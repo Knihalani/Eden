@@ -115,7 +115,7 @@ import {
 } from "./probes";
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
-import { Ledger } from "./ledger";
+import { Ledger, type LedgerEntry } from "./ledger";
 import { rankAnswer, rankScore, type RankModel } from "./rank";
 import {
   citationsOf,
@@ -291,6 +291,12 @@ interface Session {
   /** Work lookups left running behind their answers: a poll and its follow-up (`afterPoll`), a judge (`judgeLater`). */
   behind?: Promise<void> | null;
   /**
+   * With `slowPathQueue`: the latest request that arrived while the slow path was busy, looked up once it settles
+   * (`drainQueued`), and whether that drain is under way.
+   */
+  queuedCue?: { cue: Cue; t0: number; eventKind: string } | null;
+  draining?: boolean;
+  /**
    * With `actionCheck`: the keys of the calls the firewall answered with a finding (`actionKey`, bounded by
    * `MAX_CHECKED`, oldest first). The same call made again is the agent's informed choice, and proceeds.
    */
@@ -338,6 +344,8 @@ interface Anticipation {
 
 /** Item ids a session's anticipation remembers as prefetched, and names and days it remembers as asked. */
 const MAX_PREFETCHED = 256;
+/** `slowPathQueue`: a request kept while the slow path was busy is dropped once it has waited this long (ms). */
+const QUEUED_CUE_MAX_AGE_MS = 10_000;
 const MAX_ASKED = 64;
 
 interface Cue {
@@ -515,6 +523,12 @@ interface Scored {
 }
 
 /** What an injection was built from, kept until it is handed out and usage tracking starts. */
+/**
+ * What a push packet's delivery marked (`readerPushBehind`): per item it marked, the ledger entry before and after,
+ * and the sketch it added to the session's near-duplicate memory.
+ */
+type Undo = Map<string, { was: LedgerEntry | undefined; set: LedgerEntry; sketch: Sketch | null }>;
+
 interface Built {
   sourceIds: string[];
   /** The delivered items, for the planner's delivery credit when the injection is handed out (D39). */
@@ -542,6 +556,11 @@ export class ContextPartner {
   private readonly sessions = new Map<string, Session>();
   private readonly perTenant = new Map<string, number>();
   private readonly built = new WeakMap<Injection, Built>();
+  /**
+   * `readerPushBehind`: what a push packet's delivery changed in its own session, so a second reading that withdraws
+   * the packet untaken can undo it (`withdraw`). Keyed by the packet, so it goes with it.
+   */
+  private readonly undoable = new WeakMap<Injection, Undo>();
   /** Tenant → user scope key → injection id → outcome; both inner maps least recently recorded first. */
   private readonly recorded = new Map<string, Map<string, Map<string, Recorded>>>();
   private readonly now: () => number;
@@ -631,6 +650,7 @@ export class ContextPartner {
           {
             maxItems: c.syncMaxItems,
             pageSize: c.syncPageSize,
+            pollPageSize: c.syncPollPageSize,
             everyMs: c.syncEveryMs,
             staleChance: c.syncStaleChance,
             maxStaleMs: c.syncMaxStaleMs,
@@ -884,6 +904,13 @@ export class ContextPartner {
     }
     if (s.inflight) {
       // The cue is not put in cooldown: it was not looked up, so the next event may look it up.
+      if (this.config.slowPathQueue) {
+        // One slot, the latest wins: looked up once the slow path settles, its answer queued (`drainQueued`).
+        s.queuedCue = { cue, t0, eventKind: event.kind };
+        trace("silent", "slow path busy: queued");
+        if (!s.draining) this.drainQueued(s);
+        return reply(queued);
+      }
       trace("silent", "slow path busy");
       return reply(queued);
     }
@@ -974,7 +1001,138 @@ export class ContextPartner {
     this.addBehind(s, chain);
   }
 
+  /**
+   * `slowPathQueue`: looks up the request kept while the slow path was busy, once nothing is in flight, one at a time
+   * (as `afterPoll`'s follow-ups are), and queues what it delivers. A request kept while this runs is looked up next.
+   * One whose session closed, whose cue went into cooldown meanwhile, or that waited over `QUEUED_CUE_MAX_AGE_MS` is
+   * dropped (traced). It runs the slow path alone, without `anticipate`'s early answer (nobody waits on it, so
+   * answering early gains nothing), and with `syncPollBehind` it gets `afterPoll`'s follow-up as any lookup does.
+   * Never throws, never blocks the caller.
+   */
+  private drainQueued(s: Session): void {
+    s.draining = true;
+    const work = (async () => {
+      for (;;) {
+        // Nothing awaits between the last check and taking `s.inflight` below, so a follow-up woken in the same tick
+        // and this lookup still run one at a time.
+        while (s.inflight && !s.closed) await s.inflight.catch(() => null);
+        const next = s.queuedCue;
+        s.queuedCue = null;
+        if (!next || s.closed) {
+          // Cleared in this same tick: a request kept after this point starts a drain of its own.
+          s.draining = false;
+          return;
+        }
+        const { cue, t0, eventKind } = next;
+        const dropped = (reason: string) =>
+          this.trace({
+            sessionId: s.id,
+            turn: s.turn,
+            event: eventKind,
+            decision: "silent",
+            reason,
+            latencyMs: Math.round(performance.now() - t0),
+            sourceCalls: 0,
+            modelCalls: 0,
+            costUsd: 0,
+            itemIds: [],
+          });
+        const last = s.cues.get(cue.key);
+        if (last !== undefined && s.turn - last < this.config.cueCooldownTurns) {
+          dropped("queued cue: repeat");
+          continue;
+        }
+        if (this.now() - (cue.arrived ?? this.now()) > QUEUED_CUE_MAX_AGE_MS) {
+          dropped("queued cue: stale");
+          continue;
+        }
+        this.markCue(s, cue);
+        const run = this.slowPath(s, cue, t0, eventKind);
+        const tracked = run.finally(() => {
+          if (s.inflight === tracked) s.inflight = null;
+        });
+        s.inflight = tracked;
+        // As for any lookup: a poll it left running gets a follow-up on the fresh index (run after this loop's next
+        // lookup if one takes `s.inflight` first; both wait on it in turn).
+        if (this.config.syncPollBehind && this.sync && this.config.syncOnDemand) {
+          this.afterPoll(s, cue, t0, eventKind, tracked, null);
+        }
+        const injection = await tracked.catch(() => null);
+        if (injection && !s.closed) s.pending.push(injection);
+      }
+    })().catch(() => {
+      s.draining = false;
+    });
+    this.addBehind(s, work);
+  }
+
   /** Work a lookup left running behind its answer (`syncPollBehind`, `judgeBehind`), for harnesses to wait on. */
+  /**
+   * `readerPushBehind`: once the poll the push did not wait for is done, and only if it stored something, the push is
+   * ranked again on the refreshed index and read once more (`again`: no second search, no further re-read). A pool the
+   * poll left as it was reads as the same reader input, a cache hit with no call. Nothing runs for a closed session or
+   * for a request the user has since followed with another. Never throws.
+   */
+  private pushAgain(
+    s: Session,
+    request: AskRequest,
+    internal: AskInternal,
+    polled: Promise<boolean>,
+    searched: SearchedLive,
+    prev: Injection | null,
+  ): void {
+    const work = polled
+      .then(async (fresh) => {
+        if (!fresh || s.closed || this.sessions.get(s.key) !== s) return;
+        if (internal.request !== undefined && internal.request !== s.requests) return;
+        // The calls were the first reading's; the second makes none (nor any plan) of its own.
+        const { plans: _plans, ...rest } = searched;
+        const again = { ...rest, calls: 0, ...(rest.syncCalls !== undefined ? { syncCalls: 0 } : {}) };
+        await this.ask(request, { push: true, request: internal.request, again: { searched: again, prev } });
+      })
+      .catch(() => {});
+    this.addBehind(s, work);
+  }
+
+  /**
+   * `readerPushBehind`: records what `injection`'s delivery marked in `s` (`was`: each item's ledger entry before it),
+   * so `withdraw` can undo it. An item the delivery left unmarked (folded out by `supersede`) has nothing to undo.
+   */
+  private keepUndo(
+    s: Session,
+    injection: Injection,
+    scored: Scored[],
+    was: Map<string, LedgerEntry | undefined>,
+  ): void {
+    const undo: Undo = new Map();
+    for (const x of scored) {
+      const set = s.ledger.entry(x.item.id);
+      const before = was.get(x.item.id);
+      if (!set || sameEntry(set, before)) continue;
+      undo.set(x.item.id, { was: before, set, sketch: x.sketch });
+    }
+    if (undo.size > 0) this.undoable.set(injection, undo);
+  }
+
+  /**
+   * A push packet withdrawn before the agent took it (`readerPushBehind`'s second reading): its items go back to what
+   * the session's ledger held before it (an earlier delivery and its version stand; an item never delivered is fresh
+   * again), and their sketches leave the near-duplicate memory, so what the second reading does not deliver again
+   * stays deliverable. An entry marked since by another delivery that recorded something else is left as it is.
+   */
+  private withdraw(s: Session, prev: Injection): void {
+    const undo = this.undoable.get(prev);
+    if (!undo) return;
+    this.undoable.delete(prev);
+    for (const [id, u] of undo) {
+      if (!sameEntry(u.set, s.ledger.entry(id))) continue;
+      s.ledger.restore(id, u.was);
+      if (!u.sketch) continue;
+      const at = s.delivered.lastIndexOf(u.sketch);
+      if (at >= 0) s.delivered.splice(at, 1);
+    }
+  }
+
   private addBehind(s: Session, work: Promise<void>): void {
     const all = s.behind ? Promise.all([s.behind, work]).then(() => {}) : work;
     const tracked: Promise<void> = all.finally(() => {
@@ -1208,7 +1366,7 @@ export class ContextPartner {
     }
   }
 
-  async ask(request: AskRequest, internal: { push?: boolean; request?: number } = {}): Promise<AskResponse> {
+  async ask(request: AskRequest, internal: AskInternal = {}): Promise<AskResponse> {
     const t0 = performance.now();
     const spans = this.spans;
     const root = spans?.open("ask", 0, { async: true });
@@ -1226,15 +1384,16 @@ export class ContextPartner {
     );
     if (root) cue.span = root.id;
     const limit = request.maxItems ?? 5;
-    const {
-      calls: sourceCalls,
-      plans,
-      probed,
-      local,
-      syncCalls,
-      consequence,
-      covered,
-    } = await this.searchLive(s, cue, this.config.askSources);
+    // `readerPushBehind`: the push reads the index as it stands while the sync's poll runs behind (the agent's asks
+    // still wait for it). Its second reading, once the poll has stored something, reuses the first one's search.
+    const behind =
+      internal.push === true &&
+      internal.again === undefined &&
+      this.config.readerPushBehind &&
+      this.config.syncPollBehind &&
+      this.config.syncOnDemand;
+    const searched = internal.again?.searched ?? (await this.searchLive(s, cue, this.config.askSources, behind));
+    const { calls: sourceCalls, plans, probed, local, syncCalls, consequence, covered } = searched;
     // `askVerdicts` (docs/research/gen-ask.md): an ask gathers what a lookup gathers (the consequence probe's finds,
     // the graph walk's, the card finds), not only what shares the question's words, and reads each with the verdicts
     // the lookup's rule paths read, so an item the question runs into answers it ahead of a merely similar one.
@@ -1364,15 +1523,37 @@ export class ContextPartner {
       const flagged = reading
         ? chosen.filter((x) => reading.notes.has(x.item.id) && pushes.has(reading.kinds.get(x.item.id) ?? ""))
         : [];
-      const fresh = flagged.filter((x) => s.ledger.isFresh(x.item.id, s.turn));
       // A reading that lands after a newer user message answers a request the agent has moved past: not queued.
       const latest = internal.request === undefined || internal.request === s.requests;
+      // `readerPushBehind`'s second reading, on the index the poll refreshed: the packet the first queued from the
+      // older copies, if the agent has not taken it, gives way to this one (its items count as undelivered here). One
+      // the agent has taken stays taken: only what is new to it, or what the poll changed since, goes out again.
+      const prev = internal.again?.prev;
+      const withdrawn = new Set<string>();
+      if (prev && reading?.read && !s.closed && latest) {
+        const at = s.pending.indexOf(prev);
+        if (at >= 0) {
+          s.pending.splice(at, 1);
+          for (const c of prev.citations) withdrawn.add(c.itemId);
+          // The agent never got it: what its delivery marked is undone before this reading delivers.
+          this.withdraw(s, prev);
+        }
+      }
+      const fresh = flagged.filter(
+        (x) =>
+          withdrawn.has(x.item.id) ||
+          s.ledger.isFresh(x.item.id, s.turn) ||
+          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
+      );
+      // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
+      const was = behind ? new Map(fresh.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       const injection =
         fresh.length > 0 && !s.closed && latest
           ? this.config.readerPushNotes
             ? this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue, undefined, undefined, reading!.notes)
             : this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue)
           : null;
+      if (injection && was) this.keepUndo(s, injection, fresh, was);
       if (injection) s.pending.push(injection);
       const latencyMs = Math.round(performance.now() - t0);
       // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
@@ -1396,6 +1577,7 @@ export class ContextPartner {
         itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
       });
       if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
+      if (behind && cue.polled) this.pushAgain(s, request, internal, cue.polled, searched, injection);
       return { answer: "", citations: [], usedModel: reading?.called === true, costUsd, latencyMs };
     }
     // `askGuard` (docs/research/edge-ask.md): an ask about an action is answered with its verdicts said. What may block
@@ -3084,11 +3266,11 @@ export class ContextPartner {
       if (id < 0) return false;
       ids[i] = id;
     }
-    const holders = s.agentHas.filter((held) => ids.every((id) => held.terms.has(id)));
+    const holders = s.agentHas.filter((held) => ids.every((id) => sortedHas(held.terms, id)));
     if (holders.length === 0) return false;
     // Every term is known to the session now, so no term is skipped and adjacent ids are adjacent words.
     const pairs = [...pairsOf(item.title, s.vocab), ...pairsOf(item.text.slice(0, HELD_CHARS), s.vocab)];
-    return holders.some((held) => pairs.every((p) => held.pairs.has(p)));
+    return holders.some((held) => pairs.every((p) => sortedHas(held.pairs, p)));
   }
 
   /**
@@ -3131,8 +3313,34 @@ export class ContextPartner {
         // `syncPollBehind`: the poll is not waited for. This lookup answers from the index as it stands (every warm
         // synced source, current or not); if the poll stores anything, the lookup is made again once it is done
         // (`afterPoll`), and the agent's ask waits for it as before.
-        if (behind) cue.polled = polled.then(() => tally.fresh > 0).catch(() => false);
-        else syncCalls = await polled;
+        if (behind) {
+          // The poll's listing calls are in no lookup's trace (this one's is out before they are counted, and a
+          // follow-up runs only when the poll stored something), so the poll gets a trace of its own when it settles:
+          // "skipped", not "silent" (it decided nothing), and emitted even if the session has closed by then, as a
+          // late reader call is ("reader-late"): the calls were made. A poll that only waited on another's made none.
+          const turn = s.turn;
+          const started = performance.now();
+          cue.polled = polled
+            .then((calls) => {
+              if (calls > 0) {
+                this.trace({
+                  sessionId: s.id,
+                  turn,
+                  event: "sync",
+                  decision: "skipped",
+                  reason: "sync poll behind",
+                  latencyMs: Math.round(performance.now() - started),
+                  sourceCalls: calls,
+                  modelCalls: 0,
+                  costUsd: 0,
+                  itemIds: [],
+                  syncCalls: calls,
+                });
+              }
+              return tally.fresh > 0;
+            })
+            .catch(() => false);
+        } else syncCalls = await polled;
         if (s.closed) return { calls: syncCalls, syncCalls };
       }
       local = this.localOf(s, all, behind);
@@ -5516,20 +5724,35 @@ function rebuildVocab(s: Session, maxTerms: number): void {
   const agentHas: Held[] = [];
   const remap = (id: number) => vocab.intern(old.term(id));
   let room = Math.floor(maxTerms / 4);
-  for (let i = s.agentHas.length - 1; i >= 0 && s.agentHas[i]!.terms.size <= room; i--) {
+  for (let i = s.agentHas.length - 1; i >= 0 && s.agentHas[i]!.terms.length <= room; i--) {
     const held = s.agentHas[i]!;
-    room -= held.terms.size;
-    const pairs = new Set(
-      Array.from(held.pairs, (p) => pairKey(remap(Math.floor(p / PAIR_BASE)), remap(p % PAIR_BASE))),
-    );
-    agentHas.unshift({ terms: new Set(Array.from(held.terms, remap)), pairs });
+    room -= held.terms.length;
+    // New ids do not keep the old order, so both arrays are sorted again after the remap.
+    const terms = held.terms.map(remap);
+    const pairs = held.pairs.map((p) => pairKey(remap(Math.floor(p / PAIR_BASE)), remap(p % PAIR_BASE)));
+    agentHas.unshift({ terms: sortedUnique(terms), pairs: sortedUnique(pairs) });
   }
   s.agentHas = agentHas;
   s.vocab = vocab;
   s.seen = seen;
 }
 
+/** What `searchLive` returns: the calls it made and what the lookup's ranking reads from them. */
+type SearchedLive = Awaited<ReturnType<ContextPartner["searchLive"]>>;
+
+/** `ask`'s second argument, for the engine's own asks (`readerPush`); an embedder's ask passes none. */
+interface AskInternal {
+  push?: boolean;
+  /** The session's request count when the push's request was counted: a later request makes it stale. */
+  request?: number;
+  /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
+  again?: { searched: SearchedLive; prev: Injection | null };
+}
+
 const sessionKey = (e: Scope & { sessionId: string }) => `${scopeKey(e)}#${e.sessionId}`;
+
+const sameEntry = (a: LedgerEntry | undefined, b: LedgerEntry | undefined) =>
+  a === b || (a !== undefined && b !== undefined && a.turn === b.turn && a.version === b.version);
 
 /** An opaque per-user key for provider sticky routing (prompt-cache reuse): a hash, never the ids themselves. */
 export const userCacheKey = (scope: Scope) =>
@@ -5577,10 +5800,15 @@ function buildCue(text: string, ids: Uint32Array, vocab: Vocab, at: number, offs
   return { text: terms.join(" "), entities, key, id, time: timeWindow(text, at, offset), at, raw: text, offset };
 }
 
-/** What one agent-held event holds: its terms and its adjacent term pairs (`pairKey`), in session ids. */
+/**
+ * What one agent-held event holds: its terms and its adjacent term pairs (`pairKey`), in session ids, each sorted and
+ * unique so membership is a binary search. Typed arrays, not Sets: a session keeps up to `windowEvents` of these, and
+ * a Set of numbers costs over 100 bytes an entry against 4 or 8 here (`held.test.ts`: a session with 12 mail
+ * listings of 8 KB took 2,096 KB with Sets, 311 KB with these).
+ */
 interface Held {
-  terms: Set<number>;
-  pairs: Set<number>;
+  terms: Uint32Array;
+  pairs: Float64Array;
 }
 
 /**
@@ -5597,15 +5825,40 @@ const pairKey = (a: number, b: number) => a * PAIR_BASE + b;
 
 /** An agent-held event's terms and pairs. Its terms are interned already (`observe`), so none is skipped. */
 function heldOf(text: string, vocab: Vocab): Held {
-  const { ids, n } = termIds(text.slice(0, HELD_CHARS), vocab, false);
-  const terms = new Set<number>();
-  const pairs = new Set<number>();
-  for (let i = 0; i < n; i++) {
-    if (!terms.has(ids[i]!) && terms.size === MAX_HELD_TERMS) break;
-    terms.add(ids[i]!);
-    if (i > 0) pairs.add(pairKey(ids[i - 1]!, ids[i]!));
+  const { ids, n: all } = termIds(text.slice(0, HELD_CHARS), vocab, false);
+  let terms = sortedUnique(ids.subarray(0, all));
+  let n = all;
+  if (terms.length > MAX_HELD_TERMS) {
+    // Rare (an event of over 512 distinct terms): the head up to its 513th distinct term, in reading order.
+    const distinct = new Set<number>();
+    for (n = 0; n < all && (distinct.has(ids[n]!) || distinct.size < MAX_HELD_TERMS); n++) distinct.add(ids[n]!);
+    terms = sortedUnique(ids.subarray(0, n));
   }
-  return { terms, pairs };
+  const pairs = new Float64Array(Math.max(0, n - 1));
+  for (let i = 1; i < n; i++) pairs[i - 1] = pairKey(ids[i - 1]!, ids[i]!);
+  return { terms, pairs: sortedUnique(pairs) };
+}
+
+/** A sorted copy of `xs` without repeats, trimmed to fit (a fresh buffer: the input may be a view of a shared one). */
+function sortedUnique<T extends Uint32Array | Float64Array>(xs: T): T {
+  const sorted = xs.slice().sort() as T;
+  let m = 0;
+  for (let i = 0; i < sorted.length; i++) if (m === 0 || sorted[i] !== sorted[m - 1]) sorted[m++] = sorted[i]!;
+  return m === sorted.length ? sorted : (sorted.slice(0, m) as T);
+}
+
+/** Whether sorted `xs` holds `x`. */
+function sortedHas(xs: Uint32Array | Float64Array, x: number): boolean {
+  let lo = 0;
+  let hi = xs.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    const v = xs[mid]!;
+    if (v === x) return true;
+    if (v < x) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return false;
 }
 
 /** The adjacent term pairs of `text` (terms the vocabulary does not know are skipped). */

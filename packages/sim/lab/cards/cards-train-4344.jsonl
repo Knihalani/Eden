@@ -1,0 +1,315 @@
+{"h":"d0f8c9977aa9be880f058c2c8c03080f","c":{"kind":"dependency","actions":["sign"],"entities":["Globex"],"statement":"15% discount for Globex new business is pending finance team approval before it can be offered"}}
+{"h":"26567e1035137981872735a833b2f724","c":{"kind":"deadline","actions":["sign"],"entities":["Initech"],"statement":"Initech will only sign by 19 Dec if 15% off is offered; procurement won't approve list price this quarter","end":"2026-12-19"}}
+{"h":"54d2fe5ae0048fdda7968b58326c1e49","c":{"kind":"deadline","actions":["sign"],"entities":["Umbrella Health"],"statement":"Umbrella Health will only sign by 11 Dec if 15% off is offered; procurement won't approve list price this quarter","end":"2026-12-11"}}
+{"h":"b8a250a31dd849a8ea7cb12dbee15474","c":{"kind":"deadline","actions":["sign"],"entities":["Hooli"],"statement":"Hooli will only sign by 9 Dec if 12% off is offered; procurement won't approve list price this quarter","end":"2026-12-09"}}
+{"h":"cf30604a9c574763f01d582aa1084350","c":null}
+{"h":"8d0ca49d3901d5e5f2c6ef30ff370b73","c":{"kind":"deadline","actions":["sign"],"entities":["Vandelay Industries"],"statement":"Vandelay Industries will only sign by 23 Nov if 12% off is offered; procurement won't approve list price this quarter","end":"2026-11-23"}}
+{"h":"e570939689caeaa9fdac4daae7e8e4c7","c":{"kind":"deadline","actions":["sign"],"entities":["Stark Freight"],"statement":"Stark Freight will only sign by 10 Nov if 10% off is offered; procurement won't approve list price this quarter","end":"2026-11-10"}}
+{"h":"79047772fc8abedbd2e6c82ebc7c0165","c":{"kind":"dependency","actions":["sign"],"entities":["Stark Freight"],"statement":"10% discount for Stark Freight is pending finance team approval before it can be offered"}}
+{"h":"a95d4ffee7f66c0f10e2940be1f41ed3","c":null}
+{"h":"cf2e701a07d64e6a125288c7c60341c9","c":null}
+{"h":"1a2328f8551f5ed0074966fdfd5a818b","c":{"kind":"prohibition","actions":["purchase"],"entities":["Audi"],"statement":"don't buy the Audi yet — outstanding finance means it could be repossessed; Jamie is sorting it with the dealer"}}
+{"h":"113b843a6c287030529ef8ddf341cf81","c":{"kind":"prohibition","actions":["purchase"],"entities":["new credit / new accounts"],"statement":"no new credit or new accounts until completion of the Hollins Way purchase, as the lender re-checks the file","end":"2026-12-04"}}
+{"h":"76284ff374ed750331b9321e88b694da","c":{"kind":"freeze","actions":["purchase","travel","book-venue","book-food"],"entities":["Northwind company cards"],"statement":"all company cards suspended until 9 November during Pleo migration; pay personally and claim back if urgent","start":"2026-10-21","end":"2026-11-09"}}
+{"h":"4132869046708225c8ae24f3487ee0af","c":{"kind":"dependency","actions":["purchase"],"entities":["Pleo spend over £1k","Marcus Webb"],"statement":"spending over £1k needs Marcus Webb's sign-off in Pleo before submission","limit":1000,"unit":""}}
+{"h":"baefb527a78b439c167c3225457b826b","c":{"kind":"already-done","actions":["purchase"],"entities":["WFH allowance"],"statement":"the £6/week WFH allowance is already paid via payslips; don't apply to Revenue as it would be clawed back"}}
+{"h":"59d1996c8ec0f849ad7765652d117487","c":{"kind":"dependency","actions":["travel","purchase"],"entities":["international trips","COO approval via Navan"],"statement":"any trip outside the UK needs COO pre-approval in Navan before booking; unapproved trips not reimbursed","start":"2026-10-25"}}
+{"h":"496c70c2b5a08c2938df6872661af3f9","c":{"kind":"prohibition","actions":["pay"],"entities":["Bath booking payment to Jo Mensah"],"statement":"hold off sending Jo money for Bath; everyone pays direct through the booking site once numbers are confirmed"}}
+{"h":"1579873f9765dbdb4df7f4a27d0b2ac3","c":null}
+{"h":"1804e6534a281a503f74b065b2fa3ba2","c":{"kind":"status-change","actions":["pay"],"entities":["Dean Harlow bank details","Starling account"],"statement":"Dean Harlow has moved to Starling; use the new sort code and account number from his Friday email","start":"2026-10-24"}}
+{"h":"bfd2b2ecb8b20848ceb5b548b8327c95","c":{"kind":"deadline","actions":["pay"],"entities":["tax computation amount owed"],"statement":"amount owed must be settled directly by 31 January; tax-code collection not available this year","end":"2027-01-31"}}
+{"h":"b7eb4c52ca544fc645aa7d0cce5f8c53","c":{"kind":"already-done","actions":["purchase"],"entities":["WFH allowance","Revenue"],"statement":"WFH allowance already paid via payslips since April; do not also apply to the Revenue"}}
+{"h":"9f51e0a275b97764b4eacf9bbfcf2509","c":{"kind":"dependency","actions":["travel","purchase"],"entities":["COO","Navan","international travel"],"statement":"any trip outside the UK needs COO pre-approval in Navan before anything is bought; unbought-without-approval trips won't be reimbursed","start":"2026-10-25"}}
+{"h":"b106ae68c6f6cdd67200756d9594e0d4","c":{"kind":"prohibition","actions":["pay"],"entities":["Bath booking"],"statement":"hold off sending Sam anything for Bath; everyone pays direct through the booking site once numbers are confirmed"}}
+{"h":"d4f873adfd73d20601f43c52333d2ce5","c":{"kind":"prohibition","actions":["share-external"],"entities":["AWS credentials"],"statement":"AWS credentials must not be shared outside the team"}}
+{"h":"ce2a704ed8505dfed1ab28dfd9945028","c":{"kind":"already-done","actions":["contact"],"entities":["tax computation","agent authorisation"],"statement":"computation already submitted on Friday under agent authorisation, ref 7G2K-QW81; nothing needed until January"}}
+{"h":"8d5eb3d776b1944e288e27012c8888be","c":{"kind":"prohibition","actions":["pay"],"entities":["bank details","compromised inbox"],"statement":"do not send money to any new sort code or account number from this sender; call 07700 900481 before sending anything"}}
+{"h":"72d13380ee027dac4a6e0f53d23d15cc","c":{"kind":"prohibition","actions":["hire"],"entities":["flat repairs","pipes, water, heating"],"statement":"all pipes, water and heating repairs go through the landlord; do not get own trades in"}}
+{"h":"6390f2d386d68c5fe7d8496c244b4d05","c":{"kind":"prohibition","actions":["pay"],"entities":["tax under £3,000","2027/28 tax code"],"statement":"tax owed is being collected through the tax code over 2027/28; do not settle it directly","limit":3000,"unit":""}}
+{"h":"dc552e21f0bd3b11e2a8c6480d83e33a","c":{"kind":"already-done","actions":["pay"],"entities":["phone payment","Ellie"],"statement":"Ellie already set up a monthly payment for the phone on Sunday; do not send anything or it will be duplicated"}}
+{"h":"6cb78532df247c142e66cd0eea75ec34","c":{"kind":"prohibition","actions":["purchase"],"entities":["Halden investment account","Maya"],"statement":"a child can only have one of that type of investment account; do not open another for Maya"}}
+{"h":"e50a3f7899c2c4f0d9c43b63dfa2355b","c":null}
+{"h":"54399d0d22f6181fb47493359a68475a","c":null}
+{"h":"569de028aee29f4ea565e8795950de9a","c":null}
+{"h":"cd4bcff2b75739cff7a3054a737819fa","c":null}
+{"h":"a2c91ac43b5dc199e306ae8209902946","c":null}
+{"h":"fa80eb5eefbad035e901a77e32e82909","c":null}
+{"h":"600f9dac78cebbba9690f0b6c73e976c","c":null}
+{"h":"7700f8ea42ad67dfdcf8ba2142dfcdbc","c":{"kind":"prohibition","actions":["purchase","pay","sign","contact"],"entities":["new credit","new accounts"],"statement":"Do not take out new credit or open new accounts until 4 December","end":"2026-12-04"}}
+{"h":"2c28c948d161aaf3c111ba3e62c0cb4d","c":{"kind":"freeze","actions":["pay","purchase","travel","book-venue","book-food","hire","contact","send-gift"],"entities":["Northwind company cards"],"statement":"Northwind company cards suspended until 9 November","start":"2026-10-27","end":"2026-11-09"}}
+{"h":"9b36652b6d86419df36bcd7dfe678142","c":{"kind":"limit","actions":["pay","purchase"],"entities":["expenses"],"statement":"Expenses over £1k require sign-off","limit":1000,"unit":""}}
+{"h":"ace8ecf3269df40c9fe7c49b4417ed15","c":null}
+{"h":"b20cdba3a0fc08b530f861a17cfaec1b","c":null}
+{"h":"3a7375a9cc032c2c35dca95a772e910f","c":null}
+{"h":"87d1368a9be62ebc0ed97050abcc7e1a","c":null}
+{"h":"64e898bb6583fb2c68b757f1ecaa2cac","c":{"kind":"deadline","actions":["pay"],"entities":["tax owed"],"statement":"tax owed must be settled directly by 31 January","end":"2027-01-31"}}
+{"h":"561cc95543ce5045cfcff2501a390a1d","c":null}
+{"h":"d35168c3ac5a8ae4c7b681b48a999f4b","c":null}
+{"h":"c0121d4e0fb5dc654265dca128104b6e","c":{"kind":"prohibition","actions":["hire","purchase"],"entities":["Flat 3 repairs","contractors"],"statement":"landlord prohibits booking contractors yourself; all repairs go through the landlord under clause 14"}}
+{"h":"80283f3767f284f60112ebf9818871ef","c":{"kind":"freeze","actions":["attend"],"entities":["childcare provider"],"statement":"childcare closed 2-6 November while the provider is away","start":"2026-11-02","end":"2026-11-06"}}
+{"h":"5baaaa13ad23b89582c150554e80f376","c":{"kind":"limit","actions":["purchase"],"entities":["outpatient therapies benefit"],"statement":"outpatient therapies benefit fully used (£400 of £400); further therapy claims cannot be paid until renewal on 1 January 2027","end":"2027-01-01","limit":400,"unit":""}}
+{"h":"6cdcfaa6b17bec3c769edadfa7e86964","c":{"kind":"absence","actions":["attend"],"entities":["Alex Carter"],"statement":"Alex is in Reading till late on Thu 29 Oct, so can't handle Maya's dentist appointment that day","start":"2026-10-29","end":"2026-10-29"}}
+{"h":"a50adbae6e1ba3acbba9e6b327669b07","c":{"kind":"preference","actions":["book-food"],"entities":["Auntie Jean"],"statement":"Jean is on apixaban: no anti-inflammatories for her any more"}}
+{"h":"7e4d1f28fb947fa36662345c085ebe99","c":{"kind":"freeze","actions":["pay"],"entities":["Tax-Free Childcare account"],"statement":"Tax-Free Childcare account is frozen until reconfirmation in January; keep paying nursery from Robin's account","end":"2027-01-31"}}
+{"h":"fff42a1c38d020c50ca9e7485fbcefd1","c":{"kind":"status-change","actions":["schedule"],"entities":["Robin's availability 2-6 Nov"],"statement":"Robin is no longer away 2-6 Nov; wedding postponed to spring, so he's open as normal that week"}}
+{"h":"9aa42af5fae73368cf0dfbc2689bd2da","c":null}
+{"h":"3c3ae47f21679182bd363b4f3dcd9ef6","c":null}
+{"h":"baf8b07025334cfce538b24ddd42df83","c":{"kind":"prohibition","actions":["attend"],"entities":["R (Christmas visit)"],"statement":"R can't host/visit this year until hip heals; bring Maya and Theo for Boxing Day instead","end":"2026-12-31"}}
+{"h":"a2e0f12bf97aedc2a418d1bb3490d9ab","c":null}
+{"h":"b8ce05e8bfa20282f4856be00d70d72d","c":{"kind":"freeze","actions":["deploy"],"entities":["Tier-1 services: ledger-core, payments-api, invoicing-worker"],"statement":"Change freeze: all production changes to Tier-1 services rejected 28 Oct 18:00 UTC to 2 Nov 08:00 UTC","start":"2026-10-28","end":"2026-11-02"}}
+{"h":"40c554ad1c706aeea45e0985d2c6238f","c":{"kind":"prohibition","actions":["purchase"],"entities":["Lumen"],"statement":"Lumen non-renewal notice given; don't raise new POs or seat increases for Lumen before contract ends 30 Nov","end":"2026-11-30"}}
+{"h":"eb04922b1711782118899d13a80cd025","c":{"kind":"absence","actions":["schedule","book-venue","attend"],"entities":["child (evening jobs)"],"statement":"not free Friday or Saturday evenings until mocks finish on Friday 13 November","start":"2026-10-18","end":"2026-11-13"}}
+{"h":"378525a5a5bc05878c87f36116da7661","c":{"kind":"preference","actions":["book-food","send-gift","purchase"],"entities":["Theo"],"statement":"strict avoidance of peanut and cashew; two Jext 150 auto-injectors carried at all times; inform hosts and anyone serving food","start":"2026-10-19"}}
+{"h":"dc41a535cf300618db855b13e1a7120c","c":{"kind":"freeze","actions":["send-gift","attend","purchase"],"entities":["service lift"],"statement":"service lift out of action 2-13 November; no delivery or removal of furniture or large appliances during this period","start":"2026-11-02","end":"2026-11-13"}}
+{"h":"37062d46ac5d9cff41556a57dcefad4e","c":{"kind":"already-done","actions":["pay"],"entities":["free school meals FSM-30417","M. Carter"],"statement":"free school meals approved from 2 November; no need to add lunch money from that date","start":"2026-11-02"}}
+{"h":"107eca0b565f14e368df0a721433b881","c":null}
+{"h":"c7da353fc3cb2e05c909fe59859c4f45","c":{"kind":"dependency","actions":["travel","book-venue"],"entities":["school leave of absence"],"statement":"leave in term time requires Headteacher approval via Leave of Absence form at least four weeks beforehand"}}
+{"h":"8404962a86aad14690ff31f4ebf48752","c":{"kind":"preference","actions":["book-food","purchase","send-gift"],"entities":["Squirrels"],"statement":"Squirrels is sesame-free as well as nut-free from 2 November; check labels for sesame, tahini, sesame oil and seeds","start":"2026-11-02"}}
+{"h":"91586e57a10cd925f707c8e15c1156e0","c":{"kind":"prohibition","actions":["purchase","delete-data"],"entities":["grey sofa"],"statement":"do not replace or get rid of the grey sofa; it is the landlord's and on the inventory"}}
+{"h":"6e77607600e297dfd16948f0eda1481b","c":{"kind":"preference","actions":["book-food"],"entities":["blood test at Parkside Surgery"],"statement":"water only after 22:00 the night before the 08:40 blood test on 5 November"}}
+{"h":"4bdcdf2e47265a88258556dfe05fef4b","c":{"kind":"prohibition","actions":["hire","contact","schedule"],"entities":["Flat 3 repairs"],"statement":"do not book contractors yourself; all repairs go through the landlord under clause 14 of the tenancy"}}
+{"h":"6bcc4ffb06801e0a2a9c72b1257d6ba2","c":{"kind":"dependency","actions":["deploy"],"entities":["third-party repo access / OAuth apps","Vendor Security Review"],"statement":"any third-party app requesting repository access must pass a Vendor Security Review (~10 working days) before approval"}}
+{"h":"f569e937a4cd6ccd094a62ec19017a44","c":{"kind":"prohibition","actions":["delete-data"],"entities":["customer communications","helpdesk records","derived copies dated January 2021 onwards"],"statement":"legal hold LH-2026-07: preserve all customer communications, helpdesk records and derived copies from Jan 2021 onwards","start":"2026-10-21"}}
+{"h":"8f2be2d9a1e0978cd6d4e1ee4b0c930c","c":{"kind":"limit","actions":["deploy"],"entities":["staged release on Play"],"statement":"nothing goes past 50% until QA gate green (crash-free sessions ≥99.5% over 48h); current release at 99.1% stays at 20%","start":"2026-10-26","limit":99.5,"unit":"%"}}
+{"h":"0623a0c8856f4e0c4917cf9e48a00c56","c":{"kind":"dependency","actions":["hire"],"entities":["Figtree workspace seats"],"statement":"Figtree workspace full (50/50); new members stay pending until an amended order form is signed by the billing owner"}}
+{"h":"d385d2fc04f50a627199a5080733b3b2","c":{"kind":"status-change","actions":["contact"],"entities":["Aperture Labs account contact"],"statement":"former contact left Aperture Labs on 16 Oct; account now handled by Sofia Marchetti (sofia.marchetti@aperturelabs.io)","start":"2026-10-16"}}
+{"h":"85106bc71560d005ac20d92bdfac27c0","c":{"kind":"status-change","actions":["deploy"],"entities":["network approvals contact"],"statement":"Alex no longer approves anything touching the network as of 26 Oct; network approvals go via Platform Networking rota in #net-approvals","start":"2026-10-26"}}
+{"h":"983611a1b49b96524ee07696b8e9de7c","c":{"kind":"prohibition","actions":["delete-data"],"entities":["IAM configuration in in-scope accounts"],"statement":"SOC 2 fieldwork: no deleting or rewriting identities, policies or permission boundaries until fieldwork closes 13 Nov","start":"2026-10-22","end":"2026-11-13"}}
+{"h":"a0927af49e6e4bc696f9fb7411772754","c":{"kind":"freeze","actions":["deploy"],"entities":["managed Postgres control plane, eu-west-2"],"statement":"maintenance window 31 Oct 00:00-06:00 UTC: snapshots, point-in-time restore, failover and instance modifications unavailable","start":"2026-10-31","end":"2026-10-31"}}
+{"h":"d81571e3662c8427353bcfd0154d8eb2","c":{"kind":"prohibition","actions":["share-external"],"entities":["Ferrolux"],"statement":"Ferrolux MSA lapsed 15 Oct; no Ferrolux access to systems, chat or source control until SOW and NDA countersigned","start":"2026-10-15"}}
+{"h":"02c75bf274af9322dc51b6c3392a3321","c":{"kind":"prohibition","actions":["share-external"],"entities":["Quillon personal data"],"statement":"no personal data (customer names, emails, conversation content) to Quillon until DPA signed and DPIA closed; synthetic/anonymised data OK","end":"2026-11-13"}}
+{"h":"2055f62cebf63bcd02376531050b43af","c":{"kind":"absence","actions":["schedule","attend","contact"],"entities":["childminder"],"statement":"childminder away 2-6 November, closed that week","start":"2026-11-02","end":"2026-11-06"}}
+{"h":"cad3f294d3149a93a479f0e85ae54e1a","c":{"kind":"absence","actions":["schedule"],"entities":["teen helper evenings"],"statement":"not free Friday or Saturday nights until mocks end 13 November","start":"2026-10-18","end":"2026-11-13"}}
+{"h":"7175c9b873006b64b588153435cf7ded","c":null}
+{"h":"f1bfd5a92e8b864de9b3a4cfc3f80d87","c":{"kind":"prohibition","actions":["purchase"],"entities":["grey sofa"],"statement":"grey sofa is the landlord's and on the inventory; do not replace or dispose of it"}}
+{"h":"7e6afcb5e8c78caab8bf3c0a3b645d71","c":null}
+{"h":"e7cc7840b0944be3694d6e0dd7ede7bc","c":null}
+{"h":"3a0919bc6730056eb2c5a84723032f85","c":{"kind":"prohibition","actions":["attend","schedule"],"entities":["Ruth visit"],"statement":"Ruth cannot have the children until her hip heals; visit Boxing Day instead"}}
+{"h":"0f33344062bb8a57436dd6c9645a78ba","c":null}
+{"h":"a7ceed5e08cab6e740d95a713d6379bc","c":{"kind":"preference","actions":["book-food"],"entities":["Hedgehogs room"],"statement":"Hedgehogs room sesame-free as well as nut-free from 2 November","start":"2026-11-02"}}
+{"h":"0476753b6cc716995e969d89e8d1058f","c":{"kind":"status-change","actions":["schedule","attend"],"entities":["blood test Parkside Surgery"],"statement":"blood test moved from 5 Nov to 12 Nov 2026, 08:40, fasting required","start":"2026-11-12"}}
+{"h":"b3e87e7ba37853cddc05f2f6b207c8fe","c":{"kind":"absence","actions":["deploy","pay"],"entities":["Dana"],"statement":"Dana is off sick today and tomorrow; Ethan is covering her approvals till Thursday","start":"2026-10-27","end":"2026-10-28"}}
+{"h":"28e0a52f78affe499660f059e078b833","c":null}
+{"h":"b8fc9a5592bceae5f0aae5588825841f","c":null}
+{"h":"93f7f13a5b3c209df1ea3b8055506f7f","c":null}
+{"h":"73e2a9cc908097fcd75e65e951b3fb8c","c":null}
+{"h":"21b696ead004b761d9f8b339d6541ea5","c":null}
+{"h":"52f8323007cf09b75f309e2b3e684d05","c":null}
+{"h":"e134162a9131527836bd643e1decba70","c":null}
+{"h":"dc5059037496a67fb40b7e2597121e58","c":null}
+{"h":"b657caa2fe46acc4d314a1fba4634c81","c":null}
+{"h":"d6c849dcde80be2760538dd891570c38","c":null}
+{"h":"9eff96540f6518b8951642c612ccc096","c":null}
+{"h":"6e671d837767a328e9fdc7df29decf71","c":null}
+{"h":"fc045dfc808052fbaa4a8ba8c60ab2e2","c":null}
+{"h":"778d01a75a08c6f3e5a2eeea74e82339","c":null}
+{"h":"f17620abffa6177d0b0bbf9f0be1638b","c":null}
+{"h":"213779ca01fa14aca7d2940d0c71a191","c":null}
+{"h":"e52ba3aa74f65fca3027861d8c826ae1","c":null}
+{"h":"cf98cc00b4f436d8af658f028618e4b3","c":null}
+{"h":"0a3a044ab6446c2da6353906bc109d66","c":null}
+{"h":"4aa294c16a69e901fea5395c8a00a2ca","c":null}
+{"h":"c1134285d67e6c2ddff4218866696195","c":{"kind":"absence","actions":["contact"],"entities":["autoresponder sender"],"statement":"out of office until 26 Oct with limited email access","end":"2026-10-26"}}
+{"h":"1dbb7fd09a44d4bbd0ff3e7182a86a4c","c":{"kind":"dependency","actions":["deploy"],"entities":["Alex","network changes"],"statement":"Alex remains the approver for anything touching the network; rota plan on hold until January"}}
+{"h":"e78493a173304819f330cd99aa7b2a19","c":null}
+{"h":"cf1f567b64cb4753d16b2ec4c6e501db","c":null}
+{"h":"5a04d26f800875f4814e4ca3271e1ee9","c":null}
+{"h":"1655d4eba50e12d2749218c05d834abf","c":null}
+{"h":"ec197d457564ed2e46627bc3cff6bc7d","c":{"kind":"status-change","actions":["schedule"],"entities":["SOC 2 control walkthrough — Brightline"],"statement":"walkthrough on 29 Oct canceled, moving to 12 Nov, new invite to follow","start":"2026-11-12"}}
+{"h":"d604405f0c4982ffdd799d1b907b1524","c":{"kind":"prohibition","actions":["deploy"],"entities":["personal access tokens in automation"],"statement":"personal access tokens may not be used in automation; exceptions need written CISO approval","start":"2026-10-01"}}
+{"h":"ba3ac13b369759c992d327619d632cbf","c":{"kind":"limit","actions":["deploy"],"entities":["primary database"],"statement":"DDL hold lifted but one change at a time on the primary"}}
+{"h":"fc52e71a4b08cf9b161278054d8565fb","c":{"kind":"prohibition","actions":["delete-data","deploy"],"entities":["production"],"statement":"Do not delete or rewrite identities, policies or permission boundaries during SOC 2 fieldwork.","start":"2026-10-29","end":"2026-11-13"}}
+{"h":"d0700e1a57e9c7e4339f8b58850bb0bd","c":{"kind":"prohibition","actions":["contact","deploy"],"entities":[],"statement":"No Ferrolux personnel should have access to systems, chat, or source control until MSA renewal is signed.","start":"2026-10-24"}}
+{"h":"a4b90a3f0fa461162e8f1b5d187516aa","c":{"kind":"prohibition","actions":["share-external"],"entities":[],"statement":"No personal data can be shared with Quillon until DPA and DPIA are signed.","start":"2026-10-25","end":"2026-11-13"}}
+{"h":"a28e025cc9ef4bbe1e8a14d588f516e2","c":{"kind":"absence","actions":["contact","schedule","attend"],"entities":[],"statement":"Rose Kimura is on parental leave.","start":"2026-10-30","end":"2026-11-27"}}
+{"h":"9a522c64975d2c7c919a011fa4a1f448","c":{"kind":"prohibition","actions":["deploy"],"entities":[],"statement":"No DDL or index builds on the primary cluster until 3 TB backfill finishes.","start":"2026-10-27","end":"2026-10-29"}}
+{"h":"a723a36c0f7ced5cb44446f4e54b65d0","c":{"kind":"absence","actions":["contact","schedule"],"entities":[],"statement":"Jo Mensah is off sick.","start":"2026-10-27","end":"2026-10-28"}}
+{"h":"e8c3e1dfdb4c50f69e53f5e4850f37dc","c":{"kind":"status-change","actions":["schedule"],"entities":[],"statement":"Marcus Webb's session moved to 2026-10-28 at 15:00.","start":"2026-10-28"}}
+{"h":"59f3ebcbb1f733339b2afb652a721efd","c":null}
+{"h":"affe4952f459028978788784044c7705","c":null}
+{"h":"23cf9fa3b9e522639ef33bc10e8ee81a","c":null}
+{"h":"50e5651f801473ffd208ea5929890c7c","c":{"kind":"absence","actions":["contact","schedule"],"entities":["Tomás Silva"],"statement":"Tomás Silva on parental leave 30 Oct – 27 Nov, not checking Slack or email","start":"2026-10-30","end":"2026-11-27"}}
+{"h":"4fe1f827a8b508350f7e1f1951420452","c":{"kind":"prohibition","actions":["deploy"],"entities":["primary cluster"],"statement":"no DDL or lock-taking operations on the primary cluster until the 3 TB backfill finishes (ETA 29 Oct)","end":"2026-10-29"}}
+{"h":"ac992bba2dabccf5ea08b903e0afb9e1","c":{"kind":"absence","actions":["deploy"],"entities":["Ethan Brooks"],"statement":"Ethan Brooks off sick 27–28 Oct; approvals covered by Dana until Thursday","start":"2026-10-27","end":"2026-10-29"}}
+{"h":"7b25432c41953e63f9c511934f901d4d","c":{"kind":"status-change","actions":["schedule"],"entities":["session with Jo Mensah"],"statement":"session moved forward to Wed 28 Oct 15:00; numbers needed by midday","start":"2026-10-28"}}
+{"h":"78c26bdb21db394370c6a320574f38b9","c":{"kind":"deadline","actions":["purchase"],"entities":["Lumen"],"statement":"Lumen contract runs out 30 Nov and will not be renewed","end":"2026-11-30"}}
+{"h":"b405c55bb2ddc79c862bfd593072e28f","c":{"kind":"dependency","actions":["deploy"],"entities":["third-party repository access"],"statement":"third-party apps requesting repository access must pass Vendor Security Review (~10 working days) before approval"}}
+{"h":"edef1d36225233ef8c791181b5b21db3","c":{"kind":"prohibition","actions":["delete-data"],"entities":["Northwind customer communications"],"statement":"legal hold LH-2026-07: preserve all customer communications, helpdesk records and derived copies dated January 2021 onwards","start":"2026-10-21"}}
+{"h":"acab270f541d58029fd655c2c1a9d88a","c":{"kind":"limit","actions":["deploy"],"entities":["staged release"],"statement":"nothing goes past 50% rollout until QA gate green (crash-free ≥99.5% over 48h); current release stays at 20%","limit":50,"unit":"%"}}
+{"h":"539e1cb38d6e020aaeebb4d7dbc7e582","c":{"kind":"status-change","actions":["contact"],"entities":["Tyrell Bio support"],"statement":"contact person changed: mailbox closed, Sofia Marchetti now handles the account","start":"2026-10-16"}}
+{"h":"caf3acfaf6f902581d4a4cb85a7ecca1","c":{"kind":"status-change","actions":["deploy"],"entities":["network approvals"],"statement":"Kate no longer approves network changes; approvals go through the Platform Networking rota in #net-approvals","start":"2026-10-26"}}
+{"h":"9f8913a2abd05dcebbe141a04d5830b5","c":{"kind":"dependency","actions":["deploy","purchase"],"entities":["EU hosting"],"statement":"CISO sign-off conditional on everything hosted in the EU, nothing in the US, backups included"}}
+{"h":"a6816c6317593e0cac17788f6f8753bb","c":{"kind":"dependency","actions":["pay"],"entities":["Credit Control"],"statement":"payment terms longer than 30 days need Credit Control approval and, for new accounts, a credit check first"}}
+{"h":"d8aee58750a33158c1558120d02b1071","c":{"kind":"prohibition","actions":["travel"],"entities":["international trips"],"statement":"no international trips until new travel insurance starts 1 Dec; domestic is fine","start":"2026-10-24","end":"2026-11-30"}}
+{"h":"0a2a194a74dc9cc2f6d8379d76a92da8","c":{"kind":"absence","actions":["contact","schedule"],"entities":["Lars Nilsen","Tomás Silva"],"statement":"Lars Nilsen on parental leave until 18 Jan 2027; route anything needing him to Tomás Silva","start":"2026-10-26","end":"2027-01-18"}}
+{"h":"bfbccf2e30f7bcbb5d5717f954795736","c":{"kind":"prohibition","actions":["share-external"],"entities":["Initech"],"statement":"NDA with Initech is unsigned; do not send anything confidential until it is countersigned"}}
+{"h":"9544568cfb95b397450072bd1298223d","c":{"kind":"freeze","actions":["purchase","pay"],"entities":["Wayne Analytics (ACC-48312)"],"statement":"Wayne Analytics on credit hold: no new orders, upgrades or licence increases until Credit Control lifts the hold","start":"2026-10-25"}}
+{"h":"f0c385cc3b63f03e107ee2e4212c84e4","c":{"kind":"prohibition","actions":["pay","purchase","share-external","contact"],"entities":["Kestrel Marine Supply BV","Orvane Holdings"],"statement":"do not transact with Kestrel Marine Supply BV in any way until enhanced due diligence (TC-2207) is complete; parent on asset-freeze list"}}
+{"h":"f9d6dcf83420dd0ebd82d3398c6e9765","c":{"kind":"dependency","actions":["pay"],"entities":["Aperture Labs"],"statement":"Aperture Labs not cleared to receive money until bank-detail call-back verification and signed tax declaration are done"}}
+{"h":"f4315e7d4698f6f0ba2175e2a44bcd4c","c":{"kind":"prohibition","actions":["delete-data"],"entities":["Hooli"],"statement":"legal hold: preserve all Hooli files, messages and chat logs from 1 Jan 2024 onward; do not delete"}}
+{"h":"7c0d6ed978c5cc5f19dca93d633e1c65","c":{"kind":"limit","actions":["sign"],"entities":["customer contracts"],"statement":"commercial leads may execute customer paper up to £50k ACV; above that requires CFO or legal sign-off","start":"2026-10-19","limit":50000,"unit":""}}
+{"h":"0d426613aadb1d81fe92dd4dc9159c99","c":null}
+{"h":"e2948d391cb4ab77fe6d5766b844bab1","c":null}
+{"h":"9fb06421203eb0c0f4307d12c7e10854","c":null}
+{"h":"83ac90c3c66b18a9311b5d24f48364cd","c":null}
+{"h":"9c9b5a0eb03e8dc87621872bfc413233","c":null}
+{"h":"cdd72f6af62063e4b765a7583ea9dba8","c":null}
+{"h":"8444327f5e85cd182cd51375b2dcc555","c":null}
+{"h":"bb2a663efe3aa7a4aeacac6d09c3bf2e","c":{"kind":"dependency","actions":["sign","contact"],"entities":["Halvard Shipping Ltd"],"statement":"Restricted-party screening flagged Halvard Shipping Ltd as a potential match; clearance not yet obtained"}}
+{"h":"f0d956b6ee7e998f7737142ae54c92ab","c":null}
+{"h":"6a87a8d778172af280f49be901d65eb6","c":null}
+{"h":"a1cd026a8da060e6e9fe128133235e94","c":{"kind":"dependency","actions":["hire","contact","share-external"],"entities":["Halvard Shipping Ltd"],"statement":"Halvard Shipping Ltd flagged as POTENTIAL restricted-party match (parent Orvane Holdings) — pending resolution before onboarding or dealing with the account"}}
+{"h":"f0892ccff329f9028e818616de5e84fd","c":null}
+{"h":"e6980734ebe6870d544815a28841d8d3","c":null}
+{"h":"02b9004e7856fa9ef194e2bdc9870897","c":null}
+{"h":"de7190aaefb15673bd6a361c1a3ad9e4","c":null}
+{"h":"8b2683ce649f38c8218abfc495e26837","c":null}
+{"h":"91d6e209ba827f1d63ef688706748e24","c":null}
+{"h":"8c1d165a2f31717986c0c4b19b72dcc6","c":null}
+{"h":"ce0be7b71b5f9339209eeac40166cb16","c":null}
+{"h":"b388ef29a22ee0640c57c44e7fa764a2","c":null}
+{"h":"71316cdb1ac6762650bcc97865f17c3b","c":null}
+{"h":"bfe34a3e6cf5191abb560ea1ae6f87d7","c":null}
+{"h":"943332a99c5360ed44552de95c689576","c":null}
+{"h":"f9f703fee03d41d7c70e2973a71d7358","c":{"kind":"dependency","actions":["deploy"],"entities":["EU hosting"],"statement":"EU hosting becomes a requirement if the service goes to production"}}
+{"h":"244b915664e4a6e7b0d49f60e1be20bf","c":null}
+{"h":"cc722816ae4ebcd1b22cd1f2695c4c4d","c":null}
+{"h":"77b0d40d32923b6c2ec7b0f72ce2ea6a","c":null}
+{"h":"a85425aee65fe1e6943f4a912590d19a","c":null}
+{"h":"fe675d62a6f778169f4dfa8144f3ddca","c":null}
+{"h":"533e1c00b417ebcfa082107c9aa75faa","c":{"kind":"absence","actions":["schedule","contact"],"entities":["Robert Haddad","Katherine Okafor"],"statement":"Robert Haddad on leave 14 Dec to 4 Jan; contact Katherine Okafor instead","start":"2026-12-14","end":"2027-01-04"}}
+{"h":"33ba142c5abf11a5953cd06be512a656","c":{"kind":"limit","actions":["book-venue"],"entities":["barn"],"statement":"barn hard limit of 80, named guests only, no plus-ones","limit":80,"unit":""}}
+{"h":"00e68dff587939cb04cca5f45da645e6","c":{"kind":"status-change","actions":["travel"],"entities":["flight SK482 LGW→OPO"],"statement":"flight SK482 on 2026-11-08 retimed to depart 16:40","start":"2026-11-08"}}
+{"h":"4cbee181b89e2328c6d9ce098698b40b","c":{"kind":"prohibition","actions":["travel"],"entities":["US travel under Visa Waiver Program"],"statement":"travel to the US not authorized under Visa Waiver Program"}}
+{"h":"4a8b16b937f173e95288aad1b94dd9dc","c":{"kind":"absence","actions":["travel"],"entities":["yellow fever vaccine"],"statement":"no yellow fever vaccine stock until 2026-12-16; Uganda requires valid certificate","start":"2026-10-25","end":"2026-12-16"}}
+{"h":"3fabc91fa40a923e9cdd7a9c9bee020b","c":{"kind":"prohibition","actions":["share-external"],"entities":["order LK-287104 wristbands"],"statement":"wristbands only to named holder with matching photo ID; forwarded or resold barcodes refused"}}
+{"h":"acd53eaaf9b1b04cc90126ca9d2bb91b","c":{"kind":"absence","actions":["attend"],"entities":["Chloe Brennan babysitting"],"statement":"Chloe can't babysit Maya on the 20th; free the 27th instead","start":"2026-11-20","end":"2026-11-20"}}
+{"h":"cbf7964d6301a91eadd8228ff24504cc","c":{"kind":"prohibition","actions":["attend"],"entities":["rota involving young people"],"statement":"cannot be placed on youth rota until DBS renewal clears","start":"2026-10-14"}}
+{"h":"ae69eb59dd7cb1ba552a88634270a9a3","c":null}
+{"h":"d6ff15b492d9d8ec8c08a34af0a3d2f0","c":{"kind":"preference","actions":["book-venue"],"entities":["post-op mobility"],"statement":"on crutches until Christmas; needs lift access and aisle seat"}}
+{"h":"696be4d9c86c520f06c5602fd7014848","c":{"kind":"preference","actions":["book-food"],"entities":["Imogen"],"statement":"no big nights out; drinking lime and sodas only"}}
+{"h":"fc6576d2a9e653fcfc194a78149b6999","c":{"kind":"prohibition","actions":["share-external"],"entities":["Marlow Civic Trust customer personal information"],"statement":"no disclosure of Marlow Civic Trust customer personal information to any third party without prior written authorisation from the customer's DPO"}}
+{"h":"82b320e308534e8d5cf23c4abade0957","c":{"kind":"freeze","actions":["travel"],"entities":["visa application IN-EV-96317147"],"statement":"e-Business visa application on hold; new images must be uploaded within 7 days or the application will be closed","start":"2026-10-25","end":"2026-11-01"}}
+{"h":"6ab822b665440cfce3e537071ff45c25","c":{"kind":"freeze","actions":["travel"],"entities":["South Africa trip"],"statement":"passport has only one blank page; South Africa requires two, and renewal takes at least three weeks","start":"2026-10-25"}}
+{"h":"c1561920db428bd0ad3f60cb0128afbf","c":{"kind":"limit","actions":["book-venue"],"entities":["barn event on 5 Nov"],"statement":"barn has a hard limit of 80 and attendance is named guests only, no plus-ones","limit":80,"unit":""}}
+{"h":"916b4d649c97f5cd5b5ebb9d7724b532","c":{"kind":"status-change","actions":["travel"],"entities":["flight SK482 LGW→OPO, booking 9GHLYL"],"statement":"flight on 8 Nov retimed to depart 16:40 and arrive 19:55 (was 09:15/12:30)","start":"2026-11-08"}}
+{"h":"c7a4a8be9c324b7186fa234ece004bf6","c":{"kind":"freeze","actions":["travel"],"entities":["travel to the United States"],"statement":"travel not authorized: not eligible under the Visa Waiver Program; nonimmigrant visa interview wait approx 9 weeks","start":"2026-10-24"}}
+{"h":"aa361a9a6c21215356b1202dc1a59e39","c":{"kind":"freeze","actions":["travel"],"entities":["Uganda trip, yellow fever vaccination"],"statement":"no yellow fever vaccine stock until mid-December; first appointment 16 December, and Uganda requires a valid certificate","start":"2026-10-25","end":"2026-12-16"}}
+{"h":"a152d75861735d2c358d09adc4c38bdb","c":{"kind":"prohibition","actions":["share-external"],"entities":["Larkspur Winter Weekender order LK-963932"],"statement":"wristbands only for the named holder with matching photo ID; forwarded or resold barcodes refused at the gate"}}
+{"h":"6e251057add702d3620fd51fce0669dd","c":{"kind":"absence","actions":["attend"],"entities":["babysitter for Maya"],"statement":"babysitter cannot look after Maya on the 20th; available the 27th instead","start":"2026-11-20","end":"2026-11-20"}}
+{"h":"f49348337acf8bb5feaaa70c784e66a9","c":{"kind":"freeze","actions":["attend"],"entities":["rota involving young people"],"statement":"DBS renewal not cleared; cannot be placed on any rota involving young people until renewal clears (approx four weeks)","start":"2026-10-14"}}
+{"h":"02b134d48c5bd549d04530cac58fc310","c":null}
+{"h":"c73411019f5e4fb22135e539db455cb4","c":{"kind":"preference","actions":["book-venue","attend"],"entities":["friend on crutches"],"statement":"on crutches until at least Christmas; stairs are a nightmare, so venues without a lift are out and an aisle seat is needed"}}
+{"h":"df348165462d586a7b0c8ef3898f6630","c":{"kind":"preference","actions":["book-food","book-venue"],"entities":["pregnant friend"],"statement":"on lime and sodas for a while, so no big nights for her"}}
+{"h":"ba2699912d10196633a06f6690f35537","c":{"kind":"preference","actions":["schedule","book-venue"],"entities":["Nell Garrow","Theo"],"statement":"Nell will skip Thursday's party if Theo is coming"}}
+{"h":"871f8909d9c8a84ed226c10ff79b863f","c":{"kind":"already-done","actions":["travel"],"entities":["Calton Rooms hotel"],"statement":"hotel rooms for the 12th already booked for everyone including Robin; do not book your own"}}
+{"h":"4388e3c0fd164849c486e80c3e67c500","c":{"kind":"absence","actions":["schedule"],"entities":["Grace Liu"],"statement":"Grace Liu is out for the 10th, flying to Accra on the 7th","start":"2026-11-07","end":"2026-11-10"}}
+{"h":"153195c515f41921be9936446f4514f1","c":{"kind":"status-change","actions":["book-venue","travel"],"entities":["Callum stag do"],"statement":"stag do moved from 16th to Fri 22 – Sun 24 Jan; don't book anything for the old dates","start":"2027-01-22","end":"2027-01-24"}}
+{"h":"e9c23503ae1cae5867880177d6238c00","c":{"kind":"deadline","actions":["travel"],"entities":["visa application IN-EV-24258143"],"statement":"upload new passport images within 7 days or the visa application will be closed","end":"2026-11-01"}}
+{"h":"2a762ef322087b68a7bba4c6b3c7505a","c":{"kind":"freeze","actions":["travel"],"entities":["Cape Town trip","passport renewal"],"statement":"passport lacks blank pages for South Africa; renewal takes at least three weeks, so the trip can't go ahead until then"}}
+{"h":"e0ca24ff719ee65356d13856f3ed7327","c":{"kind":"preference","actions":["book-food"],"entities":["couple attending on the 7th"],"statement":"both fully vegetarian — no meat for either of them"}}
+{"h":"ca0543f0b9c5d7a77b8dca5d585ece10","c":null}
+{"h":"d9207f784a0301e799d2d4756aeda598","c":{"kind":"prohibition","actions":["share-external"],"entities":["Hanna's pregnancy"],"statement":"Hanna's pregnancy is not to be shared until after the scan on 20 Nov"}}
+{"h":"b537de83802d3ce1dfd3ad9b20abd95d","c":null}
+{"h":"20d3549c26ae0288ad3cb2509b0a1767","c":{"kind":"absence","actions":["schedule","book-venue"],"entities":["Grace Liu"],"statement":"Grace Liu is out for the pub quiz on Thursday 3rd November","start":"2026-11-03","end":"2026-11-03"}}
+{"h":"be8d6177f4a25fba8fbf7006f6c32117","c":null}
+{"h":"981165992100f757af5497e36cb8153d","c":null}
+{"h":"5d393cb5b7df38370161fc83fcc0ba3d","c":null}
+{"h":"683145b2c8783c7d38baadad6a5a3e02","c":null}
+{"h":"04a332a8401c011878e4a16a5f068673","c":null}
+{"h":"366fbc5a9f7db39e570837916af39993","c":null}
+{"h":"6989fa0ccf296cca863647b214768eae","c":null}
+{"h":"c4a97e38ad7124f5d4b73f087a74ddaf","c":null}
+{"h":"75df62469c1c34f46d97a77b41d32673","c":{"kind":"prohibition","actions":["share-external"],"entities":["Hanna's pregnancy"],"statement":"Hanna is 11 weeks pregnant but not telling people until after the scan on the 20th; keep it confidential"}}
+{"h":"ff441a98a1a085956346cd968a93d6d0","c":null}
+{"h":"062df336a85ca314f89174d9560eac0f","c":{"kind":"absence","actions":["schedule","attend"],"entities":["Katherine Okafor","pub quiz"],"statement":"Katherine Okafor is out for the pub quiz on Thursday 3rd — her brother's in town that night","start":"2026-11-05","end":"2026-11-05"}}
+{"h":"7e74864db5595c68fa1e0762ffdd8a4a","c":{"kind":"dependency","actions":["hire","sign"],"entities":["Joss Kettering","IR35 status determination"],"statement":"No renewal or extension of Joss Kettering until his IR35 status determination is completed and signed; he hits 12 months on 15 November","end":"2026-11-15"}}
+{"h":"f7d69fdda28ea2b352fe7206e0b89f7b","c":{"kind":"prohibition","actions":["share-external"],"entities":["Søren Kierkegaard's mid-year review"],"statement":"Søren Kierkegaard's mid-year review contains confidential health information and must not go beyond the named people"}}
+{"h":"02a6e8fc9f0abe2138eb4d3640cbd9aa","c":{"kind":"status-change","actions":["pay"],"entities":["Soylent Foods","invoices@soylentfoods.com","PO-4500287827"],"statement":"From 1 November 2026 Soylent Foods only processes invoices quoting PO-4500287827, sent to invoices@soylentfoods.com; invoices without a PO are returned unpaid","start":"2026-11-01"}}
+{"h":"5853c3fb57ae014210d18ed52f3e088a","c":{"kind":"prohibition","actions":["purchase"],"entities":["2027 learning budget","Q1 2027 courses"],"statement":"Do not book or commit to any course, conference or programme in Q1 2027 until the board approves the 2027 learning budget in February","end":"2027-02-01"}}
+{"h":"a31b4783d5d61cddb638cfab912b5d2b","c":{"kind":"status-change","actions":["hire"],"entities":["Odette Marsh","Ravi Dunmore"],"statement":"Odette Marsh has withdrawn from the ops lead process; Ravi Dunmore remains a candidate and is free most of next week, Friday included","start":"2026-10-26"}}
+{"h":"49646aa504c528b5f6e676ef69c2a25e","c":{"kind":"freeze","actions":["purchase","hire","travel","book-venue"],"entities":["discretionary spend"],"statement":"Discretionary spend frozen until year end","start":"2026-10-27","end":"2026-12-31"}}
+{"h":"290061d46cfe0264306161a1e852f12e","c":null}
+{"h":"6087df970b6049d298333a8a3424bb44","c":{"kind":"prohibition","actions":["deploy"],"entities":["hosting"],"statement":"Everything must be hosted in the EU, nothing in the States"}}
+{"h":"f3db7256828173d585a797339cdf3877","c":null}
+{"h":"389ca2c44518bac1c7f17a82d167acf8","c":null}
+{"h":"71ef55e3fb195b54ebf0b3249ebf5a0d","c":{"kind":"freeze","actions":["travel"],"entities":["international trips"],"statement":"No international trips until 2026-12-01","start":"2026-10-27","end":"2026-11-30"}}
+{"h":"d1c5e007e88f8614d8646864cc8608e3","c":null}
+{"h":"511190a28ddf2a71bfb97f3d9e12fc25","c":{"kind":"prohibition","actions":["share-external"],"entities":["Globex"],"statement":"No disclosure of customer personal information to any third party without prior written authorization from the customer's DPO"}}
+{"h":"9c208ecc9f18891d4f6436a69f73cf3c","c":null}
+{"h":"0306b1e8d1bb913df7f04ad424797f55","c":null}
+{"h":"6daf489da183a4694b4abf9fb45b80a0","c":{"kind":"freeze","actions":["hire"],"entities":["external recruitment"],"statement":"all external recruitment paused until Q1 forecast signed off mid-December","start":"2026-10-25","end":"2026-12-15"}}
+{"h":"ad8ca6d502813a5b2b7d339ec2d63c6c","c":{"kind":"absence","actions":["contact","schedule"],"entities":["Grace Liu"],"statement":"Grace signed off sick until 13 November; no work contact in the meantime","start":"2026-10-23","end":"2026-11-13"}}
+{"h":"53246a3f16cecace54ec1829be197659","c":null}
+{"h":"49153c103a40e4e9a50ab050a0871302","c":{"kind":"freeze","actions":["pay"],"entities":["Q3 bonuses"],"statement":"no Q3 bonuses until audited numbers signed mid-November; nothing into payroll yet","start":"2026-10-25","end":"2026-11-15"}}
+{"h":"8a5d78e80f46a85c693be5e16bed4450","c":{"kind":"status-change","actions":["purchase"],"entities":["Tobias day rate"],"statement":"day rate rises to £520 from 1 November; bookings before then stay at old rate","start":"2026-11-01","limit":520,"unit":""}}
+{"h":"02cce44a9332062a99cb37a0824ad529","c":{"kind":"prohibition","actions":["hire"],"entities":["promotions and pay rises"],"statement":"no promising or announcing promotions before the 8 December calibration panel","end":"2026-12-08"}}
+{"h":"8c61296a9a2ec536a04a61b99666f5f7","c":{"kind":"prohibition","actions":["share-external"],"entities":["new identity"],"statement":"new identity under embargo until 1 December launch; nothing with new mark to outside suppliers","end":"2026-12-01"}}
+{"h":"79a2f7895ac850aa0f7e7621b0b1addd","c":{"kind":"absence","actions":["contact","schedule"],"entities":["Tomás Silva"],"statement":"Tomás on annual leave 2–6 Nov, no laptop, back 9 Nov","start":"2026-11-02","end":"2026-11-06"}}
+{"h":"9c80d777a959f35b0ef4a9ab570b7ff1","c":null}
+{"h":"7b5e4825a7f515b7d82c65670de8dc79","c":{"kind":"limit","actions":["book-food"],"entities":["hospitality for external guests"],"statement":"external hospitality up to £75 per head; above that needs written Finance exception","start":"2026-10-01","limit":75,"unit":""}}
+{"h":"1f3dd4faa8179119a0dbf0690d7fbfb6","c":{"kind":"absence","actions":["schedule"],"entities":["Vikram Iyer","Elena Ivanova"],"statement":"Vikram Iyer on approved leave 18 Dec–1 Jan; Elena Ivanova and Vikram are the only escalation-trained staff and cannot be off at the same time","start":"2026-12-18","end":"2027-01-01"}}
+{"h":"ce2c7a7b5827c0246c9782389a60bc2f","c":{"kind":"prohibition","actions":["purchase"],"entities":["furniture","Arden House"],"statement":"don't buy furniture or kit for the current floor; Arden House comes fully furnished and purchases would go into storage"}}
+{"h":"12f910c3cb1251e4f264d8244d284c44","c":{"kind":"prohibition","actions":["purchase"],"entities":["Brightway"],"statement":"agreed: do NOT auto-renew Brightway cleaning contract; three-quote tender to run instead"}}
+{"h":"31e8438a9d98c4d2df3e7457badebf3a","c":{"kind":"limit","actions":["hire"],"entities":["Leon Ashby","CS manager"],"statement":"CS manager approved at band topping out at £54k; anything above that must go back to Sam Patel before a written offer","limit":54000,"unit":""}}
+{"h":"8d2199e7f19f5ee91f92c080299957e2","c":{"kind":"deadline","actions":["book-venue"],"entities":["Rochelle Canteen deposit"],"statement":"£250 festive do deposit is non-refundable after 13 Nov","end":"2026-11-13"}}
+{"h":"39b172ef3390bcd968a2e8adb4c79aef","c":{"kind":"preference","actions":["book-food"],"entities":["Zoë Müller"],"statement":"Zoë Müller is coeliac (medical); any food laid on must be gluten-free"}}
+{"h":"be828f197c1f05bc8ccd9204e6d51c77","c":{"kind":"prohibition","actions":["hire"],"entities":["Sefton"],"statement":"do not close out candidate Sefton before discussing with Ethan Brooks and Liv Tarrant"}}
+{"h":"453601fc61109ed04cc304ca1c4b001d","c":{"kind":"prohibition","actions":["share-external"],"entities":["Robert Haddad mid-year review"],"statement":"Robert Haddad's mid-year review contains confidential health information; must not go beyond Robin, Robert and occupational health"}}
+{"h":"59b9c9b1f7f807a4694b9aa67efc409a","c":{"kind":"status-change","actions":["pay"],"entities":["Initech invoices"],"statement":"from 1 Nov Initech requires a valid PO number (PO-4500331140) on invoices and a new invoice address invoices@initech.io","start":"2026-11-01"}}
+{"h":"dcf71c9768a07957acd3ccac56b8c1b0","c":{"kind":"dependency","actions":["purchase"],"entities":["2027 L&D budget"],"statement":"2027 learning budget not released until board approval in February; no booking or committing to Q1 2027 courses before then"}}
+{"h":"3f40acd790af4122f92b8fa191d2c4a9","c":{"kind":"prohibition","actions":["book-food","book-venue"],"entities":["festive do"],"statement":"festive do is work-only; partners cannot come"}}
+{"h":"e82c1e9b4f464f49a52de78a0ff812bb","c":{"kind":"preference","actions":["book-food"],"entities":["Ingrid Berg"],"statement":"Ingrid Berg is coeliac; food must be gluten-free or she brings her own"}}
+{"h":"a2f894d9b1f2e6d2f3b537b3453f6337","c":{"kind":"dependency","actions":["hire"],"entities":["Sefton"],"statement":"do not close out candidate Sefton before discussing with Jo Mensah (and Liv Tarrant)"}}
+{"h":"ccbec073e062ab99a22fcf55d5acf1a7","c":{"kind":"prohibition","actions":["share-external"],"entities":["Imogen Hart","Tilly Brenner"],"statement":"reviews for Imogen Hart and Tilly Brenner contain sensitive health notes; keep them between Robin, them and People"}}
+{"h":"6e5d17c76dfc4b9aba0b02afc226aaa1","c":{"kind":"status-change","actions":["pay"],"entities":["Brindle & Moss","invoices@brindlemoss.co.uk"],"statement":"from 1 Nov invoices must quote PO-4500287827 and go to invoices@brindlemoss.co.uk or they are returned unpaid","start":"2026-11-01"}}
+{"h":"c9fdb4fe50c70af8eedbdb1ed9485d08","c":null}
+{"h":"3ab5bcf66148680cb8755e452b0b6129","c":{"kind":"status-change","actions":["hire","schedule"],"entities":["Ravi Dunmore","Odette Marsh"],"statement":"Ravi Dunmore withdrew from the ops lead process; Odette Marsh available next week, Friday included"}}
+{"h":"715e5b23d45112dcf90098685e45c17e","c":null}
+{"h":"fec5fdb9202021c86208150f06e11f80","c":null}
+{"h":"0252c78a9c2d916baded4f977d70a679","c":{"kind":"already-done","actions":["pay"],"entities":["EXP-2296","Kofi Boateng"],"statement":"claim EXP-2296 already approved and added to 3 Nov payroll"}}
+{"h":"e6d24a60b62e8215d847383ea2f6e742","c":{"kind":"status-change","actions":["pay"],"entities":["Brindle & Moss","invoices@brindlemoss.co.uk","PO-4500331140"],"statement":"from 1 Nov invoices must quote PO-4500331140 and go to invoices@brindlemoss.co.uk or they will be returned unpaid","start":"2026-11-01"}}
+{"h":"1ec7b3fbea5f4e5cebb89154617e4598","c":null}
+{"h":"300a5de04cc4a48f7e8604150bc451e3","c":{"kind":"status-change","actions":["hire"],"entities":["Ravi Dunmore"],"statement":"Ravi Dunmore withdrew from the ops lead process, having accepted an offer elsewhere"}}
+{"h":"6b88571470afb1c716942a3bed497a1d","c":null}
+{"h":"5a67e5f0e4984c4e7e2ca416ed30be23","c":null}
+{"h":"2d80c34c075f85574caf3431b1e24bf9","c":null}
+{"h":"a8846545ab7cbeb9c68e22362ad30cc5","c":null}
+{"h":"69eead4fa752b91f1f9e47149edd0342","c":null}
+{"h":"831e574a084548285ab622a1efcc0710","c":null}
+{"h":"1efb202e2af1f23e9b0c8edfcc266eec","c":null}
+{"h":"880d3b5cb7a451aa98388eb83c2d8b53","c":{"kind":"prohibition","actions":["hire"],"entities":["Odette Marsh"],"statement":"Odette Marsh accepted an offer elsewhere and withdrew from the hiring process"}}
+{"h":"6f4c1d29e4d20ac3b409af94bad49dfd","c":{"kind":"absence","actions":["contact","schedule"],"entities":["Aiko Tanaka"],"statement":"Aiko Tanaka signed off sick until 13 November; do not contact about work in the meantime","end":"2026-11-13"}}
+{"h":"2b317d8f079bf1f727e5407e8c0adedd","c":{"kind":"freeze","actions":["pay"],"entities":["Q3 bonuses"],"statement":"No Q3 bonuses go out until audited numbers are signed mid-November; nothing into payroll yet","end":"2026-11-15"}}
+{"h":"846b488b84a776446b497df3b7b3dd85","c":{"kind":"status-change","actions":["purchase"],"entities":["Tobias day rate"],"statement":"Tobias's day rate rises to £520 from 1 November; bookings before then stay at the old rate","start":"2026-11-01","limit":520,"unit":""}}
+{"h":"f5dea888a22f1e4c505d8af3ac7628ba","c":{"kind":"prohibition","actions":["hire"],"entities":["Q4 promotions and pay rises"],"statement":"No promotions or pay rises may be promised or announced before the calibration panel on 8 December","end":"2026-12-08"}}
+{"h":"16441fa75042ba5db80b462d5daed49c","c":{"kind":"prohibition","actions":["share-external"],"entities":["new identity mark"],"statement":"New identity under embargo until public launch 1 December; nothing carrying the new mark printed or sent to outside suppliers before then","end":"2026-12-01"}}
+{"h":"63684e695cfc020033b4be066feabb29","c":{"kind":"absence","actions":["contact","schedule"],"entities":["Rose Kimura"],"statement":"Rose Kimura on annual leave 2–6 November, out of office with no laptop","start":"2026-11-02","end":"2026-11-06"}}
+{"h":"31d9898c2489e8a87a32836eafa8b348","c":{"kind":"dependency","actions":["schedule"],"entities":["Olu Adebayo leave request 21-31 Dec"],"statement":"Olu Adebayo's leave 21–31 December is still pending and can't be approved while Sam Patel is off 18 Dec–1 Jan (only two people trained on escalation queue)","end":"2026-12-31"}}
+{"h":"4ae20e8377a89442d9482568e452b9ad","c":{"kind":"limit","actions":["hire"],"entities":["Leon Ashby CS manager offer"],"statement":"Leon Ashby approved at band topping out at £54k; anything higher must go back to Christopher Hall before a written offer","limit":54000,"unit":""}}
+{"h":"e67930364016a5b7c8a42446e782dc6a","c":null}
+{"h":"a3d1ddc9d3cfba16ae35c6be72d3b052","c":{"kind":"preference","actions":["book-food","schedule"],"entities":["Theo","Thursday party guest"],"statement":"guest will not attend the Thursday party if Theo is there"}}
+{"h":"618fa128e10fb56c10daaba6e555eb4e","c":{"kind":"already-done","actions":["travel"],"entities":["Calton Rooms"],"statement":"hotel rooms for the trip north on the 12th already booked for everyone including Robin; do not book your own as duplicate claims will be rejected"}}
+{"h":"9ffc270657967141b6bfbf648aec8103","c":{"kind":"absence","actions":["schedule","contact"],"entities":["Katherine Okafor"],"statement":"Katherine Okafor is away, flying out 7 Nov for her brother's wedding, unavailable on the 10th","start":"2026-11-07","end":"2026-11-10"}}
+{"h":"598f2c7f74a0ec19c08c98d48d60ee85","c":null}
+{"h":"7c401843ac63121816758d2dbe4f6dbd","c":null}
+{"h":"512caeec2d82c634b92c8e7b7d182e12","c":null}
+{"h":"d5432bff7052daaa222618bc4e8eee4a","c":null}
+{"h":"87f02be2c8b7885176580c7e7a55053c","c":null}
+{"h":"6c09be21dfaa0a5af8299c78aa5e3752","c":null}
+{"h":"b02abd7af24915cca8f7098bfca5a4a3","c":null}
+{"h":"abd34062f90a719ae9038126605c7383","c":null}
+{"h":"4047f4fdfae987f1a36b4adf4edeceaa","c":null}
+{"h":"0aa0d9398d9d32a2089b9e9c3c0bdb48","c":null}
+{"h":"6d15accb87903c387cb91393b3cdd696","c":null}
+{"h":"f59b18308dab928580c8603aa620bb50","c":{"kind":"status-change","actions":["deploy","attend"],"entities":["Hooli go-live cutover support"],"statement":"Hooli go-live cutover support postponed to 12 January 2027 at Hooli's request; nothing needed on 30 Oct","start":"2027-01-12"}}
+{"h":"a8a1dae8b4ae106c8452e398f4df35a6","c":null}
+{"h":"97754ed0262ec8aeaed69a3d99231d5d","c":{"kind":"freeze","actions":["hire"],"entities":["office manager role"],"statement":"office manager role parked to Q1","end":"2026-12-31"}}
+{"h":"1301ea42f281e1126c0283062f217e46","c":{"kind":"preference","actions":["contact"],"entities":["leadership lunch 18 Nov"],"statement":"leadership lunch is work-only, partners cannot come this time"}}
+{"h":"ab74858637843a340e910346e74ad799","c":{"kind":"status-change","actions":["pay"],"entities":["Lars Nilsen"],"statement":"Lars Nilsen switched bank details to Monzo, sort code 20-45-77, account ending 3320"}}
+{"h":"79ef1e11d97d42aa568d3ee227acd2f9","c":null}
+{"h":"8c18ae3e4612d02c262903a8ad10a174","c":{"kind":"status-change","actions":["attend","schedule"],"entities":["Vandelay Industries go-live cutover support"],"statement":"Vandelay Industries go-live cutover support postponed from 30 Oct 2026 to 12 January 2027 at Vandelay's request; nothing needed on the original date","start":"2027-01-12"}}
+{"h":"74abfb0ba632700846240e9cac0e78d0","c":{"kind":"absence","actions":["schedule","contact"],"entities":["Sam Patel"],"statement":"Sam Patel on approved leave 18 Dec 2026 – 1 Jan 2027 (Olu Adebayo's overlapping leave 21–31 Dec is now covered by Tilly Brenner)","start":"2026-12-18","end":"2027-01-01"}}
+{"h":"6d65096174223c0e89cdeace8b2f4b85","c":{"kind":"prohibition","actions":["hire"],"entities":["office manager role"],"statement":"Office manager role parked to Q1 — do not hire for it now; CS manager and data analyst backfill are approved"}}
+{"h":"e621d13def3485a60f3ba25c4415af7b","c":null}
+{"h":"1337389d50355eef543071added11275","c":{"kind":"status-change","actions":["pay"],"entities":["Al Chen"],"statement":"Al Chen changed bank details to Monzo, sort code 20-45-77, account ending 3320"}}

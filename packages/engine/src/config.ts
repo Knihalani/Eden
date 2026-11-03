@@ -56,6 +56,15 @@ export interface EngineConfig {
   ledgerCooldownTurns: number;
   /** Turns before the same cue is looked up again. */
   cueCooldownTurns: number;
+  /**
+   * A request that arrives while the session's slow path is busy (a judge call, a slow source) is kept, not dropped:
+   * one slot per session, the latest wins, looked up once the slow path settles, and its answer queued as pending.
+   * Dropped instead if the session closed, its cue is in cooldown by then, or it waited over 10 s. At most one extra
+   * slow path (so one judge call, under the budget) per busy window. The kept request runs the slow path alone (no
+   * `anticipate` early answer); with `syncPollBehind` it gets the follow-up on the fresh index as any lookup does.
+   * Off: such a request is not looked up. Proposed D102.
+   */
+  slowPathQueue: boolean;
   /** Turns an injection has to show use before it counts as unused. */
   usageWindowTurns: number;
   /**
@@ -254,6 +263,14 @@ export interface EngineConfig {
   syncMaxItems: number;
   /** Items asked per listing page. */
   syncPageSize: number;
+  /**
+   * An incremental poll's smallest first page (0: polls read `syncPageSize` pages, as backfill and sweeps do). Set, a
+   * poll's first page is twice what the source's learned change rate expects since its last poll, at least this and
+   * at most `syncPageSize`. While no page reaches what was already synced, the next page tops the items asked up to
+   * the next multiple of `syncPageSize` (5, 95, 100): a poll lists at most `syncCatchupPages` (or its background
+   * limit) full pages' worth of items, in at most one call more. Cuts items listed on the request path (D101).
+   */
+  syncPollPageSize: number;
   /** Timed polls of an active user's sources this often (ms); 0 polls only on demand (`syncOnDemand`). */
   syncEveryMs: number;
   /** A synced source is stale once the chance it changed since its last poll (its learned rate) reaches this. */
@@ -589,6 +606,15 @@ export interface EngineConfig {
    */
   readerPushWaitMs: number;
   /**
+   * With `readerPush`, `syncOnDemand` and `syncPollBehind`: the push's own lookup does not wait for the sync's poll
+   * either (the agent's asks still do). It reads the index as it stands, so its reader starts about one poll sooner
+   * (audit 2026-11-03b, lat-push-read-waits-poll). If the poll then stores anything, the push is ranked once more on
+   * the fresh index with no new source call and read again (a reader cache hit, no call, when its pool is unchanged);
+   * a packet the first reading queued and the agent has not taken is replaced, not joined by a second one. Off by
+   * default; no decision yet.
+   */
+  readerPushBehind: boolean;
+  /**
    * With `askReader`: no reader call when none of the request's candidates could constrain it (no card of a
    * constraint, state-change or already-done kind, no constraint wording). Standing items (`askReaderStanding`) do not
    * open the gate, so with both on, a request whose candidates hold nothing constraint-like is not read even when a
@@ -629,6 +655,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   windowEvents: 12,
   ledgerCooldownTurns: 40,
   cueCooldownTurns: 6,
+  slowPathQueue: false,
   usageWindowTurns: 6,
   maxSessionsPerTenant: 5_000,
   sessionIdleMs: 2 * 3_600_000,
@@ -695,6 +722,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sync: false,
   syncMaxItems: 3_000,
   syncPageSize: 100,
+  syncPollPageSize: 0,
   syncEveryMs: 0,
   syncStaleChance: 0.15,
   syncMaxStaleMs: 6 * 3_600_000,
@@ -763,6 +791,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerPushKinds: ["blocks", "limits", "changes", "done"],
   readerPushNotes: false,
   readerPushWaitMs: 60_000,
+  readerPushBehind: false,
   readerGate: false,
   constraintDigest: false,
   digestLines: 12,

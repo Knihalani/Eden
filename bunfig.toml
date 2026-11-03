@@ -2,3 +2,6 @@
 # Throwaway HOME and EDEN_HOME, inherited EDEN_* cleared. Applies to `bun test` started from the
 # repo root only: Bun reads bunfig.toml from the working directory.
 preload = ["./scripts/test-preload.ts"]
+# archived/ is history (CLAUDE.md): its ~530 test files must not run. scripts/test.sh finds its own files and never
+# reaches them; this makes a bare `bun test` at the root agree with it. Honoured by Bun 1.3.13 and 1.4.4.
+pathIgnorePatterns = ["archived/**", "**/node_modules/**"]

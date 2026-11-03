@@ -55,6 +55,12 @@ and a statement on training (none).
 - **Read-only sources:** `McpSource` calls only its configured search tool, and refuses it unless the server declares
   it read-only or an operator trusts it (D7). Annotations are self-declared, so only trusted servers are connected.
   A list tool for the sync (`listTool`, D57) passes the same check, or the connection fails.
+- **Per-user credentials (D108):** each user's sources are built from their own entry (`EDEN_USER_SOURCES_FILE` or the
+  integrator's directory) and their MCP connections are held per (tenant, user, source); no connection, header or
+  token is shared between users. Header values can name an environment variable so tokens stay out of the file; they
+  are held in memory only while the user's connections are, and never logged. Forget, 15 minutes idle, a changed
+  token, a directory error or a directory that does not answer within 5 s closes the connections; the directory is asked again at most every 60 s, so a revoked
+  account stops being read within a minute. Tokens are issued and refreshed by the integrator (no OAuth flow in Eden).
 - **Model-bound background work:** with `cards` (D59), item text leaves Eden for the model provider even when no
   request is made; tenants who turn it on must disclose it, and the budget caps how much.
 - **Request-time item text to the model:** with `askReader` (D95), an `ask` about an action sends up to 40
@@ -66,7 +72,9 @@ and a statement on training (none).
   in the same data envelope, so a malicious item cannot add words of its own beyond being picked (D11, D19).
   The agent still receives the item text: tenants should treat injections as untrusted input.
 - **Deletion:** `POST /v1/forget` drops a user's (or one source's) cache and map rows and the user's live sessions,
-  aborting in-flight lookups so nothing is re-cached afterwards (D17).
+  aborting in-flight lookups so nothing is re-cached afterwards (D17), and closes the user's (or that source's) source
+  connections (D108). It does not change the configuration: the next lookup reconnects if the directory still lists
+  the source, so revoking access means removing it from the directory too.
 - **Fail-open client:** an Eden outage never blocks the tenant's agent.
 
 ## Open items

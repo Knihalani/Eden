@@ -65,7 +65,7 @@ and ALL4 (D84) branch off ALL3 (`packages/sim/src/lab/presets.ts`).
 | [moon-telemetry.md](moon-telemetry.md) | 2026-10-31 | D56 | Engine-wide span tracing, a run recorder and report; two optimisations | adopted (spans off by default) |
 | [moon-sync.md](moon-sync.md) | 2026-10-31 | D57, D63 | "Eden Atlas": background sync into a per-user local index | adopted (ALL3) |
 | [moon-graph.md](moon-graph.md) | 2026-10-31 | D58 | Per-user knowledge graph with a 2 ms graph walk, no model | adopted (ALL3) |
-| [moon-cards.md](moon-cards.md) | 2026-10-31 | D59 | Implication cards made in the background by a model, matched at request time with no model | adopted (ALL3) |
+| [moon-cards.md](moon-cards.md) | 2026-10-31 | D59 | Implication cards made in the background by a model, matched at request time with no model; negative result (2026-11-03b): card action triggers, kind gating and age cuts cannot reach 3x (the action lexicon is the limit) | adopted (ALL3); triggers rejected |
 | [moon-anticipate.md](moon-anticipate.md) | 2026-10-31 | D60 | Read each event for what the agent will need next and prefetch it | adopted (ALL3) |
 | [moon-pi.md](moon-pi.md) | 2026-10-31 | D61 | The Pi harness as the standard live agent, with a per-task timeline | adopted (tooling) |
 | [moonshots.md](moonshots.md) | 2026-10-31 | D62, D63 | The six tracks on one tree; configuration R; review fixes | superseded (R → ALL → ALL3) |
@@ -112,7 +112,9 @@ and ALL4 (D84) branch off ALL3 (`packages/sim/src/lab/presets.ts`).
 | [broad-set.md](broad-set.md) | 2026-11-02 | — | train1–6 written blind; four rule-based tracks (ledger, ranker/gate, lexical bridge, validity) do not generalise; misses are reading, not retrieval | train adopted (tooling); the four tracks rejected |
 | [hermes-lab.md](hermes-lab.md) | 2026-11-02 | — | Hermes Agent with and without Eden: harness, smoke and a blind free-model run; full-bench estimates | adopted (tooling) |
 | [haiku-opt.md](haiku-opt.md) | 2026-11-02 | D95, D96, D97 | The ask-time reader on Haiku 5.5; prompt v5 labels lookalikes; `askReaderDrop`, `readerPush` | adopted (NEW) |
+| [new-minus-intent.md](new-minus-intent.md) | 2026-11-03 | D109 | NEW and NEWL without the intent index on train: −8.6 and −8.3 points of hidden for 16.9× fewer background items; intent kept | rejected (dropping intent) |
 | [haiku-benchmark.md](haiku-benchmark.md) | 2026-11-02 | D97, D98 | NEW vs ALL3 vs tools in Pi and Hermes, blind held-out 5–8 and 10–12: +22.8 / +23.9 points hidden raised, $24.36 | adopted (NEW is the recommendation) |
+| [distilled-reader.md](distilled-reader.md) | 2026-11-03 | D110 | A no-model cascade in front of the reader, trained on Haiku labels from train1–6: planted-vs-decoy AUC 0.544; blind 1.09× fewer reader calls at equal hidden, decoys +2.3 points | rejected (`--distill` kept as lab tooling) |
 
 Not in this directory: [../RESEARCH.md](../RESEARCH.md) (the Meta PMA paper and open questions),
 [../plans/](../plans/) (the query-planner plan and `next.md`), [../LAB.md](../LAB.md) (how to run the lab).

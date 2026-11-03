@@ -34,6 +34,11 @@ export interface Usage {
   cachedInputTokens: number;
   /** Input tokens written to the prompt cache, when the provider bills them apart (Anthropic). */
   cacheWriteTokens?: number;
+  /**
+   * Output tokens spent on hidden reasoning (already counted in `outputTokens`), when the provider reports them
+   * (OpenRouter: `completion_tokens_details.reasoning_tokens`). Absent means not reported, not zero.
+   */
+  reasoningTokens?: number;
 }
 
 export interface ChatResponse {

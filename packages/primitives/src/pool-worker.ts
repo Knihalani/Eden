@@ -1,7 +1,8 @@
 /**
- * The worker side of `WorkerPool` (pool.ts). The first message names the task module; the worker imports it and
- * replies `ready` (or the import error). Every later message is a batch: each task names an exported function and
- * its input, and the reply carries one result or error per task, in order. A task that throws fails alone.
+ * The worker side of `WorkerPool` (pool.ts). The first message names the task module, and optionally a warm task;
+ * the worker imports the module, runs the warm task once (`PoolOptions.warm`), and replies `ready` (or the error).
+ * Every later message is a batch: each task names an exported function and its input, and the reply carries one
+ * result or error per task, in order. A task that throws fails alone.
  */
 declare const self: {
   onmessage: ((e: MessageEvent) => void) | null;
@@ -15,9 +16,19 @@ let tasks: Record<string, unknown> | undefined;
 
 /** Imports the task module once, then answers batches with a synchronous handler. */
 self.onmessage = async (e: MessageEvent) => {
-  const data = e.data as { module: string };
+  const data = e.data as { module: string; warm?: string };
   try {
     tasks = (await import(data.module)) as Record<string, unknown>;
+    if (data.warm !== undefined) {
+      const warm = tasks[data.warm];
+      if (typeof warm !== "function") throw new Error(`no warm task named ${data.warm}`);
+      // Best effort: a warm-up that throws leaves the worker to warm lazily on its first batch, as without one.
+      try {
+        warm();
+      } catch {
+        // Nothing to do: the tasks still run.
+      }
+    }
     // Swapped before replying, so no batch can reach the init handler.
     self.onmessage = runBatch;
     self.postMessage({ ready: true });

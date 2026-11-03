@@ -62,6 +62,28 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   clock-independent in D58).
 - Regressions found in reviews go to `regressions.test.ts`, `review-regressions.test.ts` or the track's own
   `*-review.test.ts`; add to them rather than editing an old expectation.
+- `new ModelReaderMaker(model, { reasoning })` takes `"low"` (the default, production's value), `"medium"`, `"high"`
+  or `"off"` (no effort sent). No `EngineConfig` key wires it yet. OpenRouter excludes reasoning from the reply but
+  bills it as output; `usage.reasoningTokens` (from `completion_tokens_details.reasoning_tokens`, unset when not
+  reported) shows that share. Lab reader latencies (Anthropic, thinking off by default) exclude it, so they
+  understate production wherever the routed endpoint reasons. Changing the default needs a decision and a decoy
+  measurement (D96: reasoning before the verdict is what keeps decoys out).
+- `Held` (what a tool result or agent message holds, for `alreadyHas`) is two sorted unique typed arrays, searched by
+  binary search: a remap (`rebuildVocab`) must sort and dedupe again, since new ids do not keep the old order. Pair
+  keys stay exact Float64 (`pairKey`): a hashed key could hold back a delivery on a collision. `held.test.ts` measures
+  a session with 12 mail listings of 8 KB (311 KB; 2,096 KB with Sets).
+- `readerPushBehind` (off; needs `readerPush`, `syncOnDemand`, `syncPollBehind`): the push's lookup reads the index
+  before the poll is done; a poll that stores something gets one more ranking and reading, no new source call, a
+  reader cache hit when the pool is unchanged, and its packet replaces one the agent has not taken
+  (`push-behind.test.ts`). A packet withdrawn untaken has its ledger entries restored (`Ledger.entry`/`restore`, not
+  a bare unmark) and its sketches dropped from `s.delivered`, so what the second reading does not deliver again stays
+  deliverable. Lab preset NEWBB. With `syncPollBehind` a lookup's trace leaves out the poll it did not wait for; the
+  poll gets its own "skipped" trace (reason "sync poll behind", `sourceCalls` = `syncCalls`) when it settles, even
+  after the session closed, so traces sum to what the connectors received. A lookup whose poll waits on a read
+  already running (`SourceSync.busy`, which resolves to what that read stored) counts what it stored, not one, and
+  `freshen` returns only its own calls. Presets ALL3BG and NEWBG set `probeGraceMs` 0 on ALL3B and NEWB: a
+  lookup no longer waits for its probes (D47's grace), so a slow probe's finds only reach later turns. No decision
+  yet for either; a Pi run is owed before any default changes.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

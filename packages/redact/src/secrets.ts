@@ -77,6 +77,8 @@ export interface SecretRule {
   prefilter: string[];
   /** Where the rule's secrets sit in `text`; none when it finds none. */
   spans(text: string): Span[];
+  /** Compiles what the rule would compile on its first `spans` call (`warmGate`); absent when nothing is deferred. */
+  warm?(): void;
 }
 
 /**
@@ -456,6 +458,13 @@ function gitleaksRule(
       }
       return out;
     },
+    warm() {
+      const { pattern, own } = (compiled ??= compile());
+      // One match on the empty text makes the engine build its matcher too (JavaScriptCore compiles a RegExp on its
+      // first run, re2js its first DFA states), so the first real text pays for neither.
+      pattern.test("");
+      for (const list of [global, ...own]) for (const regex of list.regexes) regex.test("");
+    },
   };
 }
 
@@ -679,6 +688,23 @@ export function gateOf(rules: SecretRule[]): Gate {
 }
 
 let gate: Gate | undefined;
+let warmed = false;
+
+/**
+ * Builds the rules, compiles every rule's pattern and allowlists and builds the gate, so the first `sanitizeForStore`
+ * on live traffic does not pay for it (36-44 ms then, against 1.0-1.8 ms after it; packages/server/CLAUDE.md
+ * has the runs). Idempotent: a second call returns at once. A server calls it before it listens; importing the
+ * module stays cheap for everyone else.
+ */
+export function warmGate(): void {
+  if (warmed) return;
+  const rules = secretRules();
+  for (const rule of rules) rule.warm?.();
+  gate ??= gateOf(rules);
+  // Runs the prefilter and the structural redactor once, with no keyword, so no rule regex runs.
+  gate.sanitizeForStore("warm");
+  warmed = true;
+}
 
 /** The ids of the rules `text` hits, sorted; empty when it carries no secret D13 knows. */
 export function secretHits(text: string): string[] {

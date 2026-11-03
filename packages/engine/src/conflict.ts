@@ -19,6 +19,7 @@
  * pattern is linear (no nested quantifiers over the same characters) and reads at most `MAX_TEXT` characters.
  */
 import type { ContextItem } from "@eden/protocol";
+import { parseWhen } from "./grounding";
 import { compactText } from "./render";
 
 const NO_FOCUS: ReadonlySet<string> = new Set();
@@ -614,6 +615,9 @@ function dateVerdict(
  * `DONE`, `STANDING`): the knowledge graph links such an item to the days and things it names as constraining them.
  */
 export function constrains(s: string): boolean {
+  // Most sentences match none of the four: one search each (no match objects) answers them. `search` ignores the
+  // shared lists' global `lastIndex`.
+  if (s.search(BLOCKS) < 0 && s.search(MOVES) < 0 && s.search(DONE) < 0 && s.search(STANDING) < 0) return false;
   return (
     marks(s, BLOCKS, true).length > 0 ||
     marks(s, MOVES, true).length > 0 ||
@@ -856,7 +860,8 @@ const stem = (w: string) => (w.length > 4 && w.endsWith("s") && !w.endsWith("ss"
 /** When an item was written: its `Date:` header, else its `updatedAt`; null when neither is known. */
 export function sentAt(item: ContextItem): number | null {
   const m = /^date:\s*([^\n]{0,60})$/im.exec(item.text.slice(0, 600));
-  const t = m ? Date.parse(m[1]!.replace(/,/g, "")) : NaN;
+  // Read as UTC when it names no zone (`parseWhen`), so the answer does not depend on the host's zone.
+  const t = m ? parseWhen(m[1]!.replace(/,/g, "")) : NaN;
   if (Number.isFinite(t)) return t;
   return item.updatedAt ?? null;
 }

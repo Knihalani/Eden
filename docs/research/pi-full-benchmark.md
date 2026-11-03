@@ -144,6 +144,12 @@ backfill, the graph and redaction of every listed item (moonshots.md).
 | Bar 1: Eden ≥ 1.7× tools on hidden facts, live; beside tools ≥ 1.55×; false concerns ≤ tools + 2 points | ALL, blind: 2.00× (0.538 / 0.269); beside tools 1.64× (0.441); false concerns 0.019 against 0.025 | met (ALL), this grader |
 | Bar 5: Eden's cost per task ≤ tools' while meeting Bar 1 | Within this run's ~32 tasks per user, $0.474 against $0.320 counting the one-time card backfill. Without the backfill, $0.318 against $0.320. H alone: $0.291 | met in steady state; not when a new user's backfill counts against their first tasks |
 
+Bar 5's traffic weight: w = 0.5. The cost column above pools every task run, and this benchmark ran 584 hidden and
+584 control tasks, so it prices a mix of half hidden (fact-carrying) and half control (silent) tasks. The
+haiku-phase3 frontier priced hidden tasks alone (w = 1), which understates the NEW family: its reader costs more
+on control tasks (haiku-phase3.md, the traffic-weighted note). Compare Bar 5 at the same w, and print it with
+the report's traffic-weighted rows (`pi-ab-report.ts`, w = 0.1 and 0.5).
+
 ## Limits
 
 - **Grader:** deepseek, not Haiku. Its agreement with the lexical check is 0.85–0.89, against 0.98 for Haiku in

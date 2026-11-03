@@ -14,6 +14,8 @@ import { QueryPlanner, type SourceResolver } from "@eden/sources";
 export interface BuildOptions {
   sources: SourceResolver;
   sourceMapPath?: string;
+  /** An open source map (from `openSourceMap`); `sourceMapPath` is ignored when this is set. */
+  sourceMap?: SourceMap;
   model?: Model | null;
   onTrace?: TraceSink;
   /** A pool from `startGatePool`: lookup results are redacted in it. Without one they are redacted on the loop. */
@@ -21,7 +23,11 @@ export interface BuildOptions {
   /** The query planner (D28): serving by default (D33), in shadow, or off; its learning persists in the source map. */
   queryPlanner?: "off" | "serve" | "shadow";
   onShadow?: ShadowSink;
-  /** Ask answers rewritten by the model (D43); off by default. */
+  /**
+   * Ask answers rewritten by the model (D43); off by default. When set (true or false) it wins over
+   * `engine.askWithModel`, as before D103; unset, `engine.askWithModel` decides. The servers pass true for
+   * EDEN_ASK_MODEL=1 and leave it unset otherwise, so the EDEN_ENGINE_CONFIG file's value holds.
+   */
   askWithModel?: boolean;
   /**
    * Background connector sync (D57, experimental, off by default): sources with a list tool are read into each
@@ -29,17 +35,19 @@ export interface BuildOptions {
    */
   sync?: boolean;
   /**
-   * Engine settings over the production defaults, for an embedding that opts into experimental flags: the action
-   * firewall (`actionCheck`, D69, behind `POST /v1/check`) finds only on the grounds these turn on (`probes`,
-   * `groundConflict`, `groundAway`, `graph`, `cards`). The environment sets none of them.
+   * Engine settings over the production defaults, for an embedding or a deployment that opts into experimental flags:
+   * the action firewall (`actionCheck`, D69, behind `POST /v1/check`) finds only on the grounds these turn on
+   * (`probes`, `groundConflict`, `groundAway`, `graph`, `cards`). The servers pass what EDEN_ENGINE_CONFIG names
+   * (D103, engine-config.ts), `{}` when it is unset. `sync: true` here also starts the sync timer.
    */
   engine?: Partial<EngineConfig>;
 }
 
 /** Wires a partner from its parts with production defaults. */
 export function buildPartner(options: BuildOptions): ContextPartner {
-  const sourceMap = new SourceMap(options.sourceMapPath);
+  const sourceMap = options.sourceMap ?? new SourceMap(options.sourceMapPath);
   const mode = options.queryPlanner ?? "serve";
+  const sync = options.sync === true || options.engine?.sync === true;
   const partner = new ContextPartner({
     sources: options.sources,
     sourceMap,
@@ -54,17 +62,33 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     config: {
       ...options.engine,
       askWithModel: options.askWithModel ?? options.engine?.askWithModel ?? false,
-      ...(options.sync ? { sync: true } : {}),
+      ...(sync ? { sync: true } : {}),
     },
   });
-  if (options.sync) partner.startSync();
+  if (sync) partner.startSync();
   return partner;
+}
+
+/**
+ * Opens the source map at the path `resolvePath` gives, failing open: if the directory cannot be made or the file
+ * cannot be opened (permissions, a full disk, another process holding the lock past the busy timeout), it logs to
+ * stderr and returns an in-memory map, so the planner forgets what it learns at exit but asks are still served. For
+ * mcp-stdio, which an MCP client launches and whose startup failure the user sees only as a broken tool.
+ */
+export function openSourceMap(resolvePath: () => string, log = console.error): SourceMap {
+  try {
+    return new SourceMap(resolvePath());
+  } catch (err) {
+    log(`eden: source map not opened, learning kept in memory only: ${err instanceof Error ? err.message : err}`);
+    return new SourceMap();
+  }
 }
 
 /**
  * Starts the pool that redacts lookup results (D25), or returns undefined for 0 workers. Items under 1 KB are gated
  * inline (the round trip costs more than the work); a batch running past 500 ms has its worker replaced and its items
- * dropped, which bounds a pathological input.
+ * dropped, which bounds a pathological input. Each worker, a replacement too, compiles the secret gate before it
+ * serves (`warmGateItem` in engine/src/gate.ts): otherwise each one's first batch paid 30-50 ms for it.
  */
 export async function startGatePool(workers: number): Promise<WorkerPool | undefined> {
   if (workers <= 0) return undefined;
@@ -75,5 +99,7 @@ export async function startGatePool(workers: number): Promise<WorkerPool | undef
     maxBatch: 32,
     taskTimeoutMs: 500,
     inlineBelow: 1_024,
+    // A task of GATE_MODULE: a missing export fails the start, so a rename cannot leave the workers cold unnoticed.
+    warm: "warmGateItem",
   });
 }

@@ -10,6 +10,14 @@ export { FACT_NAMES, vectorOf, type Facts } from "./decide";
 export { RANK_MODEL, rankAnswer, rankScore, type RankModel } from "./rank";
 export { factsFingerprint } from "./facts-fingerprint";
 export { DEFAULT_CONFIG, type EngineConfig } from "./config";
+export {
+  ANTICIPATE_PARTS,
+  checkEngineConfig,
+  NEEDS_DEP,
+  PARENTS,
+  type ConfigCheckOptions,
+  type ConfigDep,
+} from "./config-check";
 export { ItemCache, sanitizeItem, type CacheHit, type CacheLimits } from "./cache";
 export { SyncManager, type SourceChange, type SyncOptions, type SyncStats } from "./sync";
 export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";

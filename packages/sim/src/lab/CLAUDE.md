@@ -13,19 +13,23 @@ cards-enrich, bridge-enrich, presets, suites, free, spend` (`.ts`): check `git l
 |---|---|
 | `suites.ts` | `SUITES` by name, `parseSuites` (`all`, `heldout-all`, `train`), `UNRUN_BLIND` (left out of `all`) |
 | `hidden-context.ts`, `hidden-*.ts` | The suites: each plants one item (hidden) or a near-miss decoy (control) per template in a world |
-| `presets.ts` | `PRESETS`: H (D55), ALL3 (D80), ALL5 (D92), NEW (D96, recommended D98) |
+| `presets.ts` | `PRESETS`: H (D55), ALL3 (D80), ALL5 (D92), NEW (D96, recommended D98), NEWL (D99), NEW2; ALL3B and NEWB (+ `syncPollBehind`, D72's open run) |
 | `hidden-funnel.ts` | The no-model funnel: each task through Eden alone; returned/cached/delivered, decoys, calls, ms; `--ask`, `--cards`, `--intent`, `--bridge`, `--reader`, `--timeline`, `--json` |
 | `funnel.ts` | `bun run funnel`: the funnel with a preset, replayed cards and `--ask`, and the funnel score; refuses held-out suites without `--blind` |
+| `funnel-merge.ts` | funnel.ts's arithmetic, tested in-process: `defaultJobs` (`--time` > 0 shards concurrently by default), `amortisedCalls` (merged connector calls), `callMismatches` (shards whose traces miss calls) |
+| `flags.ts` | Strict flags for the $0 CLIs (funnel, hidden-funnel, quality-cli): unknown flag, stray argument or missing value exits 2, `--help` prints usage; `labConfig` checks `--config`/`--set` with @eden/engine's `checkEngineConfig` |
 | `pi-ab.ts`, `pi-conditions.ts`, `pi-timeline.ts`, `pi-ab-report.ts` | The live A/B on the Pi harness (the standard agent): conditions `none,tools,eden,both[-judge][~variant][+flag][@w<ms>]`, per-task timelines, report |
 | `hermes-ab.ts` + `hermes-{conditions,host,proxy,worker,anthropic}.ts` | The same A/B on Hermes Agent (Python workers, `../../lab/hermes/`), Eden as MCP server + plugin |
 | `ab-common.ts` | Tasks, prompts, tools, grader and results format shared by every A/B (comparable results) |
 | `agent-ab.ts`, `agent-ab-report.ts` | The older in-house loop (label its results as such) and the shared report |
 | `free.ts`, `spend.ts`, `free-smoke.ts` | Lab access: pacer, `--allow-logging`, `--rpm`, `--max-requests`, keys; the Anthropic spend ledger and cap |
 | `cards-enrich.ts`, `cards-disk.ts`, `bridge-enrich.ts`, `bridge-disk.ts`, `reader-disk.ts` | Make once, replay free: cards (+ `--intent` requests), bridge queries, reader calls |
+| `gate-traffic.ts`, `reader-latency-fit.ts` | No-model reader instruments: calls, gating and oracle-gate ceilings per preset (`--reuse`: cross-session verdict reuse); the reader latency fit (floor, ms per token) |
 | `timeline.ts`, `timeline-report.ts` | `--timeline` spans, CPU% and RSS per second; where the time went |
 | `ledger.ts`, `bench.ts`, `bench-compare.ts` | The benchmark ledger (`bench/ledger.jsonl`, `bench/runs/`) |
 | `regrade.ts`, `reprice.ts`, `act*.ts`, `firewall-replay.ts`, `uptake.ts` | Re-grading, fixed-price re-costing (D71), action mode and firewall (D69), uptake |
-| `rank-fit.ts`, `decide-fit.ts`, `cards-census.ts`, `*-reach.ts`, `graph-bench.ts`, `sync-*.ts` | Offline instruments for one track each |
+| `distilled-reader.ts`, `distilled-fit.ts` | `--distill record\|labels\|cascade`: record the reader's verdicts as labels, replay them at $0, or put a no-model scorer in front of the reader (rejected, D110); `../../lab/distilled/run.sh` |
+| `rank-fit.ts`, `decide-fit.ts`, `cards-census.ts`, `*-reach.ts`, `graph-bench.ts`, `graph-memory.ts`, `sync-*.ts` | Offline instruments for one track each |
 | `lab.ts`, `lab-cli.ts`, `connectors.ts`, `build.ts`, `capture.ts` | The connector lab: real MCP servers in Docker over seeded backends (`bun run sim:lab`) |
 
 Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-bench.py` (run with `python3 -I`).
@@ -45,6 +49,11 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
   `--spend-headroom` clear. `--run-label` names a run's lines.
 - **Keys** are read by `keyFor`, never printed or put in results.
 - **Budgets:** every live run passes `--budget` (a hard cap per process on everything it spends).
+- **Strict CLIs (audit 2026-11-03b).** funnel.ts, hidden-funnel.ts and quality-cli.ts parse through `flags()`; a new
+  flag is added to the CLI's `known` list or it exits 2. Engine settings (`--config`, `--set`, the preset merged with
+  them) go through `labConfig`/`checkEngineConfig`: unknown keys, wrong types, out-of-range numbers and a child flag
+  whose parent flag the merged configuration has off (`PARENTS`, e.g. `syncPollBehind` without `sync`) exit 2.
+  gate-traffic.ts, the A/B harnesses and eval's cli.ts do not use it yet.
 - **Record honestly:** funnel and `bench.ts` record to `bench/ledger.jsonl` unless `--no-record` (`bun run funnel`
   does not record unless `--record`); a run on a dirty tree is marked `dirty`.
 
@@ -55,10 +64,33 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
 - NEW needs `--cards`, `--intent` (requests replayed) and a reader model; the harnesses wait 3,000 ms on the first
   observe (`@w<ms>` changes it; 1 s lost 7.6–18.1 points, D98).
 - Pi's `both` arm gets no `ask_context` (only `eden` does); Hermes gets both.
+- **pi-ab and hermes-ab default to `--time-scale 1`** (since 2026-11-03): sources take their profiles' assumed
+  latency, so the "Eden on the critical path" column includes the on-demand sync poll. Earlier results (every
+  haiku-phase3 row) ran at 0, connectors instant; compare like with like. Use 0 only for a stated quality-only rerun.
+  In the funnel the poll was about 91% of ALL3's critical path at `--time 1`; ALL3B cut ms/task 481.8 to 26.5 on
+  train1–6 seeds 41–42 with an empty task-by-task diff (docs/research/haiku-phase3.md, note of 2026-11-03).
+  Any pi-ab/hermes-ab Reproduce command dated before 2026-11-03 (hermes-lab.md, haiku-benchmark.md, edge-combined.md,
+  edge-freelab.md and the rest) needs `--time-scale 0` added to reproduce its numbers: at 1 the tools conditions
+  also get connector errors and per-second rate limits (sources.ts). `lab/haiku/run.sh` and `run-w.sh` pin 0.
 - `--cards FILE` is only read; new cards go to `--cards-out` (default `<out>.cards.jsonl`): name it in later runs.
 - Hermes needs a hermes-agent checkout with `<src>/.venv` (`uv sync --frozen --no-install-project`); the first task
   of each stream pays worker start-up (exclude it from wall times).
 - Free and paid runs (and different graders) are not comparable: compare conditions within one run.
+- **Pay once (`pi-ab.ts`):** `--replay DIR` replays the reader's and grader's calls (`DIR/{reader,grader}.jsonl`,
+  keyed on the exact prompt, model, harness version, provider preferences and role) and appends new ones;
+  `--replay-only` exits 3 on a miss; `--replay-timing` sleeps the recorded latency (without it, replayed calls take
+  no time and the critical path understates Eden). `--reuse-arms F` copies `none`/`tools` from a matching earlier
+  run (same model, grader, harness version, agent and grader prompts, time scale, seeds, suites, task wording; else
+  it refuses). The prompts are checked by `promptsHash` (`armPromptsHash` in ab-common.ts: the system prompt, user
+  turn, search tool, caps and grader prompt on a fixed probe); a results file without one cannot be reused. Both
+  freeze one sample: fine for paired comparisons, but a variance estimate needs them off. The agent itself still runs
+  live, and Hermes has neither yet (ab-replay.test.ts).
+- **Report cost columns:** `(Eden)` is per-task calls only (reader, judge). Cards and bridge are booked to Eden's
+  total but to no task: `bkfill` spreads each seed's background spend over its task runs with cards or bridge on,
+  and `all-in` adds it. A stream's background spend is recorded as it happens, so a stream stopped early (budget,
+  request cap) still counts. Reports from before 2026-11-03 lack it: `pi-ab-report.ts --reconcile report.txt
+  --ledger ledger-summary.jsonl --run PREFIX` recomputes it from the spend ledger (docs/research/haiku-phase3.md)
+  and exits 1 when the columns miss the header's Eden total by more than $0.01.
 - Funnel decoys surfaced overstate harm: live agents reject most decoys (docs/research/broad-set.md).
 
 ## Test

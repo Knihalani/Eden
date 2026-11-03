@@ -30,7 +30,10 @@ function partner(extra: Partial<PartnerDeps> = {}) {
   const traces: Trace[] = [];
   const p = new ContextPartner({
     sources: async () => sources(),
-    sourceMap: new SourceMap(),
+    // Seeded: an unseeded map draws its routing (Thompson sampling, seeded from Math.random) differently each run, and
+    // the order the sources are asked in decides whether a probe's page joins the lookup's own search or is stored on
+    // its own: one `cache.put` span more or less per run, and five expect() calls in the test below.
+    sourceMap: new SourceMap(":memory:", { seed: 1 }),
     cache: new ItemCache(),
     budget: new Budget(),
     model: null,
@@ -127,6 +130,23 @@ describe("spans", () => {
     const call = spans.find((s) => s.name === "source.search")!;
     expect(["crm", "calendar"]).toContain(call.attrs!.source as string);
     expect(typeof call.attrs!.items).toBe("number");
+  });
+
+  test("the same events give the same spans, run after run (a regression that adds or drops one shows)", async () => {
+    const shape = async (planner: boolean) => {
+      const spans: Span[] = [];
+      const { p } = partner({
+        config: H,
+        onSpan: (s) => spans.push(s),
+        ...(planner ? { planner: new QueryPlanner({ seed: 1 }) } : {}),
+      });
+      await play(p);
+      return spans.map((s) => `${s.name}:${s.attrs?.items ?? ""}`);
+    };
+    for (const planner of [true, false]) {
+      const first = await shape(planner);
+      for (let i = 0; i < 4; i++) expect(await shape(planner)).toEqual(first);
+    }
   });
 
   test("spans are content-free: no request word, item text or item id (D19)", async () => {

@@ -80,7 +80,11 @@ export function foldOf(c: number): number {
  * `toLowerCase` turns a word-final Σ into ς, which the per-character fold maps to σ, and would give one word two ids.
  */
 export function foldString(s: string): string {
-  let out = "";
+  // Folded into a reused scratch and made a string once. Built with `+=` per character, the result was a JSC rope of
+  // one node per character, which a `Vocab` keeps unread (so never flattened) for as long as it holds the term: about
+  // 10x the heap of a flat string. A plain array of small integers measured faster to `apply` than a Uint16Array view.
+  const buf = foldScratch;
+  let n = 0;
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
     const f = c < 128 ? FOLD[c]! : foldOf(c);
@@ -90,11 +94,23 @@ export function foldString(s: string): string {
       for (let j = 0; j < expanded.length; j++) {
         const e = expanded.charCodeAt(j);
         const g = e < 128 ? FOLD[e]! : foldOf(e);
-        if (g !== FOLD_DROP && g !== FOLD_EXPAND) out += String.fromCharCode(g);
+        if (g !== FOLD_DROP && g !== FOLD_EXPAND) buf[n++] = g;
       }
       continue;
     }
-    out += String.fromCharCode(f);
+    buf[n++] = f;
   }
+  buf.length = n;
+  if (n <= FOLD_CHUNK) return String.fromCharCode.apply(null, buf);
+  // Longer than one call's arguments may safely be: a few chunks (a short rope), never one node per character. The
+  // scratch is dropped rather than kept at this size.
+  let out = "";
+  for (let at = 0; at < n; at += FOLD_CHUNK) out += String.fromCharCode.apply(null, buf.slice(at, at + FOLD_CHUNK));
+  foldScratch = [];
   return out;
 }
+
+/** Code units handed to one `String.fromCharCode` call: well under any engine's argument limit. */
+const FOLD_CHUNK = 4_096;
+/** `foldString`'s output code units, one array per process (the fold is synchronous, so it is never shared). */
+let foldScratch: number[] = [];

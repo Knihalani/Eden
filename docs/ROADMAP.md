@@ -53,6 +53,9 @@ train / held-out split for tuning, and text not written by templates.
 
 ## M2 — Real connectors
 - Per-user `McpSource` connections over streamable HTTP with OAuth; a token vault interface (tenant-supplied or ours).
+  Built without OAuth (D108): `UserSources` with a `SourceDirectory` (the tenant's vault, or `EDEN_USER_SOURCES_FILE`),
+  connections per (tenant, user, source), closed on forget, idle or a rotated token. Left: an OAuth flow and token
+  refresh of our own, if tenants want one.
 - Per-server search-argument mappings for the first connectors (Gmail, Google Calendar, Notion, Slack, a memory
   product such as Supermemory or Mem0) and a `fetch` mapping for refresh (built, D35; stale copies are kept off the
   fast path, and refetching through `fetch` is opt-in, D40).

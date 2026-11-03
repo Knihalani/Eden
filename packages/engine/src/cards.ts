@@ -29,6 +29,7 @@ import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { Frame } from "./conflict";
 import { CLASSES, hasWord } from "./consequence";
+import { parseWhen } from "./grounding";
 import { cleanRequests, IntentIndex, MAX_REQUESTS, type IntentHit } from "./intent";
 import { inert } from "./render";
 import { isStopword } from "./text";
@@ -223,9 +224,11 @@ export function sentenceKey(item: ContextItem): string | undefined {
 // The model's side: prompt and parse.
 
 /** The date a message says it was sent, else its `updatedAt`, as YYYY-MM-DD; "" when unknown. */
-function datedOf(item: ContextItem): string {
+export function datedOf(item: ContextItem): string {
   const m = /^date:\s*([^\n]{0,60})$/im.exec(item.text.slice(0, 600));
-  const t = m ? Date.parse(m[1]!.replace(/,/g, "")) : NaN;
+  // Zone-less headers read as UTC (`parseWhen`): the date in the card prompt, and so its replay hash, is the same on
+  // every host.
+  const t = m ? parseWhen(m[1]!.replace(/,/g, "")) : NaN;
   if (Number.isFinite(t)) return new Date(t).toISOString().slice(0, 10);
   return item.updatedAt ? new Date(item.updatedAt).toISOString().slice(0, 10) : "";
 }

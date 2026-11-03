@@ -18,6 +18,34 @@ describe("Deadline", () => {
     const half = parent.fraction(0.5);
     expect(half.remaining()).toBeLessThanOrEqual(501);
   });
+
+  test("a child is never later than its parent, even when the clock ticks between reads", () => {
+    // A clock that moves 1 ms on every read: two reads inside child() would put the child 1 ms past its parent.
+    let t = 1_000_000;
+    const tick = () => t++;
+    const parent = Deadline.after(1_000, undefined, tick);
+    for (const ms of [5_000, 1_000, Infinity]) expect(parent.child(ms).at).toBeLessThanOrEqual(parent.at);
+    expect(parent.fraction(1).at).toBeLessThanOrEqual(parent.at);
+    // A shorter child is `ms` from the clock read it was made at.
+    const before = t;
+    const short = parent.child(10);
+    expect(short.at).toBe(before + 10);
+    // The child keeps the parent's clock: its next read is `now`.
+    const now = t;
+    expect(short.remaining()).toBe(short.at - now);
+  });
+
+  test("an unbounded deadline's children are unbounded and share its signal, with no timer", () => {
+    const parent = Deadline.after(Infinity);
+    for (const child of [parent.child(Infinity), parent.fraction(0.5)]) {
+      expect(child.at).toBe(Infinity);
+      // No timeout signal of its own: it is the parent's.
+      expect(child.signal).toBe(parent.signal);
+    }
+    const bounded = parent.child(50);
+    expect(bounded.at).toBeLessThan(Infinity);
+    expect(bounded.signal).not.toBe(parent.signal);
+  });
 });
 
 describe("Singleflight", () => {

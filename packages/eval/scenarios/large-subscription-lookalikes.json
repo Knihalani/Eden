@@ -1,0 +1,343 @@
+{
+  "id": "large-subscription-lookalikes",
+  "category": "inbox",
+  "description": "56 documents. Cancelling one subscription before its renewal among lookalikes: the same service's other plan, an already-cancelled sibling service, and last year's renewal notice.",
+  "clock": "2026-11-03T09:00:00Z",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "mail-misc-18",
+          "title": "Wine club (Kwame Castell)",
+          "text": "This quarter's case has six reds from the Douro; tasting notes are enclosed. — Kwame Castell"
+        },
+        {
+          "ref": "mail-misc-30",
+          "title": "Library hold (Kwame Ostrom)",
+          "text": "The book you reserved, A Gentleman in Moscow, is waiting at the front desk for seven days. — Kwame Ostrom"
+        },
+        {
+          "ref": "mail-misc-15",
+          "title": "Mortgage statement (Amara Halvorsen)",
+          "text": "Your annual mortgage statement is available to download from the portal. — Amara Halvorsen"
+        },
+        {
+          "ref": "mail-misc-11",
+          "title": "Bike repair (Amara Varga)",
+          "text": "The bike shop replaced the rear brake pads and trued the wheel; ready for pickup. — Amara Varga"
+        },
+        {
+          "ref": "mail-misc-22",
+          "title": "Library hold (Hiro Castell)",
+          "text": "The book you reserved, A Gentleman in Moscow, is waiting at the front desk for seven days. — Hiro Castell"
+        },
+        {
+          "ref": "mail-misc-4",
+          "title": "Knitting circle (Tomas Quinlan)",
+          "text": "The knitting circle meets at the café on Sunday; beginners very welcome. — Tomas Quinlan"
+        },
+        {
+          "ref": "mail-misc-17",
+          "title": "Laptop warranty (Ruth Tanaka)",
+          "text": "Your laptop's extended warranty covers accidental damage until next spring. — Ruth Tanaka"
+        },
+        {
+          "ref": "mail-misc-2",
+          "title": "Laptop warranty (Hiro Ostrom)",
+          "text": "Your laptop's extended warranty covers accidental damage until next spring. — Hiro Ostrom"
+        },
+        {
+          "ref": "mail-misc-7",
+          "title": "Book club (Noor Delacroix)",
+          "text": "This month we read The Overstory; bring a snack and your notes on chapter nine. — Noor Delacroix"
+        },
+        {
+          "ref": "mail-misc-25",
+          "title": "Volunteer rota (Tomas Varga)",
+          "text": "You are on the food bank rota for the second Saturday; shift starts at 9:30. — Tomas Varga"
+        },
+        {
+          "ref": "mail-misc-8",
+          "title": "Parcel locker (Ines Castell)",
+          "text": "Your parcel is in locker 12 at the station; collect within 72 hours. — Ines Castell"
+        },
+        {
+          "ref": "mail-misc-10",
+          "title": "Wine club (Hiro Varga)",
+          "text": "This quarter's case has six reds from the Douro; tasting notes are enclosed. — Hiro Varga"
+        },
+        {
+          "ref": "mail-misc-24",
+          "title": "School newsletter (Lena Byrne)",
+          "text": "Reminder that the harvest festival collection runs all week; tins and dry food please. — Lena Byrne"
+        },
+        {
+          "ref": "mail-misc-1",
+          "title": "Car service (Bea Quinlan)",
+          "text": "Your car is due its annual service; we have slots on the 9th and the 16th. — Bea Quinlan"
+        },
+        {
+          "ref": "mail-misc-9",
+          "title": "Neighbourhood watch (Felix Mbeki)",
+          "text": "A reminder to lock bikes overnight; two were taken from Elm Road last week. — Felix Mbeki"
+        },
+        {
+          "ref": "mail-misc-23",
+          "title": "Streaming receipt (Oskar Delacroix)",
+          "text": "Thanks for your payment; your streaming plan continues for another month. — Oskar Delacroix"
+        },
+        {
+          "ref": "mail-misc-28",
+          "title": "Podcast recommendation (Ines Varga)",
+          "text": "You might like the episode on urban beekeeping, about forty minutes long. — Ines Varga"
+        },
+        {
+          "ref": "mail-misc-29",
+          "title": "Photo album (Noor Quinlan)",
+          "text": "The holiday photos are uploaded to the shared album; 214 pictures from the coast. — Noor Quinlan"
+        },
+        {
+          "ref": "mail-misc-26",
+          "title": "Laptop warranty (Noor Delacroix)",
+          "text": "Your laptop's extended warranty covers accidental damage until next spring. — Noor Delacroix"
+        },
+        {
+          "ref": "cloudvault-work",
+          "title": "CloudVault Business plan invoice",
+          "text": "Your company's CloudVault Business plan is billed monthly to the corporate card; managed by IT."
+        },
+        {
+          "ref": "mail-misc-20",
+          "title": "Piano lessons (Oskar Mbeki)",
+          "text": "Lessons move to 5pm on Tuesdays from next month; please practise the scales. — Oskar Mbeki"
+        },
+        {
+          "ref": "mail-misc-21",
+          "title": "Piano lessons (Ruth Byrne)",
+          "text": "Lessons move to 5pm on Tuesdays from next month; please practise the scales. — Ruth Byrne"
+        },
+        {
+          "ref": "mail-misc-16",
+          "title": "Water outage (Oskar Mbeki)",
+          "text": "Planned maintenance may cause low water pressure on Thursday between 10 and 2. — Oskar Mbeki"
+        },
+        {
+          "ref": "mail-misc-12",
+          "title": "Charity run (Ruth Quinlan)",
+          "text": "Thanks for signing up for the 10k charity run in the park; bib numbers go out next week. — Ruth Quinlan"
+        },
+        {
+          "ref": "cloudnotes-cancelled",
+          "title": "CloudNotes cancelled",
+          "text": "Your CloudNotes subscription was cancelled and will not renew."
+        },
+        {
+          "ref": "mail-misc-19",
+          "title": "Recipe swap (Amara Novak)",
+          "text": "Here is the lentil soup recipe: onions, carrots, red lentils, cumin, simmer forty minutes. — Amara Novak"
+        },
+        {
+          "ref": "mail-misc-5",
+          "title": "Dentist newsletter (Oskar Castell)",
+          "text": "Our practice now offers evening hygiene appointments on Mondays and Wednesdays. — Oskar Castell"
+        },
+        {
+          "ref": "mail-misc-3",
+          "title": "Photo album (Felix Halvorsen)",
+          "text": "The holiday photos are uploaded to the shared album; 214 pictures from the coast. — Felix Halvorsen"
+        },
+        {
+          "ref": "mail-misc-13",
+          "title": "Volunteer rota (Kwame Byrne)",
+          "text": "You are on the food bank rota for the second Saturday; shift starts at 9:30. — Kwame Byrne"
+        },
+        {
+          "ref": "mail-misc-27",
+          "title": "Plumber visit (Oskar Delacroix)",
+          "text": "The plumber can come on Wednesday morning to look at the kitchen tap; access via side gate. — Oskar Delacroix"
+        },
+        {
+          "ref": "cloudvault-renewal",
+          "title": "CloudVault Family plan renews on 8 November",
+          "text": "Your CloudVault Family plan (2 TB) renews on 8 November 2026 for 99 GBP. Cancel before then to avoid the charge; cancellation needs the account owner's sign-in."
+        },
+        {
+          "ref": "cloudvault-renewal-2025",
+          "title": "CloudVault Family plan renewed",
+          "text": "Your CloudVault Family plan renewed on 8 November 2025 for 89 GBP."
+        },
+        {
+          "ref": "mail-misc-14",
+          "title": "Bike repair (Tomas Quinlan)",
+          "text": "The bike shop replaced the rear brake pads and trued the wheel; ready for pickup. — Tomas Quinlan"
+        },
+        {
+          "ref": "mail-misc-6",
+          "title": "Water outage (Ruth Quinlan)",
+          "text": "Planned maintenance may cause low water pressure on Thursday between 10 and 2. — Ruth Quinlan"
+        }
+      ]
+    },
+    {
+      "id": "docs",
+      "description": "The user's documents",
+      "docs": [
+        {
+          "ref": "docs-misc-8",
+          "title": "Library hold (Ruth Halvorsen)",
+          "text": "The book you reserved, A Gentleman in Moscow, is waiting at the front desk for seven days. — Ruth Halvorsen"
+        },
+        {
+          "ref": "docs-misc-3",
+          "title": "Parcel locker (Tomas Delacroix)",
+          "text": "Your parcel is in locker 12 at the station; collect within 72 hours. — Tomas Delacroix"
+        },
+        {
+          "ref": "docs-misc-2",
+          "title": "Book club (Amara Quinlan)",
+          "text": "This month we read The Overstory; bring a snack and your notes on chapter nine. — Amara Quinlan"
+        },
+        {
+          "ref": "docs-misc-10",
+          "title": "Dentist newsletter (Maya Delacroix)",
+          "text": "Our practice now offers evening hygiene appointments on Mondays and Wednesdays. — Maya Delacroix"
+        },
+        {
+          "ref": "docs-misc-1",
+          "title": "Gym membership (Amara Byrne)",
+          "text": "Your membership renews on the 3rd. Classes this week: spin Tuesday, yoga Thursday. — Amara Byrne"
+        },
+        {
+          "ref": "docs-misc-4",
+          "title": "Piano lessons (Hiro Delacroix)",
+          "text": "Lessons move to 5pm on Tuesdays from next month; please practise the scales. — Hiro Delacroix"
+        },
+        {
+          "ref": "docs-misc-11",
+          "title": "School newsletter (Kwame Castell)",
+          "text": "Reminder that the harvest festival collection runs all week; tins and dry food please. — Kwame Castell"
+        },
+        {
+          "ref": "docs-misc-12",
+          "title": "Laptop warranty (Felix Ostrom)",
+          "text": "Your laptop's extended warranty covers accidental damage until next spring. — Felix Ostrom"
+        },
+        {
+          "ref": "docs-misc-7",
+          "title": "Electricity bill (Bea Mbeki)",
+          "text": "Your statement for the period is ready; direct debit will be taken on the 21st. — Bea Mbeki"
+        },
+        {
+          "ref": "docs-misc-9",
+          "title": "Garden centre order (Tomas Ostrom)",
+          "text": "Two bags of compost and a lavender plant are ready to collect from the garden centre. — Tomas Ostrom"
+        },
+        {
+          "ref": "docs-misc-6",
+          "title": "Garden centre order (Lena Byrne)",
+          "text": "Two bags of compost and a lavender plant are ready to collect from the garden centre. — Lena Byrne"
+        },
+        {
+          "ref": "docs-misc-5",
+          "title": "Wine club (Lena Byrne)",
+          "text": "This quarter's case has six reds from the Douro; tasting notes are enclosed. — Lena Byrne"
+        }
+      ]
+    },
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "calendar-misc-5",
+          "title": "Knitting circle (Lena Quinlan)",
+          "text": "The knitting circle meets at the café on Sunday; beginners very welcome. — Lena Quinlan"
+        },
+        {
+          "ref": "calendar-misc-9",
+          "title": "Neighbourhood watch (Felix Novak)",
+          "text": "A reminder to lock bikes overnight; two were taken from Elm Road last week. — Felix Novak"
+        },
+        {
+          "ref": "calendar-misc-8",
+          "title": "Quiz night (Ines Mbeki)",
+          "text": "Pub quiz is back on Wednesday; teams of up to six, picture round included. — Ines Mbeki"
+        },
+        {
+          "ref": "calendar-misc-2",
+          "title": "Plumber visit (Ines Byrne)",
+          "text": "The plumber can come on Wednesday morning to look at the kitchen tap; access via side gate. — Ines Byrne"
+        },
+        {
+          "ref": "calendar-misc-6",
+          "title": "Parcel locker (Ines Novak)",
+          "text": "Your parcel is in locker 12 at the station; collect within 72 hours. — Ines Novak"
+        },
+        {
+          "ref": "calendar-misc-7",
+          "title": "Volunteer rota (Hiro Byrne)",
+          "text": "You are on the food bank rota for the second Saturday; shift starts at 9:30. — Hiro Byrne"
+        },
+        {
+          "ref": "calendar-misc-1",
+          "title": "Window cleaner (Lena Tanaka)",
+          "text": "The window cleaner will come on the first Monday of each month as usual. — Lena Tanaka"
+        },
+        {
+          "ref": "calendar-misc-3",
+          "title": "Piano lessons (Bea Halvorsen)",
+          "text": "Lessons move to 5pm on Tuesdays from next month; please practise the scales. — Bea Halvorsen"
+        },
+        {
+          "ref": "calendar-misc-4",
+          "title": "Neighbourhood watch (Bea Tanaka)",
+          "text": "A reminder to lock bikes overnight; two were taken from Elm Road last week. — Bea Tanaka"
+        },
+        {
+          "ref": "calendar-misc-10",
+          "title": "Library hold (Oskar Halvorsen)",
+          "text": "The book you reserved, A Gentleman in Moscow, is waiting at the front desk for seven days. — Oskar Halvorsen"
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "large-subscription-lookalikes-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Cancel my CloudVault Family subscription before it renews."
+          },
+          "expect": {
+            "items": [
+              "mail:cloudvault-renewal"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Working on it."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Cheers."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}

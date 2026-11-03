@@ -124,6 +124,24 @@ simulation, decides between them.
   `judgeBehind` gets the same additions from the real judge for about $0.02 per 1,000 tasks.
 - **(d) Spend the judge's budget on card enrichment: no gain to buy.**
   - Cards as built buy +14 planted delivered of 268 (204 → 218, decoys 18 → 18; funnel, cards off against on).
+    That was this note's funnel: configuration ALL, the hidden and held-out 1–4 suites, in-sample. It does not carry
+    over to today's screen. On 2026-11-03 the train screen (`bun run funnel --jobs 4`: preset ALL3, train1–6, seeds
+    41–42, cards replayed at $0, no model call) gave the same score with cards and without:
+
+    | Run | Hidden surfaced | Decoys surfaced | Delivered | Decoys delivered | Card calls (replayed) |
+    |---|---|---|---|---|---|
+    | ALL3 | 214/384 | 211/384 | 97 | 72 | 300 ($0) |
+    | ALL3, `--set '{"cards":false,"cardsEconomy":false}'` | 214/384 | 210/384 | 98 | 75 | 0 |
+
+    Task by task against the cards-on run: hidden +2 −2, decoys +3 −4. So on ALL3's train screen cards buy nothing
+    measurable, while the +14 above stands for its own preset and suites; neither result says what cards do for the
+    reader (NEW's standing list reads carded items), a live agent, or the held-out suites. Dropping cards from ALL3
+    (D80's preset) would need a decision and a live or blind check, not this screen alone. Commands:
+
+    ```bash
+    bun run funnel --jobs 4 --json on.json
+    bun run funnel --jobs 4 --set '{"cards":false,"cardsEconomy":false}' --baseline on.json
+    ```
   - They already cover 98% of cached items (6,546 replayed, 114 uncovered).
   - Steady-state cards cost $0.003–0.004 per user-month. At 20 tasks a day, `judgeBehind` costs about $0.012–0.040
     per user-month at the live and funnel per-task prices.

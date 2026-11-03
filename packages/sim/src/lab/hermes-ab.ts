@@ -30,7 +30,10 @@
  *     [--config ALL3] [--variant-config '{"A5":{…}}'] [--model z-ai/glm-5.3-flash] [--grader …] [--budget 0.6]
  *     [--card-model m] [--cards FILE [--cards-out FILE]] [--intent FILE] [--bridge FILE] [--bridge-model m]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--limit n] [--templates a,b] [--concurrency 4]
- *     [--max-iterations 6] [--out hermes-ab.json] [--timeline dir] [--time-scale 0] [--dump FILE] [--dry]
+ *     [--max-iterations 6] [--out hermes-ab.json] [--timeline dir] [--time-scale 1] [--dump FILE] [--dry]
+ *
+ * `--time-scale` (default 1) gives the sim sources their profiles' assumed latency, as pi-ab does (its header says why,
+ * and when 0, instant connectors, is still acceptable: a stated quality-only rerun). Runs before 2026-11-03 used 0.
  *
  * `--hermes-src` is a hermes-agent checkout with its dependencies in `<src>/.venv` (`uv sync --frozen
  * --no-install-project`); the run records its commit.
@@ -74,6 +77,7 @@ import {
   userPrompt,
   worldOf,
   type Meter,
+  type Background,
   type RunResult,
   type Task,
 } from "./ab-common";
@@ -84,6 +88,7 @@ import { parseHermesConditions, type HermesCondition } from "./hermes-conditions
 import { edenMcpServer, labRouter, type StreamHost, type TaskBinding } from "./hermes-host";
 import { modelProxy, type RequestRecord } from "./hermes-proxy";
 import { Worker } from "./hermes-worker";
+import { TRAFFIC_WEIGHTS, weightedLines, weightedRow, type WeightedRow } from "./pi-ab-weighted";
 import { parseVariants } from "./pi-conditions";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { PRESETS } from "./presets";
@@ -115,7 +120,7 @@ const CONDITION_NAMES = opt("conditions", "hermes,hermes+eden").split(",");
 const OUT = opt("out", "hermes-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
 const HOMES = `${OUT.replace(/\.json$/, "")}.homes`;
-const TIME_SCALE = Number(opt("time-scale", "0"));
+const TIME_SCALE = Number(opt("time-scale", "1"));
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 const LIMIT = Number(opt("limit", "0"));
 const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
@@ -171,6 +176,8 @@ let held = 0;
 const spend = { agent: 0, eden: 0, grader: 0 };
 /** Every lane's reader, cards and bridge, for the calls their `Budget()` refused (the summary's `overBudget:` line). */
 const budgeted: Budgeted = { reader: [], cards: [], bridge: [] };
+/** Each stream's background spend (cards, bridge), for the report's all-in cost columns (ab-common.ts). */
+const background: Background[] = [];
 function reserve(est: number): void {
   if (spent + held + est > BUDGET) throw new OverBudget(`budget $${BUDGET} reached (spent $${spent.toFixed(4)})`);
   held += est;
@@ -370,10 +377,27 @@ async function runWorld(
       current?.span("eden.source", "eden", "bg", start, end, { source: s.id, op, status }),
     ),
   );
+  // What this stream's background calls (cards, bridge) cost: booked to Eden's total, charged to no task (Background).
+  // Recorded in the results as the calls happen (below), so a stream that stops early (OverBudget, the request cap)
+  // still reports what its cards and bridge spent.
+  const bg: Background = {
+    seed,
+    suite: tasks[0]?.suite ?? "",
+    condition,
+    tasks: [],
+    cardsUsd: 0,
+    bridgeUsd: 0,
+    calls: 0,
+  };
+  const onBg = (what: "cardsUsd" | "bridgeUsd", data: Record<string, unknown>) => {
+    bg.calls++;
+    bg[what] += typeof data.cost === "number" ? data.cost : 0;
+  };
   const cardModel = () =>
-    meteredModel(labModel(ACCESS, { apiKey: KEY!, model: CARD_MODEL }, "eden.cards"), (start, end, data) =>
-      current?.span("eden.cards", "eden", "bg", start, end, data),
-    );
+    meteredModel(labModel(ACCESS, { apiKey: KEY!, model: CARD_MODEL }, "eden.cards"), (start, end, data) => {
+      onBg("cardsUsd", data);
+      current?.span("eden.cards", "eden", "bg", start, end, data);
+    });
   const cardMaker = (): CardMaker =>
     diskCards
       ? new DiskCardMaker(CARDS_FILE, new ModelCardMaker(cardModel()), { out: CARDS_OUT, shared: diskCards })
@@ -385,9 +409,10 @@ async function runWorld(
   if (cards) budgeted.cards.push(cards);
   const liveBridge = () =>
     new ModelBridgeMaker(
-      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }, "eden.bridge"), (start, end, data) =>
-        current?.span("eden.bridge", "eden", "bg", start, end, data),
-      ),
+      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }, "eden.bridge"), (start, end, data) => {
+        onBg("bridgeUsd", data);
+        current?.span("eden.bridge", "eden", "bg", start, end, data);
+      }),
     );
   const bridgeMaker = (): BridgeMaker => {
     if (!diskBridge) return liveBridge();
@@ -411,6 +436,7 @@ async function runWorld(
       ? new QueryBridge({ maker: bridgeMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   if (bridge) budgeted.bridge.push(bridge);
+  if (cards || bridge) background.push(bg);
   // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
   let readerTask: RunResult | null = null;
   const reader =
@@ -688,6 +714,7 @@ async function runWorld(
       if (r.error) record.error = r.error.slice(0, 200);
       if (partner) Object.assign(record, uptake.fields());
       out.push(r);
+      bg.tasks.push(r.task);
       records.push(record);
       if (!r.error) grading.push(gradeTask(t, r, tl));
       previous = { sessionId, r };
@@ -774,7 +801,9 @@ const worlds = SEEDS.flatMap((seed) =>
 console.error(
   `hermes-ab: ${worlds.reduce((n, w) => n + w.tasks.length, 0)} tasks × ${CONDITIONS.length} conditions ` +
     `(${CONDITIONS.map((c) => c.name).join(",")}), hermes ${HERMES_COMMIT}, model ${MODEL}, grader ${GRADER}, ` +
-    `cap $${BUDGET}, suites ${SUITE_LIST.join(",")}, config ${CONFIG_ARG in PRESETS ? CONFIG_ARG : "custom"}` +
+    `cap $${BUDGET}, suites ${SUITE_LIST.join(",")}, ` +
+    `time-scale ${TIME_SCALE}${TIME_SCALE === 0 ? " (connectors at 0 ms)" : ""}, ` +
+    `config ${CONFIG_ARG in PRESETS ? CONFIG_ARG : "custom"}` +
     (Object.keys(CONFIG_VARIANTS).length ? `, variants ${JSON.stringify(CONFIG_VARIANTS)}` : "") +
     (CARDS_FILE ? `, cards ${CARDS_FILE} (${diskCards!.cards.size} replayed; new → ${CARDS_OUT})` : "") +
     (ACCESS.allowLogging ? ", ALLOW-LOGGING (lab only)" : "") +
@@ -832,6 +861,8 @@ writeFileSync(
       stoppedStreams,
       maxIterations: MAX_ITERATIONS,
       spend,
+      // Eden's spend no task is charged for, per stream: the report's backfill and all-in columns (ab-common.ts).
+      background,
       overBudget: overBudget(budgeted),
       timeline: TIMELINE,
       wallSeconds: Math.round((performance.now() - t0) / 100) / 10,
@@ -845,9 +876,23 @@ writeFileSync(
 const ungraded = results.filter((r) => !r.error && !r.facts && tasks.find((t) => t.id === r.task)!.must.length).length;
 console.error(
   `spent $${spent.toFixed(4)} (agent $${spend.agent.toFixed(4)}, eden $${spend.eden.toFixed(4)}, grader ` +
-    `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}; ` +
-    `${PACER.sent} requests (${PACER.retried} retried, ${JSON.stringify(PACER.statuses)}), ${orphanRequests} orphan` +
+    `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}, ` +
+    `time-scale ${TIME_SCALE}; ${PACER.sent} requests (${PACER.retried} retried, ${JSON.stringify(PACER.statuses)}), ` +
+    `${orphanRequests} orphan` +
     (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : "") +
     (stoppedStreams ? `; PARTIAL: ${stoppedStreams} streams stopped on a failure (logged above)` : ""),
 );
 console.error(overBudgetLine(budgeted));
+// Traffic-weighted rows (pi-ab-weighted.ts): most traffic is silent, so the hidden-only cost columns understate. The
+// full report (pi-ab-report.ts on OUT) prints the same rows beside the outcome tables.
+{
+  const kindOf = new Map(tasks.map((t) => [t.id, t.kind]));
+  const samplesOf = (c: string, kind: Task["kind"]) =>
+    results
+      .filter((r) => !r.error && r.condition === c && kindOf.get(r.task) === kind)
+      .map((r) => ({ usd: r.costUsd, edenUsd: r.edenCostUsd, tools: r.toolCalls, wallS: r.wallMs / 1_000 }));
+  const rows = TRAFFIC_WEIGHTS.flatMap((w) =>
+    CONDITIONS.map((c) => weightedRow(c.name, samplesOf(c.name, "hidden"), samplesOf(c.name, "control"), w)),
+  ).filter((r): r is WeightedRow => r !== null);
+  for (const line of weightedLines(rows)) console.error(line);
+}

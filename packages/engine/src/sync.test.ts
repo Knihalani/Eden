@@ -16,7 +16,11 @@ class ListSource implements Source {
   readonly description = "test";
   searches = 0;
   lists = 0;
+  /** The `limit` of every list call, in order. */
+  limits: number[] = [];
   failLists = false;
+  /** While set, every list call waits for it (a read held open, to overlap another with it). */
+  gate: Promise<void> | null = null;
   items: ContextItem[];
   constructor(
     readonly id: string,
@@ -34,6 +38,8 @@ class ListSource implements Source {
   }
   async list(_scope: Scope, cursor: string | undefined, limit: number): Promise<ListPage> {
     this.lists++;
+    this.limits.push(limit);
+    if (this.gate) await this.gate;
     if (this.failLists) throw new Error("500 Internal Server Error");
     const sorted = [...this.items].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
     const at = cursor ? Number(cursor) : 0;
@@ -154,6 +160,92 @@ describe("background sync (D57)", () => {
     expect(src.searches).toBe(0);
     expect(got).toContain(itemId("mail", "new"));
     expect(partner.sync!.current(scope, "mail")).toBe(true);
+  });
+
+  describe("syncPollPageSize: polls sized to what changed", () => {
+    // 40 mails an hour apart, one backfill page: the learned rate is about one change in four hours.
+    const stale = async (config: Record<string, unknown>) => {
+      const src = new ListSource("mail", mail(40));
+      const env = setup([src], { syncPageSize: 100, syncMaxStaleMs: 4 * HOUR, ...config });
+      env.partner.sync!.track(scope);
+      while (!env.partner.sync!.warm(scope)) await env.partner.sync!.tick();
+      env.advance(5 * HOUR);
+      return { src, ...env };
+    };
+    const added = (src: ListSource, n: number, at: number) => {
+      for (let i = 0; i < n; i++) {
+        src.items.push(src.make(`new${i}`, `Zed Quinn ${i}`, `Zed Quinn contract renewal note ${i}`, at - i * 60_000));
+      }
+    };
+
+    test("three changed items: one list call of at most five items, and the new item is delivered", async () => {
+      const { src, partner, now } = await stale({ syncPollPageSize: 5 });
+      added(src, 3, now());
+      const before = src.limits.length;
+      const r = await say(partner, "Did Zed Quinn sign the contract renewal?", scope, "s1", now());
+      const calls = src.limits.slice(before);
+      expect(calls).toEqual([5]);
+      expect(partner.sync!.stats.demandItems).toBe(5);
+      expect(partner.sync!.current(scope, "mail")).toBe(true);
+      const got = [r.injection, ...partner.takePending({ ...scope, sessionId: "s1" })].flatMap(
+        (x) => x?.citations.map((c) => c.itemId) ?? [],
+      );
+      expect(got.some((id) => id.startsWith("mail:new"))).toBe(true);
+    });
+
+    test("thirty changed items: two calls (5, then 95), and the lookup holds all thirty before it answers", async () => {
+      const { src, partner, cache, now } = await stale({ syncPollPageSize: 5 });
+      added(src, 30, now());
+      const before = src.limits.length;
+      await say(partner, "Did Zed Quinn sign the contract renewal?", scope, "s1", now());
+      // The second page tops the first up to one full page: the same 100 items one full page lists, in two calls.
+      expect(src.limits.slice(before)).toEqual([5, 95]);
+      // The source holds 70 items (40 + 30): the 5 and the other 65.
+      expect(partner.sync!.stats.demandItems).toBe(70);
+      for (let i = 0; i < 30; i++) expect(cache.isSynced(scope, itemId("mail", `new${i}`))).toBe(true);
+      expect(partner.sync!.current(scope, "mail")).toBe(true);
+    });
+
+    test("more changes than a page: at most one call more than full pages, and as many items caught up", async () => {
+      const run = async (syncPollPageSize: number) => {
+        const { src, partner, cache, now } = await stale({ syncPollPageSize, syncCatchupPages: 2 });
+        added(src, 250, now());
+        const before = src.limits.length;
+        const stats = partner.sync!.stats;
+        const calls0 = stats.demandCalls;
+        await say(partner, "Did Zed Quinn sign the contract renewal?", scope, "s1", now());
+        let held = 0;
+        for (let i = 0; i < 250; i++) if (cache.isSynced(scope, itemId("mail", `new${i}`))) held++;
+        return { limits: src.limits.slice(before, before + 3), calls: stats.demandCalls - calls0, held };
+      };
+      // Full pages: two calls of 100, 200 of the 250 changes held when the lookup answers (the rest in the background).
+      const full = await run(0);
+      expect(full.calls).toBe(2);
+      expect(full.limits.slice(0, 2)).toEqual([100, 100]);
+      // Adaptive: 5, 95, 100 - the same 200 items in three calls, never the 5, 10, 20, 40, ... of doubling pages.
+      const adaptive = await run(5);
+      expect(adaptive.calls).toBe(3);
+      expect(adaptive.limits).toEqual([5, 95, 100]);
+      expect(adaptive.held).toBeGreaterThanOrEqual(full.held);
+      expect(adaptive.held).toBeGreaterThanOrEqual(200);
+    });
+
+    test("off (0): a poll reads full pages; the backfill's page size is unchanged either way", async () => {
+      for (const pollPageSize of [0, 5]) {
+        const src = new ListSource("mail", mail(25));
+        const { partner, advance, now } = setup([src], {
+          syncPageSize: 10,
+          syncPollPageSize: pollPageSize,
+          syncMaxStaleMs: 4 * HOUR,
+        });
+        partner.sync!.track(scope);
+        while (!partner.sync!.warm(scope)) await partner.sync!.tick();
+        expect(src.limits).toEqual([10, 10, 10]);
+        advance(5 * HOUR);
+        await say(partner, "Where is the quarterly plan?", scope, "s1", now());
+        expect(src.limits.slice(3)).toEqual([pollPageSize === 0 ? 10 : 5]);
+      }
+    });
   });
 
   test("with on-demand polls off, a stale source is searched live as before", async () => {
@@ -348,5 +440,97 @@ describe("item cache: synced items (D57)", () => {
     expect(all).toEqual(["mail:1"]);
     const any = cache.searchIn(scope, ids, 2, 5, new Set(["mail", "chat"]), false).map((h) => h.item.id);
     expect(new Set(any)).toEqual(new Set(["mail:1", "mail:2", "chat:3"]));
+  });
+});
+
+// Audit 2026-11-03b (corr-shared-poll-counts-as-fresh): a lookup whose on-demand poll finds the source already being
+// read waits for that read and counts what it stored, not one, so a static world's waiter triggers no follow-up.
+describe("freshen: a waiter counts what the read it waited on stored", () => {
+  const held = () => {
+    let free = () => {};
+    const gate = new Promise<void>((r) => (free = r));
+    return { gate, free: () => free() };
+  };
+  async function stale(config: Record<string, unknown> = {}) {
+    const src = new ListSource("mail", mail(4));
+    const t = setup([src], { syncMaxStaleMs: 4 * HOUR, syncActiveMs: 48 * HOUR, ...config });
+    const sync = t.partner.sync!;
+    sync.track(scope);
+    while (!sync.warm(scope)) await sync.tick();
+    t.advance(5 * HOUR); // Past syncMaxStaleMs: a lookup polls.
+    return { src, sync, ...t };
+  }
+  const signal = () => new AbortController().signal;
+
+  test("static world: the poller and the waiter both count 0, and only the poller counts the call", async () => {
+    const { src, sync } = await stale();
+    const h = held();
+    src.gate = h.gate;
+    const lists = src.lists;
+    const first = { fresh: 0 };
+    const second = { fresh: 0 };
+    const a = sync.freshen(scope, [src], signal(), first);
+    const b = sync.freshen(scope, [src], signal(), second);
+    src.gate = null;
+    h.free();
+    const calls = [await a, await b];
+    expect(src.lists - lists).toBe(1);
+    expect(first.fresh).toBe(0);
+    expect(second.fresh).toBe(0);
+    // Each freshen returns its own calls: the call was the poller's, so the two sum to what the connector received.
+    expect(calls).toEqual([1, 0]);
+  });
+
+  test("one stored item: the waiter counts it as the poller does", async () => {
+    const { src, sync, now } = await stale();
+    src.items.push(src.make("new", "Mail new", "A new note about the quarterly plan", now()));
+    const h = held();
+    src.gate = h.gate;
+    const first = { fresh: 0 };
+    const second = { fresh: 0 };
+    const a = sync.freshen(scope, [src], signal(), first);
+    const b = sync.freshen(scope, [src], signal(), second);
+    src.gate = null;
+    h.free();
+    await Promise.all([a, b]);
+    expect(first.fresh).toBe(1);
+    expect(second.fresh).toBe(1);
+  });
+
+  test("a background sweep that stores an item: the lookup waiting on it counts it", async () => {
+    const { src, sync, now } = await stale({ syncSweepMs: HOUR });
+    src.items.push(src.make("new", "Mail new", "A new note about the quarterly plan", now()));
+    const h = held();
+    src.gate = h.gate;
+    const lists = src.lists;
+    const ticking = sync.tick(); // The sweep is due: it holds the source.
+    for (let n = 0; src.lists === lists; n++) {
+      if (n > 1_000) throw new Error("the sweep never started");
+      await Bun.sleep(0);
+    }
+    const tally = { fresh: 0 };
+    const waited = sync.freshen(scope, [src], signal(), tally);
+    src.gate = null;
+    h.free();
+    await ticking;
+    expect(await waited).toBe(0); // The sweep's calls are background calls, not this lookup's.
+    expect(tally.fresh).toBe(1);
+  });
+
+  test("a waiter whose lookup gives up counts 0, whatever the read then stores", async () => {
+    const { src, sync, now } = await stale();
+    src.items.push(src.make("new", "Mail new", "A new note about the quarterly plan", now()));
+    const h = held();
+    src.gate = h.gate;
+    const a = sync.freshen(scope, [src], signal(), { fresh: 0 });
+    const stop = new AbortController();
+    const tally = { fresh: 0 };
+    const b = sync.freshen(scope, [src], stop.signal, tally);
+    stop.abort();
+    await b;
+    src.gate = null;
+    h.free();
+    await a;
+    expect(tally.fresh).toBe(0);
   });
 });
