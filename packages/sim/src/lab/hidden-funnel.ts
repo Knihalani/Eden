@@ -887,7 +887,7 @@ const add = (into: { hidden: Row; control: Row }, r: { hidden: Row; control: Row
 };
 
 console.log(`suite ${SUITE_LIST.join(",")}, seeds ${SEEDS.join(",")}, config ${JSON.stringify(CONFIG)}`);
-if (READER === "stub") console.log(STUB_BANNER);
+if (READER === "stub" && DISTILL?.mode !== "labels") console.log(STUB_BANNER);
 if (ORACLE) {
   console.log(
     `--reader oracle: a proxy, not a reader: it flags the planted hidden item (p_hit ${ORACLE.pHit}) and the decoy ` +
@@ -986,6 +986,8 @@ if (distillLanes.length) {
     `distill ${DISTILL!.mode}: local silent ${sum((d) => d.stats.silent)}, local bind ${sum((d) => d.stats.bind)}, ` +
       `escalated ${sum((d) => d.stats.escalated)}, label misses ${sum((d) => d.missed)}`,
   );
+  // A label not found is a read with no answer (the engine fails open, as ALL3): the replay is then partial.
+  if (sum((d) => d.missed) > 0) console.log(`LABEL MISSES: ${sum((d) => d.missed)} reads had no label (failed open)`);
 }
 const misses = missGate(readerModel?.missed ?? 0, ALLOW_MISSES);
 if (misses.message) console.log(`\n${misses.message}\n`);

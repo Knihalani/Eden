@@ -10,7 +10,8 @@ cd "$(dirname "$0")/../../../.."
 H=.local/dr
 mkdir -p "$H"
 MODE=${1:-labels}
-NEW=$(bun -e 'import {PRESETS} from "./packages/sim/src/lab/presets"; console.log(JSON.stringify({...PRESETS.NEW, askReaderWaitMs: 60000}))')
+NEW=$(bun -e 'import {PRESETS} from "./packages/sim/src/lab/presets";
+  console.log(JSON.stringify({...PRESETS.NEW, askReaderWaitMs: 60000}))')
 LEDGER="--spend-ledger $H/ledger.jsonl --spend-cap 5 --spend-headroom 0.5"
 FUNNEL="bun packages/sim/src/lab/hidden-funnel.ts --ask --config $NEW --cards $H/cards43/cards-v2.jsonl"
 FUNNEL="$FUNNEL --intent $H/intent/intent-v2.jsonl --no-record"
@@ -22,9 +23,10 @@ mkdir -p "$H/cards43"
 cat packages/sim/lab/cards/cards-v2.jsonl packages/sim/lab/cards/cards-train.jsonl \
   packages/sim/lab/cards/cards-train-4344.jsonl > "$H/cards43/cards-v2.jsonl"
 # Intent requests (D87): replayed from the committed file made with Haiku for the train worlds and held-out 10-11
-# (1,004 calls, $0.36), which the labels need for the same reason as the cards. `live` makes any missing ones.
+# (715 calls, $0.36), which the labels need for the same reason as the cards. `live` makes any missing ones.
 mkdir -p "$H/intent"
-[ -s "$H/intent/intent-v2.jsonl" ] || gunzip -c packages/sim/lab/distilled/intent-v2.jsonl.gz > "$H/intent/intent-v2.jsonl"
+[ -s "$H/intent/intent-v2.jsonl" ] ||
+  gunzip -c packages/sim/lab/distilled/intent-v2.jsonl.gz > "$H/intent/intent-v2.jsonl"
 if [ "$MODE" = live ]; then
   bun packages/sim/src/lab/cards-enrich.ts --dir "$H/intent" --funnel train --seeds 41,42,43,44 --intent \
     --model claude-haiku-5-5 --concurrency 6 $LEDGER
@@ -47,22 +49,30 @@ for s in 41 42 43 44; do
   RECORDS="$RECORDS,$H/rec-train-$s.jsonl"
 done
 wait
+# The labels replay writes its own model, so it never overwrites the one a live run (and the blind check) used.
+if [ "$MODE" != live ]; then
+  bun packages/sim/src/lab/distilled-fit.ts --records "${RECORDS#,}" --out $H/model-labels.json | tee $H/fit-labels.log
+  exit 0
+fi
 bun packages/sim/src/lab/distilled-fit.ts --records "${RECORDS#,}" --out $H/model.json | tee $H/fit.log
-[ "$MODE" = live ] || exit 0
+# The note's 1.5x row: the same fit with the silent cut set where about a third of the calls are decided silent.
+bun packages/sim/src/lab/distilled-fit.ts --records "${RECORDS#,}" --out $H/model-1p5x.json --silent-cut 0.1862 \
+  > $H/fit-1p5x.log
 
 # Train CV in the funnel: each suite's tasks scored by the fold model that left it out; escalations replay.
-for s in 41 42 43 44; do
-  $FUNNEL --suite train --seeds $s --json $H/cv-model-$s.json --reader live --reader-model claude-haiku-5-5 \
-    --reader-cache $H/cache-train-$s.jsonl --distill cascade:$H/model.json $LEDGER --run-label cv-$s \
-    > $H/cv-model-$s.log 2>&1 &
-done
+for m in model model-1p5x; do for s in 41 42 43 44; do
+  $FUNNEL --suite train --seeds $s --json $H/cv-$m-$s.json --reader live --reader-model claude-haiku-5-5 \
+    --reader-cache $H/cache-train-$s.jsonl --distill cascade:$H/$m.json $LEDGER --run-label cv-$m-$s \
+    > $H/cv-$m-$s.log 2>&1 &
+done; done
 wait
 # The one blind check (pre-registered in the note): NEW, then the frozen cascade on the same reader cache.
 $FUNNEL --suite heldout10,heldout11 --seeds 41,42 --json $H/blind-new.json --reader live \
-  --reader-model claude-haiku-5-5 --reader-cache $H/cache-blind.jsonl $LEDGER --run-label blind-new > $H/blind-new.log 2>&1
+  --reader-model claude-haiku-5-5 --reader-cache $H/cache-blind.jsonl $LEDGER --run-label blind-new \
+  > $H/blind-new.log 2>&1
 $FUNNEL --suite heldout10,heldout11 --seeds 41,42 --json $H/blind-cascade.json --reader live \
   --reader-model claude-haiku-5-5 --reader-cache $H/cache-blind.jsonl --distill cascade:$H/model.json $LEDGER \
   --run-label blind-cascade > $H/blind-cascade.log 2>&1
 grep -h '^distill' $H/cv-model-*.log $H/blind-cascade.log
-python3 -I packages/sim/lab/scripts/funnel-score.py $H/new-train-4?.json $H/cv-model-4?.json $H/blind-new.json \
+python3 -I packages/sim/lab/scripts/funnel-score.py $H/new-train-4?.json $H/cv-model*-4?.json $H/blind-new.json \
   $H/blind-cascade.json

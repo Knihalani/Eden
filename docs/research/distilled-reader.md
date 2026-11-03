@@ -23,7 +23,8 @@ this session. Spend: $1.30 on Anthropic (Haiku 5.5, the experiment's spend ledge
 - **Train CV** (each suite scored by the model fitted without it; the reader replayed):
   - At the cut allowed by the loss limit, the cascade decided 35 of 1,417 calls (**1.03× fewer reader calls**).
   - Forced to 1.5×, hidden fell 4.6 points and decoys rose 6.1.
-- **Blind** (held-out 10–11, seeds 41–42, once):
+- **Blind** (held-out 10–11, seeds 41–42, once). These suites are not fresh: the lab's funnel had run them several
+  times before (the Haiku campaign). This was their first use for this scorer, and nothing here was tuned on them.
   - hidden 82 → 82 of 128;
   - decoys 49 → 52 (+2.3 points);
   - reader calls 169 → 155 (**1.09×**), about 6% of the reader's cost.
@@ -56,7 +57,7 @@ its thresholds and its features frozen from train. Held-out 12 and 13 are not ru
 
 - **Harness:** the no-model funnel (`hidden-funnel.ts --ask`) with NEW and `askReaderWaitMs` 60,000. Cards are the
   checked-in caches plus `cards-train-4344.jsonl`: 315 glm-5.3-flash cards for the seed 43–44 train items the others
-  lack, $0.016. Intent requests were made with Haiku for the train worlds and held-out 10–11 (1,004 calls, $0.36;
+  lack, $0.016. Intent requests were made with Haiku for the train worlds and held-out 10–11 (715 calls, $0.36;
   committed as `packages/sim/lab/distilled/intent-v2.jsonl.gz`).
 - **The seam:** `DistilledReaderMaker` (`packages/sim/src/lab/distilled-reader.ts`) implements the engine's
   `ReaderMaker`. The engine builds, gates and caches the reader's pool as in production, and `packages/engine` is
@@ -68,9 +69,14 @@ its thresholds and its features frozen from train. Held-out 12 and 13 are not ru
   - *silent*: the best candidate scores below `silent`, and the call answers "nothing binds";
   - *bind*: exactly one candidate is above `silent` and it is at or above `bind`, and the call flags it as `changes`
     with no bearing.
-  - Thresholds are chosen on out-of-fold scores only. `silent` is the largest cut that loses at most 1% of the hidden
-    tasks whose planted item the reader flagged; `bind` is the smallest cut at which local binds agree with the reader
-    95% of the time on at least 20 calls.
+  - Thresholds are chosen on out-of-fold scores only and then applied to the model fitted on all of train, whose
+    scores may be calibrated a little differently.
+  - `silent` is the largest cut at which the hidden tasks lost (the reader flagged the planted item and every call
+    that flagged it is decided silent) are at most 1% of the 644 hidden tasks with a reader call. That is 6 tasks,
+    which is 1.2% of the 489 tasks whose planted item was flagged. The frozen blind model used this rule: cut 0.0503.
+    Measured against the 489, the cut would have been 0.0466 (4 lost, 30 calls silent). The rejection holds under
+    either rule.
+  - `bind` is the smallest cut at which local binds agree with the reader 95% of the time on at least 20 calls.
 - **Labels:** a pair is positive when the reader named the candidate in `bears`. All 1,417 calls were readable.
 
 ## Results
@@ -96,10 +102,11 @@ flagged):
 | Silent cut | Calls decided silent | The reader had bound something | Flagged hidden tasks lost |
 |---|---|---|---|
 | 0.0370 | 14 (1.0%) | 5 | 4 |
+| 0.0466 | 30 (2.1%) | 5 | 4 |
 | **0.0503 (chosen)** | **35 (2.5%)** | 7 | 6 |
 | 0.0798 | 99 (7.0%) | 26 | 15 |
-| 0.1006 | 171 (12.1%) | 67 | 35 |
-| 0.1862 (the 1.5× point) | 475 (33.5%) | 218 | 133 |
+| 0.1006 | 172 (12.1%) | 67 | 35 |
+| 0.1862 (the 1.5× point) | 477 (33.7%) | 218 | 133 |
 | 0.2533 | 739 (52.2%) | 358 | 226 |
 
 Local binds never reached the precision bar:
@@ -150,14 +157,16 @@ On that dataset:
 Replaying it at $0 (`run.sh labels`) rebuilds 1,409 of 1,416 calls. Seven miss: a replayed verdict has no `why`,
 which can change a later read's input. The fit gives AUC 0.859, 0.550 and 1.02×.
 
-The blind row above used the model fitted on the first dataset; its NEW baseline and cascade shared every card and
-prompt.
+The blind row above used the model fitted on the first dataset, the live records (`.local/dr/live-recs`, its table in
+`fit2.log`). Its NEW baseline and cascade shared every card and prompt. A later `run.sh labels` overwrote that local
+model file. It was refitted from the live records (the fit is deterministic), and its trees match a copy taken before
+the overwrite. `run.sh labels` now writes `model-labels.json` instead.
 
 ## What this says
 
 - **Do not reopen this with more features or a bigger model of the same inputs.** On this cut, a cheap scorer can
   tell the reader's bound candidate from the rest of the pool (AUC 0.86) but not the planted item from its lookalike
-  (0.54–0.57).
+  (0.544–0.550).
   - Every simulated request is built to carry one of the two, so the reader's work here is exactly that distinction.
   - The reader adds value through reading, not ranking (broad-set.md, haiku-phase3.md).
 - **Real traffic may differ.** Most real requests carry no constraint at all, and there a "nothing here" gate could
@@ -171,10 +180,10 @@ prompt.
 
 ```bash
 packages/sim/lab/distilled/run.sh labels   # $0: train records from the committed labels, fit, out-of-fold table
-packages/sim/lab/distilled/run.sh live     # paid (about $1 on Haiku 5.5): labels, CV in the funnel, the blind pair
+packages/sim/lab/distilled/run.sh live     # paid (about $1 on Haiku 5.5): labels, both CV rows, the blind pair
 ```
 
 `--distill` (on `hidden-funnel.ts`) takes `record:OUT.jsonl`, `labels:LABELS.jsonl,OUT.jsonl` (with `--reader stub`)
 or `cascade:MODEL.json` (with a reader model; a model file's `folds` score each train suite with the model that left
-it out). `distilled-fit.ts --records … --out MODEL.json [--labels-out L.jsonl]` fits the scorer and prints the tables
-above.
+it out). `distilled-fit.ts --records … --out MODEL.json [--labels-out L.jsonl] [--silent-cut X]` fits the scorer and
+prints the tables above; `--silent-cut 0.1862` gives the 1.5× row's model.

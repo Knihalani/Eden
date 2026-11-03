@@ -71,7 +71,7 @@ Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too),
 | Cards (dev/held-out worlds) | `cards-enrich.ts` | `--cards packages/sim/lab/cards/cards-v2.jsonl` | yes |
 | Cards (train worlds, 746 items, 75 calls, $0.0233 on glm-5.3-flash; broad-set.md) | `cards-enrich.ts --funnel train --seeds 41,42` | `cards-train.jsonl` (merge with v2: `bun run funnel` does) | yes |
 | Cards, price-routed batch 20 | `cards-enrich.ts --sort price --batch 20` | `econ-price20-v2.jsonl` (econ-background.md) | yes |
-| Intent requests (D87) | `cards-enrich.ts --intent --dir D` | `--intent D/intent-v2.jsonl` (needs `--cards`) | no (`.local/haiku/intent/`) |
+| Intent requests (D87) | `cards-enrich.ts --intent --dir D` | `--intent D/intent-v2.jsonl` (needs `--cards`) | the Haiku campaign's no (`.local/haiku/intent/`); the train worlds (seeds 41–44) and held-out 10–11, made for D104, yes: `packages/sim/lab/distilled/intent-v2.jsonl.gz` (gunzip it) |
 | Bridge queries (D89) | `bridge-enrich.ts --out F` | `--bridge F` | no |
 | Reader calls (D95) | `--reader live --reader-cache F` | `--reader replay --reader-cache F` (a prompt not cached fails open; misses exit 3, below) | no |
 

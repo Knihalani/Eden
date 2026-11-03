@@ -5,16 +5,20 @@
  * left-out suite for cross-validated funnel screens).
  *
  *   bun packages/sim/src/lab/distilled-fit.ts --records R.jsonl[,R2.jsonl] --out model.json [--labels-out L.jsonl]
- *     [--max-loss 0.01] [--bind-precision 0.95] [--trees 150] [--depth 3]
+ *     [--max-loss 0.01] [--silent-cut X] [--bind-precision 0.95] [--trees 150] [--depth 3]
  *
  * Labels: a (request, candidate) pair is positive when the reader named the candidate as binding (`bears`). Calls with
  * no readable answer are left out. The thresholds are chosen on the out-of-fold scores only:
- * - `silent`: the largest cut such that the calls decided silent hold at most `--max-loss` of the hidden tasks whose
- *   planted item the reader flagged (a task counts as lost when every call that flagged it is decided silent);
+ * - `silent`: the largest cut at which the hidden tasks lost number at most `--max-loss` of the hidden tasks that had a
+ *   reader call (lost: the reader flagged the planted item and every call that flagged it is decided silent). The
+ *   denominator is every hidden task with a call, as the frozen blind model was fitted (D104); `--silent-cut X` sets
+ *   the cut instead (the note's 1.5x row);
  * - `bind`: the smallest cut at which a local bind agrees with the reader at `--bind-precision` or better (off when no
  *   cut reaches it on at least 20 calls).
- * `--labels-out` writes the committed labels file: per call its task, `readerKey`, pool ids, planted item and verdict
+ * `--labels-out` writes the committed labels file: per call its task, `readerKey`, pool size, planted item and verdict
  * (no item text), which `--distill labels:FILE` replays at $0 to rebuild the records.
+ * The thresholds come from the fold models' out-of-fold scores and are applied to the model fitted on all of train,
+ * whose scores may be calibrated a little differently.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import {
@@ -36,6 +40,8 @@ const RECORDS = opt("records", "").split(",").filter(Boolean);
 const OUT = opt("out", "");
 const LABELS_OUT = opt("labels-out", "");
 const MAX_LOSS = Number(opt("max-loss", "0.01"));
+/** A fixed silent cut in place of the one `--max-loss` chooses (NaN: choose). */
+const SILENT_CUT = Number(opt("silent-cut", "NaN"));
 const BIND_PRECISION = Number(opt("bind-precision", "0.95"));
 const TREES = Number(opt("trees", "150"));
 const DEPTH = Number(opt("depth", "3"));
@@ -287,6 +293,8 @@ for (const cut of grid) {
     `${cut.toFixed(4)} | ${r.silent} (${((100 * r.silent) / readable.length).toFixed(1)}%) | ${r.anyBind} | ${r.lost}`,
   );
 }
+
+if (Number.isFinite(SILENT_CUT)) silentCut = SILENT_CUT;
 
 // Local binds: among calls not decided silent, those with exactly one candidate above the silent cut and the top at
 // or above `bind`; precision is agreement with the reader's own binding set.
