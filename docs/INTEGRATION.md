@@ -50,7 +50,7 @@ as 0 and caps it at 5,000 ms.
 The client's own timeout for that request is 800 ms plus `waitMs`, so a long wait does not make the SDK give up early.
 Work still running when the wait ends arrives later through `pending`/`collect`, as above.
 
-- **Pass a wait on the user message: the client sends 3,000 ms by default (`DEFAULT_WAIT_MS`, D111).** With no `waitMs` the observe
+- **Pass a wait on the user message: the client sends 3,000 ms by default (`DEFAULT_WAIT_MS`, D112).** With no `waitMs` the observe
   does not wait for its lookup: when the lookup is not already done it replies at once (`pending: true`) and the
   answer lands in `pending`, so it misses the agent's first model call and a one-turn answer never sees it
   (partner.ts `observe`: `waitMs <= 0` queues the slow path and returns). With `waitMs` the reply comes as soon as the
@@ -60,8 +60,8 @@ Work still running when the wait ends arrives later through `pending`/`collect`,
   waits 3,000 ms). By those timings (inferred, not a run at each wait) no wait or 600 ms would have delivered 0 of
   the 11 before the first model call, 800 ms 5, and 1,500 ms all 11. Warm in-process sources (the README's static
   file) answer in milliseconds, so there the wait is rarely spent. The client's default (3,000 ms on every sent user
-  message and nothing else, D105, D111) covers both this and the reader below; `defaultWaitMs: 0` opts out.
-- **The reader (`readerPush` with `askReader`, on in the default with a model key, D98, D111) needs about 3,000 ms.**
+  message and nothing else, D105, D112) covers both this and the reader below; `defaultWaitMs: 0` opts out.
+- **The reader (`readerPush` with `askReader`, on in the default with a model key, D98, D112) needs about 3,000 ms.**
   The reader reads the request on the critical path, and its call is paid for whatever wait you pass; with too short
   a wait its packet lands after the agent has answered. **Measured** in the lab (Haiku 5.5, simulated worlds), against
   the harnesses' 3,000 ms: a 1 s wait lost 7.6 points (Pi, Eden-only arm) and 18.1 points (Pi, tools-plus-Eden arm)
@@ -128,7 +128,7 @@ const check = await eden.check(toolName, args);
 if (check.verdict === "finding" && check.finding) return heldResult(toolName, check.finding); // or ask the user
 ```
 
-- The server needs `actionCheck` (a trial switch, off, D111's trials table) in its engine config; the grounds it
+- The server needs `actionCheck` (a trial switch, off, D112's trials table) in its engine config; the grounds it
   reads are in the default.
 - Eden returns context as data and never "do not"; whether to hold the call, ask the user or go ahead is your policy.
   `heldResult` is one choice: hold the call and let the agent call again to go ahead.
@@ -187,7 +187,7 @@ your configuration: to revoke a connection, remove it from the directory (and fo
 
 ## Configuration
 
-There is one configuration, the default (D111): the best measured setup, NEWL (D99) with the speed and memory
+There is one configuration, the default (D112): the best measured setup, NEWL (D99) with the speed and memory
 switches measured to cost nothing (poll behind, small poll pages, no probe grace, the push's reader not waiting for
 the poll, the slow-path queue, vocabulary release). Run it as shipped:
 

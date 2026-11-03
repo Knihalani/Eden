@@ -31,7 +31,7 @@ export interface Reservation {
 
 /**
  * One cap on a tenant's model spend per UTC day, shared by every `Budget` built with it (the shipped servers give the
- * reader and the card enricher one each, D111), so one tenant's users cannot spend past it whichever role calls. The
+ * reader and the card enricher one each, D112), so one tenant's users cannot spend past it whichever role calls. The
  * tenant is the user key's part before its first "/" (`scopeKey` is `tenant/user`; ids never hold a "/"); a key with
  * none is its own tenant.
  */

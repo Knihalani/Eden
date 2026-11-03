@@ -49,7 +49,7 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     expect(partner.config).toEqual({ ...DEFAULT_CONFIG, ...engine });
   });
 
-  test("card, intent, reader and sync keys are accepted: the servers wire them, or they are inert by design (D111)", () => {
+  test("card, intent, reader and sync keys are accepted: the servers wire them, or they are inert by design (D112)", () => {
     // Default minus a part, and trials of the parts' numbers, all parse.
     const accepted: Record<string, unknown>[] = [
       { cards: false, cardsEconomy: false, intent: false },
@@ -60,7 +60,7 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     for (const config of accepted) expect(parseEngineConfig(config)).toEqual(config);
   });
 
-  test("the model roles are wired only when given; without them the same default runs with no model (D111)", () => {
+  test("the model roles are wired only when given; without them the same default runs with no model (D112)", () => {
     const none = buildPartner({ sources: async () => [], model: null }) as unknown as { deps: Record<string, unknown> };
     expect(none.deps.cards).toBeUndefined();
     expect(none.deps.reader).toBeUndefined();
@@ -82,7 +82,7 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     expect((minus as unknown as { deps: Record<string, unknown> }).deps.reader).toBeUndefined();
   });
 
-  test("sync over per-user sources: a user's listable source is listed for that user only (D108, D111)", async () => {
+  test("sync over per-user sources: a user's listable source is listed for that user only (D108, D112)", async () => {
     const listed: string[] = [];
     const lister = (owner: string): Source => ({
       id: "mail",
@@ -205,7 +205,7 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     expect(names.length).toBeGreaterThanOrEqual(3);
     for (const name of names) {
       const engine = engineConfig({ EDEN_ENGINE_CONFIG: join(profiles, name) });
-      // `minus-<part>.json` holds exactly PARTS[part] (D111): the only ablation there is.
+      // `minus-<part>.json` holds exactly PARTS[part] (D112): the only ablation there is.
       const part = /^minus-(\w+)\.json$/.exec(name)?.[1];
       expect(part !== undefined && part in PARTS).toBe(true);
       expect(engine).toEqual(PARTS[part as Part]);

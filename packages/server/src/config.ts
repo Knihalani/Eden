@@ -6,7 +6,7 @@
  * EDEN_DEV=1         accept unauthenticated requests as tenant "dev" (local development only).
  * PORT, HOST         default 8790 on 127.0.0.1.
  * EDEN_SOURCE_MAP    path of the source-map database; default $EDEN_HOME/source-map.db.
- * OPENROUTER_API_KEY turns on the default's model roles (cards, intent, the ask-time reader; models.ts, D111);
+ * OPENROUTER_API_KEY turns on the default's model roles (cards, intent, the ask-time reader; models.ts, D112);
  *                    without it the same default runs with no model at all.
  * EDEN_MODEL         the roles' model, default anthropic/claude-haiku-5.5 through OpenRouter (D12's routing).
  * EDEN_MODEL_USD_PER_TENANT_DAY one cap on a tenant's model spend per UTC day, across roles; default 25.
@@ -17,7 +17,7 @@
  *                    1 (default) serves through it; "shadow" serves without it and runs it beside, learning and
  *                    reporting only; 0 turns it off.
  * EDEN_ENGINE_CONFIG path of a JSON file of engine settings over the default (D103, engine-config.ts); unset,
- *                    the default exactly (D111).
+ *                    the default exactly (D112).
  * EDEN_SOURCES_FILE  static documents shared by every user (connectors.ts); EDEN_USER_SOURCES_FILE each user's own
  *                    sources, MCP connections with their own credentials included (user-sources.ts, D108). Both are
  *                    read and checked at startup by `sourcesFromEnv`, not here.

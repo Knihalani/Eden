@@ -1,12 +1,12 @@
 /**
- * The default's parts (D111). `DEFAULT_CONFIG` is one configuration, the best measured; each part names the settings
+ * The default's parts (D112). `DEFAULT_CONFIG` is one configuration, the best measured; each part names the settings
  * that take one piece of it out, so "default minus <part>" is the only ablation there is: the lab's presets are made
  * from these (packages/sim/src/lab/presets.ts), and `CORE_CONFIG`, the default with every part taken out, is the
  * no-feature core the parts build on. Unit tests that check one mechanism in isolation start from the core and turn
  * on what they test; the default as a whole is checked by `bun run eval`, the funnel and `default.test.ts`.
  *
  * A part whose settings are model roles (cards, intent, the reader) needs its partner dependency as well: without it
- * the part is inert and the no-model path answers, so the same default runs with or without a model (D111).
+ * the part is inert and the no-model path answers, so the same default runs with or without a model (D112).
  */
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 

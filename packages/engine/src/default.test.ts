@@ -9,7 +9,7 @@ import { ContextPartner } from "./partner";
 import { CORE_CONFIG, PARTS, withoutParts, type Part } from "./parts";
 import type { Trace } from "./trace";
 
-/** Every setting where the default and the core differ, with its value in the default (D111). */
+/** Every setting where the default and the core differ, with its value in the default (D112). */
 const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   fallbackAsks: true,
   slowPathQueue: true,
@@ -57,7 +57,7 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-describe("the unified default and its parts (D111)", () => {
+describe("the unified default and its parts (D112)", () => {
   test("CORE_CONFIG is the default with every part taken out; every part's key is a setting it changes", () => {
     const all = Object.keys(PARTS) as Part[];
     expect(CORE_CONFIG).toEqual(withoutParts(...all));
@@ -136,7 +136,7 @@ describe("the default with no model and no partner dependencies", () => {
       { ref: "evt-1", title: "Call with Dana Lee", text: "Thursday 3pm, Globex renewal check-in" },
     ]);
     const budget = new Budget();
-    // No model, no cards, no reader, no judge: every part that is a model role is inert (D111).
+    // No model, no cards, no reader, no judge: every part that is a model role is inert (D112).
     const p = new ContextPartner({
       sources: async () => [crm, calendar],
       sourceMap: new SourceMap(":memory:", { seed: 1 }),

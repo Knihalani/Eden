@@ -23,12 +23,12 @@ export interface BuildOptions {
   /** An open source map (from `openSourceMap`); `sourceMapPath` is ignored when this is set. */
   sourceMap?: SourceMap;
   /**
-   * A judge model for the slow path (D5). The servers pass none: the measured default ran without a judge (D111), so
+   * A judge model for the slow path (D5). The servers pass none: the measured default ran without a judge (D112), so
    * only an embedding that has measured one wires it.
    */
   model?: Model | null;
   /**
-   * The default's model roles (D111): cards and intent in the background, the ask-time reader on the request path.
+   * The default's model roles (D112): cards and intent in the background, the ask-time reader on the request path.
    * The servers pass `modelRolesFromEnv()` (models.ts), all null without OPENROUTER_API_KEY; unset, none (`NO_MODELS`).
    * A null role leaves its part of the default inert, so the same configuration runs its no-model path.
    */
@@ -40,14 +40,14 @@ export interface BuildOptions {
   queryPlanner?: "off" | "serve" | "shadow";
   onShadow?: ShadowSink;
   /**
-   * Engine settings over the default (D111), for an embedding or a deployment (EDEN_ENGINE_CONFIG, D103), `{}` when
+   * Engine settings over the default (D112), for an embedding or a deployment (EDEN_ENGINE_CONFIG, D103), `{}` when
    * unset. With the default's `sync` on (it is), the sync timer starts: sources with a list tool (per-user MCP sources
    * that name one, D108) are read into each active user's cache in the background; static sources list nothing.
    */
   engine?: Partial<EngineConfig>;
 }
 
-/** Wires a partner from its parts with the default configuration (D111). */
+/** Wires a partner from its parts with the default configuration (D112). */
 export function buildPartner(options: BuildOptions): ContextPartner {
   const sourceMap = options.sourceMap ?? new SourceMap(options.sourceMapPath);
   const mode = options.queryPlanner ?? "serve";

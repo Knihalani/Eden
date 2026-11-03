@@ -20,7 +20,7 @@ const partner = buildPartner({
   sourceMapPath: config.sourceMapPath,
   queryPlanner: config.queryPlanner,
   engine,
-  // Cards, intent and the reader on OPENROUTER_API_KEY's model (D111); without a key, the default's no-model path.
+  // Cards, intent and the reader on OPENROUTER_API_KEY's model (D112); without a key, the default's no-model path.
   models: modelRolesFromEnv(),
   onShadow: process.env.EDEN_TRACE === "1" ? (r) => console.log(JSON.stringify({ shadow: r })) : undefined,
   onTrace: process.env.EDEN_TRACE === "1" ? (t) => console.log(JSON.stringify(t)) : undefined,

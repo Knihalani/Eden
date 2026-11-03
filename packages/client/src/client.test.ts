@@ -49,7 +49,7 @@ describe("EdenClient", () => {
   });
 });
 
-describe("defaultWaitMs (D105, D111)", () => {
+describe("defaultWaitMs (D105, D112)", () => {
   const recorder = () => {
     const urls: string[] = [];
     const fake = (async (url: string) => {
@@ -232,7 +232,7 @@ describe("misconfiguration is visible through onError", () => {
     expect(await eden.observe({ kind: "user_message", text: "hi" })).toEqual({ injection: null, pending: false });
     expect(errors.length).toBe(1);
     expect(errors[0]).toBeInstanceOf(Error);
-    // A sent user message carries the default wait (D111), and the route is named as requested.
+    // A sent user message carries the default wait (D112), and the route is named as requested.
     expect((errors[0] as Error).message).toBe(`eden /v1/events?waitMs=3000: 400 ${reason}`);
   });
 

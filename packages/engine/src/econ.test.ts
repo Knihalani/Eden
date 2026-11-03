@@ -190,7 +190,7 @@ describe("the enricher's economy preset", () => {
   });
 
   test("the partner applies the preset only with cardsEconomy", () => {
-    // On in the default (D111), out in the core these tests start from.
+    // On in the default (D112), out in the core these tests start from.
     expect(DEFAULT_CONFIG.cardsEconomy).toBe(true);
     expect(CORE_CONFIG.cardsEconomy).toBe(false);
     for (const on of [false, true]) {

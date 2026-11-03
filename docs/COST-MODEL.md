@@ -262,7 +262,7 @@ What the table says:
   against 11 ms without (docs/research/live-judge.md).
 - Server smoke test, one `ask`: $0.000013639431, 1,549 ms end to end, including the OpenRouter round trip.
 
-## The shipped default's model roles (D111)
+## The shipped default's model roles (D112)
 
 With `OPENROUTER_API_KEY` set, the shipped servers run the unified default with three model roles on
 `EDEN_MODEL` (default `anthropic/claude-haiku-5.5` through OpenRouter, D12's routing): **cards** and the **intent**

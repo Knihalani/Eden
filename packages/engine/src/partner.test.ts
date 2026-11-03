@@ -34,7 +34,7 @@ function partner(extra: Partial<PartnerDeps> = {}, sources: Source[] = [crm, cal
     model: null,
     onTrace: (t) => traces.push(t),
     ...extra,
-    // The core (D111): these tests check one mechanism each, so every part not named in a test is out.
+    // The core (D112): these tests check one mechanism each, so every part not named in a test is out.
     config: { ...CORE_CONFIG, ...extra.config },
   });
   return { p, traces };

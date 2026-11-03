@@ -33,7 +33,7 @@ const partner = buildPartner({
   sourceMap: openSourceMap(() => stdioSourceMapPath(tenantId, userId)),
   queryPlanner: plannerMode(process.env.EDEN_QUERY_PLANNER),
   engine: engineConfig(),
-  // Cards, intent and the reader on OPENROUTER_API_KEY's model (D111), as in the HTTP server.
+  // Cards, intent and the reader on OPENROUTER_API_KEY's model (D112), as in the HTTP server.
   models: modelRolesFromEnv(),
 });
 // Before the transport opens, so the first ask does not compile the secret gate.

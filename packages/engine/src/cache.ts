@@ -224,7 +224,7 @@ export interface CacheLimits {
   /**
    * Release a term once no live item holds it (`Vocab.release`), instead of keeping it until the user's vocabulary
    * outgrows its live items and is rebuilt (a synchronous reindex); forgetting a source then needs no reindex either.
-   * On by default (D111): `churn.bench.ts` worst put 274.5 to 26.3 ms, heap 38.9 to 25.0 MB.
+   * On by default (D112): `churn.bench.ts` worst put 274.5 to 26.3 ms, heap 38.9 to 25.0 MB.
    */
   releaseTerms: boolean;
 }

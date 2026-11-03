@@ -1,6 +1,6 @@
 /**
  * EDEN_ENGINE_CONFIG (D103): the path of a JSON file of `EngineConfig` keys, merged over the default for the whole
- * process. Unset, the engine runs on `DEFAULT_CONFIG` exactly, the unified default (D111). The usual use is "default
+ * process. Unset, the engine runs on `DEFAULT_CONFIG` exactly, the unified default (D112). The usual use is "default
  * minus a part" (@eden/engine's `PARTS`), or a measured trial; the lab's presets stay in `@eden/sim` and are not read
  * here, so the file names its settings itself.
  *
@@ -9,7 +9,7 @@
  * So does a number outside the key's range (`RANGES`) or an `anticipateOff` part the engine does not have. The
  * servers wire both model-role dependencies (cards and the reader, build.ts) whenever OPENROUTER_API_KEY is set, so
  * no card or reader key is refused for want of a dependency: without a key those parts are inert by design and the
- * default runs its no-model path (D111), whatever the file says. Sync is accepted: static sources list nothing, and
+ * default runs its no-model path (D112), whatever the file says. Sync is accepted: static sources list nothing, and
  * per-user MCP sources with a list tool (D108) are synced (engine-config.test.ts, `sync over per-user sources`).
  */
 import { readFileSync } from "node:fs";
@@ -47,7 +47,7 @@ export function engineConfig(env: Record<string, string | undefined> = process.e
 export function parseEngineConfig(value: unknown, where = "engine config"): Partial<EngineConfig> {
   return checkEngineConfig(value, {
     where,
-    // Wired whenever a model key is set (build.ts, models.ts); without one they are inert by design (D111).
+    // Wired whenever a model key is set (build.ts, models.ts); without one they are inert by design (D112).
     deps: { cards: true, reader: true },
     parents: false,
   });

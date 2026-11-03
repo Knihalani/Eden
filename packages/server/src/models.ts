@@ -1,5 +1,5 @@
 /**
- * The model roles the shipped servers wire (D111): the card and intent calls in the background and the ask-time
+ * The model roles the shipped servers wire (D112): the card and intent calls in the background and the ask-time
  * reader on the request path, on one OpenRouter model with D12's routing (`provider.data_collection: "deny"`, ZDR).
  * Gated on OPENROUTER_API_KEY: without it every role is null, the partner gets no card enricher and no reader, and the
  * same default configuration runs its no-model path. No judge is wired: the measured default ran without one.

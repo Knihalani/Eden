@@ -141,7 +141,7 @@ describe("compactAsk and askDedup through the engine", () => {
     return got;
   };
 
-  test("the flags are on in the default and off in the core (D111)", () => {
+  test("the flags are on in the default and off in the core (D112)", () => {
     expect(DEFAULT_CONFIG.compactAsk).toBe(true);
     expect(DEFAULT_CONFIG.askDedup).toBe(true);
     expect(DEFAULT_CONFIG.compactParts).toBe(true);

@@ -109,7 +109,7 @@ export interface EdenClientOptions {
    */
   onError?: (error: unknown) => void;
   /**
-   * `waitMs` sent on each sent `user_message` observe (not a draft) that passes none of its own (D105, D111).
+   * `waitMs` sent on each sent `user_message` observe (not a draft) that passes none of its own (D105, D112).
    * Default `DEFAULT_WAIT_MS` (3,000), the wait the default was measured with: the reader's reading of the request
    * must land before the agent's first model call (D98: a 1 s wait lost 7.6–18.1 points). The server replies as soon
    * as the lookup and reading are done, so the wait is a cap, not a delay. 0 sends none: the server answers at once
@@ -119,7 +119,7 @@ export interface EdenClientOptions {
   defaultWaitMs?: number;
 }
 
-/** The observe wait on a sent user message when `defaultWaitMs` is unset (D111): the measured default's wait. */
+/** The observe wait on a sent user message when `defaultWaitMs` is unset (D112): the measured default's wait. */
 export const DEFAULT_WAIT_MS = 3_000;
 
 type EventInput = AgentEvent extends infer E

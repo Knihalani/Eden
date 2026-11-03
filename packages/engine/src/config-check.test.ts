@@ -29,7 +29,7 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
   });
 
   test("a key needing an unwired dependency is refused off its default, accepted when the caller wires it", () => {
-    // The default turns cards and the reader on (D111): at its default a key is accepted with no dependency (the part
+    // The default turns cards and the reader on (D112): at its default a key is accepted with no dependency (the part
     // is inert and the no-model path answers); a value off its default is what needs the dependency.
     expect(() => checkEngineConfig({ cardItems: 2 })).toThrow(/"cardItems" needs the partner's cards dependency/);
     expect(checkEngineConfig({ cards: true })).toEqual({ cards: true });
@@ -46,7 +46,7 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
 
   test("a child flag whose parent is off is refused; under a parent that is on it is accepted", () => {
     // The finding: a child set with its parent off runs byte-identical to the parent off. The default turns most
-    // parents and their flag children on (D111), so the children here are set off their default with a parent off.
+    // parents and their flag children on (D112), so the children here are set off their default with a parent off.
     expect(() => checkEngineConfig({ sync: false, syncPollPageSize: 7 })).toThrow(
       /"syncPollPageSize" acts only with "sync" on, and this configuration has "sync" off/,
     );
