@@ -38,6 +38,10 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
    - `git status` is clean. Note the current branch and today's date (`date -u +%F`).
    - Fetch and start from the default branch: `git fetch origin && git checkout <default> && git pull`.
    - Run the repo's check command once and note its time and result. A red baseline goes in the report, not under it.
+   - Check free disk. Every fixer, reviewer and integrator gets its own worktree, a full checkout of the repo. Free at
+     least (checkout size) × (maxPackages × fixAttempts × 2 + 10) before starting (`df -h .`, `du -sh` of a fresh
+     checkout), and remove stale worktrees first (`git worktree list`; remove only ones whose branches are pushed or
+     merged). A full disk stops the run mid-way.
    - If another session or agent is editing parts of the repo, list those paths in `focus` as "do not edit: …".
 3. **Run the workflow** with the Workflow tool, `name: "deep-audit"`, and `args` as a JSON object:
    ```json
@@ -60,11 +64,18 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
    Say the expected scale in one line before starting.
 4. **While it runs**, stay available. If the user interjects, answer; don't stop the run unless they ask.
 5. **After it returns:**
+   - Check every package branch against the integration branch (`git merge-base --is-ancestor <branch>
+     audit/<date>-integration`): a fix that was approved but not merged, or published to a stray worktree branch,
+     has to be merged now. Treat the workflow's ledger as a claim and git as the truth.
    - Check out the integration branch and run the checks yourself. Do not trust the workflow's "green".
+   - If the repo requires a reviewer agent for the kind of change made (its CLAUDE.md says so), run it once on the
+     whole combined diff and fix what it finds before shipping.
    - Read the audit file's summary and spot-check two or three fixes against their findings.
    - Ship it the way the repo's CLAUDE.md says: usually one PR from the integration branch, or one PR per independent
      area if the repo prefers small PRs. Merge only if the repo allows agents to merge and every required check
      and review has passed.
+   - Clean up: once the branches are merged and pushed, remove the run's worktrees (`git worktree list`, then
+     `git worktree remove` on each one under the workflow's worktree folder) and `git worktree prune`.
 6. **Report to the user** using the template below. Keep it short and legible: plain words, one idea per line,
    numbers with what they mean.
 
