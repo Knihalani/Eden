@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_CONFIG } from "@eden/engine";
 import { edenHome } from "@eden/protocol";
 import { SourceMap } from "@eden/graph";
 import { buildPartner, openSourceMap } from "./build";
 import { stdioSourceMapPath } from "./config";
-import { engineConfig, parseEngineConfig } from "./engine-config";
+import { ANTICIPATE_PARTS, engineConfig, parseEngineConfig } from "./engine-config";
 
 const dir = mkdtempSync(join(edenHome(), "engine-config-"));
 const file = (name: string, body: string): string => {
@@ -103,6 +103,67 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     expect(() => parseEngineConfig({ probeOff: [1] })).toThrow(/"probeOff" must be an array of strings/);
     expect(() => parseEngineConfig({ probeWhen: "sometimes" })).toThrow(/"probeWhen" must be one of always, actions/);
     expect(() => parseEngineConfig([])).toThrow(/must be a JSON object/);
+  });
+
+  test("settings that would do nothing or break a feature are refused, naming the key (audit 2026-11-03b)", () => {
+    const refused: [Record<string, unknown>, string][] = [
+      // Acts only with cards (digestFor), which the servers do not wire.
+      [{ constraintDigest: true }, "constraintDigest"],
+      // Dependency-only numbers: refused unless at their default.
+      [{ askReaderStanding: 20 }, "askReaderStanding"],
+      [{ readerPushWaitMs: 5 }, "readerPushWaitMs"],
+      [{ bridgeAskSeats: 2 }, "bridgeAskSeats"],
+      [{ readerPushKinds: ["blocks"] }, "readerPushKinds"],
+      // A typo switches nothing off.
+      [{ anticipateOff: ["srve"] }, "anticipateOff"],
+      // 0-item pages: nothing syncs.
+      [{ syncPageSize: 0, sync: true }, "syncPageSize"],
+      [{ syncStaleChance: 7 }, "syncStaleChance"],
+      [{ askReaderPool: 2.5 }, "askReaderPool"],
+      [{ maxItemsPerInjection: 1.5 }, "maxItemsPerInjection"],
+      [{ maxSessionsPerTenant: 0 }, "maxSessionsPerTenant"],
+    ];
+    for (const [config, key] of refused) {
+      expect(() => parseEngineConfig(config)).toThrow(new RegExp(`"${key}"`));
+    }
+    expect(() => parseEngineConfig({ syncStaleChance: 7 })).toThrow(/"syncStaleChance" must be at most 1/);
+    expect(() => parseEngineConfig({ askReaderPool: 2.5 })).toThrow(/"askReaderPool" must be a whole number/);
+    expect(() => parseEngineConfig({ syncPageSize: 0 })).toThrow(/"syncPageSize" must be at least 1/);
+    expect(() => parseEngineConfig({ anticipateOff: ["serve", "srve"] })).toThrow(/"anticipateOff" has "srve"/);
+    // Legal: nothing, 0 where 0 means off, defaults of dependency-only keys, chances at the bounds, real parts.
+    const accepted: Record<string, unknown>[] = [
+      {},
+      { syncPollPageSize: 0 },
+      { syncPollPageSize: 5, sync: true },
+      { readerPushWaitMs: DEFAULT_CONFIG.readerPushWaitMs, askReaderStanding: 0 },
+      { readerPushKinds: [...DEFAULT_CONFIG.readerPushKinds] },
+      { syncStaleChance: 0 },
+      { syncStaleChance: 1 },
+      { anticipateOff: ["serve", "names"] },
+      { confidentScore: 1.25, maxRefreshes: 0 },
+    ];
+    for (const config of accepted) expect(parseEngineConfig(config)).toEqual(config);
+  });
+
+  test("anticipateOff's parts are exactly the ones partner.ts reads", () => {
+    const source = readFileSync(join(import.meta.dir, "../../engine/src/partner.ts"), "utf8");
+    // `off` is partner.ts's local alias for `this.config.anticipateOff` in `anticipate`.
+    expect(source).toContain("const off = this.config.anticipateOff;");
+    const read = new Set([...source.matchAll(/\b(?:anticipateOff|off)\.includes\("(\w+)"\)/g)].map((m) => m[1]!));
+    expect(read.size).toBeGreaterThan(0);
+    expect([...read].sort()).toEqual([...ANTICIPATE_PARTS].sort());
+  });
+
+  test("every checked-in profile in docs/profiles parses and builds a partner (D104)", () => {
+    const profiles = join(import.meta.dir, "../../../docs/profiles");
+    const names = readdirSync(profiles).filter((name) => name.endsWith(".json"));
+    expect(names.length).toBeGreaterThanOrEqual(3);
+    for (const name of names) {
+      const engine = engineConfig({ EDEN_ENGINE_CONFIG: join(profiles, name) });
+      expect(Object.keys(engine).length).toBeGreaterThan(0);
+      const partner = buildPartner({ sources: async () => [], model: null, engine });
+      expect(partner.config).toEqual({ ...DEFAULT_CONFIG, ...engine });
+    }
   });
 
   test("an unreadable or malformed file names the variable", () => {

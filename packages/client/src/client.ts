@@ -108,6 +108,14 @@ export interface EdenClientOptions {
    * id, a wrong port) looks exactly like Eden's normal silence. A 4xx's message carries the server's reason.
    */
   onError?: (error: unknown) => void;
+  /**
+   * `waitMs` sent on each sent `user_message` observe (not a draft) that passes none of its own (D105, proposed).
+   * Unset (the default), observe sends no wait: the server answers at once and a lookup still running lands in
+   * `pending`, which a one-turn answer never reads. With slow connectors that is most of what Eden finds for the
+   * first model call (docs/INTEGRATION.md has the measurement; 1,500 covered every delivery there). Other events
+   * never wait. The request's timeout grows by the wait, as for an explicit one.
+   */
+  defaultWaitMs?: number;
 }
 
 type EventInput = AgentEvent extends infer E
@@ -175,10 +183,15 @@ export class EdenClient {
     }
   }
 
-  /** Reports an event. Returns context to deliver now, if any. `waitMs` trades latency for a fresher answer. */
+  /**
+   * Reports an event. Returns context to deliver now, if any. `waitMs` trades latency for a fresher answer; without
+   * it a sent `user_message` (not a draft) uses `defaultWaitMs` (an explicit 0 sends none).
+   */
   async observe(event: EventInput, options: { waitMs?: number } = {}): Promise<ObserveResult> {
-    const wait = options.waitMs ? `?waitMs=${options.waitMs}` : "";
-    const timeout = (this.options.timeoutMs ?? 800) + (options.waitMs ?? 0);
+    const sent = event.kind === "user_message" && !event.draft;
+    const waitMs = options.waitMs ?? (sent ? this.options.defaultWaitMs : undefined);
+    const wait = waitMs ? `?waitMs=${waitMs}` : "";
+    const timeout = (this.options.timeoutMs ?? 800) + (waitMs ?? 0);
     const body = { ...this.who, at: Date.now(), ...event };
     return (await this.post<ObserveResult>(`/v1/events${wait}`, body, timeout)) ?? { injection: null, pending: false };
   }

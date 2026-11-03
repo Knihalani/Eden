@@ -11,7 +11,8 @@ D64's timelines, not tested in a tenant's agent. Measure in your own agent befor
 ```ts
 import { EdenClient, withContext } from "@eden/client";
 
-const eden = new EdenClient({ apiKey, userId, sessionId });
+// defaultWaitMs: each user message's observe waits up to 1.5 s for its lookup (see "How long to wait" below).
+const eden = new EdenClient({ apiKey, userId, sessionId, defaultWaitMs: 1500 });
 const { injection } = await eden.observe({ kind: "user_message", text }); // report each event
 messages = withContext(messages, await eden.collect(injection)); // before each model call
 ```
@@ -41,15 +42,26 @@ messages = withContext(messages, await eden.collect(injection)); // before each 
 - **The SDK fails open.** A timeout or an error is "no context", never an exception in the agent's loop. Keep it that
   way in your wrapper.
 
-## How long to wait on the user message (`waitMs`; NEW only, D98)
+## How long to wait on the user message (`waitMs`; D98, D105)
 
 `observe` takes a `waitMs` option: how long the server may hold the user message's observe for a fresher answer
-before it replies. The client sends none by default; the server treats a missing value as 0 and caps it at 5,000 ms.
+before it replies. The client sends none by default (unless `defaultWaitMs` is set); the server treats a missing value
+as 0 and caps it at 5,000 ms.
 The client's own timeout for that request is 800 ms plus `waitMs`, so a long wait does not make the SDK give up early.
 Work still running when the wait ends arrives later through `pending`/`collect`, as above.
 
-- **Default configuration: no long wait needed.** Without the experimental reader, the observe returns as soon as its
-  lookup is done, so `waitMs` only bounds a slow lookup.
+- **Default configuration: pass a wait on the user message (about `waitMs: 1500`).** With no `waitMs` the observe
+  does not wait for its lookup: when the lookup is not already done it replies at once (`pending: true`) and the
+  answer lands in `pending`, so it misses the agent's first model call and a one-turn answer never sees it
+  (partner.ts `observe`: `waitMs <= 0` queues the slow path and returns). With `waitMs` the reply comes as soon as the
+  lookup ends, so a fast lookup costs no extra latency; only a slow one costs up to the wait. **Measured** (simulated
+  connectors at their profiles' assumed latency, `bun run funnel --preset none --suite train1,train2 --seeds 41 --
+  --time 1`, production defaults): all 11 deliveries arrived 630 to 1,336 ms after the user message (the harness
+  waits 3,000 ms). By those timings (inferred, not a run at each wait) no wait or 600 ms would have delivered 0 of
+  the 11 before the first model call, 800 ms 5, and 1,500 ms all 11. Warm in-process sources (the README's static
+  file) answer in milliseconds, so there the wait is rarely spent. Either pass `waitMs` on each user message's
+  observe or set the client's `defaultWaitMs: 1500`, which does it for every sent user message and nothing else
+  (D105, proposed; unset by default).
 - **Running NEW (`readerPush` with `askReader`, D98): pass about `waitMs: 3000` on the user message's observe.** The
   reader then reads the request on the critical path, and its call is paid for whatever wait you pass; with too short
   a wait its packet lands after the agent has answered. **Measured** in the lab (Haiku 5.5, simulated worlds), against

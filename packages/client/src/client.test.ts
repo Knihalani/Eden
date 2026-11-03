@@ -50,6 +50,69 @@ describe("EdenClient", () => {
   });
 });
 
+describe("defaultWaitMs (D105, proposed)", () => {
+  const recorder = () => {
+    const urls: string[] = [];
+    const fake = (async (url: string) => {
+      urls.push(url);
+      return Response.json({ injection: null, pending: false });
+    }) as unknown as typeof fetch;
+    return { urls, fake };
+  };
+  const query = (url: string) => new URL(url).search;
+
+  test("adds ?waitMs to a sent user_message observe only (no draft); an explicit waitMs, 0 included, wins", async () => {
+    const { urls, fake } = recorder();
+    const eden = new EdenClient({ userId: "u", sessionId: "s", fetch: fake, defaultWaitMs: 1_500 });
+    await eden.observe({ kind: "user_message", text: "hi" });
+    await eden.observe({ kind: "external", source: "gmail", text: "New mail" });
+    await eden.observe({ kind: "agent_message", text: "ok" });
+    await eden.observe({ kind: "user_message", text: "h", draft: true });
+    await eden.observe({ kind: "user_message", text: "hi" }, { waitMs: 300 });
+    await eden.observe({ kind: "user_message", text: "hi" }, { waitMs: 0 });
+    await eden.pending();
+    expect(urls.map(query)).toEqual(["?waitMs=1500", "", "", "", "?waitMs=300", "", ""]);
+  });
+
+  test("absent, no observe sends a wait (the default is unchanged)", async () => {
+    const { urls, fake } = recorder();
+    const eden = new EdenClient({ userId: "u", sessionId: "s", fetch: fake });
+    await eden.observe({ kind: "user_message", text: "hi" });
+    await eden.observe({ kind: "external", source: "gmail", text: "New mail" });
+    expect(urls.map(query)).toEqual(["", ""]);
+  });
+
+  test("the timeout is the client's plus the wait, and a server past it still fails open", async () => {
+    const errors: unknown[] = [];
+    // A server that never answers: only the client's timeout ends the call.
+    const hang = ((_u: string, init: RequestInit) =>
+      new Promise((_, reject) =>
+        init.signal!.addEventListener("abort", () => reject(init.signal!.reason)),
+      )) as unknown as typeof fetch;
+    const eden = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      fetch: hang,
+      timeoutMs: 50,
+      defaultWaitMs: 150,
+      onError: (e) => errors.push(e),
+    });
+    const t0 = performance.now();
+    expect(await eden.observe({ kind: "user_message", text: "hi" })).toEqual({ injection: null, pending: false });
+    const waited = performance.now() - t0;
+    expect(waited).toBeGreaterThanOrEqual(190);
+    expect(waited).toBeLessThan(2_000);
+    // Other events keep the bare timeout.
+    const t1 = performance.now();
+    expect(await eden.observe({ kind: "external", source: "gmail", text: "x" })).toEqual({
+      injection: null,
+      pending: false,
+    });
+    expect(performance.now() - t1).toBeLessThan(190);
+    expect(errors.length).toBe(2);
+  });
+});
+
 describe("withContext", () => {
   test("puts context right before the latest user message and leaves the prefix alone", () => {
     const messages = [

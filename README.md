@@ -33,7 +33,7 @@ curl -s -X POST 'localhost:8790/v1/events?waitMs=1000' \
 ```ts
 import { EdenClient, withContext } from "@eden/client";
 
-const eden = new EdenClient({ apiKey, userId, sessionId });
+const eden = new EdenClient({ apiKey, userId, sessionId, defaultWaitMs: 1500 }); // user messages wait for the lookup
 const { injection } = await eden.observe({ kind: "user_message", text });  // report each event
 messages = withContext(messages, await eden.collect(injection));           // before each model call
 const answer = await eden.ask("What did Dana say about the renewal?");     // or expose as a tool
@@ -44,13 +44,20 @@ one user (`EDEN_USER`, `EDEN_TENANT`), and `createMcpServer` attaches it to any 
 [examples/personal-agent/agent.ts](examples/personal-agent/agent.ts).
 [docs/INTEGRATION.md](docs/INTEGRATION.md) has advice on placement, caching and cost (unmeasured).
 
+Without a wait, a user message's observe replies before a slow lookup ends and its context misses the first model
+call; `defaultWaitMs` (or `waitMs` per call) fixes that, see [docs/INTEGRATION.md](docs/INTEGRATION.md) (D105).
+
 Both servers run on the production defaults. To turn on experimental engine flags, point `EDEN_ENGINE_CONFIG` at a
-JSON file of engine settings (`packages/engine/src/config.ts`), for example `{"probes": true, "compactAsk": true}`;
-an unknown key or a wrong type stops startup with a message naming it (D103). Only flags the servers can run are
-accepted: the no-model flags, the judge and `askWithModel` (both under the per-session budget; see
-[docs/COST-MODEL.md](docs/COST-MODEL.md)). Flags that need a model role the servers do not wire (`cards`, `intent`,
-`bridgeQuery`, `askReader`, `readerPush`) are refused at startup, so the lab's ALL3 and NEW configurations are not
-runnable from the shipped servers yet; an embedding that supplies those deps can run them.
+JSON file of engine settings (`packages/engine/src/config.ts`); an unknown key, a wrong type, a number out of its
+range or a setting that would do nothing stops startup with a message naming it (D103). Only settings the servers can
+run are accepted: the no-model flags, the judge and `askWithModel` (both under the per-session budget; see
+[docs/COST-MODEL.md](docs/COST-MODEL.md)). Settings that need a model role the servers do not wire (`cards`,
+`intent`, `constraintDigest`, `bridgeQuery`, `askReader`, `readerPush` and their numbers) are refused unless at
+their default, so the NEW family is not runnable from the shipped servers. ALL3 minus `cards` is: on the no-model
+train funnel it surfaces as many hidden facts as ALL3 (214 vs 214 of 384), but as many decoys too (210), and it
+lowers the no-model eval's precision from 1 to 0.91. [docs/profiles/](docs/profiles/README.md) has checked-in
+profiles with those numbers (D104); none is recommended yet (no held-out or live check), and the defaults stay the
+production choice.
 `EDEN_SOURCES_FILE` holds static documents only for now: MCP connectors there are not supported yet, since that file's
 sources are shared by every user; connect MCP sources through `McpSource` in an embedding's resolver.
 

@@ -29,3 +29,20 @@ export function crashLater(): number {
   }, 0);
   return 1;
 }
+
+let warmed = false;
+
+/** Warm task (`PoolOptions.warm`): marks this thread warmed. */
+export function warmUp(): void {
+  warmed = true;
+}
+
+/** Whether `warmUp` ran on this thread before this task. */
+export function isWarm(): boolean {
+  return warmed;
+}
+
+/** A warm task that throws: the worker must still serve. */
+export function warmFails(): never {
+  throw new Error("warm-up failed");
+}
