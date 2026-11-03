@@ -28,7 +28,7 @@ cards-enrich, bridge-enrich, presets, suites, free, spend` (`.ts`): check `git l
 | `timeline.ts`, `timeline-report.ts` | `--timeline` spans, CPU% and RSS per second; where the time went |
 | `ledger.ts`, `bench.ts`, `bench-compare.ts` | The benchmark ledger (`bench/ledger.jsonl`, `bench/runs/`) |
 | `regrade.ts`, `reprice.ts`, `act*.ts`, `firewall-replay.ts`, `uptake.ts` | Re-grading, fixed-price re-costing (D71), action mode and firewall (D69), uptake |
-| `rank-fit.ts`, `decide-fit.ts`, `cards-census.ts`, `*-reach.ts`, `graph-bench.ts`, `sync-*.ts` | Offline instruments for one track each |
+| `rank-fit.ts`, `decide-fit.ts`, `cards-census.ts`, `*-reach.ts`, `graph-bench.ts`, `graph-memory.ts`, `sync-*.ts` | Offline instruments for one track each |
 | `lab.ts`, `lab-cli.ts`, `connectors.ts`, `build.ts`, `capture.ts` | The connector lab: real MCP servers in Docker over seeded backends (`bun run sim:lab`) |
 
 Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-bench.py` (run with `python3 -I`).
