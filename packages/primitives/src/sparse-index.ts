@@ -14,14 +14,21 @@
  *   is also chained per term (a head per term id; a next and a doc per arena slot), so a query reads only the delta
  *   docs that hold its terms.
  *
- * Freezing merges the delta into new frozen arrays in one linear pass over the postings, keeping each key's postings
- * in insertion order (a doc number is reused only after its postings are purged, so frozen postings are older than
- * delta docs). It runs when the delta is full (`DELTA_DOCS`, then an eighth of the index up to `MAX_DELTA_DOCS`),
- * and, purging the removed docs' postings, at exactly the reference's compaction points: removal marks a doc dead
- * (skipped when scoring) and updates df and lengths at once; when dead postings reach ~10% of all postings (or on
- * `flush`) they are purged, the dead docs' numbers are freed for reuse and each term no live doc holds any more is
- * reported (`onTermFreed`): from then on nothing in the index refers to that term id, so its owner may release it
- * (`Vocab.release`) and the id may come back as another term.
+ * Freezing merges the delta into new frozen arrays, keeping each key's postings in insertion order (a doc number is
+ * reused only after it is freed, and only a freed doc's postings are filtered out, so frozen postings are older than
+ * delta docs). It starts when the delta is full (`DELTA_DOCS`, then an eighth of the index up to `MAX_DELTA_DOCS`)
+ * and is incremental (D120): the full delta is sealed, later adds go behind it, and each add or remove does a bounded
+ * share of the merge (`mergeStep`) until the new arrays replace the old in one swap; until then queries read the old
+ * frozen tier and the whole delta, sealed part first. A merge within one step's work (`MERGE_MIN_WORK`, allocation
+ * counted) finishes in the add that starts it.
+ *
+ * Removal marks a doc dead (skipped when scoring) and updates df and lengths at once. When dead postings reach ~10% of
+ * all postings (or on `flush`), exactly where the reference compacted, the dead docs are purged: their numbers are
+ * freed for reuse, each term no live doc holds any more is reported (`onTermFreed`), and they leave the delta. Their
+ * frozen postings stay where they are, stale (a freed doc is neither frozen nor live, so scoring skips them), until
+ * the next merge filters them out (a purge that leaves any, with no merge under way, starts one); a reused doc
+ * number becomes frozen only in a merge that has filtered its stale postings, so none come back. A purge costs the
+ * dead docs' terms and the delta, not a pass over every posting.
  *
  * Scores, ranking, coverage and doc numbers are identical to the reference: each doc's contributions are summed in the
  * same order into the same Float32 accumulator, and candidates reach top-k in the same order (each key's postings in
@@ -74,6 +81,15 @@ export interface SearchResults {
 const DELTA_DOCS = 128;
 const MAX_DELTA_DOCS = 512;
 
+/**
+ * Merge work (about one unit per posting read or written, per key, per forward-arena slot, per 8 bytes of new arrays
+ * zeroed) one add or remove does while a merge is under way: about this (0.1-0.2 ms warm,
+ * bench/index-memory.bench.ts), so a merge holds its old and new arrays together for few adds (about 130 at 6,892
+ * docs); or, for a far larger index, enough to finish within half the delta's capacity in adds, well before the
+ * delta behind it fills (when it would, the merge is finished at once).
+ */
+const MERGE_MIN_WORK = 8_192;
+
 /** A term frequency byte of 255 means the frequency is 255 or more and is held in `bigTf`. */
 const TF_ESCAPE = 255;
 /** `bigTf` key: key × 2^22 + doc, exact in a double while key < 2^31. */
@@ -115,8 +131,9 @@ let stamp: Uint32Array = new Uint32Array(1_024);
 let touched: Int32Array = new Int32Array(1_024);
 let queryNo = 0;
 // A query term's places in the delta (arena position and doc), in insertion order: a term is once per doc at most.
-const hitPos = new Int32Array(MAX_DELTA_DOCS);
-const hitDoc = new Int32Array(MAX_DELTA_DOCS);
+// The delta holds up to twice its capacity while a merge is under way (the sealed part and the docs behind it).
+const hitPos = new Int32Array(2 * MAX_DELTA_DOCS);
+const hitDoc = new Int32Array(2 * MAX_DELTA_DOCS);
 
 /** Grows the insert scratch so term id `t` fits; lists are sized like the arrays (a field has ≤ that many terms). */
 function growScratch(t: number): void {
@@ -139,6 +156,59 @@ function growDocScratch(docs: number): void {
   stamp = new Uint32Array(size);
   touched = new Int32Array(size);
 }
+
+/** A merge under way (`SparseIndex.seal`): what it reads, fixed at the seal, and how far it has got. */
+interface Merge {
+  phase: number;
+  /** Key or doc cursor within the phase. */
+  at: number;
+  /** Work per add or remove. */
+  budget: number;
+  keys: number;
+  copyKeys: number;
+  /** Doc numbers at the seal (every doc this merge writes is below it). */
+  docCount: number;
+  // The old frozen tier.
+  oldStart: Uint32Array;
+  oldDocs: Docs;
+  oldTfs: Uint8Array;
+  oldFwd: Terms;
+  /** Per doc number: freed before the seal, its old frozen postings are dropped. Per term: some such doc held it. */
+  staleDoc: Uint8Array | null;
+  staleTerms: Uint8Array | null;
+  // Frozen docs carried over (live or dead, not freed): their slices of the old forward arena.
+  carry: Int32Array;
+  carryStart: Uint32Array;
+  carryLen: Uint32Array;
+  carryPos: Uint32Array;
+  // The sealed delta: its docs in order, their slices of its arena, live at the seal (only those get postings).
+  sealed: Int32Array;
+  sealedStart: Uint32Array;
+  sealedLen: Uint32Array;
+  sealedLive: Uint8Array;
+  sealedPos: Uint32Array;
+  sFwd: Uint32Array;
+  sTf: Uint8Array;
+  // The new frozen tier, being built.
+  start: Uint32Array;
+  docs: Docs;
+  tfs: Uint8Array;
+  cursor: Uint32Array;
+  wideFwd: boolean;
+  fwdTotal: number;
+  fwd: Terms;
+  fwdAt: number;
+}
+
+// Merge phases, in order.
+const COUNT_FROZEN = 0;
+const COUNT_SEALED = 1;
+const PREFIX = 2;
+const ALLOCATE = 3;
+const COPY_FROZEN = 4;
+const WRITE_SEALED = 5;
+const FORWARD = 6;
+const SWAP = 7;
 
 export class SparseIndex {
   private readonly k1: number;
@@ -180,15 +250,24 @@ export class SparseIndex {
   private readonly totalLens: Float64Array;
   private docs = 0;
   private live = 0;
-  // The reference's posting counters, kept exactly so compaction (and so `onTermFreed`) runs when its did.
+  // The reference's posting counters, kept exactly so a purge (and so `onTermFreed`) runs where its compaction did.
   private deadPostings = 0;
   private totalPostings = 0;
-  // Postings of removed delta docs a freeze left out of the frozen tier, still counted in `totalPostings`.
-  private droppedDead = 0;
+  // Per doc: its postings ((term, field) pairs), what a purge takes off `totalPostings`.
+  private nPost: Uint32Array = new Uint32Array(16);
   // Term ids some live doc holds (df > 0).
   private liveTerms = 0;
   private freeDocs: number[] = [];
   private pendingFree: number[] = [];
+  /**
+   * Doc numbers freed since the last seal whose postings a frozen tier still holds (or the merge under way will
+   * write), and the terms those docs held: the next merge filters their postings out.
+   */
+  private staleDocs: number[] = [];
+  private staleTerms: Uint8Array | null = null;
+  private merge: Merge | null = null;
+  /** The first `sealedN` delta docs are the merge's (sealed); the rest came after. */
+  private sealedN = 0;
 
   constructor(options: SparseIndexOptions = {}) {
     this.k1 = options.k1 ?? 1.2;
@@ -229,6 +308,7 @@ export class SparseIndex {
     const docMark = ++stampNo;
     let docUnique = 0;
     let pairs = 0;
+    let posts = 0;
     // The scratch in locals (module bindings read slower in a hot loop); reloaded when `growScratch` replaces it.
     let count = tfCount;
     let fieldStamp = tfStamp;
@@ -272,7 +352,9 @@ export class SparseIndex {
       this.lens[doc * F + f] = n;
       this.totalLens[f]! += n;
       this.totalPostings += fieldUnique;
+      posts += fieldUnique;
     }
+    this.nPost[doc] = posts;
     // The doc's sorted unique terms go to the delta arena; each field's frequencies to the slot of their term.
     const base = this.reserveDelta(docUnique);
     const fwd = this.dFwd;
@@ -307,7 +389,13 @@ export class SparseIndex {
     if (this.deltaN === this.deltaDocs.length) this.deltaDocs = growI32(this.deltaDocs, this.deltaN * 2);
     this.deltaDocs[this.deltaN++] = doc;
     this.live++;
-    if (this.deltaN >= this.deltaCap) this.freeze(false);
+    if (this.merge !== null) this.mergeStep(this.merge.budget);
+    if (this.deltaN - this.sealedN >= this.deltaCap) {
+      // The delta behind a merge is full: finish that merge at once (rare: a merge's budget ends it sooner).
+      if (this.merge !== null) this.mergeStep(Infinity);
+      this.seal();
+      this.mergeStep(this.merge!.budget);
+    }
     return doc;
   }
 
@@ -325,7 +413,8 @@ export class SparseIndex {
     this.live--;
     this.deadPostings += len; // at least this many postings died (a term may sit in several fields)
     this.pendingFree.push(doc);
-    if (this.deadPostings > 64 && this.deadPostings * 10 > this.totalPostings) this.freeze(true);
+    if (this.deadPostings > 64 && this.deadPostings * 10 > this.totalPostings) this.purge();
+    else if (this.merge !== null) this.mergeStep(this.merge.budget);
   }
 
   /**
@@ -334,7 +423,22 @@ export class SparseIndex {
    * caller that must know nothing of what it removed is left (a revoked source).
    */
   flush(): void {
-    if (this.pendingFree.length > 0) this.freeze(true);
+    if (this.pendingFree.length > 0) this.purge();
+    // And their postings, which a purge leaves stale until the next merge: one now, after the one under way.
+    this.settle();
+    if (this.staleDocs.length > 0) {
+      this.seal();
+      this.mergeStep(Infinity);
+    }
+  }
+
+  /**
+   * Finishes the merge under way, if any, at once. A merge holds the old frozen arrays and the new ones together
+   * until it ends, which adds and removes bring about; an index that stops changing mid-merge would hold both, so its
+   * owner calls this when the index is idle (the engine's expiry tick).
+   */
+  settle(): void {
+    if (this.merge !== null) this.mergeStep(Infinity);
   }
 
   /** The doc's sorted unique term ids (all fields). A view or a copy: callers must not write to it. */
@@ -527,6 +631,7 @@ export class SparseIndex {
       this.where = growU8(this.where, size);
       this.fwdStart = growU32(this.fwdStart, size);
       this.fwdLen = growU32(this.fwdLen, size);
+      this.nPost = growU32(this.nPost, size);
     }
     return doc;
   }
@@ -576,199 +681,16 @@ export class SparseIndex {
   }
 
   /**
-   * Merges the delta into new frozen arrays. With `purge`, also drops every removed doc's postings and terms, frees
-   * their doc numbers and reports each of their terms no live doc holds (`onTermFreed`): the reference's compaction.
+   * Purges the removed docs (the reference's compaction, at its points): frees their doc numbers, reports each of
+   * their terms no live doc holds (`onTermFreed`) and drops them from the delta. Their frozen postings stay, stale,
+   * for the next merge to filter out; so do those of a sealed doc, which the merge under way still writes.
    */
-  private freeze(purge: boolean): void {
+  private purge(): void {
     const F = this.fields;
     const where = this.where;
     const fwdStart = this.fwdStart;
     const fwdLen = this.fwdLen;
-    const dFwd = this.dFwd;
-    const dTf = this.dTf;
-    const oldKeys = this.fKeys;
-    const oldStart = this.keyStart;
-    const oldDocs = this.fDocs;
-    const oldTfs = this.fTfs;
-    const oldFwd = this.fFwd;
-    // Sizes: keys up to the largest term a kept doc holds; doc and term widths from the largest number. Without a
-    // purge every frozen doc is kept as it is, so only the delta's docs are read.
-    let maxTerm = oldKeys / F - 1;
-    let fwdTotal = oldFwd.length;
-    if (purge) {
-      maxTerm = -1;
-      fwdTotal = 0;
-      for (let d = 0; d < this.docs; d++) {
-        const at = where[d]!;
-        if (at !== FROZEN && at !== DELTA) continue;
-        const len = fwdLen[d]!;
-        fwdTotal += len;
-        if (len > 0) {
-          const last = (at === FROZEN ? oldFwd : dFwd)[fwdStart[d]! + len - 1]!;
-          if (last > maxTerm) maxTerm = last;
-        }
-      }
-    } else {
-      for (let j = 0; j < this.deltaN; j++) {
-        const d = this.deltaDocs[j]!;
-        const len = fwdLen[d]!;
-        fwdTotal += len;
-        if (len > 0 && dFwd[fwdStart[d]! + len - 1]! > maxTerm) maxTerm = dFwd[fwdStart[d]! + len - 1]!;
-      }
-    }
-    const keys = purge ? (maxTerm + 1) * F : Math.max(oldKeys, (maxTerm + 1) * F);
-    // Keys a removed frozen doc holds: only these lose postings in a purge (all of a key's postings are filtered).
-    const copyKeys = oldKeys < keys ? oldKeys : keys;
-    let dirty: Uint8Array | null = null;
-    if (purge) {
-      dirty = new Uint8Array(copyKeys);
-      for (const doc of this.pendingFree) {
-        if (where[doc] !== FROZEN_DEAD) continue;
-        const e = fwdStart[doc]! + fwdLen[doc]!;
-        for (let i = fwdStart[doc]!; i < e; i++) {
-          const base = oldFwd[i]! * F;
-          for (let f = 0; f < F && base + f < copyKeys; f++) dirty[base + f] = 1;
-        }
-      }
-    }
-    // Per key: postings kept from the frozen tier, then the delta's live docs' postings.
-    const start = new Uint32Array(keys + 1);
-    let purged = 0;
-    for (let key = 0; key < copyKeys; key++) {
-      const a = oldStart[key]!;
-      const b = oldStart[key + 1]!;
-      if (dirty === null || dirty[key] === 0) {
-        start[key + 1] = b - a;
-        continue;
-      }
-      let kept = 0;
-      for (let i = a; i < b; i++) if (where[oldDocs[i]!] === FROZEN) kept++;
-      start[key + 1] = kept;
-      purged += b - a - kept;
-    }
-    // Keys past the new end hold only purged postings (no kept doc holds a term that large).
-    if (purge) for (let key = copyKeys; key < oldKeys; key++) purged += oldStart[key + 1]! - oldStart[key]!;
-    for (let j = 0; j < this.deltaN; j++) {
-      const d = this.deltaDocs[j]!;
-      const s = fwdStart[d]!;
-      const e = s + fwdLen[d]!;
-      if (where[d] !== DELTA) {
-        // A removed delta doc: its postings were counted in `totalPostings` and are never written.
-        let n = 0;
-        for (let i = s * F; i < e * F; i++) if (dTf[i] !== 0) n++;
-        if (purge) purged += n;
-        else this.droppedDead += n;
-        continue;
-      }
-      for (let i = s; i < e; i++) {
-        const base = dFwd[i]! * F;
-        for (let f = 0; f < F; f++) if (dTf[i * F + f] !== 0) start[base + f + 1]!++;
-      }
-    }
-    for (let key = 0; key < keys; key++) start[key + 1]! += start[key]!;
-    const total = start[keys]!;
-    const docs: Docs = this.docs <= 65_536 ? new Uint16Array(total) : new Uint32Array(total);
-    const tfs = new Uint8Array(total);
-    // Write cursor per key: frozen postings in order, then delta postings appended behind them. A key that neither
-    // loses nor gains postings keeps its own and only moves by the keys before it: each run of such keys is copied
-    // in one block; a dirty key's postings are filtered one by one.
-    const cursor = start.slice(0, keys);
-    let from = 0;
-    for (let key = 0; key < copyKeys; key++) {
-      const a = oldStart[key]!;
-      const b = oldStart[key + 1]!;
-      const isDirty = dirty !== null && dirty[key] === 1;
-      if (!isDirty && start[key + 1]! - start[key]! === b - a) {
-        cursor[key]! += b - a;
-        continue;
-      }
-      const at = start[key]!;
-      if (from < a) {
-        docs.set(oldDocs.subarray(from, a), from + at - a);
-        tfs.set(oldTfs.subarray(from, a), from + at - a);
-      }
-      if (isDirty) {
-        let w = at;
-        for (let i = a; i < b; i++) {
-          const d = oldDocs[i]!;
-          if (where[d] !== FROZEN) continue;
-          docs[w] = d;
-          tfs[w++] = oldTfs[i]!;
-        }
-        cursor[key] = w;
-      } else {
-        docs.set(oldDocs.subarray(a, b), at);
-        tfs.set(oldTfs.subarray(a, b), at);
-        cursor[key] = at + b - a;
-      }
-      from = b;
-    }
-    const end = oldStart[copyKeys]!;
-    if (from < end) {
-      const at = from + start[copyKeys]! - end; // the run's keys end where key copyKeys starts
-      docs.set(oldDocs.subarray(from, end), at);
-      tfs.set(oldTfs.subarray(from, end), at);
-    }
-    for (let j = 0; j < this.deltaN; j++) {
-      const d = this.deltaDocs[j]!;
-      if (where[d] !== DELTA) continue;
-      const e = fwdStart[d]! + fwdLen[d]!;
-      for (let i = fwdStart[d]!; i < e; i++) {
-        const base = dFwd[i]! * F;
-        for (let f = 0; f < F; f++) {
-          const tf = dTf[i * F + f]!;
-          if (tf === 0) continue;
-          const w = cursor[base + f]!++;
-          docs[w] = d;
-          tfs[w] = tf;
-        }
-      }
-    }
-    // The forward arena: every kept doc's terms, frozen docs first (in place when nothing is purged).
-    const fwd: Terms = maxTerm < 65_536 ? new Uint16Array(fwdTotal) : new Uint32Array(fwdTotal);
-    let w = 0;
-    if (purge) {
-      for (let d = 0; d < this.docs; d++) {
-        if (where[d] !== FROZEN) continue;
-        const s = fwdStart[d]!;
-        const e = s + fwdLen[d]!;
-        fwdStart[d] = w;
-        for (let i = s; i < e; i++) fwd[w++] = oldFwd[i]!;
-      }
-    } else {
-      fwd.set(oldFwd);
-      w = oldFwd.length;
-    }
-    for (let j = 0; j < this.deltaN; j++) {
-      const d = this.deltaDocs[j]!;
-      if (purge && where[d] === DELTA_DEAD) continue;
-      const s = fwdStart[d]!;
-      fwd.set(dFwd.subarray(s, s + fwdLen[d]!), w);
-      fwdStart[d] = w;
-      w += fwdLen[d]!;
-      where[d] = where[d] === DELTA ? FROZEN : FROZEN_DEAD;
-    }
-    this.fKeys = keys;
-    this.keyStart = start;
-    this.fDocs = docs;
-    this.fTfs = tfs;
-    // The delta is empty from here. Its size follows the index; chained when a scan of it could be long.
-    this.deltaN = 0;
-    this.deltaCap = Math.min(MAX_DELTA_DOCS, Math.max(DELTA_DOCS, this.live >> 3));
-    if (this.deltaCap <= DELTA_DOCS) this.dHead = null;
-    else if (this.dHead === null) this.dHead = new Int32Array(Math.max(16, this.df.length)).fill(-1);
-    else for (let i = 0; i < this.dUsed; i++) this.dHead[dFwd[i]!] = -1;
-    this.dNext = new Int32Array(0);
-    this.dDoc = new Int32Array(0);
-    this.dFwd = new Uint32Array(0); // a new arena: termsOf views into the old one stay as they were
-    this.dTf = new Uint8Array(0);
-    this.dUsed = 0;
-    if (!purge) {
-      this.fFwd = fwd;
-      return;
-    }
-    // The removed docs: their distinct terms (for `onTermFreed`, in the reference's order: first seen first, marked
-    // with the insert scratch's doc stamp), their big frequencies, their slots.
+    // Their distinct terms, in the reference's order (first seen first, marked with the insert scratch's doc stamp).
     if (stampNo > 0xffff_fff0) {
       tfStamp.fill(0);
       docStamp.fill(0);
@@ -783,7 +705,8 @@ export class SparseIndex {
     for (const doc of this.pendingFree) {
       const s = fwdStart[doc]!;
       const e = s + fwdLen[doc]!;
-      const own = where[doc] === FROZEN_DEAD ? oldFwd : dFwd;
+      const frozen = where[doc] === FROZEN_DEAD;
+      const own = frozen ? this.fFwd : this.dFwd;
       for (let i = s; i < e; i++) {
         const t = own[i]!;
         if (seen[t] !== mark) {
@@ -792,19 +715,423 @@ export class SparseIndex {
         }
         if (this.bigTf.size > 0) for (let f = 0; f < F; f++) this.bigTf.delete((t * F + f) * DOC_SPAN + doc);
       }
+      if (frozen) this.markStale(doc, own, s, e);
+      this.totalPostings -= this.nPost[doc]!;
       where[doc] = FREE;
+    }
+    // Out of the delta. A sealed doc's postings reach the new frozen tier, so they are stale there.
+    let gone = false;
+    for (let j = 0; j < this.deltaN; j++) {
+      const d = this.deltaDocs[j]!;
+      if (where[d] !== FREE) continue;
+      gone = true;
+      if (j < this.sealedN) this.markStale(d, this.dFwd, fwdStart[d]!, fwdStart[d]! + fwdLen[d]!);
+    }
+    // The delta's size follows the index, as after a merge (a merge under way sets it when it ends).
+    if (this.merge === null) this.deltaCap = Math.min(MAX_DELTA_DOCS, Math.max(DELTA_DOCS, this.live >> 3));
+    const chained = this.deltaCap > DELTA_DOCS;
+    if (gone || chained !== (this.dHead !== null)) this.rebuildDelta(0, chained);
+    for (const doc of this.pendingFree) {
       fwdStart[doc] = 0;
       fwdLen[doc] = 0;
+      this.nPost[doc] = 0;
       this.freeDocs.push(doc);
     }
-    this.fFwd = fwd;
-    this.totalPostings -= purged + this.droppedDead;
-    this.droppedDead = 0;
     this.deadPostings = 0;
     this.pendingFree = [];
-    // Last: no doc number or posting names these terms now, so the callback may release them at once.
+    // Their frozen postings go in a merge started now (the reference's compaction rewrote at this point), done a step
+    // at a time; with one under way, in the next.
+    if (this.merge === null && this.staleDocs.length > 0) this.seal();
+    // Last: no doc number or live posting names these terms now, so the callback may release them at once.
     const freed = this.onTermFreed;
     if (freed !== undefined) for (let i = 0; i < termsN; i++) if (this.df[terms[i]!] === 0) freed(terms[i]!);
+  }
+
+  /** Records a freed doc whose postings a frozen tier holds (or will), with its terms `own[s..e)`. */
+  private markStale(doc: number, own: Terms, s: number, e: number): void {
+    this.staleDocs.push(doc);
+    let marks = this.staleTerms;
+    if (marks === null || marks.length < this.df.length) {
+      const grown = new Uint8Array(this.df.length);
+      if (marks !== null) grown.set(marks);
+      this.staleTerms = marks = grown;
+    }
+    for (let i = s; i < e; i++) marks[own[i]!] = 1;
+  }
+
+  /**
+   * Rebuilds the delta from `deltaDocs[from..deltaN)`, keeping the docs `where` still has in it, in order: a new arena
+   * (views into the old one stay valid) and, if `chained`, new chains. The sealed docs kept stay first.
+   */
+  private rebuildDelta(from: number, chained: boolean): void {
+    const F = this.fields;
+    const where = this.where;
+    const fwdStart = this.fwdStart;
+    const fwdLen = this.fwdLen;
+    const docs = this.deltaDocs;
+    const oldFwd = this.dFwd;
+    const oldTf = this.dTf;
+    const oldUsed = this.dUsed;
+    let n = 0;
+    let sealed = 0;
+    let used = 0;
+    for (let j = from; j < this.deltaN; j++) {
+      const d = docs[j]!;
+      const at = where[d]!;
+      if (at !== DELTA && at !== DELTA_DEAD) continue;
+      if (j < this.sealedN) sealed++;
+      docs[n++] = d;
+      used += fwdLen[d]!;
+    }
+    const size = Math.max(64, used);
+    const fwd = new Uint32Array(size);
+    const tf = new Uint8Array(size * F);
+    let w = 0;
+    for (let j = 0; j < n; j++) {
+      const d = docs[j]!;
+      const s = fwdStart[d]!;
+      const len = fwdLen[d]!;
+      fwd.set(oldFwd.subarray(s, s + len), w);
+      tf.set(oldTf.subarray(s * F, (s + len) * F), w * F);
+      fwdStart[d] = w;
+      w += len;
+    }
+    this.dFwd = fwd;
+    this.dTf = tf;
+    this.dUsed = w;
+    this.deltaN = n;
+    this.sealedN = sealed;
+    if (!chained) {
+      this.dHead = null;
+      this.dNext = new Int32Array(0);
+      this.dDoc = new Int32Array(0);
+      return;
+    }
+    if (this.dHead === null) this.dHead = new Int32Array(Math.max(16, this.df.length)).fill(-1);
+    else for (let i = 0; i < oldUsed; i++) this.dHead[oldFwd[i]!] = -1;
+    this.dNext = new Int32Array(size);
+    this.dDoc = new Int32Array(size);
+    for (let j = 0; j < n; j++) {
+      const d = docs[j]!;
+      this.link(fwd.subarray(fwdStart[d]!, fwdStart[d]! + fwdLen[d]!), fwdStart[d]!, d);
+    }
+  }
+
+  /**
+   * Starts a merge of the whole delta (sealed from here) into a new frozen tier: the old frozen docs not freed
+   * (live or dead) are carried over, the postings of docs freed before now are dropped. No merge is under way.
+   */
+  private seal(): void {
+    const F = this.fields;
+    const where = this.where;
+    const fwdStart = this.fwdStart;
+    const fwdLen = this.fwdLen;
+    const oldFwd = this.fFwd;
+    const dFwd = this.dFwd;
+    const docCount = this.docs;
+    let staleDoc: Uint8Array | null = null;
+    if (this.staleDocs.length > 0) {
+      staleDoc = new Uint8Array(docCount);
+      for (const d of this.staleDocs) staleDoc[d] = 1;
+    }
+    const staleTerms = this.staleTerms;
+    this.staleDocs = [];
+    this.staleTerms = null;
+    let maxTerm = -1;
+    let fwdTotal = 0;
+    let carryN = 0;
+    for (let d = 0; d < docCount; d++) {
+      const at = where[d]!;
+      if (at === FROZEN || at === FROZEN_DEAD) carryN++;
+    }
+    const carry = new Int32Array(carryN);
+    const carryStart = new Uint32Array(carryN);
+    const carryLen = new Uint32Array(carryN);
+    carryN = 0;
+    for (let d = 0; d < docCount; d++) {
+      const at = where[d]!;
+      if (at !== FROZEN && at !== FROZEN_DEAD) continue;
+      const len = fwdLen[d]!;
+      carry[carryN] = d;
+      carryStart[carryN] = fwdStart[d]!;
+      carryLen[carryN++] = len;
+      fwdTotal += len;
+      if (len > 0 && oldFwd[fwdStart[d]! + len - 1]! > maxTerm) maxTerm = oldFwd[fwdStart[d]! + len - 1]!;
+    }
+    const n = this.deltaN;
+    const sealed = this.deltaDocs.slice(0, n);
+    const sealedStart = new Uint32Array(n);
+    const sealedLen = new Uint32Array(n);
+    const sealedLive = new Uint8Array(n);
+    let slots = 0;
+    for (let j = 0; j < n; j++) {
+      const d = sealed[j]!;
+      const len = fwdLen[d]!;
+      sealedStart[j] = fwdStart[d]!;
+      sealedLen[j] = len;
+      sealedLive[j] = where[d] === DELTA ? 1 : 0;
+      fwdTotal += len;
+      if (sealedLive[j] === 1) slots += len;
+      if (len > 0 && dFwd[fwdStart[d]! + len - 1]! > maxTerm) maxTerm = dFwd[fwdStart[d]! + len - 1]!;
+    }
+    this.sealedN = n;
+    const keys = (maxTerm + 1) * F;
+    const oldKeys = this.fKeys;
+    const oldTotal = oldKeys > 0 ? this.keyStart[oldKeys]! : 0;
+    const work = 2 * oldTotal + 2 * keys + 2 * slots * F + fwdTotal;
+    this.merge = {
+      phase: COUNT_FROZEN,
+      at: 0,
+      budget: Math.max(MERGE_MIN_WORK, Math.ceil(work / Math.max(1, this.deltaCap >> 1))),
+      keys,
+      copyKeys: oldKeys < keys ? oldKeys : keys,
+      docCount,
+      oldStart: this.keyStart,
+      oldDocs: this.fDocs,
+      oldTfs: this.fTfs,
+      oldFwd,
+      staleDoc,
+      staleTerms,
+      carry,
+      carryStart,
+      carryLen,
+      carryPos: new Uint32Array(carryN),
+      sealed,
+      sealedStart,
+      sealedLen,
+      sealedLive,
+      sealedPos: new Uint32Array(n),
+      sFwd: dFwd,
+      sTf: this.dTf,
+      start: new Uint32Array(keys + 1),
+      docs: new Uint16Array(0),
+      tfs: new Uint8Array(0),
+      cursor: EMPTY,
+      wideFwd: maxTerm >= 65_536,
+      fwdTotal,
+      fwd: EMPTY,
+      fwdAt: 0,
+    };
+  }
+
+  /** Does about `budget` units of the merge under way; the last step swaps the new frozen tier in. */
+  private mergeStep(budget: number): void {
+    const m = this.merge!;
+    const F = this.fields;
+    let work = 0;
+    while (work < budget) {
+      switch (m.phase) {
+        case COUNT_FROZEN: {
+          // Per key: its old postings, less a freed doc's in a key some freed doc held.
+          const { oldStart, oldDocs, staleDoc, staleTerms, start } = m;
+          let key = m.at;
+          for (; key < m.copyKeys && work < budget; key++) {
+            const a = oldStart[key]!;
+            const b = oldStart[key + 1]!;
+            const t = (key / F) | 0;
+            work++;
+            if (staleTerms === null || t >= staleTerms.length || staleTerms[t] === 0) {
+              start[key + 1] = b - a;
+              continue;
+            }
+            let kept = 0;
+            for (let i = a; i < b; i++) if (staleDoc![oldDocs[i]!] !== 1) kept++;
+            start[key + 1] = kept;
+            work += b - a;
+          }
+          m.at = key;
+          if (key === m.copyKeys) {
+            m.phase = COUNT_SEALED;
+            m.at = 0;
+          }
+          break;
+        }
+        case COUNT_SEALED: {
+          const { sealedLive, sealedStart, sealedLen, sFwd, sTf, start } = m;
+          let j = m.at;
+          for (; j < sealedLive.length && work < budget; j++) {
+            work++;
+            if (sealedLive[j] === 0) continue;
+            const e = sealedStart[j]! + sealedLen[j]!;
+            for (let i = sealedStart[j]!; i < e; i++) {
+              const base = sFwd[i]! * F;
+              for (let f = 0; f < F; f++) if (sTf[i * F + f] !== 0) start[base + f + 1]!++;
+            }
+            work += sealedLen[j]! * F;
+          }
+          m.at = j;
+          if (j === sealedLive.length) {
+            m.phase = PREFIX;
+            m.at = 0;
+          }
+          break;
+        }
+        case PREFIX: {
+          const start = m.start;
+          let key = m.at;
+          for (; key < m.keys && work < budget; key++, work++) start[key + 1]! += start[key]!;
+          m.at = key;
+          if (key === m.keys) {
+            m.phase = ALLOCATE;
+            m.at = 0;
+          }
+          break;
+        }
+        case ALLOCATE: {
+          // The new posting arrays: zeroing a large one is work too (and may start a collection), counted as such, so
+          // a large index allocates them a step apart and a small one in the step that counts.
+          const total = m.start[m.keys]!;
+          if (m.at === 0) m.docs = m.docCount <= 65_536 ? new Uint16Array(total) : new Uint32Array(total);
+          else if (m.at === 1) m.tfs = new Uint8Array(total);
+          else m.cursor = m.start.slice(0, m.keys);
+          work += 1 + ((m.at === 2 ? m.keys * 4 : m.at === 0 ? total * 2 : total) >> 3);
+          if (++m.at === 3) {
+            m.phase = COPY_FROZEN;
+            m.at = 0;
+          }
+          break;
+        }
+        case COPY_FROZEN: {
+          // Each key's kept old postings at its new start. Runs of whole keys at one shift are copied as one block.
+          const { oldStart, oldDocs, oldTfs, staleDoc, staleTerms, start, docs, tfs, cursor } = m;
+          let runFrom = -1;
+          let runEnd = 0;
+          let shift = 0;
+          let key = m.at;
+          for (; key < m.copyKeys && work < budget; key++) {
+            const a = oldStart[key]!;
+            const b = oldStart[key + 1]!;
+            const at = start[key]!;
+            const t = (key / F) | 0;
+            work++;
+            if (staleTerms !== null && t < staleTerms.length && staleTerms[t] === 1) {
+              let w = at;
+              for (let i = a; i < b; i++) {
+                const d = oldDocs[i]!;
+                if (staleDoc![d] === 1) continue;
+                docs[w] = d;
+                tfs[w++] = oldTfs[i]!;
+              }
+              cursor[key] = w;
+              work += b - a;
+              continue;
+            }
+            if (b === a) continue;
+            if (runFrom < 0 || runEnd !== a || at - a !== shift) {
+              if (runFrom >= 0) {
+                docs.set(oldDocs.subarray(runFrom, runEnd), runFrom + shift);
+                tfs.set(oldTfs.subarray(runFrom, runEnd), runFrom + shift);
+              }
+              runFrom = a;
+              shift = at - a;
+            }
+            runEnd = b;
+            cursor[key] = at + b - a;
+            work += (b - a) >> 2;
+          }
+          if (runFrom >= 0) {
+            docs.set(oldDocs.subarray(runFrom, runEnd), runFrom + shift);
+            tfs.set(oldTfs.subarray(runFrom, runEnd), runFrom + shift);
+          }
+          m.at = key;
+          if (key === m.copyKeys) {
+            m.phase = WRITE_SEALED;
+            m.at = 0;
+          }
+          break;
+        }
+        case WRITE_SEALED: {
+          // The sealed docs' postings behind each key's old ones, in delta order.
+          const { sealed, sealedLive, sealedStart, sealedLen, sFwd, sTf, docs, tfs, cursor } = m;
+          let j = m.at;
+          for (; j < sealed.length && work < budget; j++) {
+            work++;
+            if (sealedLive[j] === 0) continue;
+            const d = sealed[j]!;
+            const e = sealedStart[j]! + sealedLen[j]!;
+            for (let i = sealedStart[j]!; i < e; i++) {
+              const base = sFwd[i]! * F;
+              for (let f = 0; f < F; f++) {
+                const tf = sTf[i * F + f]!;
+                if (tf === 0) continue;
+                const w = cursor[base + f]!++;
+                docs[w] = d;
+                tfs[w] = tf;
+              }
+            }
+            work += sealedLen[j]! * F;
+          }
+          m.at = j;
+          if (j === sealed.length) {
+            m.cursor = EMPTY;
+            m.phase = FORWARD;
+            m.at = 0;
+          }
+          break;
+        }
+        case FORWARD: {
+          // The forward arena: the carried docs' terms, then the sealed docs'. Its allocation counts as work.
+          if (m.fwd === EMPTY && m.fwdTotal > 0) {
+            m.fwd = m.wideFwd ? new Uint32Array(m.fwdTotal) : new Uint16Array(m.fwdTotal);
+            work += m.fwdTotal >> 3;
+            continue;
+          }
+          const { carry, carryStart, carryLen, carryPos, sealed, sealedStart, sealedLen, sealedPos, fwd } = m;
+          const carried = carry.length;
+          let j = m.at;
+          for (; j < carried + sealed.length && work < budget; j++) {
+            const own = j < carried;
+            const k = own ? j : j - carried;
+            const s = own ? carryStart[k]! : sealedStart[k]!;
+            const len = own ? carryLen[k]! : sealedLen[k]!;
+            fwd.set((own ? m.oldFwd : m.sFwd).subarray(s, s + len), m.fwdAt);
+            if (own) carryPos[k] = m.fwdAt;
+            else sealedPos[k] = m.fwdAt;
+            m.fwdAt += len;
+            work += 1 + (len >> 2);
+          }
+          m.at = j;
+          if (j === carried + sealed.length) m.phase = SWAP;
+          break;
+        }
+        default:
+          this.swap(m);
+          return;
+      }
+    }
+  }
+
+  /**
+   * Ends a merge: the new frozen tier replaces the old, the sealed docs become frozen and leave the delta. A doc
+   * freed since the seal keeps its state (it is not frozen in the new tier; its postings there are stale).
+   */
+  private swap(m: Merge): void {
+    const where = this.where;
+    const fwdStart = this.fwdStart;
+    let freed: Uint8Array | null = null;
+    if (this.staleDocs.length > 0) {
+      freed = new Uint8Array(this.docs);
+      for (const d of this.staleDocs) freed[d] = 1;
+    }
+    for (let j = 0; j < m.carry.length; j++) {
+      const d = m.carry[j]!;
+      if (freed === null || freed[d] === 0) fwdStart[d] = m.carryPos[j]!;
+    }
+    for (let j = 0; j < m.sealed.length; j++) {
+      const d = m.sealed[j]!;
+      if (freed !== null && freed[d] === 1) continue;
+      where[d] = where[d] === DELTA ? FROZEN : FROZEN_DEAD;
+      fwdStart[d] = m.sealedPos[j]!;
+    }
+    this.fKeys = m.keys;
+    this.keyStart = m.start;
+    this.fDocs = m.docs;
+    this.fTfs = m.tfs;
+    this.fFwd = m.fwd;
+    this.merge = null;
+    // The docs behind the sealed ones are the delta now. Its size follows the index; chained when a scan could be long.
+    this.deltaCap = Math.min(MAX_DELTA_DOCS, Math.max(DELTA_DOCS, this.live >> 3));
+    this.rebuildDelta(this.sealedN, this.deltaCap > DELTA_DOCS);
   }
 }
 

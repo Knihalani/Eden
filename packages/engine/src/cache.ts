@@ -933,8 +933,12 @@ export class ItemCache {
     let n = 0;
     // Deleting the entry being visited is safe in a Map walk: no copy of 10k+ users per tick.
     for (const [key, u] of this.users) {
-      // Holds items, none expired: nothing to sweep, and alive. (A user with none may be dropped below.)
-      if (u.items.size > 0 && !this.anyExpired(u, now)) continue;
+      // Holds items, none expired: nothing to sweep, and alive. (A user with none may be dropped below.) A merge left
+      // under way by a user who stopped writing holds two copies of the index's arrays: end it (D120).
+      if (u.items.size > 0 && !this.anyExpired(u, now)) {
+        u.index.settle();
+        continue;
+      }
       // A probe made within the time to live is kept with its user, even one that found nothing: forgetting it would
       // cost the source call it saves (D46).
       const idle = !this.probedSince(u, now - this.limits.ttlMs);
@@ -946,6 +950,8 @@ export class ItemCache {
         continue;
       }
       this.sweep(u, now);
+      // After the sweep: its removes may purge, and a purge may start a merge.
+      u.index.settle();
       if (idle && u.items.size === 0) {
         this.dropUser(key, u.scope.tenantId);
         n++;

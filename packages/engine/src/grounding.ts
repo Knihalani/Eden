@@ -236,6 +236,19 @@ export function namesParticipant(entity: string, item: ContextItem): boolean {
   return false;
 }
 
+/**
+ * The words of the names of `item`'s participants (`meta.people`, addresses left out): "Elena Ivanova <elena@…>"
+ * gives "elena" and "ivanova". A request's word that is one of them names a person, not an occasion, even when no
+ * capital marked it as a name ("the agenda with elena").
+ */
+export function participantWords(item: ContextItem): Set<string> {
+  const out = new Set<string>();
+  for (const entry of (item.meta?.people ?? "").split(/[;\n]/)) {
+    for (const w of words(entry.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, ""))) out.add(w);
+  }
+  return out;
+}
+
 /** Title words too common to say which event is meant ("Weekly mentoring", "Team all hands"). */
 const COMMON_TITLE = new Set(
   "weekly daily monthly team sync meeting meetings call calls chat update updates report review standup stand steps next all hands session sessions catch check office hours lunch dinner coffee drinks plan plans project projects notes intro talk".split(
