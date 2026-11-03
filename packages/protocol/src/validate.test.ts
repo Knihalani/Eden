@@ -82,6 +82,54 @@ describe("tool_call.input depth and size (D100)", () => {
     expect(call(Array.from({ length: 600_000 }, () => 1)).ok).toBe(false); // 1,200,001 characters
   });
 
+  test("333,000 empty objects (999,001 characters) are accepted", () => {
+    expect(call(Array.from({ length: 333_000 }, () => ({}))).ok).toBe(true);
+  });
+
+  // `toJSON` returning [] makes the stringify cap pass, so only the node cap can refuse these, and the spy shows
+  // whether stringify ran at all.
+  const stringifiesTo = (input: object) => {
+    const seen = { stringified: false };
+    Object.defineProperty(input, "toJSON", {
+      value: () => {
+        seen.stringified = true;
+        return [];
+      },
+    });
+    return seen;
+  };
+
+  test("array elements count toward the 1,000,000-node cap; over it is refused before stringify", () => {
+    const at = new Array(1_000_000).fill(0);
+    const atSeen = stringifiesTo(at);
+    expect(call(at).ok).toBe(true);
+    expect(atSeen.stringified).toBe(true);
+    const over = new Array(1_000_001).fill(0);
+    const overSeen = stringifiesTo(over);
+    expect(call(over).ok).toBe(false);
+    expect(overSeen.stringified).toBe(false);
+  });
+
+  test("object values count as nodes, scalar or not; inherited and non-enumerable keys do not", () => {
+    // n objects of one scalar each: n elements + n values.
+    const objects = (n: number) => Array.from({ length: n }, (_, i) => ({ a: i }));
+    const under = objects(500_000); // exactly 1,000,000 nodes
+    stringifiesTo(under);
+    expect(call(under).ok).toBe(true);
+    const over = objects(500_001); // 1,000,002 nodes
+    const overSeen = stringifiesTo(over);
+    expect(call(over).ok).toBe(false);
+    expect(overSeen.stringified).toBe(false);
+    // An inherited enumerable key is not the object's own value, so it is not walked or counted.
+    const proto = { inherited: new Array(1_000_001).fill(0) };
+    const child = Object.create(proto) as Record<string, unknown>;
+    child.own = 1;
+    expect(call(child).ok).toBe(true);
+    // Nor is a deep chain behind a non-enumerable key (stringify skips it too).
+    const hidden = Object.defineProperty({}, "deep", { value: nest(1_001, (v) => [v]), enumerable: false });
+    expect(call(hidden).ok).toBe(true);
+  });
+
   test("an embedder's cyclic or throwing input is refused, never thrown", () => {
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;

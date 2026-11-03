@@ -19,24 +19,40 @@ const MAX_INPUT_NODES = 1_000_000;
 /**
  * Whether `v` nests at most `maxDepth` containers deep and holds at most `maxNodes` values (array elements and object
  * values). Iterative with an explicit stack: it must be cheap exactly where recursion and JSON.stringify are not,
- * because stringifying a 60,000-deep array runs ~1.5 s on the event loop before it overflows (D100).
+ * because stringifying a 60,000-deep array runs ~1.5 s on the event loop before it overflows (D100). Objects are
+ * walked with for-in + Object.hasOwn (own enumerable string keys, as JSON.stringify sees them) instead of collecting
+ * each object's values into a fresh array: that allocation roughly doubled the walk on object-heavy input.
  */
 function shapeUnder(root: unknown, maxDepth: number, maxNodes: number): boolean {
   if (root === null || typeof root !== "object") return true;
-  const values: unknown[] = [root];
+  const values: object[] = [root];
   const depths: number[] = [1];
   let nodes = 0;
   while (values.length > 0) {
-    const v = values.pop() as object;
+    const v = values.pop()!;
     const depth = depths.pop()!;
     if (depth > maxDepth) return false;
-    const children = Array.isArray(v) ? v : Object.values(v);
-    nodes += children.length;
-    if (nodes > maxNodes) return false;
-    for (const c of children) {
-      if (c !== null && typeof c === "object") {
-        values.push(c);
-        depths.push(depth + 1);
+    if (Array.isArray(v)) {
+      const n = v.length;
+      nodes += n;
+      if (nodes > maxNodes) return false;
+      for (let i = 0; i < n; i++) {
+        const c: unknown = v[i];
+        if (c !== null && typeof c === "object") {
+          values.push(c);
+          depths.push(depth + 1);
+        }
+      }
+    } else {
+      const o = v as Record<string, unknown>;
+      for (const k in o) {
+        if (!Object.hasOwn(o, k)) continue;
+        if (++nodes > maxNodes) return false;
+        const c = o[k];
+        if (c !== null && typeof c === "object") {
+          values.push(c);
+          depths.push(depth + 1);
+        }
       }
     }
   }
