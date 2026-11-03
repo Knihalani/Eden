@@ -28,6 +28,8 @@ near-duplicate sketches, calibration and certification statistics, Thompson samp
 | `bench/redos.scan.ts` | The search that found the secret gate's backtracking rules (D24) |
 | `src/pool.fixture.ts`, `src/pool-worker.ts` | The worker pool's test fixture and worker entry (Bun workers) |
 | `src/regressions.test.ts` | Bugs found in audits, one test each |
+| `src/sparse-index.reference.ts` | The index layout before D111, unchanged: the oracle `sparse-index-packed.test.ts` compares the packed index with, result for result; not exported |
+| `bench/sparse-index-ab.bench.ts` | Reference vs packed index interleaved in one process (the A/B to trust); memory is `packages/engine/bench/index-memory.bench.ts` |
 
 ## Test
 
@@ -38,6 +40,9 @@ bun packages/primitives/bench/tokenize.bench.ts   # a benchmark (no assertions; 
 
 ## Pitfalls
 
+- `SparseIndex` must stay identical to `sparse-index.reference.ts` (D111): sum each doc's contributions in the same
+  order into the Float32 accumulator, and keep each key's postings in insertion order, frozen before delta (top-k ties
+  follow push order). The reference stays as it is; run `sparse-index-packed.test.ts` after any change.
 - `pool.test.ts` starts real Bun workers: keep per-test timeouts generous, the parallel test run shares the cores.
 - Statistical tests (`bandit`, `calibrate`, `pack`, `random`) use seeded `Xoshiro128`; keep seeds fixed so a failure
   reproduces.
