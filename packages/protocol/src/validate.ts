@@ -49,8 +49,9 @@ function shapeUnder(root: unknown, maxDepth: number, maxNodes: number): boolean 
  * walk runs first so deep input is refused before the stringify that would stall on it (D100).
  */
 function jsonUnder(v: unknown, max: number): boolean {
-  if (!shapeUnder(v, MAX_INPUT_DEPTH, MAX_INPUT_NODES)) return false;
   try {
+    // Inside the try: an embedder's object may have a throwing getter, and validation must not throw.
+    if (!shapeUnder(v, MAX_INPUT_DEPTH, MAX_INPUT_NODES)) return false;
     return (JSON.stringify(v ?? null)?.length ?? 0) <= max;
   } catch {
     return false;

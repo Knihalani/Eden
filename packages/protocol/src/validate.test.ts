@@ -81,4 +81,18 @@ describe("tool_call.input depth and size (D100)", () => {
     expect(call(Array.from({ length: 300_000 }, () => 1)).ok).toBe(true); // 600,001 characters
     expect(call(Array.from({ length: 600_000 }, () => 1)).ok).toBe(false); // 1,200,001 characters
   });
+
+  test("an embedder's cyclic or throwing input is refused, never thrown", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(call(cyclic).ok).toBe(false);
+    const throwing = Object.defineProperty({}, "a", {
+      enumerable: true,
+      get() {
+        throw new Error("boom");
+      },
+    });
+    expect(() => call(throwing)).not.toThrow();
+    expect(call(throwing).ok).toBe(false);
+  });
 });
