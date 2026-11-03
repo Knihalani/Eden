@@ -7,6 +7,7 @@ import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import { AskReader, type ReaderMaker } from "./reader";
 import type { Trace } from "./trace";
+import { CORE_CONFIG } from "./parts";
 
 /**
  * Trace `sourceCalls` are the calls a connector received (audit 2026-11-03, finding 18). With `readerPush`, the push's
@@ -90,7 +91,7 @@ async function run(
     budget: new Budget(),
     model: null,
     now: () => NOW,
-    config: { askReader: true, askReaderWaitMs: 1_000, ...config },
+    config: { ...CORE_CONFIG, askReader: true, askReaderWaitMs: 1_000, ...config },
     reader: new AskReader({ maker: quiet, budget: new Budget(), now: () => NOW }),
     ...(opts.planner ? { planner: new QueryPlanner({ seed: 7 }) } : {}),
     onTrace: (t) => traces.push(t),

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Budget } from "./budget";
+import { Budget, TenantSpend } from "./budget";
 import { OpenRouterModel } from "./openrouter";
 import { costOf, priceFor } from "./pricing";
 
@@ -53,6 +53,49 @@ describe("Budget reservations", () => {
     b.settle(old, 0);
     expect(b.spent("s").calls).toBe(1);
     expect(b.reserve("u", "s", 0.01)).toBeNull();
+  });
+});
+
+describe("TenantSpend", () => {
+  test("one tenant's daily cap spans users, sessions and every Budget sharing it", () => {
+    const tenants = new TenantSpend(0.5);
+    const loose = { callsPerSession: 99, usdPerSession: 99, usdPerUserDay: 99 };
+    const reader = new Budget(loose, undefined, tenants);
+    const cards = new Budget(loose, undefined, tenants);
+    expect(reader.charge("acme/u1", "s1", 0.3)).toBe(true);
+    // Another user and another role of the same tenant: the tenant's day is spent.
+    expect(cards.charge("acme/u2", "bg", 0.3)).toBe(false);
+    // Another tenant is not touched by acme's spend.
+    expect(cards.charge("beta/u1", "bg", 0.3)).toBe(true);
+  });
+
+  test("a refusal by the tenant cap reserves nothing anywhere, and settling books the actual cost", () => {
+    const tenants = new TenantSpend(0.5);
+    const b = new Budget({ callsPerSession: 99, usdPerSession: 99, usdPerUserDay: 99 }, undefined, tenants);
+    const r = b.reserve("acme/u1", "s1", 0.4)!;
+    expect(b.reserve("acme/u1", "s1", 0.2)).toBeNull();
+    expect(b.spent("s1").calls).toBe(1);
+    b.settle(r, 0.1);
+    expect(tenants.spent("acme")).toBeCloseTo(0.1);
+    expect(b.reserve("acme/u1", "s1", 0.2)).not.toBeNull();
+  });
+
+  test("the tally resets with the day and holds only today's tenants", () => {
+    let now = Date.parse("2026-11-03T23:00:00Z");
+    const tenants = new TenantSpend(0.5, () => now);
+    const b = new Budget({ callsPerSession: 99, usdPerSession: 99, usdPerUserDay: 99 }, () => now, tenants);
+    expect(b.charge("acme/u1", "s1", 0.5)).toBe(true);
+    expect(b.charge("acme/u1", "s2", 0.1)).toBe(false);
+    now = Date.parse("2026-11-04T01:00:00Z");
+    expect(b.charge("acme/u1", "s3", 0.1)).toBe(true);
+    expect(tenants.size).toBe(1);
+  });
+
+  test("a user key without a tenant prefix is its own tenant", () => {
+    const tenants = new TenantSpend(0.5);
+    const b = new Budget({ callsPerSession: 99, usdPerSession: 99, usdPerUserDay: 99 }, undefined, tenants);
+    expect(b.charge("u", "s", 0.5)).toBe(true);
+    expect(tenants.spent("u")).toBeCloseTo(0.5);
   });
 });
 

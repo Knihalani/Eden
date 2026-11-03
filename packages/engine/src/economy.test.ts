@@ -6,6 +6,7 @@ import { StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { FRESH_WARMUP, ProbeEconomy, YIELD_WARMUP } from "./economy";
 import { ContextPartner } from "./partner";
+import { CORE_CONFIG } from "./parts";
 
 const alice = { tenantId: "t", userId: "alice" };
 const bob = { tenantId: "t", userId: "bob" };
@@ -153,7 +154,7 @@ describe("the probe economy in the engine", () => {
       model: null,
       now: () => clock,
       // No confident fast-path answer and no 10-minute memo: every turn looks up and probes afresh.
-      config: { probes: true, confidentScore: 99, probeMemoMs: 0, ...config },
+      config: { ...CORE_CONFIG, probes: true, confidentScore: 99, probeMemoMs: 0, ...config },
     });
     const say = async (userId: string, minutes: number, text: string) => {
       clock = t0 + minutes * MIN;

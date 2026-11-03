@@ -4,12 +4,12 @@
  * replayed cards and `--ask`, then the funnel score funnel-score.py prints (a hidden item counts as surfaced when it
  * was delivered or an ask cited it; the same for a decoy on control tasks), optionally against an earlier run.
  *
- *   bun run funnel [--suite train] [--seeds 41,42] [--preset ALL3] [--set '{"flag":true}'] [--cards default|none|F]
+ *   bun run funnel [--suite train] [--seeds 41,42] [--preset default] [--set '{"flag":true}'] [--cards default|none|F]
  *     [--no-ask] [--json out.json] [--baseline earlier.json] [--record] [--blind] [--jobs N]
  *     [-- more hidden-funnel flags]
  *
- * - `--preset`: a name from presets.ts (H, ALL3, ALL3B, ALL5, NEW, NEWB, NEWL, NEW2) or `none` (production
- *   defaults). `--set` adds flags.
+ * - `--preset`: `default` (the engine's DEFAULT_CONFIG, D112), `minus-<part>` or `minus-all` (presets.ts). `--set`
+ *   adds settings (a trial is `--set` over `default`).
  * - `--cards default`: the checked-in card caches (cards-v2 for dev/held-out worlds, cards-train for train), merged
  *   into a temp file; used when the configuration has `cards`.
  * - `--baseline`: a `--json` file of an earlier run on the same suites and seeds; prints, task by task, the hidden
@@ -26,11 +26,12 @@
  *   `-- --overlap` sends each request while another lookup is in flight (slowPathQueue's case; scores not
  *   comparable). docs/LAB.md 1c.
  *
- * NEW needs the reader (`-- --reader replay --reader-cache F` or `--reader live --reader-model m`) and the intent
- * requests (`-- --intent F`); ALL5 needs `-- --intent F --bridge F`. Neither file is checked in (docs/LAB.md).
+ * The default reads with the reader: with no `-- --reader` the screen uses `--reader stub` ($0); a real reading
+ * needs `-- --reader replay --reader-cache F` or `--reader live --reader-model m`, and the intent requests
+ * `-- --intent F`. Neither file is checked in (docs/LAB.md).
  * A replayed reader prompt that is not in the cache fails open (the ask answers without the reader), so the run
- * prints the miss count and exits 3 after the score unless `--allow-misses`: such a run is part NEW, part ALL3.
- * `-- --reader stub` screens the NEW family at $0 with no key: the reader's pool per suite (hidden and decoy in pool,
+ * prints the miss count and exits 3 after the score unless `--allow-misses`: such a run is part read, part not.
+ * `-- --reader stub` screens the default at $0 with no key: the reader's pool per suite (hidden and decoy in pool,
  * pool items, prompt size); its delivery counts are not the preset's. `-- --reader oracle[:p_hit,p_false]` is a
  * ground-truth proxy, every line labelled so. Both shard. `-- --packet-k 10,15,20` prints the planted item in the
  * ask's top K. With `-- --lead-in clause` and a no-model reader, the draft's pool against the request's (docs/LAB.md).
@@ -41,7 +42,7 @@ import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { flags, labConfig, parseJson } from "./flags";
 import { amortisedCalls, callMismatches, defaultJobs, type CallCheck } from "./funnel-merge";
-import { PRESETS } from "./presets";
+import { effective, PRESETS } from "./presets";
 import { missGate, MISS_EXIT } from "./reader-disk";
 import {
   beforeModelLine,
@@ -58,10 +59,10 @@ import {
 import { parseSuites, UNRUN_BLIND } from "./suites";
 
 const USAGE = `
-bun run funnel [--suite train] [--seeds 41,42] [--preset ALL3] [--set '{"flag":true}'] [--cards default|none|F]
+bun run funnel [--suite train] [--seeds 41,42] [--preset default] [--set '{"flag":true}'] [--cards default|none|F]
   [--no-ask] [--json out.json] [--baseline earlier.json] [--record] [--blind] [--jobs N] [--allow-misses]
   [-- more hidden-funnel flags]
-Presets: none, ${Object.keys(PRESETS).join(", ")}. docs/LAB.md has the recipes; funnel.ts's header every flag.`;
+Presets: ${Object.keys(PRESETS).join(", ")}. docs/LAB.md has the recipes; funnel.ts's header every flag.`;
 // Strict (flags.ts): a misspelled flag exits 2 before anything runs; what follows `--` is hidden-funnel.ts's to check.
 const cli = flags(
   "funnel",
@@ -100,9 +101,9 @@ if (heldout.length && !cli.has("blind")) {
 const unrun = suites.filter((s) => UNRUN_BLIND.includes(s));
 if (unrun.length) console.error(`funnel: ${unrun.join(", ")} never run before: this run spends them (UNRUN_BLIND)`);
 
-const presetName = opt("preset", "ALL3");
-const preset = presetName === "none" ? {} : PRESETS[presetName];
-if (!preset) fail(`unknown preset ${presetName} (known: none, ${Object.keys(PRESETS).join(", ")})`);
+const presetName = opt("preset", "default");
+const preset = PRESETS[presetName];
+if (!preset) fail(`unknown preset ${presetName} (known: ${Object.keys(PRESETS).join(", ")})`);
 // The merged configuration is checked whole (checkEngineConfig): an unknown or mistyped `--set` key, or a child flag
 // whose parent the merged configuration has off (`syncPollBehind` without `sync`), exits 2 naming it.
 let config: Record<string, unknown> = {};
@@ -113,6 +114,8 @@ try {
 } catch (error) {
   fail((error as Error).message);
 }
+// What runs: the override over the default (D112), whose cards, intent and reader are on.
+const run = effective(config);
 const has = (flag: string) => passthrough.includes(flag);
 /** The value after a hidden-funnel flag given after `--` ("" when absent). */
 const passValue = (name: string) => {
@@ -120,10 +123,13 @@ const passValue = (name: string) => {
   return i >= 0 ? (passthrough[i + 1] ?? "") : "";
 };
 const allowMisses = cli.has("allow-misses") || has("--allow-misses");
-if (config.askReader === true && !has("--reader")) {
-  fail("this configuration has askReader: pass `-- --reader replay --reader-cache F` (or --reader live ...)");
+// The default reads with the reader; with none named, the screen stays $0 on the stub reader (nothing binds, so
+// delivery is the rule paths'), and says so on every pool line. `-- --reader replay|live|oracle` for the rest.
+if (run.askReader && !has("--reader")) {
+  console.error("funnel: the reader is on and no `-- --reader`: screening with `--reader stub` ($0, nothing binds)");
+  passthrough.push("--reader", "stub");
 }
-if (config.intent === true && !has("--intent")) {
+if (run.intent && run.cards && !has("--intent")) {
   console.error(
     `funnel: intent is on but no \`-- --intent F\`: no hits; every TOTAL and pool line says ${INTENT_INERT}`,
   );
@@ -138,9 +144,8 @@ const checkBaseline = (current: IntentState) => {
   const why = intentMismatch(current, intentOfRun(JSON.parse(readFileSync(baseline, "utf8"))));
   if (why) fail(`--baseline ${baseline} refused: ${why}`);
 };
-if (config.intent !== true) checkBaseline("off");
+if (!run.intent || !run.cards) checkBaseline("off");
 else if (!has("--intent")) checkBaseline("inert");
-if (config.bridgeQuery === true && !has("--bridge")) console.error("funnel: bridgeQuery is on but no `-- --bridge F`");
 
 const labDir = join(import.meta.dir, "..", "..", "lab");
 const scratch = mkdtempSync(join(tmpdir(), "eden-funnel-"));
@@ -173,7 +178,7 @@ const funnelArgsFor = (suiteList: string, seedList: string, json: string) => [
   "--label",
   label,
   ...(cli.has("no-ask") ? [] : ["--ask"]),
-  ...(cards !== "none" && config.cards === true ? ["--cards", cards] : []),
+  ...(cards !== "none" && run.cards ? ["--cards", cards] : []),
   ...(cli.has("record") ? [] : ["--no-record"]),
   ...(allowMisses && !has("--allow-misses") ? ["--allow-misses"] : []),
   ...passthrough,
@@ -191,8 +196,7 @@ const shellLine = (a: string[]) => `bun ${a.map((x) => (/[\s{"]/.test(x) ? `'${x
  * latency study, a heavier configuration or a machine with fewer cores can choose one process. Some runs keep one
  * process whatever N says: each flag below clears and rewrites one output file per process (shards would overwrite
  * each other's), `--record` books one ledger entry per suite (a seed shard would book a partial run), and a live judge
- * or reader would multiply paid calls and rate-limit pressure in parallel. (hidden-funnel.ts's bridge is replay only,
- * `--bridge F`, so it shards.)
+ * or reader would multiply paid calls and rate-limit pressure in parallel.
  */
 const jobsGiven = cli.has("jobs") ? Number(opt("jobs", "1")) : undefined;
 if (jobsGiven !== undefined && (!Number.isInteger(jobsGiven) || jobsGiven < 1)) {
@@ -341,7 +345,7 @@ function mergeShards(files: string[]) {
     intentUse.asked += p.intent?.asked ?? 0;
     intentUse.found += p.intent?.found ?? 0;
   }
-  const intent = { state: intentState(config, intentUse), ...intentUse };
+  const intent = { state: intentState(run, intentUse), ...intentUse };
   const perTask = suites.flatMap((suite) =>
     (["hidden", "control"] as const).flatMap((variant) =>
       parts.flatMap((p, i) => (shards[i]!.suite === suite ? p.perTask.filter((t) => t.variant === variant) : [])),

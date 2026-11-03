@@ -12,13 +12,15 @@
                                              │                     ▼                                     │
                                              │              SLOW (background): route (graph) ─▶ sources  │
                                              │                ─▶ cache ─▶ score ─▶ confident? inject      │
-                                             │                ─▶ borderline? model judge (budget) ─▶ inject│
+                                             │                ─▶ borderline? judge if wired ─▶ inject      │
+                                             │                ─▶ acts? model reader (budget) ─▶ push       │
                                              │                ─▶ queue; delivered at the next event       │
                                              │   usage inference ─▶ graph.recordOutcome (learning)       │
                                              └──────────────────────────────────────────────────────────┘
                                                   │ read-only            │ ZDR routing
                                                   ▼                      ▼
-                                       user's sources (MCP)       OpenRouter (GLM 5.3 Flash)
+                                       user's sources (MCP)       OpenRouter (Haiku 5.5): cards,
+                                                                  intent, reader; no judge wired
 ```
 
 ## Packages
@@ -30,9 +32,9 @@
 | `packages/redact` | The secret gate (salvaged): gitleaks rules plus extras, prefiltered by one Aho–Corasick pass; the rules that backtrack in JavaScript and every allowlist run on RE2 (re2js, D24). Runs on everything stored, indexed or sent to a model. |
 | `packages/sources` | `Source` interface; `McpSource` (any MCP server's read tools, read-only enforced; arguments from the tool's schema when no mapping is given; an optional fetch tool that reads one record by id, D35, used through `SourceFanout.fetch` for refresh, D40; reconnects after a dropped connection, re-checking read-only, and waits 30 s after one that closes within 5 s of connecting; reads every page of `tools/list`); `StaticSource`; `QueryPlanner` (what each lookup sends to each connector, learned per user; D28, on by default in the server since D33); `SourceFanout`: per-source deadlines, coalescing, a result cache that serves stale on failure, rate limits, circuit breakers and adaptive concurrency, redacting before anything is held. A call is admitted only when every guard allows it, so a skip spends no rate token and no half-open probe; a failure of our own redaction says nothing against the source; a breaker ignores reports from calls allowed before it last opened. |
 | `packages/graph` | The source map (knowledge graph layer 1): which sources mention which entities, and learned usefulness per situation. SQLite. |
-| `packages/llm` | `Model` interface, OpenRouter client (ZDR, no data collection), pricing, `Budget`, `FakeModel`. |
-| `packages/engine` | `ContextPartner`: cues, a per-user BM25F item cache (title, body), near-duplicate suppression, ledger, two-speed pipeline, model judge, usage inference, traces; span tracing of every phase in wall and CPU time, off by default (`spans.ts`, `onSpan`, `config.spans`; content-free; [research/moon-telemetry.md](research/moon-telemetry.md)). Each event is tokenized once, into a per-session vocabulary. |
-| `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), MCP server exposing `ask_context`, config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). |
+| `packages/llm` | `Model` interface, OpenRouter client (ZDR, no data collection), pricing, `Budget` (per session and per user-day) and `TenantSpend` (one cap per tenant per UTC day across roles), `FakeModel`. |
+| `packages/engine` | `ContextPartner`: cues, a per-user BM25F item cache (title, body), near-duplicate suppression, ledger, two-speed pipeline, the default's parts (`DEFAULT_CONFIG`, `PARTS` in `parts.ts`, D112), an optional model judge, usage inference, traces; span tracing of every phase in wall and CPU time, off by default (`spans.ts`, `onSpan`, `config.spans`; content-free; [research/moon-telemetry.md](research/moon-telemetry.md)). Each event is tokenized once, into a per-session vocabulary. |
+| `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), MCP server exposing `ask_context`, config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). Runs `DEFAULT_CONFIG` (D112; `EDEN_ENGINE_CONFIG` overrides keys, D103). Model roles (`models.ts`): with `OPENROUTER_API_KEY`, cards and intent (background, price-routed) and the ask-time reader (request path) run on `EDEN_MODEL` (default `anthropic/claude-haiku-5.5`, D12's ZDR routing), each with its own `Budget`, all of a tenant's roles under one cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25); no judge is wired. Without a key no role is built and the same default runs its no-model path. |
 | `packages/client` | SDK for agent builders: `EdenClient` (fail-open) and `withContext` for message lists. |
 | `packages/eval` | Scenario harness over 26 hand-written scenarios (docs/research/eval-suite.md): precision, recall, false-fire rate, overall and per category; a privacy check (planted secrets, inert framing); direct asks; model calls and cost per turn, latency. |
 | `packages/sim` | Simulation: generated worlds and sessions with fact-level ground truth, connectors that behave like real ones, an oracle judge, and the real server under simulated agents over HTTP ([research/simulation.md](research/simulation.md)); the connector lab, open-source MCP servers over seeded backends in isolated containers ([research/connector-lab.md](research/connector-lab.md)). Not product code. |
@@ -58,8 +60,9 @@ does not: a source down, or a search that no longer finds the item; D40).
 
 **Slow path** (background; at most one per session at a time): rank the user's sources with the source map, search the
 top few live (each under its own deadline), cache the redacted results, record entity mentions, and re-score. A
-confident item is delivered with no model. Borderline candidates go to the model judge, whose default is "none", only if
-the budget allows. With no model, no budget, a failing model call (D41), or a verdict cut off at its token cap (D45),
+confident item is delivered with no model. Borderline candidates go to a model judge only when an embedding wires one
+and its budget allows; the servers wire none (D112). With no judge, no budget, a failing model call (D41), or a verdict
+cut off at its token cap (D45),
 Eden first grounds the request in the items' structure (D44, `grounding.ts`): who takes part (`meta.people`, from
 attendees, senders and recipients) and when it starts (`meta.start`). A full name the request acts on matches a
 participant by identity; a request about meeting someone takes only an event with them, any other one also needs a word
@@ -72,54 +75,52 @@ holds three or more query terms and scores at least 0.8 (coverage plus the entit
 directly if the caller passed `waitMs` and it landed in time; otherwise it is queued and delivered with the next event
 (or via `/v1/pending`).
 
-**A request made while the slow path is busy** (proposed D102, `slowPathQueue`, off by default): one slow path runs
-per session, so a request the fast path did not answer while another lookup (a judge call, a slow source) is still
-running is traced `silent` / `slow path busy` and not looked up; its cue stays out of cooldown, so only the same
-request made again finds it. With the flag the request is kept in a one-slot per-session queue (the latest wins),
-traced `silent` / `slow path busy: queued`, and the event's `ObserveResult.pending` is true: once nothing is in
-flight (after the running lookup and any `afterPoll` follow-up, one at a time), the request is looked up with the
-slow path alone, its cue then put in cooldown, and what it delivers is queued as pending. It is dropped, traced
-`queued cue: repeat` or `queued cue: stale`, if its cue went into cooldown meanwhile or it waited over 10 s, and never
-run if the session closed. It skips `anticipate`'s early answer (nobody is waiting on it); with `syncPollBehind` it
-gets the follow-up on the fresh index as any lookup does. At most one extra slow path, so at most one judge call
-under the session's `Budget`, per busy window (docs/COST-MODEL.md).
+**A request made while the slow path is busy** (D102, `slowPathQueue`, on in the default, D112): one slow path runs per
+session, so without the queue a request the fast path did not answer while another lookup (a judge call, a slow source)
+is still running is traced `silent` / `slow path busy` and not looked up; its cue stays out of cooldown, so only the
+same request made again finds it. With the queue the request is kept in a one-slot per-session queue (the latest wins),
+traced `silent` / `slow path busy: queued`, and the event's `ObserveResult.pending` is true: once nothing is in flight
+(after the running lookup and any `afterPoll` follow-up, one at a time), the request is looked up with the slow path
+alone, its cue then put in cooldown, and what it delivers is queued as pending. It is dropped, traced `queued cue:
+repeat` or `queued cue: stale`, if its cue went into cooldown meanwhile or it waited over 10 s, and never run if the
+session closed. It skips `anticipate`'s early answer (nobody is waiting on it); with `syncPollBehind` it gets the
+follow-up on the fresh index as any lookup does. At most one extra slow path, so at most one judge call under the
+session's `Budget`, per busy window (docs/COST-MODEL.md).
 
-**Probes** (PoC behind `config.probes`, off by default; D46, `probes.ts`): besides the request itself, a lookup sends
+**Probes** (`config.probes`, on in the default, D112; D46, `probes.ts`): besides the request itself, a lookup sends
 a few short queries, at most `probeCalls` source calls: each person it names (the sentence's leading verb removed) to
 the sources the source map says mention them, their organisation (read from what came back for them), its topic,
 and for an action on a named day that day's listing. An event near the time a scheduling request names is a clash
 delivered with no model, and up to three of the probes' finds get seats among the judge's candidates.
 Probes go out with the lookup's own search (admitted first, so they never take its per-source slot), one probe call
-per source at a time; the lookup waits at most `probeGraceMs` for them, and slower finds are cached for later turns
-(D47). Their memo is per user.
+per source at a time; the lookup waits at most `probeGraceMs` for them (0 in the default, D112: it does not wait past
+its own search), and slower finds are cached for later turns (D47). Their memo is per user.
 
-**Compaction** (`compactInjection`, off by default; D47, `render.ts` `compactText`): a delivered item, and the judge's
-copy of a candidate, is cut to the parts that bear on the request, with no model and in linear time: recipients,
+**Compaction** (`compactInjection`, on in the default, D112; D47, `render.ts` `compactText`): a delivered item, and the
+judge's copy of a candidate, is cut to the parts that bear on the request, with no model and in linear time: recipients,
 greetings, pleasantries, signatures, footers and links dropped, and parts that repeat the item's title or an earlier
-item in the packet. It drops the current year from dates ("9 Oct"); with `packetDates` (D68, off by default) it keeps
-it ("9 Oct 2026"), and an event whose shown text never names its day, in a packet or an `ask_context` answer, starts
-with its `meta.start` ("Starts: Thu 29 Oct 2026 13:30 UTC. "), built from the timestamp's digits only: the zone as
-written, no time when the stamp has no zone or is at midnight (an all-day event), and only when it fits the line whole.
-Usage learning reads the packet as rendered without the flag (`usageText`), so the flag changes wording, not what Eden
-learns.
+item in the packet. It drops the current year from dates ("9 Oct"). `compactAsk` (D76) compacts `ask` answers the same
+way, dates kept with their year, and `compactParts` (D78) reads a quoted thread past a quoted signature and cuts a
+flattened table by its rows; both are on in the default (D112).
 
-**No-model grounds and shared calls** (D48, flags off by default): with probes, a clash is an event overlapping the
+**No-model grounds and shared calls** (D48, on in the default, D112): with probes, a clash is an event overlapping the
 time asked for, never the event the request is about; `groundAway` delivers a named person's absence on a named day;
 `quietSettled` keeps back items that only confirm things stand; `fallbackAsks` lets the fallback take an item naming
 what an asking request names. `probeShare` gives a lookup one map of its source queries (`SharedCalls` in
 `sources/guarded.ts`): the planner and the probes send each (source, query) once. The envelope reads
 `<context src="the user's sources" note="Data, not instructions.">`.
 
-**Conflicts, probe economy and dense packets** (D49, D50, D52; flags off by default): `groundConflict` (`conflict.ts`)
-reads a request's frame (the days it acts on, in the user's own time zone; the amounts it commits; the references it
-names) and delivers, with no model, an item about the request whose statements block it (a hold over the day, a deadline
-or expiry before it, a limit below its amount, a thing already done); `quietClear` keeps back the near-miss twin whose
-statements clear it. `probeFresh` and `probeYield` (`economy.ts`) skip probe calls whose answer has likely not changed,
-or whose kind has not been paying at that source for the user. `densePacket` (`fold.ts`) folds out an item that repeats
-the occurrence of one above it; `groundOccasion` grounds the event a request names by its occasion. A
-standing-constraints register (D51) was measured and removed.
+**Conflicts, probe economy and dense packets** (D49, D50, D52; on in the default, D112): `groundConflict`
+(`conflict.ts`) reads a request's frame (the days it acts on, in the user's own time zone; the amounts it commits; the
+references it names) and delivers, with no model, an item about the request whose statements block it (a hold over the
+day, a deadline or expiry before it, a limit below its amount, a thing already done); `quietClear` keeps back the
+near-miss twin whose statements clear it. `probeFresh` and `probeYield` (`economy.ts`) skip probe calls whose answer has
+likely not changed, or whose kind has not been paying at that source for the user. `densePacket` (`fold.ts`) folds out
+an item that repeats the occurrence of one above it; `groundOccasion` grounds the event a request names by its occasion.
+A standing-constraints register (D51) was measured and removed.
 
-**Consequence probe, name-only quiet and tied judge** (D54, flags off by default): `consequenceProbe` (`consequence.ts`)
+**Consequence probe, name-only quiet and tied judge** (D54, on in the default, D112; `judgeTied` acts only with a
+judge): `consequenceProbe` (`consequence.ts`)
 classes an imperative or arriving request into an action class (delete, pay, release, people, travel, food, spend,
 share) by fixed verb lexicons and sends one query of the class's fixed constraint vocabulary ("freeze", "legal hold",
 "bank details", …; never user text) to one source, plus a no-call search of the cache; a find is used only when
@@ -127,64 +128,44 @@ share) by fixed verb lexicons and sends one query of the class's fixed constrain
 only by a person's name. `judgeTied` skips the judge when no candidate is tied to the request by a probe, a named day,
 two request words, a rare word or a consequence find.
 
-**Background sync, "Eden Atlas"** (proposed D57, `sync`, off by default; `sync.ts`): sources with a read-only list tool
+**Background sync, "Eden Atlas"** (D57, `sync`, on in the default, D112; `sync.ts`): sources with a read-only list tool
 (`Source.list`; `McpSource.listTool`, checked like the search tool) are read into each active user's cache in the
 background: a backfill of the newest items across sources, polls when a lookup finds a source stale by its learned
 change rate, a daily sweep that drops what a source has not listed in two sweeps in a row (about 48 h). Synced items
-have their own cap and TTL in the cache. A lookup answers every current synced source (its own search and every probe)
-from that local index at no call, and calls live only the sources that are not synced or still stale. The tick runs on a
-timer, never on the fast path, which only marks the user active. A listing redacts only what it brings new or changed:
-an item the cache holds whose raw copy hashes the same on what the gate reads (wyhash over the clipped fields,
-per-process seed) gets the held redacted copy back (`ItemCache.reuseFor`, `SourceFanout.list`'s `reuse`), so a sweep of
-an unchanged source costs about a tenth of what it did (`packages/engine/bench/ingest.bench.ts`, docs/TESTING.md). A
-poll lists `syncPageSize` (100) items a page, as backfill and sweeps do, and an on-demand poll reads at most
-`syncCatchupPages` (2) pages. With `syncPollPageSize` (proposed D101, 0 = off) a poll's first page is twice what the
+have their own cap and TTL in the cache. The servers sync per-user MCP sources that name a list tool (D108); static
+sources list nothing. A lookup answers every current synced source (its own search and every probe) from that local
+index at no call, and calls live only the sources that are not synced or still stale. The tick runs on a timer, never on
+the fast path, which only marks the user active. A listing redacts only what it brings new or changed: an item the
+cache holds whose raw copy hashes the same on what the gate reads (wyhash over the clipped fields, per-process seed)
+gets the held redacted copy back (`ItemCache.reuseFor`, `SourceFanout.list`'s `reuse`), so a sweep of an unchanged
+source costs about a tenth of what it did (`packages/engine/bench/ingest.bench.ts`, docs/TESTING.md). A poll lists
+`syncPageSize` (100) items a page, as backfill and sweeps do, and an on-demand poll reads at most `syncCatchupPages`
+(2) pages. With `syncPollPageSize` (D101; 5 in the default, D112; 0 = off) a poll's first page is twice what the
 source's learned change rate expects since its last poll, at least that size and at most `syncPageSize`; while no page
 reaches what was already synced, the next tops the items asked up to the next multiple of `syncPageSize` (5, then 95,
 then 100). A poll then lists no more items than full pages would and catches up as far, in at most one more call (an
 on-demand poll: one to three calls, against one or two). Backfill and sweeps keep `syncPageSize`. `SyncStats` counts the
 items listed (`demandItems`, `backgroundItems`) beside the calls.
 
-**Poll behind the lookup** (D65, `syncPollBehind`, off by default; with `sync` and `syncOnDemand`): without it, a
-lookup that finds a synced source stale waits for that source's on-demand poll (`sync.freshen`, one or two listing
-calls; up to three with `syncPollPageSize`), which was most of Eden's time on the agent's critical path in ALL (p50 503 ms where it ran). With it, every
-warm synced source answers the event's lookup from the index as it stands and the poll runs behind; the critical path
-then holds no source call for a synced source, current or polling behind. If the poll stores anything, the lookup is
-made again on the fresh index once both are done (after any lookup still in flight) and what it delivers is queued for
-the agent's next request: after a delivery, or with a model, only what is sure or grounded (so it makes no judge
-call); after silence with no model, as the lookup would have decided. The first answer can carry a copy the poll then
-finds edited; the ledger records each delivered item's words with the flag, and the follow-up delivers the corrected
-copy (the departure from D40 is that the old copy went out first). `ObserveResult.pending` stays true while a poll,
-follow-up or behind-the-answer judge is running. The agent's `ask_context` still waits for the poll. **Judge behind the answer** (`judgeBehind`, off by default,
-experimental and not recommended): with a model, every lookup decides as with no model and answers at once; the judge
-then reads only the candidates that answer left out and its picks are queued. The recommended configuration has no
-model judge on the critical path.
+**Poll behind the lookup** (D65, `syncPollBehind`, on in the default, D112; with `sync` and `syncOnDemand`): without it,
+a lookup that finds a synced source stale waits for that source's on-demand poll (`sync.freshen`, one or two listing
+calls; up to three with `syncPollPageSize`), which was most of Eden's time on the agent's critical path in ALL (p50 503
+ms where it ran). With it, every warm synced source answers the event's lookup from the index as it stands and the poll
+runs behind; the critical path then holds no source call for a synced source, current or polling behind. If the poll
+stores anything, the lookup is made again on the fresh index once both are done (after any lookup still in flight) and
+what it delivers is queued for the agent's next request: after a delivery, or with a model, only what is sure or
+grounded (so it makes no judge call); after silence with no model, as the lookup would have decided. The first answer
+can carry a copy the poll then finds edited; the ledger records each delivered item's words with the flag, and the
+follow-up delivers the corrected copy (the departure from D40 is that the old copy went out first).
+`ObserveResult.pending` stays true while a poll or follow-up is running. The agent's `ask_context` still waits for the
+poll; the reader's push does not (`readerPushBehind`, below).
 
-**A found conflict always speaks** (D67, `decideConflict`, off by default; docs/research/econ-decide.md): wherever the
-rule paths decide (no model, `judgeBehind`'s lookup, or a model that failed, was cut off or was over budget, D41),
-after whichever path decided, the conflict ground's test (`joinConflict()` over `conflicts()`: request-frame
-conflicts, conflicting consequence finds, the graph's conflicts) is run over every ranked candidate, and its best find
-joins the packet while it has room; a sure lexical match no longer silences a conflict the engine had found. That
-includes the fast path's sure answer from the cache (the pass then reads the cache's ranking, with no probe or graph
-finds, and adds only a current copy). It runs on `syncPollBehind`'s follow-up lookup too, and before
-`judgeBehind`'s judge, which then reads only what is left. A judge that answered decides alone. No call, no state. The candidates' facts (`decide.ts`) reach the lab only through the
-content-free `PartnerDeps.onCandidates` hook; the engine decides nothing from them.
+**Deleted by D112:** `decideConflict` (D67), `judgeBehind`, push relaying (`syncPush`, `sourcePushes`,
+`sourceChanged`, D66) and the other switches D112 lists. The candidates' facts (`decide.ts`) still reach the lab only
+through the content-free `PartnerDeps.onCandidates` hook; the engine decides nothing from them.
 
-**Push** (D66, `syncPush`, off by default, with `sync`): a tenant holding a connector watch (Gmail watch, Calendar
-push, Slack Events) declares it (`ContextPartner.sourcePushes`) and relays each change notice
-(`ContextPartner.sourceChanged`), which carries no content. Declaring a watch (or a first notice) leaves the source
-to one more poll, for what changed before the watch, which no notice names; a notice during the backfill is kept and
-read after it. A notice is a change notice unless its only field is a non-empty `deleted` list (`changed: true` says a
-notice also has new items), and `deleted` takes Eden item ids or the connector's refs (mapped through the redaction's
-hashed ids). A pushed source is current until a notice arrives, so a
-lookup neither polls it nor waits for it; a notice is read with one incremental read-only list call (by the next tick,
-at most every `syncPushGapMs`, or by a lookup), a notice naming deleted items drops them at once, and sweeps run every
-`syncPushSweepMs` (3 days: a sweep also re-lists a quiet source's older items, which lapse from the cache 7 days after
-their last listing). Items of a pushed source with no unread notice count as read now for D57's two-hour
-freshness rule. A watch silent for `syncPushMaxStaleMs` (24 h) is not trusted: the source goes stale as any other and,
-with `syncPollBehind`, is polled behind the lookup, never on the path. The server has no notice route yet.
-
-**Knowledge graph** (proposed D58, `graph` off by default; `kg.ts`, docs/research/moon-graph.md): with the flag, the
+**Knowledge graph** (D58, `graph` and `graphMerge`, on in the default, D107, D112; `kg.ts`,
+docs/research/moon-graph.md): the
 item cache keeps a per-user graph over what it holds, built as items are cached and dropped with them: people (names,
 addresses, first names), organisations (an address's domain is the same node as the name "Umbrella Health"), projects
 and systems (capitalised runs), identifiers, channels, roles and days, with typed edges (about, authored, attended,
@@ -194,7 +175,7 @@ organisation left out, 2 ms bound, no model, no source call). What it reaches ge
 with `groundConflict` is set against the request by `conflict.ts` with the names it was reached through as ties
 (grounded "graph"), only when the request acts or asks and only for an item that blocks, moves or settles something.
 
-**Anticipation** (`anticipate`, off by default; proposed D60, `anticipate.ts`,
+**Anticipation** (`anticipate`, on in the default, D112; D60, `anticipate.ts`,
 [research/moon-anticipate.md](research/moon-anticipate.md)): every event with words (a user message, a draft the user
 is still typing, `user_message` with `draft: true`, a tool call or result, an arriving message) is read, with no model
 and in linear time over its first 600 characters, for what the agent will need next: the names it mentions (from a
@@ -208,26 +189,28 @@ structure grounds, never the fallback), returned on the observe call itself, and
 adds only what is sure or grounded. With a judge, the request always goes to the slow path (a warm cache would
 otherwise end lookups before the judge sees the second candidate). A draft is ignored when the flag is off.
 
-**Implication cards** (`cards`, off by default; proposed D59, `cards.ts`,
+**Implication cards** (`cards`, on in the default, D112; D59, `cards.ts`,
 [research/moon-cards.md](research/moon-cards.md)): items new to a user's cache, looked up or synced, that pass a
 no-model deontic prefilter are queued for a `CardEnricher` (`PartnerDeps.cards`), which reads them ten per call
 through the model, under its own per-user-day `Budget`, into small validated cards (constraint kind, actions from a
 fixed vocabulary, entities, span, limit). At request time, with no model, the request's actions (fixed lexicons) and
 frame (`conflict.ts`) are matched against the cards of cached items: a match is a candidate and a judge seat, and with
 `groundConflict` the best violated card is delivered (grounded "card"). The card's own statement never reaches the
-agent. The server's `buildPartner` does not wire an enricher yet.
+agent. The servers' `buildPartner` wires the enricher on `EDEN_MODEL` when `OPENROUTER_API_KEY` is set (D112);
+without a key the part is inert and the no-model paths answer.
 
-**Card economy** (D66, `cardsEconomy`, off by default, with `cards`; docs/research/econ-background.md): the enricher
-reads fewer items with the same prompt. A strict prefilter cuts legal-disclaimer and notification-settings footer
-blocks (from their first words to the end of their paragraph, so a constraint written after one is still read) and
-does not read a reply's or forward's subject; items of one user that say the same deontic sentences under the same
-subject (reply prefixes, greetings and footers aside, none dated relative to their message) share one card, the
-subject included because the model reads it for the card's entities; twenty items go per call. The card maker's
+**Card economy** (D66, `cardsEconomy`, on in the default, D112, with `cards`; docs/research/econ-background.md): the
+enricher reads fewer items with the same prompt. A strict prefilter cuts legal-disclaimer and notification-settings
+footer blocks (from their first words to the end of their paragraph, so a constraint written after one is still read)
+and does not read a reply's or forward's subject; items of one user that say the same deontic sentences under the same
+subject (reply prefixes, greetings and footers aside, none dated relative to their message) share one card, the subject
+included because the model reads it for the card's entities; twenty items go per call. The card maker's
 `OpenRouterModel` may route by price (`sort: "price"`, still ZDR); a batch cut off at the output cap, which price
 routing makes more frequent, is sent once more with default routing (`CardMakerOptions.retry`) under its own
 reservation.
 
-**The moonshots together** (proposed D62, [research/moonshots.md](research/moonshots.md)): the flags compose. With
+**The moonshots together** (D62, [research/moonshots.md](research/moonshots.md); all in the default since D112): the
+parts compose. With
 the sync, synced sources answer the lookup's search, every probe and the prefetch locally, and the graph and the
 cards cover every synced item; the graph walk and card matching run on the slow path after the lookup's items are
 cached; the
@@ -235,58 +218,58 @@ anticipation's early decision reads what the prefetch, the sync and the cache ho
 engine's spans (`sync.freshen`, `sync.list`, `graph.walk`, `cards.match`, `cards.make`, `anticipate.prefetch`,
 `anticipate.early`), and the Pi harness's timeline reads the same spans.
 
-**The bridging query and the constraints digest** (`bridgeQuery`, `constraintDigest`, off by default; proposed D89
-and D90, `bridge.ts`, `digest.ts`, [research/edge-bridge.md](research/edge-bridge.md)). For a request that acts, the
-slow path starts one small budgeted model call beside its search (`QueryBridge`, its own `Budget` and per-user cache
-of queries): the redacted request is rewritten into two or three short queries in a constraint's words. Once the
-search has cached what it brought, the queries run against the user's own index with no source call; a find the
-conflict test, tied by the queries' words, reads as a conflict counts as a consequence find in conflict does (a seat,
-the conflict ground, an `ask` verdict hit), and with `bridgeAskSeats` the best other finds take seats in an `ask`
-answer. An `ask` reads the cached queries and never calls. The digest is the user's items whose card is a standing
-constraint in force (a freeze, limit, absence, deadline, prohibition or dependency ending today or later), a line
-each in the items' own words, ranked by when written with the user's own people a week newer, deduplicated by card,
-at most twelve lines; it opens a session (`session_start`) as data and is served on request (`POST /v1/digest`, client
-`digest`). It holds no clock, so its bytes change only when a constraint does.
+**Deleted by D112:** the bridging query (`bridgeQuery`, `bridgeQuestions`, D89) and the constraints digest
+(`constraintDigest`, D90) with its route `/v1/digest`; the client's `health()` calls `/v1/whoami`, which checks the
+key, tenant and ids and changes nothing.
 
-**The ask-time reader** (`askReader`, off by default; proposed D95, `reader.ts`). An `ask` about an action (or any ask,
-with `askReaderQuestions`) is answered as usual, and then, before rendering, one budgeted model call (`AskReader`, its
-own `ReaderMaker`, model and `Budget`) reads the first `askReaderPool` (30) distinct candidates of the ask's ranking
-(its pool in order, then the rest it scored), each rendered compactly (`readerItem`: title, source, date, sender, the ≤
-400 characters of its parts that bear most on the request, its card's fields), all redacted and fenced as data. It
+**The ask-time reader** (`askReader`, on in the default, D112; D95, `reader.ts`). An `ask` about an action (or one
+asking what blocks, limits or allows it, or made after a request that acts) is answered as usual, and then, before
+rendering, one budgeted model call (`AskReader`, its own `ReaderMaker`, model and `Budget`) reads the first
+`askReaderPool` (15 in the default) distinct candidates of the ask's ranking (its pool in order, then the rest it
+scored), each rendered compactly (`readerItem`: title, source, date, sender, the `askReaderItemChars` (240) characters
+of its parts that bear most on the request, its card's fields), all redacted and fenced as data. It
 returns the items that block, limit or change the request or show it done, each with a kind and a ≤ 15-word bearing
 (`parseReader` validates both); those lead the answer, marked "Eden's reader: <kind>: <bearing> |", and the usual items
-fill the seats left. With `askReaderClear` a read pool with nothing binding opens the answer with a fixed "Checked the N
-items found most related: …" line. An explicit ask waits at most `askReaderWaitMs` (2.5 s); late, over budget, failed or
+fill the seats left. An explicit ask waits at most `askReaderWaitMs` (2.5 s); late, over budget, failed or
 unreadable, the answer is the usual one, and a late call still fills the cache. Verdicts are cached per user and session
-by a hash of the request and the pool; any `forget` of the user or a source drops them. Like the bridge, it is wired by
-the embedder (`PartnerDeps.reader`); the lab's funnel wires it (`--reader`), the server does not yet. Its spend is the
+by a hash of the request and the pool; any `forget` of the user or a source drops them. It is wired by the embedder
+(`PartnerDeps.reader`): the servers wire it on `EDEN_MODEL` when `OPENROUTER_API_KEY` is set (D112), the lab's funnel
+with `--reader`; without it the part is inert and the ask is the no-model one. Its spend is the
 ask's: `AskResponse.costUsd` and the "answer" trace include the reader's call (`readerCalls`, `readerCostUsd` name that
 part), counted once, by the read that made it (0 for a cached verdict and for a read that joined a call in flight). A
 late call is not the ask's (its `costUsd` 0, `usedModel` false): when the call the ask started lands, the reader books
 it and the engine emits a "reader-late" trace with its cost and one model call, even if the session has closed, so the
 traces sum to the reader's spend. A call its `Budget` refused reports the outcome "budget" (`onReader`), not "none"; the
 reader's `Budget` is its own, ended with each session, and a default `new Budget()` stops it after 20 reads a session
-(`callsPerSession`), so an embedder sizes it for long sessions.
+(`callsPerSession`), so an embedder sizes it for long sessions. In the servers it also shares the tenant's daily cap
+with the card calls (`TenantSpend`, D112).
 
 The reader's prompt v5 (D96) has the model label every item that looks relevant, a lookalike included, writing what the
-item means before deciding whether it is about the same thing and binds. With `askReaderDrop` (off by default), the
-items it rejected by name leave the ask's answer; an item it flagged never does. With `readerPush` (off by default), a
+item means before deciding whether it is about the same thing and binds. With `askReaderDrop` (on in the default), the
+items it rejected by name leave the ask's answer; an item it flagged never does. A drop that would empty the answer is
+made only when the reader was shown every candidate the ask had (none cut by `askReaderPool` or the prompt's 60-item
+cap; D114): otherwise "Nothing in the connected sources" would be a false all-clear over items it never read (D93's
+guard). With `readerPush` (on in the default), a
 user request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
 flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search
 that joined another lookup's call in flight (the push and the slow path search the same words at once), was answered by
 the fan-out's cache, or was refused by a guard is none (`reachedSource`), and a planner's cascade counts each call it
-sent, so a task's traces sum to its connectors' count. Phase 3's options (D99, all off): `askReaderStanding` puts the
-user's in-force standing constraints first in the reader's pool, read without the request's focus so the same text forms
-a cached user-turn prefix (`ChatMessage.cache`); `readerGate` skips the call when no candidate could constrain the
-request; `readerPushWaitMs` bounds how long `observe` waits for the push, within the caller's own wait (0 measured
-badly: the reading must land before the agent answers). The push itself is not cut at `askReaderWaitMs`: it waits for
+sent, so a task's traces sum to its connectors' count. `readerGate` (D99, on in the default) skips the call when no
+candidate could constrain the request (no card of a constraint kind, state change or thing done, and no constraint
+wording, `mayConstrain`; bulk mail never counts). `readerPushWaitMs` bounds how long `observe` waits for the push,
+within the caller's own wait (0 measured badly: the reading must land before the agent answers). With
+`readerPushBehind` (on in the default, D112; with `syncPollBehind`) the push's own lookup does not wait for the sync's
+poll: it reads the index as it stands, and if the poll stores anything the push is ranked again on the fresh index
+with no new source call and read again (a reader cache hit when its pool is unchanged); a packet the first reading
+queued and the agent has not taken is replaced, its ledger entries restored. The push itself is not cut at
+`askReaderWaitMs`: it waits for
 the reading (bounded by the reader's model call and the session's close), and `observe` reports `pending` while it runs.
 Its packet is queued only if the session is still open and no newer user message has arrived; the agent's own events in
 between (tool calls, its replies) do not make it stale.
 
-**The intent index** (`intent`, needs `cards`, off by default; proposed D87, `intent.ts`,
+**The intent index** (`intent`, needs `cards`, on in the default, D112; D87, D109, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four
 requests the item would change, in a user's words (validated, at most 120 characters each, redacted); items the card
 prefilter rejects are read for their requests only. They live in a per-user BM25 index apart from the item text,
@@ -294,30 +277,16 @@ keyed by content hash and dropped with the card. At request time, with no model,
 it: the best hits join the lookup's candidates and one judge seat, and are fused into an `ask` by reciprocal rank
 after the verdict hits. An intent hit alone is never a no-model delivery.
 
-**Guarded asks and answer-shaped packets** (`askGuard`, `packetBearing`, off by default; proposed D88,
-[research/edge-ask.md](research/edge-ask.md)). An `ask` about an action leads with what a verdict reads as binding,
-marked "May block or change this:", and, when nothing in the answer may block and every source answered from a warm,
-current sync, opens with a fixed "Checked …: none of the items found states a rule, hold, limit, absence or change
-for …" line: a claim about what was found, not about the sources as a whole. An item the intent index or the bridging
-queries chose for the request withholds that line, since no verdict read it
-([research/edge-combined.md](research/edge-combined.md)), and so does any answer item or candidate whose words may
-state a constraint (`mayConstrain`, wider than any verdict; D93). The MCP `ask_context` tool gives the guided description
-(`ASK_CONTEXT_GUIDED`) with `askGuard`. Packets say each item's bearing the same way.
+**Deleted by D112:** guarded asks and answer-shaped packets (`askGuard`, `packetBearing`, D88)
+and the ALL5 preset (D92) with every other named preset; the lab's presets are only `default`,
+`minus-<part>` and `minus-all`.
 
-**ALL5** (proposed D92, [research/edge-combined.md](research/edge-combined.md)): ALL3 (D80) plus `intent`,
-`bridgeQuery` (with `bridgeQuestions` and two `bridgeAskSeats`), `askGuard` and `packetBearing`. In an `ask` the
-paths compose in this order: the search and the verdict paths (consequence probe, graph, cards) gather candidates,
-the intent hits and the bridge's finds join them, the verdict hits lead, the bridge's seats follow, the rest is fused
-with the intent list, and the guard reads the final answer. Model use stays off the fast path: the card call (now
-with requests) runs in the background, the bridge's one call per acting request on the slow path, both through their
-own `Budget`. `constraintDigest` (D90) is left out of ALL5 (its in-sample decoys).
-
-**The action firewall** (`actionCheck`, off by default; proposed D69, `firewall.ts`,
+**The action firewall** (`actionCheck`, a trial switch, off; D69, DECISIONS "Trial switches", `firewall.ts`,
 [research/econ-firewall.md](research/econ-firewall.md)): `checkAction` (HTTP `POST /v1/check`, client `check`) takes
 the agent's tool call before it runs. The session's request and the call's structured arguments (dates written out,
 amounts, names, references; free-text fields such as an email's body left out) make one cue, decided from what is held
 with no model and no source call: the probes' memo and the class's cached finds offline, the graph walk, the cards and
-the cache, through `grounded` (whose conflicts come from the same `conflicts()` helper `decideConflict` reads). The
+the cache, through `grounded` (whose conflicts come from the conflict ground's `conflicts()` helper). The
 arguments pass the secret gate before they make the cue, each first as `"key": value` so a secret known only by its
 key's name (a password, an api_key) is caught before the call becomes words, and a session keeps only a digest of each
 call it answered with a finding, taken after the gate. Only its action grounds count (a calendar clash for a call with a
@@ -328,42 +297,24 @@ guest has coeliac disease" in the notes) is dropped. The answer is `proceed` or 
 the same call made again after a finding proceeds (the agent's informed choice). What the integration does with a
 finding is its own: `heldResult` in the client is one choice (hold the call and return the finding as the tool's
 result). The client's `check` fails open (an error, a timeout, a 4xx or 503, or an answer of another shape is
-`proceed`); the route answers 400 for a malformed call and 503 when the engine fails. The stock server turns on no
-engine flag from the environment: an embedding opts in through `buildPartner`'s `engine` settings, with the grounds it
-wants the check to read.
+`proceed`); the route answers 400 for a malformed call and 503 when the engine fails. The default leaves the switch
+off: a trial turns it on through `EDEN_ENGINE_CONFIG` or an embedding's `buildPartner` `engine` settings.
 
-**Ask** always searches (live, or a current synced source locally with D57; more sources), ignores the not-twice ledger (the agent asked), and returns the cited
-items as they are, with no model call: the asker is a model and reads them directly (D43). `askWithModel`
-(`EDEN_ASK_MODEL=1`) has one model call compose a short cited answer instead, when a model and budget are available.
-The ask is part of the design, not a fallback for a thin packet: a packet that also carried the candidates the gate
-held back, so the agent could answer without asking, was measured and rejected (D70,
-[research/econ-oneturn.md](research/econ-oneturn.md)). The agent's own question reaches items the request's words did
-not, and the agent raised a delivered fact more often when it could still ask.
-With `askVerdicts` (D73, off by default) an ask also gathers what a lookup gathers (the consequence probe's finds,
+**Ask** always searches (live, or a current synced source locally with D57; more sources), ignores the not-twice
+ledger (the agent asked), and returns the cited items as they are, with no model call composing an answer: the asker
+is a model and reads them directly (D43; `askWithModel` and `EDEN_ASK_MODEL` were deleted by D112). The one model call
+an ask may make is the reader's (above). The ask is part of the design, not a fallback for a thin packet: a packet
+that also carried the candidates the gate held back, so the agent could answer without asking, was measured and
+rejected (D70, [research/econ-oneturn.md](research/econ-oneturn.md)). The agent's own question reaches items the
+request's words did not, and the agent raised a delivered fact more often when it could still ask.
+With `askVerdicts` (D73, on in the default) an ask also gathers what a lookup gathers (the consequence probe's finds,
 the graph walk and the card finds) and answers first with the candidates a rule path found in conflict; no model call
-and no extra source call. With `askDedup` (D77, off by default) each session keeps `Session.shown`: the words its
+and no extra source call. With `askDedup` (D77, on in the default) each session keeps `Session.shown`: the words its
 packets and answers showed the agent, per item id and version (at most 64 items, never shared across sessions or
 users), so a later answer says an unchanged item by its new parts only, or "(shown above)"; an item whose words
 changed at its source counts as not shown.
-With `askRank` (D82, off by default) the answer's pool (the verdict hits, the grounded items, the lexically likely) is
-ordered by a learned no-model ranker (`rank.ts`): a linear score over the facts `decide.ts` already computes for each
-candidate, with weights fitted offline (`rank-fit.ts`, pairwise logistic, leave-one-suite-out) and shipped as
-`rank-weights.json`. The ranker's best candidate outside the pool may take the weakest seat by a margin; the answer
-never grows. `rankTies` (D82, off by default) lets the same ranker say which of equally scored items a proactive cut
-keeps (the sure items, the conflict ground's hits, the person ground's pick); it never adds an item or lowers a gate.
-Neither holds state.
-With `supersede` (D81, off by default) candidates are grouped by matter (subject without "Re:"/"Fwd:" per source, or a
-title identifier) and an item is dropped from answers and multi-item packets when a newer item of its group is decisive
-(conflict or clear) and speaks to the same constraint (their statements share a word beyond the request's names); a
-packet left with only the clearance of a block is not sent; an ask that is not a question also leaves out an item
-whose latest state is settled. With
-`askContext` (D83, off by default) the session keeps its latest request's cue, and an ask worded otherwise is ranked
-for both its question and that request (weighted reciprocal-rank fusion over what is cached; at most
-`askContextItems`; the request's order is kept on the session while the request, the user's cache revision and the
-minute stand). Together (ALL4, D84) an ask runs in this order: the pool is built; `supersede` filters it; `askRank`
-orders it and may seat one outsider (dropped again if `supersede` would drop it); `askContext` fuses the request's
-order; and `supersede` reads the fused answer, judging what only the request found as the request would (a settled twin
-the request's words pulled in is not what a narrow question asked).
+`askRank` and `rankTies` (D82), `supersede` (D81), `askContext` (D83) and their composition ALL4 (D84) were deleted by
+D112 (no measurement favoured them on).
 
 ## Learning loop
 
@@ -388,6 +339,8 @@ skipped expired items, so no answer changes; resident memory follows the users a
 than every user seen since the process started. The timer runs on the cache's own clock (the last `put`'s `now`
 moved on by wall time since), so a simulation on an injected clock expires on its own time. The timer holds its cache
 only through a `WeakRef`, so a cache nobody closes (labs build one per task) is still collected, and its timer stops.
+A user's vocabulary releases each term no live item holds once the index compacts it away (`releaseTerms`, on in the
+default, D112), so its term ids follow the live items without a rebuild.
 
 Dates in items are read the same on every host: `parseWhen` (`grounding.ts`) reads a zone-less date or date-time (a
 `Date:` header without a zone, a calendar start with no offset, "14 Oct 2026") as UTC, not the server process's local

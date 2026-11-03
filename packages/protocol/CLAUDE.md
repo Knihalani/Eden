@@ -11,7 +11,7 @@ validation for what arrives over HTTP; Eden's data directory; the `ask_context` 
 | `src/ids.ts` | `newId`, `itemId`, `scopeKey` (`tenant/user`, the key every piece of per-user state uses) |
 | `src/validate.ts` | `checkEvent`, `checkAsk`, `isId`: hand-written checks that return `{ok:false,error}` instead of throwing |
 | `src/home.ts` | `edenHome()`: `$EDEN_HOME`, else `~/.eden`, created 0700 |
-| `src/describe.ts` | `ASK_CONTEXT_DESCRIPTION` and the guided `ASK_CONTEXT_GUIDED` (D88), used by the server's MCP tool and the lab |
+| `src/describe.ts` | `ASK_CONTEXT_DESCRIPTION`, used by the server's MCP tool and the lab (the guided variant, D88, was deleted by D112) |
 
 ## Rules that apply here
 

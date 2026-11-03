@@ -55,6 +55,15 @@ export const CARD_KINDS = [
   "already-done",
 ] as const;
 export type CardKind = (typeof CARD_KINDS)[number];
+/** The card kinds of a standing constraint (a freeze, limit, absence, deadline, prohibition or dependency). */
+export const STANDING_KINDS: ReadonlySet<CardKind> = new Set<CardKind>([
+  "freeze",
+  "limit",
+  "absence",
+  "deadline",
+  "prohibition",
+  "dependency",
+]);
 
 /**
  * The canonical actions a constraint can bear on, and how the model is told each: one vocabulary for both sides, so

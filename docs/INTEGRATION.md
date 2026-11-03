@@ -34,7 +34,7 @@ messages = withContext(messages, await eden.collect(injection)); // before each 
   characters; it never includes the request or the key.
 - **Check the setup with `health()`** at startup: `await eden.health()` resolves `{ ok: true }` when the server
   answers and accepts the key, the tenant and the ids, and `{ ok: false, error }` otherwise. It never throws and
-  changes no state (it reads the digest).
+  changes no state (`POST /v1/whoami`).
 - **Report every event**: user messages, the agent's tool calls and results, arriving messages. Eden stays silent on
   most of them; the ones it reads are how it knows what the agent is about to do.
 - **Inject before each model call, not only the first**: work Eden finishes after the first request (the slow path, a
@@ -50,7 +50,7 @@ as 0 and caps it at 5,000 ms.
 The client's own timeout for that request is 800 ms plus `waitMs`, so a long wait does not make the SDK give up early.
 Work still running when the wait ends arrives later through `pending`/`collect`, as above.
 
-- **Default configuration: pass a wait on the user message (about `waitMs: 1500`).** With no `waitMs` the observe
+- **Pass a wait on the user message: the client sends 3,000 ms by default (`DEFAULT_WAIT_MS`, D112).** With no `waitMs` the observe
   does not wait for its lookup: when the lookup is not already done it replies at once (`pending: true`) and the
   answer lands in `pending`, so it misses the agent's first model call and a one-turn answer never sees it
   (partner.ts `observe`: `waitMs <= 0` queues the slow path and returns). With `waitMs` the reply comes as soon as the
@@ -59,18 +59,15 @@ Work still running when the wait ends arrives later through `pending`/`collect`,
   --time 1`, production defaults): all 11 deliveries arrived 630 to 1,336 ms after the user message (the harness
   waits 3,000 ms). By those timings (inferred, not a run at each wait) no wait or 600 ms would have delivered 0 of
   the 11 before the first model call, 800 ms 5, and 1,500 ms all 11. Warm in-process sources (the README's static
-  file) answer in milliseconds, so there the wait is rarely spent. Either pass `waitMs` on each user message's
-  observe or set the client's `defaultWaitMs: 1500`, which does it for every sent user message and nothing else
-  (D105, proposed; unset by default).
-- **Running NEW (`readerPush` with `askReader`, D98): pass about `waitMs: 3000` on the user message's observe.** The
-  reader then reads the request on the critical path, and its call is paid for whatever wait you pass; with too short
+  file) answer in milliseconds, so there the wait is rarely spent. The client's default (3,000 ms on every sent user
+  message and nothing else, D105, D112) covers both this and the reader below; `defaultWaitMs: 0` opts out.
+- **The reader (`readerPush` with `askReader`, on in the default with a model key, D98, D112) needs about 3,000 ms.**
+  The reader reads the request on the critical path, and its call is paid for whatever wait you pass; with too short
   a wait its packet lands after the agent has answered. **Measured** in the lab (Haiku 5.5, simulated worlds), against
   the harnesses' 3,000 ms: a 1 s wait lost 7.6 points (Pi, Eden-only arm) and 18.1 points (Pi, tools-plus-Eden arm)
   of hidden facts raised, with wall time p50 within 0.15 s (D98); no wait lost 18.2 to 32.3 points on train (D99,
   [research/haiku-phase3.md](research/haiku-phase3.md)). The reader took 1,190 ms at p50 and 1,768 ms at p90 there
   (prompt v7), so a wait under about 2 s misses some readings; no wait between 1 s and 3 s was measured.
-- The production server does not wire a reader yet (turning NEW on needs a provider decision first, D98), so the
-  second point applies to lab or self-built deployments.
 
 ## Keep `ask_context` (measured, D70)
 
@@ -131,8 +128,8 @@ const check = await eden.check(toolName, args);
 if (check.verdict === "finding" && check.finding) return heldResult(toolName, check.finding); // or ask the user
 ```
 
-- The server needs `actionCheck` (off by default) and the grounds it reads (`probes`, `groundConflict`, `groundAway`,
-  `graph`, `cards`) in its engine config.
+- The server needs `actionCheck` (a trial switch, off, D112's trials table) in its engine config; the grounds it
+  reads are in the default.
 - Eden returns context as data and never "do not"; whether to hold the call, ask the user or go ahead is your policy.
   `heldResult` is one choice: hold the call and let the agent call again to go ahead.
 - The check makes no model call and no source call (4–5 ms p50 in the lab). It fails open: an error or a server without
@@ -143,15 +140,6 @@ if (check.verdict === "finding" && check.finding) return heldResult(toolName, ch
   added to the session's window and nothing is sent anywhere. See [PRIVACY.md](PRIVACY.md) (the action firewall row).
 - **Measured** beside a tools-only agent in one in-sample seed (unsafe actions 0.269 → 0.134); beside Eden's full
   configuration its own effect was about one task in 134. Treat it as an option for tool-acting agents, not a default.
-
-## Fresh sources without polling: push (opt-in, D66)
-
-If your connector platform already holds change watches (Gmail watch, Calendar push channels, Graph subscriptions,
-Slack Events), relay their notices to Eden so a synced source counts as current until a notice says otherwise and a
-lookup never waits for a poll. Today this is an engine API (`ContextPartner.sourcePushes` and `sourceChanged`, with
-`sync` and `syncPush`); there is no HTTP route for it yet. A notice carries no content: Eden reads the change through
-the same read-only tools (D7). The connectors' push APIs cost about nothing in fees (research §5); the costs are your
-relay endpoint and watch renewal (7 days for Gmail and Outlook).
 
 ## Connect each user's own sources (D108)
 
@@ -199,6 +187,20 @@ your configuration: to revoke a connection, remove it from the directory (and fo
 
 ## Configuration
 
-Every experimental flag is off by default. D64's recommended experimental configuration is ALL; a successor with the
-econ flags (`syncPollBehind`, `decideConflict`, `cardsEconomy`, `packetDates`, card maker routed by price) waits on the
-blind run before it is recommended (D72, to come). [DECISIONS.md](DECISIONS.md) holds each flag's evidence.
+There is one configuration, the default (D112): the best measured setup, NEWL (D99) with the speed and memory
+switches measured to cost nothing (poll behind, small poll pages, no probe grace, the push's reader not waiting for
+the poll, the slow-path queue, vocabulary release). Run it as shipped:
+
+- **With `OPENROUTER_API_KEY` set**, the server also runs the default's model roles on `EDEN_MODEL` (default
+  `anthropic/claude-haiku-5.5` through OpenRouter, no data collection, ZDR): cards and intent requests in the
+  background, and the ask-time reader on an acting request or ask. Each role has its own per-session and per-user-day
+  budget, and one cap per tenant per day spans them all (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25). Cost per task
+  and per user is in [COST-MODEL.md](COST-MODEL.md); disclose the model provider to your users
+  ([PRIVACY.md](PRIVACY.md)).
+- **Without a key**, the same default runs its no-model path: nothing to change.
+- Pass the client's default wait (3,000 ms on a sent user message, `DEFAULT_WAIT_MS`); see the waitMs section above.
+- `EDEN_ENGINE_CONFIG` takes a JSON file of settings over the default, usually one of `docs/profiles/minus-*.json`
+  ("default minus a part") for a comparison. New behaviour arrives as a trial switch with an owner and an end date
+  (DECISIONS.md, "Trial switches"); it becomes the default or is deleted.
+
+[DECISIONS.md](DECISIONS.md) holds each part's evidence.

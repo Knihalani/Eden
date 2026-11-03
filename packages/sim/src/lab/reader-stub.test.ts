@@ -159,7 +159,7 @@ describe("the funnel with a no-model reader (end to end, small)", () => {
   });
   // NEWL with its sync capped at 100 items a user (3,000 by default): the sync still backfills, polls and counts its
   // items, but storing 3,000 items was 0.8 s of each run's 2.5 s CPU (bun --cpu-prof), and no check here needs them.
-  const config = JSON.stringify({ ...PRESETS.NEWL, syncMaxItems: 100 });
+  const config = JSON.stringify({ ...PRESETS.default, syncMaxItems: 100 });
   /** One small funnel run in its own process. The runs below go out together: each is CPU-bound, single-threaded. */
   const start = async (reader: string, extra: string[] = []): Promise<Run> => {
     const out = join(scratch(), "f.json");
@@ -217,7 +217,7 @@ describe("the funnel with a no-model reader (end to end, small)", () => {
     expect(strip(run(runs.stub[1]!).json.perTask)).toEqual(strip(a.json.perTask));
   });
 
-  test("NEWL with --reader stub and no --intent: stamped inert, JSON label, reader log, sync item counters", () => {
+  test("the default with --reader stub and no --intent: stamped inert, JSON label, reader log, sync item counters", () => {
     const r = runs.stub[0]!;
     expect(r.stderr).not.toContain("error:");
     const { stdout, json } = run(r);

@@ -5,7 +5,7 @@
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { renderAnswer, type ContextPartner } from "@eden/engine";
-import { ASK_CONTEXT_DESCRIPTION, ASK_CONTEXT_GUIDED, type Scope } from "@eden/protocol";
+import { ASK_CONTEXT_DESCRIPTION, type Scope } from "@eden/protocol";
 import { z } from "zod";
 
 export function createMcpServer(partner: ContextPartner, who: Scope & { sessionId: string }): McpServer {
@@ -13,8 +13,7 @@ export function createMcpServer(partner: ContextPartner, who: Scope & { sessionI
   server.registerTool(
     "ask_context",
     {
-      // With `askGuard` the answers say what may block and when nothing does, so the agent is asked to probe (D88).
-      description: partner.config.askGuard ? ASK_CONTEXT_GUIDED : ASK_CONTEXT_DESCRIPTION,
+      description: ASK_CONTEXT_DESCRIPTION,
       inputSchema: { question: z.string().min(1).max(2_000) },
       annotations: { readOnlyHint: true },
     },

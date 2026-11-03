@@ -45,9 +45,6 @@
  * `--card-limits` sets the enricher's `CardLimits` (one economy setting at a time; `"cardsEconomy": true` in
  * `--config` applies the whole preset, docs/research/econ-background.md); the run prints the enrichment's counters
  * (`cards use`: items sent to the model, calls, reused by sentence) summed over its users.
- * `--push` (with `"syncPush": true` in `--config`): once backfilled, every source declares a push watch
- * (`sourcePushes`). The worlds do not change while the tasks run, so no notice follows: the run measures the polls a
- * quiet pushed source no longer needs.
  * `--planted-age-days N` dates every planted item (hidden and decoy) N days before the present instead of one: a
  * stress test for rules that read an item by its age (docs/research/econ-background.md): every suite plants a
  * day-old item.
@@ -58,12 +55,6 @@
  * and the request follows `--typing-ms` × T later. Each task then records when the planted item reached the agent
  * (`deliveryMs`, from the request), whether it came with the request's own reply (`immediate`), whether the session's
  * anticipation had prefetched it (`prefetched`), and the calls the lead-in made (`leadCalls`).
- *
- * `--bridge FILE` gives Eden bridging queries (`bridge.ts`, docs/research/edge-bridge.md) replayed from a disk cache
- * made by `bridge-enrich.ts` (no model call here; a request with no cached line goes without). Turn them on with
- * `"bridgeQuery": true` in `--config`. The run prints the requests the bridge was asked about: the calls production
- * would make. With `"constraintDigest": true` (and cards), each task's session opens with the digest: the task records
- * whether it cited the planted item (`digestCited`) and its bytes.
  *
  * `--reader live|replay` (with `"askReader": true` in `--config` and `--ask`) gives Eden its ask-time reader (D95,
  * `reader.ts`) on `--reader-model` (default z-ai/glm-5.3-flash; `--reader-sort price` for the cheapest compliant
@@ -77,7 +68,7 @@
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
  */
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import {
   AskReader,
   CardEnricher,
@@ -85,11 +76,9 @@ import {
   ModelReaderMaker,
   type ReaderReport,
   ContextPartner,
-  QueryBridge,
   cpuNow,
   ItemCache,
   type CandidateDump,
-  type RankModel,
   type Trace,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
@@ -100,7 +89,6 @@ import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
-import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker } from "./cards-disk";
 import { missGate, overBudgetLine, ReplayModel } from "./reader-disk";
 import { flags, labConfig, parseJson } from "./flags";
@@ -122,6 +110,7 @@ import {
 } from "./reader-stub";
 import { packetLine } from "./uptake";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
+import { effective } from "./presets";
 
 const args = process.argv.slice(2);
 const V = "value" as const;
@@ -145,7 +134,6 @@ const cli = flags(
         "cards",
         "intent",
         "card-log",
-        "bridge",
         "card-limits",
         "planted-age-days",
         "lead-in",
@@ -162,7 +150,6 @@ const cli = flags(
         "packets",
         "candidates",
         "ask-diag",
-        "rank-model",
         "label",
         "json",
         "rpm",
@@ -175,16 +162,13 @@ const cli = flags(
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
-      ["overlap", "sync", "ask", "serial", "allow-misses", "push", "no-record", "cpu", "allow-logging"].map((k) => [
-        k,
-        B,
-      ]),
+      ["overlap", "sync", "ask", "serial", "allow-misses", "no-record", "cpu", "allow-logging"].map((k) => [k, B]),
     ),
   },
   `
 bun packages/sim/src/lab/hidden-funnel.ts [--suite hidden|heldout|all|a,b] [--seeds 41,42,43,44] [--time 0]
   [--config '{"probes":true}'] [--json out.json] [--label L] [--no-record] [--ask] [--cards F] [--intent F]
-  [--bridge F] [--reader none|stub|oracle|replay|live] [--limit N] ... (every flag: the header of hidden-funnel.ts;
+  [--reader none|stub|oracle|replay|live] [--limit N] ... (every flag: the header of hidden-funnel.ts;
   the common screen with a preset is \`bun run funnel\`, docs/LAB.md)`,
 );
 if (cli.rest.length) {
@@ -209,6 +193,8 @@ const CONFIG = ((): Record<string, unknown> => {
     process.exit(2);
   }
 })();
+/** What runs: `--config` over the default (D112). */
+const RUN = effective(CONFIG);
 const LIVE = opt("judge", "none") === "live";
 /**
  * `--wait-ms N`: how long the request's observe waits for its lookup (the client's `waitMs`), default 30,000 with a
@@ -238,7 +224,7 @@ const ASK_Q = opt("ask-question", "request");
 if (ASK_Q !== "request" && ASK_Q !== "narrow") throw new Error("--ask-question must be request or narrow");
 const SERIAL = cli.has("serial");
 const NOOP_SPANS = opt("spans", "") === "noop";
-const REAL_SYNC = CONFIG.sync === true;
+const REAL_SYNC = RUN.sync;
 if (REAL_SYNC && SYNC) throw new Error("--sync (the oracle) and the real sync (config sync) are exclusive");
 /** The real sync's listing calls over the whole run (every suite), and the lookups that answered locally. */
 const syncUse = {
@@ -295,7 +281,7 @@ if (CARD_LOG && cardMaker) {
  * index is inert (no `--intent F`, or a file for other items), and every TOTAL and pool line and the JSON say so.
  */
 const intentUse = { asked: 0, found: 0 };
-if (cardMaker && CONFIG.intent === true) {
+if (cardMaker && RUN.intent) {
   const make = cardMaker.make.bind(cardMaker);
   cardMaker.make = async (items, today, signal, retry, intent) => {
     const got = await make(items, today, signal, retry, intent);
@@ -307,7 +293,7 @@ if (cardMaker && CONFIG.intent === true) {
     return got;
   };
 }
-const intentNow = () => intentState(CONFIG, intentUse);
+const intentNow = () => intentState(RUN, intentUse);
 /** The inert mark for a line, read when the line is printed (the replay's hits so far). */
 const inertTag = () => (intentNow() === "inert" ? `  ${INTENT_INERT}` : "");
 /** Every lane's enrichment counters, summed (`CardStats`): items read by the model and calls, per simulated user. */
@@ -315,13 +301,8 @@ const cardUse: Record<string, number> = {};
 const cardLanes: CardEnricher[] = [];
 /** No cap on replayed cards: they cost nothing here (the enrichment's spend is `cards-enrich.ts`'s). */
 const UNCAPPED = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
-const BRIDGE = opt("bridge", "");
-/** One replaying bridge maker for every seed and suite; each lane gets its own per-user cache (`QueryBridge`). */
-const bridgeMaker = BRIDGE ? new DiskBridgeMaker(BRIDGE) : null;
-const bridgeLanes: QueryBridge[] = [];
 const CARD_LIMITS = JSON.parse(opt("card-limits", "{}")) as Record<string, unknown>;
 const PLANTED_AGE_DAYS = Number(opt("planted-age-days", "0"));
-const PUSH = cli.has("push");
 const LEAD = opt("lead-in", "") as DraftMode | "";
 if (LEAD && LEAD !== "clause" && LEAD !== "half") throw new Error("--lead-in must be clause or half");
 if (LEAD && OVERLAP) throw new Error("--lead-in and --overlap are exclusive (each is a different lead-in)");
@@ -358,7 +339,7 @@ const READER_CACHE = opt("reader-cache", "");
 /** `--reader-thinking adaptive`: a `claude-*` reader thinks (at the reader's low effort); default off. */
 const READER_THINKING = opt("reader-thinking", "off") as "off" | "adaptive";
 const READER_KEY = READER === "live" ? keyFor(READER_MODEL) : undefined;
-if (READER !== "none" && !ASK && CONFIG.readerPush !== true) throw new Error("--reader needs --ask (or readerPush)");
+if (READER !== "none" && !ASK && !RUN.readerPush) throw new Error("--reader needs --ask (or readerPush)");
 const LIMIT = Number(opt("limit", "0"));
 /** `--reader-log out.jsonl`: each reader call's prompt (the items as the model read them) and reply, sim data only. */
 const READER_LOG = opt("reader-log", "");
@@ -410,12 +391,6 @@ if (CANDIDATES) writeFileSync(CANDIDATES, "");
  * the planted item's id and rank among them, and whether it was cached, one line per task (docs/research/gen-ask.md).
  */
 const ASK_DIAG = opt("ask-diag", "");
-/**
- * `--rank-model weights.json`: the learned ranker's weights for `askRank`/`rankTies` instead of the engine's own
- * (`rank-fit.ts --out`), to run a cross-validation fold on the suite its weights were not fitted on.
- */
-const RANK_FILE = opt("rank-model", "");
-const rankModel = RANK_FILE ? (JSON.parse(readFileSync(RANK_FILE, "utf8")) as RankModel) : undefined;
 if (ASK_DIAG) writeFileSync(ASK_DIAG, "");
 const timeline = TIMELINE
   ? new Timeline(TIMELINE, { tool: "hidden-funnel", suites: SUITE_LIST, seeds: SEEDS, config: CONFIG, sync: SYNC })
@@ -518,9 +493,6 @@ interface TaskRow {
   askKept?: number;
   askItems?: number;
   askMs?: number;
-  /** With `constraintDigest`: whether the session's opening digest cited the planted item, and its bytes. */
-  digestCited?: boolean;
-  digestBytes?: number;
   /** When the planted item reached the agent, from the request (ms of wall time); absent when it did not. */
   deliveryMs?: number;
   /** It came with the request's own reply (the observe call), not later. */
@@ -607,10 +579,6 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     ? new CardEnricher({ maker: cardMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
     : null;
   if (cards) cardLanes.push(cards);
-  const bridge = bridgeMaker
-    ? new QueryBridge({ maker: bridgeMaker, budget: new Budget(UNCAPPED), now: () => clock })
-    : null;
-  if (bridge) bridgeLanes.push(bridge);
   // The lane's asks run one at a time: the model's latency for this task's call (as made, when replayed) is kept so a
   // run can say what a wait of `askReaderWaitMs` would have cut.
   let readerMs: number | undefined;
@@ -671,7 +639,6 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
-    ...(bridge ? { bridge } : {}),
     ...(reader
       ? {
           reader,
@@ -683,11 +650,10 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
         }
       : {}),
     ...(onCandidates ? { onCandidates } : {}),
-    ...(rankModel ? { rankModel } : {}),
   });
   // The harness may read the engine's session table (as `quality.ts` `settle` does; product code may not): whether a
-  // session's lookup, prefetch or work its lookup left running (`behind`: `syncPollBehind`'s poll and follow-up,
-  // `judgeBehind`'s judge) is still running.
+  // session's lookup, prefetch or work its lookup left running (`behind`: `syncPollBehind`'s poll and follow-up, the
+  // reader push's second reading) is still running.
   const table = (
     partner as unknown as {
       sessions: Map<string, { inflight: unknown; ant?: { running: unknown }; behind?: unknown }>;
@@ -712,11 +678,6 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     }
     syncUse.warmMs += performance.now() - t0;
     syncUse.users++;
-    if (PUSH) {
-      for (const s of sources) partner.sourcePushes(scope, s.id);
-      // The watch's one poll (what changed before it, no notice names), as a tenant's sync would make it.
-      syncUse.backfill += await sync.tick();
-    }
     // Cards for the backfilled items, as a long-running sync would have them before the first request.
     if (cards) await cards.idle();
     clock = world.now;
@@ -768,8 +729,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     let stubBefore = stub?.sizes.length ?? 0;
     const traced = timeline?.task(lane, sessionId, `${lane}/${task.template}`);
     const at = clock;
-    const opened = await partner.observe({ ...scope, sessionId, at, kind: "session_start" } as AgentEvent);
-    const digest = opened.injection?.reason === "digest" ? opened.injection : null;
+    await partner.observe({ ...scope, sessionId, at, kind: "session_start" } as AgentEvent);
     let draftPool: string[] | undefined;
     if (LEAD) {
       const text = draftOf(task.text, LEAD);
@@ -896,7 +856,6 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       const extra = {
         detail: task.detail,
         plantedText: `${planted[i]!.title} ${planted[i]!.text}`,
-        ...(digest ? { digest: digest.text, digestIds: digest.citations.map((c) => c.itemId) } : {}),
         ...(answered ? { answer: answered.answer, answerIds: answered.citations.map((c) => c.itemId) } : {}),
       };
       appendFileSync(PACKETS, JSON.stringify({ ...line, ...extra }) + "\n");
@@ -947,7 +906,6 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
             readerFlags: rr.flagged.length,
             readerFlagged: rr.flagged.some((f) => f.id === id),
             ...(rr.flagged.some((f) => f.id === id) ? { readerKind: rr.flagged.find((f) => f.id === id)!.kind } : {}),
-            readerClear: rr.clear,
             readerWaitMs: rr.waitedMs,
             ...(readerMs !== undefined ? { readerModelMs: readerMs } : {}),
           }
@@ -981,12 +939,6 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
           }
         : {}),
       ...packet,
-      ...(CONFIG.constraintDigest
-        ? {
-            digestCited: digest?.citations.some((c) => c.itemId === id) ?? false,
-            digestBytes: digest ? Buffer.byteLength(digest.text) : 0,
-          }
-        : {}),
       why,
       injected: got.length,
       packetBytes: [...injections, ...pendingSeen].reduce((n, x) => n + Buffer.byteLength(x.text), 0),
@@ -1094,7 +1046,7 @@ if (OVERLAP) {
       "differs, so these scores are not comparable with a run without --overlap",
   );
 }
-if (CONFIG.intent === true) {
+if (RUN.intent && RUN.cards) {
   console.log(
     `intent: ${intentNow()} (replayed requests for ${intentUse.found} of ${intentUse.asked} items asked)` + inertTag(),
   );
@@ -1138,14 +1090,6 @@ if (cardMaker) {
   console.log(`cards: ${cardMaker.hits} replayed, ${cardMaker.misses} uncovered (no cached card)`);
   console.log(`cards use: ${JSON.stringify(cardUse)}`);
 }
-if (bridgeMaker) {
-  const use: Record<string, number> = {};
-  for (const b of bridgeLanes) for (const [k, v] of Object.entries(b.stats)) use[k] = (use[k] ?? 0) + v;
-  console.log(
-    `bridge: ${bridgeMaker.hits} replayed, ${bridgeMaker.misses} uncovered; per user ${JSON.stringify(use)} ` +
-      `(${bridgeLanes.length} users; calls = what production would send)`,
-  );
-}
 if (readerModel) {
   const use: Record<string, number> = {};
   for (const r of readerLanes) for (const [k, v] of Object.entries(r.stats)) use[k] = (use[k] ?? 0) + v;
@@ -1166,8 +1110,8 @@ if (readerModel) {
   const r = ACCESS.pacer.summary();
   console.log(`reader requests: ${r.sent} sent, ${r.retried} retried, ${r.refused} refused at the cap`);
 }
-if (readerModel || cardMaker || bridgeMaker) {
-  console.log(overBudgetLine({ reader: readerLanes, cards: cardLanes, bridge: bridgeLanes }));
+if (readerModel || cardMaker) {
+  console.log(overBudgetLine({ reader: readerLanes, cards: cardLanes }));
 }
 if (distillLanes.length) {
   const sum = (f: (d: DistilledReaderMaker) => number) => distillLanes.reduce((a, d) => a + f(d), 0);

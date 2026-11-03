@@ -122,9 +122,6 @@ const FULL = {
   probes: true,
   probeCalls: 4,
   compactInjection: true,
-  fallbackAgree: true,
-  judgeConfident: true,
-  judgeAgreed: false,
   judgeCandidates: 4,
 };
 const SETTINGS: Record<string, Record<string, unknown>> = {
@@ -133,7 +130,6 @@ const SETTINGS: Record<string, Record<string, unknown>> = {
   g: { ...FULL, judgeCandidates: 6 },
   p4: { probes: true, probeCalls: 4 },
   pc: { probes: true, compactInjection: true },
-  pj: { probes: true, judgeConfident: true },
   // D48's candidate: probes, compaction, the no-model grounds and the judged contested sure set.
   C: {
     probes: true,

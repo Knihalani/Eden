@@ -223,11 +223,10 @@ export function missGate(missed: number, allow: boolean): { code: number; messag
 export interface Budgeted {
   reader: { stats: { overBudget: number } }[];
   cards: { stats: { overBudget: number } }[];
-  bridge: { stats: { overBudget: number } }[];
 }
-export function overBudget(b: Budgeted): { reader: number; cards: number; bridge: number } {
+export function overBudget(b: Budgeted): { reader: number; cards: number } {
   const sum = (xs: { stats: { overBudget: number } }[]) => xs.reduce((n, x) => n + x.stats.overBudget, 0);
-  return { reader: sum(b.reader), cards: sum(b.cards), bridge: sum(b.bridge) };
+  return { reader: sum(b.reader), cards: sum(b.cards) };
 }
 /**
  * The summary line. A read refused at the Budget answers as without the reader and reports outcome "budget" (not a
@@ -236,12 +235,12 @@ export function overBudget(b: Budgeted): { reader: number; cards: number; bridge
  */
 export function overBudgetLine(b: Budgeted): string {
   const o = overBudget(b);
-  const parts = (["reader", "cards", "bridge"] as const)
+  const parts = (["reader", "cards"] as const)
     .filter((k) => b[k].length > 0)
     .map((k) => `${k} ${o[k]} (${b[k].length} lanes)`);
-  const refused = o.reader + o.cards + o.bridge > 0;
+  const refused = o.reader + o.cards > 0;
   return (
-    `overBudget: ${parts.length ? parts.join(", ") : "no budgeted reader, cards or bridge"}` +
+    `overBudget: ${parts.length ? parts.join(", ") : "no budgeted reader or cards"}` +
     (refused ? "; REFUSED at the Budget: those calls were skipped and their asks ran without them" : "")
   );
 }

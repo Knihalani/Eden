@@ -8,6 +8,7 @@ import { assess, frameOf } from "./conflict";
 import { actionClass, CLASSES, classTies, hasWord, matchesClass } from "./consequence";
 import { ProbeEconomy } from "./economy";
 import { ContextPartner } from "./partner";
+import { CORE_CONFIG } from "./parts";
 
 /** Friday 30 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-30T09:00:00Z");
@@ -154,6 +155,7 @@ describe("the consequence probe in the engine (consequenceProbe)", () => {
       model: null,
       now: () => NOW,
       config: {
+        ...CORE_CONFIG,
         probes: true,
         probeGraceMs: 1_000,
         confidentScore: 99,
@@ -250,7 +252,14 @@ describe("the consequence probe with a judge (judgeTied) and with questions", ()
       budget: new Budget(),
       model,
       now: () => NOW,
-      config: { probes: true, probeGraceMs: 1_000, confidentScore: 99, fallbackMatchedTerms: 0, ...config },
+      config: {
+        ...CORE_CONFIG,
+        probes: true,
+        probeGraceMs: 1_000,
+        confidentScore: 99,
+        fallbackMatchedTerms: 0,
+        ...config,
+      },
     });
     const scope = { tenantId: "t", userId: "u1", sessionId: "s" };
     const r = await p.observe({ ...scope, at: NOW, kind: "user_message", text } as AgentEvent, { waitMs: 1_000 });

@@ -10,13 +10,12 @@
  *
  * - reader calls per user message, and how each user message ended at the reader: `read` (a call or a cached
  *   verdict), `gated` (`readerGate` skipped the call), `none` (an empty pool), or `skipped` (not read at all: under
- *   NEWL a request that does not act is never pushed);
+ *   the default a request that does not act is never pushed);
  * - the gated share: gated over the messages that reached the gate (a non-empty pool);
  * - the missed-binding rate: gated messages whose pool held an item stating a fact the turn's ground truth needs
  *   (`must`), over gated messages; and the same over every message whose pool held one;
- * - card coverage: the share of the request's own pool items (standing constraints left out: they never open the
- *   gate) whose card is known without a model call (a replayed card, or the prefilter's no), and the gated share
- *   counted on fully covered pools only. Items with no replayed card look
+ * - card coverage: the share of the request's pool items whose card is known without a model call (a replayed card,
+ *   or the prefilter's no), and the gated share counted on fully covered pools only. Items with no replayed card look
  *   unconstrained to the gate, so a low coverage overstates the skip rate.
  *
  * Setup: worlds `buildWorld({seed: seed * 1_000})` (the funnel's, whose items the checked-in card caches cover),
@@ -48,12 +47,10 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  activeOn,
   AskReader,
   CardEnricher,
   cardKey,
   ContextPartner,
-  DIGEST_KINDS,
   ItemCache,
   worthCarding,
   worthCardingStrict,
@@ -82,12 +79,10 @@ const JSON_OUT = opt("json", "");
 const RECORD = args.includes("--record");
 const REUSE = args.includes("--reuse");
 
-/** The presets measured: the two with the gate, and each without it for the calls the gate saves. */
+/** The preset measured with the gate, and without it for the calls the gate saves. */
 const CONFIGS: Record<string, Partial<EngineConfig>> = {
-  NEWL: { ...PRESETS.NEWL },
-  "NEWL-nogate": { ...PRESETS.NEWL, readerGate: false },
-  "NEW2+gate": { ...PRESETS.NEW2, readerGate: true },
-  NEW2: { ...PRESETS.NEW2 },
+  default: { ...PRESETS.default },
+  "default-nogate": { ...PRESETS.default, readerGate: false },
 };
 
 const UNCAPPED = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
@@ -272,22 +267,6 @@ async function runSeed(config: Partial<EngineConfig>, seed: number, total: Tally
     const item = cache.get(scope, id, clock);
     return !!item && (cardMaker.cards.has(cardKey(item)) || !prefilter(item));
   };
-  // `askReaderStanding`: the user's standing constraints lead the pool and never open the gate, so coverage is counted
-  // on the request's own candidates after them. They are the pool's leading items with an active card of a standing
-  // kind, at most `askReaderStanding` (the engine's own list, newest first, deduped against the ranking).
-  const standingCap = config.askReaderStanding ?? 0;
-  const ownPool = (pool: string[]) => {
-    if (standingCap <= 0) return pool;
-    const today = new Date(clock).toISOString().slice(0, 10);
-    const held = cards.cardsOf(scope, pool, clock + 1);
-    let n = 0;
-    while (n < Math.min(standingCap, pool.length)) {
-      const card = held.get(pool[n]!);
-      if (!card || !DIGEST_KINDS.has(card.kind) || !activeOn(card, today)) break;
-      n++;
-    }
-    return pool.slice(n);
-  };
 
   for (const session of sessions) {
     for (const task of session.tasks) {
@@ -306,7 +285,7 @@ async function runSeed(config: Partial<EngineConfig>, seed: number, total: Tally
         const outcome: Outcome = r ? r.outcome : "skipped";
         const must = mustOf(turn.label);
         const binding = !!r && r.pool.some((id) => facts.get(id)?.some((f) => must.has(f)));
-        const own = r ? ownPool(r.pool) : [];
+        const own = r ? r.pool : [];
         const atGate = !!r && r.pool.length > 0;
         const cov = own.filter(covered).length;
         const calls = maker.calls - before;

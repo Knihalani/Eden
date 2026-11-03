@@ -21,6 +21,7 @@ import {
 import { seedsOf } from "./kg";
 import { ContextPartner } from "./partner";
 import type { Span } from "./spans";
+import { CORE_CONFIG } from "./parts";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -63,7 +64,7 @@ async function synced(extra: Record<string, unknown> = {}) {
     budget: new Budget(),
     model: null,
     now: () => clock,
-    config: { sync: true, syncPageSize: 2, syncCallsPerMin: 6000, syncSweepMs: 24 * HOUR, ...extra },
+    config: { ...CORE_CONFIG, sync: true, syncPageSize: 2, syncCallsPerMin: 6000, syncSweepMs: 24 * HOUR, ...extra },
   });
   const sync = p.sync!;
   sync.track(scope);
@@ -172,7 +173,7 @@ test("D17: a prefetch in flight at session_end caches and traces nothing", async
     model: null,
     now: () => T0,
     onTrace: (t) => traces.push(t.reason),
-    config: { probes: true, anticipate: true },
+    config: { ...CORE_CONFIG, probes: true, anticipate: true },
   });
   const draft = { ...ev, kind: "user_message", text: "Ask Jamie Fox to review the board deck", draft: true };
   await p.observe(draft as AgentEvent);
@@ -199,7 +200,7 @@ test("anticipation's early decision does not hold observe on a slow source resol
     budget: new Budget(),
     model: null,
     now: () => T0,
-    config: { probes: true, anticipate: true },
+    config: { ...CORE_CONFIG, probes: true, anticipate: true },
   });
   await p.observe({ ...ev, sessionId: "warm", kind: "user_message", text: "Warm up the engine" } as AgentEvent);
   slow = true;
@@ -223,7 +224,7 @@ describe("spans of a draft (D56)", () => {
       model: null,
       now: () => T0,
       onSpan: (x) => spans.push(x),
-      config: { probes: true, anticipate: true, spans: true },
+      config: { ...CORE_CONFIG, probes: true, anticipate: true, spans: true },
     });
     const draft = { ...ev, kind: "user_message", text: "Ask Jamie Fox to review the board deck", draft: true };
     await p.observe(draft as AgentEvent);
@@ -249,7 +250,7 @@ describe("spans of a draft (D56)", () => {
       model: null,
       now: () => T0,
       onSpan: (x) => spans.push(x),
-      config: { spans: true },
+      config: { ...CORE_CONFIG, spans: true },
     });
     const draft = { ...ev, kind: "user_message", text: "Ask Jamie", draft: true };
     await p.observe(draft as AgentEvent);
@@ -335,7 +336,7 @@ describe("cards: reach, anchoring, retention and day (D59)", () => {
         budget: new Budget(),
         model: null,
         now: () => clock,
-        config: { cards: true, groundConflict: true, probes: true },
+        config: { ...CORE_CONFIG, cards: true, groundConflict: true, probes: true },
         cards,
       });
       const say = async (text: string, sessionId: string) => {

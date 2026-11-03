@@ -9,7 +9,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AskReader, ContextPartner, ItemCache, ModelReaderMaker } from "@eden/engine";
+import { AskReader, ContextPartner, CORE_CONFIG, ItemCache, ModelReaderMaker } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, FakeModel, type ChatRequest, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
@@ -121,7 +121,7 @@ async function run(dir: string, tasks: Task[], options: { live: boolean; harness
     budget: new Budget(),
     model: null,
     now: () => NOW,
-    config: { askReader: true, askReaderWaitMs: 2_000 },
+    config: { ...CORE_CONFIG, askReader: true, askReaderWaitMs: 2_000 },
     reader: new AskReader({ maker: new ModelReaderMaker(owned), budget: new Budget(), now: () => NOW }),
   });
   let spent = 0;

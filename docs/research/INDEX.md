@@ -3,16 +3,18 @@
 Every note in this directory, newest work last within each group, with what it found and where it stands. Status
 words:
 
-- **adopted**: in production defaults, or in the recommended experimental configuration (NEW, D98: ALL3 + `intent` +
-  `askReader` + `askReaderDrop` + `readerPush`). Experimental flags stay off by default until the owner turns them on.
+- **adopted**: in the default. Since D112 the engine's `DEFAULT_CONFIG` is the unified default the servers run (NEWL,
+  D99, plus the measured speed and memory switches); new behaviour enters behind a trial switch and is then promoted
+  into the default or deleted (DECISIONS, "Trial switches").
 - **adopted (tooling)**: a lab instrument, harness or method in use.
 - **rejected**: measured and not taken; the code was removed or the flag left out of every recommended set.
 - **superseded**: was adopted, then replaced by a later decision.
 - **open**: proposed or partly measured; a decision is pending or a fresh pre-registered run is needed.
 
 Dates are each note's status date, or its decision's date in docs/DECISIONS.md. DECISIONS wins any conflict with this
-table. The recommended configurations by name: H (D55) ⊂ R (D62) ⊂ ALL (D64) ⊂ ALL3 (D80) ⊂ NEW (D98); ALL5 (D92)
-and ALL4 (D84) branch off ALL3 (`packages/sim/src/lab/presets.ts`).
+table. The historical recommended configurations by name: H (D55) ⊂ R (D62) ⊂ ALL (D64) ⊂ ALL3 (D80) ⊂ NEW (D98) ⊂
+NEWL (D99) ⊂ the unified default (D112); ALL5 (D92) and ALL4 (D84) branched off ALL3. The named presets were deleted by
+D112: the lab's presets are only `default`, `minus-<part>` and `minus-all` (`packages/sim/src/lab/presets.ts`).
 
 ## Foundations: primitives, language, architecture
 

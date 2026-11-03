@@ -8,6 +8,7 @@ import type { Ledger } from "./ledger";
 import { ContextPartner } from "./partner";
 import { AskReader, type ReaderInput, type ReaderKind, type ReaderMaker } from "./reader";
 import type { Trace } from "./trace";
+import { CORE_CONFIG } from "./parts";
 
 // `readerPushBehind` (audit 2026-11-03b, lat-push-read-waits-poll): under `syncPollBehind` the push's own lookup no
 // longer waits for the sync's on-demand poll, so its reader starts at once; a poll that then stores something gets one
@@ -98,6 +99,7 @@ function setup(config: Record<string, unknown> = {}, reads = [NEW, HOLD]) {
     reader: new AskReader({ maker, budget: new Budget(), now: () => clock }),
     onTrace: (t) => traces.push(t),
     config: {
+      ...CORE_CONFIG,
       sync: true,
       syncPageSize: 2,
       syncCallsPerMin: 600,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isId, type ActionCheck, type Injection } from "@eden/protocol";
-import { EdenClient, edenId } from "./client";
+import { DEFAULT_WAIT_MS, EdenClient, edenId } from "./client";
 import { heldResult, withContext } from "./messages";
 
 const inj = (text: string) => ({ id: "inj_1", text }) as Injection;
@@ -20,8 +20,7 @@ describe("EdenClient", () => {
     expect(await eden.ask("x")).toBeNull();
     expect(await eden.pending()).toEqual([]);
     expect(await eden.check("send_payment", { amount: "10" })).toMatchObject({ verdict: "proceed", finding: null });
-    expect(await eden.digest()).toBeNull();
-    expect(errors.length).toBe(5);
+    expect(errors.length).toBe(4);
   });
 
   test("sends the user and session with each event", async () => {
@@ -50,7 +49,7 @@ describe("EdenClient", () => {
   });
 });
 
-describe("defaultWaitMs (D105, proposed)", () => {
+describe("defaultWaitMs (D105, D112)", () => {
   const recorder = () => {
     const urls: string[] = [];
     const fake = (async (url: string) => {
@@ -74,12 +73,17 @@ describe("defaultWaitMs (D105, proposed)", () => {
     expect(urls.map(query)).toEqual(["?waitMs=1500", "", "", "", "?waitMs=300", "", ""]);
   });
 
-  test("absent, no observe sends a wait (the default is unchanged)", async () => {
+  test("absent, a sent user_message waits DEFAULT_WAIT_MS (3,000, the measured default's wait); others none", async () => {
     const { urls, fake } = recorder();
     const eden = new EdenClient({ userId: "u", sessionId: "s", fetch: fake });
+    expect(DEFAULT_WAIT_MS).toBe(3_000);
     await eden.observe({ kind: "user_message", text: "hi" });
     await eden.observe({ kind: "external", source: "gmail", text: "New mail" });
-    expect(urls.map(query)).toEqual(["", ""]);
+    await eden.observe({ kind: "user_message", text: "h", draft: true });
+    // 0 opts out: no wait is sent.
+    const none = new EdenClient({ userId: "u", sessionId: "s", fetch: fake, defaultWaitMs: 0 });
+    await none.observe({ kind: "user_message", text: "hi" });
+    expect(urls.map(query)).toEqual(["?waitMs=3000", "", "", ""]);
   });
 
   test("the timeout is the client's plus the wait, and a server past it still fails open", async () => {
@@ -228,7 +232,8 @@ describe("misconfiguration is visible through onError", () => {
     expect(await eden.observe({ kind: "user_message", text: "hi" })).toEqual({ injection: null, pending: false });
     expect(errors.length).toBe(1);
     expect(errors[0]).toBeInstanceOf(Error);
-    expect((errors[0] as Error).message).toBe(`eden /v1/events: 400 ${reason}`);
+    // A sent user message carries the default wait (D112), and the route is named as requested.
+    expect((errors[0] as Error).message).toBe(`eden /v1/events?waitMs=3000: 400 ${reason}`);
   });
 
   test("a huge non-JSON error body (a proxy's page) never reaches onError", async () => {
@@ -311,18 +316,18 @@ describe("misconfiguration is visible through onError", () => {
       sessionId: "s",
       fetch: answering(() => Response.json({ error: "missing or unknown API key" }, { status: 401 })),
     });
-    expect(await refused.health()).toEqual({ ok: false, error: "eden /v1/digest: 401 missing or unknown API key" });
+    expect(await refused.health()).toEqual({ ok: false, error: "eden /v1/whoami: 401 missing or unknown API key" });
     let path = "";
     const fine = new EdenClient({
       userId: "u",
       sessionId: "s",
       fetch: (async (u: string) => {
         path = new URL(u).pathname;
-        return Response.json({ digest: null });
+        return Response.json({ ok: true });
       }) as unknown as typeof fetch,
     });
     expect(await fine.health()).toEqual({ ok: true });
-    expect(path).toBe("/v1/digest"); // A read: it drains nothing, unlike /v1/pending.
+    expect(path).toBe("/v1/whoami"); // It changes nothing, unlike /v1/pending.
   });
 });
 

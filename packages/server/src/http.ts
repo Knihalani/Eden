@@ -5,7 +5,7 @@
  *   POST /v1/ask       an AskRequest              → AskResponse
  *   POST /v1/check     a tool_call AgentEvent     → ActionCheck   (the action firewall, `actionCheck`)
  *   POST /v1/pending   {tenantId,userId,sessionId} → {injections}
- *   POST /v1/digest    {tenantId,userId,sessionId?} → {digest}  (active constraints, `constraintDigest`; null when off)
+ *   POST /v1/whoami    {tenantId,userId,sessionId?} → {ok}  (checks the key, tenant and ids; changes nothing)
  *   POST /v1/feedback  a Feedback (used: boolean)  → {ok, applied}
  *   POST /v1/forget    {tenantId,userId,sourceId?} → {ok}  (also closes the user's source connections, D108)
  *   POST /v1/sources   {tenantId,userId}           → {sources:[{id,kind}]}; 422 {error} when the user's source
@@ -101,14 +101,15 @@ export function createHandler(
           const who = { tenantId: tenant, userId: body.userId as string, sessionId: body.sessionId as string };
           return json({ injections: partner.takePending(who) });
         }
-        case "/v1/digest": {
+        case "/v1/whoami": {
+          // The client's `health()`: the key, the tenant and the ids are checked as any route checks them, and nothing
+          // is read or changed (unlike `/v1/pending`, which drains the queue).
           const bad = badId(body, ["userId"]);
           if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
           if (body.sessionId !== undefined && !isId(body.sessionId)) {
             return fail(400, "sessionId must be 1-128 characters of [A-Za-z0-9._:@-]");
           }
-          const who = { tenantId: tenant, userId: body.userId as string };
-          return json({ digest: partner.digest({ ...who, sessionId: (body.sessionId as string | undefined) ?? "" }) });
+          return json({ ok: true });
         }
         case "/v1/feedback": {
           const bad = badId(body, ["userId", "sessionId", "injectionId"]);

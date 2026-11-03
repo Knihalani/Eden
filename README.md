@@ -6,7 +6,9 @@ context the agent needs in front of it before it knows to ask. Most of the time 
 
 - **Not a subagent.** A subagent only answers what the agent thinks to ask. Eden watches the session and speaks first.
 - **Model as last resort.** Cues, a learned source map and a local index decide most turns, with no model call.
-  A cheap model (GLM 5.3 Flash via OpenRouter, ZDR routing) judges only borderline cases, under a hard budget.
+  With `OPENROUTER_API_KEY` set, one model (`EDEN_MODEL`, default Claude Haiku 5.5 via OpenRouter, ZDR routing) writes
+  implication cards and the intent index in the background and reads the candidates for a request that acts, under
+  per-session budgets and a per-tenant daily cap; without a key the same default runs its no-model path.
 - **Read-only, per-user, redacted.** It never calls a write tool; users never share state; secrets are scrubbed
   before anything is stored or sent to a model.
 
@@ -48,19 +50,17 @@ one user (`EDEN_USER`, `EDEN_TENANT`), and `createMcpServer` attaches it to any 
 Without a wait, a user message's observe replies before a slow lookup ends and its context misses the first model
 call; `defaultWaitMs` (or `waitMs` per call) fixes that, see [docs/INTEGRATION.md](docs/INTEGRATION.md) (D105).
 
-Both servers run on the production defaults. To turn on experimental engine flags, point `EDEN_ENGINE_CONFIG` at a
-JSON file of engine settings (`packages/engine/src/config.ts`); an unknown key, a wrong type, a number out of its
-range or a setting that would do nothing stops startup with a message naming it (D103). Only settings the servers can
-run are accepted: the no-model flags, the judge and `askWithModel` (both under the per-session budget; see
-[docs/COST-MODEL.md](docs/COST-MODEL.md)). Settings that need a model role the servers do not wire (`cards`,
-`intent`, `constraintDigest`, `bridgeQuery`, `askReader`, `readerPush`, `readerPushBehind` and their numbers) are
-refused unless at their default, so the NEW family is not runnable from the shipped servers. So are `sync` and every
-`sync*` setting (static sources cannot be listed; sync over per-user MCP sources is not supported from the servers yet) and push sync (`syncPush*`: no server
-route relays source watches or change notices) (D106). ALL3 minus `cards` and `sync` is runnable: on the no-model
-train funnel it surfaces 193 of 384 hidden facts against ALL3's 214, with as many decoys (190), and it lowers the
-no-model eval's precision from 1 to 0.91. [docs/profiles/](docs/profiles/README.md) has checked-in profiles with
-their numbers (D104, D106); none is recommended yet (no held-out or live check), and the defaults stay the
-production choice.
+Both servers run the engine's one default (`DEFAULT_CONFIG`, D112), the best measured configuration: probes, the
+no-model grounds, the knowledge graph, anticipation, background sync, implication cards, the intent index and the
+ask-time reader. With `OPENROUTER_API_KEY` set, the cards, the intent index and the reader run on `EDEN_MODEL` (default
+`anthropic/claude-haiku-5.5`), each role under its own budget and all of a tenant's roles under one cap per UTC day
+(`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25); no judge is wired. Without a key no role is built and the same default
+answers from its no-model paths. To change a setting, or take a part out (`PARTS` in `packages/engine/src/parts.ts`),
+point `EDEN_ENGINE_CONFIG` at a JSON file of engine settings (`packages/engine/src/config.ts`); an unknown key, a wrong
+type, a number out of its range or a setting that would do nothing stops startup with a message naming it (D103).
+Trial switches (such as the action firewall, `actionCheck`) stay off until measured;
+[docs/profiles/](docs/profiles/README.md) holds "default minus a part" files, and docs/DECISIONS.md lists the trials
+with their owners and end dates.
 `EDEN_SOURCES_FILE` holds static documents only, since that file's sources are shared by every user. Each user's MCP
 connectors, with their own credentials, go in `EDEN_USER_SOURCES_FILE` or an embedding's `SourceDirectory` (D108,
 docs/INTEGRATION.md).
@@ -70,12 +70,12 @@ docs/INTEGRATION.md).
 | Path | What it is |
 |---|---|
 | `packages/protocol` | Wire types, ids, validation |
-| `packages/engine` | The partner: cues, cache, two-speed pipeline, model judge, learning |
+| `packages/engine` | The partner: cues, cache, two-speed pipeline, the default's parts, learning |
 | `packages/sources` | Source interface, MCP read-only source, fan-out |
 | `packages/graph` | Source map: who holds which entities, what helps when |
-| `packages/llm` | OpenRouter client, pricing, budgets |
+| `packages/llm` | OpenRouter client, pricing, budgets and the per-tenant daily cap |
 | `packages/redact` | Secret gate |
-| `packages/server` | HTTP API and MCP server |
+| `packages/server` | HTTP API and MCP server; runs the default and wires the model roles |
 | `packages/client` | SDK for agent builders |
 | `packages/eval` | Scenario harness and metrics |
 | `docs/` | Vision, architecture, decisions, roadmap, cost, privacy, research |

@@ -109,14 +109,18 @@ export interface EdenClientOptions {
    */
   onError?: (error: unknown) => void;
   /**
-   * `waitMs` sent on each sent `user_message` observe (not a draft) that passes none of its own (D105, proposed).
-   * Unset (the default), observe sends no wait: the server answers at once and a lookup still running lands in
-   * `pending`, which a one-turn answer never reads. With slow connectors that is most of what Eden finds for the
-   * first model call (docs/INTEGRATION.md has the measurement; 1,500 covered every delivery there). Other events
-   * never wait. The request's timeout grows by the wait, as for an explicit one.
+   * `waitMs` sent on each sent `user_message` observe (not a draft) that passes none of its own (D105, D112).
+   * Default `DEFAULT_WAIT_MS` (3,000), the wait the default was measured with: the reader's reading of the request
+   * must land before the agent's first model call (D98: a 1 s wait lost 7.6–18.1 points). The server replies as soon
+   * as the lookup and reading are done, so the wait is a cap, not a delay. 0 sends none: the server answers at once
+   * and what is still running lands in `pending`, which a one-turn answer never reads. Other events never wait. The
+   * request's timeout grows by the wait, as for an explicit one.
    */
   defaultWaitMs?: number;
 }
+
+/** The observe wait on a sent user message when `defaultWaitMs` is unset (D112): the measured default's wait. */
+export const DEFAULT_WAIT_MS = 3_000;
 
 type EventInput = AgentEvent extends infer E
   ? E extends AgentEvent
@@ -189,7 +193,7 @@ export class EdenClient {
    */
   async observe(event: EventInput, options: { waitMs?: number } = {}): Promise<ObserveResult> {
     const sent = event.kind === "user_message" && !event.draft;
-    const waitMs = options.waitMs ?? (sent ? this.options.defaultWaitMs : undefined);
+    const waitMs = options.waitMs ?? (sent ? (this.options.defaultWaitMs ?? DEFAULT_WAIT_MS) : undefined);
     const wait = waitMs ? `?waitMs=${waitMs}` : "";
     const timeout = (this.options.timeoutMs ?? 800) + (waitMs ?? 0);
     const body = { ...this.who, at: Date.now(), ...event };
@@ -199,15 +203,6 @@ export class EdenClient {
   /** Injections queued by slower lookups since the last call. */
   async pending(): Promise<Injection[]> {
     return (await this.post<{ injections: Injection[] }>("/v1/pending", this.who))?.injections ?? [];
-  }
-
-  /**
-   * The user's active-constraints digest (`constraintDigest` on the server), as data for the agent's prompt; the same
-   * constraints give the same bytes, so it can sit in a cached prefix. Null when there is none, the flag is off, or
-   * on any error (fails open).
-   */
-  async digest(): Promise<Injection | null> {
-    return (await this.post<{ digest: Injection | null }>("/v1/digest", this.who))?.digest ?? null;
   }
 
   /** `observe`'s injection plus anything pending, in one list. */
@@ -246,12 +241,12 @@ export class EdenClient {
 
   /**
    * Whether this client's setup works end to end: the server answers and accepts the key, the tenant and the ids.
-   * It reads the digest, which changes nothing (unlike `pending`, which drains the queue). Never throws; `error` is
+   * It calls `/v1/whoami`, which changes nothing (unlike `pending`, which drains the queue). Never throws; `error` is
    * the text `onError` also receives.
    */
   async health(options: { timeoutMs?: number } = {}): Promise<{ ok: boolean; error?: string }> {
     let error = "eden: unavailable";
-    const res = await this.post<unknown>("/v1/digest", this.who, options.timeoutMs, (e) => {
+    const res = await this.post<unknown>("/v1/whoami", this.who, options.timeoutMs, (e) => {
       error = e instanceof Error ? e.message : String(e);
     });
     return res === null ? { ok: false, error } : { ok: true };

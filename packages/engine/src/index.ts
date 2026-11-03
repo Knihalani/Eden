@@ -7,9 +7,8 @@ export {
   type ReaderSink,
 } from "./partner";
 export { FACT_NAMES, vectorOf, type Facts } from "./decide";
-export { RANK_MODEL, rankAnswer, rankScore, type RankModel } from "./rank";
-export { factsFingerprint } from "./facts-fingerprint";
 export { DEFAULT_CONFIG, type EngineConfig } from "./config";
+export { CORE_CONFIG, PARTS, withoutParts, type Part } from "./parts";
 export {
   ANTICIPATE_PARTS,
   checkEngineConfig,
@@ -19,7 +18,7 @@ export {
   type ConfigDep,
 } from "./config-check";
 export { ItemCache, sanitizeItem, type CacheHit, type CacheLimits } from "./cache";
-export { SyncManager, type SourceChange, type SyncOptions, type SyncStats } from "./sync";
+export { SyncManager, type SyncOptions, type SyncStats } from "./sync";
 export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
 export { Ledger } from "./ledger";
 export { inert, renderAnswer, renderPacket } from "./render";
@@ -56,6 +55,7 @@ export {
   worthCarding,
   worthCardingStrict,
   sentenceKey,
+  STANDING_KINDS,
   ECONOMY_CARD_LIMITS,
   type Action,
   type Card,
@@ -65,19 +65,6 @@ export {
 } from "./cards";
 export { cleanRequests, IntentIndex, intentTerms, stemWord, INTENT_VERSION } from "./intent";
 export { predict } from "./anticipate";
-export {
-  BRIDGE_VERSION,
-  bridgeKey,
-  bridgeMessages,
-  bridgeWants,
-  DEFAULT_BRIDGE_LIMITS,
-  ModelBridgeMaker,
-  parseBridge,
-  QueryBridge,
-  type BridgeLimits,
-  type BridgeMaker,
-  type BridgeStats,
-} from "./bridge";
 export {
   AskReader,
   cardLine,
@@ -102,4 +89,3 @@ export {
   type ReaderStats,
   type ReaderVerdict,
 } from "./reader";
-export { activeOn, buildDigest, DIGEST_KINDS, personalSender, type Digest, type DigestOptions } from "./digest";

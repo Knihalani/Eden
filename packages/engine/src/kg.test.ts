@@ -6,6 +6,7 @@ import { StaticSource } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { EDGE, extract, orgLabel, runsOf, seedsOf, tieWords, UserGraph } from "./kg";
 import { ContextPartner } from "./partner";
+import { CORE_CONFIG } from "./parts";
 
 const at = Date.parse("2026-10-27T09:00:00Z");
 const item = (id: string, title: string, text: string, meta?: Record<string, string>): ContextItem => ({
@@ -315,7 +316,14 @@ describe("partner with graph", () => {
       model: null,
       now: () => at,
       // Nothing is sure on its words alone (the fast path would deliver Ahmed's own mail): the grounds decide.
-      config: { confidentScore: 99, probes: true, groundConflict: true, quietNameOnly: true, ...config },
+      config: {
+        ...CORE_CONFIG,
+        confidentScore: 99,
+        probes: true,
+        groundConflict: true,
+        quietNameOnly: true,
+        ...config,
+      },
     });
     // What Eden has already read of the user's sources (an earlier sync).
     cache.put(scope, [ahmed, hold, lunch], at);

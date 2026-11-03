@@ -5,6 +5,7 @@ import type { AgentEvent } from "@eden/protocol";
 import { QueryPlanner, StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner, type PartnerDeps } from "./partner";
+import { CORE_CONFIG } from "./parts";
 import type { ShadowRecord, Trace } from "./trace";
 
 const scope = { tenantId: "acme-assistant", userId: "u1", sessionId: "s1" };
@@ -33,6 +34,8 @@ function partner(extra: Partial<PartnerDeps> = {}, sources: Source[] = [crm, cal
     model: null,
     onTrace: (t) => traces.push(t),
     ...extra,
+    // The core (D112): these tests check one mechanism each, so every part not named in a test is out.
+    config: { ...CORE_CONFIG, ...extra.config },
   });
   return { p, traces };
 }
@@ -295,25 +298,6 @@ describe("ask", () => {
     const res = await p.ask({ ...scope, question: "When is the call with Dana Lee?" });
     expect(res.usedModel).toBe(false);
     expect(res.citations.map((c) => c.itemId)).toContain("calendar:evt-1");
-  });
-
-  test("with askWithModel, uses the model to answer when one is configured", async () => {
-    const model = new FakeModel(() => "Thursday 3pm [0]");
-    const { p } = partner({ model, config: { askWithModel: true } });
-    const res = await p.ask({ ...scope, question: "When is the call with Dana Lee?" });
-    expect(res.usedModel).toBe(true);
-    expect(res.answer).toContain("Thursday 3pm [0]");
-    expect(res.answer).toStartWith("<context"); // Model text derived from sources is wrapped as data, too.
-  });
-
-  test("a model answer cut off at its cap is not shown: the cited items stand (D45)", async () => {
-    const model = new FakeModel(() => ({ text: "The call with Dana is at", truncated: true }));
-    const { p } = partner({ model, config: { askWithModel: true } });
-    const res = await p.ask({ ...scope, question: "When is the call with Dana Lee?" });
-    expect(res.answer).not.toContain("The call with Dana is at");
-    expect(res.citations.map((c) => c.itemId)).toContain("calendar:evt-1");
-    expect(res.answer).toContain("Call with Dana Lee: Thursday 3pm");
-    expect(model.calls[0]).toMatchObject({ maxTokens: 1_000, reasoning: "low" });
   });
 
   test("by default answers with the cited items and no model call, even with a model configured (D43)", async () => {
