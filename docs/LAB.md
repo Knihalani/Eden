@@ -87,15 +87,15 @@ answered without the reader, so a NEW screen silently becomes part NEW, part ALL
 screen knowingly. Its JSON (`--json`) carries `reader: {replayed, sent, missed, failed}`. Checked on 2026-11-03 with
 an empty cache file (`--suite train1 --seeds 41 --preset NEW`): 108 misses, exit 3; with `--allow-misses`, exit 0.
 
-**The `overBudget:` line.** `pi-ab.ts` and `hermes-ab.ts` give each lane's reader, cards and bridge their own
-`new Budget()` (production defaults: 20 calls and $0.02 a session, `packages/llm/src/budget.ts`); `hidden-funnel.ts`
-gives them an uncapped one. A call refused there is skipped, and a refused read reports outcome `none`, the same as a
-model failure. Every run therefore ends with `overBudget: reader n (k lanes), cards n, bridge n` (and the A/B results
-JSON has `overBudget`). Any non-zero count means the session cap cut reading and those asks ran as ALL3: say so with
-the result. The reader calls up to once a user message (COST-MODEL.md), or twice when push and a later ask miss its
-verdict cache, so a session of roughly 10 to 20 user messages can reach the cap (an estimate, not measured in the
-lab). The unit test `reader-disk.test.ts` shows the count: 25 distinct reads on one default `Budget` give 20 calls
-and `overBudget: reader 5`.
+**The `overBudget:` line.** `pi-ab.ts` and `hermes-ab.ts` give each lane's reader, cards and bridge their own `new
+Budget()` (production defaults: 20 calls and $0.02 a session, `packages/llm/src/budget.ts`); `hidden-funnel.ts` gives
+them an uncapped one. A call refused there is skipped, and a refused read reports outcome `budget` (`readAsk` in
+`partner.ts`, through `onReader`), apart from a model failure's `none`. Every run therefore ends with `overBudget:
+reader n (k lanes), cards n, bridge n` (and the A/B results JSON has `overBudget`). Any non-zero count means the session
+cap cut reading and those asks ran as ALL3: say so with the result. The reader calls up to once a user message
+(COST-MODEL.md), or twice when push and a later ask miss its verdict cache, so a session of roughly 10 to 20 user
+messages can reach the cap (an estimate, not measured in the lab). The unit test `reader-disk.test.ts` shows the count:
+25 distinct reads on one default `Budget` give 20 calls and `overBudget: reader 5`.
 
 ## Scorers (`packages/sim/lab/scripts/`, run with `python3 -I`)
 

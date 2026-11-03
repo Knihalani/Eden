@@ -29,7 +29,9 @@ defaults.
 - **Read-only sources (D7)** are enforced in `@eden/sources`; `connectors.ts` must build sources through it.
 - **Body size (D100).** `EDEN_MAX_BODY_BYTES` (default 8 MB = 8,388,608) caps every request body twice: the handler
   refuses a declared content-length past it with 413 before `req.json()`, and `Bun.serve` refuses bodies with no
-  length. Keep it above the ~6 MB worst case of a valid event (one 1,000,000-unit field, all `\uXXXX`-escaped).
+  length (chunked) past `maxRequestBodySize`. Bun's own 413 has an empty body, not the handler's JSON message:
+  accepted at the transport layer, since the handler never runs for it. Keep it above the ~6 MB worst case of a valid
+  event (one 1,000,000-unit field, all `\uXXXX`-escaped).
 - **Secrets.** Never log API keys or request bodies; `EDEN_API_KEYS` entries need keys of 16+ characters.
 
 ## Test

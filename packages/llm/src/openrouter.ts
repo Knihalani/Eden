@@ -32,6 +32,12 @@ export interface OpenRouterOptions {
    * models need. Never set it where real user data flows; the server has no way to.
    */
   allowLogging?: boolean;
+  /**
+   * Send Anthropic `cache_control` breakpoints (content blocks) to an `anthropic/*` model. Default off: whether
+   * OpenRouter's ZDR Anthropic endpoints accept and honour them is unverified, so a live probe must confirm it before
+   * this is enabled in production. The lab may turn it on; every other model ignores it.
+   */
+  anthropicCache?: boolean;
 }
 
 export class OpenRouterModel implements Model {
@@ -57,9 +63,10 @@ export class OpenRouterModel implements Model {
     const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
     const body = {
       model: this.options.model,
-      messages: this.options.model.startsWith("anthropic/")
-        ? anthropicCacheMessages(request.messages)
-        : request.messages.map(({ role, content }) => ({ role, content })),
+      messages:
+        this.options.anthropicCache && this.options.model.startsWith("anthropic/")
+          ? anthropicCacheMessages(request.messages)
+          : request.messages.map(({ role, content }) => ({ role, content })),
       max_tokens: request.maxTokens,
       temperature: request.temperature ?? 0,
       ...(request.json ? { response_format: { type: "json_object" } } : {}),

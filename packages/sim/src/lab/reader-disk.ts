@@ -146,8 +146,9 @@ export function overBudget(b: Budgeted): { reader: number; cards: number; bridge
   return { reader: sum(b.reader), cards: sum(b.cards), bridge: sum(b.bridge) };
 }
 /**
- * The summary line. A read refused at the Budget answers as without the reader (outcome "none", the same as a model
- * failure), so this count is the run's only sign that the session cap (20 calls by default) cut reading.
+ * The summary line. A read refused at the Budget answers as without the reader and reports outcome "budget" (not a
+ * model failure's "none"); this count is the run-level summary of how often the session cap (20 calls by default)
+ * cut reading.
  */
 export function overBudgetLine(b: Budgeted): string {
   const o = overBudget(b);

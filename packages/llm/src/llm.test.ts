@@ -162,9 +162,26 @@ describe("OpenRouterModel", () => {
     );
   });
 
-  test("an anthropic/* model gets cache_control on the last system message and on marked messages", async () => {
+  test("an anthropic/* request is unchanged by default: no cache_control unless anthropicCache is set", async () => {
     const { sent, fake } = capture();
     await new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake }).chat(cachedRequest);
+    expect(sent[0].messages).toEqual([
+      { role: "system", content: "rules" },
+      { role: "system", content: "more rules" },
+      { role: "user", content: "standing prefix" },
+      { role: "user", content: "the request" },
+    ]);
+    expect(sent[0].session_id).toBe("u-3f9a");
+  });
+
+  test("an anthropic/* model gets cache_control on the last system message and on marked messages", async () => {
+    const { sent, fake } = capture();
+    await new OpenRouterModel({
+      apiKey: "k",
+      model: "anthropic/claude-haiku-5.5",
+      fetch: fake,
+      anthropicCache: true,
+    }).chat(cachedRequest);
     const ephemeral = { type: "ephemeral" };
     expect(sent[0].messages).toEqual([
       { role: "system", content: "rules" },
@@ -181,7 +198,12 @@ describe("OpenRouterModel", () => {
   test("an anthropic/* request has at most 4 breakpoints: the last system message, then the latest marked", async () => {
     const { sent, fake } = capture();
     const marked = (i: number) => ({ role: "user" as const, content: `prefix ${i}`, cache: true });
-    await new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake }).chat({
+    await new OpenRouterModel({
+      apiKey: "k",
+      model: "anthropic/claude-haiku-5.5",
+      fetch: fake,
+      anthropicCache: true,
+    }).chat({
       messages: [{ role: "system", content: "rules" }, ...[0, 1, 2, 3, 4].map(marked), { role: "user", content: "q" }],
       maxTokens: 5,
     });
@@ -195,7 +217,12 @@ describe("OpenRouterModel", () => {
 
   test("an anthropic/* request never puts cache_control on empty text", async () => {
     const { sent, fake } = capture();
-    await new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake }).chat({
+    await new OpenRouterModel({
+      apiKey: "k",
+      model: "anthropic/claude-haiku-5.5",
+      fetch: fake,
+      anthropicCache: true,
+    }).chat({
       messages: [
         { role: "system", content: "rules" },
         { role: "system", content: "" },
@@ -215,7 +242,12 @@ describe("OpenRouterModel", () => {
 
   test("an anthropic/* request with no system message and no marker sends plain string content", async () => {
     const { sent, fake } = capture();
-    await new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake }).chat({
+    await new OpenRouterModel({
+      apiKey: "k",
+      model: "anthropic/claude-haiku-5.5",
+      fetch: fake,
+      anthropicCache: true,
+    }).chat({
       messages: [{ role: "user", content: "hi" }],
       maxTokens: 5,
     });

@@ -1,5 +1,26 @@
 # Deep audit: cost and speed (2026-11-03)
 
+## Final tree
+
+This section supersedes the merge state described further down, which was written against an older integration tree
+(6f7a36fee) and is kept as the working record.
+
+- **Merged commit:** the head of `claude/audit-2026-11-03` after the commit that adds this section (reviewer findings
+  applied). It holds every fix below, on top of current `main`.
+- **Checks on that tree:** `bun run check` green (1,362 tests pass, 0 fail); `bun run eval` identical to `main`'s
+  except latency noise (precision 1, recall 0.444, falseFireRate 0, 0 model calls; only `latencyP50Ms` and
+  `latencyP95Ms` differ).
+- **Merged since 6f7a36fee:** `r1-check-caches` (8cc2b8073), `r1-openrouter-cache` (182fcae8f, which carries
+  c00a2a7dc) and `r2-source-call-accounting` (3c9d73c79). `r1-reader-push-wait` stays unmerged on purpose: it was
+  replaced by `r2-reader-merge`.
+- **Review:** the 10 items listed below as "awaiting reviewer" (and `cost-reader-session-cap-silent`) were reviewed by
+  the repo's `reviewer` agent on the combined diff. It found no code defects; its documentation findings are fixed in
+  the commit that adds this section, and the OpenRouter `cache_control` breakpoints are now behind an explicit
+  `anthropicCache` option, off by default, until a live probe confirms OpenRouter's ZDR Anthropic endpoints accept
+  them.
+- **Still open:** `bun run eval --live` for the `readerPush` delivery-timing change (the flag is off by default; the
+  run needs paid model calls). The deferred findings and decisions listed below are unchanged.
+
 ## Final summary (read this first)
 
 Written after round 2. It is for the repo owner, not for a specialist. The sections below it are the full working
@@ -9,13 +30,13 @@ are lab settings that turn the reader on. The reader is **off by default in prod
 
 ### The bottom line
 
-One request with a deeply nested body could freeze the server for every customer for about 1.8 s. That is fixed:
-the same check now takes about 0.2 ms, and request bodies are capped at 8 MB instead of 128 MB. The reader leaked
-money and time in several small ways (calls paid for and thrown away, spend reported as $0, silent cut-offs). Those
-are fixed on the integration tree, but most of these fixes still need the repo's independent reviewer before they
-go to `main`. A default deployment behaves the same as before (the no-model eval is unchanged), and the developer
-loop is faster (the lab funnel runs about 2.8x faster). No 10x lever on the reader's cost per call was found. The
-main cost lever is calling it less often, and today the lab's NEW2 setting calls it on almost every message.
+One request with a deeply nested body could freeze the server for every customer for about 1.8 s. That is fixed: the
+same check now takes about 0.2 ms, and request bodies are capped at 8 MB instead of 128 MB. The reader leaked money and
+time in several small ways (calls paid for and thrown away, spend reported as $0, silent cut-offs). Those are fixed on
+the final tree and were reviewed by the repo's independent reviewer (see "Final tree"). A default deployment behaves the
+same as before (the no-model eval is unchanged), and the developer loop is faster (the lab funnel runs about 2.8x
+faster). No 10x lever on the reader's cost per call was found. The main cost lever is calling it less often, and today
+the lab's NEW2 setting calls it on almost every message.
 
 ### Scoreboard
 
@@ -32,9 +53,9 @@ main cost lever is calling it less often, and today the lab's NEW2 setting calls
 | Pain points | 4 | 4 | 4 | 0 | 0 |
 | **Total** | **36** | **28** | **12** | **10** | **6** |
 
-Two caveats on "fixed and reviewed". The `bun run check` speed-up (`r1-check-caches`) is fixed and reviewed but is
-**not on the latest integration tree** (see "Where everything is"). And `cost-ask-rereads-push-verdict` was closed
-by correcting the docs, not the code: a reworded ask on the same request still costs a second reader call.
+The "awaiting reviewer" column is as of round 2; all 10 have since been reviewed (see "Final tree"). One caveat on
+"fixed and reviewed": `cost-ask-rereads-push-verdict` was closed by correcting the docs, not the code: a reworded ask on
+the same request still costs a second reader call.
 
 ### The most important fixes
 
@@ -64,27 +85,24 @@ Every number was measured by a command during this audit unless it says "estimat
 - **Docs and example match reality (pain point).** INTEGRATION.md now explains `waitMs`, and the example agent's
   `EDEN_WAIT_MS=0` now really means "do not wait" (it used to wait up to 1.5 s).
 
-The final integration tree (6f7a36fee) passes `bun run check` (1,348 tests pass, 0 fail) and `bun run eval`
-(precision 1, recall 0.444, falseFireRate 0, 0 model calls). The eval numbers match the pre-audit baseline.
+The final tree passes `bun run check` (1,362 tests pass, 0 fail) and `bun run eval` (precision 1, recall 0.444,
+falseFireRate 0, 0 model calls). The eval numbers match `main` and the pre-audit baseline (see "Final tree").
 
 ### What is still open, and the next step for each
 
-**Fixed, but the independent reviewer has not run (10).** The fixing agents had no tool to start the `reviewer`
-subagent, so each checked its own diff against the reviewer's checklist. Next step for all of them: run
-`.claude/agents/reviewer.md` on the branch diff, fix its correctness findings, then merge.
+**Fixed; reviewed after round 2 (10).** The fixing agents had no tool to start the `reviewer` subagent, so each
+checked its own diff against the reviewer's checklist. All 10 were then reviewed by the `reviewer` agent on the
+combined diff and are merged on the final tree (see "Final tree").
 
 - `sec-deep-json-stringify-stall` and `sec-no-body-size-limit`: on the integration tree (D100).
 - `cost-ask-costusd-omits-reader`, `cost-readerpush-bypasses-question-cap`, `mem-component-budget-session-leak`,
   `speed-reader-push-late-paid-never-delivered`, `integ-reader-branches-conflict` and
   `cost-late-reader-call-untraced`: on the integration tree, through `r2-reader-merge`.
-- `lab-push-source-calls-uncounted`: on `audit/2026-11-03-r2-source-call-accounting`, **not merged**. Expect a small
-  conflict in partner.ts at the reader-push trace. Next step: merge it onto 6f7a36fee, resolve, run check, review.
-- `reader-prompt-cache-lost-on-openrouter`: the fix (commit c00a2a7dc) sits on `worktree-wf_cfc895b9-03f-62`, not on
-  `audit/2026-11-03-r1-openrouter-cache`, because that branch was locked in another worktree. **Not merged.** Next
-  step: fast-forward `r1-openrouter-cache` to c00a2a7dc, merge it, review.
+- `lab-push-source-calls-uncounted`: on `audit/2026-11-03-r2-source-call-accounting`, merged (3c9d73c79).
+- `reader-prompt-cache-lost-on-openrouter`: the fix (commit c00a2a7dc), merged (182fcae8f). Its `cache_control`
+  breakpoints are now sent only with the `anthropicCache` option (off by default) until a live probe confirms them.
 
-`cost-reader-session-cap-silent` counts as reviewed above, but one fixer also listed it as "reviewer not run".
-Include it in the same reviewer pass.
+`cost-reader-session-cap-silent` was included in the same reviewer pass.
 
 **Needs your decision (5).**
 
@@ -122,23 +140,16 @@ the cache file.
 
 - **This audit:** `docs/audits/2026-11-03-deep-audit.md` (this file). Findings 1-27 and the round 1 and round 2
   plans follow below.
-- **Integration branch:** `audit/2026-11-03-integration`. Its ref still points at 2acbb4b1b (docs only), because it
-  is checked out in another worktree (`.claude/worktrees/wf_cfc895b9-03f-46`) and could not be moved from here. The
-  green, merged tree is **6f7a36fee** (branch `worktree-wf_cfc895b9-03f-119`), and this summary is committed on top
-  of it. To publish, fast-forward the integration branch to this summary's commit from that worktree
-  (`git merge --ff-only <commit>`).
-- **Merged into 6f7a36fee** (all named `audit/2026-11-03-<name>`): `r1-server-input-hardening`,
-  `r1-reader-accounting`, `r1-gate-instrument`, `r1-lab-visibility`, `r1-waitms-docs`, `r2-reader-merge`,
-  `r2-reader-test-speed`, `r2-gate-traffic-budget`, `r2-validate-walk`, `r2-example-waitms-zero`,
-  `r2-bench-warmup`, `r2-funnel-jobs`.
-- **Not merged into 6f7a36fee:**
-  - `r1-check-caches` (the `check` speed-up). It merged cleanly and passed in the round 1 tree 8fdfbc3ca, which was
-    never published. Next step: merge it on top of the latest tree and rerun check.
-  - `r1-openrouter-cache` (needs c00a2a7dc first; see above).
-  - `r2-source-call-accounting` (see above).
-  - `r1-reader-push-wait`: replaced by `r2-reader-merge`. **Do not merge it.**
-- **Before `main`:** run the reviewer subagent on the open items, then `bun run check` and `bun run eval` on the
-  final tree, and `bun run eval --live`, because these changes touch reader delivery (CLAUDE.md).
+- **Final branch:** `claude/audit-2026-11-03` (see "Final tree"). The earlier integration tree 6f7a36fee is an
+  ancestor of it.
+- **Merged** (all named `audit/2026-11-03-<name>`): `r1-server-input-hardening`, `r1-reader-accounting`,
+  `r1-gate-instrument`, `r1-lab-visibility`, `r1-waitms-docs`, `r2-reader-merge`, `r2-reader-test-speed`,
+  `r2-gate-traffic-budget`, `r2-validate-walk`, `r2-example-waitms-zero`, `r2-bench-warmup`, `r2-funnel-jobs`, and,
+  after 6f7a36fee, `r1-check-caches` (8cc2b8073), `r1-openrouter-cache` (182fcae8f) and `r2-source-call-accounting`
+  (3c9d73c79).
+- **Not merged, on purpose:** `r1-reader-push-wait`, replaced by `r2-reader-merge`. **Do not merge it.**
+- **Done before `main`:** the reviewer pass, `bun run check` and `bun run eval` on the final tree. **Still to run:**
+  `bun run eval --live`, because these changes touch reader delivery (CLAUDE.md); it needs paid model calls.
 
 ## Background
 
@@ -197,33 +208,33 @@ first rating. Statuses name the branch or package; "deferred" findings name the 
 
 | # | ID | Severity | Effort | Status |
 |---|---|---|---|---|
-| 1 | sec-deep-json-stringify-stall | high | S | fixed on `r1-server-input-hardening`, unmerged; see #23 |
-| 2 | sec-no-body-size-limit | medium | S | fixed on `r1-server-input-hardening`, unmerged; see #23 |
-| 3 | dev-prettier-cache-tsc-incremental | medium | S | fixed on `r1-check-caches`, unmerged |
+| 1 | sec-deep-json-stringify-stall | high | S | fixed on `r1-server-input-hardening`, merged; see #23 |
+| 2 | sec-no-body-size-limit | medium | S | fixed on `r1-server-input-hardening`, merged; see #23 |
+| 3 | dev-prettier-cache-tsc-incremental | medium | S | fixed on `r1-check-caches`, merged |
 | 4 | speed-reader-push-late-paid-never-delivered | medium | M | `r1-reader-push-wait` has the wrong base; redone in #17 |
 | 5 | cost-ask-rereads-push-verdict | medium | M | deferred (doc sentence fixed on `r1-gate-instrument`) |
 | 6 | cost-no-tenant-spend-cap | medium | M | deferred |
-| 7 | cost-gate-realistic-traffic | medium | M | instrument on `r1-gate-instrument`, unmerged; see #19 |
+| 7 | cost-gate-realistic-traffic | medium | M | instrument on `r1-gate-instrument`, merged; see #19 |
 | 8 | speed-reader-stream-early-exit | medium | M | deferred |
 | 9 | speed-push-reader-after-search | medium | M | deferred |
-| 10 | reader-prompt-cache-lost-on-openrouter | low | S | fixed on `r1-openrouter-cache`, `r1-reader-accounting` |
-| 11 | cost-reader-session-cap-silent | low | S | fixed on `r1-reader-accounting` and `r1-lab-visibility`, unmerged |
-| 12 | cost-ask-costusd-omits-reader | low | S | fixed on `r1-reader-accounting`, unmerged; see #20 |
-| 13 | cost-readerpush-bypasses-question-cap | low | S | fixed on `r1-reader-accounting`, unmerged; see #20 |
-| 14 | mem-component-budget-session-leak | low | S | fixed on `r1-reader-accounting`, unmerged; see #20 |
-| 15 | painpoint-waitms-undocumented | low | S | fixed on `r1-waitms-docs`, unmerged; see #21 |
-| 16 | reader-replay-cache-not-committed | low | S | miss gate on `r1-lab-visibility`, unmerged; cache build deferred |
-| 17 | integ-reader-branches-conflict | medium | S | open, round 2 package `reader-merge` |
-| 18 | lab-push-source-calls-uncounted | medium | S | open, round 2 package `source-call-accounting` |
-| 19 | integ-gate-traffic-budget-outcome | low | S | open, round 2 package `gate-traffic-budget` |
-| 20 | cost-late-reader-call-untraced | low | S | open, round 2 package `reader-merge` |
-| 21 | painpoint-example-waitms-zero | low | S | open, round 2 package `example-waitms-zero` |
-| 22 | dev-reader-test-sleeps | low | S | open, round 2 package `reader-test-speed` |
-| 23 | speed-input-shape-walk-allocates | low | S | open, round 2 package `validate-walk` |
-| 24 | speed-eventloop-max-is-coldstart | low | S | open, round 2 package `bench-warmup` |
+| 10 | reader-prompt-cache-lost-on-openrouter | low | S | fixed on `r1-openrouter-cache`, `r1-reader-accounting`, merged; behind `anthropicCache` |
+| 11 | cost-reader-session-cap-silent | low | S | fixed on `r1-reader-accounting` and `r1-lab-visibility`, merged |
+| 12 | cost-ask-costusd-omits-reader | low | S | fixed on `r1-reader-accounting`, merged; see #20 |
+| 13 | cost-readerpush-bypasses-question-cap | low | S | fixed on `r1-reader-accounting`, merged; see #20 |
+| 14 | mem-component-budget-session-leak | low | S | fixed on `r1-reader-accounting`, merged; see #20 |
+| 15 | painpoint-waitms-undocumented | low | S | fixed on `r1-waitms-docs`, merged; see #21 |
+| 16 | reader-replay-cache-not-committed | low | S | miss gate on `r1-lab-visibility`, merged; cache build deferred |
+| 17 | integ-reader-branches-conflict | medium | S | fixed in round 2 package `reader-merge`, merged |
+| 18 | lab-push-source-calls-uncounted | medium | S | fixed in round 2 package `source-call-accounting`, merged |
+| 19 | integ-gate-traffic-budget-outcome | low | S | fixed in round 2 package `gate-traffic-budget`, merged |
+| 20 | cost-late-reader-call-untraced | low | S | fixed in round 2 package `reader-merge`, merged |
+| 21 | painpoint-example-waitms-zero | low | S | fixed in round 2 package `example-waitms-zero`, merged |
+| 22 | dev-reader-test-sleeps | low | S | fixed in round 2 package `reader-test-speed`, merged |
+| 23 | speed-input-shape-walk-allocates | low | S | fixed in round 2 package `validate-walk`, merged |
+| 24 | speed-eventloop-max-is-coldstart | low | S | fixed in round 2 package `bench-warmup`, merged |
 | 25 | cost-reader-reasoning-openrouter-anthropic | low | S | deferred |
 | 26 | cost-push-duplicates-source-search | low | M | deferred |
-| 27 | dev-funnel-single-process | low | M | open, round 2 package `funnel-jobs` |
+| 27 | dev-funnel-single-process | low | M | fixed in round 2 package `funnel-jobs`, merged |
 
 ### 1. A deeply nested tool_call body stalls the event loop for about 1.5-1.8 s (high, S)
 

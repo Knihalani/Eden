@@ -13,6 +13,8 @@ export const isId = (v: unknown): v is string => typeof v === "string" && /^[A-Z
 
 /** How deep a tool call's input may nest (D100). No real tool input comes near it; JSON.parse handles far deeper. */
 export const MAX_INPUT_DEPTH = 1_000;
+/** The longest question an ask may carry (`checkAsk`); the engine cuts its internal asks to the same length. */
+export const MAX_QUESTION_CHARS = 10_000;
 /** Values a tool call's input may hold (D100). A 1,000,000-character flat array holds at most ~500,000. */
 const MAX_INPUT_NODES = 1_000_000;
 
@@ -127,7 +129,9 @@ export function checkAsk(v: unknown): Checked<AskRequest> {
   if (!isRecord(v)) return { ok: false, error: "ask must be an object" };
   const scope = scopeError(v);
   if (scope) return { ok: false, error: scope };
-  if (!isText(v.question, 10_000) || !v.question.trim()) return { ok: false, error: "question must be non-empty" };
+  if (!isText(v.question, MAX_QUESTION_CHARS) || !v.question.trim()) {
+    return { ok: false, error: "question must be non-empty" };
+  }
   const maxItems = typeof v.maxItems === "number" ? Math.max(1, Math.min(20, Math.floor(v.maxItems))) : undefined;
   return {
     ok: true,

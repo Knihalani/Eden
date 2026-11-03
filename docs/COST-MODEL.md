@@ -69,31 +69,31 @@ repeated ask makes none. Input: the system prompt (about 450 tokens) and up to 3
 glm-5.3-flash, 2026-11-02, OpenRouter's reported cost): 0.86 calls per task (124 asks read in 144 tasks). Two
 endpoints, with very different reasoning lengths:
 
-Measured on Claude Haiku 5.5 (lab, D96, docs/research/haiku-opt.md): prompt v5 over a 30-item pool is about 3,770
-tokens in and 250 out, 24% of the prompt read from the cache (the instructions), $0.00042 per call ($0.10 / $0.50 per
-million, cache reads at a tenth), p50 1.41 s and p90 1.99 s with thinking off. With `readerPush` (D96) the same call is also made
-once per user request that acts (an imperative request), whether or not the agent asks: at about $0.00042 a call,
-$0.42 per thousand acting requests. Phase 3 (D99): prompt v7 is about 3,900 tokens in and 190 out, $0.00040 a call;
-the leaner operating point (pool 15, 240-character snippets, `readerGate`) about 2,900 in and 180 out, $0.00029 a call
-(30% less Eden cost per task live). `askReaderStanding` 20 adds about 3,000 input tokens, 55–68% of the prompt then
-read from the cache ($0.00043–0.00047 a call). With `askReaderQuestions` and `readerPush` together, the push reads
-every user message (small talk included), not only acting requests: about $0.00040–0.00047 per user message from the
-push alone. An `ask_context` the agent then makes about the same request is a second full call unless its question
-is the request word for word: the verdict cache is keyed by the request, the question and the focused pool
-(`readerKey`), and a paraphrase changes all three (the audit's scratch test on the `reader.test.ts`
-harness, re-run 2026-11-03: 1 call for a verbatim ask, 2 for a paraphrase). In Pi's held-out 13 run (seed 41,
-`packages/sim/lab/haiku/phase3/ledger-summary.jsonl`) the reader made 476 calls over the 320 tasks of the five reader
-conditions, 1.49 a task, mixing the `eden` arms (which have `ask_context`) with the `both` arms (which do not). So the
-reader runs once per user message plus once per paraphrased ask, not once per user message.
-The reader's calls show in the traces, each call counted once (`readerCalls`, `readerCostUsd`): an "answer" trace for an
-ask's read, a "reader-push" trace for a push's (the push waits for its reading), and a "reader-late" trace, emitted when
-it lands, for a call an explicit ask started and stopped waiting for at `askReaderWaitMs`. `AskResponse.costUsd` holds
-only a call that answered in time: a late call reports 0 there (and `usedModel` false), so an embedder meters the reader
-from the traces or from `AskReader.stats`, not from `AskResponse` alone. A reader given a default `new Budget()`
-stops after 20 reads a session (`callsPerSession`; settling at the actual cost frees the dollar cap, so the count binds
-first): about 20 user messages when each is read once, fewer when an ask reads a pool its push did not. Refused reads report the
-outcome "budget"; size the reader's own `Budget` for longer sessions. The intent index's requests for every
-item of a world (D87) cost $0.0000501 per item on Haiku 5.5 (3,331 items, 355 calls, $0.177), once per item version.
+Measured on Claude Haiku 5.5 (lab, D96, docs/research/haiku-opt.md): prompt v5 over a 30-item pool is about 3,770 tokens
+in and 250 out, 24% of the prompt read from the cache (the instructions), $0.00042 per call ($0.10 / $0.50 per million,
+cache reads at a tenth), p50 1.41 s and p90 1.99 s with thinking off. With `readerPush` (D96) the same call is also made
+once per user request that acts (an imperative request), whether or not the agent asks: at about $0.00042 a call, $0.42
+per thousand acting requests. Phase 3 (D99): prompt v7 is about 3,900 tokens in and 190 out, $0.00040 a call; the leaner
+operating point (pool 15, 240-character snippets, `readerGate`) about 2,900 in and 180 out, $0.00029 a call (30% less
+Eden cost per task live). `askReaderStanding` 20 adds about 3,000 input tokens, 55–68% of the prompt then read from the
+cache ($0.00043–0.00047 a call). With `askReaderQuestions` and `readerPush` together, the push reads every user message
+(small talk included), not only acting requests: about $0.00040–0.00047 per user message from the push alone. An
+`ask_context` the agent then makes about the same request is a second full call unless its question is the request word
+for word: the verdict cache is keyed by the request, the question and the focused pool (`readerKey`), and a paraphrase
+changes all three (the audit's scratch test on the `reader.test.ts` harness, re-run 2026-11-03: 1 call for a verbatim
+ask, 2 for a paraphrase). In Pi's held-out 13 run (seed 41, `packages/sim/lab/haiku/phase3/ledger-summary.jsonl`) the
+reader made 476 calls over the 320 tasks of the five reader conditions, 1.49 a task, mixing the `eden` arms (which have
+`ask_context`) with the `both` arms (which do not). So the reader runs once per user message plus once per paraphrased
+ask, not once per user message. The reader's calls show in the traces, each call counted once (`readerCalls`,
+`readerCostUsd`): an "answer" trace for an ask's read, a "reader-push" trace for a push's (the push waits for its
+reading), and a "reader-late" trace, emitted when it lands, for a call an explicit ask started and stopped waiting for
+at `askReaderWaitMs`. `AskResponse.costUsd` holds only a call that answered in time: a late call reports 0 there (and
+`usedModel` false), so an embedder meters the reader from the traces or from `AskReader.stats`, not from `AskResponse`
+alone. A reader given a default `new Budget()` stops after 20 reads a session (`callsPerSession`; settling at the actual
+cost frees the dollar cap, so the count binds first): about 20 user messages when each is read once, fewer when an ask
+reads a pool its push did not. Refused reads report the outcome "budget"; size the reader's own `Budget` for longer
+sessions. The intent index's requests for every item of a world (D87) cost $0.0000501 per item on Haiku 5.5 (3,331
+items, 355 calls, $0.177), once per item version.
 
 | Routing (`sort`)            | Endpoint      | Calls | Tokens in / out per call | $ per call (reported) | Latency p50 / p90 | Over 2.5 s |
 | --------------------------- | ------------- | ----- | ------------------------ | --------------------- | ----------------- | ---------- |

@@ -226,43 +226,43 @@ each in the items' own words, ranked by when written with the user's own people 
 at most twelve lines; it opens a session (`session_start`) as data and is served on request (`POST /v1/digest`, client
 `digest`). It holds no clock, so its bytes change only when a constraint does.
 
-**The ask-time reader** (`askReader`, off by default; proposed D95, `reader.ts`). An `ask` about an action (or
-any ask, with `askReaderQuestions`) is answered as usual, and then, before rendering, one budgeted model call
-(`AskReader`, its own `ReaderMaker`, model and `Budget`) reads the first `askReaderPool` (30) distinct candidates of
-the ask's ranking (its pool in order, then the rest it scored), each rendered compactly (`readerItem`: title, source,
-date, sender, the ≤ 400 characters of its parts that bear most on the request, its card's fields), all redacted and
-fenced as data. It returns the items that block, limit or change the request or show it done, each with a kind and a
-≤ 15-word bearing (`parseReader` validates both); those lead the answer, marked "Eden's reader: <kind>: <bearing> |",
-and the usual items fill the seats left. With `askReaderClear` a read pool with nothing binding opens the answer with
-a fixed "Checked the N items found most related: …" line. An explicit ask waits at most `askReaderWaitMs` (2.5 s); late, over
-budget, failed or unreadable, the answer is the usual one, and a late call still fills the cache. Verdicts are cached
-per user and session by a hash of the request and the pool; any `forget` of the user or a source drops them. Like the
-bridge, it is wired by the embedder (`PartnerDeps.reader`); the lab's funnel wires it (`--reader`), the server does not
-yet. Its spend is the ask's: `AskResponse.costUsd` and the "answer" trace include the reader's call (`readerCalls`,
-`readerCostUsd` name that part), counted once, by the read that made it (0 for a cached verdict and for a read that
-joined a call in flight). A late call is not the ask's (its `costUsd` 0, `usedModel` false): when the call the ask
-started lands, the reader books it and the engine emits a "reader-late" trace with its cost and one model call, even if
-the session has closed, so the traces sum to the reader's spend. A call its `Budget` refused reports the
-outcome "budget" (`onReader`), not "none"; the reader's `Budget` is its own, ended with each session, and a default
-`new Budget()` stops it after 20 reads a session (`callsPerSession`), so an embedder sizes it for long sessions.
+**The ask-time reader** (`askReader`, off by default; proposed D95, `reader.ts`). An `ask` about an action (or any ask,
+with `askReaderQuestions`) is answered as usual, and then, before rendering, one budgeted model call (`AskReader`, its
+own `ReaderMaker`, model and `Budget`) reads the first `askReaderPool` (30) distinct candidates of the ask's ranking
+(its pool in order, then the rest it scored), each rendered compactly (`readerItem`: title, source, date, sender, the ≤
+400 characters of its parts that bear most on the request, its card's fields), all redacted and fenced as data. It
+returns the items that block, limit or change the request or show it done, each with a kind and a ≤ 15-word bearing
+(`parseReader` validates both); those lead the answer, marked "Eden's reader: <kind>: <bearing> |", and the usual items
+fill the seats left. With `askReaderClear` a read pool with nothing binding opens the answer with a fixed "Checked the N
+items found most related: …" line. An explicit ask waits at most `askReaderWaitMs` (2.5 s); late, over budget, failed or
+unreadable, the answer is the usual one, and a late call still fills the cache. Verdicts are cached per user and session
+by a hash of the request and the pool; any `forget` of the user or a source drops them. Like the bridge, it is wired by
+the embedder (`PartnerDeps.reader`); the lab's funnel wires it (`--reader`), the server does not yet. Its spend is the
+ask's: `AskResponse.costUsd` and the "answer" trace include the reader's call (`readerCalls`, `readerCostUsd` name that
+part), counted once, by the read that made it (0 for a cached verdict and for a read that joined a call in flight). A
+late call is not the ask's (its `costUsd` 0, `usedModel` false): when the call the ask started lands, the reader books
+it and the engine emits a "reader-late" trace with its cost and one model call, even if the session has closed, so the
+traces sum to the reader's spend. A call its `Budget` refused reports the outcome "budget" (`onReader`), not "none"; the
+reader's `Budget` is its own, ended with each session, and a default `new Budget()` stops it after 20 reads a session
+(`callsPerSession`), so an embedder sizes it for long sessions.
 
-The reader's prompt v5 (D96) has the model label every item that looks relevant, a lookalike included, writing what
-the item means before deciding whether it is about the same thing and binds. With `askReaderDrop` (off by default),
-the items it rejected by name leave the ask's answer; an item it flagged never does. With `readerPush` (off by default), a user
-request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
-flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. Its question is
-the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
+The reader's prompt v5 (D96) has the model label every item that looks relevant, a lookalike included, writing what the
+item means before deciding whether it is about the same thing and binds. With `askReaderDrop` (off by default), the
+items it rejected by name leave the ask's answer; an item it flagged never does. With `readerPush` (off by default), a
+user request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
+flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. Its question
+is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search
-that joined another lookup's call in flight (the push and the slow path search the same words at once), was answered
-by the fan-out's cache, or was refused by a guard is none (`reachedSource`), and a planner's cascade counts each call
-it sent, so a task's traces sum to its connectors' count. Phase 3's
-options (D99, all off): `askReaderStanding` puts the user's in-force standing constraints first in the reader's pool,
-read without the request's focus so the same text forms a cached user-turn prefix (`ChatMessage.cache`); `readerGate`
-skips the call when no candidate could constrain the request; `readerPushWaitMs` bounds how long `observe` waits for
-the push, within the caller's own wait (0 measured badly: the reading must land before the agent answers). The push
-itself is not cut at `askReaderWaitMs`: it waits for the reading (bounded by the reader's model call and the session's
-close), and `observe` reports `pending` while it runs. Its packet is queued only if the session is still open and no
-newer user message has arrived; the agent's own events in between (tool calls, its replies) do not make it stale.
+that joined another lookup's call in flight (the push and the slow path search the same words at once), was answered by
+the fan-out's cache, or was refused by a guard is none (`reachedSource`), and a planner's cascade counts each call it
+sent, so a task's traces sum to its connectors' count. Phase 3's options (D99, all off): `askReaderStanding` puts the
+user's in-force standing constraints first in the reader's pool, read without the request's focus so the same text forms
+a cached user-turn prefix (`ChatMessage.cache`); `readerGate` skips the call when no candidate could constrain the
+request; `readerPushWaitMs` bounds how long `observe` waits for the push, within the caller's own wait (0 measured
+badly: the reading must land before the agent answers). The push itself is not cut at `askReaderWaitMs`: it waits for
+the reading (bounded by the reader's model call and the session's close), and `observe` reports `pending` while it runs.
+Its packet is queued only if the session is still open and no newer user message has arrived; the agent's own events in
+between (tool calls, its replies) do not make it stale.
 
 **The intent index** (`intent`, needs `cards`, off by default; proposed D87, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four

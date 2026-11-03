@@ -19,6 +19,7 @@ import { createHash } from "node:crypto";
 import type { SourceMap } from "@eden/graph";
 import type { Budget, Model, Reservation } from "@eden/llm";
 import {
+  MAX_QUESTION_CHARS,
   newId,
   scopeKey,
   type ActionCheck,
@@ -419,8 +420,6 @@ interface ProbeOpts {
   local?: ReadonlySet<string> | null;
 }
 const ANSWER_MAX_TOKENS = 1_000;
-/** The longest question an ask may carry: `checkAsk`'s cap (protocol's validate.ts), which it keeps private. */
-const ASK_QUESTION_CHARS = 10_000;
 /** `askContext`: how long a request's answer order is reused by the asks that follow it (`requestOrder`). */
 const REQUEST_ORDER_MS = 60_000;
 /** `askContext`'s reciprocal-rank constant: rank 0 scores 1/k (the usual 60 flattens a five-item list to a tie). */
@@ -710,7 +709,7 @@ export class ContextPartner {
       (this.config.askReaderQuestions || isImperative(event.text, MORE_VERBS))
         ? // The question as an ask may carry it (`checkAsk`'s cap): the event's own cap is 100 times that, and the
           // ask redacts and tokenizes it before its first await, on the observe's critical path.
-          this.ask({ ...event, question: head(event.text, ASK_QUESTION_CHARS), maxItems: 5 }, internal).catch(
+          this.ask({ ...event, question: head(event.text, MAX_QUESTION_CHARS), maxItems: 5 }, internal).catch(
             () => null,
           )
         : null;
