@@ -5741,20 +5741,21 @@ const pairKey = (a: number, b: number) => a * PAIR_BASE + b;
 
 /** An agent-held event's terms and pairs. Its terms are interned already (`observe`), so none is skipped. */
 function heldOf(text: string, vocab: Vocab): Held {
-  const { ids, n } = termIds(text.slice(0, HELD_CHARS), vocab, false);
-  const distinct = new Set<number>(); // Transient: only counts distinct terms against the cap.
-  const pairs = new Float64Array(Math.max(0, n - 1));
-  let m = 0;
-  let i = 0;
-  for (; i < n; i++) {
-    if (!distinct.has(ids[i]!) && distinct.size === MAX_HELD_TERMS) break;
-    distinct.add(ids[i]!);
-    if (i > 0) pairs[m++] = pairKey(ids[i - 1]!, ids[i]!);
+  const { ids, n: all } = termIds(text.slice(0, HELD_CHARS), vocab, false);
+  let terms = sortedUnique(ids.subarray(0, all));
+  let n = all;
+  if (terms.length > MAX_HELD_TERMS) {
+    // Rare (an event of over 512 distinct terms): the head up to its 513th distinct term, in reading order.
+    const distinct = new Set<number>();
+    for (n = 0; n < all && (distinct.has(ids[n]!) || distinct.size < MAX_HELD_TERMS); n++) distinct.add(ids[n]!);
+    terms = sortedUnique(ids.subarray(0, n));
   }
-  return { terms: sortedUnique(ids.slice(0, i)), pairs: sortedUnique(pairs.subarray(0, m)) };
+  const pairs = new Float64Array(Math.max(0, n - 1));
+  for (let i = 1; i < n; i++) pairs[i - 1] = pairKey(ids[i - 1]!, ids[i]!);
+  return { terms, pairs: sortedUnique(pairs) };
 }
 
-/** A sorted copy of `xs` without repeats, trimmed to fit (a fresh buffer: the input may be a view of a larger one). */
+/** A sorted copy of `xs` without repeats, trimmed to fit (a fresh buffer: the input may be a view of a shared one). */
 function sortedUnique<T extends Uint32Array | Float64Array>(xs: T): T {
   const sorted = xs.slice().sort() as T;
   let m = 0;
