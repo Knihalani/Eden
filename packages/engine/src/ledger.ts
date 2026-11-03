@@ -7,6 +7,11 @@
  * within the cooldown whose words have changed since: what the agent holds is a superseded copy (`syncPollBehind`,
  * D65), and the corrected one is news.
  */
+export interface LedgerEntry {
+  turn: number;
+  version?: number;
+}
+
 export class Ledger {
   private readonly delivered = new Map<string, number>();
   private readonly versions = new Map<string, number>();
@@ -38,6 +43,29 @@ export class Ledger {
       this.delivered.delete(id);
       this.versions.delete(id);
     }
+  }
+
+  /** What the ledger holds for an item: the turn it was last delivered in and its version, if one was recorded. */
+  entry(itemId: string): LedgerEntry | undefined {
+    const turn = this.delivered.get(itemId);
+    if (turn === undefined) return undefined;
+    const version = this.versions.get(itemId);
+    return version === undefined ? { turn } : { turn, version };
+  }
+
+  /**
+   * Puts an item's entry back to what `entry` returned before a delivery that did not reach the agent (a packet
+   * withdrawn before it was taken, `readerPushBehind`): an earlier delivery and its version stand again, and an item
+   * never delivered is fresh again. Not a bare unmark, which would forget a copy the agent does hold. The entry goes
+   * last in the map's order; one older than those before it is dropped once they have expired, so the ledger stays
+   * bounded.
+   */
+  restore(itemId: string, was: LedgerEntry | undefined): void {
+    this.delivered.delete(itemId);
+    this.versions.delete(itemId);
+    if (!was) return;
+    this.delivered.set(itemId, was.turn);
+    if (was.version !== undefined) this.versions.set(itemId, was.version);
   }
 
   get size(): number {

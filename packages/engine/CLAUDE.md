@@ -75,8 +75,13 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - `readerPushBehind` (off; needs `readerPush`, `syncOnDemand`, `syncPollBehind`): the push's lookup reads the index
   before the poll is done; a poll that stores something gets one more ranking and reading, no new source call, a
   reader cache hit when the pool is unchanged, and its packet replaces one the agent has not taken
-  (`push-behind.test.ts`). Lab preset NEWBB. With `syncPollBehind` neither lookup's trace counts the poll's listing
-  calls (the funnel's connector count does). Presets ALL3BG and NEWBG set `probeGraceMs` 0 on ALL3B and NEWB: a
+  (`push-behind.test.ts`). A packet withdrawn untaken has its ledger entries restored (`Ledger.entry`/`restore`, not
+  a bare unmark) and its sketches dropped from `s.delivered`, so what the second reading does not deliver again stays
+  deliverable. Lab preset NEWBB. With `syncPollBehind` a lookup's trace leaves out the poll it did not wait for; the
+  poll gets its own "skipped" trace (reason "sync poll behind", `sourceCalls` = `syncCalls`) when it settles, even
+  after the session closed, so traces sum to what the connectors received. A lookup whose poll waits on a read
+  already running (`SourceSync.busy`, which resolves to what that read stored) counts what it stored, not one, and
+  `freshen` returns only its own calls. Presets ALL3BG and NEWBG set `probeGraceMs` 0 on ALL3B and NEWB: a
   lookup no longer waits for its probes (D47's grace), so a slow probe's finds only reach later turns. No decision
   yet for either; a Pi run is owed before any default changes.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
