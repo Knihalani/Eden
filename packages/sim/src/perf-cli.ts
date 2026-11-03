@@ -9,7 +9,8 @@
  * Scenarios:
  *   steady   production-like: 300 users at real pacing and real source latency for 90 s
  *   ramp     saturation: pacing compressed 10x, users doubling from 100 to 3,200, 20 s per step
- *   memory   server memory after warming 250, 500, 1,000 and 2,000 users (forced GC before each reading)
+ *   memory   server memory after warming 250, 500, 1,000 and 2,000 users (forced GC before each reading), and
+ *            edenOnly: the readings minus the zero-user one (the in-process sim worlds), MB per user
  *   soak     --minutes 10 with the server clock at 144x (10 minutes = a simulated day: TTLs, idle sessions,
  *            daily budgets)
  *   faults   300 users; Gmail down for 30 s, then Drive 5x slower for 30 s, then a CRM 429 storm for 30 s
@@ -155,10 +156,45 @@ async function memory() {
       done = target;
       readings.push({ users: target, ...(await sim(s.base, "gc")) });
     }
-    return { scenario: "memory", readings };
+    return { scenario: "memory", readings, edenOnly: edenOnly(readings) };
   } finally {
     s.stop();
   }
+}
+
+/**
+ * Eden's own memory per user. The server process also builds the sim worlds and their sources in-process before any
+ * user exists (server.ts), so its zero-user reading (1,096.8 MB rss in audit 2026-11-03b) is mostly the sim, not Eden.
+ * Subtracting it leaves what the users added: per reading the Eden-only MB and MB per user, and over all readings the
+ * least-squares slope through the origin (MB per user).
+ */
+function edenOnly(readings: Record<string, unknown>[]) {
+  const zero = readings[0]!;
+  const rest = readings.slice(1).filter((r) => Number(r.users) > 0);
+  const added = (r: Record<string, unknown>, k: string) => Number(r[k]) - Number(zero[k]);
+  const round = (x: number) => Math.round(x * 1_000) / 1_000;
+  // Through the origin (sum of users x added over sum of users squared): the zero-user reading is the intercept.
+  const slope = (k: string) =>
+    round(
+      rest.reduce((n, r) => n + Number(r.users) * added(r, k), 0) /
+        Math.max(
+          1,
+          rest.reduce((n, r) => n + Number(r.users) ** 2, 0),
+        ),
+    );
+  return {
+    note: "readings minus the zero-user reading (the in-process sim worlds and sources)",
+    baseline: { rssMb: zero.rssMb, heapUsedMb: zero.heapUsedMb },
+    rssMbPerUser: slope("rssMb"),
+    heapMbPerUser: slope("heapUsedMb"),
+    readings: rest.map((r) => ({
+      users: r.users,
+      rssMb: round(added(r, "rssMb")),
+      heapUsedMb: round(added(r, "heapUsedMb")),
+      rssMbPerUser: round(added(r, "rssMb") / Number(r.users)),
+      heapMbPerUser: round(added(r, "heapUsedMb") / Number(r.users)),
+    })),
+  };
 }
 
 async function soak() {
