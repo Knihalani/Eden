@@ -70,6 +70,94 @@ export interface ReplayOptions {
   salt?: Record<string, unknown>;
   /** Sleep each replayed call's recorded latency, so a replayed run's timings stand for a live one's. */
   timing?: boolean;
+  /** `--reader-subset`: a prompt with no cached line is answered from a recorded superset pool, when one holds it. */
+  subset?: SubsetReplay;
+}
+
+/** A hash of a reader request's instructions (the system message): a reply made under other instructions differs. */
+export function systemHash(request: Pick<ChatRequest, "messages">): string {
+  const sys = request.messages.find((m) => m.role === "system")?.content ?? "";
+  return createHash("sha256").update(sys).digest("hex").slice(0, 16);
+}
+
+/** A reader prompt's user turn split into what it asks (the day, request and question) and its item lines. */
+function splitPrompt(prompt: string): { head: string; items: string[] } | null {
+  const at = prompt.indexOf("<items>\n");
+  if (at < 0 || prompt.includes("<standing>")) return null;
+  const items = prompt
+    .slice(at + 8)
+    .replace(/\n?<\/items>$/, "")
+    .split("\n")
+    .filter((x) => x.length > 0)
+    // The index is the item's place in this pool, not part of what the model read about it.
+    .map((x) => x.replace(/^<item i="\d+"/, "<item"));
+  return { head: prompt.slice(0, at), items };
+}
+
+/**
+ * `--reader-subset LOG[,LOG]` (lab only, devloop-reader-replay-item-level-key, D117): an approximate, labelled reader
+ * replay for $0 screens of changes that only take items out of the reader's pool (a smaller pool, a gate, a cut). A
+ * prompt the cache misses is answered from a call recorded in a `--reader-log` file by the same model under the same
+ * instructions, with the same day, request and question, whose pool held every item of this one, rendered exactly the
+ * same, in the same order: its verdict on those items, renumbered. It assumes a verdict on an item does not depend on
+ * the items left out, which the reader does not promise: measured on train (D117), restricting a 15-to-30-item
+ * reading to its first 15 items matched the real 15-item reading exactly on 493 of 600 calls, against 97 of 110 for
+ * the same prompt sent twice. Never for a change that adds items or renders them differently (no recorded call holds
+ * the new pool), and every run that uses it says how many calls it answered.
+ */
+export class SubsetReplay {
+  private readonly byHead = new Map<string, { items: string[]; reply: string }[]>();
+  /** Prompts answered from a recorded superset pool. */
+  answered = 0;
+
+  constructor(files: readonly string[], model: string, sys: string) {
+    for (const file of files) {
+      for (const raw of readFileSync(file, "utf8").split("\n")) {
+        if (!raw.trim()) continue;
+        const l = JSON.parse(raw) as { prompt?: unknown; reply?: unknown; model?: unknown; sys?: unknown };
+        if (l.model !== model || l.sys !== sys || typeof l.prompt !== "string" || typeof l.reply !== "string") continue;
+        const p = splitPrompt(l.prompt);
+        if (!p) continue;
+        const list = this.byHead.get(p.head) ?? [];
+        list.push({ items: p.items, reply: l.reply });
+        this.byHead.set(p.head, list);
+      }
+    }
+  }
+
+  /** The reply for this prompt from the smallest recorded pool that holds its items in order, or null when none. */
+  answer(prompt: string): string | null {
+    const p = splitPrompt(prompt);
+    if (!p || p.items.length === 0) return null;
+    let best: { map: number[]; reply: string; size: number } | null = null;
+    for (const c of this.byHead.get(p.head) ?? []) {
+      // The recorded index of each of this prompt's items, increasing: an ordered subsequence of the recorded pool.
+      const map: number[] = [];
+      let j = 0;
+      for (const it of p.items) {
+        while (j < c.items.length && c.items[j] !== it) j++;
+        if (j >= c.items.length) break;
+        map.push(j++);
+      }
+      if (map.length < p.items.length) continue;
+      if (!best || c.items.length < best.size) best = { map, reply: c.reply, size: c.items.length };
+    }
+    if (!best) return null;
+    let parsed: { bears?: { i?: unknown }[] };
+    try {
+      parsed = JSON.parse(best.reply) as { bears?: { i?: unknown }[] };
+    } catch {
+      return null;
+    }
+    if (!Array.isArray(parsed.bears)) return null;
+    const at = new Map(best.map.map((recorded, i) => [recorded, i]));
+    const bears = parsed.bears.flatMap((b) => {
+      const i = typeof b.i === "number" ? at.get(b.i) : undefined;
+      return i === undefined ? [] : [{ ...b, i }];
+    });
+    this.answered++;
+    return JSON.stringify({ ...parsed, bears });
+  }
 }
 
 /**
@@ -93,6 +181,8 @@ export class ReplayModel implements Model {
   sent = 0;
   missed = 0;
   failed = 0;
+  /** `--reader-subset`: prompts the cache missed that a recorded superset pool answered (approximate). */
+  subsetReplayed = 0;
   readonly latencies: number[] = [];
   readonly calls: ReplayCall[] = [];
 
@@ -121,6 +211,13 @@ export class ReplayModel implements Model {
     if (flying) {
       const shared = await flying.catch(() => undefined);
       if (shared) return this.replay(shared, request.signal);
+    }
+    const prompt = request.messages.at(-1)?.content;
+    const approx = !this.inner && typeof prompt === "string" ? (this.options.subset?.answer(prompt) ?? null) : null;
+    if (approx !== null) {
+      this.subsetReplayed++;
+      const usage = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 };
+      return { text: approx, usage, costUsd: 0, latencyMs: 0, model: this.id };
     }
     if (!this.inner) {
       this.missed++;
