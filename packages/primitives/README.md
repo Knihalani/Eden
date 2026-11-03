@@ -120,6 +120,8 @@ mode, item text excluded) run on main and on this branch:
 | Index heap per item, 100 users × 200 items | 1,743 B (340 KB per user) | 527 B (103 KB per user; 3.30x) |
 | Index heap per item, 500 users × 20 items | 3,467 B (67.7 KB per user) | 897 B (17.5 KB per user; 3.86x) |
 | `ItemCache` heap per item, 1 user × 6,892 items | 2,219 B | 1,241 B (1.79x) |
+| `ingest.bench.ts` (200 users × 500 synced items, text included; two runs each): memory per user | 1,818 KB (3,723 B/item) | 1,272 KB (2,606 B/item; 1.43x) |
+| Same: backfill / unchanged sweep, µs per item | 122.0–137.8 / 5.7–6.5 | 118.9–130.0 / 4.2–5.7 |
 | `sparse-index-ab.bench.ts` (interleaved, median of 6) zipf search / remove + add, p50 | 10.44–19.39 / 15.01–19.86 µs | 10.71–18.50 / 9.45–12.01 µs |
 | Same, dense search / remove + add, p50 | 74.39–75.82 / 3.26–4.02 µs | 70.76–77.80 / 4.30–5.08 µs |
 | `index-memory.bench.ts` search p50, 20 / 128 / 1,000 / 6,892 items (two runs) | 1.6–3.3 / 4.6–5.1 / 47.7–62.6 / 210.7–274.6 µs | 3.4–3.5 / 4.0–4.3 / 39.2–61.6 / 149.1–196.0 µs |
