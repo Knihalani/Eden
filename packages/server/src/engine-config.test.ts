@@ -109,6 +109,8 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     const refused: [Record<string, unknown>, string][] = [
       // Acts only with cards (digestFor), which the servers do not wire.
       [{ constraintDigest: true }, "constraintDigest"],
+      [{ digestLines: 3 }, "digestLines"],
+      [{ digestBytes: 10 }, "digestBytes"],
       // Dependency-only numbers: refused unless at their default.
       [{ askReaderStanding: 20 }, "askReaderStanding"],
       [{ readerPushWaitMs: 5 }, "readerPushWaitMs"],
@@ -118,6 +120,8 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
       [{ anticipateOff: ["srve"] }, "anticipateOff"],
       // 0-item pages: nothing syncs.
       [{ syncPageSize: 0, sync: true }, "syncPageSize"],
+      // A 0 cap stops backfill at once and trims every synced item: sync silently off.
+      [{ syncMaxItems: 0, sync: true }, "syncMaxItems"],
       [{ syncStaleChance: 7 }, "syncStaleChance"],
       [{ askReaderPool: 2.5 }, "askReaderPool"],
       [{ maxItemsPerInjection: 1.5 }, "maxItemsPerInjection"],

@@ -9,10 +9,11 @@
  * value of the wrong type stops the server with a message naming it, rather than running silently on the default.
  * So does a number outside the key's range (`RANGES`), an `anticipateOff` part the engine does not have, or setting a
  * key that acts only through a partner dependency the servers do not wire (`NEEDS_DEP`) to anything but its default:
- * the engine would accept it and do nothing, or (`syncPageSize: 0`) stop syncing without a word. Those deps are paid
- * model roles (cards, the bridge, the reader); ALL3 and the NEW family need them, so they are not runnable from the
- * shipped servers until the deps are wired under a decision with a COST-MODEL.md entry. The judge (`judge*`,
- * `anticipate`) and `askWithModel` use the partner's own model and `Budget`; docs/COST-MODEL.md has their cost.
+ * the engine would accept it and do nothing, or (`syncPageSize: 0`, `syncMaxItems: 0`) stop syncing without a word.
+ * Those deps are paid model roles (cards, the bridge, the reader); ALL3 and the NEW family need them, so they are not
+ * runnable from the shipped servers until the deps are wired under a decision with a COST-MODEL.md entry. The judge
+ * (`judge*`, `anticipate`) and `askWithModel` use the partner's own model and `Budget`; docs/COST-MODEL.md has their
+ * cost.
  */
 import { readFileSync } from "node:fs";
 import { DEFAULT_CONFIG, type EngineConfig } from "@eden/engine";
@@ -24,14 +25,17 @@ const CHOICES: Partial<Record<keyof EngineConfig, readonly string[]>> = { probeW
  * Keys that act only when the partner has a dependency `buildPartner` does not wire (partner.ts `PartnerDeps`), with
  * that dependency. Set to anything but their default they would be silent no-ops, so they are refused; the default
  * (off, for a flag) is accepted. The numbers and lists here are read only on their dependency's path (partner.ts:
- * `digestFor` returns nothing without cards, `askReaderStanding` fills the reader's pool, `readerPushWaitMs` bounds
- * the reader's push, the `intent*` settings are read by `intentFinds`, which needs cards).
+ * `digestFor`, the only reader of `constraintDigest`, `digestLines` and `digestBytes`, returns nothing without cards,
+ * `askReaderStanding` fills the reader's pool, `readerPushWaitMs` bounds the reader's push, the `intent*` settings are
+ * read by `intentFinds`, which needs cards).
  */
 const NEEDS_DEP: Partial<Record<keyof EngineConfig, "cards" | "bridge" | "reader">> = {
   cards: "cards",
   cardsEconomy: "cards",
   cardItems: "cards",
   constraintDigest: "cards",
+  digestLines: "cards",
+  digestBytes: "cards",
   intent: "cards",
   intentHits: "cards",
   intentMinCoverage: "cards",
@@ -101,7 +105,7 @@ const RANGES: Partial<Record<keyof EngineConfig, Range>> = {
   anticipateSessionCalls: COUNT,
   judgeTiedShare: SHARE,
   confidentItems: COUNT,
-  syncMaxItems: COUNT,
+  syncMaxItems: SIZE,
   syncPageSize: SIZE,
   syncPollPageSize: COUNT,
   syncStaleChance: SHARE,
