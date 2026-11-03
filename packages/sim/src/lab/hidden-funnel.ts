@@ -636,11 +636,14 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     },
   };
   // `--reader stub|oracle`: the lane's own no-model maker, so its calls and prompt sizes are this lane's tasks'.
-  const stub = ORACLE
-    ? new OracleReaderMaker(ORACLE.pHit, ORACLE.pFalse)
-    : NO_MODEL_READER
-      ? new CountingReader()
-      : null;
+  // Not with `--distill`: its maker answers every read, so a stub here would count nothing and report zeros.
+  const stub = DISTILL
+    ? null
+    : ORACLE
+      ? new OracleReaderMaker(ORACLE.pHit, ORACLE.pFalse)
+      : NO_MODEL_READER
+        ? new CountingReader()
+        : null;
   // `--reader-log` with a no-model reader: the prompt a model would have read and the stub's or oracle's verdict.
   if (stub && READER_LOG) {
     stub.log = ({ prompt, reply }) =>
@@ -1175,7 +1178,9 @@ if (distillLanes.length) {
   // A label not found is a read with no answer (the engine fails open, as ALL3): the replay is then partial.
   if (sum((d) => d.missed) > 0) console.log(`LABEL MISSES: ${sum((d) => d.missed)} reads had no label (failed open)`);
 }
-const misses = missGate(readerModel?.missed ?? 0, ALLOW_MISSES);
+// A label miss under `--distill labels` is a partial replay like a reader-cache miss, so it fails the run the same way.
+const distillMissed = distillLanes.reduce((a, d) => a + d.missed, 0);
+const misses = missGate((readerModel?.missed ?? 0) + distillMissed, ALLOW_MISSES);
 if (misses.message) console.log(`\n${misses.message}\n`);
 if (LIVE) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);

@@ -521,7 +521,9 @@ function readUsersFile(path: string, only: string | undefined): UsersFile {
   try {
     raw = JSON.parse(readFileSync(path, "utf8"));
   } catch (e) {
-    throw new SourceConfigError(`EDEN_USER_SOURCES_FILE ${path}: ${e instanceof Error ? e.message : e}`);
+    // Not the parser's message: it can quote a word of the file, and the file holds credentials (logged on re-read).
+    const why = e instanceof SyntaxError ? "is not valid JSON" : "cannot be read";
+    throw new SourceConfigError(`EDEN_USER_SOURCES_FILE ${path} ${why}`);
   }
   if (!isObject(raw) || !isObject(raw.users)) {
     throw new SourceConfigError(`EDEN_USER_SOURCES_FILE must be {"users": {"<tenant>/<user>": [sources]}}`);

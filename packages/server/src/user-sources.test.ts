@@ -351,6 +351,10 @@ describe("source files at startup", () => {
 
   test("EDEN_USER_SOURCES_FILE: bad JSON, shape, keys and entries stop startup with a message", () => {
     expect(() => fileDirectory(write("a.json", "{nope"))).toThrow(/EDEN_USER_SOURCES_FILE/);
+    // The parser's message can quote the file (an unquoted token); the error, logged on re-read, must not.
+    expect(() => fileDirectory(write("a2.json", '{"users": {"acme/a": [{"headers": {"x": Bearer sk-1}}]}}'))).toThrow(
+      /^EDEN_USER_SOURCES_FILE \S+ is not valid JSON$/,
+    );
     expect(() => fileDirectory(write("b.json", { sources: [] }))).toThrow(/must be \{"users"/);
     expect(() => fileDirectory(write("c.json", { users: { alice: [] } }))).toThrow(/"<tenantId>\/<userId>"/);
     const bad = { users: { "acme/alice": [{ kind: "mcp", id: "m", description: "", url: "https://x" }] } };
