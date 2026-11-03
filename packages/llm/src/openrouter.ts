@@ -11,7 +11,7 @@
  * docs/research/edge-freelab.md). Nothing reads it from the environment: `fromEnv`, and so the server, never sets it.
  */
 import { costOf, priceFor } from "./pricing";
-import type { ChatRequest, ChatResponse, Model } from "./types";
+import type { ChatMessage, ChatRequest, ChatResponse, Model } from "./types";
 
 export interface OpenRouterOptions {
   apiKey: string;
@@ -57,7 +57,9 @@ export class OpenRouterModel implements Model {
     const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
     const body = {
       model: this.options.model,
-      messages: request.messages.map(({ role, content }) => ({ role, content })),
+      messages: this.options.model.startsWith("anthropic/")
+        ? anthropicCacheMessages(request.messages)
+        : request.messages.map(({ role, content }) => ({ role, content })),
       max_tokens: request.maxTokens,
       temperature: request.temperature ?? 0,
       ...(request.json ? { response_format: { type: "json_object" } } : {}),
@@ -101,6 +103,24 @@ export class OpenRouterModel implements Model {
       truncated: data.choices?.[0]?.finish_reason === "length",
     };
   }
+}
+
+/**
+ * Anthropic models cache only up to explicit `cache_control` breakpoints, which OpenRouter passes through on content
+ * blocks. Mirrors anthropic.ts: a breakpoint on the last system message and on each message marked `cache`; every
+ * other message keeps plain string content. Whether OpenRouter's ZDR Anthropic endpoints honour the breakpoint is
+ * unverified (no live call was made), so no saving is claimed for it.
+ */
+function anthropicCacheMessages(messages: ChatMessage[]) {
+  let lastSystem = -1;
+  messages.forEach((m, i) => {
+    if (m.role === "system") lastSystem = i;
+  });
+  return messages.map(({ role, content, cache }, i) =>
+    cache || i === lastSystem
+      ? { role, content: [{ type: "text", text: content, cache_control: { type: "ephemeral" } }] }
+      : { role, content },
+  );
 }
 
 interface OpenRouterResponse {

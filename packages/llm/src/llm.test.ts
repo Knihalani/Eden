@@ -74,7 +74,7 @@ describe("OpenRouterModel", () => {
       json: true,
       cacheKey: "u-3f9a",
     });
-    // The prompt-cache marker is Anthropic's (`ChatMessage.cache`): never sent to an OpenAI-compatible endpoint.
+    // The prompt-cache marker is Anthropic's (`ChatMessage.cache`): never sent for a non-Anthropic model.
     expect(sent.messages).toEqual([{ role: "user", content: "hi" }]);
     expect(sent.provider).toMatchObject({ data_collection: "deny", zdr: true });
     expect(sent.session_id).toBe("u-3f9a");
@@ -117,6 +117,75 @@ describe("OpenRouterModel", () => {
     const lab = new OpenRouterModel({ apiKey: "k", model: "m:free", allowLogging: true, fetch: fake });
     await lab.chat({ messages: [{ role: "user", content: "hi" }], maxTokens: 5 });
     expect(sent[1].provider).toMatchObject({ data_collection: "allow", zdr: false });
+  });
+
+  const capture = () => {
+    const sent: any[] = [];
+    const fake = (async (_url: string, init: RequestInit) => {
+      sent.push(JSON.parse(String(init.body)));
+      return Response.json({ choices: [{ message: { content: "{}" } }], usage: {} });
+    }) as unknown as typeof fetch;
+    return { sent, fake };
+  };
+  const cachedRequest = {
+    messages: [
+      { role: "system" as const, content: "rules" },
+      { role: "system" as const, content: "more rules" },
+      { role: "user" as const, content: "standing prefix", cache: true },
+      { role: "user" as const, content: "the request" },
+    ],
+    maxTokens: 50,
+    json: true,
+    cacheKey: "u-3f9a",
+  };
+
+  test("the default glm request body is unchanged: plain string content, no cache_control (snapshot)", async () => {
+    const { sent, fake } = capture();
+    await new OpenRouterModel({ apiKey: "k", model: "z-ai/glm-5.3-flash", fetch: fake }).chat(cachedRequest);
+    // The body as it was before cache_control support, byte for byte.
+    expect(JSON.stringify(sent[0])).toBe(
+      JSON.stringify({
+        model: "z-ai/glm-5.3-flash",
+        messages: [
+          { role: "system", content: "rules" },
+          { role: "system", content: "more rules" },
+          { role: "user", content: "standing prefix" },
+          { role: "user", content: "the request" },
+        ],
+        max_tokens: 50,
+        temperature: 0,
+        response_format: { type: "json_object" },
+        provider: { data_collection: "deny", zdr: true, allow_fallbacks: true },
+        usage: { include: true },
+        session_id: "u-3f9a",
+      }),
+    );
+  });
+
+  test("an anthropic/* model gets cache_control on the last system message and on marked messages", async () => {
+    const { sent, fake } = capture();
+    await new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake }).chat(cachedRequest);
+    const ephemeral = { type: "ephemeral" };
+    expect(sent[0].messages).toEqual([
+      { role: "system", content: "rules" },
+      { role: "system", content: [{ type: "text", text: "more rules", cache_control: ephemeral }] },
+      { role: "user", content: [{ type: "text", text: "standing prefix", cache_control: ephemeral }] },
+      { role: "user", content: "the request" },
+    ]);
+    expect(sent[0].session_id).toBe("u-3f9a");
+    // D12 routing is untouched by the cache markers.
+    expect(sent[0].model).toBe("anthropic/claude-haiku-5.5");
+    expect(sent[0].provider).toEqual({ data_collection: "deny", zdr: true, allow_fallbacks: true });
+  });
+
+  test("an anthropic/* request with no system message and no marker sends plain string content", async () => {
+    const { sent, fake } = capture();
+    await new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake }).chat({
+      messages: [{ role: "user", content: "hi" }],
+      maxTokens: 5,
+    });
+    expect(sent[0].messages).toEqual([{ role: "user", content: "hi" }]);
+    expect(sent[0].session_id).toBeUndefined();
   });
 
   test("asks for low reasoning effort when told, and reports a reply cut off at the cap (D45)", async () => {
