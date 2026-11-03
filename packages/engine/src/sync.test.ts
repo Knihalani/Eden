@@ -19,6 +19,8 @@ class ListSource implements Source {
   /** The `limit` of every list call, in order. */
   limits: number[] = [];
   failLists = false;
+  /** While set, every list call waits for it (a read held open, to overlap another with it). */
+  gate: Promise<void> | null = null;
   items: ContextItem[];
   constructor(
     readonly id: string,
@@ -37,6 +39,7 @@ class ListSource implements Source {
   async list(_scope: Scope, cursor: string | undefined, limit: number): Promise<ListPage> {
     this.lists++;
     this.limits.push(limit);
+    if (this.gate) await this.gate;
     if (this.failLists) throw new Error("500 Internal Server Error");
     const sorted = [...this.items].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
     const at = cursor ? Number(cursor) : 0;
@@ -437,5 +440,97 @@ describe("item cache: synced items (D57)", () => {
     expect(all).toEqual(["mail:1"]);
     const any = cache.searchIn(scope, ids, 2, 5, new Set(["mail", "chat"]), false).map((h) => h.item.id);
     expect(new Set(any)).toEqual(new Set(["mail:1", "mail:2", "chat:3"]));
+  });
+});
+
+// Audit 2026-11-03b (corr-shared-poll-counts-as-fresh): a lookup whose on-demand poll finds the source already being
+// read waits for that read and counts what it stored, not one, so a static world's waiter triggers no follow-up.
+describe("freshen: a waiter counts what the read it waited on stored", () => {
+  const held = () => {
+    let free = () => {};
+    const gate = new Promise<void>((r) => (free = r));
+    return { gate, free: () => free() };
+  };
+  async function stale(config: Record<string, unknown> = {}) {
+    const src = new ListSource("mail", mail(4));
+    const t = setup([src], { syncMaxStaleMs: 4 * HOUR, syncActiveMs: 48 * HOUR, ...config });
+    const sync = t.partner.sync!;
+    sync.track(scope);
+    while (!sync.warm(scope)) await sync.tick();
+    t.advance(5 * HOUR); // Past syncMaxStaleMs: a lookup polls.
+    return { src, sync, ...t };
+  }
+  const signal = () => new AbortController().signal;
+
+  test("static world: the poller and the waiter both count 0, and only the poller counts the call", async () => {
+    const { src, sync } = await stale();
+    const h = held();
+    src.gate = h.gate;
+    const lists = src.lists;
+    const first = { fresh: 0 };
+    const second = { fresh: 0 };
+    const a = sync.freshen(scope, [src], signal(), first);
+    const b = sync.freshen(scope, [src], signal(), second);
+    src.gate = null;
+    h.free();
+    const calls = [await a, await b];
+    expect(src.lists - lists).toBe(1);
+    expect(first.fresh).toBe(0);
+    expect(second.fresh).toBe(0);
+    // Each freshen returns its own calls: the call was the poller's, so the two sum to what the connector received.
+    expect(calls).toEqual([1, 0]);
+  });
+
+  test("one stored item: the waiter counts it as the poller does", async () => {
+    const { src, sync, now } = await stale();
+    src.items.push(src.make("new", "Mail new", "A new note about the quarterly plan", now()));
+    const h = held();
+    src.gate = h.gate;
+    const first = { fresh: 0 };
+    const second = { fresh: 0 };
+    const a = sync.freshen(scope, [src], signal(), first);
+    const b = sync.freshen(scope, [src], signal(), second);
+    src.gate = null;
+    h.free();
+    await Promise.all([a, b]);
+    expect(first.fresh).toBe(1);
+    expect(second.fresh).toBe(1);
+  });
+
+  test("a background sweep that stores an item: the lookup waiting on it counts it", async () => {
+    const { src, sync, now } = await stale({ syncSweepMs: HOUR });
+    src.items.push(src.make("new", "Mail new", "A new note about the quarterly plan", now()));
+    const h = held();
+    src.gate = h.gate;
+    const lists = src.lists;
+    const ticking = sync.tick(); // The sweep is due: it holds the source.
+    for (let n = 0; src.lists === lists; n++) {
+      if (n > 1_000) throw new Error("the sweep never started");
+      await Bun.sleep(0);
+    }
+    const tally = { fresh: 0 };
+    const waited = sync.freshen(scope, [src], signal(), tally);
+    src.gate = null;
+    h.free();
+    await ticking;
+    expect(await waited).toBe(0); // The sweep's calls are background calls, not this lookup's.
+    expect(tally.fresh).toBe(1);
+  });
+
+  test("a waiter whose lookup gives up counts 0, whatever the read then stores", async () => {
+    const { src, sync, now } = await stale();
+    src.items.push(src.make("new", "Mail new", "A new note about the quarterly plan", now()));
+    const h = held();
+    src.gate = h.gate;
+    const a = sync.freshen(scope, [src], signal(), { fresh: 0 });
+    const stop = new AbortController();
+    const tally = { fresh: 0 };
+    const b = sync.freshen(scope, [src], stop.signal, tally);
+    stop.abort();
+    await b;
+    src.gate = null;
+    h.free();
+    await a;
+    expect(tally.fresh).toBe(0);
   });
 });

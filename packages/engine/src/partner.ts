@@ -115,7 +115,7 @@ import {
 } from "./probes";
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
-import { Ledger } from "./ledger";
+import { Ledger, type LedgerEntry } from "./ledger";
 import { rankAnswer, rankScore, type RankModel } from "./rank";
 import {
   citationsOf,
@@ -523,6 +523,12 @@ interface Scored {
 }
 
 /** What an injection was built from, kept until it is handed out and usage tracking starts. */
+/**
+ * What a push packet's delivery marked (`readerPushBehind`): per item it marked, the ledger entry before and after,
+ * and the sketch it added to the session's near-duplicate memory.
+ */
+type Undo = Map<string, { was: LedgerEntry | undefined; set: LedgerEntry; sketch: Sketch | null }>;
+
 interface Built {
   sourceIds: string[];
   /** The delivered items, for the planner's delivery credit when the injection is handed out (D39). */
@@ -550,6 +556,11 @@ export class ContextPartner {
   private readonly sessions = new Map<string, Session>();
   private readonly perTenant = new Map<string, number>();
   private readonly built = new WeakMap<Injection, Built>();
+  /**
+   * `readerPushBehind`: what a push packet's delivery changed in its own session, so a second reading that withdraws
+   * the packet untaken can undo it (`withdraw`). Keyed by the packet, so it goes with it.
+   */
+  private readonly undoable = new WeakMap<Injection, Undo>();
   /** Tenant → user scope key → injection id → outcome; both inner maps least recently recorded first. */
   private readonly recorded = new Map<string, Map<string, Map<string, Recorded>>>();
   private readonly now: () => number;
@@ -1083,6 +1094,45 @@ export class ContextPartner {
     this.addBehind(s, work);
   }
 
+  /**
+   * `readerPushBehind`: records what `injection`'s delivery marked in `s` (`was`: each item's ledger entry before it),
+   * so `withdraw` can undo it. An item the delivery left unmarked (folded out by `supersede`) has nothing to undo.
+   */
+  private keepUndo(
+    s: Session,
+    injection: Injection,
+    scored: Scored[],
+    was: Map<string, LedgerEntry | undefined>,
+  ): void {
+    const undo: Undo = new Map();
+    for (const x of scored) {
+      const set = s.ledger.entry(x.item.id);
+      const before = was.get(x.item.id);
+      if (!set || sameEntry(set, before)) continue;
+      undo.set(x.item.id, { was: before, set, sketch: x.sketch });
+    }
+    if (undo.size > 0) this.undoable.set(injection, undo);
+  }
+
+  /**
+   * A push packet withdrawn before the agent took it (`readerPushBehind`'s second reading): its items go back to what
+   * the session's ledger held before it (an earlier delivery and its version stand; an item never delivered is fresh
+   * again), and their sketches leave the near-duplicate memory, so what the second reading does not deliver again
+   * stays deliverable. An entry marked since by another delivery that recorded something else is left as it is.
+   */
+  private withdraw(s: Session, prev: Injection): void {
+    const undo = this.undoable.get(prev);
+    if (!undo) return;
+    this.undoable.delete(prev);
+    for (const [id, u] of undo) {
+      if (!sameEntry(u.set, s.ledger.entry(id))) continue;
+      s.ledger.restore(id, u.was);
+      if (!u.sketch) continue;
+      const at = s.delivered.lastIndexOf(u.sketch);
+      if (at >= 0) s.delivered.splice(at, 1);
+    }
+  }
+
   private addBehind(s: Session, work: Promise<void>): void {
     const all = s.behind ? Promise.all([s.behind, work]).then(() => {}) : work;
     const tracked: Promise<void> = all.finally(() => {
@@ -1485,6 +1535,8 @@ export class ContextPartner {
         if (at >= 0) {
           s.pending.splice(at, 1);
           for (const c of prev.citations) withdrawn.add(c.itemId);
+          // The agent never got it: what its delivery marked is undone before this reading delivers.
+          this.withdraw(s, prev);
         }
       }
       const fresh = flagged.filter(
@@ -1493,12 +1545,15 @@ export class ContextPartner {
           s.ledger.isFresh(x.item.id, s.turn) ||
           (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
       );
+      // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
+      const was = behind ? new Map(fresh.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       const injection =
         fresh.length > 0 && !s.closed && latest
           ? this.config.readerPushNotes
             ? this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue, undefined, undefined, reading!.notes)
             : this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue)
           : null;
+      if (injection && was) this.keepUndo(s, injection, fresh, was);
       if (injection) s.pending.push(injection);
       const latencyMs = Math.round(performance.now() - t0);
       // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
@@ -3258,8 +3313,34 @@ export class ContextPartner {
         // `syncPollBehind`: the poll is not waited for. This lookup answers from the index as it stands (every warm
         // synced source, current or not); if the poll stores anything, the lookup is made again once it is done
         // (`afterPoll`), and the agent's ask waits for it as before.
-        if (behind) cue.polled = polled.then(() => tally.fresh > 0).catch(() => false);
-        else syncCalls = await polled;
+        if (behind) {
+          // The poll's listing calls are in no lookup's trace (this one's is out before they are counted, and a
+          // follow-up runs only when the poll stored something), so the poll gets a trace of its own when it settles:
+          // "skipped", not "silent" (it decided nothing), and emitted even if the session has closed by then, as a
+          // late reader call is ("reader-late"): the calls were made. A poll that only waited on another's made none.
+          const turn = s.turn;
+          const started = performance.now();
+          cue.polled = polled
+            .then((calls) => {
+              if (calls > 0) {
+                this.trace({
+                  sessionId: s.id,
+                  turn,
+                  event: "sync",
+                  decision: "skipped",
+                  reason: "sync poll behind",
+                  latencyMs: Math.round(performance.now() - started),
+                  sourceCalls: calls,
+                  modelCalls: 0,
+                  costUsd: 0,
+                  itemIds: [],
+                  syncCalls: calls,
+                });
+              }
+              return tally.fresh > 0;
+            })
+            .catch(() => false);
+        } else syncCalls = await polled;
         if (s.closed) return { calls: syncCalls, syncCalls };
       }
       local = this.localOf(s, all, behind);
@@ -5669,6 +5750,9 @@ interface AskInternal {
 }
 
 const sessionKey = (e: Scope & { sessionId: string }) => `${scopeKey(e)}#${e.sessionId}`;
+
+const sameEntry = (a: LedgerEntry | undefined, b: LedgerEntry | undefined) =>
+  a === b || (a !== undefined && b !== undefined && a.turn === b.turn && a.version === b.version);
 
 /** An opaque per-user key for provider sticky routing (prompt-cache reuse): a hash, never the ids themselves. */
 export const userCacheKey = (scope: Scope) =>

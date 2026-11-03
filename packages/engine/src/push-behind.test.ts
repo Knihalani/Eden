@@ -4,6 +4,7 @@ import { Budget } from "@eden/llm";
 import { itemId, type AgentEvent, type ContextItem, type Injection, type Scope } from "@eden/protocol";
 import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
+import type { Ledger } from "./ledger";
 import { ContextPartner } from "./partner";
 import { AskReader, type ReaderInput, type ReaderKind, type ReaderMaker } from "./reader";
 import type { Trace } from "./trace";
@@ -59,7 +60,7 @@ class SlowListSource implements Source {
 /** Flags the first of `ids` its pool holds; counts the calls that reached it. */
 class PickReader implements ReaderMaker {
   calls: ReaderInput[] = [];
-  constructor(private readonly ids: string[]) {}
+  constructor(public ids: string[]) {}
   async read(input: ReaderInput) {
     this.calls.push(input);
     const i = this.ids.map((id) => input.items.findIndex((x) => x.id === id)).find((k) => k >= 0) ?? -1;
@@ -299,6 +300,178 @@ describe("readerPushBehind: the push's reader does not wait for the sync's poll"
       expect(packets).toHaveLength(1);
       expect(packets[0]!.sessionId).toBe(sid);
       expect(packets[0]!.tenantId).toBe(s.tenantId);
+    }
+  });
+});
+
+type Open = {
+  sessions: Map<string, { id: string; scope: Scope; turn: number; ledger: Ledger; delivered: unknown[] }>;
+  slowPath: (...a: unknown[]) => Promise<unknown>;
+};
+const sessionOf = (p: ContextPartner, s: Scope, sid: string) =>
+  [...(p as unknown as Open).sessions.values()].find(
+    (x) => x.id === sid && x.scope.tenantId === s.tenantId && x.scope.userId === s.userId,
+  )!;
+
+// Audit 2026-11-03b (corr-push-behind-withdraw-leaves-ledger-marked): the second reading withdraws the first packet
+// the agent has not taken; what it does not deliver again must not stay marked delivered, or the agent never gets it.
+describe("readerPushBehind: a withdrawn packet gives its items back", () => {
+  const SETTLED = "Harlow dispute settled: the invoice may be paid, new bank details";
+
+  test("an item the withdrawn packet carried reaches the agent on its next request", async () => {
+    const { p, src, maker, traces, warm, advance, now } = setup({ cueCooldownTurns: 0 });
+    await warm(user);
+    advance(5 * HOUR);
+    src.add("new", "Harlow dispute settled", SETTLED, now());
+    src.hold();
+    await say(p, now()); // Read from the stale index: HOLD is flagged and queued.
+    src.release();
+    await until(() => maker.calls.length >= 2);
+    await Bun.sleep(20);
+    // The re-read flags NEW: the HOLD packet is withdrawn untaken, and only NEW goes out.
+    expect(cited(p.takePending({ ...user, sessionId: "s1" }))).toEqual([NEW]);
+    const s = sessionOf(p, user, "s1");
+    expect(s.ledger.isFresh(HOLD, s.turn)).toBe(true);
+    expect(s.ledger.isFresh(NEW, s.turn)).toBe(false);
+    // Nor is HOLD in the near-duplicate memory a lookup reads: only NEW's sketch is.
+    expect(s.delivered).toHaveLength(1);
+    maker.ids = [HOLD];
+    await say(p, now(), user, "s1", "Wire the Harlow invoice payment now");
+    await Bun.sleep(20);
+    const second = p.takePending({ ...user, sessionId: "s1" });
+    expect(cited(second)).toContain(HOLD);
+    const pushes = traces.filter((t) => t.decision === "reader-push");
+    expect(pushes.at(-1)!.itemIds).toContain(HOLD);
+  });
+
+  test("an item the second packet delivers again stays delivered; the near-duplicate memory drops the rest", async () => {
+    const { p, src, maker, warm, advance, now } = setup({ cueCooldownTurns: 0 }, [NEW, HOLD]);
+    await warm(user);
+    advance(5 * HOUR);
+    src.add("new", "Harlow dispute settled", SETTLED, now());
+    src.hold();
+    await say(p, now());
+    const s = sessionOf(p, user, "s1");
+    const remembered = s.delivered.length;
+    expect(remembered).toBeGreaterThan(0);
+    // The second reading flags both: the withdrawn HOLD goes out again beside NEW.
+    maker.ids = [HOLD];
+    const read = maker.read.bind(maker);
+    maker.read = async (input) => {
+      const r = await read(input);
+      const i = input.items.findIndex((x) => x.id === NEW);
+      return i >= 0
+        ? { ...r, bears: [...r.bears, { i, kind: "blocks" as const, why: "the payment details changed" }] }
+        : r;
+    };
+    src.release();
+    await until(() => maker.calls.length >= 2);
+    await Bun.sleep(20);
+    expect(new Set(cited(p.takePending({ ...user, sessionId: "s1" })))).toEqual(new Set([HOLD, NEW]));
+    // HOLD's sketch is there once (taken out with its packet, put back with the new one), beside NEW's.
+    expect(s.delivered).toHaveLength(remembered + 1);
+    expect(s.ledger.isFresh(HOLD, s.turn)).toBe(false);
+    expect(s.ledger.isFresh(NEW, s.turn)).toBe(false);
+  });
+
+  test("isolation: the withdrawal restores only its own session's ledger (tenant/user#session)", async () => {
+    const { p, src, maker, warm, advance, now } = setup({ cueCooldownTurns: 0 });
+    const other = { tenantId: "t2", userId: "u1" };
+    await warm(user);
+    await warm(other);
+    advance(5 * HOUR);
+    src.add("new", "Harlow dispute settled", SETTLED, now());
+    // The other tenant, and the same user's other session, are read with nothing held: HOLD is theirs.
+    maker.ids = [HOLD];
+    await say(p, now(), other, "s1");
+    await Bun.sleep(30);
+    maker.ids = [NEW, HOLD];
+    const others = [sessionOf(p, other, "s1")];
+    const before = others.map((x) => [x.ledger.entry(HOLD), x.ledger.entry(NEW)]);
+    expect(before[0]![0]).toBeDefined();
+    advance(5 * HOUR); // Stale again for this user.
+    src.add("newer", "Harlow dispute settled again", SETTLED, now());
+    src.hold();
+    await say(p, now(), user, "s1");
+    src.release();
+    await until(() => maker.calls.filter((c) => c.request === REQUEST).length >= 3);
+    await Bun.sleep(20);
+    const mine = sessionOf(p, user, "s1");
+    expect(mine.ledger.isFresh(HOLD, mine.turn)).toBe(true);
+    expect(others.map((x) => [x.ledger.entry(HOLD), x.ledger.entry(NEW)])).toEqual(before);
+  });
+});
+
+// Audit 2026-11-03b (corr-shared-poll-counts-as-fresh): a lookup that waited on another's poll counts what that poll
+// stored, so in a static world no lookup is made again and no push is read again.
+describe("syncPollBehind: a lookup waiting on another's poll", () => {
+  const counting = (p: ContextPartner) => {
+    const open = p as unknown as Open;
+    const orig = open.slowPath.bind(p);
+    const n = { followUps: 0 };
+    open.slowPath = (...a: unknown[]) => {
+      if ((a[1] as { followUp?: boolean }).followUp) n.followUps++;
+      return orig(...a);
+    };
+    return n;
+  };
+
+  test("two concurrent lookups on a stale static source: no follow-up, no push re-read", async () => {
+    const { p, src, traces, warm, advance, now } = setup();
+    await warm(user);
+    advance(5 * HOUR);
+    const n = counting(p);
+    src.hold();
+    const lists = src.lists;
+    const a = say(p, now(), user, "a");
+    const b = say(p, now(), user, "b");
+    await Bun.sleep(10);
+    src.release();
+    await Promise.all([a, b]);
+    await Bun.sleep(30);
+    expect(src.lists - lists).toBe(1);
+    expect(n.followUps).toBe(0);
+    // One reading per session's request, none again.
+    expect(traces.filter((t) => t.decision === "reader-push")).toHaveLength(2);
+  });
+
+  test("off readerPush: two concurrent lookups give no follow-up; one stored item gives each exactly one", async () => {
+    for (const store of [false, true]) {
+      const { p, src, warm, advance, now } = setup({ readerPush: false, readerPushBehind: false });
+      await warm(user);
+      advance(5 * HOUR);
+      if (store) src.add("new", "Harlow dispute settled", "Harlow dispute settled: the invoice may be paid", now());
+      const n = counting(p);
+      src.hold();
+      const a = say(p, now(), user, "a");
+      const b = say(p, now(), user, "b");
+      await Bun.sleep(10);
+      src.release();
+      await Promise.all([a, b]);
+      await Bun.sleep(30);
+      expect(n.followUps).toBe(store ? 2 : 0);
+    }
+  });
+
+  test("the push as the waiter: no re-read in a static world, one when the poll it waited on stored", async () => {
+    for (const store of [false, true]) {
+      const { p, src, maker, traces, warm, advance, now } = setup();
+      await warm(user);
+      advance(5 * HOUR);
+      if (store) src.add("new", "Harlow dispute settled", "Harlow dispute settled: the invoice may be paid", now());
+      src.hold();
+      // The agent's ask in another session polls first and waits for its poll; the request's lookups wait on it.
+      const asked = p.ask({ ...user, sessionId: "x", question: "Anything about lunch orders?" });
+      await Bun.sleep(5);
+      const lists = src.lists;
+      await say(p, now());
+      expect(src.lists).toBe(lists); // The push and the event's lookup made no listing call of their own.
+      src.release();
+      await asked;
+      await Bun.sleep(30);
+      const pushes = traces.filter((t) => t.decision === "reader-push" && t.sessionId === "s1");
+      expect(pushes).toHaveLength(store ? 2 : 1);
+      expect(maker.calls.filter((c) => c.request === REQUEST).length).toBe(store ? 2 : 1);
     }
   });
 });

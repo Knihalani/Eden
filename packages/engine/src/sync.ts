@@ -151,8 +151,13 @@ interface SourceSync {
   beta: number;
   failures: number;
   retryAt: number;
-  /** The poll or page read in flight, so two never overlap. */
-  busy: Promise<void> | null;
+  /**
+   * The poll, sweep or page read in flight, so two never overlap. It resolves to how many items that read stored new
+   * or changed (`reading`), so a lookup that waited on it instead of polling knows whether the index moved.
+   */
+  busy: Promise<number> | null;
+  /** The read `busy` holds: what it has stored so far (`store` adds to it). */
+  reading: { stored: number } | null;
   /** The source pushes its changes (`notify` was called for it): current while it has no unread notice. */
   pushed: boolean;
   /** When the oldest unread notice arrived (+Infinity: none). A complete poll that began after it clears it. */
@@ -348,29 +353,30 @@ export class SyncManager {
   /**
    * A lookup's on-demand poll (`syncOnDemand`): every warm source of the user that is not current is polled now,
    * at most `catchupPages` pages each before the lookup goes on (the rest is read in the background), within the
-   * lookup's deadline. Returns the listing calls made; the sources it brought current answer the lookup locally.
-   * `tally.fresh` counts the items its polls stored new or changed; a poll it waited on instead (another's) counts
-   * as one, since what that poll stored is not known here.
+   * lookup's deadline. Returns the listing calls this freshen made (not another lookup's, made meanwhile); the
+   * sources it brought current answer the lookup locally. `tally.fresh` counts the items stored new or changed by its
+   * polls, and by any read it waited on instead (a timed poll, a sweep, another lookup's poll: `SourceSync.busy`
+   * resolves to what that read stored), or none for one it stopped waiting on (`signal`).
    */
   async freshen(scope: Scope, sources: Source[], signal: AbortSignal, tally?: { fresh: number }): Promise<number> {
     const u = this.users.get(scopeKey(scope));
     if (!u) return 0;
     const now = this.deps.now();
-    const before = this.stats.demandCalls;
+    const own = { fresh: 0, calls: 0 };
     await Promise.all(
       sources.map(async (source) => {
         const s = u.sources.get(source.id);
         if (!s || s.phase !== "warm" || this.isCurrent(s, now) || !source.list) return;
         if (s.busy) {
-          // A poll already running (timed, or another lookup's): its answer, not a second call.
-          await Promise.race([s.busy, aborted(signal)]);
-          if (tally) tally.fresh++;
+          // A read already running (timed, a sweep, or another lookup's poll): its answer, not a second call.
+          own.fresh += await Promise.race([s.busy, aborted(signal).then(() => 0)]);
           return;
         }
-        await this.run(s, () => this.poll(u, s, source, this.o.catchupPages, true, signal, tally));
+        await this.run(s, () => this.poll(u, s, source, this.o.catchupPages, true, signal, own));
       }),
     );
-    return this.stats.demandCalls - before;
+    if (tally) tally.fresh += own.fresh;
+    return own.calls;
   }
 
   // ── internals ──
@@ -492,6 +498,8 @@ export class SyncManager {
           timeoutMs: this.o.timeoutMs,
           reserve: SERVING_HEADROOM,
         });
+        // Stored within the read, so what it stored is the read's (`SourceSync.reading`).
+        if (typeof page !== "string" && !u.gone) this.store(u, next, page.items);
       });
       if (page === undefined || u.gone) return;
       if (typeof page === "string") {
@@ -502,7 +510,6 @@ export class SyncManager {
       this.stats.backgroundCalls++;
       this.stats.backgroundItems += page.items.length;
       next.failures = 0;
-      this.store(u, next, page.items);
       for (const it of page.items)
         if (it.updatedAt !== undefined) next.frontier = Math.min(next.frontier, it.updatedAt);
       if (page.items.length > 0 && page.items.every((it) => it.updatedAt === undefined)) next.frontier = -Infinity;
@@ -578,7 +585,7 @@ export class SyncManager {
     maxPages: number,
     demand: boolean,
     signal?: AbortSignal,
-    tally?: { fresh: number },
+    tally?: { fresh: number; calls: number },
   ): Promise<void> {
     const started = this.deps.now();
     let cursor: string | undefined;
@@ -603,13 +610,13 @@ export class SyncManager {
       });
       if (u.gone) return;
       if (typeof page === "string") {
-        if (page !== "limited" && page !== "busy") this.count(demand);
+        if (page !== "limited" && page !== "busy") this.count(demand, tally);
         // The lookup gave up (its deadline, the session ending): no evidence against the source, no back-off.
         if (signal?.aborted) return;
         this.failed(s, page);
         return;
       }
-      this.count(demand);
+      this.count(demand, tally);
       if (demand) this.stats.demandItems += page.items.length;
       else this.stats.backgroundItems += page.items.length;
       s.failures = 0;
@@ -710,6 +717,7 @@ export class SyncManager {
     if (u.gone || items.length === 0 || this.users.get(u.key) !== u || u.sources.get(s.id) !== s) return 0;
     const own = items.filter((it) => it.sourceId === s.id);
     const changed = this.deps.cache.put(u.scope, own, this.deps.now(), true, true);
+    if (s.reading) s.reading.stored += changed.length;
     for (const it of own) {
       // Listed: not missing, whatever an earlier sweep thought (an offset listing may have skipped it then).
       s.missed.delete(it.id);
@@ -756,20 +764,31 @@ export class SyncManager {
     }
   }
 
-  private count(demand: boolean): void {
-    if (demand) this.stats.demandCalls++;
-    else this.stats.backgroundCalls++;
+  /** One listing call, a lookup's (`demand`, also counted in its freshen's `tally`) or the background's. */
+  private count(demand: boolean, tally?: { calls: number }): void {
+    if (demand) {
+      this.stats.demandCalls++;
+      if (tally) tally.calls++;
+    } else this.stats.backgroundCalls++;
   }
 
-  /** Runs one read for a source, so a poll, a sweep and a backfill page never overlap on it. */
-  private async run(s: SourceSync, work: () => Promise<void>): Promise<void> {
+  /**
+   * Runs one read for a source, so a poll, a sweep and a backfill page never overlap on it. Resolves to what the read
+   * stored new or changed (`SourceSync.reading`), as its `busy` does for a lookup waiting on it.
+   */
+  private async run(s: SourceSync, work: () => Promise<void>): Promise<number> {
     while (s.busy) await s.busy;
-    const p = work().catch(() => {});
+    const reading = { stored: 0 };
+    s.reading = reading;
+    const p = work()
+      .catch(() => {})
+      .then(() => reading.stored);
     s.busy = p;
     try {
-      await p;
+      return await p;
     } finally {
       if (s.busy === p) s.busy = null;
+      if (s.reading === reading) s.reading = null;
     }
   }
 }
@@ -792,6 +811,7 @@ function newSourceSync(id: string): SourceSync {
     failures: 0,
     retryAt: 0,
     busy: null,
+    reading: null,
     pushed: false,
     dirtyAt: Infinity,
   };
