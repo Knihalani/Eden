@@ -9,12 +9,34 @@
 | `bun run test:pkg engine sim` | Named packages | Working inside one package |
 | `bun run check:fast` | format:check + typecheck + test:changed | Before pushing a work-in-progress commit |
 | `bun run check` | format:check + typecheck + every test | Before every merge (CLAUDE.md) |
+| `CHECK_COLD=1 bun run check` | The same, without the Prettier and tsc caches | When a cache is in doubt |
 | `bun test ./packages/x/src/y.test.ts` | One file | Debugging; **from the repo root only** |
 
 `bunfig.toml`'s preload (`scripts/test-preload.ts`: temp `HOME` and `EDEN_HOME`, `EDEN_*` and `OPENROUTER_*`
 cleared) is read from the working directory, so `bun test` started inside a package skips it. `test:changed` treats
 a change outside packages/ and examples/ (scripts, bun.lock, tsconfig, bunfig) as "run everything", and skips
 Markdown-only changes. `TEST_SERIAL=1 bun run test` runs in one process, as before parallelism.
+
+## Caches in format:check and typecheck (measured 2026-11-03, 4-core container, Bun 1.4.4)
+
+`scripts/format.sh` runs Prettier with `--cache --cache-strategy content`, and `scripts/typecheck.sh` runs `tsc
+--incremental` with one build-info file per `tsconfig.json` (named from its path). Both caches live under
+`node_modules/.cache/`, which git ignores. Prettier's cache skips only files whose content matches a run that found
+them formatted, and its key covers the Prettier version and options; tsc re-checks whatever an edit can reach.
+`scripts/check-line-length.ts` has no cache and still reads every file, so an overlong comment is always caught.
+`CHECK_COLD=1 bun run check` (or `format:check`, `typecheck`) drops both caches: use it when a cache is in doubt.
+
+| Step | Before (no cache, 2 runs) | Cold cache | Warm cache |
+|---|---|---|---|
+| `bun run format:check` | 11.8 s, 10.7 s | 10.6 s | 2.4 s, 2.7 s, 2.1 s |
+| `bun run typecheck` | 9.8 s, 8.6 s | 9.9 s | 3.8 s, 3.0 s, 3.2 s |
+| `bun run check` | | 39.8 s (`CHECK_COLD=1`) | 21.1 s |
+
+On a warm cache, each of these still failed the check: a new untracked misformatted file (format:check, 2.6 s), a
+type error appended to `packages/engine/src/anticipate.test.ts` (typecheck, 3.4 s), and a 143-column comment
+(format:check, 2.6 s). A warm typecheck after an edit to a widely imported file costs close to a cold one (about
+8 s in the audit that proposed the caches; not re-measured here). Tests now dominate the check: 15.7 s of the warm
+21.1 s.
 
 ## Parallel runs (measured 2026-11-02, 4-core container, Bun 1.4.4)
 
