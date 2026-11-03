@@ -38,7 +38,8 @@ const A = args || {};
 const SCOPE = A.scope || "the whole repository";
 const FOCUS = A.focus ? `\nUser's extra focus: ${A.focus}` : "";
 const DATE = A.date || "undated";
-const MAX_ROUNDS = A.maxRounds || 3;
+// `finalizeOnly` skips the audit rounds (scale-out mode: the fixes were made in parallel cloud sessions).
+const MAX_ROUNDS = A.finalizeOnly ? 0 : A.maxRounds || 3;
 // The smallest improvement a lever finder keeps (a multiple of the metric); `minMultiple` in args.
 const MIN = A.minMultiple || 1.5;
 const MAX_FINDINGS = A.maxFindings || 24;
@@ -351,6 +352,7 @@ const ledger = {
   packages: [],
   merges: [],
 };
+if (A.deferred) ledger.deferred.push(...A.deferred);
 let round = 0;
 
 while (round < MAX_ROUNDS) {
@@ -450,13 +452,27 @@ merged list.${READONLY}\n\n${JSON.stringify(raw)}`,
 verified findings ranked by value (severity, then effort), each with evidence, impact, fix and status. Add a round ${round}
 section. Then split the findings into at most ${MAX_PACKAGES} work packages for parallel fixers: packages must not share
 files (merge or sequence them otherwise), each package small enough for one agent, with concrete acceptance checks a
-reviewer can run. Defer findings that need a decision from the user (say what decision). Commit the report and publish it to
+reviewer can run. Decide judgement calls yourself (the owner delegates them): pick the option the measurements favour
+and record it as a decision row in the repo's decision log, with the evidence. Defer a finding only when it needs paid
+spend beyond the run's budget, an irreversible or external action, or work that must wait for another package (say
+which and why). Commit the report and publish it to
 ${INTEGRATION} as described below.\n\nVerified findings:\n${JSON.stringify(work)}\n${RULES}\n${GITREFS(INTEGRATION, `${INTEGRATION} if it exists, else ${BASE}`)}`,
     { label: `audit:r${round}`, phase: "Audit", schema: PACKAGES, isolation: "worktree" },
   );
   if (!audit || !audit.packages.length) break;
   ledger.packages.push(...audit.packages);
   ledger.deferred.push(...audit.deferred);
+  // Scale-out mode: the orchestrator hands the packages to parallel cloud sessions instead (see SKILL.md).
+  if (A.planOnly)
+    return {
+      planOnly: true,
+      integrationBranch: INTEGRATION,
+      auditPath: AUDIT_PATH,
+      map,
+      findings: work,
+      packages: audit.packages,
+      deferred: audit.deferred,
+    };
 
   const { approved, merged } = await fixRound(audit.packages, work, `r${round}`);
   if (!approved.length) break;
@@ -482,6 +498,9 @@ Measure with the repo's no-cost checks, evals and benchmarks, on vs off, in your
    the reason (in the repo's decision log or the audit file).
 3. Approved branches not merged into ${INTEGRATION}, TODO/FIXME lines the run added, docs that disagree with the code,
    failing or flaky tests.
+4. Production defaults versus the best measured configuration: if the repo benchmarks a named preset that beats the
+   shipped defaults, promote what can be promoted (decision row, docs) or record exactly what blocks it and the fix.
+Decide each judgement call yourself from the measurements and record it; the owner delegates these decisions.
 Return work packages (no shared files, concrete acceptance checks) for everything that needs a change; return an
 empty list only if nothing is left. Do not commit; the packages are fixed and reviewed after you.
 \nDeferred: ${JSON.stringify(ledger.deferred)}\nUnresolved: ${JSON.stringify(ledger.unresolved)}\nOrientation brief:\n${map}\n${RULES}\nWork in your own worktree: \`git checkout --detach ${INTEGRATION}\`.`,
@@ -504,9 +523,12 @@ the top of ${AUDIT_PATH} (commit and publish it to ${INTEGRATION} as described a
 without a one-line explanation. Structure:
 1. The bottom line in 3–5 sentences (what was wrong, what is fixed, what it changes for users/cost/speed/safety).
 2. A table: dimension × (found, verified, fixed and reviewed, still open).
-3. The most important fixes, each in one or two lines with measured before/after numbers (label estimates).
-4. What is still open and why (needs a decision, too big, rejected by review), with the next step for each.
-5. Where everything is: the audit file, the integration branch, per-package branches.
+3. What was achieved: a table with one row per merged fix: the fix, the measured before -> after with units, and the
+   outcome (shipped as default, shipped behind a flag with the recorded reason, or removed). Label estimates.
+4. Decisions made during the run: one line each (decision, evidence, decision-log row).
+5. What is still open and why (needs paid spend beyond budget, an external action, or rejected by review), with the
+   next step for each. Nothing may be open without a reason and a next step.
+6. Where everything is: the audit file, the integration branch, per-package branches.
 Use only facts from the data below; do not invent numbers. Check each claimed fix against git (is its branch merged in
 ${INTEGRATION}?) and say so where the data and git disagree.
 ${GITREFS(INTEGRATION, INTEGRATION)}\n\nData:\n${JSON.stringify({
