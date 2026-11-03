@@ -349,12 +349,7 @@ export class ItemCache {
     this.lastNow = now;
     this.lastWall = Date.now();
     if (this.expiry === null && !this.closed && this.limits.expireEveryMs > 0) {
-      this.expiry = setInterval(
-        () => this.expireIdle(this.lastNow + (Date.now() - this.lastWall)),
-        this.limits.expireEveryMs,
-      );
-      // Never what keeps a process alive: a server's own handles do, and a test or script exits when it is done.
-      (this.expiry as { unref?: () => void }).unref?.();
+      this.expiry = expiryTimer(new WeakRef<ItemCache>(this), this.limits.expireEveryMs);
     }
     const u = this.touch(scope);
     this.sweep(u, now);
@@ -790,6 +785,11 @@ export class ItemCache {
     return last !== undefined && last.at >= since;
   }
 
+  /** Runs `expireIdle` on the cache's own clock (the last `put`'s `now` moved on by wall time since). */
+  tick(): void {
+    this.expireIdle(this.lastNow + (Date.now() - this.lastWall));
+  }
+
   /** Stops the expiry timer for good (a closing server, a test). The cache still answers; nothing expires on time. */
   close(): void {
     this.closed = true;
@@ -825,4 +825,21 @@ function sketchOf(u: UserCache, item: ContextItem): Sketch | null {
   if (u.sketcher.load(`${item.title}\n${own}`) === 0) return null;
   u.sketcher.simhash(simScratch);
   return { lo: simScratch[0]!, hi: simScratch[1]!, numbers: u.sketcher.numberKey };
+}
+
+/**
+ * The expiry timer of one cache, which it holds only weakly. `unref` keeps the timer from holding the process open,
+ * but a tick closing over the cache would keep a dropped one (labs build one per task, session or loop and close
+ * none) resident until exit. A module-level function, so the tick's scope holds nothing of `put`'s (in JSC a closure
+ * keeps its whole enclosing scope, `this` included). A collected cache stops its own timer on the next tick.
+ */
+function expiryTimer(ref: WeakRef<ItemCache>, everyMs: number): ReturnType<typeof setInterval> {
+  const id: ReturnType<typeof setInterval> = setInterval(() => {
+    const c = ref.deref();
+    if (c === undefined) clearInterval(id);
+    else c.tick();
+  }, everyMs);
+  // Never what keeps a process alive: a server's own handles do, and a test or script exits when it is done.
+  (id as { unref?: () => void }).unref?.();
+  return id;
 }

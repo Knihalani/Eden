@@ -137,8 +137,12 @@ export function startMs(item: ContextItem): number {
   return s ? parseWhen(s) : Number.NaN;
 }
 
-/** A trailing zone: "Z", "+01:00", "-0700", "GMT+0100", an RFC 2822 name; an optional "(comment)" after it. */
-const HAS_ZONE = /(?:\dZ|[+-]\d{2}(?::?\d{2})?|\b(?:UTC?|GMT|[ECMP][SD]T))(?:\s*\([^)]*\))?\s*$/;
+/**
+ * A trailing zone: "Z", "+01:00" or "-0700" right after a time (so the year in "14-Oct-2026" is no offset), or a
+ * name ("UTC", "GMT+0100", an RFC 2822 zone); an optional "(comment)" after it.
+ */
+const HAS_ZONE =
+  /(?:\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s*(?:Z|[+-]\d{2}(?::?\d{2})?)|\b(?:UTC?|GMT|[ECMP][SD]T)(?:\s*[+-]\d{2}:?\d{2})?)(?:\s*\([^)]*\))?\s*$/;
 const ISO_LOCAL = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/;
 
 /**

@@ -21,6 +21,7 @@ const mail = (date: string): ContextItem => ({
 const INPUTS = [
   "Wed, 14 Oct 2026 23:30",
   "14 Oct 2026",
+  "14-Oct-2026",
   "2026-10-14T09:00",
   "2026-10-14 09:00:30",
   "2026-10-14",
@@ -29,6 +30,7 @@ const INPUTS = [
   "Wed, 14 Oct 2026 09:14:00 PST",
   "2026-10-14T09:00:00+09:00",
   "2026-10-14T09:00:00Z",
+  "Wed, 14 Oct 2026 09:14:00 CEST",
   "not a date",
 ];
 
@@ -70,12 +72,15 @@ describe("parseWhen: zone-less dates are UTC, whatever the host's zone", () => {
   test("zone-less date-times and day-only RFC 2822 dates read as UTC; zones and ISO bare dates as written", () => {
     expect(parseWhen("Wed, 14 Oct 2026 23:30".replace(/,/g, ""))).toBe(Date.UTC(2026, 9, 14, 23, 30));
     expect(parseWhen("14 Oct 2026")).toBe(Date.UTC(2026, 9, 14));
+    expect(parseWhen("14-Oct-2026")).toBe(Date.UTC(2026, 9, 14)); // Its "-2026" is a year, not an offset.
     expect(parseWhen("2026-10-14T09:00")).toBe(Date.UTC(2026, 9, 14, 9));
     expect(parseWhen("2026-10-14 09:00:30")).toBe(Date.UTC(2026, 9, 14, 9, 0, 30));
     expect(parseWhen("2026-10-14")).toBe(Date.UTC(2026, 9, 14));
     expect(parseWhen("Wed 14 Oct 2026 09:14:00 -0700")).toBe(Date.UTC(2026, 9, 14, 16, 14));
     expect(parseWhen("Wed 14 Oct 2026 09:14:00 PST")).toBe(Date.UTC(2026, 9, 14, 17, 14));
     expect(parseWhen("2026-10-14T09:00:00+09:00")).toBe(Date.UTC(2026, 9, 14, 0));
+    // A zone name outside RFC 2822 does not parse at all (callers fall back: sentAt and datedOf to updatedAt).
+    expect(parseWhen("Wed 14 Oct 2026 09:14:00 CEST")).toBeNaN();
     expect(parseWhen("not a date")).toBeNaN();
     expect(parseWhen("")).toBeNaN();
     expect(datedOf(mail("14 Oct 2026"))).toBe("2026-10-14");

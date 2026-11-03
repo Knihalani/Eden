@@ -133,7 +133,7 @@ describe("expireIdle: idle users and expired items are freed, not held until the
   const other = { tenantId: "u", userId: "carol" };
 
   test("a user whose items are all past ttlMs is dropped, and the drop hook hears (scope, null)", () => {
-    const cache = new ItemCache({ expireEveryMs: 0 });
+    const cache = new ItemCache({ expireEveryMs: 60_000 });
     const heard: [string, string[] | null][] = [];
     cache.onDropped((s, ids) => heard.push([`${s.tenantId}/${s.userId}`, ids]));
     cache.put(alice, [item("mail", "1", "Globex renewal call"), item("mail", "2", "Initech invoice")], t0);
@@ -148,7 +148,7 @@ describe("expireIdle: idle users and expired items are freed, not held until the
   });
 
   test("a user with a synced item within syncTtlMs is kept, their expired lookups swept; other tenants untouched", () => {
-    const cache = new ItemCache({ expireEveryMs: 0 });
+    const cache = new ItemCache({ expireEveryMs: 60_000 });
     cache.put(alice, [item("cal", "s", "Board offsite agenda")], t0, false, true); // Synced (D57).
     cache.put(alice, [item("mail", "l", "Globex renewal call")], t0);
     cache.put(bob, [item("mail", "b", "Hooli quote")], t0);
@@ -167,7 +167,7 @@ describe("expireIdle: idle users and expired items are freed, not held until the
   });
 
   test("a fresh user ahead of an idle one in write order does not keep the idle one", () => {
-    const cache = new ItemCache({ expireEveryMs: 0 });
+    const cache = new ItemCache({ expireEveryMs: 60_000 });
     cache.put(bob, [item("mail", "b", "Hooli quote")], t0 + 20 * H);
     cache.put(alice, [item("mail", "a", "Globex call")], t0); // Written later, on an older clock: still idle.
     expect(cache.expireIdle(t0 + 25 * H)).toBe(1);
@@ -176,7 +176,7 @@ describe("expireIdle: idle users and expired items are freed, not held until the
   });
 
   test("a user with only a recent probe memo is kept; once the probe is old too, dropped", () => {
-    const cache = new ItemCache({ expireEveryMs: 0 });
+    const cache = new ItemCache({ expireEveryMs: 60_000 });
     cache.put(alice, [], t0);
     cache.rememberProbe(alice, "q", [], 8, t0 + 10 * H);
     expect(cache.expireIdle(t0 + 12 * H)).toBe(0);
@@ -196,5 +196,22 @@ describe("expireIdle: idle users and expired items are freed, not held until the
     cache.put(alice, [item("mail", "1", "Globex renewal call")], 1_000);
     await Bun.sleep(150);
     expect(cache.userCount).toBe(1); // Closed: nothing expires on time.
+  });
+
+  test("a running timer does not keep a dropped cache alive (nothing closes the caches labs build per task)", async () => {
+    // Built in a function so no stack slot here holds the cache; only the WeakRef does.
+    const make = (): WeakRef<ItemCache> => {
+      const cache = new ItemCache({ expireEveryMs: 60_000 });
+      for (let i = 0; i < 50; i++) cache.put(alice, [item("mail", String(i), `Globex renewal call ${i}`)]);
+      return new WeakRef(cache);
+    };
+    const refs = Array.from({ length: 20 }, make);
+    for (let i = 0; i < 10; i++) {
+      await Bun.sleep(1);
+      Bun.gc(true);
+    }
+    // JSC scans the stack conservatively, so a stale slot can pin the odd one; a tick closing over its cache pins
+    // all 20.
+    expect(refs.filter((r) => r.deref() !== undefined).length).toBeLessThanOrEqual(2);
   });
 });
