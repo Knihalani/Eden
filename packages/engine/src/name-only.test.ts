@@ -6,6 +6,7 @@ import { StaticSource, type StaticDoc } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import { isImperative } from "./probes";
+import { CORE_CONFIG } from "./parts";
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -37,7 +38,7 @@ async function run(config: Record<string, unknown>, text: string, docs = DOCS): 
     budget: new Budget(),
     model: null,
     now: () => NOW,
-    config: { probes: true, probeGraceMs: 1_000, confidentScore: 0.1, minMatchedTerms: 1, ...config },
+    config: { ...CORE_CONFIG, probes: true, probeGraceMs: 1_000, confidentScore: 0.1, minMatchedTerms: 1, ...config },
   });
   const out: Record<string, string[]> = {};
   for (const userId of ["u1", "u2"]) {

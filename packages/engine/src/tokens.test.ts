@@ -7,6 +7,7 @@ import { ItemCache } from "./cache";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner } from "./partner";
 import { compactText, messageParts, renderPacket, SHOWN } from "./render";
+import { CORE_CONFIG } from "./parts";
 
 /**
  * The tokens track (D76–D78; docs/research/gen-tokens.md): `compactAsk` cuts an ask's answer as packets are cut,
@@ -121,6 +122,7 @@ describe("compactAsk and askDedup through the engine", () => {
       model: null,
       now: () => at,
       config: {
+        ...CORE_CONFIG,
         probes: true,
         probeGraceMs: 1_000,
         compactInjection: true,
@@ -139,10 +141,13 @@ describe("compactAsk and askDedup through the engine", () => {
     return got;
   };
 
-  test("the flags are off by default", () => {
-    expect(DEFAULT_CONFIG.compactAsk).toBe(false);
-    expect(DEFAULT_CONFIG.askDedup).toBe(false);
-    expect(DEFAULT_CONFIG.compactParts).toBe(false);
+  test("the flags are on in the default and off in the core (D111)", () => {
+    expect(DEFAULT_CONFIG.compactAsk).toBe(true);
+    expect(DEFAULT_CONFIG.askDedup).toBe(true);
+    expect(DEFAULT_CONFIG.compactParts).toBe(true);
+    expect(CORE_CONFIG.compactAsk).toBe(false);
+    expect(CORE_CONFIG.askDedup).toBe(false);
+    expect(CORE_CONFIG.compactParts).toBe(false);
   });
 
   test("compactAsk cuts the answer to the parts that bear on the question; the citations are unchanged", async () => {
@@ -199,7 +204,7 @@ describe("compactAsk and askDedup through the engine", () => {
       budget: new Budget(),
       model: null,
       now: () => at,
-      config: { compactAsk: true, askDedup: true },
+      config: { ...CORE_CONFIG, compactAsk: true, askDedup: true },
     });
     const first = await p.ask({ ...scope, sessionId: "v", question: po });
     expect(first.answer).toContain("CFO sign-off");

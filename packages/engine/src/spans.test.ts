@@ -5,6 +5,7 @@ import type { AgentEvent } from "@eden/protocol";
 import { QueryPlanner, StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner, type PartnerDeps } from "./partner";
+import { CORE_CONFIG } from "./parts";
 import { SPAN_NAMES, SpanStats, Tracer, type Span } from "./spans";
 import type { Trace } from "./trace";
 
@@ -39,6 +40,8 @@ function partner(extra: Partial<PartnerDeps> = {}) {
     model: null,
     onTrace: (t) => traces.push(t),
     ...extra,
+    // The core (D111): these tests check one mechanism each, so every part not named in a test is out.
+    config: { ...CORE_CONFIG, ...extra.config },
   });
   return { p, traces };
 }

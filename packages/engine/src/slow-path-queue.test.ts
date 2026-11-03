@@ -6,6 +6,7 @@ import { StaticSource, type ListPage, type SearchQuery, type Source } from "@ede
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import type { Trace } from "./trace";
+import { CORE_CONFIG } from "./parts";
 
 // `slowPathQueue`: a request that arrives while the session's slow path is busy is kept (one slot, the latest wins)
 // and looked up once that slow path settles, instead of being dropped.
@@ -94,7 +95,7 @@ function make(config: Record<string, unknown>) {
     model,
     now: () => clock,
     // Nothing is sure enough to skip the judge: every lookup makes its call.
-    config: { confidentScore: 5, ...config },
+    config: { ...CORE_CONFIG, confidentScore: 5, ...config },
     onTrace: (t) => traces.push(t),
   });
   return { p, traces, model, advance: (ms: number) => (clock += ms), now: () => clock };
@@ -295,6 +296,7 @@ test("with syncPollBehind, the queued lookup gets the follow-up on the fresh ind
     model: null,
     now: () => clock,
     config: {
+      ...CORE_CONFIG,
       sync: true,
       syncPageSize: 2,
       syncCallsPerMin: 600,

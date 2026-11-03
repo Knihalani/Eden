@@ -5,6 +5,7 @@ import type { AgentEvent } from "@eden/protocol";
 import { StaticSource } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
+import { CORE_CONFIG } from "./parts";
 
 /**
  * `judgeTied`: the judge is asked only when a candidate is tied to the request (a probe's find, a day it names, two of
@@ -35,7 +36,7 @@ describe("judgeTied", () => {
       model,
       now: () => at,
       // Nothing is sure on its words alone: every candidate goes to the judge unless the rule under test stops it.
-      config: { confidentScore: 99, ...config },
+      config: { ...CORE_CONFIG, confidentScore: 99, ...config },
     });
   };
   const say = async (p: ContextPartner, text: string, who = scope, sessionId = "s") => {

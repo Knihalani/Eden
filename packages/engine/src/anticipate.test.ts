@@ -7,6 +7,7 @@ import { FOLLOW_MIN, IntentPatterns, PATTERN_TTL_MS, predict } from "./anticipat
 import { ItemCache } from "./cache";
 import { hasWord } from "./consequence";
 import { ContextPartner } from "./partner";
+import { CORE_CONFIG } from "./parts";
 
 /** Friday 30 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-30T09:00:00Z");
@@ -130,6 +131,7 @@ describe("anticipation in the engine (anticipate)", () => {
       model: null,
       now: () => NOW,
       config: {
+        ...CORE_CONFIG,
         probes: true,
         probeGraceMs: 1_000,
         confidentScore: 99,

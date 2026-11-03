@@ -20,6 +20,7 @@ import {
 } from "./cards";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner } from "./partner";
+import { CORE_CONFIG } from "./parts";
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");
 const item = (id: string, title: string, text: string, sourceId = "mail"): ContextItem => ({
@@ -189,7 +190,9 @@ describe("the enricher's economy preset", () => {
   });
 
   test("the partner applies the preset only with cardsEconomy", () => {
-    expect(DEFAULT_CONFIG.cardsEconomy).toBe(false);
+    // On in the default (D111), out in the core these tests start from.
+    expect(DEFAULT_CONFIG.cardsEconomy).toBe(true);
+    expect(CORE_CONFIG.cardsEconomy).toBe(false);
     for (const on of [false, true]) {
       const cards = new CardEnricher({ maker: new PolicyMaker(), budget: new Budget(), now: () => NOW });
       let economized = false;
@@ -201,7 +204,7 @@ describe("the enricher's economy preset", () => {
         budget: new Budget(),
         model: null,
         cards,
-        config: { cards: true, cardsEconomy: on },
+        config: { ...CORE_CONFIG, cards: true, cardsEconomy: on },
       });
       expect(economized).toBe(on);
     }
