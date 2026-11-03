@@ -13,7 +13,7 @@ cards-enrich, presets, suites, free, spend` (`.ts`): check `git log origin/main`
 |---|---|
 | `suites.ts` | `SUITES` by name, `parseSuites` (`all`, `heldout-all`, `train`), `UNRUN_BLIND` (left out of `all`) |
 | `hidden-context.ts`, `hidden-*.ts` | The suites: each plants one item (hidden) or a near-miss decoy (control) per template in a world |
-| `presets.ts` | `PRESETS`: H (D55), ALL3 (D80), NEW (D96, recommended D98), NEWL (D99); ALL3B and NEWB (+ `syncPollBehind`, D72's open run), NEWBB, ALL3BG, NEWBG |
+| `presets.ts` | `PRESETS`: only `default`, `minus-<part>` (one per `PARTS` entry) and `minus-all` (the core), made from @eden/engine (D112); `effective(override)` reads what a preset runs |
 | `hidden-funnel.ts` | The no-model funnel: each task through Eden alone; returned/cached/delivered, decoys, calls, ms; `--ask`, `--cards`, `--intent`, `--reader`, `--timeline`, `--json` |
 | `funnel.ts` | `bun run funnel`: the funnel with a preset, replayed cards and `--ask`, and the funnel score; refuses held-out suites without `--blind` |
 | `funnel-merge.ts` | funnel.ts's arithmetic, tested in-process: `defaultJobs` (`--time` > 0 shards concurrently by default), `amortisedCalls` (merged connector calls), `callMismatches` (shards whose traces miss calls) |
@@ -61,8 +61,10 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
 
 - **One seed per `pi-ab.ts` process.** One process for four seeds over nine suites was killed for memory (14 GB;
   docs/research/pi-full-benchmark.md); the Haiku campaign ran three processes at once, RSS up to 3.35 GB each.
-- NEW needs `--cards`, `--intent` (requests replayed) and a reader model; the harnesses wait 3,000 ms on the first
-  observe (`@w<ms>` changes it; 1 s lost 7.6–18.1 points, D98).
+- The default needs `--cards`, `--intent` (requests replayed) and a reader for its model parts; without them they are
+  inert (the funnel screens with `--reader stub` when none is named). Read settings through `effective()`: a preset
+  is an override, and `default` is `{}`. The harnesses wait 3,000 ms on the first observe (`@w<ms>` changes it; 1 s
+  lost 7.6–18.1 points, D98).
 - Pi's `both` arm gets no `ask_context` (only `eden` does); Hermes gets both.
 - **pi-ab and hermes-ab default to `--time-scale 1`** (since 2026-11-03): sources take their profiles' assumed
   latency, so the "Eden on the critical path" column includes the on-demand sync poll. Earlier results (every

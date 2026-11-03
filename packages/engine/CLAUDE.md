@@ -12,7 +12,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | File | Owns |
 |---|---|
 | `partner.ts` (5.5k lines) | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues |
-| `config.ts` | `EngineConfig`, `DEFAULT_CONFIG`: thresholds (`confidentScore` 1.1, D6) and every experimental flag, off by default |
+| `config.ts`, `parts.ts` | `EngineConfig`, `DEFAULT_CONFIG` (the unified default, D112: thresholds such as `confidentScore` 1.1, D6, and every part on); `PARTS` (each part's settings that take it out), `withoutParts`, `CORE_CONFIG` (every part out) |
 | `cache.ts` | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem` |
 | `text.ts`, `situation.ts` | Cues with no model (entities, content terms, chatter); a coarse situation label for routing |
 | `render.ts`, `fold.ts` | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52) |
@@ -43,8 +43,13 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 - **Untrusted text (D11, D19).** Source and event text are data in every prompt (fenced, labelled), and everything
   delivered is inside the data envelope.
 - **Item content stays in memory (D8):** only content-free metadata goes to the source map.
-- **Flags stay off by default.** A new behaviour lands behind a flag in `config.ts`, with a proposed decision; the
-  lab's presets (`packages/sim/src/lab/presets.ts`) name the recommended experimental set (NEW, D98).
+- **One product (D112).** `DEFAULT_CONFIG` is the best measured configuration and what ships. A new behaviour lands
+  as a trial switch in `config.ts` (off), with an owner and an end date in DECISIONS.md's trials table; at the end it
+  joins the default (and a part in `parts.ts`) or is deleted with its code and tests. A part whose model role is not
+  wired (no `cards`, no `reader` dep) is inert: the default runs its no-model path (`default.test.ts`).
+- **Unit tests start from the core.** A test of one mechanism builds its partner on `{ ...CORE_CONFIG, ...what it
+  tests }`, so the other parts do not move its result; the default as a whole is `default.test.ts`, the eval and the
+  funnel.
 
 ## Test
 
@@ -52,7 +57,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 bun run test:pkg engine          # 41 files, ~4 s wall in parallel (~15 s one by one); partner and reader lead
 bun test ./packages/engine/src/conflict.test.ts      # one file, from the repo root (the preload is read from cwd)
 bun run eval                     # the scenario metrics; paste the JSON in the PR when behaviour changes
-bun run funnel                   # the lab's no-model screen on train (docs/LAB.md), ~40 s
+bun run funnel --jobs 4          # the lab's $0 screen of the default on train (reader stub; docs/LAB.md)
 bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 ```
 
@@ -72,18 +77,17 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   binary search: a remap (`rebuildVocab`) must sort and dedupe again, since new ids do not keep the old order. Pair
   keys stay exact Float64 (`pairKey`): a hashed key could hold back a delivery on a collision. `held.test.ts` measures
   a session with 12 mail listings of 8 KB (311 KB; 2,096 KB with Sets).
-- `readerPushBehind` (off; needs `readerPush`, `syncOnDemand`, `syncPollBehind`): the push's lookup reads the index
+- `readerPushBehind` (on in the default; needs `readerPush`, `syncOnDemand`, `syncPollBehind`): the push's lookup reads the index
   before the poll is done; a poll that stores something gets one more ranking and reading, no new source call, a
   reader cache hit when the pool is unchanged, and its packet replaces one the agent has not taken
   (`push-behind.test.ts`). A packet withdrawn untaken has its ledger entries restored (`Ledger.entry`/`restore`, not
   a bare unmark) and its sketches dropped from `s.delivered`, so what the second reading does not deliver again stays
-  deliverable. Lab preset NEWBB. With `syncPollBehind` a lookup's trace leaves out the poll it did not wait for; the
+  deliverable. On in the default (D112). With `syncPollBehind` a lookup's trace leaves out the poll it did not wait for; the
   poll gets its own "skipped" trace (reason "sync poll behind", `sourceCalls` = `syncCalls`) when it settles, even
   after the session closed, so traces sum to what the connectors received. A lookup whose poll waits on a read
   already running (`SourceSync.busy`, which resolves to what that read stored) counts what it stored, not one, and
-  `freshen` returns only its own calls. Presets ALL3BG and NEWBG set `probeGraceMs` 0 on ALL3B and NEWB: a
-  lookup no longer waits for its probes (D47's grace), so a slow probe's finds only reach later turns. No decision
-  yet for either; a Pi run is owed before any default changes.
+  `freshen` returns only its own calls. `probeGraceMs` is 0 in the default (D112): a lookup no longer waits for its
+  probes (D47's grace), so a slow probe's finds only reach later turns.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 
