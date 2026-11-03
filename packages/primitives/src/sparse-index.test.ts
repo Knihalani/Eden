@@ -164,3 +164,84 @@ describe("SparseIndex fields", () => {
     }
   });
 });
+
+describe("SparseIndex term release (onTermFreed, flush, termCount)", () => {
+  test("a term is reported once compaction purges its last holder, and not while a live doc holds it", () => {
+    const freed: number[] = [];
+    const idx = new SparseIndex({ fields: 2, onTermFreed: (t) => freed.push(t) });
+    const a = idx.addFields([Uint32Array.of(1), Uint32Array.of(2, 3)], [1, 2]);
+    idx.addFields([Uint32Array.of(3), Uint32Array.of(4)], [1, 1]);
+    expect(idx.termCount).toBe(4);
+    idx.remove(a);
+    expect(idx.termCount).toBe(2); // 3 and 4 are still held
+    expect(freed).toEqual([]); // nothing compacted yet: dead postings still name 1 and 2
+    idx.flush();
+    expect(freed.sort()).toEqual([1, 2]);
+    idx.flush(); // nothing pending: no second report
+    expect(freed).toHaveLength(2);
+    // An id reported free may come back as another term: the new term starts with no postings of the old one.
+    const c = idx.addFields([Uint32Array.of(1), Uint32Array.of(1)], [1, 1]);
+    const r = idx.search(Uint32Array.of(1), 1, 5);
+    expect([r.count, r.docs[0]]).toEqual([1, c]);
+    expect(idx.termCount).toBe(3);
+  });
+
+  test("with ids freed and reused at random, search agrees with an index built from the live docs alone", () => {
+    let seed = 11;
+    const rnd = (n: number) => {
+      seed = (Math.imul(seed, 1_103_515_245) + 12_345) >>> 0;
+      return (seed >>> 8) % n;
+    };
+    // The caller's side: term ids handed out from a free list, as `Vocab` does, and released when the index says.
+    const free: number[] = [];
+    let next = 0;
+    const word = new Map<number, number>(); // id -> the word it currently names
+    const idOf = new Map<number, number>(); // word -> id
+    const idx = new SparseIndex({
+      fields: 2,
+      onTermFreed: (t) => {
+        idOf.delete(word.get(t)!);
+        word.delete(t);
+        free.push(t);
+      },
+    });
+    const intern = (w: number) => {
+      let id = idOf.get(w);
+      if (id === undefined) {
+        id = free.pop() ?? next++;
+        idOf.set(w, id);
+        word.set(id, w);
+      }
+      return id;
+    };
+    const live: { doc: number; words: number[][] }[] = [];
+    for (let step = 0; step < 3_000; step++) {
+      if (live.length > 60 || (live.length > 0 && rnd(3) === 0)) {
+        const [gone] = live.splice(rnd(live.length), 1);
+        idx.remove(gone!.doc);
+      } else {
+        // Each doc has a few common words and a few rare ones from a wide range, so rare words die and ids recycle.
+        const words = [0, 1].map(() => Array.from({ length: 1 + rnd(6) }, () => (rnd(2) ? rnd(20) : 20 + rnd(5_000))));
+        const ids = words.map((ws) => Uint32Array.from(ws.map(intern)));
+        live.push({ doc: idx.addFields(ids, [ids[0]!.length, ids[1]!.length]), words });
+      }
+    }
+    expect(next).toBeLessThan(2_000); // ids were reused, not one per word ever seen
+    const ref = new SparseIndex({ fields: 2 });
+    const refDoc = new Map<number, number>();
+    for (const { doc, words } of live) {
+      const ids = words.map((ws) => Uint32Array.from(ws.map((w) => idOf.get(w)!)));
+      refDoc.set(ref.addFields(ids, [ids[0]!.length, ids[1]!.length]), doc);
+    }
+    expect(idx.termCount).toBe(ref.termCount);
+    for (let w = 0; w < 20; w++) {
+      const id = idOf.get(w);
+      if (id === undefined) continue;
+      const got = idx.search(Uint32Array.of(id), 1, 100);
+      const want = ref.search(Uint32Array.of(id), 1, 100);
+      expect(got.count).toBe(want.count);
+      for (let j = 0; j < got.count; j++) expect(got.scores[j]!).toBeCloseTo(want.scores[j]!, 6);
+      expect([...got.docs].map(Number).sort()).toEqual([...want.docs].map((d) => refDoc.get(d)!).sort());
+    }
+  });
+});

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
+import type { Vocab } from "@eden/primitives";
 import { ItemCache } from "./cache";
+import { offsetOf as startOffset, userOffset } from "./grounding";
 import { termIds } from "./text";
 
 const alice = { tenantId: "t", userId: "alice" };
@@ -33,6 +35,21 @@ describe("ItemCache bounds (branch review)", () => {
     // 80,000 distinct terms went through; 10 items of ~201 terms each are live.
     expect(cache.peekVocab(alice)!.size).toBeLessThan(50_001 + 201);
     const q = termIds("shared", cache.peekVocab(alice)!, false);
+    expect(cache.search(alice, q.ids, q.n, 20)).toHaveLength(10);
+  });
+
+  test("with releaseTerms the vocabulary follows the live items without a rebuild", () => {
+    const cache = new ItemCache({ maxItemsPerUser: 10, releaseTerms: true, expireEveryMs: 0 });
+    cache.put(alice, [item("db", "first", "shared")]);
+    const vocab = cache.peekVocab(alice)!;
+    for (let i = 0; i < 400; i++) {
+      const words = Array.from({ length: 200 }, (_, j) => `w${i}x${j}`).join(" ");
+      cache.put(alice, [item("db", String(i), `${words} shared`)]);
+    }
+    expect(cache.peekVocab(alice)).toBe(vocab); // never rebuilt
+    // 10 live items of ~203 terms, plus the dead ones awaiting the next compaction (~10% of postings).
+    expect(vocab.size).toBeLessThan(4_000);
+    const q = termIds("shared", vocab, false);
     expect(cache.search(alice, q.ids, q.n, 20)).toHaveLength(10);
   });
 
@@ -213,5 +230,156 @@ describe("expireIdle: idle users and expired items are freed, not held until the
     // JSC scans the stack conservatively, so a stale slot can pin the odd one; a tick closing over its cache pins
     // all 20.
     expect(refs.filter((r) => r.deref() !== undefined).length).toBeLessThanOrEqual(2);
+  });
+
+  test("each class expires and is evicted on its own: old synced items hide no expired lookup, nor the reverse", () => {
+    const cache = new ItemCache({ maxItemsPerUser: 2, maxSyncedPerUser: 2, expireEveryMs: 0 });
+    const dropped: string[] = [];
+    cache.onDropped((_, ids) => dropped.push(...(ids ?? ["*"])));
+    cache.put(alice, [item("cal", "s1", "Board offsite"), item("cal", "s2", "Budget review")], t0, false, true);
+    cache.put(alice, [item("mail", "l1", "Globex call")], t0 + H);
+    cache.put(alice, [item("cal", "s3", "Hiring plan")], t0 + 2 * H, false, true); // over the synced cap: s1 goes
+    expect(dropped).toEqual(["cal:s1"]);
+    cache.put(alice, [item("mail", "l2", "Initech invoice"), item("mail", "l3", "Hooli quote")], t0 + 3 * H);
+    expect(dropped).toEqual(["cal:s1", "mail:l1"]); // over the lookup cap: the oldest lookup, behind synced ones
+    // A day on, the lookups behind the (still live) synced items expire on the next write; the synced stay.
+    cache.put(alice, [item("mail", "l4", "Acme contract")], t0 + 28 * H);
+    expect(dropped).toEqual(["cal:s1", "mail:l1", "mail:l2", "mail:l3"]);
+    expect(cache.syncedCount(alice)).toBe(2);
+    // Past syncTtlMs the synced items go, behind a fresh lookup.
+    cache.put(alice, [item("mail", "l5", "Acme renewal")], t0 + 9 * 24 * H);
+    expect(dropped.slice(4).sort()).toEqual(["cal:s2", "cal:s3", "mail:l4"]);
+    expect(cache.syncedCount(alice)).toBe(0);
+    expect(cache.expireIdle(t0 + 9 * 24 * H + H)).toBe(0); // l5 is fresh
+  });
+});
+
+describe("releaseTerms: a user's vocabulary holds the terms of live items, without a reindex", () => {
+  const vocabTerms = (v: Vocab) => Array.from({ length: v.size }, (_, id) => v.term(id));
+
+  test("forget(scope, source) releases the source's terms, reuses no revoked word, and needs no rebuild", () => {
+    const cache = new ItemCache({ releaseTerms: true, expireEveryMs: 0 });
+    cache.put(alice, [
+      item("crm", "1", "Quentavious renewal notes zarnowski"),
+      item("crm", "2", "Quentavious escalation"),
+      item("mail", "2", "Globex renewal call"),
+    ]);
+    const vocab = cache.peekVocab(alice)!;
+    const revoked = ["quentavious", "zarnowski", "notes", "escalation"];
+    const ids = revoked.map((w) => vocab.lookup(w));
+    expect(ids.every((id) => id >= 0)).toBe(true);
+    cache.forget(alice, "crm");
+    expect(cache.peekVocab(alice)).toBe(vocab); // released in place: no rebuild
+    for (const w of revoked) expect(vocab.lookup(w)).toBe(-1);
+    for (const id of ids) expect(revoked).not.toContain(vocab.term(id));
+    expect(vocabTerms(vocab).filter((t) => revoked.includes(t))).toEqual([]);
+    // New terms take the released ids; none of them, nor any search, brings a revoked word back.
+    cache.put(alice, [item("mail", "3", "Initech offsite hotel booking lisbon")]);
+    expect(ids.some((id) => ["offsite", "hotel", "booking", "lisbon", "initech"].includes(vocab.term(id)))).toBe(true);
+    expect(vocabTerms(vocab).filter((t) => revoked.includes(t))).toEqual([]);
+    for (const w of revoked) {
+      const q = termIds(w, vocab, false);
+      expect(q.n === 0 ? [] : cache.search(alice, q.ids, q.n, 5)).toEqual([]);
+    }
+    const q = termIds("renewal", vocab, false);
+    expect(cache.search(alice, q.ids, q.n, 5).map((h) => h.item.id)).toEqual(["mail:2"]);
+  });
+
+  test("random puts, evictions, expiry and forgets rank and sketch exactly as with releaseTerms off", () => {
+    let seed = 5;
+    const rnd = (n: number) => {
+      seed = (Math.imul(seed, 1_103_515_245) + 12_345) >>> 0;
+      return (seed >>> 8) % n;
+    };
+    const limits = { maxItemsPerUser: 40, maxSyncedPerUser: 30, ttlMs: 400, expireEveryMs: 0 };
+    const off = new ItemCache({ ...limits, releaseTerms: false });
+    const on = new ItemCache({ ...limits, releaseTerms: true });
+    const word = () => (rnd(3) === 0 ? `common${rnd(15)}` : `rare${rnd(4_000)}`);
+    const text = (n: number) => Array.from({ length: n }, word).join(" ");
+    let now = 1_000;
+    for (let step = 0; step < 1_500; step++) {
+      now += rnd(4);
+      const r = rnd(40);
+      if (r === 0) {
+        const src = `src${rnd(3)}`;
+        off.forget(alice, src);
+        on.forget(alice, src);
+        continue;
+      }
+      const synced = r < 10;
+      const batch = Array.from({ length: 1 + rnd(4) }, () => ({
+        ...item(`src${rnd(3)}`, String(rnd(150)), `${text(4 + rnd(20))} 3pm`),
+        title: text(2),
+      }));
+      off.put(alice, batch, now, false, synced);
+      on.put(alice, batch, now, false, synced);
+      if (step % 50 !== 0) continue;
+      for (const qw of ["common1 common2", "common3", `rare${rnd(4_000)} common4`, "3pm"]) {
+        // `termIds` returns shared scratch: search with each before reading the next.
+        const a = termIds(qw, off.peekVocab(alice)!, false);
+        const hitsA = off.search(alice, a.ids, a.n, 10, now);
+        const b = termIds(qw, on.peekVocab(alice)!, false);
+        const hitsB = on.search(alice, b.ids, b.n, 10, now);
+        expect(hitsB.map((h) => [h.item.id, h.score.toFixed(6), h.sketch])).toEqual(
+          hitsA.map((h) => [h.item.id, h.score.toFixed(6), h.sketch]),
+        );
+      }
+    }
+    // Terms seen across the run far outnumber what live items hold; with release on, the vocabulary tracks the latter.
+    const vocab = on.peekVocab(alice)!;
+    expect(vocab.live).toBeLessThan(off.peekVocab(alice)!.size);
+  });
+});
+
+describe("offsetOf: a tally kept as items come and go", () => {
+  test("after 1,000 random puts and drops it equals userOffset over the items in order", () => {
+    let seed = 9;
+    const rnd = (n: number) => {
+      seed = (Math.imul(seed, 1_103_515_245) + 12_345) >>> 0;
+      return (seed >>> 8) % n;
+    };
+    const cache = new ItemCache({ maxItemsPerUser: 25, maxSyncedPerUser: 15, expireEveryMs: 0 });
+    const zones = ["Z", "+01:00", "-05:00", "+0530", "", "+00:00", "-07:00"];
+    const users = (cache as unknown as { users: Map<string, { items: Map<string, { item: ContextItem }> }> }).users;
+    const recompute = () => {
+      const starts: string[] = [];
+      for (const e of users.get("t/alice")?.items.values() ?? [])
+        if (e.item.meta?.start) starts.push(e.item.meta.start);
+      return userOffset(starts);
+    };
+    let ties = 0;
+    for (let step = 0; step < 1_000; step++) {
+      const id = String(rnd(60));
+      if (rnd(5) === 0) {
+        cache.dropSynced(alice, [`cal:${id}`]);
+      } else {
+        // Few offsets and few items: ties between non-zero offsets come up often.
+        const z = zones[rnd(zones.length)]!;
+        const meta = rnd(4) === 0 ? undefined : { start: z === "" ? "2026-11-03" : `2026-11-03T09:00:00${z}` };
+        const words = rnd(3) === 0 ? "same words" : `event ${step}`; // the same words: a refresh, moved to the end
+        cache.put(alice, [{ ...item("cal", id, words), meta }], 1_000 + step, false, rnd(2) === 0);
+      }
+      const want = recompute();
+      expect(cache.offsetOf(alice)).toBe(want);
+      const counts = new Map<number, number>();
+      for (const e of users.get("t/alice")?.items.values() ?? []) {
+        const o = e.item.meta?.start ? startOffset(e.item.meta.start) : null;
+        if (o !== null && o !== 0) counts.set(o, (counts.get(o) ?? 0) + 1);
+      }
+      const top = Math.max(0, ...counts.values());
+      if ([...counts.values()].filter((c) => c === top).length > 1) ties++;
+    }
+    expect(ties).toBeGreaterThan(20); // the tie-break path ran
+  });
+
+  test("per user: one user's events never shape another's offset", () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    const bob = { tenantId: "t", userId: "bob" };
+    cache.put(alice, [{ ...item("cal", "1", "standup"), meta: { start: "2026-11-03T09:00:00+01:00" } }]);
+    cache.put(bob, [{ ...item("cal", "1", "standup"), meta: { start: "2026-11-03T09:00:00-05:00" } }]);
+    expect([cache.offsetOf(alice), cache.offsetOf(bob)]).toEqual([60, -300]);
+    cache.dropSynced(bob, ["cal:1"]); // not synced: kept
+    cache.forget(bob);
+    expect([cache.offsetOf(alice), cache.offsetOf(bob)]).toEqual([60, 0]);
   });
 });

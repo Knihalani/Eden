@@ -10,16 +10,22 @@
  * Bounded three ways: items per user (oldest evicted), users per tenant (least recently written dropped, so one tenant
  * never evicts another's), and item text length. Expired items are swept on write, so they stop shaping idf, and on a
  * timer (`expireIdle`), which also drops users left with none: memory follows the users active within the time to
- * live, not every user seen since the process started. A
- * vocabulary never forgets a term, so a user's is rebuilt from the live items when a source is forgotten (no term of
- * a revoked source's content survives) and when it outgrows `VOCAB_REBUILD_FACTOR` times its size after the last
- * rebuild.
+ * live, not every user seen since the process started. Each class of item (a lookup's, the sync's) is also kept in
+ * its own oldest-first list, so eviction and expiry touch only what goes, plus one check per class.
+ *
+ * Terms. By default a vocabulary never forgets a term, so a user's is rebuilt from the live items when a source is
+ * forgotten (no term of a revoked source's content survives) and when it outgrows `VOCAB_REBUILD_FACTOR` times its
+ * size after the last rebuild: a synchronous reindex of every live item (57–340 ms for a heavy user, docs/audits). With
+ * `releaseTerms`, the index reports each term no live item holds once it compacts, and the vocabulary releases it
+ * (`Vocab.release`: its string and fingerprint cleared, its id reused): the vocabulary tracks the live items, and
+ * forgetting a source compacts and checks that every term left is held by a live item instead of reindexing. The
+ * rebuild stays as the fallback (a term interned but never indexed, ids left sparse after a mass eviction).
  */
 import { createHash } from "node:crypto";
 import { dedupText, hamming64, SparseIndex, TextSketcher, Vocab } from "@eden/primitives";
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
-import { parseWhen, userOffset } from "./grounding";
+import { offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
 import { squash, UserGraph, type Seed, type Walked, type WalkOptions } from "./kg";
 import { head, termIds } from "./text";
 
@@ -35,6 +41,9 @@ interface Entry {
    * `syncTtlMs`, and dropped by the sync when its source no longer lists it. A lookup that returns it keeps it synced.
    */
   synced?: true;
+  /** Neighbours in its class's oldest-first list (`UserCache.heads`): a lookup's items, or the sync's. */
+  prev: Entry | null;
+  next: Entry | null;
 }
 
 /**
@@ -60,21 +69,40 @@ export function nearDuplicate(a: Sketch | null, b: Sketch | null): boolean {
 const VOCAB_REBUILD_FACTOR = 4;
 const MIN_VOCAB_REBUILD = 50_000;
 
+/** The class lists' slots: a lookup's items, the sync's (D57). */
+const LOOSE = 0;
+const SYNCED = 1;
+
 class UserCache {
-  constructor(readonly scope: Scope) {}
+  constructor(
+    readonly scope: Scope,
+    releaseTerms: boolean,
+  ) {
+    // With `releaseTerms`, a term no live item holds is released once the index has compacted it away.
+    this.index = new SparseIndex({
+      fields: 2,
+      weights: [2, 1],
+      onTermFreed: releaseTerms ? (t) => this.vocab.release(t) : undefined,
+    });
+  }
   /** Vocabulary size after the last rebuild. */
   baseline = 0;
   /** Changes whenever an item is added, changed or dropped (`ItemCache.revision`); unique across rebuilds. */
   revision = 0;
   readonly items = new Map<string, Entry>();
+  /** Per class (`LOOSE`, `SYNCED`): the oldest and newest entry of its list, the same order as `items` restricted. */
+  readonly heads: [Entry | null, Entry | null] = [null, null];
+  readonly tails: [Entry | null, Entry | null] = [null, null];
   /** How many of `items` are synced (D57). */
   synced = 0;
   readonly byDoc: (Entry | undefined)[] = [];
   readonly vocab = new Vocab(256); // Grows by doubling: most users hold few terms.
-  readonly index = new SparseIndex({ fields: 2, weights: [2, 1] });
+  readonly index: SparseIndex;
   readonly sketcher = new TextSketcher(this.vocab, 8_192, 3);
   /** The UTC offset most of the user's events carry (minutes), computed on demand; reset as events come and go. */
   offset: number | undefined;
+  /** How many items' `meta.start` carry each UTC offset (`offsetOf`): kept as items come and go. */
+  offsets = new Map<number, number>();
   /** Recent probes (`probes.ts`): a query → the ids it found and when, shared by the user's sessions. */
   readonly probes = new Map<string, { ids: string[]; at: number }>();
   /** The user's own name as their items list it (`selfOf`), computed on demand; null when none stands out. */
@@ -123,6 +151,40 @@ function tally(u: UserCache, item: ContextItem, by: 1 | -1): void {
   u.personNames = undefined;
 }
 
+/** Counts an item's start offset in or out of the user's tally (`offsetOf`). */
+function tallyOffset(u: UserCache, item: ContextItem, by: 1 | -1): void {
+  const start = item.meta?.start;
+  if (!start) return;
+  u.offset = undefined; // An event come or gone, or moved in the order (a refresh), may change the mode or its tie.
+  const o = startOffset(start);
+  if (o === null) return;
+  const c = (u.offsets.get(o) ?? 0) + by;
+  if (c > 0) u.offsets.set(o, c);
+  else u.offsets.delete(o);
+}
+
+/** Appends an entry to its class's list (it is the newest of its class). */
+function link(u: UserCache, e: Entry): void {
+  const k = e.synced ? SYNCED : LOOSE;
+  const tail = u.tails[k];
+  e.prev = tail;
+  e.next = null;
+  if (tail) tail.next = e;
+  else u.heads[k] = e;
+  u.tails[k] = e;
+}
+
+/** Takes an entry out of its class's list; call before its `synced` changes. */
+function unlink(u: UserCache, e: Entry): void {
+  const k = e.synced ? SYNCED : LOOSE;
+  if (e.prev) e.prev.next = e.next;
+  else u.heads[k] = e.next;
+  if (e.next) e.next.prev = e.prev;
+  else u.tails[k] = e.prev;
+  e.prev = null;
+  e.next = null;
+}
+
 const simScratch = new Uint32Array(2);
 
 export interface CacheHit {
@@ -159,6 +221,12 @@ export interface CacheLimits {
    * timer started by the first `put`. 0: never (expired items then go only when their user writes again).
    */
   expireEveryMs: number;
+  /**
+   * Release a term once no live item holds it (`Vocab.release`), instead of keeping it until the user's vocabulary
+   * outgrows its live items and is rebuilt (a synchronous reindex); forgetting a source then needs no reindex either.
+   * Off by default until a decision makes it the default.
+   */
+  releaseTerms: boolean;
 }
 
 export const DEFAULT_CACHE_LIMITS: CacheLimits = {
@@ -169,6 +237,7 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   maxSyncedPerUser: 5_000,
   syncTtlMs: 7 * 24 * 3_600_000,
   expireEveryMs: 10 * 60_000,
+  releaseTerms: false,
 };
 
 /**
@@ -247,7 +316,7 @@ export class ItemCache {
         break;
       }
     }
-    const u = new UserCache({ tenantId: scope.tenantId, userId: scope.userId });
+    const u = new UserCache({ tenantId: scope.tenantId, userId: scope.userId }, this.limits.releaseTerms);
     u.revision = ++this.revisions;
     this.users.set(key, u);
     this.perTenant.set(scope.tenantId, (this.perTenant.get(scope.tenantId) ?? 0) + 1);
@@ -358,8 +427,10 @@ export class ItemCache {
       const item = sanitized ? raw : sanitizeItem(raw, this.limits.maxTextChars);
       const old = u.items.get(item.id);
       if (old && synced && !old.synced) {
+        unlink(u, old); // Out of the lookups' list into the sync's (re-placed below, refreshed or dropped).
         old.synced = true;
         u.synced++;
+        link(u, old);
       }
       // A lookup's copy of a synced item leaves it synced: the sync still lists it, and drops it once it does not.
       const isSynced = synced || old?.synced === true;
@@ -368,25 +439,30 @@ export class ItemCache {
         // people are counted again: its meta may name others.
         if (!sameDetails(old.item, item)) u.revision = ++this.revisions;
         tally(u, old.item, -1);
+        tallyOffset(u, old.item, -1);
         old.item = item;
         tally(u, item, 1);
+        tallyOffset(u, item, 1);
         old.fetchedAt = now;
         u.items.delete(item.id); // Re-insert: Map order stays oldest-first for eviction.
         u.items.set(item.id, old);
+        unlink(u, old);
+        link(u, old);
         continue;
       }
       if (old) this.drop(u, old);
-      if (item.meta?.start) u.offset = undefined;
+      tallyOffset(u, item, 1);
       tally(u, item, 1);
       // Added before the item is: a graph built on first use (`graphOf`) must not read it twice.
       this.graphOf(u, now)?.add(item, now);
       const doc = this.index(u, item);
-      const entry: Entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item) };
+      const entry: Entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item), prev: null, next: null };
       if (isSynced) {
         entry.synced = true;
         u.synced++;
       }
       u.items.set(item.id, entry); // Map order stays oldest-first for eviction (old entry was removed above).
+      link(u, entry);
       u.byDoc[doc] = entry;
       u.revision = ++this.revisions;
       changed.push(item);
@@ -396,30 +472,32 @@ export class ItemCache {
     } else {
       this.evictMixed(u);
     }
-    if (u.vocab.size > Math.max(MIN_VOCAB_REBUILD, u.baseline * VOCAB_REBUILD_FACTOR)) this.rebuild(scope, u);
+    if (this.vocabOverGrown(u)) this.rebuild(scope, u);
     // Only what is still held: an item evicted by this same put is not new to the cache (its drop hook already ran,
     // so a card or a mention made from it now would outlive it).
     return changed.filter((item) => u.items.get(item.id)?.item === item);
   }
 
   /**
+   * Whether the user's vocabulary should be rebuilt from the live items. Without `releaseTerms`, once its id count
+   * passes `VOCAB_REBUILD_FACTOR` times its size after the last rebuild (dead terms pile up until then). With it, dead
+   * terms are released as the index compacts and their ids reused, so the id count follows the terms live items hold;
+   * a rebuild is only the fallback for ids left sparse (a mass eviction after a peak) or terms never indexed.
+   */
+  private vocabOverGrown(u: UserCache): boolean {
+    const floor = this.limits.releaseTerms ? u.index.termCount : u.baseline;
+    return u.vocab.size > Math.max(MIN_VOCAB_REBUILD, floor * VOCAB_REBUILD_FACTOR);
+  }
+
+  /**
    * Eviction when some items are synced (D57): lookups' items over `maxItemsPerUser` and synced ones over
-   * `maxSyncedPerUser` go, each class oldest first, in one pass over the oldest-first order.
+   * `maxSyncedPerUser` go, each class oldest first, from the head of its own list (no walk past the other class).
    */
   private evictMixed(u: UserCache): void {
-    let loose = u.items.size - u.synced - this.limits.maxItemsPerUser;
-    let synced = u.synced - this.limits.maxSyncedPerUser;
-    if (loose <= 0 && synced <= 0) return;
-    for (const e of [...u.items.values()]) {
-      if (loose <= 0 && synced <= 0) break;
-      if (e.synced && synced > 0) {
-        this.drop(u, e);
-        synced--;
-      } else if (!e.synced && loose > 0) {
-        this.drop(u, e);
-        loose--;
-      }
+    for (let loose = u.items.size - u.synced - this.limits.maxItemsPerUser; loose > 0; loose--) {
+      this.drop(u, u.heads[LOOSE]!);
     }
+    for (let synced = u.synced - this.limits.maxSyncedPerUser; synced > 0; synced--) this.drop(u, u.heads[SYNCED]!);
   }
 
   /**
@@ -469,12 +547,14 @@ export class ItemCache {
    * numbers change; nothing outside holds them across calls. Sketches are kept (they do not depend on term ids).
    */
   private rebuild(scope: Scope, old: UserCache): void {
-    const u = new UserCache(old.scope);
+    const u = new UserCache(old.scope, this.limits.releaseTerms);
     u.revision = ++this.revisions;
     for (const e of old.items.values()) {
       const doc = this.index(u, e.item);
-      const entry = { ...e, doc };
+      const entry: Entry = { item: e.item, fetchedAt: e.fetchedAt, doc, sketch: e.sketch, prev: null, next: null };
+      if (e.synced) entry.synced = true;
       u.items.set(e.item.id, entry);
+      link(u, entry); // In `items` order, so each class's list keeps its order.
       u.byDoc[doc] = entry;
     }
     u.baseline = u.vocab.size;
@@ -483,6 +563,8 @@ export class ItemCache {
     u.partied = old.partied;
     u.self = old.self;
     u.synced = old.synced;
+    u.offsets = old.offsets;
+    u.offset = old.offset;
     // Keyed by item id, not doc number: the graph stands as it is.
     u.graph = old.graph;
     this.users.set(scopeKey(scope), u); // Same key: the user's place in the eviction order is unchanged.
@@ -499,27 +581,29 @@ export class ItemCache {
   }
 
   /**
-   * Removes expired items. Map order is oldest-first, so the scan stops at the first fresh one; a synced item (its
-   * own, longer time to live) is passed over, and reads check its time on their own.
+   * Removes expired items. Each class's list is oldest-first and the class has one time to live, so its expired items
+   * are a prefix of it: the walk stops at the first live one of each, touching only what goes.
    */
   private sweep(u: UserCache, now: number): void {
-    for (const e of u.items.values()) {
-      if (e.synced) {
-        if (!this.alive(e, now)) this.drop(u, e);
-        continue;
-      }
-      if (now - e.fetchedAt <= this.limits.ttlMs) break;
-      this.drop(u, e);
-    }
+    for (let e = u.heads[LOOSE]; e && !this.alive(e, now); e = u.heads[LOOSE]) this.drop(u, e);
+    for (let e = u.heads[SYNCED]; e && !this.alive(e, now); e = u.heads[SYNCED]) this.drop(u, e);
+  }
+
+  /** Whether any of the user's items is past its time to live: the oldest of each class is (`sweep`). */
+  private anyExpired(u: UserCache, now: number): boolean {
+    const loose = u.heads[LOOSE];
+    const synced = u.heads[SYNCED];
+    return (loose !== null && !this.alive(loose, now)) || (synced !== null && !this.alive(synced, now));
   }
 
   private drop(u: UserCache, e: Entry): void {
     u.revision = ++this.revisions;
+    unlink(u, e);
     if (e.synced) u.synced--;
     u.items.delete(e.item.id);
     u.index.remove(e.doc);
     if (u.byDoc[e.doc] === e) u.byDoc[e.doc] = undefined;
-    if (e.item.meta?.start) u.offset = undefined; // An event gone (evicted, expired, forgotten) may change the mode.
+    tallyOffset(u, e.item, -1); // An event gone (evicted, expired, forgotten) may change the mode.
     tally(u, e.item, -1);
     u.graph?.remove(e.item.id);
     this.dropped?.(u.scope, [e.item.id]);
@@ -650,14 +734,33 @@ export class ItemCache {
     return out;
   }
 
-  /** The UTC offset (minutes) most of the user's cached events carry: their calendar's zone; 0 if none says. */
+  /**
+   * The UTC offset (minutes) most of the user's cached events carry: their calendar's zone; 0 if none says. Read from
+   * the tally kept as items come and go (O(distinct offsets)); `userOffset` over the items in order is what it equals.
+   * Its tie-break (a non-zero offset over 0, then the offset seen first in item order) needs the order only when two
+   * or more non-zero offsets tie for the most, and then the items are scanned as before.
+   */
   offsetOf(scope: Scope): number {
     const u = this.peek(scope);
     if (!u) return 0;
     if (u.offset === undefined) {
-      const starts: string[] = [];
-      for (const e of u.items.values()) if (e.item.meta?.start) starts.push(e.item.meta.start);
-      u.offset = userOffset(starts);
+      let most = 0;
+      let nonZero = 0; // Non-zero offsets at the most.
+      let pick = 0;
+      for (const [o, c] of u.offsets) {
+        if (c > most) {
+          most = c;
+          nonZero = 0;
+        }
+        if (c === most && o !== 0 && nonZero++ === 0) pick = o;
+      }
+      if (nonZero === 0) pick = 0;
+      else if (nonZero > 1) {
+        const starts: string[] = [];
+        for (const e of u.items.values()) if (e.item.meta?.start) starts.push(e.item.meta.start);
+        pick = userOffset(starts);
+      }
+      u.offset = pick;
     }
     return u.offset;
   }
@@ -741,7 +844,7 @@ export class ItemCache {
    * freed instead of held until they write again. Every user is visited on their own items alone: one user's fresh
    * items keep no other user, and no tenant's traffic expires another's. Returns how many users were dropped.
    *
-   * A user whose oldest entry is a fresh lookup item has nothing expired and costs one check. Runs on the timer
+   * A user with nothing expired costs one check per class of item (the oldest of each, `anyExpired`). Runs on the timer
    * (`expireEveryMs`), so never inside a caller's synchronous use of a user's vocabulary ids; callable directly
    * (tests, a simulation on its own clock).
    */
@@ -749,10 +852,8 @@ export class ItemCache {
     let n = 0;
     // Deleting the entry being visited is safe in a Map walk: no copy of 10k+ users per tick.
     for (const [key, u] of this.users) {
-      const first = u.items.values().next().value as Entry | undefined;
-      // Oldest-first order: a fresh first entry that is not synced means nothing is expired (a synced one may hide
-      // expired lookups behind it, so the sweep runs).
-      if (first && !first.synced && this.alive(first, now)) continue;
+      // Holds items, none expired: nothing to sweep, and alive. (A user with none may be dropped below.)
+      if (u.items.size > 0 && !this.anyExpired(u, now)) continue;
       // A probe made within the time to live is kept with its user, even one that found nothing: forgetting it would
       // cost the source call it saves (D46).
       const idle = !this.probedSince(u, now - this.limits.ttlMs);
@@ -772,10 +873,11 @@ export class ItemCache {
     return n;
   }
 
-  /** Whether any of the user's items is within its time to live: a scan of fetch times, nothing dropped. */
+  /** Whether any of the user's items is within its time to live: the newest of a class is, if any of it is. */
   private anyAlive(u: UserCache, now: number): boolean {
-    for (const e of u.items.values()) if (this.alive(e, now)) return true;
-    return false;
+    const loose = u.tails[LOOSE];
+    const synced = u.tails[SYNCED];
+    return (loose !== null && this.alive(loose, now)) || (synced !== null && this.alive(synced, now));
   }
 
   /** Whether the user made a probe at or after `since` (the probes map is least recently made first). */
@@ -805,6 +907,12 @@ export class ItemCache {
     const u = this.peek(scope);
     if (!u) return;
     for (const e of [...u.items.values()]) if (e.item.sourceId === sourceId) this.drop(u, e);
+    if (this.limits.releaseTerms) {
+      // Compact now: every term no live item holds is released. Then if the vocabulary holds exactly the terms live
+      // items do, no term of the source's content is left that a rebuild would remove, and none is needed.
+      u.index.flush();
+      if (u.vocab.live === u.index.termCount) return;
+    }
     this.rebuild(scope, u);
   }
 

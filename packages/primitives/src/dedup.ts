@@ -59,14 +59,16 @@ export class TextSketcher {
   /** Words per shingle. */
   readonly shingleSize: number;
   // Per vocabulary id: the term's hash, or, for a term in a script written without spaces, a run of unit hashes in
-  // `pool` (expLen > 0). Filled once per id.
+  // `pool` (expLen > 0). Filled on an id's first use, and again after the vocabulary releases the id (it may then
+  // name another term): `state` is 0 until filled, else HASHED, plus NUMERIC when the term holds a digit.
   private termHashes: Uint32Array = new Uint32Array(1_024);
   private expStart: Uint32Array = new Uint32Array(1_024);
   private expLen: Uint32Array = new Uint32Array(1_024);
-  private numeric: Uint8Array = new Uint8Array(1_024);
+  private state: Uint8Array = new Uint8Array(1_024);
   private pool: Uint32Array = new Uint32Array(1_024);
   private poolUsed = 0;
-  private hashed = 0;
+  // Pool units that a live id's run holds; the rest belong to released ids, reclaimed by `compactPool`.
+  private poolLive = 0;
   private terms = 0;
   private shingleCount = 0;
   private numbers = 0;
@@ -76,6 +78,15 @@ export class TextSketcher {
     this.vocab = vocab;
     this.maxTerms = maxTerms;
     this.shingleSize = shingleSize;
+    vocab.onRelease((id) => this.forgetTerm(id));
+  }
+
+  /** Drops what was derived from a released id's term: the id may come back as another term. */
+  private forgetTerm(id: number): void {
+    if (id >= this.state.length || this.state[id] === 0) return;
+    this.state[id] = 0;
+    this.poolLive -= this.expLen[id]!;
+    this.expLen[id] = 0;
   }
 
   /** The shared scratch, checked to still hold this sketcher's text. */
@@ -126,24 +137,27 @@ export class TextSketcher {
     owner = this;
     const ids = scratchIds.length === cap ? scratchIds : scratchIds.subarray(0, cap);
     const found = tokenizeInto(text, this.vocab, true, ids, null);
-    this.hashNewTerms();
+    if (this.vocab.size > this.state.length) this.growTerms(this.vocab.size);
     const th = this.termHashes;
     const expLen = this.expLen;
     const seq = scratchSeq;
-    const numeric = this.numeric;
+    const state = this.state;
     let n = 0;
     let numbers = 0;
     for (let i = 0; i < found && n < cap; i++) {
       const id = ids[i]!;
+      let st = state[id]!;
+      if (st === 0) st = this.hashTerm(id);
       // A sum of mixed hashes: a multiset key, so the order numbers appear in does not matter.
-      if (numeric[id] === 1) numbers = (numbers + mix32(th[id]! ^ 0x7f4a7c15)) | 0;
+      if (st === HASHED_NUMERIC) numbers = (numbers + mix32(th[id]! ^ 0x7f4a7c15)) | 0;
       const len = expLen[id]!;
       if (len === 0) {
         seq[n++] = th[id]!;
         continue;
       }
       const start = this.expStart[id]!;
-      for (let j = 0; j < len && n < cap; j++) seq[n++] = this.pool[start + j]!;
+      const pool = this.pool; // read after hashTerm, which may have grown or compacted it
+      for (let j = 0; j < len && n < cap; j++) seq[n++] = pool[start + j]!;
     }
     this.terms = n;
     this.numbers = numbers >>> 0;
@@ -238,26 +252,26 @@ export class TextSketcher {
     out[1] = hi >>> 0;
   }
 
-  private hashNewTerms(): void {
-    const size = this.vocab.size;
-    if (size <= this.hashed) return;
-    if (size > this.termHashes.length) {
-      let n = this.termHashes.length;
-      while (n < size) n *= 2;
-      this.termHashes = grown(this.termHashes, n);
-      this.expStart = grown(this.expStart, n);
-      this.expLen = grown(this.expLen, n);
-      const numeric = new Uint8Array(n);
-      numeric.set(this.numeric);
-      this.numeric = numeric;
-    }
-    for (let id = this.hashed; id < size; id++) {
-      const term = this.vocab.term(id);
-      this.termHashes[id] = mix32(fnv1a(term, 0, term.length));
-      if (hasUnsegmented(term)) this.expand(id, term);
-      if (/[0-9]/.test(term)) this.numeric[id] = 1;
-    }
-    this.hashed = size;
+  /** Grows the per-id arrays so ids below `size` fit. */
+  private growTerms(size: number): void {
+    let n = this.termHashes.length;
+    while (n < size) n *= 2;
+    this.termHashes = grown(this.termHashes, n);
+    this.expStart = grown(this.expStart, n);
+    this.expLen = grown(this.expLen, n);
+    const state = new Uint8Array(n);
+    state.set(this.state);
+    this.state = state;
+  }
+
+  /** Fills an id's hash (and units, for unsegmented script) from its term; returns its new `state`. */
+  private hashTerm(id: number): number {
+    const term = this.vocab.term(id);
+    this.termHashes[id] = mix32(fnv1a(term, 0, term.length));
+    if (hasUnsegmented(term)) this.expand(id, term);
+    const st = /[0-9]/.test(term) ? HASHED_NUMERIC : HASHED;
+    this.state[id] = st;
+    return st;
   }
 
   /**
@@ -265,6 +279,8 @@ export class TextSketcher {
    * single character alone), each other run as one unit. "osakaの小さなホテル" → osaka, の小, 小さ, さな, なホ, ホテ, テル.
    */
   private expand(id: number, term: string): void {
+    // Released ids' runs are dead weight: once they are most of the pool, copy the live runs down.
+    if (this.poolUsed > 1_024 && this.poolUsed > 2 * this.poolLive + term.length * 2) this.compactPool();
     const start = this.poolUsed;
     let i = 0;
     while (i < term.length) {
@@ -281,6 +297,22 @@ export class TextSketcher {
     }
     this.expStart[id] = start;
     this.expLen[id] = this.poolUsed - start;
+    this.poolLive += this.poolUsed - start;
+  }
+
+  /** Copies the live ids' unit runs to the front of a fresh pool, dropping released ids' runs. */
+  private compactPool(): void {
+    const pool = new Uint32Array(Math.max(1_024, this.poolLive * 2));
+    let used = 0;
+    for (let id = 0; id < this.state.length; id++) {
+      const len = this.expLen[id]!;
+      if (len === 0) continue;
+      pool.set(this.pool.subarray(this.expStart[id]!, this.expStart[id]! + len), used);
+      this.expStart[id] = used;
+      used += len;
+    }
+    this.pool = pool;
+    this.poolUsed = used;
   }
 
   private poolPush(h: number): void {
@@ -288,6 +320,9 @@ export class TextSketcher {
     this.pool[this.poolUsed++] = h;
   }
 }
+
+const HASHED = 1;
+const HASHED_NUMERIC = 3;
 
 function grown(a: Uint32Array, n: number): Uint32Array {
   const b = new Uint32Array(n);
