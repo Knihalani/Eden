@@ -5,7 +5,12 @@
  * complexity. Reports per-event latency of `observe` (fast path, waitMs 0), the CPU cost of slow-path lookups, and
  * event-loop lag while the stream runs.
  *
- *   bun packages/engine/bench/pipeline.bench.ts [itemsPerSource=1500] [events=2000] [gateWorkers=0]
+ *   bun packages/engine/bench/pipeline.bench.ts [itemsPerSource=1500] [events=2000] [gateWorkers=0] [warmup=20]
+ *
+ * The first `warmup` events are reported on their own line and left out of the steady-state percentiles: event #0
+ * pays JIT compilation and session set-up (30-45 ms), which otherwise is the whole-run max and reads as a recurring
+ * stall. Lag samples taken while those events ran are split off the same way. The cold maxima stay printed so start-up
+ * cost remains visible.
  *
  * With gateWorkers > 0, lookup results are redacted in a WorkerPool (D25) and each event waits for the pool to drain.
  * The stream is sequential, so this shows the pool's overhead and that decisions do not change, not the tail latency
@@ -20,6 +25,7 @@ import { buildWorkload } from "./workload";
 const itemsPerSource = Number(process.argv[2] ?? 1_500);
 const eventCount = Number(process.argv[3] ?? 2_000);
 const gateWorkers = Number(process.argv[4] ?? 0);
+const warmup = Math.max(0, Math.min(Number(process.argv[5] ?? 20), eventCount - 1));
 const w = buildWorkload({ itemsPerSource, events: eventCount, seed: 7 });
 const pool =
   gateWorkers > 0
@@ -55,8 +61,11 @@ const probe = setInterval(() => {
 
 const observeMs: number[] = [];
 const slowMs: number[] = [];
+// Index into `lags` of the first probe sample taken after warm-up ended.
+let warmLagEnd = 0;
 const t0 = performance.now();
 for (const event of w.events) {
+  if (observeMs.length === warmup) warmLagEnd = lags.length;
   const s = performance.now();
   await partner.observe(event, { waitMs: 0 });
   observeMs.push(performance.now() - s);
@@ -75,17 +84,25 @@ pool?.close();
 const pct = (xs: number[], p: number) =>
   [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))]!;
 const fmt = (ms: number) => `${(ms * 1000).toFixed(1)} µs`;
+const max = (xs: number[]) => xs.reduce((m, x) => (x > m ? x : m), 0);
+const line = (label: string, xs: number[]) =>
+  `${label.padEnd(24)}p50 ${fmt(pct(xs, 0.5))}  p99 ${fmt(pct(xs, 0.99))}  max ${fmt(max(xs))}  (n=${xs.length})`;
 const decisions: Record<string, number> = {};
 for (const t of traces) decisions[t.decision] = (decisions[t.decision] ?? 0) + 1;
 console.log(`workload: ${w.items} items across ${w.sources.length} sources, ${w.events.length} events`);
+const coldIdx = observeMs.indexOf(max(observeMs));
 console.log(
-  `observe (fast path):  p50 ${fmt(pct(observeMs, 0.5))}  p99 ${fmt(pct(observeMs, 0.99))}  max ${fmt(Math.max(...observeMs))}`,
+  `warm-up (first ${warmup} events): observe max ${fmt(max(observeMs.slice(0, warmup)))}` +
+    ` (event #0 ${fmt(observeMs[0]!)})  slow max ${fmt(max(slowMs.slice(0, warmup)))}` +
+    `  lag max ${fmt(max(lags.slice(0, warmLagEnd)))} over ${warmLagEnd} samples`,
 );
+console.log(`steady state (events ${warmup}..${w.events.length - 1}):`);
+console.log(line("  observe (fast path):", observeMs.slice(warmup)));
+console.log(line("  slow path per event:", slowMs.slice(warmup)));
+console.log(line("  event-loop lag:", lags.slice(warmLagEnd)));
 console.log(
-  `slow path per event:  p50 ${fmt(pct(slowMs, 0.5))}  p99 ${fmt(pct(slowMs, 0.99))}  max ${fmt(Math.max(...slowMs))}`,
-);
-console.log(
-  `event-loop lag:       p50 ${fmt(pct(lags, 0.5))}  p99 ${fmt(pct(lags, 0.99))}  max ${fmt(Math.max(...lags))}`,
+  `whole run: observe max ${fmt(max(observeMs))} (event #${coldIdx})  slow max ${fmt(max(slowMs))}` +
+    `  lag max ${fmt(max(lags))}`,
 );
 console.log(`total ${total.toFixed(0)} ms, ${(total / w.events.length).toFixed(3)} ms/event`);
 console.log("decisions", JSON.stringify(decisions));
