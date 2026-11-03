@@ -93,6 +93,21 @@ export interface ReaderInput {
    * request's candidates: read without the request's focus and sent first, as a prefix a provider can cache.
    */
   standing?: number;
+  /**
+   * The user's opaque sticky-routing key (`userCacheKey`), passed to the model so a provider routes the user's calls
+   * where their cached prefix is. Routing only: not part of `readerKey`, and never sent as prompt text.
+   */
+  cacheKey?: string;
+}
+
+/**
+ * One `AskReader.read`: the verdict (null as `verdictFor`'s), what this read itself spent (0 when the verdict came
+ * from the cache or a call another read had in flight), and whether the budget refused the call.
+ */
+export interface ReaderRead {
+  verdict: ReaderVerdict | null;
+  costUsd: number;
+  overBudget: boolean;
 }
 
 const STOP = new Set(
@@ -451,6 +466,7 @@ export class ModelReaderMaker implements ReaderMaker {
       maxTokens: READER_MAX_TOKENS,
       reasoning: "low",
       json: true,
+      ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),
       signal,
     });
     const n = Math.min(input.items.length, READER_MAX_ITEMS);
@@ -507,7 +523,7 @@ interface Entry {
 export class AskReader {
   private readonly users = new Map<string, { tenantId: string; byKey: Map<string, Entry> }>();
   private readonly perTenant = new Map<string, number>();
-  private readonly running = new Map<string, Promise<ReaderVerdict | null>>();
+  private readonly running = new Map<string, Promise<ReaderRead>>();
   private readonly aborts = new Map<string, AbortController>();
   private readonly limits: ReaderLimits;
   /** When expired verdicts were last dropped from every user (`sweep`). */
@@ -560,15 +576,24 @@ export class AskReader {
     input: ReaderInput,
     signal: AbortSignal,
   ): Promise<ReaderVerdict | null> {
+    return (await this.read(scope, session, input, signal)).verdict;
+  }
+
+  /**
+   * `verdictFor`, with what this read spent and whether the budget refused it: the caller's accounting (the ask's
+   * `costUsd`, its trace and the reader's report). A read that joins a call in flight spent nothing: the read that
+   * started the call carries its cost, so a cost is counted once.
+   */
+  async read(scope: Scope, session: string, input: ReaderInput, signal: AbortSignal): Promise<ReaderRead> {
     this.stats.asked++;
     const held = this.peek(scope, session, input);
     if (held) {
       this.stats.cached++;
-      return held;
+      return { verdict: held, costUsd: 0, overBudget: false };
     }
     const key = `${scopeKey(scope)}\n${AskReader.inner(session, input)}`;
     const running = this.running.get(key);
-    if (running) return running;
+    if (running) return running.then((r) => ({ ...r, costUsd: 0 }));
     const abort = new AbortController();
     const p = this.call(scope, session, input, AbortSignal.any([signal, abort.signal]), abort.signal).finally(() => {
       if (this.running.get(key) === p) this.running.delete(key);
@@ -585,13 +610,13 @@ export class AskReader {
     input: ReaderInput,
     signal: AbortSignal,
     forgotten: AbortSignal,
-  ): Promise<ReaderVerdict | null> {
+  ): Promise<ReaderRead> {
     const items = input.items.slice(0, READER_MAX_ITEMS);
-    if (items.length === 0) return null;
+    if (items.length === 0) return { verdict: null, costUsd: 0, overBudget: false };
     const reservation = this.deps.budget.reserve(scopeKey(scope), session, this.limits.estimateUsd);
     if (!reservation) {
       this.stats.overBudget++;
-      return null;
+      return { verdict: null, costUsd: 0, overBudget: true };
     }
     this.stats.calls++;
     try {
@@ -600,10 +625,12 @@ export class AskReader {
       this.stats.costUsd += got.costUsd;
       this.stats.inputTokens += got.usage?.inputTokens ?? 0;
       this.stats.outputTokens += got.usage?.outputTokens ?? 0;
-      if (forgotten.aborted) return null;
+      // A call that ran was paid for whatever became of its answer.
+      const spent = { costUsd: got.costUsd, overBudget: false };
+      if (forgotten.aborted) return { verdict: null, ...spent };
       if (!got.bears) {
         this.stats.failures++;
-        return null;
+        return { verdict: null, ...spent };
       }
       const verdict: ReaderVerdict = {
         bears: got.bears
@@ -613,11 +640,11 @@ export class AskReader {
         checked: items.length,
       };
       this.keep(scope, AskReader.inner(session, input), verdict);
-      return verdict;
+      return { verdict, ...spent };
     } catch {
       this.deps.budget.settle(reservation, 0);
       this.stats.failures++;
-      return null;
+      return { verdict: null, costUsd: 0, overBudget: false };
     }
   }
 
@@ -679,6 +706,15 @@ export class AskReader {
       this.aborts.delete(k);
       this.running.delete(k);
     }
+  }
+
+  /**
+   * Ends a session's budget tally (the partner's `close`): the reader's `Budget` is its own, so ending the partner's
+   * session does not end it, and a tally never ended is held for good. Idempotent; a call still in flight settles
+   * into the dropped tally, which changes nothing.
+   */
+  endSession(session: string): void {
+    this.deps.budget.endSession(session);
   }
 
   get userCount(): number {

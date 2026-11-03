@@ -11,9 +11,10 @@ export interface Trace {
    * - sources: delivered after a live source search, no model;
    * - model: delivered after the model judged the candidates;
    * - answer: answered an ask;
-   * - digest: opened a session with the active-constraints digest (`constraintDigest`), no call.
+   * - digest: opened a session with the active-constraints digest (`constraintDigest`), no call;
+   * - reader-push: `readerPush` read a user's request with the ask-time reader (its cost, and what it queued).
    */
-  decision: "skipped" | "repeat" | "silent" | "fast" | "sources" | "model" | "answer" | "digest";
+  decision: "skipped" | "repeat" | "silent" | "fast" | "sources" | "model" | "answer" | "digest" | "reader-push";
   reason: string;
   latencyMs: number;
   sourceCalls: number;

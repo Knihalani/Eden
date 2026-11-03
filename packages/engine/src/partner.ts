@@ -72,6 +72,7 @@ import {
   readerNote,
   type AskReader,
   type ReaderInput,
+  type ReaderRead,
   type ReaderKind,
 } from "./reader";
 import { activeOn, buildDigest, DIGEST_KINDS, digestAdmits, personalSender } from "./digest";
@@ -225,8 +226,11 @@ export interface ReaderReport {
   /** The ids it was given, in order. */
   pool: string[];
   flagged: { id: string; kind: ReaderKind }[];
-  /** "read" (a verdict, from a call or the cache), "late" (the wait ran out), "none" (refused, failed, unreadable). */
-  outcome: "read" | "late" | "none" | "gated";
+  /**
+   * "read" (a verdict, from a call or the cache), "late" (the wait ran out), "budget" (the reader's `Budget` refused
+   * the call: a session or day cap), "none" (no pool, a failed or unreadable call), "gated" (`readerGate`).
+   */
+  outcome: "read" | "late" | "budget" | "none" | "gated";
   waitedMs: number;
   /** Whether the answer said the reader found nothing that binds (`askReaderClear`). */
   clear: boolean;
@@ -408,6 +412,8 @@ interface ProbeOpts {
   local?: ReadonlySet<string> | null;
 }
 const ANSWER_MAX_TOKENS = 1_000;
+/** The longest question an ask may carry: `checkAsk`'s cap (protocol's validate.ts), which it keeps private. */
+const ASK_QUESTION_CHARS = 10_000;
 /** `askContext`: how long a request's answer order is reused by the asks that follow it (`requestOrder`). */
 const REQUEST_ORDER_MS = 60_000;
 /** `askContext`'s reciprocal-rank constant: rank 0 scores 1/k (the usual 60 flattens a five-item list to a tie). */
@@ -692,7 +698,11 @@ export class ContextPartner {
       // With `askReaderQuestions` every request is read: the verb list behind `isImperative` misses many actions
       // ("Cash in…", "RSVP yes…", "Open a Junior ISA…"), and the reader itself says when nothing binds.
       (this.config.askReaderQuestions || isImperative(event.text, MORE_VERBS))
-        ? this.ask({ ...event, question: event.text, maxItems: 5 }, { push: true }).catch(() => null)
+        ? // The question as an ask may carry it (`checkAsk`'s cap): the event's own cap is 100 times that, and the
+          // ask redacts and tokenizes it before its first await, on the observe's critical path.
+          this.ask({ ...event, question: head(event.text, ASK_QUESTION_CHARS), maxItems: 5 }, { push: true }).catch(
+            () => null,
+          )
         : null;
     const t0 = performance.now();
     const result = await this.observeEvent(event, options);
@@ -1341,8 +1351,25 @@ export class ContextPartner {
           : null;
       if (injection) s.pending.push(injection);
       const latencyMs = Math.round(performance.now() - t0);
+      // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
+      // trace carries it, since this response goes to no caller.
+      const costUsd = reading?.costUsd ?? 0;
+      this.trace({
+        sessionId: s.id,
+        turn: s.turn,
+        event: "user_message",
+        decision: "reader-push",
+        reason: cue.id,
+        latencyMs,
+        sourceCalls,
+        modelCalls: reading?.called ? 1 : 0,
+        costUsd,
+        itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
+        ...(plans ? { plans } : {}),
+        ...(local !== undefined ? { localSources: local, syncCalls: syncCalls ?? 0 } : {}),
+      });
       if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
-      return { answer: "", citations: [], usedModel: reading?.called === true, costUsd: 0, latencyMs };
+      return { answer: "", citations: [], usedModel: reading?.called === true, costUsd, latencyMs };
     }
     // `askGuard` (docs/research/edge-ask.md): an ask about an action is answered with its verdicts said. What may block
     // leads, marked; with nothing that may block and every source searched, a line says so. A reader's verdict, when
@@ -1402,7 +1429,9 @@ export class ContextPartner {
       );
     }
     let usedModel = reading?.called === true;
-    let costUsd = 0;
+    // What the ask spent: the reader's call (0 when its verdict was cached, joined or late), then the answer model's.
+    let costUsd = reading?.costUsd ?? 0;
+    let answerCalls = 0;
     const reservation =
       this.config.askWithModel && items.length && this.deps.model && !s.closed
         ? this.charge(s, this.config.estimatedAnswerUsd)
@@ -1424,7 +1453,8 @@ export class ContextPartner {
           learnt = undefined;
         }
         usedModel = true;
-        costUsd = res.costUsd;
+        costUsd += res.costUsd;
+        answerCalls = 1;
         if (calling) spans!.close(calling, modelAttrs(res));
       } catch {
         this.settle(reservation, 0);
@@ -1452,7 +1482,8 @@ export class ContextPartner {
       reason: cue.id,
       latencyMs,
       sourceCalls,
-      modelCalls: usedModel ? 1 : 0,
+      // The reader's call and the answer model's are two calls.
+      modelCalls: (reading?.called ? 1 : 0) + answerCalls,
       costUsd,
       itemIds: items.map((i) => i.id),
       ...(plans ? { plans } : {}),
@@ -1526,6 +1557,7 @@ export class ContextPartner {
     clear: boolean;
     checked: number;
     called: boolean;
+    costUsd: number;
   } | null> {
     const reader = this.deps.reader!;
     const acts = (raw: string) => isImperative(raw, MORE_VERBS);
@@ -1617,20 +1649,26 @@ export class ContextPartner {
       ),
       ...(standingCount > 0 ? { standing: standingCount } : {}),
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
+      // Sticky routing to the provider that holds the user's cached prefix, as the judge, answer and cards calls do.
+      cacheKey: userCacheKey(s.scope),
     };
-    const called = reader.peek(s.scope, s.key, input) === undefined;
+    const missed = reader.peek(s.scope, s.key, input) === undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<"late">((resolve) => {
       timer = setTimeout(() => resolve("late"), Math.max(0, this.config.askReaderWaitMs));
     });
-    let verdict: Awaited<ReturnType<AskReader["verdictFor"]>> | "late";
+    let got: ReaderRead | "late";
     try {
-      verdict = await Promise.race([reader.verdictFor(s.scope, s.key, input, s.abort.signal), late]);
+      got = await Promise.race([reader.read(s.scope, s.key, input, s.abort.signal), late]);
     } catch {
-      verdict = null;
+      got = { verdict: null, costUsd: 0, overBudget: false };
     } finally {
       clearTimeout(timer);
     }
+    // A late call's cost is booked by the reader (its stats and Budget) when it lands, not by this ask. A read the
+    // budget refused made no call.
+    const costUsd = got === "late" ? 0 : got.costUsd;
+    const called = missed && (got === "late" || !got.overBudget);
     const unchanged = {
       chosen,
       notes: new Map<string, string>(),
@@ -1639,11 +1677,13 @@ export class ContextPartner {
       clear: false,
       checked: 0,
       called,
+      costUsd,
     };
-    if (verdict === "late" || verdict === null) {
-      report(verdict === "late" ? "late" : "none");
+    if (got === "late" || got.verdict === null) {
+      report(got === "late" ? "late" : got.overBudget ? "budget" : "none");
       return unchanged;
     }
+    const verdict = got.verdict;
     const byId = new Map(pool.map((x) => [x.item.id, x]));
     const notes = new Map<string, string>();
     const kinds = new Map<string, ReaderKind>();
@@ -1675,6 +1715,7 @@ export class ContextPartner {
       clear,
       checked: verdict.checked,
       called,
+      costUsd,
     };
   }
 
@@ -2033,6 +2074,9 @@ export class ContextPartner {
     s.window.length = 0;
     s.agentHas.length = 0;
     this.deps.budget.endSession(s.key);
+    // The reader and the bridge reserve on Budgets of their own, by the same session key.
+    this.deps.reader?.endSession(s.key);
+    this.deps.bridge?.endSession(s.key);
     this.sessions.delete(s.key);
     const n = (this.perTenant.get(s.scope.tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(s.scope.tenantId);
@@ -5420,7 +5464,7 @@ function rebuildVocab(s: Session, maxTerms: number): void {
 const sessionKey = (e: Scope & { sessionId: string }) => `${scopeKey(e)}#${e.sessionId}`;
 
 /** An opaque per-user key for provider sticky routing (prompt-cache reuse): a hash, never the ids themselves. */
-const userCacheKey = (scope: Scope) =>
+export const userCacheKey = (scope: Scope) =>
   `eden-${createHash("sha256").update(scopeKey(scope)).digest("hex").slice(0, 24)}`;
 
 function eventText(e: AgentEvent): string {
