@@ -54,7 +54,7 @@ run are accepted: the no-model flags, the judge and `askWithModel` (both under t
 [docs/COST-MODEL.md](docs/COST-MODEL.md)). Settings that need a model role the servers do not wire (`cards`,
 `intent`, `constraintDigest`, `bridgeQuery`, `askReader`, `readerPush`, `readerPushBehind` and their numbers) are
 refused unless at their default, so the NEW family is not runnable from the shipped servers. So are `sync` and every
-`sync*` setting (the servers build only static sources, which cannot be listed) and push sync (`syncPush*`: no server
+`sync*` setting (static sources cannot be listed; sync over per-user MCP sources is not supported from the servers yet) and push sync (`syncPush*`: no server
 route relays source watches or change notices) (D106). ALL3 minus `cards` and `sync` is runnable: on the no-model
 train funnel it surfaces 193 of 384 hidden facts against ALL3's 214, with as many decoys (190), and it lowers the
 no-model eval's precision from 1 to 0.91. [docs/profiles/](docs/profiles/README.md) has checked-in profiles with

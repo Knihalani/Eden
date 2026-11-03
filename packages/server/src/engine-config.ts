@@ -3,8 +3,9 @@
  * the whole process. Unset, the engine runs on `DEFAULT_CONFIG` exactly (D12). It turns on the flags that need nothing
  * beyond what the shipped servers wire (probes, graph, grounds, compaction, the action firewall, the judge); the lab's
  * presets stay in `@eden/sim` and are not read here, so the file names its flags itself. Checked-in profiles, each
- * with its measured numbers, are in docs/profiles/ (D104). Sync is not among them: it needs listable sources, and the
- * servers build only `StaticSource`s (connectors.ts), which have no list tool (`SERVER_REFUSES`).
+ * with its measured numbers, are in docs/profiles/ (D104). Sync is not among them: it needs listable sources, the
+ * shared `StaticSource`s (connectors.ts) have no list tool, and sync over per-user MCP sources (user-sources.ts, D108)
+ * has not been tested from the servers (`SERVER_REFUSES`).
  *
  * Every key is checked at startup against `DEFAULT_CONFIG`: an unknown key (a typo, a flag from another version) or a
  * value of the wrong type stops the server with a message naming it, rather than running silently on the default.
@@ -30,14 +31,16 @@ const NOTIFY =
   "needs a server route that relays source watches and change notices to the partner (`sourcePushes`, " +
   "`sourceChanged`), which the shipped servers do not have";
 const LIST =
-  "needs sources with a list tool, and the shipped servers build only static sources from EDEN_SOURCES_FILE " +
-  "(connectors.ts), which cannot be listed (sync would start and read nothing)";
+  "needs sources with a list tool: the static sources from EDEN_SOURCES_FILE cannot be listed (sync would read " +
+  "nothing from them), and sync over per-user MCP sources (EDEN_USER_SOURCES_FILE) is not supported from the " +
+  "servers yet";
 
 /**
  * Keys that act only through something the servers lack besides a partner dependency (those are @eden/engine's
  * `NEEDS_DEP`). sync.ts applies the `syncPush*` settings only to a source marked by `pushing`, which only
- * `sourcePushes` calls. `sync` is refused until the servers build listable sources (per-user MCP connectors, roadmap
- * M2), and so is every other `sync*` key off its default, since each is inert without it (D106).
+ * `sourcePushes` calls. `sync` is refused (D106): static sources cannot be listed, and per-user MCP sources (D108),
+ * which can carry a list tool, are not yet tested under sync from the servers; so is every other `sync*` key off its
+ * default, since each is inert without it.
  * engine-config.test.ts requires every reader, card, bridge, intent, digest, push and sync key to be refused here or
  * by `NEEDS_DEP`, or allow-listed with a reason.
  */

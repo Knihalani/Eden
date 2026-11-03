@@ -103,7 +103,7 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
         new RegExp(`"${key}" needs a server route that relays source watches and change notices`),
       );
     }
-    // The servers build only StaticSources (connectors.ts), which have no list tool: sync would list nothing.
+    // Static sources have no list tool and sync over per-user MCP sources is untested from the servers (D106, D108).
     expect(() => parseEngineConfig({ sync: true })).toThrow(/"sync" needs sources with a list tool/);
     const path = file("sync.json", JSON.stringify({ probes: true, sync: true }));
     expect(() => engineConfig({ EDEN_ENGINE_CONFIG: path })).toThrow(/EDEN_ENGINE_CONFIG .*"sync" needs sources/);

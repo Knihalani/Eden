@@ -18,7 +18,8 @@ needs its own decision with a held-out check (D104).
 
 - `fallback-asks`: the defaults plus `fallbackAsks`. One more eval item found (20 to 21 of 45); no funnel change.
 - `all3-no-cards`: the lab's ALL3 (D80) without `cards`, `cardsEconomy` and `sync`, which the servers refuse (D104,
-  and its follow-up: the servers build only static sources, which cannot be listed, so sync would read nothing). On
+  and its follow-up: static sources cannot be listed, so sync would read nothing; per-user MCP sources, D108, are not yet
+  tested under sync). On
   this funnel cards add about 0 (with `sync` kept, 214 vs 214 hidden, 210 vs 211 decoys); `sync` adds 21 hidden and
   20 decoys (214 / 210 with it, 193 / 190 without, measured 2026-11-03 r3). Decoys rise with hidden facts (127 to
   190), and on the eval one false fire appears. The funnel replays cached cards; D80's live and held-out evidence for
