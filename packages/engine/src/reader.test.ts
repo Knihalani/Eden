@@ -399,10 +399,11 @@ describe("the reader in the engine (config.askReader)", () => {
       onReader: (r) => reports.push(r),
     });
     const answers: Record<string, { answer: string; ids: string[] }[]> = {};
+    let observed: { pending: boolean } | undefined;
     for (const userId of opts.users ?? ["u1"]) {
       const scope = { tenantId: "t", userId };
       const sessionId = "s1";
-      await p.observe(
+      observed = await p.observe(
         { ...scope, sessionId, at: clock, kind: "user_message", text: opts.request ?? REQUEST } as AgentEvent,
         { waitMs: opts.waitMs ?? 1_000 },
       );
@@ -419,7 +420,7 @@ describe("the reader in the engine (config.askReader)", () => {
         answers[userId]!.push({ answer: a.answer, ids: a.citations.map((c) => c.itemId) });
       }
     }
-    return { answers, maker, reader, reports, partner: p };
+    return { answers, maker, reader, reports, partner: p, observed };
   };
 
   test("flag off: no call, and the binding item is not among the seats", async () => {
@@ -596,6 +597,55 @@ describe("the reader in the engine (config.askReader)", () => {
     await Bun.sleep(1_000);
     const later = r.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" });
     expect(later.find((x) => x.reason.startsWith("reader:"))).toBeDefined();
+  });
+
+  // The push read waits `readerPushWaitMs`, not the explicit ask's `askReaderWaitMs`: a reading that lands after the
+  // ask's wait but within the caller's is queued, not paid for and dropped. It is queued only while its session is
+  // open and its request is still the session's latest.
+  const PUSH_SLOW = { askReader: true, readerPush: true, askReaderWaitMs: 100, readerPushWaitMs: 3_000 };
+  const ref = { tenantId: "t", userId: "u1", sessionId: "s1" };
+  const isReader = (x: { reason: string }) => x.reason.startsWith("reader:");
+  const slowReader = () => new ScriptedReader(flags("mail:hold"), { delayMs: 300 });
+
+  test("readerPush: a reading slower than askReaderWaitMs lands within the observe's wait and is queued", async () => {
+    const slow = slowReader();
+    const r = await run(PUSH_SLOW, { asks: 0, maker: slow, waitMs: 3_000 });
+    expect(slow.calls.length).toBe(1);
+    expect(r.observed!.pending).toBe(true);
+    expect(r.reports.map((x) => x.outcome)).toEqual(["read"]);
+    expect(r.partner.takePending(ref).find(isReader)).toBeDefined();
+  });
+
+  test("readerPush: a reading that lands after its session closed is not queued", async () => {
+    const slow = slowReader();
+    const r = await run(PUSH_SLOW, { asks: 0, maker: slow, waitMs: 0 });
+    expect(r.observed!.pending).toBe(true);
+    // The close comes while the call is in flight (past the explicit ask's 100 ms wait, before the 300 ms reading).
+    await Bun.sleep(150);
+    await r.partner.observe({ ...ref, at: NOW, kind: "session_end" } as AgentEvent);
+    await Bun.sleep(600);
+    expect(slow.calls.length).toBe(1);
+    expect(r.partner.takePending(ref).find(isReader)).toBeUndefined();
+  });
+
+  test("readerPush: a reading that lands after a newer user message is not queued for the old request", async () => {
+    const slow = slowReader();
+    const r = await run(PUSH_SLOW, { asks: 0, maker: slow, waitMs: 0 });
+    // Not an action, so it starts no push of its own: only the first request's reading is in flight.
+    await Bun.sleep(150);
+    const next = { ...ref, at: NOW, kind: "user_message", text: "thanks, what time is it there?" } as AgentEvent;
+    await r.partner.observe(next);
+    await Bun.sleep(600);
+    expect(slow.calls.length).toBe(1);
+    expect(r.reports.map((x) => x.outcome)).toEqual(["read"]);
+    expect(r.partner.takePending(ref).find(isReader)).toBeUndefined();
+    // Control: the agent's own events after the request (a tool call) do not make the request stale.
+    const kept = await run(PUSH_SLOW, { asks: 0, maker: slowReader(), waitMs: 0 });
+    await kept.partner.observe({ ...ref, at: NOW, kind: "tool_call", tool: "calendar.list", input: {} } as AgentEvent);
+    // Isolation: a user message in another session of the same user does not make this session's request stale.
+    await kept.partner.observe({ ...next, sessionId: "s2" } as AgentEvent);
+    await Bun.sleep(600);
+    expect(kept.partner.takePending(ref).find(isReader)).toBeDefined();
   });
 
   test("askReaderClear: a read pool with nothing binding says so in fixed words", async () => {

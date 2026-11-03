@@ -234,7 +234,7 @@ date, sender, the ≤ 400 characters of its parts that bear most on the request,
 fenced as data. It returns the items that block, limit or change the request or show it done, each with a kind and a
 ≤ 15-word bearing (`parseReader` validates both); those lead the answer, marked "Eden's reader: <kind>: <bearing> |",
 and the usual items fill the seats left. With `askReaderClear` a read pool with nothing binding opens the answer with
-a fixed "Checked the N items found most related: …" line. The ask waits at most `askReaderWaitMs` (2.5 s); late, over
+a fixed "Checked the N items found most related: …" line. An explicit ask waits at most `askReaderWaitMs` (2.5 s); late, over
 budget, failed or unreadable, the answer is the usual one, and a late call still fills the cache. Verdicts are cached
 per user and session by a hash of the request and the pool; any `forget` of the user or a source drops them. Like the
 bridge, it is wired by the embedder (`PartnerDeps.reader`); the lab's funnel wires it (`--reader`), the server does not
@@ -248,7 +248,10 @@ flags are queued as a proactive packet, so an agent that never calls `ask_contex
 options (D99, all off): `askReaderStanding` puts the user's in-force standing constraints first in the reader's pool,
 read without the request's focus so the same text forms a cached user-turn prefix (`ChatMessage.cache`); `readerGate`
 skips the call when no candidate could constrain the request; `readerPushWaitMs` bounds how long `observe` waits for
-the push (0 measured badly: the reading must land before the agent answers).
+the push, within the caller's own wait (0 measured badly: the reading must land before the agent answers). The push
+itself is not cut at `askReaderWaitMs`: it waits for the reading (bounded by the reader's model call and the session's
+close), and `observe` reports `pending` while it runs. Its packet is queued only if the session is still open and no
+newer user message has arrived; the agent's own events in between (tool calls, its replies) do not make it stale.
 
 **The intent index** (`intent`, needs `cards`, off by default; proposed D87, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four
