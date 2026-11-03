@@ -3165,11 +3165,11 @@ export class ContextPartner {
       if (id < 0) return false;
       ids[i] = id;
     }
-    const holders = s.agentHas.filter((held) => ids.every((id) => held.terms.has(id)));
+    const holders = s.agentHas.filter((held) => ids.every((id) => sortedHas(held.terms, id)));
     if (holders.length === 0) return false;
     // Every term is known to the session now, so no term is skipped and adjacent ids are adjacent words.
     const pairs = [...pairsOf(item.title, s.vocab), ...pairsOf(item.text.slice(0, HELD_CHARS), s.vocab)];
-    return holders.some((held) => pairs.every((p) => held.pairs.has(p)));
+    return holders.some((held) => pairs.every((p) => sortedHas(held.pairs, p)));
   }
 
   /**
@@ -5597,13 +5597,13 @@ function rebuildVocab(s: Session, maxTerms: number): void {
   const agentHas: Held[] = [];
   const remap = (id: number) => vocab.intern(old.term(id));
   let room = Math.floor(maxTerms / 4);
-  for (let i = s.agentHas.length - 1; i >= 0 && s.agentHas[i]!.terms.size <= room; i--) {
+  for (let i = s.agentHas.length - 1; i >= 0 && s.agentHas[i]!.terms.length <= room; i--) {
     const held = s.agentHas[i]!;
-    room -= held.terms.size;
-    const pairs = new Set(
-      Array.from(held.pairs, (p) => pairKey(remap(Math.floor(p / PAIR_BASE)), remap(p % PAIR_BASE))),
-    );
-    agentHas.unshift({ terms: new Set(Array.from(held.terms, remap)), pairs });
+    room -= held.terms.length;
+    // New ids do not keep the old order, so both arrays are sorted again after the remap.
+    const terms = held.terms.map(remap);
+    const pairs = held.pairs.map((p) => pairKey(remap(Math.floor(p / PAIR_BASE)), remap(p % PAIR_BASE)));
+    agentHas.unshift({ terms: sortedUnique(terms), pairs: sortedUnique(pairs) });
   }
   s.agentHas = agentHas;
   s.vocab = vocab;
@@ -5658,10 +5658,15 @@ function buildCue(text: string, ids: Uint32Array, vocab: Vocab, at: number, offs
   return { text: terms.join(" "), entities, key, id, time: timeWindow(text, at, offset), at, raw: text, offset };
 }
 
-/** What one agent-held event holds: its terms and its adjacent term pairs (`pairKey`), in session ids. */
+/**
+ * What one agent-held event holds: its terms and its adjacent term pairs (`pairKey`), in session ids, each sorted and
+ * unique so membership is a binary search. Typed arrays, not Sets: a session keeps up to `windowEvents` of these, and
+ * a Set of numbers costs over 100 bytes an entry against 4 or 8 here (`held.test.ts`: a session with 12 mail
+ * listings of 8 KB took 2,096 KB with Sets, 311 KB with these).
+ */
 interface Held {
-  terms: Set<number>;
-  pairs: Set<number>;
+  terms: Uint32Array;
+  pairs: Float64Array;
 }
 
 /**
@@ -5679,14 +5684,38 @@ const pairKey = (a: number, b: number) => a * PAIR_BASE + b;
 /** An agent-held event's terms and pairs. Its terms are interned already (`observe`), so none is skipped. */
 function heldOf(text: string, vocab: Vocab): Held {
   const { ids, n } = termIds(text.slice(0, HELD_CHARS), vocab, false);
-  const terms = new Set<number>();
-  const pairs = new Set<number>();
-  for (let i = 0; i < n; i++) {
-    if (!terms.has(ids[i]!) && terms.size === MAX_HELD_TERMS) break;
-    terms.add(ids[i]!);
-    if (i > 0) pairs.add(pairKey(ids[i - 1]!, ids[i]!));
+  const distinct = new Set<number>(); // Transient: only counts distinct terms against the cap.
+  const pairs = new Float64Array(Math.max(0, n - 1));
+  let m = 0;
+  let i = 0;
+  for (; i < n; i++) {
+    if (!distinct.has(ids[i]!) && distinct.size === MAX_HELD_TERMS) break;
+    distinct.add(ids[i]!);
+    if (i > 0) pairs[m++] = pairKey(ids[i - 1]!, ids[i]!);
   }
-  return { terms, pairs };
+  return { terms: sortedUnique(ids.slice(0, i)), pairs: sortedUnique(pairs.subarray(0, m)) };
+}
+
+/** A sorted copy of `xs` without repeats, trimmed to fit (a fresh buffer: the input may be a view of a larger one). */
+function sortedUnique<T extends Uint32Array | Float64Array>(xs: T): T {
+  const sorted = xs.slice().sort() as T;
+  let m = 0;
+  for (let i = 0; i < sorted.length; i++) if (m === 0 || sorted[i] !== sorted[m - 1]) sorted[m++] = sorted[i]!;
+  return m === sorted.length ? sorted : (sorted.slice(0, m) as T);
+}
+
+/** Whether sorted `xs` holds `x`. */
+function sortedHas(xs: Uint32Array | Float64Array, x: number): boolean {
+  let lo = 0;
+  let hi = xs.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    const v = xs[mid]!;
+    if (v === x) return true;
+    if (v < x) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return false;
 }
 
 /** The adjacent term pairs of `text` (terms the vocabulary does not know are skipped). */
