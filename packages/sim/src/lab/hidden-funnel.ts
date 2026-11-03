@@ -121,6 +121,7 @@ import {
   type ScreenRow,
 } from "./reader-stub";
 import { packetLine } from "./uptake";
+import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 
 const args = process.argv.slice(2);
 const V = "value" as const;
@@ -170,6 +171,7 @@ const cli = flags(
         "spend-cap",
         "spend-headroom",
         "run-label",
+        "distill",
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
@@ -384,6 +386,10 @@ const readerModel =
         READER_MODEL,
       );
 const readerLanes: AskReader[] = [];
+/** `--distill record|labels|cascade:FILE` (distilled-reader.ts): record reader verdicts, replay labels, or cascade. */
+const DISTILL = opt("distill", "") ? parseDistill(opt("distill", "")) : null;
+const DISTILL_MODEL = DISTILL?.mode === "cascade" ? loadModel(DISTILL.file) : null;
+const distillLanes: DistilledReaderMaker[] = [];
 /** `--allow-misses`: accept a replay run some of whose reader prompts were not cached (they fail open). */
 const ALLOW_MISSES = cli.has("allow-misses");
 const TIMELINE = opt("timeline", "");
@@ -640,7 +646,12 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     stub.log = ({ prompt, reply }) =>
       appendFileSync(READER_LOG, `${JSON.stringify({ task: readerTask, reader: READER, prompt, reply })}\n`);
   }
-  const maker = stub ?? (laneModel ? new ModelReaderMaker(laneModel) : null);
+  const modelMaker = laneModel ? new ModelReaderMaker(laneModel) : null;
+  const distill = DISTILL
+    ? new DistilledReaderMaker(DISTILL.mode, modelMaker, DISTILL.file, DISTILL_MODEL, DISTILL.out)
+    : null;
+  if (distill) distillLanes.push(distill);
+  const maker = distill ?? stub ?? modelMaker;
   const reader = maker ? new AskReader({ maker, budget: new Budget(UNCAPPED), now: () => clock }) : null;
   if (reader) readerLanes.push(reader);
   // Every report per session, in order: a request can be read twice (`readerPush`'s ask, then the funnel's own).
@@ -745,6 +756,10 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     if (stub instanceof OracleReaderMaker) {
       stub.task = readerTask;
       stub.planted = new Map([[id, variant === "hidden" ? "hidden" : "decoy"]]);
+    }
+    if (distill) {
+      distill.task = readerTask;
+      distill.planted = { id, role: variant === "hidden" ? "hidden" : "decoy" };
     }
     // The request's own reader calls start here (after the draft's, below).
     let stubBefore = stub?.sizes.length ?? 0;
@@ -1032,7 +1047,7 @@ const add = (into: { hidden: Row; control: Row }, r: { hidden: Row; control: Row
 };
 
 console.log(`suite ${SUITE_LIST.join(",")}, seeds ${SEEDS.join(",")}, config ${JSON.stringify(CONFIG)}`);
-if (READER === "stub") console.log(STUB_BANNER);
+if (READER === "stub" && DISTILL?.mode !== "labels") console.log(STUB_BANNER);
 if (ORACLE) {
   console.log(
     `--reader oracle: a proxy, not a reader: it flags the planted hidden item (p_hit ${ORACLE.pHit}) and the decoy ` +
@@ -1150,6 +1165,15 @@ if (readerModel) {
 }
 if (readerModel || cardMaker || bridgeMaker) {
   console.log(overBudgetLine({ reader: readerLanes, cards: cardLanes, bridge: bridgeLanes }));
+}
+if (distillLanes.length) {
+  const sum = (f: (d: DistilledReaderMaker) => number) => distillLanes.reduce((a, d) => a + f(d), 0);
+  console.log(
+    `distill ${DISTILL!.mode}: local silent ${sum((d) => d.stats.silent)}, local bind ${sum((d) => d.stats.bind)}, ` +
+      `escalated ${sum((d) => d.stats.escalated)}, label misses ${sum((d) => d.missed)}`,
+  );
+  // A label not found is a read with no answer (the engine fails open, as ALL3): the replay is then partial.
+  if (sum((d) => d.missed) > 0) console.log(`LABEL MISSES: ${sum((d) => d.missed)} reads had no label (failed open)`);
 }
 const misses = missGate(readerModel?.missed ?? 0, ALLOW_MISSES);
 if (misses.message) console.log(`\n${misses.message}\n`);

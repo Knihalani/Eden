@@ -82,7 +82,7 @@ Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too),
 | Cards (dev/held-out worlds) | `cards-enrich.ts` | `--cards packages/sim/lab/cards/cards-v2.jsonl` | yes |
 | Cards (train worlds, 746 items, 75 calls, $0.0233 on glm-5.3-flash; broad-set.md) | `cards-enrich.ts --funnel train --seeds 41,42` | `cards-train.jsonl` (merge with v2: `bun run funnel` does) | yes |
 | Cards, price-routed batch 20 | `cards-enrich.ts --sort price --batch 20` | `econ-price20-v2.jsonl` (econ-background.md) | yes |
-| Intent requests (D87) | `cards-enrich.ts --intent --dir D` | `--intent D/intent-v2.jsonl` (needs `--cards`) | no (`.local/haiku/intent/`) |
+| Intent requests (D87) | `cards-enrich.ts --intent --dir D` | `--intent D/intent-v2.jsonl` (needs `--cards`) | the Haiku campaign's no (`.local/haiku/intent/`); the train worlds (seeds 41–44) and held-out 10–11, made for D110, yes: `packages/sim/lab/distilled/intent-v2.jsonl.gz` (gunzip it) |
 | Bridge queries (D89) | `bridge-enrich.ts --out F` | `--bridge F` | no |
 | Reader calls (D95) | `--reader live --reader-cache F` | `--reader replay --reader-cache F` (a prompt not cached fails open; misses exit 3, below) | no |
 
@@ -244,6 +244,11 @@ bun run funnel --preset NEWL --jobs 4 -- --reader stub --lead-in clause # draft 
   compares its pool with the request's first read: the share of tasks whose draft had a pool, mean Jaccard, final pool
   ⊆ draft pool, and the hidden item in the draft's pool (stage 1 of lat-draft-speculative-read). The draft's lookup
   is real: it caches what it finds for the request, so delivery moves slightly (NEWL stub: decoys 211 → 212).
+- **`--distill labels:LABELS.jsonl,OUT.jsonl` with `--reader stub`** replays Haiku 5.5's reader verdicts for train1–6,
+  seeds 41–44 (`packages/sim/lab/distilled/labels-train.jsonl`, keyed on task and `readerKey`) at $0, and writes each
+  call with its items to OUT: labels for (request, candidate) pairs. It needs the committed cards and intent requests
+  (`packages/sim/lab/distilled/run.sh labels` sets them up). `record:OUT` makes such labels with a live reader;
+  `cascade:MODEL` puts a no-model scorer in front of the reader (rejected, D110, docs/research/distilled-reader.md).
 
 Measured on train1–6, seeds 41–42, 4 cores, no key set:
 
