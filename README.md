@@ -60,8 +60,9 @@ train funnel it surfaces 193 of 384 hidden facts against ALL3's 214, with as man
 no-model eval's precision from 1 to 0.91. [docs/profiles/](docs/profiles/README.md) has checked-in profiles with
 their numbers (D104, D106); none is recommended yet (no held-out or live check), and the defaults stay the
 production choice.
-`EDEN_SOURCES_FILE` holds static documents only for now: MCP connectors there are not supported yet, since that file's
-sources are shared by every user; connect MCP sources through `McpSource` in an embedding's resolver.
+`EDEN_SOURCES_FILE` holds static documents only, since that file's sources are shared by every user. Each user's MCP
+connectors, with their own credentials, go in `EDEN_USER_SOURCES_FILE` or an embedding's `SourceDirectory` (D108,
+docs/INTEGRATION.md).
 
 ## Repository
 
