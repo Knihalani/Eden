@@ -38,7 +38,9 @@ import {
   PlanError,
   PlannedSource,
   SourceFanout,
+  type CountedPlanCalls,
   type FanoutOutcome,
+  reachedSource,
   sharedKey,
   type SharedCalls,
   type QueryPlanner,
@@ -1361,12 +1363,11 @@ export class ContextPartner {
         decision: "reader-push",
         reason: cue.id,
         latencyMs,
-        // Not `sourceCalls`: the push's lookup runs beside the event's own slow path over the same words, and a search
-        // that joins the other's call in flight (or is answered by the fan-out's cache) still counts here as a call,
-        // though the connector saw one. Its own count rides apart, so a harness summing `sourceCalls` (calls per task)
-        // counts what connectors were sent, as before the push had a trace. Its plans and sync use stay off too.
-        sourceCalls: 0,
-        pushSourceCalls: sourceCalls,
+        // The push's lookup runs beside the event's own slow path over the same words but asks `askSources`, not
+        // `lookupSources`, so it is partly new calls: `searchLive` counts only the calls a connector received (a search
+        // that joined the slow path's in flight, or was answered by the fan-out's cache, is none), and a harness
+        // summing `sourceCalls` over a task counts what its connectors were sent. Plans and sync use stay off.
+        sourceCalls,
         modelCalls: reading?.called ? 1 : 0,
         costUsd,
         ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
@@ -3123,18 +3124,15 @@ export class ContextPartner {
     // `anticipate`: what a prefetch already asked a source for the request's names answers the planner too (its
     // query per name), as it answers the probes (`probe`'s `recent`).
     if (shared && this.config.anticipate && s.ant) this.seedShared(s, shared, cue, all);
+    // A planned source's calls, as counted where they reach the connector (`made`), by its index in `chosen`.
+    const planned: CountedPlanCalls[] = [];
     const chosen =
       planner && !listing
-        ? sendTo(found).map(
-            (x) =>
-              new PlannedSource(
-                x,
-                planner,
-                () => this.fanout.permit(s.scope, x.id),
-                this.fanout.planCalls(x, shared),
-                deadlineAt,
-              ),
-          )
+        ? sendTo(found).map((x) => {
+            const via = this.fanout.planCalls(x, shared);
+            planned.push(via);
+            return new PlannedSource(x, planner, () => this.fanout.permit(s.scope, x.id), via, deadlineAt);
+          })
         : listing
           ? sendTo(listers.filter((x) => !local?.has(x.id)))
           : sendTo(found);
@@ -3186,8 +3184,16 @@ export class ContextPartner {
           return last ? [{ sourceId: x.id, shapes: last.shapes, calls: last.calls, found: last.found }] : [];
         })
       : undefined;
+    // The calls the connectors received: not a source answered by the fan-out's cache, one that joined another
+    // lookup's call in flight (the slow path and `readerPush`'s ask search the same words at once), or one a guard
+    // refused. A planned source counts the shape calls it sent that reached the connector (a cascade sends two).
+    let made = 0;
+    for (let k = 0; k < outcomes.length; k++) {
+      const via = planned[k];
+      made += via ? via.made : reachedSource(outcomes[k]!) ? 1 : 0;
+    }
     const result = {
-      calls: chosen.length + syncCalls,
+      calls: made + syncCalls,
       ...(plans ? { plans } : {}),
       ...(this.sync ? { local: local?.size ?? 0, syncCalls } : {}),
       // Every source of the user synced and current: the cache this lookup ranks holds all they have (`askGuard`).
@@ -3432,8 +3438,9 @@ export class ContextPartner {
       // `anticipate` with shared calls: the whole answer (the planner's page size) is cached and recorded, so it can
       // stand in for the planner's own query of the name later (`seedShared`); the probe's finds stay its first five.
       const whole = window ? 20 : this.config.anticipate && shared ? 8 : 5;
-      // A call the fan-out did not make (busy, limited, open, answered from its cache, past the deadline) is no call.
-      const unmade = to.length - outcomes.filter((o) => !SKIPPED.has(o.status)).length;
+      // A call the fan-out did not make (busy, limited, open, answered from its cache, joined in flight, past the
+      // deadline) is no call.
+      const unmade = to.length - outcomes.filter(reachedSource).length;
       out.calls -= unmade;
       if (own) extra -= unmade;
       // A consequence probe's answers are always recorded: which of its terms each source was asked, and when, is
@@ -5418,9 +5425,6 @@ function spanDays(c: { start?: string; end?: string }): number {
   if (!c.start || !c.end) return Infinity;
   return (Date.parse(c.end) - Date.parse(c.start)) / 86_400_000 + 1;
 }
-
-/** Fan-out outcomes with no call to the source behind them. */
-const SKIPPED = new Set<string>(["busy", "limited", "open", "cached"]);
 
 /** Ids both a lookup's own search and its probes found. */
 function agreed(probed: ReadonlySet<string>, looked: readonly string[] | undefined): Set<string> {

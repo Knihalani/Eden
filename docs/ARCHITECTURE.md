@@ -250,8 +250,10 @@ the items it rejected by name leave the ask's answer; an item it flagged never d
 request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
 flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. Its question is
 the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
-call and cost; that trace's `sourceCalls` is 0 (its lookup's count is `pushSourceCalls`), since its search can join the
-slow path's in flight and so report a call no connector received. Phase 3's
+call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search
+that joined another lookup's call in flight (the push and the slow path search the same words at once), was answered
+by the fan-out's cache, or was refused by a guard is none (`reachedSource`), and a planner's cascade counts each call
+it sent, so a task's traces sum to its connectors' count. Phase 3's
 options (D99, all off): `askReaderStanding` puts the user's in-force standing constraints first in the reader's pool,
 read without the request's focus so the same text forms a cached user-turn prefix (`ChatMessage.cache`); `readerGate`
 skips the call when no candidate could constrain the request; `readerPushWaitMs` bounds how long `observe` waits for
