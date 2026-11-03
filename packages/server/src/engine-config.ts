@@ -16,127 +16,11 @@
  * cost.
  */
 import { readFileSync } from "node:fs";
-import { DEFAULT_CONFIG, type EngineConfig } from "@eden/engine";
+import { ANTICIPATE_PARTS, checkEngineConfig, type EngineConfig } from "@eden/engine";
 
-/** String-valued keys and the values each accepts; every other key's type is its default's. */
-const CHOICES: Partial<Record<keyof EngineConfig, readonly string[]>> = { probeWhen: ["always", "actions"] };
-
-/**
- * Keys that act only when the partner has a dependency `buildPartner` does not wire (partner.ts `PartnerDeps`), with
- * that dependency. Set to anything but their default they would be silent no-ops, so they are refused; the default
- * (off, for a flag) is accepted. The numbers and lists here are read only on their dependency's path (partner.ts:
- * `digestFor`, the only reader of `constraintDigest`, `digestLines` and `digestBytes`, returns nothing without cards,
- * `askReaderStanding` fills the reader's pool, `readerPushWaitMs` bounds the reader's push, the `intent*` settings are
- * read by `intentFinds`, which needs cards).
- */
-const NEEDS_DEP: Partial<Record<keyof EngineConfig, "cards" | "bridge" | "reader">> = {
-  cards: "cards",
-  cardsEconomy: "cards",
-  cardItems: "cards",
-  constraintDigest: "cards",
-  digestLines: "cards",
-  digestBytes: "cards",
-  intent: "cards",
-  intentHits: "cards",
-  intentMinCoverage: "cards",
-  intentMinMatched: "cards",
-  intentWeight: "cards",
-  intentSeats: "cards",
-  bridgeQuery: "bridge",
-  bridgeQuestions: "bridge",
-  bridgeWaitMs: "bridge",
-  bridgeHits: "bridge",
-  bridgeAskSeats: "bridge",
-  askReader: "reader",
-  askReaderQuestions: "reader",
-  askReaderClear: "reader",
-  askReaderDrop: "reader",
-  askReaderPool: "reader",
-  askReaderWaitMs: "reader",
-  askReaderStanding: "reader",
-  askReaderItemChars: "reader",
-  askReaderStandingKinds: "reader",
-  readerPush: "reader",
-  readerPushNotes: "reader",
-  readerPushKinds: "reader",
-  readerPushWaitMs: "reader",
-  readerGate: "reader",
-};
-
-/** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
-type Range = { integer?: true; min?: number; max?: number };
-const COUNT: Range = { integer: true };
-const SIZE: Range = { integer: true, min: 1 };
-const SHARE: Range = { max: 1 };
-
-/**
- * Per-key ranges, from each key's doc in the engine's config.ts. Counts (items, terms, calls, seats, turns) are whole;
- * 0 stays legal where config.ts gives it a meaning ("none", "off", `syncPollPageSize`'s "every page is pageSize").
- * `SIZE` is for keys where 0 breaks the feature instead of turning it off: a 0 `syncPageSize` lists 0-item pages, so
- * nothing syncs (sync.ts poll), and a 0 cap on sessions or synced users evicts every one. Chances and shares of the
- * user's items are in [0, 1]. Keys not listed (times, bytes, scores, weights) keep the general floor.
- */
-const RANGES: Partial<Record<keyof EngineConfig, Range>> = {
-  minMatchedTerms: COUNT,
-  fallbackMatchedTerms: COUNT,
-  maxItemsPerInjection: COUNT,
-  maxRefreshes: COUNT,
-  lookupSources: COUNT,
-  askSources: COUNT,
-  judgeCandidates: COUNT,
-  windowEvents: COUNT,
-  ledgerCooldownTurns: COUNT,
-  cueCooldownTurns: COUNT,
-  usageWindowTurns: COUNT,
-  maxSessionsPerTenant: SIZE,
-  maxSeenTokens: COUNT,
-  maxCues: COUNT,
-  maxSessionTerms: COUNT,
-  probeCalls: COUNT,
-  probePeopleSources: COUNT,
-  probeTopicSources: COUNT,
-  probeFreshFloor: SHARE,
-  probeYieldFloor: SHARE,
-  consequenceSources: COUNT,
-  probeSecondSources: COUNT,
-  graphItems: COUNT,
-  graphSeats: COUNT,
-  anticipateCalls: COUNT,
-  anticipateSessionCalls: COUNT,
-  judgeTiedShare: SHARE,
-  confidentItems: COUNT,
-  syncMaxItems: SIZE,
-  syncPageSize: SIZE,
-  syncPollPageSize: COUNT,
-  syncStaleChance: SHARE,
-  syncCallsPerMin: COUNT,
-  syncCatchupPages: COUNT,
-  syncMaxUsersPerTenant: SIZE,
-  syncTermProbes: COUNT,
-  cardItems: COUNT,
-  askFullItems: COUNT,
-  decideCandidates: COUNT,
-  askContextItems: COUNT,
-  intentHits: COUNT,
-  intentMinCoverage: SHARE,
-  intentMinMatched: COUNT,
-  intentSeats: COUNT,
-  bridgeHits: COUNT,
-  bridgeAskSeats: COUNT,
-  askReaderPool: COUNT,
-  askReaderStanding: COUNT,
-  digestLines: COUNT,
-};
-
-/**
- * The parts `anticipateOff` can switch off: every `anticipateOff.includes(…)` (and `off.includes(…)` on it) in
- * partner.ts. engine-config.test.ts reads them there, so a part added to the engine fails the test until it is listed
- * here. A typo would switch nothing off.
- */
-export const ANTICIPATE_PARTS: readonly string[] = ["tools", "serve", "names", "learn", "days", "class"];
-
-/** String-list keys whose entries must come from a known list. */
-const NAMES: Partial<Record<keyof EngineConfig, readonly string[]>> = { anticipateOff: ANTICIPATE_PARTS };
+// The checks themselves (keys, types, `RANGES`, `anticipateOff` parts, `NEEDS_DEP`) live in @eden/engine's
+// config-check.ts, shared with the lab's CLIs; re-exported for engine-config.test.ts.
+export { ANTICIPATE_PARTS };
 
 /** The engine settings EDEN_ENGINE_CONFIG names, validated; `{}` when it is unset or empty. Throws on a bad file. */
 export function engineConfig(env: Record<string, string | undefined> = process.env): Partial<EngineConfig> {
@@ -157,56 +41,17 @@ export function engineConfig(env: Record<string, string | undefined> = process.e
   return parseEngineConfig(parsed, `EDEN_ENGINE_CONFIG (${path})`);
 }
 
-/** `value` as engine settings: a JSON object of known keys, each of its default's type. Throws naming the key. */
+/**
+ * `value` as engine settings: a JSON object of known keys, each of its default's type. Throws naming the key. No
+ * partner dependency is wired here (buildPartner wires no cards, bridge or reader). The parent-flag check is left off:
+ * a file is merged over the defaults, and refusing a child whose parent is off would refuse settings the server has
+ * accepted so far (D104); the lab's CLIs run it.
+ */
 export function parseEngineConfig(value: unknown, where = "engine config"): Partial<EngineConfig> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`${where} must be a JSON object of engine settings`);
-  }
-  const out: Record<string, unknown> = {};
-  for (const [key, given] of Object.entries(value)) {
-    // `Object.hasOwn`, not `in`: "__proto__" and "constructor" are not settings.
-    if (!Object.hasOwn(DEFAULT_CONFIG, key)) throw new Error(`${where}: unknown key "${key}"`);
-    const fallback = DEFAULT_CONFIG[key as keyof EngineConfig];
-    const choices = CHOICES[key as keyof EngineConfig];
-    if (choices) {
-      if (typeof given !== "string" || !choices.includes(given)) {
-        throw new Error(`${where}: "${key}" must be one of ${choices.join(", ")}`);
-      }
-    } else if (Array.isArray(fallback)) {
-      if (!Array.isArray(given) || !given.every((entry) => typeof entry === "string")) {
-        throw new Error(`${where}: "${key}" must be an array of strings`);
-      }
-      const names = NAMES[key as keyof EngineConfig];
-      const unknown = names ? (given as string[]).find((entry) => !names.includes(entry)) : undefined;
-      if (names && unknown !== undefined) {
-        throw new Error(`${where}: "${key}" has "${unknown}", which is not one of ${names.join(", ")}`);
-      }
-    } else if (typeof fallback === "number") {
-      // Every numeric setting is a count, a size, a time or a score, none negative.
-      if (typeof given !== "number" || !Number.isFinite(given) || given < 0) {
-        throw new Error(`${where}: "${key}" must be a number ≥ 0`);
-      }
-      const range = RANGES[key as keyof EngineConfig];
-      if (range?.integer && !Number.isInteger(given)) throw new Error(`${where}: "${key}" must be a whole number`);
-      if (range?.min !== undefined && given < range.min) {
-        throw new Error(`${where}: "${key}" must be at least ${range.min}`);
-      }
-      if (range?.max !== undefined && given > range.max) {
-        throw new Error(`${where}: "${key}" must be at most ${range.max}`);
-      }
-    } else if (typeof given !== typeof fallback) {
-      throw new Error(`${where}: "${key}" must be a ${typeof fallback}`);
-    }
-    const dep = NEEDS_DEP[key as keyof EngineConfig];
-    // JSON equality: every such value is a boolean, a number or a list of strings.
-    if (dep !== undefined && JSON.stringify(given) !== JSON.stringify(fallback)) {
-      throw new Error(
-        `${where}: "${key}" needs the partner's ${dep} dependency, which the shipped servers do not wire, so only ` +
-          `its default (${JSON.stringify(fallback)}) is accepted; run it from an embedding that supplies it ` +
-          "(buildPartner does not)",
-      );
-    }
-    out[key] = given;
-  }
-  return out as Partial<EngineConfig>;
+  return checkEngineConfig(value, {
+    where,
+    deps: {},
+    depNote: "which the shipped servers do not wire (run it from an embedding that supplies it; buildPartner does not)",
+    parents: false,
+  });
 }

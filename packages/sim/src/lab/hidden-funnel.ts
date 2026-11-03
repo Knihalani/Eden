@@ -103,6 +103,7 @@ import { buildWorld } from "../world";
 import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker } from "./cards-disk";
 import { missGate, overBudgetLine, ReplayModel } from "./reader-disk";
+import { flags, labConfig, parseJson } from "./flags";
 import { keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
@@ -122,10 +123,73 @@ import {
 import { packetLine } from "./uptake";
 
 const args = process.argv.slice(2);
-const opt = (name: string, fallback: string) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
-};
+const V = "value" as const;
+const B = "bool" as const;
+// Strict (flags.ts): an unknown flag exits 2 before any world is built; `--help` prints this and the header has the
+// rest. The pacer's and spend ledger's flags are read by `labAccess` (free.ts) from the same arguments.
+const cli = flags(
+  "hidden-funnel",
+  {
+    ...Object.fromEntries(
+      [
+        "suite",
+        "seeds",
+        "time",
+        "config",
+        "judge",
+        "model",
+        "wait-ms",
+        "ask-question",
+        "spans",
+        "cards",
+        "intent",
+        "card-log",
+        "bridge",
+        "card-limits",
+        "planted-age-days",
+        "lead-in",
+        "typing-ms",
+        "reader",
+        "packet-k",
+        "reader-model",
+        "reader-sort",
+        "reader-cache",
+        "reader-thinking",
+        "limit",
+        "reader-log",
+        "timeline",
+        "packets",
+        "candidates",
+        "ask-diag",
+        "rank-model",
+        "label",
+        "json",
+        "rpm",
+        "max-requests",
+        "spend-ledger",
+        "spend-cap",
+        "spend-headroom",
+        "run-label",
+      ].map((k) => [k, V]),
+    ),
+    ...Object.fromEntries(
+      ["overlap", "sync", "ask", "serial", "allow-misses", "push", "no-record", "cpu", "allow-logging"].map((k) => [
+        k,
+        B,
+      ]),
+    ),
+  },
+  `
+bun packages/sim/src/lab/hidden-funnel.ts [--suite hidden|heldout|all|a,b] [--seeds 41,42,43,44] [--time 0]
+  [--config '{"probes":true}'] [--json out.json] [--label L] [--no-record] [--ask] [--cards F] [--intent F]
+  [--bridge F] [--reader none|stub|oracle|replay|live] [--limit N] ... (every flag: the header of hidden-funnel.ts;
+  the common screen with a preset is \`bun run funnel\`, docs/LAB.md)`,
+);
+if (cli.rest.length) {
+  console.error(`hidden-funnel: unexpected arguments after --: ${cli.rest.join(" ")}; --help lists the flags`);
+  process.exit(2);
+}
+const opt = cli.opt;
 const SUITE = opt("suite", "hidden");
 const SUITE_LIST = parseSuites(SUITE);
 const SEEDS = opt("seeds", "41,42,43,44").split(",").map(Number);
@@ -134,7 +198,15 @@ const SEEDS = opt("seeds", "41,42,43,44").split(",").map(Number);
  * is the delivery latency a user would see; 0 (the default) answers at once.
  */
 const TIME = Number(opt("time", "0"));
-const CONFIG = JSON.parse(opt("config", "{}")) as Record<string, unknown>;
+/** `--config`: engine settings, checked whole (checkEngineConfig); a typo or a child whose parent is off exits 2. */
+const CONFIG = ((): Record<string, unknown> => {
+  try {
+    return labConfig(parseJson(opt("config", "{}"), "--config"), "--config");
+  } catch (error) {
+    console.error(`hidden-funnel: ${(error as Error).message}`);
+    process.exit(2);
+  }
+})();
 const LIVE = opt("judge", "none") === "live";
 /**
  * `--wait-ms N`: how long the request's observe waits for its lookup (the client's `waitMs`), default 30,000 with a
@@ -150,19 +222,19 @@ if (!(WAIT_MS >= 0)) throw new Error("--wait-ms must be a number of at least 0")
  * session with no wait, so the request arrives while that lookup is in flight: what `slowPathQueue` acts on, which no
  * other funnel task shape reaches. Changes the task shape: its scores are not comparable with a run without it.
  */
-const OVERLAP = args.includes("--overlap");
+const OVERLAP = cli.has("overlap");
 /** Traces of a request that arrived while its session's slow path was busy (`--overlap`), and how many were queued. */
 const busyTraces = { busy: 0, queued: 0 };
-const SYNC = args.includes("--sync");
+const SYNC = cli.has("sync");
 /** `--ask`: each request is also asked of Eden (`ask`), recording whether the answer cites the planted item. */
-const ASK = args.includes("--ask");
+const ASK = cli.has("ask");
 /**
  * `--ask-question narrow` (with `--ask`): the ask's question is the request narrowed as an agent would word it
  * (`narrow.ts`, "<name> <object> <action noun>?"; a simulation assumption) instead of the request's own text.
  */
 const ASK_Q = opt("ask-question", "request");
 if (ASK_Q !== "request" && ASK_Q !== "narrow") throw new Error("--ask-question must be request or narrow");
-const SERIAL = args.includes("--serial");
+const SERIAL = cli.has("serial");
 const NOOP_SPANS = opt("spans", "") === "noop";
 const REAL_SYNC = CONFIG.sync === true;
 if (REAL_SYNC && SYNC) throw new Error("--sync (the oracle) and the real sync (config sync) are exclusive");
@@ -247,7 +319,7 @@ const bridgeMaker = BRIDGE ? new DiskBridgeMaker(BRIDGE) : null;
 const bridgeLanes: QueryBridge[] = [];
 const CARD_LIMITS = JSON.parse(opt("card-limits", "{}")) as Record<string, unknown>;
 const PLANTED_AGE_DAYS = Number(opt("planted-age-days", "0"));
-const PUSH = args.includes("--push");
+const PUSH = cli.has("push");
 const LEAD = opt("lead-in", "") as DraftMode | "";
 if (LEAD && LEAD !== "clause" && LEAD !== "half") throw new Error("--lead-in must be clause or half");
 if (LEAD && OVERLAP) throw new Error("--lead-in and --overlap are exclusive (each is a different lead-in)");
@@ -313,7 +385,7 @@ const readerModel =
       );
 const readerLanes: AskReader[] = [];
 /** `--allow-misses`: accept a replay run some of whose reader prompts were not cached (they fail open). */
-const ALLOW_MISSES = args.includes("--allow-misses");
+const ALLOW_MISSES = cli.has("allow-misses");
 const TIMELINE = opt("timeline", "");
 /**
  * `--packets out.jsonl`: each task's packets as the agent would read them (text, reason, cited item ids) and the
@@ -1016,6 +1088,15 @@ console.log(
   `calls: connectors received ${callCheck.received} in the tasks' windows (${callCheck.listed} of them on-demand ` +
     `listings); traces summed ${callCheck.traced} (cross-check, fetches included)`,
 );
+// The traces should carry every call the connectors received (audit 2026-11-03b, corr-poll-behind-calls-untraced):
+// a gap means per-trace `sourceCalls`, and every cost or rate-limit view built from traces, is off.
+if (callCheck.traced !== callCheck.received) {
+  console.log(
+    `CALLS UNTRACED: traces summed ${callCheck.traced} of the ${callCheck.received} calls the connectors received ` +
+      "(per-trace sourceCalls are off; the connectors' count is the one calls/task uses" +
+      (CONFIG.syncPollBehind === true ? "; syncPollBehind's polls reach no trace)" : ")"),
+  );
+}
 if (REAL_SYNC) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);
   const requestCalls = grand.hidden.calls + grand.control.calls;
@@ -1086,7 +1167,7 @@ if (LIVE) {
 }
 // A run the cap cut short, or one with reader misses not accepted, is not this configuration's result: it stays out
 // of the ledger.
-if (!args.includes("--no-record") && ACCESS.pacer.refused === 0 && misses.code === 0) {
+if (!cli.has("no-record") && ACCESS.pacer.refused === 0 && misses.code === 0) {
   for (const { suite, rows, perTask, wall, total: t } of runs) {
     const n = (k: keyof Row, v: "hidden" | "control") => t[v][k] / Math.max(1, t[v].n);
     const metrics: Record<string, number> = {
@@ -1127,7 +1208,7 @@ if (!args.includes("--no-record") && ACCESS.pacer.refused === 0 && misses.code =
     console.log(`recorded ${e.id}`);
   }
 }
-if (TIMELINE || NOOP_SPANS || SERIAL || args.includes("--cpu")) {
+if (TIMELINE || NOOP_SPANS || SERIAL || cli.has("cpu")) {
   const c = process.cpuUsage(cpu0);
   console.error(`cpu suites ${((c.user + c.system) / 1e6).toFixed(3)} s, tasks ${(taskCpuUs / 1e6).toFixed(3)} s`);
 }
@@ -1152,6 +1233,8 @@ if (out) {
         rows,
         total: grand,
         ...(REAL_SYNC ? { sync: syncUse } : {}),
+        // The connectors' and the traces' call counts, for funnel.ts's merged check.
+        calls: callCheck,
         ...(cardMaker ? { cards: cardUse } : {}),
         // The replay's misses (answered without the reader) and failures, for funnel.ts's gate.
         ...(readerModel

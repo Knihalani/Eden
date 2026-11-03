@@ -49,6 +49,17 @@ Every flag is off by default in production; presets exist only in the lab. `--se
 `--variant-config '{"X":{...}}' --conditions eden,eden~X` (pi-ab, hermes-ab) adds flags; `eden+flag` is shorthand
 for one.
 
+**The $0 CLIs are strict** (`bun run funnel`, `hidden-funnel.ts`, `bun run sim`; audit 2026-11-03b). An unknown flag,
+a stray argument or a flag missing its value exits 2 before anything runs (`--presett NEWL` used to run the whole ALL3
+screen and read "+0 −0"); `--help` prints the usage and exits 0 (about 0.15–0.3 s). Engine settings go through
+`checkEngineConfig` (@eden/engine), on the preset and `--set` merged: an unknown key (`fallbackAsk`), a wrong type, an
+out-of-range number, or a child flag whose parent the merged configuration has off exits 2 naming it. So
+`--preset H --set '{"syncPollBehind":true}'` is refused (H has no `sync`; the flag would do nothing) and
+`--set '{"syncPollBehind":true}'` on ALL3 is accepted. The parent map (`PARENTS` in config-check.ts) allows several
+parents per key (`syncPollBehind` needs `sync` and `syncOnDemand`). The lab wires every dependency (cards, bridge,
+reader); `bun run sim` wires cards only with `--cards`. gate-traffic.ts, the A/B harnesses and eval's `--config` are
+not strict yet.
+
 ## Harnesses
 
 | Harness | Command | What it measures |
@@ -147,7 +158,7 @@ item" row). `--preset H` takes 9 s; `--suite train1 --seeds 41` takes 3 s; `--su
 takes 22 s (122/240 hidden, 91/240 decoys). The `--baseline` diff lists every task that moved. A gain that is a
 coin flip between hidden and decoys (broad-set.md: rules on unseen writing) is not a gain.
 
-**`--jobs N` (default 1)** runs one `hidden-funnel.ts` process per suite × seed shard, N at a time, and merges their
+**`--jobs N` (default 1 at `--time 0`)** runs one `hidden-funnel.ts` process per suite × seed shard, N at a time, and merges their
 rows before the score; every shard's output is printed whole, in order, then the merged totals (the sync, cards and
 reader replay counters summed; `overBudget` and `cpu` lines stay per shard). Checked on 2026-11-03 (4 cores, ALL3,
 train, seeds 41–42, with `--ask` and cards): `--jobs 1` 32.8 s and 34.4 s, `--jobs 4` 21.3 s and 15.7 s; the 768
@@ -163,8 +174,14 @@ shard; their reader misses are summed for the miss gate.
 **`--time` shards too** (since audit 2026-11-03b round 2; it used to force one process). At `-- --time 1` a task's
 time is mostly the connectors' simulated latency, which is sleeping, not CPU, so concurrent shards barely slow each
 other and ms/task stays a latency figure; inside each process the hidden and control variants also run at once at
-`--time` > 0 (`-- --serial` keeps variants and seeds one after another). `--jobs` is honoured as typed (default 1),
-so a heavier configuration or a smaller machine can still choose one process; the header names the shard concurrency.
+`--time` > 0 (`-- --serial` keeps variants and seeds one after another). **Without `--jobs`, a `--time` > 0 run uses
+min(shards, 12, 3 × cores) jobs** (round 3, `defaultJobs` in funnel-merge.ts) and says how many on stderr; the solo
+reasons above still force one. `--jobs` is honoured as typed, so a latency study, a heavier configuration or a smaller
+machine can choose one process. Measured 2026-11-03 (4 cores, ALL3, train1–6, seeds 41–42, `bun run funnel --json F
+-- --time 1`): no `--jobs` (now 12 at once) 45 s against `--jobs 1` 223 s, 5.0x; the 768 perTask rows identical in
+order with `ms`, `askMs`, `deliveryMs` and `beforeModel` removed; score 214/211 both; delivered 97/72 both; mean
+ms/task 495.3 against 491.2 (+0.8%; the audit's verifiers measured +2.6% and +3.5% at 12 jobs on the same machine
+class, so quote latency from `--jobs 1` when a few percent matter).
 Measured on 4 cores, ALL3, `--suite train1,train2 --seeds 41 -- --time 1`: before (forced one process) 136.6 s,
 after with `--jobs 4` (2 shards) 35.5 s, 3.8x; the 128 perTask rows identical in order with `ms`, `askMs`,
 `deliveryMs` and `beforeModel` removed, score 36/64 hidden and 39/64 decoys both ways, mean ms/task 473.5 against
@@ -172,6 +189,16 @@ after with `--jobs 4` (2 shards) 35.5 s, 3.8x; the 128 perTask rows identical in
 (measured while other no-model runs and `bun run check` shared the machine), delivered 97/384 hidden and 72/384
 decoys, ms/task 494.2, score 214/211; the audit finding measured the forced one-process run at 435.5 s with the
 same 97/72 and ms/task 481.9 (not re-run here).
+
+**Merged sync and call counts.** The merged `amortised total` subtracts the summed `demandSeen` (on-demand listings
+the connectors received in the tasks' windows, already in the request calls), as each shard does; it used to subtract
+`demand` (the polls in lookups' traces), which counted twice every poll left behind under `syncPollBehind` or made by
+the reader's push. `bun run funnel --suite train1,train2 --seeds 41,42 --set '{"syncPollBehind":true}' --jobs 4`:
+merged 7.04/task before, 4.43/task after; the four shards print 4.67, 4.08, 4.31 and 4.64 (mean 4.43). ALL3, where
+every poll is traced, is unchanged. Each shard now also prints `CALLS UNTRACED` when its traces summed other than its
+connectors received, and the merged summary lists such shards: under `syncPollBehind` the poll's listings reach no
+trace (train1 seed 41: 53 traced of 225 received), so per-trace `sourceCalls` undercount; under ALL3 every shard
+matched (12 of 12). The engine fix (a trace when the behind poll settles) is a separate change.
 
 ### 1b. Screen the NEW family at $0: no-model readers (measured 2026-11-03)
 
