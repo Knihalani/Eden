@@ -13,12 +13,14 @@
  * Auth: `Authorization: Bearer <key>`; the key fixes the tenant, and a body naming another tenant is refused.
  * Each tenant is rate limited (GCRA, `ServerConfig.tenantRatePerSec` / `tenantBurst`): past it, 429 with Retry-After,
  * so one tenant cannot starve the others.
+ * Bodies are capped (`ServerConfig.maxBodyBytes`, 8 MB by default, D100): a declared content-length past it is a 413
+ * before the body is read; `main.ts` passes the same cap to Bun.serve, which also covers bodies sent without one.
  * Errors are `{error}` with a 4xx for the caller's mistakes; nothing the caller sends can produce a 500.
  */
 import type { ContextPartner } from "@eden/engine";
 import { Gcra } from "@eden/primitives";
 import { checkAsk, checkEvent, isId } from "@eden/protocol";
-import type { ServerConfig } from "./config";
+import { DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
 
 type Json = Record<string, unknown>;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
@@ -26,8 +28,11 @@ const fail = (status: number, error: string) => json({ error }, status);
 
 export function createHandler(
   partner: ContextPartner,
-  config: Pick<ServerConfig, "keys" | "dev"> & Partial<Pick<ServerConfig, "tenantRatePerSec" | "tenantBurst">>,
+  config: Pick<ServerConfig, "keys" | "dev"> &
+    Partial<Pick<ServerConfig, "tenantRatePerSec" | "tenantBurst" | "maxBodyBytes">>,
 ) {
+  const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
+  const tooLarge = `body must be at most ${maxBodyBytes.toLocaleString("en-US")} bytes`;
   const limiter = new Gcra({ ratePerSec: config.tenantRatePerSec ?? 200, burst: config.tenantBurst ?? 400 });
   const tenantOf = (req: Request): string | null => {
     const key = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -50,6 +55,10 @@ export function createHandler(
         { status: 429, headers: { "retry-after": String(Math.ceil(waitMs / 1_000)) } },
       );
     }
+    // After auth and the limiter, so their answers are unchanged; before req.json(), so an oversized body is never
+    // buffered or parsed on the loop. A missing or unparseable header falls through to Bun.serve's cap (main.ts).
+    const declared = Number(req.headers.get("content-length") ?? NaN);
+    if (declared > maxBodyBytes) return fail(413, tooLarge);
     let body: Json;
     try {
       const parsed: unknown = await req.json();

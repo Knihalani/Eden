@@ -7,7 +7,9 @@
  * For each template, and in total:
  * - hidden tasks: was the planted item returned by a source, cached, delivered (higher is better);
  * - control tasks (the decoy planted instead): was the decoy delivered (noise: lower is better);
- * - source calls per task, and the engine's wall time per task.
+ * - source calls per task, and the engine's wall time per task. Calls are counted at the connector (`SimSource.stats`
+ *   over the task's window: searches and on-demand listings; the background sync's ticks fall outside it), not from
+ *   the engine's traces: those are printed beside them as a cross-check (audit 2026-11-03, finding 18).
  *
  *   bun packages/sim/src/lab/hidden-funnel.ts [--suite hidden|heldout|heldout-all|all|a,b] [--seeds 41,42,43,44]
  *     [--time 0]
@@ -64,8 +66,9 @@
  * endpoint; a `:free` model through `free.ts` with `--allow-logging --rpm --max-requests`). `--reader-cache FILE`
  * keeps every call under its prompt's hash (`reader-disk.ts`), so a rerun replays it at no cost; `replay` never
  * calls (a prompt not cached fails open). The run prints the reader's calls, tokens, spend and latency p50/p90 as
- * made, and each task records what the reader did (`reader*`). `--limit N` plays only the first N tasks of each suite,
- * variant and seed (a sample; run the baseline with the same N).
+ * made, and each task records what the reader did (`reader*`). Replay misses are counted and gate the run: with any,
+ * it is not recorded and exits 3 (`MISS_EXIT`) unless `--allow-misses` (docs/LAB.md). `--limit N` plays only the
+ * first N tasks of each suite, variant and seed (a sample; run the baseline with the same N).
  *
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
@@ -95,7 +98,7 @@ import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker } from "./cards-disk";
-import { ReplayModel } from "./reader-disk";
+import { missGate, overBudgetLine, ReplayModel } from "./reader-disk";
 import { keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
@@ -141,8 +144,12 @@ const syncUse = {
   lookups: 0,
   localSources: 0,
   warmMs: 0,
+  // On-demand listings the connectors received inside the tasks' windows (in calls/task).
+  demandSeen: 0,
   users: 0,
 };
+/** Over the whole run: calls the connectors received in the tasks' windows (listings among them); the traces' sum. */
+const callCheck = { received: 0, listed: 0, traced: 0 };
 const CARDS = opt("cards", "");
 /**
  * `--intent FILE[,FILE]` (with `"intent": true` in `--config`): the requests `cards-enrich.ts --intent` wrote, replayed
@@ -227,6 +234,8 @@ const readerModel =
         READER_MODEL,
       );
 const readerLanes: AskReader[] = [];
+/** `--allow-misses`: accept a replay run some of whose reader prompts were not cached (they fail open). */
+const ALLOW_MISSES = args.includes("--allow-misses");
 const TIMELINE = opt("timeline", "");
 /**
  * `--packets out.jsonl`: each task's packets as the agent would read them (text, reason, cited item ids) and the
@@ -325,7 +334,16 @@ interface TaskRow {
   /** Bytes of every packet the task delivered (the agent's input), and how many packets. */
   packetBytes: number;
   packets: number;
+  /**
+   * Calls the connectors received in the task's window (`SimSource.stats.calls`: searches and on-demand sync listings;
+   * the background sync's ticks run outside the window, as `quality.ts` leaves them out): ground truth for calls per
+   * task.
+   */
   calls: number;
+  /** The engine's traces' sum for the task (`sourceCalls` + `anticipateCalls`): a cross-check, fetches included. */
+  traced: number;
+  /** The on-demand sync listings among `calls`. */
+  listed: number;
   ms: number;
   /** With `--ask`: whether the answer cites the planted item, its bytes and items, and the ask's wall time. */
   askCited?: boolean;
@@ -345,9 +363,7 @@ interface TaskRow {
   /** Source calls made between the lead-in and the request (the prefetch's). */
   leadCalls?: number;
   /**
-   * Searches the connectors served for this task, counted at the connector: `calls` is what the engine's traces
-   * report, and a lookup's trace counts only the probe calls sent within its grace (`probeGraceMs`), not those that
-   * finish later; a prefetch counts all of its own.
+   * Searches the connectors served for this task, counted by a wrapper on `search` (`calls` less `listed`).
    */
   served: number;
 }
@@ -397,8 +413,12 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
           list.push(d);
         }
       : undefined;
+  // What the connectors received (`stats.calls` counts searches and listings), read around each task: the ground truth
+  // for calls per task, as `quality.ts` reads it.
+  const received = () => sources.reduce((n, s) => n + s.stats.calls, 0);
+  const listed = () => sources.reduce((n, s) => n + s.stats.lists, 0);
   const countCalls = (t: Trace) => {
-    // A prefetch's calls (`anticipate`) are the task's too.
+    // The traces' count, a cross-check only. A prefetch's calls (`anticipate`) are the task's too.
     calls += t.sourceCalls + (t.anticipateCalls ?? 0);
     for (const id of t.prefetched ?? []) prefetched.add(id);
     if (t.localSources !== undefined) {
@@ -526,6 +546,8 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     returned.clear();
     prefetched.clear();
     const callsBefore = calls;
+    const receivedBefore = received();
+    const listedBefore = listed();
     const servedBefore = served;
     const c0 = cpuNow();
     const traced = timeline?.task(lane, sessionId, `${lane}/${task.template}`);
@@ -538,7 +560,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       if (TIME > 0) await Bun.sleep(TYPING_MS * TIME);
       else for (let k = 0; k < 5_000 && busy(sessionId); k++) await Bun.sleep(1);
     }
-    const leadCalls = calls - callsBefore;
+    const leadCalls = received() - receivedBefore;
     const t0 = performance.now();
     const r = await partner.observe(
       { ...scope, sessionId, at, kind: "user_message", text: task.text } as AgentEvent,
@@ -633,6 +655,14 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       appendFileSync(CANDIDATES, `${JSON.stringify(line)}\n`);
       dumps.delete(sessionId);
     }
+    // The task's window closes here: the reply, everything it left running (the slow path, the push, probes past
+    // their grace: `busy`) and the ask have finished.
+    const taskListed = listed() - listedBefore;
+    const taskCalls = received() - receivedBefore;
+    syncUse.demandSeen += taskListed;
+    callCheck.received += taskCalls;
+    callCheck.listed += taskListed;
+    callCheck.traced += calls - callsBefore;
     perTask.push({
       seed,
       variant,
@@ -675,7 +705,9 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       injected: got.length,
       packetBytes: [...injections, ...pendingSeen].reduce((n, x) => n + Buffer.byteLength(x.text), 0),
       packets: injections.length + pendingSeen.length,
-      calls: calls - callsBefore,
+      calls: taskCalls,
+      traced: calls - callsBefore,
+      listed: taskListed,
       served: served - servedBefore,
       ms: Number(ms.toFixed(2)),
       ...(first
@@ -743,17 +775,26 @@ if (SUITE_LIST.length > 1) {
   for (const r of runs) console.log(line(r.suite, r.total));
   console.log(line("TOTAL", grand));
 }
+// calls/task above are what the connectors received; the traces' sum is printed to catch accounting drift in the
+// engine. It also counts fetches (which `SimSource` counts apart), and a call still running when a task's window
+// closes lands in the next task's.
+console.log(
+  `calls: connectors received ${callCheck.received} in the tasks' windows (${callCheck.listed} of them on-demand ` +
+    `listings); traces summed ${callCheck.traced} (cross-check, fetches included)`,
+);
 if (REAL_SYNC) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);
   const requestCalls = grand.hidden.calls + grand.control.calls;
+  // The on-demand listings counted in the tasks' windows are in `requestCalls`; the sync's count covers them all.
+  const amortised = requestCalls - syncUse.demandSeen + syncUse.demandAll + syncUse.background + syncUse.backfill;
   console.log(
     `sync: backfill ${syncUse.backfill} calls (${(syncUse.backfill / Math.max(1, syncUse.users)).toFixed(1)}/user, ` +
       `${(syncUse.warmMs / Math.max(1, syncUse.users)).toFixed(0)} ms/user), background ${syncUse.background} ` +
       `(${(syncUse.background / tasks).toFixed(2)}/task), on-demand ${syncUse.demand} ` +
-      `(${(syncUse.demand / tasks).toFixed(2)}/task, in calls/task; ${syncUse.demandAll} by the sync's count); ` +
-      `request ${(requestCalls / tasks).toFixed(2)}/task; amortised total ` +
-      `${((requestCalls + syncUse.demandAll - syncUse.demand + syncUse.background + syncUse.backfill) / tasks).toFixed(2)}` +
-      `/task; ` +
+      `(${(syncUse.demand / tasks).toFixed(2)}/task in lookups' traces; ${syncUse.demandSeen} at the connectors in the ` +
+      `tasks' windows, in calls/task; ${syncUse.demandAll} by the sync's count); request ` +
+      `${(requestCalls / tasks).toFixed(2)}/task; amortised total ` +
+      `${(amortised / tasks).toFixed(2)}/task; ` +
       `local sources ${(syncUse.localSources / Math.max(1, syncUse.lookups)).toFixed(2)}/lookup`,
   );
 }
@@ -791,6 +832,11 @@ if (readerModel) {
   const r = ACCESS.pacer.summary();
   console.log(`reader requests: ${r.sent} sent, ${r.retried} retried, ${r.refused} refused at the cap`);
 }
+if (readerModel || cardMaker || bridgeMaker) {
+  console.log(overBudgetLine({ reader: readerLanes, cards: cardLanes, bridge: bridgeLanes }));
+}
+const misses = missGate(readerModel?.missed ?? 0, ALLOW_MISSES);
+if (misses.message) console.log(`\n${misses.message}\n`);
 if (LIVE) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);
   console.log(
@@ -803,8 +849,9 @@ if (LIVE) {
   console.log(`judge requests: ${r.sent} sent, ${r.retried} retried, ${r.refused} refused at the cap`);
   if (r.refused) console.log("PARTIAL: the request cap refused judge calls; those tasks ran with no judge");
 }
-// A run the cap cut short is not this configuration's result: it stays out of the ledger.
-if (!args.includes("--no-record") && ACCESS.pacer.refused === 0) {
+// A run the cap cut short, or one with reader misses not accepted, is not this configuration's result: it stays out
+// of the ledger.
+if (!args.includes("--no-record") && ACCESS.pacer.refused === 0 && misses.code === 0) {
   for (const { suite, rows, perTask, wall, total: t } of runs) {
     const n = (k: keyof Row, v: "hidden" | "control") => t[v][k] / Math.max(1, t[v].n);
     const metrics: Record<string, number> = {
@@ -868,6 +915,17 @@ if (out) {
         total: grand,
         ...(REAL_SYNC ? { sync: syncUse } : {}),
         ...(cardMaker ? { cards: cardUse } : {}),
+        // The replay's misses (answered without the reader) and failures, for funnel.ts's gate.
+        ...(readerModel
+          ? {
+              reader: {
+                replayed: readerModel.replayed,
+                sent: readerModel.sent,
+                missed: readerModel.missed,
+                failed: readerModel.failed,
+              },
+            }
+          : {}),
         ...(SUITE_LIST.length > 1 ? { suites } : {}),
         // Per task, with the suite: how each planted item was delivered (`why`), for breakdowns by path.
         perTask: runs.flatMap((r) => r.perTask.map((t) => ({ suite: r.suite, ...t }))),
@@ -877,3 +935,4 @@ if (out) {
     ),
   );
 }
+if (misses.code) process.exit(misses.code);

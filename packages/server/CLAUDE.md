@@ -8,13 +8,13 @@ defaults.
 
 | File | Owns |
 |---|---|
-| `src/http.ts` | `createHandler`: `/v1/events` (`?waitMs=`, clamped 0–5,000), `/v1/ask`, `/v1/check`, `/v1/pending`, `/v1/digest`, `/v1/feedback`, `/v1/forget`, `/healthz`; auth (the key fixes the tenant; dev mode accepts a missing key, never a wrong one); 429 with Retry-After past the tenant's rate |
+| `src/http.ts` | `createHandler`: `/v1/events` (`?waitMs=`, clamped 0–5,000), `/v1/ask`, `/v1/check`, `/v1/pending`, `/v1/digest`, `/v1/feedback`, `/v1/forget`, `/healthz`; auth (the key fixes the tenant; dev mode accepts a missing key, never a wrong one); 429 with Retry-After past the tenant's rate; 413 when the declared content-length passes `maxBodyBytes` (D100) |
 | `src/build.ts` | `buildPartner` (production defaults: query planner serving D33, no experimental flag unless `engine` passes it), `startGatePool` (`EDEN_GATE_WORKERS`, D26) |
 | `src/config.ts` | `loadConfig`: every `EDEN_*` variable validated at startup with a message naming it |
 | `src/mcp.ts` | `createMcpServer`: one `ask_context` tool (guided description with `askGuard`, D88) |
 | `src/mcp-stdio.ts` | One user's `ask_context` over stdio (`EDEN_TENANT`, `EDEN_USER`, `EDEN_SOURCES_FILE`) |
 | `src/connectors.ts` | `staticResolver`: sources from a JSON file; per-user OAuth MCP connections are roadmap M2 |
-| `src/main.ts` | `bun run dev` |
+| `src/main.ts` | `bun run dev`; passes `EDEN_MAX_BODY_BYTES` to `Bun.serve` as `maxRequestBodySize` |
 
 ## Rules that apply here
 
@@ -27,12 +27,17 @@ defaults.
 - **Production defaults (D12, D33, D43).** The environment turns on no experimental engine flag; only an embedding's
   `buildPartner({ engine })` does. Do not read lab options (`allowLogging`, Anthropic models) from the environment.
 - **Read-only sources (D7)** are enforced in `@eden/sources`; `connectors.ts` must build sources through it.
+- **Body size (D100).** `EDEN_MAX_BODY_BYTES` (default 8 MB = 8,388,608) caps every request body twice: the handler
+  refuses a declared content-length past it with 413 before `req.json()`, and `Bun.serve` refuses bodies with no
+  length (chunked) past `maxRequestBodySize`. Bun's own 413 has an empty body, not the handler's JSON message:
+  accepted at the transport layer, since the handler never runs for it. Keep it above the ~6 MB worst case of a valid
+  event (one 1,000,000-unit field, all `\uXXXX`-escaped).
 - **Secrets.** Never log API keys or request bodies; `EDEN_API_KEYS` entries need keys of 16+ characters.
 
 ## Test
 
 ```bash
-bun run test:pkg server          # ~3 s; two tests parse a 60,000-deep body on purpose (~2.5 s)
+bun run test:pkg server          # one test sends a 60,000-deep body, refused by the depth walk in milliseconds (D100)
 EDEN_DEV=1 bun run dev           # local server on 127.0.0.1:8790 with static sources from EDEN_SOURCES_FILE
 ```
 

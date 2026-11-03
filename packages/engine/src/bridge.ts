@@ -347,6 +347,14 @@ export class QueryBridge {
     }
   }
 
+  /**
+   * Ends a session's budget tally (the partner's `close`): the bridge's `Budget` is its own, so ending the partner's
+   * session does not end it, and a tally never ended is held for good. The cache is per user and stays.
+   */
+  endSession(session: string): void {
+    this.deps.budget.endSession(session);
+  }
+
   get userCount(): number {
     return this.users.size;
   }
