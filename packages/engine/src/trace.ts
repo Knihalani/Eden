@@ -30,6 +30,12 @@ export interface Trace {
     | "reader-late";
   reason: string;
   latencyMs: number;
+  /**
+   * Calls the connectors received for this decision: a search answered by the fan-out's cache, one that joined another
+   * lookup's call in flight (a "reader-push" lookup and the slow path search the same words at once), or one a guard
+   * refused is not counted; a planner's cascade counts each call it sent. Fetches (refreshes) and on-demand sync
+   * listings are included. Summed over a task's traces, with `anticipateCalls`, it is the task's request-time calls.
+   */
   sourceCalls: number;
   modelCalls: number;
   costUsd: number;
@@ -40,12 +46,6 @@ export interface Trace {
    */
   readerCalls?: number;
   readerCostUsd?: number;
-  /**
-   * On a "reader-push" trace (whose `sourceCalls` is 0): the calls its lookup reported. Not added to `sourceCalls`,
-   * because a search that joins the slow path's call in flight, or is served from the fan-out's cache, reports a call
-   * the connector never received.
-   */
-  pushSourceCalls?: number;
   itemIds: string[];
   /**
    * With the query planner on: per connector searched, the shapes it sent, its calls and how many items came back.

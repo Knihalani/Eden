@@ -25,8 +25,10 @@ export {
 } from "./schema-args";
 export { searchSources, type SourceOutcome } from "./fanout";
 export {
+  reachedSource,
   sharedKey,
   SourceFanout,
+  type CountedPlanCalls,
   type FanoutOptions,
   type FanoutOutcome,
   type FanoutStatus,

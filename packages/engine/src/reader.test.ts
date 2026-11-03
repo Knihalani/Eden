@@ -894,9 +894,9 @@ describe("the reader in the engine (config.askReader)", () => {
       const { traces, sent } = await run({ askReader: true, readerPush }, { asks: 0 });
       expect(sent.searches).toBeGreaterThan(0);
       expect(traces.reduce((n, t) => n + t.sourceCalls, 0)).toBe(sent.searches);
-      // The push's own lookup is named apart, never added to `sourceCalls`.
+      // One source, the same query: the push and the slow path share one call, counted on one of their traces.
       const pushed = traces.find((t) => t.decision === "reader-push");
-      if (readerPush) expect([pushed!.sourceCalls, pushed!.pushSourceCalls]).toEqual([0, 1]);
+      if (readerPush) expect(sent.searches).toBe(1);
       else expect(pushed).toBeUndefined();
     }
   });
