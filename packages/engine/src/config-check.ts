@@ -11,8 +11,9 @@
  * - a key that acts only through a partner dependency (`NEEDS_DEP`: cards, reader) the caller does not wire
  *   is at its default or the core's (`deps`; the core's value takes the part out, so it needs nothing);
  * - with `parents` (the default), on the whole configuration merged over `DEFAULT_CONFIG`: a key given a value other
- *   than the core's (`CORE_CONFIG`, its part taken out) has every parent flag it acts under (`PARENTS`) on. Check the merged preset + override, never an override alone,
- *   so a child set under a preset that turns its parent on is accepted.
+ *   than the core's (`CORE_CONFIG`, its part taken out) has every parent flag it acts under (`PARENTS`) on. Check
+ *   the merged preset + override, never an override alone, so a child set under a preset that turns its parent on
+ *   is accepted.
  */
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { CORE_CONFIG } from "./parts";
