@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
-import { Budget, FakeModel } from "@eden/llm";
+import { Budget, FakeModel, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
@@ -320,6 +320,30 @@ describe("the reader's prompt and output (reader.ts)", () => {
     await new ModelReaderMaker(model).read(input(), new AbortController().signal);
     expect(model.calls[0]!.cacheKey).toBe("eden-abc");
     expect(model.calls[1]!.cacheKey).toBeUndefined();
+  });
+
+  test("the model maker asks for low reasoning by default; 'off' sends no effort and 'high' passes through", async () => {
+    const model = new FakeModel(() => '{"bears":[]}');
+    const signal = new AbortController().signal;
+    await new ModelReaderMaker(model).read(input(), signal);
+    await new ModelReaderMaker(model, { reasoning: "off" }).read(input(), signal);
+    await new ModelReaderMaker(model, { reasoning: "high" }).read(input(), signal);
+    expect(model.calls[0]!.reasoning).toBe("low");
+    expect("reasoning" in model.calls[1]!).toBe(false);
+    expect(model.calls[2]!.reasoning).toBe("high");
+    // The prompt is the same whatever the effort: the replay cache key (READER_VERSION) does not change.
+    expect(model.calls[1]!.messages).toEqual(model.calls[0]!.messages);
+  });
+
+  test("the model maker hands the call's usage back unchanged, reasoning tokens included", async () => {
+    const usage = { inputTokens: 3_900, outputTokens: 310, cachedInputTokens: 0, reasoningTokens: 120 };
+    const model: Model = {
+      id: "stub",
+      chat: async () => ({ text: '{"bears":[]}', usage, costUsd: 0.0004, model: "stub", latencyMs: 0 }),
+    };
+    const got = await new ModelReaderMaker(model).read(input(), new AbortController().signal);
+    expect(got.usage).toEqual(usage);
+    expect(got.costUsd).toBe(0.0004);
   });
 });
 
