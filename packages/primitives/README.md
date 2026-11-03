@@ -138,5 +138,33 @@ across runs in both directions; a reviewer's four runs gave 75.5–155.3 → 71.
 reference compacted 7 times in 5,000 churn steps, the packed index purges at the same 7 points and also freezes its
 delta about as often again, so it pauses about twice as often, each pause one pass over the postings (median 6–9.5 ms
 at 6,892 items on this VM, with GC; the reference's compactions 5.7–7.7 ms) and its worst step (GC included) is
-higher.
+higher. D120 (below) spreads that work out.
 Measured on a shared VM, ±30% run to run.
+
+## Incremental merge (2026-11-03, D120)
+
+A purge no longer rewrites the frozen tier: at the reference's compaction points it frees the doc numbers, reports
+the freed terms and drops the dead docs from the delta (the dead docs' terms and the delta, not every posting); their
+frozen postings stay, stale and skipped (a freed doc is neither frozen nor live), until a merge filters them. A merge
+starts when the delta fills, or at a purge that leaves stale frozen postings with none under way. It seals the delta
+(later adds go behind it) and runs in phases (count, prefix sums, allocate the new arrays, copy the old postings,
+write the sealed docs', build the forward arena), about 8,192 units of work (a posting each; zeroing new arrays
+counts) per add or remove, then swaps; a merge within one step's work finishes in the add that starts it. Until
+the swap queries read the old frozen tier and the whole delta, sealed part first: insertion order, and so every
+result, is unchanged. A reused doc number becomes frozen only in a merge that filtered its stale postings. `settle()`
+finishes a merge at once; the engine's expiry tick calls it for every user (after its sweep, whose removes may start
+one), since an index that stops changing mid-merge holds the old and new arrays together. `flush()` also merges, so nothing of a revoked source is left.
+
+| `index-memory.bench.ts`, churn at 6,892 (5,000 remove + add steps; three runs) | Reference | D111 packed | D120 packed |
+|---|---|---|---|
+| Steps over 1 ms | 7–10 | 13–15 (14 here) | 3–7 |
+| Median of those / worst step (GC included) | 5.1–5.8 / 10.2–11.9 ms | 6.0–9.5 / 21.2–43.9 ms | 1.5–1.9 / 1.8–4.3 ms |
+| Step p50 / p99 | 4.5–5.2 / 33–45 µs | 4.4–7.7 / 63–104 µs | 4.4–4.6 / 340–394 µs |
+
+The p99 rose: one step in about ten carries a share of a merge (0.1–0.4 ms). Index heap at rest is unchanged (6,892 /
+2,000 / 500 × 20 / 100 × 200 items: 415 / 799 / 922 / 518 B per item; D111's 414 / 802 / 903 / 529); an index built
+and left mid-merge holds both copies (the 6,892-item build ends in one: 814 B per item until its next write or the
+expiry tick). `churn.bench.ts` (the cache at 2,000 lookups + 5,000 synced, `releaseTerms` on, the default): worst put
+19.84 → 5.07 ms, p99 9.48 → 2.44 ms, p50 0.410 → 0.388 ms; heap churned 10.93 → 11.03 MB, fresh 10.17 → 10.26 MB (a
+per-doc postings count, 4 B, for the purge's exact count). `sparse-index-ab.bench.ts`: within noise (three runs each,
+remove + add p50 zipf 7.5–10.3 → 8.6–10.1 µs, dense 3.8–4.4 → 3.9–4.7 µs).

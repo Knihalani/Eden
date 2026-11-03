@@ -81,7 +81,15 @@ import { actionClass, classTies, matchesClass, type ActionClass } from "./conseq
 import { ProbeEconomy, type ProbeKind } from "./economy";
 import { seedsOf, tieWords, type Walked } from "./kg";
 import { judgeMessages, parseJudge } from "./judge";
-import { namesParticipant, startDay, startMs, timeWindow, titleNames, type TimeWindow } from "./grounding";
+import {
+  namesParticipant,
+  participantWords,
+  startDay,
+  startMs,
+  timeWindow,
+  titleNames,
+  type TimeWindow,
+} from "./grounding";
 import {
   absenceSpan,
   cleanEntities,
@@ -2401,10 +2409,14 @@ export class ContextPartner {
       return next.length > 0 ? { items: [next[0]!], how } : none;
     };
     const named = (t: Set<string>) => names.some((n) => n.every((w) => t.has(w)));
-    const kind = (t: Set<string>) => kinds.some((w) => t.has(w));
+    // An occasion word that is a participant's name is a person the cue did not read as one (lowercase, "with elena").
+    const kind = (x: Scored, t: Set<string>) => {
+      const people = participantWords(x.item);
+      return kinds.some((w) => t.has(w) && !people.has(w));
+    };
     const withName = events.filter((x) => {
       const t = titleWordsOf(x);
-      return named(t) && kind(t);
+      return named(t) && kind(x, t);
     });
     if (withName.length > 0) {
       const r = pick(withName, "occasion-person");
@@ -2414,7 +2426,7 @@ export class ContextPartner {
     // next week's board meeting") is about the action, and the occasion standing as planned is no news.
     if (time !== null && time.days.size > 0 && names.length === 0 && /\?\s*$/.test(cue.raw)) {
       const r = pick(
-        events.filter((x) => onDay(x) && kind(titleWordsOf(x))),
+        events.filter((x) => onDay(x) && kind(x, titleWordsOf(x))),
         "occasion",
         true,
       );
