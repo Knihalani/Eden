@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AskReader, type ReaderInput, type ReaderMaker } from "@eden/engine";
-import { Budget, type ChatRequest } from "@eden/llm";
+import { Budget, type ChatRequest, type Model } from "@eden/llm";
 import { MISS_EXIT, missGate, overBudget, overBudgetLine, ReplayModel } from "./reader-disk";
 
 const request = (n: number): ChatRequest => ({
@@ -24,6 +24,46 @@ describe("ReplayModel misses (--reader replay)", () => {
     expect(m.missed).toBe(3);
     expect(m.replayed).toBe(0);
     expect(m.calls.length).toBe(0);
+  });
+});
+
+describe("ReplayModel per-call timings (reader-latency-fit.ts)", () => {
+  const usage = { inputTokens: 3_900, outputTokens: 190, cachedInputTokens: 1_200 };
+  const timed = (ttftMs?: number): Model => ({
+    id: "m",
+    async chat() {
+      const res = { text: '{"bears":[]}', usage, costUsd: 0.0004, model: "m", latencyMs: 1_190 };
+      return ttftMs === undefined ? res : { ...res, ttftMs };
+    },
+  });
+
+  test("a live call's line keeps usage, latency and TTFT (counts and timings), and its replay reports them", async () => {
+    const file = join(mkdtempSync(join(tmpdir(), "reader-")), "timed.jsonl");
+    const live = new ReplayModel(file, timed(420), "m");
+    await live.chat(request(1));
+    const line = JSON.parse(readFileSync(file, "utf8").trim()) as Record<string, unknown>;
+    expect(line).toMatchObject({ usage, latencyMs: 1_190, ttftMs: 420 });
+    expect(Object.keys(line).sort()).toEqual(["costUsd", "k", "latencyMs", "model", "text", "ttftMs", "usage"]);
+    expect(live.calls[0]).toMatchObject({ ttftMs: 420, live: true });
+    const again = new ReplayModel(file, null, "m");
+    const res = await again.chat(request(1));
+    expect(res.ttftMs).toBe(420);
+    expect(again.calls[0]).toMatchObject({
+      inputTokens: 3_900,
+      cachedInputTokens: 1_200,
+      outputTokens: 190,
+      latencyMs: 1_190,
+      ttftMs: 420,
+      live: false,
+    });
+  });
+
+  test("a call that was not streamed has no ttftMs in its line, and null in calls", async () => {
+    const file = join(mkdtempSync(join(tmpdir(), "reader-")), "plain.jsonl");
+    const m = new ReplayModel(file, timed(), "m");
+    await m.chat(request(2));
+    expect(readFileSync(file, "utf8")).not.toContain("ttftMs");
+    expect(m.calls[0]!.ttftMs).toBeNull();
   });
 });
 

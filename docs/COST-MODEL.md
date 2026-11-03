@@ -142,7 +142,8 @@ most needed facts in `sessions.ts` are plain information (a meeting's time, an i
 not for, and the sessions label no constraints of their own. It is not zero, so the gate is not free to adopt; making
 it part of a preset still needs the live hidden-fact check. Applying the live per-call prices above to these counts
 (an estimate, not measured): NEWL about $0.044 per 1,000 user messages with the gate and $0.058 without ($0.00029 a
-call); NEW2 about $0.25–0.30 with the gate and $0.40–0.47 without ($0.00040–0.00047 a call).
+call); NEW2 about $0.25–0.30 with the gate and $0.40–0.47 without ($0.00040–0.00047 a call). Ceilings for the gate, an
+oracle gate and verdict reuse: "Where 3x is impossible" below.
 
 Active-constraints digest (proposed D90, `constraintDigest`, off by default): no model call and no source call. Its
 cost is the agent's: at most `digestBytes` (1,600 bytes; 1,377 on average on dev, 1,414 in-sample), about 350 tokens,
@@ -195,6 +196,62 @@ all tasks, within noise).
 
 These are arithmetic on list prices, not measurements. Output is billed on tokens used, not the cap: a judge verdict
 is a few tokens plus low-effort reasoning (about 20 tokens on GLM 5.3 Flash in a probe of three calls).
+
+## Where 3x is impossible (and where it is not)
+
+The audit's question for each cost and latency component: is a 3x cut left, on today's evidence? Each row names the
+command or source that gives it. Rows marked **unverified** carry figures no command in the repo reproduces;
+**estimate** rows are arithmetic. Commands are no-model and $0 (2026-11-03, audit 2026-11-03b, R3-18/19/20; this
+closes R2-18).
+
+**Reader latency is a fixed floor plus output decoding.** `bun packages/sim/src/lab/reader-latency-fit.ts` fits
+`latency = floor + a × input tokens + b × output tokens` over the ten single-value train-screen rows of
+docs/research/haiku-phase3.md: floor 364.9 ms, 0.006 ms per input token, 4.214 ms per output token (R² 0.988, max
+error 34.9 ms). At prompt v7's shape (3,921 in, 188 out) that is 365 ms floor (31%), 24 ms input (2%) and 792 ms
+output (67%). `--runs packages/sim/lab/haiku/phase3/funnel-reader-cost.txt` (19 runs) gives a higher floor: p50 =
+534.7 ms + 0.0107 ms/input + 3.40 ms/output (R² 0.831, max error 122 ms); p90 = 1,325 ms + 0.0285/input +
+1.96/output, R² 0.164, so the p90 fit is weak. Leaving out the one run that only replayed another (f7-AB20k) changes
+the floor by under 5 ms. Both fits are run-level (they regress run medians, not calls), so the floor is a range,
+365–535 ms. Per-call data settles it: reader replay lines now keep each call's input, cached input and output
+tokens, `latencyMs` and, when the provider streamed the call, `ttftMs` (reader-disk.ts; counts and timings only),
+and `--replay FILE.jsonl ...` fits per call, with cached input apart when the lines carry it.
+
+| Component | Best lever on file | Ceiling | Source |
+| --- | --- | --- | --- |
+| Reader latency, any reader-only change while it emits a verdict | everything but the floor | 3.24x p50 (fit a), 2.27x p50 and 1.36x p90 (fit b, weak) | `reader-latency-fit.ts`, default and `--runs` |
+| Reader latency, input side (pool size, item chars, standing, markup) | shorter input | 24–42 ms of 1,190 (about 1.02–1.04x): a cost lever only | the same fits at v7's shape |
+| Reader latency and cost, terse reply (no output at all) | a ceiling, **not a recommendation**: D96's reply carries the bearing the agent reads | latency at most the floor ratio above; cost 1.31x ($0.000094 output of $0.000401, haiku-phase3.md:93) | **estimate** from the fits and haiku-phase3.md:93 |
+| Reader calls, the shipped gate | `readerGate` | NEWL 87 → 66 calls (1.32x, 5 of 22 gated held a needed item); NEW2 436 → 275 (1.59x, 29 of 163) | `bun run gate-traffic` |
+| Reader calls, an oracle gate over any needed fact | perfect skip of pools with no needed item | NEW2 2.19x (199 calls), NEWL-nogate 2.07x (42) | `bun run gate-traffic`, "oracle gate" line |
+| Reader calls, an oracle gate over reader facts only (constraint, blocker, paid) | perfect skip of pools with nothing the reader is for | NEW2 8.90x (49 calls; 5.38x, 81 calls, counting reader facts the turn may use), NEWL-nogate 3.63x (24) | `bun run gate-traffic`, "oracle gate" line |
+| Reader calls, a verdict reused across one user's sessions | cache by exact input / pool / same type and binding set | NEW2 1.27x / 1.50x / 2.19x; NEWL-nogate 1.10x / 1.18x / 1.61x | `bun run gate-traffic --reuse` |
+| Reader cost per call, whole input read from the prompt cache | cached per-user prefix | about 3.0x: 3,921 × $0.01/M + 188 × $0.5/M = $0.000133 against $0.000401 | **estimate**: ignores cache writes (1.25x, pricing.ts:21) and the focus-dependent request part |
+| Reader cost per call, cheaper model endpoint | cheapest glm-5.3-flash endpoint | under 2x on input ($0.0513/M against Haiku's $0.10/M); glm list price is dearer than Haiku | packages/llm/src/pricing.ts:15, :20-22 |
+| Sharing a verdict between push and ask | one cache | none: the key hashes the request, the question and the items as read | packages/engine/src/reader.ts:262-270 (`readerKey`) |
+| Engine CPU on the fast path | profile-guided work | flat: steady observe p50 104.8 µs, p99 848 µs, 0.389 ms per event; the reader is about 10^4 times dearer | `bun packages/engine/bench/pipeline.bench.ts` |
+| Total task cost with a free Eden (agent + Eden, reader only) | Eden at $0 | Pi 2.55x ($0.638 total, $0.388 Eden, haiku-phase3.md:138), Hermes 1.78x ($0.628, $0.276, :145) | docs/research/haiku-phase3.md held-out 13 table |
+| Reader calls per task in the funnel (656 for 768 tasks under NEWL), background calls (1,796 against 300), compute per task ($4e-8) | – | – | **unverified**: from audit scratch runs, no committed command |
+
+What the table says:
+
+- **Latency.** 3x on the reader itself needs a verdict of almost no tokens, so it is impossible while the reader
+  answers with bearings. Input-side changes are cost levers with about zero latency effect. The routes to 3x on
+  Eden's critical path all move the read off it: not waiting for it (the answer gate), starting it on drafts, or no
+  separate reader call (agent-as-reader, a distilled no-model scorer). None of those is measured at $0.
+- **Call count.** The earlier "an oracle gate caps at 2.2x" counted every needed fact, most of which are plain
+  information (a meeting's time, an invoice's amount) the reader is not for. Counted over the facts the reader is for,
+  an oracle gate cuts NEW2's calls 5.4–8.9x on simulated sessions: a 3x on calls is not ruled out; the shipped gate's
+  precision is what stands between: NEW2 + gate makes 275 calls against the oracle's 49–81 and still gates 36 need
+  turns, 5 of them needing a reader fact (7 needing or able to use one). Two caveats: the reader-fact kinds are this lab's reading of the reader's prompt
+  (gate-traffic.ts `READER_FACTS`), and a pool holding the item is not the reader binding it.
+- **Need turns NEWL never reads.** Of NEWL's 348 unread user messages, 178 are need turns: 26 of those need a
+  reader fact and 62 need or can use one (gate-traffic's oracle line): a quality question for NEWL's "acting requests only" rule, not a cost
+  lever.
+- **Reuse.** A cross-session verdict cache reaches 1.27x on exact inputs and 2.19x only as an oracle memo (same type
+  and same binding set); the sessions' requests are templated, so even these overstate real repeats. It is not worth
+  a decision and an isolation test.
+- **Total cost.** Even a free Eden cuts agent + Eden cost at most 2.55x (Pi) or 1.78x (Hermes): the agent's own model
+  is the rest.
 
 ## Measured so far (tiny samples, not statistics)
 

@@ -142,6 +142,14 @@ messages can reach the cap (an estimate, not measured in the lab). The unit test
   With the lab-connector-latency change (audit 2026-11-03b) `pi-ab.ts` and `hermes-ab.ts` default to `--time-scale 1`;
   pass `--time-scale 0` for instant sources. The funnel's default stays `--time 0`.
 - Engine spans (`config.spans`, D56) are content-free and change no decision.
+- Reader call rate, no model: `bun run gate-traffic` (seeds 41–44, 40 sessions each, about 20 s) counts reader calls,
+  gated and unread messages per preset (NEWL, NEWL-nogate, NEW2+gate, NEW2), an oracle-gate line (calls a perfect gate
+  would make over any needed fact, needed reader facts, and reader facts needed or usable, and the need turns left
+  unread or gated), and with `--reuse` what reusing a verdict across one user's sessions could save (exact input, pool
+  only, same type and binding set). COST-MODEL.md "Where 3x is impossible" quotes it.
+- Reader latency split, no model: `bun packages/sim/src/lab/reader-latency-fit.ts` fits `floor + a·input + b·output`
+  over haiku-phase3.md's train-screens table (default), `--runs FILE` (a funnel log summary) or `--replay F.jsonl …`
+  (reader replay caches, one point per call, with TTFT when recorded); `--at IN,OUT` splits one call shape.
 
 ## Recipes
 
