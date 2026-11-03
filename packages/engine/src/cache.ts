@@ -25,6 +25,7 @@ import { createHash } from "node:crypto";
 import { dedupText, hamming64, SparseIndex, TextSketcher, Vocab } from "@eden/primitives";
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
+import type { ListReuse } from "@eden/sources";
 import { offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
 import { squash, UserGraph, type Seed, type Walked, type WalkOptions } from "./kg";
 import { head, termIds } from "./text";
@@ -44,7 +45,48 @@ interface Entry {
   /** Neighbours in its class's oldest-first list (`UserCache.heads`): a lookup's items, or the sync's. */
   prev: Entry | null;
   next: Entry | null;
+  /**
+   * The hash (`rawHash`) of the raw listed item `item` was redacted from, when it came from a listing that noted it
+   * (`reuseFor`): a later listing of the same raw item reuses `item` instead of redacting it again.
+   */
+  raw?: number;
 }
+
+/**
+ * A per-process seed for `rawHash`: listed content cannot be crafted ahead of time to collide with another item's
+ * hash. A collision could only keep an older redacted copy, never let unredacted text in.
+ */
+const RAW_SEED = new BigUint64Array(crypto.getRandomValues(new Uint32Array(2)).buffer)[0]!;
+
+/**
+ * What `sanitizeItem` reads of a raw item, hashed (wyhash, cut to 53 bits so it is a plain number, held unboxed: a
+ * BigInt per item cost 75 B in ingest.bench): equal hashes mean `sanitizeItem` gives the same copy. Title and text are
+ * clipped as `sanitizeItem` clips them, so a huge listed text costs no more here than in the gate (D25 keeps that off
+ * the event loop), and fields are named, not serialized whole: a getter or `toJSON` cannot hide a change. Undefined
+ * when the item cannot be hashed (the caller then redacts it as usual).
+ */
+function rawHash(raw: ContextItem, maxTextChars: number): number | undefined {
+  try {
+    // Each part prefixed with its length, so no field's content can pass for a boundary between two.
+    const parts: string[] = [
+      raw.id,
+      raw.sourceId,
+      raw.ref,
+      head(String(raw.title), 500),
+      head(String(raw.text), maxTextChars),
+      raw.url === undefined ? "" : `=${String(raw.url)}`,
+      String(raw.updatedAt),
+    ];
+    if (raw.meta) for (const [k, v] of Object.entries(raw.meta)) parts.push(k, String(v));
+    const key = parts.map((p) => `${p.length}:${p}`).join("");
+    return Number(BigInt.asUintN(53, Bun.hash.wyhash(key, RAW_SEED)));
+  } catch {
+    return undefined;
+  }
+}
+
+/** The raw hash each redacted copy a listing made was made from (`ListReuse.made`), read when it is `put`. */
+const madeFrom = new WeakMap<ContextItem, number>();
 
 /**
  * A near-duplicate sketch of an item's own words (quotes, signatures and greetings stripped; for an acknowledgement
@@ -402,6 +444,32 @@ export class ItemCache {
     return this.peek(scope)?.vocab;
   }
 
+  /**
+   * A listing's reuse of this user's held copies (`ListReuse`, for `SourceFanout.list`): a raw item identical, field
+   * for field, to the one a held copy was redacted from gets that copy back, not a second redaction; anything else
+   * (new, changed, a ref the gate rewrote, a copy a lookup replaced) is redacted. Per user: never another's copy.
+   */
+  reuseFor(scope: Scope): ListReuse {
+    const hashes = new WeakMap<ContextItem, number | undefined>();
+    const hashOf = (raw: ContextItem) => {
+      if (hashes.has(raw)) return hashes.get(raw);
+      const h = rawHash(raw, this.limits.maxTextChars);
+      hashes.set(raw, h);
+      return h;
+    };
+    return {
+      held: (raw) => {
+        const e = this.peek(scope)?.items.get(raw.id);
+        if (e?.raw === undefined) return undefined;
+        return e.raw === hashOf(raw) ? e.item : undefined;
+      },
+      made: (raw, redacted) => {
+        const h = hashOf(raw);
+        if (h !== undefined) madeFrom.set(redacted, h);
+      },
+    };
+  }
+
   /** Characters of item text kept (`sanitizeItem`'s limit for this cache). */
   get maxTextChars(): number {
     return this.limits.maxTextChars;
@@ -434,6 +502,16 @@ export class ItemCache {
       }
       // A lookup's copy of a synced item leaves it synced: the sync still lists it, and drops it once it does not.
       const isSynced = synced || old?.synced === true;
+      if (old && old.item === item) {
+        // A listing reused the copy held (`reuseFor`): nothing about it changed, so only its fetch time and order.
+        old.fetchedAt = now;
+        u.items.delete(item.id);
+        u.items.set(item.id, old);
+        unlink(u, old);
+        link(u, old);
+        continue;
+      }
+      const from = madeFrom.get(item);
       if (old && old.item.text === item.text && old.item.title === item.title) {
         // Same words, so the index and sketch stand; the rest (url, meta, updatedAt) is taken from the new copy. Its
         // people are counted again: its meta may name others.
@@ -443,6 +521,7 @@ export class ItemCache {
         old.item = item;
         tally(u, item, 1);
         tallyOffset(u, item, 1);
+        old.raw = from; // What this copy was redacted from, if a listing said; a lookup's copy ends the reuse.
         old.fetchedAt = now;
         u.items.delete(item.id); // Re-insert: Map order stays oldest-first for eviction.
         u.items.set(item.id, old);
@@ -456,7 +535,8 @@ export class ItemCache {
       // Added before the item is: a graph built on first use (`graphOf`) must not read it twice.
       this.graphOf(u, now)?.add(item, now);
       const doc = this.index(u, item);
-      const entry: Entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item), prev: null, next: null };
+      // `raw` always set (if undefined), so every entry has one shape.
+      const entry: Entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item), prev: null, next: null, raw: from };
       if (isSynced) {
         entry.synced = true;
         u.synced++;
@@ -551,7 +631,8 @@ export class ItemCache {
     u.revision = ++this.revisions;
     for (const e of old.items.values()) {
       const doc = this.index(u, e.item);
-      const entry: Entry = { item: e.item, fetchedAt: e.fetchedAt, doc, sketch: e.sketch, prev: null, next: null };
+      const { item, fetchedAt, sketch, raw } = e;
+      const entry: Entry = { item, fetchedAt, doc, sketch, prev: null, next: null, raw };
       if (e.synced) entry.synced = true;
       u.items.set(e.item.id, entry);
       link(u, entry); // In `items` order, so each class's list keeps its order.
