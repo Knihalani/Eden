@@ -93,6 +93,12 @@ export interface ReaderInput {
    * request's candidates: read without the request's focus and sent first, as a prefix a provider can cache.
    */
   standing?: number;
+  /**
+   * The user's opaque sticky-routing key (the same one the judge, ask and cards calls send), passed to the model as
+   * `cacheKey` so one user's reader calls land on one provider endpoint and its prompt cache. Routing only: it is not
+   * part of the verdict key.
+   */
+  cacheKey?: string;
 }
 
 const STOP = new Set(
@@ -451,6 +457,7 @@ export class ModelReaderMaker implements ReaderMaker {
       maxTokens: READER_MAX_TOKENS,
       reasoning: "low",
       json: true,
+      ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),
       signal,
     });
     const n = Math.min(input.items.length, READER_MAX_ITEMS);

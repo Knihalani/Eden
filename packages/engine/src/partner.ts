@@ -1617,6 +1617,7 @@ export class ContextPartner {
       ),
       ...(standingCount > 0 ? { standing: standingCount } : {}),
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
+      cacheKey: userCacheKey(s.scope),
     };
     const called = reader.peek(s.scope, s.key, input) === undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;

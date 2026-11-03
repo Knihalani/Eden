@@ -259,6 +259,18 @@ describe("the reader's prompt and output (reader.ts)", () => {
     expect(model.calls[0]!.json).toBe(true);
     expect(model.calls[0]!.maxTokens).toBeGreaterThanOrEqual(1_000);
   });
+
+  test("the model maker passes the input's cacheKey through for sticky routing, and none when unset", async () => {
+    const model = new FakeModel(() => '{"bears":[]}');
+    await new ModelReaderMaker(model).read({ ...input(), cacheKey: "eden-abc" }, new AbortController().signal);
+    await new ModelReaderMaker(model).read(input(), new AbortController().signal);
+    expect(model.calls[0]!.cacheKey).toBe("eden-abc");
+    expect(model.calls[1]!.cacheKey).toBeUndefined();
+  });
+
+  test("the cacheKey is routing only: it does not change the verdict key", () => {
+    expect(readerKey({ ...input(), cacheKey: "eden-abc" })).toBe(readerKey(input()));
+  });
 });
 
 describe("the verdict cache (AskReader)", () => {
@@ -483,6 +495,33 @@ describe("the reader in the engine (config.askReader)", () => {
     const { maker, reader } = await run({ askReader: true }, { users: ["u1", "u2"] });
     expect(maker.calls.length).toBe(2);
     expect(reader.userCount).toBe(2);
+  });
+
+  test("a reader request carries the user's sticky cacheKey, one per user and never the raw ids", async () => {
+    // The model maker over a capturing model: the request the provider would see.
+    const model = new FakeModel(() => '{"bears":[]}');
+    const reader = new AskReader({ maker: new ModelReaderMaker(model), budget: new Budget(), now: () => NOW });
+    const p = new ContextPartner({
+      sources: async () => [source()],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: { askReader: true, askReaderWaitMs: 1_000 },
+      reader,
+    });
+    for (const userId of ["u1", "u2"]) {
+      const scope = { tenantId: "t", userId, sessionId: "s1" };
+      await p.observe({ ...scope, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 1_000 });
+      await p.ask({ ...scope, question: REQUEST, maxItems: 3 });
+    }
+    expect(model.calls.length).toBe(2);
+    const [k1, k2] = model.calls.map((c) => c.cacheKey);
+    expect(k1).toMatch(/^eden-[0-9a-f]{24}$/);
+    expect(k2).toMatch(/^eden-[0-9a-f]{24}$/);
+    expect(k1).not.toBe(k2);
+    expect(k1).not.toContain("u1");
   });
 
   test("the partner's forget, of the user or of one source, drops the user's verdicts", async () => {

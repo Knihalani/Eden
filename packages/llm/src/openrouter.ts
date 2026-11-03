@@ -105,19 +105,29 @@ export class OpenRouterModel implements Model {
   }
 }
 
+/** Anthropic rejects a request with more than this many `cache_control` breakpoints. */
+const MAX_BREAKPOINTS = 4;
+
 /**
  * Anthropic models cache only up to explicit `cache_control` breakpoints, which OpenRouter passes through on content
  * blocks. Mirrors anthropic.ts: a breakpoint on the last system message and on each message marked `cache`; every
- * other message keeps plain string content. Whether OpenRouter's ZDR Anthropic endpoints honour the breakpoint is
- * unverified (no live call was made), so no saving is claimed for it.
+ * other message keeps plain string content. Anthropic allows at most 4 breakpoints and rejects cache_control on empty
+ * text, so the last non-empty system message comes first, then the latest marked messages up to the cap, and an empty
+ * or blank message never gets one. Whether OpenRouter's ZDR Anthropic endpoints honour the breakpoint is unverified
+ * (no live call was made), so no saving is claimed for it.
  */
 function anthropicCacheMessages(messages: ChatMessage[]) {
+  const filled = (m: ChatMessage) => m.content.trim() !== "";
   let lastSystem = -1;
   messages.forEach((m, i) => {
-    if (m.role === "system") lastSystem = i;
+    if (m.role === "system" && filled(m)) lastSystem = i;
   });
-  return messages.map(({ role, content, cache }, i) =>
-    cache || i === lastSystem
+  const marked = new Set<number>(lastSystem >= 0 ? [lastSystem] : []);
+  for (let i = messages.length - 1; i >= 0 && marked.size < MAX_BREAKPOINTS; i--) {
+    if (messages[i]!.cache && filled(messages[i]!)) marked.add(i);
+  }
+  return messages.map(({ role, content }, i) =>
+    marked.has(i)
       ? { role, content: [{ type: "text", text: content, cache_control: { type: "ephemeral" } }] }
       : { role, content },
   );

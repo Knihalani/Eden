@@ -178,6 +178,41 @@ describe("OpenRouterModel", () => {
     expect(sent[0].provider).toEqual({ data_collection: "deny", zdr: true, allow_fallbacks: true });
   });
 
+  test("an anthropic/* request has at most 4 breakpoints: the last system message, then the latest marked", async () => {
+    const { sent, fake } = capture();
+    const marked = (i: number) => ({ role: "user" as const, content: `prefix ${i}`, cache: true });
+    await new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake }).chat({
+      messages: [{ role: "system", content: "rules" }, ...[0, 1, 2, 3, 4].map(marked), { role: "user", content: "q" }],
+      maxTokens: 5,
+    });
+    const msgs = sent[0].messages as { role: string; content: unknown }[];
+    const breakpoints = msgs.flatMap((m, i) => (Array.isArray(m.content) ? [i] : []));
+    // Anthropic rejects a request with more than 4: system (0), and the three latest marked (prefix 2, 3, 4).
+    expect(breakpoints).toEqual([0, 3, 4, 5]);
+    expect(msgs[1]).toEqual({ role: "user", content: "prefix 0" });
+    expect(msgs[2]).toEqual({ role: "user", content: "prefix 1" });
+  });
+
+  test("an anthropic/* request never puts cache_control on empty text", async () => {
+    const { sent, fake } = capture();
+    await new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake }).chat({
+      messages: [
+        { role: "system", content: "rules" },
+        { role: "system", content: "" },
+        { role: "user", content: "  ", cache: true },
+        { role: "user", content: "q" },
+      ],
+      maxTokens: 5,
+    });
+    // The empty system message is not the breakpoint: the last non-empty one is. Empty text stays a plain string.
+    expect(sent[0].messages).toEqual([
+      { role: "system", content: [{ type: "text", text: "rules", cache_control: { type: "ephemeral" } }] },
+      { role: "system", content: "" },
+      { role: "user", content: "  " },
+      { role: "user", content: "q" },
+    ]);
+  });
+
   test("an anthropic/* request with no system message and no marker sends plain string content", async () => {
     const { sent, fake } = capture();
     await new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake }).chat({
