@@ -156,9 +156,22 @@ lines identical, and the summed sync and cards counters equal to the single run'
 with N > 1 ms/task (and the sync's ms/user) is not a latency figure: the run says so; quote latency from `--jobs 1`.
 `--jobs` falls back to one process, and says so, with `--record` (the ledger books one entry per suite, and a seed
 shard would book a partial run), with any of `--packets`, `--card-log`, `--reader-log`, `--ask-diag`,
-`--candidates` or `--timeline` (each process clears and rewrites that one file), with `--judge live` or
-`--reader live` (paid calls and rate limits in parallel), and with `--time` (a latency study). A replayed reader
-(`--reader replay`) and a replayed bridge shard; their reader misses are summed for the miss gate.
+`--candidates` or `--timeline` (each process clears and rewrites that one file), and with `--judge live` or
+`--reader live` (paid calls and rate limits in parallel). A replayed reader (`--reader replay`) and a replayed bridge
+shard; their reader misses are summed for the miss gate.
+
+**`--time` shards too** (since audit 2026-11-03b round 2; it used to force one process). At `-- --time 1` a task's
+time is mostly the connectors' simulated latency, which is sleeping, not CPU, so concurrent shards barely slow each
+other and ms/task stays a latency figure; inside each process the hidden and control variants also run at once at
+`--time` > 0 (`-- --serial` keeps variants and seeds one after another). `--jobs` is honoured as typed (default 1),
+so a heavier configuration or a smaller machine can still choose one process; the header names the shard concurrency.
+Measured on 4 cores, ALL3, `--suite train1,train2 --seeds 41 -- --time 1`: before (forced one process) 136.6 s,
+after with `--jobs 4` (2 shards) 35.5 s, 3.8x; the 128 perTask rows identical in order with `ms`, `askMs`,
+`deliveryMs` and `beforeModel` removed, score 36/64 hidden and 39/64 decoys both ways, mean ms/task 473.5 against
+474.5 (+0.2%). The whole train set, `bun run funnel --jobs 4 -- --time 1` (12 shards, 4 at a time): 112 s wall
+(measured while other no-model runs and `bun run check` shared the machine), delivered 97/384 hidden and 72/384
+decoys, ms/task 494.2, score 214/211; the audit finding measured the forced one-process run at 435.5 s with the
+same 97/72 and ms/task 481.9 (not re-run here).
 
 ### 1b. Screen the NEW family at $0: no-model readers (measured 2026-11-03)
 
@@ -207,7 +220,33 @@ Measured on train1–6, seeds 41–42, 4 cores, no key set:
 | NEWL stub `--lead-in clause` | 22.4 s | draft pool non-empty 640/768; Jaccard mean 0.688; final ⊆ draft 237/640; hidden in draft pool 213/384 (in final pool 228) |
 
 Limits: the intent index finds nothing without `-- --intent F` (not checked in), so NEW/NEWL pools here lack intent
-hits that the paid screens had; the prompt sizes are of the stub's reads only.
+hits that the paid screens had; the prompt sizes are of the stub's reads only. Such a run says so: with `intent` on
+and no replayed request found for any item (no `--intent F`, or a file for other items), every TOTAL and pool line
+and the JSON `label` carry `[intent inert: no replay]`, the JSON has `intent: {state, asked, found}` (`off`, `inert`
+or `live`), and `--reader stub|oracle` refuses a `--baseline` whose intent state differs (an inert NEWL screen reads
+the same prompts as `--set '{"intent":false}'`, so a comparison across states would read as "intent does nothing").
+A baseline written before the field existed, with intent configured, is `unknown` and refused. `--reader-log F` works
+with stub and oracle too: one line per read (task, the prompt a model would have read, the verdict); NEWL stub on
+train1 seed 41 wrote 54 lines for its 54 reader calls.
+
+### 1c. Lab-only measurements of first-turn delivery, overlapping requests and sync items
+
+- **`-- --wait-ms N`** sets the request observe's wait (the client's `waitMs`; default 3,000 × max(1, `--time`), as
+  before). Each delivered task records `beforeModel`: the planted item came with the reply or was pending right
+  after it, so an agent that collects before its first model call holds it. Later arrivals still count as delivered
+  (collected up to the default window), so the funnel score does not move. ALL3, `--suite train1,train2 --seeds 41
+  --jobs 2 -- --time 1` (36 s each): wait 0 delivered 5 of 28 before the first model call (hidden 3/14, decoys 2/14),
+  wait 1,500 26 of 28 (12/14, 14/14), the default 3,000 27 of 28 (13/14, 14/14); score 36/64 and 39/64 in all three.
+  The client SDK and server default `waitMs` to 0 (D98).
+- **`-- --overlap`** sends the suite's next request in the same session, not waited for, just before each request,
+  so the request arrives while a lookup is in flight: the only funnel task shape `slowPathQueue` acts on. The run
+  prints `overlap: slow path busy N times (M queued by slowPathQueue)`. It changes the task shape: its scores are not
+  comparable with a run without it. ALL3 train1–6 seeds 41–42 `--jobs 4`, `--time 0`: `slowPathQueue` off 214/384
+  hidden, 210/384 decoys (busy 58–64 per shard, none queued); on 216/384, 211/384 (every busy request queued).
+- **Sync items.** The sync line and the JSON `sync` carry `demandItems` and `backgroundItems` (`SyncStats`, summed
+  per user before each lane's sync is discarded), the counter D101 is judged on, now reproducible at $0:
+  `bun run funnel --jobs 4` (ALL3, train, seeds 41–42) demand items 182,742 and background items 76,796; with
+  `--set '{"syncPollPageSize":5}'` 10,080 and 77,996 (D101's 182,742 → 10,080), score 214/211 both.
 
 ### 2. The same with Eden's reader live (NEW)
 
