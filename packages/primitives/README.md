@@ -69,3 +69,30 @@ trust: no measurable change on the hot paths. The gain is in `packages/engine/be
 streaming lookups through the cap): with release on, the worst put fell from 174–208 ms (a whole-user rebuild) to
 13–21 ms at Zipf s=1.3 and from 285–361 ms to 30–32 ms at s=1.15; the churned user holds 1.07x (s=1.3) and 1.21x
 (s=1.15) the heap of a fresh build of the same live items, against 1.50x and 1.55x with release off.
+
+## Flat folded terms (2026-11-03, audit round 3)
+
+`foldString` built its result with one `+=` per code unit, so every term a `Vocab` stored was a JSC rope of one node
+per character, and a term nothing reads is never flattened. It now folds into a reused array of code units and makes
+the string once (`String.fromCharCode.apply`; strings over 4,096 code units in 4,096-unit chunks). Output is identical:
+`vocab.test.ts` checks every BMP code unit, random runs and a corpus with final sigma and ligatures against the old
+code, and caps the heap at 80 B per stored term. A plain `number[]` scratch measured faster than a `Uint16Array` view
+(scratch micro-benchmark, 4,096 terms of 3-12 letters, 3 rounds: 131-182 ns vs 237-357 ns per term; the old rope
+167-207 ns, `toLowerCase` on the rope 208-255 ns), so the code uses it.
+
+Old and new `charclass.ts` swapped in turn, 5 rounds of `vocab.bench.ts` and `tokenize.bench.ts` back to back on one
+VM, median p50:
+
+| Benchmark | Before | After |
+|---|---|---|
+| `vocab.bench.ts` heap per stored term, 20k → 120k distinct terms of 9-22 characters (new row) | 574.6 B | 42.1 B |
+| `vocab.bench.ts` `tokenizeInto`, cold `Vocab` (every term new), 2 KB +10% non-ASCII (new row) | 25.23 µs | 25.64 µs |
+| `vocab.bench.ts` intern a new term and release the oldest, 4,096 live | 483 ns | 401 ns |
+| `vocab.bench.ts` `Vocab.lookup`, 43 known terms | 1.19 µs | 1.19 µs |
+| `tokenize.bench.ts` `tokenizeInto` fused, steady state, 2 KB / 2 KB +10% non-ASCII / 16 KB | 8.36 / 11.02 / 109.9 µs | 9.10 / 11.05 / 113.7 µs |
+| `tokenize.bench.ts` `tokenizeInto` lookup only, 2 KB / 2 KB +10% non-ASCII / 16 KB | 8.84 / 10.67 / 109.5 µs | 13.67 / 11.16 / 110.1 µs |
+
+The steady-state tokenizer rows never call `foldString` (every term is already known), so their differences are
+run-to-run noise (±30% on this VM). The gain is memory: 13.6x less heap per stored term, at no cost to interning. How
+much of a session's heap that is depends on how many terms are never read back (`term(id)` resolves a rope); not
+measured here. `tokenize.bench.ts`'s engine row now passes the vocabulary `contentTerms` takes (it had stopped running).

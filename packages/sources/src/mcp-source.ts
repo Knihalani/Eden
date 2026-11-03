@@ -253,7 +253,8 @@ export class McpSource implements Source {
    * next. The next cursor is the server's (`nextCursor`, `nextPageToken`, Slack's `response_metadata.next_cursor`
    * and the like) or, for a tool that pages by offset, this one plus the rows returned while a page comes back full.
    * An error result throws, so a sync never reads a failed page as an empty listing (which would drop every item).
-   * Items are not redacted here: whoever holds them runs them through the gate (D10).
+   * A page that is not offset-paged may hold more than `limit` items (the server's whole page). Items are not
+   * redacted here: whoever holds them runs them through the gate (D10).
    */
   private async listPage(_scope: Scope, cursor: string | undefined, limit: number, signal: AbortSignal) {
     const listTool = this.options.listTool!;
@@ -261,9 +262,14 @@ export class McpSource implements Source {
     const args = listTool.args ? listTool.args(cursor, limit) : buildListArgs(this.listMapping!, cursor, limit);
     const result = await client.callTool({ name: listTool.name, arguments: args }, undefined, { signal });
     if (result.isError) throw new Error(`${this.id}: ${listTool.name} returned an error`);
-    const items = toItems(this.id, result.content, limit, result.structuredContent);
+    // Only an offset page may be cut to `limit`: Eden's next offset counts the rows it returns. A server's own token
+    // points past the whole page it sent, so rows cut from a token page (a tool with no page-size argument, or an
+    // operator's `args` that ignores `limit`) would never be listed; the page is kept whole, up to `MAX_LIST_ROWS`.
+    const offset = !listTool.args && this.listMapping?.cursor?.kind === "offset";
+    const keep = offset ? limit : Math.max(limit, MAX_LIST_ROWS);
+    const items = toItems(this.id, result.content, keep, result.structuredContent);
     const page: ListPage = { items, next: null };
-    if (!listTool.args && this.listMapping?.cursor?.kind === "offset") {
+    if (offset) {
       const at = cursor === undefined ? 0 : Number(cursor);
       page.next = items.length >= limit && Number.isSafeInteger(at) ? String(at + items.length) : null;
     } else if (listTool.args || this.listMapping?.cursor) {
@@ -278,6 +284,12 @@ export class McpSource implements Source {
     await client?.close();
   }
 }
+
+/**
+ * Most rows Eden keeps from one page of a server-paged (token) listing that returns more than it was asked for. Rows
+ * past it are lost, so it is set well above any page a list tool returns (Gmail's largest is 500).
+ */
+export const MAX_LIST_ROWS = 1_000;
 
 type Block = { type: string; text?: string };
 type Row = Record<string, unknown>;
