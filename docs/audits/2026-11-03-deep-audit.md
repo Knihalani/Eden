@@ -1,5 +1,147 @@
 # Deep audit: cost and speed (2026-11-03)
 
+## Final summary (read this first)
+
+Written after round 2. It is for the repo owner, not for a specialist. The sections below it are the full working
+record. Three words used here: the **reader** is Eden's one model call that reads the user's request and picks the
+facts that matter; a **push** is Eden sending those facts to the agent without being asked; **NEW** and **NEW2**
+are lab settings that turn the reader on. The reader is **off by default in production**.
+
+### The bottom line
+
+One request with a deeply nested body could freeze the server for every customer for about 1.8 s. That is fixed:
+the same check now takes about 0.2 ms, and request bodies are capped at 8 MB instead of 128 MB. The reader leaked
+money and time in several small ways (calls paid for and thrown away, spend reported as $0, silent cut-offs). Those
+are fixed on the integration tree, but most of these fixes still need the repo's independent reviewer before they
+go to `main`. A default deployment behaves the same as before (the no-model eval is unchanged), and the developer
+loop is faster (the lab funnel runs about 2.8x faster). No 10x lever on the reader's cost per call was found. The
+main cost lever is calling it less often, and today the lab's NEW2 setting calls it on almost every message.
+
+### Scoreboard
+
+"Found" is what the auditors reported. "Verified" survived a second, adversarial check; the rest were rejected.
+"Fixed and reviewed" is what the audit's own review accepted. "Still open" splits into fixes waiting for the repo's
+`reviewer` subagent (CLAUDE.md, Workflow step 5) and findings with no fix yet.
+
+| Dimension | Found | Verified | Fixed and reviewed | Open: fixed, awaiting reviewer | Open: not fixed |
+|---|---|---|---|---|---|
+| Security | 8 | 6 | 1 | 4 | 1 |
+| Correctness (bugs) | 7 | 7 | 2 | 5 | 0 |
+| Order-of-magnitude levers | 9 | 7 | 3 | 0 | 4 |
+| Inefficiency | 8 | 4 | 2 | 1 | 1 |
+| Pain points | 4 | 4 | 4 | 0 | 0 |
+| **Total** | **36** | **28** | **12** | **10** | **6** |
+
+Two caveats on "fixed and reviewed". The `bun run check` speed-up (`r1-check-caches`) is fixed and reviewed but is
+**not on the latest integration tree** (see "Where everything is"). And `cost-ask-rereads-push-verdict` was closed
+by correcting the docs, not the code: a reworded ask on the same request still costs a second reader call.
+
+### The most important fixes
+
+Every number was measured by a command during this audit unless it says "estimate". No paid model calls were made.
+
+- **Server freeze on deep input (security).** `checkEvent` on a 60,000-deep body: 1,537 ms before, 0.2 ms after
+  (decision D100). Over HTTP it was 1,844 ms. Input nested deeper than 1,000 levels is now refused with a 400.
+  Round 2 made the check cheaper on object-heavy input: 333,000 empty objects went from 20.7-29.4 ms to
+  12.0-16.5 ms.
+- **Huge request bodies (security).** Bodies are now capped at 8 MB (`EDEN_MAX_BODY_BYTES`). A 64 MB body took
+  159 ms to accept before; it is now refused in 11 ms.
+- **Push reads paid for and thrown away (correctness).** Before, 2.8-8.5% of push reads landed after the 2.5 s
+  cut-off and were paid for but never delivered. The push now waits for its read, and the read is traced. The new
+  rate was not measured, because that needs a paid run.
+- **Two reader fixes collided (correctness).** Merging them by hand could silently undo five cost fixes. They were
+  rebuilt on one base. Kept as part of it: a 1 MB user message costs 4.15 ms on the request path instead of
+  42.82 ms, because the question handed to the reader is now capped.
+- **Reader spend reported as $0 (correctness).** `AskResponse.costUsd` now includes the reader's call, a late
+  reader call is traced when it lands, and a reader stopped by its budget reports the outcome "budget" instead of
+  stopping silently.
+- **The gate's real saving is now measurable (cost).** A new $0 lab, `bun run gate-traffic`, counts reader calls.
+  For NEW2: 436 reader calls for 438 user messages (0.995 a message), 0% skipped by the gate. So today the gate
+  saves nothing under NEW2. The cost docs now say 1.49 reader calls a task, not one a message.
+- **Faster developer loop.** `bun run funnel --jobs 4`: 15 s instead of 41.6 s, with identical counts. The reader
+  test file: 10.30-10.63 s down to 3.01-3.05 s. With the new caches, `bun run check` ran in 34.6 s cold and 20.8 s
+  warm on the round 1 tree (the audit's starting estimate was about 40 s).
+- **Docs and example match reality (pain point).** INTEGRATION.md now explains `waitMs`, and the example agent's
+  `EDEN_WAIT_MS=0` now really means "do not wait" (it used to wait up to 1.5 s).
+
+The final integration tree (6f7a36fee) passes `bun run check` (1,348 tests pass, 0 fail) and `bun run eval`
+(precision 1, recall 0.444, falseFireRate 0, 0 model calls). The eval numbers match the pre-audit baseline.
+
+### What is still open, and the next step for each
+
+**Fixed, but the independent reviewer has not run (10).** The fixing agents had no tool to start the `reviewer`
+subagent, so each checked its own diff against the reviewer's checklist. Next step for all of them: run
+`.claude/agents/reviewer.md` on the branch diff, fix its correctness findings, then merge.
+
+- `sec-deep-json-stringify-stall` and `sec-no-body-size-limit`: on the integration tree (D100).
+- `cost-ask-costusd-omits-reader`, `cost-readerpush-bypasses-question-cap`, `mem-component-budget-session-leak`,
+  `speed-reader-push-late-paid-never-delivered`, `integ-reader-branches-conflict` and
+  `cost-late-reader-call-untraced`: on the integration tree, through `r2-reader-merge`.
+- `lab-push-source-calls-uncounted`: on `audit/2026-11-03-r2-source-call-accounting`, **not merged**. Expect a small
+  conflict in partner.ts at the reader-push trace. Next step: merge it onto 6f7a36fee, resolve, run check, review.
+- `reader-prompt-cache-lost-on-openrouter`: the fix (commit c00a2a7dc) sits on `worktree-wf_cfc895b9-03f-62`, not on
+  `audit/2026-11-03-r1-openrouter-cache`, because that branch was locked in another worktree. **Not merged.** Next
+  step: fast-forward `r1-openrouter-cache` to c00a2a7dc, merge it, review.
+
+`cost-reader-session-cap-silent` counts as reviewed above, but one fixer also listed it as "reviewer not run".
+Include it in the same reviewer pass.
+
+**Needs your decision (5).**
+
+- `cost-no-tenant-spend-cap` (security). The caller picks the user id, so one API key can run up model spend
+  across made-up users. Estimate: up to about $8,640 a day per key at the rate limit. Next step: choose a daily
+  spend cap per tenant; the code change is then small.
+- `speed-reader-stream-early-exit`. Streaming the reader's reply and stopping early could make it about 2x faster
+  (estimate: about 590 ms instead of 1,190 ms). It cannot reach 10x and may lose recall. Next step: decide whether
+  to fund a measured trial.
+- `speed-push-reader-after-search`. The push waits for the live source search before it reads. Overlapping the two
+  could save 0.4-0.8 s (estimate). Next step: decide whether the reader may start on cached results alone.
+- `cost-push-duplicates-source-search`. Under NEW2 the push adds 3.2-3.3 connector calls per message, about double
+  the connector traffic. Next step: decide whether the push may share the normal search (fewer calls, possible
+  recall loss).
+- `cost-reader-reasoning-openrouter-anthropic`. Production asks OpenRouter for "low" reasoning; the lab measured
+  the reader with reasoning off. Unverified estimate: up to 2.8x the cost per call, and much slower. Next step:
+  approve a small paid probe before NEW runs on OpenRouter.
+
+**Too big for this run (1).**
+
+- `speed-draft-speculative-reader`. Starting the reader while the user is still typing is the only path found to a
+  near-zero wait (estimate: 10x or more, but only for integrations that send drafts). Pi and Hermes send no drafts,
+  so today's labs cannot measure it. Next step: build a draft-streaming test suite first.
+
+**Partly done.** `reader-replay-cache-not-committed`: the lab now stops clearly on a cache miss, but the reader
+cache itself is still not checked in, so screening NEW still needs an API key. Next step: decide whether to commit
+the cache file.
+
+**Rejected by review (8).** These did not survive verification and need no action:
+`mem-per-user-text-dominated`, `dev-redact-test-critical-file`, `sec-deep-json-parse-stall-unchecked-field`,
+`speed-push-wait-unbounded-critical-path`, `dev-worktrees-fill-disk`, `cost-superseded-push-read-not-aborted`,
+`speed-push-packet-second-roundtrip`, `cost-openrouter-cache-write-premium-all-calls`.
+
+### Where everything is
+
+- **This audit:** `docs/audits/2026-11-03-deep-audit.md` (this file). Findings 1-27 and the round 1 and round 2
+  plans follow below.
+- **Integration branch:** `audit/2026-11-03-integration`. Its ref still points at 2acbb4b1b (docs only), because it
+  is checked out in another worktree (`.claude/worktrees/wf_cfc895b9-03f-46`) and could not be moved from here. The
+  green, merged tree is **6f7a36fee** (branch `worktree-wf_cfc895b9-03f-119`), and this summary is committed on top
+  of it. To publish, fast-forward the integration branch to this summary's commit from that worktree
+  (`git merge --ff-only <commit>`).
+- **Merged into 6f7a36fee** (all named `audit/2026-11-03-<name>`): `r1-server-input-hardening`,
+  `r1-reader-accounting`, `r1-gate-instrument`, `r1-lab-visibility`, `r1-waitms-docs`, `r2-reader-merge`,
+  `r2-reader-test-speed`, `r2-gate-traffic-budget`, `r2-validate-walk`, `r2-example-waitms-zero`,
+  `r2-bench-warmup`, `r2-funnel-jobs`.
+- **Not merged into 6f7a36fee:**
+  - `r1-check-caches` (the `check` speed-up). It merged cleanly and passed in the round 1 tree 8fdfbc3ca, which was
+    never published. Next step: merge it on top of the latest tree and rerun check.
+  - `r1-openrouter-cache` (needs c00a2a7dc first; see above).
+  - `r2-source-call-accounting` (see above).
+  - `r1-reader-push-wait`: replaced by `r2-reader-merge`. **Do not merge it.**
+- **Before `main`:** run the reviewer subagent on the open items, then `bun run check` and `bun run eval` on the
+  final tree, and `bun run eval --live`, because these changes touch reader delivery (CLAUDE.md).
+
+## Background
+
 Scope: what Eden costs to run (model spend, memory, developer time) and how fast it answers (server event loop,
 reader critical path, `bun run check`). Base: `main` at `164f2909c`. No paid model or API calls were made; every
 number below is either from a local command named in the finding or labelled an estimate with its arithmetic.
