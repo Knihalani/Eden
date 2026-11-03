@@ -25,6 +25,25 @@ messages = withContext(messages, await eden.collect(injection)); // before each 
 - **The SDK fails open.** A timeout or an error is "no context", never an exception in the agent's loop. Keep it that
   way in your wrapper.
 
+## How long to wait on the user message (`waitMs`; NEW only, D98)
+
+`observe` takes a `waitMs` option: how long the server may hold the user message's observe for a fresher answer
+before it replies. The client sends none by default; the server treats a missing value as 0 and caps it at 5,000 ms.
+The client's own timeout for that request is 800 ms plus `waitMs`, so a long wait does not make the SDK give up early.
+Work still running when the wait ends arrives later through `pending`/`collect`, as above.
+
+- **Default configuration: no long wait needed.** Without the experimental reader, the observe returns as soon as its
+  lookup is done, so `waitMs` only bounds a slow lookup.
+- **Running NEW (`readerPush` with `askReader`, D98): pass about `waitMs: 3000` on the user message's observe.** The
+  reader then reads the request on the critical path, and its call is paid for whatever wait you pass; with too short
+  a wait its packet lands after the agent has answered. **Measured** in the lab (Haiku 5.5, simulated worlds), against
+  the harnesses' 3,000 ms: a 1 s wait lost 7.6 points (Pi, Eden-only arm) and 18.1 points (Pi, tools-plus-Eden arm)
+  of hidden facts raised, with wall time p50 within 0.15 s (D98); no wait lost 18.2 to 32.3 points on train (D99,
+  [research/haiku-phase3.md](research/haiku-phase3.md)). The reader took 1,190 ms at p50 and 1,768 ms at p90 there
+  (prompt v7), so a wait under about 2 s misses some readings; no wait between 1 s and 3 s was measured.
+- The production server does not wire a reader yet (turning NEW on needs a provider decision first, D98), so the
+  second point applies to lab or self-built deployments.
+
 ## Keep `ask_context` (measured, D70)
 
 Give the agent `ask_context` as a tool (the MCP server's, or `eden.ask` behind a tool of your own) with **Eden's own
