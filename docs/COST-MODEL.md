@@ -262,6 +262,39 @@ What the table says:
   against 11 ms without (docs/research/live-judge.md).
 - Server smoke test, one `ask`: $0.000013639431, 1,549 ms end to end, including the OpenRouter round trip.
 
+## The shipped default's model roles (D111)
+
+With `OPENROUTER_API_KEY` set, the shipped servers run the unified default with three model roles on
+`EDEN_MODEL` (default `anthropic/claude-haiku-5.5` through OpenRouter, D12's routing): **cards** and the **intent**
+requests in the background (one call per batch of new items, never per event), and the ask-time **reader** on the
+request path (one call per acting request or ask that a candidate could constrain, `readerGate`; the push reads the
+user's request, the ask its question). No judge is wired (the measured setup ran none). Each role has its own
+`Budget` (20 calls and $0.02 per session, $0.25 per user per day) and all of a tenant's roles share one
+`TenantSpend` cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25). Over any cap the role is skipped and the
+no-model path answers. Without a key nothing is called and the same default runs with no model.
+
+Per task (live, Pi harness, Haiku 5.5 as agent, grader and Eden's roles, blind held-out 13, seeds 41–42, 64 hidden +
+64 control tasks per condition, `--time-scale 1`; `.local/unify`, 2026-11-03; this PR's run):
+
+| Configuration | Eden per-task calls, $/1k hidden / control | Background (cards + intent), $/1k tasks | Agent + Eden per-task, $/1k hidden / control |
+|---|---|---|---|
+| Old shipped default (judge on the same model) | 0.055 / 0.056 | 0 | 0.482 / 0.494 |
+| NEWL | 0.384 / 0.474 | 0.451 | 0.638 / 0.790 |
+| Unified default | 0.385 / 0.547 | 0.451 | 0.667 / 0.900 |
+
+- The background column spreads each seed's card and intent spend over that seed's task runs; with only 64 tasks per
+  simulated user it is mostly the one-time backfill, an upper bound on the steady state. In this run the checked-in
+  card cache replayed 4,634 cards, so new cards and intent requests cost $0.058 (seed 41) and $0.057 (seed 42) for
+  two partner conditions: about $0.03 per user per condition, a lower bound for a cold user.
+- Per user, cold: the intent requests cost about $0.071 per user backfill (1,487.5 items at $0.0000510 an item,
+  docs/research/new-minus-intent.md) on top of the cards (ALL3's card backfill was $0.106 per 1k Pi tasks on held-out
+  13, docs/research/haiku-phase3.md). The per-user-day budget ($0.25) bounds a day's backfill.
+- Per task, larger sample (haiku-phase3.md, held-out 13 seeds 41–44): NEWL agent + reader $0.638 per 1k hidden Pi
+  tasks ($0.744 all-in); traffic-weighted at one task in ten carrying a fact, Eden's own calls $0.518 per 1k (Pi) and
+  $0.290 (Hermes).
+- Reader calls are about 2,800 uncached input tokens ($0.00028) and 200 output tokens ($0.0001) each on Haiku 5.5
+  (haiku-phase3.md); the budget reserves $0.002 a call (`DEFAULT_READER_LIMITS.estimateUsd`).
+
 ## Budget defaults (`packages/llm/src/budget.ts`)
 
 20 calls and $0.02 per session; $0.25 per user per day; each call reserved before its real cost is known, at about its
