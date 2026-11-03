@@ -145,6 +145,19 @@ item" row). `--preset H` takes 9 s; `--suite train1 --seeds 41` takes 3 s; `--su
 takes 22 s (122/240 hidden, 91/240 decoys). The `--baseline` diff lists every task that moved. A gain that is a
 coin flip between hidden and decoys (broad-set.md: rules on unseen writing) is not a gain.
 
+**`--jobs N` (default 1)** runs one `hidden-funnel.ts` process per suite × seed shard, N at a time, and merges their
+rows before the score; every shard's output is printed whole, in order, then the merged totals (the sync, cards and
+reader replay counters summed; `overBudget` and `cpu` lines stay per shard). Checked on 2026-11-03 (4 cores, ALL3,
+train, seeds 41–42, with `--ask` and cards): `--jobs 1` 32.8 s and 34.4 s, `--jobs 4` 21.3 s and 15.7 s; the 768
+perTask rows were identical in order once their timing fields (`ms`, `deliveryMs`, `askMs`) were removed, the score
+lines identical, and the summed sync and cards counters equal to the single run's. The shards contend for cores, so
+with N > 1 ms/task (and the sync's ms/user) is not a latency figure: the run says so; quote latency from `--jobs 1`.
+`--jobs` falls back to one process, and says so, with `--record` (the ledger books one entry per suite, and a seed
+shard would book a partial run), with any of `--packets`, `--card-log`, `--reader-log`, `--ask-diag`,
+`--candidates` or `--timeline` (each process clears and rewrites that one file), with `--judge live` or
+`--reader live` (paid calls and rate limits in parallel), and with `--time` (a latency study). A replayed reader
+(`--reader replay`) and a replayed bridge shard; their reader misses are summed for the miss gate.
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash
