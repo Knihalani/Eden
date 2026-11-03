@@ -132,6 +132,9 @@ unchanged at 214/384 hidden facts and 211/384 decoys. `bun run eval` now reports
 - `lat-answer-gate-not-start-gate` (about 2x on measured mixes): needs a tool-gate design.
 - `lat-ask-rereads-after-push`: the fix failed as written.
 - `devloop-reader-replay-item-level-key`: as written it erases the effects it should screen; needs a narrow version.
+  **Done after the audit (docs/research/wave2-reader.md):** all four measured; the pool universe (D115), the ask
+  reusing the push's verdict (D116) and the answer gate (D118) were rejected and deleted; the narrow subset replay was
+  kept as a labelled lab instrument (D117, `--reader-subset`).
 - Landlord bindings missed by the reader gate (R3-19), and the server's config check delegating to the shared checker
   (R3-5): queued for round 4.
 
