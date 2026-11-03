@@ -29,6 +29,9 @@ afterAll(() => {
   for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true });
 });
 const noKey = { ...process.env, OPENROUTER_API_KEY: "" };
+// Every run below has the preset's sync capped at 100 items a user (3,000 by default): it still backfills, polls and
+// counts, but storing 3,000 items was 0.8 s of each run's 2.5 s CPU (bun --cpu-prof), and no check here needs them.
+const smallSync = { syncMaxItems: 100 };
 
 type Run = { status: number | null; stdout: string; stderr: string; out: string };
 /** `bun args…` in a child process without blocking this one, so the runs below can go out together. */
@@ -61,7 +64,7 @@ const funnelTimed = (jobs: string) => {
   return spawn(
     [
       join(lab, "funnel.ts"),
-      ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--json", out],
+      ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--set", JSON.stringify(smallSync), "--json", out],
       // One task per variant and seed. Not a smaller --time: at 0.005 the sleeps are as short as a loaded machine's
       // scheduling jitter, and a task's call counts then changed between the two runs (seen once in three runs).
       ...["--", "--time", "0.05", "--limit", "1"],
@@ -76,7 +79,7 @@ const funnelTimed = (jobs: string) => {
 let runs: { overlap: Promise<Run>; solo: Promise<Run>; sharded: Promise<Run> };
 beforeAll(() => {
   runs = {
-    overlap: funnel({ ...PRESETS.ALL3, slowPathQueue: true }, ["--overlap"], 3),
+    overlap: funnel({ ...PRESETS.ALL3, slowPathQueue: true, ...smallSync }, ["--overlap"], 3),
     solo: funnelTimed("1"),
     sharded: funnelTimed("2"),
   };

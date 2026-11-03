@@ -67,8 +67,27 @@ describe("warmGate", () => {
     expect(cold.work.compiled).toBeGreaterThan(compiledBefore);
     expect(cold.work.firstRunInUse).toBeGreaterThan(0);
 
+    // warmGate itself warms every rule of the module's own set, each exactly once. This is the file's first
+    // warmGate call, and no other call in this file reaches the module gate before it.
+    const moduleRules = secretRules();
+    const originals = moduleRules.map((rule) => rule.warm);
+    const warmCalls = moduleRules.map(() => 0);
+    moduleRules.forEach((rule, i) => {
+      const original = originals[i];
+      if (original) rule.warm = () => (warmCalls[i]!++, original());
+    });
+    try {
+      warmGate();
+    } finally {
+      moduleRules.forEach((rule, i) => {
+        if (originals[i]) rule.warm = originals[i];
+      });
+    }
+    const warmable = moduleRules.flatMap((_, i) => (originals[i] ? [i] : []));
+    expect(warmable.length).toBeGreaterThan(100);
+    for (const i of warmable) expect(warmCalls[i]).toBe(1);
+
     // The module's own gate after warmGate gives the same answer.
-    warmGate();
     expect(sanitizeForStore(keywords)).toBe(gate.sanitizeForStore(keywords));
   });
 

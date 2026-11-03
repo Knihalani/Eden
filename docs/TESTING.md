@@ -139,6 +139,10 @@ run, as did `reader-stub.test.ts`. Now:
 - The `--time` shards test runs two seeds (two shards, so the "2 at a time" assertion still means sharding) at
   `--limit 1` instead of 2. It stays at `--time 0.05`: at 0.005 the connector sleeps are as short as a loaded
   machine's scheduling jitter, and one run in three gave a task different call counts in the two runs.
+- Every funnel run in both files caps the preset's sync at 100 items a user (`syncMaxItems: 100`, `--set` for
+  `funnel.ts`; 3,000 by default). The sync still backfills, polls and fills both item counters, and every check
+  still holds; storing 3,000 items was 0.8 s of each NEWL run's 2.5 s user CPU (`bun --cpu-prof`), and one NEWL stub
+  run drops from 2.5 s to 1.7 s user CPU, the `--time` solo run from 3.3 s to 2.3 s wall.
 - Both files remove every directory they make (`afterAll`).
 - `sim.test.ts`'s "a run without updates scores exactly as before" (two full `runQuality` runs, 2.1-2.5 s alone)
   has a 20 s timeout; it hit bun's 5 s default under the parallel gate in the audit.
@@ -149,9 +153,16 @@ funnel-flags 8.6 s (15.4 s CPU, 10 tests, 48 `expect()`) → 5.4 s (12.8 s, 9 te
 (9.0 s, 12 tests, 76) → 5.1 s (8.4 s, 13 tests, 91). The package is CPU-bound now: a profile of one NEWL
 `hidden-funnel.ts` run (`bun --cpu-prof`, 2.3 s sampled) puts 0.9 s in the sync backfill (`sync.ts` `backfill` →
 `store` → `cache.put`, the knowledge graph's `extract` and the secret gate) and 0.36 s in building the simulated
-sources, so running the funnel in-process would save only the start-up. The audit's 7 s target needs a cheaper
-backfill for small runs (outside the test files). `bun run test`, five runs in a row after the change: 1,489 pass,
-0 fail, 1,206,716 `expect()` calls each, 18.7-22.3 s wall (load average 4-9 from other agents).
+sources, so running the funnel in-process would save only the start-up. `bun run test`, five runs in a row after
+the change: 1,489 pass, 0 fail, 1,206,716 `expect()` calls each, 18.7-22.3 s wall (load average 4-9 from other
+agents).
+
+With the sync capped (above), same machine, load average 6-7 from other agents: `bun run test:pkg sim` 6.9, 7.1,
+7.5 s wall (21.0 s user CPU in one timed run, against 29.6-33.7 s before the cap and 8.9-12.0 s wall on the same
+afternoon), 156 pass and 3,060 `expect()` calls; funnel-flags alone 2.7-2.8 s (7.6-8.0 s user CPU, was 4.3-5.4 s
+and 13.0 s), reader-stub alone 3.3 s (5.5 s, was 3.0-3.2 s and 8.4 s). The two files passed 8 runs in a row at
+load average 7-14. The 7 s target is met only on a machine no busier than that; main's 3.7-4.4 s is not reached:
+the files still run seven funnel processes (three NEWL, the overlap run, three for the shards).
 
 ## The slowest files (each alone, `bun test <file>`, wall incl. ~70 ms start-up)
 
@@ -166,7 +177,7 @@ backfill for small runs (outside the test files). `bun run test`, five runs in a
 | packages/sim/src/lab/suites.test.ts | 1,213 | builds worlds for every suite | One world per seed shared by the registry tests |
 | packages/engine/src/partner.test.ts | 1,143 | 74 tests | (protected while the engine is being edited) |
 | packages/engine/src/reader.test.ts | 2,187 | wait-bound tests with real delays (300–400 ms readings) | Sleep-free where the test is not of a wait bound (2026-11-03b) |
-| packages/sim/src/lab/reader-stub.test.ts | 2,896–5,280 | three `hidden-funnel.ts` processes (8.4 s CPU), run at once; also holds the NEWL flag checks | A cheaper sync backfill for small runs (0.9 s of each run's 2.3 s) |
+| packages/sim/src/lab/reader-stub.test.ts | 3,340 | three `hidden-funnel.ts` processes (5.5 s CPU), run at once; also holds the NEWL flag checks | Done: sync capped at 100 items (was 8.4 s CPU); next, build the simulated sources once per seed |
 | packages/redact/src/redos*.test.ts | 1,526–1,930 each | the crafted-input sweep, split over four files | Done (2026-11-03b) |
 | packages/sim/src/lab/hermes-host.test.ts | 1,117 | starts servers and stub workers | (protected) |
 
