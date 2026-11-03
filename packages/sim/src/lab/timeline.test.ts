@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ContextPartner, ItemCache } from "@eden/engine";
+import { ContextPartner, CORE_CONFIG, ItemCache } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
@@ -55,7 +55,7 @@ describe("timeline report", () => {
       cache: new ItemCache(),
       budget: new Budget(),
       model: null,
-      config: { probes: true },
+      config: { ...CORE_CONFIG, probes: true },
       onSpan: timeline.sink("u1"),
       onTrace: timeline.traceSink("u1"),
     });

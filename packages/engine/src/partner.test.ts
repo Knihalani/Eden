@@ -5,6 +5,7 @@ import type { AgentEvent } from "@eden/protocol";
 import { QueryPlanner, StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner, type PartnerDeps } from "./partner";
+import { CORE_CONFIG } from "./parts";
 import type { ShadowRecord, Trace } from "./trace";
 
 const scope = { tenantId: "acme-assistant", userId: "u1", sessionId: "s1" };
@@ -33,6 +34,8 @@ function partner(extra: Partial<PartnerDeps> = {}, sources: Source[] = [crm, cal
     model: null,
     onTrace: (t) => traces.push(t),
     ...extra,
+    // The core (D111): these tests check one mechanism each, so every part not named in a test is out.
+    config: { ...CORE_CONFIG, ...extra.config },
   });
   return { p, traces };
 }

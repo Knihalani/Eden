@@ -25,6 +25,7 @@ import {
 } from "./reader";
 import { shownText } from "./render";
 import type { Trace } from "./trace";
+import { CORE_CONFIG } from "./parts";
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -489,7 +490,7 @@ describe("the reader in the engine (config.askReader)", () => {
       budget: new Budget(),
       model: null,
       now: () => clock,
-      config: { askReaderWaitMs: 200, ...config },
+      config: { ...CORE_CONFIG, askReaderWaitMs: 200, ...config },
       reader,
       onReader: (r) => reports.push(r),
       onTrace: (t) => traces.push(t),
@@ -617,7 +618,7 @@ describe("the reader in the engine (config.askReader)", () => {
         budget: new Budget(),
         model: null,
         now: () => clock,
-        config: { askReader: true, ...config },
+        config: { ...CORE_CONFIG, askReader: true, ...config },
         reader: new AskReader({ maker, budget: new Budget(), now: () => clock }),
       });
       await p.ask({ tenantId: "t", userId: "u1", sessionId: "s1", question });
@@ -935,7 +936,7 @@ describe("the reader in the engine (config.askReader)", () => {
       budget: new Budget(),
       model: null,
       now: () => NOW,
-      config: { askReader: true, askReaderWaitMs: 200 },
+      config: { ...CORE_CONFIG, askReader: true, askReaderWaitMs: 200 },
       reader: new AskReader({ maker, budget: new Budget(), now: () => NOW }),
       onReader: (r) => reports.push(r),
     });
@@ -966,7 +967,7 @@ describe("the reader in the engine (config.askReader)", () => {
       budget: new Budget(),
       model: null,
       now: () => NOW,
-      config: { askReader: true, readerPush: true },
+      config: { ...CORE_CONFIG, askReader: true, readerPush: true },
       reader: new AskReader({ maker, budget, now: () => NOW }),
     });
     for (let n = 0; n < 100; n++) {
@@ -987,7 +988,7 @@ describe("the reader in the engine (config.askReader)", () => {
       budget: new Budget(),
       model: null,
       now: () => NOW,
-      config: { askReader: true, askReaderWaitMs: 1_000 },
+      config: { ...CORE_CONFIG, askReader: true, askReaderWaitMs: 1_000 },
       reader: new AskReader({ maker: new ModelReaderMaker(model), budget: new Budget(), now: () => NOW }),
     });
     const u1 = { tenantId: "t", userId: "u1" };

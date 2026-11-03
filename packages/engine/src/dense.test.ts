@@ -7,6 +7,7 @@ import { ItemCache } from "./cache";
 import { anchorsOf, foldEchoes } from "./fold";
 import { ContextPartner } from "./partner";
 import { compactText, messageParts } from "./render";
+import { CORE_CONFIG } from "./parts";
 
 const item = (id: string, sourceId: string, title: string, text: string): ContextItem => ({
   id,
@@ -167,7 +168,7 @@ describe("the engine (densePacket, groundOccasion)", () => {
       budget: new Budget(),
       model: null,
       now: () => at,
-      config: { probes: true, probeGraceMs: 1_000, ...config },
+      config: { ...CORE_CONFIG, probes: true, probeGraceMs: 1_000, ...config },
     });
   const ask = async (p: ContextPartner, text: string, who = scope, kind = "user_message") => {
     const r = await p.observe({ ...who, sessionId: "s", at, kind, text } as AgentEvent, { waitMs: 1_000 });

@@ -38,16 +38,20 @@ describe("parseFlags (audit 2026-11-03b, devloop-lab-accepts-typos-silently)", (
 
 describe("labConfig: the lab's presets and overrides through checkEngineConfig", () => {
   test("every preset passes as it stands", () => {
-    expect(Object.keys(PRESETS).length).toBe(9);
+    expect(Object.keys(PRESETS).length).toBe(10);
     for (const [name, preset] of Object.entries(PRESETS)) {
       expect(() => labConfig(preset, name)).not.toThrow();
     }
   });
 
   test("a child flag is checked on the merged preset and override", () => {
-    // ALL3 turns sync on, so its child is accepted; H does not, so it would do nothing.
+    // ALL3 turns sync on, so its child is accepted; an override turning sync off leaves the child doing nothing. (The
+    // unified default turns sync and syncPollBehind on, D111, so the child is set off its default here.)
     expect(labConfig({ ...PRESETS.ALL3, syncPollBehind: true }, "ALL3").syncPollBehind).toBe(true);
-    expect(() => labConfig({ ...PRESETS.H, syncPollBehind: true }, "H")).toThrow(/"syncPollBehind" acts only/);
+    expect(labConfig({ ...PRESETS.ALL3, syncPollPageSize: 7 }, "ALL3").syncPollPageSize).toBe(7);
+    expect(() => labConfig({ ...PRESETS.H, sync: false, syncPollPageSize: 7 }, "H")).toThrow(
+      /"syncPollPageSize" acts only/,
+    );
     expect(() => labConfig({ ...PRESETS.ALL3, fallbackAsk: true }, "ALL3")).toThrow(/unknown key "fallbackAsk"/);
   });
 });

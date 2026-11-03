@@ -83,7 +83,7 @@ function mail(n: number, base = T0) {
 }
 
 describe("background sync (D57)", () => {
-  test("off by default: no sync, no list call, the lookup searches live", async () => {
+  test("off (the default minus sync): no sync, no list call, the lookup searches live", async () => {
     const src = new ListSource("mail", mail(3));
     const p = new ContextPartner({
       sources: async () => [src],
@@ -91,6 +91,7 @@ describe("background sync (D57)", () => {
       cache: new ItemCache(),
       budget: new Budget(),
       model: null,
+      config: { sync: false },
     });
     expect(p.sync).toBeNull();
     await say(p, "What about the quarterly plan from Dana Lee?");

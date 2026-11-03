@@ -6,6 +6,7 @@ import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import type { Trace } from "./trace";
+import { CORE_CONFIG } from "./parts";
 
 // docs/research/econ-judge.md: a lookup that does not wait for the sync's on-demand poll (`syncPollBehind`).
 
@@ -61,7 +62,14 @@ describe("syncPollBehind: the first packet does not wait for the on-demand poll"
       budget: new Budget(),
       model: null,
       now: () => clock,
-      config: { sync: true, syncPageSize: 2, syncCallsPerMin: 600, syncMaxStaleMs: 4 * HOUR, ...config },
+      config: {
+        ...CORE_CONFIG,
+        sync: true,
+        syncPageSize: 2,
+        syncCallsPerMin: 600,
+        syncMaxStaleMs: 4 * HOUR,
+        ...config,
+      },
     });
     const warm = async (s: Scope) => {
       p.sync!.track(s);
@@ -90,7 +98,7 @@ describe("syncPollBehind: the first packet does not wait for the on-demand poll"
     expect(p.sync!.current(scope, "mail")).toBe(true);
   });
 
-  test("off by default: the lookup waits for the poll and answers from what it brought", async () => {
+  test("off (the core): the lookup waits for the poll and answers from what it brought", async () => {
     const { p, src, warm, advance, now } = setup();
     await warm(scope);
     advance(5 * HOUR);
@@ -176,6 +184,7 @@ describe("syncPollBehind in a changing world: an item arriving during the backgr
       now: () => clock,
       onTrace: (t) => traces.push(t),
       config: {
+        ...CORE_CONFIG,
         sync: true,
         syncPollBehind: true,
         syncPageSize: 2,
@@ -275,7 +284,14 @@ describe("syncPollBehind: review regressions", () => {
       budget: new Budget(),
       model,
       now: () => clock,
-      config: { sync: true, syncPageSize: 2, syncCallsPerMin: 600, syncMaxStaleMs: 4 * HOUR, ...config },
+      config: {
+        ...CORE_CONFIG,
+        sync: true,
+        syncPageSize: 2,
+        syncCallsPerMin: 600,
+        syncMaxStaleMs: 4 * HOUR,
+        ...config,
+      },
     });
     const warm = async () => {
       p.sync!.track(scope);
@@ -432,7 +448,14 @@ describe("syncPollBehind: the poll's calls are traced", () => {
       model: null,
       now: () => clock,
       onTrace: (t) => traces.push(t),
-      config: { sync: true, syncPageSize: 2, syncCallsPerMin: 600, syncMaxStaleMs: 4 * HOUR, ...config },
+      config: {
+        ...CORE_CONFIG,
+        sync: true,
+        syncPageSize: 2,
+        syncCallsPerMin: 600,
+        syncMaxStaleMs: 4 * HOUR,
+        ...config,
+      },
     });
     p.sync!.track(scope);
     while (!p.sync!.warm(scope)) await p.sync!.tick();

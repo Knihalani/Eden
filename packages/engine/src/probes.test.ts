@@ -23,6 +23,7 @@ import {
   topicOf,
 } from "./probes";
 import { extractEntities } from "./text";
+import { CORE_CONFIG } from "./parts";
 
 const item = (text: string, meta?: Record<string, string>): ContextItem => ({
   id: `x:${text.slice(0, 8)}`,
@@ -249,7 +250,7 @@ describe("probes in the engine (config.probes)", () => {
       budget: new Budget(),
       model: null,
       now: () => at,
-      config: { probes },
+      config: { ...CORE_CONFIG, probes },
     });
     const sessionId = "s";
     const r = await p.observe({ ...scope, sessionId, at, kind: "user_message", text } as AgentEvent, { waitMs: 1_000 });
@@ -297,7 +298,7 @@ describe("probe state is the session's own (isolation)", () => {
       budget: new Budget(),
       model: null,
       now: () => at,
-      config: { probes: true },
+      config: { ...CORE_CONFIG, probes: true },
     });
     const say = async (userId: string, sessionId: string, turn: number, text: string) => {
       await p.observe({ tenantId: "t", userId, sessionId, at: at + turn, kind: "user_message", text } as AgentEvent, {
@@ -340,7 +341,7 @@ describe("probe state, review round (D46)", () => {
       budget: new Budget(),
       model,
       now: () => clock,
-      config: { probes: true, ...config },
+      config: { ...CORE_CONFIG, probes: true, ...config },
     });
     const say = async (sessionId: string, minutes: number, text: string) => {
       clock = t0 + minutes * 60_000;
@@ -368,7 +369,7 @@ describe("probe state, review round (D46)", () => {
       budget: new Budget(),
       model: null,
       now: () => clock,
-      config: { probes: true, confidentScore: 99 },
+      config: { ...CORE_CONFIG, probes: true, confidentScore: 99 },
     });
     const say = async (userId: string, sessionId: string, minutes: number, text: string) => {
       clock = t0 + minutes * 60_000;
@@ -448,7 +449,7 @@ describe("probes beside the lookup", () => {
       budget: new Budget(),
       model: null,
       now: () => at,
-      config: { probes: true, ...config },
+      config: { ...CORE_CONFIG, probes: true, ...config },
     });
   };
 
@@ -485,7 +486,7 @@ describe("the confident path with a model", () => {
       budget: new Budget(),
       model,
       now: () => at,
-      config: { probes: true, probeGraceMs: 1_000, ...config },
+      config: { ...CORE_CONFIG, probes: true, probeGraceMs: 1_000, ...config },
     });
     const r = await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, {
       waitMs: 1_000,
@@ -524,7 +525,14 @@ describe("an absence on the day a request names (groundAway)", () => {
       model: null,
       now: () => at,
       // Nothing is sure on its words alone, and the plain fallback is off: only grounding can deliver.
-      config: { probes: true, probeGraceMs: 1_000, groundAway, confidentScore: 99, fallbackMatchedTerms: 0 },
+      config: {
+        ...CORE_CONFIG,
+        probes: true,
+        probeGraceMs: 1_000,
+        groundAway,
+        confidentScore: 99,
+        fallbackMatchedTerms: 0,
+      },
     });
     const text = "Ask Jamie Fox if they can feed the cat on Saturday 7 November";
     const r = await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, {
@@ -564,7 +572,7 @@ describe("fewer probe calls", () => {
       budget: new Budget(),
       model: null,
       now: () => at,
-      config: { probes: true, probeGraceMs: 1_000, ...config },
+      config: { ...CORE_CONFIG, probes: true, probeGraceMs: 1_000, ...config },
     });
     await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, { waitMs: 1_000 });
     return queries;
@@ -594,7 +602,7 @@ describe("the fallback for a request that asks about something it names (fallbac
       now: () => at,
       // Nothing is sure on its words alone, and the plain fallback wants more terms than either item shares: only
       // the rule under test can deliver.
-      config: { fallbackAsks, confidentScore: 99, fallbackMatchedTerms: 5 },
+      config: { ...CORE_CONFIG, fallbackAsks, confidentScore: 99, fallbackMatchedTerms: 5 },
     });
     const r = await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, {
       waitMs: 1_000,
@@ -632,7 +640,7 @@ describe("more of D48's settings, through the engine", () => {
       model,
       now: () => at,
       ...(planner ? { planner } : {}),
-      config: { probeGraceMs: 1_000, ...config },
+      config: { ...CORE_CONFIG, probeGraceMs: 1_000, ...config },
     });
   const logged = (id: string, items: { ref: string; title: string; text: string }[], log: string[]): Source => {
     const s = new StaticSource(id, id, items);

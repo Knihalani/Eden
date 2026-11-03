@@ -6,6 +6,7 @@ import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { CardEnricher, type Card, type CardMaker } from "./cards";
 import { ContextPartner } from "./partner";
+import { CORE_CONFIG } from "./parts";
 
 /**
  * `askVerdicts` (docs/research/gen-ask.md): an ask gathers the lookup's candidates and answers first with those a rule
@@ -71,7 +72,7 @@ async function ask(config: Record<string, unknown>, users = ["u1"], seeded = ["u
     budget: new Budget(),
     model: null,
     now: () => clock,
-    config: { cards: true, groundConflict: true, ...config },
+    config: { ...CORE_CONFIG, cards: true, groundConflict: true, ...config },
     cards: enricher,
   });
   const out: Record<string, { ids: string[]; answer: string }> = {};

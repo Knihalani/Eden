@@ -22,6 +22,7 @@ import { timeWindow } from "./grounding";
 import { ContextPartner } from "./partner";
 import { cleanEntities } from "./probes";
 import { extractEntities } from "./text";
+import { CORE_CONFIG } from "./parts";
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -361,7 +362,7 @@ describe("cards in the engine (config.cards)", () => {
       budget: new Budget(),
       model: null,
       now: () => clock,
-      config: { confidentScore: 99, fallbackMatchedTerms: 0, groundConflict: true, ...config },
+      config: { ...CORE_CONFIG, confidentScore: 99, fallbackMatchedTerms: 0, groundConflict: true, ...config },
       cards,
     });
     const out: Record<string, string[]> = {};
@@ -415,7 +416,7 @@ describe("cards in the engine (config.cards)", () => {
       budget: new Budget(),
       model: null,
       now: () => clock,
-      config: { confidentScore: 99, fallbackMatchedTerms: 0, groundConflict: true, cards: true },
+      config: { ...CORE_CONFIG, confidentScore: 99, fallbackMatchedTerms: 0, groundConflict: true, cards: true },
       cards,
     });
     const scope = { tenantId: "t", userId: "u1" };

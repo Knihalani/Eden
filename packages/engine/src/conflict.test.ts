@@ -9,6 +9,7 @@ import { timeWindow } from "./grounding";
 import { ContextPartner } from "./partner";
 import { cleanEntities } from "./probes";
 import { extractEntities } from "./text";
+import { CORE_CONFIG } from "./parts";
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -227,7 +228,7 @@ describe("the conflict ground in the engine (groundConflict, quietClear)", () =>
       budget: new Budget(),
       model: null,
       now: () => at,
-      config: { probes: true, probeGraceMs: 1_000, ...config },
+      config: { ...CORE_CONFIG, probes: true, probeGraceMs: 1_000, ...config },
     });
     const out: Record<string, string[]> = {};
     // Two users with the same request: what one's sources say never reaches the other.
@@ -284,6 +285,7 @@ describe("the conflict ground in the engine (groundConflict, quietClear)", () =>
         model: null,
         now: () => late,
         config: {
+          ...CORE_CONFIG,
           probes: true,
           probeGraceMs: 1_000,
           confidentScore: 99,
