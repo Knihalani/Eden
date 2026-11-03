@@ -156,11 +156,10 @@ describe("eval harness: the reader family (--reader stub|oracle)", () => {
   test("flags whose dependency the eval does not wire are named", () => {
     expect(unwiredFlags({}, { reader: false })).toEqual([]);
     expect(unwiredFlags({ askReader: true }, { reader: true })).toEqual([]);
-    const named = unwiredFlags(
-      { askReader: true, cards: true, intent: true, askReaderStanding: 20, bridgeQuery: true },
-      { reader: false },
-    ).map((s) => s.split(" ")[0]);
-    expect(named).toEqual(["askReader", "cards", "intent", "askReaderStanding", "bridgeQuery"]);
+    const named = unwiredFlags({ askReader: true, cards: true, intent: true }, { reader: false }).map(
+      (s) => s.split(" ")[0],
+    );
+    expect(named).toEqual(["askReader", "cards", "intent"]);
   });
 });
 

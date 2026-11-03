@@ -100,17 +100,15 @@ describe("overBudget line", () => {
     const signal = new AbortController().signal;
     for (let n = 0; n < 25; n++) await reader.verdictFor(scope, "s", input(n), signal);
     expect(reader.stats.calls).toBe(20);
-    expect(overBudget({ reader: [reader], cards: [], bridge: [] })).toEqual({ reader: 5, cards: 0, bridge: 0 });
-    const line = overBudgetLine({ reader: [reader], cards: [], bridge: [] });
+    expect(overBudget({ reader: [reader], cards: [] })).toEqual({ reader: 5, cards: 0 });
+    const line = overBudgetLine({ reader: [reader], cards: [] });
     expect(line).toContain("overBudget: reader 5 (1 lanes)");
     expect(line).toContain("REFUSED");
   });
 
   test("nothing refused: counts only, no warning; components absent are left out", () => {
-    const line = overBudgetLine({ reader: [{ stats: { overBudget: 0 } }], cards: [], bridge: [] });
+    const line = overBudgetLine({ reader: [{ stats: { overBudget: 0 } }], cards: [] });
     expect(line).toBe("overBudget: reader 0 (1 lanes)");
-    expect(overBudgetLine({ reader: [], cards: [], bridge: [] })).toBe(
-      "overBudget: no budgeted reader, cards or bridge",
-    );
+    expect(overBudgetLine({ reader: [], cards: [] })).toBe("overBudget: no budgeted reader or cards");
   });
 });

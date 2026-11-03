@@ -250,7 +250,7 @@ export interface IntentUse {
 /** The mark every TOTAL and pool line, and the JSON label, carry when intent is on but inert. */
 export const INTENT_INERT = "[intent inert: no replay]";
 
-export function intentState(config: Record<string, unknown>, use: IntentUse | undefined): IntentState {
+export function intentState(config: { intent?: unknown }, use: IntentUse | undefined): IntentState {
   if (config.intent !== true) return "off";
   return use && use.found > 0 ? "live" : "inert";
 }

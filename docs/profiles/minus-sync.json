@@ -1,0 +1,6 @@
+{
+  "sync": false,
+  "syncPollBehind": false,
+  "syncPollPageSize": 0,
+  "readerPushBehind": false
+}

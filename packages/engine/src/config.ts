@@ -19,12 +19,8 @@ export interface EngineConfig {
    */
   fallbackMatchedTerms: number;
   fallbackScore: number;
-  /** The fallback also takes an item the lookup's own search and a probe both found, sharing two request terms. */
-  fallbackAgree: boolean;
   /** The fallback takes two of the request's terms, not `fallbackMatchedTerms`, when the request asks or acts. */
   fallbackAsks: boolean;
-  /** The least score an agreed item needs (`fallbackAgree`). */
-  fallbackAgreeScore: number;
   maxItemsPerInjection: number;
   maxInjectionBytes: number;
   /**
@@ -45,11 +41,6 @@ export interface EngineConfig {
   sourceTimeoutMs: number;
   /** Most candidates shown to the model judge. Bounds its input tokens. */
   judgeCandidates: number;
-  /**
-   * Whether `ask` has the model rewrite the items it found as a short prose answer. Off by default (D43): the asker
-   * is itself a model and reads the cited items directly, and that rewrite was about half of all model calls.
-   */
-  askWithModel: boolean;
   /** Events kept as the session's recent window. */
   windowEvents: number;
   /** Turns before a delivered item may be delivered again. */
@@ -95,8 +86,6 @@ export interface EngineConfig {
    */
   compactInjection: boolean;
   compactItemBytes: number;
-  /** Compaction also drops the parts whose every content word the session has already seen. */
-  compactNovel: boolean;
   /** How long a lookup waits for its probes past its own search (ms); slower ones only fill the cache. */
   probeGraceMs: number;
   /** A probe the user's lookups made this recently (ms) is answered from its cached finds, at no call. */
@@ -147,18 +136,6 @@ export interface EngineConfig {
   consequenceProbe: boolean;
   /** Sources the consequence probe goes to per lookup. */
   consequenceSources: number;
-  /**
-   * With a judge configured, the slow path's confident items are judged too (with the other candidates, one call)
-   * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
-   */
-  judgeConfident: boolean;
-  /**
-   * With a model: the judge leaves the critical path. Every lookup decides and answers as with no model (the fast
-   * path, anticipation's early answer, grounding and the fallback); the judge then reads the candidates that answer
-   * left out, and what it picks is queued for the agent's next turn. It can add, never hold back
-   * (docs/research/econ-judge.md).
-   */
-  judgeBehind: boolean;
   /** With a judge configured, sure items are judged when more than one scored as sure (a contested set). */
   judgeContested: boolean;
   /**
@@ -200,8 +177,6 @@ export interface EngineConfig {
    * or unchanged, a sibling reference (Q2 for Q3, another invoice number) (`conflict.ts`; D49).
    */
   quietClear: boolean;
-  /** With `judgeConfident`, a lone sure item the lookup and a probe both found is judged too (false: delivered). */
-  judgeAgreed: boolean;
   /**
    * With `compactInjection`, a packet says each occurrence once: an item that echoes one above it (the same weekday
    * and time, and no word the user's items make rare: an invitation under its calendar event, the reply that booked
@@ -209,20 +184,6 @@ export interface EngineConfig {
    * run into a line and the user from attendee lists (`render.ts` `messageParts`).
    */
   densePacket: boolean;
-  /**
-   * Dates said whole in packets and `ask` answers (D68; docs/research/econ-uptake.md): compaction keeps the current
-   * year ("left 9 Oct 2026", which `compactInjection` shortens to "9 Oct"), and an event whose text never names its
-   * day starts with its `meta.start` ("Starts: Thu 29 Oct 2026 13:30 UTC. "), since a calendar connector may keep the
-   * time only there. Wording only: what is delivered, and when, is unchanged; in-sample, packet bytes +1.6%, about 6
-   * bytes (1–2 agent input tokens) a task (docs/COST-MODEL.md).
-   */
-  packetDates: boolean;
-  /**
-   * With no model's say, names a request types in lowercase ("move my drinks with chen wei") ground it and pick its
-   * fallback as capitalised ones do, when the user's own sources have been recorded mentioning them (the source map;
-   * `Partner.withRecoveredNames`). Probes and ranking keep the request as typed: no source call is added.
-   */
-  recoverNames: boolean;
   /**
    * With no model's say, the event a request names the way people do is grounded: by its occasion and who it is with
    * ("dinner with Elena"), its occasion and day ("lunch on Monday"), or, for a message from someone about meeting, the
@@ -302,30 +263,11 @@ export interface EngineConfig {
   syncMaxUsersPerTenant: number;
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
   syncLocalAll: boolean;
-  /** Probes of a current synced source go to every synced source (they cost no call), not only the routed ones. */
-  syncWide: boolean;
   /**
    * With sources answered locally, up to this many of the request's rare words (a place, a reference: on few of the
    * user's items) are each sent alone to them as a probe, at no call; their finds get the probes' seats. 0: none.
    */
   syncTermProbes: number;
-  /**
-   * Push (`SyncManager.notify`, `ContextPartner.sourceChanged`; docs/research/econ-background.md): a synced source
-   * whose connector sends change notices (Gmail watch, Calendar push, Slack Events, relayed by the tenant) is current
-   * until a notice arrives, read with one incremental poll, and swept only every `syncPushSweepMs`. Off: notices are
-   * ignored and every source is polled as D57 says.
-   */
-  syncPush: boolean;
-  /** A pushed source with no notice and no poll for this long (ms) is polled anyway (a lapsed watch). */
-  syncPushMaxStaleMs: number;
-  /**
-   * A pushed source's sweep, for deletes its notices did not name, this often (ms). It is also what re-lists a quiet
-   * source's older items, so it stays at most half the cache's `syncTtlMs` (7 days): a sweep spans many ticks on a
-   * large source, and an item not re-listed within `syncTtlMs` lapses from the cache.
-   */
-  syncPushSweepMs: number;
-  /** A pushed source with an unread notice is polled in the background at most this often (ms; 0: every tick). */
-  syncPushGapMs: number;
   /**
    * A per-user knowledge graph over every cached item (`kg.ts`; docs/research/moon-graph.md): people, organisations,
    * projects and systems, identifiers, channels, roles and days, joined by typed edges. A lookup walks it from the
@@ -352,8 +294,6 @@ export interface EngineConfig {
   graphBudgetMs: number;
   /** The least activation a walked item needs. */
   graphFloor: number;
-  /** A walked item reached by a name is tied, in the conflict test, by the request's own words too. */
-  graphWordTies: boolean;
   /** The walk starts from the days the request names too (reaching items whose blocking statements cover them). */
   graphDays: boolean;
   /**
@@ -373,45 +313,14 @@ export interface EngineConfig {
    */
   cardsEconomy: boolean;
   /**
-   * `decideConflict` (D67, docs/research/econ-decide.md): with no model's say (none, `judgeBehind`, whose lookup
-   * decides as with none, or a model that failed, was cut off or was over budget, D41), the conflict ground's test (its
-   * request-frame conflicts, consequence finds and the graph's conflicts) is run over every ranked candidate, not only
-   * the eligible ones, whatever path spoke first (the fast path's sure cached match, sure, anticipated, grounded by a
-   * person or a day, the fallback, or none), and its best find joins the delivery while it has room. A sure lexical
-   * match no longer silences a conflict.
-   */
-  decideConflict: boolean;
-  /**
    * An ask gathers the lookup's candidates (consequence probe, graph walk, card finds) and answers first with those
    * carrying a rule path's verdict: a conflict about the question, a binding graph conflict, a consequence find in
    * conflict, a violated card (D73, docs/research/gen-ask.md). Off by default.
    */
   askVerdicts: boolean;
-  /**
-   * An ask's answer is the rule paths' pool (verdict hits, grounded items, the lexically likely) in a learned no-model
-   * ranker's order (`rank.ts`), and the ranker's best candidate outside the pool takes the weakest seat when it
-   * outscores it by more than `askRankMargin` (D82, docs/research/smart-rank.md). Same item limit. Off by default.
-   */
-  askRank: boolean;
-  askRankMargin: number;
-  /**
-   * The learned ranker breaks ties at a proactive cut: where a rule path keeps the best few of equally scored items,
-   * the ranker says which (D82). It never adds an item nor lowers a gate. Off by default, and rejected: inert on the
-   * funnel at +5% engine CPU per lookup (docs/research/smart-rank.md).
-   */
-  rankTies: boolean;
-  /**
-   * An ask's answer is compacted as a packet is (`compactText` around the question's words, `askItemBytes` each),
-   * items past the first `askFullItems` cut to `askLineBytes`, the whole at most `askMaxBytes`, and with
-   * `densePacket` an echo folded out (D74, docs/research/gen-ask.md). Off by default: the answer is each item's first
-   * bytes, at most 4,000.
-   */
-  askCompact: boolean;
+  /** With `compactAsk`: each item of an ask's answer at most this many bytes. */
   askItemBytes: number;
-  askFullItems: number;
-  askLineBytes: number;
-  askMaxBytes: number;
-  /** With `decideConflict`: the ranked candidates its test reads (and the lab's candidate dump holds), best first. */
+  /** The ranked candidates whose facts the lab's candidate dump holds (`onCandidates`), best first. */
   decideCandidates: number;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
@@ -434,8 +343,6 @@ export interface EngineConfig {
   anticipateOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
   estimatedCallUsd: number;
-  /** Cost reserved per model-composed ask answer (`askWithModel`): about its worst case at its cap (D45). */
-  estimatedAnswerUsd: number;
   /**
    * Characters of an event the engine reads (the head; the rest is ignored). The protocol accepts up to 1,000,000,
    * and redaction, tokenizing and usage checks are linear in it: without this, one large tool result costs every
@@ -452,8 +359,7 @@ export interface EngineConfig {
   /**
    * `ask` answers compacted as packets are (D76; docs/research/gen-tokens.md): each item cut to the parts that bear on
    * the question (`compactText`), at most `askItemBytes`, rather than said whole up to the answer's 4 KB. The items and
-   * their order are unchanged; only how much of each the agent reads. Off: answers say each item whole. Shares
-   * `askItemBytes` with `askCompact`, its alternative (docs/research/gen-combined.md), which wins if both are on.
+   * their order are unchanged; only how much of each the agent reads. Off: answers say each item whole.
    */
   compactAsk: boolean;
   /**
@@ -468,35 +374,6 @@ export interface EngineConfig {
    * sign-off ("— O") hides the rest of a thread, and a one-line table longer than an item's room is dropped whole.
    */
   compactParts: boolean;
-  /**
-   * Supersession (D81, docs/research/smart-supersede.md): surface what the user's items say now. Among a lookup's or
-   * an `ask`'s candidates, an item a newer item about the same matter supersedes (same subject once "Re:" is
-   * stripped, or the same identifier; the newer one says something decisive: a conflict or a clearance) is dropped,
-   * and an `ask` that is not a question leaves out an item about it whose latest state is settled (cleared by the
-   * conflict test, or said done or resolved with no conflict): the agent has nothing to raise. Questions keep them.
-   */
-  supersede: boolean;
-  /**
-   * The conflict test reads a reply's quoted messages oldest first (`chronological`), so a later statement is the
-   * later one written: a hold lifted in the newest reply clears, a hold re-imposed after a quoted "lifted" stands.
-   */
-  supersedeThreads: boolean;
-  /**
-   * `ask` reads the conversation it is asked in (docs/research/smart-askctx.md): an agent's question is often narrower
-   * or worded otherwise than the user's request ("Globex discount approval?"), so the answer's candidates are ranked
-   * for the question and for the session's latest user request (its names and days), and fused question first by
-   * weighted reciprocal rank (`askContextWeight`), a verdict hit of either first. No source call and no model call:
-   * the request was looked up when it arrived, and its ranking is over what is cached. An ask whose question holds
-   * every word of the request is answered as without the flag. Off: an answer is ranked for the question alone.
-   */
-  askContext: boolean;
-  /** The request's weight in `askContext`'s fusion, against the question's 1 (equal: the question leads ties). */
-  askContextWeight: number;
-  /**
-   * The most items a fused `askContext` answer holds (the ask's own `maxItems` caps it too): fusion fills slots a
-   * narrow question leaves empty, and four keeps an answer's bytes at or under the question's own.
-   */
-  askContextItems: number;
   /**
    * The intent index (D87, docs/research/edge-intent.md; needs `cards` and `PartnerDeps.cards`): the background card
    * call also writes, per item, up to four requests the item would change, in a user's words, and items the card
@@ -518,43 +395,6 @@ export interface EngineConfig {
   /** Judge seats kept for intent hits the lexical ranking did not seat (with a model). */
   intentSeats: number;
   /**
-   * Guided asking with a precision guard (D88, docs/research/edge-ask.md). An `ask` about an action (the question or
-   * the session's request acts, or the question asks what could block it) answers with its verdicts said: an item a
-   * verdict reads as binding leads, marked "May block or change this", and when none of the answer's items reads as a
-   * block, no item or candidate has constraint wording (`mayConstrain`) and every source was searched (each synced and
-   * current, `sync`), a line of fixed words says so ("Checked mail, calendar: none of the items found states a rule,
-   * hold, limit, absence or change for Dana, 5 Nov."), so a cautious agent has grounds to go ahead (D93). The MCP
-   * server's `ask_context` then gives the guided description (`ASK_CONTEXT_GUIDED`). No source call, no model call.
-   * Off: answers as before, and the standard description.
-   */
-  askGuard: boolean;
-  /**
-   * Answer-shaped packets (D88): a proactive packet says each item's bearing on the request before the item, from the
-   * conflict test's verdict and the item's card ("May block or change this", "Says this is clear"), in fixed words,
-   * and puts an item that may block first. No source call, no model call.
-   */
-  packetBearing: boolean;
-  /**
-   * The request-time bridging query (docs/research/edge-bridge.md, `bridge.ts`): for a request that acts, on the slow
-   * path only, one small budgeted model call (`PartnerDeps.bridge`) rewrites the request into two or three queries in
-   * the words a constraint on it would use; they are run against the user's own index with no source call, and what
-   * they find joins the lookup's and the ask's candidates, a verdict hit only where the conflict test, tied by the
-   * queries' words, says it conflicts with the request. Queries are cached per user by request; an `ask` reads them
-   * and never calls. Needs a bridge in the deps; with none, nothing changes.
-   */
-  bridgeQuery: boolean;
-  /** How long a lookup waits for the bridge's call after its own search is done (ms); past it, it goes without. */
-  bridgeWaitMs: number;
-  /** The most items each bridging query brings in from the index. */
-  bridgeHits: number;
-  /**
-   * `bridgeQuery`: seats in an `ask` answer, after the verdict hits, for the bridge's best finds the conflict test does
-   * not read as conflicts (nor clears): the agent's model judges them. 0: only verdict hits count.
-   */
-  bridgeAskSeats: number;
-  /** `bridgeQuery` also asks about a question for permission ("Can I…", "Is it fine if I…", "Should I…"). */
-  bridgeQuestions: boolean;
-  /**
    * The ask-time model reader (D95, `reader.ts`): for an `ask` about an action, one budgeted model call reads the top
    * `askReaderPool` candidates the ask already ranked (compact, redacted, fenced as data) and says which would block,
    * limit or change the request, or show it done; those lead the answer, each with a short bearing, and the usual
@@ -562,17 +402,10 @@ export interface EngineConfig {
    * Verdicts are cached per user and session. Needs a reader in the deps; with none, nothing changes.
    */
   askReader: boolean;
-  /** How many of the ask's ranked candidates the reader reads (capped at `READER_MAX_ITEMS`, 40). */
+  /** How many of the ask's ranked candidates the reader reads (capped at `READER_MAX_ITEMS`, 60). */
   askReaderPool: number;
   /** How long an ask waits for the reader (ms); past it, the usual answer (the call still fills the cache). */
   askReaderWaitMs: number;
-  /** `askReader` also reads an ask that is not about an action (a question for information). */
-  askReaderQuestions: boolean;
-  /**
-   * `askReader`: when the reader read the pool and found nothing that binds, the answer's first line says so, in fixed
-   * words. Off by default: a reader's miss would read as an all-clear (D93's false all-clear).
-   */
-  askReaderClear: boolean;
   /**
    * With `askReader`: the items the reader named and judged not to bind (a lookalike, another thing of the same kind,
    * or a rule lifted or ended) leave the ask's answer, so a decoy the search found is not handed to the agent beside
@@ -586,20 +419,10 @@ export interface EngineConfig {
    * One reader call per acting request, budgeted and cached as an ask's; off by default.
    */
   readerPush: boolean;
-  /**
-   * With `askReader` and `cards`: up to this many of the user's standing constraints on file (a carded freeze, limit,
-   * absence, deadline, prohibition or dependency still in force), newest first, join the reader's pool after the
-   * ask's ranked candidates, whatever their words. 0 (default): none.
-   */
-  askReaderStanding: number;
   /** The characters of each item's most relevant parts the reader reads (`READER_ITEM_CHARS`, 400, is the most). */
   askReaderItemChars: number;
-  /** The card kinds `askReaderStanding` takes; empty (default): the digest's standing kinds (`DIGEST_KINDS`). */
-  askReaderStandingKinds: string[];
   /** With `readerPush`: the reader's kinds pushed unasked (`askReader` still shows every kind in an ask's answer). */
   readerPushKinds: string[];
-  /** With `readerPush`: the pushed packet says the reader's bearing before each item, as an ask's answer does. */
-  readerPushNotes: boolean;
   /**
    * With `readerPush`: the most `observe` waits for the push (ms), within the caller's own wait. 0: never; the reading
    * runs beside the agent's first model request and its packet is taken before the next one.
@@ -616,21 +439,9 @@ export interface EngineConfig {
   readerPushBehind: boolean;
   /**
    * With `askReader`: no reader call when none of the request's candidates could constrain it (no card of a
-   * constraint, state-change or already-done kind, no constraint wording). Standing items (`askReaderStanding`) do not
-   * open the gate, so with both on, a request whose candidates hold nothing constraint-like is not read even when a
-   * standing constraint would bind it.
+   * constraint, state-change or already-done kind, no constraint wording).
    */
   readerGate: boolean;
-  /**
-   * The active-constraints digest (docs/research/edge-bridge.md, `digest.ts`): per user, the items whose card
-   * (`cards`) is a standing constraint (a freeze or hold, a limit, an absence, a deadline, a prohibition) over today
-   * or later, at most `digestLines` lines of the items' own words (`digestBytes` in all), ranked by recency and the
-   * user's own people, delivered once at `session_start` as data and on request (`ContextPartner.digest`). The same
-   * constraints give the same bytes (no clock in the text), so a provider's prompt cache holds it. Needs `cards`.
-   */
-  constraintDigest: boolean;
-  digestLines: number;
-  digestBytes: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -640,9 +451,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   minMatchedTerms: 2,
   fallbackMatchedTerms: 3,
   fallbackScore: 0.8,
-  fallbackAgree: false,
-  fallbackAsks: false,
-  fallbackAgreeScore: 0.6,
+  fallbackAsks: true,
   maxItemsPerInjection: 3,
   refreshAfterMs: 2 * 3_600_000,
   maxRefreshes: 0,
@@ -651,11 +460,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askSources: 6,
   sourceTimeoutMs: 1_500,
   judgeCandidates: 6,
-  askWithModel: false,
   windowEvents: 12,
   ledgerCooldownTurns: 40,
   cueCooldownTurns: 6,
-  slowPathQueue: false,
+  slowPathQueue: true,
   usageWindowTurns: 6,
   maxSessionsPerTenant: 5_000,
   sessionIdleMs: 2 * 3_600_000,
@@ -663,66 +471,58 @@ export const DEFAULT_CONFIG: EngineConfig = {
   maxCues: 200,
   maxSessionTerms: 20_000,
   estimatedCallUsd: 0.0005,
-  estimatedAnswerUsd: 0.0015,
-  probes: false,
-  compactInjection: false,
+  probes: true,
+  compactInjection: true,
   compactItemBytes: 320,
-  compactNovel: false,
-  probeGraceMs: 100,
+  probeGraceMs: 0,
   probeMemoMs: 10 * 60_000,
   probeCalls: 8,
   probeWhen: "always",
   probePeopleSources: 3,
   probeTopicSources: 8,
-  probeTopicAlone: false,
-  probeFresh: false,
+  probeTopicAlone: true,
+  probeFresh: true,
   probeFreshFloor: 0.15,
-  probeYield: false,
+  probeYield: true,
   probeYieldFloor: 0.05,
-  consequenceProbe: false,
+  consequenceProbe: true,
   consequenceSources: 1,
-  probeRoles: false,
-  probeShare: false,
+  probeRoles: true,
+  probeShare: true,
   probeSecondSources: 3,
-  graph: false,
+  graph: true,
   graphItems: 16,
   graphSeats: 1,
   graphGround: 1,
-  graphMerge: false,
+  graphMerge: true,
   graphLearn: true,
   graphBudgetMs: 2,
   graphFloor: 0.15,
-  graphWordTies: false,
   graphDays: true,
   probeOff: [],
-  anticipate: false,
+  anticipate: true,
   anticipateCalls: 4,
   anticipateSessionCalls: 24,
   anticipateOff: [],
-  judgeConfident: false,
-  judgeBehind: false,
-  judgeContested: false,
-  judgeTied: false,
+  judgeContested: true,
+  judgeTied: true,
   judgeTiedShare: 0.03,
   judgeWindowChars: 4_000,
-  judgeItemBytes: 280,
+  judgeItemBytes: 200,
   confidentItems: 3,
-  quietSettled: false,
-  groundAway: false,
-  groundConflict: false,
-  quietClear: false,
-  judgeAgreed: true,
-  densePacket: false,
-  packetDates: false,
-  recoverNames: false,
-  groundOccasion: false,
-  quietNameOnly: false,
-  conflictVocab: false,
+  quietSettled: true,
+  groundAway: true,
+  groundConflict: true,
+  quietClear: true,
+  densePacket: true,
+  groundOccasion: true,
+  quietNameOnly: true,
+  conflictVocab: true,
   spans: false,
-  sync: false,
+  sync: true,
   syncMaxItems: 3_000,
   syncPageSize: 100,
-  syncPollPageSize: 0,
+  syncPollPageSize: 5,
   syncEveryMs: 0,
   syncStaleChance: 0.15,
   syncMaxStaleMs: 6 * 3_600_000,
@@ -731,69 +531,36 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncDropMs: 7 * 24 * 3_600_000,
   syncCallsPerMin: 30,
   syncOnDemand: true,
-  syncPollBehind: false,
+  syncPollBehind: true,
   syncCatchupPages: 2,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
-  syncWide: false,
   syncTermProbes: 0,
-  syncPush: false,
-  syncPushMaxStaleMs: 24 * 3_600_000,
-  syncPushSweepMs: 3 * 24 * 3_600_000,
-  syncPushGapMs: 0,
-  cards: false,
-  cardsEconomy: false,
+  cards: true,
+  cardsEconomy: true,
   cardItems: 1,
-  decideConflict: false,
-  askVerdicts: false,
-  askRank: false,
-  askRankMargin: 5,
-  rankTies: false,
-  askCompact: false,
+  askVerdicts: true,
   askItemBytes: 320,
-  askFullItems: 5,
-  askLineBytes: 200,
-  askMaxBytes: 4_000,
   decideCandidates: 64,
   maxEventChars: 32_000,
   actionCheck: false,
-  compactAsk: false,
-  askDedup: false,
-  compactParts: false,
-  supersede: false,
-  supersedeThreads: false,
-  askContext: false,
-  askContextWeight: 1,
-  askContextItems: 4,
-  intent: false,
+  compactAsk: true,
+  askDedup: true,
+  compactParts: true,
+  intent: true,
   intentHits: 6,
   intentMinCoverage: 0.35,
   intentMinMatched: 2,
   intentWeight: 1,
   intentSeats: 1,
-  askGuard: false,
-  packetBearing: false,
-  bridgeQuery: false,
-  bridgeWaitMs: 4_000,
-  bridgeHits: 3,
-  bridgeQuestions: false,
-  bridgeAskSeats: 0,
-  askReader: false,
-  askReaderPool: 30,
+  askReader: true,
+  askReaderPool: 15,
   askReaderWaitMs: 2_500,
-  askReaderQuestions: false,
-  askReaderClear: false,
-  askReaderDrop: false,
-  readerPush: false,
-  askReaderStanding: 0,
-  askReaderItemChars: 400,
-  askReaderStandingKinds: [],
+  askReaderDrop: true,
+  readerPush: true,
+  askReaderItemChars: 240,
   readerPushKinds: ["blocks", "limits", "changes", "done"],
-  readerPushNotes: false,
   readerPushWaitMs: 60_000,
-  readerPushBehind: false,
-  readerGate: false,
-  constraintDigest: false,
-  digestLines: 12,
-  digestBytes: 1_600,
+  readerPushBehind: true,
+  readerGate: true,
 };

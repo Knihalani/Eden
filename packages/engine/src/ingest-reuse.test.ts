@@ -308,10 +308,6 @@ describe("unchanged re-listed items skip redaction (ingest-skip-unchanged-redact
       catchupPages: 1,
       maxUsersPerTenant: 10,
       timeoutMs: 5_000,
-      push: false,
-      pushMaxStaleMs: 24 * HOUR,
-      pushSweepMs: 24 * HOUR,
-      pushGapMs: 0,
     };
     const sync = new SyncManager({ sources: async () => [src], fanout, cache, now }, options);
     const listAll = async () => {

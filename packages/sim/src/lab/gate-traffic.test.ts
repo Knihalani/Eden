@@ -114,8 +114,8 @@ describe("gate-traffic end to end (one seed, 15 sessions, no model)", () => {
 
   test("prints an oracle line and a reuse report per preset", () => {
     expect(run.status).toBe(0);
-    expect(run.stdout.match(/^ {2}oracle gate: /gm)?.length).toBe(4);
-    expect(run.stdout.match(/^ {2}reuse across one user's sessions: /gm)?.length).toBe(4);
+    expect(run.stdout.match(/^ {2}oracle gate: /gm)?.length).toBe(2);
+    expect(run.stdout.match(/^ {2}reuse across one user's sessions: /gm)?.length).toBe(2);
   });
 
   test("the oracles and reuse counts are consistent with the calls", () => {
@@ -153,7 +153,5 @@ describe("gate-traffic end to end (one seed, 15 sessions, no model)", () => {
       expect(u.pool).toBeLessThanOrEqual(all.calls);
       expect(u.typeBinding).toBeLessThanOrEqual(all.calls);
     }
-    // With no gate and every request read, the any-fact oracle calls exactly where a pool holds a needed item.
-    expect(results.NEW2!.all.oracleCalls.must).toBe(results.NEW2!.all.bindingInPool);
   });
 });

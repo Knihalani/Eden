@@ -25,6 +25,7 @@ import {
 } from "./reader";
 import { shownText } from "./render";
 import type { Trace } from "./trace";
+import { CORE_CONFIG } from "./parts";
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -489,7 +490,7 @@ describe("the reader in the engine (config.askReader)", () => {
       budget: new Budget(),
       model: null,
       now: () => clock,
-      config: { askReaderWaitMs: 200, ...config },
+      config: { ...CORE_CONFIG, askReaderWaitMs: 200, ...config },
       reader,
       onReader: (r) => reports.push(r),
       onTrace: (t) => traces.push(t),
@@ -605,7 +606,7 @@ describe("the reader in the engine (config.askReader)", () => {
     expect(reader.userCount).toBe(1);
   });
 
-  test("a question for information is not read unless askReaderQuestions", async () => {
+  test("a question for information is not read", async () => {
     const question = "What did Harlow send about the venue deposit?";
     const clock = NOW;
     const mk = async (config: Record<string, unknown>) => {
@@ -617,14 +618,13 @@ describe("the reader in the engine (config.askReader)", () => {
         budget: new Budget(),
         model: null,
         now: () => clock,
-        config: { askReader: true, ...config },
+        config: { ...CORE_CONFIG, askReader: true, ...config },
         reader: new AskReader({ maker, budget: new Budget(), now: () => clock }),
       });
       await p.ask({ tenantId: "t", userId: "u1", sessionId: "s1", question });
       return maker.calls.length;
     };
     expect(await mk({})).toBe(0);
-    expect(await mk({ askReaderQuestions: true })).toBe(1);
   });
 
   test("askReaderDrop: what the reader rejected by name leaves the answer; what it flagged never does", async () => {
@@ -639,14 +639,22 @@ describe("the reader in the engine (config.askReader)", () => {
     expect(off.answers.u1![0]!.ids).toContain("mail:n0");
     expect(on.answers.u1![0]!.ids).not.toContain("mail:n0");
     expect(on.answers.u1![0]!.ids[0]).toBe("mail:hold");
-    // A drop that would empty the answer is not made: an empty answer would say nothing was found.
+    // A drop that would empty the answer is made only when the reader read every candidate (D114); with the pool cut
+    // below the candidates the answer keeps them: an empty answer would be a false all-clear (D93).
     const all = (input: ReaderInput) => input.items.map((_, i) => i);
     const empty = await run(
       { askReader: true, askReaderDrop: true },
       { maker: new ScriptedReader(() => [], { reject: all }) },
     );
-    expect(empty.answers.u1![0]!.ids.length).toBeGreaterThan(0);
-    expect(empty.answers.u1![0]!.answer).not.toContain("Nothing in the connected sources");
+    expect(empty.reports[0]!.checked).toBe(empty.reports[0]!.pool.length);
+    expect(empty.answers.u1![0]!.ids).toEqual([]);
+    const cut = await run(
+      { askReader: true, askReaderDrop: true, askReaderPool: 2 },
+      { maker: new ScriptedReader(() => [], { reject: all }) },
+    );
+    expect(cut.reports[0]!.checked).toBe(2);
+    expect(cut.answers.u1![0]!.ids.length).toBeGreaterThan(0);
+    expect(cut.answers.u1![0]!.answer).not.toContain("Nothing in the connected sources");
     // Without a reading (the reader failed), nothing is dropped.
     const failed = await run(
       { askReader: true, askReaderDrop: true },
@@ -669,25 +677,20 @@ describe("the reader in the engine (config.askReader)", () => {
     );
     const none = failing.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" });
     expect(none.find((p) => p.reason.startsWith("reader:"))).toBeUndefined();
-    // Without readerPushNotes the packet carries the item alone; with it, the reader's bearing in Eden's words.
+    // The packet carries the item alone, not the reader's bearing.
     expect(packets.find((p) => p.reason.startsWith("reader:"))!.text).not.toContain("Eden's reader");
-    const noted = await run({ askReader: true, readerPush: true, readerPushNotes: true }, { asks: 0 });
-    const withNote = noted.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" });
-    expect(withNote.find((p) => p.reason.startsWith("reader:"))!.text).toContain("Eden's reader: blocks:");
     // Off (and with askReader alone), observing makes no reader call.
     const off = await run({ askReader: true }, { asks: 0 });
     expect(off.maker.calls.length).toBe(0);
   });
 
-  test("readerPush with askReaderQuestions reads a request the verb list misses; readerPushKinds filters", async () => {
-    // "RSVP" is not in the verb list: without askReaderQuestions the push does not read it, with it, it does.
+  test("readerPush reads only a request in the verb list; readerPushKinds filters", async () => {
+    // "RSVP" is not in the verb list: the push does not read it.
     const RSVP = "RSVP yes for the Harlow venue dinner on Friday.";
     const quiet = await run({ askReader: true, readerPush: true }, { asks: 0, request: RSVP });
     expect(quiet.maker.calls.length).toBe(0);
-    const wide = await run({ askReader: true, readerPush: true, askReaderQuestions: true }, { asks: 0, request: RSVP });
-    expect(wide.maker.calls.length).toBe(1);
     const p = await run(
-      { askReader: true, readerPush: true, askReaderQuestions: true, readerPushKinds: ["blocks"] },
+      { askReader: true, readerPush: true, readerPushKinds: ["blocks"] },
       { asks: 0, maker: new ScriptedReader(flags("mail:hold", "changes")) },
     );
     expect(p.maker.calls.length).toBe(1);
@@ -772,13 +775,6 @@ describe("the reader in the engine (config.askReader)", () => {
     held.gate.release();
     await held.maker.idle();
     expect(kept.partner.takePending(ref).find(isReader)).toBeDefined();
-  });
-
-  test("askReaderClear: a read pool with nothing binding says so in fixed words", async () => {
-    const { answers } = await run({ askReader: true, askReaderClear: true }, { maker: new ScriptedReader(() => []) });
-    expect(answers.u1![0]!.answer).toContain("Checked the 8 items found most related: none reads as blocking");
-    const quiet = await run({ askReader: true }, { maker: new ScriptedReader(() => []) });
-    expect(quiet.answers.u1![0]!.answer).not.toContain("Checked the");
   });
 
   test("the reader's spend is the ask's: the first ask costs the call, a cached repeat nothing; the trace agrees", async () => {
@@ -948,7 +944,7 @@ describe("the reader in the engine (config.askReader)", () => {
       budget: new Budget(),
       model: null,
       now: () => NOW,
-      config: { askReader: true, askReaderWaitMs: 200 },
+      config: { ...CORE_CONFIG, askReader: true, askReaderWaitMs: 200 },
       reader: new AskReader({ maker, budget: new Budget(), now: () => NOW }),
       onReader: (r) => reports.push(r),
     });
@@ -962,10 +958,7 @@ describe("the reader in the engine (config.askReader)", () => {
   test("readerPush: a 1,000,000-character message is asked as at most 10,000 characters (the ask's cap)", async () => {
     const huge = `${REQUEST} ${"and the venue deposit ".repeat(50_000)}`.slice(0, 1_000_000);
     expect(huge.length).toBe(1_000_000);
-    const { maker } = await run(
-      { askReader: true, readerPush: true, askReaderQuestions: true },
-      { asks: 0, request: huge },
-    );
+    const { maker } = await run({ askReader: true, readerPush: true }, { asks: 0, request: huge });
     expect(maker.calls.length).toBe(1);
     expect(maker.calls[0]!.request.length).toBeLessThanOrEqual(10_000);
     expect((maker.calls[0]!.question ?? "").length).toBeLessThanOrEqual(10_000);
@@ -982,7 +975,7 @@ describe("the reader in the engine (config.askReader)", () => {
       budget: new Budget(),
       model: null,
       now: () => NOW,
-      config: { askReader: true, readerPush: true },
+      config: { ...CORE_CONFIG, askReader: true, readerPush: true },
       reader: new AskReader({ maker, budget, now: () => NOW }),
     });
     for (let n = 0; n < 100; n++) {
@@ -1003,7 +996,7 @@ describe("the reader in the engine (config.askReader)", () => {
       budget: new Budget(),
       model: null,
       now: () => NOW,
-      config: { askReader: true, askReaderWaitMs: 1_000 },
+      config: { ...CORE_CONFIG, askReader: true, askReaderWaitMs: 1_000 },
       reader: new AskReader({ maker: new ModelReaderMaker(model), budget: new Budget(), now: () => NOW }),
     });
     const u1 = { tenantId: "t", userId: "u1" };

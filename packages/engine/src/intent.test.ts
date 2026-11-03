@@ -7,6 +7,7 @@ import { ItemCache } from "./cache";
 import { CardEnricher, cardMessages, ModelCardMaker, parseRequests, type Card, type CardMaker } from "./cards";
 import { cleanRequests, IntentIndex, intentTerms, MAX_REQUEST_CHARS, MAX_REQUESTS, stemWord } from "./intent";
 import { ContextPartner } from "./partner";
+import { CORE_CONFIG } from "./parts";
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -253,7 +254,7 @@ describe("intent in the engine (config.intent)", () => {
       budget: new Budget(),
       model: null,
       now: () => clock,
-      config: { cards: true, groundConflict: true, ...config },
+      config: { ...CORE_CONFIG, cards: true, groundConflict: true, ...config },
       cards,
     });
     const out: Record<string, { asked: string[]; pushed: string[] }> = {};
@@ -342,7 +343,15 @@ describe("an item steering its own requests (anchoredIntents)", () => {
       budget: new Budget(),
       model: null,
       now: () => clock,
-      config: { cards: true, intent: true, askVerdicts: true, sync: true, syncPageSize: 50, syncCallsPerMin: 600 },
+      config: {
+        ...CORE_CONFIG,
+        cards: true,
+        intent: true,
+        askVerdicts: true,
+        sync: true,
+        syncPageSize: 50,
+        syncCallsPerMin: 600,
+      },
       cards,
     });
     const scope = { tenantId: "t", userId: "u1" };

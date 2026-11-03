@@ -38,25 +38,29 @@ per suite for train1–6 and held-out 10–12.
 
 ## Configurations (`presets.ts`)
 
-| Preset | What | Decision | Needs |
-|---|---|---|---|
-| `H` | Probes, grounds, conflict, probe economy, dense packets, `quietNameOnly`, `judgeTied` | D55 | — |
-| `ALL3` | H + consequence/role probes, graph, cards, anticipation, sync, ask verdicts, conflict vocabulary, compaction, ask dedup, `cardsEconomy` | D80 | `--cards` (replayed) |
-| `ALL5` | ALL3 + intent, bridging query, `askGuard`, `packetBearing` | D92 (open) | `--cards`, `--intent`, `--bridge` (funnel) or a bridge model (live) |
-| `NEW` | ALL3 + intent + `askReader` + `askReaderDrop` + `readerPush` — **recommended** | D96, D98 | `--cards`, `--intent`, a reader model (`--reader-model`, or `--reader replay --reader-cache F` in the funnel) |
+One product (D112): the engine's `DEFAULT_CONFIG` is the configuration, and the presets are made from it, never
+written by hand.
 
-Every flag is off by default in production; presets exist only in the lab. `--set '{"flag":true}'` (funnel) or
-`--variant-config '{"X":{...}}' --conditions eden,eden~X` (pi-ab, hermes-ab) adds flags; `eden+flag` is shorthand
-for one.
+| Preset | What |
+|---|---|
+| `default` | The unified default: NEWL (D99) plus poll behind, small poll pages, no probe grace, the push's reader not waiting for the poll, the slow-path queue (D112). Cards, intent and the reader need their dependencies (`--cards`, `--intent`, a reader); without them they are inert, as in a server with no model key |
+| `minus-<part>` | The default with one of `PARTS` (`packages/engine/src/parts.ts`) taken out: probes, grounds, fallback, compaction, judge, graph, anticipate, sync, askVerdicts, cards, intent, reader, slowPathQueue, probeGrace |
+| `minus-all` | The default with every part taken out: `CORE_CONFIG`, the no-feature core (the old production default) |
+
+A trial (DECISIONS.md, "Trial switches") is measured as `--set '{...}'` over `default` (funnel) or
+`--variant-config '{"X":{...}}' --conditions eden,eden~X` (pi-ab, hermes-ab, whose `--config` defaults to `default`);
+`eden+flag` is shorthand for one flag. The measured history (H, ALL3, NEW, NEWL, the B/BG variants) lives in the
+decisions and research notes; their presets are gone, so commands dated before 2026-11-03 that name them need the
+settings written out (`git show 926b094:packages/sim/src/lab/presets.ts`).
 
 **The $0 CLIs are strict** (`bun run funnel`, `hidden-funnel.ts`, `bun run sim`; audit 2026-11-03b). An unknown flag,
 a stray argument or a flag missing its value exits 2 before anything runs (`--presett NEWL` used to run the whole ALL3
-screen and read "+0 −0"); `--help` prints the usage and exits 0 (about 0.15–0.3 s). Engine settings go through
+screen and read "+0 −0", 2026-11-03b); `--help` prints the usage and exits 0 (about 0.15–0.3 s). Engine settings go through
 `checkEngineConfig` (@eden/engine), on the preset and `--set` merged: an unknown key (`fallbackAsk`), a wrong type, an
-out-of-range number, or a child flag whose parent the merged configuration has off exits 2 naming it. So
-`--preset H --set '{"syncPollBehind":true}'` is refused (H has no `sync`; the flag would do nothing) and
-`--set '{"syncPollBehind":true}'` on ALL3 is accepted. The parent map (`PARENTS` in config-check.ts) allows several
-parents per key (`syncPollBehind` needs `sync` and `syncOnDemand`). The lab wires every dependency (cards, bridge,
+out-of-range number, or a child flag set on (off the core's value) whose parent the merged configuration has off
+exits 2 naming it. So `--preset minus-sync --set '{"syncPollBehind":true}'` is refused (the flag would do nothing),
+while `minus-sync` itself, whose values are the core's, is accepted. The parent map (`PARENTS` in config-check.ts) allows several
+parents per key (`syncPollBehind` needs `sync` and `syncOnDemand`). The lab wires every dependency (cards,
 reader); `bun run sim` wires cards only with `--cards`. gate-traffic.ts, the A/B harnesses and eval's `--config` are
 not strict yet.
 
@@ -143,7 +147,7 @@ messages can reach the cap (an estimate, not measured in the lab). The unit test
   pass `--time-scale 0` for instant sources. The funnel's default stays `--time 0`.
 - Engine spans (`config.spans`, D56) are content-free and change no decision.
 - Reader call rate, no model: `bun run gate-traffic` (seeds 41–44, 40 sessions each, about 20 s) counts reader calls,
-  gated and unread messages per preset (NEWL, NEWL-nogate, NEW2+gate, NEW2), an oracle-gate line (calls a perfect gate
+  gated and unread messages for the default and the default without `readerGate`, an oracle-gate line (calls a perfect gate
   would make over any needed fact, needed reader facts, and reader facts needed or usable, and the need turns left
   unread or gated), and with `--reuse` what reusing a verdict across one user's sessions could save (exact input, pool
   only, same type and binding set). COST-MODEL.md "Where 3x is impossible" quotes it.
@@ -156,13 +160,14 @@ messages can reach the cap (an estimate, not measured in the lab). The unit test
 ### 1. Screen a change on train, no model (measured 2026-11-02)
 
 ```bash
-bun run funnel --json .local/base.json                       # ALL3, train1-6, seeds 41,42: 36 s
+bun run funnel --json .local/base.json                       # default, train1-6, seeds 41,42, --reader stub
 # ... change the engine, or add a flag:
 bun run funnel --set '{"myFlag":true}' --baseline .local/base.json --json .local/new.json
 ```
 
-ALL3 on train, seeds 41–42: hidden 214/384, decoys 211/384 (the same as broad-set.md's "cards for every prefiltered
-item" row). `--preset H` takes 9 s; `--suite train1 --seeds 41` takes 3 s; `--suite dev6a,dev6b --seeds 41,42,43,44`
+The default on train, seeds 41–42, `--jobs 4`, cards replayed, reader stub (nothing binds), intent inert: hidden
+214/384, decoys 211/384, as ALL3's (measured 2026-11-03, D112; with a real reader, use recipe 2). Before 2026-11-03
+this recipe ran ALL3, with the same numbers; `--suite train1 --seeds 41` takes 3 s; `--suite dev6a,dev6b --seeds 41,42,43,44`
 takes 22 s (122/240 hidden, 91/240 decoys). The `--baseline` diff lists every task that moved. A gain that is a
 coin flip between hidden and decoys (broad-set.md: rules on unseen writing) is not a gain.
 
@@ -216,10 +221,10 @@ reader (the miss gate above). Three no-model modes stand in for the model behind
 key, and held-out suites still need `--blind`.
 
 ```bash
-bun run funnel --preset NEWL --jobs 4 -- --reader stub                  # pool recall per suite: 18 s, $0
-bun run funnel --preset NEWL --jobs 4 -- --reader oracle:0.9,0.1        # ground-truth proxy, every line labelled
-bun run funnel --jobs 4 -- --packet-k 10,15,20                          # ALL3: planted item in the ask's top K
-bun run funnel --preset NEWL --jobs 4 -- --reader stub --lead-in clause # draft pool against the request's
+bun run funnel --jobs 4 -- --reader stub                  # pool recall per suite: 18 s, $0
+bun run funnel --jobs 4 -- --reader oracle:0.9,0.1        # ground-truth proxy, every line labelled
+bun run funnel --jobs 4 -- --packet-k 10,15,20                          # planted item in the ask's top K
+bun run funnel --jobs 4 -- --reader stub --lead-in clause # draft pool against the request's
 ```
 
 - **`--reader stub`** says nothing binds and prints, per suite, `hidden in pool X/N, decoy in pool Y/N, mean pool
@@ -292,7 +297,7 @@ train1 seed 41 wrote 54 lines for its 54 reader calls.
 
 ```bash
 H=.local/haiku   # intent requests and cards as in docs/research/haiku-opt.md "Reproduce"
-bun run funnel --preset NEW --json $H/new.json -- --intent $H/intent/intent-v2.jsonl --reader live \
+bun run funnel --json $H/new.json -- --intent $H/intent/intent-v2.jsonl --reader live \
   --reader-model claude-haiku-5-5 --reader-cache $H/reader-cache-v5.jsonl \
   --spend-ledger $H/ledger.jsonl --spend-cap 40 --spend-headroom 3
 python3 -I packages/sim/lab/scripts/reader-score.py .local/base.json $H/new.json
@@ -319,7 +324,7 @@ One seed per process (a single process for four seeds over nine suites was kille
 
 ```bash
 bun packages/sim/src/lab/pi-ab.ts --suite train --seeds 41 --variants hidden,control \
-  --conditions tools,eden,eden~X --config ALL3 --variant-config '{"X":{"myFlag":true}}' \
+  --conditions tools,eden,eden~X --config default --variant-config '{"X":{"myFlag":true}}' \
   --cards packages/sim/lab/cards/cards-train.jsonl --grader deepseek/deepseek-v4.1-flash --budget 1 \
   --timeline .local/pi-41 --out .local/pi-41.json
 bun packages/sim/src/lab/pi-ab-report.ts .local/pi-41.json
@@ -336,7 +341,7 @@ an agent task plus Eden NEW is $0.79 per 1,000 hidden tasks in Pi, ALL3 $0.36 (h
 
 ```bash
 bun packages/sim/src/lab/hermes-ab.ts --hermes-src $HERMES --concurrency 6 --suite train --seeds 41 \
-  --variants hidden,control --conditions hermes,hermes+eden,hermes+eden~X --config ALL3 \
+  --variants hidden,control --conditions hermes,hermes+eden,hermes+eden~X --config default \
   --variant-config '{"X":{"myFlag":true}}' --cards packages/sim/lab/cards/cards-train.jsonl \
   --grader deepseek/deepseek-v4.1-flash --budget 1 --timeline .local/h-41 --out .local/h-41.json
 bun packages/sim/src/lab/pi-ab-report.ts .local/h-41.json

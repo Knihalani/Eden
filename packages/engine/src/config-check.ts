@@ -8,20 +8,21 @@
  * - the key is one of `DEFAULT_CONFIG`'s (an unknown key is a typo or a flag from another version);
  * - its value has its default's type (`CHOICES` for strings with a fixed set, string lists' entries from `NAMES`);
  * - a number is finite and ≥ 0, and within its `RANGES` entry (whole, at least, at most);
- * - a key that acts only through a partner dependency (`NEEDS_DEP`: cards, bridge, reader) the caller does not wire
- *   is at its default (`deps`);
- * - with `parents` (the default), on the whole configuration merged over `DEFAULT_CONFIG`: a key set off its default
- *   has every parent flag it acts under (`PARENTS`) on. Check the merged preset + override, never an override alone,
- *   so a child set under a preset that turns its parent on is accepted.
+ * - a key that acts only through a partner dependency (`NEEDS_DEP`: cards, reader) the caller does not wire
+ *   is at its default or the core's (`deps`; the core's value takes the part out, so it needs nothing);
+ * - with `parents` (the default), on the whole configuration merged over `DEFAULT_CONFIG`: a key given a value other
+ *   than the core's (`CORE_CONFIG`, its part taken out) has every parent flag it acts under (`PARENTS`) on. Check
+ *   the merged preset + override, never an override alone, so a child set under a preset that turns its parent on
+ *   is accepted.
  */
-import { CARD_KINDS } from "./cards";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
+import { CORE_CONFIG } from "./parts";
 import { READER_KINDS } from "./reader";
 
 type Key = keyof EngineConfig;
 
 /** A partner dependency some settings act through (`PartnerDeps`). */
-export type ConfigDep = "cards" | "bridge" | "reader";
+export type ConfigDep = "cards" | "reader";
 
 /** String-valued keys and the values each accepts; every other key's type is its default's. */
 const CHOICES: Partial<Record<Key, readonly string[]>> = { probeWhen: ["always", "actions"] };
@@ -29,40 +30,25 @@ const CHOICES: Partial<Record<Key, readonly string[]>> = { probeWhen: ["always",
 /**
  * Keys that act only when the partner has a dependency, with that dependency. Set to anything but their default
  * without it they would be silent no-ops, so they are refused; the default (off, for a flag) is accepted. The numbers
- * and lists here are read only on their dependency's path (partner.ts: `digestFor`, the only reader of
- * `constraintDigest`, `digestLines` and `digestBytes`, returns nothing without cards, `askReaderStanding` fills the
- * reader's pool, `readerPushWaitMs` bounds the reader's push, the `intent*` settings are read by `intentFinds`, which
- * needs cards).
+ * and lists here are read only on their dependency's path (partner.ts: `readerPushWaitMs` bounds the reader's push,
+ * the `intent*` settings are read by `intentFinds`, which needs cards).
  */
 export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   cards: "cards",
   cardsEconomy: "cards",
   cardItems: "cards",
-  constraintDigest: "cards",
-  digestLines: "cards",
-  digestBytes: "cards",
   intent: "cards",
   intentHits: "cards",
   intentMinCoverage: "cards",
   intentMinMatched: "cards",
   intentWeight: "cards",
   intentSeats: "cards",
-  bridgeQuery: "bridge",
-  bridgeQuestions: "bridge",
-  bridgeWaitMs: "bridge",
-  bridgeHits: "bridge",
-  bridgeAskSeats: "bridge",
   askReader: "reader",
-  askReaderQuestions: "reader",
-  askReaderClear: "reader",
   askReaderDrop: "reader",
   askReaderPool: "reader",
   askReaderWaitMs: "reader",
-  askReaderStanding: "reader",
   askReaderItemChars: "reader",
-  askReaderStandingKinds: "reader",
   readerPush: "reader",
-  readerPushNotes: "reader",
   readerPushKinds: "reader",
   readerPushWaitMs: "reader",
   readerPushBehind: "reader",
@@ -96,12 +82,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncCatchupPages: SYNC,
   syncMaxUsersPerTenant: SYNC,
   syncLocalAll: SYNC,
-  syncWide: SYNC,
   syncTermProbes: SYNC,
-  syncPush: SYNC,
-  syncPushMaxStaleMs: ["sync", "syncPush"],
-  syncPushSweepMs: ["sync", "syncPush"],
-  syncPushGapMs: ["sync", "syncPush"],
   graphItems: ["graph"],
   graphSeats: ["graph"],
   graphGround: ["graph"],
@@ -109,7 +90,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   graphLearn: ["graph"],
   graphBudgetMs: ["graph"],
   graphFloor: ["graph"],
-  graphWordTies: ["graph"],
   graphDays: ["graph"],
   cardItems: ["cards"],
   cardsEconomy: ["cards"],
@@ -119,25 +99,13 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   intentMinMatched: ["cards", "intent"],
   intentWeight: ["cards", "intent"],
   intentSeats: ["cards", "intent"],
-  constraintDigest: ["cards"],
-  digestLines: ["cards", "constraintDigest"],
-  digestBytes: ["cards", "constraintDigest"],
-  bridgeWaitMs: ["bridgeQuery"],
-  bridgeHits: ["bridgeQuery"],
-  bridgeAskSeats: ["bridgeQuery"],
-  bridgeQuestions: ["bridgeQuery"],
   askReaderPool: READER,
   askReaderWaitMs: READER,
-  askReaderQuestions: READER,
-  askReaderClear: READER,
   askReaderDrop: READER,
-  askReaderStanding: ["askReader", "cards"],
   askReaderItemChars: READER,
-  askReaderStandingKinds: ["askReader", "cards"],
   readerPush: READER,
   readerGate: READER,
   readerPushKinds: PUSH,
-  readerPushNotes: PUSH,
   readerPushWaitMs: PUSH,
   readerPushBehind: [...PUSH, ...POLL_BEHIND],
   anticipateCalls: ["anticipate"],
@@ -196,18 +164,12 @@ const RANGES: Partial<Record<Key, Range>> = {
   syncMaxUsersPerTenant: SIZE,
   syncTermProbes: COUNT,
   cardItems: COUNT,
-  askFullItems: COUNT,
   decideCandidates: COUNT,
-  askContextItems: COUNT,
   intentHits: COUNT,
   intentMinCoverage: SHARE,
   intentMinMatched: COUNT,
   intentSeats: COUNT,
-  bridgeHits: COUNT,
-  bridgeAskSeats: COUNT,
   askReaderPool: COUNT,
-  askReaderStanding: COUNT,
-  digestLines: COUNT,
 };
 
 /**
@@ -221,7 +183,6 @@ export const ANTICIPATE_PARTS: readonly string[] = ["tools", "serve", "names", "
 const NAMES: Partial<Record<Key, readonly string[]>> = {
   anticipateOff: ANTICIPATE_PARTS,
   readerPushKinds: READER_KINDS,
-  askReaderStandingKinds: CARD_KINDS,
 };
 
 export interface ConfigCheckOptions {
@@ -234,8 +195,8 @@ export interface ConfigCheckOptions {
   /** Refuse a key set off its default whose `PARENTS` are not all on (default true). */
   parents?: boolean;
   /**
-   * Keys the caller cannot serve beyond `NEEDS_DEP` (the server: push sync needs a notice route, sync needs listable
-   * sources), each with the phrase its error gives after the key ("needs …"); refused unless at their default.
+   * Keys the caller cannot serve beyond `NEEDS_DEP` (the server: sync needs listable sources), each with the phrase
+   * its error gives after the key ("needs …"); refused unless at their default.
    */
   refuse?: Partial<Record<Key, string>>;
 }
@@ -254,7 +215,7 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
   for (const [key, given] of Object.entries(value)) {
     checkKey(where, key, given);
     const dep = NEEDS_DEP[key as Key];
-    if (dep !== undefined && options.deps?.[dep] !== true && !isDefault(key as Key, given)) {
+    if (dep !== undefined && options.deps?.[dep] !== true && !isInert(key as Key, given)) {
       throw new Error(
         `${where}: "${key}" needs the partner's ${dep} dependency, ` +
           `${options.depNote ?? "which this caller does not wire"}, so only its default ` +
@@ -273,7 +234,7 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
     const merged = { ...DEFAULT_CONFIG, ...out } as EngineConfig;
     for (const key of Object.keys(out) as Key[]) {
       const parents = PARENTS[key];
-      if (!parents || isDefault(key, merged[key])) continue;
+      if (!parents || isCore(key, merged[key])) continue;
       const off = parents.filter((p) => merged[p] !== true);
       if (off.length) {
         throw new Error(
@@ -289,6 +250,19 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
 /** JSON equality with the default: every setting is a boolean, a number, a string or a list of strings. */
 function isDefault(key: Key, given: unknown): boolean {
   return JSON.stringify(given) === JSON.stringify(DEFAULT_CONFIG[key]);
+}
+
+/**
+ * Whether a value asks nothing of a dependency or a parent flag: the default's own (which runs its no-model path
+ * without the dependency, D112), or the core's (`CORE_CONFIG`: the part taken out, "default minus <part>").
+ */
+function isInert(key: Key, given: unknown): boolean {
+  return isDefault(key, given) || isCore(key, given);
+}
+
+/** Whether a value is the core's: what a child holds with its part taken out, so it needs no parent on. */
+function isCore(key: Key, given: unknown): boolean {
+  return JSON.stringify(given) === JSON.stringify(CORE_CONFIG[key]);
 }
 
 /** Throws unless `key` is a setting and `given` a legal value for it. */

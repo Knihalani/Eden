@@ -24,13 +24,12 @@ describe("hermes-ab conditions", () => {
   });
 
   test("variants, flags and waits parse as in pi-conditions, and every Eden arm pairs with hermes", () => {
-    const variants = parseVariants('{"A5":{"askGuard":true}}');
-    const c = parseHermesCondition("hermes+eden~A5+packetBearing@w0", { config: ALL, variants, defaults });
-    expect(c.config).toEqual({ ...ALL, askGuard: true, packetBearing: true });
+    const variants = parseVariants('{"A5":{"askVerdicts":true}}');
+    const c = parseHermesCondition("hermes+eden~A5+compactParts@w0", { config: ALL, variants, defaults });
+    expect(c.config).toEqual({ ...ALL, askVerdicts: true, compactParts: true });
     expect(c.waitMs).toBe(0);
-    expect(c.name).toBe("hermes+eden~A5+packetBearing@w0");
-    for (const n of ["hermes+eden", "hermes+eden~A5", "hermes+eden+packetBearing"])
-      expect(pairedWith(n)).toBe("hermes");
+    expect(c.name).toBe("hermes+eden~A5+compactParts@w0");
+    for (const n of ["hermes+eden", "hermes+eden~A5", "hermes+eden+compactParts"]) expect(pairedWith(n)).toBe("hermes");
   });
 
   test("other names, the judge, --act and duplicates throw", () => {

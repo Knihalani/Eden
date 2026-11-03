@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * bun run eval [--live [--ask-model]] [--wait <ms>] [--no-planner] [--config '{"probes":true}'] [--reader stub|oracle]
+ * bun run eval [--live] [--wait <ms>] [--no-planner] [--config '{"probes":true}'] [--reader stub|oracle]
  *   [scenario dir]
  *
  * Without --live no model is used, so the run is free and deterministic: it measures the no-model paths.
@@ -9,7 +9,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { EngineConfig } from "@eden/engine";
+import { DEFAULT_CONFIG, type EngineConfig } from "@eden/engine";
 import { OpenRouterModel } from "@eden/llm";
 import { parseReaderOption, type ReaderKindOption } from "./reader-stub";
 import { proxyOf, runScenarios, unwiredFlags } from "./run";
@@ -18,8 +18,6 @@ import type { Scenario } from "./scenario";
 const args = process.argv.slice(2);
 const live = args.includes("--live");
 const planner = !args.includes("--no-planner");
-// Model-composed ask answers (D43) are off by default; --ask-model covers them, and their privacy checks, live.
-const askWithModel = args.includes("--ask-model");
 const waitAt = args.indexOf("--wait");
 const waitMs = waitAt >= 0 ? Number(args[waitAt + 1]) : 2_000;
 // Any engine setting, as JSON (`--config '{"probes":true}'`): for experiments behind a flag.
@@ -50,15 +48,18 @@ if (live && !model) {
   console.error("--live needs OPENROUTER_API_KEY");
   process.exit(1);
 }
-const config = { askWithModel, ...extra } as Partial<EngineConfig>;
-// A flag whose dependency the eval does not wire runs as if off: askReader without a reader is refused (its run would
-// read as the preset's), the rest are labelled in the output and on stderr.
-const unwired = unwiredFlags(config, { reader: reader !== undefined });
+const config = { ...extra } as Partial<EngineConfig>;
+// What runs: the override over the default (D112), whose cards, intent and reader are on. With no model and no
+// dependency they are inert by design, the default's no-model path, which is what `bun run eval` measures; they are
+// labelled in the output and on stderr. An override that names askReader itself without a reader is refused (its run
+// would read as the reader's).
+const run = { ...DEFAULT_CONFIG, ...config };
+const unwired = unwiredFlags(run, { reader: reader !== undefined });
 if (config.askReader && reader === undefined) {
   console.error(`this configuration has askReader: pass --reader stub (or oracle). Unwired: ${unwired.join("; ")}`);
   process.exit(2);
 }
-if (reader !== undefined && !config.askReader) {
+if (reader !== undefined && !run.askReader) {
   console.error("--reader needs a configuration with askReader (e.g. --config '{\"askReader\":true}')");
   process.exit(2);
 }
@@ -73,7 +74,6 @@ console.log(
       live,
       waitMs,
       planner,
-      askWithModel,
       ...(reader ? { reader } : {}),
       ...(unwired.length ? { inert: unwired } : {}),
       ...metrics,

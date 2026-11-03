@@ -75,11 +75,11 @@ const funnelTimed = (jobs: string) => {
 
 // The end-to-end runs are single-threaded child processes (mostly sleeps, for the shards). They start together
 // here, before any test, and each test awaits its own: one after another they cost the sum of their wall times.
-// The NEWL stub run's assertions are in reader-stub.test.ts, on the stub run that file makes anyway.
+// The default's stub run assertions are in reader-stub.test.ts, on the stub run that file makes anyway.
 let runs: { overlap: Promise<Run>; solo: Promise<Run>; sharded: Promise<Run> };
 beforeAll(() => {
   runs = {
-    overlap: funnel({ ...PRESETS.ALL3, slowPathQueue: true, ...smallSync }, ["--overlap"], 3),
+    overlap: funnel({ ...PRESETS["minus-reader"], ...PRESETS["minus-intent"], ...smallSync }, ["--overlap"], 3),
     solo: funnelTimed("1"),
     sharded: funnelTimed("2"),
   };
@@ -172,7 +172,7 @@ describe("funnel.ts flags", () => {
     writeFileSync(base, JSON.stringify({ config: { intent: false }, perTask: [] }));
     const r = spawnSync(
       "bun",
-      [join(lab, "funnel.ts"), "--preset", "NEWL", "--baseline", base, "--", "--reader", "stub"],
+      [join(lab, "funnel.ts"), "--preset", "default", "--baseline", base, "--", "--reader", "stub"],
       { encoding: "utf8", env: noKey },
     );
     expect(r.status).toBe(2);
@@ -187,8 +187,9 @@ describe("funnel.ts flags", () => {
       expect(r.status).toBe(0);
       return { stderr: r.stderr, rows: (JSON.parse(readFileSync(r.out, "utf8")) as { perTask: object[] }).perTask };
     };
-    // Timing fields, and `beforeModel` (whether a delivery beat the observe's wait is a matter of timing too).
-    const timing = new Set(["ms", "askMs", "deliveryMs", "beforeModel"]);
+    // Timing fields (the reader's wait, now that the default reads, D112), and `beforeModel` (whether a delivery beat
+    // the observe's wait is a matter of timing too).
+    const timing = new Set(["ms", "askMs", "deliveryMs", "beforeModel", "readerWaitMs"]);
     const strip = (rows: object[]) =>
       rows.map((t) => Object.fromEntries(Object.entries(t).filter(([k]) => !timing.has(k))));
     const [solo, sharded] = await Promise.all([rowsOf(runs.solo), rowsOf(runs.sharded)]);

@@ -1,22 +1,38 @@
 import {
+  AskReader,
+  CardEnricher,
   ContextPartner,
+  DEFAULT_CONFIG,
   GATE_MODULE,
   ItemCache,
+  ModelCardMaker,
+  ModelReaderMaker,
   type EngineConfig,
   type ShadowSink,
   type TraceSink,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
-import { Budget, OpenRouterModel, type Model } from "@eden/llm";
+import { Budget, DEFAULT_LIMITS, TenantSpend, type Model } from "@eden/llm";
 import { WorkerPool } from "@eden/primitives";
 import { QueryPlanner, type SourceResolver } from "@eden/sources";
+import { NO_MODELS, type ModelRoles } from "./models";
 
 export interface BuildOptions {
   sources: SourceResolver;
   sourceMapPath?: string;
   /** An open source map (from `openSourceMap`); `sourceMapPath` is ignored when this is set. */
   sourceMap?: SourceMap;
+  /**
+   * A judge model for the slow path (D5). The servers pass none: the measured default ran without a judge (D112), so
+   * only an embedding that has measured one wires it.
+   */
   model?: Model | null;
+  /**
+   * The default's model roles (D112): cards and intent in the background, the ask-time reader on the request path.
+   * The servers pass `modelRolesFromEnv()` (models.ts), all null without OPENROUTER_API_KEY; unset, none (`NO_MODELS`).
+   * A null role leaves its part of the default inert, so the same configuration runs its no-model path.
+   */
+  models?: ModelRoles;
   onTrace?: TraceSink;
   /** A pool from `startGatePool`: lookup results are redacted in it. Without one they are redacted on the loop. */
   gatePool?: WorkerPool;
@@ -24,48 +40,50 @@ export interface BuildOptions {
   queryPlanner?: "off" | "serve" | "shadow";
   onShadow?: ShadowSink;
   /**
-   * Ask answers rewritten by the model (D43); off by default. When set (true or false) it wins over
-   * `engine.askWithModel`, as before D103; unset, `engine.askWithModel` decides. The servers pass true for
-   * EDEN_ASK_MODEL=1 and leave it unset otherwise, so the EDEN_ENGINE_CONFIG file's value holds.
-   */
-  askWithModel?: boolean;
-  /**
-   * Background connector sync (D57, experimental, off by default): sources with a list tool are read into each
-   * active user's cache in the background, on a one-minute timer, and lookups answer them locally.
-   */
-  sync?: boolean;
-  /**
-   * Engine settings over the production defaults, for an embedding or a deployment that opts into experimental flags:
-   * the action firewall (`actionCheck`, D69, behind `POST /v1/check`) finds only on the grounds these turn on
-   * (`probes`, `groundConflict`, `groundAway`, `graph`, `cards`). The servers pass what EDEN_ENGINE_CONFIG names
-   * (D103, engine-config.ts), `{}` when it is unset. `sync: true` here also starts the sync timer.
+   * Engine settings over the default (D112), for an embedding or a deployment (EDEN_ENGINE_CONFIG, D103), `{}` when
+   * unset. With the default's `sync` on (it is), the sync timer starts: sources with a list tool (per-user MCP sources
+   * that name one, D108) are read into each active user's cache in the background; static sources list nothing.
    */
   engine?: Partial<EngineConfig>;
 }
 
-/** Wires a partner from its parts with production defaults. */
+/** Wires a partner from its parts with the default configuration (D112). */
 export function buildPartner(options: BuildOptions): ContextPartner {
   const sourceMap = options.sourceMap ?? new SourceMap(options.sourceMapPath);
   const mode = options.queryPlanner ?? "serve";
-  const sync = options.sync === true || options.engine?.sync === true;
+  const config = { ...DEFAULT_CONFIG, ...options.engine };
+  const models = options.models ?? NO_MODELS;
+  // One cap per tenant per UTC day shared by every role, besides each role's own per-session and per-user-day caps.
+  const tenants = new TenantSpend(models.usdPerTenantDay);
+  const budget = () => new Budget(DEFAULT_LIMITS, undefined, tenants);
+  const cards =
+    models.cards && config.cards
+      ? new CardEnricher({
+          maker: new ModelCardMaker(models.cards, models.cardsRetry ? { retry: models.cardsRetry } : {}),
+          budget: budget(),
+          now: () => Date.now(),
+        })
+      : undefined;
+  const reader =
+    models.reader && config.askReader
+      ? new AskReader({ maker: new ModelReaderMaker(models.reader), budget: budget(), now: () => Date.now() })
+      : undefined;
   const partner = new ContextPartner({
     sources: options.sources,
     sourceMap,
     cache: new ItemCache(),
-    budget: new Budget(),
-    model: options.model === undefined ? OpenRouterModel.fromEnv() : options.model,
+    budget: budget(),
+    model: options.model ?? null,
+    ...(cards ? { cards } : {}),
+    ...(reader ? { reader } : {}),
     onTrace: options.onTrace,
     gatePool: options.gatePool,
     planner:
       mode === "off" ? undefined : new QueryPlanner({ seed: (Math.random() * 2 ** 32) >>> 0, store: sourceMap, mode }),
     onShadow: options.onShadow,
-    config: {
-      ...options.engine,
-      askWithModel: options.askWithModel ?? options.engine?.askWithModel ?? false,
-      ...(sync ? { sync: true } : {}),
-    },
+    config: options.engine ?? {},
   });
-  if (sync) partner.startSync();
+  if (config.sync) partner.startSync();
   return partner;
 }
 

@@ -1,0 +1,9 @@
+{
+  "groundAway": false,
+  "groundConflict": false,
+  "groundOccasion": false,
+  "quietSettled": false,
+  "quietClear": false,
+  "quietNameOnly": false,
+  "conflictVocab": false
+}

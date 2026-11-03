@@ -89,8 +89,9 @@ export interface ReaderInput {
   /** The user's day (YYYY-MM-DD), so "until Friday" and "expired" can be read against it. */
   today: string;
   /**
-   * How many of `items`, from the first, are the user's standing constraints (`askReaderStanding`) rather than the
-   * request's candidates: read without the request's focus and sent first, as a prefix a provider can cache.
+   * How many of `items`, from the first, are the user's standing constraints rather than the request's candidates.
+   * The engine sends none since `askReaderStanding` was deleted (D112); kept so the prompt and its cache keys stay
+   * byte-identical and reader replay caches still hit.
    */
   standing?: number;
   /**
