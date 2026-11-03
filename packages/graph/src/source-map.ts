@@ -54,6 +54,8 @@ export interface SourceMapOptions {
 
 const OUTCOME_FLUSH_MS = 10;
 const OUTCOME_FLUSH_ROWS = 256;
+/** How long a statement waits for another process's write lock on the same file before SQLITE_BUSY. */
+const BUSY_TIMEOUT_MS = 2_000;
 
 export class SourceMap {
   private readonly db: Database;
@@ -67,6 +69,11 @@ export class SourceMap {
     this.explore = options.explore ?? true;
     this.rng = new Xoshiro128(options.seed ?? (Math.random() * 2 ** 32) >>> 0);
     this.db = new Database(path, { create: true });
+    // First, so the WAL switch and the schema below wait too: two processes on one file (two MCP clients launching
+    // mcp-stdio for one user) otherwise fail with SQLITE_BUSY at once, in this constructor or in a write. Writes here
+    // are short transactions, so a wait is milliseconds; with one process per file, as the HTTP server runs, it never
+    // waits at all.
+    this.db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec("PRAGMA synchronous = NORMAL");
     this.db.exec(`

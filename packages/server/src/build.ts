@@ -14,6 +14,8 @@ import { QueryPlanner, type SourceResolver } from "@eden/sources";
 export interface BuildOptions {
   sources: SourceResolver;
   sourceMapPath?: string;
+  /** An open source map (from `openSourceMap`); `sourceMapPath` is ignored when this is set. */
+  sourceMap?: SourceMap;
   model?: Model | null;
   onTrace?: TraceSink;
   /** A pool from `startGatePool`: lookup results are redacted in it. Without one they are redacted on the loop. */
@@ -39,7 +41,7 @@ export interface BuildOptions {
 
 /** Wires a partner from its parts with production defaults. */
 export function buildPartner(options: BuildOptions): ContextPartner {
-  const sourceMap = new SourceMap(options.sourceMapPath);
+  const sourceMap = options.sourceMap ?? new SourceMap(options.sourceMapPath);
   const mode = options.queryPlanner ?? "serve";
   const sync = options.sync === true || options.engine?.sync === true;
   const partner = new ContextPartner({
@@ -61,6 +63,21 @@ export function buildPartner(options: BuildOptions): ContextPartner {
   });
   if (sync) partner.startSync();
   return partner;
+}
+
+/**
+ * Opens the source map at the path `resolvePath` gives, failing open: if the directory cannot be made or the file
+ * cannot be opened (permissions, a full disk, another process holding the lock past the busy timeout), it logs to
+ * stderr and returns an in-memory map, so the planner forgets what it learns at exit but asks are still served. For
+ * mcp-stdio, which an MCP client launches and whose startup failure the user sees only as a broken tool.
+ */
+export function openSourceMap(resolvePath: () => string, log = console.error): SourceMap {
+  try {
+    return new SourceMap(resolvePath());
+  } catch (err) {
+    log(`eden: source map not opened, learning kept in memory only: ${err instanceof Error ? err.message : err}`);
+    return new SourceMap();
+  }
 }
 
 /**

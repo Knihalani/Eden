@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { DEFAULT_CONFIG } from "@eden/engine";
 import { edenHome } from "@eden/protocol";
 import { SourceMap } from "@eden/graph";
-import { buildPartner } from "./build";
+import { buildPartner, openSourceMap } from "./build";
 import { stdioSourceMapPath } from "./config";
 import { engineConfig, parseEngineConfig } from "./engine-config";
 
@@ -117,6 +117,35 @@ describe("mcp-stdio source map (isolation)", () => {
     expect(forB.sourcesFor(b, "Quarry Ltd")).toEqual([]);
     expect(forB.sourcesFor(a, "Quarry Ltd").length).toBe(1);
     forB.close();
+  });
+
+  test("EDEN_HOME in the env passed is the home used, not process.env's", () => {
+    const home = join(dir, "other-home");
+    const path = stdioSourceMapPath(a.tenantId, a.userId, { EDEN_HOME: home });
+    expect(path.startsWith(join(home, "mcp-stdio") + "/")).toBe(true);
+    expect(path).not.toBe(stdioSourceMapPath(a.tenantId, a.userId, {}));
+  });
+
+  test("a source map that cannot be opened falls back to memory, logged, and still serves", () => {
+    const logged: string[] = [];
+    // A directory is not a database file: opening it throws, as an unwritable path or a held lock would.
+    const map = openSourceMap(
+      () => dir,
+      (line) => logged.push(line),
+    );
+    expect(logged.length).toBe(1);
+    expect(logged[0]).toContain("in memory");
+    map.recordMentions(a, "crm", ["Dana Lee"]);
+    expect(map.sourcesFor(a, "Dana Lee").map((row) => row.sourceId)).toEqual(["crm"]);
+    map.close();
+    const thrown = openSourceMap(
+      () => {
+        throw new Error("EACCES: mkdir");
+      },
+      (line) => logged.push(line),
+    );
+    expect(logged[1]).toContain("EACCES");
+    thrown.close();
   });
 
   test("ids that look like paths stay inside the directory", () => {

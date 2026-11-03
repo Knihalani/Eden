@@ -11,7 +11,7 @@
  */
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { isId, newId } from "@eden/protocol";
-import { buildPartner } from "./build";
+import { buildPartner, openSourceMap } from "./build";
 import { warmGate } from "@eden/redact";
 import { askModel, plannerMode, stdioSourceMapPath } from "./config";
 import { staticResolver } from "./connectors";
@@ -27,7 +27,8 @@ if (!isId(tenantId) || !isId(userId)) {
 // The query planner as in the HTTP server (D33): on unless EDEN_QUERY_PLANNER=0, learning into this user's source map.
 const partner = buildPartner({
   sources: staticResolver(process.env.EDEN_SOURCES_FILE),
-  sourceMapPath: stdioSourceMapPath(tenantId, userId),
+  // Fails open to an in-memory map (logged to stderr) when the file cannot be opened, rather than not starting.
+  sourceMap: openSourceMap(() => stdioSourceMapPath(tenantId, userId)),
   queryPlanner: plannerMode(process.env.EDEN_QUERY_PLANNER),
   askWithModel: askModel(process.env.EDEN_ASK_MODEL),
   engine: engineConfig(),

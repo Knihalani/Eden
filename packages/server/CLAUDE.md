@@ -13,7 +13,7 @@ defaults.
 | `src/config.ts` | `loadConfig`: every `EDEN_*` variable validated at startup with a message naming it; `stdioSourceMapPath` (one source-map file per tenant/user under `$EDEN_HOME/mcp-stdio`, or `EDEN_SOURCE_MAP`) |
 | `src/engine-config.ts` | `engineConfig`: `EDEN_ENGINE_CONFIG`, a JSON file of `EngineConfig` keys over the defaults (D101); unknown keys and wrong types stop startup |
 | `src/mcp.ts` | `createMcpServer`: one `ask_context` tool (guided description with `askGuard`, D88) |
-| `src/mcp-stdio.ts` | One user's `ask_context` over stdio (`EDEN_TENANT`, `EDEN_USER`, `EDEN_SOURCES_FILE`); persists its source map per user; warms the gate before connecting |
+| `src/mcp-stdio.ts` | One user's `ask_context` over stdio (`EDEN_TENANT`, `EDEN_USER`, `EDEN_SOURCES_FILE`); persists its source map per user, falling back to an in-memory map (logged to stderr) when the file cannot be opened (`openSourceMap`); warms the gate before connecting |
 | `src/connectors.ts` | `staticResolver`: sources from a JSON file; per-user OAuth MCP connections are roadmap M2 |
 | `src/main.ts` | `bun run dev`; passes `EDEN_MAX_BODY_BYTES` to `Bun.serve` as `maxRequestBodySize`; warms the secret gate (`warmGate`) before listening and logs `startup N ms` |
 

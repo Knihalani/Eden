@@ -91,11 +91,13 @@ export function loadConfig(env = process.env): ServerConfig {
  * Where the stdio MCP server (one user per process) keeps its source map: EDEN_SOURCE_MAP when set, as for the HTTP
  * server, else one file per tenant/user under $EDEN_HOME/mcp-stdio. Rows inside are keyed by scope either way, as
  * the HTTP server's are; the file per user keeps two users' processes from contending for one SQLite writer. The name
- * is a hash of the scope key, since ids may hold "." and ".." would leave the directory.
+ * is a hash of the scope key, since ids may hold "." and ".." would leave the directory. Both the override and the
+ * home come from `env`; with no EDEN_HOME there, edenHome()'s default applies.
  */
 export function stdioSourceMapPath(tenantId: string, userId: string, env = process.env): string {
   if (env.EDEN_SOURCE_MAP) return env.EDEN_SOURCE_MAP;
-  const dir = join(edenHome(), "mcp-stdio");
+  // `env`'s EDEN_HOME, not process.env's (which edenHome() reads), so a caller passing an env gets that home.
+  const dir = join(env.EDEN_HOME || edenHome(), "mcp-stdio");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const name = createHash("sha256").update(scopeKey({ tenantId, userId })).digest("hex").slice(0, 32);
   return join(dir, `${name}.source-map.db`);
