@@ -122,7 +122,6 @@ const FULL = {
   probes: true,
   probeCalls: 4,
   compactInjection: true,
-  judgeAgreed: false,
   judgeCandidates: 4,
 };
 const SETTINGS: Record<string, Record<string, unknown>> = {

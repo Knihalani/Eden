@@ -3872,14 +3872,10 @@ export class ContextPartner {
         );
         return this.deliver(s, items, "proactive", `sources:${cue.id}`, cue);
       }
-      // One sure item both the request's search and a probe found is corroborated: delivered without the call
-      // (`judgeAgreed` false).
-      const both = agreed(new Set(probedIds ?? []), lookedIds);
-      const corroborated = !this.config.judgeAgreed && sure.length === 1 && both.has(sure[0]!.item.id);
       // `judgeContested`: only when more than one item scored as sure (which is meant is then the judge's call), what
       // scores as sure is judged with the rest in the same call.
       const contested = this.config.judgeContested && sure.length > 1;
-      const judgeSure = contested && this.deps.model !== null && !corroborated;
+      const judgeSure = contested && this.deps.model !== null;
       if (sure.length > 0 && !judgeSure) {
         dumped("lookup", sure, "sure");
         done(
@@ -4541,11 +4537,6 @@ function cardRank(f: CardFind): number {
 function spanDays(c: { start?: string; end?: string }): number {
   if (!c.start || !c.end) return Infinity;
   return (Date.parse(c.end) - Date.parse(c.start)) / 86_400_000 + 1;
-}
-
-/** Ids both a lookup's own search and its probes found. */
-function agreed(probed: ReadonlySet<string>, looked: readonly string[] | undefined): Set<string> {
-  return new Set((looked ?? []).filter((id) => probed.has(id)));
 }
 
 /** The request's words and its people's names, lowercased: what a compacted packet keeps the parts holding. */

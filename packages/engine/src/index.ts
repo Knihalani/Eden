@@ -8,6 +8,7 @@ export {
 } from "./partner";
 export { FACT_NAMES, vectorOf, type Facts } from "./decide";
 export { DEFAULT_CONFIG, type EngineConfig } from "./config";
+export { CORE_CONFIG, PARTS, withoutParts, type Part } from "./parts";
 export {
   ANTICIPATE_PARTS,
   checkEngineConfig,
