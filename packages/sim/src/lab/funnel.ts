@@ -487,6 +487,10 @@ if (readerReplay?.subset) {
 if (!opt("json", "")) console.log("  (pass --json FILE to keep the per-task rows, e.g. as a later --baseline)");
 
 if (baseline) {
+  const was = (JSON.parse(readFileSync(baseline, "utf8")) as { reader?: { subset?: number } }).reader?.subset ?? 0;
+  if (was > 0) {
+    console.log(`  APPROXIMATE BASELINE: ${was} of its reader prompts were answered from a recorded superset pool`);
+  }
   const before = new Map(tasks(baseline).map((t) => [key(t), t]));
   const moved = { hidden: [0, 0], control: [0, 0] };
   const changed: string[] = [];
