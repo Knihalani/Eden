@@ -625,6 +625,9 @@ describe("the reader in the engine (config.askReader)", () => {
     const asked = traces.filter((t) => t.event === "ask" && t.decision === "answer");
     expect(asked.map((t) => t.costUsd)).toEqual([first!.costUsd, 0]);
     expect(asked.map((t) => t.modelCalls)).toEqual([1, 0]);
+    // The reader's part is named, so a harness that meters the reader's model itself can leave it out.
+    expect(asked.map((t) => t.readerCostUsd)).toEqual([first!.costUsd, 0]);
+    expect(asked.map((t) => t.readerCalls)).toEqual([1, 0]);
   });
 
   test("readerPush: the push's read is traced with its cost, and a later ask over it costs nothing", async () => {

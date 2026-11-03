@@ -20,6 +20,12 @@ export interface Trace {
   sourceCalls: number;
   modelCalls: number;
   costUsd: number;
+  /**
+   * With `askReader`: the part of `modelCalls` and `costUsd` that is the ask-time reader's call (on an "answer" or a
+   * "reader-push" trace), so a harness that also meters the reader's model itself does not count it twice.
+   */
+  readerCalls?: number;
+  readerCostUsd?: number;
   itemIds: string[];
   /**
    * With the query planner on: per connector searched, the shapes it sent, its calls and how many items came back.

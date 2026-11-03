@@ -1364,6 +1364,7 @@ export class ContextPartner {
         sourceCalls,
         modelCalls: reading?.called ? 1 : 0,
         costUsd,
+        ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
         itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
         ...(plans ? { plans } : {}),
         ...(local !== undefined ? { localSources: local, syncCalls: syncCalls ?? 0 } : {}),
@@ -1485,6 +1486,7 @@ export class ContextPartner {
       // The reader's call and the answer model's are two calls.
       modelCalls: (reading?.called ? 1 : 0) + answerCalls,
       costUsd,
+      ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
       itemIds: items.map((i) => i.id),
       ...(plans ? { plans } : {}),
       ...(local !== undefined ? { localSources: local, syncCalls: syncCalls ?? 0 } : {}),
