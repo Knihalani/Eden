@@ -440,8 +440,9 @@ async function runWorld(
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
           if (!owner) return;
-          owner.r.edenModelCalls += t.modelCalls;
-          owner.r.edenCostUsd += t.costUsd;
+          // The reader's part is charged by `ownedModel` (a late call too), so it is not counted again here.
+          owner.r.edenModelCalls += t.modelCalls - (t.readerCalls ?? 0);
+          owner.r.edenCostUsd += t.costUsd - (t.readerCostUsd ?? 0);
           owner.tl.point(t.decision === "fast" ? "eden.cache-hit" : "eden.decision", {
             decision: t.decision,
             event: t.event,
