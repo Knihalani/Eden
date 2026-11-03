@@ -345,6 +345,11 @@ if (READER !== "none" && !ASK && !RUN.readerPush) throw new Error("--reader need
 const LIMIT = Number(opt("limit", "0"));
 /** `--reader-log out.jsonl`: each reader call's prompt (the items as the model read them) and reply, sim data only. */
 const READER_LOG = opt("reader-log", "");
+// An approximated verdict logged beside recorded ones would be read back later as a real reading (checked before the
+// log is created).
+if (opt("reader-subset", "") && READER_LOG) {
+  throw new Error("--reader-subset and --reader-log cannot be used together");
+}
 if (READER_LOG) writeFileSync(READER_LOG, "");
 /** The hash of the reader's instructions, on each `--reader-log` line, so `--reader-subset` matches like with like. */
 const READER_SYS = systemHash({ messages: readerMessages({ request: "", items: [], today: "" }) });
@@ -354,8 +359,6 @@ const READER_SYS = systemHash({ messages: readerMessages({ request: "", items: [
  */
 const READER_SUBSET = opt("reader-subset", "");
 if (READER_SUBSET && READER !== "replay") throw new Error("--reader-subset needs --reader replay");
-// An approximated verdict logged beside recorded ones would be read back later as a real reading.
-if (READER_SUBSET && READER_LOG) throw new Error("--reader-subset and --reader-log cannot be used together");
 /** The judge's and the reader's requests: paced, capped and retried, with the run's logging choice (free.ts). */
 const ACCESS = labAccess(args, [...(LIVE ? [MODEL] : []), ...(READER === "live" ? [READER_MODEL] : [])]);
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
@@ -1118,9 +1121,10 @@ if (readerModel) {
   const sum = (f: (c: (typeof m.calls)[number]) => number) => m.calls.reduce((a, c) => a + f(c), 0);
   const { p50, p90 } = m.quantiles();
   const made = sum((c) => c.costUsd);
+  const approxNote = READER_SUBSET ? `; ${m.subsetReplayed} more approximated, not in these figures` : "";
   console.log(
     `reader ${READER_MODEL}: ${m.calls.length} calls answered (${m.sent} sent now, ${m.replayed} replayed, ` +
-      `${m.missed} not cached, ${m.failed} failed${READER_SUBSET ? `; ${m.subsetReplayed} more approximated, not in these figures` : ""}), ${(sum((c) => c.inputTokens) / n).toFixed(0)} in / ` +
+      `${m.missed} not cached, ${m.failed} failed${approxNote}), ${(sum((c) => c.inputTokens) / n).toFixed(0)} in / ` +
       `${(sum((c) => c.outputTokens) / n).toFixed(0)} out tokens per call, ${sum((c) => (c.truncated ? 1 : 0))} cut off; ` +
       `$${made.toFixed(5)} as made ($${(made / n).toFixed(6)} per call), $${sum((c) => (c.live ? c.costUsd : 0)).toFixed(5)} ` +
       `spent this run; latency as made p50 ${p50} ms, p90 ${p90} ms, ` +
