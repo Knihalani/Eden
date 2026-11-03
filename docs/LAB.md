@@ -101,7 +101,7 @@ messages can reach the cap (an estimate, not measured in the lab). The unit test
 
 | Script | Input | Output |
 |---|---|---|
-| `funnel-score.py F.json …` | funnel `--json` files | per suite: hidden surfaced (delivered or ask-cited) and decoys surfaced. `bun run funnel` prints the same |
+| `funnel-score.py F.json …` | funnel `--json` files | per suite: hidden surfaced (delivered or ask-cited) and decoys surfaced; with a reader, hidden and decoy in the reader's pool. `bun run funnel` prints the same |
 | `reader-score.py BASE.json RUN.json` | two funnel files on the same tasks | the reader's effect: surfaced base → reader, 2.5 s-capped, flags, latency p50/p90, flag kinds |
 | `haiku-bench.py LEDGER.jsonl RUN.json …` | pi-ab/hermes-ab results + timelines + spend ledger | rates per harness, suite group and condition; paired bootstrap CIs; tokens, cache shares; cost by role |
 
@@ -128,6 +128,8 @@ messages can reach the cap (an estimate, not measured in the lab). The unit test
 - Pi/Hermes: `--timeline DIR` (tasks.jsonl, samples.jsonl) then `pi-ab-report.ts results.json`: Eden's time on the
   agent's critical path, per-second profile (moon-pi.md, haiku-benchmark.md "Where the time goes").
 - `--time 0` (default) answers sources instantly; `--time 1` / `--time-scale 1` uses the profiles' assumed latency.
+  With the lab-connector-latency change (audit 2026-11-03b) `pi-ab.ts` and `hermes-ab.ts` default to `--time-scale 1`;
+  pass `--time-scale 0` for instant sources. The funnel's default stays `--time 0`.
 - Engine spans (`config.spans`, D56) are content-free and change no decision.
 
 ## Recipes
@@ -157,6 +159,55 @@ shard would book a partial run), with any of `--packets`, `--card-log`, `--reade
 `--candidates` or `--timeline` (each process clears and rewrites that one file), with `--judge live` or
 `--reader live` (paid calls and rate limits in parallel), and with `--time` (a latency study). A replayed reader
 (`--reader replay`) and a replayed bridge shard; their reader misses are summed for the miss gate.
+
+### 1b. Screen the NEW family at $0: no-model readers (measured 2026-11-03)
+
+The NEW presets read each acting request with a model, and the replay cache misses on any change upstream of the
+reader (the miss gate above). Three no-model modes stand in for the model behind the engine's real `AskReader`
+(`reader-stub.ts`), so the pool is built, ordered and gated exactly as with a model. They shard with `--jobs`, need no
+key, and held-out suites still need `--blind`.
+
+```bash
+bun run funnel --preset NEWL --jobs 4 -- --reader stub                  # pool recall per suite: 18 s, $0
+bun run funnel --preset NEWL --jobs 4 -- --reader oracle:0.9,0.1        # ground-truth proxy, every line labelled
+bun run funnel --jobs 4 -- --packet-k 10,15,20                          # ALL3: planted item in the ask's top K
+bun run funnel --preset NEWL --jobs 4 -- --reader stub --lead-in clause # draft pool against the request's
+```
+
+- **`--reader stub`** says nothing binds and prints, per suite, `hidden in pool X/N, decoy in pool Y/N, mean pool
+  items, mean prompt chars (standing prefix)`. Pool means the ids the reader was given for the request (the push's
+  read and the ask's, `ReaderReport.pool`). It measures pool content; it is **not a bound** on NEW's hidden rate: the
+  rule paths, the ask's own citations and the push still deliver items the reader never read (NEWL's paid screen
+  delivered 254/384 hidden, haiku-phase3.md, against 230/384 in its stub pool here, though that screen also had
+  intent requests). Its hidden and decoy *delivered* counts are not the preset's:
+  with a reader that never binds, NEW falls back toward its rule paths (NEWL under stub: 214/211, ALL3's numbers). Use
+  it for changes upstream of the reader: pool building, retrieval, ordering, gating, standing items.
+- **`--reader oracle[:p_hit,p_false]`** (default 1,0) flags the planted hidden item as bearing with probability
+  `p_hit` and the planted decoy with `p_false` (else rejects it), each draw a hash of (task, item id), so a result
+  does not depend on sharding: `--jobs 1` and `--jobs 4` gave identical perTask rows and score lines. Every line says
+  `oracle proxy`. Two numbers cannot model how a real reader responds to the prompt's form, length or order (v8's line
+  format cut hidden from 291 to 198–210 at a similar pool, haiku-phase3.md): its deltas speak for pool-composition
+  changes only, until a paid screen confirms them. It is not calibrated to the haiku-phase3 rows.
+- **`--packet-k K[,K]`** (with `--ask`, any preset) prints, per K, the planted item within the ask's top K ranked
+  candidates (by rank alone, and with today's delivered or cited), the mean bytes of a top-K packet at `askItemBytes`
+  (320) per item, and the hidden item's mean position. A diagnostic for handing the agent a wide no-model packet
+  (moon-agent-is-the-reader): in-packet is not uptake.
+- **`--lead-in clause|half` with stub or oracle** asks the draft as `readerPush` asks, in a session of its own, and
+  compares its pool with the request's first read: the share of tasks whose draft had a pool, mean Jaccard, final pool
+  ⊆ draft pool, and the hidden item in the draft's pool (stage 1 of lat-draft-speculative-read). The draft's lookup
+  is real: it caches what it finds for the request, so delivery moves slightly (NEWL stub: decoys 211 → 212).
+
+Measured on train1–6, seeds 41–42, 4 cores, no key set:
+
+| Run | Wall | Result |
+|---|---|---|
+| NEWL `--reader stub` (twice) | 18.5 s, 18.2 s | hidden in pool 230/384, decoy in pool 229/384, mean pool 12.3 items, mean prompt 7,501 chars over 656 stub calls; identical perTask rows (timing removed) and score |
+| NEWL `--reader oracle:0.9,0.1` | 20.7 s (`--jobs 4`), 37.4 s (`--jobs 1`) | proxy: hidden 245/384, decoys 134/384; same rows at both job counts |
+| ALL3 `--packet-k 10,15,20` | 18.6 s | top-10 237 (256 with delivered/cited), top-15 264 (272), top-20 279 (282) hidden of 384; decoys top-15 268 (275); top-15 packet 3,808 bytes |
+| NEWL stub `--lead-in clause` | 22.4 s | draft pool non-empty 640/768; Jaccard mean 0.688; final ⊆ draft 237/640; hidden in draft pool 213/384 (in final pool 228) |
+
+Limits: the intent index finds nothing without `-- --intent F` (not checked in), so NEW/NEWL pools here lack intent
+hits that the paid screens had; the prompt sizes are of the stub's reads only.
 
 ### 2. The same with Eden's reader live (NEW)
 

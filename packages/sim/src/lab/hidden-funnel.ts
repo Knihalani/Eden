@@ -104,6 +104,14 @@ import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
 import { parseSuites, SUITES, type HiddenTask } from "./suites";
+import {
+  CountingReader,
+  OracleReaderMaker,
+  parseOracle,
+  screenLines,
+  STUB_BANNER,
+  type ScreenRow,
+} from "./reader-stub";
 import { packetLine } from "./uptake";
 
 const args = process.argv.slice(2);
@@ -197,9 +205,30 @@ if (LEAD && LEAD !== "clause" && LEAD !== "half") throw new Error("--lead-in mus
 const TYPING_MS = Number(opt("typing-ms", "1500"));
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
 const KEY = LIVE ? keyFor(MODEL) : undefined;
-/** `--reader live|replay`: the ask-time reader (D95); its model, routing and disk replay cache. */
+/**
+ * `--reader live|replay|stub|oracle[:p_hit,p_false]`: the ask-time reader (D95); its model, routing and disk replay
+ * cache. `stub` and `oracle` make no model call (`reader-stub.ts`): stub says nothing binds and the run reports the
+ * reader's pool (hidden and decoy in pool); oracle flags the planted hidden item and rejects the decoy, flipped at the
+ * given rates, a proxy.
+ */
 const READER = opt("reader", "none");
-if (!["none", "live", "replay"].includes(READER)) throw new Error("--reader must be live or replay");
+const ORACLE = READER.startsWith("oracle") ? parseOracle(READER) : null;
+if (!["none", "live", "replay", "stub"].includes(READER) && !ORACLE) {
+  throw new Error("--reader must be live, replay, stub or oracle[:p_hit,p_false]");
+}
+/** No model behind the reader: its pool is measured, its verdict is a stub's or the oracle proxy's. */
+const NO_MODEL_READER = READER === "stub" || ORACLE !== null;
+/** Every line that reports a delivery under the oracle says it is a proxy. */
+const TAG = ORACLE ? `  [oracle proxy ${ORACLE.pHit},${ORACLE.pFalse}]` : "";
+/**
+ * `--packet-k K[,K]` (with `--ask`): for each K, whether the planted item ranks in the ask's top K candidates (the
+ * packet an agent would read if Eden handed it the top K with no reader), the packet's bytes at `askItemBytes` per item
+ * and the item's position. A diagnostic, not a delivery: docs/LAB.md.
+ */
+const PACKET_K = opt("packet-k", "").split(",").filter(Boolean).map(Number);
+if (PACKET_K.some((k) => !Number.isInteger(k) || k < 1))
+  throw new Error("--packet-k takes whole numbers of at least 1");
+if (PACKET_K.length && !ASK) throw new Error("--packet-k needs --ask");
 const READER_MODEL = opt("reader-model", "z-ai/glm-5.3-flash");
 const READER_SORT = opt("reader-sort", "") as "" | "price" | "throughput" | "latency";
 const READER_CACHE = opt("reader-cache", "");
@@ -215,7 +244,7 @@ if (READER_LOG) writeFileSync(READER_LOG, "");
 const ACCESS = labAccess(args, [...(LIVE ? [MODEL] : []), ...(READER === "live" ? [READER_MODEL] : [])]);
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
 const readerModel =
-  READER === "none"
+  READER === "none" || NO_MODEL_READER
     ? null
     : new ReplayModel(
         READER_CACHE,
@@ -401,7 +430,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   const dumps = new Map<string, CandidateDump[]>();
   const askDumps = new Map<string, CandidateDump>();
   const onCandidates =
-    CANDIDATES || ASK_DIAG
+    CANDIDATES || ASK_DIAG || PACKET_K.length
       ? (d: CandidateDump) => {
           if (d.path === "ask") {
             askDumps.set(d.sessionId, d);
@@ -459,11 +488,17 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       return res;
     },
   };
-  const reader = laneModel
-    ? new AskReader({ maker: new ModelReaderMaker(laneModel), budget: new Budget(UNCAPPED), now: () => clock })
-    : null;
+  // `--reader stub|oracle`: the lane's own no-model maker, so its calls and prompt sizes are this lane's tasks'.
+  const stub = ORACLE
+    ? new OracleReaderMaker(ORACLE.pHit, ORACLE.pFalse)
+    : NO_MODEL_READER
+      ? new CountingReader()
+      : null;
+  const maker = stub ?? (laneModel ? new ModelReaderMaker(laneModel) : null);
+  const reader = maker ? new AskReader({ maker, budget: new Budget(UNCAPPED), now: () => clock }) : null;
   if (reader) readerLanes.push(reader);
-  const readerReports = new Map<string, ReaderReport>();
+  // Every report per session, in order: a request can be read twice (`readerPush`'s ask, then the funnel's own).
+  const readerReports = new Map<string, ReaderReport[]>();
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
@@ -477,7 +512,16 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
     ...(bridge ? { bridge } : {}),
-    ...(reader ? { reader, onReader: (r: ReaderReport) => readerReports.set(r.sessionId, r) } : {}),
+    ...(reader
+      ? {
+          reader,
+          onReader: (r: ReaderReport) => {
+            const list = readerReports.get(r.sessionId) ?? [];
+            readerReports.set(r.sessionId, list);
+            list.push(r);
+          },
+        }
+      : {}),
     ...(onCandidates ? { onCandidates } : {}),
     ...(rankModel ? { rankModel } : {}),
   });
@@ -550,15 +594,36 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     const listedBefore = listed();
     const servedBefore = served;
     const c0 = cpuNow();
+    // Named before the first observe: `readerPush` reads the request inside it.
+    readerTask = `${suite}/${variant}/${seed}/${task.template}/${id}`;
+    if (stub instanceof OracleReaderMaker) {
+      stub.task = readerTask;
+      stub.planted = new Map([[id, variant === "hidden" ? "hidden" : "decoy"]]);
+    }
+    // The request's own reader calls start here (after the draft's, below).
+    let stubBefore = stub?.sizes.length ?? 0;
     const traced = timeline?.task(lane, sessionId, `${lane}/${task.template}`);
     const at = clock;
     const opened = await partner.observe({ ...scope, sessionId, at, kind: "session_start" } as AgentEvent);
     const digest = opened.injection?.reason === "digest" ? opened.injection : null;
+    let draftPool: string[] | undefined;
     if (LEAD) {
       const text = draftOf(task.text, LEAD);
       await partner.observe({ ...scope, sessionId, at, kind: "user_message", text, draft: true } as AgentEvent);
       if (TIME > 0) await Bun.sleep(TYPING_MS * TIME);
       else for (let k = 0; k < 5_000 && busy(sessionId); k++) await Bun.sleep(1);
+      // With a no-model reader, the pool a speculative read of the draft would get (lat-draft-speculative-read, stage
+      // 1): the draft asked as `readerPush` asks, in a session of its own so the request's session is untouched. Its
+      // lookup is a real one (its calls are in `leadCalls`, and it caches what it finds for the request).
+      if (NO_MODEL_READER) {
+        const draftSession = `${sessionId}~draft`;
+        await partner.ask({ ...scope, sessionId: draftSession, question: text, maxItems: 5 });
+        draftPool = [...new Set((readerReports.get(draftSession) ?? []).flatMap((x) => x.pool))];
+        readerReports.delete(draftSession);
+        askDumps.delete(draftSession);
+        stubBefore = stub?.sizes.length ?? 0;
+        await partner.observe({ ...scope, sessionId: draftSession, at, kind: "session_end" } as AgentEvent);
+      }
     }
     const leadCalls = received() - receivedBefore;
     const t0 = performance.now();
@@ -592,13 +657,33 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     const got = arrived.flatMap((x) => x.ids);
     const question = ASK_Q === "narrow" ? narrowQuestion(task.text) : task.text;
     readerMs = undefined;
-    readerTask = `${suite}/${variant}/${seed}/${task.template}/${id}`;
     const a0 = performance.now();
     const answered = ASK ? await partner.ask({ ...scope, sessionId, question }) : null;
     const askMs = performance.now() - a0;
     const askCited = answered ? answered.citations.some((c) => c.itemId === id) : undefined;
-    const rr = readerReports.get(sessionId);
+    const reports = readerReports.get(sessionId) ?? [];
     readerReports.delete(sessionId);
+    const rr = reports.at(-1);
+    // The reader's pool over the request's reads (the push's and the ask's), and the first read's: what a read of the
+    // sent request is given, compared with the draft's.
+    const pool = new Set(reports.flatMap((x) => x.pool));
+    const finalPool = reports[0]?.pool ?? [];
+    const stubCalls = stub ? stub.sizes.slice(stubBefore) : [];
+    let packet: Record<string, unknown> = {};
+    if (PACKET_K.length && answered) {
+      const d = askDumps.get(sessionId);
+      const ids = d?.candidates.map((c) => c.id) ?? [];
+      const cap = Number(CONFIG.askItemBytes ?? 320);
+      const bytesOf = (itemId: string) => {
+        const it = cache.get(scope, itemId, clock);
+        return it ? Math.min(Buffer.byteLength(`${it.title} ${it.text}`), cap) : 0;
+      };
+      packet = {
+        askRank: ids.indexOf(id),
+        packetKBytes: Object.fromEntries(PACKET_K.map((k) => [k, ids.slice(0, k).reduce((n, x) => n + bytesOf(x), 0)])),
+      };
+      if (!ASK_DIAG) askDumps.delete(sessionId);
+    }
     if (ASK_DIAG && answered) {
       const d = askDumps.get(sessionId);
       askDumps.delete(sessionId);
@@ -695,6 +780,33 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
         : READER !== "none" && answered
           ? { readerOutcome: "skipped" }
           : {}),
+      ...(reader
+        ? {
+            poolHas: pool.has(id),
+            poolItems: pool.size,
+            ...(stub
+              ? {
+                  stubCalls: stubCalls.length,
+                  promptChars: stubCalls.reduce((n, c) => n + c.promptChars, 0),
+                  prefixChars: stubCalls.reduce((n, c) => n + c.prefixChars, 0),
+                }
+              : {}),
+          }
+        : {}),
+      ...(draftPool
+        ? {
+            draftPool,
+            finalPool,
+            draftHas: draftPool.includes(id),
+            ...(draftPool.length && finalPool.length
+              ? {
+                  draftJaccard: Number(jaccard(draftPool, finalPool).toFixed(4)),
+                  draftSubset: finalPool.every((x) => draftPool.includes(x)),
+                }
+              : {}),
+          }
+        : {}),
+      ...packet,
       ...(CONFIG.constraintDigest
         ? {
             digestCited: digest?.citations.some((c) => c.itemId === id) ?? false,
@@ -726,6 +838,14 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   return perTask;
 }
 
+/** |a ∩ b| / |a ∪ b| over two id lists. */
+function jaccard(a: string[], b: string[]): number {
+  const x = new Set(a);
+  const y = new Set(b);
+  const both = [...x].filter((v) => y.has(v)).length;
+  return both / Math.max(1, x.size + y.size - both);
+}
+
 /**
  * A proxy for whether an answer says the hidden detail, not only cites its item: of the detail's key words (numbers,
  * and words of four letters or more) that the planted item holds, the share the answer's text holds too.
@@ -744,7 +864,8 @@ const line = (name: string, r: { hidden: Row; control: Row }) =>
   `${name.padEnd(24)} ${pct(r.hidden.returned, r.hidden.n).padStart(16)} ${pct(r.hidden.delivered, r.hidden.n).padStart(9)}` +
   `   ${pct(r.control.delivered, r.control.n).padStart(22)}` +
   `   ${(r.hidden.calls / Math.max(1, r.hidden.n)).toFixed(1).padStart(10)}` +
-  ` ${(r.hidden.ms / Math.max(1, r.hidden.n)).toFixed(1).padStart(8)}`;
+  ` ${(r.hidden.ms / Math.max(1, r.hidden.n)).toFixed(1).padStart(8)}` +
+  TAG;
 const add = (into: { hidden: Row; control: Row }, r: { hidden: Row; control: Row }) => {
   for (const v of ["hidden", "control"] as const) {
     for (const k of Object.keys(into[v]) as (keyof Row)[]) into[v][k] += r[v][k];
@@ -752,6 +873,13 @@ const add = (into: { hidden: Row; control: Row }, r: { hidden: Row; control: Row
 };
 
 console.log(`suite ${SUITE_LIST.join(",")}, seeds ${SEEDS.join(",")}, config ${JSON.stringify(CONFIG)}`);
+if (READER === "stub") console.log(STUB_BANNER);
+if (ORACLE) {
+  console.log(
+    `--reader oracle: a proxy, not a reader: it flags the planted hidden item (p_hit ${ORACLE.pHit}) and the decoy ` +
+      `(p_false ${ORACLE.pFalse}); its deltas speak for pool-composition changes only, until a paid screen confirms`,
+  );
+}
 const header = "template                 hidden: returned delivered   control: decoy delivered   calls/task  ms/task";
 const grand = { hidden: row(), control: row() };
 const runs: { suite: string; rows: Rows; perTask: Record<string, unknown>[]; wall: number; total: typeof grand }[] = [];
@@ -766,6 +894,7 @@ for (const suite of SUITE_LIST) {
     console.log(line(name, r));
   }
   console.log(line(SUITE_LIST.length > 1 ? `total ${suite}` : "TOTAL", total));
+  for (const l of screenLines(suite, perTask as unknown as ScreenRow[], PACKET_K)) console.log(l + TAG);
   add(grand, total);
   runs.push({ suite, rows, perTask, wall, total });
 }
@@ -774,6 +903,8 @@ if (SUITE_LIST.length > 1) {
   console.log(`\n${header}`);
   for (const r of runs) console.log(line(r.suite, r.total));
   console.log(line("TOTAL", grand));
+  const all = runs.flatMap((r) => r.perTask) as unknown as ScreenRow[];
+  for (const l of screenLines("TOTAL", all, PACKET_K)) console.log(l + TAG);
 }
 // calls/task above are what the connectors received; the traces' sum is printed to catch accounting drift in the
 // engine. It also counts fetches (which `SimSource` counts apart), and a call still running when a task's window
