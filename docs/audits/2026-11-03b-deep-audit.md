@@ -125,6 +125,8 @@ unchanged at 214/384 hidden facts and 211/384 decoys. `bun run eval` now reports
 
 - Search-index memory: `scale-index-posting-arena` (2.1-2.8x as specified), `scale-compact-frozen-index` and
   `scale-compressed-text-cold-tier`. Next step: one frozen, packed index for synced items.
+  **Done after the audit (D111):** the packed index (frozen CSR plus a scanned or chained delta, light users scanned)
+  is 3.2-3.8x smaller per item with identical results; the compressed text tier was left out (D111 says why).
 - `quality-reader-pool-universe`: adding the user's constraint items to the reader's pool cut retrieval misses about
   6x ($0, measured), but no round packaged it, and the related `quality-constraint-index-seats` was rejected.
 - `lat-answer-gate-not-start-gate` (about 2x on measured mixes): needs a tool-gate design.
