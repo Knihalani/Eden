@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AskReader, type ReaderInput, type ReaderMaker } from "@eden/engine";
 import { Budget, type ChatRequest, type Model } from "@eden/llm";
-import { MISS_EXIT, missGate, overBudget, overBudgetLine, ReplayModel } from "./reader-disk";
+import { MISS_EXIT, missGate, overBudget, overBudgetLine, ReplayModel, SubsetReplay, systemHash } from "./reader-disk";
+import { readerItem, readerMessages } from "@eden/engine";
 
 const request = (n: number): ChatRequest => ({
   messages: [
@@ -110,5 +111,59 @@ describe("overBudget line", () => {
     const line = overBudgetLine({ reader: [{ stats: { overBudget: 0 } }], cards: [] });
     expect(line).toBe("overBudget: reader 0 (1 lanes)");
     expect(overBudgetLine({ reader: [], cards: [] })).toBe("overBudget: no budgeted reader or cards");
+  });
+});
+
+describe("SubsetReplay (--reader-subset)", () => {
+  const item = (n: number) =>
+    readerItem({ id: `m${n}`, sourceId: "mail", ref: `m${n}`, title: `Item ${n}`, text: `Text ${n}.` }, new Set());
+  const req = (ns: number[], request = "Pay the Harlow invoice") =>
+    ({
+      messages: readerMessages({ request, items: ns.map(item), today: "2026-10-27" }),
+      maxTokens: 100,
+    }) as ChatRequest;
+  const user = (r: ChatRequest) => r.messages[1]!.content;
+  const write = (lines: object[]) => {
+    const file = join(mkdtempSync(join(tmpdir(), "subset-")), "log.jsonl");
+    writeFileSync(file, lines.map((l) => JSON.stringify(l)).join("\n"));
+    return file;
+  };
+  const sys = systemHash(req([0]));
+  // A recorded reading of items 0-4 that flagged items 1 and 3.
+  const reply = JSON.stringify({
+    bears: [
+      { i: 1, why: "a", same: true, binds: true, k: "blocks" },
+      { i: 3, why: "b", same: true, binds: true, k: "limits" },
+    ],
+  });
+  const log = write([{ task: "t", prompt: user(req([0, 1, 2, 3, 4])), reply, model: "m", sys }]);
+
+  test("a pool inside a recorded one, in its order, takes that reading's verdict, renumbered", () => {
+    const s = new SubsetReplay([log], "m", sys);
+    const got = JSON.parse(s.answer(user(req([0, 3, 4])))!) as { bears: { i: number; k: string }[] };
+    expect(got.bears).toEqual([expect.objectContaining({ i: 1, k: "limits" })]);
+    expect(s.answered).toBe(1);
+  });
+
+  test("no answer for another order, an item never read, another request or day, model or instructions", () => {
+    const s = new SubsetReplay([log], "m", sys);
+    expect(s.answer(user(req([3, 1])))).toBeNull();
+    expect(s.answer(user(req([0, 5])))).toBeNull();
+    expect(s.answer(user(req([0, 1], "Pay the Kestrel invoice")))).toBeNull();
+    expect(new SubsetReplay([log], "other", sys).answer(user(req([0, 1])))).toBeNull();
+    expect(new SubsetReplay([log], "m", "x").answer(user(req([0, 1])))).toBeNull();
+    expect(s.answered).toBe(0);
+  });
+
+  test("ReplayModel answers a cache miss from it, counted apart from misses and replays", async () => {
+    const file = join(mkdtempSync(join(tmpdir(), "reader-")), "empty.jsonl");
+    writeFileSync(file, "");
+    const m = new ReplayModel(file, null, "m", { subset: new SubsetReplay([log], "m", sys) });
+    const res = await m.chat(req([1, 2]));
+    expect(JSON.parse(res.text).bears).toEqual([expect.objectContaining({ i: 0 })]);
+    expect(res.costUsd).toBe(0);
+    expect([m.subsetReplayed, m.missed, m.replayed]).toEqual([1, 0, 0]);
+    await expect(m.chat(req([7]))).rejects.toThrow("no cached call");
+    expect(m.missed).toBe(1);
   });
 });

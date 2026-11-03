@@ -427,7 +427,7 @@ describe("ItemCache index isolation (packed index, shared scratch)", () => {
   });
 });
 
-describe("ItemCache expiry tick and the index's merges (D116)", () => {
+describe("ItemCache expiry tick and the index's merges (D120)", () => {
   test("the tick leaves no merge under way, even one its own sweep starts", () => {
     const cache = new ItemCache({ expireEveryMs: 0, maxItemsPerUser: 5_000 });
     const scope = { tenantId: "t", userId: "merge" };

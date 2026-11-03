@@ -17,7 +17,7 @@
  * Freezing merges the delta into new frozen arrays, keeping each key's postings in insertion order (a doc number is
  * reused only after it is freed, and only a freed doc's postings are filtered out, so frozen postings are older than
  * delta docs). It starts when the delta is full (`DELTA_DOCS`, then an eighth of the index up to `MAX_DELTA_DOCS`)
- * and is incremental (D116): the full delta is sealed, later adds go behind it, and each add or remove does a bounded
+ * and is incremental (D120): the full delta is sealed, later adds go behind it, and each add or remove does a bounded
  * share of the merge (`mergeStep`) until the new arrays replace the old in one swap; until then queries read the old
  * frozen tier and the whole delta, sealed part first. A merge within one step's work (`MERGE_MIN_WORK`, allocation
  * counted) finishes in the add that starts it.

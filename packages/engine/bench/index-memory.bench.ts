@@ -7,7 +7,7 @@
  *
  * - heap per item and per user, each in a child process (heap after a full GC less the heap before, the vocabulary
  *   built first so only the index counts): one heavy user holding every item, and 500 light users of 20 items each;
- *   the packed index settled (no merge under way, D116), and as built (a merge may hold old and new arrays together);
+ *   the packed index settled (no merge under way, D120), and as built (a merge may hold old and new arrays together);
  * - the whole `ItemCache` per item (`cache` mode: entries, sketches, tallies, vocabulary and index; not the item text,
  *   whose strings the world still holds), for the end-to-end share: run it on each tree for before/after;
  * - add p50/p99/max (the max is a freeze in the packed index), search p50/p99 for 4-term queries drawn from item
@@ -95,7 +95,7 @@ function heapChild(impl: Impl, users: number, per: number, settled: boolean): vo
   // taken before building them counted up to ~10 MB of tokenizer garbage JSC had not yet swept.
   const held: Index[] = [];
   for (const docs of corpora) held.push(build(impl, docs));
-  // Settled: no merge under way (D116), the index at rest. As built, a merge may hold old and new arrays together.
+  // Settled: no merge under way (D120), the index at rest. As built, a merge may hold old and new arrays together.
   if (settled) for (const ix of held) if (ix instanceof SparseIndex) ix.settle();
   const withIndexes = heapBytes();
   const count = held.length;
@@ -124,7 +124,7 @@ function buildCache(): void {
 function cacheChild(settled: boolean): void {
   const before = heapBytes();
   buildCache();
-  // The expiry tick ends a merge left under way (D116); nothing expires at the world's own clock.
+  // The expiry tick ends a merge left under way (D120); nothing expires at the world's own clock.
   if (settled) caches[0]!.expireIdle(world.now);
   console.log(JSON.stringify({ perItem: (heapBytes() - before) / ITEMS.length }));
 }

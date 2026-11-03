@@ -22,7 +22,7 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
   JSON in the PR. Engine changes touching scoring, thresholds or delivery also run `bun run eval --live` (needs
   `OPENROUTER_API_KEY`; fractions of a cent) and report both.
 - **Precision over recall (D3).** A change that raises `recall` by raising `falseFireRate` needs an explicit
-  decision. The no-model run of the default reads precision 0.828, recall 0.48, falseFireRate 0 (D115 removed D112's
+  decision. The no-model run of the default reads precision 0.828, recall 0.48, falseFireRate 0 (D119 removed D112's
   false fire in `people-and-days-4`: `groundOccasion` took a lowercase first name for the occasion): any false fire
   is a regression. `--live` still has one on that turn, from the judge the eval wires (`model:` reason; the servers
   wire none, D112). Precision fell to 0.889 with the `large-*` scenarios (24 of 27 delivered items expected under the

@@ -80,6 +80,7 @@ import {
   ItemCache,
   type CandidateDump,
   type Trace,
+  readerMessages,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
@@ -90,7 +91,7 @@ import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
-import { missGate, overBudgetLine, ReplayModel } from "./reader-disk";
+import { missGate, overBudgetLine, ReplayModel, SubsetReplay, systemHash } from "./reader-disk";
 import { flags, labConfig, parseJson } from "./flags";
 import { keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
@@ -146,6 +147,7 @@ const cli = flags(
         "reader-thinking",
         "limit",
         "reader-log",
+        "reader-subset",
         "timeline",
         "packets",
         "candidates",
@@ -343,7 +345,20 @@ if (READER !== "none" && !ASK && !RUN.readerPush) throw new Error("--reader need
 const LIMIT = Number(opt("limit", "0"));
 /** `--reader-log out.jsonl`: each reader call's prompt (the items as the model read them) and reply, sim data only. */
 const READER_LOG = opt("reader-log", "");
+// An approximated verdict logged beside recorded ones would be read back later as a real reading (checked before the
+// log is created).
+if (opt("reader-subset", "") && READER_LOG) {
+  throw new Error("--reader-subset and --reader-log cannot be used together");
+}
 if (READER_LOG) writeFileSync(READER_LOG, "");
+/** The hash of the reader's instructions, on each `--reader-log` line, so `--reader-subset` matches like with like. */
+const READER_SYS = systemHash({ messages: readerMessages({ request: "", items: [], today: "" }) });
+/**
+ * `--reader-subset LOG[,LOG]` (with `--reader replay`): a prompt the cache misses is answered from a `--reader-log`
+ * call of the same model whose pool held its items in order (`SubsetReplay`, approximate; every run says how many).
+ */
+const READER_SUBSET = opt("reader-subset", "");
+if (READER_SUBSET && READER !== "replay") throw new Error("--reader-subset needs --reader replay");
 /** The judge's and the reader's requests: paced, capped and retried, with the run's logging choice (free.ts). */
 const ACCESS = labAccess(args, [...(LIVE ? [MODEL] : []), ...(READER === "live" ? [READER_MODEL] : [])]);
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
@@ -365,6 +380,7 @@ const readerModel =
             )
           : null,
         READER_MODEL,
+        READER_SUBSET ? { subset: new SubsetReplay(READER_SUBSET.split(","), READER_MODEL, READER_SYS) } : {},
       );
 const readerLanes: AskReader[] = [];
 /** `--distill record|labels|cascade:FILE` (distilled-reader.ts): record reader verdicts, replay labels, or cascade. */
@@ -588,7 +604,14 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     chat: async (request) => {
       const log = (reply: string | null, ms?: number) => {
         if (!READER_LOG) return;
-        const line = { task: readerTask, prompt: request.messages[1]?.content, reply, ms };
+        const line = {
+          task: readerTask,
+          prompt: request.messages[1]?.content,
+          reply,
+          ms,
+          model: readerModel.id,
+          sys: systemHash(request),
+        };
         appendFileSync(READER_LOG, `${JSON.stringify(line)}\n`);
       };
       let res: Awaited<ReturnType<Model["chat"]>>;
@@ -1098,9 +1121,10 @@ if (readerModel) {
   const sum = (f: (c: (typeof m.calls)[number]) => number) => m.calls.reduce((a, c) => a + f(c), 0);
   const { p50, p90 } = m.quantiles();
   const made = sum((c) => c.costUsd);
+  const approxNote = READER_SUBSET ? `; ${m.subsetReplayed} more approximated, not in these figures` : "";
   console.log(
     `reader ${READER_MODEL}: ${m.calls.length} calls answered (${m.sent} sent now, ${m.replayed} replayed, ` +
-      `${m.missed} not cached, ${m.failed} failed), ${(sum((c) => c.inputTokens) / n).toFixed(0)} in / ` +
+      `${m.missed} not cached, ${m.failed} failed${approxNote}), ${(sum((c) => c.inputTokens) / n).toFixed(0)} in / ` +
       `${(sum((c) => c.outputTokens) / n).toFixed(0)} out tokens per call, ${sum((c) => (c.truncated ? 1 : 0))} cut off; ` +
       `$${made.toFixed(5)} as made ($${(made / n).toFixed(6)} per call), $${sum((c) => (c.live ? c.costUsd : 0)).toFixed(5)} ` +
       `spent this run; latency as made p50 ${p50} ms, p90 ${p90} ms, ` +
@@ -1126,6 +1150,12 @@ if (distillLanes.length) {
 const distillMissed = distillLanes.reduce((a, d) => a + d.missed, 0);
 const misses = missGate((readerModel?.missed ?? 0) + distillMissed, ALLOW_MISSES);
 if (misses.message) console.log(`\n${misses.message}\n`);
+if (READER_SUBSET && readerModel) {
+  console.log(
+    `READER SUBSET-REPLAYED: ${readerModel.subsetReplayed} reader prompts were answered from a recorded superset pool ` +
+      "(--reader-subset): approximate, a verdict on fewer items read off a reading of more",
+  );
+}
 if (LIVE) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);
   console.log(
@@ -1217,6 +1247,7 @@ if (out) {
                 sent: readerModel.sent,
                 missed: readerModel.missed,
                 failed: readerModel.failed,
+                ...(READER_SUBSET ? { subset: readerModel.subsetReplayed } : {}),
               },
             }
           : {}),

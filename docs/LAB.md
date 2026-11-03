@@ -102,6 +102,29 @@ answered without the reader, so a NEW screen silently becomes part NEW, part ALL
 screen knowingly. Its JSON (`--json`) carries `reader: {replayed, sent, missed, failed}`. Checked on 2026-11-03 with
 an empty cache file (`--suite train1 --seeds 41 --preset NEW`): 108 misses, exit 3; with `--allow-misses`, exit 0.
 
+**Subset replay (`--reader-subset LOG[,LOG]`, D117; approximate, labelled).** With `--reader replay`, a prompt the cache
+misses may be answered from a call recorded in a `--reader-log` file (same model, same reader instructions, same day,
+request and question) whose pool held every item of the missed prompt, rendered identically and in the same order: that
+reading's verdict on those items, renumbered (`SubsetReplay`, reader-disk.ts). It screens, at $0, changes that only take
+items out of the pool (a smaller pool, a gate, a cut); a change that adds or re-renders items still misses. It assumes a
+verdict on an item does not depend on the items left out: on train1–6, seeds 41–42, Haiku 5.5, restricting each
+15-plus-up-to-15-item reading (the deleted trial `askReaderUniverse` 15, D115) to its first 15 items matched the real
+15-item reading exactly on 493 of 600 calls, while the same prompt sent twice matched on 97 of 110 (train1–2, seed 41);
+the default replayed this way scored hidden 277/384, decoys 146/384 against its real 280/143. Every shard prints `READER
+SUBSET-REPLAYED: n`, the merged funnel `APPROXIMATE: n …`, and the JSON `reader.subset`. Log lines carry `model` and
+`sys` (a hash of the instructions) since 2026-11-03; older logs are not read. Make the logs once at $0 by replaying the
+superset run with `--reader-log`. A run with `--reader-subset` refuses `--reader-log` (an approximated verdict must
+never be read back as a recorded one) and leaves its approximated calls out of the reader's latency figures; a
+`--baseline` made with it is labelled too. The superset below is a wider pool (`askReaderPool` 30, whose first 15 items
+are the default's 15), recorded once live (recipe 2) into `W/rc-wide.jsonl`:
+
+```bash
+bun run funnel --set '{"askReaderPool":30}' -- --reader replay --reader-model claude-haiku-5-5 \
+  --reader-cache W/rc-wide.jsonl --reader-log W/log-wide.jsonl          # $0: the wide run's verdicts, logged
+bun run funnel --jobs 4 --allow-misses -- --reader replay --reader-model claude-haiku-5-5 \
+  --reader-cache W/rc-wide.jsonl --reader-subset W/log-wide.jsonl         # the default's pool, approximated
+```
+
 **The `overBudget:` line.** `pi-ab.ts` and `hermes-ab.ts` give each lane's reader, cards and bridge their own `new
 Budget()` (production defaults: 20 calls and $0.02 a session, `packages/llm/src/budget.ts`); `hidden-funnel.ts` gives
 them an uncapped one. A call refused there is skipped, and a refused read reports outcome `budget` (`readAsk` in

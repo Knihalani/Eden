@@ -23,7 +23,7 @@ cards-enrich, presets, suites, free, spend` (`.ts`): check `git log origin/main`
 | `ab-common.ts` | Tasks, prompts, tools, grader and results format shared by every A/B (comparable results) |
 | `agent-ab.ts`, `agent-ab-report.ts` | The older in-house loop (label its results as such) and the shared report |
 | `free.ts`, `spend.ts`, `free-smoke.ts` | Lab access: pacer, `--allow-logging`, `--rpm`, `--max-requests`, keys; the Anthropic spend ledger and cap |
-| `cards-enrich.ts`, `cards-disk.ts`, `reader-disk.ts` | Make once, replay free: cards (+ `--intent` requests), reader calls |
+| `cards-enrich.ts`, `cards-disk.ts`, `reader-disk.ts` | Make once, replay free: cards (+ `--intent` requests), reader calls; `SubsetReplay` (`--reader-subset`, D117: a missed prompt answered from a recorded superset pool, approximate and labelled) |
 | `gate-traffic.ts`, `reader-latency-fit.ts` | No-model reader instruments: calls, gating and oracle-gate ceilings per preset (`--reuse`: cross-session verdict reuse); the reader latency fit (floor, ms per token) |
 | `timeline.ts`, `timeline-report.ts` | `--timeline` spans, CPU% and RSS per second; where the time went |
 | `ledger.ts`, `bench.ts`, `bench-compare.ts` | The benchmark ledger (`bench/ledger.jsonl`, `bench/runs/`) |

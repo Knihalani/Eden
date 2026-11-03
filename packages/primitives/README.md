@@ -138,10 +138,10 @@ across runs in both directions; a reviewer's four runs gave 75.5–155.3 → 71.
 reference compacted 7 times in 5,000 churn steps, the packed index purges at the same 7 points and also freezes its
 delta about as often again, so it pauses about twice as often, each pause one pass over the postings (median 6–9.5 ms
 at 6,892 items on this VM, with GC; the reference's compactions 5.7–7.7 ms) and its worst step (GC included) is
-higher. D116 (below) spreads that work out.
+higher. D120 (below) spreads that work out.
 Measured on a shared VM, ±30% run to run.
 
-## Incremental merge (2026-11-03, D116)
+## Incremental merge (2026-11-03, D120)
 
 A purge no longer rewrites the frozen tier: at the reference's compaction points it frees the doc numbers, reports
 the freed terms and drops the dead docs from the delta (the dead docs' terms and the delta, not every posting); their
@@ -155,7 +155,7 @@ result, is unchanged. A reused doc number becomes frozen only in a merge that fi
 finishes a merge at once; the engine's expiry tick calls it for every user (after its sweep, whose removes may start
 one), since an index that stops changing mid-merge holds the old and new arrays together. `flush()` also merges, so nothing of a revoked source is left.
 
-| `index-memory.bench.ts`, churn at 6,892 (5,000 remove + add steps; three runs) | Reference | D111 packed | D116 packed |
+| `index-memory.bench.ts`, churn at 6,892 (5,000 remove + add steps; three runs) | Reference | D111 packed | D120 packed |
 |---|---|---|---|
 | Steps over 1 ms | 7–10 | 13–15 (14 here) | 3–7 |
 | Median of those / worst step (GC included) | 5.1–5.8 / 10.2–11.9 ms | 6.0–9.5 / 21.2–43.9 ms | 1.5–1.9 / 1.8–4.3 ms |

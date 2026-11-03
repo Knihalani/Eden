@@ -117,6 +117,7 @@ D112: the lab's presets are only `default`, `minus-<part>` and `minus-all` (`pac
 | [new-minus-intent.md](new-minus-intent.md) | 2026-11-03 | D109 | NEW and NEWL without the intent index on train: −8.6 and −8.3 points of hidden for 16.9× fewer background items; intent kept | rejected (dropping intent) |
 | [haiku-benchmark.md](haiku-benchmark.md) | 2026-11-02 | D97, D98 | NEW vs ALL3 vs tools in Pi and Hermes, blind held-out 5–8 and 10–12: +22.8 / +23.9 points hidden raised, $24.36 | adopted (NEW is the recommendation) |
 | [distilled-reader.md](distilled-reader.md) | 2026-11-03 | D110 | A no-model cascade in front of the reader, trained on Haiku labels from train1–6: planted-vs-decoy AUC 0.544; blind 1.09× fewer reader calls at equal hidden, decoys +2.3 points | rejected (`--distill` kept as lab tooling) |
+| [wave2-reader.md](wave2-reader.md) | 2026-11-03 | D115–D118 | Four audit leftovers on the reader: a constraint-item pool universe (+4.7 hidden, +4.7 false concerns on held-out 13), reusing the push's verdict (fewer calls, fewer facts), gating actions instead of the start (−6.2 hidden), and a subset replay for $0 screens (matches a real 15-item reading exactly on 82% of calls over train, 87% on a shard where a same-prompt rerun matches 88%) | rejected (D115, D116, D118); adopted (tooling, D117) |
 
 Not in this directory: [../RESEARCH.md](../RESEARCH.md) (the Meta PMA paper and open questions),
 [../plans/](../plans/) (the query-planner plan and `next.md`), [../LAB.md](../LAB.md) (how to run the lab).
