@@ -6,16 +6,18 @@
  * EDEN_DEV=1         accept unauthenticated requests as tenant "dev" (local development only).
  * PORT, HOST         default 8790 on 127.0.0.1.
  * EDEN_SOURCE_MAP    path of the source-map database; default $EDEN_HOME/source-map.db.
- * OPENROUTER_API_KEY enables the model; without it the engine runs with no model at all.
- * EDEN_MODEL         default z-ai/glm-5.3-flash.
+ * OPENROUTER_API_KEY turns on the default's model roles (cards, intent, the ask-time reader; models.ts, D111);
+ *                    without it the same default runs with no model at all.
+ * EDEN_MODEL         the roles' model, default anthropic/claude-haiku-5.5 through OpenRouter (D12's routing).
+ * EDEN_MODEL_USD_PER_TENANT_DAY one cap on a tenant's model spend per UTC day, across roles; default 25.
  * EDEN_TENANT_RPS    requests per second per tenant on the HTTP API (GCRA), default 200; EDEN_TENANT_BURST, 400.
  *                    The stdio MCP server (mcp-stdio.ts) serves one local user and is not limited.
  * EDEN_GATE_WORKERS  workers that redact lookup results off the event loop (D25, D26); default 0, on the loop.
  * EDEN_QUERY_PLANNER the query planner chooses what each lookup sends to each connector (D28), on by default (D33):
  *                    1 (default) serves through it; "shadow" serves without it and runs it beside, learning and
  *                    reporting only; 0 turns it off.
- * EDEN_ENGINE_CONFIG path of a JSON file of engine settings over the production defaults (D103, engine-config.ts);
- *                    unset, the defaults exactly (D12).
+ * EDEN_ENGINE_CONFIG path of a JSON file of engine settings over the default (D103, engine-config.ts); unset,
+ *                    the default exactly (D111).
  * EDEN_SOURCES_FILE  static documents shared by every user (connectors.ts); EDEN_USER_SOURCES_FILE each user's own
  *                    sources, MCP connections with their own credentials included (user-sources.ts, D108). Both are
  *                    read and checked at startup by `sourcesFromEnv`, not here.

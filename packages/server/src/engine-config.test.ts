@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DEFAULT_CONFIG } from "@eden/engine";
+import { DEFAULT_CONFIG, PARTS, type Part } from "@eden/engine";
+import { FakeModel } from "@eden/llm";
+import type { ListPage, Source } from "@eden/sources";
 import { edenHome } from "@eden/protocol";
 import { SourceMap } from "@eden/graph";
 import { buildPartner, openSourceMap } from "./build";
 import { stdioSourceMapPath } from "./config";
 import { ANTICIPATE_PARTS, engineConfig, parseEngineConfig } from "./engine-config";
+import { DEFAULT_USD_PER_TENANT_DAY, modelRolesFromEnv, NO_MODELS } from "./models";
 
 const dir = mkdtempSync(join(edenHome(), "engine-config-"));
 const file = (name: string, body: string): string => {
@@ -16,7 +19,7 @@ const file = (name: string, body: string): string => {
 };
 
 describe("EDEN_ENGINE_CONFIG (D103)", () => {
-  test("unset: the partner runs on the production defaults exactly", () => {
+  test("unset: the partner runs on the default exactly", () => {
     expect(engineConfig({})).toEqual({});
     expect(engineConfig({ EDEN_ENGINE_CONFIG: "" })).toEqual({});
     const partner = buildPartner({ sources: async () => [], model: null, engine: engineConfig({}) });
@@ -46,85 +49,81 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     expect(partner.config).toEqual({ ...DEFAULT_CONFIG, ...engine });
   });
 
-  test("a flag whose partner dependency the servers do not wire is refused, naming it and the dependency", () => {
-    // buildPartner wires no cards or reader: turned on, these would be accepted by the engine and do nothing.
-    const needs = {
-      cards: "cards",
-      cardsEconomy: "cards",
-      intent: "cards",
-      askReader: "reader",
-      askReaderDrop: "reader",
-      readerPush: "reader",
-      readerGate: "reader",
-    };
-    for (const [key, dep] of Object.entries(needs)) {
-      expect(() => parseEngineConfig({ probes: true, [key]: true })).toThrow(
-        new RegExp(`"${key}" needs the partner's ${dep} dependency`),
-      );
-      // Off is the default and harmless.
-      expect(parseEngineConfig({ [key]: false })).toEqual({ [key]: false });
-    }
-    const path = file("all3.json", JSON.stringify({ probes: true, graph: true, cards: true }));
-    expect(() => engineConfig({ EDEN_ENGINE_CONFIG: path })).toThrow(/EDEN_ENGINE_CONFIG .*"cards" needs/);
-    // Each one is a dependency buildPartner does not wire.
-    const partner = buildPartner({ sources: async () => [], model: null }) as unknown as {
+  test("card, intent, reader and sync keys are accepted: the servers wire them, or they are inert by design (D111)", () => {
+    // Default minus a part, and trials of the parts' numbers, all parse.
+    const accepted: Record<string, unknown>[] = [
+      { cards: false, cardsEconomy: false, intent: false },
+      { askReader: false, readerPush: false, readerGate: false },
+      { sync: false, syncPollBehind: false, syncPollPageSize: 0, readerPushBehind: false },
+      { askReaderPool: 20, askReaderItemChars: 400, readerPushWaitMs: 5, readerPushKinds: ["blocks"] },
+    ];
+    for (const config of accepted) expect(parseEngineConfig(config)).toEqual(config);
+  });
+
+  test("the model roles are wired only when given; without them the same default runs with no model (D111)", () => {
+    const none = buildPartner({ sources: async () => [], model: null }) as unknown as { deps: Record<string, unknown> };
+    expect(none.deps.cards).toBeUndefined();
+    expect(none.deps.reader).toBeUndefined();
+    expect(none.deps.model).toBeNull();
+    const model = new FakeModel(() => "{}");
+    const roles = { reader: model, cards: model, cardsRetry: null, usdPerTenantDay: 1 };
+    const both = buildPartner({ sources: async () => [], models: roles }) as unknown as {
       deps: Record<string, unknown>;
+      config: typeof DEFAULT_CONFIG;
     };
-    for (const dep of new Set(Object.values(needs))) expect(partner.deps[dep]).toBeUndefined();
+    expect(both.deps.cards).toBeDefined();
+    expect(both.deps.reader).toBeDefined();
+    // No judge: the measured default ran without one.
+    expect(both.deps.model).toBeNull();
+    expect(both.config).toEqual(DEFAULT_CONFIG);
+    // Default minus a part: its role is not built, so it costs nothing.
+    const minus = buildPartner({ sources: async () => [], models: roles, engine: { cards: false, askReader: false } });
+    expect((minus as unknown as { deps: Record<string, unknown> }).deps.cards).toBeUndefined();
+    expect((minus as unknown as { deps: Record<string, unknown> }).deps.reader).toBeUndefined();
   });
 
-  test("readerPushBehind and sync are refused, naming what the servers lack (audit 2026-11-03b r3)", () => {
-    // readerPushBehind acts only on the reader's push (partner.ts ask with internal.push), so it needs the reader.
-    expect(() => parseEngineConfig({ readerPushBehind: true })).toThrow(
-      /"readerPushBehind" needs the partner's reader dependency/,
+  test("sync over per-user sources: a user's listable source is listed for that user only (D108, D111)", async () => {
+    const listed: string[] = [];
+    const lister = (owner: string): Source => ({
+      id: "mail",
+      kind: "mcp",
+      description: "mail",
+      async search() {
+        return [];
+      },
+      async list(scope, _cursor, _limit, _signal): Promise<ListPage> {
+        listed.push(`${owner} for ${scope.tenantId}/${scope.userId}`);
+        return {
+          items: [{ id: `mail:${owner}`, sourceId: "mail", title: `Note for ${owner}`, text: "Globex renewal moved" }],
+          next: null,
+        };
+      },
+    });
+    const partner = buildPartner({ sources: async (scope) => [lister(scope.userId)], model: null, queryPlanner: "off" });
+    partner.stopSync();
+    for (const userId of ["alice", "bob"]) {
+      const scope = { tenantId: "acme", userId, sessionId: `s-${userId}` };
+      await partner.observe({ kind: "session_start", ...scope, at: 0 } as never);
+    }
+    // One background round (the timer's work): each active user's listable source is backfilled.
+    expect(partner.sync).not.toBeNull();
+    await partner.sync!.tick();
+    expect(listed).toContain("alice for acme/alice");
+    expect(listed).toContain("bob for acme/bob");
+    // Each user's source was listed for its own user and no other.
+    for (const line of listed) expect(line === "alice for acme/alice" || line === "bob for acme/bob").toBe(true);
+    await partner.forget({ tenantId: "acme", userId: "alice" } as never);
+  });
+
+  test("model roles from the environment: none without a key, a tenant cap that must be a number", () => {
+    expect(modelRolesFromEnv({})).toEqual({ ...NO_MODELS, usdPerTenantDay: DEFAULT_USD_PER_TENANT_DAY });
+    const roles = modelRolesFromEnv({ OPENROUTER_API_KEY: "k", EDEN_MODEL_USD_PER_TENANT_DAY: "3" });
+    expect(roles.reader).not.toBeNull();
+    expect(roles.cards).not.toBeNull();
+    expect(roles.usdPerTenantDay).toBe(3);
+    expect(() => modelRolesFromEnv({ EDEN_MODEL_USD_PER_TENANT_DAY: "lots" })).toThrow(
+      /EDEN_MODEL_USD_PER_TENANT_DAY must be/,
     );
-    // Static sources have no list tool and sync over per-user MCP sources is untested from the servers (D106, D108).
-    expect(() => parseEngineConfig({ sync: true })).toThrow(/"sync" needs sources with a list tool/);
-    const path = file("sync.json", JSON.stringify({ probes: true, sync: true }));
-    expect(() => engineConfig({ EDEN_ENGINE_CONFIG: path })).toThrow(/EDEN_ENGINE_CONFIG .*"sync" needs sources/);
-    // With sync refused, its sub-settings would start cleanly and do nothing (partner.ts gates them on this.sync).
-    for (const [key, value] of [
-      ["syncPollBehind", true],
-      ["syncOnDemand", false],
-      ["syncPollPageSize", 5],
-      ["syncEveryMs", 60_000],
-      ["syncStaleChance", 1],
-    ] as const) {
-      expect(() => parseEngineConfig({ [key]: value })).toThrow(new RegExp(`"${key}" needs sources with a list tool`));
-    }
-    // Their defaults stay accepted.
-    const defaults = { readerPushBehind: false, sync: false };
-    expect(parseEngineConfig(defaults)).toEqual(defaults);
-  });
-
-  test("every reader, card, intent, push and sync key is refused off its default or allow-listed", () => {
-    // A new key of these families acts only through something the servers do not wire (a paid model dependency,
-    // listable sources) unless shown otherwise. Each must be refused at a non-default value, or listed here with the
-    // reason it does something from the shipped servers.
-    const allowed: Record<string, string> = {};
-    const other = (value: unknown): unknown => {
-      if (typeof value === "boolean") return !value;
-      // A legal non-default (`RANGES` is checked first): 0 is illegal for sizes, and a share must stay at most 1.
-      if (typeof value === "number") return value === 0 ? 1 : Number.isInteger(value) ? value + 1 : value / 2;
-      // A list's entries are checked against its known names (config-check.ts `NAMES`), so add a real one.
-      if (Array.isArray(value)) return value.length ? [] : ["deadline"];
-      throw new Error(`no non-default value for ${JSON.stringify(value)}`);
-    };
-    // Sync is refused while the servers build no listable sources, so every sync sub-setting would be inert too.
-    const keys = Object.keys(DEFAULT_CONFIG).filter((key) => /reader|card|intent|push|^sync/i.test(key));
-    expect(keys.length).toBeGreaterThanOrEqual(36);
-    const unguarded: string[] = [];
-    for (const key of keys) {
-      if (allowed[key] !== undefined) continue;
-      const value = other(DEFAULT_CONFIG[key as keyof typeof DEFAULT_CONFIG]);
-      try {
-        parseEngineConfig({ [key]: value });
-        unguarded.push(key);
-      } catch (error) {
-        expect((error as Error).message).toContain(`"${key}" needs `);
-      }
-    }
-    expect(unguarded).toEqual([]);
   });
 
   test("an unknown key stops startup with an error naming it", () => {
@@ -147,10 +146,6 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
 
   test("settings that would do nothing or break a feature are refused, naming the key (audit 2026-11-03b)", () => {
     const refused: [Record<string, unknown>, string][] = [
-      // Dependency-only numbers: refused unless at their default.
-      [{ readerPushWaitMs: 5 }, "readerPushWaitMs"],
-      [{ askReaderItemChars: 100 }, "askReaderItemChars"],
-      [{ readerPushKinds: ["blocks"] }, "readerPushKinds"],
       // A typo switches nothing off.
       [{ anticipateOff: ["srve"] }, "anticipateOff"],
       // 0-item pages: nothing syncs.
@@ -192,13 +187,16 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     expect([...read].sort()).toEqual([...ANTICIPATE_PARTS].sort());
   });
 
-  test("every checked-in profile in docs/profiles parses and builds a partner (D104)", () => {
+  test("every checked-in profile in docs/profiles is the default minus a part, parses and builds a partner", () => {
     const profiles = join(import.meta.dir, "../../../docs/profiles");
     const names = readdirSync(profiles).filter((name) => name.endsWith(".json"));
     expect(names.length).toBeGreaterThanOrEqual(3);
     for (const name of names) {
       const engine = engineConfig({ EDEN_ENGINE_CONFIG: join(profiles, name) });
-      expect(Object.keys(engine).length).toBeGreaterThan(0);
+      // `minus-<part>.json` holds exactly PARTS[part] (D111): the only ablation there is.
+      const part = /^minus-(\w+)\.json$/.exec(name)?.[1];
+      expect(part !== undefined && part in PARTS).toBe(true);
+      expect(engine).toEqual(PARTS[part as Part]);
       const partner = buildPartner({ sources: async () => [], model: null, engine });
       expect(partner.config).toEqual({ ...DEFAULT_CONFIG, ...engine });
     }

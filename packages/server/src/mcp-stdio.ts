@@ -17,6 +17,7 @@ import { plannerMode, stdioSourceMapPath } from "./config";
 import { sourcesFromEnv } from "./connectors";
 import { engineConfig } from "./engine-config";
 import { createMcpServer } from "./mcp";
+import { modelRolesFromEnv } from "./models";
 
 const tenantId = process.env.EDEN_TENANT ?? "dev";
 const userId = process.env.EDEN_USER ?? "";
@@ -32,6 +33,8 @@ const partner = buildPartner({
   sourceMap: openSourceMap(() => stdioSourceMapPath(tenantId, userId)),
   queryPlanner: plannerMode(process.env.EDEN_QUERY_PLANNER),
   engine: engineConfig(),
+  // Cards, intent and the reader on OPENROUTER_API_KEY's model (D111), as in the HTTP server.
+  models: modelRolesFromEnv(),
 });
 // Before the transport opens, so the first ask does not compile the secret gate.
 warmGate();

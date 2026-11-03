@@ -6,6 +6,7 @@ import { sourcesFromEnv } from "./connectors";
 import { buildPartner, startGatePool } from "./build";
 import { engineConfig } from "./engine-config";
 import { createHandler } from "./http";
+import { modelRolesFromEnv } from "./models";
 
 const started = performance.now();
 const config = loadConfig();
@@ -19,6 +20,8 @@ const partner = buildPartner({
   sourceMapPath: config.sourceMapPath,
   queryPlanner: config.queryPlanner,
   engine,
+  // Cards, intent and the reader on OPENROUTER_API_KEY's model (D111); without a key, the default's no-model path.
+  models: modelRolesFromEnv(),
   onShadow: process.env.EDEN_TRACE === "1" ? (r) => console.log(JSON.stringify({ shadow: r })) : undefined,
   onTrace: process.env.EDEN_TRACE === "1" ? (t) => console.log(JSON.stringify(t)) : undefined,
 });
@@ -35,5 +38,6 @@ const startupMs = Math.round(performance.now() - started);
 const keys = Object.keys(engine);
 console.log(
   `eden partner listening on http://${server.hostname}:${server.port}${config.dev ? " (dev, no auth)" : ""}` +
-    ` (startup ${startupMs} ms${keys.length > 0 ? `; engine settings: ${keys.join(", ")}` : ""})`,
+    ` (startup ${startupMs} ms; model roles ${process.env.OPENROUTER_API_KEY ? "on" : "off (no OPENROUTER_API_KEY)"}` +
+    `${keys.length > 0 ? `; engine settings: ${keys.join(", ")}` : ""})`,
 );
