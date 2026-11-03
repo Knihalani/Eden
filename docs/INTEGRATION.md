@@ -21,8 +21,9 @@ messages = withContext(messages, await eden.collect(injection)); // before each 
 - **Ids are 1-128 characters of `[A-Za-z0-9._:@-]`** (`isId` in `@eden/protocol`) for `tenantId`, `userId` and
   `sessionId`. The server refuses anything else with a 400, so `alice+work@x.com`, `chat/123` or an id with a space
   get no context at all. Map ids you do not control with `edenId(raw)` from `@eden/client`: it keeps a valid id as it
-  is and maps any other string injectively (a reversible escape, `e:alice_2bwork@x.com`, or `h:` + SHA-256 when that
-  would pass 128 characters), so two users never share an id. Use the same mapping everywhere; the id is how Eden
+  is and maps any other string injectively (a reversible escape of its UTF-16 code units, `e:alice_2bwork@x.com`, or
+  `h:` + SHA-256 when that would pass 128 characters), so two users never share an id, even when an id holds a lone
+  surrogate from cutting a string mid-character. Use the same mapping everywhere; the id is how Eden
   finds the user's state next time. Never fold a bad id by replacing characters (`+` to `-` would merge
   `alice+work@x.com` with `alice-work@x.com`). The client reports a bad id once through `onError` when it is
   constructed.

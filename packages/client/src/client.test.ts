@@ -212,6 +212,11 @@ describe("misconfiguration is visible through onError", () => {
     expect(await eden.observe({ kind: "user_message", text: "hi" })).toEqual({ injection: null, pending: false });
     expect(await eden.check("t", {})).toMatchObject({ verdict: "proceed" });
 
+    const none: Error[] = [];
+    // An empty tenantId is no tenantId: the call omits it and the server takes the tenant from the key.
+    new EdenClient({ tenantId: "", userId: "u", sessionId: "s", onError: (e) => none.push(e as Error) });
+    expect(none).toEqual([]);
+
     const more: Error[] = [];
     new EdenClient({ tenantId: "t/1", userId: "u", sessionId: "chat/123", onError: (e) => more.push(e as Error) });
     expect(more.length).toBe(1);
@@ -273,6 +278,17 @@ describe("edenId", () => {
     "chat#123",
     "",
     "Ünïcödé",
+    "\uD800",
+    "\uFFFD",
+    "a\uDC00b",
+    "a\uFFFDb",
+    "\uD83D\uDE00",
+    "\uD83D",
+    "\uDE00",
+    "_u00e9",
+    "\u00e9",
+    "\uD800".repeat(40),
+    "\uFFFD".repeat(40),
     "x".repeat(128),
     "x".repeat(129),
     "+".repeat(200),
@@ -294,5 +310,16 @@ describe("edenId", () => {
     expect(edenId("alice+work@x.com")).toBe(edenId("alice+work@x.com"));
     expect(edenId("alice+work@x.com")).toBe("e:alice_2bwork@x.com");
     expect(edenId("x".repeat(129)).startsWith("h:")).toBe(true);
+  });
+
+  test("escapes UTF-16 code units, so a lone surrogate never meets U+FFFD", () => {
+    // UTF-8 turns every lone surrogate into EF BF BD, which would merge '\uD800' with '\uFFFD' (two users, one id).
+    expect(edenId("\uD800")).toBe("e:_ud800");
+    expect(edenId("\uFFFD")).toBe("e:_ufffd");
+    expect(edenId("a\uDC00b")).not.toBe(edenId("a\uFFFDb"));
+    expect(edenId("\u00e9")).toBe("e:_e9");
+    // The hashed form too: both inputs are too long to escape within 128 characters.
+    expect(edenId("\uD800".repeat(40))).not.toBe(edenId("\uFFFD".repeat(40)));
+    expect(edenId("\uD800".repeat(40)).startsWith("h:")).toBe(true);
   });
 });

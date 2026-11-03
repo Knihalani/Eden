@@ -32,9 +32,13 @@ const ERROR_TEXT_CHARS = 300;
  * inputs never share an id, because a shared id would merge two users' or sessions' state (D9).
  *
  * - A valid id that does not start with `e:` or `h:` is kept as is (`alice-work@x.com` stays itself).
- * - Otherwise, if it fits, `e:` + a reversible escape: each UTF-8 byte outside [A-Za-z0-9.:@-] (`_` included, it is
- *   the escape character) becomes `_` + two hex digits, so `alice+work@x.com` is `e:alice_2bwork@x.com`.
- * - Otherwise `h:` + the SHA-256 of the input in hex (injective up to a SHA-256 collision).
+ * - Otherwise, if it fits, `e:` + a reversible escape over UTF-16 code units: each one outside [A-Za-z0-9.:@-] (`_`
+ *   included, it is the escape character) becomes `_` + two hex digits below 0x100, else `_u` + four hex digits, so
+ *   `alice+work@x.com` is `e:alice_2bwork@x.com` and `\uD800` is `e:_ud800`. Code units, not UTF-8 bytes: UTF-8
+ *   turns every lone surrogate into U+FFFD, which would merge `\uD800` with `\uFFFD`. `u` is not a hex digit, so
+ *   the two escape forms cannot be confused.
+ * - Otherwise `h:` + the SHA-256 of that escape (ASCII, so hashing it loses nothing) in hex: injective up to a
+ *   SHA-256 collision.
  *
  * The three forms cannot meet: kept ids never start with `e:` or `h:`, and the other two differ in their prefix.
  * Map the same way everywhere: the id is how Eden finds the user's state next time.
@@ -42,12 +46,14 @@ const ERROR_TEXT_CHARS = 300;
 export function edenId(raw: string): string {
   if (isId(raw) && !raw.startsWith("e:") && !raw.startsWith("h:")) return raw;
   let escaped = "e:";
-  for (const byte of new TextEncoder().encode(raw)) {
-    const c = String.fromCharCode(byte);
-    escaped += /[A-Za-z0-9.:@-]/.test(c) ? c : `_${byte.toString(16).padStart(2, "0")}`;
-    if (escaped.length > 128) return `h:${createHash("sha256").update(raw).digest("hex")}`;
+  for (let i = 0; i < raw.length; i++) {
+    const unit = raw.charCodeAt(i);
+    const c = raw[i]!;
+    if (/[A-Za-z0-9.:@-]/.test(c)) escaped += c;
+    else if (unit < 0x100) escaped += `_${unit.toString(16).padStart(2, "0")}`;
+    else escaped += `_u${unit.toString(16).padStart(4, "0")}`;
   }
-  return escaped;
+  return escaped.length <= 128 ? escaped : `h:${createHash("sha256").update(escaped).digest("hex")}`;
 }
 
 /** Reads at most `max` bytes of a body and cancels the rest; null when the body is longer or unreadable. */
@@ -125,7 +131,8 @@ export class EdenClient {
   private badIds(): string | null {
     const { tenantId, userId, sessionId } = this.options;
     const bad = Object.entries({ tenantId, userId, sessionId })
-      .filter(([f, v]) => (f !== "tenantId" || v !== undefined) && !isId(v))
+      // A falsy tenantId is no tenantId, as in `who`: the call omits it and the server takes the tenant from the key.
+      .filter(([f, v]) => (f !== "tenantId" || Boolean(v)) && !isId(v))
       .map(([f]) => f);
     return bad.length > 0 ? `eden: ${bad.join(", ")} must be ${ID_RULE} (map ids with edenId)` : null;
   }
