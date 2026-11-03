@@ -308,3 +308,82 @@ describe("people and start times kept as structure (D44)", () => {
     expect(two!.items.map((i) => i.ref)).toEqual(["b"]);
   });
 });
+
+describe("McpSource list: server-paged pages are kept whole", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const rows = Array.from({ length: 10 }, (_, i) => ({ id: `m${i}`, subject: `Mail ${i}`, snippet: `body ${i}` }));
+
+  /** A list tool with a page token and (optionally) a page-size argument; the server's own page is 4 rows. */
+  function pagedMail(withLimit: boolean) {
+    const server = new McpServer({ name: "mail", version: "1" });
+    const calls: Record<string, unknown>[] = [];
+    server.registerTool(
+      "search_mail",
+      { inputSchema: { query: z.string() }, annotations: { readOnlyHint: true } },
+      async () => ({ content: [{ type: "text", text: "[]" }] }),
+    );
+    const input: z.ZodRawShape = withLimit
+      ? { pageToken: z.string().optional(), limit: z.number().optional() }
+      : { pageToken: z.string().optional() };
+    server.registerTool("list_mail", { inputSchema: input, annotations: { readOnlyHint: true } }, async (args) => {
+      const a = args as Record<string, unknown>;
+      calls.push(a);
+      const size = Number(a.limit ?? 4);
+      const at = a.pageToken ? Number(String(a.pageToken).slice(1)) : 0;
+      const next = at + size < rows.length ? `p${at + size}` : undefined;
+      const body = { messages: rows.slice(at, at + size), ...(next ? { nextPageToken: next } : {}) };
+      return { content: [{ type: "text", text: JSON.stringify(body) }] };
+    });
+    return { server, calls };
+  }
+
+  const make = (server: McpServer, listTool: ConstructorParameters<typeof McpSource>[0]["listTool"]) =>
+    new McpSource({
+      id: "mail",
+      description: "mail",
+      transport: () => {
+        const [client, serverSide] = InMemoryTransport.createLinkedPair();
+        void server.connect(serverSide);
+        return client;
+      },
+      searchTool: { name: "search_mail" },
+      listTool,
+    });
+
+  async function listAll(s: McpSource, limit: number) {
+    const seen: string[] = [];
+    const sizes: number[] = [];
+    let cursor: string | undefined;
+    for (let i = 0; i < 20; i++) {
+      const page = await s.list!(scope, cursor, limit, AbortSignal.timeout(2_000));
+      seen.push(...page.items.map((it) => it.ref));
+      sizes.push(page.items.length);
+      if (page.next === null) break;
+      cursor = page.next;
+    }
+    await s.close();
+    return { seen, sizes };
+  }
+
+  test("a token-paged tool with no page-size argument, paged at limit 2, lists every row (m0..m9)", async () => {
+    const { server, calls } = pagedMail(false);
+    const { seen, sizes } = await listAll(make(server, { name: "list_mail" }), 2);
+    expect(seen).toEqual(rows.map((r) => r.id));
+    expect(sizes).toEqual([4, 4, 2]);
+    expect(calls).toEqual([{}, { pageToken: "p4" }, { pageToken: "p8" }]);
+  });
+
+  test("an operator's args function that ignores limit: the server's page is still kept whole", async () => {
+    const { server } = pagedMail(false);
+    const s = make(server, { name: "list_mail", args: (cursor) => (cursor ? { pageToken: cursor } : {}) });
+    expect((await listAll(s, 2)).seen).toEqual(rows.map((r) => r.id));
+  });
+
+  test("a schema with a page-size argument still gets limit-sized pages", async () => {
+    const { server, calls } = pagedMail(true);
+    const { seen, sizes } = await listAll(make(server, { name: "list_mail" }), 2);
+    expect(seen).toEqual(rows.map((r) => r.id));
+    expect(sizes).toEqual([2, 2, 2, 2, 2]);
+    expect(calls[0]).toEqual({ limit: 2 });
+  });
+});

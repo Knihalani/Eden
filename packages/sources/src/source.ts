@@ -42,7 +42,8 @@ export interface Source {
   fetch?(ref: string, scope: Scope, signal: AbortSignal): Promise<ContextItem | null>;
   /**
    * One page of everything the source holds for the user, most recently updated first, from `cursor` (undefined: the
-   * first page), at most `limit` items: what a background sync reads into a local index (D57). Read-only like search.
+   * first page), `limit` items as a rule: what a background sync reads into a local index (D57). Read-only like search.
+   * A source whose next cursor is the server's own may return more (its whole page): rows cut from it would be skipped.
    */
   list?(scope: Scope, cursor: string | undefined, limit: number, signal: AbortSignal): Promise<ListPage>;
   close?(): Promise<void>;

@@ -17,7 +17,7 @@ for (const [size, nonAscii] of [
   const map = new Map<string, number>();
   const label = `${size}B${nonAscii ? " +10% non-ASCII" : ""}`;
   results.push(
-    bench(`engine contentTerms (regex, today)  ${label}`, () => contentTerms(text), { batch: 20 }),
+    bench(`engine contentTerms (warm vocab)      ${label}`, () => contentTerms(text, vocab), { batch: 20 }),
     bench(
       `regex match + toLowerCase + Map     ${label}`,
       () => {
