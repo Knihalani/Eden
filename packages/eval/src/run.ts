@@ -2,11 +2,12 @@
  * Plays scenarios through a real `ContextPartner` and scores what it delivered. Deterministic with no model or a
  * `FakeModel`; with `--live` it uses OpenRouter and reports real cost.
  */
-import { ContextPartner, ItemCache, type EngineConfig, type Trace } from "@eden/engine";
+import { AskReader, ContextPartner, ItemCache, type EngineConfig, type ReaderReport, type Trace } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner, StaticSource } from "@eden/sources";
+import { OracleReader, readerFor, type ReaderKindOption } from "./reader-stub";
 import type { Scenario } from "./scenario";
 
 export interface RunOptions {
@@ -19,6 +20,30 @@ export interface RunOptions {
   config?: Partial<EngineConfig>;
   /** Run each scenario's lookups through a query planner (a fresh one per scenario, as the server does per process). */
   planner?: boolean;
+  /**
+   * A no-model reader behind the real `AskReader` (`reader-stub.ts`), for configurations with `askReader`: `stub` says
+   * nothing binds and measures the reader's pool (`Metrics.readerPool`); `oracle` flags the expected items, a proxy
+   * whose scores read the gold labels (`proxyOf`). Absent: no reader is wired, and `askReader` does nothing.
+   */
+  reader?: ReaderKindOption;
+}
+
+/**
+ * With `RunOptions.reader`: how often an expected item was in a pool the reader was given (the ids `onReader`
+ * reports), by its turn or the next one (the window recall uses), or during its ask. A measurement of pool content,
+ * not of delivery: what a reader could flag at best.
+ */
+export interface ReaderPoolMetrics {
+  reader: ReaderKindOption;
+  /** Calls the engine made to the reader, reports with a pool, and the mean pool size over those reports. */
+  calls: number;
+  reads: number;
+  meanPoolItems: number;
+  /** Expected items on labelled turns, and those in a reader pool in their window. */
+  expected: number;
+  expectedInPool: number;
+  ask: { expected: number; expectedInPool: number };
+  byCategory: Record<string, { expected: number; expectedInPool: number }>;
 }
 
 export interface Metrics {
@@ -63,6 +88,8 @@ export interface Metrics {
   };
   /** `Scenario.asks`: how many, how many cited something, and recall of the expected items in their citations. */
   ask: { cases: number; answered: number; recall: number };
+  /** Only with `RunOptions.reader`. */
+  readerPool?: ReaderPoolMetrics;
 }
 
 export interface CategoryMetrics {
@@ -116,6 +143,14 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
   const ask = { cases: 0, answered: 0, expected: 0, found: 0 };
   const latencies: number[] = [];
   const traces: Trace[] = [];
+  const reports: ReaderReport[] = [];
+  const pool = {
+    expected: 0,
+    expectedInPool: 0,
+    ask: { expected: 0, expectedInPool: 0 },
+    byCategory: new Map<string, { expected: number; expectedInPool: number }>(),
+  };
+  let readerCalls = 0;
 
   for (const scenario of scenarios) {
     const category = scenario.category ?? "general";
@@ -142,6 +177,14 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       for (const inj of got) inspect(inj.text, inj.citations);
     };
     const sources = scenario.sources.map((s) => new StaticSource(s.id, s.description, s.docs));
+    // A fresh reader per scenario, as each scenario is its own user. Uncapped, as the lab's no-model readers are: the
+    // pool is what is measured, and a stub costs nothing.
+    const maker = options.reader ? readerFor(options.reader) : null;
+    const oracle = maker instanceof OracleReader ? maker : null;
+    const uncapped = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
+    const reader = maker ? new AskReader({ maker, budget: new Budget(uncapped), now: () => Date.now() }) : null;
+    if (!pool.byCategory.has(category)) pool.byCategory.set(category, { expected: 0, expectedInPool: 0 });
+    const poolTally = pool.byCategory.get(category)!;
     const partner = new ContextPartner({
       sources: async () => sources,
       sourceMap: new SourceMap(),
@@ -151,14 +194,23 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       config: options.config,
       onTrace: (t) => traces.push(t),
       ...(options.planner ? { planner: new QueryPlanner({ seed: 1 }) } : {}),
+      ...(reader ? { reader, onReader: (r: ReaderReport) => reports.push(r) } : {}),
     });
+    // The ids in the pools reported for a session between two `reports` indexes.
+    const pooled = (sessionId: string, from: number, to: number) =>
+      new Set(reports.slice(from, to).flatMap((r) => (r.sessionId === sessionId ? r.pool : [])));
     const who = { tenantId: "eval", userId: scenario.id };
     let clock = scenario.clock ? Date.parse(scenario.clock) : Date.UTC(2026, 9, 1);
     for (const session of scenario.sessions) {
       const traceStart = traces.length;
       const deliveries: string[][] = [];
+      // `reports.length` as each turn starts, and once more after the trailing wait.
+      const marks: number[] = [];
       for (const turn of session.turns) {
         turns++;
+        marks.push(reports.length);
+        // The oracle flags what this turn expects (the push's reader reads the request inside this observe).
+        if (oracle) oracle.bearing = new Set(turn.expect && turn.expect !== "silent" ? turn.expect.items : []);
         const event = { ...who, sessionId: session.id, at: clock++, ...turn.event } as AgentEvent;
         const t0 = performance.now();
         const result = await partner.observe(event, { waitMs: options.waitMs });
@@ -176,6 +228,19 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       const trailing = partner.takePending({ ...who, sessionId: session.id });
       check(trailing);
       deliveries.push(trailing.flatMap((i) => i.citations.map((c) => c.itemId)));
+      marks.push(reports.length);
+      if (reader) {
+        // An expected item counts as in the pool when a reader pool held it by its turn or the next one.
+        session.turns.forEach((turn, i) => {
+          if (!turn.expect || turn.expect === "silent") return;
+          const seen = pooled(session.id, marks[i]!, marks[Math.min(i + 2, marks.length - 1)]!);
+          const hit = turn.expect.items.filter((id) => seen.has(id)).length;
+          for (const t of [pool, poolTally]) {
+            t.expected += turn.expect.items.length;
+            t.expectedInPool += hit;
+          }
+        });
+      }
 
       // Score each delivered item against the turn that caused it, not the turn it arrived at: the slow path
       // may land one event late, and that must not change whether a delivery counts as a false fire. The engine's
@@ -214,7 +279,14 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       await partner.observe({ ...who, sessionId: session.id, at: clock++, kind: "session_end" });
     }
     for (const c of scenario.asks ?? []) {
+      const before = reports.length;
+      if (oracle) oracle.bearing = new Set(c.expect);
       const res = await partner.ask({ ...who, sessionId: `${scenario.id}-ask`, question: c.question, maxItems: 5 });
+      if (reader) {
+        const seen = pooled(`${scenario.id}-ask`, before, reports.length);
+        pool.ask.expected += c.expect.length;
+        pool.ask.expectedInPool += c.expect.filter((id) => seen.has(id)).length;
+      }
       ask.cases++;
       if (res.citations.length > 0) ask.answered++;
       if (res.answer.length > 0) inspect(res.answer, res.citations);
@@ -222,6 +294,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       ask.expected += c.expect.length;
       ask.found += c.expect.filter((id) => cited.has(id)).length;
     }
+    readerCalls += maker?.calls ?? 0;
   }
 
   const decisions: Record<string, number> = {};
@@ -231,6 +304,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     decisions[k] = (decisions[k] ?? 0) + 1;
   }
   const sum = (f: (t: Trace) => number) => traces.reduce((s, t) => s + f(t), 0);
+  const readsWithPool = reports.filter((r) => r.pool.length > 0).length;
   return {
     scenarios: scenarios.length,
     turns,
@@ -257,5 +331,60 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     ),
     privacy,
     ask: { cases: ask.cases, answered: ask.answered, recall: ask.expected ? ask.found / ask.expected : 1 },
+    ...(options.reader
+      ? {
+          readerPool: {
+            reader: options.reader,
+            calls: readerCalls,
+            reads: readsWithPool,
+            meanPoolItems: readsWithPool ? reports.reduce((n, r) => n + r.pool.length, 0) / readsWithPool : 0,
+            expected: pool.expected,
+            expectedInPool: pool.expectedInPool,
+            ask: pool.ask,
+            byCategory: Object.fromEntries([...pool.byCategory].sort(([a], [b]) => a.localeCompare(b))),
+          },
+        }
+      : {}),
   };
+}
+
+/** The label every proxy block carries: the oracle reads the gold labels. */
+export const ORACLE_LABEL =
+  "PROXY (--reader oracle): the reader flags exactly the expected items, reading the gold labels; an upper bound on " +
+  "what a perfect reader adds over this pool, not a measurement, and excluded from the headline metrics";
+
+/**
+ * An oracle run's scores, every key named as a proxy so none can be read as a headline metric. The headline metrics
+ * of an oracle invocation come from a stub run (cli.ts).
+ */
+export function proxyOf(m: Metrics) {
+  return {
+    label: ORACLE_LABEL,
+    proxyPrecision: m.precision,
+    proxyRecall: m.recall,
+    proxyFalseFireRate: m.falseFireRate,
+    proxyCounts: m.counts,
+    proxyAskRecall: m.ask.recall,
+    proxyByCategory: Object.fromEntries(
+      Object.entries(m.byCategory).map(([k, c]) => [
+        k,
+        { proxyPrecision: c.precision, proxyRecall: c.recall, proxyFalseFireRate: c.falseFireRate },
+      ]),
+    ),
+    proxyDecisions: m.decisions,
+  };
+}
+
+/**
+ * Flags in `config` whose dependency the eval does not wire: each runs as if off. The lab's precedent is the funnel,
+ * which refuses `askReader` without `--reader` (funnel.ts); cli.ts refuses that too and labels the rest.
+ */
+export function unwiredFlags(config: Partial<EngineConfig>, wired: { reader: boolean }): string[] {
+  const out: string[] = [];
+  if (config.askReader && !wired.reader) out.push("askReader (needs a reader: pass --reader stub|oracle)");
+  if (config.cards) out.push("cards (needs a card maker; the eval wires none, so no card is made or matched)");
+  if (config.intent) out.push("intent (needs the card maker's intent requests; not wired)");
+  if ((config.askReaderStanding ?? 0) > 0) out.push("askReaderStanding (needs cards; not wired)");
+  if (config.bridgeQuery) out.push("bridgeQuery (needs a bridge model; not wired)");
+  return out;
 }

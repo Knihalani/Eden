@@ -1,0 +1,361 @@
+{
+  "id": "large-flight-lookalikes",
+  "category": "travel",
+  "description": "58 documents. Changing one flight among lookalikes: the same route last year, a colleague's booking on the same day, and a cancelled hotel in the same city.",
+  "clock": "2026-11-03T09:00:00Z",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "mail-misc-14",
+          "title": "School newsletter (Ines Delacroix)",
+          "text": "Reminder that the harvest festival collection runs all week; tins and dry food please. — Ines Delacroix"
+        },
+        {
+          "ref": "mail-misc-19",
+          "title": "Team standup notes (Hiro Novak)",
+          "text": "Standup: build is green, the onboarding doc needs review, nobody is blocked. — Hiro Novak"
+        },
+        {
+          "ref": "mail-misc-20",
+          "title": "Wine club (Felix Tanaka)",
+          "text": "This quarter's case has six reds from the Douro; tasting notes are enclosed. — Felix Tanaka"
+        },
+        {
+          "ref": "mail-misc-18",
+          "title": "Hiking group (Tomas Novak)",
+          "text": "Saturday's hike is the ridge loop, 14 km; bring water and a waterproof. — Tomas Novak"
+        },
+        {
+          "ref": "mail-misc-16",
+          "title": "Window cleaner (Kwame Novak)",
+          "text": "The window cleaner will come on the first Monday of each month as usual. — Kwame Novak"
+        },
+        {
+          "ref": "mail-misc-3",
+          "title": "Podcast recommendation (Amara Castell)",
+          "text": "You might like the episode on urban beekeeping, about forty minutes long. — Amara Castell"
+        },
+        {
+          "ref": "mail-misc-1",
+          "title": "Recipe swap (Hiro Mbeki)",
+          "text": "Here is the lentil soup recipe: onions, carrots, red lentils, cumin, simmer forty minutes. — Hiro Mbeki"
+        },
+        {
+          "ref": "mail-misc-26",
+          "title": "Electricity bill (Bea Halvorsen)",
+          "text": "Your statement for the period is ready; direct debit will be taken on the 21st. — Bea Halvorsen"
+        },
+        {
+          "ref": "mail-misc-23",
+          "title": "Plumber visit (Tomas Quinlan)",
+          "text": "The plumber can come on Wednesday morning to look at the kitchen tap; access via side gate. — Tomas Quinlan"
+        },
+        {
+          "ref": "mail-misc-22",
+          "title": "Hiking group (Maya Castell)",
+          "text": "Saturday's hike is the ridge loop, 14 km; bring water and a waterproof. — Maya Castell"
+        },
+        {
+          "ref": "mail-misc-2",
+          "title": "School newsletter (Maya Ostrom)",
+          "text": "Reminder that the harvest festival collection runs all week; tins and dry food please. — Maya Ostrom"
+        },
+        {
+          "ref": "booking-lis-2025",
+          "title": "Your booking: London to Lisbon, 12 November 2025",
+          "text": "Booking reference LM2PQA. Flight TP1351 departed London Heathrow 07:40 on 12 November 2025."
+        },
+        {
+          "ref": "mail-misc-24",
+          "title": "Volunteer rota (Maya Byrne)",
+          "text": "You are on the food bank rota for the second Saturday; shift starts at 9:30. — Maya Byrne"
+        },
+        {
+          "ref": "mail-misc-6",
+          "title": "Volunteer rota (Hiro Novak)",
+          "text": "You are on the food bank rota for the second Saturday; shift starts at 9:30. — Hiro Novak"
+        },
+        {
+          "ref": "booking-lis-nov",
+          "title": "Your booking: London to Lisbon, 12 November",
+          "text": "Booking reference QX7RTB. Flight TP1351 departs London Heathrow 07:40 on 12 November 2026. Fare: Classic, changes allowed for a 60 GBP fee."
+        },
+        {
+          "ref": "mail-misc-11",
+          "title": "Gym membership (Lena Byrne)",
+          "text": "Your membership renews on the 3rd. Classes this week: spin Tuesday, yoga Thursday. — Lena Byrne"
+        },
+        {
+          "ref": "mail-misc-4",
+          "title": "Team standup notes (Oskar Halvorsen)",
+          "text": "Standup: build is green, the onboarding doc needs review, nobody is blocked. — Oskar Halvorsen"
+        },
+        {
+          "ref": "mail-misc-13",
+          "title": "Volunteer rota (Ines Quinlan)",
+          "text": "You are on the food bank rota for the second Saturday; shift starts at 9:30. — Ines Quinlan"
+        },
+        {
+          "ref": "mail-misc-8",
+          "title": "Library hold (Felix Delacroix)",
+          "text": "The book you reserved, A Gentleman in Moscow, is waiting at the front desk for seven days. — Felix Delacroix"
+        },
+        {
+          "ref": "mail-misc-17",
+          "title": "Neighbourhood watch (Maya Byrne)",
+          "text": "A reminder to lock bikes overnight; two were taken from Elm Road last week. — Maya Byrne"
+        },
+        {
+          "ref": "sam-booking-lis",
+          "title": "Fwd: Sam Okoro's flight to Lisbon",
+          "text": "Sam's booking reference ZZ81KD: TP1357, 18:05 from Heathrow on 12 November 2026. Sam asked you to keep a copy."
+        },
+        {
+          "ref": "mail-misc-21",
+          "title": "Hiking group (Amara Halvorsen)",
+          "text": "Saturday's hike is the ridge loop, 14 km; bring water and a waterproof. — Amara Halvorsen"
+        },
+        {
+          "ref": "mail-misc-10",
+          "title": "Piano lessons (Maya Tanaka)",
+          "text": "Lessons move to 5pm on Tuesdays from next month; please practise the scales. — Maya Tanaka"
+        },
+        {
+          "ref": "mail-misc-7",
+          "title": "Mortgage statement (Felix Mbeki)",
+          "text": "Your annual mortgage statement is available to download from the portal. — Felix Mbeki"
+        },
+        {
+          "ref": "mail-misc-15",
+          "title": "Laptop warranty (Ines Halvorsen)",
+          "text": "Your laptop's extended warranty covers accidental damage until next spring. — Ines Halvorsen"
+        },
+        {
+          "ref": "mail-misc-5",
+          "title": "Quiz night (Tomas Mbeki)",
+          "text": "Pub quiz is back on Wednesday; teams of up to six, picture round included. — Tomas Mbeki"
+        },
+        {
+          "ref": "mail-misc-12",
+          "title": "Streaming receipt (Kwame Halvorsen)",
+          "text": "Thanks for your payment; your streaming plan continues for another month. — Kwame Halvorsen"
+        },
+        {
+          "ref": "mail-misc-9",
+          "title": "Conference CFP (Ruth Halvorsen)",
+          "text": "The call for papers closes at the end of the month; talks are 25 minutes. — Ruth Halvorsen"
+        },
+        {
+          "ref": "hotel-lis-cancelled",
+          "title": "Cancelled: Hotel Alfama, Lisbon",
+          "text": "Your reservation at Hotel Alfama for 12 to 14 November 2026 has been cancelled at your request."
+        },
+        {
+          "ref": "mail-misc-25",
+          "title": "Photo album (Amara Halvorsen)",
+          "text": "The holiday photos are uploaded to the shared album; 214 pictures from the coast. — Amara Halvorsen"
+        }
+      ]
+    },
+    {
+      "id": "docs",
+      "description": "The user's documents",
+      "docs": [
+        {
+          "ref": "docs-misc-2",
+          "title": "Neighbourhood watch (Felix Quinlan)",
+          "text": "A reminder to lock bikes overnight; two were taken from Elm Road last week. — Felix Quinlan"
+        },
+        {
+          "ref": "docs-misc-7",
+          "title": "Conference CFP (Hiro Ostrom)",
+          "text": "The call for papers closes at the end of the month; talks are 25 minutes. — Hiro Ostrom"
+        },
+        {
+          "ref": "docs-misc-8",
+          "title": "Gym membership (Ruth Castell)",
+          "text": "Your membership renews on the 3rd. Classes this week: spin Tuesday, yoga Thursday. — Ruth Castell"
+        },
+        {
+          "ref": "docs-misc-5",
+          "title": "Team standup notes (Felix Mbeki)",
+          "text": "Standup: build is green, the onboarding doc needs review, nobody is blocked. — Felix Mbeki"
+        },
+        {
+          "ref": "docs-misc-11",
+          "title": "School newsletter (Oskar Halvorsen)",
+          "text": "Reminder that the harvest festival collection runs all week; tins and dry food please. — Oskar Halvorsen"
+        },
+        {
+          "ref": "docs-misc-10",
+          "title": "Knitting circle (Ines Quinlan)",
+          "text": "The knitting circle meets at the café on Sunday; beginners very welcome. — Ines Quinlan"
+        },
+        {
+          "ref": "docs-misc-6",
+          "title": "Recipe swap (Felix Castell)",
+          "text": "Here is the lentil soup recipe: onions, carrots, red lentils, cumin, simmer forty minutes. — Felix Castell"
+        },
+        {
+          "ref": "docs-misc-14",
+          "title": "Quiz night (Tomas Byrne)",
+          "text": "Pub quiz is back on Wednesday; teams of up to six, picture round included. — Tomas Byrne"
+        },
+        {
+          "ref": "docs-misc-1",
+          "title": "Photo album (Ines Tanaka)",
+          "text": "The holiday photos are uploaded to the shared album; 214 pictures from the coast. — Ines Tanaka"
+        },
+        {
+          "ref": "docs-misc-13",
+          "title": "Recipe swap (Lena Varga)",
+          "text": "Here is the lentil soup recipe: onions, carrots, red lentils, cumin, simmer forty minutes. — Lena Varga"
+        },
+        {
+          "ref": "docs-misc-12",
+          "title": "Office plants (Maya Halvorsen)",
+          "text": "Facilities will water the office plants on Fridays; please do not move the ficus. — Maya Halvorsen"
+        },
+        {
+          "ref": "docs-misc-9",
+          "title": "Piano lessons (Ines Tanaka)",
+          "text": "Lessons move to 5pm on Tuesdays from next month; please practise the scales. — Ines Tanaka"
+        },
+        {
+          "ref": "docs-misc-4",
+          "title": "Podcast recommendation (Amara Mbeki)",
+          "text": "You might like the episode on urban beekeeping, about forty minutes long. — Amara Mbeki"
+        },
+        {
+          "ref": "docs-misc-3",
+          "title": "Bike repair (Amara Tanaka)",
+          "text": "The bike shop replaced the rear brake pads and trued the wheel; ready for pickup. — Amara Tanaka"
+        }
+      ]
+    },
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "calendar-misc-9",
+          "title": "Photo album (Maya Mbeki)",
+          "text": "The holiday photos are uploaded to the shared album; 214 pictures from the coast. — Maya Mbeki"
+        },
+        {
+          "ref": "calendar-misc-1",
+          "title": "Streaming receipt (Maya Mbeki)",
+          "text": "Thanks for your payment; your streaming plan continues for another month. — Maya Mbeki"
+        },
+        {
+          "ref": "calendar-misc-6",
+          "title": "Electricity bill (Oskar Halvorsen)",
+          "text": "Your statement for the period is ready; direct debit will be taken on the 21st. — Oskar Halvorsen"
+        },
+        {
+          "ref": "calendar-misc-3",
+          "title": "Water outage (Noor Halvorsen)",
+          "text": "Planned maintenance may cause low water pressure on Thursday between 10 and 2. — Noor Halvorsen"
+        },
+        {
+          "ref": "calendar-misc-11",
+          "title": "Charity run (Ines Quinlan)",
+          "text": "Thanks for signing up for the 10k charity run in the park; bib numbers go out next week. — Ines Quinlan"
+        },
+        {
+          "ref": "calendar-misc-8",
+          "title": "Office plants (Hiro Castell)",
+          "text": "Facilities will water the office plants on Fridays; please do not move the ficus. — Hiro Castell"
+        },
+        {
+          "ref": "lis-workshop",
+          "title": "Lisbon client workshop",
+          "text": "13 November 2026, 09:00 to 17:00, at the client's Lisbon office."
+        },
+        {
+          "ref": "calendar-misc-2",
+          "title": "Team standup notes (Maya Mbeki)",
+          "text": "Standup: build is green, the onboarding doc needs review, nobody is blocked. — Maya Mbeki"
+        },
+        {
+          "ref": "calendar-misc-7",
+          "title": "Volunteer rota (Lena Halvorsen)",
+          "text": "You are on the food bank rota for the second Saturday; shift starts at 9:30. — Lena Halvorsen"
+        },
+        {
+          "ref": "calendar-misc-10",
+          "title": "Hiking group (Noor Castell)",
+          "text": "Saturday's hike is the ridge loop, 14 km; bring water and a waterproof. — Noor Castell"
+        },
+        {
+          "ref": "calendar-misc-12",
+          "title": "Book club (Ruth Byrne)",
+          "text": "This month we read The Overstory; bring a snack and your notes on chapter nine. — Ruth Byrne"
+        },
+        {
+          "ref": "calendar-misc-5",
+          "title": "Plumber visit (Ines Byrne)",
+          "text": "The plumber can come on Wednesday morning to look at the kitchen tap; access via side gate. — Ines Byrne"
+        },
+        {
+          "ref": "calendar-misc-4",
+          "title": "Laptop warranty (Amara Halvorsen)",
+          "text": "Your laptop's extended warranty covers accidental damage until next spring. — Amara Halvorsen"
+        },
+        {
+          "ref": "calendar-misc-13",
+          "title": "Office plants (Ines Castell)",
+          "text": "Facilities will water the office plants on Fridays; please do not move the ficus. — Ines Castell"
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "large-flight-lookalikes-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Move my Lisbon flight on 12 November to the evening departure."
+          },
+          "expect": {
+            "items": [
+              "mail:booking-lis-nov"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Let me check what is available."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Great, thanks."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ],
+  "asks": [
+    {
+      "question": "What is my booking reference for the Lisbon flight on 12 November 2026?",
+      "expect": [
+        "mail:booking-lis-nov"
+      ]
+    }
+  ]
+}
