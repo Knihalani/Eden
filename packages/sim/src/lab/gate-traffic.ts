@@ -91,11 +91,14 @@ class CountingReader implements ReaderMaker {
 }
 
 type Outcome = ReaderReport["outcome"] | "skipped";
+// "budget" (the gate passed but the reader's Budget refused the call) is named here as well as in ReaderReport so the
+// tally has every key whether or not this tree's ReaderReport lists it; a missing key would count NaN.
+type Counted = Outcome | "budget";
 
 interface Tally {
   messages: number;
   calls: number;
-  outcomes: Record<Outcome, number>;
+  outcomes: Record<Counted, number>;
   /** Messages whose pool held an item stating a `must` fact of the turn, and how many of those were gated. */
   bindingInPool: number;
   bindingGated: number;
@@ -110,7 +113,7 @@ interface Tally {
 const tally = (): Tally => ({
   messages: 0,
   calls: 0,
-  outcomes: { read: 0, gated: 0, none: 0, late: 0, skipped: 0 },
+  outcomes: { read: 0, gated: 0, none: 0, late: 0, budget: 0, skipped: 0 },
   bindingInPool: 0,
   bindingGated: 0,
   poolItems: 0,
@@ -232,7 +235,8 @@ const mustOf = (label: Label) => new Set(label.kind === "need" ? label.must : []
 
 const ratio = (a: number, b: number) => (b > 0 ? a / b : 0);
 function summary(t: Tally) {
-  const atGate = t.outcomes.read + t.outcomes.gated + t.outcomes.late;
+  // A budget refusal passed the gate, like a late read: it counts at the gate.
+  const atGate = t.outcomes.read + t.outcomes.gated + t.outcomes.late + t.outcomes.budget;
   return {
     messages: t.messages,
     calls: t.calls,
@@ -240,6 +244,8 @@ function summary(t: Tally) {
     read: t.outcomes.read,
     gated: t.outcomes.gated,
     emptyPool: t.outcomes.none,
+    late: t.outcomes.late,
+    budget: t.outcomes.budget,
     skipped: t.outcomes.skipped,
     gatedShare: ratio(t.outcomes.gated, atGate),
     missedBindingRate: ratio(t.bindingGated, t.outcomes.gated),
@@ -272,7 +278,8 @@ for (const [name, r] of Object.entries(results)) {
   const a = r.all;
   console.log(
     `${name.padEnd(12)} ${a.messages} user messages: ${a.calls} reader calls (${a.callsPerMessage.toFixed(3)} per ` +
-      `message); read ${a.read}, gated ${a.gated}, empty pool ${a.emptyPool}, not read ${a.skipped}; gated share ` +
+      `message); read ${a.read}, gated ${a.gated}, late ${a.late}, budget-refused ${a.budget}, empty pool ` +
+      `${a.emptyPool}, not read ${a.skipped}; gated share ` +
       `${pct(a.gatedShare)}; missed-binding ${a.missedBindingRate.toFixed(3)} (${a.bindingGatedShare.toFixed(3)} of ` +
       `${a.bindingInPool} pools holding a needed item); card coverage ${pct(a.cardCoverage)}, gated share on fully ` +
       `covered pools ${pct(a.gatedShareCovered)} (${a.coveredPools} pools)`,
@@ -280,7 +287,8 @@ for (const [name, r] of Object.entries(results)) {
   for (const [type, s] of Object.entries(r.byType)) {
     console.log(
       `  ${type.padEnd(18)} ${String(s.messages).padStart(4)} msgs  calls/msg ${s.callsPerMessage.toFixed(3)}  read ` +
-        `${s.read}  gated ${s.gated}  empty ${s.emptyPool}  not read ${s.skipped}  missed-binding ` +
+        `${s.read}  gated ${s.gated}  late ${s.late}  budget ${s.budget}  empty ${s.emptyPool}  not read ${s.skipped}  ` +
+        `missed-binding ` +
         `${s.missedBindingRate.toFixed(3)}  coverage ${pct(s.cardCoverage)}`,
     );
   }
