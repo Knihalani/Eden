@@ -10,6 +10,10 @@
  * The live A/B (`pi-ab.ts --replay DIR`) keeps its reader's and its grader's calls here too, with a `salt` in the key
  * (the role, the harness version, the provider preferences) so a line made under one setup never answers another. A
  * line holds the reply, usage, cost and latency only: never a key or a request header.
+ *
+ * Per-call timings for `reader-latency-fit.ts`: a line keeps the call's usage (input, cached input and output tokens),
+ * its total `latencyMs` and, when the provider streamed it, `ttftMs` (time to the first answer token). Counts and
+ * timings only; the reply text is the sim's own.
  */
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
@@ -21,9 +25,23 @@ interface Line {
   usage: ChatResponse["usage"];
   costUsd: number;
   latencyMs: number;
+  /** Time to the first answer token (ms), when the call was streamed (`ChatResponse.ttftMs`). */
+  ttftMs?: number;
   model: string;
   provider?: string;
   truncated?: boolean;
+}
+
+/** One call as made, counts and timings only (`ReplayModel.calls`). */
+export interface ReplayCall {
+  costUsd: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  latencyMs: number;
+  ttftMs: number | null;
+  live: boolean;
+  truncated: boolean;
 }
 
 /**
@@ -76,8 +94,7 @@ export class ReplayModel implements Model {
   missed = 0;
   failed = 0;
   readonly latencies: number[] = [];
-  readonly calls: { costUsd: number; inputTokens: number; outputTokens: number; live: boolean; truncated: boolean }[] =
-    [];
+  readonly calls: ReplayCall[] = [];
 
   constructor(
     private readonly file: string,
@@ -116,6 +133,7 @@ export class ReplayModel implements Model {
       usage: res.usage,
       costUsd: res.costUsd,
       latencyMs: res.latencyMs,
+      ...(res.ttftMs !== undefined ? { ttftMs: res.ttftMs } : {}),
       model: res.model,
       ...(res.provider ? { provider: res.provider } : {}),
       ...(res.truncated ? { truncated: true } : {}),
@@ -168,7 +186,10 @@ export class ReplayModel implements Model {
     this.calls.push({
       costUsd: l.costUsd,
       inputTokens: l.usage.inputTokens,
+      cachedInputTokens: l.usage.cachedInputTokens ?? 0,
       outputTokens: l.usage.outputTokens,
+      latencyMs: l.latencyMs,
+      ttftMs: l.ttftMs ?? null,
       live,
       truncated: l.truncated === true,
     });
