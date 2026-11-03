@@ -69,16 +69,31 @@ repeated ask makes none. Input: the system prompt (about 450 tokens) and up to 3
 glm-5.3-flash, 2026-11-02, OpenRouter's reported cost): 0.86 calls per task (124 asks read in 144 tasks). Two
 endpoints, with very different reasoning lengths:
 
-Measured on Claude Haiku 5.5 (lab, D96, docs/research/haiku-opt.md): prompt v5 over a 30-item pool is about 3,770
-tokens in and 250 out, 24% of the prompt read from the cache (the instructions), $0.00042 per call ($0.10 / $0.50 per
-million, cache reads at a tenth), p50 1.41 s and p90 1.99 s with thinking off. With `readerPush` (D96) the same call is also made
-once per user request that acts (an imperative request), whether or not the agent asks: at about $0.00042 a call,
-$0.42 per thousand acting requests. Phase 3 (D99): prompt v7 is about 3,900 tokens in and 190 out, $0.00040 a call;
-the leaner operating point (pool 15, 240-character snippets, `readerGate`) about 2,900 in and 180 out, $0.00029 a call
-(30% less Eden cost per task live). `askReaderStanding` 20 adds about 3,000 input tokens, 55–68% of the prompt then
-read from the cache ($0.00043–0.00047 a call). With `askReaderQuestions` and `readerPush` together, the reader is
-called once per user message (small talk included), not per acting request: about $0.00040–0.00047 per user message. The intent index's requests for every
-item of a world (D87) cost $0.0000501 per item on Haiku 5.5 (3,331 items, 355 calls, $0.177), once per item version.
+Measured on Claude Haiku 5.5 (lab, D96, docs/research/haiku-opt.md): prompt v5 over a 30-item pool is about 3,770 tokens
+in and 250 out, 24% of the prompt read from the cache (the instructions), $0.00042 per call ($0.10 / $0.50 per million,
+cache reads at a tenth), p50 1.41 s and p90 1.99 s with thinking off. With `readerPush` (D96) the same call is also made
+once per user request that acts (an imperative request), whether or not the agent asks: at about $0.00042 a call, $0.42
+per thousand acting requests. Phase 3 (D99): prompt v7 is about 3,900 tokens in and 190 out, $0.00040 a call; the leaner
+operating point (pool 15, 240-character snippets, `readerGate`) about 2,900 in and 180 out, $0.00029 a call (30% less
+Eden cost per task live). `askReaderStanding` 20 adds about 3,000 input tokens, 55–68% of the prompt then read from the
+cache ($0.00043–0.00047 a call). With `askReaderQuestions` and `readerPush` together, the push reads every user message
+(small talk included), not only acting requests: about $0.00040–0.00047 per user message from the push alone. An
+`ask_context` the agent then makes about the same request is a second full call unless its question is the request word
+for word: the verdict cache is keyed by the request, the question and the focused pool (`readerKey`), and a paraphrase
+changes all three (the audit's scratch test on the `reader.test.ts` harness, re-run 2026-11-03: 1 call for a verbatim
+ask, 2 for a paraphrase). In Pi's held-out 13 run (seed 41, `packages/sim/lab/haiku/phase3/ledger-summary.jsonl`) the
+reader made 476 calls over the 320 tasks of the five reader conditions, 1.49 a task, mixing the `eden` arms (which have
+`ask_context`) with the `both` arms (which do not). So the reader runs once per user message plus once per paraphrased
+ask, not once per user message. The reader's calls show in the traces, each call counted once (`readerCalls`,
+`readerCostUsd`): an "answer" trace for an ask's read, a "reader-push" trace for a push's (the push waits for its
+reading), and a "reader-late" trace, emitted when it lands, for a call an explicit ask started and stopped waiting for
+at `askReaderWaitMs`. `AskResponse.costUsd` holds only a call that answered in time: a late call reports 0 there (and
+`usedModel` false), so an embedder meters the reader from the traces or from `AskReader.stats`, not from `AskResponse`
+alone. A reader given a default `new Budget()` stops after 20 reads a session (`callsPerSession`; settling at the actual
+cost frees the dollar cap, so the count binds first): about 20 user messages when each is read once, fewer when an ask
+reads a pool its push did not. Refused reads report the outcome "budget"; size the reader's own `Budget` for longer
+sessions. The intent index's requests for every item of a world (D87) cost $0.0000501 per item on Haiku 5.5 (3,331
+items, 355 calls, $0.177), once per item version.
 
 | Routing (`sort`)            | Endpoint      | Calls | Tokens in / out per call | $ per call (reported) | Latency p50 / p90 | Over 2.5 s |
 | --------------------------- | ------------- | ----- | ------------------------ | --------------------- | ----------------- | ---------- |
@@ -93,6 +108,30 @@ turning it on roughly doubles the model cost of an acting task. The price-routed
 whatever effort it is asked for, which puts 94% of its calls past the default 2.5 s wait (the ask then answers
 without it, and the call only fills the cache); throughput routing is what makes the reader fit its wait. Small
 samples on one seed: not statistics.
+
+The reader gate on everyday traffic, SIMULATED (`bun run gate-traffic`, no model, $0; 2026-11-03, bench/ledger.jsonl
+`20261103060929-sim-sessions-gate-traffic`). `sessions.ts` sessions (requests that need context, inbound mail,
+small talk, off-world and novel requests, passing mentions; 438 user messages over 160 sessions on seeds 41–44)
+through a `ContextPartner` with a reader that counts calls and makes none, every item synced with its replayed card
+(99.6–99.9% of the request's own pool items have a known card, so missing cards do not inflate the skip rate). Two
+runs gave identical numbers. These are simulated sessions, not production traffic, and the agent's own
+`ask_context` calls are not played, so the counts are the push's alone:
+
+| Preset          | Reader calls per user message | Gated share (of messages at the gate) | Gated with a needed item in the pool |
+| --------------- | ----------------------------- | ------------------------------------- | ------------------------------------ |
+| NEWL, gate off  | 0.199                         | –                                     | –                                    |
+| NEWL (gate on)  | 0.151                         | 25.0% (22 of 88)                      | 5 of 22 gated; 5 of 42 such pools    |
+| NEW2, gate off  | 0.995                         | –                                     | –                                    |
+| NEW2 + gate     | 0.628                         | 37.2% (163 of 438)                    | 29 of 163 gated; 29 of 199 such pools |
+
+Under NEWL 348 of 438 messages are never read (they do not act), so the gate trims 24% of an already small count;
+under NEW2 it cuts calls by 37%, not the 3.3–10x an estimate in the audit assumed. The cost of the cut is real: about
+one gated message in five held an item stating a fact the turn needed. That is a proxy, not a count of lost bindings:
+most needed facts in `sessions.ts` are plain information (a meeting's time, an invoice's amount) that the reader is
+not for, and the sessions label no constraints of their own. It is not zero, so the gate is not free to adopt; making
+it part of a preset still needs the live hidden-fact check. Applying the live per-call prices above to these counts
+(an estimate, not measured): NEWL about $0.044 per 1,000 user messages with the gate and $0.058 without ($0.00029 a
+call); NEW2 about $0.25–0.30 with the gate and $0.40–0.47 without ($0.00040–0.00047 a call).
 
 Active-constraints digest (proposed D90, `constraintDigest`, off by default): no model call and no source call. Its
 cost is the agent's: at most `digestBytes` (1,600 bytes; 1,377 on average on dev, 1,414 in-sample), about 350 tokens,

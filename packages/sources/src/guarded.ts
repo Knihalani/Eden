@@ -49,6 +49,29 @@ export interface FanoutOutcome {
   items: ContextItem[];
   latencyMs: number;
   error?: string;
+  /** The outcome of a call already in flight for the same query, joined: the connector received no call of its own. */
+  joined?: true;
+}
+
+/** Statuses of a call a guard refused before it went out (no rate token, no call). */
+const REFUSED = new Set<string>(["open", "busy", "limited"]);
+
+/**
+ * Whether this outcome is a call the connector received. Not one answered by the result cache ("cached"), one that
+ * joined another lookup's call in flight (`joined`), or one a guard refused (with a stale result, a "stale" outcome
+ * whose `error` names the refusal). A call that failed or timed out at the connector was received.
+ */
+export function reachedSource(o: FanoutOutcome): boolean {
+  if (o.joined || o.status === "cached" || REFUSED.has(o.status)) return false;
+  return !(o.status === "stale" && o.error !== undefined && REFUSED.has(o.error));
+}
+
+/**
+ * `planCalls`' calls with a count of those that reached the connector (`made`): a shape's query answered from the
+ * cache, by `SharedCalls`, or by joining a call already in flight is not one.
+ */
+export interface CountedPlanCalls extends PlanCalls {
+  made: number;
 }
 
 export interface FanoutOptions {
@@ -278,12 +301,13 @@ export class SourceFanout {
    * the forget. Rate tokens, the breaker and the concurrency limit stay with the lookup that admitted the source and
    * with the planner's `permit`.
    */
-  planCalls(source: Source, shared?: SharedCalls): PlanCalls {
+  planCalls(source: Source, shared?: SharedCalls): CountedPlanCalls {
     const key = (q: SearchQuery) =>
       `${scopeKey(q.scope)}|${source.id}|plan|${q.limit}|${q.text}` +
       (q.window ? `|${q.window.start}..${q.window.end}` : "");
     const sourceKey = (q: SearchQuery) => `${scopeKey(q.scope)}|${source.id}`;
-    const calls: PlanCalls = {
+    const calls: CountedPlanCalls = {
+      made: 0,
       expectMs: (q, quantile) => {
         const h = this.per.get(sourceKey(q))?.callLatency;
         return h && h.count >= MIN_CALL_SAMPLES ? h.quantile(quantile) : 0;
@@ -306,6 +330,8 @@ export class SourceFanout {
         const run = this.flights.run(
           k,
           async (sig) => {
+            // Only the flight's leader runs this: a call that joins it is not one the connector receives.
+            calls.made++;
             const forgets = this.forgets;
             const t0 = performance.now();
             let raw: ContextItem[];
@@ -432,9 +458,9 @@ export class SourceFanout {
     // Joining a call already in flight costs the source nothing: no permit, no rate-limit token, no breaker probe.
     if (this.flights.has(cacheKey)) {
       try {
-        return done("ok", await this.flights.run(cacheKey, () => Promise.resolve([]), deadline));
+        return { ...done("ok", await this.flights.run(cacheKey, () => Promise.resolve([]), deadline)), joined: true };
       } catch (e) {
-        return fallback(timeout.aborted ? "timeout" : "error", String(e));
+        return { ...fallback(timeout.aborted ? "timeout" : "error", String(e)), joined: true };
       }
     }
     const s = this.state(sourceKey);

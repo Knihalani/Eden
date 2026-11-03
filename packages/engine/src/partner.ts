@@ -19,6 +19,7 @@ import { createHash } from "node:crypto";
 import type { SourceMap } from "@eden/graph";
 import type { Budget, Model, Reservation } from "@eden/llm";
 import {
+  MAX_QUESTION_CHARS,
   newId,
   scopeKey,
   type ActionCheck,
@@ -38,7 +39,9 @@ import {
   PlanError,
   PlannedSource,
   SourceFanout,
+  type CountedPlanCalls,
   type FanoutOutcome,
+  reachedSource,
   sharedKey,
   type SharedCalls,
   type QueryPlanner,
@@ -72,6 +75,7 @@ import {
   readerNote,
   type AskReader,
   type ReaderInput,
+  type ReaderRead,
   type ReaderKind,
 } from "./reader";
 import { activeOn, buildDigest, DIGEST_KINDS, digestAdmits, personalSender } from "./digest";
@@ -225,8 +229,11 @@ export interface ReaderReport {
   /** The ids it was given, in order. */
   pool: string[];
   flagged: { id: string; kind: ReaderKind }[];
-  /** "read" (a verdict, from a call or the cache), "late" (the wait ran out), "none" (refused, failed, unreadable). */
-  outcome: "read" | "late" | "none" | "gated";
+  /**
+   * "read" (a verdict, from a call or the cache), "late" (the wait ran out), "budget" (the reader's `Budget` refused
+   * the call: a session or day cap), "none" (no pool, a failed or unreadable call), "gated" (`readerGate`).
+   */
+  outcome: "read" | "late" | "budget" | "none" | "gated";
   waitedMs: number;
   /** Whether the answer said the reader found nothing that binds (`askReaderClear`). */
   clear: boolean;
@@ -246,6 +253,11 @@ interface Session {
   /** Tenant, user and session: the only key a session's state is ever looked up by. */
   key: string;
   turn: number;
+  /**
+   * The user messages (not drafts) observed so far. A `readerPush` reading is queued only while its request is still
+   * the latest: the agent's own events move `turn` within one request, a new user message moves this.
+   */
+  requests: number;
   lastActive: number;
   window: string[];
   /**
@@ -682,7 +694,10 @@ export class ContextPartner {
   async observe(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
     // `readerPush`: a request that acts is also read by the ask-time reader, as an ask of the engine's own; what it
     // flags is queued as a packet. The observe waits for it within its own wait, so an agent that never calls
-    // `ask_context` gets the reading before its first model request when it is ready in time.
+    // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
+    // not cut at `askReaderWaitMs` (that bounds an explicit ask): a reading that lands later is still queued, while its
+    // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
+    const internal: { push: true; request?: number } = { push: true };
     const push =
       this.config.readerPush &&
       this.config.askReader &&
@@ -692,10 +707,17 @@ export class ContextPartner {
       // With `askReaderQuestions` every request is read: the verb list behind `isImperative` misses many actions
       // ("Cash in…", "RSVP yes…", "Open a Junior ISA…"), and the reader itself says when nothing binds.
       (this.config.askReaderQuestions || isImperative(event.text, MORE_VERBS))
-        ? this.ask({ ...event, question: event.text, maxItems: 5 }, { push: true }).catch(() => null)
+        ? // The question as an ask may carry it (`checkAsk`'s cap): the event's own cap is 100 times that, and the
+          // ask redacts and tokenizes it before its first await, on the observe's critical path.
+          this.ask({ ...event, question: head(event.text, MAX_QUESTION_CHARS), maxItems: 5 }, internal).catch(
+            () => null,
+          )
         : null;
     const t0 = performance.now();
-    const result = await this.observeEvent(event, options);
+    const observing = this.observeEvent(event, options);
+    // `observeEvent` counts the request before its first await, so the session's count now names this request.
+    if (push) internal.request = this.sessions.get(sessionKey(event))?.requests;
+    const result = await observing;
     if (!push) return result;
     let settled = false;
     void push.then(() => (settled = true));
@@ -737,6 +759,7 @@ export class ContextPartner {
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
     this.sync?.track(s.scope, this.now());
     s.turn++;
+    if (event.kind === "user_message") s.requests++;
     const prep = spans?.open("observe.prep", root!.id);
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
@@ -1185,7 +1208,7 @@ export class ContextPartner {
     }
   }
 
-  async ask(request: AskRequest, internal: { push?: boolean } = {}): Promise<AskResponse> {
+  async ask(request: AskRequest, internal: { push?: boolean; request?: number } = {}): Promise<AskResponse> {
     const t0 = performance.now();
     const spans = this.spans;
     const root = spans?.open("ask", 0, { async: true });
@@ -1319,9 +1342,18 @@ export class ContextPartner {
       chosen = fused.slice(0, Math.min(limit, this.config.askContextItems));
     }
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
+    // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
+    // it stops waiting at `readerPushWaitMs`), bounded by the reader's call and the session's close.
     const reading =
       this.config.askReader && this.deps.reader
-        ? await this.readAsk(s, cue, [...order, ...scored], chosen, limit)
+        ? await this.readAsk(
+            s,
+            cue,
+            [...order, ...scored],
+            chosen,
+            limit,
+            internal.push ? Infinity : this.config.askReaderWaitMs,
+          )
         : null;
     if (reading) chosen = reading.chosen;
     // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
@@ -1333,16 +1365,38 @@ export class ContextPartner {
         ? chosen.filter((x) => reading.notes.has(x.item.id) && pushes.has(reading.kinds.get(x.item.id) ?? ""))
         : [];
       const fresh = flagged.filter((x) => s.ledger.isFresh(x.item.id, s.turn));
+      // A reading that lands after a newer user message answers a request the agent has moved past: not queued.
+      const latest = internal.request === undefined || internal.request === s.requests;
       const injection =
-        fresh.length > 0 && !s.closed
+        fresh.length > 0 && !s.closed && latest
           ? this.config.readerPushNotes
             ? this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue, undefined, undefined, reading!.notes)
             : this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue)
           : null;
       if (injection) s.pending.push(injection);
       const latencyMs = Math.round(performance.now() - t0);
+      // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
+      // trace carries it, since this response goes to no caller.
+      const costUsd = reading?.costUsd ?? 0;
+      this.trace({
+        sessionId: s.id,
+        turn: s.turn,
+        event: "user_message",
+        decision: "reader-push",
+        reason: cue.id,
+        latencyMs,
+        // The push's lookup runs beside the event's own slow path over the same words but asks `askSources`, not
+        // `lookupSources`, so it is partly new calls: `searchLive` counts only the calls a connector received (a search
+        // that joined the slow path's in flight, or was answered by the fan-out's cache, is none), and a harness
+        // summing `sourceCalls` over a task counts what its connectors were sent. Plans and sync use stay off.
+        sourceCalls,
+        modelCalls: reading?.called ? 1 : 0,
+        costUsd,
+        ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
+        itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
+      });
       if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
-      return { answer: "", citations: [], usedModel: reading?.called === true, costUsd: 0, latencyMs };
+      return { answer: "", citations: [], usedModel: reading?.called === true, costUsd, latencyMs };
     }
     // `askGuard` (docs/research/edge-ask.md): an ask about an action is answered with its verdicts said. What may block
     // leads, marked; with nothing that may block and every source searched, a line says so. A reader's verdict, when
@@ -1402,7 +1456,9 @@ export class ContextPartner {
       );
     }
     let usedModel = reading?.called === true;
-    let costUsd = 0;
+    // What the ask spent: the reader's call (0 when its verdict was cached, joined or late), then the answer model's.
+    let costUsd = reading?.costUsd ?? 0;
+    let answerCalls = 0;
     const reservation =
       this.config.askWithModel && items.length && this.deps.model && !s.closed
         ? this.charge(s, this.config.estimatedAnswerUsd)
@@ -1424,7 +1480,8 @@ export class ContextPartner {
           learnt = undefined;
         }
         usedModel = true;
-        costUsd = res.costUsd;
+        costUsd += res.costUsd;
+        answerCalls = 1;
         if (calling) spans!.close(calling, modelAttrs(res));
       } catch {
         this.settle(reservation, 0);
@@ -1452,8 +1509,10 @@ export class ContextPartner {
       reason: cue.id,
       latencyMs,
       sourceCalls,
-      modelCalls: usedModel ? 1 : 0,
+      // The reader's call and the answer model's are two calls.
+      modelCalls: (reading?.called ? 1 : 0) + answerCalls,
       costUsd,
+      ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
       itemIds: items.map((i) => i.id),
       ...(plans ? { plans } : {}),
       ...(local !== undefined ? { localSources: local, syncCalls: syncCalls ?? 0 } : {}),
@@ -1510,7 +1569,9 @@ export class ContextPartner {
    * `askReader` (D95, `reader.ts`): the reader's verdict on an ask about an action (or any ask, with
    * `askReaderQuestions`), over the first `askReaderPool` distinct candidates of `ranked` (the ask's pool in its order,
    * then the rest it scored). The items it says bind lead the answer, at most `limit`, the usual `chosen` fill what is
-   * left. Null when the reader is not asked; `read` false when it gave no verdict in time (fail open: `chosen` as is).
+   * left. Null when the reader is not asked; `read` false when it gave no verdict within `waitMs` (fail open: `chosen`
+   * as is; Infinity waits for the verdict, with no timer). A late call reports `called` false and no cost: the call
+   * this read started is traced as "reader-late" when it lands.
    */
   private async readAsk(
     s: Session,
@@ -1518,6 +1579,7 @@ export class ContextPartner {
     ranked: readonly Scored[],
     chosen: Scored[],
     limit: number,
+    waitMs: number,
   ): Promise<{
     chosen: Scored[];
     notes: Map<string, string>;
@@ -1526,6 +1588,7 @@ export class ContextPartner {
     clear: boolean;
     checked: number;
     called: boolean;
+    costUsd: number;
   } | null> {
     const reader = this.deps.reader!;
     const acts = (raw: string) => isImperative(raw, MORE_VERBS);
@@ -1617,20 +1680,59 @@ export class ContextPartner {
       ),
       ...(standingCount > 0 ? { standing: standingCount } : {}),
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
+      // Sticky routing to the provider that holds the user's cached prefix, as the judge, answer and cards calls do.
+      cacheKey: userCacheKey(s.scope),
     };
-    const called = reader.peek(s.scope, s.key, input) === undefined;
+    // Who makes the call, for the accounting: a read that finds a verdict cached, or a call another read started
+    // (an ask joining its push), makes none. Known before the read, for when this ask's wait runs out first.
+    const starts = reader.peek(s.scope, s.key, input) === undefined && !reader.inFlight(s.scope, s.key, input);
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const late = new Promise<"late">((resolve) => {
-      timer = setTimeout(() => resolve("late"), Math.max(0, this.config.askReaderWaitMs));
-    });
-    let verdict: Awaited<ReturnType<AskReader["verdictFor"]>> | "late";
+    const reading = reader.read(s.scope, s.key, input, s.abort.signal);
+    let got: ReaderRead | "late";
     try {
-      verdict = await Promise.race([reader.verdictFor(s.scope, s.key, input, s.abort.signal), late]);
+      // An explicit ask stops waiting at `waitMs`; the push (Infinity) waits for the reading, with no timer left
+      // pending, bounded by the reader's call and the session's close.
+      got = Number.isFinite(waitMs)
+        ? await Promise.race([
+            reading,
+            new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), Math.max(0, waitMs)))),
+          ])
+        : await reading;
     } catch {
-      verdict = null;
+      got = { verdict: null, costUsd: 0, called: false, overBudget: false };
     } finally {
       clearTimeout(timer);
     }
+    // A late call is not this ask's to report (its `costUsd` 0, `called` false, so `AskResponse.usedModel` is false):
+    // when the call this ask started lands, it gets a "reader-late" trace of its own with its cost, so a harness that
+    // sums traces counts each call once. Emitted even if the session has closed by then: the call was paid for. A
+    // read that joined another's call (`starts` false) leaves that call to the read that started it. A read the budget
+    // refused, a cached one and a joined one made no call.
+    if (got === "late" && starts) {
+      const turn = s.turn;
+      void reading.then(
+        (r) => {
+          if (!r.called) return;
+          this.trace({
+            sessionId: s.id,
+            turn,
+            event: "ask",
+            decision: "reader-late",
+            reason: cue.id,
+            latencyMs: Math.round(performance.now() - t0),
+            sourceCalls: 0,
+            modelCalls: 1,
+            costUsd: r.costUsd,
+            readerCalls: 1,
+            readerCostUsd: r.costUsd,
+            itemIds: [],
+          });
+        },
+        () => undefined,
+      );
+    }
+    const costUsd = got === "late" ? 0 : got.costUsd;
+    const called = got === "late" ? false : got.called;
     const unchanged = {
       chosen,
       notes: new Map<string, string>(),
@@ -1639,11 +1741,13 @@ export class ContextPartner {
       clear: false,
       checked: 0,
       called,
+      costUsd,
     };
-    if (verdict === "late" || verdict === null) {
-      report(verdict === "late" ? "late" : "none");
+    if (got === "late" || got.verdict === null) {
+      report(got === "late" ? "late" : got.overBudget ? "budget" : "none");
       return unchanged;
     }
+    const verdict = got.verdict;
     const byId = new Map(pool.map((x) => [x.item.id, x]));
     const notes = new Map<string, string>();
     const kinds = new Map<string, ReaderKind>();
@@ -1675,6 +1779,7 @@ export class ContextPartner {
       clear,
       checked: verdict.checked,
       called,
+      costUsd,
     };
   }
 
@@ -1997,6 +2102,7 @@ export class ContextPartner {
       id: e.sessionId,
       key,
       turn: 0,
+      requests: 0,
       lastActive: now,
       window: [],
       agentHas: [],
@@ -2033,6 +2139,9 @@ export class ContextPartner {
     s.window.length = 0;
     s.agentHas.length = 0;
     this.deps.budget.endSession(s.key);
+    // The reader and the bridge reserve on Budgets of their own, by the same session key.
+    this.deps.reader?.endSession(s.key);
+    this.deps.bridge?.endSession(s.key);
     this.sessions.delete(s.key);
     const n = (this.perTenant.get(s.scope.tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(s.scope.tenantId);
@@ -3072,18 +3181,15 @@ export class ContextPartner {
     // `anticipate`: what a prefetch already asked a source for the request's names answers the planner too (its
     // query per name), as it answers the probes (`probe`'s `recent`).
     if (shared && this.config.anticipate && s.ant) this.seedShared(s, shared, cue, all);
+    // A planned source's calls, as counted where they reach the connector (`made`), by its index in `chosen`.
+    const planned: CountedPlanCalls[] = [];
     const chosen =
       planner && !listing
-        ? sendTo(found).map(
-            (x) =>
-              new PlannedSource(
-                x,
-                planner,
-                () => this.fanout.permit(s.scope, x.id),
-                this.fanout.planCalls(x, shared),
-                deadlineAt,
-              ),
-          )
+        ? sendTo(found).map((x) => {
+            const via = this.fanout.planCalls(x, shared);
+            planned.push(via);
+            return new PlannedSource(x, planner, () => this.fanout.permit(s.scope, x.id), via, deadlineAt);
+          })
         : listing
           ? sendTo(listers.filter((x) => !local?.has(x.id)))
           : sendTo(found);
@@ -3135,8 +3241,16 @@ export class ContextPartner {
           return last ? [{ sourceId: x.id, shapes: last.shapes, calls: last.calls, found: last.found }] : [];
         })
       : undefined;
+    // The calls the connectors received: not a source answered by the fan-out's cache, one that joined another
+    // lookup's call in flight (the slow path and `readerPush`'s ask search the same words at once), or one a guard
+    // refused. A planned source counts the shape calls it sent that reached the connector (a cascade sends two).
+    let made = 0;
+    for (let k = 0; k < outcomes.length; k++) {
+      const via = planned[k];
+      made += via ? via.made : reachedSource(outcomes[k]!) ? 1 : 0;
+    }
     const result = {
-      calls: chosen.length + syncCalls,
+      calls: made + syncCalls,
       ...(plans ? { plans } : {}),
       ...(this.sync ? { local: local?.size ?? 0, syncCalls } : {}),
       // Every source of the user synced and current: the cache this lookup ranks holds all they have (`askGuard`).
@@ -3381,8 +3495,9 @@ export class ContextPartner {
       // `anticipate` with shared calls: the whole answer (the planner's page size) is cached and recorded, so it can
       // stand in for the planner's own query of the name later (`seedShared`); the probe's finds stay its first five.
       const whole = window ? 20 : this.config.anticipate && shared ? 8 : 5;
-      // A call the fan-out did not make (busy, limited, open, answered from its cache, past the deadline) is no call.
-      const unmade = to.length - outcomes.filter((o) => !SKIPPED.has(o.status)).length;
+      // A call the fan-out did not make (busy, limited, open, answered from its cache, joined in flight, past the
+      // deadline) is no call.
+      const unmade = to.length - outcomes.filter(reachedSource).length;
       out.calls -= unmade;
       if (own) extra -= unmade;
       // A consequence probe's answers are always recorded: which of its terms each source was asked, and when, is
@@ -5368,9 +5483,6 @@ function spanDays(c: { start?: string; end?: string }): number {
   return (Date.parse(c.end) - Date.parse(c.start)) / 86_400_000 + 1;
 }
 
-/** Fan-out outcomes with no call to the source behind them. */
-const SKIPPED = new Set<string>(["busy", "limited", "open", "cached"]);
-
 /** Ids both a lookup's own search and its probes found. */
 function agreed(probed: ReadonlySet<string>, looked: readonly string[] | undefined): Set<string> {
   return new Set((looked ?? []).filter((id) => probed.has(id)));
@@ -5420,7 +5532,7 @@ function rebuildVocab(s: Session, maxTerms: number): void {
 const sessionKey = (e: Scope & { sessionId: string }) => `${scopeKey(e)}#${e.sessionId}`;
 
 /** An opaque per-user key for provider sticky routing (prompt-cache reuse): a hash, never the ids themselves. */
-const userCacheKey = (scope: Scope) =>
+export const userCacheKey = (scope: Scope) =>
   `eden-${createHash("sha256").update(scopeKey(scope)).digest("hex").slice(0, 24)}`;
 
 function eventText(e: AgentEvent): string {

@@ -4,7 +4,7 @@ import { Budget, FakeModel } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
-import { ContextPartner, type ReaderReport } from "./partner";
+import { ContextPartner, type ReaderReport, userCacheKey } from "./partner";
 import {
   AskReader,
   ModelReaderMaker,
@@ -24,6 +24,7 @@ import {
   type ReaderMaker,
 } from "./reader";
 import { shownText } from "./render";
+import type { Trace } from "./trace";
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -39,19 +40,72 @@ const item = (id: string, title: string, text: string, ageH = 24): ContextItem =
   updatedAt: NOW - ageH * HOUR,
 });
 
+/** One macrotask turn: every promise continuation already queued (a landed reading's delivery and traces) has run. */
+const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+/** Turns until `cond` holds; throws rather than hang when it never does. */
+const until = async (cond: () => boolean, turns = 1_000) => {
+  for (let n = 0; !cond(); n++) {
+    if (n >= turns) throw new Error("condition never held");
+    await tick();
+  }
+};
+
+/**
+ * A reading held until the test releases it: the test orders "the call is in flight", "the session closes" and "the
+ * reading lands" by awaits rather than by sleeping past a delay. Only the tests of a wait bound use real delays.
+ */
+class Gate {
+  release!: () => void;
+  readonly opened = new Promise<void>((resolve) => (this.release = resolve));
+}
+
 /** A reader whose verdict is scripted from what it was given; counts calls, can wait, fail or answer nonsense. */
 class ScriptedReader implements ReaderMaker {
   calls: ReaderInput[] = [];
+  private readonly flying = new Set<Promise<unknown>>();
   constructor(
     private readonly pick: (input: ReaderInput) => { i: number; kind: ReaderKind; why: string }[] | null,
-    private readonly opts: { delayMs?: number; fail?: boolean; reject?: (input: ReaderInput) => number[] } = {},
+    private readonly opts: {
+      delayMs?: number;
+      /** Hold each reading until the gate is released (or the call is aborted). */
+      gate?: Gate;
+      fail?: boolean;
+      reject?: (input: ReaderInput) => number[];
+      /** A provider that answers (and bills) a request whose caller has gone away. */
+      ignoreAbort?: boolean;
+    } = {},
   ) {}
-  async read(input: ReaderInput, signal: AbortSignal) {
+  /** Every reading started has landed or failed, and what the engine does when it lands has run. */
+  async idle() {
+    await Promise.allSettled([...this.flying]);
+    await tick();
+  }
+  read(input: ReaderInput, signal: AbortSignal) {
+    const p = this.answer(input, signal);
+    this.flying.add(p);
+    void p.then(
+      () => this.flying.delete(p),
+      () => this.flying.delete(p),
+    );
+    return p;
+  }
+  private async answer(input: ReaderInput, signal: AbortSignal) {
     this.calls.push(input);
+    if (this.opts.gate) {
+      const gate = this.opts.gate;
+      await new Promise<void>((resolve, reject) => {
+        void gate.opened.then(resolve);
+        signal.addEventListener("abort", () => {
+          if (!this.opts.ignoreAbort) reject(new Error("aborted"));
+        });
+      });
+    }
     if (this.opts.delayMs) {
       await new Promise<void>((resolve, reject) => {
         const t = setTimeout(resolve, this.opts.delayMs);
         signal.addEventListener("abort", () => {
+          if (this.opts.ignoreAbort) return;
           clearTimeout(t);
           reject(new Error("aborted"));
         });
@@ -259,6 +313,14 @@ describe("the reader's prompt and output (reader.ts)", () => {
     expect(model.calls[0]!.json).toBe(true);
     expect(model.calls[0]!.maxTokens).toBeGreaterThanOrEqual(1_000);
   });
+
+  test("the model maker passes the input's cacheKey through for sticky routing, and none when unset", async () => {
+    const model = new FakeModel(() => '{"bears":[]}');
+    await new ModelReaderMaker(model).read({ ...input(), cacheKey: "eden-abc" }, new AbortController().signal);
+    await new ModelReaderMaker(model).read(input(), new AbortController().signal);
+    expect(model.calls[0]!.cacheKey).toBe("eden-abc");
+    expect(model.calls[1]!.cacheKey).toBeUndefined();
+  });
 });
 
 describe("the verdict cache (AskReader)", () => {
@@ -363,11 +425,14 @@ describe("the reader in the engine (config.askReader)", () => {
       200,
     ),
   ];
-  const source = (): Source => ({
+  const source = (sent?: { searches: number }): Source => ({
     id: "mail",
     kind: "test",
     description: "Mail",
-    search: async () => items,
+    search: async () => {
+      if (sent) sent.searches++;
+      return items;
+    },
   });
 
   const run = async (
@@ -378,7 +443,10 @@ describe("the reader in the engine (config.askReader)", () => {
       users?: string[];
       asks?: number;
       forgetBetween?: boolean;
-      pauseMs?: number;
+      /** Awaited before each ask after the first. */
+      between?: () => Promise<void>;
+      /** Awaited while each ask is out, before it is awaited. */
+      duringAsk?: (reader: AskReader) => Promise<void>;
       request?: string;
       waitMs?: number;
     } = {},
@@ -387,8 +455,11 @@ describe("the reader in the engine (config.askReader)", () => {
     const maker = opts.maker ?? new ScriptedReader(flags("mail:hold"));
     const reader = new AskReader({ maker, budget: opts.budget ?? new Budget(), now: () => clock });
     const reports: ReaderReport[] = [];
+    const traces: Trace[] = [];
+    // What the connector itself received, against what the traces say was sent.
+    const sent = { searches: 0 };
     const p = new ContextPartner({
-      sources: async () => [source()],
+      sources: async () => [source(sent)],
       sourceMap: new SourceMap(),
       cache: new ItemCache(),
       budget: new Budget(),
@@ -397,29 +468,38 @@ describe("the reader in the engine (config.askReader)", () => {
       config: { askReaderWaitMs: 200, ...config },
       reader,
       onReader: (r) => reports.push(r),
+      onTrace: (t) => traces.push(t),
     });
-    const answers: Record<string, { answer: string; ids: string[] }[]> = {};
+    const answers: Record<string, { answer: string; ids: string[]; costUsd: number; usedModel: boolean }[]> = {};
+    let observed: { pending: boolean } | undefined;
     for (const userId of opts.users ?? ["u1"]) {
       const scope = { tenantId: "t", userId };
       const sessionId = "s1";
-      await p.observe(
+      observed = await p.observe(
         { ...scope, sessionId, at: clock, kind: "user_message", text: opts.request ?? REQUEST } as AgentEvent,
         { waitMs: opts.waitMs ?? 1_000 },
       );
       answers[userId] = [];
       for (let k = 0; k < (opts.asks ?? 1); k++) {
-        if (k > 0 && opts.pauseMs) await Bun.sleep(opts.pauseMs);
+        if (k > 0 && opts.between) await opts.between();
         if (k > 0 && opts.forgetBetween) {
           p.forget(scope);
           await p.observe({ ...scope, sessionId, at: clock, kind: "user_message", text: REQUEST } as AgentEvent, {
             waitMs: 1_000,
           });
         }
-        const a = await p.ask({ ...scope, sessionId, question: REQUEST, maxItems: 3 });
-        answers[userId]!.push({ answer: a.answer, ids: a.citations.map((c) => c.itemId) });
+        const asking = p.ask({ ...scope, sessionId, question: REQUEST, maxItems: 3 });
+        if (opts.duringAsk) await opts.duringAsk(reader);
+        const a = await asking;
+        answers[userId]!.push({
+          answer: a.answer,
+          ids: a.citations.map((c) => c.itemId),
+          costUsd: a.costUsd,
+          usedModel: a.usedModel,
+        });
       }
     }
-    return { answers, maker, reader, reports, partner: p };
+    return { answers, maker, reader, reports, traces, sent, partner: p, observed };
   };
 
   test("flag off: no call, and the binding item is not among the seats", async () => {
@@ -448,26 +528,34 @@ describe("the reader in the engine (config.askReader)", () => {
   });
 
   test("fail open: late, over budget, failing or unreadable, the answer is the one without the flag", async () => {
-    const base = (await run({})).answers.u1![0]!;
+    // What the agent reads: the answer and its citations (the cost and usedModel fields say what was spent).
+    const seen = (a: { answer: string; ids: string[] } | undefined) => ({ answer: a?.answer, ids: a?.ids });
+    const base = seen((await run({})).answers.u1![0]);
     const late = await run({ askReader: true }, { maker: new ScriptedReader(flags("mail:hold"), { delayMs: 400 }) });
-    expect(late.answers.u1![0]).toEqual(base);
+    expect(seen(late.answers.u1![0])).toEqual(base);
     expect(late.reports[0]!.outcome).toBe("late");
     const poor = await run(
       { askReader: true },
       { budget: new Budget({ callsPerSession: 0, usdPerSession: 1, usdPerUserDay: 1 }) },
     );
-    expect(poor.answers.u1![0]).toEqual(base);
+    expect(seen(poor.answers.u1![0])).toEqual(base);
     expect(poor.maker.calls.length).toBe(0);
     const down = await run({ askReader: true }, { maker: new ScriptedReader(() => null, { fail: true }) });
-    expect(down.answers.u1![0]).toEqual(base);
+    expect(seen(down.answers.u1![0])).toEqual(base);
     const garbled = await run({ askReader: true }, { maker: new ScriptedReader(() => null) });
-    expect(garbled.answers.u1![0]).toEqual(base);
+    expect(seen(garbled.answers.u1![0])).toEqual(base);
     expect(garbled.reports[0]!.outcome).toBe("none");
   });
 
   test("a call that outlives the wait fills the cache: the next ask reads its verdict with no new call", async () => {
-    const maker = new ScriptedReader(flags("mail:hold"), { delayMs: 300 });
-    const { answers } = await run({ askReader: true, askReaderWaitMs: 100 }, { maker, asks: 2, pauseMs: 350 });
+    // The reading is held past the first ask's wait, then lands before the second ask.
+    const gate = new Gate();
+    const maker = new ScriptedReader(flags("mail:hold"), { gate });
+    const between = async () => {
+      gate.release();
+      await maker.idle();
+    };
+    const { answers } = await run({ askReader: true, askReaderWaitMs: 100 }, { maker, asks: 2, between });
     expect(answers.u1![0]!.ids[0]).not.toBe("mail:hold");
     expect(answers.u1![1]!.ids[0]).toBe("mail:hold");
     expect(maker.calls.length).toBe(1);
@@ -598,10 +686,305 @@ describe("the reader in the engine (config.askReader)", () => {
     expect(later.find((x) => x.reason.startsWith("reader:"))).toBeDefined();
   });
 
+  // The push read waits `readerPushWaitMs`, not the explicit ask's `askReaderWaitMs`: a reading that lands after the
+  // ask's wait but within the caller's is queued, not paid for and dropped. It is queued only while its session is
+  // open and its request is still the session's latest.
+  const PUSH_SLOW = { askReader: true, readerPush: true, askReaderWaitMs: 100, readerPushWaitMs: 3_000 };
+  const ref = { tenantId: "t", userId: "u1", sessionId: "s1" };
+  const isReader = (x: { reason: string }) => x.reason.startsWith("reader:");
+  /** A reader whose reading is held until the test releases `gate`. */
+  const heldReader = (opts: { ignoreAbort?: boolean } = {}) => {
+    const gate = new Gate();
+    return { gate, maker: new ScriptedReader(flags("mail:hold"), { gate, ...opts }) };
+  };
+
+  // The wait-bound test for the push: the reading takes 300 ms of real time, past `askReaderWaitMs`.
+  test("readerPush: a reading slower than askReaderWaitMs lands within the observe's wait and is queued", async () => {
+    const slow = new ScriptedReader(flags("mail:hold"), { delayMs: 300 });
+    const r = await run(PUSH_SLOW, { asks: 0, maker: slow, waitMs: 3_000 });
+    expect(slow.calls.length).toBe(1);
+    expect(r.observed!.pending).toBe(true);
+    expect(r.reports.map((x) => x.outcome)).toEqual(["read"]);
+    expect(r.partner.takePending(ref).find(isReader)).toBeDefined();
+  });
+
+  test("readerPush: a reading that lands after its session closed is not queued", async () => {
+    const { gate, maker: slow } = heldReader();
+    const r = await run(PUSH_SLOW, { asks: 0, maker: slow, waitMs: 0 });
+    expect(r.observed!.pending).toBe(true);
+    // The close comes while the call is in flight: the reading is held until after it.
+    await until(() => slow.calls.length === 1);
+    await r.partner.observe({ ...ref, at: NOW, kind: "session_end" } as AgentEvent);
+    gate.release();
+    await slow.idle();
+    expect(slow.calls.length).toBe(1);
+    expect(r.partner.takePending(ref).find(isReader)).toBeUndefined();
+  });
+
+  test("readerPush: a reading that lands after a newer user message is not queued for the old request", async () => {
+    const { gate, maker: slow } = heldReader();
+    const r = await run(PUSH_SLOW, { asks: 0, maker: slow, waitMs: 0 });
+    // Not an action, so it starts no push of its own: only the first request's reading is in flight.
+    await until(() => slow.calls.length === 1);
+    const next = { ...ref, at: NOW, kind: "user_message", text: "thanks, what time is it there?" } as AgentEvent;
+    await r.partner.observe(next);
+    gate.release();
+    await slow.idle();
+    expect(slow.calls.length).toBe(1);
+    expect(r.reports.map((x) => x.outcome)).toEqual(["read"]);
+    expect(r.partner.takePending(ref).find(isReader)).toBeUndefined();
+    // Control: the agent's own events after the request (a tool call) do not make the request stale.
+    const held = heldReader();
+    const kept = await run(PUSH_SLOW, { asks: 0, maker: held.maker, waitMs: 0 });
+    await until(() => held.maker.calls.length === 1);
+    await kept.partner.observe({ ...ref, at: NOW, kind: "tool_call", tool: "calendar.list", input: {} } as AgentEvent);
+    // Isolation: a user message in another session of the same user does not make this session's request stale.
+    await kept.partner.observe({ ...next, sessionId: "s2" } as AgentEvent);
+    held.gate.release();
+    await held.maker.idle();
+    expect(kept.partner.takePending(ref).find(isReader)).toBeDefined();
+  });
+
   test("askReaderClear: a read pool with nothing binding says so in fixed words", async () => {
     const { answers } = await run({ askReader: true, askReaderClear: true }, { maker: new ScriptedReader(() => []) });
     expect(answers.u1![0]!.answer).toContain("Checked the 8 items found most related: none reads as blocking");
     const quiet = await run({ askReader: true }, { maker: new ScriptedReader(() => []) });
     expect(quiet.answers.u1![0]!.answer).not.toContain("Checked the");
+  });
+
+  test("the reader's spend is the ask's: the first ask costs the call, a cached repeat nothing; the trace agrees", async () => {
+    const { answers, traces } = await run({ askReader: true }, { asks: 2 });
+    const [first, again] = answers.u1!;
+    expect(first!.usedModel).toBe(true);
+    expect(first!.costUsd).toBeCloseTo(0.0002, 10);
+    expect(again!.usedModel).toBe(false);
+    expect(again!.costUsd).toBe(0);
+    const asked = traces.filter((t) => t.event === "ask" && t.decision === "answer");
+    expect(asked.map((t) => t.costUsd)).toEqual([first!.costUsd, 0]);
+    expect(asked.map((t) => t.modelCalls)).toEqual([1, 0]);
+    // The reader's part is named, so a harness that meters the reader's model itself can leave it out.
+    expect(asked.map((t) => t.readerCostUsd)).toEqual([first!.costUsd, 0]);
+    expect(asked.map((t) => t.readerCalls)).toEqual([1, 0]);
+  });
+
+  test("readerPush: the push's read is traced with its cost, and a later ask over it costs nothing", async () => {
+    const { answers, traces } = await run({ askReader: true, readerPush: true });
+    const pushed = traces.filter((t) => t.decision === "reader-push");
+    expect(pushed.length).toBe(1);
+    expect(pushed[0]!.costUsd).toBeCloseTo(0.0002, 10);
+    expect(pushed[0]!.modelCalls).toBe(1);
+    expect(pushed[0]!.itemIds).toContain("mail:hold");
+    expect(answers.u1![0]!.costUsd).toBe(0);
+  });
+
+  test("readerPush: an ask that joins the push's call in flight is not a second call", async () => {
+    // The push starts the read (held) and the observe stops waiting after 5 ms; the agent's ask then joins that call
+    // (the reader's second read, made while the first is in flight), and only then does the reading land.
+    const held = heldReader();
+    const { answers, traces, reader, maker } = await run(
+      { askReader: true, readerPush: true, askReaderWaitMs: 1_000 },
+      {
+        maker: held.maker,
+        waitMs: 5,
+        duringAsk: async (r) => {
+          await until(() => r.stats.asked === 2);
+          held.gate.release();
+        },
+      },
+    );
+    expect(maker.calls.length).toBe(1);
+    expect(reader.stats.calls).toBe(1);
+    const total = (f: (t: Trace) => number) => traces.reduce((n, t) => n + f(t), 0);
+    expect(total((t) => t.modelCalls)).toBe(reader.stats.calls);
+    expect(total((t) => t.readerCalls ?? 0)).toBe(1);
+    expect(total((t) => t.costUsd)).toBeCloseTo(0.0002, 10);
+    const pushed = traces.find((t) => t.decision === "reader-push")!;
+    expect([pushed.modelCalls, pushed.readerCalls]).toEqual([1, 1]);
+    const asked = traces.find((t) => t.decision === "answer")!;
+    expect([asked.modelCalls, asked.readerCalls, asked.costUsd]).toEqual([0, 0, 0]);
+    // Intended: `usedModel` says whether this ask made a model call, and the push made it (the call is counted once,
+    // on the push's trace). The joined ask still reads the verdict.
+    expect(answers.u1![0]!.usedModel).toBe(false);
+    expect(answers.u1![0]!.ids).toContain("mail:hold");
+  });
+
+  test("an ask whose own wait runs out while joining another's call does not count it either", async () => {
+    // The reading is held past the ask's 50 ms wait, then lands.
+    const { gate, maker } = heldReader();
+    const { traces, reader } = await run(
+      { askReader: true, readerPush: true, askReaderWaitMs: 50 },
+      { maker, waitMs: 5 },
+    );
+    gate.release();
+    await maker.idle();
+    expect(reader.stats.calls).toBe(1);
+    expect(traces.reduce((n, t) => n + t.modelCalls, 0)).toBe(1);
+    expect(traces.find((t) => t.decision === "reader-push")!.modelCalls).toBe(1);
+  });
+
+  // A late call (finding cost-late-reader-call-untraced): the reader books it when it lands, and so must the traces.
+  const LATE = { askReader: true, askReaderWaitMs: 100 };
+  const sums = (traces: Trace[]) => ({
+    costUsd: traces.reduce((n, t) => n + t.costUsd, 0),
+    modelCalls: traces.reduce((n, t) => n + t.modelCalls, 0),
+  });
+
+  test("an explicit ask's late reader call is traced when it lands: the traces sum to the reader's stats", async () => {
+    const { gate, maker } = heldReader();
+    const { answers, traces, reader } = await run(LATE, { maker });
+    // The ask itself made no call it can report: usedModel false and no cost; nothing is traced as late yet.
+    expect(answers.u1![0]!.usedModel).toBe(false);
+    expect(answers.u1![0]!.costUsd).toBe(0);
+    expect(traces.find((t) => t.decision === "reader-late")).toBeUndefined();
+    gate.release();
+    await maker.idle();
+    expect(reader.stats.calls).toBe(1);
+    expect(reader.stats.costUsd).toBeCloseTo(0.0002, 10);
+    const sum = sums(traces);
+    expect(sum.costUsd).toBeCloseTo(reader.stats.costUsd, 10);
+    expect(sum.modelCalls).toBe(reader.stats.calls);
+    const late = traces.filter((t) => t.decision === "reader-late");
+    expect(late.length).toBe(1);
+    expect(late[0]).toMatchObject({ event: "ask", sourceCalls: 0, modelCalls: 1, readerCalls: 1, itemIds: [] });
+    expect(late[0]!.costUsd).toBeCloseTo(0.0002, 10);
+    expect(late[0]!.readerCostUsd).toBeCloseTo(0.0002, 10);
+    const asked = traces.find((t) => t.decision === "answer")!;
+    expect([asked.modelCalls, asked.readerCalls, asked.costUsd]).toEqual([0, 0, 0]);
+  });
+
+  test("readerPush with a late explicit ask: the traces sum to the reader's stats, the call counted once", async () => {
+    // The observe waits 0, so the ask joins the push's held call and stops waiting at 100 ms; the push's trace
+    // carries the call, and the joined ask adds no late trace of its own. With a 1,000 ms wait the reading lands
+    // within the observe's wait, before the ask.
+    for (const waitMs of [0, 1_000]) {
+      const { gate, maker } = heldReader();
+      if (waitMs > 0) void until(() => maker.calls.length === 1).then(gate.release);
+      const { traces, reader } = await run({ ...LATE, readerPush: true }, { maker, waitMs });
+      gate.release();
+      await maker.idle();
+      expect(reader.stats.calls).toBe(1);
+      const sum = sums(traces);
+      expect(sum.costUsd).toBeCloseTo(reader.stats.costUsd, 10);
+      expect(sum.modelCalls).toBe(reader.stats.calls);
+      expect(traces.filter((t) => t.decision === "reader-late").length).toBe(0);
+    }
+  });
+
+  // A wait-bound test: the push's reading takes 400 ms of real time, past `askReaderWaitMs`, within the observe's wait.
+  test("readerPush: a push read past askReaderWaitMs is traced as reader-push with its cost and one reader call", async () => {
+    const maker = new ScriptedReader(flags("mail:hold"), { delayMs: 400 });
+    const { traces, reader } = await run({ ...LATE, readerPush: true }, { asks: 0, maker });
+    await maker.idle();
+    const pushed = traces.filter((t) => t.decision === "reader-push");
+    expect(pushed.length).toBe(1);
+    expect(pushed[0]!.costUsd).toBeGreaterThan(0);
+    expect(pushed[0]!.readerCalls).toBe(1);
+    expect(pushed[0]!.costUsd).toBeCloseTo(reader.stats.costUsd, 10);
+  });
+
+  test("a late call that lands after its session closed is still traced: it was paid for", async () => {
+    const { gate, maker } = heldReader({ ignoreAbort: true });
+    const { traces, reader, partner } = await run(LATE, { maker });
+    await partner.observe({
+      ...{ tenantId: "t", userId: "u1", sessionId: "s1" },
+      at: NOW,
+      kind: "session_end",
+    } as AgentEvent);
+    gate.release();
+    await maker.idle();
+    expect(reader.stats.costUsd).toBeCloseTo(0.0002, 10);
+    expect(sums(traces).costUsd).toBeCloseTo(reader.stats.costUsd, 10);
+    expect(traces.filter((t) => t.decision === "reader-late").length).toBe(1);
+  });
+
+  test("readerPush: the traces' source calls are the calls the connector received", async () => {
+    for (const readerPush of [false, true]) {
+      const { traces, sent } = await run({ askReader: true, readerPush }, { asks: 0 });
+      expect(sent.searches).toBeGreaterThan(0);
+      expect(traces.reduce((n, t) => n + t.sourceCalls, 0)).toBe(sent.searches);
+      // One source, the same query: the push and the slow path share one call, counted on one of their traces.
+      const pushed = traces.find((t) => t.decision === "reader-push");
+      if (readerPush) expect(sent.searches).toBe(1);
+      else expect(pushed).toBeUndefined();
+    }
+  });
+
+  test('a session past its budget\'s 20 calls reports the reader\'s outcome as "budget", not "none"', async () => {
+    const maker = new ScriptedReader(flags("mail:hold"));
+    const reports: ReaderReport[] = [];
+    const p = new ContextPartner({
+      sources: async () => [source()],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: { askReader: true, askReaderWaitMs: 200 },
+      reader: new AskReader({ maker, budget: new Budget(), now: () => NOW }),
+      onReader: (r) => reports.push(r),
+    });
+    const scope = { tenantId: "t", userId: "u1", sessionId: "s1" };
+    for (let n = 0; n < 22; n++) await p.ask({ ...scope, question: `Pay the Harlow invoice number ${n} today.` });
+    expect(maker.calls.length).toBe(20);
+    expect(reports.slice(0, 20).every((r) => r.outcome === "read")).toBe(true);
+    expect(reports.slice(20).map((r) => r.outcome)).toEqual(["budget", "budget"]);
+  });
+
+  test("readerPush: a 1,000,000-character message is asked as at most 10,000 characters (the ask's cap)", async () => {
+    const huge = `${REQUEST} ${"and the venue deposit ".repeat(50_000)}`.slice(0, 1_000_000);
+    expect(huge.length).toBe(1_000_000);
+    const { maker } = await run(
+      { askReader: true, readerPush: true, askReaderQuestions: true },
+      { asks: 0, request: huge },
+    );
+    expect(maker.calls.length).toBe(1);
+    expect(maker.calls[0]!.request.length).toBeLessThanOrEqual(10_000);
+    expect((maker.calls[0]!.question ?? "").length).toBeLessThanOrEqual(10_000);
+  });
+
+  // `Budget.sessions` has no cap or eviction, so a session the reader fails to end shows at any count: 100 is enough.
+  test("the reader's budget ends each session with the partner's: 100 sessions leave no session tally", async () => {
+    const maker = new ScriptedReader(flags("mail:hold"));
+    const budget = new Budget();
+    const p = new ContextPartner({
+      sources: async () => [source()],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: { askReader: true, readerPush: true },
+      reader: new AskReader({ maker, budget, now: () => NOW }),
+    });
+    for (let n = 0; n < 100; n++) {
+      const e = { tenantId: "t", userId: `u${n % 10}`, sessionId: `s${n}`, at: NOW };
+      await p.observe({ ...e, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 1_000 });
+      await p.observe({ ...e, kind: "session_end" } as AgentEvent);
+    }
+    expect(maker.calls.length).toBe(100);
+    expect(budget.size.sessions).toBe(0);
+  });
+
+  test("the reader's model request carries the user's sticky cache key; two users get different keys", async () => {
+    const model = new FakeModel(() => '{"bears":[]}');
+    const p = new ContextPartner({
+      sources: async () => [source()],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: { askReader: true, askReaderWaitMs: 1_000 },
+      reader: new AskReader({ maker: new ModelReaderMaker(model), budget: new Budget(), now: () => NOW }),
+    });
+    const u1 = { tenantId: "t", userId: "u1" };
+    const u2 = { tenantId: "t", userId: "u2" };
+    for (const scope of [u1, u2]) await p.ask({ ...scope, sessionId: "s1", question: REQUEST });
+    expect(model.calls.length).toBe(2);
+    expect(model.calls[0]!.cacheKey).toBe(userCacheKey(u1));
+    expect(model.calls[1]!.cacheKey).toBe(userCacheKey(u2));
+    expect(model.calls[0]!.cacheKey).not.toBe(model.calls[1]!.cacheKey);
+    // The key is for routing only: the verdict's cache key does not hold it.
+    expect(readerKey({ ...input(), cacheKey: "a" })).toBe(readerKey({ ...input(), cacheKey: "b" }));
   });
 });

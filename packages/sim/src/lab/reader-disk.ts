@@ -118,3 +118,46 @@ export class ReplayModel implements Model {
     return { p50: q(0.5), p90: q(0.9) };
   }
 }
+
+/**
+ * The miss gate (`--reader replay`): a prompt with no cached line fails open, so the ask answers as without the reader
+ * and a NEW screen silently becomes part NEW, part ALL3. A run with misses is therefore not that configuration's
+ * result: it exits non-zero unless `--allow-misses` says the caller knows (docs/LAB.md).
+ */
+export const MISS_EXIT = 3;
+export function missGate(missed: number, allow: boolean): { code: number; message: string | null } {
+  if (missed <= 0) return { code: 0, message: null };
+  const message =
+    `READER MISSES: ${missed} reader prompts had no cached line and were answered without the reader ` +
+    `(fail open), so this run is part reader, part not`;
+  return allow
+    ? { code: 0, message: `${message} (--allow-misses)` }
+    : { code: MISS_EXIT, message: `${message}; not a result of this configuration. Pass --allow-misses to accept` };
+}
+
+/** Calls each budgeted engine component refused at its `Budget` (`stats.overBudget`), summed over a run's lanes. */
+export interface Budgeted {
+  reader: { stats: { overBudget: number } }[];
+  cards: { stats: { overBudget: number } }[];
+  bridge: { stats: { overBudget: number } }[];
+}
+export function overBudget(b: Budgeted): { reader: number; cards: number; bridge: number } {
+  const sum = (xs: { stats: { overBudget: number } }[]) => xs.reduce((n, x) => n + x.stats.overBudget, 0);
+  return { reader: sum(b.reader), cards: sum(b.cards), bridge: sum(b.bridge) };
+}
+/**
+ * The summary line. A read refused at the Budget answers as without the reader and reports outcome "budget" (not a
+ * model failure's "none"); this count is the run-level summary of how often the session cap (20 calls by default)
+ * cut reading.
+ */
+export function overBudgetLine(b: Budgeted): string {
+  const o = overBudget(b);
+  const parts = (["reader", "cards", "bridge"] as const)
+    .filter((k) => b[k].length > 0)
+    .map((k) => `${k} ${o[k]} (${b[k].length} lanes)`);
+  const refused = o.reader + o.cards + o.bridge > 0;
+  return (
+    `overBudget: ${parts.length ? parts.join(", ") : "no budgeted reader, cards or bridge"}` +
+    (refused ? "; REFUSED at the Budget: those calls were skipped and their asks ran without them" : "")
+  );
+}

@@ -11,14 +11,41 @@ export interface Trace {
    * - sources: delivered after a live source search, no model;
    * - model: delivered after the model judged the candidates;
    * - answer: answered an ask;
-   * - digest: opened a session with the active-constraints digest (`constraintDigest`), no call.
+   * - digest: opened a session with the active-constraints digest (`constraintDigest`), no call;
+   * - reader-push: `readerPush` read a user's request with the ask-time reader (its cost, and what it queued);
+   * - reader-late: a reader call an explicit ask started landed after the ask stopped waiting (`askReaderWaitMs`):
+   *   its cost and its one model call, which the ask's own "answer" trace leaves out. Emitted even after the session
+   *   closed. No items.
    */
-  decision: "skipped" | "repeat" | "silent" | "fast" | "sources" | "model" | "answer" | "digest";
+  decision:
+    | "skipped"
+    | "repeat"
+    | "silent"
+    | "fast"
+    | "sources"
+    | "model"
+    | "answer"
+    | "digest"
+    | "reader-push"
+    | "reader-late";
   reason: string;
   latencyMs: number;
+  /**
+   * Calls the connectors received for this decision: a search answered by the fan-out's cache, one that joined another
+   * lookup's call in flight (a "reader-push" lookup and the slow path search the same words at once), or one a guard
+   * refused is not counted; a planner's cascade counts each call it sent. Fetches (refreshes) and on-demand sync
+   * listings are included. Summed over a task's traces, with `anticipateCalls`, it is the task's request-time calls.
+   */
   sourceCalls: number;
   modelCalls: number;
   costUsd: number;
+  /**
+   * With `askReader`: the part of `modelCalls` and `costUsd` that is the ask-time reader's call (on an "answer", a
+   * "reader-push" or a "reader-late" trace), so a harness that also meters the reader's model itself does not count
+   * it twice.
+   */
+  readerCalls?: number;
+  readerCostUsd?: number;
   itemIds: string[];
   /**
    * With the query planner on: per connector searched, the shapes it sent, its calls and how many items came back.
