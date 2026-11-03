@@ -1,43 +1,26 @@
 /**
- * D24 and D86: no input makes the gate super-linear. The timing half of linear.test.ts, in a file of its own so a
+ * D24 and D86: no input makes the gate super-linear. The timing half of linear.test.ts, in files of its own so a
  * parallel test run (`scripts/test.sh`) runs it beside the equivalence checks instead of after them. Secret-shaped
  * values are assembled from parts, so no literal in this file is one.
  */
 import { describe, expect, test } from "bun:test";
 import { RE2_RULES, sanitizeForStore, secretRules } from "./secrets";
+import { SHARDS, shardRules, slowOn } from "./redos-sweep";
 
+// The crafted-input sweep is split by rule index over this file (shard 0) and redos-{1,2,3}.test.ts (redos-sweep.ts).
 describe("rules left on JavaScript's engine stay cheap on crafted input", () => {
-  // A reduced form of the search that found RE2_RULES: each rule's first keyword, then runs of characters its classes
-  // take, at 8 KB. Measured once: the rules left on JavaScript took at most 13 ms here, while with every rule on
-  // JavaScript the seven slow ones took 81–755 ms (curl-*: ~80 ms; sumologic-, okta-, cohere-: 560–760 ms). So a
-  // gitleaks update that adds a backtracking rule fails here; the ceiling leaves room for a GC pause.
-  const UNITS = ["a", "0", "f", "-", ".", "_", " ", "=", "/", ":", "\n", "'", "@", "a-", "a.", "a ", "x-", "AKIA"];
-  const CEILING_MS = 40;
-  const SIZE = 8_192;
-
-  test("every gitleaks rule outside RE2_RULES, and every Eden rule", () => {
-    const rules = secretRules().filter((rule) => !RE2_RULES.has(rule.id));
-    const slow: string[] = [];
-    for (const rule of rules) {
-      const word = rule.keywords[0] ?? rule.prefilter[0] ?? "";
-      for (const unit of UNITS) {
-        const run = unit.repeat(Math.ceil(SIZE / unit.length)).slice(0, SIZE);
-        const pairs = `${word}${unit}`.repeat(Math.ceil(SIZE / (word.length + unit.length)));
-        for (const text of [`${word}=${run}!`, pairs, run + word]) {
-          // Best of up to three: a backtracking rule is slow every time, a GC pause only once (the suite shares a
-          // process with tests that build large heaps).
-          let ms = Infinity;
-          for (let attempt = 0; attempt < 3 && ms > CEILING_MS; attempt++) {
-            const t0 = performance.now();
-            rule.spans(text);
-            ms = Math.min(ms, performance.now() - t0);
-          }
-          if (ms > CEILING_MS) slow.push(`${rule.id} on ${JSON.stringify(text.slice(0, 24))}…: ${ms.toFixed(0)} ms`);
-        }
-      }
-    }
-    expect(slow).toEqual([]);
+  test("shard 0 of every gitleaks rule outside RE2_RULES, and every Eden rule", () => {
+    expect(shardRules(0).length).toBeGreaterThan(0);
+    expect(slowOn(0)).toEqual([]);
   }, 60_000);
+
+  test("the shards together are every rule on JavaScript's engine, each once", () => {
+    const ids = Array.from({ length: SHARDS }, (_, k) => shardRules(k).map((r) => r.id)).flat();
+    const all = secretRules()
+      .filter((rule) => !RE2_RULES.has(rule.id))
+      .map((r) => r.id);
+    expect(ids.sort()).toEqual(all.sort());
+  });
 });
 
 describe("no input makes the gate super-linear", () => {
