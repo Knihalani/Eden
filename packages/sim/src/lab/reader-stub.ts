@@ -27,11 +27,26 @@ export interface StubCall {
 
 /** The size of a reader prompt as `ModelReaderMaker` would send it (`readerMessages`), with its cacheable prefix. */
 export function promptSize(input: ReaderInput): StubCall {
-  const messages = readerMessages(input);
+  return sizeOf(input, readerMessages(input));
+}
+
+function sizeOf(input: ReaderInput, messages: { content: string }[]): StubCall {
   const chars = messages.map((m) => m.content.length);
   // With standing items the prompt is [system, standing prefix (cached), request]; without, [system, request].
   const prefixChars = messages.length === 3 ? chars[1]! : 0;
   return { items: input.items.length, promptChars: chars.reduce((a, b) => a + b, 0), prefixChars };
+}
+
+/** What a no-model reader returns: the items it flags as bearing and the ones it rejects. */
+type Verdict = Awaited<ReturnType<ReaderMaker["read"]>>;
+
+/**
+ * One `--reader-log` line from a no-model reader: the prompt as `ModelReaderMaker` would send it (the message after
+ * the system one, as hidden-funnel.ts logs a model's) and the verdict in place of a reply. Sim data only.
+ */
+export interface StubLogLine {
+  prompt: string | undefined;
+  reply: Verdict;
 }
 
 /** The reader with no model: counts the calls the engine makes and says nothing binds. */
@@ -39,9 +54,19 @@ export class CountingReader implements ReaderMaker {
   calls = 0;
   /** Every call's size, in order (`promptSize`). */
   readonly sizes: StubCall[] = [];
+  /** Set by the harness for `--reader-log`: called once per read with the prompt and the verdict. */
+  log?: (line: StubLogLine) => void;
   async read(input: ReaderInput): ReturnType<ReaderMaker["read"]> {
     this.calls++;
-    this.sizes.push(promptSize(input));
+    // The messages are built once per call, for the size and the log alike.
+    const messages = readerMessages(input);
+    this.sizes.push(sizeOf(input, messages));
+    const verdict = this.verdict(input);
+    this.log?.({ prompt: messages[1]?.content, reply: verdict });
+    return verdict;
+  }
+  /** Nothing binds. */
+  protected verdict(_input: ReaderInput): Verdict {
     return { bears: [], rejected: [], costUsd: 0 };
   }
 }
@@ -80,8 +105,7 @@ export class OracleReaderMaker extends CountingReader {
   ) {
     super();
   }
-  override async read(input: ReaderInput): ReturnType<ReaderMaker["read"]> {
-    await super.read(input);
+  protected override verdict(input: ReaderInput): Verdict {
     const bears: { i: number; kind: "blocks"; why: string }[] = [];
     const rejected: number[] = [];
     for (const [i, it] of input.items.entries()) {
@@ -115,6 +139,22 @@ export interface ScreenRow {
   draftHas?: boolean;
   draftJaccard?: number;
   draftSubset?: boolean;
+  /** When delivered: it was in the observe's reply or pending right after it (before the agent's first model call). */
+  beforeModel?: boolean;
+}
+
+/**
+ * Delivered before the agent's first model call: of the delivered planted items, those an agent that collects right
+ * after the observe holds (with the observe's wait, `--wait-ms`); the rest arrive later, in the pending queue.
+ */
+export function beforeModelLine(rows: ScreenRow[], waitMs: number | string): string {
+  const [h, c] = split(rows);
+  const count = (v: ScreenRow[]) =>
+    `${v.filter((t) => t.delivered && t.beforeModel).length} of ${v.filter((t) => t.delivered).length}`;
+  return (
+    `delivered before first model call (observe wait ${waitMs} ms): hidden ${count(h!)} delivered ` +
+    `(${h!.length} tasks), decoys ${count(c!)} delivered (${c!.length} tasks)`
+  );
 }
 
 /** The banner a stub run prints: its delivery counts are not NEW's. */
@@ -191,6 +231,52 @@ export function draftLine(name: string, rows: ScreenRow[]): string | null {
     `mean ${j.toFixed(3)}, final pool ⊆ draft pool ${both.filter((t) => t.draftSubset).length}/${both.length}; hidden ` +
     `in draft pool ${h!.filter((t) => t.draftHas).length}/${h!.length} (in final pool ` +
     `${h!.filter((t) => t.poolHas).length})`
+  );
+}
+
+/**
+ * The intent index's state in a funnel run: `off` (the configuration has no `intent`), `inert` (it has, but no
+ * replayed request matched any item the run asked about: no `-- --intent F`, or a file for other items, so the index
+ * finds nothing and the run measures the preset minus intent), or `live` (some requests replayed).
+ */
+export type IntentState = "off" | "inert" | "live";
+
+/** The replayed intent requests a run asked for (items) and found (items with requests), as hidden-funnel counts. */
+export interface IntentUse {
+  asked: number;
+  found: number;
+}
+
+/** The mark every TOTAL and pool line, and the JSON label, carry when intent is on but inert. */
+export const INTENT_INERT = "[intent inert: no replay]";
+
+export function intentState(config: Record<string, unknown>, use: IntentUse | undefined): IntentState {
+  if (config.intent !== true) return "off";
+  return use && use.found > 0 ? "live" : "inert";
+}
+
+/**
+ * A run's intent state as its `--json` file records it (`intent.state`). A file from before the field existed with
+ * intent configured is `unknown`: whether its replay matched cannot be told from it.
+ */
+export function intentOfRun(json: {
+  config?: Record<string, unknown>;
+  intent?: { state?: IntentState };
+}): IntentState | "unknown" {
+  if (json.intent?.state) return json.intent.state;
+  return json.config?.intent === true ? "unknown" : "off";
+}
+
+/**
+ * Why a no-model screen (`--reader stub|oracle`) refuses a `--baseline`, or null when it may compare: the two runs'
+ * intent states differ, so a pool or proxy delta would mix the change under test with intent's own (an inert run
+ * reads byte-identical prompts to an intent-off one, and would read as "intent does nothing").
+ */
+export function intentMismatch(current: IntentState, baseline: IntentState | "unknown"): string | null {
+  if (current === baseline) return null;
+  return (
+    `the baseline's intent is ${baseline} and this run's is ${current}: a no-model screen compares like with like ` +
+    "(rerun the baseline with the same --preset/--set and -- --intent F)"
   );
 }
 

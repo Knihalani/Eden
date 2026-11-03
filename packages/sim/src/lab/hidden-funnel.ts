@@ -27,7 +27,11 @@
  * `--timeline out.jsonl` records every engine span, each task and the process's CPU% and RSS per second
  * (`timeline.ts`); `timeline-report.ts out.jsonl` says where the time went. Spans change no decision.
  * `--spans noop` turns spans on into a sink that drops them (the tracer's own cost, for overhead runs); `--serial`
- * plays the seeds one after another (same results; a task's wall time is then its own, not shared with other seeds).
+ * plays the seeds one after another (same results; a task's wall time is then its own, not shared with other seeds);
+ * at `--time` > 0 the hidden and control variants also run at once unless `--serial`.
+ * `--wait-ms N` sets the request's observe wait (default 3,000 × max(1, `--time`)) and the run prints how many
+ * deliveries an agent collecting before its first model call would hold; `--overlap` sends another request just before
+ * each one, so it arrives while a lookup is in flight (what `slowPathQueue` acts on; not comparable scores).
  * With either, or `--timeline`, the process CPU of the suites' runs is printed to stderr.
  * `--config '{"sync":true,...}'` runs Eden's real background sync (`SyncManager`, D57) over the sim connectors: the
  * user's sources are backfilled through their list calls before the first task (the clock running), and the sync
@@ -105,7 +109,10 @@ import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
 import { parseSuites, SUITES, type HiddenTask } from "./suites";
 import {
+  beforeModelLine,
   CountingReader,
+  INTENT_INERT,
+  intentState,
   OracleReaderMaker,
   parseOracle,
   screenLines,
@@ -129,6 +136,23 @@ const SEEDS = opt("seeds", "41,42,43,44").split(",").map(Number);
 const TIME = Number(opt("time", "0"));
 const CONFIG = JSON.parse(opt("config", "{}")) as Record<string, unknown>;
 const LIVE = opt("judge", "none") === "live";
+/**
+ * `--wait-ms N`: how long the request's observe waits for its lookup (the client's `waitMs`), default 30,000 with a
+ * live judge, else 3,000 × max(1, `--time`). What the reply and the pending queue right after it carry is what an agent
+ * that collects before its first model call gets: each delivered task records it (`beforeModel`) and the run prints
+ * the count. Later arrivals are still collected (for up to the default window) and count as delivered, as before.
+ */
+const WAIT_DEFAULT = LIVE ? 30_000 : 3_000 * Math.max(1, TIME);
+const WAIT_MS = Number(opt("wait-ms", String(WAIT_DEFAULT)));
+if (!(WAIT_MS >= 0)) throw new Error("--wait-ms must be a number of at least 0");
+/**
+ * `--overlap`: before each request, another user message (the suite's next task's request) is sent in the same
+ * session with no wait, so the request arrives while that lookup is in flight: what `slowPathQueue` acts on, which no
+ * other funnel task shape reaches. Changes the task shape: its scores are not comparable with a run without it.
+ */
+const OVERLAP = args.includes("--overlap");
+/** Traces of a request that arrived while its session's slow path was busy (`--overlap`), and how many were queued. */
+const busyTraces = { busy: 0, queued: 0 };
 const SYNC = args.includes("--sync");
 /** `--ask`: each request is also asked of Eden (`ask`), recording whether the answer cites the planted item. */
 const ASK = args.includes("--ask");
@@ -154,6 +178,10 @@ const syncUse = {
   warmMs: 0,
   // On-demand listings the connectors received inside the tasks' windows (in calls/task).
   demandSeen: 0,
+  // Items the sync's listings brought in (`SyncStats`): on demand, and in the background (backfill, polls, sweeps).
+  // Summed per user before each lane's sync is discarded; D101's on-demand items figure is `demandItems`.
+  demandItems: 0,
+  backgroundItems: 0,
   users: 0,
 };
 /** Over the whole run: calls the connectors received in the tasks' windows (listings among them); the traces' sum. */
@@ -188,6 +216,26 @@ if (CARD_LOG && cardMaker) {
     return got;
   };
 }
+/**
+ * Items the intent index asked the replay about, and those it found requests for: with intent on and none found the
+ * index is inert (no `--intent F`, or a file for other items), and every TOTAL and pool line and the JSON say so.
+ */
+const intentUse = { asked: 0, found: 0 };
+if (cardMaker && CONFIG.intent === true) {
+  const make = cardMaker.make.bind(cardMaker);
+  cardMaker.make = async (items, today, signal, retry, intent) => {
+    const got = await make(items, today, signal, retry, intent);
+    if (intent && !retry) {
+      const requests = "requests" in got ? got.requests : [];
+      intentUse.asked += items.length;
+      intentUse.found += requests.filter((r) => r !== null && r.length > 0).length;
+    }
+    return got;
+  };
+}
+const intentNow = () => intentState(CONFIG, intentUse);
+/** The inert mark for a line, read when the line is printed (the replay's hits so far). */
+const inertTag = () => (intentNow() === "inert" ? `  ${INTENT_INERT}` : "");
 /** Every lane's enrichment counters, summed (`CardStats`): items read by the model and calls, per simulated user. */
 const cardUse: Record<string, number> = {};
 const cardLanes: CardEnricher[] = [];
@@ -202,6 +250,7 @@ const PLANTED_AGE_DAYS = Number(opt("planted-age-days", "0"));
 const PUSH = args.includes("--push");
 const LEAD = opt("lead-in", "") as DraftMode | "";
 if (LEAD && LEAD !== "clause" && LEAD !== "half") throw new Error("--lead-in must be clause or half");
+if (LEAD && OVERLAP) throw new Error("--lead-in and --overlap are exclusive (each is a different lead-in)");
 const TYPING_MS = Number(opt("typing-ms", "1500"));
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
 const KEY = LIVE ? keyFor(MODEL) : undefined;
@@ -329,10 +378,21 @@ async function runSuite(suite: string): Promise<{ rows: Rows; perTask: Record<st
   const rows: Rows = new Map();
   const perTask: Record<string, unknown>[] = [];
   const started = performance.now();
-  for (const variant of ["hidden", "control"] as const) {
+  const variants = ["hidden", "control"] as const;
+  const runVariant = async (variant: (typeof variants)[number]) => {
     const results: TaskRow[][] = [];
     if (SERIAL) for (const seed of SEEDS) results.push(await runSeed(suite, variant, seed));
     else results.push(...(await Promise.all(SEEDS.map((seed) => runSeed(suite, variant, seed)))));
+    return results;
+  };
+  // At `--time` > 0 a task's wall time is mostly connector sleeps, so the two variants (each in its own worlds) run
+  // at once, as seeds do; `--serial` keeps them one after the other. The rows are folded in the same order either way.
+  const byVariant =
+    TIME > 0 && !SERIAL
+      ? await Promise.all(variants.map(runVariant))
+      : [await runVariant("hidden"), await runVariant("control")];
+  for (const [v, results] of byVariant.entries()) {
+    const variant = variants[v]!;
     for (const r of results) {
       for (const t of r) {
         const both = rows.get(t.template) ?? { hidden: row(), control: row() };
@@ -392,6 +452,11 @@ interface TaskRow {
   /** Source calls made between the lead-in and the request (the prefetch's). */
   leadCalls?: number;
   /**
+   * When delivered: the planted item came with the observe's reply or was pending right after it (within `--wait-ms`),
+   * so an agent that collects before its first model call has it.
+   */
+  beforeModel?: boolean;
+  /**
    * Searches the connectors served for this task, counted by a wrapper on `search` (`calls` less `listed`).
    */
   served: number;
@@ -450,6 +515,10 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     // The traces' count, a cross-check only. A prefetch's calls (`anticipate`) are the task's too.
     calls += t.sourceCalls + (t.anticipateCalls ?? 0);
     for (const id of t.prefetched ?? []) prefetched.add(id);
+    if (t.reason.startsWith("slow path busy")) {
+      busyTraces.busy++;
+      if (t.reason.endsWith("queued")) busyTraces.queued++;
+    }
     if (t.localSources !== undefined) {
       syncUse.lookups++;
       syncUse.localSources += t.localSources;
@@ -494,6 +563,11 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     : NO_MODEL_READER
       ? new CountingReader()
       : null;
+  // `--reader-log` with a no-model reader: the prompt a model would have read and the stub's or oracle's verdict.
+  if (stub && READER_LOG) {
+    stub.log = ({ prompt, reply }) =>
+      appendFileSync(READER_LOG, `${JSON.stringify({ task: readerTask, reader: READER, prompt, reply })}\n`);
+  }
   const maker = stub ?? (laneModel ? new ModelReaderMaker(laneModel) : null);
   const reader = maker ? new AskReader({ maker, budget: new Budget(UNCAPPED), now: () => clock }) : null;
   if (reader) readerLanes.push(reader);
@@ -625,23 +699,33 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
         await partner.observe({ ...scope, sessionId: draftSession, at, kind: "session_end" } as AgentEvent);
       }
     }
+    if (OVERLAP && tasks.length > 1) {
+      // Another request just before this one, not waited for: its lookup is in flight when this one arrives.
+      const other = tasks[(i + 1) % tasks.length]!.text;
+      await partner.observe({ ...scope, sessionId, at, kind: "user_message", text: other } as AgentEvent);
+    }
     const leadCalls = received() - receivedBefore;
     const t0 = performance.now();
     const r = await partner.observe(
       { ...scope, sessionId, at, kind: "user_message", text: task.text } as AgentEvent,
       // A live judge answers in seconds: the slow path is waited for, so what it lets through counts here.
-      { waitMs: LIVE ? 30_000 : 3_000 * Math.max(1, TIME) },
+      { waitMs: WAIT_MS },
     );
     const ms = performance.now() - t0;
     // What arrives after the reply (a lookup still running behind a delivery made from what was held), with when.
     const arrived: { ids: string[]; at: number }[] = [];
     const pendingSeen: Injection[] = [];
+    // What an agent collecting right after the observe (before its first model call) holds: the reply's packet and
+    // the pending queue at that moment (the first drain below).
+    const beforeModel = new Set<string>();
     if (r.injection) arrived.push({ ids: r.injection.citations.map((c) => c.itemId), at: ms });
-    const deadline = performance.now() + (LIVE ? 30_000 : 3_000 * Math.max(1, TIME));
-    for (;;) {
+    for (const c of r.injection?.citations ?? []) beforeModel.add(c.itemId);
+    const deadline = performance.now() + Math.max(WAIT_MS, WAIT_DEFAULT);
+    for (let firstDrain = true; ; firstDrain = false) {
       for (const x of partner.takePending({ ...scope, sessionId })) {
         pendingSeen.push(x);
         arrived.push({ ids: x.citations.map((c) => c.itemId), at: performance.now() - t0 });
+        if (firstDrain) for (const c of x.citations) beforeModel.add(c.itemId);
       }
       if (!busy(sessionId) || performance.now() > deadline) break;
       await Bun.sleep(1);
@@ -822,6 +906,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       listed: taskListed,
       served: served - servedBefore,
       ms: Number(ms.toFixed(2)),
+      ...(got.includes(id) ? { beforeModel: beforeModel.has(id) } : {}),
       ...(first
         ? { deliveryMs: Number(first.at.toFixed(2)), immediate: r.injection?.citations.some((c) => c.itemId === id) }
         : {}),
@@ -834,6 +919,8 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     for (let k = 0; k < 5_000 && [...table.values()].some((x) => x.inflight || x.behind); k++) await Bun.sleep(1);
     await Bun.sleep(TIME > 0 ? 2_000 * TIME : 5);
     syncUse.demandAll += sync.stats.demandCalls;
+    syncUse.demandItems += sync.stats.demandItems;
+    syncUse.backgroundItems += sync.stats.backgroundItems;
   }
   return perTask;
 }
@@ -893,8 +980,8 @@ for (const suite of SUITE_LIST) {
     add(total, r);
     console.log(line(name, r));
   }
-  console.log(line(SUITE_LIST.length > 1 ? `total ${suite}` : "TOTAL", total));
-  for (const l of screenLines(suite, perTask as unknown as ScreenRow[], PACKET_K)) console.log(l + TAG);
+  console.log(line(SUITE_LIST.length > 1 ? `total ${suite}` : "TOTAL", total) + inertTag());
+  for (const l of screenLines(suite, perTask as unknown as ScreenRow[], PACKET_K)) console.log(l + TAG + inertTag());
   add(grand, total);
   runs.push({ suite, rows, perTask, wall, total });
 }
@@ -902,9 +989,25 @@ for (const suite of SUITE_LIST) {
 if (SUITE_LIST.length > 1) {
   console.log(`\n${header}`);
   for (const r of runs) console.log(line(r.suite, r.total));
-  console.log(line("TOTAL", grand));
+  console.log(line("TOTAL", grand) + inertTag());
   const all = runs.flatMap((r) => r.perTask) as unknown as ScreenRow[];
-  for (const l of screenLines("TOTAL", all, PACKET_K)) console.log(l + TAG);
+  for (const l of screenLines("TOTAL", all, PACKET_K)) console.log(l + TAG + inertTag());
+}
+// What an agent that collects before its first model call would hold (`beforeModel`), against the wait it gave.
+{
+  const all = runs.flatMap((r) => r.perTask) as unknown as ScreenRow[];
+  console.log(beforeModelLine(all, WAIT_MS));
+}
+if (OVERLAP) {
+  console.log(
+    `overlap: slow path busy ${busyTraces.busy} times (${busyTraces.queued} queued by slowPathQueue); the task shape ` +
+      "differs, so these scores are not comparable with a run without --overlap",
+  );
+}
+if (CONFIG.intent === true) {
+  console.log(
+    `intent: ${intentNow()} (replayed requests for ${intentUse.found} of ${intentUse.asked} items asked)` + inertTag(),
+  );
 }
 // calls/task above are what the connectors received; the traces' sum is printed to catch accounting drift in the
 // engine. It also counts fetches (which `SimSource` counts apart), and a call still running when a task's window
@@ -926,7 +1029,8 @@ if (REAL_SYNC) {
       `tasks' windows, in calls/task; ${syncUse.demandAll} by the sync's count); request ` +
       `${(requestCalls / tasks).toFixed(2)}/task; amortised total ` +
       `${(amortised / tasks).toFixed(2)}/task; ` +
-      `local sources ${(syncUse.localSources / Math.max(1, syncUse.lookups)).toFixed(2)}/lookup`,
+      `local sources ${(syncUse.localSources / Math.max(1, syncUse.lookups)).toFixed(2)}/lookup; ` +
+      `demand items ${syncUse.demandItems}, background items ${syncUse.backgroundItems}`,
   );
 }
 if (cardMaker) {
@@ -1042,6 +1146,9 @@ if (out) {
         suite: SUITE_LIST.join(","),
         seeds: SEEDS,
         config: CONFIG,
+        // The run's label, stamped when intent was on but inert, so a number copied out of the file keeps the caveat.
+        label: (opt("label", "") + inertTag()).trim(),
+        intent: { state: intentNow(), ...intentUse },
         rows,
         total: grand,
         ...(REAL_SYNC ? { sync: syncUse } : {}),
