@@ -16,6 +16,7 @@ export const meta = {
     { title: "Audit", detail: "write the audit report and split it into work packages with disjoint files" },
     { title: "Fix", detail: "one fixer per package in its own worktree; reviewer loop until approved" },
     { title: "Integrate", detail: "merge approved branches into one integration branch and run the full checks" },
+    { title: "Finalize", detail: "flags made default or removed, deferred items decided, nothing left unmerged" },
     { title: "Report", detail: "plain-language summary of what was found, fixed and left" },
   ],
 };
@@ -250,8 +251,106 @@ check, rules that constrain changes, and known open problems.${RULES}${READONLY}
   { label: "map", phase: "Map" },
 );
 
+// The reviewer's checklist, given to fixers up front: most rejections in earlier runs were things a fixer could have
+// checked itself, and each rejection costs a full fix + review cycle.
+const CHECKLIST = `
+Before you finish, check your own work the way the reviewer will (it will reject on any of these):
+- every acceptance item holds when you run it yourself; every claimed number re-measured on the final commit;
+- no regression: the repo's full check passes once on your final commit (use the fast/changed-only checks while
+  iterating, then the full check once at the end);
+- new state is isolated per tenant/user/session, released when its owner goes (no timers or closures that pin it),
+  and has a test; text that is stored, logged or sent to a model is redacted; failures fail open where the rules say;
+- edge cases: empty, huge, unicode (lone surrogates, case variants), time zones, concurrency and retries;
+- no security, privacy or isolation check weakened; no test skipped or loosened; docs and decision rows match the
+  code; nothing outside the package's files changed without a stated reason.`;
+
+// Fix every package (fixer then reviewer, up to FIX_ATTEMPTS each, pipelined), merge the approved branches into the
+// integration branch, run the full checks there, and free finished worktrees.
+async function fixRound(packages, work, tag) {
+  phase("Fix");
+  // ── Fix → review loop per package, pipelined (no barrier between packages) ──
+  const fixes = await pipeline(packages, async (pkg) => {
+    const findings = work.filter((f) => pkg.findingIds.includes(f.id));
+    const branch = `audit/${DATE}-${tag}-${pkg.id}`;
+    let issues = [];
+    let last = null;
+    for (let attempt = 1; attempt <= FIX_ATTEMPTS; attempt++) {
+      const fixed = await agent(
+        `Fix this work package completely. Your branch is ${branch}${attempt > 1 ? " (it already holds your previous attempt; continue from it)" : ` (new, from ${INTEGRATION})`}.
+Tests first for behaviour changes; measure before and after for any claimed performance, cost or quality effect; commit (no push needed unless the repo requires it). Touch only these files unless unavoidable (say
+why): ${pkg.files.join(", ")}.
+${issues.length ? `\nThe reviewer rejected the previous attempt. Fix every one of these:\n- ${issues.join("\n- ")}` : ""}
+
+Package: ${JSON.stringify(pkg)}\nFindings: ${JSON.stringify(findings)}\nOrientation brief:\n${map}\n${RULES}\n${GITREFS(branch, attempt > 1 ? branch : INTEGRATION)}\n${CHECKLIST}\nAn independent reviewer agent runs after you: do not try to start one; just leave the branch ready for review.`,
+        { label: `fix:${pkg.id}:${tag}:${attempt}`, phase: "Fix", isolation: "worktree", schema: FIXED },
+      );
+      if (!fixed || fixed.blocked)
+        return { pkg, approved: false, fixed, review: null, why: fixed ? fixed.blocked : "fixer died" };
+      const review = await agent(
+        `Review branch ${fixed.branch} (diff against ${INTEGRATION}) as an independent, adversarial reviewer. Assume defects
+until shown otherwise. Check each acceptance item yourself, re-run any measurement the fixer claims and the full check once (targeted tests
+first, to fail fast), look
+for regressions, weakened security, skipped tests, and side effects outside the package's files. Approve only if every
+finding below is genuinely resolved.\n\nPackage: ${JSON.stringify(pkg)}\nFindings: ${JSON.stringify(findings)}\nFixer's report: ${JSON.stringify(fixed)}\n${RULES}\nWork in your own worktree: run \`git checkout --detach ${fixed.branch}\`, then run the checks there. Do not commit.`,
+        {
+          label: `review:${pkg.id}:${tag}:${attempt}`,
+          isolation: "worktree",
+          phase: "Fix",
+          schema: REVIEW,
+          ...(A.reviewerAgent ? { agentType: A.reviewerAgent } : {}),
+        },
+      );
+      last = { pkg, fixed, review };
+      if (review && review.approved) return { ...last, approved: true };
+      issues = review ? review.issues : ["reviewer died; re-verify the work yourself and report checks in full"];
+    }
+    return { ...(last || { pkg }), approved: false, why: `not approved after ${FIX_ATTEMPTS} attempts` };
+  });
+  const done = fixes.filter(Boolean);
+  const approved = done.filter((d) => d.approved);
+  for (const d of done) {
+    const ids = d.pkg.findingIds;
+    if (d.approved) ledger.resolved.push(...ids.filter((id) => (d.review.resolved || ids).includes(id)));
+    else ledger.unresolved.push(...ids.map((id) => `${id} (${d.why || "rejected"})`));
+  }
+  log(`${tag}: ${approved.length}/${done.length} packages approved`);
+  if (!approved.length) return { approved, done, merged: null };
+
+  // ── Integrate approved branches and run the full checks ──
+  phase("Integrate");
+  const merged = await agent(
+    `Merge these approved branches into ${INTEGRATION} one at a time (a merge commit each; no history rewriting).
+Resolve conflicts by keeping both packages' intent; if a conflict cannot be resolved safely, leave that branch out and
+say why. After merging, run the repo's full checks and any evals/benchmarks the orientation brief names as no-cost.
+Fix only integration breakage (not new features). Report what is green.\n\nBranches: ${JSON.stringify(approved.map((d) => d.fixed.branch))}\nOrientation brief:\n${map}\n${RULES}\n${GITREFS(INTEGRATION, INTEGRATION)}`,
+    { label: `integrate:${tag}`, phase: "Integrate", schema: MERGED, isolation: "worktree" },
+  );
+  ledger.merges.push(merged);
+
+  // Every fixer, reviewer and integrator gets a full checkout; a long run fills the disk unless finished ones go.
+  await agent(
+    `Free disk between rounds. List git worktrees (\`git worktree list --porcelain\`). Remove (\`git worktree remove\`)
+only worktrees under the repo's .claude/worktrees folder whose HEAD is already contained in ${INTEGRATION}
+(\`git merge-base --is-ancestor <head> ${INTEGRATION}\`) or whose branch name starts with audit/ and is merged into it,
+and that have no uncommitted changes (\`git -C <path> status --porcelain\` empty). Never remove anything else, never
+delete branches, never touch the user's main checkout. Then \`git worktree prune\`. Report what you removed and the
+free disk (\`df -h .\`) before and after.`,
+    { label: `cleanup:${tag}`, phase: "Integrate", effort: "low" },
+  );
+  return { approved, done, merged };
+}
+
 const seen = new Set();
-const ledger = { found: [], verified: [], rejected: [], resolved: [], unresolved: [], packages: [], merges: [] };
+const ledger = {
+  found: [],
+  verified: [],
+  rejected: [],
+  resolved: [],
+  unresolved: [],
+  deferred: [],
+  packages: [],
+  merges: [],
+};
 let round = 0;
 
 while (round < MAX_ROUNDS) {
@@ -290,10 +389,10 @@ merged list.${READONLY}\n\n${JSON.stringify(raw)}`,
   const candidates = (deduped ? deduped.findings : raw).filter((f) => !seen.has(f.id)).sort(byValue);
   candidates.forEach((f) => seen.add(f.id));
   ledger.found.push(...candidates);
-  const toVerify = candidates.slice(0, MAX_FINDINGS * 2);
+  const toVerify = candidates.slice(0, MAX_FINDINGS);
   if (candidates.length > toVerify.length)
     log(
-      `round ${round}: verifying the top ${toVerify.length} of ${candidates.length}; the rest are listed as unverified`,
+      `round ${round}: verifying the top ${toVerify.length} of ${candidates.length}; the rest are listed as unverified and come back next round`,
     );
 
   // ── Verify: two skeptics per finding, different lenses ──
@@ -357,81 +456,44 @@ ${INTEGRATION} as described below.\n\nVerified findings:\n${JSON.stringify(work)
   );
   if (!audit || !audit.packages.length) break;
   ledger.packages.push(...audit.packages);
+  ledger.deferred.push(...audit.deferred);
 
-  // ── Fix → review loop per package, pipelined (no barrier between packages) ──
-  phase("Fix");
-  const fixes = await pipeline(audit.packages, async (pkg) => {
-    const findings = work.filter((f) => pkg.findingIds.includes(f.id));
-    const branch = `audit/${DATE}-r${round}-${pkg.id}`;
-    let issues = [];
-    let last = null;
-    for (let attempt = 1; attempt <= FIX_ATTEMPTS; attempt++) {
-      const fixed = await agent(
-        `Fix this work package completely. Your branch is ${branch}${attempt > 1 ? " (it already holds your previous attempt; continue from it)" : ` (new, from ${INTEGRATION})`}.
-Tests first for behaviour changes; measure before and after for any claimed performance, cost or quality effect; run
-the repo's checks; commit (no push needed unless the repo requires it). Touch only these files unless unavoidable (say
-why): ${pkg.files.join(", ")}.
-${issues.length ? `\nThe reviewer rejected the previous attempt. Fix every one of these:\n- ${issues.join("\n- ")}` : ""}
-
-Package: ${JSON.stringify(pkg)}\nFindings: ${JSON.stringify(findings)}\nOrientation brief:\n${map}\n${RULES}\n${GITREFS(branch, attempt > 1 ? branch : INTEGRATION)}\nAn independent reviewer agent runs after you: do not try to start one; just leave the branch ready for review.`,
-        { label: `fix:${pkg.id}:${attempt}`, phase: "Fix", isolation: "worktree", schema: FIXED },
-      );
-      if (!fixed || fixed.blocked)
-        return { pkg, approved: false, fixed, review: null, why: fixed ? fixed.blocked : "fixer died" };
-      const review = await agent(
-        `Review branch ${fixed.branch} (diff against ${INTEGRATION}) as an independent, adversarial reviewer. Assume defects
-until shown otherwise. Check each acceptance item yourself, re-run the checks and any measurement the fixer claims, look
-for regressions, weakened security, skipped tests, and side effects outside the package's files. Approve only if every
-finding below is genuinely resolved.\n\nPackage: ${JSON.stringify(pkg)}\nFindings: ${JSON.stringify(findings)}\nFixer's report: ${JSON.stringify(fixed)}\n${RULES}\nWork in your own worktree: run \`git checkout --detach ${fixed.branch}\`, then run the checks there. Do not commit.`,
-        {
-          label: `review:${pkg.id}:${attempt}`,
-          isolation: "worktree",
-          phase: "Fix",
-          schema: REVIEW,
-          ...(A.reviewerAgent ? { agentType: A.reviewerAgent } : {}),
-        },
-      );
-      last = { pkg, fixed, review };
-      if (review && review.approved) return { ...last, approved: true };
-      issues = review ? review.issues : ["reviewer died; re-verify the work yourself and report checks in full"];
-    }
-    return { ...(last || { pkg }), approved: false, why: `not approved after ${FIX_ATTEMPTS} attempts` };
-  });
-  const done = fixes.filter(Boolean);
-  const approved = done.filter((d) => d.approved);
-  for (const d of done) {
-    const ids = d.pkg.findingIds;
-    if (d.approved) ledger.resolved.push(...ids.filter((id) => (d.review.resolved || ids).includes(id)));
-    else ledger.unresolved.push(...ids.map((id) => `${id} (${d.why || "rejected"})`));
-  }
-  log(`round ${round}: ${approved.length}/${done.length} packages approved`);
+  const { approved, merged } = await fixRound(audit.packages, work, `r${round}`);
   if (!approved.length) break;
-
-  // ── Integrate approved branches and run the full checks ──
-  phase("Integrate");
-  const merged = await agent(
-    `Merge these approved branches into ${INTEGRATION} one at a time (a merge commit each; no history rewriting).
-Resolve conflicts by keeping both packages' intent; if a conflict cannot be resolved safely, leave that branch out and
-say why. After merging, run the repo's full checks and any evals/benchmarks the orientation brief names as no-cost.
-Fix only integration breakage (not new features). Report what is green.\n\nBranches: ${JSON.stringify(approved.map((d) => d.fixed.branch))}\nOrientation brief:\n${map}\n${RULES}\n${GITREFS(INTEGRATION, INTEGRATION)}`,
-    { label: `integrate:r${round}`, phase: "Integrate", schema: MERGED, isolation: "worktree" },
-  );
-  ledger.merges.push(merged);
-
-  // Every fixer, reviewer and integrator gets a full checkout; a long run fills the disk unless finished ones go.
-  await agent(
-    `Free disk between rounds. List git worktrees (\`git worktree list --porcelain\`). Remove (\`git worktree remove\`)
-only worktrees under the repo's .claude/worktrees folder whose HEAD is already contained in ${INTEGRATION}
-(\`git merge-base --is-ancestor <head> ${INTEGRATION}\`) or whose branch name starts with audit/ and is merged into it,
-and that have no uncommitted changes (\`git -C <path> status --porcelain\` empty). Never remove anything else, never
-delete branches, never touch the user's main checkout. Then \`git worktree prune\`. Report what you removed and the
-free disk (\`df -h .\`) before and after.`,
-    { label: `cleanup:r${round}`, phase: "Integrate" },
-  );
   if (!merged || !merged.green) {
     log(`round ${round}: integration not green; stopping so a human can look`);
     break;
   }
+}
+
+// ── Finalize: no loose ends ───────────────────────────────────────────────────────────────────────────────────────
+// A run that leaves features behind off flags, deferred items without a decision, or branches unmerged has not
+// finished. Up to two passes: plan what is left, fix it like any package, re-check.
+phase("Finalize");
+for (let pass = 1; pass <= 2; pass++) {
+  const plan = await agent(
+    `Close every loose end this run left on ${INTEGRATION} (compare with ${BASE}: \`git diff ${BASE}...${INTEGRATION}\`).
+Measure with the repo's no-cost checks, evals and benchmarks, on vs off, in your own worktree.
+1. Every config flag or option the run added, and every off-by-default flag it touched. Helps or neutral, safe, and no
+   added paid cost: make it the default, with a decision row and docs. Never helps: remove the flag and its dead code.
+   Helps but adds paid cost per default: decide from the measured cost and benefit and record the decision. "Off for
+   now" is allowed only with a recorded reason and a concrete next step.
+2. Every deferred or unresolved item below: resolve it now if it can be done safely, otherwise record a decision with
+   the reason (in the repo's decision log or the audit file).
+3. Approved branches not merged into ${INTEGRATION}, TODO/FIXME lines the run added, docs that disagree with the code,
+   failing or flaky tests.
+Return work packages (no shared files, concrete acceptance checks) for everything that needs a change; return an
+empty list only if nothing is left. Do not commit; the packages are fixed and reviewed after you.
+\nDeferred: ${JSON.stringify(ledger.deferred)}\nUnresolved: ${JSON.stringify(ledger.unresolved)}\nOrientation brief:\n${map}\n${RULES}\nWork in your own worktree: \`git checkout --detach ${INTEGRATION}\`.`,
+    { label: `finalize-plan:${pass}`, phase: "Finalize", schema: PACKAGES, isolation: "worktree" },
+  );
+  if (!plan || !plan.packages.length) {
+    log(`finalize pass ${pass}: nothing left`);
+    break;
+  }
+  ledger.packages.push(...plan.packages);
+  log(`finalize pass ${pass}: ${plan.packages.length} packages`);
+  await fixRound(plan.packages, [], `final${pass}`);
 }
 
 // ── Report ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -461,6 +523,7 @@ ${GITREFS(INTEGRATION, INTEGRATION)}\n\nData:\n${JSON.stringify({
       rejected: ledger.rejected.map((f) => f.id),
       resolved: ledger.resolved,
       unresolved: ledger.unresolved,
+      deferred: ledger.deferred,
       merges: ledger.merges,
     },
   })}`,
