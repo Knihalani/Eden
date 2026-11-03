@@ -10,7 +10,89 @@
  * Fails open by design: a network error, a timeout or a non-2xx response yields "no context", never an exception
  * in the agent's loop. Timeouts are short (default 800 ms) because the agent is waiting.
  */
-import type { ActionCheck, AgentEvent, AskResponse, Injection, ObserveResult } from "@eden/protocol";
+import { createHash } from "node:crypto";
+import {
+  isId,
+  type ActionCheck,
+  type AgentEvent,
+  type AskResponse,
+  type Injection,
+  type ObserveResult,
+} from "@eden/protocol";
+
+/** The server's id rule (`isId` in @eden/protocol), as its 400s word it. */
+const ID_RULE = "1-128 characters of [A-Za-z0-9._:@-]";
+/** How much of an error response is read: enough for the server's `{error}`, never a proxy's whole page. */
+const ERROR_BODY_BYTES = 2_048;
+/** How much of the server's error text reaches `onError`. */
+const ERROR_TEXT_CHARS = 300;
+
+/**
+ * Maps any string (an email, a path-like chat id, a long external id) to a valid Eden id, injectively: two different
+ * inputs never share an id, because a shared id would merge two users' or sessions' state (D9).
+ *
+ * - A valid id that does not start with `e:` or `h:` is kept as is (`alice-work@x.com` stays itself).
+ * - Otherwise, if it fits, `e:` + a reversible escape over UTF-16 code units: each one outside [A-Za-z0-9.:@-] (`_`
+ *   included, it is the escape character) becomes `_` + two hex digits below 0x100, else `_u` + four hex digits, so
+ *   `alice+work@x.com` is `e:alice_2bwork@x.com` and `\uD800` is `e:_ud800`. Code units, not UTF-8 bytes: UTF-8
+ *   turns every lone surrogate into U+FFFD, which would merge `\uD800` with `\uFFFD`. `u` is not a hex digit, so
+ *   the two escape forms cannot be confused.
+ * - Otherwise `h:` + the SHA-256 of that escape (ASCII, so hashing it loses nothing) in hex: injective up to a
+ *   SHA-256 collision.
+ *
+ * The three forms cannot meet: kept ids never start with `e:` or `h:`, and the other two differ in their prefix.
+ * Map the same way everywhere: the id is how Eden finds the user's state next time.
+ */
+export function edenId(raw: string): string {
+  if (isId(raw) && !raw.startsWith("e:") && !raw.startsWith("h:")) return raw;
+  let escaped = "e:";
+  for (let i = 0; i < raw.length; i++) {
+    const unit = raw.charCodeAt(i);
+    const c = raw[i]!;
+    if (/[A-Za-z0-9.:@-]/.test(c)) escaped += c;
+    else if (unit < 0x100) escaped += `_${unit.toString(16).padStart(2, "0")}`;
+    else escaped += `_u${unit.toString(16).padStart(4, "0")}`;
+  }
+  return escaped.length <= 128 ? escaped : `h:${createHash("sha256").update(escaped).digest("hex")}`;
+}
+
+/** Reads at most `max` bytes of a body and cancels the rest; null when the body is longer or unreadable. */
+async function readCapped(res: Response, max: number): Promise<string | null> {
+  const reader = res.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > max) return null;
+      chunks.push(value);
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    all.set(c, at);
+    at += c.byteLength;
+  }
+  return new TextDecoder().decode(all);
+}
+
+/** The server's `{error}` text on a failed response, bounded, with a leading space; "" when there is none. */
+async function serverError(res: Response): Promise<string> {
+  try {
+    const text = await readCapped(res, ERROR_BODY_BYTES);
+    if (text === null) return "";
+    const error: unknown = (JSON.parse(text) as { error?: unknown } | null)?.error;
+    return typeof error === "string" ? ` ${error.slice(0, ERROR_TEXT_CHARS)}` : "";
+  } catch {
+    return "";
+  }
+}
 
 export interface EdenClientOptions {
   /** The tenant's API key. Omit it against a dev server (`EDEN_DEV=1`), which refuses any key. */
@@ -21,7 +103,10 @@ export interface EdenClientOptions {
   baseUrl?: string;
   timeoutMs?: number;
   fetch?: typeof fetch;
-  /** Called on a swallowed error, for the integrator's logs. */
+  /**
+   * Called on a swallowed error, for the integrator's logs. Set it: without it a misconfiguration (a refused key or
+   * id, a wrong port) looks exactly like Eden's normal silence. A 4xx's message carries the server's reason.
+   */
   onError?: (error: unknown) => void;
 }
 
@@ -36,6 +121,20 @@ export class EdenClient {
 
   constructor(private readonly options: EdenClientOptions) {
     this.baseUrl = (options.baseUrl ?? "http://127.0.0.1:8790").replace(/\/$/, "");
+    const bad = this.badIds();
+    // Every call with a bad id would be refused (400); say so once, up front. The ids themselves stay out of the
+    // message (they may be personal data, such as an email). No throw (D14): the calls still fail open.
+    if (bad) this.report(new Error(bad));
+  }
+
+  /** Which configured ids the server would refuse, as an error message; null when all pass `isId`. */
+  private badIds(): string | null {
+    const { tenantId, userId, sessionId } = this.options;
+    const bad = Object.entries({ tenantId, userId, sessionId })
+      // A falsy tenantId is no tenantId, as in `who`: the call omits it and the server takes the tenant from the key.
+      .filter(([f, v]) => (f !== "tenantId" || Boolean(v)) && !isId(v))
+      .map(([f]) => f);
+    return bad.length > 0 ? `eden: ${bad.join(", ")} must be ${ID_RULE} (map ids with edenId)` : null;
   }
 
   private get who() {
@@ -43,7 +142,12 @@ export class EdenClient {
     return { ...(tenantId ? { tenantId } : {}), userId, sessionId };
   }
 
-  private async post<T>(path: string, body: unknown, timeoutMs = this.options.timeoutMs ?? 800): Promise<T | null> {
+  private async post<T>(
+    path: string,
+    body: unknown,
+    timeoutMs = this.options.timeoutMs ?? 800,
+    failed?: (e: unknown) => void,
+  ): Promise<T | null> {
     try {
       const res = await (this.options.fetch ?? fetch)(`${this.baseUrl}${path}`, {
         method: "POST",
@@ -54,9 +158,10 @@ export class EdenClient {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(timeoutMs),
       });
-      if (!res.ok) throw new Error(`eden ${path}: ${res.status}`);
+      if (!res.ok) throw new Error(`eden ${path}: ${res.status}${await serverError(res)}`);
       return (await res.json()) as T;
     } catch (e) {
+      failed?.(e);
       this.report(e);
       return null;
     }
@@ -124,6 +229,19 @@ export class EdenClient {
       return unavailable;
     }
     return check;
+  }
+
+  /**
+   * Whether this client's setup works end to end: the server answers and accepts the key, the tenant and the ids.
+   * It reads the digest, which changes nothing (unlike `pending`, which drains the queue). Never throws; `error` is
+   * the text `onError` also receives.
+   */
+  async health(options: { timeoutMs?: number } = {}): Promise<{ ok: boolean; error?: string }> {
+    let error = "eden: unavailable";
+    const res = await this.post<unknown>("/v1/digest", this.who, options.timeoutMs, (e) => {
+      error = e instanceof Error ? e.message : String(e);
+    });
+    return res === null ? { ok: false, error } : { ok: true };
   }
 
   /** Tells the partner whether the agent used an injection. Better than the partner's own inference. */

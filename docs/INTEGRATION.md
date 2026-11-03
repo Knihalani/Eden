@@ -18,6 +18,22 @@ messages = withContext(messages, await eden.collect(injection)); // before each 
 
 - **One `userId` per end user, one `sessionId` per conversation.** Eden keys every piece of state by tenant, user and
   session (D9); a shared id would mix users' context.
+- **Ids are 1-128 characters of `[A-Za-z0-9._:@-]`** (`isId` in `@eden/protocol`) for `tenantId`, `userId` and
+  `sessionId`. The server refuses anything else with a 400, so `alice+work@x.com`, `chat/123` or an id with a space
+  get no context at all. Map ids you do not control with `edenId(raw)` from `@eden/client`: it keeps a valid id as it
+  is and maps any other string injectively (a reversible escape of its UTF-16 code units, `e:alice_2bwork@x.com`, or
+  `h:` + SHA-256 when that would pass 128 characters), so two users never share an id, even when an id holds a lone
+  surrogate from cutting a string mid-character. Use the same mapping everywhere; the id is how Eden
+  finds the user's state next time. Never fold a bad id by replacing characters (`+` to `-` would merge
+  `alice+work@x.com` with `alice-work@x.com`). The client reports a bad id once through `onError` when it is
+  constructed.
+- **Set `onError`.** A refused key or id, a wrong port and a down server all look like Eden's normal silence
+  otherwise: the SDK swallows every error (it fails open) and has no default logger. The error's message carries the
+  server's reason (`eden /v1/events: 400 userId must be 1-128 characters of [A-Za-z0-9._:@-]`), capped at 300
+  characters; it never includes the request or the key.
+- **Check the setup with `health()`** at startup: `await eden.health()` resolves `{ ok: true }` when the server
+  answers and accepts the key, the tenant and the ids, and `{ ok: false, error }` otherwise. It never throws and
+  changes no state (it reads the digest).
 - **Report every event**: user messages, the agent's tool calls and results, arriving messages. Eden stays silent on
   most of them; the ones it reads are how it knows what the agent is about to do.
 - **Inject before each model call, not only the first**: work Eden finishes after the first request (the slow path, a
