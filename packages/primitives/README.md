@@ -146,13 +146,14 @@ Measured on a shared VM, ±30% run to run.
 A purge no longer rewrites the frozen tier: at the reference's compaction points it frees the doc numbers, reports
 the freed terms and drops the dead docs from the delta (the dead docs' terms and the delta, not every posting); their
 frozen postings stay, stale and skipped (a freed doc is neither frozen nor live), until a merge filters them. A merge
-starts when the delta fills, or at a purge with none under way. It seals the delta (later adds go behind it) and runs
-in phases (count, prefix sums, allocate the new arrays one to a step, copy the old postings, write the sealed docs',
-build the forward arena), at least 8,192 units of work (about a posting each) per add or remove, then swaps. Until
+starts when the delta fills, or at a purge that leaves stale frozen postings with none under way. It seals the delta
+(later adds go behind it) and runs in phases (count, prefix sums, allocate the new arrays, copy the old postings,
+write the sealed docs', build the forward arena), about 8,192 units of work (a posting each; zeroing new arrays
+counts) per add or remove, then swaps; a merge within one step's work finishes in the add that starts it. Until
 the swap queries read the old frozen tier and the whole delta, sealed part first: insertion order, and so every
 result, is unchanged. A reused doc number becomes frozen only in a merge that filtered its stale postings. `settle()`
-finishes a merge at once; the engine's expiry tick calls it, since an index that stops changing mid-merge holds the
-old and new arrays together. `flush()` also merges, so nothing of a revoked source is left.
+finishes a merge at once; the engine's expiry tick calls it for every user (after its sweep, whose removes may start
+one), since an index that stops changing mid-merge holds the old and new arrays together. `flush()` also merges, so nothing of a revoked source is left.
 
 | `index-memory.bench.ts`, churn at 6,892 (5,000 remove + add steps; three runs) | Reference | D111 packed | D116 packed |
 |---|---|---|---|

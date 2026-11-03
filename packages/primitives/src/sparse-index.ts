@@ -19,14 +19,16 @@
  * delta docs). It starts when the delta is full (`DELTA_DOCS`, then an eighth of the index up to `MAX_DELTA_DOCS`)
  * and is incremental (D116): the full delta is sealed, later adds go behind it, and each add or remove does a bounded
  * share of the merge (`mergeStep`) until the new arrays replace the old in one swap; until then queries read the old
- * frozen tier and the whole delta, sealed part first. A small merge finishes in the add that starts it.
+ * frozen tier and the whole delta, sealed part first. A merge within one step's work (`MERGE_MIN_WORK`, allocation
+ * counted) finishes in the add that starts it.
  *
  * Removal marks a doc dead (skipped when scoring) and updates df and lengths at once. When dead postings reach ~10% of
  * all postings (or on `flush`), exactly where the reference compacted, the dead docs are purged: their numbers are
  * freed for reuse, each term no live doc holds any more is reported (`onTermFreed`), and they leave the delta. Their
  * frozen postings stay where they are, stale (a freed doc is neither frozen nor live, so scoring skips them), until
- * the next merge filters them out; a reused doc number becomes frozen only in a merge that has filtered its stale
- * postings, so none come back. A purge costs the dead docs' terms and the delta, not a pass over every posting.
+ * the next merge filters them out (a purge that leaves any, with no merge under way, starts one); a reused doc
+ * number becomes frozen only in a merge that has filtered its stale postings, so none come back. A purge costs the
+ * dead docs' terms and the delta, not a pass over every posting.
  *
  * Scores, ranking, coverage and doc numbers are identical to the reference: each doc's contributions are summed in the
  * same order into the same Float32 accumulator, and candidates reach top-k in the same order (each key's postings in
@@ -80,11 +82,11 @@ const DELTA_DOCS = 128;
 const MAX_DELTA_DOCS = 512;
 
 /**
- * Merge work (about one unit per posting read or written, per key, per forward-arena slot) one add or remove does
- * while a merge is under way: at least this (about 0.1-0.2 ms warm, bench/index-memory.bench.ts), so a merge holds its
- * old and new arrays together for few adds (about 130 at 6,892 docs); or, for a far larger index, enough
- * to finish within half the delta's capacity in adds, well before the delta behind it fills (when it would, the merge
- * is finished at once).
+ * Merge work (about one unit per posting read or written, per key, per forward-arena slot, per 8 bytes of new arrays
+ * zeroed) one add or remove does while a merge is under way: about this (0.1-0.2 ms warm,
+ * bench/index-memory.bench.ts), so a merge holds its old and new arrays together for few adds (about 130 at 6,892
+ * docs); or, for a far larger index, enough to finish within half the delta's capacity in adds, well before the
+ * delta behind it fills (when it would, the merge is finished at once).
  */
 const MERGE_MIN_WORK = 8_192;
 
@@ -976,16 +978,17 @@ export class SparseIndex {
           break;
         }
         case ALLOCATE: {
-          // The new posting arrays, one to a step: zeroing a large array is work too, and may start a collection.
+          // The new posting arrays: zeroing a large one is work too (and may start a collection), counted as such, so
+          // a large index allocates them a step apart and a small one in the step that counts.
           const total = m.start[m.keys]!;
           if (m.at === 0) m.docs = m.docCount <= 65_536 ? new Uint16Array(total) : new Uint32Array(total);
           else if (m.at === 1) m.tfs = new Uint8Array(total);
           else m.cursor = m.start.slice(0, m.keys);
+          work += 1 + ((m.at === 2 ? m.keys * 4 : m.at === 0 ? total * 2 : total) >> 3);
           if (++m.at === 3) {
             m.phase = COPY_FROZEN;
             m.at = 0;
           }
-          if (budget < Infinity) return;
           break;
         }
         case COPY_FROZEN: {
@@ -1067,10 +1070,11 @@ export class SparseIndex {
           break;
         }
         case FORWARD: {
-          // The forward arena: the carried docs' terms, then the sealed docs'. Allocated in a step of its own.
+          // The forward arena: the carried docs' terms, then the sealed docs'. Its allocation counts as work.
           if (m.fwd === EMPTY && m.fwdTotal > 0) {
             m.fwd = m.wideFwd ? new Uint32Array(m.fwdTotal) : new Uint16Array(m.fwdTotal);
-            if (budget < Infinity) return;
+            work += m.fwdTotal >> 3;
+            continue;
           }
           const { carry, carryStart, carryLen, carryPos, sealed, sealedStart, sealedLen, sealedPos, fwd } = m;
           const carried = carry.length;

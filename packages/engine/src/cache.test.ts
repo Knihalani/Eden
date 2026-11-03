@@ -426,3 +426,23 @@ describe("ItemCache index isolation (packed index, shared scratch)", () => {
     }
   });
 });
+
+describe("ItemCache expiry tick and the index's merges (D116)", () => {
+  test("the tick leaves no merge under way, even one its own sweep starts", () => {
+    const cache = new ItemCache({ expireEveryMs: 0, maxItemsPerUser: 5_000 });
+    const scope = { tenantId: "t", userId: "merge" };
+    const t0 = 1_700_000_000_000;
+    const ttl = 24 * 3_600_000;
+    const words = (i: number) => Array.from({ length: 25 }, (_, j) => `w${(i * 31 + j * 17) % 4_000}`).join(" ");
+    // 800 then 600 (a combination found to leave a merge under way after the sweep, with the settle before it only).
+    for (let i = 0; i < 800; i++) cache.put(scope, [item("mail", `old-${i}`, words(i))], t0);
+    for (let i = 0; i < 600; i += 50) {
+      const batch = Array.from({ length: 50 }, (_, k) => item("mail", `new-${i + k}`, words(10_000 + i + k)));
+      cache.put(scope, batch, t0 + ttl / 2);
+    }
+    const index = () =>
+      (cache as unknown as { users: Map<string, { index: { merge: unknown } }> }).users.values().next().value!.index;
+    cache.expireIdle(t0 + ttl + 1); // sweeps the 800 old items: purges, and the last starts a merge
+    expect(index().merge).toBeNull();
+  });
+});
