@@ -132,6 +132,64 @@ describe("loadConfig", () => {
     expect(loadConfig({ EDEN_DEV: "1" }).dev).toBe(true);
     expect(() => loadConfig({ EDEN_API_KEYS: "a/b:0123456789abcdef" })).toThrow(/tenant/);
   });
+
+  test("EDEN_MAX_BODY_BYTES: 8 MB by default (D100), a positive integer when set, junk refused", () => {
+    expect(loadConfig({ EDEN_DEV: "1" }).maxBodyBytes).toBe(8_388_608);
+    expect(loadConfig({ EDEN_DEV: "1", EDEN_MAX_BODY_BYTES: "" }).maxBodyBytes).toBe(8_388_608);
+    expect(loadConfig({ EDEN_DEV: "1", EDEN_MAX_BODY_BYTES: "1048576" }).maxBodyBytes).toBe(1_048_576);
+    for (const bad of ["0", "-1", "1.5", "8MB", "abc"]) {
+      expect(() => loadConfig({ EDEN_DEV: "1", EDEN_MAX_BODY_BYTES: bad })).toThrow(/EDEN_MAX_BODY_BYTES/);
+    }
+  });
+});
+
+describe("request body size (D100)", () => {
+  const observed: unknown[] = [];
+  const spied = buildPartner({ sources: async () => [crm], model: null });
+  const realObserve = spied.observe.bind(spied);
+  spied.observe = (...args: Parameters<typeof spied.observe>) => {
+    observed.push(args[0]);
+    return realObserve(...args);
+  };
+  const send = (h: ReturnType<typeof createHandler>, body: string, headers: Record<string, string> = {}) =>
+    h(
+      new Request("http://x/v1/events", {
+        method: "POST",
+        headers: { authorization: `Bearer ${key}`, "content-type": "application/json", ...headers },
+        body,
+      }),
+    );
+  const event = (pad: number) =>
+    JSON.stringify({ ...who, kind: "user_message", text: "Globex renewal", junk: "x".repeat(pad) });
+
+  test("a 9 MB body is a 413 with a message and never reaches observe; a normal event is still a 200", async () => {
+    observed.length = 0;
+    const h = createHandler(spied, { keys: new Map([[key, "acme"]]), dev: false });
+    const big = event(9 * 1024 * 1024);
+    const res = await send(h, big, { "content-length": String(Buffer.byteLength(big)) });
+    expect(res.status).toBe(413);
+    expect(((await res.json()) as { error: string }).error).toMatch(/8,388,608 bytes/);
+    expect(observed.length).toBe(0);
+    const small = event(10);
+    const ok = await send(h, small, { "content-length": String(Buffer.byteLength(small)) });
+    expect(ok.status).toBe(200);
+    expect(observed.length).toBe(1);
+  });
+
+  test("the limit is configurable; auth still answers first; a missing or junk content-length falls through", async () => {
+    observed.length = 0;
+    const h = createHandler(spied, { keys: new Map([[key, "acme"]]), dev: false, maxBodyBytes: 1_000 });
+    const body = event(2_000);
+    const len = { "content-length": String(Buffer.byteLength(body)) };
+    expect((await send(h, body, len)).status).toBe(413);
+    const anon = await h(new Request("http://x/v1/events", { method: "POST", headers: len, body }));
+    expect(anon.status).toBe(401);
+    // Without a usable header the handler cannot know the size up front; Bun.serve's maxRequestBodySize (main.ts)
+    // enforces the same limit on the wire, chunked bodies included.
+    expect((await send(h, body)).status).toBe(200);
+    expect((await send(h, body, { "content-length": "abc" })).status).toBe(200);
+    expect(observed.length).toBe(2);
+  });
 });
 
 describe("gate pool", () => {
@@ -220,6 +278,7 @@ describe("audit regressions (2026-10-29)", () => {
     });
     const n = 60_000;
     const body = `{"userId":"u1","sessionId":"s1","kind":"tool_call","tool":"t","input":${"[".repeat(n)}${"]".repeat(n)}}`;
+    const t0 = performance.now();
     const res = await handle(
       new Request("http://x/v1/events", {
         method: "POST",
@@ -227,7 +286,10 @@ describe("audit regressions (2026-10-29)", () => {
         body,
       }),
     );
+    const ms = performance.now() - t0;
     expect(res.status).toBe(400);
+    // D100: refused by the depth walk, not after ~1.5 s of JSON.stringify on the event loop. Loose bound for slow CI.
+    expect(ms).toBeLessThan(500);
   });
 
   test("EDEN_API_KEYS: a key may hold ':', and one key for two tenants is refused", () => {
