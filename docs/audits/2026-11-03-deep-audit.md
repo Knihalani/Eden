@@ -27,29 +27,61 @@ number below is either from a local command named in the finding or labelled an 
 Round 1 packages 8 work items for parallel fixers (two of them run in sequence) and defers 5 findings that need a
 decision from you.
 
+**Round 2 (a review of round 1's branches) in plain language:**
+
+- **Two round 1 fixes were built on the same starting point and now collide.** The reader-accounting fix and the
+  push-wait fix both rewrote the same reader code. Merging them carelessly would quietly undo five cost fixes, and
+  the type checker would not notice. One package redoes the push-wait fix on top of reader-accounting.
+- **Once merged, the tree would not type-check.** A lab script counts reader outcomes and does not know the new
+  "budget" outcome. A one-line fix, but it blocks the merge until it lands.
+- **Eden still under-reports some spend and some source calls.** A reader call that finishes after the ask has
+  returned is paid for but shows as $0 in traces. In the lab, the push's own connector searches are missing from
+  calls per task, so under NEW2 the lab reports about 41-42% of the real connector calls.
+- **Smaller items.** The example agent cannot turn its wait off (`EDEN_WAIT_MS=0` still waits up to 1.5 s); the new
+  input check is about 2-3x slower than it needs to be on large inputs; the new reader tests sleep for real and
+  nearly double that file's test time; the no-model funnel uses one CPU core of four; a benchmark's alarming "max"
+  numbers are only start-up cost.
+- **Two findings need your decision**: whether the push may share the slow path's source search (fewer connector
+  calls, possible recall loss), and whether to fund a small paid probe of the reader's reasoning setting on
+  OpenRouter before NEW ever runs there.
+
+Round 2 packages 8 work items (three of them wait for another package) and defers 2 findings.
+
 ## Findings, ranked by value
 
-Ranked by severity, then effort (S before M). Severities are the verified ones, which in several cases are lower
-than the auditor's first rating. "Package" names the round 1 work package; "Deferred" names the decision needed.
+Ranked by severity, then effort (S before M), within each round: 1-16 are round 1, 17-27 are round 2 (detailed in
+the Round 2 section below). Severities are the verified ones, which in several cases are lower than the auditor's
+first rating. Statuses name the branch or package; "deferred" findings name the decision needed.
 
 | # | ID | Severity | Effort | Status |
 |---|---|---|---|---|
-| 1 | sec-deep-json-stringify-stall | high | S | open, package `server-input-hardening` |
-| 2 | sec-no-body-size-limit | medium | S | open, package `server-input-hardening` |
-| 3 | dev-prettier-cache-tsc-incremental | medium | S | open, package `check-caches` |
-| 4 | speed-reader-push-late-paid-never-delivered | medium | M | open, package `reader-push-wait` (after `reader-accounting`) |
-| 5 | cost-ask-rereads-push-verdict | medium | M | deferred (doc sentence fixed in `gate-instrument`) |
+| 1 | sec-deep-json-stringify-stall | high | S | fixed on `r1-server-input-hardening`, unmerged; see #23 |
+| 2 | sec-no-body-size-limit | medium | S | fixed on `r1-server-input-hardening`, unmerged; see #23 |
+| 3 | dev-prettier-cache-tsc-incremental | medium | S | fixed on `r1-check-caches`, unmerged |
+| 4 | speed-reader-push-late-paid-never-delivered | medium | M | `r1-reader-push-wait` has the wrong base; redone in #17 |
+| 5 | cost-ask-rereads-push-verdict | medium | M | deferred (doc sentence fixed on `r1-gate-instrument`) |
 | 6 | cost-no-tenant-spend-cap | medium | M | deferred |
-| 7 | cost-gate-realistic-traffic | medium | M | open, package `gate-instrument` |
+| 7 | cost-gate-realistic-traffic | medium | M | instrument on `r1-gate-instrument`, unmerged; see #19 |
 | 8 | speed-reader-stream-early-exit | medium | M | deferred |
 | 9 | speed-push-reader-after-search | medium | M | deferred |
-| 10 | reader-prompt-cache-lost-on-openrouter | low | S | open, packages `openrouter-cache` and `reader-accounting` |
-| 11 | cost-reader-session-cap-silent | low | S | open, packages `reader-accounting` and `lab-visibility` |
-| 12 | cost-ask-costusd-omits-reader | low | S | open, package `reader-accounting` |
-| 13 | cost-readerpush-bypasses-question-cap | low | S | open, package `reader-accounting` |
-| 14 | mem-component-budget-session-leak | low | S | open, package `reader-accounting` |
-| 15 | painpoint-waitms-undocumented | low | S | open, package `waitms-docs` |
-| 16 | reader-replay-cache-not-committed | low | S | partly open (miss gate in `lab-visibility`); cache build deferred |
+| 10 | reader-prompt-cache-lost-on-openrouter | low | S | fixed on `r1-openrouter-cache`, `r1-reader-accounting` |
+| 11 | cost-reader-session-cap-silent | low | S | fixed on `r1-reader-accounting` and `r1-lab-visibility`, unmerged |
+| 12 | cost-ask-costusd-omits-reader | low | S | fixed on `r1-reader-accounting`, unmerged; see #20 |
+| 13 | cost-readerpush-bypasses-question-cap | low | S | fixed on `r1-reader-accounting`, unmerged; see #20 |
+| 14 | mem-component-budget-session-leak | low | S | fixed on `r1-reader-accounting`, unmerged; see #20 |
+| 15 | painpoint-waitms-undocumented | low | S | fixed on `r1-waitms-docs`, unmerged; see #21 |
+| 16 | reader-replay-cache-not-committed | low | S | miss gate on `r1-lab-visibility`, unmerged; cache build deferred |
+| 17 | integ-reader-branches-conflict | medium | S | open, round 2 package `reader-merge` |
+| 18 | lab-push-source-calls-uncounted | medium | S | open, round 2 package `source-call-accounting` |
+| 19 | integ-gate-traffic-budget-outcome | low | S | open, round 2 package `gate-traffic-budget` |
+| 20 | cost-late-reader-call-untraced | low | S | open, round 2 package `reader-merge` |
+| 21 | painpoint-example-waitms-zero | low | S | open, round 2 package `example-waitms-zero` |
+| 22 | dev-reader-test-sleeps | low | S | open, round 2 package `reader-test-speed` |
+| 23 | speed-input-shape-walk-allocates | low | S | open, round 2 package `validate-walk` |
+| 24 | speed-eventloop-max-is-coldstart | low | S | open, round 2 package `bench-warmup` |
+| 25 | cost-reader-reasoning-openrouter-anthropic | low | S | deferred |
+| 26 | cost-push-duplicates-source-search | low | M | deferred |
+| 27 | dev-funnel-single-process | low | M | open, round 2 package `funnel-jobs` |
 
 ### 1. A deeply nested tool_call body stalls the event loop for about 1.5-1.8 s (high, S)
 
@@ -297,4 +329,198 @@ Deferred this round: 5 (cost-ask-rereads-push-verdict), 6 (cost-no-tenant-spend-
 (speed-reader-stream-early-exit), 9 (speed-push-reader-after-search), and the cache-build half of 16. Each needs a
 decision named in its finding above.
 
-Round 1 results: pending.
+### Round 1 results
+
+All eight packages produced a branch (`audit/2026-11-03-r1-<package>`); none is merged into
+`audit/2026-11-03-integration` yet (`git branch -v` shows integration still at 6fea9110f). Review found:
+
+- `r1-reader-push-wait` was cut from 6fea9110f, not from `r1-reader-accounting` as planned, and the two conflict
+  (finding 17). It is redone in round 2 and should not be merged as is.
+- `r1-gate-instrument` plus `r1-reader-accounting` fail typecheck together (finding 19), so they must merge with the
+  round 2 `gate-traffic-budget` fix. Their only textual conflict is docs/COST-MODEL.md.
+- `r1-reader-accounting` leaves late reader calls untraced (finding 20) and sets the push trace's sourceCalls to 0
+  on a false premise (finding 18).
+- `r1-server-input-hardening`, `r1-waitms-docs` and the reader tests carry small follow-ups (findings 21-23).
+- Disk was nearly full during verification (one verifier saw 37-38 MB free on /); a failed `git worktree add` there
+  briefly moved another branch, which was restored. Free space before starting round 2 worktrees.
+
+## Round 2
+
+Round 2 reviewed the round 1 branches and the paths they touch. Each finding below was verified twice, with no
+paid model calls. Numbers come from the verifiers' local commands (named) or are labelled estimates.
+
+### 17. reader-push-wait was branched from the wrong base and conflicts with reader-accounting (medium, S)
+
+- **Evidence.** `git merge-base audit/2026-11-03-r1-reader-accounting audit/2026-11-03-r1-reader-push-wait` is
+  6fea9110f, the integration base, although round 1 said push-wait runs after reader-accounting.
+  `git merge-tree --write-tree` of the two reports CONFLICT (content) in packages/engine/src/partner.ts and
+  packages/engine/src/reader.test.ts (docs/ARCHITECTURE.md merges cleanly). Overlaps in the merged partner.ts:
+  readAsk's race (:1693-1710: accounting races `reader.read()` with `starts`/`costUsd`/`overBudget` against a `late`
+  timer; push-wait races `verdictFor` only when `Number.isFinite(waitMs)`), and the push's `this.ask(...)` call
+  (:709-717: accounting passes `head(event.text, ASK_QUESTION_CHARS)`; push-wait passes `internal`).
+- **Impact.** Taking only push-wait's hunk leaves `got`/`starts`/`costUsd` undefined (a compile error), but taking
+  push-wait's whole function or file typechecks, because `verdictFor` still exists on the accounting branch
+  (reader.ts:587), and silently reverts findings 10 (cacheKey), 11, 12, 13 and 14. Taking accounting's side cuts the
+  push at askReaderWaitMs again (finding 4). The combined reader.test.ts has never run.
+- **Fix.** Rebase push-wait onto reader-accounting. In readAsk keep `reader.read()` and add the wait argument: race a
+  late timer only when `Number.isFinite(waitMs)`, else await the read with no timer; keep the `starts` accounting so
+  the call is counted once. At the push call site keep the head() cap and pass `internal`. Keep both branches' tests
+  and add one combined test (a push read past askReaderWaitMs has a reader-push trace with costUsd > 0, readerCalls
+  1).
+- **Status.** Open, package `reader-merge`.
+
+### 18. Lab calls per task drops the push's real connector calls (medium, S)
+
+- **Evidence.** On `r1-reader-accounting` (e7e2d6d64) the reader-push trace sets `sourceCalls: 0, pushSourceCalls:
+  sourceCalls`, with a comment that the push "mostly" joins the slow path's search. hidden-funnel.ts:402 counts
+  only `t.sourceCalls + (t.anticipateCalls ?? 0)`. Probe (stub reader, counting SimSource.stats.calls, worktree at
+  e7e2d6d64, rerun by a verifier): NEW2 seed 41 traced 300 vs 725 connector calls; seed 42 294 vs 704; NEWL seed 41
+  334 vs 417; with the push off, 359/338/359 and traced equals connector. stats.lists was 0. On main the push emits
+  no trace at all, so phase 3's NEW/NEWL calls per task already left these calls out.
+- **Impact.** Lab calls per task is 41-42% of the real connector calls under NEW2 and 80% under NEWL (300/725,
+  294/704, 334/417), biasing Bar 2/Bar 3 source-cost comparisons in NEW's favour. "Mostly joins" is false: by the
+  same numbers 300 + 656 - 725 = 231 of the push's 656 lookups (about 35%) were joins. The staged edit in worktree
+  wf-49 that restores `sourceCalls` overshoots the other way (about 956 vs 725, an estimate) and must not merge.
+- **Fix.** Lab: use SimSource.stats.calls (minus stats.lists) per task as ground truth, as quality.ts already does;
+  keep the trace as a cross-check. Trace: count calls in searchLive itself, only outcomes that reached the
+  connector (not "cached", not joined flights; the fan-out must expose a joined marker), for push and slow path
+  alike. Correct the trace.ts and partner.ts comments. Re-measure and relabel any published NEW/NEWL calls per task.
+- **Status.** Open, package `source-call-accounting` (after `reader-merge`).
+
+### 19. gate-traffic.ts does not know the new "budget" outcome; the merged tree fails typecheck (low, S)
+
+- **Evidence.** packages/sim/src/lab/gate-traffic.ts:113 on `r1-gate-instrument` is `outcomes: { read: 0, gated: 0,
+  none: 0, late: 0, skipped: 0 }`, typed `Record<ReaderReport["outcome"] | "skipped", number>`; reader-accounting
+  adds "budget" (partner.ts:233). A verifier merged both into the integration tree and ran the root `tsc --noEmit`:
+  exit 2, one error, TS2741 "Property 'budget' is missing" at gate-traffic.ts:113; adding `budget: 0` gave exit 0.
+  `atGate` (:235) omits budget too.
+- **Impact.** `bun run check` fails on integration once both branches merge. With a capped Budget,
+  `outcomes["budget"]++` would give NaN; the lab uses UNCAPPED budgets, so published numbers are unaffected.
+- **Fix.** Add `budget: 0`, count it in `atGate`, print it in the summary.
+- **Status.** Open, package `gate-traffic-budget`.
+
+### 20. A late reader call's cost never reaches traces or AskResponse (low, S)
+
+- **Evidence.** `r1-reader-accounting` partner.ts:1677-1678: `const costUsd = got === "late" ? 0 : got.costUsd;`.
+  The landed call is booked only in AskReader.stats and its Budget. A scratch test (reader 400 ms, $0.0002,
+  askReaderWaitMs 100, then 600 ms sleep) fails for an explicit ask and for a readerPush read: traced cost 0,
+  traced modelCalls 1, reader.stats.costUsd 0.0002. COST-MODEL.md:82 says reader calls show in AskResponse.costUsd
+  and the traces, "each call counted once"; ARCHITECTURE.md:243 is accurate (the reader books it when it lands).
+- **Impact.** Metering error, not extra spend (the reader's Budget still caps it). Anyone metering through onTrace
+  or AskResponse.costUsd sees $0 for every late call; COST-MODEL.md records 117 of 124 price-routed glm calls past
+  2.5 s. The lab meters the reader directly, so lab costs are unaffected.
+- **Fix.** Capture `const reading = reader.read(...)` before the race; when `got === "late" && starts`, attach
+  `reading.then(...)` that emits a new trace, decision "reader-late" (add it to the Trace.decision union and the
+  trace.ts doc list, and check quality.ts:876, timeline.ts:81, pi-ab.ts and hermes-ab.ts), with costUsd,
+  modelCalls 1, readerCalls 1, readerCostUsd, sourceCalls 0, latencyMs and turn. Emit it even if the session closed
+  (Trace carries sessionId). Mark the ask's own trace as not having called, and document that AskResponse.usedModel
+  is then false for late asks. Correct COST-MODEL.md:82.
+- **Status.** Open, package `reader-merge`.
+
+### 21. The example agent cannot turn its wait off (low, S)
+
+- **Evidence.** `r1-waitms-docs` examples/personal-agent/agent.ts:57: `Number(process.env.EDEN_WAIT_MS) || 1_500`;
+  `Number("0")` is falsy, so 0 becomes 1,500 (`bun -e` printed 1500).
+- **Impact.** An integrator copying the pattern with EDEN_WAIT_MS=0 still waits up to 1.5 s (a ceiling: without the
+  reader the call returns when its lookup finishes). Only the example; the SDK handles 0 correctly.
+- **Fix.** Unset or empty falls back to 1,500; otherwise a finite number clamped at 0 (junk falls back to 1,500).
+- **Status.** Open, package `example-waitms-zero`.
+
+### 22. Round 1's reader tests sleep for real (low, S)
+
+- **Evidence.** `bun test ./packages/engine/src/reader.test.ts`: main 2.14 s (29 tests); `r1-reader-accounting`
+  3.90 s (38 tests); `r1-reader-push-wait` 4.52-4.55 s (32 tests). push-wait's tests use a 300 ms ScriptedReader
+  with `Bun.sleep(150)` and `Bun.sleep(600)` (reader.test.ts:608-650); accounting adds `Bun.sleep(400)` and two
+  1,000-session leak tests (reader.test.ts:727, bridge.test.ts:349; 1.09 s and 0.32 s with `-t`).
+- **Impact.** Estimate: the merged file at about 6 s (2.2 + 1.7 + 2.4), next to redos.test.ts (6.01 s measured) as
+  the engine package's long pole. Test time only.
+- **Fix.** A gated ScriptedReader the test releases explicitly, ordering by awaits instead of sleeps; keep one
+  real-timer test for each wait bound; run the leak tests over 100 sessions (Budget.sessions has no cap, so any N
+  shows a leak). Same assertions.
+- **Status.** Open, package `reader-test-speed` (after `reader-merge`).
+
+### 23. D100's input-shape walk allocates an array per object (low, S)
+
+- **Evidence.** `r1-server-input-hardening` packages/protocol/src/validate.ts:33: `const children =
+  Array.isArray(v) ? v : Object.values(v)`. Verifier bench (bun, 3 warm-ups): 333,000 empty objects (999,001 chars,
+  valid) checkEvent 21.6 ms mean of 20, stringify 3.3 ms, a for-in walk alone 9.2 ms; 50,000 small objects 4.6 ms
+  vs main's ~2 ms; a 2 KB realistic input 3 µs.
+- **Impact.** A constant-factor cost on large object-heavy inputs only. It is not what saturates the loop: the
+  server already pays `JSON.parse` of the same 1 MB body (16.1 ms measured), so the auditor's "one key saturates the
+  loop" story is a property of 200 req/s x 1 MB bodies, not of the walk.
+- **Fix.** Walk objects with `for (const k in v)` plus `Object.hasOwn`, pushing only container children. Keep
+  MAX_INPUT_NODES at 1,000,000 (100,000 would refuse valid input and contradict D100). Test node counts or refusal,
+  not wall-clock time. Report before/after with a scratch bench in the PR.
+- **Status.** Open, package `validate-walk`.
+
+### 24. pipeline.bench's maxima are cold start (low, S)
+
+- **Evidence.** `bun packages/engine/bench/pipeline.bench.ts` with a scratch copy printing the slowest events,
+  run twice by each verifier: the observe max (32-34 ms), slow path max (17-42 ms) and lag max (48-76 ms) are all
+  event #0 or lag sample #0. Skipping the first 20 events: observe p99 738-857 µs, max 3-5 ms, slow max 10-16 ms.
+  The bench drives events back to back with `Bun.sleep(0)` (pipeline.bench.ts:59-69), so lag measures its own load.
+- **Impact.** No product lever; the recurring pauses are under about 16 ms against an 800 ms client timeout.
+- **Fix.** Report warm-up (first ~20 events) separately and percentiles after it, still printing the cold numbers.
+- **Status.** Open, package `bench-warmup`.
+
+### 25. The reader always asks OpenRouter for reasoning effort "low" (low, S, low confidence)
+
+- **Evidence.** reader.ts:452 sends `reasoning: "low"`; openrouter.ts:64-65 forwards `{effort, exclude: true}`
+  (billed as output). The same flag is at bridge.ts:144, cards.ts:484 and partner.ts:991, 1416, 4603. Phase 3's
+  NEW numbers used AnthropicModel with thinking off, which ignores the flag (anthropic.ts:145).
+- **Impact.** Estimate, unverified: if OpenRouter maps "low" to about 1,024 thinking tokens for Claude, 1,024 x
+  $0.50/M = $0.00051 more per call and about 3.7 s more decode (1,024 x 3.65 ms). No production path wires a reader
+  today (`grep` of packages/server finds none) and the production default model is glm, where D95 needed "low".
+- **Status.** Deferred. Decision needed: when the D98 provider decision for NEW on anthropic/* via OpenRouter is
+  taken, approve a small paid probe (about 20 reader calls, a few cents, estimate) of how OpenRouter maps effort for
+  Claude, and then a per-role reasoning "off" option that sends an explicit disable (not an omitted field).
+
+### 26. readerPush roughly doubles connector calls under NEW2 (low, M)
+
+- **Evidence.** The push is a full ask that awaits `searchLive(s, cue, askSources)` (partner.ts:1214 on main),
+  askSources 6 vs lookupSources 3 (config.ts:624-625), including on messages the slow path skipped. Probe rerun by
+  both verifiers (stub reader, counting source): seed 41, 116 messages: NEW2 725 connector calls, NEW2 push off 359,
+  NEWL 417 (= NEW), NEWL push off 359; seed 42: NEW 414, NEW push off 338. Lab presets only; readerPush defaults to
+  false (config.ts:759).
+- **Impact.** About +3.2 connector calls per user message under NEW2 ((725-359)/116), about +100%; under NEW/NEWL
+  about +16-22%, 0.5-0.7 per message. The auditor's "askSources 3" variant removed only 40% of the extra.
+- **Status.** Deferred. Decision needed: whether the push may reuse the slow path's per-turn search (or only the
+  cache) instead of its own 6-source search. That shrinks the reader's candidate pool, which D98/D99 credit with the
+  hidden-fact gains, so it needs a new decision amending D96/D99, new per-session shared search state (observe
+  starts the push before the slow path decides, partner.ts:686-698), and a hidden/decoy measurement that needs the
+  reader replay cache deferred under finding 16 or a paid run.
+
+### 27. The no-model funnel runs in one process (low, M)
+
+- **Evidence.** funnel.ts:98 runs one `spawnSync("bun", funnelArgs)`; hidden-funnel.ts runs suites in sequence and
+  seeds on one event loop. `hidden-funnel.ts --suite train --seeds 41,42 --config <ALL3> --no-record`: 22.4-22.6 s
+  single process; 11.4-12.8 s as 4 concurrent processes, with all 768 perTask rows identical once timing fields are
+  removed (verifier's compare script). `bun run funnel` took 32.5 s with user time about equal to real (one core of
+  `nproc` 4).
+- **Impact.** About 1.75-2x on every tuning-loop screen. Not 10x (4 cores).
+- **Fix.** `--jobs N` in funnel.ts, default 1, spawning hidden-funnel.ts per suite x seed shard with its own `--json`
+  and merging rows inside funnel.ts (there is no funnel-score.py). Guards: force jobs 1 with any per-run output file
+  flag (--packets, --card-log, --reader-log, --ask-diag, --candidates, --timeline), with --record, and with a live
+  judge, reader or bridge; label ms/task as contended when jobs > 1; sum or label the stderr totals per shard.
+- **Status.** Open, package `funnel-jobs`.
+
+### Round 2 packages
+
+Merge order on `audit/2026-11-03-integration`: the round 1 branches except `r1-reader-push-wait` (which `reader-merge`
+replaces), with `gate-traffic-budget` landing together with `r1-gate-instrument` and `r1-reader-accounting` and the
+COST-MODEL.md conflict resolved by hand. `reader-merge` then lands before `source-call-accounting` and
+`reader-test-speed`. No two packages that run at the same time share a file.
+
+| Package | Findings | Base | Files (exclusive) |
+|---|---|---|---|
+| `reader-merge` | 17, 20 | `r1-reader-accounting` + d34351285 | packages/engine/src/partner.ts, reader.ts, trace.ts, reader.test.ts; docs/ARCHITECTURE.md, docs/COST-MODEL.md; trace consumers if needed |
+| `source-call-accounting` | 18 | integration after `reader-merge` | packages/engine/src/partner.ts, trace.ts, new source-calls.test.ts; packages/sources/src/guarded.ts; packages/sim/src/lab/hidden-funnel.ts |
+| `reader-test-speed` | 22 | integration after `reader-merge` | packages/engine/src/reader.test.ts, bridge.test.ts |
+| `gate-traffic-budget` | 19 | `r1-gate-instrument` | packages/sim/src/lab/gate-traffic.ts |
+| `validate-walk` | 23 | `r1-server-input-hardening` | packages/protocol/src/validate.ts, validate.test.ts |
+| `example-waitms-zero` | 21 | `r1-waitms-docs` | examples/personal-agent/agent.ts |
+| `bench-warmup` | 24 | integration | packages/engine/bench/pipeline.bench.ts |
+| `funnel-jobs` | 27 | `r1-lab-visibility` | packages/sim/src/lab/funnel.ts, docs/LAB.md |
+
+Deferred this round: 25 (cost-reader-reasoning-openrouter-anthropic) and 26 (cost-push-duplicates-source-search).
+Each needs the decision named in its finding above.
