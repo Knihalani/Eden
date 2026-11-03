@@ -102,11 +102,17 @@ export interface ReaderInput {
 
 /**
  * One `AskReader.read`: the verdict (null as `verdictFor`'s), what this read itself spent (0 when the verdict came
- * from the cache or a call another read had in flight), and whether the budget refused the call.
+ * from the cache or a call another read had in flight), whether this read made the model call, and whether the budget
+ * refused the call.
  */
 export interface ReaderRead {
   verdict: ReaderVerdict | null;
   costUsd: number;
+  /**
+   * True only for the read that started the call and got past the budget: a cached read, one that joined a call in
+   * flight, and one the budget refused made none, so a call is counted once however many reads share it.
+   */
+  called: boolean;
   overBudget: boolean;
 }
 
@@ -567,6 +573,14 @@ export class AskReader {
   }
 
   /**
+   * Whether a call for this input is in flight (started by another read), so a read made now would join it: the
+   * caller's accounting when its own wait runs out before the read says who made the call.
+   */
+  inFlight(scope: Scope, session: string, input: ReaderInput): boolean {
+    return this.running.has(`${scopeKey(scope)}\n${AskReader.inner(session, input)}`);
+  }
+
+  /**
    * The input's verdict: from the cache, a call in flight for it, or one budgeted call. Null when there is none (the
    * budget refused, the call failed or was unreadable, or the user was forgotten meanwhile). Never throws.
    */
@@ -589,11 +603,11 @@ export class AskReader {
     const held = this.peek(scope, session, input);
     if (held) {
       this.stats.cached++;
-      return { verdict: held, costUsd: 0, overBudget: false };
+      return { verdict: held, costUsd: 0, called: false, overBudget: false };
     }
     const key = `${scopeKey(scope)}\n${AskReader.inner(session, input)}`;
     const running = this.running.get(key);
-    if (running) return running.then((r) => ({ ...r, costUsd: 0 }));
+    if (running) return running.then((r) => ({ ...r, costUsd: 0, called: false }));
     const abort = new AbortController();
     const p = this.call(scope, session, input, AbortSignal.any([signal, abort.signal]), abort.signal).finally(() => {
       if (this.running.get(key) === p) this.running.delete(key);
@@ -612,11 +626,11 @@ export class AskReader {
     forgotten: AbortSignal,
   ): Promise<ReaderRead> {
     const items = input.items.slice(0, READER_MAX_ITEMS);
-    if (items.length === 0) return { verdict: null, costUsd: 0, overBudget: false };
+    if (items.length === 0) return { verdict: null, costUsd: 0, called: false, overBudget: false };
     const reservation = this.deps.budget.reserve(scopeKey(scope), session, this.limits.estimateUsd);
     if (!reservation) {
       this.stats.overBudget++;
-      return { verdict: null, costUsd: 0, overBudget: true };
+      return { verdict: null, costUsd: 0, called: false, overBudget: true };
     }
     this.stats.calls++;
     try {
@@ -626,7 +640,7 @@ export class AskReader {
       this.stats.inputTokens += got.usage?.inputTokens ?? 0;
       this.stats.outputTokens += got.usage?.outputTokens ?? 0;
       // A call that ran was paid for whatever became of its answer.
-      const spent = { costUsd: got.costUsd, overBudget: false };
+      const spent = { costUsd: got.costUsd, called: true, overBudget: false };
       if (forgotten.aborted) return { verdict: null, ...spent };
       if (!got.bears) {
         this.stats.failures++;
@@ -644,7 +658,8 @@ export class AskReader {
     } catch {
       this.deps.budget.settle(reservation, 0);
       this.stats.failures++;
-      return { verdict: null, costUsd: 0, overBudget: false };
+      // A call that failed was still made (and counted in `stats.calls`); it settled at no cost.
+      return { verdict: null, costUsd: 0, called: true, overBudget: false };
     }
   }
 

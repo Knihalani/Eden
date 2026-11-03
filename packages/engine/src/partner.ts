@@ -1361,13 +1361,16 @@ export class ContextPartner {
         decision: "reader-push",
         reason: cue.id,
         latencyMs,
-        sourceCalls,
+        // Not `sourceCalls`: the push's lookup runs beside the event's own slow path over the same words, and a search
+        // that joins the other's call in flight (or is answered by the fan-out's cache) still counts here as a call,
+        // though the connector saw one. Its own count rides apart, so a harness summing `sourceCalls` (calls per task)
+        // counts what connectors were sent, as before the push had a trace. Its plans and sync use stay off too.
+        sourceCalls: 0,
+        pushSourceCalls: sourceCalls,
         modelCalls: reading?.called ? 1 : 0,
         costUsd,
         ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
         itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
-        ...(plans ? { plans } : {}),
-        ...(local !== undefined ? { localSources: local, syncCalls: syncCalls ?? 0 } : {}),
       });
       if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
       return { answer: "", citations: [], usedModel: reading?.called === true, costUsd, latencyMs };
@@ -1654,7 +1657,9 @@ export class ContextPartner {
       // Sticky routing to the provider that holds the user's cached prefix, as the judge, answer and cards calls do.
       cacheKey: userCacheKey(s.scope),
     };
-    const missed = reader.peek(s.scope, s.key, input) === undefined;
+    // Who makes the call, for the accounting: a read that finds a verdict cached, or a call another read started
+    // (an ask joining its push), makes none. Known before the read, for when this ask's wait runs out first.
+    const starts = reader.peek(s.scope, s.key, input) === undefined && !reader.inFlight(s.scope, s.key, input);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<"late">((resolve) => {
       timer = setTimeout(() => resolve("late"), Math.max(0, this.config.askReaderWaitMs));
@@ -1663,14 +1668,14 @@ export class ContextPartner {
     try {
       got = await Promise.race([reader.read(s.scope, s.key, input, s.abort.signal), late]);
     } catch {
-      got = { verdict: null, costUsd: 0, overBudget: false };
+      got = { verdict: null, costUsd: 0, called: false, overBudget: false };
     } finally {
       clearTimeout(timer);
     }
-    // A late call's cost is booked by the reader (its stats and Budget) when it lands, not by this ask. A read the
-    // budget refused made no call.
+    // A late call's cost is booked by the reader (its stats and Budget) when it lands, not by this ask; the call is
+    // this ask's if it started it. A read the budget refused, a cached one and a joined one made no call.
     const costUsd = got === "late" ? 0 : got.costUsd;
-    const called = missed && (got === "late" || !got.overBudget);
+    const called = got === "late" ? starts : got.called;
     const unchanged = {
       chosen,
       notes: new Map<string, string>(),

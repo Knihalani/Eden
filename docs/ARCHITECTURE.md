@@ -238,13 +238,20 @@ a fixed "Checked the N items found most related: …" line. The ask waits at mos
 budget, failed or unreadable, the answer is the usual one, and a late call still fills the cache. Verdicts are cached
 per user and session by a hash of the request and the pool; any `forget` of the user or a source drops them. Like the
 bridge, it is wired by the embedder (`PartnerDeps.reader`); the lab's funnel wires it (`--reader`), the server does not
-yet.
+yet. Its spend is the ask's: `AskResponse.costUsd` and the "answer" trace include the reader's call (`readerCalls`,
+`readerCostUsd` name that part), counted once, by the read that made it (0 for a cached verdict, for a read that joined
+a call in flight and for a late one, whose cost the reader books when it lands). A call its `Budget` refused reports the
+outcome "budget" (`onReader`), not "none"; the reader's `Budget` is its own, ended with each session, and a default
+`new Budget()` stops it after 20 reads a session (`callsPerSession`), so an embedder sizes it for long sessions.
 
 The reader's prompt v5 (D96) has the model label every item that looks relevant, a lookalike included, writing what
 the item means before deciding whether it is about the same thing and binds. With `askReaderDrop` (off by default),
 the items it rejected by name leave the ask's answer; an item it flagged never does. With `readerPush` (off by default), a user
 request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
-flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. Phase 3's
+flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. Its question is
+the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
+call and cost; that trace's `sourceCalls` is 0 (its lookup's count is `pushSourceCalls`), since its search can join the
+slow path's in flight and so report a call no connector received. Phase 3's
 options (D99, all off): `askReaderStanding` puts the user's in-force standing constraints first in the reader's pool,
 read without the request's focus so the same text forms a cached user-turn prefix (`ChatMessage.cache`); `readerGate`
 skips the call when no candidate could constrain the request; `readerPushWaitMs` bounds how long `observe` waits for

@@ -364,11 +364,14 @@ describe("the reader in the engine (config.askReader)", () => {
       200,
     ),
   ];
-  const source = (): Source => ({
+  const source = (sent?: { searches: number }): Source => ({
     id: "mail",
     kind: "test",
     description: "Mail",
-    search: async () => items,
+    search: async () => {
+      if (sent) sent.searches++;
+      return items;
+    },
   });
 
   const run = async (
@@ -389,8 +392,10 @@ describe("the reader in the engine (config.askReader)", () => {
     const reader = new AskReader({ maker, budget: opts.budget ?? new Budget(), now: () => clock });
     const reports: ReaderReport[] = [];
     const traces: Trace[] = [];
+    // What the connector itself received, against what the traces say was sent.
+    const sent = { searches: 0 };
     const p = new ContextPartner({
-      sources: async () => [source()],
+      sources: async () => [source(sent)],
       sourceMap: new SourceMap(),
       cache: new ItemCache(),
       budget: new Budget(),
@@ -427,7 +432,7 @@ describe("the reader in the engine (config.askReader)", () => {
         });
       }
     }
-    return { answers, maker, reader, reports, traces, partner: p };
+    return { answers, maker, reader, reports, traces, sent, partner: p };
   };
 
   test("flag off: no call, and the binding item is not among the seats", async () => {
@@ -638,6 +643,52 @@ describe("the reader in the engine (config.askReader)", () => {
     expect(pushed[0]!.modelCalls).toBe(1);
     expect(pushed[0]!.itemIds).toContain("mail:hold");
     expect(answers.u1![0]!.costUsd).toBe(0);
+  });
+
+  test("readerPush: an ask that joins the push's call in flight is not a second call", async () => {
+    // The push starts the read (300 ms) and the observe stops waiting after 5; the agent's ask then joins that call.
+    const { answers, traces, reader, maker } = await run(
+      { askReader: true, readerPush: true, askReaderWaitMs: 1_000 },
+      { maker: new ScriptedReader(flags("mail:hold"), { delayMs: 300 }), waitMs: 5 },
+    );
+    expect(maker.calls.length).toBe(1);
+    expect(reader.stats.calls).toBe(1);
+    const total = (f: (t: Trace) => number) => traces.reduce((n, t) => n + f(t), 0);
+    expect(total((t) => t.modelCalls)).toBe(reader.stats.calls);
+    expect(total((t) => t.readerCalls ?? 0)).toBe(1);
+    expect(total((t) => t.costUsd)).toBeCloseTo(0.0002, 10);
+    const pushed = traces.find((t) => t.decision === "reader-push")!;
+    expect([pushed.modelCalls, pushed.readerCalls]).toEqual([1, 1]);
+    const asked = traces.find((t) => t.decision === "answer")!;
+    expect([asked.modelCalls, asked.readerCalls, asked.costUsd]).toEqual([0, 0, 0]);
+    // Intended: `usedModel` says whether this ask made a model call, and the push made it (the call is counted once,
+    // on the push's trace). The joined ask still reads the verdict.
+    expect(answers.u1![0]!.usedModel).toBe(false);
+    expect(answers.u1![0]!.ids).toContain("mail:hold");
+  });
+
+  test("an ask whose own wait runs out while joining another's call does not count it either", async () => {
+    const maker = new ScriptedReader(flags("mail:hold"), { delayMs: 300 });
+    const { traces, reader } = await run(
+      { askReader: true, readerPush: true, askReaderWaitMs: 50 },
+      { maker, waitMs: 5 },
+    );
+    await Bun.sleep(400);
+    expect(reader.stats.calls).toBe(1);
+    expect(traces.reduce((n, t) => n + t.modelCalls, 0)).toBe(1);
+    expect(traces.find((t) => t.decision === "reader-push")!.modelCalls).toBe(1);
+  });
+
+  test("readerPush: the traces' source calls are the calls the connector received", async () => {
+    for (const readerPush of [false, true]) {
+      const { traces, sent } = await run({ askReader: true, readerPush }, { asks: 0 });
+      expect(sent.searches).toBeGreaterThan(0);
+      expect(traces.reduce((n, t) => n + t.sourceCalls, 0)).toBe(sent.searches);
+      // The push's own lookup is named apart, never added to `sourceCalls`.
+      const pushed = traces.find((t) => t.decision === "reader-push");
+      if (readerPush) expect([pushed!.sourceCalls, pushed!.pushSourceCalls]).toEqual([0, 1]);
+      else expect(pushed).toBeUndefined();
+    }
   });
 
   test('a session past its budget\'s 20 calls reports the reader\'s outcome as "budget", not "none"', async () => {

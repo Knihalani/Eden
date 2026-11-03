@@ -26,6 +26,12 @@ export interface Trace {
    */
   readerCalls?: number;
   readerCostUsd?: number;
+  /**
+   * On a "reader-push" trace (whose `sourceCalls` is 0): the calls its lookup reported. Not added to `sourceCalls`,
+   * because a search that joins the slow path's call in flight, or is served from the fan-out's cache, reports a call
+   * the connector never received.
+   */
+  pushSourceCalls?: number;
   itemIds: string[];
   /**
    * With the query planner on: per connector searched, the shapes it sent, its calls and how many items came back.
