@@ -93,6 +93,8 @@ def quantile(xs, p):
 def bootstrap(diffs, n=4000, seed=7):
     """The mean of the paired differences and its bootstrap 95% interval."""
     rnd, m = random.Random(seed), len(diffs)
+    if not m:
+        return (float("nan"),) * 3
     means = sorted(sum(diffs[rnd.randrange(m)] for _ in range(m)) / m for _ in range(n))
     # The ranks pi-timeline.ts uses for the interval.
     return sum(diffs) / m, means[math.floor(0.025 * n)], means[math.floor(0.975 * n) - 1]
