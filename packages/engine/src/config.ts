@@ -251,10 +251,10 @@ export interface EngineConfig {
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
   syncLocalAll: boolean;
   /**
-   * On in the default (D125). With `sync`, a source whose integrator forwards its change
-   * notifications (`Source.notifies`, `ContextPartner.sourceChanged` / `sourceItems`) is polled when told it changed
-   * (by the next lookup that reads it) and at most `syncPushMaxStaleMs` apart, not whenever its learned change rate says it
-   * may have. Sources that do not notify are polled as before. The market-latency Pi runs made 3.4-3.9 sync polls per
+   * On in the default (D125). With `sync`, a source whose integrator forwards its change notifications
+   * (`Source.notifies`, `ContextPartner.sourceChanged` / `sourceItems`) is polled when told it changed (by the next
+   * lookup that reads it) and at most `syncPushMaxStaleMs` apart, not whenever its learned change rate says it may
+   * have. Sources that do not notify are polled as before. The market-latency Pi runs made 3.4-3.9 sync polls per
    * task, each a billed call on a per-call connector platform (docs/research/eden-market-effect.md).
    */
   syncPush: boolean;

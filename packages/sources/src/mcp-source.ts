@@ -34,7 +34,7 @@ import type { ListPage, SearchQuery, Source } from "./source";
 export interface McpSourceOptions {
   id: string;
   description: string;
-  /** The integrator forwards this source's change notifications to Eden (`Source.notifies`, the engine's `syncPush`). */
+  /** The integrator forwards this source's change notifications (`Source.notifies`; the engine's `syncPush`). */
   notifies?: boolean;
   /** Builds the transport for this user's connection (stdio for local servers, streamable HTTP for remote ones). */
   transport: () => Transport;

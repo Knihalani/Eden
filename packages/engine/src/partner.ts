@@ -1672,8 +1672,8 @@ export class ContextPartner {
    * A change notification for one of the user's sources (`syncPush`; the source says it `notifies`): the integrator
    * forwards a Gmail watch, a Calendar or Drive channel, a Slack event, a Graph subscription, a connector platform's
    * trigger. The source's synced copy is behind until the next lookup that reads it polls it; until then, and between
-   * notifications, nothing polls it (at most `syncPushMaxStaleMs` apart). No I/O; false when push is off or the source is
-   * not synced for the user.
+   * notifications, nothing polls it (at most `syncPushMaxStaleMs` apart). No I/O; false when push is off or the source
+   * is not synced for the user.
    */
   sourceChanged(scope: Scope, sourceId: string): boolean {
     if (!this.config.syncPush || !this.sync) return false;
