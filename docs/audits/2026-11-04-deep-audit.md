@@ -113,7 +113,7 @@ After all merges, on the integration tree:
 
 Follow-up, same day (docs/research/live-checks-1104.md): D114 and D119 were live-checked on held-out 13 (D123: the
 default holds 73.4% hidden, 0 false concerns). R3-19 was re-measured live on train under the owner's reset bar and
-rejected again (D124: hidden 262 → 256 of 384); it stays open.
+promoted (D124: +9.1% reader calls in gate-traffic, no train gate decision changed, false concerns equal); it is closed.
 
 ### 6. Where everything is
 

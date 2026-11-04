@@ -61,6 +61,7 @@ export const PARTS = {
     askReaderDrop: false,
     readerPush: false,
     readerGate: false,
+    readerGateVisits: false,
     readerPushBehind: false,
     askReaderPool: 30,
     askReaderItemChars: 400,

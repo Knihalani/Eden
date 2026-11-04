@@ -424,6 +424,12 @@ export interface EngineConfig {
    * constraint, state-change or already-done kind, no constraint wording).
    */
   readerGate: boolean;
+  /**
+   * With `readerGate`: a candidate stating an arranged visit or asking that someone be in (`arrangedVisit`,
+   * conflict.ts: "i've booked the engineer, he'll come thursday between 8 and 12") also opens the gate, which no card
+   * kind or constraint word reads (R3-19; on in the default, D124, amending D122).
+   */
+  readerGateVisits: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -541,4 +547,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerPushWaitMs: 60_000,
   readerPushBehind: true,
   readerGate: true,
+  readerGateVisits: true,
 };

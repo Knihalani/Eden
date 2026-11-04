@@ -2,7 +2,7 @@
 
 Two paid runs on the Pi harness (CLAUDE.md's standard agent), Haiku 5.5 as agent, grader and Eden's model roles
 through the lab's Anthropic provider, one spend ledger capped at $5. Total spent: **$1.764** ($0.327 held-out 13,
-$1.437 train). Decisions: D123 (live check) and D124 (landlord trial, rejected).
+$1.437 train). Decisions: D123 (live check) and D124 (landlord gate, promoted into the default).
 
 ## 1. The current default on blind held-out 13 (D123)
 
@@ -57,13 +57,22 @@ reader calls, merged delivered 97/72, with and without the switch: no train task
 | default + `readerGateVisits` | 66.7% (256/384) | 1.0% (4/384) | 1,158 (+0.2%) | $0.334 | 0.702 / 0.826 | 3.75 / 6.59 |
 
 Paired: hidden −1.6 points (−5.7..+2.3), control +0.0 (−1.3..+1.3), wall −0.05 s, $/1k +0.014 (−0.019..+0.047).
-Per task, reader calls differed in 217 of 1,536 paired runs, 107 up and 110 down: the agent's own asks vary between
+Per task, reader calls differed in 217 of 768 paired tasks, 107 up and 110 down: the agent's own asks vary between
 runs, and that noise, not the gate, moves the count (the funnel shows no gate decision changing on train).
 
-**Outcome: not promoted; the switch is deleted with its code and tests.** The cost bar holds (+0.2% live, +9.1% in
-gate-traffic), false concerns did not rise, but hidden facts fell by 1.6 points (6 of 384) rather than rising or
-staying equal. Since the gate never decided differently on train, the fall is agent noise; the run shows no benefit
-on train, and the bar is not met. R3-19 stays open: the landlord mail is still gated in gate-traffic's worlds.
+**Outcome: promoted into the default (D124, amending D122).** The bar's three tests hold. Cost: +9.1% reader calls
+in gate-traffic, +0.2% live on train, both under 10%. False concerns: 4 and 4. Hidden facts: equal. The gate makes
+no different decision on any train task, so both live arms ran the same Eden behaviour and the 6-task gap (CI
+−5.7..+2.3) is agent noise, not an effect of the switch. What the switch does do, it does in gate-traffic: every missed
+landlord binding (0.227 → 0.000) is read. A first draft of this note read the 6-task gap as "hidden facts fell" and
+deleted the switch; the review pointed out that the same evidence would have promoted it had the noise gone the other
+way. Not measured: the live quality effect on arranged-visit tasks. Train has none that the gate decides
+differently, and held-out 13's `gutters-landlord` is not tuned on.
+
+`readerGateVisits` is a setting of the `reader` part (`PARTS.reader`, `docs/profiles/minus-reader.json`), so the
+default has 43 changed keys (`default.test.ts`). After the promotion, on this tree: `gate-traffic.ts` default 72
+calls, gated 16, missed-binding 0.000; `bun run funnel --jobs 4` TOTAL 214/211, 658 reader calls; `bun run eval`
+precision 0.8276, recall 0.48, falseFireRate 0.
 
 ## Reproduce
 
@@ -78,7 +87,7 @@ for S in 41 42; do   # one process per seed; $0.163 each
     --timeline $W/pi/h13-$S --out $W/pi/h13-$S.json
 done
 bun packages/sim/src/lab/pi-ab-report.ts $W/pi/h13-41.json $W/pi/h13-42.json
-# The trial (deleted after this run; its code is on branch claude/live-checks-1104 at 3f62bcf):
+# The landlord gate as a variant (now in the default: on this tree V is a no-op; run it on main before D124):
 gunzip -c packages/sim/lab/distilled/intent-v2.jsonl.gz > $W/intent/intent-v2.jsonl
 for S in 41 42; do   # $0.718 each
   bun packages/sim/src/lab/pi-ab.ts --suite train --seeds $S --variants hidden,control --time-scale 1 \

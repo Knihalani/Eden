@@ -258,7 +258,8 @@ that joined another lookup's call in flight (the push and the slow path search t
 the fan-out's cache, or was refused by a guard is none (`reachedSource`), and a planner's cascade counts each call it
 sent, so a task's traces sum to its connectors' count. `readerGate` (D99, on in the default) skips the call when no
 candidate could constrain the request (no card of a constraint kind, state change or thing done, and no constraint
-wording, `mayConstrain`; bulk mail never counts). `readerPushWaitMs` bounds how long `observe` waits for the push,
+wording, `mayConstrain`; bulk mail never counts); with `readerGateVisits` (on in the default, D124) an arranged visit
+or a request that someone be in ("he'll come thursday between 8 and 12", `arrangedVisit`) also opens it. `readerPushWaitMs` bounds how long `observe` waits for the push,
 within the caller's own wait (0 measured badly: the reading must land before the agent answers). With
 `readerPushBehind` (on in the default, D112; with `syncPollBehind`) the push's own lookup does not wait for the sync's
 poll: it reads the index as it stands, and if the poll stores anything the push is ranked again on the fresh index
