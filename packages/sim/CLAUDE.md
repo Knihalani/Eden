@@ -20,7 +20,8 @@ performance claims cite this package alongside `bun run eval`.
 
 Outside `src/`: `lab/` holds the connector-lab Dockerfiles and `servers.json` (pinned MCP servers), replay caches
 (`lab/cards/*.jsonl`), the Hermes plugin and worker (`lab/hermes/`), the Haiku campaign's scripts and summaries
-(`lab/haiku/`), and the Python scorers (`lab/scripts/*.py`).
+(`lab/haiku/`), the Python scorers (`lab/scripts/*.py`), and `lab/before-after/` (rebuilds the pre-campaign
+BEFORE tree and makes the tables of docs/research/final-before-after.md).
 
 ## Rules that apply here
 
