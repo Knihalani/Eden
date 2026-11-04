@@ -256,13 +256,15 @@ export class SyncManager {
     const u = this.users.get(scopeKey(scope));
     const s = u?.sources.get(sourceId);
     if (!u || !s || s.phase !== "warm") return 0;
-    for (const it of items) {
-      if (it.sourceId !== sourceId) continue;
-      s.pushed.delete(it.id); // Re-insert: the map stays in arrival order.
-      s.pushed.set(it.id, ++s.pushSeq);
+    // Only what the push changed is marked: a replayed, unchanged item was synced before and is a true boundary.
+    const changed = new Set<string>();
+    const n = this.store(u, s, items, changed);
+    for (const id of changed) {
+      s.pushed.delete(id); // Re-insert: the map stays in arrival order.
+      s.pushed.set(id, ++s.pushSeq);
     }
     while (s.pushed.size > MAX_PUSHED) s.pushed.delete(s.pushed.keys().next().value as string);
-    return this.store(u, s, items);
+    return n;
   }
 
   /** Whether the user's copy of a source has finished its backfill, current or not (`syncPollBehind`). */
