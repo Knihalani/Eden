@@ -33,7 +33,7 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
         probes: true,
         compactAsk: true,
         askItemBytes: 240,
-        probeWhen: "actions",
+        probeCalls: 4,
         probeOff: ["calendar"],
       }),
     );
@@ -42,7 +42,7 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
       probes: true,
       compactAsk: true,
       askItemBytes: 240,
-      probeWhen: "actions",
+      probeCalls: 4,
       probeOff: ["calendar"],
     });
     const partner = buildPartner({ sources: async () => [], model: null, engine });
@@ -157,7 +157,6 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     expect(() => parseEngineConfig({ askItemBytes: -1 })).toThrow(/"askItemBytes" must be a number/);
     expect(() => parseEngineConfig({ probeOff: "calendar" })).toThrow(/"probeOff" must be an array of strings/);
     expect(() => parseEngineConfig({ probeOff: [1] })).toThrow(/"probeOff" must be an array of strings/);
-    expect(() => parseEngineConfig({ probeWhen: "sometimes" })).toThrow(/"probeWhen" must be one of always, actions/);
     expect(() => parseEngineConfig([])).toThrow(/must be a JSON object/);
   });
 
@@ -190,7 +189,7 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
       { syncStaleChance: DEFAULT_CONFIG.syncStaleChance },
       { probeFreshFloor: 0, probeYieldFloor: 1 },
       { anticipateOff: ["serve", "names"] },
-      { confidentScore: 1.25, maxRefreshes: 0 },
+      { confidentScore: 1.25, refreshAfterMs: 0 },
     ];
     for (const config of accepted) expect(parseEngineConfig(config)).toEqual(config);
   });
