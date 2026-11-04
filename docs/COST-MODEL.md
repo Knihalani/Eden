@@ -275,6 +275,16 @@ Per task (live, Pi harness, Haiku 5.5 as agent, grader and Eden's roles, blind h
 | Unified default                               | 0.385 / 0.547                              | 0.451                                   | 0.667 / 0.900                                |
 | Default after D114/D119, rerun (D123)         | 0.332 / 0.510                              | 0.459                                   | 0.577 / 0.830                                |
 
+**After D125** (docs/research/cost-fixes.md; Pi, held-out 13, seeds 41–44, both market latency profiles, 512 Eden task
+runs per arm, hidden and control pooled; per 1,000 tasks): the old default spent $0.318 on the agent, $0.448 on the
+reader and $0.900 on cards and intent ($1.666); the default with `cardsLean` and `syncPush` spent $0.323, $0.458 and
+$0.387 ($1.168, −30%). Cards are a cold-cache figure (every item of a fresh user, 64 tasks per user). Connector calls
+are the other half of the cost on a per-call platform: Eden's sync made 3.8–5.1 listing calls per task, and 0.6–0.8 when
+the integrator forwards notifications that carry their items (a static lab world, so no notification was sent: the sweep
+and the 24 h safety poll; receiving notifications has its own cost, not counted here) (signal-only notifications:
+3.7–4.7, since a busy inbox changes every hour). Priced per agent model and connector plan in
+docs/research/cost-fixes.md and eden-market-effect.md.
+
 - The background column spreads each seed's card and intent spend over that seed's task runs; with only 64 tasks per
   simulated user it is mostly the one-time backfill, an upper bound on the steady state. In this run the checked-in
   card cache replayed 4,634 cards, so new cards and intent requests cost $0.058 (seed 41) and $0.057 (seed 42) for

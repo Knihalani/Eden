@@ -10,6 +10,9 @@
  *   POST /v1/forget    {tenantId,userId,sourceId?} → {ok}  (also closes the user's source connections, D108)
  *   POST /v1/sources   {tenantId,userId}           → {sources:[{id,kind}]}; 422 {error} when the user's source
  *                                                    configuration is broken (only with per-user sources, D108)
+ *   POST /v1/sources/changed {tenantId,userId,sourceId} → {ok, synced}: a change notification (`syncPush`)
+ *   POST /v1/sources/items   {tenantId,userId,sourceId,items:[{ref,title?,text,url?,updatedAt?,meta?}]}
+ *                                                    → {ok, stored}: the items a notification carried (`syncPush`)
  *   GET  /healthz
  *
  * Auth: `Authorization: Bearer <key>`; the key fixes the tenant, and a body naming another tenant is refused.
@@ -21,7 +24,7 @@
  */
 import type { ContextPartner } from "@eden/engine";
 import { Gcra } from "@eden/primitives";
-import { checkAsk, checkEvent, isId } from "@eden/protocol";
+import { checkAsk, checkEvent, checkSourceChanged, checkSourceItems, isId } from "@eden/protocol";
 import { DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
 import type { UserSources } from "./user-sources";
 
@@ -132,6 +135,20 @@ export function createHandler(
           partner.forget(scope, body.sourceId as string | undefined);
           userSources?.forget(scope, body.sourceId as string | undefined);
           return json({ ok: true });
+        }
+        case "/v1/sources/changed": {
+          // A webhook or watch the integrator receives, forwarded: the source's synced copy is polled at its next use.
+          const checked = checkSourceChanged(body);
+          if (!checked.ok) return fail(400, checked.error);
+          const { userId, sourceId } = checked.value;
+          return json({ ok: true, synced: partner.sourceChanged({ tenantId: tenant, userId }, sourceId) });
+        }
+        case "/v1/sources/items": {
+          // The changed items themselves (a Slack event, a trigger's payload): held as synced, with no source call.
+          const checked = checkSourceItems(body);
+          if (!checked.ok) return fail(400, checked.error);
+          const { userId, sourceId, items } = checked.value;
+          return json({ ok: true, stored: await partner.sourceItems({ tenantId: tenant, userId }, sourceId, items) });
         }
         case "/v1/sources": {
           if (!userSources) return fail(404, "per-user sources are not configured (EDEN_USER_SOURCES_FILE)");

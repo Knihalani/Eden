@@ -168,6 +168,48 @@ export function ownText(item: ContextItem): string {
     .slice(0, READ_CHARS);
 }
 
+/** A sender that is a machine: a no-reply, notification or mailing-list address in the item's From line. */
+const AUTOMATED_FROM =
+  /^From:[^\n]*?[<\s:](?:no-?reply|do-?not-?reply|notifications?|alerts?|mailer(?:-daemon)?|newsletters?|digest|marketing|updates|news|info|support|billing|receipts?|team)@/im;
+/** What bulk and notification mail says of itself (an unsubscribe link, a "you are receiving this" footer). */
+const AUTOMATED_TEXT =
+  /(?:unsubscribe|view (?:it |this )?in (?:your )?browser|you(?: are|'re) receiving this|this mailbox is not monitored|manage (?:your )?(?:notifications|email preferences|subscriptions?)|notification (?:preferences|settings))/i;
+const BULK_CATEGORY = /^(?:promotions?|social|forums?|updates)$/i;
+
+/**
+ * Whether an item is machine-sent mail: a no-reply or list address (its whole local part: `team@`, not `dana.team@`),
+ * a bulk category, or a bulk footer. The footer test reads mail only (an item with a sender): a chat message or a
+ * document saying "unsubscribe me from the vendor list" is a person's. Such mail
+ * bears on a request only through constraint wording (a security alert, a payment due), which the prefilter passes on
+ * its own; read for intent only, it rarely is (`cardsLean`).
+ */
+export function automated(item: ContextItem): boolean {
+  const category = item.meta?.category;
+  if (category !== undefined && BULK_CATEGORY.test(category)) return true;
+  // The sender as a connector gives it: a `From:` header line in the text, or a sender field in `meta`.
+  const sender = item.meta?.from ?? item.meta?.sender;
+  const head = `${sender !== undefined ? `From: ${sender}\n` : ""}${item.text.slice(0, 600)}`;
+  if (AUTOMATED_FROM.test(head)) return true;
+  const mail = sender !== undefined || /^From:/m.test(head);
+  return mail && AUTOMATED_TEXT.test(item.text.slice(0, READ_CHARS * 4));
+}
+
+const LEAN_DAY = 86_400_000;
+
+/**
+ * Whether an item the prefilter rejects is read for its requests (`intent`): always without `cardsLean`
+ * (`leanDays` 0); with it, when it is not `automated` and its date (when it changed at the source, or an event's
+ * start) is within `leanDays` of `now` or ahead of it. An item with no date at all is read.
+ */
+export function readForIntent(item: ContextItem, now: number, leanDays: number): boolean {
+  if (leanDays <= 0) return true;
+  if (automated(item)) return false;
+  const start = item.meta?.start ? Date.parse(item.meta.start) : NaN;
+  const dated = Math.max(item.updatedAt ?? -Infinity, Number.isFinite(start) ? start : -Infinity);
+  if (dated === -Infinity) return true;
+  return dated >= now - leanDays * LEAN_DAY;
+}
+
 /** Whether an item is worth a card: its own words, title included, hold deontic or status language. */
 export function worthCarding(item: ContextItem): boolean {
   return DEONTIC.test(`${item.title.slice(0, 200)}\n${ownText(item)}`);
@@ -540,6 +582,11 @@ export interface CardLimits {
    * none, as the prefilter said).
    */
   intent: boolean;
+  /**
+   * With `intent` (`cardsLean`, `lean()` sets it; 0: off): an item the prefilter rejects is read for its requests only
+   * when it is not automated and is dated within this many days or upcoming (`readForIntent`).
+   */
+  leanDays: number;
 }
 
 export const DEFAULT_CARD_LIMITS: CardLimits = {
@@ -552,6 +599,7 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   strict: false,
   sentenceReuse: false,
   intent: false,
+  leanDays: 0,
 };
 
 /** The queue bound with `intent` (`CardEnricher.intend`), unless one was given. */
@@ -610,6 +658,8 @@ class UserCards {
 export interface CardStats {
   enqueued: number;
   prefiltered: number;
+  /** Items the prefilter rejected that `cardsLean` left unread for intent (automated or old). */
+  leanSkipped: number;
   reused: number;
   carded: number;
   /** Items sent to the model (each batch's size). */
@@ -644,6 +694,7 @@ export class CardEnricher {
   readonly stats: CardStats = {
     enqueued: 0,
     prefiltered: 0,
+    leanSkipped: 0,
     reused: 0,
     carded: 0,
     sent: 0,
@@ -700,6 +751,14 @@ export class CardEnricher {
     // Every item is read now, not the prefilter's 11–15%: a backfill's items would overrun the card queue's bound
     // (oldest dropped, uncovered). The queue holds references to cached items, so a longer one costs little.
     this.limits = { ...this.limits, intent: true, maxQueue: this.given.maxQueue ?? INTENT_MAX_QUEUE };
+  }
+
+  /**
+   * Turns on `cardsLean` (with `intent`): an item the prefilter rejects is read for its requests only when a person
+   * wrote it and it is dated within `days` or upcoming (`readForIntent`). Constraint-worded items are read as before.
+   */
+  lean(days: number): void {
+    this.limits = { ...this.limits, leanDays: Math.max(0, days) };
   }
 
   private user(scope: Scope): UserCards {
@@ -780,8 +839,12 @@ export class CardEnricher {
         this.stats.prefiltered++;
         // With `intent`, an item with no constraint language may still bear on a request (an event, a thread about
         // a project): it is read for its requests, and its card stays none.
-        if (this.limits.intent) this.enlist(u, { item, hash, only: true });
-        else this.keep(u, hash, { card: null, at: now, seenAt: now });
+        if (this.limits.intent && readForIntent(item, now, this.limits.leanDays)) {
+          this.enlist(u, { item, hash, only: true });
+        } else {
+          if (this.limits.intent) this.stats.leanSkipped++;
+          this.keep(u, hash, { card: null, at: now, seenAt: now });
+        }
         continue;
       }
       this.queueItem(u, item, hash, now);

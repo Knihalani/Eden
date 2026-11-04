@@ -4,7 +4,16 @@ import { Budget, FakeModel } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
-import { CardEnricher, cardMessages, ModelCardMaker, parseRequests, type Card, type CardMaker } from "./cards";
+import {
+  automated,
+  CardEnricher,
+  cardMessages,
+  ModelCardMaker,
+  parseRequests,
+  readForIntent,
+  type Card,
+  type CardMaker,
+} from "./cards";
 import { cleanRequests, IntentIndex, intentTerms, MAX_REQUEST_CHARS, MAX_REQUESTS, stemWord } from "./intent";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
@@ -364,5 +373,69 @@ describe("an item steering its own requests (anchoredIntents)", () => {
     const a = await p.ask({ ...scope, sessionId: "s1", question });
     expect(a.citations.map((c) => c.itemId)).toContain(bill.id);
     expect(a.citations.map((c) => c.itemId)).not.toContain(steer.id);
+  });
+});
+
+describe("cardsLean: what the prefilter rejects is read for intent only when a person wrote it recently", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const DAY = 24 * HOUR;
+  const mail = (id: string, from: string, body: string, ageDays: number, extra: Partial<ContextItem> = {}) => ({
+    ...item(id, `Mail ${id}`, `From: ${from}\nTo: Robin <robin@example.com>\n\n${body}`, "gmail"),
+    updatedAt: NOW - ageDays * DAY,
+    ...extra,
+  });
+  const human = mail("h", "Sam Lee <sam@acme.com>", "Lunch on Friday with the team?", 3);
+  const old = mail("o", "Sam Lee <sam@acme.com>", "Notes from the offsite", 45);
+  const noreply = mail("n", "Acme <no-reply@acme.com>", "Your order has shipped", 1);
+  const footer = mail("f", "Acme News <hello@acme.com>", "Five tips for spring. Unsubscribe here.", 1);
+  const upcoming = { ...old, id: "gmail:u", ref: "u", title: "Mail u", meta: { start: "2026-11-02T10:00:00Z" } };
+  const undated = { ...item("d", "Doc d", "Draft of the plan", "drive") };
+  const constrained = mail(
+    "c",
+    "Acme <no-reply@acme.com>",
+    "Payment must be made by Friday or the card is blocked",
+    60,
+  );
+
+  test("readForIntent and automated", () => {
+    expect(automated(noreply)).toBe(true);
+    expect(automated(footer)).toBe(true);
+    expect(automated({ ...human, meta: { category: "promotions" } })).toBe(true);
+    expect(automated(human)).toBe(false);
+    // A person whose address merely contains a list word, and a chat message that mentions unsubscribing.
+    expect(automated(mail("p", "Dana Team <dana.team@acme.com>", "Lunch?", 1))).toBe(false);
+    expect(automated(item("c", "Vendor list", "Please unsubscribe me from the vendor list by Friday"))).toBe(false);
+    expect(
+      automated({ ...item("x", "Shipped", "Your parcel is on its way"), meta: { from: "no-reply@shop.example" } }),
+    ).toBe(true);
+    expect(readForIntent(human, NOW, 30)).toBe(true);
+    expect(readForIntent(old, NOW, 30)).toBe(false);
+    expect(readForIntent(upcoming, NOW, 30)).toBe(true);
+    expect(readForIntent(undated, NOW, 30)).toBe(true);
+    expect(readForIntent(noreply, NOW, 30)).toBe(false);
+    // Off (0 days): every item is read, as before.
+    expect(readForIntent(old, NOW, 0)).toBe(true);
+    expect(readForIntent(noreply, NOW, 0)).toBe(true);
+  });
+
+  test("the enricher sends only recent human items for requests; constraint wording is read whatever its sender", async () => {
+    const all = [human, old, noreply, footer, upcoming, undated, constrained];
+    const maker = new IntentMaker({});
+    const e = new CardEnricher({ maker, budget: new Budget(), now: () => NOW });
+    e.intend();
+    e.lean(30);
+    e.enqueue(scope, all);
+    await e.idle();
+    // human, upcoming, undated and the constraint-worded no-reply mail: four items read, three skipped.
+    expect(maker.calls.reduce((a, c) => a + c.n, 0)).toBe(4);
+    expect(e.stats.leanSkipped).toBe(3);
+
+    const base = new IntentMaker({});
+    const b = new CardEnricher({ maker: base, budget: new Budget(), now: () => NOW });
+    b.intend();
+    b.enqueue(scope, all);
+    await b.idle();
+    expect(base.calls.reduce((a, c) => a + c.n, 0)).toBe(7);
+    expect(b.stats.leanSkipped).toBe(0);
   });
 });

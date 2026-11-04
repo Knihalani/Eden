@@ -256,4 +256,44 @@ export class EdenClient {
   async feedback(injectionId: string, used: boolean): Promise<void> {
     await this.post("/v1/feedback", { ...this.who, injectionId, used });
   }
+
+  /**
+   * Forwards a change notification for one of the user's sources (a Gmail watch, a Calendar or Drive channel, a
+   * webhook): with the server's `syncPush`, the source is polled at its next use instead of on a guess. Never throws;
+   * resolves false when the partner could not be reached or does not sync that source.
+   */
+  async sourceChanged(sourceId: string): Promise<boolean> {
+    const { tenantId, userId } = this.options;
+    const res = await this.post<{ synced?: boolean }>("/v1/sources/changed", {
+      ...(tenantId ? { tenantId } : {}),
+      userId,
+      sourceId,
+    });
+    return res?.synced === true;
+  }
+
+  /**
+   * Forwards the items a change notification carried (a Slack event's message, a trigger's payload): held as synced,
+   * with no source call. Never throws; resolves to how many were stored new or changed (0 when unreachable).
+   */
+  async sourceItems(
+    sourceId: string,
+    items: {
+      ref: string;
+      title?: string;
+      text: string;
+      url?: string;
+      updatedAt?: number;
+      meta?: Record<string, string>;
+    }[],
+  ): Promise<number> {
+    const { tenantId, userId } = this.options;
+    const res = await this.post<{ stored?: number }>("/v1/sources/items", {
+      ...(tenantId ? { tenantId } : {}),
+      userId,
+      sourceId,
+      items,
+    });
+    return typeof res?.stored === "number" ? res.stored : 0;
+  }
 }

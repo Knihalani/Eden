@@ -21,6 +21,7 @@ cards-enrich, presets, suites, free, spend` (`.ts`): check `git log origin/main`
 | `pi-ab.ts`, `pi-conditions.ts`, `pi-timeline.ts`, `pi-ab-report.ts` | The live A/B on the Pi harness (the standard agent): conditions `none,tools,eden,both[-judge][~variant][+flag][@w<ms>]`, per-task timelines, report |
 | `hermes-ab.ts` + `hermes-{conditions,host,proxy,worker,anthropic}.ts` | The same A/B on Hermes Agent (Python workers, `../../lab/hermes/`), Eden as MCP server + plugin |
 | `ab-common.ts` | Tasks, prompts, tools, grader and results format shared by every A/B (comparable results) |
+| `connector-options.ts` | `--source-profile` (market latency profiles), `--push signals\|payload` and `--push-rates` for both live harnesses (docs/LAB.md 5b) |
 | `agent-ab.ts`, `agent-ab-report.ts` | The older in-house loop (label its results as such) and the shared report |
 | `free.ts`, `spend.ts`, `free-smoke.ts` | Lab access: pacer, `--allow-logging`, `--rpm`, `--max-requests`, keys; the Anthropic spend ledger and cap |
 | `cards-enrich.ts`, `cards-disk.ts`, `reader-disk.ts` | Make once, replay free: cards (+ `--intent` requests), reader calls; `SubsetReplay` (`--reader-subset`, D117: a missed prompt answered from a recorded superset pool, approximate and labelled) |
@@ -94,6 +95,9 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
   --ledger ledger-summary.jsonl --run PREFIX` recomputes it from the spend ledger (docs/research/haiku-phase3.md)
   and exits 1 when the columns miss the header's Eden total by more than $0.01.
 - Funnel decoys surfaced overstate harm: live agents reject most decoys (docs/research/broad-set.md).
+- A wrapper around a sim source must copy `notifies` (and `listsByTime`) or `--push` silently does nothing: pi-ab's
+  timing wrapper dropped it once, and the run polled as if no source notified.
+- Hermes needs its `mcp` extra (`uv sync --frozen --no-install-project --extra mcp`), else "Hermes has no ask_context".
 
 ## Test
 
