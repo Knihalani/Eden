@@ -115,7 +115,8 @@ missing cards do not inflate the skip rate). These are simulated sessions, not p
 own `ask_context` calls are not played, so the counts are the push's alone.
 
 Today the command runs only `default` and `default-nogate` (gate-traffic.ts `CONFIGS`). Current rows: `bun
-packages/sim/src/lab/gate-traffic.ts`, 2026-11-04, on 39a41c49e (two runs, identical counts, 7.2 and 9.9 s):
+packages/sim/src/lab/gate-traffic.ts`, 2026-11-04, on 39a41c49e (two runs, identical counts, 7.2 and 9.9 s) and again
+on cc668e4df (identical counts, 6.9 s):
 
 | Preset                     | Reader calls per user message | Gated share (of messages at the gate) | Gated with a needed item in the pool |
 | -------------------------- | ----------------------------- | ------------------------------------- | ------------------------------------ |
@@ -123,7 +124,8 @@ packages/sim/src/lab/gate-traffic.ts`, 2026-11-04, on 39a41c49e (two runs, ident
 | default (gate on, shipped) | 0.151 (66 calls)              | 25.0% (22 of 88)                      | 5 of 22 gated; 5 of 42 such pools    |
 
 The default's missed-binding share is 0.227 (5 of 22 gated), 0.119 of the 42 pools holding a needed item, and all 5
-are `landlord` sessions (landlord row: gated 5, missed-binding 1.000; R3-19, still open). An oracle gate makes 42
+are `landlord` sessions (landlord row: gated 5, missed-binding 1.000; R3-19, still open: D122 measured a pattern
+that reads the landlord's arranged visit, 66 → 72 calls with missed-binding 0, and rejected it). An oracle gate makes 42
 calls over any needed fact and 24 over needed reader facts: 1.57x and 2.75x fewer than the default, 2.07x and 3.63x
 fewer than default-nogate. NEWL's rows from 2026-11-03 (bench/ledger.jsonl `20261103060929-sim-sessions-gate-traffic`)
 are the same numbers: NEWL is the default's reader setting (D112).
@@ -142,7 +144,7 @@ under NEW2 it cut calls by 37%, not the 3.3–10x an estimate in the audit assum
 gated message in five held an item stating a fact the turn needed. That is a proxy, not a count of lost bindings: most
 needed facts in `sessions.ts` are plain information (a meeting's time, an invoice's amount) that the reader is not for,
 and the sessions label no constraints of their own. It is not zero; D112 put the gate in the default on its live Pi run,
-and the landlord misses stay open (R3-19). Applying the live per-call prices above to these counts (an estimate, not
+and the landlord misses stay open (R3-19, D122). Applying the live per-call prices above to these counts (an estimate, not
 measured): the default about $0.044 per 1,000 user messages with the gate and $0.058 without ($0.00029 a call); NEW2
 (history) about $0.25–0.30 with the gate and $0.40–0.47 without ($0.00040–0.00047 a call). Ceilings for the gate, an
 oracle gate and verdict reuse: "Where 3x is impossible" below.
@@ -330,7 +332,7 @@ unmeasured advice.
 
 Probes (D46, in the default since D112) add no model call but roughly double source calls per lookup in simulation
 (5.4–5.6 → 11.4–11.8; 8.7–9.1 with `probeWhen: "actions"`, never in the default; the 2026-11-04 audit's
-`engine-dead-switches` package deletes it, D121), within `probeCalls` (8) per lookup; with a judge, model calls per
+`engine-dead-switches` package deleted it, D121), within `probeCalls` (8) per lookup; with a judge, model calls per
 turn rise by 0.01–0.03 (more lookups have candidates). For the agent, Eden with probes in place of search tools cost
 less per task than the tools did ($0.327 against $0.354 per 1,000 held-out tasks; docs/research/probes.md).
 
