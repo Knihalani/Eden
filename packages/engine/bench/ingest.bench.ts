@@ -79,7 +79,6 @@ const fanout = new SourceFanout({
 const options: SyncOptions = {
   maxItems: PER_USER,
   pageSize: PAGE,
-  everyMs: 0,
   staleChance: 0.5,
   maxStaleMs: 24 * HOUR,
   activeMs: 24 * HOUR,

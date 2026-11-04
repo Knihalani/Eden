@@ -56,7 +56,7 @@ user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`.
 ## Test
 
 ```bash
-bun run test:pkg engine          # 41 files, ~4 s wall in parallel (~15 s one by one); partner and reader lead
+bun run test:pkg engine          # 43 files, ~4 s wall in parallel (~15 s one by one); partner and reader lead
 bun test ./packages/engine/src/conflict.test.ts      # one file, from the repo root (the preload is read from cwd)
 bun run eval                     # the scenario metrics; paste the JSON in the PR when behaviour changes
 bun run funnel --jobs 4          # the lab's $0 screen of the default on train (reader stub; docs/LAB.md)

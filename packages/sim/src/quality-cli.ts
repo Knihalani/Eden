@@ -4,7 +4,7 @@
  *   zoo-tune|zoo-a|zoo-b] [--planner [--planner-max-calls 3] [--planner-no-cascade] [--planner-cascade-min 0.05]
  *   [--planner-no-reuse] [--planner-deadline-margin 2] [--planner-latency-quantile 0.9]
  *   [--planner-mode serve|shadow] [--promote-after N]] [--time 0] [--wait 0]
- *   [--noise 1] [--updates 0] [--refresh-after-hours H] [--max-refreshes 3] [--tool-rate 0.4]
+ *   [--noise 1] [--updates 0] [--refresh-after-hours H] [--tool-rate 0.4]
  *   [--judge none|perfect|noisy] [--live] [--brief] [--config '{"probes":true}']
  *   [--timeline out.jsonl] [--sync]
  *   [--cards DIR/cards-v2.jsonl]
@@ -46,7 +46,6 @@ const cli = flags(
         "noise",
         "updates",
         "refresh-after-hours",
-        "max-refreshes",
         "tool-rate",
         "judge",
         "config",
@@ -126,7 +125,6 @@ const report = await runQuality({
   updates: Number(arg("updates", "0")),
   config: {
     ...(has("refresh-after-hours") ? { refreshAfterMs: Number(arg("refresh-after-hours", "0")) * 3_600_000 } : {}),
-    ...(has("max-refreshes") ? { maxRefreshes: Number(arg("max-refreshes", "3")) } : {}),
     // Any engine setting, as JSON (`--config '{"probes":true}'`): for experiments behind a flag.
     ...engineConfig,
   },

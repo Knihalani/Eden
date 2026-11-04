@@ -29,12 +29,6 @@ export interface EngineConfig {
    * old time). 0 turns this off. See D40.
    */
   refreshAfterMs: number;
-  /**
-   * After that search, the best candidates still older than `refreshAfterMs` are re-read through their source's
-   * `fetch`, at most this many per lookup. Off by default (0): in simulation it added calls and no recall beyond noise
-   * (D40).
-   */
-  maxRefreshes: number;
   /** Sources asked per proactive lookup (routing picks them). An ask uses `askSources`. */
   lookupSources: number;
   askSources: number;
@@ -92,11 +86,6 @@ export interface EngineConfig {
   probeMemoMs: number;
   /** Source calls the probes may make per lookup, on top of the lookup's own. */
   probeCalls: number;
-  /**
-   * Which requests are probed: "always", or "actions" (a request that starts with a verb, schedules, or acts on
-   * someone, and arriving messages): where unasked context changes the outcome, at fewer source calls.
-   */
-  probeWhen: "always" | "actions";
   /** Sources each person or organisation probe goes to (the source map's best for that name). */
   probePeopleSources: number;
   /** Sources the topic probe goes to (the lookup's best routed). */
@@ -232,13 +221,11 @@ export interface EngineConfig {
    * limit) full pages' worth of items, in at most one call more. Cuts items listed on the request path (D101).
    */
   syncPollPageSize: number;
-  /** Timed polls of an active user's sources this often (ms); 0 polls only on demand (`syncOnDemand`). */
-  syncEveryMs: number;
   /** A synced source is stale once the chance it changed since its last poll (its learned rate) reaches this. */
   syncStaleChance: number;
   /** ... or once its last poll is this old (ms). */
   syncMaxStaleMs: number;
-  /** A user with an event this recently (ms) is active: timed polls and sweeps run only for them. */
+  /** A user with an event this recently (ms) is active: sweeps run only for them. */
   syncActiveMs: number;
   /** Each source of an active user is re-listed whole this often (ms): what it no longer lists is dropped. */
   syncSweepMs: number;
@@ -263,11 +250,6 @@ export interface EngineConfig {
   syncMaxUsersPerTenant: number;
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
   syncLocalAll: boolean;
-  /**
-   * With sources answered locally, up to this many of the request's rare words (a place, a reference: on few of the
-   * user's items) are each sent alone to them as a probe, at no call; their finds get the probes' seats. 0: none.
-   */
-  syncTermProbes: number;
   /**
    * A per-user knowledge graph over every cached item (`kg.ts`; docs/research/moon-graph.md): people, organisations,
    * projects and systems, identifiers, channels, roles and days, joined by typed edges. A lookup walks it from the
@@ -454,7 +436,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   fallbackAsks: true,
   maxItemsPerInjection: 3,
   refreshAfterMs: 2 * 3_600_000,
-  maxRefreshes: 0,
   maxInjectionBytes: 1_200,
   lookupSources: 3,
   askSources: 6,
@@ -477,7 +458,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probeGraceMs: 0,
   probeMemoMs: 10 * 60_000,
   probeCalls: 8,
-  probeWhen: "always",
   probePeopleSources: 3,
   probeTopicSources: 8,
   probeTopicAlone: true,
@@ -523,7 +503,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncMaxItems: 3_000,
   syncPageSize: 100,
   syncPollPageSize: 5,
-  syncEveryMs: 0,
   syncStaleChance: 0.15,
   syncMaxStaleMs: 6 * 3_600_000,
   syncActiveMs: 2 * 3_600_000,
@@ -535,7 +514,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncCatchupPages: 2,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
-  syncTermProbes: 0,
   cards: true,
   cardsEconomy: true,
   cardItems: 1,
