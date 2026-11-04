@@ -9,7 +9,7 @@ anything is held).
 
 | File | Owns |
 |---|---|
-| `src/source.ts` | `Source` (search; optional `fetch` by id D35, `list` for sync D57, `listsByTime`), `SearchQuery` (with a day `window`, D44), `ListPage` |
+| `src/source.ts` | `Source` (search; optional `fetch` by id D35, `list` for sync D57, `listsByTime`, `notifies` for push sync D125), `SearchQuery` (with a day `window`, D44), `ListPage` |
 | `src/mcp-source.ts` | `McpSource`: the read-only check (`readTool`: `readOnlyHint: true` or operator `trustedReadTools`, else `ReadOnlyViolation`), reconnects (re-checking read-only), paged `tools/list`, `toItems` |
 | `src/schema-args.ts` | Arguments built from a tool's JSON schema (search, fetch, list), deterministic; operator `fixed` values win |
 | `src/shapes.ts` | Query shapes (terms, entities, one call per entity…); `inert` strips search-syntax operators from untrusted text |

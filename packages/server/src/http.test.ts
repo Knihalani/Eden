@@ -380,3 +380,29 @@ describe("POST /v1/check (the action firewall, D69)", () => {
     expect(JSON.stringify(errors)).not.toContain("INV-4821");
   });
 });
+
+describe("change notifications (syncPush)", () => {
+  test("sources/changed and sources/items: checked input, 200 with what was done, other tenants refused", async () => {
+    // The static source does not list, so nothing is synced: the routes answer, and report nothing done.
+    expect(await (await post("/v1/sources/changed", { userId: "u1", sourceId: "crm" })).json()).toEqual({
+      ok: true,
+      synced: false,
+    });
+    const items = [{ ref: "d2", title: "Globex", text: "Dana Lee approved the renewal", updatedAt: 1 }];
+    expect(await (await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items })).json()).toEqual({
+      ok: true,
+      stored: 0,
+    });
+    expect((await post("/v1/sources/changed", { userId: "u1" })).status).toBe(400);
+    expect((await post("/v1/sources/changed", { userId: "u1", sourceId: "a/b" })).status).toBe(400);
+    expect((await post("/v1/sources/changed", { userId: "u1", sourceId: "crm", tenantId: "other" })).status).toBe(403);
+    expect((await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items: [] })).status).toBe(400);
+    expect((await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items: [{ text: "x" }] })).status).toBe(
+      400,
+    );
+    const many = Array.from({ length: 101 }, (_, i) => ({ ref: `r${i}`, text: "x" }));
+    expect((await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items: many })).status).toBe(400);
+    const badMeta = [{ ref: "r", text: "x", meta: { a: 1 } }];
+    expect((await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items: badMeta })).status).toBe(400);
+  });
+});

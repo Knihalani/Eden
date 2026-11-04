@@ -147,6 +147,14 @@ while no page reaches what was already synced, the next tops the items asked up 
 call (an on-demand poll: one to three calls, against one or two). Backfill and sweeps keep `syncPageSize`. `SyncStats`
 counts the items listed (`demandItems`, `backgroundItems`) beside the calls.
 
+**Change notifications** (D125, `syncPush`; `Source.notifies`, `ContextPartner.sourceChanged` and `sourceItems`,
+`POST /v1/sources/changed` and `/v1/sources/items`, the client's `sourceChanged`/`sourceItems`): a source whose
+integrator forwards the provider's change notifications is not polled on its learned change rate. A notification marks
+it behind (`Sync.changed`, O(1)), and the next lookup that reads it polls it once, however many notifications came
+first. A notification that carries the changed items passes the secret gate and is stored as synced, with no call.
+Such a source is otherwise polled only by the daily sweep and after `syncPushMaxStaleMs` (24 h) with no notification,
+the bound on a lost one. Sources that do not notify are polled as before.
+
 **Poll behind the lookup** (D65, `syncPollBehind`, on in the default, D112; with `sync` and `syncOnDemand`): without it,
 a lookup that finds a synced source stale waits for that source's on-demand poll (`sync.freshen`, one or two listing
 calls; up to three with `syncPollPageSize`), which was most of Eden's time on the agent's critical path in ALL (p50 503
@@ -274,7 +282,9 @@ between (tool calls, its replies) do not make it stale.
 **The intent index** (`intent`, needs `cards`, on in the default, D112; D87, D109, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four
 requests the item would change, in a user's words (validated, at most 120 characters each, redacted); items the card
-prefilter rejects are read for their requests only. They live in a per-user BM25 index apart from the item text,
+prefilter rejects are read for their requests only, and with `cardsLean` (D125) only when a person wrote them
+recently: not automated mail (`automated`: a no-reply or list sender, a bulk category or footer) and dated within
+`cardsLeanDays` (30) or upcoming; constraint-worded items are read whatever their sender or age. They live in a per-user BM25 index apart from the item text,
 keyed by content hash and dropped with the card. At request time, with no model, the request's words are searched in
 it: the best hits join the lookup's candidates and one judge seat, and are fused into an `ask` by reciprocal rank
 after the verdict hits. An intent hit alone is never a no-model delivery.

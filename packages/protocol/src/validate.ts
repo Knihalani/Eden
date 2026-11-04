@@ -2,7 +2,8 @@
  * Runtime checks for what arrives over the wire. Hand-written rather than schema-library based: the shapes are
  * small, and the server must reject a malformed event with a clear message rather than a stack trace.
  */
-import type { AgentEvent, AskRequest } from "./types";
+import { itemId } from "./ids";
+import type { AgentEvent, AskRequest, ContextItem } from "./types";
 
 export type Checked<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -143,4 +144,65 @@ export function checkAsk(v: unknown): Checked<AskRequest> {
       maxItems,
     },
   };
+}
+
+/** Items one change notification may carry (`checkSourceItems`): a notification is a few items, never a listing. */
+export const MAX_PUSHED_ITEMS = 100;
+/** The longest item text a notification may carry; the engine cuts what it holds further (`maxTextChars`). */
+const MAX_PUSHED_TEXT = 200_000;
+
+/** A source change notification's body (`POST /v1/sources/changed`): the user and the source. */
+export function checkSourceChanged(v: unknown): Checked<{ tenantId: string; userId: string; sourceId: string }> {
+  if (!isRecord(v)) return { ok: false, error: "body must be an object" };
+  if (!isId(v.tenantId)) return { ok: false, error: "tenantId must be 1-128 characters of [A-Za-z0-9._:@-]" };
+  if (!isId(v.userId)) return { ok: false, error: "userId must be 1-128 characters of [A-Za-z0-9._:@-]" };
+  if (!isId(v.sourceId)) return { ok: false, error: "sourceId must be 1-128 characters of [A-Za-z0-9._:@-]" };
+  return { ok: true, value: { tenantId: v.tenantId, userId: v.userId, sourceId: v.sourceId } };
+}
+
+/**
+ * The items a change notification carried (`POST /v1/sources/items`): each `{ref, title?, text, url?, updatedAt?,
+ * meta?}` of the named source, at most `MAX_PUSHED_ITEMS`. Ids are made here from the source and ref, as a listing
+ * makes them, so a pushed item and the same item listed later are one item.
+ */
+export function checkSourceItems(
+  v: unknown,
+): Checked<{ tenantId: string; userId: string; sourceId: string; items: ContextItem[] }> {
+  const head = checkSourceChanged(v);
+  if (!head.ok) return head;
+  const raw = (v as Record<string, unknown>).items;
+  if (!Array.isArray(raw) || raw.length === 0) return { ok: false, error: "items must be a non-empty array" };
+  if (raw.length > MAX_PUSHED_ITEMS) return { ok: false, error: `at most ${MAX_PUSHED_ITEMS} items per call` };
+  const { sourceId } = head.value;
+  const items: ContextItem[] = [];
+  for (const [n, x] of raw.entries()) {
+    if (!isRecord(x)) return { ok: false, error: `items[${n}] must be an object` };
+    if (!isText(x.ref, 512) || !x.ref) return { ok: false, error: `items[${n}].ref must be 1-512 characters` };
+    if (x.title !== undefined && !isText(x.title, 2_000)) return { ok: false, error: `items[${n}].title is too long` };
+    if (!isText(x.text, MAX_PUSHED_TEXT)) return { ok: false, error: `items[${n}].text must be a string` };
+    if (x.url !== undefined && !isText(x.url, 2_000)) return { ok: false, error: `items[${n}].url is malformed` };
+    if (x.updatedAt !== undefined && !(typeof x.updatedAt === "number" && Number.isFinite(x.updatedAt))) {
+      return { ok: false, error: `items[${n}].updatedAt must be epoch milliseconds` };
+    }
+    let meta: Record<string, string> | undefined;
+    if (x.meta !== undefined) {
+      if (!isRecord(x.meta)) return { ok: false, error: `items[${n}].meta must be an object of strings` };
+      const entries = Object.entries(x.meta);
+      if (entries.length > 20 || entries.some(([k, m]) => k.length > 64 || !isText(m, 2_000))) {
+        return { ok: false, error: `items[${n}].meta must be at most 20 short string values` };
+      }
+      meta = Object.fromEntries(entries) as Record<string, string>;
+    }
+    items.push({
+      id: itemId(sourceId, x.ref),
+      sourceId,
+      ref: x.ref,
+      title: (x.title as string | undefined) ?? "",
+      text: x.text,
+      ...(x.url !== undefined ? { url: x.url as string } : {}),
+      ...(x.updatedAt !== undefined ? { updatedAt: x.updatedAt as number } : {}),
+      ...(meta ? { meta } : {}),
+    });
+  }
+  return { ok: true, value: { ...head.value, items } };
 }

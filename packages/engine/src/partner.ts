@@ -492,6 +492,8 @@ export class ContextPartner {
   private readonly recorded = new Map<string, Map<string, Map<string, Recorded>>>();
   private readonly now: () => number;
   private readonly fanout: SourceFanout;
+  /** The secret gate every item passes before it is held (D10): the fanout's, and `sourceItems`'. */
+  private readonly redact: (items: ContextItem[]) => ContextItem[] | Promise<ContextItem[]>;
   /** What each user's probes bring back (`probeFresh`, `probeYield`). */
   private readonly economy = new ProbeEconomy();
   /** Span tracing (`spans.ts`): null when off, so each phase's call site is one null check. */
@@ -524,6 +526,7 @@ export class ContextPartner {
     const gate = deps.gatePool
       ? pooledSanitizer(deps.gatePool, maxText)
       : (items: ContextItem[]) => items.map((i) => sanitizeItem(i, maxText));
+    this.redact = gate;
     const spans = this.spans;
     // The card enrichment (`cards`) reports its background calls into the same spans.
     if (spans && deps.cards && this.config.cards) deps.cards.tracer = spans;
@@ -536,6 +539,8 @@ export class ContextPartner {
       if (this.config.cardsEconomy) cards.economize();
       // `intent`: the same calls write each item's requests, and what the prefilter rejects is read for them.
       if (this.config.intent) cards.intend();
+      // `cardsLean`: what the prefilter rejects is read for requests only when a person wrote it recently.
+      if (this.config.intent && this.config.cardsLean) cards.lean(this.config.cardsLeanDays);
     }
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
@@ -587,6 +592,8 @@ export class ContextPartner {
             catchupPages: c.syncCatchupPages,
             maxUsersPerTenant: c.syncMaxUsersPerTenant,
             timeoutMs: Math.max(c.sourceTimeoutMs, 5_000),
+            push: c.syncPush,
+            pushMaxStaleMs: c.syncPushMaxStaleMs,
           },
         )
       : null;
@@ -1661,6 +1668,30 @@ export class ContextPartner {
    * rows, and the user's live sessions (their windows and queued injections hold content). In-flight lookups are
    * aborted, and their results discarded.
    */
+  /**
+   * A change notification for one of the user's sources (`syncPush`; the source says it `notifies`): the integrator
+   * forwards a Gmail watch, a Calendar or Drive channel, a Slack event, a Graph subscription, a connector platform's
+   * trigger. The source's synced copy is behind until the next lookup that reads it polls it; until then, and between
+   * notifications, nothing polls it (at most `syncPushMaxStaleMs` apart). No I/O; false when push is off or the source is
+   * not synced for the user.
+   */
+  sourceChanged(scope: Scope, sourceId: string): boolean {
+    if (!this.config.syncPush || !this.sync) return false;
+    return this.sync.changed(scope, sourceId);
+  }
+
+  /**
+   * Items a change notification carried (`syncPush`): a Slack event's message, a Graph notification's resource data, a
+   * trigger's payload. They pass the secret gate and are stored as synced, with no source call. Items naming another
+   * source are left out. Returns how many were new or changed; 0 when push is off or the source is not synced yet.
+   */
+  async sourceItems(scope: Scope, sourceId: string, items: ContextItem[]): Promise<number> {
+    if (!this.config.syncPush || !this.sync || items.length === 0) return 0;
+    const own = items.filter((it) => it.sourceId === sourceId).slice(0, MAX_PUSHED_ITEMS);
+    const clean = await this.redact(own);
+    return this.sync.ingest(scope, sourceId, clean);
+  }
+
   forget(scope: Scope, sourceId?: string): void {
     const key = scopeKey(scope);
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
@@ -4334,6 +4365,7 @@ export class ContextPartner {
       kind: source.kind,
       description: source.description,
       ...(source.listsByTime !== undefined ? { listsByTime: source.listsByTime } : {}),
+      ...(source.notifies !== undefined ? { notifies: source.notifies } : {}),
       // A listing (the sync, D57) is traced by the sync itself (`sync.list`): passed through as it is.
       ...(source.list ? { list: source.list.bind(source) } : {}),
       // One `then`, no async frame of its own: a source call is the most frequent span (tracing overhead).
@@ -4658,6 +4690,9 @@ const BULK_TITLE = /\b(newsletter|top stories|you appeared in)\b/i;
 /** A question about what could stop or change an act, and the usual ways to ask whether something is fine to do. */
 const ASKS_BLOCKERS =
   /\b(?:block(?:s|ed|ing|er|ers)?|constrain(?:s|t|ts)?|rules?|limits?|holds?|approvals?|policy|policies|availab(?:le|ility)|allowed|permitted|conflicts?|clash(?:es)?|freezes?|frozen|restrictions?|ok(?:ay)? to|safe to|fine to|go ahead)\b/i;
+
+/** Items one `sourceItems` call stores at most (a notification carries a few; a bigger batch is a listing's job). */
+const MAX_PUSHED_ITEMS = 100;
 
 /** The most candidates an ask's reader reads, whatever `askReaderPool` says. */
 const READER_POOL_CAP = READER_MAX_ITEMS;

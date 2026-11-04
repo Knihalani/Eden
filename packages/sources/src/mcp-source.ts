@@ -34,6 +34,8 @@ import type { ListPage, SearchQuery, Source } from "./source";
 export interface McpSourceOptions {
   id: string;
   description: string;
+  /** The integrator forwards this source's change notifications to Eden (`Source.notifies`, the engine's `syncPush`). */
+  notifies?: boolean;
   /** Builds the transport for this user's connection (stdio for local servers, streamable HTTP for remote ones). */
   transport: () => Transport;
   /**
@@ -111,10 +113,12 @@ export class McpSource implements Source {
   private listMapping: ListMapping | null = null;
   /** `list`, when a list tool is configured (D57); undefined otherwise, so the source is never synced. */
   readonly list?: Source["list"];
+  readonly notifies: boolean;
 
   constructor(private readonly options: McpSourceOptions) {
     this.id = options.id;
     this.description = options.description;
+    this.notifies = options.notifies === true;
     if (options.listTool) this.list = (scope, cursor, limit, signal) => this.listPage(scope, cursor, limit, signal);
   }
 

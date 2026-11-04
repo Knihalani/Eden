@@ -370,10 +370,28 @@ bun packages/sim/src/lab/hermes-ab.ts --hermes-src $HERMES --concurrency 6 --sui
 bun packages/sim/src/lab/pi-ab-report.ts .local/h-41.json
 ```
 
-`$HERMES` is a hermes-agent checkout with `<src>/.venv` (`uv sync --frozen --no-install-project`). Hermes' prompt is
+`$HERMES` is a hermes-agent checkout at commit 06433066 with `<src>/.venv` (`uv sync --frozen --no-install-project
+--extra mcp`: without the `mcp` extra Hermes lists no MCP tools and every `hermes+eden` stream stops with "Hermes has
+no ask_context"). Hermes' prompt is
 about 3× Pi's input tokens per request; on free models tasks after a stream's first averaged 22–26 s, and the full
 nine-suite bench was estimated at 2.6 h at concurrency 6 if the rate limit does not bind, 7.6 h at 18 requests a
 minute on free models (hermes-lab.md, estimates).
+
+### 5b. Market connectors and change notifications (both harnesses)
+
+`connector-options.ts` gives `pi-ab.ts` and `hermes-ab.ts` the same three flags:
+
+- `--source-profile FILE|JSON` overrides `REALISTIC`'s latency, error rate or rate limit per source. The two market
+  profiles (estimates: measured network floor plus how each API searches, docs/research/eden-market-effect.md) are
+  `packages/sim/lab/before-after/market-profiles/{direct,hosted}.json`.
+- `--push signals|payload`: every sim source `notifies` (the engine acts on it with `syncPush`). `signals` sends a
+  change notification per source before each task with chance 1 − exp(−rate); the rates per hour come from
+  `--push-rates` (default `gmail=4,slack=6,calendar=0.3,drive=0.3,crm=0.2`, assumed). `payload` models
+  notifications that carry their items, which in a static world means none and no poll.
+- The results header records both (`sourceProfile`, `push`).
+
+`market.py` (in `packages/sim/lab/before-after/`) prices a run's `tools` and `eden` arms per agent model and
+connector plan; `--reuse-arms` copies the `tools` arm of an earlier run on the same profile, so only Eden is paid for.
 
 ### 6. Full benchmark (blind, both harnesses)
 
