@@ -51,7 +51,9 @@ Where the ledger and git disagree, or the ledger disagrees with itself:
   counted once.
 - The ledger lists no unresolved items, but 30 verified findings are neither resolved nor rejected. They are open.
 - Round 3's text says R3-20 closes `cost-per-task-reader-floor-measured` (R2-18); the ledger still has it open. The
-  table follows the ledger.
+  table follows the ledger. **Corrected 2026-11-04:** `cost-per-task-reader-floor-measured` is closed by R3-20 (a
+  measured floor, nothing to fix; section 4 already lists it among the recorded limits), so the open count in the
+  table overstates by one (29, not 30). The table is left as the ledger drew it.
 - Round 1's merge record names merge commits (such as 069b12cb8), not branch tips. The current branch tips are all
   ancestors of the integration tip, so nothing is missing.
 
@@ -174,6 +176,101 @@ remaining 3x gains on cost or speed come from moving or removing the reader's ca
   - Round 3, `audit/2026-11-03b-r3-*`: `engine-push-behind-accounting`, `sources-pages-and-vocab`,
     `server-config-fast-gate`, `lab-cli-strict-and-funnel`, `devloop-speed-and-flakes`, `lab-ceilings`,
     `reporting-weights-and-notes`, `eval-reader-family`.
+
+### 6. Status on 2026-11-04
+
+Every item of section 4, mapped to what happened after the audit merged (#214, squash of
+`audit/2026-11-03b-integration`). Decision numbers are rows of docs/DECISIONS.md; "recorded here" means the owner
+delegated the call to the 2026-11-04 audit and this section is its record.
+
+**The decision list.**
+
+- **Speed switches on by default** (poll behind, poll page size, session memory, vocabulary release, push wait, probe
+  grace, `sync` with the warm copy): in the default, D112, which lists the switches it took (`syncPollBehind`,
+  `syncPollPageSize` 5, `probeGraceMs` 0, `readerPushBehind`, `slowPathQueue`, `releaseTerms`, `sync`), measured live
+  on Pi (blind held-out 13).
+- **Intent index under NEW** and **dropping cards from ALL3**: intent and cards stay in the default, D109 (without
+  intent the default lost 8.3 points on train) and D113 (5).
+- **Explicit asks answering from a slightly stale copy** (`lat-ask-waits-poll`): **not adopted** (recorded here). It
+  departs from D65/D40 freshness and rests only on a 4.3x ask-p95 estimate. Reopen only with a funnel `--ask --time 1`
+  measurement that counts stale answers.
+- **Reading on the draft event** (`lat-draft-speculative-read` stage 2): **not adopted** (recorded here). It is a model
+  call per draft event, which CLAUDE.md forbids without a decision and a docs/COST-MODEL.md estimate; neither exists.
+- **One core per server**: several processes behind a tenant/user router, D113 (1).
+- **Restarts re-pay backfill**: persist content-free positions and cursors only, D113 (2).
+- **Reader as the only deliverer**: a reader rejection may empty an answer only when it read every candidate, D114.
+- **Paid reader screens** ($0.3-0.5 each): **deferred**. Next step: the owner approves a budget; the D117 subset replay
+  answers some screens at $0 first.
+- **`tsgo` as the merge gate**: a trial, D113 (4); `tsc` stays the gate until the trial ends on 2026-12-03.
+- **Cap old source-map mention rows**: not capped (content-free routing rows; `forget` removes them), D113 (3).
+- **Per-user MCP credentials** for the shipped server: roadmap, not an audit fix (docs/ARCHITECTURE.md:357, "Per-user
+  MCP connections with OAuth and a token vault"). Per-user listable sources are D108.
+- **Distilled local reader** (`moonshot-distilled-reader`): rejected a third time, D110.
+- **Merge gate skipping cached test passes** (`devloop-test-closure-cache`): **rejected** (recorded here). The merge
+  gate runs every test.
+- **Knowledge graph as a production default**: in the default, D112 (`graph: true` in `DEFAULT_CONFIG`; memory per
+  D107).
+
+**Needs rework.**
+
+- Search-index memory (`scale-index-posting-arena`, `scale-compact-frozen-index`): done, D111 (packed index, 3.2-3.8x
+  less heap) and D120 (incremental merges). `scale-compressed-text-cold-tier`: left out by D111, which says why (short
+  of its bar).
+- `quality-reader-pool-universe`: measured and rejected, D115.
+- `lat-answer-gate-not-start-gate`: measured and rejected, D118.
+- `lat-ask-rereads-after-push`: measured and rejected, D116.
+- `devloop-reader-replay-item-level-key`: the narrow version is a lab instrument, D117 (`--reader-subset`).
+- **R3-19, landlord bindings gated by the reader gate:** still open. `bun packages/sim/src/lab/gate-traffic.ts`
+  (2026-11-04, seeds 41-44) still reports the default's 5 gated misses all on `landlord` (gated 5, missed-binding
+  1.000; docs/COST-MODEL.md). Sequenced after the 2026-11-04 package `engine-dead-switches`, which shares
+  partner.ts:1482-1493 (`constraintLike` in the `readerGate` block) and docs/DECISIONS.md. Next step: one package that
+  changes `mayConstrain` (conflict.ts) or `constraintLike` so that gate-traffic's landlord row reports missed-binding
+  0, with `bun run eval` falseFireRate 0 and the funnel at 214/211.
+- **R3-5, the server's config check:** resolved. `packages/server/src/engine-config.ts:48` delegates to the shared
+  `checkEngineConfig`.
+
+**Small, never packaged.**
+
+- `ingest-skip-unchanged-redaction`, `corr-sync-test-vacuous-guard`, `corr-searchsources-preaborted-hang`,
+  `example-agent-not-runnable-offline-and-wrong-description`, `no-memory-bench-per-user`: fixed by the clean-up
+  package (#215); `corr-cache-offset-stale-on-refresh` has its named test there (already fixed on main).
+- `dead-experimental-flags`: D112 deleted 44 settings; the switches left neither in the default nor a trial
+  (`maxRefreshes`, `syncTermProbes`, `probeWhen: "actions"` and the like) are the 2026-11-04 package
+  `engine-dead-switches` (D121).
+- `scale-light-user-scan-index`: done, D111 (an index under 128 docs is scanned and builds no postings) and D120.
+
+**Recorded limits.** Nothing to fix; `cost-per-task-reader-floor-measured` is closed by R3-20 (the ledger correction in
+section 2).
+
+**Shipped as a first stage only.**
+
+- `lat-sync-poll-on-critical-path`, `lat-default-path-live-search-vs-warm-index`: `sync` and `syncPollBehind` are in
+  the default, D112; the servers read per-user listable sources, D108.
+- `lat-draft-speculative-read`: stage 2 not adopted (above).
+- `moon-agent-is-the-reader`: no second stage was planned ("none unless the diagnostic surprises", round 1's deferred
+  table); closed.
+- `lat-reader-faster-endpoint-no-reasoning`: the shipped reader is throughput-routed, D112 (D95's routing); any
+  further endpoint screen is one of the paid reader screens (deferred above).
+- `integrator-server-...`: per-user sources D108 and the model roles D112; the MCP-credential half is roadmap (above).
+- `devloop-intent-replay-not-committed`: the $0.17-0.35 intent replay is a paid screen, deferred with them.
+- `devloop-ab-request-replay-all-roles`: stage 2 (agent-stream and Hermes replay) open. Next step: one lab package,
+  after the Hermes checkout below.
+- `cost-cards-zero-on-all3-funnel`: cards stay in the default, D113 (5).
+
+**Live checks.**
+
+- **Hermes live check of the unified default:** blocked. Cloning `hermes-agent` needs the owner's approval in a
+  session; Pi was measured (D112). Next step: run `hermes-ab` with D112's conditions (blind held-out 13, seeds 41-42,
+  `--time-scale 1`, Haiku 5.5) when a checkout is approved.
+- D114 and D119 were not measured live (both say so); they ride on the next paid Pi run.
+
+**Branches.** `audit/2026-11-03b-integration` was squash-merged as #214, so `git branch --merged` does not list it.
+`git branch -r --no-merged origin/main` lists 63 of the 66 `origin/claude/*` branches; squash merges and abandoned work
+look the same to it. Candidates to delete, for the owner (remote branches are not deleted by agents): the 41
+`origin/claude/r10-*` branches (last commits 2026-10-19 to 2026-10-22) and `origin/claude/lucid-hypatia-v9wqk5` (last
+commit 2026-11-03; its `gate-traffic.ts` and round-1 audit docs are older versions of what main holds: `git diff
+origin/main origin/claude/lucid-hypatia-v9wqk5 -- packages/sim/src/lab/gate-traffic.ts docs/audits` is 110 lines
+added against 2,192 removed). Confirm each with `git diff origin/main <branch> -- <its files>` before deleting.
 
 The second deep audit of 2026-11-03, run with the revised `/deep-audit` skill: security is out of scope (use
 `/security-review` for that), and the six finders hunted for improvements of 3x or more in cost, latency, quality,
