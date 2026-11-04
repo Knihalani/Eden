@@ -1,5 +1,10 @@
 # Eden's effect on an agent's cost, speed and quality, at market connector latency and prices
 
+> **Superseded for cost by [cost-fixes.md](cost-fixes.md) (D125):** the default now reads fewer items for intent and
+> takes change notifications, so Eden's model spend and, with item-carrying notifications, its connector calls are
+> lower than below. The quality and speed findings stand; this note's first-run 80.5% hidden was a high draw (the same
+> default rerun scored 77.3%).
+
 Status: 2026-11-04. Measurement, no decision. Pi harness (the standard agent), Haiku 5.5 agent, grader and Eden
 roles, blind held-out 13, seeds 41–44: 128 hidden and 128 control tasks per arm. The shipped default (`--config
 default`) against the agent alone with its search tools (`tools`). Spend $1.09 for the 8 processes plus $0.06 for a

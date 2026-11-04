@@ -251,7 +251,7 @@ export interface EngineConfig {
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
   syncLocalAll: boolean;
   /**
-   * Trial (owner: the cost track, ends 2026-11-18): with `sync`, a source whose integrator forwards its change
+   * On in the default (D125). With `sync`, a source whose integrator forwards its change
    * notifications (`Source.notifies`, `ContextPartner.sourceChanged` / `sourceItems`) is polled when told it changed
    * (by the next lookup that reads it) and at most `syncPushMaxStaleMs` apart, not whenever its learned change rate says it
    * may have. Sources that do not notify are polled as before. The market-latency Pi runs made 3.4-3.9 sync polls per
@@ -380,8 +380,8 @@ export interface EngineConfig {
    */
   intent: boolean;
   /**
-   * Trial (owner: the cost track, ends 2026-11-18): with `intent`, an item the card prefilter rejects is read for its
-   * requests only when a person wrote it and it is recent: not automated mail (`automated`, cards.ts) and dated within
+   * On in the default (D125). With `intent`, an item the card prefilter rejects is read for its requests only when a
+   * person wrote it and it is recent: not automated mail (`automated`, cards.ts) and dated within
    * the last `cardsLeanDays` days or upcoming. Items with constraint wording are read as before, whatever their age or
    * sender. Train1–6, seeds 41–42: 58% fewer card reads, 81 of the 85 planted items the prefilter rejects still read.
    */
@@ -542,7 +542,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncCatchupPages: 2,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
-  syncPush: false,
+  syncPush: true,
   syncPushMaxStaleMs: 24 * 3_600_000,
   cards: true,
   cardsEconomy: true,
@@ -556,7 +556,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askDedup: true,
   compactParts: true,
   intent: true,
-  cardsLean: false,
+  cardsLean: true,
   cardsLeanDays: 30,
   intentHits: 6,
   intentMinCoverage: 0.35,
