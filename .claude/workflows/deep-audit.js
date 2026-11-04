@@ -54,6 +54,8 @@ const SPEND = A.allowSpend
 
 const RULES = `
 Ground rules for every agent:
+- Never delete or clean files or directories you did not create in this task (the orchestrator's scratchpad,
+  ~/.claude, other agents' worktrees); a cleanup step removes only what its prompt names.
 - Follow the repository's CLAUDE.md files and decision log; where a rule and this task conflict, the rule wins and you say so.
 - Honest numbers only: every number you report comes from a command you ran (say which) or is labelled an estimate with its arithmetic.
 - ${SPEND}
@@ -63,7 +65,9 @@ Ground rules for every agent:
 // Agents that run without their own worktree share the user's checkout: they must not change it.
 const READONLY = `
 - You share the user's checkout: do NOT commit, switch branches, stash, reset or leave changed files behind. Write any
-  scratch script or output under a temporary directory and delete it when done. Report findings; do not fix them.`;
+  scratch script or output under a new temporary directory you create, and delete only that directory when done.
+  Never delete or clean files you did not create (the orchestrator's scratchpad, ~/.claude, other agents' worktrees).
+  Report findings; do not fix them.`;
 
 // Several worktrees exist at once and git refuses to check out a branch that another worktree holds. So agents never
 // check out a shared branch: they work on a detached HEAD and publish with an explicit ref update.
