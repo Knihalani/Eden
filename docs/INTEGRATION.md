@@ -185,6 +185,34 @@ user's connections as well as dropping what Eden holds; a user idle 15 minutes i
 (unless background sync keeps reading them), and each tenant holds at most 10,000 users' connections. Forget does not edit
 your configuration: to revoke a connection, remove it from the directory (and forget, to drop what was read).
 
+## Forward your sources' change notifications (`syncPush`, D125)
+
+Eden keeps a synced copy of each user's listable sources. Without help it guesses when a source has changed (a busy
+inbox goes stale in minutes) and polls it at the next lookup: 3.8 to 5.1 listing calls per agent task in the
+market-latency runs (docs/research/cost-fixes.md). On a connector platform that bills per call, those polls are most
+of Eden's connector bill. If you already receive the provider's change notifications, forward them:
+
+- **The changed items themselves** (a Slack Events API message, a Graph notification with resource data, a connector
+  platform's trigger payload): `POST /v1/sources/items {userId, sourceId, items}`, each item
+  `{ref, title?, text, url?, updatedAt?, meta?}`, at most 100 per call, or `client.sourceItems(sourceId, items)`.
+  They pass the secret gate and are held as synced, with no source call. Use the same `ref` the source's list tool
+  returns, so a pushed item and the same item listed later are one item. This is what cuts Eden's polls (to 0.6 to
+  0.8 calls per task in the lab: the daily sweep and a 24-hour safety poll).
+- **Only that the source changed** (a Gmail `watch` push, a Calendar or Drive channel, a HubSpot webhook):
+  `POST /v1/sources/changed {userId, sourceId}`, or `client.sourceChanged(sourceId)`. The source is polled once, at
+  its next use, however many notifications came first. For a busy inbox this saves little: it changes about every
+  hour, so it is polled about as often as before.
+
+Declare the sources you forward: `"notifies": true` in the user's source spec (`EDEN_USER_SOURCES_FILE` or your
+`SourceDirectory`), or `notifies: true` on a `Source` you build. A source that notifies is polled only when told it
+changed, by the daily sweep (which also drops what the source deleted), and after `syncPushMaxStaleMs` (24 hours)
+with no notification, so a lost notification is bounded. Sources you do not forward are polled as before. The routes
+answer 200 with what was done: `synced` is false when the source is not synced for the user or not declared as
+notifying (the notification is ignored), and `stored` counts the items held new or changed.
+
+Receiving notifications has its own cost, which Eden does not see: a platform may bill trigger runs, and a Gmail push
+carries only a history id that your code turns into items with a `history.list` call.
+
 ## Configuration
 
 There is one configuration, the default (D112): the best measured setup, NEWL (D99) with the speed and memory

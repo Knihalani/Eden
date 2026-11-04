@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { checkAsk, checkEvent } from "./validate";
+import { itemId } from "./ids";
+import { checkAsk, checkEvent, checkSourceItems } from "./validate";
 
 const scope = { tenantId: "acme", userId: "u_1", sessionId: "s_1" };
 
@@ -142,5 +143,29 @@ describe("tool_call.input depth and size (D100)", () => {
     });
     expect(() => call(throwing)).not.toThrow();
     expect(call(throwing).ok).toBe(false);
+  });
+});
+
+describe("checkSourceItems", () => {
+  test("makes ids from the source and ref, keeps only known fields, bounds the batch", () => {
+    const ok = checkSourceItems({
+      tenantId: "t",
+      userId: "u",
+      sourceId: "slack",
+      items: [{ ref: "C1/123", text: "hello", extra: "dropped", meta: { channel: "general" } }],
+    });
+    expect(ok.ok).toBe(true);
+    if (!ok.ok) return;
+    expect(ok.value.items[0]).toEqual({
+      id: itemId("slack", "C1/123"),
+      sourceId: "slack",
+      ref: "C1/123",
+      title: "",
+      text: "hello",
+      meta: { channel: "general" },
+    });
+    expect(checkSourceItems({ tenantId: "t", userId: "u", sourceId: "slack", items: [{ ref: "r" }] }).ok).toBe(false);
+    const updated = { tenantId: "t", userId: "u", sourceId: "s", items: [{ ref: "r", text: "x", updatedAt: "now" }] };
+    expect(checkSourceItems(updated).ok).toBe(false);
   });
 });

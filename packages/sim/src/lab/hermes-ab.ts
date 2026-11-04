@@ -57,7 +57,8 @@ import { Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
-import { REALISTIC, simSources, type SimSource } from "../sources";
+import { simSources, type SimSource } from "../sources";
+import { connectorHeader, connectorOptions, pushNotifier, sourceFields } from "./connector-options";
 import type { World } from "../world";
 import {
   emptyResult,
@@ -115,6 +116,8 @@ const OUT = opt("out", "hermes-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
 const HOMES = `${OUT.replace(/\.json$/, "")}.homes`;
 const TIME_SCALE = Number(opt("time-scale", "1"));
+// `--source-profile`, `--push`, `--push-rates` (connector-options.ts), as pi-ab takes them.
+const CONNECTORS = connectorOptions(opt);
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 const LIMIT = Number(opt("limit", "0"));
 const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
@@ -195,10 +198,7 @@ function watched(source: SimSource, onCall: (op: string, start: number, end: num
     }
   };
   return {
-    id: source.id,
-    kind: source.kind,
-    description: source.description,
-    listsByTime: source.listsByTime,
+    ...sourceFields(source),
     search: (query, signal) => timed("search", () => source.search(query, signal)),
     fetch: (ref, scope, signal) => timed("fetch", () => source.fetch(ref, scope, signal)),
     list: (scope, cursor, limit, signal) => timed("list", () => source.list(scope, cursor, limit, signal)),
@@ -354,7 +354,8 @@ async function runWorld(
   records: TaskRecord[],
   grading: Promise<void>[],
 ): Promise<RunResult[]> {
-  const sources = simSources(world, REALISTIC, TIME_SCALE, seed);
+  const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
+  const notify = pushNotifier(sources, CONNECTORS, seed);
   const { name: condition, waitMs, withPartner, config, eden } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
@@ -564,6 +565,7 @@ async function runWorld(
       }
       clock += 3_600_000;
       if (sync) await sync.tick();
+      notify(partner, scope);
       await closePrevious();
       const sessionId = t.id;
       const r = emptyResult(t.id, condition);
@@ -812,6 +814,7 @@ writeFileSync(
       ...(Object.keys(CONFIG_VARIANTS).length ? { variantConfig: CONFIG_VARIANTS } : {}),
       ...(CARDS_FILE ? { cards: { replay: CARDS_FILE, out: CARDS_OUT } } : {}),
       timeScale: TIME_SCALE,
+      ...connectorHeader(CONNECTORS),
       ...(ACCESS.allowLogging ? { allowLogging: true } : {}),
       requests: PACER.summary(),
       orphanRequests,

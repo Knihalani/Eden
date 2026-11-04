@@ -66,6 +66,11 @@ export interface McpSpec {
   fetchTool?: McpSourceOptions["fetchTool"];
   listTool?: McpSourceOptions["listTool"];
   trustedReadTools?: string[];
+  /**
+   * The integrator forwards this source's change notifications (`POST /v1/sources/changed` or `/v1/sources/items`):
+   * with `syncPush`, its synced copy is polled when told it changed rather than on a guess.
+   */
+  notifies?: boolean;
 }
 
 export type SourceSpec = StaticSpec | McpSpec;
@@ -327,6 +332,10 @@ class Lease implements Source {
     return this.inner.listsByTime === true;
   }
 
+  get notifies(): boolean {
+    return this.inner.notifies === true;
+  }
+
   search(query: SearchQuery, signal: AbortSignal) {
     return this.call(() => this.inner.search(query, signal));
   }
@@ -364,6 +373,7 @@ function build(spec: SourceSpec): Source {
     fetchTool: spec.fetchTool,
     listTool: spec.listTool,
     trustedReadTools: spec.trustedReadTools,
+    ...(spec.notifies === true ? { notifies: true } : {}),
   });
 }
 
@@ -461,6 +471,9 @@ export function checkSpecs(raw: unknown, where: string): SourceSpec[] {
     const trusted = s.trustedReadTools;
     if (trusted !== undefined && !(Array.isArray(trusted) && trusted.every((x) => typeof x === "string"))) {
       throw new SourceConfigError(`${at}.trustedReadTools must be an array of tool names`);
+    }
+    if (s.notifies !== undefined && typeof s.notifies !== "boolean") {
+      throw new SourceConfigError(`${at}.notifies must be true or false`);
     }
   });
   return raw as SourceSpec[];

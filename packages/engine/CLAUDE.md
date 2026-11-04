@@ -90,6 +90,13 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   already running (`SourceSync.busy`, which resolves to what that read stored) counts what it stored, not one, and
   `freshen` returns only its own calls. `probeGraceMs` is 0 in the default (D112): a lookup no longer waits for its
   probes (D47's grace), so a slow probe's finds only reach later turns.
+- `syncPush` (D125) acts only on sources whose `notifies` is true. Any wrapper around a `Source` (tracing, timing, a
+  lease) must copy `notifies` as it copies `listsByTime`, or notifications are silently ignored and the source is
+  polled on its learned rate. `sourceItems` redacts before storing (D10); `ingest` stores only items of that source.
+- `cardsLean` (D125) only narrows what the intent index reads (`readForIntent`): constraint-worded items are carded
+  whatever their sender or age. `automated` reads a `From:` line in the text or a `meta.from`/`meta.sender` field
+  (connectors differ: `toItems` keeps whatever text the tool returned) and bulk footers; a connector giving neither
+  is judged on its footers alone.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

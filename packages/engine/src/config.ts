@@ -251,6 +251,19 @@ export interface EngineConfig {
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
   syncLocalAll: boolean;
   /**
+   * On in the default (D125). With `sync`, a source whose integrator forwards its change notifications
+   * (`Source.notifies`, `ContextPartner.sourceChanged` / `sourceItems`) is polled when told it changed (by the next
+   * lookup that reads it) and at most `syncPushMaxStaleMs` apart, not whenever its learned change rate says it may
+   * have. Sources that do not notify are polled as before. The market-latency Pi runs made 3.4-3.9 sync polls per
+   * task, each a billed call on a per-call connector platform (docs/research/eden-market-effect.md).
+   */
+  syncPush: boolean;
+  /**
+   * With `syncPush`: how long (ms) a notifying source's copy stands with no notification before it is polled anyway,
+   * the bound on a lost notification. The daily sweep (`syncSweepMs`) re-reads it too.
+   */
+  syncPushMaxStaleMs: number;
+  /**
    * A per-user knowledge graph over every cached item (`kg.ts`; docs/research/moon-graph.md): people, organisations,
    * projects and systems, identifiers, channels, roles and days, joined by typed edges. A lookup walks it from the
    * request's names, ids, roles and days (spreading activation, `graphBudgetMs` at most, no model, no source call);
@@ -366,6 +379,16 @@ export interface EngineConfig {
    * still read its own words, and its card if it has one.
    */
   intent: boolean;
+  /**
+   * On in the default (D125). With `intent`, an item the card prefilter rejects is read for its requests only when a
+   * person wrote it and it is recent: not automated mail (`automated`, cards.ts) and dated within
+   * the last `cardsLeanDays` days or upcoming. Items with constraint wording are read as before, whatever their age or
+   * sender. Train1–6, seeds 41–42: 62% fewer items sent to the card model (55% fewer calls), and 81 of the 85 planted
+   * items the prefilter rejects still read.
+   */
+  cardsLean: boolean;
+  /** With `cardsLean`: how old (days, by its date or its start) an unconstrained item may be and still be read. */
+  cardsLeanDays: number;
   /** Items the intent index may add to a request's candidates, best first. */
   intentHits: number;
   /** The least share of the request's (known) idf an item's requests must hold to count as a hit. */
@@ -520,6 +543,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncCatchupPages: 2,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
+  syncPush: true,
+  syncPushMaxStaleMs: 24 * 3_600_000,
   cards: true,
   cardsEconomy: true,
   cardItems: 1,
@@ -532,6 +557,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askDedup: true,
   compactParts: true,
   intent: true,
+  cardsLean: true,
+  cardsLeanDays: 30,
   intentHits: 6,
   intentMinCoverage: 0.35,
   intentMinMatched: 2,

@@ -1,5 +1,6 @@
 {
   "cards": false,
   "cardsEconomy": false,
-  "intent": false
+  "intent": false,
+  "cardsLean": false
 }

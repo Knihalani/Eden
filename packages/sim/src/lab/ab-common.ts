@@ -524,6 +524,8 @@ export interface ArmSource {
   seeds: number[];
   suites: string[];
   timeScale?: number;
+  /** The sim sources' profiles when `--source-profile` overrode REALISTIC (pi-ab), else "REALISTIC". */
+  sourceProfile?: unknown;
   toolExecution?: string;
   act?: boolean;
   partial?: boolean;

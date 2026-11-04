@@ -90,8 +90,9 @@ import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
-import { REALISTIC, simSources, type SimSource } from "../sources";
+import { simSources, type SimSource } from "../sources";
 import type { World } from "../world";
+import { connectorHeader, connectorOptions, pushNotifier, sourceFields } from "./connector-options";
 import {
   armPromptsHash,
   ASK_DESCRIPTION,
@@ -146,6 +147,8 @@ const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden,eden-act-firewall" :
 const OUT = opt("out", "pi-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
 const TIME_SCALE = Number(opt("time-scale", "1"));
+// `--source-profile`, `--push`, `--push-rates` (connector-options.ts).
+const CONNECTORS = connectorOptions(opt);
 const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 // The first N tasks of each world only: a plumbing check before a real run.
@@ -355,10 +358,7 @@ function watched(
     }
   };
   return {
-    id: source.id,
-    kind: source.kind,
-    description: source.description,
-    listsByTime: source.listsByTime,
+    ...sourceFields(source),
     search: (query, signal) =>
       timed(
         "search",
@@ -492,7 +492,8 @@ async function runWorld(
   records: TaskRecord[],
   grading: Promise<void>[],
 ): Promise<RunResult[]> {
-  const sources = simSources(world, REALISTIC, TIME_SCALE, seed);
+  const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
+  const notify = pushNotifier(sources, CONNECTORS, seed);
   const { name: condition, waitMs, useEden, withPartner, useTools, judge, act, firewall, config } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
@@ -643,6 +644,7 @@ async function runWorld(
     }
     clock += 3_600_000; // an hour between tasks: Eden's clock, for its caches and planner
     if (sync) await sync.tick();
+    notify(partner, scope);
     const sessionId = task.id;
     const ev = (e: Record<string, unknown>) => ({ ...scope, sessionId, at: clock, ...e }) as AgentEvent;
     const r: RunResult = emptyResult(task.id, condition);
@@ -1158,6 +1160,7 @@ writeFileSync(
       ...(ACT ? { act: true } : {}),
       ...(CARDS_FILE ? { cards: { replay: CARDS_FILE, out: CARDS_OUT } } : {}),
       timeScale: TIME_SCALE,
+      ...connectorHeader(CONNECTORS),
       ...(ACCESS.allowLogging ? { allowLogging: true } : {}),
       // Every HTTP request the run sent (retries included), and whether the cap cut it short.
       requests: PACER.summary(),

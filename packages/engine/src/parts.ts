@@ -48,13 +48,13 @@ export const PARTS = {
   /** Anticipation (D60). */
   anticipate: { anticipate: false },
   /** Background sync (D57) and its request-path switches (D65, D101). */
-  sync: { sync: false, syncPollBehind: false, syncPollPageSize: 0, readerPushBehind: false },
+  sync: { sync: false, syncPollBehind: false, syncPollPageSize: 0, readerPushBehind: false, syncPush: false },
   /** The rule verdicts an ask gathers (D73). */
   askVerdicts: { askVerdicts: false },
   /** Implication cards (D59, D66), and with them the intent index, which their calls write. */
-  cards: { cards: false, cardsEconomy: false, intent: false },
-  /** The intent index (D87, D109). */
-  intent: { intent: false },
+  cards: { cards: false, cardsEconomy: false, intent: false, cardsLean: false },
+  /** The intent index (D87, D109), and what it reads (`cardsLean`, D125). */
+  intent: { intent: false, cardsLean: false },
   /** The ask-time reader and its push (D95, D96, D99). */
   reader: {
     askReader: false,

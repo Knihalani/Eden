@@ -1,0 +1,7 @@
+{
+  "gmail": { "latency": { "medianMs": 600, "sigma": 0.6 } },
+  "calendar": { "latency": { "medianMs": 280, "sigma": 0.5 } },
+  "drive": { "latency": { "medianMs": 700, "sigma": 0.7 } },
+  "crm": { "latency": { "medianMs": 450, "sigma": 0.6 } },
+  "slack": { "latency": { "medianMs": 550, "sigma": 0.7 } }
+}

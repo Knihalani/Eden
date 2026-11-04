@@ -37,6 +37,14 @@ export interface Source {
   readonly description: string;
   /** Whether a query with a `window` and no words lists what starts in it (a calendar), D44. */
   readonly listsByTime?: boolean;
+  /**
+   * Whether the integrator forwards this source's change notifications to Eden (`ContextPartner.sourceChanged`, or
+   * the changed items themselves with `sourceItems`): a Gmail watch, a Calendar or Drive channel, Slack's Events API,
+   * a Graph subscription, a HubSpot webhook, a connector platform's trigger. With the engine's `syncPush`, a synced
+   * source that notifies is polled when told it changed (and at most `syncPushMaxStaleMs`, 24 h, apart), not
+   * whenever its learned change rate says it may have.
+   */
+  readonly notifies?: boolean;
   search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]>;
   /** One item by its source ref, for refreshing a cached item. */
   fetch?(ref: string, scope: Scope, signal: AbortSignal): Promise<ContextItem | null>;
