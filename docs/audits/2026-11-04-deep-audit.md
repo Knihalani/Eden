@@ -111,6 +111,10 @@ After all merges, on the integration tree:
 | Old remote branches (41 `origin/claude/r10-*` and `origin/claude/lucid-hypatia-v9wqk5`) | External action: agents do not delete remote branches                                                            | Check each with `git diff origin/main <branch> -- <its files>`, then delete                                                                                                                          |
 | Merging this run into `main`                                                            | Not done by this run; the integration branch is local                                                            | Open a PR from `audit/2026-11-04-integration` to `main` (base 39a41c49e, still main's tip)                                                                                                           |
 
+Follow-up, same day (docs/research/live-checks-1104.md): D114 and D119 were live-checked on held-out 13 (D123: the
+default holds 73.4% hidden, 0 false concerns). R3-19 was re-measured live on train under the owner's reset bar and
+promoted (D124: +9.1% reader calls in gate-traffic, no train gate decision changed, false concerns equal); it is closed.
+
 ### 6. Where everything is
 
 - This file: `docs/audits/2026-11-04-deep-audit.md`. The detailed status of every earlier item:
