@@ -25,15 +25,16 @@ OpenRouter returns the real cost per call (`usage.cost`), and the engine books t
 | Call                                                                                           | Input bound                                                                                    | Output bound                      | Cost at $0.15 / $0.50, uncached |
 | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------- |
 | Judge                                                                                          | system ≈ 100 tok + window ≤ 4,000 chars (≈ 1,000 tok) + ≤ 6 candidates × ≈ 100 tok ≈ 1,700 tok | 512 tok, reasoning included (D45) | ≈ $0.00051                      |
-| Card enrichment (only with `cards`, off by default, D59 proposed; background, never per event) | system ≈ 700 tok + ≤ 10 items × (title ≤ 160 + own text ≤ 900 chars) ≈ 3,400 tok               | 2,000 tok, reasoning included     | ≈ $0.0015                       |
+| Card enrichment (`cards`, in the default since D112 and kept there by D113(5); background, never per event) | system ≈ 700 tok + ≤ 10 items × (title ≤ 160 + own text ≤ 900 chars) ≈ 3,400 tok               | 2,000 tok, reasoning included     | ≈ $0.0015                       |
 
-Queued request (`slowPathQueue`, off by default, proposed D102). No new kind of call: a request that arrives while
+Queued request (`slowPathQueue`, D102, in the default since D112). No new kind of call: a request that arrives while
 the session's slow path is busy is looked up once that slow path settles, instead of being dropped. One slot per
 session (the latest request wins), so it adds at most one extra slow path, so at most one judge call (under the
 session's `Budget`, as any lookup's), per busy window. A queued request older than 10 s, in cooldown by then, or in a
 session that closed makes no call.
 
-Smaller poll pages (`syncPollPageSize`, off by default, proposed D101). No model call. An on-demand poll lists far
+Smaller poll pages (`syncPollPageSize`, D101, in the default since D112 at 5). No model call. An on-demand poll lists
+far
 fewer items (measured on the train funnel: 182,742 → 10,080 items at `syncPollPageSize` 5, calls 2,048 → 2,049) but
 can make one listing call more than full pages would (at most `syncCatchupPages` + 1): a connector billed per call
 pays at most that one call more per poll, one billed per item or byte pays less.
@@ -44,7 +45,8 @@ pass the no-model prefilter (11-15% of simulated items), each item read once per
 items arriving, $0.003-0.004 per user-month at 50 new items a day (at most about $0.013 at list prices). Reserved per
 call at $0.002 against its own per-user-day `Budget`.
 
-Intent index (proposed D87, `intent`, off by default; docs/research/edge-intent.md). No new call: the card call also
+Intent index (D87, `intent`, in the default since D112, kept there by D113(5); docs/research/edge-intent.md). No new
+call: the card call also
 writes up to four requests per item, and every new item is read, not only the 11–15% the prefilter passes. The cap per
 call rises from 2,000 to 3,000 output tokens (300 per item past ten); the reservation is unchanged. Estimates from
 measured per-item prices, not a live run of the combined prompt on the default model: requests alone cost $0.0000091
@@ -58,7 +60,7 @@ reasons that much. Request time adds one BM25 search over the user's requests (n
 
 The bridging query (D89) was deleted by D112; its cost notes are in git history.
 
-Ask-time reader (proposed D95, `askReader`, off by default; `reader.ts`). One call per `ask` about an action (an
+Ask-time reader (D95, `askReader`, in the default since D112; `reader.ts`). One call per `ask` about an action (an
 imperative question, a question about blockers, or an ask while the session's latest request acts; any ask with
 `askReaderQuestions`), never per event, never on the fast path, cached per user and session by request and pool, so a
 repeated ask makes none. Input: the system prompt (about 450 tokens) and up to 30 candidates (at most 40) of at most
@@ -149,7 +151,7 @@ The active-constraints digest (D90) was deleted by D112.
 
 ALL5 (D92) was deleted by D112; its intent part is in the default (cost above).
 
-Card economy (proposed D66, `cardsEconomy`, off by default; docs/research/econ-background.md; in-sample, 2026-10-31):
+Card economy (D66, `cardsEconomy`, in the default since D112; docs/research/econ-background.md; in-sample, 2026-10-31):
 the strict prefilter and sentence reuse read 74.25 items per simulated user instead of 166.5 (−55.4%) in 12.4 calls
 instead of 24.25 (20 items per call), with the same funnel totals (218/19; the track measured 70.25 items and 12.15
 calls before the sentence key took the subject in, after review). Per item, OpenRouter's endpoint decides the price:
@@ -167,7 +169,8 @@ from $0.156 to about $0.039 per 1,000 tasks, Eden ALL all-in from $0.474 to abou
 
 Sync push (D66) was deleted by D112.
 
-With `graph` (proposed D58) the judge sees at most `graphSeats` (1) more candidate, about 100 more input tokens per
+With `graph` (D58, in the default since D112) the judge sees at most `graphSeats` (1) more candidate, about 100 more
+input tokens per
 call at its cap; no other model call is added and the graph makes no source call. Measured in simulation (realistic,
 4 seeds, perfect judge): $0.0172 → $0.0178 per 1,000 turns, model calls per turn 0.213 → 0.215.
 
@@ -345,7 +348,8 @@ control 41,560 → 42,495. A start with a time is 35 bytes (about 9 tokens); 14 
 candidates were compacted without it, so the judge's input was unchanged. With the flag on, each delivery was rendered a
 second time without it for usage learning (`usageText`): linear in the packet, no model call.
 
-D76–D78 (proposed, docs/research/gen-tokens.md; `compactAsk`, `askDedup`, `compactParts`, off by default) makes no model
+D76–D78 (proposed, docs/research/gen-tokens.md; `compactAsk`, `askDedup`, `compactParts`, in the default since D112)
+makes no model
 call. No-model funnel, ALL, one ask per task, this session: bytes the agent reads per task 1,528 → 900 in-sample and
 1,328 → 801 on dev6a/dev6b (ask answers 1,254 → 625 and 1,195 → 669), every task's delivered and askCited unchanged.
 At 4 bytes a token and $0.053 per million input tokens that is about −$0.008 per 1,000 tasks, per read of each
@@ -366,7 +370,8 @@ economy starts cold for each new user, so a user's first lookups make the wider 
 learned which to skip (8.4 calls per task in the per-task funnel, which builds a new engine each task). The register's
 background sweep (D51) added calls (10.4 per task) and was removed with it.
 
-D57, proposed (background sync, "Eden Atlas", off by default; docs/research/moon-sync.md) adds no model call: the
+D57 (background sync, "Eden Atlas", `sync`, in the default since D112; docs/research/moon-sync.md) adds no model call:
+the
 sync makes listing calls only. With a judge it raises model cost, because the judge sees more candidates: simulation,
 realistic, seeds 41–44, perfect judge, $0.0170 (H) → $0.0222–0.0223 (HA, two runs) per 1,000 turns (+31%), at the same input caps
 (≤ 6 candidates of ≤ 200 bytes, ≤ 4k characters of window). Source calls fall: 7.78 → 0.86 request-time calls per
@@ -375,7 +380,7 @@ A synced user costs about 4 MB of heap per ~1,500 items and ~200 ms of CPU to ba
 measurement, not re-run). The combined funnel implies more, about 420 ms per user (16.9 s of extra process CPU over 40
 users with ALL), because there the graph and the cards are built on every synced item too (below).
 
-Anticipation (proposed D60, `anticipate`, off by default; docs/research/moon-anticipate.md) adds no model call on any
+Anticipation (D60, `anticipate`, in the default since D112; docs/research/moon-anticipate.md) adds no model call on any
 path: its predictions are fixed linear reads of an event's head, and its prefetches are source calls within
 `anticipateCalls` (4 per event, `probeCalls` for a draft) and `anticipateSessionCalls` (24 per session). Measured
 in-sample: source calls +1.0% to +3.5% in simulation, +3.9% connector searches per task in the dev funnel with a draft
@@ -408,14 +413,16 @@ bounded judge call (the judge's caps and `Budget`) on a lookup whose no-model an
 - live, seed 43: 0.90 calls per task, about $0.000024 a call (OpenRouter's reported cost), $0.017–0.022 per 1,000
   tasks against the judge on the path's $0.023.
 
-At 20 tasks a user a day, that is about $0.012–0.040 per user-month. `syncPollBehind` (off by default) makes no model
+At 20 tasks a user a day, that is about $0.012–0.040 per user-month. `syncPollBehind` (in the default since D112) makes
+no model
 call and no new poll: the poll a lookup used to wait for runs behind it. When that poll stores something, the lookup
 is made again; it decides as a lookup behind a delivery (what is sure or grounded), so with a model configured it
 makes no second judge call (a test counts one model call per event, flag on or off). Its synced sources then answer
 locally, but sources that are not synced are searched live a second time. The in-sample worlds are static, so that second lookup never ran in any benchmark and its source calls are
 unmeasured; in a live mailbox they scale with how often a poll finds something new.
 
-`readerPushBehind` (off by default; with `readerPush`, `syncOnDemand` and `syncPollBehind`) lets the push's reader
+`readerPushBehind` (in the default since D112; with `readerPush`, `syncOnDemand` and `syncPollBehind`) lets the push's
+reader
 start before that poll is done. It adds no source call: when the poll stores something, the push is ranked once more
 on the refreshed index with the first search's results, and read at most once more. That second read is a model call
 only when the poll changed the reader's pool (an item in or out, or an item's words): an unchanged pool is the same
