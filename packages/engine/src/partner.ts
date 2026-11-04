@@ -54,7 +54,16 @@ import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache
 import { SyncManager } from "./sync";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
-import { assess, mayConstrain, frameOf, namesRef, unmeasuredLimit, type Frame, type Verdict } from "./conflict";
+import {
+  arrangedVisit,
+  assess,
+  mayConstrain,
+  frameOf,
+  namesRef,
+  unmeasuredLimit,
+  type Frame,
+  type Verdict,
+} from "./conflict";
 import { cardVerdict, requestActions, STANDING_KINDS, type CardEnricher } from "./cards";
 import { intentTerms, stemWord } from "./intent";
 import {
@@ -1484,7 +1493,8 @@ export class ContextPartner {
         if (card && (STANDING_KINDS.has(card.kind) || card.kind === "status-change" || card.kind === "already-done")) {
           return true;
         }
-        return mayConstrain(`${x.item.title}. ${x.item.text}`.toLowerCase());
+        const text = `${x.item.title}. ${x.item.text}`.toLowerCase();
+        return mayConstrain(text) || (this.config.readerGateVisits && arrangedVisit(text));
       };
       if (!pool.some(constraintLike)) {
         report("gated");
