@@ -220,12 +220,13 @@ delegated the call to the 2026-11-04 audit and this section is its record.
 - `lat-answer-gate-not-start-gate`: measured and rejected, D118.
 - `lat-ask-rereads-after-push`: measured and rejected, D116.
 - `devloop-reader-replay-item-level-key`: the narrow version is a lab instrument, D117 (`--reader-subset`).
-- **R3-19, landlord bindings gated by the reader gate:** still open. `bun packages/sim/src/lab/gate-traffic.ts`
-  (2026-11-04, seeds 41-44) still reports the default's 5 gated misses all on `landlord` (gated 5, missed-binding
-  1.000; docs/COST-MODEL.md). Sequenced after the 2026-11-04 package `engine-dead-switches`, which shares
-  partner.ts:1482-1493 (`constraintLike` in the `readerGate` block) and docs/DECISIONS.md. Next step: one package that
-  changes `mayConstrain` (conflict.ts) or `constraintLike` so that gate-traffic's landlord row reports missed-binding
-  0, with `bun run eval` falseFireRate 0 and the funnel at 214/211.
+- **R3-19, landlord bindings gated by the reader gate:** still open; a fix was measured and rejected, D122.
+  `bun packages/sim/src/lab/gate-traffic.ts` (2026-11-04, seeds 41-44) reports the default's 5 gated misses all on
+  `landlord` (gated 5, missed-binding 1.000; docs/COST-MODEL.md). An arranged-visit pattern in `mayConstrain`
+  (conflict.ts) took the default to missed-binding 0.000 with eval (0.8276/0.48/0) and funnel (214/211, 97/72)
+  unchanged, but cost 66 → 72 reader calls per 438 messages, one more than the 5 gated landlord calls, and moved
+  reply-pricing (gated 4 → 3) through the same landlord mail in its pool. Next step: the owner's call on that trade
+  (D122).
 - **R3-5, the server's config check:** resolved. `packages/server/src/engine-config.ts:48` delegates to the shared
   `checkEngineConfig`.
 
