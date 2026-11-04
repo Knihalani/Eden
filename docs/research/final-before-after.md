@@ -134,10 +134,11 @@ injected) and the critical path pool hidden and control tasks, as the report pri
 
 Reading:
 - **Quality.** AFTER's 72.7% on Pi matches its D123 record on the same suite (73.4%, seeds 41–42) and its D112 record.
-  So today's figure is stable. The keyed old product's 29.7% (38/128, seeds 41–44) is the same rate as D112's record
-  of it (19/64 on seeds 41–42; here those seeds gave 21/64, 32.8%), not the same tasks. The old default works mostly
-  from asks answered by live searches: 14.4 source calls per task and 0.14 items injected (0.41 with the judge). Old ALL3 works from rules, cards and the background sync. Neither breakdown was measured
-  directly, so both readings are likely explanations, not measurements.
+  So today's figure is stable. The keyed old product's 29.7% (38/128, seeds 41–44) is the same rate as D112's record of
+  it (19/64 on seeds 41–42; here those seeds gave 21/64, 32.8%), not the same tasks. The old default works mostly from
+  asks answered by live searches: 14.4 source calls per task and 0.14 items injected (0.41 with the judge). Old ALL3
+  works from rules, cards and the background sync. Neither breakdown was measured directly, so both readings are likely
+  explanations, not measurements.
 - **Speed.** Old ALL3 had Eden on the critical path least (461 ms). Its background sync answered asks from the local
   index (ask p50 19 ms), and it ran no model on the path. AFTER spends 1,655 ms there, mostly the reader's call
   (ask p50 1,004 ms). That call is what makes hidden tasks raise their fact, and on control tasks it is the 1.3 s cost
