@@ -1,8 +1,8 @@
 # Cutting Eden's cost: lean intent reads and change-notification sync (D125)
 
-Status: 2026-11-04. Measured on the Pi harness, both market latency profiles (eden-market-effect.md), Haiku 5.5
-everywhere, blind held-out 13, seeds 41–44: 128 hidden and 128 control tasks per profile. Hermes results are in the
-section of that name. Every number comes from a command run in this session.
+Status: 2026-11-04. Measured on the Pi harness, both market latency profiles (eden-market-effect.md), and on Hermes
+Agent (direct profile), Haiku 5.5 everywhere, blind held-out 13, seeds 41–44: 128 hidden and 128 control tasks per
+profile and arm. Every number comes from a command run in this session.
 
 ## In plain words
 
@@ -139,14 +139,30 @@ integrator turns it into items with one `history.list` call of its own.
 
 ## Hermes
 
-The Hermes section is added when its run finishes (`h-41-42`, `h-43-44`: Hermes alone, the new default, and the old
-default as variant `OLD`, direct profile, payload notifications).
+Hermes Agent at commit 06433066, the direct market profile, payload notifications, seeds 41–44 (two processes, three
+streams each), 128 hidden and 128 control tasks per arm. Three arms in one run: Hermes alone, Hermes with the new
+default, and Hermes with the old default as a variant (`{"cardsLean":false,"syncPush":false}`).
+
+| Arm | Hidden raised | False concerns | Wall p50 / p90 hidden (s) | Wall p50 / p90 control (s) | Eden connector calls / task | Agent search calls / task | Agent + Eden live $/1k hidden / control | Cards and intent $/1k | All-in $/1k |
+|---|---|---|---|---|---|---|---|---|---|
+| Hermes + Eden, new default | 68.0% (87/128) | 0/128 | 3.21 / 9.39 | 6.11 / 10.21 | 0.57 | 1.95 | 0.630 / 0.713 | 0.331 | 1.002 |
+| Hermes + Eden, old default | 66.4% (85/128) | 0/128 | 3.28 / 9.90 | 6.06 / 9.38 | 3.70 | 2.00 | 0.638 / 0.702 | 0.554 | 1.224 |
+| Hermes alone | 6.2% (8/128) | 0/128 | 4.73 / 7.99 | 4.70 / 7.81 | 0 | 2.38 | 0.353 / 0.344 | 0 | 0.348 |
+
+Paired over the same tasks (bootstrap, 4,000 resamples): new − old hidden +1.6 points (−5.5..+8.6), control +0.0,
+wall −0.08 s hidden (−0.46..+0.32) and +0.17 s control (−0.29..+0.62); new − Hermes alone hidden +61.7 points
+(+53.1..+70.3). The card cut is smaller on Hermes than on Pi ($0.554 → $0.331, −40%), likely because both Eden arms
+of this run spread their card spend over the same tasks while reading one world each; not measured further. Spend:
+$0.70 (a first attempt, stopped when the review found its wrapper dropped `notifies`, cost $0.48 more).
 
 ## What went wrong
 
 - **The first notification runs did nothing.** The Pi harness wraps every sim source in a timing wrapper that copied
   `listsByTime` but not `notifies`, so the sync never saw a notifying source. The coalescing runs (`sig-*`) were made
-  that way and are kept only for their coalescing comparison. The wrapper now copies `notifies`. The engine's own span
+  that way and are kept only for their coalescing comparison. The review then found hermes-ab's wrapper had the same
+  gap, so a first Hermes run measured nothing of push; it was stopped and rerun. Both harnesses now spread one helper
+  (`sourceFields`, connector-options.ts, tested), so a new source field cannot be copied in one and missed in the
+  other. The engine's own span
   wrapper had the same gap; its lookups never reach the sync, but it now copies the flag too. Every later run
   (`a-*`, `p-*`) was made after the fix.
 - **A test hung.** A sync test with a 2-item page and a frozen clock ran out of rate-limit tokens after 8 calls and
@@ -175,5 +191,6 @@ python3 -I packages/sim/lab/before-after/market.py p.md \
 
 ## Spend
 
-Pi runs in this note: $2.76 (coalescing $0.61, signals $0.63, payload $0.63, old-default rerun $0.89). The Hermes run
-is listed in its section.
+Pi runs in this note: $2.76 (coalescing $0.61, signals $0.63, payload $0.63, old-default rerun $0.89). Hermes $0.70,
+plus $0.48 for the stopped first attempt. With the market-effect runs and pilots, this session's lab spend was $5.19
+(spend ledger).
