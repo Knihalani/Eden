@@ -1010,3 +1010,59 @@ describe("the reader in the engine (config.askReader)", () => {
     expect(readerKey({ ...input(), cacheKey: "a" })).toBe(readerKey({ ...input(), cacheKey: "b" }));
   });
 });
+
+describe("readerGateVisits (trial, R3-19): an arranged visit opens readerGate", () => {
+  const REQUEST = "Book me a day trip to the coast on Thursday.";
+  const items = [
+    item(
+      "landlord",
+      "Re: boiler",
+      "Sorry to hear that. I've booked the engineer, he'll come Thursday between 8 and 12. Can you make sure someone's in?",
+      20,
+    ),
+    item("trains", "Coast trains Thursday", "Thursday's coast line runs every half hour from 7.", 30),
+  ];
+  const run = async (config: Record<string, unknown>) => {
+    const maker = new ScriptedReader(flags("mail:landlord"));
+    const reports: ReaderReport[] = [];
+    const p = new ContextPartner({
+      sources: async () => [{ id: "mail", kind: "test", description: "Mail", search: async () => items }],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: { ...CORE_CONFIG, askReader: true, askReaderWaitMs: 200, readerGate: true, ...config },
+      reader: new AskReader({ maker, budget: new Budget(), now: () => NOW }),
+      onReader: (r) => reports.push(r),
+    });
+    const a = await p.ask({ tenantId: "t", userId: "u1", sessionId: "s1", question: REQUEST, maxItems: 3 });
+    return {
+      calls: maker.calls.length,
+      outcomes: reports.map((r) => r.outcome),
+      ids: a.citations.map((c) => c.itemId),
+    };
+  };
+
+  test("off: the gate skips the call, as D122 measured", async () => {
+    const off = await run({});
+    expect(off.calls).toBe(0);
+    expect(off.outcomes).toEqual(["gated"]);
+  });
+
+  test("on: the landlord's visit is read, and what the reader flags leads", async () => {
+    const on = await run({ readerGateVisits: true });
+    expect(on.calls).toBe(1);
+    expect(on.outcomes).toEqual(["read"]);
+    expect(on.ids[0]).toBe("mail:landlord");
+  });
+
+  test("on, with no arranged visit among the candidates: still gated", async () => {
+    const saved = items.splice(0, 1);
+    try {
+      expect((await run({ readerGateVisits: true })).calls).toBe(0);
+    } finally {
+      items.unshift(...saved);
+    }
+  });
+});
