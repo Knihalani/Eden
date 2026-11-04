@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 /**
- * What keeping a synced index current costs, by sync mode (docs/research/econ-background.md): one simulated user whose
+ * What keeping a synced index current costs (docs/research/econ-background.md): one simulated user whose
  * sources receive new items through the working day (and lose a few to deletes), synced by the real `SyncManager`
  * inside a `ContextPartner`, over several days after the backfill. Each lookup is played as the partner plays it
  * with `syncOnDemand`: every source not current is polled (`freshen`) before the lookup reads the local index.
  *
- * Modes:
- * - `poll` (D57 as configured: no timed polls, on-demand polls by each source's learned change rate, a daily sweep);
- * - `timed` (the same plus a timed poll every 15 minutes).
+ * One mode, `poll` (D57 as configured: on-demand polls by each source's learned change rate, a daily sweep). The
+ * `timed` mode (the same plus a timed poll every 15 minutes) went with the timed-poll setting (D121): at `--days 3`
+ * it made 267 listing calls per user-day against poll's 117.7, for freshAtLookup 0.9983 against 0.9984.
  *
  * Reports per user-day: listing calls in the background and inside lookups (request-time calls), and freshness: at
  * each lookup, the share of the items that arrived (since the backfill) at least a minute before it that the index
@@ -94,7 +94,7 @@ function arrivals(rng: Rng, perDay: number, from: number, to: number): number[] 
   return out.sort((a, b) => a - b);
 }
 
-type Mode = "poll" | "timed";
+type Mode = "poll";
 
 async function run(mode: Mode) {
   const rng = new Rng(SEED);
@@ -127,7 +127,7 @@ async function run(mode: Mode) {
     budget: new Budget(),
     model: null,
     now: () => clock,
-    config: { sync: true, ...(mode === "timed" ? { syncEveryMs: 15 * MIN } : {}) },
+    config: { sync: true },
   });
   const sync = partner.sync!;
   sync.track(scope, clock);
@@ -217,7 +217,7 @@ async function run(mode: Mode) {
 }
 
 const out = [];
-for (const mode of ["poll", "timed"] as const) {
+for (const mode of ["poll"] as const) {
   const r = await run(mode);
   console.log(JSON.stringify(r));
   out.push(r);

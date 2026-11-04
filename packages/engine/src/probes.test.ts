@@ -415,7 +415,7 @@ describe("probe state, review round (D46)", () => {
       shown.push(req.messages.map((m) => m.content).join("\n"));
       return '{"pick": []}';
     });
-    const { say } = setup({ probeWhen: "actions" }, [notes()], model);
+    const { say } = setup({}, [notes()], model);
     await say("a", 0, "Order chocolates for Dana Lee");
     const before = shown.length;
     await say("a", 30, "what is the weather forecast this week?");

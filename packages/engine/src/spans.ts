@@ -60,7 +60,6 @@ export const SPAN_NAMES = [
   "orgs",
   "cache.put",
   "mentions",
-  "refresh",
   "rank",
   "conflict",
   "confident",

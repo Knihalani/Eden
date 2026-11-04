@@ -6,7 +6,7 @@
  *
  * Checked, in this order, each failure throwing an error that names the key:
  * - the key is one of `DEFAULT_CONFIG`'s (an unknown key is a typo or a flag from another version);
- * - its value has its default's type (`CHOICES` for strings with a fixed set, string lists' entries from `NAMES`);
+ * - its value has its default's type (string lists' entries from `NAMES`);
  * - a number is finite and ≥ 0, and within its `RANGES` entry (whole, at least, at most);
  * - a key that acts only through a partner dependency (`NEEDS_DEP`: cards, reader) the caller does not wire
  *   is at its default or the core's (`deps`; the core's value takes the part out, so it needs nothing);
@@ -23,9 +23,6 @@ type Key = keyof EngineConfig;
 
 /** A partner dependency some settings act through (`PartnerDeps`). */
 export type ConfigDep = "cards" | "reader";
-
-/** String-valued keys and the values each accepts; every other key's type is its default's. */
-const CHOICES: Partial<Record<Key, readonly string[]>> = { probeWhen: ["always", "actions"] };
 
 /**
  * Keys that act only when the partner has a dependency, with that dependency. Set to anything but their default
@@ -70,7 +67,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncMaxItems: SYNC,
   syncPageSize: SYNC,
   syncPollPageSize: SYNC,
-  syncEveryMs: SYNC,
   syncStaleChance: SYNC,
   syncMaxStaleMs: SYNC,
   syncActiveMs: SYNC,
@@ -82,7 +78,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncCatchupPages: SYNC,
   syncMaxUsersPerTenant: SYNC,
   syncLocalAll: SYNC,
-  syncTermProbes: SYNC,
   graphItems: ["graph"],
   graphSeats: ["graph"],
   graphGround: ["graph"],
@@ -130,7 +125,6 @@ const RANGES: Partial<Record<Key, Range>> = {
   minMatchedTerms: COUNT,
   fallbackMatchedTerms: COUNT,
   maxItemsPerInjection: COUNT,
-  maxRefreshes: COUNT,
   lookupSources: COUNT,
   askSources: COUNT,
   judgeCandidates: COUNT,
@@ -162,7 +156,6 @@ const RANGES: Partial<Record<Key, Range>> = {
   syncCallsPerMin: COUNT,
   syncCatchupPages: COUNT,
   syncMaxUsersPerTenant: SIZE,
-  syncTermProbes: COUNT,
   cardItems: COUNT,
   decideCandidates: COUNT,
   intentHits: COUNT,
@@ -270,12 +263,7 @@ function checkKey(where: string, key: string, given: unknown): void {
   // `Object.hasOwn`, not `in`: "__proto__" and "constructor" are not settings.
   if (!Object.hasOwn(DEFAULT_CONFIG, key)) throw new Error(`${where}: unknown key "${key}"`);
   const fallback = DEFAULT_CONFIG[key as Key];
-  const choices = CHOICES[key as Key];
-  if (choices) {
-    if (typeof given !== "string" || !choices.includes(given)) {
-      throw new Error(`${where}: "${key}" must be one of ${choices.join(", ")}`);
-    }
-  } else if (Array.isArray(fallback)) {
+  if (Array.isArray(fallback)) {
     if (!Array.isArray(given) || !given.every((entry) => typeof entry === "string")) {
       throw new Error(`${where}: "${key}" must be an array of strings`);
     }

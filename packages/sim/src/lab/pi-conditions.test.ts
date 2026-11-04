@@ -46,19 +46,19 @@ describe("pi-ab conditions", () => {
   test("+flag only turns on a boolean setting: a number, string or list setting set to true would run broken", () => {
     const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
     expect(parseCondition("eden+judgeTied", { config: {}, defaults }).config.judgeTied).toBe(true);
-    for (const f of ["judgeItemBytes", "probeWhen", "probeOff"]) {
+    for (const f of ["judgeItemBytes", "readerPushKinds", "probeOff"]) {
       expect(() => parseCondition(`eden+${f}`, { config: {}, defaults })).toThrow(/not an on\/off flag/);
     }
   });
 
   test("a variant's settings must have the engine setting's type", () => {
     const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
-    const ok = { V: { probes: true, judgeItemBytes: 400, probeWhen: "never", probeOff: ["gmail"] } };
+    const ok = { V: { probes: true, judgeItemBytes: 400, readerPushKinds: ["blocks"], probeOff: ["gmail"] } };
     expect(parseCondition("eden~V", { config: {}, variants: ok, defaults }).config).toEqual(ok.V);
     const bad: [string, unknown][] = [
       ["probes", "yes"],
       ["judgeItemBytes", "400"],
-      ["probeWhen", 1],
+      ["readerPushKinds", "blocks"],
       ["probeOff", "gmail"],
       ["probeOff", { a: 1 }],
       ["probes", null],

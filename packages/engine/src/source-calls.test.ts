@@ -141,7 +141,7 @@ describe("trace sourceCalls are the calls connectors received", () => {
 
   test("with probes on, the probes' calls that joined or were cached are not counted either", async () => {
     const { traces, sent } = await run(
-      { readerPush: true, lookupSources: 2, askSources: 4, probes: true, probeWhen: "always", probeGraceMs: 1_000 },
+      { readerPush: true, lookupSources: 2, askSources: 4, probes: true, probeGraceMs: 1_000 },
       { requests: 2 },
     );
     expect(total(sent)).toBeGreaterThan(4);
