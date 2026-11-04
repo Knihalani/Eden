@@ -614,22 +614,6 @@ export function mayConstrain(s: string): boolean {
   return constrains(t) || [BLOCKS_MORE, BLOCKS_OBJECT, STANDING_MORE, GUARD_WORDING].some((re) => t.search(re) >= 0);
 }
 
-/**
- * A visit someone has booked for the user ("i've booked the engineer, he'll come thursday between 8 and 12") or a
- * request that someone be in ("make sure someone's in?"): it binds the user's time though no constraint word says so.
- * The booking verb and the visit must share a sentence, within 60 characters. Read only by the trial
- * `readerGateVisits` (R3-19, D122) to open `readerGate`.
- */
-const BOOKED_VISIT =
-  /\b(?:booked|arranged|scheduled|organi[sz]ed)\b[^.!?]{0,60}?\b(?:he|she|they|someone)(?:['\u2019]ll| will) (?:come|arrive|visit|call round|be round)\b/;
-const BE_IN = /\bmake sure (?:someone['\u2019]s|someone is|you['\u2019]re|you are) (?:in|home|around)\s*(?:[.,;:!?]|$)/;
-
-/** Whether a text (lower case) states an arranged visit or asks that someone be in (`BOOKED_VISIT`, `BE_IN`). */
-export function arrangedVisit(s: string): boolean {
-  const t = s.slice(0, MAX_TEXT);
-  return t.search(BOOKED_VISIT) >= 0 || t.search(BE_IN) >= 0;
-}
-
 /** The spans and limits a sentence (lower case) states, as ISO days (`datesOf`), for the knowledge graph. */
 export function datesIn(s: string, now: number): { spans: { from: string; to: string }[]; limits: string[] } {
   return datesOf(s.slice(0, MAX_TEXT).replace(/[\u2013\u2014]/g, "-"), now);

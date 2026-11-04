@@ -83,7 +83,6 @@ const REUSE = args.includes("--reuse");
 const CONFIGS: Record<string, Partial<EngineConfig>> = {
   default: { ...PRESETS.default },
   "default-nogate": { ...PRESETS.default, readerGate: false },
-  "default+visits": { ...PRESETS.default, readerGateVisits: true },
 };
 
 const UNCAPPED = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };

@@ -4,7 +4,7 @@ import { Budget } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { StaticSource } from "@eden/sources";
 import { ItemCache } from "./cache";
-import { arrangedVisit, assess, frameOf, mayConstrain, namesRef } from "./conflict";
+import { assess, frameOf, namesRef } from "./conflict";
 import { timeWindow } from "./grounding";
 import { ContextPartner } from "./partner";
 import { cleanEntities } from "./probes";
@@ -310,26 +310,5 @@ describe("the conflict ground in the engine (groundConflict, quietClear)", () =>
     const out = await run({ confidentScore: 99, fallbackMatchedTerms: 0, groundConflict: true }, [policy("£40,000")]);
     expect(out.u1).toEqual(["drive:p1 grounded-conflict"]);
     expect(out.u2).toEqual(["drive:p1 grounded-conflict"]);
-  });
-});
-
-describe("arrangedVisit (trial readerGateVisits, R3-19)", () => {
-  test("reads a visit someone booked for the user, and a request to be in", () => {
-    const landlord =
-      "sorry to hear that. i've booked the engineer, he'll come thursday between 8 and 12. can you make sure someone's in?";
-    expect(mayConstrain(landlord)).toBe(false);
-    expect(arrangedVisit(landlord)).toBe(true);
-    expect(arrangedVisit("we've arranged a plumber; they will arrive on monday morning.")).toBe(true);
-    expect(arrangedVisit("the courier is organised and she\u2019ll be round after lunch")).toBe(true);
-    expect(arrangedVisit("the meter reader visits tuesday. please make sure you're home.")).toBe(true);
-    expect(arrangedVisit("could you make sure someone is around, thanks")).toBe(true);
-  });
-  test("stays closed on the near misses", () => {
-    expect(arrangedVisit("i've booked a table for friday at 8.")).toBe(false);
-    expect(arrangedVisit("between 8 and 12 deals closed this quarter.")).toBe(false);
-    expect(arrangedVisit("he'll come by later with the keys.")).toBe(false);
-    expect(arrangedVisit("make sure someone is in charge of the slides.")).toBe(false);
-    // The visit must be in the booking's sentence.
-    expect(arrangedVisit("i booked flights. he'll come too.")).toBe(false);
   });
 });
