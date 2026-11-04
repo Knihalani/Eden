@@ -1,13 +1,13 @@
 /**
- * Background connector sync, "Eden Atlas" (D57, behind `sync`, off by default): each active user's sources are read
- * through their read-only list tools (`Source.list`) into the user's own item cache, so a lookup can be answered from
- * the local index and request-time source calls drop.
+ * Background connector sync, "Eden Atlas" (D57, behind `sync`, on in the default, D112): each active user's sources
+ * are read through their read-only list tools (`Source.list`) into the user's own item cache, so a lookup can be
+ * answered from the local index and request-time source calls drop.
  *
  * Per user and source:
  * - a backfill of the newest `syncMaxItems` items across the user's sources (pages merged by recency, so a busy
  *   mailbox does not crowd out a quiet calendar's newest), then
- * - incremental polls: the listing read newest first until a page holds an item already synced and unchanged, every
- *   `syncEveryMs` while the user is active (0: no timed polls), or on demand when a lookup finds the source stale;
+ * - incremental polls: the listing read newest first until a page holds an item already synced and unchanged, on
+ *   demand when a lookup finds the source stale (timed polls were deleted, D121: 2.3x the calls, no fresher answers);
  * - a sweep every `syncSweepMs` (while active) that re-lists everything and drops what two sweeps in a row did not
  *   list (one can skip an item: an offset listing shifts under a delete between its pages);
  * - a per-(user, source) budget of `syncCallsPerMin`, on top of the fan-out's own guards (breaker, AIMD concurrency,
@@ -41,13 +41,11 @@ export interface SyncOptions {
    * and sweeps always read `pageSize`.
    */
   pollPageSize?: number;
-  /** Timed polls of an active user's sources, this often (ms); 0 for none (polls on demand only). */
-  everyMs: number;
   /** A source's synced copy is stale once the chance that it changed since the last poll reaches this. */
   staleChance: number;
   /** ... or once its last poll is this old (ms), whatever the chance. */
   maxStaleMs: number;
-  /** A user with an event this recently (ms) is active: timed polls and sweeps run only for active users. */
+  /** A user with an event this recently (ms) is active: sweeps run only for active users. */
   activeMs: number;
   /** A full re-listing, for deletes, this often per source (ms) while the user is active. */
   sweepMs: number;
@@ -80,7 +78,7 @@ export interface SyncDeps {
 const PRIOR_HOURS = 7 * 24;
 /** The change-rate posterior's memory (hours): older evidence is scaled down past this, so a source's pace can move. */
 const RATE_MEMORY_HOURS = 14 * 24;
-/** Pages a timed poll or a background catch-up reads at most in one go. */
+/** Pages a background catch-up reads at most in one go. */
 const MAX_POLL_PAGES = 20;
 /** Background sync calls leave this many of the serving rate limit's tokens for lookups. */
 const SERVING_HEADROOM = 2;
@@ -135,7 +133,7 @@ interface UserSync {
 }
 
 export interface SyncStats {
-  /** Listing calls made in the background (backfill, timed polls, sweeps, catch-ups). */
+  /** Listing calls made in the background (backfill, sweeps, catch-ups). */
   backgroundCalls: number;
   /** Listing calls made inside lookups (on-demand polls). */
   demandCalls: number;
@@ -226,7 +224,7 @@ export class SyncManager {
 
   /**
    * One round of background work, for every synced user: drop the idle and those past the tenant's cap, then per
-   * user backfill, timed polls and sweeps, as each source's budget allows. Never runs twice at once, never throws.
+   * user backfill and sweeps, as each source's budget allows. Never runs twice at once, never throws.
    * Returns the listing calls it made.
    */
   async tick(): Promise<number> {
@@ -253,7 +251,7 @@ export class SyncManager {
    * at most `catchupPages` pages each before the lookup goes on (the rest is read in the background), within the
    * lookup's deadline. Returns the listing calls this freshen made (not another lookup's, made meanwhile); the
    * sources it brought current answer the lookup locally. `tally.fresh` counts the items stored new or changed by its
-   * polls, and by any read it waited on instead (a timed poll, a sweep, another lookup's poll: `SourceSync.busy`
+   * polls, and by any read it waited on instead (a sweep, a catch-up, another lookup's poll: `SourceSync.busy`
    * resolves to what that read stored), or none for one it stopped waiting on (`signal`).
    */
   async freshen(scope: Scope, sources: Source[], signal: AbortSignal, tally?: { fresh: number }): Promise<number> {
@@ -266,7 +264,7 @@ export class SyncManager {
         const s = u.sources.get(source.id);
         if (!s || s.phase !== "warm" || this.isCurrent(s, now) || !source.list) return;
         if (s.busy) {
-          // A read already running (timed, a sweep, or another lookup's poll): its answer, not a second call.
+          // A read already running (a sweep, a catch-up, or another lookup's poll): its answer, not a second call.
           own.fresh += await Promise.race([s.busy, aborted(signal).then(() => 0)]);
           return;
         }
@@ -336,11 +334,7 @@ export class SyncManager {
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);
         if (!source || s.phase !== "warm" || s.busy || now < s.retryAt) return;
-        if (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs) {
-          await this.run(s, () => this.sweep(u, s, source));
-        } else if (this.o.everyMs > 0 && now - s.polledAt >= this.o.everyMs) {
-          await this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false));
-        }
+        if (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs) await this.run(s, () => this.sweep(u, s, source));
       }),
     );
   }

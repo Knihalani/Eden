@@ -298,7 +298,6 @@ describe("unchanged re-listed items skip redaction (ingest-skip-unchanged-redact
     const options: SyncOptions = {
       maxItems: 100,
       pageSize: 4,
-      everyMs: 0,
       staleChance: 0.5,
       maxStaleMs: 24 * HOUR,
       activeMs: 24 * HOUR,

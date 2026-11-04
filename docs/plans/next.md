@@ -76,7 +76,7 @@ Each item, when done, gets a line here with its PR and its numbers.
   iteration 6).
 - **3, follow-up: refreshing stale cached items (D40):** the simulation gained source-side updates (`--updates`); a
   cached copy older than two hours is now never delivered from the fast path, and its cue takes a live lookup.
-  Refetching through `fetch` is built and opt-in (`maxRefreshes`): it added calls and no recall beyond noise. On fresh
-  held-out seeds 31–40 with updates: stale deliveries 5–12 per mix to 0–2, precision up on five of six rows, soft
-  fires down on all, recall up (perfect judge +4.0 to +4.6 facts per seed, as much without updates: the live lookup
-  finds more than the old copy), total connector calls up about 3%, no hard false fire (docs/research/refresh.md).
+  Refetching through `fetch` was built and opt-in: it added calls and no recall beyond noise (D121 deleted it). On fresh
+  held-out seeds 31–40 with updates: stale deliveries 5–12 per mix to 0–2, precision up on five of six rows, soft fires
+  down on all, recall up (perfect judge +4.0 to +4.6 facts per seed, as much without updates: the live lookup finds more
+  than the old copy), total connector calls up about 3%, no hard false fire (docs/research/refresh.md).

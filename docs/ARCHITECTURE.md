@@ -30,10 +30,10 @@
 | `packages/protocol` | Wire types (`AgentEvent`, `ContextItem`, `Injection`, `AskRequest`…), ids, input validation. |
 | `packages/primitives` | Benchmarked building blocks: hashing, tokenizer + interner, multi-pattern matcher, top-k, BM25F sparse index, S3-FIFO cache, deadline, singleflight, GCRA, circuit breaker, AIMD limiter, histogram, reply stripping and near-duplicate sketches, calibration and certification statistics, Thompson sampling, budgeted packing, worker pool (D25, D26) ([research/primitives.md](research/primitives.md)). |
 | `packages/redact` | The secret gate (salvaged): gitleaks rules plus extras, prefiltered by one Aho–Corasick pass; the rules that backtrack in JavaScript and every allowlist run on RE2 (re2js, D24). Runs on everything stored, indexed or sent to a model. |
-| `packages/sources` | `Source` interface; `McpSource` (any MCP server's read tools, read-only enforced; arguments from the tool's schema when no mapping is given; an optional fetch tool that reads one record by id, D35, used through `SourceFanout.fetch` for refresh, D40; reconnects after a dropped connection, re-checking read-only, and waits 30 s after one that closes within 5 s of connecting; reads every page of `tools/list`); `StaticSource`; `QueryPlanner` (what each lookup sends to each connector, learned per user; D28, on by default in the server since D33); `SourceFanout`: per-source deadlines, coalescing, a result cache that serves stale on failure, rate limits, circuit breakers and adaptive concurrency, redacting before anything is held. A call is admitted only when every guard allows it, so a skip spends no rate token and no half-open probe; a failure of our own redaction says nothing against the source; a breaker ignores reports from calls allowed before it last opened. |
+| `packages/sources` | `Source` interface; `McpSource` (any MCP server's read tools, read-only enforced; arguments from the tool's schema when no mapping is given; an optional fetch tool that reads one record by id, D35, not called by the engine since D121 deleted the fetch refresh; reconnects after a dropped connection, re-checking read-only, and waits 30 s after one that closes within 5 s of connecting; reads every page of `tools/list`); `StaticSource`; `QueryPlanner` (what each lookup sends to each connector, learned per user; D28, on by default in the server since D33); `SourceFanout`: per-source deadlines, coalescing, a result cache that serves stale on failure, rate limits, circuit breakers and adaptive concurrency, redacting before anything is held. A call is admitted only when every guard allows it, so a skip spends no rate token and no half-open probe; a failure of our own redaction says nothing against the source; a breaker ignores reports from calls allowed before it last opened. |
 | `packages/graph` | The source map (knowledge graph layer 1): which sources mention which entities, and learned usefulness per situation. SQLite. |
 | `packages/llm` | `Model` interface, OpenRouter client (ZDR, no data collection), pricing, `Budget` (per session and per user-day) and `TenantSpend` (one cap per tenant per UTC day across roles), `FakeModel`. |
-| `packages/engine` | `ContextPartner`: cues, a per-user BM25F item cache (title, body), near-duplicate suppression, ledger, two-speed pipeline, the default's parts (`DEFAULT_CONFIG`, `PARTS` in `parts.ts`, D112), an optional model judge, usage inference, traces; span tracing of every phase in wall and CPU time, off by default (`spans.ts`, `onSpan`, `config.spans`; content-free; [research/moon-telemetry.md](research/moon-telemetry.md)). Each event is tokenized once, into a per-session vocabulary. |
+| `packages/engine` | `ContextPartner`: cues, a per-user BM25F item cache (title, body), near-duplicate suppression, ledger, two-speed pipeline, the default's parts (`DEFAULT_CONFIG`, `PARTS` in `parts.ts`, D112), an optional model judge, usage inference, traces; span tracing of every phase in wall and CPU time, off by default (`spans.ts`, `onSpan`, `config.spans`; content-free; an observability toggle, not a product switch, D121; [research/moon-telemetry.md](research/moon-telemetry.md)). Each event is tokenized once, into a per-session vocabulary. |
 | `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), MCP server exposing `ask_context`, config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). Runs `DEFAULT_CONFIG` (D112; `EDEN_ENGINE_CONFIG` overrides keys, D103). Model roles (`models.ts`): with `OPENROUTER_API_KEY`, cards and intent (background, price-routed) and the ask-time reader (request path) run on `EDEN_MODEL` (default `anthropic/claude-haiku-5.5`, D12's ZDR routing), each with its own `Budget`, all of a tenant's roles under one cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25); no judge is wired. Without a key no role is built and the same default runs its no-model path. |
 | `packages/client` | SDK for agent builders: `EdenClient` (fail-open) and `withContext` for message lists. |
 | `packages/eval` | Scenario harness over 26 hand-written scenarios (docs/research/eval-suite.md): precision, recall, false-fire rate, overall and per category; a privacy check (planted secrets, inert framing); direct asks; model calls and cost per turn, latency. |
@@ -56,7 +56,7 @@ terms (D6: `confidentScore` > 1 by construction, since idf-weighted coverage is 
 An item a recent tool result or agent message holds whole is never pushed (an ask still returns it), and bulk mail
 is never pushed without a model (D34). A cached copy older than two hours is never delivered from here: its cue goes
 to the slow path, which delivers the source's current copy when its live search returns it (and the cached one if it
-does not: a source down, or a search that no longer finds the item; D40).
+does not: a source down, or a search that no longer finds the item; D40). No item is re-read through `fetch` (D121).
 
 **Slow path** (background; at most one per session at a time): rank the user's sources with the source map, search the
 top few live (each under its own deadline), cache the redacted results, record entity mentions, and re-score. A
@@ -131,21 +131,21 @@ two request words, a rare word or a consequence find.
 **Background sync, "Eden Atlas"** (D57, `sync`, on in the default, D112; `sync.ts`): sources with a read-only list tool
 (`Source.list`; `McpSource.listTool`, checked like the search tool) are read into each active user's cache in the
 background: a backfill of the newest items across sources, polls when a lookup finds a source stale by its learned
-change rate, a daily sweep that drops what a source has not listed in two sweeps in a row (about 48 h). Synced items
-have their own cap and TTL in the cache. The servers sync per-user MCP sources that name a list tool (D108); static
-sources list nothing. A lookup answers every current synced source (its own search and every probe) from that local
-index at no call, and calls live only the sources that are not synced or still stale. The tick runs on a timer, never on
-the fast path, which only marks the user active. A listing redacts only what it brings new or changed: an item the
-cache holds whose raw copy hashes the same on what the gate reads (wyhash over the clipped fields, per-process seed)
-gets the held redacted copy back (`ItemCache.reuseFor`, `SourceFanout.list`'s `reuse`), so a sweep of an unchanged
-source costs about a tenth of what it did (`packages/engine/bench/ingest.bench.ts`, docs/TESTING.md). A poll lists
-`syncPageSize` (100) items a page, as backfill and sweeps do, and an on-demand poll reads at most `syncCatchupPages`
-(2) pages. With `syncPollPageSize` (D101; 5 in the default, D112; 0 = off) a poll's first page is twice what the
-source's learned change rate expects since its last poll, at least that size and at most `syncPageSize`; while no page
-reaches what was already synced, the next tops the items asked up to the next multiple of `syncPageSize` (5, then 95,
-then 100). A poll then lists no more items than full pages would and catches up as far, in at most one more call (an
-on-demand poll: one to three calls, against one or two). Backfill and sweeps keep `syncPageSize`. `SyncStats` counts the
-items listed (`demandItems`, `backgroundItems`) beside the calls.
+change rate (no timed polls, D121), a daily sweep that drops what a source has not listed in two sweeps in a row (about
+48 h). Synced items have their own cap and TTL in the cache. The servers sync per-user MCP sources that name a list tool
+(D108); static sources list nothing. A lookup answers every current synced source (its own search and every probe) from
+that local index at no call, and calls live only the sources that are not synced or still stale. The tick runs on a
+timer, never on the fast path, which only marks the user active. A listing redacts only what it brings new or changed:
+an item the cache holds whose raw copy hashes the same on what the gate reads (wyhash over the clipped fields,
+per-process seed) gets the held redacted copy back (`ItemCache.reuseFor`, `SourceFanout.list`'s `reuse`), so a sweep of
+an unchanged source costs about a tenth of what it did (`packages/engine/bench/ingest.bench.ts`, docs/TESTING.md). A
+poll lists `syncPageSize` (100) items a page, as backfill and sweeps do, and an on-demand poll reads at most
+`syncCatchupPages` (2) pages. With `syncPollPageSize` (D101; 5 in the default, D112; 0 = off) a poll's first page is
+twice what the source's learned change rate expects since its last poll, at least that size and at most `syncPageSize`;
+while no page reaches what was already synced, the next tops the items asked up to the next multiple of `syncPageSize`
+(5, then 95, then 100). A poll then lists no more items than full pages would and catches up as far, in at most one more
+call (an on-demand poll: one to three calls, against one or two). Backfill and sweeps keep `syncPageSize`. `SyncStats`
+counts the items listed (`demandItems`, `backgroundItems`) beside the calls.
 
 **Poll behind the lookup** (D65, `syncPollBehind`, on in the default, D112; with `sync` and `syncOnDemand`): without it,
 a lookup that finds a synced source stale waits for that source's on-demand poll (`sync.freshen`, one or two listing

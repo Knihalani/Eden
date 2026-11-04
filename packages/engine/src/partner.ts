@@ -33,7 +33,7 @@ import {
   type ObserveResult,
   type Scope,
 } from "@eden/protocol";
-import { REDACTED, sanitizeForStore } from "@eden/redact";
+import { sanitizeForStore } from "@eden/redact";
 import { hashString, Vocab, type WorkerPool } from "@eden/primitives";
 import {
   PlanError,
@@ -326,7 +326,7 @@ interface Cue {
   raw: string;
   /** The user's UTC offset (minutes) the days were resolved at. */
   offset: number;
-  /** The request arrived from outside the conversation (a new email): probed whatever its wording (`probeWhen`). */
+  /** The request arrived from outside the conversation (a new email), not from the user's own turn. */
   external?: boolean;
   /** With spans on, the span this lookup's phases are children of (`spans.ts`). */
   span?: number;
@@ -569,7 +569,6 @@ export class ContextPartner {
             maxItems: c.syncMaxItems,
             pageSize: c.syncPageSize,
             pollPageSize: c.syncPollPageSize,
-            everyMs: c.syncEveryMs,
             staleChance: c.syncStaleChance,
             maxStaleMs: c.syncMaxStaleMs,
             activeMs: c.syncActiveMs,
@@ -2630,12 +2629,6 @@ export class ContextPartner {
           ? sendTo(listers.filter((x) => !local?.has(x.id)))
           : sendTo(found);
     // Probes (`probe`) go out with the lookup, not after it: the slow path waits for the slower of the two, not both.
-    const probeThis =
-      this.config.probeWhen === "always" ||
-      isAction(cue.raw) ||
-      ACTING.has(s.situation) ||
-      ACTS_ON.test(cue.raw) ||
-      cue.external;
     // A probe that fails is no probe; a session that closes mid-search leaves it to finish on its own (it checks).
     // The lookup's own search starts first: the fan-out admits a call when it starts (a per-source concurrency slot),
     // and probes started before it could take the slots and leave the request itself skipped as busy.
@@ -2652,13 +2645,12 @@ export class ContextPartner {
     );
     const settled = searching.catch(() => null);
     const probed: ProbeOut = { calls: 0, kept: [] };
-    const probing =
-      this.config.probes && probeThis
-        ? this.probe(s, cue, routed, all, listing, probed, settled, shared, {
-            ...this.lookupOpts(s, cue),
-            local,
-          }).catch(() => {})
-        : null;
+    const probing = this.config.probes
+      ? this.probe(s, cue, routed, all, listing, probed, settled, shared, {
+          ...this.lookupOpts(s, cue),
+          local,
+        }).catch(() => {})
+      : null;
     // The same query answered by the synced sources from the local index (D57): no call, nothing to store.
     const answeredHere = local
       ? this.localAnswer(
@@ -3045,12 +3037,7 @@ export class ContextPartner {
           : null;
     // The class read with no call (`anticipate`): the class's queries an event's prefetch sent, as cached.
     const offlineSend: ProbeSend = (k, src, t, w, keep, on) => send(k, src, t, w, keep, on, true);
-    // `syncTermProbes` (D57): with sources answered locally, each of the request's words that few of the user's items
-    // hold (a place, a reference, a product), alone, to those sources: a query per word, which no live budget allows.
-    const synced = local ? all.filter((x) => local.has(x.id)) : [];
-    const terms = synced.length > 0 && c.syncTermProbes > 0 ? this.termProbes(s, cue, c.syncTermProbes) : [];
     await Promise.all([
-      ...terms.map((t) => send("topic", synced, t)),
       ...windows.map((w) => send("day", listers, "", w)),
       byPeople,
       ...roles.map((r) => send("role", found.slice(0, 2), r)),
@@ -3251,60 +3238,6 @@ export class ContextPartner {
   /** When an item's copy was last known current: when it was fetched. */
   private readAt(s: Session, item: ContextItem, now: number): number {
     return this.deps.cache.fetchedAt(s.scope, item.id) ?? now;
-  }
-
-  /**
-   * Re-reads the best candidates fetched longer ago than `refreshAfterMs` through their source's `fetch`, so what is
-   * ranked next is the source's current copy (D40). At most `maxRefreshes`, in parallel, under the fan-out's guards;
-   * a source without `fetch`, or a call that fails or is skipped, leaves the cached copy as it is. Returns the fetches
-   * attempted.
-   */
-  private async refresh(s: Session, cue: Cue): Promise<number> {
-    const c = this.config;
-    if (c.refreshAfterMs <= 0 || c.maxRefreshes <= 0 || s.closed) return 0;
-    const spans = this.spans;
-    if (!spans) return this.refreshOnce(s, cue, 0);
-    const sp = spans.open("refresh", cue.span, { async: true });
-    let fetched = 0;
-    try {
-      fetched = await this.refreshOnce(s, cue, sp.id);
-      return fetched;
-    } finally {
-      spans.close(sp, { fetches: fetched });
-    }
-  }
-
-  private async refreshOnce(s: Session, cue: Cue, parent: number): Promise<number> {
-    const c = this.config;
-    const now = this.now();
-    const stale = this.rank(s, cue)
-      .filter((x) => x.score >= c.candidateScore)
-      .slice(0, c.judgeCandidates)
-      .filter((x) => now - this.readAt(s, x.item, now) > c.refreshAfterMs)
-      .slice(0, c.maxRefreshes);
-    if (stale.length === 0) return 0;
-    const all = await this.deps.sources(s.scope).catch((): Source[] => []);
-    const jobs = stale.flatMap((x) => {
-      const source = all.find((a) => a.id === x.item.sourceId);
-      // A ref the gate redacted, or Eden's own content hash, cannot be asked for again: no call, no rate token.
-      const fetchable = !x.item.ref.includes(REDACTED) && !x.item.ref.startsWith("eden-h-");
-      return source?.fetch && fetchable
-        ? [{ source: parent ? this.traced(source, parent) : source, ref: x.item.ref }]
-        : [];
-    });
-    if (jobs.length === 0 || s.closed) return 0;
-    const fresh = await Promise.all(
-      jobs.map((j) =>
-        this.fanout.fetch(j.source, s.scope, j.ref, { timeoutMs: c.sourceTimeoutMs, signal: s.abort.signal }),
-      ),
-    );
-    if (s.closed) return jobs.length; // Forgotten or ended meanwhile: keep nothing (D17).
-    this.store(
-      s,
-      fresh.filter((x): x is ContextItem => x !== null),
-      parent,
-    );
-    return jobs.length;
   }
 
   /**
@@ -3792,8 +3725,6 @@ export class ContextPartner {
         this.config.syncPollBehind && this.config.syncOnDemand,
       ));
       if (s.closed) return null;
-      sourceCalls += await this.refresh(s, cue);
-      if (s.closed) return null;
       const spans = this.spans;
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
       const consIds = new Set(consequence?.ids ?? []);
@@ -4186,31 +4117,6 @@ export class ContextPartner {
    * a name, a reference, a place, rather than words common to their mail. Ids in the user's cache vocabulary; a word
    * no cached item holds has no id and so ties nothing (`judgeTied`).
    */
-  /**
-   * The request's words for `syncTermProbes`: at least four letters, rare in the user's items (`judgeTiedShare`), not
-   * a stopword, a word that only says when, nor part of a name the people probes already send; at most `max`.
-   */
-  private termProbes(s: Session, cue: Cue, max: number): string[] {
-    const vocab = this.deps.cache.peekVocab(s.scope);
-    if (!vocab) return [];
-    const named = new Set(
-      cue.entities.flatMap((e) =>
-        e
-          .toLowerCase()
-          .split(/\s+/)
-          .filter((w) => w.length > 0),
-      ),
-    );
-    const out: string[] = [];
-    for (const id of this.rareTerms(s, cue)) {
-      const w = vocab.term(id);
-      if (w.length < 4 || named.has(w) || TIME_WORD.test(w) || out.includes(w)) continue;
-      out.push(w);
-      if (out.length >= max) break;
-    }
-    return out;
-  }
-
   private rareTerms(s: Session, cue: Cue): number[] {
     const vocab = this.deps.cache.peekVocab(s.scope);
     if (!vocab) return [];

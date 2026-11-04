@@ -14,7 +14,6 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     expect(() => checkEngineConfig({ askItemBytes: -1 })).toThrow(/"askItemBytes" must be a number ≥ 0/);
     expect(() => checkEngineConfig({ syncStaleChance: 2, sync: true })).toThrow(/"syncStaleChance" must be at most 1/);
     expect(() => checkEngineConfig({ maxItemsPerInjection: 1.5 })).toThrow(/whole number/);
-    expect(() => checkEngineConfig({ probeWhen: "never" })).toThrow(/"probeWhen" must be one of always, actions/);
     expect(() => checkEngineConfig({ anticipate: true, anticipateOff: ["srve"] })).toThrow(/"anticipateOff" has/);
     expect(() =>
       checkEngineConfig(
