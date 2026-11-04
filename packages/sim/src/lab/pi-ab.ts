@@ -90,7 +90,7 @@ import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
-import { REALISTIC, simSources, type SimSource } from "../sources";
+import { REALISTIC, simSources, withOverrides, type ProfileSet, type SimSource, type SourceProfile } from "../sources";
 import type { World } from "../world";
 import {
   armPromptsHash,
@@ -146,6 +146,17 @@ const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden,eden-act-firewall" :
 const OUT = opt("out", "pi-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
 const TIME_SCALE = Number(opt("time-scale", "1"));
+// `--source-profile FILE|JSON`: per-source overrides of REALISTIC (latency, errorRate, ratePerSec), e.g. latencies
+// calibrated on market connectors. Only the named fields change; search semantics and snippets stay REALISTIC's.
+const SOURCE_PROFILE_ARG = opt("source-profile", "");
+const PROFILES: ProfileSet = SOURCE_PROFILE_ARG
+  ? withOverrides(
+      REALISTIC,
+      JSON.parse(
+        SOURCE_PROFILE_ARG.trim().startsWith("{") ? SOURCE_PROFILE_ARG : readFileSync(SOURCE_PROFILE_ARG, "utf8"),
+      ) as Record<string, Partial<SourceProfile>>,
+    )
+  : REALISTIC;
 const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 // The first N tasks of each world only: a plumbing check before a real run.
@@ -492,7 +503,7 @@ async function runWorld(
   records: TaskRecord[],
   grading: Promise<void>[],
 ): Promise<RunResult[]> {
-  const sources = simSources(world, REALISTIC, TIME_SCALE, seed);
+  const sources = simSources(world, PROFILES, TIME_SCALE, seed);
   const { name: condition, waitMs, useEden, withPartner, useTools, judge, act, firewall, config } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
@@ -1158,6 +1169,7 @@ writeFileSync(
       ...(ACT ? { act: true } : {}),
       ...(CARDS_FILE ? { cards: { replay: CARDS_FILE, out: CARDS_OUT } } : {}),
       timeScale: TIME_SCALE,
+      ...(SOURCE_PROFILE_ARG ? { sourceProfile: PROFILES } : {}),
       ...(ACCESS.allowLogging ? { allowLogging: true } : {}),
       // Every HTTP request the run sent (retries included), and whether the cap cut it short.
       requests: PACER.summary(),

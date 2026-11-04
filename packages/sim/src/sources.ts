@@ -100,6 +100,15 @@ export const REALISTIC: ProfileSet = {
 };
 
 /**
+ * `base` with some fields of some sources replaced (lab `--source-profile`): an unknown source name is an error, so a
+ * typo cannot silently leave a source at its default latency.
+ */
+export function withOverrides(base: ProfileSet, over: Record<string, Partial<SourceProfile>>): ProfileSet {
+  for (const k of Object.keys(over)) if (!base[k]) throw new Error(`unknown source "${k}" in --source-profile`);
+  return Object.fromEntries(Object.entries(base).map(([k, v]) => [k, { ...v, ...over[k] }]));
+}
+
+/**
  * The connector zoo: the same world behind connectors with different search semantics, for learning what to send
  * without being told (docs/plans/query-planner.md, tier 2). Every integrator passes Eden's query text through
  * (`adapter: "text"`), so only the query decides what comes back. `ZOO_TUNE` is for tuning; numbers are reported on
