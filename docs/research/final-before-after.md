@@ -9,36 +9,47 @@ tasks (held-out 13) in four generated worlds. In each world the agent had 32 tas
 32 look-alike tasks where nothing should be raised. Every model involved was Claude Haiku 5.5: the agent, the grader
 and Eden's own model roles. We ran on both standard agent harnesses, Pi and Hermes Agent.
 
-- **Eden now finds 1.6 to 6.6 times as many hidden facts as it did before** (2.7× the old default and 1.6× old ALL3
-  on Pi; 6.6× and 2.1× on Hermes). On Pi the agent raised the hidden fact
-  in 72.7% of tasks with today's Eden. It raised 27.3% with the old built-in default and 45.3% with the old
-  recommended lab configuration (ALL3). On Hermes the figures were 67.2%, 10.2% and 32.0%. Agents with no Eden raised
-  7.0% (Pi) and 4.7% (Hermes). All four after-versus-before gains are well outside the noise (paired 95% intervals
-  +18 to +66 points).
-- **It still does not cry wolf.** On the look-alike tasks, today's Eden raised a false concern once in 256 runs
-  (Pi 1/128, Hermes 0/128). Old ALL3 raised 2/128 on Pi; the old default raised none.
-- **It is faster than the old default when there is something to find, and a little slower than old ALL3.** On hidden
-  tasks the median answer took 3.4 s on Pi, against 5.0 s for the old default and 3.9 s for old ALL3. Paired, that is
-  1.0 s faster than the old default and 0.3 s slower than ALL3. On look-alike tasks today's Eden is slower:
-  1.3 s more than ALL3 on Pi. It reads the candidates with a model before answering (the reader). Neither old
-  configuration did that.
-- **It costs more per task, but still well under a tenth of a cent.** Agent plus Eden came to $0.61–0.83 per 1,000
-  tasks on Pi, against $0.33–0.40 for the old configurations and $0.33–0.35 with no Eden. Of that, Eden's reader is
-  $0.30–0.44 per 1,000. Today's Eden also makes cards in the background. In this run that was a one-time catch-up of
-  $0.90 per 1,000 tasks, an upper bound (see "Costs" below).
+- **Eden now finds far more of the hidden facts than before.** On Pi the agent raised the hidden fact in 72.7% of tasks
+  with today's Eden. The old engine raised fewer:
+  - 29.7% as the old product shipped with a model key (its default plus its model judge);
+  - 27.3% for the same default with no key (no judge);
+  - 45.3% with the old recommended lab configuration (ALL3), which never shipped.
+
+  On Hermes the figures were 67.2% today, 10.2% for the old default with no key and 32.0% for old ALL3. Hermes has no
+  judge condition, so the keyed old product was measured on Pi only. Agents with no Eden raised 7.0% (Pi) and 4.7%
+  (Hermes). Every after-versus-before gain is well outside the noise (paired 95% intervals +18 to +66 points). Today's
+  Eden raises 2.4× what the keyed old product did on Pi, and 1.6× (Pi) to 2.1× (Hermes) what old ALL3 did.
+- **It still does not cry wolf in the live runs.** On the look-alike tasks, today's Eden raised a false concern once in
+  256 runs (Pi 1/128, Hermes 0/128). Old ALL3 raised 2/128 on Pi; the old default raised none, with or without the
+  judge.
+- **One regression, without a model key.** With no key the default runs its no-model path. On the hand-written
+  no-model eval (`bun run eval`, 31 scenarios), its precision fell from 0.889 (old engine) to 0.828 (today): two
+  look-alike items are now delivered beside expected ones. Recall is unchanged at 0.48 and no false fire is counted.
+- **It is faster than the old product when there is something to find, and a little slower than old ALL3.** On hidden
+  tasks the median answer took 3.4 s on Pi, against 5.0 s for the old default (5.7 s with its judge) and 3.9 s for
+  old ALL3. Paired, that is 1.0 s faster than the old default, 1.5 s faster than it with its judge, and 0.3 s slower
+  than ALL3. On look-alike tasks today's Eden is 1.3 s slower than ALL3 on Pi. It reads the candidates with a model
+  before answering (the reader); neither old configuration did that.
+- **It costs more.** Agent plus Eden's per-task calls came to $0.61–0.83 per 1,000 tasks on Pi, against $0.33–0.48
+  for the old configurations and $0.33–0.35 with no Eden. Eden's reader accounts for $0.44 per 1,000 of that on Pi and
+  $0.30 on Hermes. Today's Eden also makes cards in the background. In this run that was a cold-cache catch-up of
+  $0.90 per 1,000 tasks, an upper bound on the steady state (see "Costs"). Counting it, the total is $1.6 per 1,000
+  tasks, about 0.16 cents a task.
 - **It holds 30% less memory per user** (1,276 KB against 1,825 KB for a synced user with 500 items).
 - **It calls the user's sources a quarter as often as the old default** (3.6 calls per task against 14.4 on Pi). That
   is about the same as old ALL3, which also synced in the background.
-- **The test suite grew from 1,270 to 1,499 tests and runs in 50 s instead of 57 s.**
+- **The test suite grew from 1,270 to 1,499 tests.** Main's `bun run check` took 50 s against 57 s for the old tree.
+  That gap comes from main's parallel test runner, not from the code.
 
-Total spent: **$2.21** of the $12 cap, including $0.34 on a discarded first BEFORE run (see "What went wrong").
+Total spent: **$2.35** of the $12 cap, including $0.34 on a discarded first BEFORE run (see "What went wrong").
 
 ## What was compared
 
 | Arm | Engine | Configuration |
 |---|---|---|
 | AFTER | main at bf2fc13 (D112, D119–D124) | `--config default`: the one shipped default (`DEFAULT_CONFIG`, cards, intent, sync, the reader with its gate) |
-| BEFORE-default | 18366d039 | `--config default` = `{}`: that engine's built-in `DEFAULT_CONFIG` (every experimental flag off), what shipped then |
+| BEFORE-default | 18366d039 | `--config default` = `{}`: that engine's built-in `DEFAULT_CONFIG` (every experimental flag off), no judge: what shipped then on the no-key path |
+| BEFORE-default + judge (Pi only) | 18366d039 | the same default with its model judge (`eden-judge`, Haiku 5.5): what the shipped server ran with a model key (its `build.ts` wired `OpenRouterModel.fromEnv()`); D112 recorded this arm as the old shipped default (29.7%) |
 | BEFORE-ALL3 | 18366d039 | ALL3 (D80), that tree's recommended lab configuration, copied verbatim from its `presets.ts` (H + cards, sync, graph, …) |
 | agent alone | — | Pi with its search tools (`tools`) / Hermes with its MCP search tools (`hermes`); run in both trees as a check |
 
@@ -46,8 +57,9 @@ Total spent: **$2.21** of the $12 cap, including $0.34 on a discarded first BEFO
 `packages/llm` (the Anthropic provider, D97), `packages/eval`, `ingest.bench.ts` and the root package files. A lab-only
 shim (`packages/sim/src/before-engine.ts`) stubs the few names the lab imports that the old engine lacked: the reader
 classes, `PARTS`, `CORE_CONFIG` and `checkEngineConfig`. Neither old configuration reaches them, because neither has
-`askReader`. `git diff 18366d039 -- packages/{engine,graph,sources,primitives,redact,protocol,client}` is empty in that
-tree, so every product package is the old one. `packages/sim/lab/before-after/make-before-tree.sh` rebuilds the tree.
+`askReader`. `git diff 18366d039 -- packages/engine/src packages/{graph,sources,primitives,redact,protocol,client}` is
+empty in that tree. Only `packages/llm` (shared lab and product plumbing) and the engine's bench files are main's.
+`packages/sim/lab/before-after/make-before-tree.sh` rebuilds the tree.
 `analyze.py` in the same directory makes the tables. Its rates, walls, critical path and source calls match
 `pi-ab-report.ts` on the same files.
 
@@ -63,6 +75,9 @@ cards: no `--intent` replay file was given to either tree. Hermes Agent ran at c
 - The product packages the engine depends on (`graph`, `sources`, `primitives`, `redact`, `protocol`) and `client`
   (the lab uses its `heldResult`) are the old ones in BEFORE. These count as "the engine" here.
 - The lab-only shim and the old `presets.ts` (above).
+- `packages/llm` is main's in both trees: `Budget`, pacing, pricing and the OpenRouter and Anthropic clients. The old
+  engine's card and judge calls go through it. No card or judge call was refused for budget in any arm, so this
+  should change nothing measured.
 - **Card replay is not equally warm.** The old ALL3 card prompt matches the checked-in `cards-v2.jsonl`, so it made
   only 34–46 cards live per seed. Today's card prompt differs (intent requests, card version 2 and the date fix of
   `datedOf`), so it made 1,354–1,385 live per seed. Quality is unaffected, because cards are made live on a miss.
@@ -74,20 +89,27 @@ cards: no `--intent` replay file was given to either tree. Hermes Agent ran at c
 
 ## Pi (the standard agent): held-out 13, seeds 41–44
 
-| Arm | Hidden raised | False concerns | Wall p50/p90 hidden (s) | Wall p50/p90 control (s) | Eden on the critical path, mean ms | TTFT p50 ms | Agent tokens in/out per task | Cache-read share | Agent + Eden live $/1k hidden / control | Background $/1k | All-in $/1k | Eden source calls/task | Agent search calls/task | Peak RSS / heap MB (process) |
+| Arm | Hidden raised | False concerns | Wall p50/p90 hidden (s) | Wall p50/p90 control (s) | Eden on the critical path, mean ms ² | TTFT p50 ms ² | Agent tokens in/out per task ² | Cache-read share ² | Agent + Eden live $/1k hidden / control | Background $/1k | All-in $/1k ² | Eden source calls/task ² | Agent search calls/task ² | Peak RSS / heap MB (process) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | **AFTER (default, now)** | **72.7% (93/128)** | **0.8% (1/128)** | **3.42 / 6.27** | 5.27 / 7.11 | 1,655 | 544 | 1,550 / 420 | 70.4% | 0.605 / 0.827 | 0.899 | 1.615 | 3.61 | 0.87 | 352 / 180 |
 | BEFORE-default | 27.3% (35/128) | 0.0% (0/128) | 5.04 / 6.03 | 5.06 / 5.90 | 1,556 | 537 | 2,310 / 492 | 51.0% | 0.403 / 0.395 | 0 | 0.399 | 14.41 | 1.46 | 455 / 276 |
+| BEFORE-default + judge ¹ | 29.7% (38/128) | 0.0% (0/128) | 5.65 / 7.33 | 5.67 / 7.22 | 2,238 | 546 | 2,189 / 480 | 40.3% | 0.459 / 0.483 | 0 | 0.471 | 13.35 | 1.27 | 223 / 102 |
 | BEFORE-ALL3 | 45.3% (58/128) | 1.6% (2/128) | 3.85 / 4.86 | 3.91 / 4.82 | 461 | 528 | 1,891 / 487 | 65.5% | 0.327 / 0.348 | 0.047 | 0.384 | 3.75 | 1.26 | 455 / 276 |
 | Pi alone (`tools`) | 7.0% (9/128) | 0.0% (0/128) | 4.11 / 5.87 | 4.17 / 5.89 | 0 | 551 | 2,600 / 516 | 81.5% | 0.333 / 0.345 | 0 | 0.339 | 0 | 3.41 | 352 / 180 |
 | Pi alone, BEFORE tree | 7.0% (9/128) | 0.0% (0/128) | 4.04 / 5.90 | 4.06 / 6.05 | 0 | 540 | 2,641 / 523 | 82.1% | 0.332 / 0.353 | 0 | 0.342 | 0 | 3.40 | 455 / 276 |
+
+¹ Run afterwards, alone on the machine (four processes, not eight), with the same flags and `--conditions eden-judge`.
+Its walls had less competition for the CPU than the other rows, so any bias favours this arm.
+² Pooled over hidden and control tasks.
 
 Paired differences (a − b) over the same 128 task ids, bootstrap 95% interval (4,000 resamples):
 
 | a − b | kind | hidden fact / false concern (points) | wall (s) | agent + Eden live $/1k |
 |---|---|---|---|---|
-| AFTER − BEFORE-default | hidden | **+45.3 (+35.2..+54.7)** | −1.03 (−1.31..−0.73) | +0.201 (+0.148..+0.260) |
+| AFTER − BEFORE-default | hidden | **+45.3 (+35.2..+54.7)** | −1.03 (−1.31..−0.74) | +0.201 (+0.148..+0.260) |
 | AFTER − BEFORE-default | control | +0.8 (+0.0..+2.3) | +0.16 (−0.12..+0.44) | +0.432 (+0.377..+0.489) |
+| AFTER − BEFORE-default + judge | hidden | **+43.0 (+32.8..+53.1)** | −1.49 (−1.83..−1.16) | +0.146 (+0.089..+0.206) |
+| AFTER − BEFORE-default + judge | control | +0.8 (+0.0..+2.3) | −0.55 (−0.84..−0.27) | +0.344 (+0.291..+0.399) |
 | AFTER − BEFORE-ALL3 | hidden | **+27.3 (+18.0..+36.7)** | +0.29 (+0.02..+0.56) | +0.278 (+0.222..+0.334) |
 | AFTER − BEFORE-ALL3 | control | −0.8 (−3.9..+1.6) | +1.27 (+1.03..+1.53) | +0.479 (+0.424..+0.535) |
 | AFTER − Pi alone | hidden | **+65.6 (+57.0..+74.2)** | −0.15 (−0.46..+0.16) | +0.272 (+0.215..+0.333) |
@@ -99,27 +121,31 @@ Paired differences (a − b) over the same 128 task ids, bootstrap 95% interval 
 walls within noise. Both results files carry the same `promptsHash` (00a17863458a8419) and harness version
 (`@earendil-works/pi-agent-core@1.3.0`).
 
-From `pi-ab-report.ts` (hidden tasks only; the table above pools hidden and control where marked):
+From `pi-ab-report.ts`. The tokens and model calls are for hidden tasks only; the Eden columns (slow path, ask, items
+injected) and the critical path pool hidden and control tasks, as the report prints them:
 
-| Arm | Agent tokens in / out (hidden) | Model calls | Eden slow path p50 / p90 ms | Ask p50 ms | Items injected/task | Critical path: Eden / model / tool (mean ms, all tasks) |
+| Arm | Agent tokens in / out (hidden) | Model calls (hidden) | Eden slow path p50 / p90 ms | Ask p50 ms | Items injected/task | Critical path: Eden / model / tool (mean ms) |
 |---|---|---|---|---|---|---|
 | AFTER | 1,293 / 389 | 1.34 | 16 / 31 | 1,004 | 0.97 | 1,655 (37%) / 2,853 / 0 |
 | BEFORE-default | 2,314 / 500 | 1.92 | 668 / 1,179 | 746 | 0.14 | 1,556 (31%) / 3,387 / 0 |
+| BEFORE-default + judge | 2,087 / 474 | 1.74 | 1,389 / 2,616 (judge 0.85 calls/task, p50 686 ms) | 771 | 0.41 | 2,238 (40%) / 3,293 / 0 |
 | BEFORE-ALL3 | 1,834 / 479 | 1.74 | 472 / 934 | 19 | 0.65 | 461 (12%) / 3,266 / 0 |
 | Pi alone | 2,523 / 506 | 2.07 | — | — | — | 0 / 3,452 / 715 |
 
 Reading:
 - **Quality.** AFTER's 72.7% on Pi matches its D123 record on the same suite (73.4%, seeds 41–42) and its D112 record.
-  So today's figure is stable. The old default's 27.3% comes from a few asks answered from live searches: 14.4 source
-  calls per task and 0.14 items injected. Old ALL3's 45.3% comes from rules, cards and the background sync.
+  So today's figure is stable. The keyed old product's 29.7% also equals D112's record of it, to the task. The old
+  default works mostly from asks answered by live searches: 14.4 source calls per task and 0.14 items injected (0.41
+  with the judge). Old ALL3 works from rules, cards and the background sync. Neither breakdown was measured
+  directly, so both readings are likely explanations, not measurements.
 - **Speed.** Old ALL3 had Eden on the critical path least (461 ms). Its background sync answered asks from the local
   index (ask p50 19 ms), and it ran no model on the path. AFTER spends 1,655 ms there, mostly the reader's call
   (ask p50 1,004 ms). That call is what makes hidden tasks raise their fact, and on control tasks it is the 1.3 s cost
   over ALL3. AFTER's slow path itself is 40 times quicker (16 ms against 668 ms for the old default). On hidden tasks
-  the agent then needs fewer turns (1.34 model calls against 1.92), which is why AFTER beats the old default's wall
-  time.
+  the agent also needs fewer turns (1.34 model calls against 1.92), the likely reason AFTER beats the old default's
+  wall time.
 - **Tokens.** With Eden today the agent reads 1,293 prompt tokens per hidden task, against 2,523 with no Eden and
-  2,314 with the old default. It searches less because Eden has already answered.
+  2,314 with the old default. It searches less, most likely because Eden has already answered.
 
 ## Hermes Agent: held-out 13, seeds 41–44
 
@@ -136,7 +162,7 @@ Reading:
 | AFTER − BEFORE-default | hidden | **+57.0 (+47.7..+65.6)** | −0.83 (−1.28..−0.40) | +0.211 (+0.161..+0.261) |
 | AFTER − BEFORE-default | control | +0.0 (+0.0..+0.0) | +0.46 (+0.08..+0.86) | +0.326 (+0.283..+0.372) |
 | AFTER − BEFORE-ALL3 | hidden | **+35.2 (+25.8..+44.5)** | +0.40 (+0.04..+0.75) | +0.248 (+0.200..+0.297) |
-| AFTER − BEFORE-ALL3 | control | +0.0 (+0.0..+0.0) | +0.84 (+0.46..+1.23) | +0.310 (+0.264..+0.359) |
+| AFTER − BEFORE-ALL3 | control | +0.0 (+0.0..+0.0) | +0.84 (+0.46..+1.23) | +0.310 (+0.264..+0.358) |
 | AFTER − Hermes alone | hidden | **+62.5 (+53.9..+71.1)** | +0.35 (−0.08..+0.78) | +0.261 (+0.208..+0.316) |
 | AFTER − Hermes alone | control | +0.0 (+0.0..+0.0) | +1.40 (+1.03..+1.78) | +0.380 (+0.331..+0.430) |
 | AFTER − Hermes alone (BEFORE tree) | hidden | +61.7 (+53.1..+70.3) | +0.49 (+0.08..+0.90) | +0.280 (+0.228..+0.333) |
@@ -149,14 +175,16 @@ Notes:
 - Hermes's own prompt is about 7,000 tokens, so the agent's tokens hardly move with Eden. 87–90% of them are read from
   the prompt cache in every arm.
 - The old default does worse on Hermes than on Pi (10.2% against 27.3%), and AFTER keeps most of its Pi figure
-  (67.2%). Today's default reaches the agent through the plugin's packets as well as through asks.
+  (67.2%). A likely reason, not measured here: today's default reaches the agent through the plugin's packets as well
+  as through asks.
 
 ## Costs: dollars per 1,000 tasks, labelled
 
-| Arm | Agent | Eden per task (the reader) | Background (cards, intent), spread over the arm's tasks | All-in |
+| Arm | Agent | Eden per task (the reader; the judge for the old keyed default) | Background (cards, intent), spread over the arm's tasks | All-in |
 |---|---|---|---|---|
 | Pi AFTER | 0.278 | 0.438 | 0.899 (cold-cache upper bound) | 1.615 |
 | Pi BEFORE-default | 0.399 | 0 | 0 | 0.399 |
+| Pi BEFORE-default + judge | 0.412 | 0.059 (the judge) | 0 | 0.471 |
 | Pi BEFORE-ALL3 | 0.337 | 0 | 0.047 (warm replay) | 0.384 |
 | Pi alone | 0.339 | 0 | 0 | 0.339 |
 | Hermes AFTER | 0.380 | 0.295 | 0.886 (cold-cache upper bound) | 1.561 |
@@ -170,23 +198,23 @@ The agent and Eden per-task columns are pooled over hidden and control tasks.
 It is mostly a one-time backfill of each world's items. AFTER missed the checked-in card cache on almost every item
 (its prompt changed since the cache was made, see above), so it paid for about 1,370 cards per seed. Old ALL3 hit the
 cache and paid for about 40. In a deployment, each item is carded once in its lifetime, not once per task. So the
-steady-state background cost per task is far below either figure (D123 recorded $0.459 per 1k for the same default).
+steady-state background cost per task is below AFTER's figure here (D123 recorded $0.459 per 1k for the same default).
 This run measured it only as an upper bound. Eden's own spend on Pi AFTER was $0.230 for cards and $0.112 for the
-reader over 512 task runs (four seeds). On Hermes AFTER it was $0.227 and $0.076.
+reader over its 256 task runs (four seeds). On Hermes AFTER it was $0.227 and $0.076.
 
 ## The $0 checks, both trees
 
 | Check | BEFORE (18366d039) | AFTER (bf2fc13) | Notes |
 |---|---|---|---|
 | `bun run eval` (no model), each tree's own eval | 27 scenarios: precision 1.000, recall 0.444, false-fire 0 | 31 scenarios: precision 0.828, recall 0.480, false-fire 0 | Different scenario sets: main added four "large look-alike" scenarios |
-| main's eval (31 scenarios) on the old engine, default | precision 0.889, recall 0.480, false-fire 0 | precision 0.828, recall 0.480, false-fire 0 | The eval wires no reader or cards, so AFTER's reader, cards and intent are inert here (it says so). This is the no-model fast path, not the product |
+| main's eval (31 scenarios) on the old engine, default | precision 0.889, recall 0.480, false-fire 0 | precision 0.828, recall 0.480, false-fire 0 | The eval wires no reader or cards, so AFTER's reader, cards and intent are inert here (it says so). This is the no-key path the shipped servers run without a model key (D112): its precision fell 0.889 → 0.828 (two look-alikes delivered beside expected items) |
 | main's eval on the old engine, ALL3 | precision 0.800, recall 0.480, false-fire 0.0147 | — | cards inert (no card maker) |
 | `bun run funnel` train1–6, seeds 41–42 (TOTAL hidden / decoys surfaced of 384) | default 122 / 127; ALL3 214 / 211 | default 214 / 211 (658 reader calls) | `--reader stub` for AFTER (the reader says nothing binds), so AFTER's funnel shows its rule paths only, which equal old ALL3's here. The live runs above are the measure |
 | funnel: delivered hidden / decoys before the first model call | default 24 / 42; ALL3 97 / 72 | 97 / 72 | same caveat |
 | funnel: source calls per task (merged) | default 9.2; ALL3 3.2 | 3.1 (amortised total 4.33) | |
 | `ingest.bench.ts 200 500`: memory per synced user | **1,825 KB** (3,737 B/item), 3 runs identical | **1,276 KB** (2,614 B/item), 3 runs identical | −30%: the packed index (D111, D120) and the cheaper graph (D107) |
-| `ingest.bench.ts`: backfill CPU per item | 121.9–126.6 µs | 131.0–141.2 µs | AFTER 7–11% slower to ingest. BEFORE's copy counts items per tick, which costs it a little, so the gap may be slightly larger than shown. The unchanged sweep was not measured on BEFORE (the old sync has no listing counter) and is 4.5–4.9 µs/item on AFTER |
-| `bun run check` (format, types, all tests) | 57.3 s wall, 1,270 tests, 0 fail | 50.1 s wall, 1,499 tests, 0 fail | Same container, one at a time |
+| `ingest.bench.ts`: backfill CPU per item | 121.9–126.6 µs | 131.0–141.2 µs | AFTER slower to ingest, by roughly 3–17% across runs on this shared 4-core container (the reviewer's interleaved runs: 119.2–121.6 against 124.8–140.8 µs). BEFORE's copy counts items per tick, which costs it a little. The unchanged sweep was not measured on BEFORE (the old sync has no listing counter) and is 4.5–4.9 µs/item on AFTER |
+| `bun run check` (format, types, all tests) | 57.3 s wall (tests 33.4 s), 1,270 tests, 0 fail | 50.1 s wall (tests 24.2 s), 1,499 tests, 0 fail | Same container, one at a time; walls timed with `time` in this session, test times from bun's output. Main's `scripts/test.sh` runs the tests in parallel, the old one serially: the faster wall comes from the runner, not the code. A warm type-check cache gave 34.5 s on main in the review |
 
 ## What went wrong, and other honesty notes
 
@@ -209,11 +237,12 @@ reader over 512 task runs (four seeds). On Hermes AFTER it was $0.227 and $0.076
 |---|---|
 | Pi AFTER (4 seeds: tools + default) | 0.533 |
 | Pi BEFORE (4 seeds: tools + old default + old ALL3) | 0.338 |
-| Hermes AFTER (4 seeds: hermes + default) | 0.520 |
+| Hermes AFTER (4 seeds: hermes + default) | 0.519 |
 | Hermes BEFORE (4 seeds: hermes + old default + old ALL3) | 0.350 |
 | Pilots (Pi and Hermes, both trees) | 0.138 |
+| Pi BEFORE-default + judge (4 seeds, after the review) | 0.138 |
 | Discarded first BEFORE run (stale lab) | 0.337 |
-| **Total (spend ledger)** | **2.215** |
+| **Total (spend ledger)** | **2.352** |
 
 ## Reproduce
 
@@ -233,6 +262,7 @@ for S in 41 42 43 44; do   # one process per seed and tree
     --cards-out $OLDPWD/$W/pi/before-$S.cards.jsonl $H --conditions tools,eden,eden~A $L --budget 1 \
     --timeline $OLDPWD/$W/pi/before-$S --out $OLDPWD/$W/pi/before-$S.json) &
 done; wait
+# The old keyed product (Pi only), from ../eden-before: the same flags with --conditions eden-judge.
 # Hermes: the same with hermes-ab.ts --hermes-src $HERMES --concurrency 3, conditions hermes,hermes+eden (AFTER) and
 # hermes,hermes+eden,hermes+eden~A (BEFORE), two seeds at a time.
 a=$(echo $W/pi/after-4{1,2,3,4}.json | tr ' ' ,); b=$(echo $W/pi/before-4{1,2,3,4}.json | tr ' ' ,)

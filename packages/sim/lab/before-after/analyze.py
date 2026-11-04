@@ -66,6 +66,7 @@ def load(spec):
             rows[r["task"]] = {
                 "kind": tasks[r["task"]]["kind"],
                 "rate": raised / max(1, len(must)),
+                "graded": r.get("facts") is not None or not must,
                 "wall": r["wallMs"] / 1000,
                 "agent": r["costUsd"],
                 "eden": r.get("edenCostUsd", 0),
@@ -93,7 +94,8 @@ def bootstrap(diffs, n=4000, seed=7):
     """The mean of the paired differences and its bootstrap 95% interval."""
     rnd, m = random.Random(seed), len(diffs)
     means = sorted(sum(diffs[rnd.randrange(m)] for _ in range(m)) / m for _ in range(n))
-    return sum(diffs) / m, means[int(0.025 * n)], means[int(0.975 * n)]
+    # The ranks pi-timeline.ts uses for the interval.
+    return sum(diffs) / m, means[math.floor(0.025 * n)], means[math.floor(0.975 * n) - 1]
 
 
 def ci(x, digits):
@@ -145,7 +147,9 @@ def main():
                 if not common:
                     continue
                 x, y = by[a], by[b]
-                rate = bootstrap([100 * (x[t]["rate"] - y[t]["rate"]) for t in common])
+                # Ungraded runs (a failed grading call) are left out of the rate, as pi-ab-report.ts does.
+                graded = [t for t in common if x[t]["graded"] and y[t]["graded"]]
+                rate = bootstrap([100 * (x[t]["rate"] - y[t]["rate"]) for t in graded])
                 wall = bootstrap([x[t]["wall"] - y[t]["wall"] for t in common])
                 usd = bootstrap(
                     [1000 * (x[t]["agent"] + x[t]["eden"] - y[t]["agent"] - y[t]["eden"]) for t in common]
