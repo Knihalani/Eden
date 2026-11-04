@@ -109,6 +109,24 @@ Hosted profile, same mix: Haiku on first-party APIs $0.33 → OLD $1.73, NEW $1.
 With signal-only notifications (direct): Haiku on first-party $1.24 (+248%), on Pipedream $61.77 (+48%); Sonnet on
 first-party $7.88 (+11%). The model saving holds, but the connector saving needs notifications that carry their items.
 
+## What the payload arm does not show
+
+- **The lab world does not change during a run**, so in `payload` mode no notification is ever sent. The arm is
+  "sources marked notifying, never told anything": its 0.6–0.8 calls per task are the daily sweep and the 24-hour
+  safety poll. It cannot show a quality loss from a stale copy, because nothing becomes stale. A real deployment adds
+  the items pushed and, for a notification that carries no items, one poll.
+- **What it costs to receive notifications is not counted.** A connector platform may bill each trigger run, and a
+  Gmail push carries only a history id that the integrator turns into items with a `history.list` call of its own.
+  The cost tables count only the calls Eden and the agent make.
+- **False concerns per profile:** direct OLD 1/128 against NEW payload 3/128, hosted 2/128 against 2/128. Pooled the
+  change is +0.8 points (−0.8..+2.3); on the direct profile alone it is +1.6 points, within its noise and not a
+  measured regression, but stated here under the precision rule.
+
+The review of this change found that pushed items could make the next poll stop early and miss an older unannounced
+change. A poll now ignores items pushed since the last complete poll when it looks for where its listing reaches what
+was synced before (`sync.test.ts`, "pushed items are not taken for the poll's boundary"). The lab runs above predate
+that fix; in a static world it changes no call.
+
 ## Why signal-only notifications save so little here
 
 The lab advances Eden's clock an hour between tasks. At the assumed rates, a busy inbox (4 changes an hour) and chat

@@ -93,6 +93,8 @@ const MAX_POLL_PAGES = 20;
 /** Background sync calls leave this many of the serving rate limit's tokens for lookups. */
 const SERVING_HEADROOM = 2;
 const HOUR = 3_600_000;
+/** Pushed item ids held per source between polls (`SourceSync.pushed`); past it the oldest are let go. */
+const MAX_PUSHED = 1_000;
 /** Users a tick works on at once. */
 const USERS_AT_ONCE = 16;
 
@@ -137,6 +139,15 @@ interface SourceSync {
   notices: number;
   /** `notices` when the last complete poll began: the copy is behind while they differ. */
   noticesPolled: number;
+  /** `notices` when the backfill's latest page began: what the backfill has read when it ends (`warmUp`). */
+  noticesBackfill: number;
+  /**
+   * Items stored from notifications (`ingest`) since the last complete poll, with the order they came in. They are the
+   * newest the source has but were never listed, so a poll must not take one of them for the point where its listing
+   * reaches what was synced before (`boundary`): items between them and that point would be skipped.
+   */
+  pushed: Map<string, number>;
+  pushSeq: number;
 }
 
 interface UserSync {
@@ -225,11 +236,13 @@ export class SyncManager {
   /**
    * A change notification for a user's source (`syncPush`): its synced copy is behind until a poll that begins after
    * now completes, which the next lookup that reads it makes (behind it with `syncPollBehind`). A burst of
-   * notifications before that poll costs one poll. Returns whether the source is synced for the user. O(1), no I/O.
+   * notifications before that poll costs one poll. Returns whether the notification acts: the source is synced for the
+   * user and says it notifies (with `push`); for any other source it is ignored and false, so an integrator that
+   * forgot to declare `notifies` is told so. O(1), no I/O.
    */
   changed(scope: Scope, sourceId: string): boolean {
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
-    if (!s) return false;
+    if (!s || !s.notifies) return false;
     s.notices++;
     return true;
   }
@@ -243,6 +256,12 @@ export class SyncManager {
     const u = this.users.get(scopeKey(scope));
     const s = u?.sources.get(sourceId);
     if (!u || !s || s.phase !== "warm") return 0;
+    for (const it of items) {
+      if (it.sourceId !== sourceId) continue;
+      s.pushed.delete(it.id); // Re-insert: the map stays in arrival order.
+      s.pushed.set(it.id, ++s.pushSeq);
+    }
+    while (s.pushed.size > MAX_PUSHED) s.pushed.delete(s.pushed.keys().next().value as string);
     return this.store(u, s, items);
   }
 
@@ -409,6 +428,7 @@ export class SyncManager {
       if (!source) return;
       if (this.budget.take(budgetKey(u, next)) > 0) return;
       let page: Awaited<ReturnType<SourceFanout["list"]>> | undefined;
+      next.noticesBackfill = next.notices;
       await this.run(next, async () => {
         page = await this.list("backfill", source, u.scope, next.cursor, this.o.pageSize, {
           timeoutMs: this.o.timeoutMs,
@@ -471,6 +491,8 @@ export class SyncManager {
     if (s.phase === "warm") return;
     s.phase = "warm";
     s.polledAt = now;
+    // Notifications that came before the backfill's last page began are read by it; later ones are not.
+    s.noticesPolled = s.noticesBackfill;
     s.sweptAt = now;
     let recent = 0;
     let timed = 0;
@@ -505,6 +527,7 @@ export class SyncManager {
   ): Promise<void> {
     const started = this.deps.now();
     const notices = s.notices;
+    const pushSeq = s.pushSeq;
     let cursor: string | undefined;
     let changed = 0;
     // `pollPageSize`: the first page is sized to what changed, not to the backfill's page; each page after it tops the
@@ -537,12 +560,14 @@ export class SyncManager {
       if (demand) this.stats.demandItems += page.items.length;
       else this.stats.backgroundItems += page.items.length;
       s.failures = 0;
-      const fresh = this.store(u, s, page.items);
+      const stored = new Set<string>();
+      const fresh = this.store(u, s, page.items, stored);
       changed += fresh;
       if (tally) tally.fresh += fresh;
-      const boundary = fresh < page.items.length;
+      // The listing has reached what was synced before: an item held unchanged that a notification did not bring.
+      const boundary = page.items.some((it) => !stored.has(it.id) && !s.pushed.has(it.id));
       if (boundary || page.next === null || page.items.length === 0) {
-        this.polled(s, started, changed, notices);
+        this.polled(s, started, changed, notices, pushSeq);
         return;
       }
       cursor = page.next;
@@ -568,8 +593,10 @@ export class SyncManager {
    * A complete poll: the change-rate posterior learns `changed` items over the hours since the last poll, and the
    * notifications received before it began (`notices`) are read.
    */
-  private polled(s: SourceSync, startedAt: number, changed: number, notices: number): void {
+  private polled(s: SourceSync, startedAt: number, changed: number, notices: number, pushSeq: number): void {
     s.noticesPolled = notices;
+    // Items pushed before the poll began are listed now, or lie past where it stopped: no longer a false boundary.
+    for (const [id, seq] of s.pushed) if (seq <= pushSeq) s.pushed.delete(id);
     const hours = Math.max(0, (startedAt - s.polledAt) / HOUR);
     if (Number.isFinite(hours)) {
       s.alpha += changed;
@@ -591,6 +618,7 @@ export class SyncManager {
   private async sweep(u: UserSync, s: SourceSync, source: Source): Promise<void> {
     const started = this.deps.now();
     const notices = s.notices;
+    const pushSeq = s.pushSeq;
     s.sweep ??= { cursor: undefined, seen: new Set() };
     const sw = s.sweep;
     for (let p = 0; p < MAX_POLL_PAGES; p++) {
@@ -613,7 +641,7 @@ export class SyncManager {
       const fresh = this.store(u, s, page.items);
       for (const it of page.items) sw.seen.add(it.id);
       // The sweep's first page is the newest: it is also a poll.
-      if (first) this.polled(s, started, fresh, notices);
+      if (first) this.polled(s, started, fresh, notices, pushSeq);
       const full = sw.seen.size >= this.o.maxItems;
       if (page.next === null || page.items.length === 0 || full) {
         // Missed by this sweep and the one before: gone. Missed by this one only: perhaps skipped (an offset listing
@@ -631,12 +659,13 @@ export class SyncManager {
     }
   }
 
-  /** Stores a page's (redacted) items as synced; returns how many were new or changed. */
-  private store(u: UserSync, s: SourceSync, items: ContextItem[]): number {
+  /** Stores a page's (redacted) items as synced; returns how many were new or changed (their ids into `changedIds`). */
+  private store(u: UserSync, s: SourceSync, items: ContextItem[], changedIds?: Set<string>): number {
     // The same user object and source state: work for a user forgotten and back since must not land.
     if (u.gone || items.length === 0 || this.users.get(u.key) !== u || u.sources.get(s.id) !== s) return 0;
     const own = items.filter((it) => it.sourceId === s.id);
     const changed = this.deps.cache.put(u.scope, own, this.deps.now(), true, true);
+    if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
     for (const it of own) {
       // Listed: not missing, whatever an earlier sweep thought (an offset listing may have skipped it then).
@@ -742,6 +771,9 @@ function newSourceSync(id: string): SourceSync {
     notifies: false,
     notices: 0,
     noticesPolled: 0,
+    noticesBackfill: 0,
+    pushed: new Map(),
+    pushSeq: 0,
   };
 }
 

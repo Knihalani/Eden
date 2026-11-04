@@ -13,6 +13,7 @@
  */
 import { readFileSync } from "node:fs";
 import type { Scope } from "@eden/protocol";
+import type { Source } from "@eden/sources";
 import { Rng } from "../rng";
 import { REALISTIC, withOverrides, type ProfileSet, type SimSource, type SourceProfile } from "../sources";
 
@@ -51,6 +52,20 @@ export function connectorOptions(opt: (name: string, fallback: string) => string
       }),
   );
   return { sourceProfileArg, profiles, push, pushRates };
+}
+
+/**
+ * The fields a wrapper around a source must keep (a harness's timing wrapper): everything the engine reads off a
+ * `Source` besides its calls. A wrapper that dropped `notifies` once made `--push` do nothing (pi-ab, then hermes-ab).
+ */
+export function sourceFields(source: Source): Pick<Source, "id" | "kind" | "description" | "listsByTime" | "notifies"> {
+  return {
+    id: source.id,
+    kind: source.kind,
+    description: source.description,
+    listsByTime: source.listsByTime,
+    notifies: source.notifies,
+  };
 }
 
 /** What a results file records of these options (nothing when both are at their defaults). */

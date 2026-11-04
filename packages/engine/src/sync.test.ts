@@ -632,13 +632,68 @@ describe("syncPush: a source that notifies is polled when told it changed", () =
     expect(partner.sync!.current(scope, "mail")).toBe(true);
   });
 
-  test("off (the default): notifications do nothing; a source that does not notify goes by its rate", async () => {
+  test("push off: notifications do nothing; push on: a source that does not notify is told so, and goes by its rate", async () => {
     const src = new NotifyingSource("mail", mail(4));
     const { partner } = await warm(src, { syncPush: false });
     expect(partner.sourceChanged(scope, "mail")).toBe(false);
     expect(await partner.sourceItems(scope, "mail", [src.make("x", "X", "x", T0)])).toBe(0);
-    const plain = new ListSource("mail", mail(4));
+    const plain = new ListSource("mail", mail(20));
     const on = await warm(plain);
     expect(on.partner.sourceChanged(scope, "nope")).toBe(false);
+    // Not declared as notifying: the notification is refused (the integrator sees false) and changes nothing.
+    expect(on.partner.sourceChanged(scope, "mail")).toBe(false);
+    on.advance(3 * HOUR);
+    expect(on.partner.sync!.current(scope, "mail")).toBe(false);
+  });
+
+  test("pushed items are not taken for the poll's boundary: an unannounced item older than them is still listed", async () => {
+    const src = new NotifyingSource("mail", mail(4));
+    const { partner, advance, now, cache } = await warm(src, { syncPollPageSize: 5 });
+    advance(HOUR);
+    const fresh = Array.from({ length: 6 }, (_, i) =>
+      src.make(`n${i}`, `New ${i}`, `New mail ${i} about the plan`, now() - (6 - i) * 60_000),
+    );
+    src.items.push(...fresh);
+    // The integrator pushes the newest five; the sixth (the oldest new one) came with no payload.
+    expect(await partner.sourceItems(scope, "mail", fresh.slice(1))).toBe(5);
+    expect(partner.sourceChanged(scope, "mail")).toBe(true);
+    const signal = new AbortController().signal;
+    await partner.sync!.freshen(scope, [src], signal);
+    expect(partner.sync!.current(scope, "mail")).toBe(true);
+    expect(cache.get(scope, itemId("mail", "n0"), now())?.title).toBe("New 0");
+  });
+
+  test("a notification before the backfill's last page is read by it; one during that page is not", async () => {
+    /** Holds its `hold`-th list call open until released. */
+    class Held extends NotifyingSource {
+      hold = 0;
+      release: () => void = () => {};
+      override async list(scope: Scope, cursor: string | undefined, limit: number): Promise<ListPage> {
+        if (this.lists + 1 === this.hold) {
+          const opened = new Promise<void>((r) => (this.release = r));
+          this.gate = opened;
+          const page = super.list(scope, cursor, limit);
+          this.gate = null;
+          return page;
+        }
+        return super.list(scope, cursor, limit);
+      }
+    }
+    for (const [hold, current] of [
+      [1, true], // During page 1 of 2: page 2 begins after it and reads it.
+      [2, false], // During the last page: nothing after it reads it, so the copy is behind once warm.
+    ] as const) {
+      const src = new Held("mail", mail(4));
+      src.hold = hold;
+      const env = setup([src], { syncPush: true, syncPageSize: 2 });
+      env.partner.sync!.track(scope);
+      const tick = env.partner.sync!.tick();
+      while (src.lists < hold) await new Promise((r) => setTimeout(r, 1));
+      expect(env.partner.sourceChanged(scope, "mail")).toBe(true);
+      src.release();
+      await tick;
+      while (!env.partner.sync!.warm(scope)) await env.partner.sync!.tick();
+      expect(env.partner.sync!.current(scope, "mail")).toBe(current);
+    }
   });
 });

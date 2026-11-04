@@ -170,14 +170,16 @@ export function ownText(item: ContextItem): string {
 
 /** A sender that is a machine: a no-reply, notification or mailing-list address in the item's From line. */
 const AUTOMATED_FROM =
-  /^From:[^\n]*\b(?:no-?reply|do-?not-?reply|notifications?|alerts?|mailer(?:-daemon)?|newsletters?|digest|marketing|updates|news|info|support|billing|receipts?|team)@/im;
+  /^From:[^\n]*?[<\s:](?:no-?reply|do-?not-?reply|notifications?|alerts?|mailer(?:-daemon)?|newsletters?|digest|marketing|updates|news|info|support|billing|receipts?|team)@/im;
 /** What bulk and notification mail says of itself (an unsubscribe link, a "you are receiving this" footer). */
 const AUTOMATED_TEXT =
   /(?:unsubscribe|view (?:it |this )?in (?:your )?browser|you(?: are|'re) receiving this|this mailbox is not monitored|manage (?:your )?(?:notifications|email preferences|subscriptions?)|notification (?:preferences|settings))/i;
 const BULK_CATEGORY = /^(?:promotions?|social|forums?|updates)$/i;
 
 /**
- * Whether an item is machine-sent mail: a no-reply or list address, a bulk category, or a bulk footer. Such mail
+ * Whether an item is machine-sent mail: a no-reply or list address (its whole local part: `team@`, not `dana.team@`),
+ * a bulk category, or a bulk footer. The footer test reads mail only (an item with a sender): a chat message or a
+ * document saying "unsubscribe me from the vendor list" is a person's. Such mail
  * bears on a request only through constraint wording (a security alert, a payment due), which the prefilter passes on
  * its own; read for intent only, it rarely is (`cardsLean`).
  */
@@ -187,7 +189,9 @@ export function automated(item: ContextItem): boolean {
   // The sender as a connector gives it: a `From:` header line in the text, or a sender field in `meta`.
   const sender = item.meta?.from ?? item.meta?.sender;
   const head = `${sender !== undefined ? `From: ${sender}\n` : ""}${item.text.slice(0, 600)}`;
-  return AUTOMATED_FROM.test(head) || AUTOMATED_TEXT.test(item.text.slice(0, READ_CHARS * 4));
+  if (AUTOMATED_FROM.test(head)) return true;
+  const mail = sender !== undefined || /^From:/m.test(head);
+  return mail && AUTOMATED_TEXT.test(item.text.slice(0, READ_CHARS * 4));
 }
 
 const LEAN_DAY = 86_400_000;

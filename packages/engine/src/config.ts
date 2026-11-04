@@ -383,7 +383,8 @@ export interface EngineConfig {
    * On in the default (D125). With `intent`, an item the card prefilter rejects is read for its requests only when a
    * person wrote it and it is recent: not automated mail (`automated`, cards.ts) and dated within
    * the last `cardsLeanDays` days or upcoming. Items with constraint wording are read as before, whatever their age or
-   * sender. Train1–6, seeds 41–42: 58% fewer card reads, 81 of the 85 planted items the prefilter rejects still read.
+   * sender. Train1–6, seeds 41–42: 62% fewer items sent to the card model (55% fewer calls), and 81 of the 85 planted
+   * items the prefilter rejects still read.
    */
   cardsLean: boolean;
   /** With `cardsLean`: how old (days, by its date or its start) an unconstrained item may be and still be read. */

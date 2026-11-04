@@ -58,7 +58,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
-import { connectorHeader, connectorOptions, pushNotifier } from "./connector-options";
+import { connectorHeader, connectorOptions, pushNotifier, sourceFields } from "./connector-options";
 import type { World } from "../world";
 import {
   emptyResult,
@@ -198,10 +198,7 @@ function watched(source: SimSource, onCall: (op: string, start: number, end: num
     }
   };
   return {
-    id: source.id,
-    kind: source.kind,
-    description: source.description,
-    listsByTime: source.listsByTime,
+    ...sourceFields(source),
     search: (query, signal) => timed("search", () => source.search(query, signal)),
     fetch: (ref, scope, signal) => timed("fetch", () => source.fetch(ref, scope, signal)),
     list: (scope, cursor, limit, signal) => timed("list", () => source.list(scope, cursor, limit, signal)),

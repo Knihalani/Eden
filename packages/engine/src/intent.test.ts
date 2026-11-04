@@ -402,6 +402,9 @@ describe("cardsLean: what the prefilter rejects is read for intent only when a p
     expect(automated(footer)).toBe(true);
     expect(automated({ ...human, meta: { category: "promotions" } })).toBe(true);
     expect(automated(human)).toBe(false);
+    // A person whose address merely contains a list word, and a chat message that mentions unsubscribing.
+    expect(automated(mail("p", "Dana Team <dana.team@acme.com>", "Lunch?", 1))).toBe(false);
+    expect(automated(item("c", "Vendor list", "Please unsubscribe me from the vendor list by Friday"))).toBe(false);
     expect(
       automated({ ...item("x", "Shipped", "Your parcel is on its way"), meta: { from: "no-reply@shop.example" } }),
     ).toBe(true);

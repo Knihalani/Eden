@@ -56,7 +56,7 @@ Work still running when the wait ends arrives later through `pending`/`collect`,
   (partner.ts `observe`: `waitMs <= 0` queues the slow path and returns). With `waitMs` the reply comes as soon as the
   lookup ends, so a fast lookup costs no extra latency; only a slow one costs up to the wait. **Measured** (simulated
   connectors at their profiles' assumed latency, `bun run funnel --preset none --suite train1,train2 --seeds 41 --
---time 1`, production defaults): all 11 deliveries arrived 630 to 1,336 ms after the user message (the harness
+  --time 1`, production defaults): all 11 deliveries arrived 630 to 1,336 ms after the user message (the harness
   waits 3,000 ms). By those timings (inferred, not a run at each wait) no wait or 600 ms would have delivered 0 of
   the 11 before the first model call, 800 ms 5, and 1,500 ms all 11. Warm in-process sources (the README's static
   file) answer in milliseconds, so there the wait is rarely spent. The client's default (3,000 ms on every sent user
@@ -83,7 +83,7 @@ trip. Eden answers an ask in about 5 ms at p50 (D64), so the cost of asking is t
 ## Keep the provider's prompt cache warm
 
 - **Put Eden's packet after the stable prefix.** `withContext` inserts it as a system message just before the latest
-  user message, so the system prompt, tool definitions and earlier _turns_ stay byte-identical between requests. It
+  user message, so the system prompt, tool definitions and earlier *turns* stay byte-identical between requests. It
   does not keep the cache within a turn that calls tools: a packet injected before the turn's next model call lands
   before the user message, ahead of the assistant's tool call and the tool result, so the previous request is no
   longer a prefix and the cache misses from that point on. To keep it, append a mid-turn packet at the end of the
@@ -168,7 +168,6 @@ The server reads the end user's accounts with that user's credentials, never ano
 
   The file is checked at startup (a bad entry or an unset env header stops the server with a message naming it) and
   re-read when it changes, entry by entry (a broken entry is that user's error; the rest apply). `EDEN_SOURCES_FILE` stays for static documents every user shares; its entries need `docs`.
-
 - **Your own directory**, when you embed the server: `new UserSources({ directory: async (scope) => specs })` reads
   the user's connected accounts and tokens from your vault, then pass `userSources.resolver` to `buildPartner` and
   `userSources` to `createHandler`. Return specs with `url` and `headers` (or the same `transport` function while a
@@ -186,26 +185,33 @@ user's connections as well as dropping what Eden holds; a user idle 15 minutes i
 (unless background sync keeps reading them), and each tenant holds at most 10,000 users' connections. Forget does not edit
 your configuration: to revoke a connection, remove it from the directory (and forget, to drop what was read).
 
-## Forward your sources' change notifications (`syncPush`)
+## Forward your sources' change notifications (`syncPush`, D125)
 
 Eden keeps a synced copy of each user's listable sources. Without help it guesses when a source has changed (a busy
-inbox goes stale in minutes) and polls it at the next lookup: about 3.4 to 3.9 listing calls per agent task in the
-market-latency runs (docs/research/eden-market-effect.md). On a connector platform that bills per call, those polls
-are most of Eden's connector bill. If you already receive the provider's change notifications, forward them:
+inbox goes stale in minutes) and polls it at the next lookup: 3.8 to 5.1 listing calls per agent task in the
+market-latency runs (docs/research/cost-fixes.md). On a connector platform that bills per call, those polls are most
+of Eden's connector bill. If you already receive the provider's change notifications, forward them:
 
-- **The source changed** (a Gmail `watch` push, a Calendar or Drive channel, a HubSpot webhook):
-  `POST /v1/sources/changed {userId, sourceId}`, or `client.sourceChanged(sourceId)`. The source's copy is polled
-  once, at its next use; a burst of notifications before that costs one poll.
 - **The changed items themselves** (a Slack Events API message, a Graph notification with resource data, a connector
-  platform's trigger payload): `POST /v1/sources/items {userId, sourceId, items: [{ref, title?, text, url?,
-updatedAt?, meta?}]}` (at most 100 items), or `client.sourceItems(sourceId, items)`. They pass the secret gate and are
-  held as synced, with no source call. Use the same `ref` the source's list tool returns, so the two are one item.
+  platform's trigger payload): `POST /v1/sources/items {userId, sourceId, items}`, each item
+  `{ref, title?, text, url?, updatedAt?, meta?}`, at most 100 per call, or `client.sourceItems(sourceId, items)`.
+  They pass the secret gate and are held as synced, with no source call. Use the same `ref` the source's list tool
+  returns, so a pushed item and the same item listed later are one item. This is what cuts Eden's polls (to 0.6 to
+  0.8 calls per task in the lab: the daily sweep and a 24-hour safety poll).
+- **Only that the source changed** (a Gmail `watch` push, a Calendar or Drive channel, a HubSpot webhook):
+  `POST /v1/sources/changed {userId, sourceId}`, or `client.sourceChanged(sourceId)`. The source is polled once, at
+  its next use, however many notifications came first. For a busy inbox this saves little: it changes about every
+  hour, so it is polled about as often as before.
 
 Declare the sources you forward: `"notifies": true` in the user's source spec (`EDEN_USER_SOURCES_FILE` or your
 `SourceDirectory`), or `notifies: true` on a `Source` you build. A source that notifies is polled only when told it
-changed, and at most `syncPushMaxStaleMs` (24 hours, the daily sweep's period) apart, so a lost notification is bounded; sources you do not forward
-are polled as before. Both routes answer 200 with what was done (`synced`, `stored`) and never change a user's
-configuration.
+changed, by the daily sweep (which also drops what the source deleted), and after `syncPushMaxStaleMs` (24 hours)
+with no notification, so a lost notification is bounded. Sources you do not forward are polled as before. The routes
+answer 200 with what was done: `synced` is false when the source is not synced for the user or not declared as
+notifying (the notification is ignored), and `stored` counts the items held new or changed.
+
+Receiving notifications has its own cost, which Eden does not see: a platform may bill trigger runs, and a Gmail push
+carries only a history id that your code turns into items with a `history.list` call.
 
 ## Configuration
 

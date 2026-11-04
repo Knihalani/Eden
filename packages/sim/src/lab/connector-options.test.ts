@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildWorld } from "../world";
 import { REALISTIC, simSources } from "../sources";
-import { connectorHeader, connectorOptions, pushNotifier } from "./connector-options";
+import { connectorHeader, connectorOptions, pushNotifier, sourceFields } from "./connector-options";
 
 const opts = (given: Record<string, string>) => (name: string, fallback: string) => given[name] ?? fallback;
 
@@ -41,5 +41,21 @@ describe("connector options (--source-profile, --push)", () => {
     expect(sent("signals", 41).got).toEqual(a.got);
     expect(sent("payload", 41)).toEqual({ got: [], notifies: true });
     expect(sent("none", 41)).toEqual({ got: [], notifies: false });
+  });
+
+  test("sourceFields keeps every field the engine reads off a source besides its calls", () => {
+    const [s] = simSources(buildWorld({ seed: 41_000 }), REALISTIC, 0, 41);
+    s!.notifies = true;
+    const kept = sourceFields(s!);
+    expect(kept).toEqual({
+      id: s!.id,
+      kind: "sim",
+      description: s!.description,
+      listsByTime: s!.listsByTime,
+      notifies: true,
+    });
+    // Every optional, non-call member of `Source` today: a new one must be added here and to `sourceFields`.
+    const optional: (keyof typeof kept)[] = ["listsByTime", "notifies"];
+    for (const k of optional) expect(k in kept).toBe(true);
   });
 });

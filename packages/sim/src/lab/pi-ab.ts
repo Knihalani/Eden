@@ -92,7 +92,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import type { World } from "../world";
-import { connectorHeader, connectorOptions, pushNotifier } from "./connector-options";
+import { connectorHeader, connectorOptions, pushNotifier, sourceFields } from "./connector-options";
 import {
   armPromptsHash,
   ASK_DESCRIPTION,
@@ -358,11 +358,7 @@ function watched(
     }
   };
   return {
-    id: source.id,
-    kind: source.kind,
-    description: source.description,
-    listsByTime: source.listsByTime,
-    notifies: source.notifies,
+    ...sourceFields(source),
     search: (query, signal) =>
       timed(
         "search",

@@ -1664,16 +1664,11 @@ export class ContextPartner {
   }
 
   /**
-   * Drops everything held for a user, or for one of their sources (a revoked connector): cached items, source-map
-   * rows, and the user's live sessions (their windows and queued injections hold content). In-flight lookups are
-   * aborted, and their results discarded.
-   */
-  /**
    * A change notification for one of the user's sources (`syncPush`; the source says it `notifies`): the integrator
    * forwards a Gmail watch, a Calendar or Drive channel, a Slack event, a Graph subscription, a connector platform's
    * trigger. The source's synced copy is behind until the next lookup that reads it polls it; until then, and between
-   * notifications, nothing polls it (at most `syncPushMaxStaleMs` apart). No I/O; false when push is off or the source
-   * is not synced for the user.
+   * notifications, nothing polls it (at most `syncPushMaxStaleMs` apart). No I/O; false when push is off, or the source
+   * is not synced for the user or does not say it notifies (the notification is then ignored).
    */
   sourceChanged(scope: Scope, sourceId: string): boolean {
     if (!this.config.syncPush || !this.sync) return false;
@@ -1692,6 +1687,11 @@ export class ContextPartner {
     return this.sync.ingest(scope, sourceId, clean);
   }
 
+  /**
+   * Drops everything held for a user, or for one of their sources (a revoked connector): cached items, source-map
+   * rows, and the user's live sessions (their windows and queued injections hold content). In-flight lookups are
+   * aborted, and their results discarded.
+   */
   forget(scope: Scope, sourceId?: string): void {
     const key = scopeKey(scope);
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
