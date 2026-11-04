@@ -39,10 +39,12 @@ CONNECTORS = {  # $ per 1,000 tool calls
 
 def load(paths):
     """Task runs keyed by (condition, task id), each with its result and timeline record."""
-    runs = {}
+    runs, background = {}, 0.0
     for p in paths:
         d = json.load(open(p))
         tasks = {t["id"]: t for t in d["tasks"]}
+        # Eden's cards and intent requests, booked to no task: spread over the eden runs below (as analyze.py does).
+        background += sum(b["cardsUsd"] + b["bridgeUsd"] for b in d.get("background") or [] if b["condition"] == "eden")
         tl = os.path.join(d.get("timeline") or p[: -len(".json")], "tasks.jsonl")
         lines = {}
         for line in open(tl):
@@ -56,7 +58,8 @@ def load(paths):
             must = tasks[tid]["must"]
             r = dict(r, rate=sum(1 for m in must if (r.get("facts") or {}).get(m["id"])) / max(1, len(must)))
             runs[(cond, tid)] = (r, t)
-    return runs
+    n_eden = sum(1 for c, _ in runs if c == "eden")
+    return runs, background / max(1, n_eden)
 
 
 def raised(r):
@@ -104,8 +107,11 @@ def main():
     lines = []
     for spec in specs:
         name, files = spec.split("=", 1)
-        runs = load(files.split(","))
+        runs, bg = load(files.split(","))
         lines.append(f"## {name}\n")
+        lines.append(f"Eden's background spend (cards, intent), cold-cache upper bound: ${1000 * bg:.3f} per 1,000 "
+                     "tasks, "
+                     "included in every Agent + Eden cost below.\n")
         for kind in ("hidden", "control"):
             ids = sorted(
                 tid
@@ -114,7 +120,7 @@ def main():
             )
             if not ids:
                 continue
-            rows = {}
+            rows, per_fact = {}, {}
             for cond in ("tools", "eden"):
                 rs = [runs[(cond, i)] for i in ids]
                 rows[cond] = {
@@ -171,15 +177,25 @@ def main():
                     with_e = (
                         1000 * statistics.mean(a["agentUsd"][m])
                         + 1000 * statistics.mean(a["edenUsd"])
+                        + 1000 * bg
                         + statistics.mean(ca) * per_k
                     )
                     push = with_e - statistics.mean(a["edenLists"]) * per_k
+                    if kind == "hidden":
+                        per_fact[(m, cn)] = (alone / statistics.mean(b["rate"]), with_e / statistics.mean(a["rate"]))
                     lines.append(
                         f"| {m} | {cn} | {alone:.3f} | {with_e:.3f} | {with_e - alone:+.3f} "
                         f"({100 * (with_e / alone - 1):+.0f}%) | {push:.3f} | {push - alone:+.3f} "
                         f"({100 * (push / alone - 1):+.0f}%) |"
                     )
             lines.append("")
+            if kind == "hidden" and per_fact:
+                lines.append("Cost per hidden fact raised (hidden-task cost per 1,000 ÷ facts raised per 1,000), $:\n")
+                lines.append("| Agent model | Connector plan | Agent alone | Agent + Eden | Eden as a share of alone |")
+                lines.append("|---|---|---|---|---|")
+                for (m, cn), (x, y) in per_fact.items():
+                    lines.append(f"| {m} | {cn} | {x:.2f} | {y:.2f} | {100 * y / x:.0f}% |")
+                lines.append("")
     open(out, "w").write("\n".join(lines) + "\n")
     print("\n".join(lines))
 
