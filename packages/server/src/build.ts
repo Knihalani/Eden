@@ -15,6 +15,7 @@ import { SourceMap } from "@eden/graph";
 import { Budget, DEFAULT_LIMITS, TenantSpend, type Model } from "@eden/llm";
 import { WorkerPool } from "@eden/primitives";
 import { QueryPlanner, type SourceResolver } from "@eden/sources";
+import { sanitizeForStore } from "@eden/redact";
 import { NO_MODELS, type ModelRoles } from "./models";
 
 export interface BuildOptions {
@@ -45,6 +46,32 @@ export interface BuildOptions {
    * that name one, D108) are read into each active user's cache in the background; static sources list nothing.
    */
   engine?: Partial<EngineConfig>;
+  /**
+   * Where operational lines go (default stderr, which mcp-stdio needs: stdout is its protocol). Today: the reader's
+   * first failure (`readerFailureLog`).
+   */
+  log?: (line: string) => void;
+}
+
+/** How much of a provider's error message is logged: OpenRouterModel already cuts the body at 300 characters. */
+const FAILURE_CHARS = 400;
+
+/**
+ * The reader's failures, logged once per partner (one per server process): a reader that fails on every call (an
+ * OpenRouter 403 for the account, a revoked key) otherwise looks exactly like a reader that found nothing, since it
+ * fails open to the no-model path (D41). The line holds the provider's status and message, with the key removed
+ * (`scrub`) and redacted (D10), never the request. One line and no probe: a probe at startup would be a model call
+ * (CLAUDE.md, "Model last"). Later failures are counted in `AskReader.stats.failures`.
+ */
+export function readerFailureLog(log: (line: string) => void, scrub: (text: string) => string = (t) => t) {
+  let logged = false;
+  return (error: unknown): void => {
+    if (logged) return;
+    logged = true;
+    const raw = error instanceof Error ? error.message : String(error);
+    const text = sanitizeForStore(scrub(raw).slice(0, FAILURE_CHARS)).replace(/\s+/g, " ");
+    log(`eden: the reader's model call failed; asks and pushes fall back to the no-model path (logged once): ${text}`);
+  };
 }
 
 /** Wires a partner from its parts with the default configuration (D112). */
@@ -66,7 +93,12 @@ export function buildPartner(options: BuildOptions): ContextPartner {
       : undefined;
   const reader =
     models.reader && config.askReader
-      ? new AskReader({ maker: new ModelReaderMaker(models.reader), budget: budget(), now: () => Date.now() })
+      ? new AskReader({
+          maker: new ModelReaderMaker(models.reader),
+          budget: budget(),
+          now: () => Date.now(),
+          onFailure: readerFailureLog(options.log ?? console.error, models.scrub),
+        })
       : undefined;
   const partner = new ContextPartner({
     sources: options.sources,

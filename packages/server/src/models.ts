@@ -10,7 +10,7 @@
  *
  * The Anthropic provider is lab only (D97): nothing here constructs it.
  */
-import { OpenRouterModel, type Model } from "@eden/llm";
+import { OpenRouterModel, type Model, type OpenRouterOptions } from "@eden/llm";
 
 /** The measured model (Haiku 5.5, D98, D99), through OpenRouter. */
 export const DEFAULT_ROLE_MODEL = "anthropic/claude-haiku-5.5";
@@ -26,6 +26,11 @@ export interface ModelRoles {
   cardsRetry: Model | null;
   /** One cap on each tenant's spend per UTC day, across roles. */
   usdPerTenantDay: number;
+  /**
+   * Removes the API key from text bound for a log (a provider's error message), when a key is set. A closure, so the
+   * key is never a field anything could serialise or print.
+   */
+  scrub?: (text: string) => string;
 }
 
 /**
@@ -39,8 +44,17 @@ export const NO_MODELS: ModelRoles = {
   usdPerTenantDay: DEFAULT_USD_PER_TENANT_DAY,
 };
 
-/** The roles from the environment; all null without OPENROUTER_API_KEY. Throws on a malformed cap. */
-export function modelRolesFromEnv(env: Record<string, string | undefined> = process.env): ModelRoles {
+/** How a role's model is made from its OpenRouter options: the real client, or a fake in tests (no network). */
+export type MakeRoleModel = (options: OpenRouterOptions) => Model;
+
+/**
+ * The roles from the environment; all null without OPENROUTER_API_KEY. Throws on a malformed cap. The eval's `--live`
+ * builds its reader from this very function (D128), so what it measures is what ships.
+ */
+export function modelRolesFromEnv(
+  env: Record<string, string | undefined> = process.env,
+  make: MakeRoleModel = (options) => new OpenRouterModel(options),
+): ModelRoles {
   const usdPerTenantDay = tenantCap(env.EDEN_MODEL_USD_PER_TENANT_DAY);
   const apiKey = env.OPENROUTER_API_KEY;
   if (!apiKey) return { ...NO_MODELS, usdPerTenantDay };
@@ -51,10 +65,11 @@ export function modelRolesFromEnv(env: Record<string, string | undefined> = proc
     zdr: env.EDEN_MODEL_ZDR !== "off",
   };
   return {
-    reader: new OpenRouterModel({ ...base, sort: "throughput" }),
-    cards: new OpenRouterModel({ ...base, sort: "price" }),
-    cardsRetry: new OpenRouterModel(base),
+    reader: make({ ...base, sort: "throughput" }),
+    cards: make({ ...base, sort: "price" }),
+    cardsRetry: make(base),
     usdPerTenantDay,
+    scrub: (text) => text.split(apiKey).join("[key]"),
   };
 }
 
