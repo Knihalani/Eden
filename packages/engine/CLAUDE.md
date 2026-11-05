@@ -94,13 +94,22 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   already running (`SourceSync.busy`, which resolves to what that read stored) counts what it stored, not one, and
   `freshen` returns only its own calls. `probeGraceMs` is 0 in the default (D112): a lookup no longer waits for its
   probes (D47's grace), so a slow probe's finds only reach later turns.
-- `syncPush` (D125) polls on a notice only for sources whose `notifies` is true, but every notice (and every
-  `sourceItems` call with items of that source) drops the source's held search pages (D148): a search-only notifying
-  source has no sync state, and its held page would answer with the old copy. `sourceNotice` gives the reason a notice
-  did not act ("push-off", "not-synced", "not-notifying"; no I/O, so an unknown id is "not-synced").
-- `syncPush` (D125) acts only on sources whose `notifies` is true. Any wrapper around a `Source` (tracing, timing, a
-  lease) must copy `notifies` as it copies `listsByTime`, or notifications are silently ignored and the source is
-  polled on its learned rate. `sourceItems` redacts before storing (D10); `ingest` stores only items of that source.
+- `syncPush` (D125) polls on a notice only for sources whose `notifies` is true. Any wrapper around a `Source`
+  (tracing, timing, a lease) must copy `notifies` as it copies `listsByTime`, or notifications are silently ignored
+  and the source is polled on its learned rate. Every notice (and every `sourceItems` call with items of that source)
+  still drops the source's held search pages, notifying or not (D148): a search-only notifying source has no sync
+  state, and its held page would answer with the old copy. `sourceNotice` gives the reason a notice did not act
+  ("push-off", "not-synced", "not-notifying"; no I/O, so an unknown id is "not-synced"). `sourceItems` redacts before
+  storing (D10); `ingest` stores only items of that source.
+- `new ModelCardMaker(model, { reasoning })` defaults to `"off"` (D149, amending D59): no reasoning field is sent,
+  the request every lab card and intent figure measured (all 5,158 `eden.cards` ledger rows ran with thinking off).
+  `buildPartner` passes no `reasoning`, so the servers ship "off". "low" was 1.82x slower at p50 and 1.54x dearer on
+  Haiku 5.5 (docs/COST-MODEL.md, run `close-cards-reasoning`). Turning it back on needs a decision, as for the
+  reader (D144).
+- The graph reads an item's first `READ_CHARS` = 1,000 characters of text (D150; its title and `meta.people` are read
+  on their own). That cut D141's `+graph` ingest stage 2.1-2.3x with every train screen identical; a name past
+  character 1,000 is not a graph node (`kg.test.ts`). Raising it again re-runs `ingest.bench.ts` and the funnel
+  screens, and there is no `graphLite` switch: D150 closed it.
 - `cardsLean` (D125) only narrows what the intent index reads (`readForIntent`): constraint-worded items are carded
   whatever their sender or age. `automated` reads a `From:` line in the text or a `meta.from`/`meta.sender` field
   (connectors differ: `toItems` keeps whatever text the tool returned) and bulk footers; a connector giving neither
