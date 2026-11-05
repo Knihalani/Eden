@@ -22,8 +22,12 @@
  * dropped, minus the heap before the users were built: the text the cache keeps is counted. The source map's SQLite
  * pages live outside the JS heap and are not counted.
  *
- * Run: `bun packages/engine/bench/ingest.bench.ts [users=200] [itemsPerUser=500] [mode=all|core|graph|shipped]`.
- * No model, no network.
+ * Run: `bun packages/engine/bench/ingest.bench.ts [users=200] [itemsPerUser=500] [mode=all|core|graph|shipped]`, or
+ * `bun packages/engine/bench/ingest.bench.ts --quick`.
+ * No model, no network. The default 200 × 500 is the size every recorded figure uses (D111, D141, docs/TESTING.md);
+ * compare only like with like. `--quick` runs 40 × 500 (about 5x faster) for a screen while iterating: its µs/item
+ * stay within ~10% of the full size, but held memory per item reads ~3-5% higher (a fixed per-user cost spread over
+ * fewer items), so its memory is not comparable with a 200 × 500 figure. It cannot be combined with explicit sizes.
  */
 import type { ContextItem, Scope } from "@eden/protocol";
 import { SourceMap } from "@eden/graph";
@@ -35,9 +39,12 @@ import { ContextPartner } from "../src/partner";
 import { SyncManager, type SyncOptions } from "../src/sync";
 import { buildWorkload } from "./workload";
 
-const USERS = Number(process.argv[2] ?? 200);
-const PER_USER = Number(process.argv[3] ?? 500);
-const MODE = process.argv[4] ?? "all";
+const QUICK = process.argv.includes("--quick");
+const args = process.argv.slice(2).filter((a) => a !== "--quick");
+if (QUICK && args.length > 0) throw new Error("--quick runs 40 × 500 in every mode; it takes no other arguments");
+const USERS = QUICK ? 40 : Number(args[0] ?? 200);
+const PER_USER = QUICK ? 500 : Number(args[1] ?? 500);
+const MODE = args[2] ?? "all";
 const MODES = ["core", "graph", "shipped"] as const;
 type Mode = (typeof MODES)[number];
 const PAGE = 100;
@@ -227,6 +234,12 @@ if (MODE !== "all") {
   }
   const [core, graph, shipped] = results as [Result, Result, Result];
   console.log(`${USERS} users × ${PER_USER} synced items (avg text ${core.avgChars} chars), pages of ${PAGE}`);
+  if (QUICK) {
+    console.log(
+      `--quick: a screen, not a record. Memory per item is not comparable with 200 × 500 figures (a per-user fixed ` +
+        `cost over fewer items reads a few % higher); µs/item are within ~10%. Re-run without --quick to report.`,
+    );
+  }
   console.log(`mode      backfill (new)  sweep (unchanged)  memory: raw held  raw released`);
   for (const r of results) console.log(line(r.mode, r));
   console.log(`per stage (the difference between modes):`);
