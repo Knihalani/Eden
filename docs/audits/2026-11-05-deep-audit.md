@@ -779,7 +779,7 @@ is old calls 1`.
 - 3 rejected with decisions: D135, D137, D138. Parts of R2-3 and R2-9 rejected: D134, D136.
 - 1 fixed in this commit: R2-13 (D133).
 - Decisions written this round: D133 to D140. D141 (R2-P8's graph verdict) is now written in docs/DECISIONS.md; D142
-  is the big-pages package's (`lc-sync-big-pages`, proposed in its commit). Fixers do not edit docs/DECISIONS.md; a proposed row goes in the commit message under `Decision row:`.
+  is the big-pages package's (`lc-sync-big-pages`), written at integration with its trial row. Fixers do not edit docs/DECISIONS.md; a proposed row goes in the commit message under `Decision row:`.
 
 ## Work packages (round 2)
 
