@@ -27,26 +27,61 @@ under archived/ not run. On 1.3.13 three tests in those files fail (`utf8.test.t
 failing with the old bunfig, and two `redos.test.ts` timing tests), and the run took 107 s; the gate is measured on
 1.4.4.
 
-## Caches in format:check and typecheck (measured 2026-11-03, 4-core container, Bun 1.4.4)
+## Caches in format:check and typecheck
 
-`scripts/format.sh` runs Prettier with `--cache --cache-strategy content`, and `scripts/typecheck.sh` runs `tsc
---incremental` with one build-info file per `tsconfig.json` (named from its path). Both caches live under
-`node_modules/.cache/`, which git ignores. Prettier's cache skips only files whose content matches a run that found
-them formatted, and its key covers the Prettier version and options; tsc re-checks whatever an edit can reach.
-`scripts/check-line-length.ts` has no cache and still reads every file, so an overlong comment is always caught.
-`CHECK_COLD=1 bun run check` (or `format:check`, `typecheck`) drops both caches: use it when a cache is in doubt.
+Both caches carry to a fresh git worktree (each audit fixer, reviewer and integrator gets one), and
+`CHECK_COLD=1 bun run check` (or `format:check`, `typecheck`) ignores both: use it when a cache is in doubt, and for a
+final run that trusts nothing earlier.
 
-| Step | Before (no cache, 2 runs) | Cold cache | Warm cache |
-|---|---|---|---|
-| `bun run format:check` | 11.8 s, 10.7 s | 10.6 s | 2.4 s, 2.7 s, 2.1 s |
-| `bun run typecheck` | 9.8 s, 8.6 s | 9.9 s | 3.8 s, 3.0 s, 3.2 s |
-| `bun run check` | | 39.8 s (`CHECK_COLD=1`) | 21.1 s |
+**Prettier: a shared known-formatted set.** `scripts/format.sh` keeps one `<blob id> <path>` line per file content
+that Prettier passed, in `$(git rev-parse --git-common-dir)/eden-check-cache/prettier-<key>`, which every worktree of
+the repo shares. Prettier's own `--cache` could not: it keys absolute paths, so each new worktree ran cold.
 
-On a warm cache, each of these still failed the check: a new untracked misformatted file (format:check, 2.6 s), a
-type error appended to `packages/engine/src/anticipate.test.ts` (typecheck, 3.4 s), and a 143-column comment
-(format:check, 2.6 s). A warm typecheck after an edit to a widely imported file costs close to a cold one (about
-8 s in the audit that proposed the caches; not re-measured here). Tests now dominate the check: 15.7 s of the warm
-21.1 s.
+- The key is a hash of the Prettier version and of every Prettier config, `.prettierignore`, `.editorconfig` and
+  `package.json` file (outside `archived/`). A change to any of them starts a new, empty set.
+- An entry is a (path, blob) pair: the blob id is `git hash-object --no-filters` of the working-tree file, so unstaged
+  and untracked edits count, and the path is part of it because Prettier picks its parser from the path.
+- Only files whose pair is not in the set go to Prettier; when none remain Prettier is not run at all.
+- Entries come only from Prettier's exit status and bare paths, never from its log: `--check` runs Prettier as
+  `--list-different --no-color`. Exit 0 records every file checked; exit 1 records those not listed, and only when
+  every listed line is exactly a checked path; exit 2 (a syntax error) records nothing. A checked file is recorded
+  only if its content hashes the same before and after Prettier ran. `format` (write) records only on exit 0, with the
+  formatted content.
+- Writes are a temp file renamed into place, so concurrent worktrees can lose each other's additions (re-checked next
+  time) but never corrupt the set; malformed lines are ignored. The set is capped at 50,000 lines. Every read touches
+  it, and only sets for other keys (and leftover temp files) are pruned after 14 days.
+
+`scripts/check-line-length.ts` has no cache and still reads every file, so an overlong comment is always caught,
+whatever the set holds.
+
+**tsc: per-worktree build info, seeded.** `scripts/typecheck.sh` runs `tsc --incremental` with one build-info file
+per `tsconfig.json` under the gitignored `node_modules/.cache/tsc/`. A worktree with no such directory is seeded with
+a copy (never a link: two checkouts writing one file would race) from the other worktree whose HEAD is closest: the
+same commit first, else the fewest `*.ts`/`*.tsx`/`*.mts`/`*.json` files in `git diff --name-only` between the two
+HEADs, ties to the most recently written. tsc trusts nothing in the copy: each file's recorded version is its content
+hash, so it re-checks whatever differs.
+
+Measured 2026-11-05 (4-core container shared with other agents, Bun 1.4.4), in a worktree after `bun install` with
+`node_modules/.cache` removed before each run, and sibling worktrees on several other branches present. The newest
+build info was a sibling at another commit; the closest, which was chosen, differed only in these shell scripts.
+
+| Step | First run in the worktree (3 runs) | `CHECK_COLD=1` |
+|---|---|---|
+| `bun run format:check` | 1.8 s, 1.4 s, 1.4 s | 13.5 s |
+| `bun run typecheck` (seeded from a sibling 0 TS/JSON files apart) | 4.0 s, 3.6 s, 3.8 s | 11.1 s |
+
+Seeding by closeness, not recency: in the same session tsc seeded from a sibling 2 files apart (`conflict.ts` and its
+test) took 8.7 s, from a same-commit sibling 3.1 s, and cold 9.6 to 9.9 s. Each of these still failed the check with
+the set warm: a misformatted untracked `.ts` file, with and without `FORCE_COLOR=1`, on the first and second run (it
+never entered the set); a file with a syntax error; and a 133-column comment in a Prettier-formatted file (the set
+holds that file; the line-length check fails it every run). Three concurrent `format:check` runs, twice, against a new
+key left a 392-line set with no malformed line.
+
+Earlier, with Prettier's own cache (2026-11-03): format:check 11.8 s and 10.7 s with no cache, 2.4 s warm; typecheck
+9.8 s and 8.6 s with no cache, 3.0 to 3.8 s warm; `bun run check` 39.8 s cold, 21.1 s warm, of which tests were
+15.7 s. A warm typecheck after an edit to a widely imported file costs close to a cold one (about 8 s in the audit
+that proposed the caches; not re-measured).
+
 
 ## tsgo in the fast loop (measured 2026-11-03b, 4-core container shared with other agents, Bun 1.4.4)
 

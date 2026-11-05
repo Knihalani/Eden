@@ -36,6 +36,54 @@ fi
 # run re-checks only what an edit can reach: an edit to a widely imported file costs close to a cold run.
 # CHECK_COLD=1 checks from scratch.
 cache_dir=node_modules/.cache/tsc
+
+# A new git worktree has no build info, and its first check ran cold (11 s against 3.4 s warm). Its paths are
+# relative to the build info file, so another worktree's carries over: copy in the one whose HEAD is closest to this
+# one's, since tsc re-checks whatever differs. Closest is the same commit, else the fewest TypeScript or JSON files
+# changed between the two commits (`git diff --name-only`), and among equals the most recently written. The newest
+# alone is the wrong pick in an audit run: it is usually a sibling fixer on another branch. Seeded from one 2 files
+# apart (engine's conflict.ts and its test) tsc took 8.7 s, from a same-commit one 3.1 s, cold 9.6 to 9.9 s
+# (2026-11-05, 4 cores). A copy, never a link: two checkouts writing one file would race. tsc trusts nothing in it
+# unchecked: each file's recorded version is its content hash, so a copy from another commit re-checks what differs,
+# and an unreadable one (copied mid-write) is treated as absent.
+seed_cache() {
+  local here head wt sha info from= best= distance tmp
+  here=$(pwd -P)
+  head=$(git rev-parse HEAD 2>/dev/null) || head=
+  while read -r sha wt; do
+    info=$wt/node_modules/.cache/tsc/tsconfig.tsbuildinfo
+    [ -f "$info" ] || continue
+    [ "$(cd "$wt" && pwd -P)" != "$here" ] || continue
+    if [ "$sha" = "$head" ]; then
+      distance=0
+    else
+      # Unknown commits (another repo's object, a broken worktree) rank last rather than failing the check.
+      distance=$(git diff --name-only "$head" "$sha" -- '*.ts' '*.tsx' '*.mts' '*.json' 2>/dev/null | wc -l) ||
+        distance=
+      [ -n "$head" ] && [ -n "$distance" ] || distance=999999
+      # A diff of 0 files is still another commit: rank it after the same commit.
+      distance=$((distance + 1))
+    fi
+    if [ -z "$from" ] || [ "$distance" -lt "$best" ] ||
+      { [ "$distance" = "$best" ] && [ "$info" -nt "$from/tsconfig.tsbuildinfo" ]; }; then
+      from=$wt/node_modules/.cache/tsc
+      best=$distance
+    fi
+  done < <(git worktree list --porcelain | awk '/^worktree /{wt=substr($0, 10)} /^HEAD /{print $2, wt}')
+  [ -n "$from" ] || return 0
+  mkdir -p node_modules/.cache
+  tmp=$(mktemp -d node_modules/.cache/tsc.seed.XXXXXX) || return 0
+  cp "$from"/*.tsbuildinfo "$tmp"/ 2>/dev/null || true
+  # A rename, so a check running beside this one sees no directory or a whole one; if one appeared meanwhile, keep it.
+  if [ -d "$cache_dir" ] || ! mv "$tmp" "$cache_dir" 2>/dev/null; then rm -rf "$tmp"; fi
+  rm -rf "${cache_dir:?}/${tmp##*/}" # mv moved it inside a directory created between the test and the rename
+  local how="same commit"
+  [ "$best" = 0 ] || how="$((best - 1)) TypeScript/JSON files apart"
+  [ -d "$cache_dir" ] && echo "── seeded $cache_dir from ${from%/node_modules/.cache/tsc} ($how)"
+}
+if [ "${CHECK_COLD:-}" != "1" ] && [ ! -d "$cache_dir" ]; then
+  seed_cache || true
+fi
 mkdir -p "$cache_dir"
 
 # check CHECKER PROJECT [EXTRA FLAGS...]: one program through one checker.
