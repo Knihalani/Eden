@@ -60,8 +60,9 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
      merged). A full disk stops the run mid-way.
    - Fresh worktrees start their checks warm, so the baseline check above also warms them. In this repo
      `format:check` keeps a known-formatted set under the git common dir that every worktree shares, and `typecheck`
-     seeds a worktree with no build info from the newest other worktree's (`scripts/format.sh`,
-     `scripts/typecheck.sh`). `CHECK_COLD=1` bypasses both, for a final run that trusts nothing earlier.
+     seeds a worktree with no build info from the other worktree whose HEAD is closest to its own, the same commit
+     first (`scripts/format.sh`, `scripts/typecheck.sh`; docs/TESTING.md). `CHECK_COLD=1` bypasses both, for a final
+     run that trusts nothing earlier.
    - If another session or agent is editing parts of the repo, list those paths in `focus` as "do not edit: …".
 3. **Run the workflow** with the Workflow tool, `name: "deep-audit"`, and `args` as a JSON object:
    ```json
