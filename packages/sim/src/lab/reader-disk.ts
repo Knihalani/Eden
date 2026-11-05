@@ -333,6 +333,51 @@ export function missGate(missed: number, allow: boolean): { code: number; messag
     : { code: MISS_EXIT, message: `${message}; not a result of this configuration. Pass --allow-misses to accept` };
 }
 
+/** hidden-funnel.ts's `--reader-model` when none is given. */
+export const DEFAULT_READER_MODEL = "z-ai/glm-5.3-flash";
+
+/** The model ids a reader cache's lines were recorded under (empty for a missing, unreadable or compressed file). */
+export function cacheModels(file: string): string[] {
+  if (!file || file.endsWith(".gz") || !existsSync(file)) return [];
+  const models = new Set<string>();
+  try {
+    for (const raw of readFileSync(file, "utf8").split("\n")) {
+      if (!raw.trim()) continue;
+      try {
+        const model = (JSON.parse(raw) as { model?: unknown }).model;
+        if (typeof model === "string") models.add(model);
+      } catch {
+        // A torn line (a run killed mid-append) names no model; the replay itself reports it.
+      }
+    }
+  } catch {
+    return [];
+  }
+  return [...models].sort();
+}
+
+/**
+ * The hint when a replay matched nothing and `--reader-model` was not given (devloop-paid-reader-replay-exists): the
+ * key hashes the model id (`promptKey`), so a cache recorded under any model but the default misses every prompt, and
+ * the run reads as the stub reader's with only a miss count to say why. Null when anything replayed or was sent, when
+ * nothing missed, or when the model was named (a full miss then means a stale cache, which the miss gate covers).
+ */
+export function allMissedHint(
+  reader: { replayed: number; sent: number; missed: number; subset?: number },
+  modelGiven: boolean,
+  recorded: readonly string[] = [],
+): string | null {
+  if (modelGiven || reader.missed <= 0 || reader.replayed + reader.sent + (reader.subset ?? 0) > 0) return null;
+  const other = recorded.filter((m) => m !== DEFAULT_READER_MODEL);
+  return (
+    `READER HINT: all ${reader.missed} reader prompts missed the cache and no --reader-model was given. A cache line ` +
+    `is keyed on the model id (default ${DEFAULT_READER_MODEL}), so pass \`--reader-model\` with the model the cache ` +
+    "was recorded with" +
+    (other.length ? ` (this cache's lines were recorded as ${other.join(", ")})` : "") +
+    ", e.g. `-- --reader replay --reader-model claude-haiku-5-5` (docs/LAB.md)"
+  );
+}
+
 /** Calls each budgeted engine component refused at its `Budget` (`stats.overBudget`), summed over a run's lanes. */
 export interface Budgeted {
   reader: { stats: { overBudget: number } }[];

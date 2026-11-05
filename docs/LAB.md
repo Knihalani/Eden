@@ -88,7 +88,7 @@ Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too),
 | Cards, price-routed batch 20 | `cards-enrich.ts --sort price --batch 20` | `econ-price20-v2.jsonl` (econ-background.md) | yes |
 | Intent requests (D87) | `cards-enrich.ts --intent --dir D` | `--intent D/intent-v2.jsonl` (needs `--cards`) | the Haiku campaign's no (`.local/haiku/intent/`); the train worlds (seeds 41–44) and held-out 10–11, made for D110, yes: `packages/sim/lab/distilled/intent-v2.jsonl.gz` (gunzip it) |
 | Bridge queries (D89) | `bridge-enrich.ts --out F` | `--bridge F` | no |
-| Reader calls (D95) | `--reader live --reader-cache F` | `--reader replay --reader-cache F` (a prompt not cached fails open; misses exit 3, below) | no |
+| Reader calls (D95) | `--reader live --reader-model m --reader-cache F` | `--reader replay --reader-model m --reader-cache F` (the same `m`: the key hashes it; a prompt not cached fails open; misses exit 3, below) | the default on train, seeds 41–42, Haiku 5.5 (D141's paid run), yes: `packages/sim/lab/distilled/reader-haiku-train-4142.jsonl.gz` (gunzip it; recipe 2a); others no |
 
 `pi-ab.ts`/`hermes-ab.ts` read `--cards FILE` and write cards they had to make live to `--cards-out` (default
 `<out>.cards.jsonl`); name that file in later runs. Keep run outputs under `.local/` (git ignores it).
@@ -341,6 +341,41 @@ python3 -I packages/sim/lab/scripts/reader-score.py .local/base.json $H/new.json
 Cost: one reader call per acting ask, about $0.0004 on Haiku (haiku-benchmark.md); Phase 1 of the Haiku campaign,
 reader and intent requests for train and held-out 10–11 included, spent $1.39 (haiku-opt.md). Reruns replay from the
 reader cache at $0. The haiku-opt.md command sets `askReaderWaitMs: 60000` so latency does not decide what is read.
+
+### 2a. The default's paid Haiku reading, replayed at $0
+
+The reader cache of D141's first paid default run (docs/research/graph-ablation.md, "default (1st paid read)",
+committed in cea000ba6; it also holds that run's minus-graph calls) is checked in gzipped: 866 lines, all
+`claude-haiku-5-5`, plain md5 `9a492c00cf9724306e3e4743e2882982`. It covers the default (ALL3 with the reader) on
+train1–6, seeds 41–42, cards replayed, intent inert. The cache is plain JSONL that a live reader appends to, so it is
+unpacked under `.local/` (`--reader-cache` refuses a `.gz`):
+
+```bash
+gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142.jsonl.gz > .local/reader-haiku-train-4142.jsonl
+bun run funnel --jobs 4 --allow-misses --json .local/haiku-default.json -- --reader replay \
+  --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142.jsonl
+```
+
+Measured on 2026-11-05 (audit/2026-11-05-r1-s8-reader-replay-cache, 10 s wall, no key, no ledger flag, so no spend
+and no ledger rows): `merged reader replay {"replayed":648,"sent":0,"missed":5,"failed":0}`, TOTAL hidden 247/384,
+decoys 127/384, reader pool hidden 230/384 and decoy 229/384, the same as graph-ablation.md's paid row. The 5 misses
+(answered without the reader, fail open) are why the recipe needs `--allow-misses`; without it the run exits 3. A
+`--baseline .local/haiku-default.json` then screens a change against the paid reading at $0.
+
+- **`--reader-model claude-haiku-5-5` is required.** The key hashes the model id (`promptKey`), and the default
+  model is `z-ai/glm-5.3-flash`: without the flag every one of the 1,250 prompts misses, the score falls to the stub
+  reader's 214/211, and the funnel prints `READER HINT` naming the cache's recorded model.
+- **What it screens.** A change that only takes items out of the reader's pool (a veto, a gate, a smaller pool) at
+  $0 with `--reader-subset` on a `--reader-log` made by replaying this cache (subset replay, above; approximate and
+  labelled). Measured the same day: replaying with `--reader-log .local/log.jsonl` (653 lines, 247/127 again), then
+  `--set '{"askReaderPool":10}' ... --reader-subset .local/log.jsonl` gave `{"replayed":17,"missed":3,"subset":602}`,
+  hidden 230/384, decoys 140/384, labelled APPROXIMATE, at $0. A change that adds or re-renders pool items misses
+  for those prompts.
+- **When it goes stale.** Any change upstream of the reader's input (sync, retrieval, ranking, rendering, the day or
+  request text), a `READER_VERSION` bump or another reader prompt misses: the miss count says how much. Top the
+  misses up with one metered live run into a copy (`--reader live --reader-model claude-haiku-5-5 --reader-cache
+  .local/reader-haiku-train-4142.jsonl --spend-ledger .local/mkt/ledger.jsonl --spend-cap 17 --spend-headroom 0.3`);
+  a fresh default reading cost $0.17–0.19 (ledger runs ga-default and ga-default2).
 
 ### 3. Blind check (once, pre-registered)
 
