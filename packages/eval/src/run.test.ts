@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readerMessages } from "@eden/engine";
 import { OpenRouterModel, type ChatRequest, type ChatResponse, type Model, type OpenRouterOptions } from "@eden/llm";
-import { DEFAULT_ROLE_MODEL, modelRolesFromEnv } from "../../server/src/models";
+import { DEFAULT_ROLE_MODEL, modelRolesFromEnv } from "@eden/server";
 import { EVAL_TENANT, fromEnvVia, liveWiring, ORACLE_LABEL, proxyOf, runScenarios, unwiredFlags } from "./run";
 import type { Scenario } from "./scenario";
 

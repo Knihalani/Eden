@@ -23,6 +23,7 @@ cards-enrich, presets, suites, free, spend` (`.ts`): check `git log origin/main`
 | `ab-common.ts` | Tasks, prompts, tools, grader and results format shared by every A/B (comparable results) |
 | `connector-options.ts` | `--source-profile` (market latency profiles), `--push signals\|payload` and `--push-rates` for both live harnesses (docs/LAB.md 5b) |
 | `agent-ab.ts`, `agent-ab-report.ts` | The older in-house loop (label its results as such) and the shared report |
+| `eval-live.ts` | `bun run eval --live` on Anthropic (claude-haiku-5-5, `HAIKU_API_KEY`, ledger role `eden.reader`): the eval's `liveWiring` (D128) with a `make` that returns `labModel`; `--thinking off\|adaptive`, `--usd-cap` (default 0.05), `--wait`; a lab transport, not what ships |
 | `free.ts`, `spend.ts`, `free-smoke.ts` | Lab access: pacer, `--allow-logging`, `--rpm`, `--max-requests`, keys; the Anthropic spend ledger and cap |
 | `cards-enrich.ts`, `cards-disk.ts`, `reader-disk.ts` | Make once, replay free: cards (+ `--intent` requests), reader calls; `SubsetReplay` (`--reader-subset`, D117: a missed prompt answered from a recorded superset pool, approximate and labelled) |
 | `gate-traffic.ts`, `reader-latency-fit.ts` | No-model reader instruments: calls, gating and oracle-gate ceilings per preset (`--reuse`: cross-session verdict reuse); the reader latency fit (floor, ms per token) |
@@ -48,13 +49,21 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
 - **Anthropic (D97):** a `claude-*` model needs `HAIKU_API_KEY` (or `ANTHROPIC_API_KEY`) and `--spend-ledger FILE
   --spend-cap USD`, else the run stops before any call; parallel processes share one ledger, each keeping
   `--spend-headroom` clear. `--run-label` names a run's lines.
+- **Live eval on Anthropic (`eval-live.ts`).** The shipped wiring (no judge, the servers' reader role from
+  `modelRolesFromEnv`, `DEFAULT_CONFIG`) with only the transport swapped: Anthropic's Messages API direct instead of
+  OpenRouter (D12's ZDR route, D95's throughput sort). Output says `provider: "anthropic-direct (lab, D97)"`; quote
+  it as the same model family on another transport, never as production. The env handed to `modelRolesFromEnv`
+  carries a placeholder OpenRouter key (its gate), never the real one, and `make` refuses any other. `--thinking off`
+  (default) is how the lab's readers ran; `adaptive` sends the reader's "low" as effort low, nearer production, but
+  is slower: at the eval's default `--wait 2000` it lost 2 of 6 calls to the wait (counted as reader failures, none
+  logged; 0 at `--wait 10000`, 2026-11-05). About $0.001 a run (6 reader calls).
 - **Keys** are read by `keyFor`, never printed or put in results.
 - **Budgets:** every live run passes `--budget` (a hard cap per process on everything it spends).
 - **Strict CLIs (audit 2026-11-03b).** funnel.ts, hidden-funnel.ts and quality-cli.ts parse through `flags()`; a new
   flag is added to the CLI's `known` list or it exits 2. Engine settings (`--config`, `--set`, the preset merged with
   them) go through `labConfig`/`checkEngineConfig`: unknown keys, wrong types, out-of-range numbers and a child flag
   whose parent flag the merged configuration has off (`PARENTS`, e.g. `syncPollBehind` without `sync`) exit 2.
-  gate-traffic.ts, the A/B harnesses and eval's cli.ts do not use it yet.
+  gate-traffic.ts, the A/B harnesses and eval's cli.ts do not use it yet; eval-live.ts does.
 - **Record honestly:** funnel and `bench.ts` record to `bench/ledger.jsonl` unless `--no-record` (`bun run funnel`
   does not record unless `--record`); a run on a dirty tree is marked `dirty`.
 

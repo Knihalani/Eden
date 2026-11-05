@@ -13,8 +13,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_CONFIG, type EngineConfig } from "@eden/engine";
-// The server's own log line for a failing reader (one line, key removed, redacted): see run.ts on the relative import.
-import { readerFailureLog } from "../../server/src/build";
+// The server's own log line for a failing reader (one line, key removed, redacted).
+import { readerFailureLog } from "@eden/server";
 import { parseReaderOption, type ReaderKindOption } from "./reader-stub";
 import { EVAL_TENANT, liveWiring, proxyOf, runScenarios, unwiredFlags } from "./run";
 import type { Scenario } from "./scenario";
