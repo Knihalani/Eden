@@ -1,10 +1,24 @@
 /**
  * Plays scenarios through a real `ContextPartner` and scores what it delivered. Deterministic with no model or a
- * `FakeModel`; with `--live` it uses OpenRouter and reports real cost.
+ * `FakeModel`; with `--live` it uses OpenRouter, wired as the servers wire it (`liveWiring`, D128), and reports real
+ * cost.
  */
-import { AskReader, ContextPartner, ItemCache, type EngineConfig, type ReaderReport, type Trace } from "@eden/engine";
+import {
+  AskReader,
+  ContextPartner,
+  ItemCache,
+  ModelReaderMaker,
+  type EngineConfig,
+  type ReaderReport,
+  type Trace,
+} from "@eden/engine";
 import { SourceMap } from "@eden/graph";
-import { Budget, type Model } from "@eden/llm";
+import { Budget, DEFAULT_LIMITS, OpenRouterModel, TenantSpend, type Model } from "@eden/llm";
+// The servers' own role construction (D128): the eval's live reader is built by the function main.ts calls, so the
+// model, its routing (D12's ZDR and no data collection, D95's throughput sort) and EDEN_MODEL cannot drift from what
+// ships. A relative import of that one file, which needs only @eden/llm, rather than a dependency on all of
+// @eden/server (its HTTP and MCP layers).
+import { modelRolesFromEnv, type MakeRoleModel } from "../../server/src/models";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner, StaticSource } from "@eden/sources";
 import { OracleReader, readerFor, type ReaderKindOption } from "./reader-stub";
@@ -26,6 +40,71 @@ export interface RunOptions {
    * whose scores read the gold labels (`proxyOf`). Absent: no reader is wired, and `askReader` does nothing.
    */
   reader?: ReaderKindOption;
+  /**
+   * The shipped reader's model (`liveWiring`): the real `AskReader` over `ModelReaderMaker`, as `buildPartner` wires
+   * it with a key, on the servers' default budget limits. Exclusive with `reader`.
+   */
+  readerModel?: Model | null;
+  /** One cap on the whole run's model spend, shared by every budget the run builds (`liveWiring`). */
+  spend?: TenantSpend;
+  /** Told of each failed reader call (a provider's 403, an unreadable reply): `AskReader`'s `onFailure`. */
+  onReaderFailure?: (error: unknown) => void;
+}
+
+/** The tenant every scenario runs under: `TenantSpend` keys the run's cap on it. */
+export const EVAL_TENANT = "eval";
+
+/** What `--live` wires: the shipped shape (no judge, the role reader) or, with `--judge`, the old one. */
+export interface LiveWiring {
+  /** The judge (`PartnerDeps.model`): null in the shipped shape, as `buildPartner` passes (D112). */
+  model: Model | null;
+  /** The reader's model: the servers' reader role in the shipped shape, null under `--judge`. */
+  readerModel: Model | null;
+  /** The run's hard cap: every budget is built with it, so no call is reserved past `usdCap`. */
+  spend: TenantSpend;
+  /** Removes the API key from a provider's error text before it is printed. */
+  scrub: (text: string) => string;
+}
+
+/**
+ * The live wiring (D128). Shipped: no judge, and the reader the servers build with a key (`modelRolesFromEnv(env)
+ * .reader`, Haiku 5.5 through OpenRouter unless EDEN_MODEL says otherwise). `judge`: the shape `--live` had before
+ * D128 (`OpenRouterModel.fromEnv` as judge, no live reader), so D119's and D125's `--live` numbers can be re-run.
+ * Either way every call is charged to one `TenantSpend` of `usdCap` (reserved at its estimate before the call, so a
+ * call that would pass the cap is refused and its path runs with no model). Null without OPENROUTER_API_KEY. `make`
+ * builds the reader's model from its OpenRouter options: tests pass a fake, so no network.
+ */
+export function liveWiring(options: {
+  judge: boolean;
+  usdCap: number;
+  env?: Record<string, string | undefined>;
+  make?: MakeRoleModel;
+}): LiveWiring | null {
+  const env = options.env ?? process.env;
+  if (!(options.usdCap > 0) || !Number.isFinite(options.usdCap)) throw new Error("usdCap must be a positive number");
+  // The whole run is one tenant on one day: a fixed clock keeps a run past midnight under the one cap.
+  const start = Date.now();
+  const spend = new TenantSpend(options.usdCap, () => start);
+  if (options.judge) {
+    const model = options.make ? fromEnvVia(env, options.make) : OpenRouterModel.fromEnv(env);
+    if (!model) return null;
+    const key = env.OPENROUTER_API_KEY!;
+    return { model, readerModel: null, spend, scrub: (t) => t.split(key).join("[key]") };
+  }
+  const roles = modelRolesFromEnv(env, options.make);
+  if (!roles.reader) return null;
+  return { model: null, readerModel: roles.reader, spend, scrub: roles.scrub ?? ((t) => t) };
+}
+
+/** `OpenRouterModel.fromEnv`'s options, through a test's factory (run.test.ts pins the two equal). */
+export function fromEnvVia(env: Record<string, string | undefined>, make: MakeRoleModel): Model | null {
+  if (!env.OPENROUTER_API_KEY) return null;
+  return make({
+    apiKey: env.OPENROUTER_API_KEY,
+    model: env.EDEN_MODEL || "z-ai/glm-5.3-flash",
+    baseUrl: env.OPENROUTER_BASE_URL,
+    zdr: env.EDEN_MODEL_ZDR !== "off",
+  });
 }
 
 /**
@@ -34,9 +113,12 @@ export interface RunOptions {
  * not of delivery: what a reader could flag at best.
  */
 export interface ReaderPoolMetrics {
-  reader: ReaderKindOption;
+  /** `live`: the shipped reader (`RunOptions.readerModel`). */
+  reader: ReaderKindOption | "live";
   /** Calls the engine made to the reader, reports with a pool, and the mean pool size over those reports. */
   calls: number;
+  /** Calls that failed (threw, or replied with nothing readable): each fell back to the no-model path. */
+  failures: number;
   reads: number;
   meanPoolItems: number;
   /** Expected items on labelled turns, and those in a reader pool in their window. */
@@ -136,6 +218,10 @@ const percentile = (xs: number[], p: number) => {
 };
 
 export async function runScenarios(scenarios: Scenario[], options: RunOptions): Promise<Metrics> {
+  if (options.reader && options.readerModel) throw new Error("a stub reader and a live reader are exclusive");
+  const readerKind = options.readerModel ? ("live" as const) : options.reader;
+  // A capped run charges every budget to its one cap; an uncapped one keeps the old unbounded budgets.
+  const budget = (limits = DEFAULT_LIMITS) => new Budget(limits, undefined, options.spend);
   let turns = 0;
   const total = tally();
   const byCategory = new Map<string, Tally>();
@@ -151,6 +237,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     byCategory: new Map<string, { expected: number; expectedInPool: number }>(),
   };
   let readerCalls = 0;
+  let readerFailures = 0;
 
   for (const scenario of scenarios) {
     const category = scenario.category ?? "general";
@@ -182,14 +269,24 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     const maker = options.reader ? readerFor(options.reader) : null;
     const oracle = maker instanceof OracleReader ? maker : null;
     const uncapped = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
-    const reader = maker ? new AskReader({ maker, budget: new Budget(uncapped), now: () => Date.now() }) : null;
+    // The live reader is the one `buildPartner` wires: `ModelReaderMaker` on the role model, the default limits.
+    const reader = maker
+      ? new AskReader({ maker, budget: budget(uncapped), now: () => Date.now() })
+      : options.readerModel
+        ? new AskReader({
+            maker: new ModelReaderMaker(options.readerModel),
+            budget: budget(),
+            now: () => Date.now(),
+            ...(options.onReaderFailure ? { onFailure: options.onReaderFailure } : {}),
+          })
+        : null;
     if (!pool.byCategory.has(category)) pool.byCategory.set(category, { expected: 0, expectedInPool: 0 });
     const poolTally = pool.byCategory.get(category)!;
     const partner = new ContextPartner({
       sources: async () => sources,
       sourceMap: new SourceMap(),
       cache: new ItemCache(),
-      budget: new Budget(),
+      budget: budget(),
       model: options.model,
       config: options.config,
       onTrace: (t) => traces.push(t),
@@ -199,7 +296,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     // The ids in the pools reported for a session between two `reports` indexes.
     const pooled = (sessionId: string, from: number, to: number) =>
       new Set(reports.slice(from, to).flatMap((r) => (r.sessionId === sessionId ? r.pool : [])));
-    const who = { tenantId: "eval", userId: scenario.id };
+    const who = { tenantId: EVAL_TENANT, userId: scenario.id };
     let clock = scenario.clock ? Date.parse(scenario.clock) : Date.UTC(2026, 9, 1);
     for (const session of scenario.sessions) {
       const traceStart = traces.length;
@@ -294,7 +391,8 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       ask.expected += c.expect.length;
       ask.found += c.expect.filter((id) => cited.has(id)).length;
     }
-    readerCalls += maker?.calls ?? 0;
+    readerCalls += maker?.calls ?? reader?.stats.calls ?? 0;
+    readerFailures += reader?.stats.failures ?? 0;
   }
 
   const decisions: Record<string, number> = {};
@@ -331,11 +429,12 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     ),
     privacy,
     ask: { cases: ask.cases, answered: ask.answered, recall: ask.expected ? ask.found / ask.expected : 1 },
-    ...(options.reader
+    ...(readerKind
       ? {
           readerPool: {
-            reader: options.reader,
+            reader: readerKind,
             calls: readerCalls,
+            failures: readerFailures,
             reads: readsWithPool,
             meanPoolItems: readsWithPool ? reports.reduce((n, r) => n + r.pool.length, 0) / readsWithPool : 0,
             expected: pool.expected,

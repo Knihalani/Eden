@@ -13,7 +13,7 @@ choices they drove are in [docs/research/primitives.md](../../docs/research/prim
 | `tokenize.ts` | `tokenizeInto`: fused scan + fold + hash + intern into a `Uint32Array` | Indexing, queries, usage tracking |
 | `matcher.ts` | `MultiMatcher`: folded Aho–Corasick dense DFA, optional whole-word | Keyword prefilters, cue lists, small gazetteers |
 | `topk.ts` | `TopK`: typed-array heap, `pushDense` for accumulators | Ranking |
-| `cache.ts` | `S3FifoCache`: S3-FIFO eviction, byte budget, stale/expire TTLs, no per-op allocation | Item caches, MCP result caches, negative caches |
+| `cache.ts` | `S3FifoCache`: S3-FIFO eviction, byte budget, stale/expire TTLs, no per-op allocation; optional `group(key)` with `deleteGroup` (O(group) drops) | Item caches, MCP result caches, negative caches |
 | `deadline.ts` | `Deadline`: one absolute deadline, child slices, one AbortSignal | Every multi-stage operation |
 | `singleflight.ts` | `Singleflight`: coalesce identical in-flight calls; last waiter leaving aborts | Duplicate lookups to the same source |
 | `gcra.ts` | `Gcra`: rate limiting, O(1) state per key, Retry-After penalties | Per tenant / user × upstream / host limits |
@@ -168,3 +168,23 @@ expiry tick). `churn.bench.ts` (the cache at 2,000 lookups + 5,000 synced, `rele
 19.84 → 5.07 ms, p99 9.48 → 2.44 ms, p50 0.410 → 0.388 ms; heap churned 10.93 → 11.03 MB, fresh 10.17 → 10.26 MB (a
 per-doc postings count, 4 B, for the purge's exact count). `sparse-index-ab.bench.ts`: within noise (three runs each,
 remove + add p50 zipf 7.5–10.3 → 8.6–10.1 µs, dense 3.8–4.4 → 3.9–4.7 µs).
+
+## Cache groups (2026-11-05)
+
+`S3FifoCache` takes an optional `group(key)`: live keys are also indexed by group (one shared record per group, a
+`Set` of its keys), kept wherever a key leaves (delete, expiry, eviction, an oversized replace), and `deleteGroup(g)`
+drops one group in O(its keys). `SourceFanout` groups its results cache by (user, source), so `dropResults` (D126:
+per notification, per changed re-read, per gone item) no longer scans the whole cache; forget-a-user keeps
+`deleteWhere`. Ghost keys are not grouped (they only steer promotion).
+
+Measured on a shared 4-core VM (Bun 1.4.4), runs back to back:
+
+- One pair's drop (20 pages) from N pages, `deleteWhere` → `deleteGroup` (a scratch bench timing the drop alone, 300
+  drops each): N = 1k 0.232 → 0.007 ms mean (p99 1.27 → 0.053), 10k 1.355 → 0.005 ms (p99 3.52 → 0.021), 50k
+  5.887 → 0.004 ms (p99 11.88 → 0.008). `runtime.bench.ts`, drop plus refill of the pair's 20 pages at 10k: 987 →
+  40 µs mean.
+- get/set (the `runtime.bench.ts` workload, old and new caches interleaved, three runs each): without a group within
+  noise, mean 378–524 ns → 394–539 ns; with a group 612–821 ns (the group's `Set` is updated on every insert and
+  eviction, and this workload misses and evicts on most operations).
+- Heap: grouping adds ~63 B per entry (200,000 empty entries with ~120-char keys: 345 → 408 B/entry, `bun:jsc`
+  heapStats after a full GC).

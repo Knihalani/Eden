@@ -147,7 +147,8 @@ One change per PR, as CLAUDE.md requires. Branch each from up-to-date `main`. Ru
    - `docs/research/econ-synthesis.md` with the blind results.
    - D72: the `ALL2` recommended configuration, with or without `judgeBehind` depending on its bar.
    - VISION/ARCHITECTURE wording if the recommended default changes.
-   - Also `bun run eval --live` (scoring and delivery changed); report both runs.
+   - Also `bun run eval --live` (scoring and delivery changed); report both runs. (Since D128 the command is
+     `bun run eval --live --usd-cap 0.05`; this plan's `--live` was the judge shape, now `--live --judge`.)
 
 **Renumbering.** All seven branches claim "D65". Renumber in merge order as above, D65–D71, with D72 for the post-blind configuration decision. Each row records its in-sample numbers and is updated with blind numbers in PR 8.
 
@@ -186,7 +187,7 @@ One change per PR, as CLAUDE.md requires. Branch each from up-to-date `main`. Ru
 | Act process subtotal | | | $1.34 | 4 × $0.38 = $1.52 |
 | Live card enrichment for uncovered blind items (both card sets) | – | – | ≤ $0.20 | $0.25 (`cards-enrich --cap`) |
 | Lenient second grade, hidden answers of eden and eden~ALL2 | 856 | 0.000167 | $0.14 | $0.15 |
-| `bun run eval --live` | – | – | < $0.01 | – |
+| `bun run eval --live` (since D128: `--live --judge --usd-cap 0.05`) | – | – | < $0.01 | – |
 | **Total** | | | **≈ $3.36** | **$3.84 < $4.00** |
 
 Caps sit about 15% above the estimates, because a worst-case hold refused a run in oneturn and a cap cut judge's run unevenly. If spend runs over, cut in this order: `eden~ALL2jb` first, then the lenient regrade.

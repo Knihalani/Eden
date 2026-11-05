@@ -11,7 +11,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 
 | File | Owns |
 |---|---|
-| `partner.ts` (5.5k lines) | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues |
+| `partner.ts` (5,081 lines) | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues |
 | `config.ts`, `parts.ts` | `EngineConfig`, `DEFAULT_CONFIG` (the unified default, D112: thresholds such as `confidentScore` 1.1, D6, and every part on); `PARTS` (each part's settings that take it out), `withoutParts`, `CORE_CONFIG` (every part out) |
 | `cache.ts` | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem` |
 | `text.ts`, `situation.ts` | Cues with no model (entities, content terms, chatter); a coarse situation label for routing |
@@ -56,7 +56,7 @@ user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`.
 ## Test
 
 ```bash
-bun run test:pkg engine          # 43 files, ~4 s wall in parallel (~15 s one by one); partner and reader lead
+bun run test:pkg engine          # 49 files, 8-10 s wall (two runs, shared 4-core box, 2026-11-05); partner and reader lead
 bun test ./packages/engine/src/conflict.test.ts      # one file, from the repo root (the preload is read from cwd)
 bun run eval                     # the scenario metrics; paste the JSON in the PR when behaviour changes
 bun run funnel --jobs 4          # the lab's $0 screen of the default on train (reader stub; docs/LAB.md)
@@ -104,6 +104,36 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   cached copy current, so `verifyItems` also applies a session's recent re-reads, not only doubted items. A new
   delivery path uses `deliverChecked`, never `deliver`, or it can send a stale copy. `deliverChecked` itself calls
   `deliver` (a bulk rename of `return this.deliver(` once made it call itself forever: the tests hung, not failed).
+- **An ask says "Nothing in the connected sources." only when its sources answered (D127).** `searchLive` returns
+  each chosen source's status (`sources`: the fan-out's, or "local" for a synced source answered from the index);
+  `honestAnswer` names any that did not answer (error, timeout, circuit open, busy, limited) and says the empty answer
+  is not an all-clear, and `AskResponse.sources` carries the statuses. A new lookup path an ask answers from must
+  return statuses too, or an outage reads as "nothing". A failed on-demand sync poll (`freshen`) feeds the status
+  through `localOf`, not a status of its own: it leaves the copy not current, so the source is searched live and that
+  search's status stands. An ask never passes `behind`, so a warm-but-stale copy is not "local" there
+  (`review-regressions.test.ts`); only the reader push's first reading answers from it. A session that ends before the
+  search runs returns `closed`, and the answer says so rather than "nothing". Probes are extra queries
+  beside a chosen source's own search, whose outcome gives the source's status.
+- **Shown means handed out.** With `askDedup`, what an injection showed is noted (`noteShown`) in `handOut`, which
+  every path that gives the agent an injection calls (observe's reply, `takePending`, the firewall's finding, the
+  ask's own answer), not when `deliver` builds it: a queued packet the agent has not taken was shown nothing, so an
+  ask before `takePending` says its items in full. The ask then drops from `s.pending` a packet whose every item it
+  cited; one cited in part stays queued (`review-regressions.test.ts`).
+- `confident()` is one loop that stops at the cap, cheap tests first; every test in it must judge one item alone (no
+  state across items), or stopping early would change its output.
+- **A re-read never revives a held-gone id (D126).** `recheck` checks `ItemCache.isHeldGone` after its fetch and
+  before `revive`/`store`: a `sourceRemoved` can land while the fetch is on the wire, and reviving would lift the
+  hold and deliver the deleted item. Any new path that stores a re-read or pushed copy must not `revive` an id a
+  removal holds unless that copy is itself newer than the removal (`sourceItems` is: the source sent it again).
+- **`checkAhead` runs only once the reader will be called (D134):** after `readAsk`'s empty-pool and `readerGate`
+  returns. Moving it back above the gate makes every gated ask pay up to `VERIFY_AHEAD` connector calls.
+- **One deadline per lookup (D140).** `searchLive` takes `deadlineAt` once, after resolving the sources and before
+  the on-demand poll; the poll's signal, the live search's `timeoutMs`, the planner and the probes
+  (`ProbeOpts.deadlineAt`) get only what is left. Do not give a later stage a fresh `sourceTimeoutMs`: an ask waits
+  for its poll, so the stages add up. Under `MIN_SEARCH_MS` (50) left, the search is skipped with "timeout" statuses
+  and no call (no rate token or breaker failure for a call that could not answer). `Sync.freshen` skips a source
+  whose on-demand poll gave up within `demandTimeoutMs` (= `sourceTimeoutMs`), so the next lookup searches it live
+  instead of waiting on the same listing.
 - `fetchChecked`'s `gone` needs `Source.fetchReportsGone`: an MCP tool's null fetch proves nothing, so verification
   never deletes an MCP item on its own; deletions there come from `sourceRemoved` or the sweep.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on

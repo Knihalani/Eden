@@ -11,8 +11,8 @@ D64's timelines, not tested in a tenant's agent. Measure in your own agent befor
 ```ts
 import { EdenClient, withContext } from "@eden/client";
 
-// defaultWaitMs: each user message's observe waits up to 1.5 s for its lookup (see "How long to wait" below).
-const eden = new EdenClient({ apiKey, userId, sessionId, defaultWaitMs: 1500 });
+// Each sent user message's observe waits up to 3 s for its lookup by default (see "How long to wait" below).
+const eden = new EdenClient({ apiKey, userId, sessionId });
 const { injection } = await eden.observe({ kind: "user_message", text }); // report each event
 messages = withContext(messages, await eden.collect(injection)); // before each model call
 ```
@@ -45,8 +45,9 @@ messages = withContext(messages, await eden.collect(injection)); // before each 
 ## How long to wait on the user message (`waitMs`; D98, D105)
 
 `observe` takes a `waitMs` option: how long the server may hold the user message's observe for a fresher answer
-before it replies. The client sends none by default (unless `defaultWaitMs` is set); the server treats a missing value
-as 0 and caps it at 5,000 ms.
+before it replies. The client sends 3,000 ms on each sent user message by default (`DEFAULT_WAIT_MS`, D112) and none on
+other events; `defaultWaitMs` changes it and `defaultWaitMs: 0` opts out. The server treats a missing value as 0 and
+caps it at 5,000 ms.
 The client's own timeout for that request is 800 ms plus `waitMs`, so a long wait does not make the SDK give up early.
 Work still running when the wait ends arrives later through `pending`/`collect`, as above.
 
@@ -220,6 +221,11 @@ that source before the signal as unconfirmed, and reads such an item again by it
 0.5 re-reads per agent turn in the simulation, each one connector call; a source without a fetch tool is delivered as
 held). Notifications that carry their items or name their deletions need no re-reads, so prefer them where the
 provider offers them.
+
+If you know which items changed, send them: `sourceItems` for the new or changed items and `sourceRemoved` for the
+deleted refs, not a bare `sourceChanged`. That path re-reads nothing (0 re-reads in D126's simulation, with no more
+stale or deleted items delivered than the signal path), while a bare signal makes Eden doubt every earlier-read item
+of the source (D131). For a Gmail push, turn the history id into items and deletions with `history.list` first.
 
 Receiving notifications has its own cost, which Eden does not see: a platform may bill trigger runs, and a Gmail push
 carries only a history id that your code turns into items with a `history.list` call.

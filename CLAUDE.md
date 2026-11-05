@@ -48,7 +48,9 @@ The standard agent for live agent tests (`agent-ab.ts`, any "Eden against tools"
 as a tool or as injected context. Until the lab runs on Pi, label any agent result from the older in-house loop as such.
 
 `bun run format` fixes formatting except long comments. Engine changes that touch scoring, thresholds or
-delivery also run `bun run eval --live` (needs `OPENROUTER_API_KEY`; costs fractions of a cent) and report both runs.
+delivery also run `bun run eval --live --usd-cap 0.05` (needs `OPENROUTER_API_KEY`; costs fractions of a cent) and
+report both runs. `--live` is the shipped wiring (live reader, no judge) and refuses to start without a hard dollar
+cap (D128); `--live --judge --usd-cap 0.05` re-runs the pre-D128 shape (judge on, reader stub).
 
 ## Engineering rules
 

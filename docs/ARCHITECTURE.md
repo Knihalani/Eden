@@ -157,9 +157,13 @@ the bound on a lost one. Sources that do not notify are polled as before.
 
 **Freshness at delivery** (D126, `verifyDelivery`, in the default, with `verifyTimeoutMs` 1.5 s; `partner.ts`
 `verifyItems`, `checkAhead`, `deliverChecked`; `SourceFanout.fetchChecked`). Every slow-path, reader, anticipation,
-firewall and `ask` delivery goes through `deliverChecked`: an item read before its source last signalled a change
-(`Sync.signalledSince`, a `syncPush` signal that does not say which item changed) is fetched again by its ref first, in
-parallel; a reader's likely picks are re-read beside its call, so the delivery seldom waits. A changed copy is stored
+firewall and `ask` delivery goes through `deliverChecked`: an item whose read began before its source last signalled a
+change (`Sync.signalledSince`, a `syncPush` signal that does not say which item changed) is fetched again by its ref
+first, in parallel. A read's start is a mark, not a time (D133): every lookup, probe, re-read and sync page takes
+`Sync.mark()` (a count of signals) before its call and stores it with its copies (`ItemCache.readMark`), so a signal
+that lands while a call is on the wire doubts what it brings, and items a notification carried, or a poll the signal
+started, do not; a reader's likely picks are re-read beside its call, so the delivery seldom waits (only once the
+reader will be called: an empty pool or a `readerGate`d ask starts none, D134). A changed copy is stored
 and delivered instead; one the source no longer has (`gone`, only from a source with `Source.fetchReportsGone`) is
 dropped from the cache and left out; one that cannot be checked is delivered as held. With no signal nothing is
 re-read: a copy's age alone is no doubt (re-reading by age was measured live and deleted, D126), and a silent source's
@@ -167,7 +171,9 @@ changes arrive through polls and the daily sweep. The fast path, which may not c
 the slow path. Deletion notifications (`ContextPartner.sourceRemoved`, `POST /v1/sources/removed`) drop items at once;
 a deleted item, from a notification or a re-read, is also dropped from the fan-out's held search pages
 (`SourceFanout.dropResults`, as on every signal) and kept out of the cache for 10 minutes (`ItemCache.removeItems`'
-hold), so a page read before the deletion cannot bring it back.
+hold), so a page read before the deletion cannot bring it back. A re-read that is on the wire when a deletion
+notification lands does not revive the item (`recheck` checks `ItemCache.isHeldGone` before storing): it counts as
+gone.
 The re-reads are traced as "verify" decisions with their `sourceCalls`.
 
 **Poll behind the lookup** (D65, `syncPollBehind`, on in the default, D112; with `sync` and `syncOnDemand`): without it,
@@ -181,7 +187,11 @@ grounded (so it makes no judge call); after silence with no model, as the lookup
 can carry a copy the poll then finds edited; the ledger records each delivered item's words with the flag, and the
 follow-up delivers the corrected copy (the departure from D40 is that the old copy went out first).
 `ObserveResult.pending` stays true while a poll or follow-up is running. The agent's `ask_context` still waits for the
-poll; the reader's push does not (`readerPushBehind`, below).
+poll; the reader's push does not (`readerPushBehind`, below). A lookup has one deadline, `sourceTimeoutMs` (1.5 s) from
+when its sources are resolved (D140): the on-demand poll, the live search, the planner's cascade and the probes share
+it, so a listing that hangs and the search after it hold an ask back about 1.5 s before the reader starts, not 3 s.
+With under 50 ms left, the live search is skipped and each chosen source reports "timeout" (no call). A source whose
+on-demand poll ran out of time is not polled again by a lookup for the next `sourceTimeoutMs`: it is searched live.
 
 **Deleted by D112:** `decideConflict` (D67), `judgeBehind`, push relaying (`syncPush`, `sourcePushes`,
 `sourceChanged`, D66) and the other switches D112 lists. The candidates' facts (`decide.ts`) still reach the lab only
@@ -272,7 +282,10 @@ item means before deciding whether it is about the same thing and binds. With `a
 items it rejected by name leave the ask's answer; an item it flagged never does. A drop that would empty the answer is
 made only when the reader was shown every candidate the ask had (none cut by `askReaderPool` or the prompt's 60-item
 cap; D114): otherwise "Nothing in the connected sources" would be a false all-clear over items it never read (D93's
-guard). With `readerPush` (on in the default), a
+guard). A source outage is the other false all-clear (D127, audit 2026-11-05 `ask-false-all-clear`): an ask says
+"Nothing in the connected sources." only when every source it chose answered (ok, cached, stale, or from the synced
+index); otherwise its answer names the sources that failed (error, timeout, circuit open, busy, limited) and says it
+is not an all-clear, and `AskResponse.sources` carries each chosen source's status. With `readerPush` (on in the default), a
 user request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
 flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
@@ -339,7 +352,11 @@ the graph walk and the card finds) and answers first with the candidates a rule 
 and no extra source call. With `askDedup` (D77, on in the default) each session keeps `Session.shown`: the words its
 packets and answers showed the agent, per item id and version (at most 64 items, never shared across sessions or
 users), so a later answer says an unchanged item by its new parts only, or "(shown above)"; an item whose words
-changed at its source counts as not shown.
+changed at its source counts as not shown. Shown is recorded when an injection is handed out (`handOut`: observe's
+reply, `takePending`, the firewall's finding, the ask's own answer), not when a packet is built (audit 2026-11-05
+`ask-shown-before-handed-out`): a packet still queued in `s.pending` was shown nothing, so an ask before `takePending`
+says its items in full, and drops the queued packet only when it cited every one of its items. A new delivery path
+hands out through `handOut`; noting shown at build brings back an ask's "(shown above)" for items the agent never got.
 `askRank` and `rankTies` (D82), `supersede` (D81), `askContext` (D83) and their composition ALL4 (D84) were deleted by
 D112 (no measurement favoured them on).
 
