@@ -93,6 +93,25 @@ describe("extract", () => {
     expect(x.links.some(([a, b]) => a === "n:markadeyemi" && b === "r:manager")).toBe(true);
   });
 
+  test("only the first 1,000 characters of an item's text are read (D150)", () => {
+    // Lowercase filler names nothing; each sentence ends in ". " so the names stand in sentences of their own.
+    const filler = (n: number) => "the plan is unchanged. ".repeat(Math.floor(n / 23)) + " ".repeat(n % 23);
+    const before = "Priya Raman approved it. ";
+    const after = "Tobias Fenwick approved it. priya@globex.com";
+    // Priya's name ends at character 1,000 exactly; Tobias's starts there, as does an address after him.
+    const head = filler(1_000 - before.length + 1) + before.slice(0, -1);
+    expect(head.length).toBe(1_000);
+    const x = extract(item("gmail:long", "Status", `${head} ${after}`), at);
+    expect(x.nodes.has("n:priyaraman")).toBe(true);
+    expect(x.nodes.has("n:tobiasfenwick")).toBe(false);
+    expect(x.nodes.has("e:priya@globex.com")).toBe(false);
+    // The same names at the head of an item are read: the cut is position, not wording.
+    const y = extract(item("gmail:short", "Status", `${after} ${before}`), at);
+    expect(y.nodes.has("n:tobiasfenwick")).toBe(true);
+    expect(y.nodes.has("e:priya@globex.com")).toBe(true);
+    expect(y.nodes.has("n:priyaraman")).toBe(true);
+  });
+
   test("an item names at most 48 nodes", () => {
     const names = Array.from({ length: 300 }, (_, k) => `Person${String.fromCharCode(65 + (k % 26))}${k} Smith`);
     expect(extract(item("drive:d1", "Roster", names.join(", ")), at).nodes.size).toBeLessThanOrEqual(48);
