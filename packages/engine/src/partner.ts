@@ -3296,8 +3296,8 @@ export class ContextPartner {
 
   /**
    * Whether any of these cached items was fetched longer ago than `refreshAfterMs` (refreshing on), or, with
-   * `verifyDelivery`, than `verifyAfterMs` without being current by its source's notifications: the fast path may not
-   * re-read it, so the slow path, which does, delivers it.
+   * `verifyDelivery`, read before its source signalled a change (`doubted`): the fast path may not re-read it, so the
+   * slow path, which does, delivers it.
    */
   private stale(s: Session, scored: Scored[]): boolean {
     const now = this.now();
@@ -3316,38 +3316,19 @@ export class ContextPartner {
   }
 
   /**
-   * When an item's copy is known current (`verifyDelivery`, `packetAge`): now for a synced item of a source that
-   * notifies with no notification pending (`Sync.notifiedCurrent`), else when it was last read.
-   */
-  private freshAt(s: Session, item: ContextItem, now: number): number {
-    const read = this.readAt(s, item, now);
-    const synced = this.sync !== null && this.deps.cache.isSynced(s.scope, item.id);
-    return synced && this.sync!.notifiedCurrent(s.scope, item.sourceId, read, now) ? now : read;
-  }
-
-  /**
-   * Whether an item must be re-read before it is delivered (`verifyDelivery`): its copy is older than `verifyAfterMs`,
-   * or its source has signalled a change since the copy was read (`Sync.signalledSince`), however recent the read.
+   * Whether an item must be re-read before it is delivered (`verifyDelivery`): its source signalled a change after the
+   * copy was read (`Sync.signalledSince`) and no listing or notification has brought it again since. A copy's age alone
+   * does not doubt it (D126: re-reading by age cost 4.6 connector calls and 0.33 s per task live, for no measured gain;
+   * a silent source's changes reach Eden through the sync's polls and sweeps).
    */
   private doubted(s: Session, item: ContextItem, now: number): boolean {
-    if (now - this.freshAt(s, item, now) > this.config.verifyAfterMs) return true;
     return this.sync?.signalledSince(s.scope, item.sourceId, this.readAt(s, item, now)) === true;
   }
 
   /**
-   * `packetAge`: "as of 3 h ago" for a copy in doubt (`doubted`: old, or read before its source signalled a change)
-   * that was not, or could not be, read again; undefined for a current one.
-   */
-  private ageOf(s: Session, item: ContextItem): string | undefined {
-    const now = this.now();
-    if (!this.doubted(s, item, now)) return undefined;
-    return `as of ${agoText(Math.max(60_000, now - this.freshAt(s, item, now)))}`;
-  }
-
-  /**
-   * `verifyDelivery`: re-reads, by ref and in parallel, each item whose copy is older than `verifyAfterMs` and not
-   * current by its notifications. A changed copy is stored (already redacted by the fan-out) and replaces the item; one
-   * its source no longer has is dropped from the cache and left out; one that could not be checked stays as held.
+   * `verifyDelivery`: re-reads, by ref and in parallel, each item in doubt (`doubted`). A changed copy is stored
+   * (already redacted by the fan-out) and replaces the item; one its source no longer has is dropped from the cache and
+   * left out; one that could not be checked stays as held.
    * Each re-read is a connector call, traced as a "verify" decision (`sourceCalls`). Never throws.
    */
   private async verifyItems(s: Session, scored: Scored[], cue: Cue): Promise<Scored[]> {
@@ -4394,7 +4375,6 @@ export class ContextPartner {
         : {}),
       ...(shown ? { shownBefore: (item: ContextItem) => shown.get(shownKey(item)) } : {}),
       ...(this.config.compactParts ? { split: true } : {}),
-      ...(this.config.packetAge ? { age: (item: ContextItem) => this.ageOf(s, item) } : {}),
     };
   }
 
@@ -4413,8 +4393,7 @@ export class ContextPartner {
     const year = String(new Date(this.now()).getUTCFullYear());
     for (const [k, line] of lines.entries()) {
       const item = items[k];
-      // The tag is "[source]", or "[source · as of …]" with `packetAge`: the age is Eden's, not the item's words.
-      if (!item || !(line.startsWith(`- [${item.sourceId}] `) || line.startsWith(`- [${item.sourceId} · `))) break;
+      if (!item || !line.startsWith(`- [${item.sourceId}] `)) break;
       const key = shownKey(item);
       const words = shown.get(key) ?? new Set<string>([year]);
       const said = line.slice(line.indexOf("] ") + 2);
@@ -4499,7 +4478,6 @@ export class ContextPartner {
           }
         : {}),
       ...(this.config.compactParts ? { split: true } : {}),
-      ...(this.config.packetAge ? { age: (item: ContextItem) => this.ageOf(s, item) } : {}),
     };
     const injection: Injection = {
       ...s.scope,
@@ -4890,14 +4868,6 @@ const MAX_CHECKS = 64;
 const CHECK_REUSE_MS = 30_000;
 /** Doubted candidates of a reader's pool re-read beside its call (`checkAhead`): about what a delivery cites. */
 const VERIFY_AHEAD = 3;
-
-/** An age in words for `packetAge`: "25 min ago", "3 h ago", "2 d ago". */
-function agoText(ms: number): string {
-  const min = Math.round(ms / 60_000);
-  if (min < 90) return `${min} min ago`;
-  const h = Math.round(ms / 3_600_000);
-  return h < 48 ? `${h} h ago` : `${Math.round(ms / 86_400_000)} d ago`;
-}
 
 /** The user's day as YYYY-MM-DD, at their offset from UTC (minutes). */
 function localDay(at: number, offsetMin: number): string {

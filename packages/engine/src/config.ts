@@ -264,26 +264,17 @@ export interface EngineConfig {
    */
   syncPushMaxStaleMs: number;
   /**
-   * Trial (owner: the freshness track, ends 2026-11-19): every item about to be delivered (a packet or an `ask` answer,
-   * from the slow path, the reader's push, anticipation or the action firewall) whose copy was read more than
-   * `verifyAfterMs` ago is fetched again by its ref first (`SourceFanout.fetchChecked`, within `verifyTimeoutMs`, all in
-   * parallel), unless its source notifies and has no notification pending (`Sync.notifiedCurrent`). A changed copy is
-   * stored and delivered in its place; one the source no longer has (`gone`, only from a source with
-   * `fetchReportsGone`) is dropped from the cache and not delivered; one that could not be checked is delivered as
-   * held (with `packetAge`, labelled with its age). The fast path, which may not call a source, hands such items to
-   * the slow path instead. Each check is one connector call.
+   * Every item about to be delivered (a packet or an `ask` answer, from the slow path, the reader's push, anticipation
+   * or the action firewall) whose source signalled a change after the copy was read (`Sync.signalledSince`, with
+   * `syncPush`) is fetched again by its ref first (`SourceFanout.fetchChecked`, within `verifyTimeoutMs`, in parallel;
+   * a reader's likely picks are re-read beside its call). A changed copy is stored and delivered in its place; one the
+   * source no longer has (`gone`, only from a source with `fetchReportsGone`) is dropped from the cache and not
+   * delivered; one that could not be checked is delivered as held. The fast path, which may not call a source, hands
+   * such items to the slow path. Each check is one connector call; with no signal nothing is re-read (D126).
    */
   verifyDelivery: boolean;
-  /** With `verifyDelivery`: how old (ms) a copy may be and still be delivered without a re-read. */
-  verifyAfterMs: number;
   /** With `verifyDelivery`: each re-read's deadline (ms); past it the item is delivered as held. */
   verifyTimeoutMs: number;
-  /**
-   * Trial (owner: the freshness track, ends 2026-11-19): a delivered item whose copy is older than `verifyAfterMs`
-   * (not re-read, or the re-read failed) says how old it is beside its source ("[gmail · as of 3 h ago]"), so the
-   * agent can weigh it. Current items carry no label.
-   */
-  packetAge: boolean;
   /**
    * A per-user knowledge graph over every cached item (`kg.ts`; docs/research/moon-graph.md): people, organisations,
    * projects and systems, identifiers, channels, roles and days, joined by typed edges. A lookup walks it from the
@@ -566,10 +557,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncLocalAll: true,
   syncPush: true,
   syncPushMaxStaleMs: 24 * 3_600_000,
-  verifyDelivery: false,
-  verifyAfterMs: 10 * 60_000,
+  verifyDelivery: true,
   verifyTimeoutMs: 1_500,
-  packetAge: false,
   cards: true,
   cardsEconomy: true,
   cardItems: 1,

@@ -139,7 +139,7 @@ interface SourceSync {
   notices: number;
   /**
    * When the latest notification came (-Infinity before any). A signal does not say which item changed, and the poll
-   * it causes reads only the newest page: a copy read before it is in doubt until read again (`notifiedCurrent`).
+   * it causes reads only the newest page: a copy read before it is in doubt until read again (`signalledSince`).
    */
   noticedAt: number;
   /** `notices` when the last complete poll began: the copy is behind while they differ. */
@@ -288,18 +288,10 @@ export class SyncManager {
   }
 
   /**
-   * Whether an item read at `readAt` is current by its source's notifications: the source notifies (`push`), no
-   * notification is pending, the copy is within `pushMaxStaleMs`, and the item was read after the latest signal (a
-   * signal says only that something changed; its poll reads the newest page, so an older copy, or one the source has
-   * since deleted, stays in doubt until it is read again). Items a notification carried, and deletions it named
-   * (`ingest`, `removed`), need no signal. What this holds current needs no re-read to be delivered (`verifyDelivery`).
+   * Whether a notifying source has signalled a change after `readAt`: a signal does not say which item changed, and the
+   * poll it causes reads only the newest page, so a copy read before it (or one the source has since deleted) is in
+   * doubt until it is read again (`verifyDelivery`). Items a notification carried (`ingest`) are read at its time.
    */
-  notifiedCurrent(scope: Scope, sourceId: string, readAt: number, now = this.deps.now()): boolean {
-    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
-    return s !== undefined && s.notifies && this.isCurrent(s, now) && readAt >= s.noticedAt;
-  }
-
-  /** Whether a notifying source has signalled a change after `readAt`: a copy read before it is in doubt. */
   signalledSince(scope: Scope, sourceId: string, readAt: number): boolean {
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
     return s !== undefined && s.notifies && s.noticedAt > readAt;

@@ -216,9 +216,10 @@ answer 200 with what was done: `synced` is false when the source is not synced f
 notifying (the notification is ignored), and `stored` counts the items held new or changed.
 
 A signal that says only "this source changed" does not say what changed. Eden then treats every item it read from
-that source before the signal as unconfirmed: with the freshness check (`verifyDelivery`, D126) such an item is read
-again before it is delivered, and otherwise it is labelled with its age. Notifications that carry their items or name
-their deletions need no re-reads.
+that source before the signal as unconfirmed, and reads such an item again by its id before delivering it (D126: about
+0.5 re-reads per agent turn in the simulation, each one connector call; a source without a fetch tool is delivered as
+held). Notifications that carry their items or name their deletions need no re-reads, so prefer them where the
+provider offers them.
 
 Receiving notifications has its own cost, which Eden does not see: a platform may bill trigger runs, and a Gmail push
 carries only a history id that your code turns into items with a `history.list` call.

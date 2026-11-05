@@ -67,20 +67,40 @@ const say = async (p: ContextPartner, text: string, sessionId: string, at: numbe
   const r = await p.observe({ ...scope, sessionId, at, kind: "user_message", text } as AgentEvent, { waitMs: 2_000 });
   return [r.injection, ...p.takePending({ ...scope, sessionId })].filter((x) => x !== null);
 };
-const VERIFY = { verifyDelivery: true, verifyAfterMs: 10 * MIN, packetAge: true };
+/** A source that lists and notifies (`syncPush`): a signal says only that something changed. */
+class Listed extends Mutable {
+  readonly notifies = true;
+  async list(_s: Scope, cursor: string | undefined, limit: number) {
+    if (this.failSearch) throw new Error("503 Service Unavailable");
+    const all = [...this.docs.keys()].map((r) => this.item(r)!);
+    const at = cursor ? Number(cursor) : 0;
+    return { items: all.slice(at, at + limit), next: at + limit < all.length ? String(at + limit) : null };
+  }
+}
 
-describe("verifyDelivery: an old copy is re-read before it is delivered", () => {
-  const seed = (src: Mutable) =>
-    src.docs.set("q1", { title: "Quarterly offsite", text: "The quarterly offsite is in Lisbon on 12 November." });
+const PUSH = { sync: true, syncPush: true, syncPageSize: 100, verifyDelivery: true };
 
-  test("changed at the source since it was cached, and the search is down: the re-read brings the current copy", async () => {
-    const src = new Mutable("notes");
+/** A partner whose sync has read every item of `src` once. */
+async function synced(src: Listed, config: Record<string, unknown> = {}) {
+  const t = setup(src, { ...PUSH, ...config });
+  t.partner.sync!.track(scope, t.now());
+  while (!t.partner.sync!.warm(scope)) await t.partner.sync!.tick();
+  return t;
+}
+
+const seed = (src: Mutable) =>
+  src.docs.set("q1", { title: "Quarterly offsite", text: "The quarterly offsite is in Lisbon on 12 November." });
+
+describe("verifyDelivery: a copy read before its source signalled a change is re-read before it is delivered", () => {
+  test("changed at the source, and the source is down for search and listing: the re-read brings the current copy", async () => {
+    const src = new Listed("notes");
     seed(src);
-    const { partner, cache, advance, now } = setup(src, VERIFY);
-    await say(partner, "Where is the quarterly offsite?", "s1", now()); // caches the copy
+    const { partner, cache, advance, now } = await synced(src);
+    advance(5 * MIN);
     src.docs.set("q1", { title: "Quarterly offsite", text: "The quarterly offsite moved to Porto on 19 November." });
-    src.failSearch = true; // Only the cached copy can answer: without a re-read it would say Lisbon.
-    advance(30 * MIN);
+    expect(partner.sourceChanged(scope, "notes")).toBe(true);
+    src.failSearch = true; // Only the held copy can answer: without a re-read it would say Lisbon.
+    advance(1 * MIN);
     const got = await say(partner, "Remind me where the quarterly offsite is", "s2", now());
     const text = got.map((i) => i.text).join("\n");
     expect(text).toContain("Porto");
@@ -89,55 +109,56 @@ describe("verifyDelivery: an old copy is re-read before it is delivered", () => 
     expect(cache.get(scope, itemId("notes", "q1"), now())?.text).toContain("Porto");
   });
 
-  test("deleted at the source: not delivered, and dropped from the cache", async () => {
-    const src = new Mutable("notes");
+  test("deleted at the source: not delivered, dropped from the cache, every re-read traced", async () => {
+    const src = new Listed("notes");
     seed(src);
-    const { partner, cache, advance, now, traces } = setup(src, VERIFY);
-    await say(partner, "Where is the quarterly offsite?", "s1", now());
+    const { partner, cache, advance, now, traces } = await synced(src);
+    advance(5 * MIN);
     src.docs.delete("q1");
-    advance(30 * MIN);
-    const searches = src.searches;
+    partner.sourceChanged(scope, "notes");
+    src.failSearch = true;
+    advance(1 * MIN);
     const got = await say(partner, "Remind me where the quarterly offsite is", "s2", now());
-    // The live search no longer finds it; what the cache held is re-read, found gone and left out.
     expect(got.flatMap((i) => i.citations.map((c) => c.itemId))).not.toContain(itemId("notes", "q1"));
     expect(cache.get(scope, itemId("notes", "q1"), now())).toBeFalsy();
-    expect(src.searches).toBeGreaterThan(searches);
-    // Every re-read is traced as a connector call.
     const verifyCalls = traces.filter((t) => t.decision === "verify").reduce((n, t) => n + t.sourceCalls, 0);
+    expect(src.fetches).toBeGreaterThanOrEqual(1);
     expect(verifyCalls).toBe(src.fetches);
   });
 
-  test("a fresh copy is delivered with no re-read; off (the default) never re-reads", async () => {
-    const src = new Mutable("notes");
-    seed(src);
-    const { partner, advance, now } = setup(src, VERIFY);
-    await say(partner, "Where is the quarterly offsite?", "s1", now());
-    advance(2 * MIN);
-    await say(partner, "Remind me where the quarterly offsite is", "s2", now());
-    expect(src.fetches).toBe(0);
+  test("no signal: an old copy is delivered with no re-read; the part taken out never re-reads", async () => {
+    const quiet = new Listed("notes");
+    seed(quiet);
+    const q = await synced(quiet);
+    q.advance(3 * 60 * MIN); // Age alone is no doubt (D126).
+    quiet.failSearch = true;
+    const got = await say(q.partner, "Where is the quarterly offsite?", "s1", q.now());
+    expect(got.flatMap((i) => i.citations.map((c) => c.itemId))).toContain(itemId("notes", "q1"));
+    expect(quiet.fetches).toBe(0);
 
-    const off = new Mutable("notes");
+    const off = new Listed("notes");
     seed(off);
-    const o = setup(off);
+    const o = await synced(off, { verifyDelivery: false });
+    o.advance(5 * MIN);
+    o.partner.sourceChanged(scope, "notes");
+    off.failSearch = true;
     await say(o.partner, "Where is the quarterly offsite?", "s1", o.now());
-    o.advance(30 * MIN);
-    await say(o.partner, "Remind me where the quarterly offsite is", "s2", o.now());
     expect(off.fetches).toBe(0);
   });
 
-  test("a re-read that fails, or a source whose null proves nothing: delivered as held, labelled with its age", async () => {
-    for (const src of [new Mutable("notes"), new Mutable("notes", false)]) {
+  test("a re-read that fails, or a source whose null proves nothing: delivered as held", async () => {
+    for (const src of [new Listed("notes"), new Listed("notes", false)]) {
       seed(src);
-      const { partner, advance, now } = setup(src, VERIFY);
-      await say(partner, "Where is the quarterly offsite?", "s1", now());
-      src.failSearch = true; // The cached copy answers.
+      const { partner, advance, now } = await synced(src);
+      advance(5 * MIN);
+      partner.sourceChanged(scope, "notes");
+      src.failSearch = true;
       if (src.fetchReportsGone) src.failFetch = true;
       else src.docs.delete("q1"); // A null from a source that does not say null means gone.
-      advance(3 * 60 * MIN);
+      advance(1 * MIN);
       // The ask path: what it cites is checked too.
       const r = await partner.ask({ ...scope, sessionId: "s2", question: "Where is the quarterly offsite?" });
       expect(r.citations.map((c) => c.itemId)).toContain(itemId("notes", "q1"));
-      expect(r.answer).toMatch(/\[notes · as of 3 h ago\]/);
       expect(src.fetches).toBeGreaterThanOrEqual(1);
     }
   });
@@ -167,29 +188,5 @@ describe("sourceRemoved: a deletion notification drops the items at once", () =>
     await say(off.partner, "Where is the quarterly offsite?", "s1", off.now());
     expect(off.partner.sourceRemoved(scope, "notes", ["q1"])).toBe(0);
     expect(off.cache.get(scope, itemId("notes", "q1"), off.now())).toBeTruthy();
-  });
-});
-
-describe("verifyDelivery and syncPush: a notifying source's copy needs no re-read", () => {
-  class Listed extends Mutable {
-    readonly notifies = true;
-    async list(_s: Scope, cursor: string | undefined, limit: number) {
-      const all = [...this.docs.keys()].map((r) => this.item(r)!);
-      const at = cursor ? Number(cursor) : 0;
-      return { items: all.slice(at, at + limit), next: at + limit < all.length ? String(at + limit) : null };
-    }
-  }
-  test("current by its notifications: delivered with no fetch and no age label", async () => {
-    const src = new Listed("notes");
-    src.docs.set("q1", { title: "Quarterly offsite", text: "The quarterly offsite is in Lisbon on 12 November." });
-    const { partner, advance, now } = setup(src, { ...VERIFY, sync: true, syncPush: true, syncPageSize: 100 });
-    partner.sync!.track(scope, now());
-    while (!partner.sync!.warm(scope)) await partner.sync!.tick();
-    advance(3 * 60 * MIN);
-    src.failSearch = true;
-    const quiet = await say(partner, "Where is the quarterly offsite?", "s1", now());
-    expect(quiet.flatMap((i) => i.citations.map((c) => c.itemId))).toContain(itemId("notes", "q1"));
-    expect(quiet.map((i) => i.text).join("\n")).not.toContain("as of");
-    expect(src.fetches).toBe(0);
   });
 });

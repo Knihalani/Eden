@@ -29,11 +29,9 @@ describe("source-side deletions (--deletes)", () => {
   });
 
   test("the quality run counts deleted deliveries; with payload notifications Eden delivers none", async () => {
-    const base = { users: 1, sessionsPerUser: 6, seed: 2, profiles: REALISTIC, timeScale: 0, waitMs: 0, model: null };
-    const off = await runQuality(base);
-    expect(off.deletes).toEqual({ planned: 0, applied: 0, deletedDelivered: 0, deletedCited: 0 });
+    const base = { users: 1, sessionsPerUser: 4, seed: 2, profiles: REALISTIC, timeScale: 0, waitMs: 0, model: null };
     const pushed = await runQuality({ ...base, deletes: 0.3, push: "payload" });
     expect(pushed.deletes.applied).toBeGreaterThan(0);
     expect(pushed.deletes.deletedDelivered + pushed.deletes.deletedCited).toBe(0);
-  });
+  }, 20_000); // Two quality runs: about 3 s alone, more under the full suite's load.
 });

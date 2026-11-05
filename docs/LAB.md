@@ -44,7 +44,7 @@ written by hand.
 | Preset | What |
 |---|---|
 | `default` | The unified default: NEWL (D99) plus poll behind, small poll pages, no probe grace, the push's reader not waiting for the poll, the slow-path queue (D112). Cards, intent and the reader need their dependencies (`--cards`, `--intent`, a reader); without them they are inert, as in a server with no model key |
-| `minus-<part>` | The default with one of `PARTS` (`packages/engine/src/parts.ts`) taken out: probes, grounds, fallback, compaction, judge, graph, anticipate, sync, askVerdicts, cards, intent, reader, slowPathQueue, probeGrace |
+| `minus-<part>` | The default with one of `PARTS` (`packages/engine/src/parts.ts`) taken out: probes, grounds, fallback, compaction, judge, graph, anticipate, sync, freshness, askVerdicts, cards, intent, reader, slowPathQueue, probeGrace |
 | `minus-all` | The default with every part taken out: `CORE_CONFIG`, the no-feature core (the old production default) |
 
 A trial (DECISIONS.md, "Trial switches") is measured as `--set '{...}'` over `default` (funnel) or
@@ -405,7 +405,8 @@ The quality runner (`quality-cli.ts`) changes the world during a run and counts 
   `sourceRemoved`). `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed, changed, gone, failed, calls).
 
 D126's matrix: `bun packages/sim/src/quality-cli.ts --users 8 --sessions 20 --updates 0.6 --deletes 0.05
-[--push signals|payload] [--config '{"verifyDelivery":true,"packetAge":true}']`, about 50 s each, $0. Do not pass
+[--push signals|payload] [--config '{"verifyDelivery":false}']`, about 50 s each, $0 (`verifyDelivery` is in the
+default and acts only on signals). Do not pass
 `--sync`: it is an oracle that reloads every item each session and hides staleness.
 
 ### 6. Full benchmark (blind, both harnesses)

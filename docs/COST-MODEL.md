@@ -285,6 +285,12 @@ and the 24 h safety poll; receiving notifications has its own cost, not counted 
 3.7–4.7, since a busy inbox changes every hour). Priced per agent model and connector plan in
 docs/research/cost-fixes.md and eden-market-effect.md.
 
+**Freshness (D126, docs/research/freshness.md):** each re-read is one connector call, made only for an item read
+before its source's latest signal-only notification: about 0.48 per agent turn in the simulation with signals, none
+with item-carrying notifications or none at all (the live market runs: unchanged). Re-reading by age was measured at
++4.6 calls per task live and rejected; on a $12-per-1,000-calls platform that would have been about $55 per 1,000
+tasks.
+
 - The background column spreads each seed's card and intent spend over that seed's task runs; with only 64 tasks per
   simulated user it is mostly the one-time backfill, an upper bound on the steady state. In this run the checked-in
   card cache replayed 4,634 cards, so new cards and intent requests cost $0.058 (seed 41) and $0.057 (seed 42) for

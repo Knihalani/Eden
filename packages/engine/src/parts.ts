@@ -48,7 +48,16 @@ export const PARTS = {
   /** Anticipation (D60). */
   anticipate: { anticipate: false },
   /** Background sync (D57) and its request-path switches (D65, D101). */
-  sync: { sync: false, syncPollBehind: false, syncPollPageSize: 0, readerPushBehind: false, syncPush: false },
+  sync: {
+    sync: false,
+    syncPollBehind: false,
+    syncPollPageSize: 0,
+    readerPushBehind: false,
+    syncPush: false,
+    verifyDelivery: false,
+  },
+  /** A delivered item its source signalled a change to since it was read is read again first (D126). */
+  freshness: { verifyDelivery: false },
   /** The rule verdicts an ask gathers (D73). */
   askVerdicts: { askVerdicts: false },
   /** Implication cards (D59, D66), and with them the intent index, which their calls write. */

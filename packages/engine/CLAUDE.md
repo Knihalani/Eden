@@ -97,7 +97,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   whatever their sender or age. `automated` reads a `From:` line in the text or a `meta.from`/`meta.sender` field
   (connectors differ: `toItems` keeps whatever text the tool returned) and bulk footers; a connector giving neither
   is judged on its footers alone.
-- **Deliveries go through `deliverChecked` (D126)** in every async path, so `verifyDelivery` can re-read old copies;
+- **Deliveries go through `deliverChecked` (D126)** in every async path, so `verifyDelivery` can re-read copies a signal put in doubt;
   only the fast path calls `deliver` directly, and it hands a doubted item (`doubted`) to the slow path instead. A new
   delivery path uses `deliverChecked`, never `deliver`, or it can send a stale copy. `deliverChecked` itself calls
   `deliver` (a bulk rename of `return this.deliver(` once made it call itself forever: the tests hung, not failed).
