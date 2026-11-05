@@ -35,7 +35,7 @@ curl -s -X POST 'localhost:8790/v1/events?waitMs=1000' \
 ```ts
 import { EdenClient, withContext } from "@eden/client";
 
-const eden = new EdenClient({ apiKey, userId, sessionId, defaultWaitMs: 1500 }); // user messages wait for the lookup
+const eden = new EdenClient({ apiKey, userId, sessionId }); // a sent user message waits up to 3 s for its lookup
 const { injection } = await eden.observe({ kind: "user_message", text });  // report each event
 messages = withContext(messages, await eden.collect(injection));           // before each model call
 const answer = await eden.ask("What did Dana say about the renewal?");     // or expose as a tool
@@ -48,7 +48,9 @@ one user (`EDEN_USER`, `EDEN_TENANT`), and `createMcpServer` attaches it to any 
 [docs/INTEGRATION.md](docs/INTEGRATION.md) has advice on placement, caching and cost (unmeasured).
 
 Without a wait, a user message's observe replies before a slow lookup ends and its context misses the first model
-call; `defaultWaitMs` (or `waitMs` per call) fixes that, see [docs/INTEGRATION.md](docs/INTEGRATION.md) (D105).
+call, so the client waits up to 3,000 ms on each sent user message by default (D105, D112) and the server replies as
+soon as the lookup ends; `defaultWaitMs: 0` (or `waitMs` per call) overrides it, see
+[docs/INTEGRATION.md](docs/INTEGRATION.md).
 
 Both servers run the engine's one default (`DEFAULT_CONFIG`, D112), the best measured configuration: probes, the
 no-model grounds, the knowledge graph, anticipation, background sync, implication cards, the intent index and the
