@@ -2,7 +2,7 @@
 /**
  * `bun run eval --live` on Anthropic's API (claude-haiku-5-5, HAIKU_API_KEY), metered by the lab's spend ledger. LAB
  * ONLY (D97): the shipped reader runs on OpenRouter (`anthropic/claude-haiku-5.5`, D12's ZDR and no data collection,
- * D95's throughput sort, reasoning "low"), and this driver exists for sessions whose paid calls are limited to
+ * D95's throughput sort, no reasoning since D144), and this driver exists for sessions whose paid calls are limited to
  * Anthropic.
  *
  *   bun packages/sim/src/lab/eval-live.ts --spend-ledger .local/mkt/ledger.jsonl --spend-cap 17 \
@@ -16,15 +16,18 @@
  * on OPENROUTER_API_KEY, so the env it is handed carries a placeholder in that slot: the real OpenRouter key never
  * reaches it, and `make` refuses any key but the placeholder.
  *
- * `--thinking off` (default) is how the lab's readers have run (thinking disabled, so the reader's "low" reasoning is
- * not sent). `--thinking adaptive` sends it as Anthropic's effort "low", nearer the shipped reasoning; neither is
- * bit-identical to OpenRouter's route. Two caps hold: `--usd-cap` on the run (the eval's `TenantSpend`, reserved
- * before each call) and the ledger's `--spend-cap` across every process of the campaign.
+ * `--thinking off` (default) is the shipped request on a lab transport: since D144 `ModelReaderMaker` sends no
+ * reasoning, and thinking is disabled, as in every lab reader run. `--thinking adaptive` is the arm D144 timed and
+ * rejected: thinking on, and every request given `reasoning: "low"` here (the shipped reader sets none, and
+ * `AnthropicModel` sends `output_config.effort` only from it), so it thinks at effort low, not at the model's default
+ * effort. Neither is bit-identical to OpenRouter's route. Two caps hold: `--usd-cap` on the run (the eval's
+ * `TenantSpend`, reserved before each call) and the ledger's `--spend-cap` across every process of the campaign.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_CONFIG } from "@eden/engine";
 import { EVAL_TENANT, liveWiring, runScenarios, unwiredFlags, type Scenario } from "@eden/eval";
+import type { Model } from "@eden/llm";
 import { readerFailureLog } from "@eden/server";
 import { flags } from "./flags";
 import { keyFor, labAccess, labModel } from "./free";
@@ -37,7 +40,8 @@ export const PROVIDER = "anthropic-direct (lab, D97)";
 const USAGE = `
 bun packages/sim/src/lab/eval-live.ts --spend-ledger FILE --spend-cap USD [--spend-headroom USD] [--run-label L]
   [--usd-cap 0.05] [--thinking off|adaptive] [--wait 2000] [--no-planner] [--scenarios DIR] [--rpm N] [--max-requests N]
-The eval's shipped live wiring (D128) with the reader on Anthropic's claude-haiku-5-5 (lab only, D97).`;
+The eval's shipped live wiring (D128) with the reader on Anthropic's claude-haiku-5-5 (lab only, D97).
+--thinking off (default) is the shipped request (no reasoning, D144); adaptive is the effort-low arm D144 rejected.`;
 
 const argv = process.argv.slice(2);
 const cli = flags(
@@ -83,13 +87,25 @@ try {
 }
 const ledger = access!.ledger!;
 
+/**
+ * The adaptive arm's requests at effort low. The shipped reader sends no reasoning (D144), and without it
+ * `AnthropicModel` sends no `output_config.effort`, so adaptive thinking would run at the model's default effort, an
+ * arm nobody measured. A caller's own reasoning is kept. "off" is never wrapped: it stays exactly the shipped request.
+ */
+function effortLow(model: Model): Model {
+  return { id: model.id, chat: (request) => model.chat({ ...request, reasoning: request.reasoning ?? "low" }) };
+}
+
 const wiring = liveWiring({
   judge: false,
   usdCap,
   env: { ...process.env, OPENROUTER_API_KEY: PLACEHOLDER },
   make: (options) => {
     if (options.apiKey !== PLACEHOLDER) throw new Error("eval-live: a role was built with a real OpenRouter key");
-    return labModel(access!, { ...options, model: MODEL }, "eden.reader", { thinking: thinking as "off" | "adaptive" });
+    const model = labModel(access!, { ...options, model: MODEL }, "eden.reader", {
+      thinking: thinking as "off" | "adaptive",
+    });
+    return thinking === "adaptive" ? effortLow(model) : model;
   },
 });
 if (!wiring?.readerModel) fail("the shipped wiring built no reader");
