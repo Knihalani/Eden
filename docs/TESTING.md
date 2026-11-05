@@ -274,6 +274,13 @@ The default size (200 × 500) took 20 s wall and gave 1,794 KB per user, 153 µs
 before the change (a busier machine at the time). The reuse adds 43-44 B/item (measured); what makes it up (the
 hash field on each entry, a `madeFrom` WeakMap entry per held copy) is not measured apart.
 
+Since 2026-11-05 the bench runs three modes, each in its own process, and the table above is its `core` line: `graph`
+adds the cache's knowledge graph, and `shipped` runs a `ContextPartner` on `DEFAULT_CONFIG` with no model (graph and
+`onStored` mention recording on), which is what the servers run. It also prints the stages (the differences between
+modes) and the heap with the sources' raw items released; a fourth argument (`core`, `graph`, `shipped`) runs one
+mode. 200 × 500, two runs: `core` 66.1–73.4 µs/item, `shipped` 357.6–380.6 µs/item (5.2–5.4x) and 2.0x the heap
+per item; about 75 s wall in all (docs/research/graph-ablation.md).
+
 ## Rules for new tests
 
 - Behaviour changes get a test first (CLAUDE.md); a regression found in review gets its own test.
