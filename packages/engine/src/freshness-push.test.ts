@@ -150,3 +150,108 @@ describe("verifyDelivery on the reader's push", () => {
     expect(cited(p.takePending({ ...user, sessionId: "s1" }))).toContain(HOLD);
   });
 });
+
+/** A notifying source that only searches (no `list`): it never gets sync state, so only its held pages go stale. */
+class Notes implements Source {
+  readonly id: string = "notes";
+  readonly kind = "test";
+  readonly description = "notes";
+  readonly notifies: boolean = true;
+  searches = 0;
+  text = "Harlow invoice payments are on hold until the dispute ends";
+  async search(q: SearchQuery): Promise<ContextItem[]> {
+    this.searches++;
+    const words = q.text.toLowerCase().split(/\W+/);
+    const item = { id: itemId(this.id, "h"), sourceId: this.id, ref: "h", title: "Harlow", text: this.text };
+    return words.some((w) => w.length > 3 && item.text.toLowerCase().includes(w)) ? [{ ...item, updatedAt: T0 }] : [];
+  }
+}
+
+/** A synced source (it lists) that does not say it notifies. */
+class Quiet extends Notes {
+  override readonly id = "quiet";
+  override readonly notifies = false;
+  override async search(): Promise<ContextItem[]> {
+    return [];
+  }
+  async list(): Promise<ListPage> {
+    return { items: [], next: null };
+  }
+}
+
+function notesPartner(config: Record<string, unknown> = {}) {
+  let clock = T0;
+  const src = new Notes();
+  const p = new ContextPartner({
+    sources: async () => [src, new Quiet()],
+    sourceMap: new SourceMap(":memory:", { seed: 1 }),
+    cache: new ItemCache(),
+    budget: new Budget(),
+    model: null,
+    now: () => clock,
+    config: { ...CORE_CONFIG, sync: true, syncPush: true, ...config },
+  });
+  const user = { tenantId: "t1", userId: "u1" };
+  const ask = (sessionId: string) => p.ask({ ...user, sessionId, question: "Can I pay the Harlow invoice?" });
+  return { p, src, user, ask, advance: (ms: number) => (clock += ms) };
+}
+
+describe("a change notice drops held search pages (search-only notifying source)", () => {
+  test("sourceChanged: the next ask makes a new search and answers the new text", async () => {
+    const { p, src, user, ask, advance } = notesPartner();
+    const first = await ask("s1");
+    expect(first.answer).toContain("on hold until the dispute ends");
+    const searches = src.searches;
+    src.text = "Harlow dispute settled: the invoice may be paid now";
+    // Not synced (no listing), so the notice polls nothing; it still drops the held page, and says why.
+    expect(p.sourceChanged(user, "notes")).toBe(false);
+    expect(p.sourceNotice(user, "notes")).toEqual({ synced: false, reason: "not-synced" });
+    advance(5_000);
+    const second = await ask("s2");
+    expect(src.searches).toBeGreaterThan(searches);
+    expect(second.answer).toContain("dispute settled");
+    expect(second.answer).not.toContain("on hold until");
+    expect(second.sources?.find((x) => x.sourceId === "notes")?.status).toBe("ok");
+  });
+
+  test("sourceItems with items of the source drops its held page too", async () => {
+    const { p, src, user, ask, advance } = notesPartner();
+    await ask("s1");
+    const searches = src.searches;
+    src.text = "Harlow dispute settled: the invoice may be paid now";
+    const pushed = { id: itemId("notes", "h"), sourceId: "notes", ref: "h", title: "Harlow", text: src.text };
+    expect(await p.sourceItems(user, "notes", [pushed])).toBe(0); // Not synced: nothing stored as synced.
+    advance(5_000);
+    const second = await ask("s2");
+    expect(src.searches).toBeGreaterThan(searches);
+    expect(second.answer).toContain("dispute settled");
+  });
+
+  test("without a notice the held page answers (control); an item of another source drops nothing", async () => {
+    const { p, src, user, ask, advance } = notesPartner();
+    await ask("s1");
+    const searches = src.searches;
+    src.text = "Harlow dispute settled: the invoice may be paid now";
+    const other = { id: itemId("mail", "x"), sourceId: "mail", ref: "x", title: "x", text: "Harlow" };
+    expect(await p.sourceItems(user, "notes", [other])).toBe(0);
+    advance(5_000);
+    const second = await ask("s2");
+    expect(src.searches).toBe(searches);
+    expect(second.answer).toContain("on hold until");
+  });
+
+  test("the reason for each ignored notice: push off, not synced, not notifying", async () => {
+    const off = notesPartner({ syncPush: false });
+    expect(off.p.sourceNotice(off.user, "notes")).toEqual({ synced: false, reason: "push-off" });
+    expect(off.p.sourceChanged(off.user, "notes")).toBe(false);
+    const { p, user } = notesPartner();
+    p.sync!.track(user, T0);
+    while (!p.sync!.warm(user)) await p.sync!.tick();
+    expect(p.sourceNotice(user, "quiet")).toEqual({ synced: false, reason: "not-notifying" });
+    expect(p.sourceNotice(user, "typo")).toEqual({ synced: false, reason: "not-synced" });
+    expect(p.sourceNotice({ tenantId: "t1", userId: "nobody" }, "quiet")).toEqual({
+      synced: false,
+      reason: "not-synced",
+    });
+  });
+});

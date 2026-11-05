@@ -483,3 +483,75 @@ describe("results cache: real bytes, group drops, drops across state eviction", 
     expect((f as unknown as { running: Map<string, unknown> }).running.size).toBe(0);
   });
 });
+
+describe("held: a cache-only read of the page a search would be answered from (D140)", () => {
+  const a = { tenantId: "t", userId: "a" };
+  const b = { tenantId: "t", userId: "b" };
+  const item: ContextItem = { id: "s:1", sourceId: "s", ref: "1", title: "t", text: "x" };
+  const q = (scope: typeof a, text = "x") => ({ scope, text, entities: ["Dana"], limit: 5 });
+
+  test("no rate token, call or breaker probe: a held page read 50 times leaves the next call its token", async () => {
+    // A burst of 2 and no refill to speak of: the first search takes one token, so one call is left.
+    const f = new SourceFanout({ sanitize: (x) => x, ratePerSec: 1e-9, burst: 2, now: () => 0 });
+    let calls = 0;
+    const src = { id: "s", kind: "t", description: "", search: async () => (calls++, [item]) };
+    expect((await f.search([src], q(a), { timeoutMs: 1_000 }))[0]!.status).toBe("ok");
+    const rate = (f as unknown as { rate: { available(k: string): number } }).rate;
+    const before = rate.available("t/a|s");
+    expect(before).toBe(1); // The key is the pair's: the first call took one of two.
+    for (let i = 0; i < 50; i++) expect(f.held("s", q(a))?.status).toBe("cached");
+    expect(calls).toBe(1);
+    expect(rate.available("t/a|s")).toBe(before);
+    // The token the reads did not spend: a different query is still admitted, then the bucket is empty.
+    expect((await f.search([src], q(a, "y"), { timeoutMs: 1_000 }))[0]!.status).toBe("ok");
+    expect((await f.search([src], q(a, "z"), { timeoutMs: 1_000 }))[0]!.status).toBe("limited");
+  });
+
+  test("the same key as the search: a page found only for the same limit, text, entities and window", async () => {
+    const f = new SourceFanout({ sanitize: (x) => x, ratePerSec: 1_000, burst: 1_000 });
+    const src = { id: "s", kind: "t", description: "", search: async () => [item] };
+    const windowed = { ...q(a), window: { start: "2026-11-01", end: "2026-11-02" } };
+    await f.search([src], q(a), { timeoutMs: 1_000 });
+    await f.search([src], windowed, { timeoutMs: 1_000 });
+    expect(f.held("s", q(a))?.items).toEqual([item]);
+    expect(f.held("s", windowed)?.status).toBe("cached");
+    expect(f.held("s", { ...windowed, window: { start: "2026-11-01", end: "2026-11-03" } })).toBeUndefined();
+    expect(f.held("s", { ...q(a), limit: 6 })).toBeUndefined();
+    expect(f.held("s", { ...q(a), entities: [] })).toBeUndefined();
+    expect(f.held("s", { ...q(a), text: "X" })).toBeUndefined();
+    expect(f.held("other", q(a))).toBeUndefined();
+    expect(f.held("s", q(b))).toBeUndefined(); // Another user's page is never read.
+  });
+
+  test("fresh is cached, past freshMs stale with error timeout, past staleMs gone; a drop or forget empties it", async () => {
+    let now = 0;
+    const f = new SourceFanout({
+      sanitize: (x) => x,
+      ratePerSec: 1_000,
+      burst: 1_000,
+      freshMs: 100,
+      staleMs: 1_000,
+      now: () => now,
+    });
+    const src = { id: "s", kind: "t", description: "", search: async () => [item] };
+    await f.search([src], q(a), { timeoutMs: 1_000 });
+    await f.search([src], q(b), { timeoutMs: 1_000 });
+    expect(f.held("s", q(a))).toEqual({ sourceId: "s", status: "cached", items: [item], latencyMs: 0 });
+    now = 500;
+    expect(f.held("s", q(a))).toEqual({
+      sourceId: "s",
+      status: "stale",
+      items: [item],
+      latencyMs: 0,
+      error: "timeout",
+    });
+    f.dropResults(a, "s");
+    expect(f.held("s", q(a))).toBeUndefined();
+    expect(f.held("s", q(b))?.status).toBe("stale"); // Only that user's pages went.
+    f.forget(b, "s");
+    expect(f.held("s", q(b))).toBeUndefined();
+    await f.search([src], q(a), { timeoutMs: 1_000 });
+    now = 2_000;
+    expect(f.held("s", q(a))).toBeUndefined();
+  });
+});

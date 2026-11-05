@@ -172,6 +172,18 @@ function resultKey(pair: string, rest: string): string {
   return `${pair.length}:${pair}|${rest}`;
 }
 
+/**
+ * The results-cache key of a search page: `one()` holds its page under it, and `held` reads it back. One helper, so a
+ * cache-only read can never build a key the search did not.
+ */
+function pageKey(scope: Scope, sourceId: string, query: SearchQuery): string {
+  const span = query.window ? `|${query.window.start}..${query.window.end}` : "";
+  return resultKey(
+    `${scopeKey(scope)}|${sourceId}`,
+    `${query.limit}|${query.text}|${query.entities.join("\u0001")}${span}`,
+  );
+}
+
 /** The (user, source) pair a `resultKey` belongs to: the results cache's group, so a drop is O(that pair's pages). */
 function pairOf(key: string): string {
   const colon = key.indexOf(":");
@@ -224,6 +236,22 @@ export class SourceFanout {
       burst: Math.max(1, Math.floor(burst / 2)),
       now: this.now,
     });
+  }
+
+  /**
+   * The page a search of `sourceId` for `query` would be answered from without a call, or undefined: a fresh one as
+   * "cached", one past `freshMs` (but not expired) as "stale" with error "timeout", as `one()`'s fallback reports a
+   * call cut off by the deadline. Cache only: no rate token, concurrency slot, breaker probe or flight, so a lookup
+   * with no time left to search still answers from what is held (D140). A `forget` or `dropResults` deleted the
+   * pair's pages, so nothing from before one is served.
+   */
+  held(sourceId: string, query: SearchQuery): FanoutOutcome | undefined {
+    const k = pageKey(query.scope, sourceId, query);
+    const page = this.results?.get(k);
+    if (page === undefined) return undefined;
+    return this.results!.isStale(k)
+      ? { sourceId, status: "stale", items: page, latencyMs: 0, error: "timeout" }
+      : { sourceId, status: "cached", items: page, latencyMs: 0 };
   }
 
   /** Searches `sources` for `query` within `timeoutMs`, cancelled with `signal`. */
@@ -622,8 +650,7 @@ export class SourceFanout {
     const t0 = performance.now();
     const elapsed = () => Math.round(performance.now() - t0);
     const sourceKey = `${scopeKey(query.scope)}|${source.id}`;
-    const span = query.window ? `|${query.window.start}..${query.window.end}` : "";
-    const cacheKey = resultKey(sourceKey, `${query.limit}|${query.text}|${query.entities.join("\u0001")}${span}`);
+    const cacheKey = pageKey(query.scope, source.id, query);
     const done = (status: FanoutStatus, items: ContextItem[], error?: string): FanoutOutcome => ({
       sourceId: source.id,
       status,

@@ -142,7 +142,8 @@ export function createHandler(
           const checked = checkSourceChanged(body);
           if (!checked.ok) return fail(400, checked.error);
           const { userId, sourceId } = checked.value;
-          return json({ ok: true, synced: partner.sourceChanged({ tenantId: tenant, userId }, sourceId) });
+          // 200 either way (a no-op notification is not a caller error); `reason` says why nothing was synced.
+          return json({ ok: true, ...partner.sourceNotice({ tenantId: tenant, userId }, sourceId) });
         }
         case "/v1/sources/items": {
           // The changed items themselves (a Slack event, a trigger's payload): held as synced, with no source call.

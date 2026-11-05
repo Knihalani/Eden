@@ -152,6 +152,7 @@ counts the items listed (`demandItems`, `backgroundItems`) beside the calls.
 integrator forwards the provider's change notifications is not polled on its learned change rate. A notification marks
 it behind (`Sync.changed`, O(1)), and the next lookup that reads it polls it once, however many notifications came
 first. A notification that carries the changed items passes the secret gate and is stored as synced, with no call.
+Every notification (with `syncPush` on) also drops the source's held search pages, synced or not (D148).
 Such a source is otherwise polled only by the daily sweep and after `syncPushMaxStaleMs` (24 h) with no notification,
 the bound on a lost one. Sources that do not notify are polled as before.
 
