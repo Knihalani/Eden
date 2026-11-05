@@ -1140,7 +1140,7 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
 }
 
 /** A tally (one process's, or shards' merged) as the report: rates, percentiles and shares. */
-export function qualityReport(t: QualityTally, o: Pick<QualityOptions, "config">): QualityReport {
+export function qualityReport(t: QualityTally, o: QualityOptions): QualityReport {
   const { total, ambiguous, thirds, thirdLookups, thirdCalls, shadowSeen, shadowTruth } = t.counts;
   const { freshness, syncUse, ask, judged, funnel, needDecisions, byReason, decisions, plans, anticipation } = t.counts;
   const { turns, injections, itemsDelivered, redundant, noise, secretsPlanted, secretsLeaked } = t.counts.scalars;
