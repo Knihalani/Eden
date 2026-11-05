@@ -5,9 +5,12 @@ import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget, FakeModel } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
-import { StaticSource, type Source } from "@eden/sources";
+import { StaticSource, type ListPage, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
+import { DEFAULT_CONFIG } from "./config";
+import { CORE_CONFIG } from "./parts";
 import { ContextPartner, type PartnerDeps } from "./partner";
+import { SHOWN } from "./render";
 import type { Trace } from "./trace";
 
 const scope = { tenantId: "t", userId: "u", sessionId: "s" };
@@ -332,5 +335,235 @@ describe("near-duplicates (dedup integration)", () => {
       waitMs: 1_000,
     });
     expect(again.injection?.citations.map((c) => c.itemId) ?? []).not.toContain("drive:d1");
+  });
+});
+
+/** A `StaticSource` that answers each search after `ms`: the slow path's packet is still queued when an ask comes. */
+class SlowSource extends StaticSource {
+  constructor(
+    id: string,
+    items: { ref: string; title: string; text: string }[],
+    private readonly ms: number,
+  ) {
+    super(id, "docs", items);
+  }
+  override async search(...args: Parameters<StaticSource["search"]>) {
+    await Bun.sleep(this.ms);
+    return super.search(...args);
+  }
+}
+
+describe("deep audit 2026-11-05 ask-shown-before-handed-out: shown means handed out", () => {
+  const policy = {
+    ref: "p1",
+    title: "Procurement policy v4",
+    text: "Effective 1 Oct 2026: purchases above £40,000, including licence renewals, need two quotes and CFO sign-off.",
+  };
+  const away = {
+    ref: "q1",
+    title: "CFO travel",
+    text: "The CFO is away 2-20 Nov 2026 and cannot sign off any PO while away.",
+  };
+  const po = "Raise a PO for the Aperture Labs licence renewal, £48k, and route it to the CFO";
+  const who = { tenantId: "t", userId: "u", sessionId: "shown" };
+  const partner = (items: { ref: string; title: string; text: string }[]) =>
+    new ContextPartner({
+      sources: async () => [new SlowSource("drive", items, 300)],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      config: { ...DEFAULT_CONFIG },
+    });
+  // Observe returns at once; the slow path queues its packet once the 300 ms search is back.
+  const queue = async (p: ContextPartner) => {
+    const r = await p.observe({ ...who, at: Date.now(), kind: "user_message", text: po } as AgentEvent, {
+      waitMs: 0,
+    });
+    expect(r.injection).toBeNull();
+    await Bun.sleep(1_500);
+  };
+
+  test("an ask before takePending says the queued item in full, not '(shown above)', and is not repeated", async () => {
+    const p = partner([policy]);
+    await queue(p);
+    const answer = await p.ask({ ...who, question: po });
+    expect(answer.citations.map((c) => c.itemId)).toEqual(["drive:p1"]);
+    expect(answer.answer).toContain("need two quotes and CFO sign-off");
+    expect(answer.answer).not.toContain(SHOWN);
+    // The packet the answer covered whole is not handed out again.
+    expect(p.takePending(who)).toEqual([]);
+    // Once handed out (here, by the answer), a second ask says it by its title alone.
+    const again = await p.ask({ ...who, question: po });
+    expect(again.answer).toContain(`- [drive] Procurement policy v4: ${SHOWN}`);
+  });
+
+  test("a two-item packet whose items the answer cites only in part stays queued", async () => {
+    const p = partner([policy, away]);
+    await queue(p);
+    const answer = await p.ask({ ...who, question: po, maxItems: 1 });
+    expect(answer.citations).toHaveLength(1);
+    expect(answer.answer).not.toContain(SHOWN);
+    const pending = p.takePending(who);
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.citations.map((c) => c.itemId).sort()).toEqual(["drive:p1", "drive:q1"]);
+  });
+});
+
+describe("deep audit 2026-11-05 ask-false-all-clear (D127): an outage is not 'nothing'", () => {
+  const who = { tenantId: "t", userId: "u", sessionId: "outage" };
+  const question = "What did Globex say about the renewal discount?";
+  const failing = (id: string): Source => ({
+    id,
+    kind: "test",
+    description: "",
+    search: async () => {
+      throw new Error("503 upstream down");
+    },
+  });
+  const hanging = (id: string): Source => ({
+    id,
+    kind: "test",
+    description: "",
+    search: () => new Promise<never>(() => {}),
+  });
+  const empty = (id: string) => new StaticSource(id, "docs", []);
+  const ask = (sources: Source[], config: Record<string, unknown> = {}) =>
+    make({ config: { ...DEFAULT_CONFIG, sourceTimeoutMs: 300, ...config } }, sources).p.ask({ ...who, question });
+
+  test("every source fails or times out: the answer names them and says it is not an all-clear", async () => {
+    const r = await ask([failing("crm"), hanging("calendar")]);
+    expect(r.answer).not.toContain("Nothing in the connected sources.");
+    expect(r.answer).toContain("crm");
+    expect(r.answer).toContain("calendar");
+    expect(r.answer).toContain("not an all-clear");
+    expect(r.citations).toEqual([]);
+    const status = new Map(r.sources?.map((x) => [x.sourceId, x.status]));
+    expect(status.get("crm")).toBe("error");
+    expect(status.get("calendar")).toBe("timeout");
+  });
+
+  test("the same under the core config", async () => {
+    const { p } = make({ config: { ...CORE_CONFIG, sourceTimeoutMs: 300 } }, [failing("crm"), hanging("calendar")]);
+    const r = await p.ask({ ...who, question });
+    expect(r.answer).not.toContain("Nothing in the connected sources.");
+    expect(r.answer).toContain("not an all-clear");
+  });
+
+  test("one healthy source with nothing: still 'Nothing in the connected sources.', its status ok", async () => {
+    const r = await ask([empty("crm")]);
+    expect(r.answer).toBe("Nothing in the connected sources.");
+    expect(r.sources).toEqual([{ sourceId: "crm", status: "ok" }]);
+  });
+
+  test("one source answers empty, another fails: the answer names the failed one only", async () => {
+    const r = await ask([empty("calendar"), failing("crm")]);
+    expect(r.answer).not.toContain("Nothing in the connected sources.");
+    expect(r.answer).toContain("Could not reach crm");
+    expect(r.answer).not.toContain("Could not reach calendar");
+    const status = new Map(r.sources?.map((x) => [x.sourceId, x.status]));
+    expect(status.get("calendar")).toBe("ok");
+    expect(status.get("crm")).toBe("error");
+  });
+
+  test("an answer with items from a source that answered still names the one that failed", async () => {
+    const r = await ask([crm, failing("calendar")]);
+    expect(r.citations.map((c) => c.itemId)).toContain("crm:deal-9");
+    expect(r.answer).toContain("Globex renewal");
+    expect(r.answer).toContain("Could not reach calendar");
+  });
+
+  test("a circuit-open source counts as not answered", async () => {
+    const { p } = make({ config: { ...DEFAULT_CONFIG, sourceTimeoutMs: 300 } }, [failing("crm")]);
+    // Enough failures open the breaker; a later ask is refused before any call ("open").
+    let last = await p.ask({ ...who, question });
+    for (let i = 0; i < 20 && last.sources?.[0]?.status !== "open"; i++) {
+      last = await p.ask({ ...who, sessionId: `outage${i}`, question: `${question} ${i}` });
+    }
+    expect(last.sources?.[0]?.status).toBe("open");
+    expect(last.answer).toContain("not an all-clear");
+  });
+
+  test("a source resolver that fails is no all-clear either", async () => {
+    const { p } = make({
+      config: { ...DEFAULT_CONFIG },
+      sources: async () => {
+        throw new Error("resolver down");
+      },
+    });
+    const r = await p.ask({ ...who, question });
+    expect(r.answer).not.toContain("Nothing in the connected sources.");
+    expect(r.answer).toContain("not an all-clear");
+  });
+
+  test("no source connected at all: nothing was there to answer", async () => {
+    const r = await ask([]);
+    expect(r.answer).toBe("Nothing in the connected sources.");
+    expect(r.sources).toEqual([]);
+  });
+});
+
+describe("deep audit 2026-11-05 ask-false-all-clear (D127): a failed sync poll is not a local answer", () => {
+  const HOUR = 3_600_000;
+  const T0 = Date.UTC(2026, 10, 5, 9);
+  const who = { tenantId: "t", userId: "u", sessionId: "poll" };
+  const lunch: ContextItem = {
+    id: "mail:m1",
+    sourceId: "mail",
+    ref: "m1",
+    title: "Lunch",
+    text: "Lunch with Priya moved to Friday",
+    updatedAt: T0 - HOUR,
+  };
+  /** A synced source whose list (the sync's poll) and search both throw once `down` is set. */
+  const flaky = () => {
+    const src = {
+      id: "mail",
+      kind: "test",
+      description: "mail",
+      down: false,
+      lists: 0,
+      async search(): Promise<ContextItem[]> {
+        if (src.down) throw new Error("503 upstream down");
+        return [lunch];
+      },
+      async list(): Promise<ListPage> {
+        src.lists++;
+        if (src.down) throw new Error("503 upstream down");
+        return { items: [lunch], next: null };
+      },
+    };
+    return src;
+  };
+
+  test("syncOnDemand, the poll and the search throw on a stale synced copy: not 'local', no all-clear", async () => {
+    let clock = T0;
+    const src = flaky();
+    const p = new ContextPartner({
+      sources: async () => [src],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { ...DEFAULT_CONFIG, sync: true, syncOnDemand: true, sourceTimeoutMs: 300 },
+    });
+    // Track the user and warm the synced copy while the source is healthy.
+    await p.observe({ ...who, at: clock, kind: "user_message", text: "hello" } as AgentEvent, { waitMs: 0 });
+    for (let i = 0; i < 10 && !p.sync!.warm(who); i++) await p.sync!.tick();
+    expect(p.sync!.warm(who)).toBe(true);
+    // Past the staleness bound the copy is no longer current, and the source goes down: the ask's on-demand poll
+    // fails, so the copy stays not current (`localOf` leaves it out) and the failed live search gives its status.
+    clock += DEFAULT_CONFIG.syncMaxStaleMs + HOUR;
+    src.down = true;
+    expect(p.sync!.current(who, "mail", clock)).toBe(false);
+    const listed = src.lists;
+    const r = await p.ask({ ...who, question: "When is lunch with Priya?" });
+    expect(src.lists).toBeGreaterThan(listed); // the on-demand poll ran, and failed
+    const status = r.sources?.find((x) => x.sourceId === "mail")?.status;
+    expect(status).toBeDefined();
+    expect(status).not.toBe("local");
+    expect(r.answer).not.toContain("Nothing in the connected sources.");
+    expect(r.answer).toContain("Could not reach mail");
   });
 });

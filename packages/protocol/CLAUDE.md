@@ -7,7 +7,7 @@ validation for what arrives over HTTP; Eden's data directory; the `ask_context` 
 
 | File | Owns |
 |---|---|
-| `src/types.ts` | `AgentEvent` (user/agent message, tool call/result, external, session start/end; `draft` on a user message), `ContextItem`, `Injection`, `ObserveResult`, `AskRequest`/`AskResponse`, `ActionCheck`, `Feedback`, `Scope` |
+| `src/types.ts` | `AgentEvent` (user/agent message, tool call/result, external, session start/end; `draft` on a user message), `ContextItem`, `Injection`, `ObserveResult`, `AskRequest`/`AskResponse` (optional `sources`: each chosen source's status, D127), `ActionCheck`, `Feedback`, `Scope` |
 | `src/ids.ts` | `newId`, `itemId`, `scopeKey` (`tenant/user`, the key every piece of per-user state uses) |
 | `src/validate.ts` | `checkEvent`, `checkAsk`, `isId`: hand-written checks that return `{ok:false,error}` instead of throwing |
 | `src/home.ts` | `edenHome()`: `$EDEN_HOME`, else `~/.eden`, created 0700 |
@@ -23,6 +23,9 @@ validation for what arrives over HTTP; Eden's data directory; the `ask_context` 
 - **Untrusted text (D11, D19).** Types carry source and event text as data; nothing here interprets it.
 - Code that defaults to `~/.eden` must read `EDEN_HOME` first: Bun reads `os.homedir()` once at startup, so the test
   preload's temp HOME only reaches code that goes through `edenHome()`.
+- `AskResponse.sources` is additive and optional (D127): a status other than "ok", "cached", "stale" or "local" means
+  that source did not answer, and the answer text names it, since an MCP caller sees only the text. Keep new
+  response fields optional so older clients and servers still agree.
 - A type change here reaches every package: run the dependents' tests (`bun run test:changed` does).
 
 ## Test

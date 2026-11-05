@@ -91,6 +91,15 @@ export interface AskResponse {
   usedModel: boolean;
   costUsd: number;
   latencyMs: number;
+  /**
+   * How each source the ask chose to search fared (D127), in the order it was chosen. `status` is one of "ok",
+   * "cached" or "stale" (answered from the fan-out's live or held result), "local" (answered from the user's synced
+   * index), or "error", "timeout", "open" (circuit open), "busy" or "limited" (not answered). A source the router did
+   * not choose is not listed. An empty answer is an all-clear only when every listed source answered; otherwise the
+   * answer text names the sources that did not (the text carries it too, since an MCP caller sees only the text).
+   * Optional and additive: absent from older servers and from the engine's own push readings.
+   */
+  sources?: { sourceId: string; status: string }[];
 }
 
 /** What `observe` returns: context to deliver now, if any was ready within the deadline. */

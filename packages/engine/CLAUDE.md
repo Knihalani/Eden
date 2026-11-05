@@ -104,6 +104,22 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   cached copy current, so `verifyItems` also applies a session's recent re-reads, not only doubted items. A new
   delivery path uses `deliverChecked`, never `deliver`, or it can send a stale copy. `deliverChecked` itself calls
   `deliver` (a bulk rename of `return this.deliver(` once made it call itself forever: the tests hung, not failed).
+- **An ask says "Nothing in the connected sources." only when its sources answered (D127).** `searchLive` returns
+  each chosen source's status (`sources`: the fan-out's, or "local" for a synced source answered from the index);
+  `honestAnswer` names any that did not answer (error, timeout, circuit open, busy, limited) and says the empty answer
+  is not an all-clear, and `AskResponse.sources` carries the statuses. A new lookup path an ask answers from must
+  return statuses too, or an outage reads as "nothing". A failed on-demand sync poll (`freshen`) feeds the status
+  through `localOf`, not a status of its own: it leaves the copy not current, so the source is searched live and that
+  search's status stands. An ask never passes `behind`, so a warm-but-stale copy is not "local" there
+  (`review-regressions.test.ts`); only the reader push's first reading answers from it. Probes are extra queries
+  beside a chosen source's own search, whose outcome gives the source's status.
+- **Shown means handed out.** With `askDedup`, what an injection showed is noted (`noteShown`) in `handOut`, which
+  every path that gives the agent an injection calls (observe's reply, `takePending`, the firewall's finding, the
+  ask's own answer), not when `deliver` builds it: a queued packet the agent has not taken was shown nothing, so an
+  ask before `takePending` says its items in full. The ask then drops from `s.pending` a packet whose every item it
+  cited; one cited in part stays queued (`review-regressions.test.ts`).
+- `confident()` is one loop that stops at the cap, cheap tests first; every test in it must judge one item alone (no
+  state across items), or stopping early would change its output.
 - `fetchChecked`'s `gone` needs `Source.fetchReportsGone`: an MCP tool's null fetch proves nothing, so verification
   never deletes an MCP item on its own; deletions there come from `sourceRemoved` or the sweep.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
