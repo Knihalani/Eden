@@ -435,7 +435,7 @@ run but not edited; a package that finds it must edit a file another package own
 
 | Item | Why | Next step |
 | --- | --- | --- |
-| How OpenRouter maps `reasoning: {effort: "low"}` for `anthropic/claude-haiku-5.5` (B1, B8) | Needs a paid OpenRouter call; this run allows Anthropic only. Moot for the reader once S1 ships "off", but the judge still sends "low" (`partner.ts:4365`) | One OpenRouter call with a served key: check for HTTP 400 or reasoning tokens |
+| How OpenRouter maps `reasoning: {effort: "low"}` for `anthropic/claude-haiku-5.5` (B1, B8) | Needs a paid OpenRouter call; this run allows Anthropic only. Moot for the reader once S1 ships "off". The judge still sends "low" (`partner.ts:4385`), but the servers wire no judge, so that is lab-only: closed by D155 | One OpenRouter call with a served key: check for HTTP 400 or reasoning tokens (only if a judge or a reasoning arm is ever shipped) |
 | Turning `anthropicCache` on (B3) | Needs an OpenRouter probe (cached tokens above 0 on a second call, at realistic per-user spacing); outside this run's budget | The D145 trial's deciding probe, by 2026-12-03 |
 | The shipped path's cost and latency on OpenRouter (B8) | Same OpenRouter restriction | Re-run S1's `reader-time.ts` through OpenRouter once a served key exists |
 
@@ -453,11 +453,12 @@ $0.0013). The ledger holds $7.37 in all (summed with a `bun -e` script).
 commit (1c8f0c064) and S1-S8, merged as 8 merge commits (`git log --merges 1c8f0c064..audit/2026-11-05-integration`
 counts 8): 58 files, +2,367 −146 (`git diff --stat main audit/2026-11-05-integration`). Because #226 was squashed,
 `git log main..audit/2026-11-05-integration` also lists the first pass's history (65 commits, 26 merges). This
-closing step's packages sit on their own branches, not merged yet: `final1-cards-reasoning-off` (D149),
-`final1-graph-read-chars-1000` (D150), `final1-timed-zone-day`, `final1-eval-live-thinking-arm` and this one,
-`final1-close-docs`. D149, D150 and the engine CLAUDE.md pitfalls added here describe the first two, so those merge
-together. Merging into `main` needs the `reviewer` subagent on the engine and server diff first (CLAUDE.md step 5),
-then `bun run check` and `bun run eval` on the final tree.
+closing step's packages (`final1-cards-reasoning-off` for D149, `final1-graph-read-chars-1000` for D150,
+`final1-timed-zone-day`, `final1-eval-live-thinking-arm`, `final1-close-docs` and `final1-final-live-ab`) have since
+been merged into the integration branch: `git branch --no-merged audit/2026-11-05-integration --list
+'audit/2026-11-05*'` prints none (run in "Closing the second pass: final loose ends" below). Merging into `main`
+needs the `reviewer` subagent on the engine and server diff first (CLAUDE.md step 5), then `bun run check` and `bun
+run eval` on the final tree.
 
 ### Every deferred item
 
@@ -478,7 +479,7 @@ rule of this pass made them runnable on the lab transport.
 | Low note 8c: `TenantHolds` entries kept once a tenant has evicted (`cache.ts:1171`, `:1235`) | Bounded, kept: an entry outlives its holds only for a tenant that hit a cap, and the servers fix the tenant from the API key (`packages/server/src/http.ts:46-50`; a body naming another tenant is refused, `:79-80`), so the map holds at most one entry per configured key (plus "dev" in dev mode). An embedder that mints tenant ids per request would need its own bound | This row |
 | Low note 8d: eval imported server code by relative path, undeclared | Fixed by S2 (`@eden/server` declared in `packages/eval/package.json`) | S2 |
 | The 24 candidates with no recorded outcome | Each resolved below | Below |
-| Live Pi A/B of the current default; the Hermes live check of the default (carried from 2026-11-04) | Handed to this closing step's package `final-live-ab`; its results are recorded with that package, not here | `final-live-ab` |
+| Live Pi A/B of the current default; the Hermes live check of the default (carried from 2026-11-04) | Done, Anthropic-direct lab transport, Haiku 5.5 for every role: Pi held-out 13, seeds 41-44, hidden 77.3% vs 9.4% for tools, 0/128 false concerns; Hermes, seeds 41-42, 70.3% vs 4.7%, 1/64 false concerns | [docs/research/final-live-2026-11-05.md](../research/final-live-2026-11-05.md) |
 | The second pass's three OpenRouter-only items (effort mapping, `anthropicCache`, the shipped path's cost and latency) | Unchanged: the D145 trial (ends 2026-12-03) and "Second pass: deferred" above | D144, D145 |
 
 ### The 24 candidates
@@ -491,7 +492,7 @@ rule of this pass made them runnable on the lab transport.
 | `fresh-sourcechanged-keeps-pages` | Fixed | S3, finding B6: every notice drops the source's held search pages (D148) |
 | `client-sourceremoved-ambiguous-zero` | Fixed (doc) | S3: `sourceRemoved`'s doc says it counts cached items dropped; `sourceNotice` gives `{synced, reason?}` (D148) |
 | `config-errors-one-at-a-time` | Fixed in part; the rest rejected | S7: `EDEN_SOURCES_FILE` goes through `checkSpecs`, and a bad file exits 2 with one line naming the entry (ef8217ef1). Reporting every error at once is rejected as low value: startup stops at the first bad entry and names it, so each round trip fixes one entry |
-| `timed-utc-start-day` | Fixed on its own branch | Package `timed-zone-day` (`audit/2026-11-05-final1-timed-zone-day`, c98570273): a UTC start is read on the user's local day (`dayOf` in grounding.ts); its test failed 2 of 5 cases before the fix; eval and stub funnel unchanged |
+| `timed-utc-start-day` | Fixed (merged into the integration branch) | Package `timed-zone-day` (`audit/2026-11-05-final1-timed-zone-day`, c98570273): a UTC start is read on the user's local day (`dayOf` in grounding.ts); its test failed 2 of 5 cases before the fix; eval and stub funnel unchanged |
 | `lat-reader-stream-early-settle` | Decided | D147 (an estimated 1.12x at p50) |
 | `anthropic-cache-dead-flag` | Decided | D145: a trial with an owner and an end date |
 | `reader-push-ask-verdict-reuse` | Decided | D116 already rejected reusing the push's verdict for the ask (trial `askReaderReuse`) |
@@ -507,8 +508,8 @@ rule of this pass made them runnable on the lab transport.
 | `funnel-ceiling` | Closed (informational) | The funnel's ceiling as a measurement note; no change proposed |
 | `ab-baseline-cache` | Closed by an existing tool | `pi-ab.ts --reuse-arms F` copies the `none`/`tools` arms from a matching earlier run (`pi-ab.ts:51-53`; packages/sim/src/lab/CLAUDE.md, "Pay once") |
 | `format-check-needs-git` | Rejected | `scripts/format.sh` lists files with `git ls-files`; every checkout this repo supports is a git checkout, worktrees included |
-| `lat-speculative-first-call` | Deferred to the next audit | Needs a paid Pi latency run that is not designed yet. The push is silent 62% of the time (the candidate's figure), so a speculative first reader call would pay mostly for calls with nothing to deliver |
-| `cost-reader-pool-gate-learned` | Deferred to the next audit | Needs a paid labelling run that is not designed yet. Its ceiling (2.75-3.2x, the candidate's figure) is also bounded by D110: a learned scorer separated planted from decoy items at AUC 0.544 |
+| `lat-speculative-first-call` | Rejected (under 1.5x, adds paid cost) | D156, measured from the final live Pi run's task traces: at most 1.05x (measured silent share) to 1.14x (the candidate's 62%) on task wall time, for +21% to +40% of agent spend (estimates) |
+| `cost-reader-pool-gate-learned` | Closed by D110 | D157: in the checked-in Haiku reader replay a perfect gate caps the reader at 2.19x and Eden's model spend at about 1.41x (estimate); D110's learned cascade decided 2.5% of calls at its loss limit |
 
 ### Docs corrected in this step
 
@@ -516,10 +517,82 @@ rule of this pass made them runnable on the lab transport.
   row was ever made. It now points to D150, as do the two other rows that called `graphLite` not yet built.
 - `packages/engine/CLAUDE.md`: its two overlapping `syncPush` (D125) pitfalls are now one bullet; D149 (cards send no
   reasoning) and D150 (`READ_CHARS` 1,000) have pitfalls.
-- Still to change with D150's merge (outside this step's files): `docs/COST-MODEL.md:462` calls `graphLite` "not yet
-  built".
+- Still to change with D150's merge (outside this step's files): `docs/COST-MODEL.md:462` called `graphLite` "not yet
+  built". Done in "Closing the second pass: final loose ends" below.
+
+## Closing the second pass: final loose ends
+
+Checked on 2026-11-05 at `audit/2026-11-05-integration` (a0e4da57e) plus this step's docs (package
+`close-docs-loose-ends`, which documents package `drop-maker-reasoning-options`; the two merge together). No paid
+calls were made in this step: every new figure comes from files already on disk or from the $0 commands named next to
+it.
+
+### Flags and options of the run
+
+Every switch the two passes added, kept or removed, and where it stands. D112 allows only shipped defaults and trials
+with an owner and an end date; the rest is wiring or a developer flag.
+
+| Flag or option | Where | Status |
+| --- | --- | --- |
+| `reasoning` on `ModelReaderMaker` and `ModelCardMaker` | `packages/engine/src/reader.ts`, `cards.ts` | Deleted (D155): both makers send no reasoning field; the lab's "low" arms wrap the model instead. The judge's hard-coded "low" stays: the servers wire no judge |
+| `anthropicCache` | `OpenRouterOptions`, `packages/llm/src/openrouter.ts:40` | Trial (D145; owner repo owner, ends 2026-12-03). Still off: its deciding probe is an OpenRouter call, outside this run's Anthropic-only rule. Next step: that probe by 2026-12-03 |
+| `syncBigPageSize`, `Source.listPageMax` | sync | Deleted with their code (D143) |
+| `graphLite` | none | Never built: D150 promoted the graph's 1,000-character read with no switch |
+| `onFailure`, `log`, `scrub`, `make` | `AskReader` (`build.ts:100`), `buildPartner` (`build.ts:53`), `models.ts:33`, `liveWiring` (`packages/eval/src/run.ts:81`) | Wiring hooks (where a failure is logged, how its text is redacted, which client a lab run builds); none switches behaviour |
+| `CHECK_COLD=1` | `scripts/format.sh:62` | Dev flag: a format check that trusts no cache from an earlier run |
+| `--quick` | `packages/engine/bench/ingest.bench.ts:42` | Dev flag: 40 users instead of 200, for a screen while iterating |
+| `--jobs N` | `bun run funnel` (`packages/sim/src/lab/funnel.ts`) | Dev flag: processes for the funnel's shards (D139) |
+| `--judge`, `--usd-cap` | `bun run eval --live` (`packages/eval/src/cli.ts:24`, `:31`) | Dev flags: the pre-D128 judge shape, and the required dollar cap on a paid run |
+
+The trials table in docs/DECISIONS.md is unchanged by this step: action firewall, tsgo and `anthropicCache`, all
+ending 2026-12-03.
+
+### Measurements on the final tree
+
+All on a0e4da57e plus this step's docs (documentation changes only), on the shared 4-core box:
+
+- `bun run check`, run three times. The first run had 1 failure of 1,666: `ask-deadline.test.ts:119` timed the ask
+  at 801 ms against its 750 ms bound. That run started as `ingest.bench.ts` finished, on a loaded box. The next two
+  runs passed, 1,666 tests, 0 fail, in 139 files (23.7 s and 24.2 s for the tests). The test is timing-bound, so treat
+  it as flaky under load; this step does not touch code.
+- `bun run eval`: 31 scenarios, precision 0.8276, recall 0.48, falseFireRate 0.
+- `bun run funnel --json F` (stub reader): hidden 214/384, decoys 211/384; reader pool hidden 230/384, decoys
+  229/384, over 658 stub reader calls. Same as the audit's baseline.
+- `bun packages/engine/bench/ingest.bench.ts`, two full runs: `core` 68.7 and 65.1 µs per backfilled item, `shipped`
+  261.8 and 258.9 (3.81x and 3.98x `core`), `+graph` 86.2 and 90.3. docs/COST-MODEL.md now gives these post-D150
+  figures in place of the pre-D150 ones (5.2-5.4x) and no longer calls `graphLite` "not yet built".
+- `git branch --no-merged audit/2026-11-05-integration --list 'audit/2026-11-05*'` prints nothing: every branch of
+  both passes is merged into the integration branch.
+- `git branch -r | grep -c r10-` prints 42.
+
+### What this step closed
+
+| Item | Outcome | Where |
+| --- | --- | --- |
+| `lat-speculative-first-call` | Rejected: 1.05x to 1.14x on task wall time (upper bounds) for +21% to +40% of agent spend (estimates), from the final live Pi run's traces | D156 |
+| `cost-reader-pool-gate-learned` | Closed by D110: a perfect gate caps the reader at 2.19x and Eden's model spend at about 1.41x, and D110's learned cascade decided 2.5% of calls | D157 |
+| The makers' `reasoning` options (`drop-maker-reasoning-options`) and the "judge still sends low" note | Options deleted; the judge's "low" stays, lab-only | D155 |
+| `scale-graph-dominates-ingest`: docs after D150 | COST-MODEL.md's shipped-ingest paragraph re-measured; graph-ablation.md's status and research/INDEX.md's row point to D150 | D150 |
+| Low note 8c (`TenantHolds` entries kept per tenant) | Unchanged: bounded at one entry per configured API key ("Every deferred item" above) | This file |
+| Final live Pi A/B (item 10) and Hermes live check (item 11) | Done: Pi 77.3% vs 9.4%, 0/128 false concerns; Hermes 70.3% vs 4.7%, 1/64 | [docs/research/final-live-2026-11-05.md](../research/final-live-2026-11-05.md) |
+
+### Left for the owner
+
+- Delete the 42 stale `origin/claude/r10-*` branches (`git branch -r | grep -c r10-` prints 42; the 2026-11-04 audit
+  counted 41). Deleting remote branches needs the owner's approval.
+- Merge the integration branch into `main` after the `reviewer` subagent has run on the engine and server diff
+  (CLAUDE.md step 5), then `bun run check` and `bun run eval` on the final tree.
+- The D145 probe (`anthropicCache`) by 2026-12-03, with a key OpenRouter serves Anthropic models for.
 
 ## Final summary of the whole run (for the owner)
+
+> **Superseded in part by the second pass.** This summary was written before the second pass. Its rows that call the
+> shipped reader untimed, say a change is not in `main`, or mark an item blocked externally are out of date: the
+> second pass timed the reader on Anthropic (D144), ran the live eval and the live Pi and Hermes checks on the lab
+> transport, and decided the D130 veto by name (D151) ("Closing the second pass" above); `main` (cf38efb09) holds the
+> first pass, and the second pass waits in the integration branch for the reviewer and a merge. See "Closing the
+> second pass: final loose ends" above for the current state.
+
 
 This section closes the run. It covers two audit rounds and two final clean-up steps. Every number comes from a
 command or commit message recorded in this run; numbers marked "estimate" were not measured. Benchmarks ran on a

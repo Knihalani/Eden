@@ -4,8 +4,9 @@ Status: 2026-11-05. Stage 2 (D150, the section at the end) is done: the graph no
 Deep audit 2026-11-05 round 2, work package `r2-graph-ablation` (findings
 `devloop-ingest-bench-not-shipped-path` and `scale-graph-dominates-ingest`). Every number below comes from a command
 run in this session on the integration branch (`audit/2026-11-05-integration`, 463f6fdfc, plus this change), on a
-shared 4-core container with other agents running. Decision: D141 in docs/DECISIONS.md (graph stays in the default;
-deleting its code rejected; stage 2 is the `graphLite` trial still to build).
+shared 4-core container with other agents running. Decisions: D141 in docs/DECISIONS.md (graph stays in the default;
+deleting its code rejected) and D150 (stage 2 built with no switch: the graph reads 1,000 characters per item, which
+closes the planned `graphLite` trial).
 
 ## In plain words
 

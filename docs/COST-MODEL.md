@@ -65,11 +65,13 @@ servers send to OpenRouter (`build.ts` wires `models.cards`), while every Haiku 
 $2.298, $0.000445 a call, p50 2,699 ms, 625 output tokens a call. So every Haiku card and intent figure in this file
 describes "off"; the earlier glm-5.3-flash and nemotron figures through OpenRouter (D59's measurement above, D66's
 re-carding, the intent estimates, and the replayed `cards-v2.jsonl` the funnel reads) were made with "low". The
-default now sends no reasoning field; `{ reasoning: "low" }` (and up) still sends that effort. The output caps are
-unchanged. Timed on Haiku 5.5, Anthropic-direct, lab provider, cached (the system block read from the cache on both
-arms), the shipped shape (`cardsEconomy` batches of 20 train items, seed 41, `intent` on, 6,000-token cap), arms
-interleaved per batch: "off" is `new ModelCardMaker(model)` with thinking off; "low" is `{ reasoning: "low" }` with
-adaptive thinking, so the effort reaches the model. Percentiles are nearest-rank.
+maker now sends no reasoning field, and since D155 it has no option to send one: "low" exists only as a lab arm,
+sent through a model wrapper that adds the effort to each request (as `eval-live.ts` does for the reader). The output
+caps are unchanged. Timed on Haiku 5.5, Anthropic-direct, lab provider, cached (the system block read from the cache
+on both arms), the shipped shape (`cardsEconomy` batches of 20 train items, seed 41, `intent` on, 6,000-token cap),
+arms interleaved per batch: "off" is `new ModelCardMaker(model)` with thinking off; "low" sent effort "low" with
+adaptive thinking, so the effort reaches the model (at the time through the maker's own `reasoning` option, which
+D155 deleted; the request is the same). Percentiles are nearest-rank.
 
 | Arm (run `close-cards-reasoning`, 2026-11-05) | Calls | p50 / p90 ms   | TTFT p50 ms | Thought | Truncated | Tokens in (cached) / out | $ per call |
 | --------------------------------------------- | ----- | -------------- | ----------- | ------- | --------- | ------------------------ | ---------- |
@@ -114,9 +116,11 @@ D112).
 **Reader reasoning (D144): the default sends none.** Until D144 `ModelReaderMaker` defaulted to reasoning "low", which
 the servers send to OpenRouter, while every lab figure above (and D96's, D98's and D125's quality) ran with thinking
 off. Timed on Haiku 5.5, Anthropic-direct, lab provider, cached (the system prompt read from the cache on both arms):
-"off" is `new ModelReaderMaker(model)` on `AnthropicModel` with thinking off; "low" is `{ reasoning: "low" }` with
-adaptive thinking, so the effort reaches the model (`output_config.effort`). Percentiles are nearest-rank; "thought"
-is a call whose stream held a thinking block; the wait is `askReaderWaitMs` (2,500 ms).
+"off" is `new ModelReaderMaker(model)` on `AnthropicModel` with thinking off; "low" sent effort "low" with adaptive
+thinking, so the effort reaches the model (`output_config.effort`). "Low" is a lab arm only: the runs below passed it
+as the maker's `reasoning` option, which D155 deleted, and the lab now sends it through a model wrapper that adds
+the effort to each request (`eval-live.ts`, `reader-time.ts`); the request is the same. Percentiles are
+nearest-rank; "thought" is a call whose stream held a thinking block; the wait is `askReaderWaitMs` (2,500 ms).
 
 | Run (ledger label)                                                   | Arm            | Calls | p50 / p90 ms  | TTFT p50 ms | Thought | Over 2.5 s | Tokens in (cached) / out | $ per call |
 | -------------------------------------------------------------------- | -------------- | ----- | ------------- | ----------- | ------- | ---------- | ------------------------ | ---------- |
@@ -477,15 +481,19 @@ A synced user costs about 4 MB of heap per ~1,500 items and ~200 ms of CPU to ba
 measurement, not re-run). The combined funnel implies more, about 420 ms per user (16.9 s of extra process CPU over 40
 users with ALL), because there the graph and the cards are built on every synced item too (below).
 
-The shipped ingest path, measured (2026-11-05, docs/research/graph-ablation.md): `ingest.bench.ts` used to time only
-the cache's own work (its `core` line: 66–79 µs per backfilled item, 2,595 B of heap per item, 200 users × 500 items
-of 1,599 chars on average). Through a `ContextPartner` on `DEFAULT_CONFIG` with no model (its `shipped` line) the same
-backfill costs 358–381 µs per item and 5,230–5,237 B per item (5.2–5.4x the CPU, 2.0x the heap): the graph's add is
-182–192 µs and 2.6 KB of it, recording mentions in the source map 109–115 µs (SQLite, outside the heap). Re-listing
-unchanged items stays 3.4–6.1 µs per item. Arithmetic, not measured: a cold restart that backfills 10,000 users ×
-3,000 items at about 370 µs each is about 11,100 CPU-seconds per process, about half of it the graph. The graph adds
-no paid call; the paid-reader funnel credits it with 4 more hidden facts surfaced of 384 (and 2 more decoys), so it
-stays in the default and a cheaper graph (the `graphLite` trial, not yet built) is the next step (D141).
+The shipped ingest path, measured (2026-11-05, after D150; docs/research/graph-ablation.md): `ingest.bench.ts` times
+the cache's own work (its `core` line) and the same backfill through a `ContextPartner` on `DEFAULT_CONFIG` with no
+model (its `shipped` line), 200 users × 500 items of 1,599 chars on average. Two full runs of
+`bun packages/engine/bench/ingest.bench.ts` at a0e4da57e (shared 4-core box): `core` 68.7 and 65.1 µs per backfilled
+item, 2,562 B of heap per item; `shipped` 261.8 and 258.9 µs and 4,218-4,223 B per item (3.81x and 3.98x the CPU, 1.65x the
+heap). Of the difference, the graph's add (`+graph`) is 86.2 and 90.3 µs and 1,662-1,663 B per item, and recording
+mentions in the source map (`+onStored`) 106.9 and 103.5 µs (SQLite, outside the heap). Re-listing unchanged items
+stays 3.9-5.1 µs per item. Before D150 the graph read 4,000 characters per item and the same bench gave `shipped`
+358-381 µs and 5.2-5.4x `core`, the graph's add 182-192 µs and 2.6 KB; D150 cut the read to 1,000 characters with
+every train screen identical, which closed the planned `graphLite` trial with no switch. Arithmetic, not measured: a
+cold restart that backfills 10,000 users × 3,000 items at about 260 µs each is about 7,800 CPU-seconds per process,
+about a third of it the graph. The graph adds no paid call; the paid-reader funnel credits it with 4 more hidden
+facts surfaced of 384 (and 2 more decoys), so it stays in the default (D141).
 
 Anticipation (D60, `anticipate`, in the default since D112; docs/research/moon-anticipate.md) adds no model call on any
 path: its predictions are fixed linear reads of an event's head, and its prefetches are source calls within
