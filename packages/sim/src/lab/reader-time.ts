@@ -4,9 +4,10 @@
  * `labModel` (D97), metered by the spend ledger.
  *
  * - off: `new ModelReaderMaker(model)`, the shipped request (no reasoning field), on `AnthropicModel`, thinking off.
- * - low: `new ModelReaderMaker(model, { reasoning: "low" })` on `AnthropicModel` with adaptive thinking, so the
- *   request's effort reaches the model (`output_config.effort`); thinking that is not adaptive returns HTTP 400 on
- *   Haiku 5.5 (the `lat-audit-reasoning` enabled-1024 ledger rows).
+ * - low: `new ModelReaderMaker(atLowEffort(model))`: the maker has no reasoning option (D155), so the arm wraps its
+ *   model to add `reasoning: "low"` to the maker's request, as eval-live.ts's adaptive arm does. The model is
+ *   `AnthropicModel` with adaptive thinking, so the request's effort reaches it (`output_config.effort`); thinking
+ *   that is not adaptive returns HTTP 400 on Haiku 5.5 (the `lat-audit-reasoning` enabled-1024 ledger rows).
  *
  * The pools are the engine's own, made at $0: a funnel run with the stub reader logs each prompt the reader would
  * read (`--reader-log`), at the default's `askReaderPool` and `askReaderItemChars` unless the run overrode them. Each
@@ -164,6 +165,14 @@ function thinkingProbe(inner: typeof fetch): { fetch: typeof fetch; take(): Prom
   return { fetch: wrapped, take: () => pending };
 }
 
+/**
+ * The low arm's model: every request at effort "low". The reader maker sends no reasoning (D144, D155), so the effort
+ * D144 timed is added here, under the maker; the prompt is unchanged. The off arm is never wrapped.
+ */
+export function atLowEffort(model: Model): Model {
+  return { id: model.id, chat: (request) => model.chat({ ...request, reasoning: "low" }) };
+}
+
 /** Keeps the last response a model returned, so the timing is the model's own (latency, TTFT). */
 function recording(model: Model): Model & { last: ChatResponse | null } {
   const rec = {
@@ -206,7 +215,7 @@ async function main() {
   const lowModel = recording(labModel(routed, base, "eden.reader.time.low", { thinking: "adaptive" }));
   const makers: Record<Arm, { maker: ModelReaderMaker; model: ReturnType<typeof recording> }> = {
     off: { maker: new ModelReaderMaker(offModel), model: offModel },
-    low: { maker: new ModelReaderMaker(lowModel, { reasoning: "low" }), model: lowModel },
+    low: { maker: new ModelReaderMaker(atLowEffort(lowModel)), model: lowModel },
   };
 
   const calls: TimedCall[] = [];

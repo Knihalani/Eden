@@ -32,7 +32,6 @@ import { CLASSES, hasWord } from "./consequence";
 import { parseWhen } from "./grounding";
 import { cleanRequests, IntentIndex, MAX_REQUESTS, type IntentHit } from "./intent";
 import { inert } from "./render";
-import type { ReaderReasoning } from "./reader";
 import { isStopword } from "./text";
 import type { Tracer } from "./spans";
 
@@ -499,11 +498,11 @@ export interface CardBatch {
 }
 
 /**
- * Output cap per batch: ten short cards, with room for reasoning when a caller asks for it (D45's lesson: reasoning
- * spends the cap). The default sends none (D149) and keeps the cap.
+ * Output cap per batch: ten short cards. The maker sends no reasoning effort (D155); the cap keeps D45's headroom for
+ * a model that reasons on its own whatever it is asked, since a cut batch is unreadable past the cut.
  */
 const CARD_MAX_TOKENS = 2_000;
-/** ... and per item past ten: a batch of twenty (`cardsEconomy`) gets 4,000, since reasoning grows with the batch. */
+/** ... and per item past ten: a batch of twenty (`cardsEconomy`) gets 4,000, since the output grows with the batch. */
 const CARD_TOKENS_PER_ITEM = 200;
 /** With `intent`, up to four short requests per item ride along (about 80 tokens each item), so the cap grows. */
 const INTENT_MAX_TOKENS = 3_000;
@@ -522,25 +521,18 @@ export interface CardMakerOptions {
    * asked for (the free models the lab uses: docs/research/edge-intent.md) needs more room than the default model.
    */
   maxTokens?: number;
-  /**
-   * How hard the model reasons before it writes the cards (and, with `intent`, the requests). Default "off" (D149,
-   * amending D59): no effort is sent, the request every Haiku lab card call measured (the lab's Anthropic model runs
-   * with thinking off, so "low" never reached Haiku there: all 5,158 `eden.cards` ledger rows; D59's and D66's
-   * glm-5.3-flash figures through OpenRouter did run with "low"). Callers may pass "low" and up; the output caps stay
-   * as they are, and reasoning tokens spend them (D45). Same values as the reader's (D144).
-   */
-  reasoning?: ReaderReasoning;
 }
 
+/**
+ * The card maker's model call. It sends no reasoning effort (D149, D155): the request every lab card and intent figure
+ * measured (all 5,158 `eden.cards` ledger rows ran with thinking off). "low" on Haiku 5.5 was 1.82x slower at p50 and
+ * 1.54x dearer (docs/COST-MODEL.md), so no option asks for it (D155).
+ */
 export class ModelCardMaker implements CardMaker {
-  private readonly reasoning: ReaderReasoning;
-
   constructor(
     private readonly model: Model,
     private readonly options: CardMakerOptions = {},
-  ) {
-    this.reasoning = options.reasoning ?? "off";
-  }
+  ) {}
 
   async make(items: ContextItem[], today: string, signal: AbortSignal, retry = false, intent = false) {
     const model = retry ? (this.options.retry ?? this.model) : this.model;
@@ -551,7 +543,6 @@ export class ModelCardMaker implements CardMaker {
         (intent
           ? Math.max(INTENT_MAX_TOKENS, INTENT_TOKENS_PER_ITEM * items.length)
           : Math.max(CARD_MAX_TOKENS, CARD_TOKENS_PER_ITEM * items.length)),
-      ...(this.reasoning === "off" ? {} : { reasoning: this.reasoning }),
       json: true,
       signal,
     });
