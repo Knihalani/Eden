@@ -164,12 +164,50 @@ and 13.0 s), reader-stub alone 3.3 s (5.5 s, was 3.0-3.2 s and 8.4 s). The two f
 load average 7-14. The 7 s target is met only on a machine no busier than that; main's 3.7-4.4 s is not reached:
 the files still run seven funnel processes (three NEWL, the overlap run, three for the shards).
 
+## Round 1's slow tests trimmed (2026-11-05, 4-core container shared with other agents, Bun 1.4.4)
+
+The 2026-11-05 audit's first round added about 6.6 s of per-file test time; three of its tests were trimmed, with
+what each proves kept:
+
+- `review-regressions.test.ts`, "shown means handed out": the `SlowSource` (300 ms search) and the fixed
+  `Bun.sleep(1_500)` gave way to a `HeldSource` whose search is held until the test releases it, as
+  `slow-path-queue.test.ts` does; the test then turns the event loop until the session's queue holds the packet
+  (a test-only read of the partner's private `sessions`, which `takePending` would empty).
+- `sources/src/regressions.test.ts`, the results cache's heap test: 50,000 pages one every 30 simulated ms (1,500 s,
+  past the 600 s expiry) instead of 200,000 every 10 ms. With `guarded.ts` from 6911f514d (before the fix) put
+  back, it still fails: 50,050 entries held against the `< 10,000` bound.
+- `sim.test.ts`, "user-range tallies merge": 2 users x 2 sessions, shards [0,1] and [1,2] (was 3 x 3, [0,1] and
+  [1,3]). Each user costs about 0.65 s of fixed work (the simulated connectors' index and the sync backfill of
+  ~1,500 items; one CPU profile), so four user-plays is the floor for a whole run plus two shards.
+
+Each file alone (`bun test ./<file>`, wall from `date`, two alternating rounds at load average 2.7-3.9):
+
+| File | Before (audit/2026-11-05-integration) | After |
+|---|---|---|
+| packages/engine/src/review-regressions.test.ts (33 tests) | 3,999 ms, 4,028 ms | 1,078 ms, 1,015 ms |
+| packages/sim/src/sim.test.ts (15 tests) | 9,351 ms, 8,289 ms | 7,246 ms, 6,625 ms |
+| packages/sources/src/regressions.test.ts (18 tests) | 2,681 ms, 2,354 ms | 828 ms, 753 ms |
+
+Full suite, `./scripts/test.sh --reporter=junit`, per-file `time` summed (132 files, 1,588 tests), alternating
+before and after on the same machine while other agents ran (load average 1.0-9.0):
+
+| Run | Before | After |
+|---|---|---|
+| Quietest pair (load 1.0-3.0) | 95.4 s (wall 25.2 s) | 93.1 s (wall 24.1 s) |
+| Other pairs | 97.9, 103.9, 126.0, 101.1, 99.9, 141.0 s | 95.3, 96.4, 96.3, 90.2, 93.8, 110.1, 132.6 s |
+
+Junit per test (a before run at load 2.7, an after run at 4.2): the two queued-packet tests 1.51 s each → 0.015 s;
+the heap test 3.25 s → 1.23 s; the user-range test 7.29 s → 5.21 s under the parallel run (3.09 s alone). The
+audit's 90 s target for the sum was not reached on this shared machine: the sum swings by more than the about 7 s
+these changes save (the per-test differences above). The one failure seen in these runs (after, load 9.0) was
+`cards.test.ts`'s "linear on hostile input", a 50 ms wall bound outside this change.
+
 ## The slowest files (each alone, `bun test <file>`, wall incl. ~70 ms start-up)
 
 | File | ms | Where the time goes | Proposal |
 |---|---|---|---|
 | packages/redact/src/linear.test.ts (before the split) | 9,541 | "every gitleaks rule outside RE2_RULES" 6.5 s; RE2 vs JS equivalence 3.7 s | Done: split into `linear.test.ts` + `redos.test.ts` |
-| packages/sim/src/sim.test.ts | 3,542 | "a run without updates scores exactly as before" 2.1 s (two `runQuality` runs) | Share one `runQuality` result between the tests that read it, or 3 sessions instead of 6 (it has a 20 s timeout now) |
+| packages/sim/src/sim.test.ts | 3,542 (6,625-7,246 on 2026-11-05, above) | "a run without updates scores exactly as before" 2.1 s (two `runQuality` runs) | Share one `runQuality` result between the tests that read it, or 3 sessions instead of 6 (it has a 20 s timeout now) |
 | packages/server/src/http.test.ts | 2,671 | the 60,000-deep body test 2.5 s | See validate below |
 | packages/protocol/src/validate.test.ts | 2,305 | 60,000-deep array: `JSON.stringify` throwing RangeError costs 2.3 s in JSC (20,000 deep: 2 ms, no throw) | Find the smallest depth that still overflows on Linux and macOS and use it; keep one deep case |
 | packages/primitives/src/sparse-index.test.ts | 1,349 | randomized index checks | Fewer iterations behind a constant, full count in a bench |

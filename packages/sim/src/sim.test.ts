@@ -114,8 +114,9 @@ describe("quality runner", () => {
 
   test("user-range tallies merge into the whole run's report (quality-cli --jobs), timing aside", async () => {
     const o = {
-      users: 3,
-      sessionsPerUser: 3,
+      // Two users of two sessions: the smallest run with a shard boundary and more than one session per shard.
+      users: 2,
+      sessionsPerUser: 2,
       seed: 3,
       profiles: REALISTIC,
       timeScale: 0,
@@ -131,13 +132,13 @@ describe("quality runner", () => {
     const shards = await Promise.all(
       [
         [0, 1],
-        [1, 3],
+        [1, 2],
       ].map(
         async ([a, b]) => JSON.parse(JSON.stringify(await tallyQuality({ ...o, userRange: [a!, b!] }))) as QualityTally,
       ),
     );
     const merged = mergeTallies(shards);
-    expect(merged.users).toBe(3);
+    expect(merged.users).toBe(2);
     expect(untimed(qualityReport(merged, o))).toBe(untimed(whole));
     // Latency percentiles come from the concatenated samples, not from shard percentiles.
     expect(merged.samples.observeMs.length).toBe(
@@ -145,7 +146,7 @@ describe("quality runner", () => {
     );
     // Merging adds; the inputs are left as they were.
     expect(shards[0]!.users).toBe(1);
-    await expect(tallyQuality({ ...o, userRange: [2, 4] })).rejects.toThrow(/userRange/);
+    await expect(tallyQuality({ ...o, userRange: [1, 3] })).rejects.toThrow(/userRange/);
     await expect(tallyQuality({ ...o, userRange: [1, 1] })).rejects.toThrow(/no user/);
   }, 20_000);
 

@@ -49,5 +49,6 @@ The saving is small and the loss grows with it, so the judge is asked as before.
 
 ```bash
 bun packages/sim/src/quality-cli.ts --profile realistic --seed 31 --planner --judge perfect [--ask-model]
+# Stale: the eval CLI no longer parses --ask-model (checked 2026-11-05); kept as the command this note ran.
 bun run eval --live --ask-model   # model-composed ask answers, with the privacy checks, live
 ```
