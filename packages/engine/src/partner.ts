@@ -283,6 +283,11 @@ interface Session {
    */
   checked?: Set<string>;
   /**
+   * `verifyDelivery`: re-reads under way or just made, by item id (`check`): started ahead, beside the reader's call,
+   * and taken by the delivery that follows. Bounded (`MAX_CHECKS`); dropped with the session.
+   */
+  checks?: Map<string, { at: number; outcome: Promise<CheckOutcome> }>;
+  /**
    * With `askDedup`: the words each item's line showed the agent in this session's packets and answers (lowercase),
    * by item id and version (`shownKey`: an item changed at its source under the same id counts as not shown), at
    * most `MAX_SHOWN` items (oldest dropped first), so an answer does not repeat them.
@@ -1477,6 +1482,8 @@ export class ContextPartner {
       pool.length <= READER_MAX_ITEMS &&
       ranked.every((x) => seen.has(x.item.id)) &&
       chosen.every((x) => seen.has(x.item.id));
+    // The likely deliveries are re-read while the reader reads (`verifyDelivery`): the delivery then waits on no call.
+    this.checkAhead(s, pool);
     const t0 = performance.now();
     const report = (outcome: ReaderReport["outcome"], flagged: ReaderReport["flagged"] = []) =>
       this.deps.onReader?.({
@@ -3349,50 +3356,10 @@ export class ContextPartner {
     const due = scored.filter((x) => this.doubted(s, x.item, now));
     if (due.length === 0) return scored;
     const t0 = performance.now();
-    const all = await this.deps.sources(s.scope).catch((): Source[] => []);
-    const byId = new Map(all.map((x) => [x.id, x]));
-    const replaced = new Map<string, ContextItem | null>();
-    let calls = 0;
-    await Promise.all(
-      due.map(async (x) => {
-        const source = byId.get(x.item.sourceId);
-        if (!source?.fetch) {
-          this.freshness.failed++;
-          return;
-        }
-        calls++;
-        const got = await this.fanout.fetchChecked(source, s.scope, x.item.ref, {
-          timeoutMs: this.config.verifyTimeoutMs,
-          signal: s.abort.signal,
-        });
-        if (got.status === "failed") {
-          this.freshness.failed++;
-          return;
-        }
-        if (got.status === "gone") {
-          this.freshness.gone++;
-          replaced.set(x.item.id, null);
-          return;
-        }
-        const copy = { ...got.item, id: x.item.id, sourceId: x.item.sourceId, ref: x.item.ref };
-        const synced = this.deps.cache.isSynced(s.scope, x.item.id);
-        // Stored as read now (its fetch time moves), and as synced when the sync held it.
-        const changed = this.deps.cache.put(s.scope, [copy], this.now(), true, synced);
-        if (changed.length > 0) {
-          this.freshness.changed++;
-          replaced.set(x.item.id, this.deps.cache.get(s.scope, x.item.id, this.now()) ?? copy);
-        } else {
-          this.freshness.confirmed++;
-        }
-      }),
+    const before = this.freshness.calls;
+    const outcomes = new Map(
+      await Promise.all(due.map(async (x) => [x.item.id, await this.check(s, x.item)] as const)),
     );
-    this.freshness.checked += due.length;
-    this.freshness.calls += calls;
-    const gone = [...replaced].filter(([, v]) => v === null).map(([id]) => id);
-    if (gone.length > 0 && !s.closed) {
-      this.deps.cache.removeItems(s.scope, gone);
-      for (const id of gone) this.sync?.removed(s.scope, scored.find((x) => x.item.id === id)!.item.sourceId, [id]);
-    }
     this.trace({
       sessionId: s.id,
       turn: s.turn,
@@ -3400,17 +3367,86 @@ export class ContextPartner {
       decision: "verify",
       reason: cue.id,
       latencyMs: Math.round(performance.now() - t0),
-      sourceCalls: calls,
+      // Calls this delivery waited on that were made for it (a re-read started ahead is counted where it began).
+      sourceCalls: this.freshness.calls - before,
       modelCalls: 0,
       costUsd: 0,
       itemIds: due.map((x) => x.item.id),
     });
     if (s.closed) return [];
     return scored.flatMap((x) => {
-      if (!replaced.has(x.item.id)) return [x];
-      const copy = replaced.get(x.item.id);
-      return copy ? [{ ...x, item: copy }] : [];
+      const o = outcomes.get(x.item.id);
+      if (o === "gone") return [];
+      if (o !== "changed") return [x];
+      const copy = this.deps.cache.get(s.scope, x.item.id, this.now());
+      return copy ? [{ ...x, item: copy }] : [x];
     });
+  }
+
+  /**
+   * One item's re-read (`verifyDelivery`), shared by every delivery of the session that wants it while it runs or for
+   * `CHECK_REUSE_MS` after: started ahead (`checkAhead`, beside the reader's call) or by `verifyItems`. A changed copy
+   * is stored, a gone item dropped from the cache and the sync's bookkeeping. Never throws.
+   */
+  private check(s: Session, item: ContextItem): Promise<CheckOutcome> {
+    const checks = (s.checks ??= new Map());
+    const now = this.now();
+    const held = checks.get(item.id);
+    if (held && now - held.at <= CHECK_REUSE_MS) return held.outcome;
+    const outcome = this.recheck(s, item);
+    checks.delete(item.id);
+    checks.set(item.id, { at: now, outcome });
+    while (checks.size > MAX_CHECKS) checks.delete(checks.keys().next().value as string);
+    return outcome;
+  }
+
+  private async recheck(s: Session, item: ContextItem): Promise<CheckOutcome> {
+    this.freshness.checked++;
+    const all = await this.deps.sources(s.scope).catch((): Source[] => []);
+    const source = all.find((x) => x.id === item.sourceId);
+    if (!source?.fetch) {
+      this.freshness.failed++;
+      return "failed";
+    }
+    this.freshness.calls++;
+    const got = await this.fanout.fetchChecked(source, s.scope, item.ref, {
+      timeoutMs: this.config.verifyTimeoutMs,
+      signal: s.abort.signal,
+    });
+    if (got.status === "failed" || s.closed) {
+      this.freshness.failed++;
+      return "failed";
+    }
+    if (got.status === "gone") {
+      this.freshness.gone++;
+      this.deps.cache.removeItems(s.scope, [item.id]);
+      this.sync?.removed(s.scope, item.sourceId, [item.id]);
+      return "gone";
+    }
+    const copy = { ...got.item, id: item.id, sourceId: item.sourceId, ref: item.ref };
+    const synced = this.deps.cache.isSynced(s.scope, item.id);
+    // Stored as read now (its fetch time moves), and as synced when the sync held it.
+    const changed = this.deps.cache.put(s.scope, [copy], this.now(), true, synced).length > 0;
+    if (changed) this.freshness.changed++;
+    else this.freshness.confirmed++;
+    return changed ? "changed" : "confirmed";
+  }
+
+  /**
+   * `verifyDelivery`: re-reads the first `VERIFY_AHEAD` doubted candidates of a reader's pool while the reader reads
+   * them, so the delivery that follows finds them done (`check`) instead of waiting a connector's round trip. The
+   * reader reads the copies it was given; a delivery shows the re-read ones.
+   */
+  private checkAhead(s: Session, pool: readonly Scored[]): void {
+    if (!this.config.verifyDelivery) return;
+    const now = this.now();
+    let n = 0;
+    for (const x of pool) {
+      if (n >= VERIFY_AHEAD) break;
+      if (!this.doubted(s, x.item, now)) continue;
+      n++;
+      void this.check(s, x.item);
+    }
   }
 
   /** `deliver`, after `verifyItems`: null when every item was found gone, or the session closed meanwhile. */
@@ -4846,6 +4882,14 @@ const MAX_PUSHED_ITEMS = 100;
 
 /** The most candidates an ask's reader reads, whatever `askReaderPool` says. */
 const READER_POOL_CAP = READER_MAX_ITEMS;
+
+/** What a re-read found (`verifyDelivery`). */
+type CheckOutcome = "confirmed" | "changed" | "gone" | "failed";
+/** Re-reads a session keeps (`Session.checks`), and how long one is reused before an item is read again (ms). */
+const MAX_CHECKS = 64;
+const CHECK_REUSE_MS = 30_000;
+/** Doubted candidates of a reader's pool re-read beside its call (`checkAhead`): about what a delivery cites. */
+const VERIFY_AHEAD = 3;
 
 /** An age in words for `packetAge`: "25 min ago", "3 h ago", "2 d ago". */
 function agoText(ms: number): string {
