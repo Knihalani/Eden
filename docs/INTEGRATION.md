@@ -214,7 +214,14 @@ Declare the sources you forward: `"notifies": true` in the user's source spec (`
 changed, by the daily sweep (which also drops what the source deleted), and after `syncPushMaxStaleMs` (24 hours)
 with no notification, so a lost notification is bounded. Sources you do not forward are polled as before. The routes
 answer 200 with what was done: `synced` is false when the source is not synced for the user or not declared as
-notifying (the notification is ignored), and `stored` counts the items held new or changed.
+notifying (no poll follows), and `reason` then says which: `"push-off"` (the server runs without `syncPush`),
+`"not-synced"` (no lookup has synced that source for that user: a typo'd `sourceId` or `userId`, a source with no list
+tool, or one not read yet; Eden tells these apart only by reading your source config, which this route does not do) or
+`"not-notifying"` (synced, but not declared `"notifies": true`). The client's `sourceNotice(sourceId)` returns
+`{synced, reason?}` (null when unreachable). Either way, any search result Eden holds for that source is dropped, so
+the next lookup asks the source again. `stored` counts the items held new or changed, and `removed` (from
+`/v1/sources/removed`) the cached items dropped: 0 is still a success, since the refs are held as gone whether or not
+they were cached.
 
 A signal that says only "this source changed" does not say what changed. Eden then treats every item it read from
 that source before the signal as unconfirmed, and reads such an item again by its id before delivering it (D126: about
