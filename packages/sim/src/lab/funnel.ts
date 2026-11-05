@@ -17,9 +17,10 @@
  * - Held-out suites are refused without `--blind`: they are measurement only, never for tuning (suites.ts). The
  *   unrun blind ones (UNRUN_BLIND) are spent by the first run that names them.
  * - Not recorded in bench/ledger.jsonl unless `--record` (a screen is not a result).
- * - `--jobs N`: N hidden-funnel.ts processes at once, one per suite × seed shard, rows merged before the score (same
- *   score; at `--time 0` ms/task is then contended). Default 1 at `--time 0`; at `--time` > 0 min(shards, 12,
- *   3 × cores), since those shards wait on sleeps. Some flags force 1 (the `--jobs` note below says which and why).
+ * - `--jobs N`: N hidden-funnel.ts processes, rows merged before the score (same score). At `--time 0` each takes a
+ *   block of suite × seed shards and all run at once, default one per core (D139; ms/task is then contended, so
+ *   `--jobs 1` for latency); at `--time` > 0 one per shard, N at a time, default min(shards, 12, 3 × cores), since
+ *   those shards wait on sleeps. Some flags force 1 (the `--jobs` note below says which and why).
  * - With intent on and nothing replayed (no `-- --intent F`, or a file for other items), every TOTAL and pool line and
  *   the JSON label say `[intent inert: no replay]`; `--reader stub|oracle` refuse a `--baseline` whose intent differs.
  * - `-- --wait-ms N` (the observe's wait) prints the deliveries made before the agent's first model call;
@@ -41,7 +42,7 @@ import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync }
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { flags, labConfig, parseJson } from "./flags";
-import { amortisedCalls, callMismatches, defaultJobs, type CallCheck } from "./funnel-merge";
+import { amortisedCalls, callMismatches, defaultJobs, groupShards, mergeParts, type PartOut } from "./funnel-merge";
 import { effective, PRESETS } from "./presets";
 import { missGate, MISS_EXIT } from "./reader-disk";
 import {
@@ -53,7 +54,6 @@ import {
   screenLines,
   STUB_BANNER,
   type IntentState,
-  type IntentUse,
   type ScreenRow,
 } from "./reader-stub";
 import { parseSuites, UNRUN_BLIND } from "./suites";
@@ -162,6 +162,8 @@ const out = opt("json", join(scratch, "funnel.json"));
 const seeds = opt("seeds", "41,42");
 
 const seedList = seeds.split(",");
+// A repeated seed would run twice in one process but once per block when grouped, so the merge refuses it up front.
+if (new Set(seedList.map(Number)).size !== seedList.length) fail(`--seeds ${seeds} repeats a seed`);
 const label = presetName + (cli.has("set") ? "+set" : "");
 
 /** hidden-funnel.ts's arguments for some suites and seeds, writing its rows to `json`. */
@@ -186,11 +188,15 @@ const funnelArgsFor = (suiteList: string, seedList: string, json: string) => [
 const shellLine = (a: string[]) => `bun ${a.map((x) => (/[\s{"]/.test(x) ? `'${x}'` : x)).join(" ")}`;
 
 /**
- * `--jobs N`: one hidden-funnel.ts process per suite × seed shard, N at a time, their rows merged here before
- * scoring. Default 1 at `--time 0`; at `--time` > 0, min(shards, 12, 3 × cores) (`defaultJobs`, funnel-merge.ts). A
- * task's result does not depend on which other seeds share its process (checked at `--time 0` and `--time 1`: perTask
- * rows identical without their timing fields, docs/LAB.md). At `--time 0` its `ms` does: with N > 1 the shards contend
- * for cores, so ms/task is not a latency figure. At `--time` > 0 a task's time is mostly the connectors' simulated
+ * `--jobs N`: N hidden-funnel.ts processes, their rows merged here before scoring (`mergeParts`, funnel-merge.ts). At
+ * `--time 0` each process runs a block of suites × seeds (`groupShards`) and all start at once, default one per core:
+ * each process repeats its start-up (worlds, cards, backfill) in CPU, so 12 one-shard processes on 4 cores spent more
+ * CPU and were slower than 4 blocks of 3 (D139). At `--time` > 0 each shard gets its own process, N at a time, default
+ * min(shards, 12, 3 × cores) (`defaultJobs`). A task's result does not depend on which other suites or seeds share
+ * its process (checked at `--time 0` and `--time 1`: perTask rows identical without their timing fields,
+ * docs/LAB.md). At `--time 0` its `ms` does: with N > 1 the processes contend for cores, so ms/task is not a latency
+ * figure and the run says CONTENDED; `--jobs 1` gives the uncontended one. At `--time` > 0 a task's time is mostly
+ * the connectors' simulated
  * latency (sleeps, not CPU), so shards barely contend and ms/task stays a latency figure (measured within a few
  * percent of one process, docs/LAB.md), and the run says how many ran at once; `--jobs` is honoured as typed, so a
  * latency study, a heavier configuration or a machine with fewer cores can choose one process. Some runs keep one
@@ -210,20 +216,33 @@ const soloReasons = [
 ];
 /** `-- --time T`: connectors at their simulated latency; shards then wait on sleeps rather than contend for CPU. */
 const timeScale = Number(passValue("time") || "0");
-const shards = suites.flatMap((suite) => seedList.map((seed) => ({ suite, seed })));
+const shardCount = suites.length * seedList.length;
 const cores = availableParallelism();
-let jobs = defaultJobs({ ...(jobsGiven !== undefined ? { jobsGiven } : {}), timeScale, shards: shards.length, cores });
+let jobs = defaultJobs({ ...(jobsGiven !== undefined ? { jobsGiven } : {}), timeScale, shards: shardCount, cores });
 if (jobs > 1 && soloReasons.length) {
-  const asked = jobsGiven !== undefined ? `--jobs ${jobsGiven}` : `the --time default of ${jobs} jobs`;
+  const asked = jobsGiven !== undefined ? `--jobs ${jobsGiven}` : `the default of ${jobs} jobs`;
   console.error(`funnel: ${asked} ignored, running one job: ${soloReasons.join(", ")} needs one process`);
   jobs = 1;
-} else if (jobsGiven === undefined && jobs > 1) {
+}
+// The processes: at `--time 0` blocks of suites × seeds, all at once; at `--time` > 0 one per shard, `jobs` at a time.
+const groups =
+  jobs === 1
+    ? [{ suites, seeds: seedList }]
+    : timeScale > 0
+      ? suites.flatMap((suite) => seedList.map((seed) => ({ suites: [suite], seeds: [seed] })))
+      : groupShards(suites, seedList, jobs);
+if (jobs > 1 && timeScale <= 0) jobs = groups.length;
+if (jobsGiven === undefined && jobs > 1) {
   console.error(
-    `funnel: --time ${timeScale} without --jobs: ${jobs} shards at once on ${cores} cores (min(shards, 12, ` +
-      "3 × cores)); ms/task read 0.8-3.5% higher at 12 jobs than at 1 on 4 cores (docs/LAB.md); --jobs 1 for an " +
-      "uncontended latency figure",
+    timeScale > 0
+      ? `funnel: --time ${timeScale} without --jobs: ${jobs} shards at once on ${cores} cores (min(shards, 12, ` +
+          "3 × cores)); ms/task read 0.8-3.5% higher at 12 jobs than at 1 on 4 cores (docs/LAB.md); --jobs 1 for an " +
+          "uncontended latency figure"
+      : `funnel: ${jobs} processes on ${cores} cores, each a block of suites × seeds (D139); ms/task is CONTENDED, ` +
+          "--jobs 1 for an uncontended latency figure",
   );
 }
+const groupName = (g: { suites: string[]; seeds: string[] }) => `${g.suites.join(",")} seed ${g.seeds.join(",")}`;
 
 const t0 = performance.now();
 if (jobs === 1) {
@@ -236,131 +255,68 @@ if (jobs === 1) {
     process.exit(run.status ?? 1);
   }
 } else {
-  await runShards();
+  await runGroups();
 }
 const wall = (performance.now() - t0) / 1000;
 
-/** Runs every shard, `jobs` at a time, prints each one's output in shard order, and merges their JSON into `out`. */
-async function runShards() {
-  const shardJson = (i: number) => join(scratch, `shard-${i}.json`);
-  const shardLog = (i: number) => join(scratch, `shard-${i}.log`);
+/** Runs every group, `jobs` at a time, prints each one's output in group order, and merges their JSON into `out`. */
+async function runGroups() {
+  const partJson = (i: number) => join(scratch, `part-${i}.json`);
+  const partLog = (i: number) => join(scratch, `part-${i}.log`);
+  const argsOf = (i: number) => funnelArgsFor(groups[i]!.suites.join(","), groups[i]!.seeds.join(","), partJson(i));
   console.error(
-    `funnel: ${shards.length} shards (suite × seed), ${jobs} at a time on ${availableParallelism()} cores` +
+    `funnel: ${shardCount} shards (suite × seed) in ${groups.length} processes, ${jobs} at a time on ${cores} cores` +
       (timeScale > 0 ? ` (--time ${timeScale}: concurrent shards wait on simulated connector latency, not CPU)` : "") +
-      `; the first: ${shellLine(funnelArgsFor(shards[0]!.suite, shards[0]!.seed, shardJson(0)))}`,
+      `; the first: ${shellLine(argsOf(0))}`,
   );
   const results: { status: number | null; seconds: number }[] = [];
   let next = 0;
   const worker = async () => {
-    for (let i = next++; i < shards.length; i = next++) {
-      const { suite, seed } = shards[i]!;
-      // Each shard's stdout and stderr go to its own file, printed whole below so shards do not interleave.
-      const fd = openSync(shardLog(i), "w");
+    for (let i = next++; i < groups.length; i = next++) {
+      // Each process's stdout and stderr go to its own file, printed whole below so they do not interleave.
+      const fd = openSync(partLog(i), "w");
       const started = performance.now();
-      const child = spawn("bun", funnelArgsFor(suite, seed, shardJson(i)), { stdio: ["ignore", fd, fd] });
+      const child = spawn("bun", argsOf(i), { stdio: ["ignore", fd, fd] });
       const status = await new Promise<number | null>((done) => child.on("close", (code) => done(code)));
       closeSync(fd);
       results[i] = { status, seconds: (performance.now() - started) / 1000 };
     }
   };
   await Promise.all(Array.from({ length: jobs }, worker));
-  for (const [i, { suite, seed }] of shards.entries()) {
+  for (const [i, g] of groups.entries()) {
     const r = results[i]!;
-    console.log(`\n== shard ${suite} seed ${seed} (exit ${r.status}, ${r.seconds.toFixed(1)} s)`);
-    process.stdout.write(readFileSync(shardLog(i), "utf8"));
+    console.log(`\n== ${groupName(g)} (exit ${r.status}, ${r.seconds.toFixed(1)} s)`);
+    process.stdout.write(readFileSync(partLog(i), "utf8"));
   }
   const failed = results.findIndex((r) => r.status !== 0 && r.status !== MISS_EXIT);
   if (failed >= 0) {
-    console.error(`funnel: shard ${shards[failed]!.suite} seed ${shards[failed]!.seed} failed (its output is above)`);
+    console.error(`funnel: ${groupName(groups[failed]!)} failed (its output is above)`);
     rmSync(scratch, { recursive: true, force: true });
     process.exit(results[failed]!.status ?? 1);
   }
-  writeFileSync(out, JSON.stringify(mergeShards(shards.map((_, i) => shardJson(i))), null, 2));
-}
-
-interface Row {
-  n: number;
-  returned: number;
-  cached: number;
-  delivered: number;
-  calls: number;
-  ms: number;
-}
-interface Rows {
-  hidden: Row;
-  control: Row;
-}
-type Counts = Record<string, number>;
-interface ShardOut {
-  rows: Record<string, Rows>;
-  total: Rows;
-  sync?: Counts;
-  cards?: Counts;
-  reader?: Counts;
-  intent?: IntentUse;
-  calls?: CallCheck;
-  perTask: { variant: "hidden" | "control" }[];
+  const parts = groups.map((_, i) => JSON.parse(readFileSync(partJson(i), "utf8")) as PartOut);
+  writeFileSync(out, JSON.stringify(merged(parts), null, 2));
 }
 
 /**
- * The shards' JSON in hidden-funnel.ts's own shape for the same suites and seeds: perTask in its order (per suite,
- * hidden then control, seeds in order); rows, totals and the sync, cards and reader counters summed. Prints the
- * merged totals, since each shard's own summary lines cover that shard only.
+ * The processes' JSON in hidden-funnel.ts's own shape for the same suites and seeds (`mergeParts`). Prints the merged
+ * totals, since each process's own summary lines cover its block only.
  */
-function mergeShards(files: string[]) {
-  const parts = files.map((f) => JSON.parse(readFileSync(f, "utf8")) as ShardOut);
-  const addRows = (into: Rows | undefined, r: Rows): Rows => {
-    const sum = into ?? { hidden: zeroRow(), control: zeroRow() };
-    for (const v of ["hidden", "control"] as const) {
-      for (const k of Object.keys(r[v]) as (keyof Row)[]) sum[v][k] += r[v][k];
-    }
-    return sum;
-  };
-  const addCounts = (into: Counts | undefined, c: Counts | undefined) => {
-    if (!c) return into;
-    const sum = into ?? {};
-    for (const [k, v] of Object.entries(c)) sum[k] = (sum[k] ?? 0) + v;
-    return sum;
-  };
-  let total: Rows = { hidden: zeroRow(), control: zeroRow() };
-  let sync: Counts | undefined;
-  let cardUse: Counts | undefined;
-  let reader: Counts | undefined;
-  const intentUse: IntentUse = { asked: 0, found: 0 };
-  const rows: Record<string, Rows> = {};
-  const bySuite: Record<string, { rows: Record<string, Rows>; total: Rows }> = {};
-  for (const [i, p] of parts.entries()) {
-    const suite = shards[i]!.suite;
-    const s = (bySuite[suite] ??= { rows: {}, total: { hidden: zeroRow(), control: zeroRow() } });
-    for (const [name, r] of Object.entries(p.rows)) {
-      s.rows[name] = addRows(s.rows[name], r);
-      const k = suites.length > 1 ? `${suite}/${name}` : name;
-      rows[k] = addRows(rows[k], r);
-    }
-    s.total = addRows(s.total, p.total);
-    total = addRows(total, p.total);
-    sync = addCounts(sync, p.sync);
-    cardUse = addCounts(cardUse, p.cards);
-    reader = addCounts(reader, p.reader);
-    intentUse.asked += p.intent?.asked ?? 0;
-    intentUse.found += p.intent?.found ?? 0;
-  }
-  const intent = { state: intentState(run, intentUse), ...intentUse };
-  const perTask = suites.flatMap((suite) =>
-    (["hidden", "control"] as const).flatMap((variant) =>
-      parts.flatMap((p, i) => (shards[i]!.suite === suite ? p.perTask.filter((t) => t.variant === variant) : [])),
-    ),
-  );
+function merged(parts: PartOut[]) {
+  const m = mergeParts(parts, groups, suites, seedList);
+  const { total, sync } = m;
+  const intent = { state: intentState(run, m.intentUse), ...m.intentUse };
   const n = Math.max(1, total.hidden.n + total.control.n);
   const request = total.hidden.calls + total.control.calls;
   console.log(
-    `\nmerged ${shards.length} shards: hidden returned ${total.hidden.returned}/${total.hidden.n}, delivered ` +
-      `${total.hidden.delivered}/${total.hidden.n}; decoys delivered ${total.control.delivered}/${total.control.n}; ` +
-      `${(request / n).toFixed(1)} calls/task; ${((total.hidden.ms + total.control.ms) / n).toFixed(1)} ms/task ` +
+    `\nmerged ${shardCount} shards from ${groups.length} processes: hidden returned ` +
+      `${total.hidden.returned}/${total.hidden.n}, delivered ${total.hidden.delivered}/${total.hidden.n}; decoys ` +
+      `delivered ${total.control.delivered}/${total.control.n}; ${(request / n).toFixed(1)} calls/task; ` +
+      `${((total.hidden.ms + total.control.ms) / n).toFixed(1)} ms/task ` +
       (timeScale > 0
         ? `(${jobs} jobs at once at --time ${timeScale}: mostly connector sleeps, a latency figure within a few ` +
           "percent of one job, docs/LAB.md)"
-        : `CONTENDED (${jobs} jobs at once: not a latency figure; use --jobs 1 for one)`),
+        : `CONTENDED (${jobs} processes at once: not a latency figure; use --jobs 1 for one)`),
   );
   if (sync) {
     // `demandSeen`, not `demand`: the listings seen in the tasks' windows are already in `request` (funnel-merge.ts).
@@ -371,21 +327,19 @@ function mergeShards(files: string[]) {
         `ms/user (contended); demand items ${sync.demandItems ?? 0}, background items ${sync.backgroundItems ?? 0}`,
     );
   }
-  const mismatched = callMismatches(
-    parts.map((p, i) => ({ name: `${shards[i]!.suite} seed ${shards[i]!.seed}`, calls: p.calls })),
-  );
+  const mismatched = callMismatches(parts.map((p, i) => ({ name: groupName(groups[i]!), calls: p.calls })));
   if (mismatched.length) {
     console.log(
-      `CALLS UNTRACED in ${mismatched.length} of ${parts.length} shards (traces vs connectors; per-trace sourceCalls ` +
-        `and cost views built from traces are off, the connectors' count above is right${
+      `CALLS UNTRACED in ${mismatched.length} of ${parts.length} processes (traces vs connectors; per-trace ` +
+        `sourceCalls and cost views built from traces are off, the connectors' count above is right${
           config.syncPollBehind === true ? "; syncPollBehind's polls reach no trace" : ""
         }): ${mismatched.join("; ")}`,
     );
   }
-  if (cardUse) console.log(`merged cards use (summed): ${JSON.stringify(cardUse)}`);
-  if (reader) console.log(`merged reader replay (summed): ${JSON.stringify(reader)}`);
+  if (m.cards) console.log(`merged cards use (summed): ${JSON.stringify(m.cards)}`);
+  if (m.reader) console.log(`merged reader replay (summed): ${JSON.stringify(m.reader)}`);
   console.log(
-    "(each shard's own summary lines above, such as sync, cards, reader, overBudget and cpu, cover that shard only; " +
+    "(each process's own summary lines above, such as sync, cards, reader, overBudget and cpu, cover its block only; " +
       "overBudget's reader and bridge counts are not summed here)",
   );
   return {
@@ -394,17 +348,14 @@ function mergeShards(files: string[]) {
     config,
     label: label + (intent.state === "inert" ? `  ${INTENT_INERT}` : ""),
     intent,
-    rows,
+    rows: m.rows,
     total,
     ...(sync ? { sync } : {}),
-    ...(cardUse ? { cards: cardUse } : {}),
-    ...(reader ? { reader } : {}),
-    ...(suites.length > 1 ? { suites: bySuite } : {}),
-    perTask,
+    ...(m.cards ? { cards: m.cards } : {}),
+    ...(m.reader ? { reader: m.reader } : {}),
+    ...(suites.length > 1 ? { suites: m.bySuite } : {}),
+    perTask: m.perTask,
   };
-}
-function zeroRow(): Row {
-  return { n: 0, returned: 0, cached: 0, delivered: 0, calls: 0, ms: 0 };
 }
 
 interface TaskRow extends ScreenRow {
@@ -439,7 +390,7 @@ const tag = readerKind.startsWith("oracle") ? `  [${readerKind} proxy]` : "";
 console.log(
   `\nfunnel score (surfaced = delivered or cited by ask), ${presetName}, seeds ${seeds}, ${wall.toFixed(0)} s` +
     (jobs > 1
-      ? ` (${jobs} jobs; ms/task in the shards is ${timeScale > 0 ? "mostly connector sleeps" : "contended"})`
+      ? ` (${jobs} jobs; ms/task in the shards is ${timeScale > 0 ? "mostly connector sleeps" : "CONTENDED"})`
       : "") +
     tag,
 );
