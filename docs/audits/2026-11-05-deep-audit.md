@@ -1,5 +1,444 @@
 # Deep audit (2026-11-05)
 
+## Second pass (2026-11-05, Anthropic-only): summary for the owner
+
+This pass audited `audit/2026-11-05-integration` at 323395554, after the first pass (everything below "Final summary
+of the whole run") had closed. Its rule for paid calls: Anthropic only (`HAIKU_API_KEY`, `claude-haiku-5-5` for every
+role), metered on `.local/mkt/ledger.jsonl` with `--spend-cap 17 --spend-headroom 0.3` (the ledger held $7.05 at the
+start, so about $10 is available). Verification spent about $0.002 (one eval-live trial, finding B2); every other
+number in this pass comes from the ledger, local runs and code reads cited in each finding. Numbers marked "estimate"
+were not measured.
+
+In plain terms:
+
+- **The paid reader that ships is not the one that was measured.** Every quality and cost figure for the reader came
+  from the lab, which calls Anthropic directly with thinking off and its instructions cached. The servers send
+  reasoning "low" through OpenRouter and mark nothing for caching. On Haiku 5.5, thinking at low effort made the
+  reader 2.8-3.3x slower at the median and about 1.5x dearer, and 6-7 of 10 calls missed the ask's 2.5 s wait. The
+  one lab row that tried thinking (haiku-opt.md, v3) found it did not change quality. Decision D144 turns reasoning
+  off by default, so what ships is what was measured. Whether OpenRouter honours caching for Anthropic cannot be
+  checked under this run's rule; D145 makes that switch a trial with an owner and an end date instead of dead code.
+- **A stale copy can survive a change notice.** For a source that sends change notices but has no listing, a notice
+  did not clear the held search page, so the next ask answered the old text for up to a minute. A slow poll also made
+  an ask report "could not reach" for a source whose page was already held. Both are small fixes (package S3).
+- **The live eval cannot run here.** `bun run eval --live` reaches only OpenRouter. A small lab driver already worked
+  in verification (6 reader calls, 0 failures, about $0.001 a run); package S2 lands it.
+- **A $0 replay of a paid reader run exists** and reproduces it exactly (hidden 247/384, decoys 127/384), but it sat
+  in a scratchpad due for deletion. This report copied it to `.local/mkt/reader-train-4142.jsonl` in the main
+  checkout (md5 9a492c00cf9724306e3e4743e2882982, 866 lines, the same as the source); package S8 commits it and
+  documents the recipe.
+- **Smaller items**: each user's near-duplicate sketcher allocates about 17 KB up front (61% of a light user's
+  memory); one test file burns a CPU core for 7.7 s on a Bun timer bug; the ingest bench takes 73-84 s; the example
+  agent's default prompt finds nothing; a bad shared sources file starts silently; eval tests are skipped by
+  `test:changed` when server code changes.
+- **Not pursued, with decisions**: a batch endpoint for cards (D146: no production route under D12, and at most
+  1.14-1.33x all-in); a streaming reader and a local distilled reader (D147: an estimated 1.12x, and a very low chance
+  of matching Haiku on decoys).
+
+Tally: 17 verified findings (1 high, 8 medium, 8 low after verification). 14 are packaged into 8 work packages
+(S1-S8), counting B8 (the union of B1 and B3). 3 are closed by decisions (B7 by D146; B9 and B17 by D147). The
+OpenRouter halves of B1, B3 and B8 are deferred (outside the run's Anthropic-only budget).
+
+## Second pass: findings, ranked by value (severity, then effort)
+
+Status key: **packaged** (a work package below fixes it), **decided** (a decision row closes it), **deferred**
+(section "Second pass: deferred" says why). Severities are after verification.
+
+### B1. `reader-shipped-reasoning-unmeasured`: the shipped reader thinks; every measured reader did not (high, M)
+
+- **Evidence.**
+  - `packages/engine/src/reader.ts:486` defaults `reasoning` to "low" and `:493` sends it.
+    `packages/server/src/build.ts:97` builds `new ModelReaderMaker(models.reader)` with no options, through OpenRouter
+    (`packages/server/src/models.ts:68`; `packages/llm/src/openrouter.ts:74` sends `reasoning: {effort, exclude:
+    true}`).
+  - The lab reader ignores the request: `labModel` (`packages/sim/src/lab/free.ts:101-111`) builds `AnthropicModel`,
+    whose `thinking` defaults to "off" (`packages/llm/src/anthropic.ts:137,144`). All 9,555 `eden.reader` ledger rows
+    ran with thinking off; `hidden-funnel.ts:342` defaults `--reader-thinking` to off.
+  - Ledger run `pp-reader-time` (Haiku 5.5, 30 items, 3,192 input tokens, 10 calls per arm), re-tallied by both
+    verifiers: off with cache p50 1,244-1,253 ms, 0/10 over 2,500 ms, $0.000348 a call; adaptive-low with cache p50
+    3,475-3,501 ms, 6/10 over 2,500 ms, TTFT 3,249 vs 641 ms (5.1x), $0.000526 (1.51x); adaptive-low uncached 7/10
+    over. Run `ineff-reader-time`: p50 1,098 vs 3,652 ms (standard median, 3.33x), cost 1.59x.
+  - The latency is bimodal: 3-4 of 10 adaptive-low calls did not think and took 0.9-1.9 s. Run `lat-audit-reasoning`
+    (n=5, about 1,700 tokens) had only 1 of 5 think.
+  - Quality: `docs/research/haiku-opt.md:71` (v3, thinking on at low) flagged 117 hidden and 89 decoys against 114
+    and 88 with it off, p50 1,450 vs 1,434 ms. D96's decoy cut (88 to 13 flagged) came from v4's `why` before `binds`
+    (haiku-opt.md:72), with thinking off. The comment at `reader.ts:472-475` credits it to provider reasoning, which
+    misreads D96.
+- **Impact.** On Anthropic-direct the shipped mode is 2.8-3.3x slower at p50 and 1.5-1.6x dearer per call, and at
+  these pool sizes about 60-70% of asks would fall back after the 2.5 s wait while still paying (COST-MODEL.md:76
+  puts the default pool at about 2,900 input tokens, close to the probes). The push waits `readerPushWaitMs` (60 s,
+  `config.ts:588`), so the fallback share applies to asks. How OpenRouter maps `effort: "low"` for
+  `anthropic/claude-haiku-5.5` is unmeasured: if it becomes `thinking.type: enabled` with a budget, the
+  `lat-audit-reasoning` enabled-1024 rows (0 output tokens, about 160 ms) suggest an HTTP 400 on every call, so the
+  reader would always fail open.
+- **Fix.** D144: default reasoning "off" (the measured configuration). Re-time at the default pool on Anthropic and
+  record the figures in COST-MODEL.md, labelled Anthropic-direct.
+- **Status.** Packaged (S1). The OpenRouter mapping probe is deferred. The judge's own `reasoning: "low"`
+  (`partner.ts:4365`) is a different role and is not changed here.
+
+### B2. `devloop-eval-live-openrouter-only`: `eval --live` cannot reach Anthropic (medium, M)
+
+- **Evidence.** `modelRolesFromEnv` returns `NO_MODELS` without `OPENROUTER_API_KEY`
+  (`packages/server/src/models.ts:59-60`); `fromEnvVia` has the same gate (`packages/eval/src/run.ts:104`);
+  `packages/eval/src/cli.ts:70` never passes `make`. A verifier's scratch driver using `liveWiring({judge: false,
+  usdCap: 0.05, env: {...process.env, OPENROUTER_API_KEY: "placeholder"}, make: o => labModel(access, {...o, model:
+  "claude-haiku-5-5"}, "eden.reader")})` ran twice: `readerPool.reader` "live", 6 calls, 0 failures, 13 reads, 6
+  `eden.reader` ledger rows summing to $0.00102.
+- **Impact.** The live gate CLAUDE.md requires for scoring and delivery changes cannot run in this environment, so
+  B1's re-time and any veto screen have no shipped-wiring driver.
+- **Fix.** `packages/sim/src/lab/eval-live.ts` as above, with `@eden/eval` added to `packages/sim/package.json`
+  (missing today; a workspace dependency, no cycle). `labAccess` already parses the spend flags (`free.ts:81-87`).
+  Label the output "shipped engine wiring, lab provider (D97)".
+- **Status.** Packaged (S2).
+
+### B3. `anthropic-cache-dead-flag-prod-pays-full-prefix`: no cache breakpoints on the shipped path (medium, S)
+
+- **Evidence.** `anthropicCache` is defined at `openrouter.ts:40`, read only at `:67`, and set only in
+  `packages/llm/src/llm.test.ts:226,248,267,292`; `models.ts:65-67` builds reader, cards and cardsRetry without it;
+  the trials table had no row. The lab always caches the last system block (`anthropic.ts:111-117`). Ledger
+  re-priced at list prices by both verifiers: `eden.reader` $2.530 vs $3.339 uncached (1.32x, 34.5% of input
+  cached, n=9,555); `eden.cards` $2.298 vs $2.908 (1.27x, 52.4%, n=5,158).
+- **Impact.** Every COST-MODEL reader and card figure describes a cached path that does not ship. At lab traffic
+  density the gap is 1.22-1.32x per reader call; with sparse production traffic it is probably smaller (OpenRouter
+  may spread endpoints; the cache lives 5 minutes). Dollars are small (estimate: about $0.1-0.2 per 1,000 tasks).
+- **Fix.** D145: the flag becomes a trial with an owner and an end date, and COST-MODEL figures are labelled "lab
+  provider, cached". Turning it on needs an OpenRouter probe (cached tokens above 0 on a second call, at realistic
+  per-user spacing).
+- **Status.** Trial row and decision written in this commit; doc labels packaged (S1); the probe is deferred.
+
+### B4. `devloop-paid-reader-replay-exists`: a $0 replay of the paid default exists only in a scratchpad (medium, S)
+
+- **Evidence.** Two verifiers replayed the cache with `--reader replay --reader-model claude-haiku-5-5
+  --reader-cache <copy>`: replayed 648, missed 5, hidden 247/384, decoys 127/384, equal to graph-ablation.md:82.
+  Without `--reader-model` every prompt misses (0 replayed, 1,250 missed): `promptKey` hashes the model id
+  (`reader-disk.ts:51-63`) and the default model is `z-ai/glm-5.3-flash` (`hidden-funnel.ts:338`). With 5 misses the
+  funnel exits 3 unless `--allow-misses` is passed. A pool cut (`askReaderPool` 10 with `--reader-subset`) screened
+  at $0 (hidden 230, decoys 140, labelled APPROXIMATE).
+- **Impact.** A paid default reader screen costs $0.17-0.19 (ledger: ga-default $0.172, ga-default2 $0.187); veto,
+  gate and pool-cut changes can screen at $0 instead. Changes that add or re-render pool items still miss.
+- **Fix.** Commit the cache gzipped next to `intent-v2.jsonl.gz` (simulated text only; 106,277 bytes gzipped,
+  measured with `gzip -c | wc -c`), a LAB.md recipe with `--allow-misses`, its preset, seeds, commit and staleness
+  rule, and a funnel hint when every reader prompt misses without `--reader-model`.
+- **Status.** File preserved at `.local/mkt/reader-train-4142.jsonl` by this report; packaged (S8).
+
+### B5. `memory-user-fixed-overhead-sketcher`: 17 KB of sketch arrays allocated per user up front (medium, S)
+
+- **Evidence.** `packages/primitives/src/dedup.ts:64-68` allocates four `Uint32Array(1_024)` and one
+  `Uint8Array(1_024)` per `TextSketcher`; `packages/engine/src/cache.ts:154` creates one per user. heapStats: a
+  one-item user 29,540 B, of which the five arrays are 17,724 B; 1,404 B at 64 slots. Per user (2,000 users): 10
+  terms 30,251 to 13,941 B (2.17x), 100 terms 34,126 to 18,965 B (1.80x), 200 terms 1.51x, 600 terms 1.05x. Growth
+  already exists (`growTerms`, `dedup.ts:256-265`; the pool, `:319`); `compactPool` (`:305`) floors at 1,024.
+- **Impact.** About 130-160 MB less per 10,000 light users (estimate: 13.2-16.3 KB x 10,000); negligible for heavy
+  users.
+- **Fix.** Start at 64, lower `compactPool`'s floor to match, test growth past 64 and 1,024, and re-run
+  `dedup.bench.ts`, `sketch.bench.ts` and `ingest.bench.ts` before and after (the primitives rule).
+- **Status.** Packaged (S4).
+
+### B6. `corr-sourcechanged-keeps-held-page`: a notice for an unsynced notifying source keeps the old page (medium, S)
+
+- **Evidence.** `partner.ts:1743-1748` calls `fanout.dropResults` only when `sync.changed()` is true, and
+  `sync.ts:262-268` returns false without sync state; a search-only source never has any (`sync.ts:441-443`;
+  `user-sources.ts:73,380` accept `notifies` without `listTool`). `sourceItems` (`partner.ts:1766`) has the same gap.
+  Both verifiers reproduced it: after the change `sourceChanged` returned false and the next ask answered the old text
+  with status "cached" and no new search; with `dropResults` called, a new search and the new text.
+- **Impact.** Old text for up to 60 s (fresh window, `guarded.ts:212`), then as a stale fallback up to 600 s. The fix
+  clears only the held fan-out page; ItemCache copies of a search-only source are still not doubted (D126's mechanism
+  needs sync state), so it narrows the gap rather than extending D126 to such sources.
+- **Fix.** Drop the held page on every notice while `syncPush` is on, and in `sourceItems` when items are non-empty;
+  keep the returned value. Test in `freshness-push.test.ts` on `CORE_CONFIG`.
+- **Status.** Packaged (S3).
+
+### B7. `cost-intent-cheaper-endpoint-or-batch`: a batch or cheaper endpoint for cards and intent (medium, M)
+
+- **Evidence.** Ledger: 5,158 `eden.cards` calls at $0.000445 each, output about 70% of the cost; 11,492 of 13,605
+  card items are request-only (map-funnel.json). Batches halve token prices, but cache hits in a batch are
+  best-effort: 1.58-2.0x on the card part (verifier arithmetic), 1.14-1.20x all-in against COST-MODEL.md:279-282,
+  1.33x on the finding's own unverified totals. Production roles go through OpenRouter (D12), which has no batch
+  tier; Anthropic-direct is lab only (D97). Batch results can take up to 24 hours and land on a cold user's
+  backfill, and the funnel replays cards, so it cannot see that delay.
+- **Fix.** D146: rejected for now.
+- **Status.** Decided (D146).
+
+### B8. `redesign-shipped-reader-is-not-the-measured-reader`: ship the measured reader (medium, M)
+
+- **Evidence.** The union of B1 and B3. Measured ledger mean per reader call $0.0002647 (2,729.6 tokens in, 941.8
+  cached, 153 out); uncached at list price $0.000350 (1.32x). The finding's 1.55x adds 118 reasoning tokens a call
+  that no run measured on OpenRouter.
+- **Fix.** B1's D144 plus B3's D145.
+- **Status.** Packaged with B1 (S1); the OpenRouter cost and latency of the shipped path stay deferred.
+
+### B9. `lat-reader-stream-early-settle`: settle the push early from a streamed reader (medium, M)
+
+- **Evidence.** Ledger (9,552 reader rows with TTFT): p50 1,053 ms, TTFT 547, decode 486 ms (46%), output p50 123
+  tokens. The push delivers every flagged item of a push kind (`partner.ts:1318-1321`), so it can settle only after
+  all binding entries: about 61% of entries on the labels-train histogram, an estimated p50 939 ms (1.12x) and p90
+  1,207 ms (1.25x). Aborting at settle would cache a partial reading that a later ask, which needs every rejection
+  (D96, D114), cannot reuse, so the claimed cost cut does not hold.
+- **Fix.** D147: not built.
+- **Status.** Decided (D147).
+
+### B10. `devloop-ingest-bench-size`: ingest.bench takes 73-84 s (low, S)
+
+- **Evidence.** Defaults 200 users x 500 items (`ingest.bench.ts:38-39`), modes in series (`:221-227`). Verifier
+  runs: 73.0 s at 200 x 500 vs 14.7 s at 40 x 500; memory at 40 users runs about 5% high (core 2,734 vs 2,595
+  B/item), so the two sizes are not comparable for memory.
+- **Fix.** Keep 200 x 500 as the default (every recorded figure uses it); add an opt-in `--quick` that prints its size
+  and that it is not comparable with 200 x 500 memory figures. No parallel mode children (they would contend the
+  per-mode timings the stage subtraction relies on).
+- **Status.** Packaged (S5).
+
+### B11. `devloop-bun-unref-timer-spin`: a test spins a core on Bun 1.4.4's unref'd timer wait (low, S)
+
+- **Evidence.** Bun 1.4.4: an unref'd `setTimeout(1500)` used 1,495 ms of CPU over 1,502 ms of wall time; with a ref'd
+  interval alive, 4.5 ms. `ask-deadline.test.ts`: 7.795 s real and 7.757 s user; with a keep-alive preload 7.752 s
+  real and 0.325 s user.
+- **Fix.** A ref'd keep-alive interval in `scripts/test-preload.ts`, cleared in its `afterAll`. Do not cut TIMEOUT to
+  300 ms with a `+250` bound: that leaves 50 ms between one deadline and two, which weakens the D140 test. A
+  proportional bound (`TIMEOUT * 1.5` at TIMEOUT 500) only if 20 runs under load pass; otherwise keep 1,500.
+- **Status.** Packaged (S5).
+
+### B12. `painpoint-source-notify-ambiguous-results`: notices give no reason when they are ignored (low, S)
+
+- **Evidence.** `http.ts:140-145` answers 200 `{ok: true, synced: false}` for a typo'd source, an unknown user, push
+  off and a non-notifying source alike (`partner.ts:1743-1748`, `sync.ts:262-268`). The client doc at
+  `client.ts:276-277` says `sourceRemoved` returns "how many were held"; it returns cached items dropped
+  (`cache.ts:783-790`). An unreachable server already reaches `onError` (`client.ts:184`).
+- **Fix.** A `reason` field computable without I/O: `push-off`, `not-synced` (covers an unknown source, an unknown
+  user and a source not yet warm) or `not-notifying`; status stays 200. The client exposes it without changing return
+  types (`sourceChanged` stays `Promise<boolean>`); the `sourceRemoved` doc is corrected. No `unknown-source` reason:
+  telling it apart needs `deps.sources`, which is async I/O on the notice path.
+- **Status.** Packaged (S3, which owns `partner.ts`).
+
+### B13. `corr-example-default-prompt-empty`: the example's default prompt finds nothing (low, S)
+
+- **Evidence.** `examples/personal-agent/agent.ts:75` defaults to "What's on my plate this week?"; both verifiers got
+  "Nothing in the connected sources." Adding `meta.start` dates did not change that prompt's answer ("plate" matches
+  neither `ASKS_SCHEDULE` nor `TIME_WORD`, `partner.ts:428,435`). "When is the dentist?" and the Priya prompt cite
+  calendar items.
+- **Fix.** The default prompt becomes the documented Priya command (`agent.ts:7`), plus a no-argument test that
+  expects `[calendar]`.
+- **Status.** Packaged (S6).
+
+### B14. `painpoint-sources-file-unvalidated`: a bad `EDEN_SOURCES_FILE` starts silently (low, S)
+
+- **Evidence.** `connectors.ts:24-35` checks only `Array.isArray(s.docs)`. The ids "bad id!", a missing id, duplicate
+  ids and a numeric ref all loaded; a missing `docs` threw with a stack; `{}` threw a bare `TypeError`
+  (`file.sources.forEach`). `http.ts:134` then rejects such ids. `user-sources.ts:418-436` (`checkSpecs`)
+  already validates the per-user file.
+- **Fix.** Reuse `checkSpecs` (kind "static") after checking `file.sources` is an array; catch `SourceConfigError` and
+  `SyntaxError` in `main.ts` and `mcp-stdio.ts`, print one line without a stack and exit 2; log the source count. Keep
+  the D108 hint that `user-sources.test.ts:347-349` expects. One validator, not a second zod schema that could drift.
+- **Status.** Packaged (S7).
+
+### B15. `devloop-eval-undeclared-server-dep`: eval imports server by relative path; `test:changed` skips it (low, S)
+
+- **Evidence.** `packages/eval/src/cli.ts:17`, `run.ts:21` and `run.test.ts:6` import `../../server/src/*`;
+  `packages/eval/package.json` lacks `@eden/server`; `touchedPackages(['packages/server/src/models.ts'])` returned
+  [server, sim]. The sim `graph-memory.ts:19` import is cosmetic (sim already declares `@eden/engine`).
+- **Fix.** Add `"@eden/server": "workspace:*"` to eval; export `modelRolesFromEnv`, `MakeRoleModel`,
+  `DEFAULT_ROLE_MODEL` and `readerFailureLog` from `packages/server/src/index.ts`; switch the imports; add a
+  test-select test. Optionally export `extract` and `UserGraph` from engine for graph-memory.
+- **Status.** Packaged (S2, which also edits `bun.lock` and sim's package.json).
+
+### B16. `correctness-searchlive-deadline-skips-held-page`: a slow poll hides pages the fan-out holds (low, S)
+
+- **Evidence.** `partner.ts:2809-2814` turns every chosen source into a synthetic timeout when `left()` is under 50 ms
+  (`MIN_SEARCH_MS`, `:5077`) without asking the fan-out, whose `one()` would answer a fresh page as "cached" or a
+  stale one as a fallback (`guarded.ts:635-639`). Reproduced: with a hanging notes poll, the second ask reported mail
+  as "timeout" and said "Could not reach mail (timed out)". The gate came in with cf38efb09 (#226).
+- **Impact.** A false "could not reach" notice and a wrong per-source status; the items survived in the repro through
+  the ItemCache. Frequency unmeasured.
+- **Fix.** A cache-only peek on the fan-out that shares `one()`'s cache-key helper and honours `isStale`, forget and
+  drop marks, with no rate token, slot or breaker charge; a stale page carries `error: "timeout"`. The synthetic
+  timeout only when nothing is held.
+- **Status.** Packaged (S3).
+
+### B17. `lat-learned-local-reader-moonshot`: a local distilled reader (low, L)
+
+- **Evidence.** D110: boosted trees reached pair AUC 0.864 but planted vs decoy 0.544. Haiku itself flagged 105/192
+  decoys until the prompt made it write `why` first (haiku-opt.md:69-72); a one-pass cross-encoder does no such
+  reasoning. `labels-train.jsonl` has 1,416 rows. The finding's 1.77 s Eden path figure was not reproduced.
+- **Fix.** D147: not built.
+- **Status.** Decided (D147).
+
+## Second pass: round 1
+
+- 17 verified findings, each checked by two verifiers: 1 high, 8 medium, 8 low (the severities verification left).
+  Verifiers lowered several from their first rating (for example `devloop-ingest-bench-size` from high) and corrected
+  five fixes: B10 keeps the full default, B11 keeps a wide bound, B12 drops `unknown-source`, B13 changes the prompt
+  rather than the dates, B14 reuses `checkSpecs`.
+- Judgement calls made here (the owner delegated them), each with its evidence in `docs/DECISIONS.md`:
+  - **D144**: reader reasoning defaults to "off", the measured configuration. Thinking at low measured 2.8-3.3x slower
+    at p50, 1.5-1.6x dearer, and neutral on quality (haiku-opt.md v3).
+  - **D145**: `anthropicCache` becomes a trial (owner: repo owner, ends 2026-12-03); COST-MODEL figures are labelled.
+  - **D146**: a batch or cheaper endpoint for cards and intent is rejected for now.
+  - **D147**: a streaming reader with early settle and a local distilled reader are not built.
+  - Smaller calls, recorded in the findings: B4 commits the cache gzipped (precedent `intent-v2.jsonl.gz`); B10, B11,
+    B12, B13 and B14 as above.
+- Paid budget for the packages: S1's re-time about $0.06 (estimate: about $0.0005 a call x 120 calls) and S2's proof
+  run about $0.001. Nothing else in round 1 needs paid calls.
+
+## Second pass: work packages (round 1)
+
+No two packages share a file. Each starts from `audit/2026-11-05-integration` (detached), commits on its own branch
+`audit/2026-11-05-s<n>-<id>`, does not edit `docs/DECISIONS.md` (rows D144-D147 are written; a further row goes in
+the commit message as a proposal) and ends with `bun run check` green. A package that changes engine behaviour also
+pastes `bun run eval` JSON before and after. Paid calls go only through the lab provider on `claude-haiku-5-5`, with
+`--spend-ledger .local/mkt/ledger.jsonl --spend-cap 17 --spend-headroom 0.3`. A bench owned by another package may be
+run but not edited; a package that finds it must edit a file another package owns stops and reports instead.
+
+| Package | Findings | Files |
+| --- | --- | --- |
+| S1 `reader-reasoning-off` | B1, B3 (doc labels), B8 | packages/engine/src/reader.ts, packages/engine/src/reader.test.ts, packages/engine/CLAUDE.md, packages/sim/src/lab/reader-time.ts (new), docs/COST-MODEL.md |
+| S2 `eval-live-anthropic` | B2, B15 | packages/sim/src/lab/eval-live.ts (new), packages/sim/package.json, packages/eval/package.json, bun.lock, packages/eval/src/cli.ts, packages/eval/src/run.ts, packages/eval/src/run.test.ts, packages/server/src/index.ts, packages/engine/src/index.ts, packages/sim/src/lab/graph-memory.ts, scripts/test-select.test.ts, packages/sim/src/lab/CLAUDE.md, CLAUDE.md |
+| S3 `notify-held-pages` | B6, B12, B16 | packages/engine/src/partner.ts, packages/sources/src/guarded.ts, packages/server/src/http.ts, packages/client/src/client.ts, packages/protocol/src/types.ts, packages/engine/src/freshness-push.test.ts, packages/engine/src/ask-deadline-held.test.ts (new), packages/server/src/http.test.ts, packages/client/src/client.test.ts, packages/sources/src/regressions.test.ts |
+| S4 `sketcher-lazy-arrays` | B5 | packages/primitives/src/dedup.ts, packages/primitives/src/dedup.test.ts, packages/primitives/README.md |
+| S5 `devloop-timers-bench` | B10, B11 | scripts/test-preload.ts, packages/engine/src/ask-deadline.test.ts, packages/engine/bench/ingest.bench.ts, docs/TESTING.md |
+| S6 `example-default-prompt` | B13 | examples/personal-agent/agent.ts, examples/personal-agent/agent.test.ts |
+| S7 `sources-file-validation` | B14 | packages/server/src/connectors.ts, packages/server/src/main.ts, packages/server/src/mcp-stdio.ts, packages/server/src/user-sources.ts, packages/server/src/connectors.test.ts (new) |
+| S8 `reader-replay-cache` | B4 | packages/sim/lab/distilled/reader-haiku-train-4142.jsonl.gz (new), packages/sim/src/lab/funnel.ts, packages/sim/src/lab/hidden-funnel.ts, packages/sim/src/lab/funnel-flags.test.ts, docs/LAB.md |
+
+### S1 `reader-reasoning-off` (B1, B3 doc labels, B8)
+
+- **Plan.**
+  1. `ModelReaderMaker` defaults `reasoning` to "off" (D144). Rewrite the `reader.ts:472-475` comment: D96's decoy cut
+     came from the prompt's `why` first; cite D144. Keep the option so a caller can still pass "low".
+  2. A unit test with a fake `Model`: the default request has no `reasoning` field, and "low" still sends one.
+  3. `packages/sim/src/lab/reader-time.ts`: times `ModelReaderMaker` over `labModel` on `claude-haiku-5-5` at the
+     default pool (`askReaderPool` 15, `askReaderItemChars` 240) built from real train pools, interleaving an "off"
+     arm and an adaptive-low arm (`anthropic.thinking`), 60 calls per arm, spend-metered with a `--run-label`. It
+     reports p50/p90, the share of calls that thought (by output tokens), the share over `askReaderWaitMs`, and $ per
+     call.
+  4. COST-MODEL.md: S1's figures and the `pp-reader-time` figures, labelled "Anthropic-direct"; every reader and card
+     cost figure labelled "lab provider, cached" (D145); a line saying the OpenRouter path is unmeasured.
+  5. engine CLAUDE.md: the new default and D144.
+- **Acceptance.**
+  - `bun test packages/engine/src/reader.test.ts` passes, including the new default-request test.
+  - `grep -n 'reasoning ?? "off"' packages/engine/src/reader.ts` matches; `grep -n 'reasoning ?? "low"'
+    packages/engine/src/reader.ts` prints nothing.
+  - `bun run eval` JSON identical before and after (the no-model eval has no reader).
+  - The reader-time run adds about 120 rows under its label to `.local/mkt/ledger.jsonl`, summing under $0.10;
+    COST-MODEL.md shows its p50/p90 per arm and the command that produced them.
+  - `bun run check` green.
+
+### S2 `eval-live-anthropic` (B2, B15)
+
+- **Plan.**
+  1. Add `"@eden/server": "workspace:*"` to `packages/eval/package.json` and `"@eden/eval": "workspace:*"` to
+     `packages/sim/package.json`; run `bun install`.
+  2. Export `modelRolesFromEnv`, `MakeRoleModel`, `DEFAULT_ROLE_MODEL` and `readerFailureLog` from
+     `packages/server/src/index.ts`; switch eval's three relative imports to `@eden/server`. Optionally export
+     `extract` and `UserGraph` from `@eden/engine` and switch `graph-memory.ts`.
+  3. A `scripts/test-select.test.ts` case: `touchedPackages(['packages/server/src/models.ts'])` includes
+     `packages/eval`.
+  4. `packages/sim/src/lab/eval-live.ts`: `labAccess(argv, ['claude-haiku-5-5'])`, then `runScenarios` with
+     `liveWiring({judge: false, usdCap, env: {...process.env, OPENROUTER_API_KEY: "lab-placeholder"}, make: o =>
+     labModel(access, {...o, model: "claude-haiku-5-5"}, "eden.reader")})`. The real OpenRouter key is never passed;
+     the output JSON carries `provider: "anthropic-direct (lab, D97)"`. An optional `--reasoning low` arm passes
+     adaptive `anthropic.thinking`.
+  5. Document it in `packages/sim/src/lab/CLAUDE.md`, and one line in root CLAUDE.md's "CI is local" section: the
+     Anthropic route for the live gate when OpenRouter is unavailable, labelled as not the shipped transport.
+- **Acceptance.**
+  - `bun test scripts/test-select.test.ts` passes with the new case (eval selected for a server change).
+  - `grep -rn "\.\./\.\./server/src" packages/eval/src` prints nothing.
+  - `bun packages/sim/src/lab/eval-live.ts --spend-ledger .local/mkt/ledger.jsonl --spend-cap 17 --spend-headroom 0.3
+    --run-label s2-eval-live` prints JSON with `readerPool.reader` "live", 0 reader failures and spend under the cap,
+    and the ledger gains `eden.reader` rows under that label (about $0.001).
+  - `bun run check` green.
+
+### S3 `notify-held-pages` (B6, B12, B16)
+
+- **Plan.**
+  1. B6: in `sourceChanged`, call `fanout.dropResults(user, source)` on every notice while `syncPush` is on, whatever
+     `sync.changed()` returns; in `sourceItems`, whenever the notice carries items. Keep the boolean result.
+  2. B12: add `reason?: "push-off" | "not-synced" | "not-notifying"` to the `/v1/sources/changed` response when
+     nothing was synced, computed without I/O (protocol type, http route). The client exposes it (for example a
+     `sourceChangedDetail` method) without changing `sourceChanged`'s `Promise<boolean>`; the `sourceRemoved` doc
+     says "cached items dropped".
+  3. B16: a `peek` on the fan-out (`guarded.ts`) built on a key helper shared with `one()`: a fresh page gives
+     "cached", a stale one gives "stale" with `error: "timeout"`, honouring `isStale`, forget and drop marks, with no
+     rate token, slot or breaker. `partner.ts:2809-2814` uses it and synthesises a timeout only when nothing is held.
+- **Acceptance.**
+  - A new `freshness-push.test.ts` case (`CORE_CONFIG` plus `sync` and `syncPush`): a search-only notifying source
+    changes, `sourceChanged` is called, and the next ask makes a new search and answers the new text.
+  - New `ask-deadline-held.test.ts`: a poll hangs to the deadline while another source's page is held from an earlier
+    ask; the held source is reported "cached" (or "stale") and the answer has no "Could not reach" for it.
+  - `http.test.ts` covers each `reason`; `client.test.ts` covers the exposed reason and the unchanged boolean.
+  - A `sources` regression test: `peek` spends no rate token (the limiter's count is unchanged) and respects a drop.
+  - `bun run eval` JSON before and after (expected identical); `bun run check` green; the `reviewer` subagent run on
+    the diff (engine and server change) and its correctness findings fixed.
+
+### S4 `sketcher-lazy-arrays` (B5)
+
+- **Plan.** Start the five `TextSketcher` arrays at 64 and let `growTerms` and the pool grow them; lower
+  `compactPool`'s floor to 64. Tests that index past 64 and past 1,024 terms and pool entries and get the same
+  sketches as an instance started at 1,024.
+- **Acceptance.**
+  - `bun test packages/primitives/src/dedup.test.ts` and `bun run test:pkg engine` pass.
+  - Before/after numbers from `bun packages/primitives/bench/dedup.bench.ts`,
+    `bun packages/primitives/bench/sketch.bench.ts` and `bun packages/engine/bench/ingest.bench.ts` (run, not edited)
+    in the commit message and the primitives README, plus a heapStats B/user figure for a one-item user (expected
+    about 29.5 KB before, about 13-14 KB after).
+  - `bun run eval` JSON identical; `bun run check` green.
+
+### S5 `devloop-timers-bench` (B10, B11)
+
+- **Plan.**
+  1. `scripts/test-preload.ts`: a ref'd `setInterval` keep-alive cleared in the existing `afterAll`, with a comment
+     naming the Bun 1.4.4 unref'd-timer spin.
+  2. `ask-deadline.test.ts`: only if 20 runs under load (alongside `bun run test`) pass, set TIMEOUT 500 with bounds
+     `TIMEOUT * 1.5`; otherwise leave TIMEOUT and the bounds as they are and say so. Never narrow the gap between one
+     deadline and two below 250 ms.
+  3. `ingest.bench.ts`: an opt-in `--quick` (40 x 500) that prints its size and a not-comparable note; the default is
+     unchanged.
+  4. TESTING.md: the ask-deadline timing before and after (real and user), and full vs quick bench wall times.
+- **Acceptance.**
+  - `time bun test packages/engine/src/ask-deadline.test.ts` shows user time under 1 s (was 7.7 s).
+  - `bun packages/engine/bench/ingest.bench.ts` with no flags prints the same 200 x 500 header as before; `--quick`
+    finishes in under 20 s and prints its note.
+  - `bun run check` green twice.
+
+### S6 `example-default-prompt` (B13)
+
+- **Plan.** The default prompt becomes "move lunch with Priya Raman to Friday" (the documented command at
+  `agent.ts:7`), plus a test that runs the agent with no argument and expects `[calendar]`.
+- **Acceptance.** `bun test examples/personal-agent/agent.test.ts` passes with the new no-argument case; running the
+  agent with no argument against the dev server prints a `[calendar]` citation; `bun run check` green.
+
+### S7 `sources-file-validation` (B14)
+
+- **Plan.** `staticSources` checks that the file is an object with a `sources` array, then calls `checkSpecs`
+  (exported from `user-sources.ts` if needed) with kind "static" and the label `EDEN_SOURCES_FILE.sources`;
+  `main.ts` and `mcp-stdio.ts` catch `SourceConfigError` and `SyntaxError`, print one line without a stack and exit
+  2; the server logs how many sources it loaded.
+- **Acceptance.** A new `connectors.test.ts` with `{}`, a bad id, a missing id, a duplicate id, a non-string ref and a
+  missing `docs`, each rejected with a message naming the entry; `user-sources.test.ts` passes unchanged;
+  `EDEN_SOURCES_FILE=<bad file> EDEN_DEV=1 bun packages/server/src/main.ts` exits 2 with no stack trace;
+  `bun run check` green.
+
+### S8 `reader-replay-cache` (B4)
+
+- **Plan.**
+  1. `gzip -c /home/user/Eden/.local/mkt/reader-train-4142.jsonl >
+     packages/sim/lab/distilled/reader-haiku-train-4142.jsonl.gz` (md5 of the plain file
+     9a492c00cf9724306e3e4743e2882982). If `--reader-cache` cannot read `.gz`, teach it to (as the lab reads
+     `intent-v2.jsonl.gz`) or document a `gunzip -c` step into `.local/`.
+  2. A LAB.md recipe: the command with `--reader replay --reader-model claude-haiku-5-5 --allow-misses`; what it
+     covers (default ALL3, train1-6, seeds 41-42, recorded by the D141 paid run); the expected hidden 247/384 and
+     decoys 127/384; when it goes stale (any change upstream of the reader's input, a `READER_VERSION` bump).
+  3. The funnel prints a hint naming `--reader-model` when every reader prompt missed and `--reader-model` was not
+     given; a `funnel-flags.test.ts` case.
+- **Acceptance.** The LAB.md command reproduces hidden 247/384 and decoys 127/384 at $0 (no ledger rows added);
+  `bun test packages/sim/src/lab/funnel-flags.test.ts` passes with the hint case; `bun run check` green.
+
+## Second pass: deferred
+
+| Item | Why | Next step |
+| --- | --- | --- |
+| How OpenRouter maps `reasoning: {effort: "low"}` for `anthropic/claude-haiku-5.5` (B1, B8) | Needs a paid OpenRouter call; this run allows Anthropic only. Moot for the reader once S1 ships "off", but the judge still sends "low" (`partner.ts:4365`) | One OpenRouter call with a served key: check for HTTP 400 or reasoning tokens |
+| Turning `anthropicCache` on (B3) | Needs an OpenRouter probe (cached tokens above 0 on a second call, at realistic per-user spacing); outside this run's budget | The D145 trial's deciding probe, by 2026-12-03 |
+| The shipped path's cost and latency on OpenRouter (B8) | Same OpenRouter restriction | Re-run S1's `reader-time.ts` through OpenRouter once a served key exists |
+
 ## Final summary of the whole run (for the owner)
 
 This section closes the run. It covers two audit rounds and two final clean-up steps. Every number comes from a
