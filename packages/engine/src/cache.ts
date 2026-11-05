@@ -318,26 +318,42 @@ export function sanitizeItem(raw: ContextItem, maxTextChars = DEFAULT_CACHE_LIMI
 const MAX_HOLDS_PER_USER = 1_000;
 
 /**
- * Gone-holds kept per tenant at most, across its users: past it, the oldest hold of the user held least recently goes.
- * A hold is an id and a number (a few hundred bytes with its user's map; the 10,000-removal test in cache.test.ts
- * measures it), so a tenant's holds stay within a few MB however many users a deletion feed names. They are not in the
- * users' caches: a hold for a user Eden has never seen (a lookup may still be in flight) must not allocate a user's
- * cache nor count against `maxUsersPerTenant`.
+ * Gone-holds kept per tenant at most, across its users. A hold must last its `holdMs` (`GONE_HOLD_MS`, 10 minutes) to
+ * close D126's store-back race, so the cap is sized for a deletion-heavy tenant: 100,000 holds over 10 minutes is ~167
+ * deletions a second (the earlier 20,000 dropped holds after ~4 minutes above ~33 a second). Past it, expired holds go
+ * first, tenant-wide; only then live ones, the oldest of the user held least recently, each counted (`holdsEvicted`).
+ * A hold is an id and a number (a few hundred bytes with its user's map; cache.test.ts measures it, ≤600 B), so a
+ * tenant's holds stay within tens of MB however many users a deletion feed names. They are not in the users' caches: a
+ * hold for a user Eden has never seen (a lookup may still be in flight) must not allocate a user's cache nor count
+ * against `maxUsersPerTenant`.
  */
-const MAX_HOLDS_PER_TENANT = 20_000;
+const MAX_HOLDS_PER_TENANT = 100_000;
+
+/**
+ * Over the tenant cap, a tenant-wide sweep of expired holds runs at most this often: each sweep visits every user
+ * holding something, so a tenant at the cap under steady deletion pays one walk a second, not one per removal.
+ */
+const HOLD_SWEEP_EVERY_MS = 1_000;
 
 /**
  * One tenant's gone-holds: per user, id → until when (ms), each user's oldest first, and the users least recently held
  * first. Bounded per user (`MAX_HOLDS_PER_USER`) and per tenant (`MAX_HOLDS_PER_TENANT`); every operation is O(1) per
- * id but `trim`, which stops at each user's first live hold.
+ * id but `trim`, which stops at each user's first live hold, and the tenant-wide sweep over the cap (at most once per
+ * `HOLD_SWEEP_EVERY_MS`, and only once some hold may have expired).
  */
 class TenantHolds {
   private readonly users = new Map<string, Map<string, number>>();
   /** Holds across the tenant's users. */
   size = 0;
+  /** Live holds dropped before their end by a cap (per user or per tenant), since the tenant's holds began. */
+  evicted = 0;
+  /** No hold ends before this (a lower bound: the earliest end seen since the last sweep). */
+  private nextEnd = 0;
+  /** When the last tenant-wide sweep ran. */
+  private sweptAt = Number.NEGATIVE_INFINITY;
 
   /** Holds `id` for the user until `until`, replacing an earlier hold of it. */
-  hold(userId: string, id: string, until: number): void {
+  hold(userId: string, id: string, until: number, now: number): void {
     let held = this.users.get(userId);
     if (held)
       this.users.delete(userId); // Re-insert: the user is now the most recently held.
@@ -346,10 +362,17 @@ class TenantHolds {
     if (held.delete(id)) this.size--; // Re-insert: the user's holds stay oldest first.
     held.set(id, until);
     this.size++;
-    if (held.size > MAX_HOLDS_PER_USER) this.drop(userId, held, held.keys().next().value as string);
+    if (until < this.nextEnd) this.nextEnd = until;
+    if (held.size > MAX_HOLDS_PER_USER) this.evict(userId, held, now);
+    if (this.size <= MAX_HOLDS_PER_TENANT) return;
+    // Expired holds go before any live one (a clock that went back sweeps too, rather than waiting a second for it).
+    if (now >= this.nextEnd && (now - this.sweptAt >= HOLD_SWEEP_EVERY_MS || now < this.sweptAt)) {
+      this.sweptAt = now;
+      this.trim(now);
+    }
     while (this.size > MAX_HOLDS_PER_TENANT) {
       const [oldest, theirs] = this.users.entries().next().value as [string, Map<string, number>];
-      this.drop(oldest, theirs, theirs.keys().next().value as string);
+      this.evict(oldest, theirs, now);
     }
   }
 
@@ -377,14 +400,23 @@ class TenantHolds {
     this.users.delete(userId);
   }
 
-  /** Drops expired holds: from the front of one user's (with `userId`), or of every user's. */
+  /**
+   * Drops expired holds: from the front of one user's (with `userId`), or of every user's. A tenant-wide trim also
+   * learns the earliest end left (each user's front), so the cap's sweep skips walks that would find nothing.
+   */
   trim(now: number, userId?: string): void {
     if (userId !== undefined) {
       const held = this.users.get(userId);
       if (held) this.trimUser(userId, held, now);
       return;
     }
-    for (const [user, held] of this.users) this.trimUser(user, held, now);
+    let nextEnd = Number.POSITIVE_INFINITY;
+    for (const [user, held] of this.users) {
+      this.trimUser(user, held, now);
+      const front = held.values().next().value;
+      if (front !== undefined && front < nextEnd) nextEnd = front;
+    }
+    this.nextEnd = nextEnd;
   }
 
   private trimUser(userId: string, held: Map<string, number>, now: number): void {
@@ -392,6 +424,13 @@ class TenantHolds {
       if (now < until) break;
       this.drop(userId, held, id);
     }
+  }
+
+  /** Drops the user's oldest hold for a cap, counted as early when it was still live. */
+  private evict(userId: string, held: Map<string, number>, now: number): void {
+    const [id, until] = held.entries().next().value as [string, number];
+    if (now < until) this.evicted++;
+    this.drop(userId, held, id);
   }
 
   private drop(userId: string, held: Map<string, number>, id: string): void {
@@ -418,9 +457,12 @@ export class ItemCache {
   private readonly perTenant = new Map<string, number>();
   /**
    * Gone-holds per tenant (`removeItems` with a hold; `TenantHolds`), bounded per user and per tenant. Apart from the
-   * users' caches, so holding an id never allocates one or evicts a user.
+   * users' caches, so holding an id never allocates one or evicts a user. A tenant's entry goes when it holds nothing,
+   * unless a cap dropped a live hold of its: then it stays (empty, a few hundred bytes) to keep its count.
    */
   private readonly holds = new Map<string, TenantHolds>();
+  /** Live gone-holds dropped before their end by a cap, every tenant's (`holdsEvicted`). */
+  private holdsEvictedTotal = 0;
   private readonly limits: CacheLimits;
   /** Whether each user's items are also put in a knowledge graph (`enableGraph`). */
   private graphs = false;
@@ -754,15 +796,17 @@ export class ItemCache {
       if (held === undefined) this.holds.set(scope.tenantId, (held = new TenantHolds()));
       else held.trim(now, scope.userId);
     }
+    const evicted = held?.evicted ?? 0;
     const u = this.peek(scope);
     let n = 0;
     for (const id of ids) {
-      held?.hold(scope.userId, id, now + holdMs);
+      held?.hold(scope.userId, id, now + holdMs, now);
       const e = u?.items.get(id);
       if (!e) continue;
       this.drop(u!, e);
       n++;
     }
+    if (held) this.holdsEvictedTotal += held.evicted - evicted;
     return n;
   }
 
@@ -779,6 +823,16 @@ export class ItemCache {
   /** Gone-holds kept for the tenant (`removeItems`), expired ones not yet swept included: for tests and bounds. */
   holdCount(tenantId: string): number {
     return this.holds.get(tenantId)?.size ?? 0;
+  }
+
+  /**
+   * Gone-holds a cap dropped while still live (before their `holdMs` ended): the tenant's, or every tenant's without
+   * one. Non-zero means deletions outran `MAX_HOLDS_PER_TENANT` (or one user's outran `MAX_HOLDS_PER_USER`), so a read
+   * from before a deletion could store its item back (D126's race). Partner reports it as `freshness.holdsEvicted`.
+   */
+  holdsEvicted(tenantId?: string): number {
+    if (tenantId === undefined) return this.holdsEvictedTotal;
+    return this.holds.get(tenantId)?.evicted ?? 0;
   }
 
   /** Synced items the user's cache holds (D57). */
@@ -1114,7 +1168,7 @@ export class ItemCache {
     // Expired gone-holds go too, and a tenant left with none: holds outlive no one's interest in them.
     for (const [tenant, held] of this.holds) {
       held.trim(now);
-      if (held.size === 0) this.holds.delete(tenant);
+      if (held.size === 0 && held.evicted === 0) this.holds.delete(tenant);
     }
     // Deleting the entry being visited is safe in a Map walk: no copy of 10k+ users per tick.
     for (const [key, u] of this.users) {
@@ -1178,7 +1232,7 @@ export class ItemCache {
       const held = this.holds.get(scope.tenantId);
       if (held) {
         held.forget(scope.userId);
-        if (held.size === 0) this.holds.delete(scope.tenantId);
+        if (held.size === 0 && held.evicted === 0) this.holds.delete(scope.tenantId);
       }
       return;
     }

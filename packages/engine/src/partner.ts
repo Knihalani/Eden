@@ -522,8 +522,11 @@ export class ContextPartner {
   private readonly recorded = new Map<string, Map<string, Map<string, Recorded>>>();
   private readonly now: () => number;
   private readonly fanout: SourceFanout;
-  /** `verifyDelivery`'s outcomes since start: items checked, confirmed, changed, gone, unverifiable, calls made. */
-  readonly freshness = { checked: 0, confirmed: 0, changed: 0, gone: 0, failed: 0, calls: 0 };
+  /**
+   * `verifyDelivery`'s outcomes since start: items checked, confirmed, changed, gone, unverifiable, calls made; and
+   * gone-holds the cache's caps dropped while still live (`ItemCache.holdsEvicted`), which reopen D126's race.
+   */
+  readonly freshness = { checked: 0, confirmed: 0, changed: 0, gone: 0, failed: 0, calls: 0, holdsEvicted: 0 };
   /** The secret gate every item passes before it is held (D10): the fanout's, and `sourceItems`'. */
   private readonly redact: (items: ContextItem[]) => ContextItem[] | Promise<ContextItem[]>;
   /** What each user's probes bring back (`probeFresh`, `probeYield`). */
@@ -3578,7 +3581,10 @@ export class ContextPartner {
   private dropGone(scope: Scope, sourceId: string, ids: string[]): number {
     this.sync?.removed(scope, sourceId, ids);
     this.fanout.dropResults(scope, sourceId);
-    return this.deps.cache.removeItems(scope, ids, this.now(), GONE_HOLD_MS);
+    const evicted = this.deps.cache.holdsEvicted(scope.tenantId);
+    const n = this.deps.cache.removeItems(scope, ids, this.now(), GONE_HOLD_MS);
+    this.freshness.holdsEvicted += this.deps.cache.holdsEvicted(scope.tenantId) - evicted;
+    return n;
   }
 
   /**
