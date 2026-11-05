@@ -146,43 +146,54 @@ at once. A notice carries no content (Eden reads the change itself, D7), and not
 nothing. The busiest source sets the call count: chat at 150 messages a day. Slack's Events API carries the message
 itself, which would remove those calls, but that puts tenant-relayed content into the index; not done.
 
-### Big pages for backfill and sweeps (D142, 2026-11-05)
+### Big pages for backfill and sweeps (D142, rejected by D143)
 
 Backfill and the daily sweep re-list a source whole, so their call count is the listing's length over the page size.
-At `syncPageSize` 100 they were about a quarter of all listing calls. `syncBigPageSize` (0, off, in the default: see
-below; 500 measured here) asks min(500, `Source.listPageMax`) a page of a source that declares a max (an MCP list
-tool's schema `maximum`, an operator's setting; the sim's sources declare 500), falls back to 100 for good on a failed
-big page, and leaves polls alone. `bun packages/sim/src/lab/sync-econ.ts --days 6 --seed N --big-pages {0,500}` (one user, five sources, 30
-lookups a day; the default except the one setting):
+At `syncPageSize` 100 they were about a quarter of all listing calls. D142 tried `syncBigPageSize`: min(500,
+`Source.listPageMax`) a page for a source that declared a max (an MCP list tool's schema `maximum`, an operator's
+setting; the sim's sources declared 500), 100 for good after a failed big page, polls unchanged. It shipped off as a
+trial, and D143 deleted it with its code and tests. The commands below ran on `audit/2026-11-05-integration` at
+cf59967f1, before the deletion; `--big-pages` and `syncBigPageSize` no longer exist.
+
+`bun packages/sim/src/lab/sync-econ.ts --days 6 --seed N --big-pages {0,500}` (one user, five sources, 30 lookups a
+day; the default except the one setting):
 
 | Seed | `syncBigPageSize` | Backfill calls | Background / user-day | All calls / user-day | In lookups / user-day | Fresh at lookup | Deleted still held | Delay p50 / p90 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 0 (before) | 33 | 33.8 | 126.8 | 93.0 | 0.999 | 0.4492 | 12.2 / 39.7 min |
-| 1 | **500** | **9** | **9.2** | **103.0** | 93.8 | 0.999 | 0.4453 | 12.6 / 40.9 min |
-| 2 | 0 (before) | 33 | 33.7 | 126.8 | 93.2 | 0.9979 | 0.5411 | 13.2 / 50.3 min |
-| 2 | **500** | **9** | **9.2** | **102.2** | 93.0 | 0.9979 | 0.5318 | 13.4 / 50.8 min |
+| 1 | 0 (default) | 33 | 33.8 | 126.8 | 93.0 | 0.999 | 0.4492 | 12.2 / 39.7 min |
+| 1 | 500 | 9 | 9.2 | 103.0 | 93.8 | 0.999 | 0.4453 | 12.6 / 40.9 min |
+| 2 | 0 (default) | 33 | 33.7 | 126.8 | 93.2 | 0.9979 | 0.5411 | 13.2 / 50.3 min |
+| 2 | 500 | 9 | 9.2 | 102.2 | 93.0 | 0.9979 | 0.5318 | 13.4 / 50.8 min |
 
-Background calls fall 3.7x, all listing calls 1.23x, at no paid cost and no freshness loss; calls inside lookups move
-by under 1% either way (the polls are unchanged; the sweep's timing shifts which lookups find a source stale).
+Background calls fell 3.7x and all listing calls 1.23x at no freshness loss. Listing calls carry no paid model cost.
 
-The other $0 screens, `--set '{"syncBigPageSize":500}'` vs the default (0): `bun run funnel --jobs 4` (train1–6, seeds 41–42) surfaced
-the same tasks (hidden 214/384, decoys 211/384, an empty task-by-task diff) with the sync's own calls down from 432
-backfill + 497 background to 168 + 170; the reader screen's pool moved from hidden 230/384, decoys 229/384 to 228/384,
-228/384, all from one template (train4 `unreleased-feature-promise`: hidden at seeds 41 and 42, control at seed 41,
-each in the pool at 0 and not at 500). Why is unproven (a different poll timing is a guess, not shown by a probe).
-**Not promoted:** the plan required the pool to stay at 230/229, so `syncBigPageSize` ships at 0 (code and tests stay,
-on by setting); promoting it needs a probe that shows the cause and a decision that accepts the pool move. On seeds
-43–44 both screens are identical on and off (hidden 208/384, decoys 209/384; pool 229/384, 228/384). `bun run eval`:
-identical except latency (precision 0.8276, recall 0.48, falseFireRate 0). Freshness sim (`quality-cli.ts --users 8
---sessions 20 --updates 0.6 --deletes 0.05 --push signals`): staleDelivered 1 → 1, deletedDelivered 0 → 0, deleted
-items cited 1 → 0, precision 0.588 → 0.586 (one more delivery, 337 → 338).
+Why it was deleted (D143):
 
-Why not just raise `syncPageSize` (audit finding 14): an offset-paged MCP list ended on a short page, so a server that
+- (a) $0 funnel, `bun run funnel --jobs 4` against `--set '{"syncBigPageSize":500}' --baseline F`: surfaced hidden
+  214/384 and decoys 211/384 both ways, an empty task-by-task diff; the reader-screen pool moved from 230/229 to
+  228/228 of 384, all from train4 `unreleased-feature-promise` (hidden at seeds 41 and 42, control at 41). Sync calls:
+  backfill 432 to 168, background 497 to 170.
+- (b) The probe D142 asked for (poll timing or lost items?) found neither. The planted item `slack:chat-1502` is in
+  the cache in both arms (the per-task `cached: true`, a `cache.get` after the task). In the off arm it reaches the
+  ask's candidates only at score 0 (no query term matched; rank 8 among filler, `--ask-diag`); with big pages other
+  score-0 items (gmail:notification-104/108) take its place. Reader prompts on train1 seed 41 (`-- --reader-log`, off
+  vs on): 23 of 54 differ, every one a reordering or swap of equal-score items (identical Monzo notices, "great demo
+  today" chats). The cause is the ask's tie order among equal-score candidates, which follows ingest order, which the
+  page size changes.
+- (c) Paid reader screen (Haiku 5.5 through the lab ledger, replaying D141's caches `rc.jsonl` and `rc2.jsonl`,
+  changed prompts sent live; $0.1875 booked under run labels `lc-bigpages-*`). Paired run 1: hidden 247 to 245,
+  decoys 127 to 136 (+3 -5 hidden, +10 -1 decoys). Paired run 2: hidden 247 to 245, decoys 132 to 132 (+4 -6, +6 -6).
+  `unreleased-feature-promise`'s hidden fact is lost at both seeds in both runs, a reproducible -2 hidden of 384; the
+  decoy moves do not reproduce (D141's same-default noise floor was +12 -7 decoys).
+
+So the switch is not neutral and cannot be promoted (D112), and its gate cannot pass while the ask's tie order depends
+on ingest order. A future attempt comes only with a measured, ingest-order-independent tie-break for equal-score ask
+candidates, then re-screens pool identity at $0 and with the paid reader.
+
+Why not just raise `syncPageSize` (audit finding 14): an offset-paged MCP list ends on a short page, so a server that
 silently caps at 100 would end every sweep after page 1, and two such sweeps drop every unlisted item as deleted; a
-server that rejects big limits would fail every sweep. So big pages go only to sources that say they are safe, an
-offset listing asked for more than 100 ends only on an empty page (`McpSource.listPage`), and a big page that fails is
-retried at 100 at once and never asked again for that user and source (`sync-big-pages.test.ts`,
-`mcp-list-max.test.ts`). The cost of a silent cap is one empty call per listing.
+server that rejects big limits would fail every sweep. Any future attempt must therefore ask big pages only of a
+source that declares a max, and must not end an offset listing asked past 100 on a short page.
 
 ### Push in the funnel
 
@@ -244,8 +255,6 @@ bun packages/sim/src/lab/cards-enrich.ts --dir DIR --funnel hidden,heldout,heldo
   --batch 20 --sort price --spend DIR/spend.jsonl --cap 0.28
 # Sync modes (no model):
 bun packages/sim/src/lab/sync-econ.ts --days 3
-# Big pages (D142): off (the default) and on:
-bun packages/sim/src/lab/sync-econ.ts --days 6 --seed 1 --big-pages 0     # and --big-pages 500; and --seed 2
 ```
 
 Card file: `econ-price20-v2.jsonl` (sha256 `a4200cbe…0668`), the price-routed re-card, kept for `ALL2`'s funnel and

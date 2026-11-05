@@ -10,14 +10,7 @@ import { z } from "zod";
 import { buildPartner } from "./build";
 import { sourcesFromEnv, staticSources } from "./connectors";
 import { createHandler } from "./http";
-import {
-  checkSpecs,
-  fileDirectory,
-  SourceConfigError,
-  UserSources,
-  type McpSpec,
-  type SourceDirectory,
-} from "./user-sources";
+import { fileDirectory, SourceConfigError, UserSources, type McpSpec, type SourceDirectory } from "./user-sources";
 
 const alice: Scope = { tenantId: "acme", userId: "alice" };
 const bob: Scope = { tenantId: "acme", userId: "bob" };
@@ -324,39 +317,6 @@ describe("UserSources: per-user sources and connections (D108)", () => {
       { kind: "static", id: "a", description: "", docs: [] },
     ]);
     expect((await twice.status(alice)).error).toMatch(/listed twice/);
-  });
-
-  test("listPageMax (D142): checked 1..1000 as a SourceConfigError, and reaches McpSource through the lease", async () => {
-    const spec = (listPageMax: unknown) => ({
-      kind: "mcp",
-      id: "mail",
-      description: "m",
-      url: "https://x.example",
-      searchTool: { name: "s" },
-      listTool: { name: "l" },
-      listPageMax,
-    });
-    for (const bad of [0, 1_001, 2.5, "500", -1, Number.NaN]) {
-      expect(() => checkSpecs([spec(bad)], "users[acme/alice]")).toThrow(SourceConfigError);
-      expect(() => checkSpecs([spec(bad)], "users[acme/alice]")).toThrow(/listPageMax must be a whole number/);
-      // From a directory: that user's config error (a 422 on /v1/sources), never a 5xx; no source is built.
-      const us = userSources(() => [spec(bad) as never]);
-      expect(await us.resolver(alice)).toEqual([]);
-      expect((await us.status(alice)).error).toMatch(/listPageMax/);
-    }
-    for (const ok of [1, 500, 1_000]) expect(checkSpecs([spec(ok)], "x")).toHaveLength(1);
-    // A valid value reaches the user's McpSource; the lease (the handle the engine holds) copies it, per user.
-    const mail = mailServer("alice");
-    const withList = (max?: number): McpSpec => ({
-      ...mcpSpec(mail.transport),
-      listTool: { name: "list_mail" },
-      ...(max === undefined ? {} : { listPageMax: max }),
-    });
-    const us = userSources((scope) => [withList(scope.userId === "alice" ? 500 : undefined)]);
-    const [a] = await us.resolver(alice);
-    const [b] = await us.resolver(bob);
-    expect(a!.listPageMax).toBe(500);
-    expect(b!.listPageMax).toBeUndefined();
   });
 
   test("read-only (D7) is untouched: a search tool not marked read-only is refused through the handle", async () => {

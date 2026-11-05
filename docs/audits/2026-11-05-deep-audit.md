@@ -865,7 +865,7 @@ item this run deferred or left to a decision, with its final status and where it
 
 | Item (finding id) | Final status | Recorded in | Next step |
 | --- | --- | --- | --- |
-| `sync-sweep-backfill-big-pages` (14) | Handed to its own package | Package `lc-sync-big-pages`; D142 proposed in its commit | That package's safe design (finding 14): a trial switch, big pages only for token-paged lists or a declared schema maximum, retry at 100 on error, offset lists end only on an empty page |
+| `sync-sweep-backfill-big-pages` (14) | Built behind a trial (D142), measured, deleted (D143): not neutral (reader-screen pool 230/229 to 228/228 at $0; a reproducible -2 hidden of 384 on the paid reader), from the ask's tie order among equal-score candidates following ingest order | D142, D143; docs/research/econ-background.md | Reopen only with a measured, ingest-order-independent tie-break for equal-score ask candidates (D143) |
 | `painpoint-prod-reader-unmeasured` (4), stage 1: paid timing of the shipped reader | Blocked externally. The $0 part (the reader's first failure logged once per process, `readerFailureLog` in packages/server/src/build.ts) shipped in round 1 | This file, finding 4 and "Deferred" | This environment's OpenRouter key gets 403 "violation of provider Terms Of Service" for Anthropic models, and the lab `SpendLedger` meters only `claude-*` ids. The owner supplies a key OpenRouter serves for `anthropic/claude-haiku-5.5`; then a ledger entry type for OpenRouter ids before any reader timing run |
 | `eval-live-measures-unshipped` (3): the paid `--live` run | Wiring fixed (D128); the paid run is blocked externally (same key block) | D128 | With a served key: `bun run eval --live --usd-cap 0.05` (D128) |
 | `quality-reader-veto-rule-path` (16): the by-name veto screen | Broad veto rejected (D130); the by-name screen is blocked externally (same key block) | D130 | Run after the live reader eval above, as D130 says |
@@ -882,5 +882,12 @@ item this run deferred or left to a decision, with its final status and where it
 | `cold-user-sources-on-path` (R2-16) | Rejected | D138 | None |
 | `mem-conflict-analysis-weakmap` (R2-9) | WeakMap kept, shared frozen empty array shipped (R2-P4); byte cap rejected | D136 | None |
 
-The run added no `TODO`/`FIXME` and no `EngineConfig` key. The 41 stale `origin/claude/r10-*` remote branches and the
-Hermes live check of the default (owner approval for a checkout) stay open from the 2026-11-04 audit.
+The run added no `TODO`/`FIXME`. It added one `EngineConfig` key, `syncBigPageSize` (D142, a trial), and D143
+deleted it with its code and tests, so the run ends with no new key. The 41 stale `origin/claude/r10-*` remote
+branches and the Hermes live check of the default (owner approval for a checkout) stay open from the 2026-11-04
+audit.
+
+Checked again at cf59967f1 (before D143): every `audit/2026-11-05-*` branch is merged (`git branch --no-merged
+audit/2026-11-05-integration` lists none), no `TODO`/`FIXME` added, `bun run check` green twice (1639 pass), and
+no named preset beats the default (presets are only `default` and `minus-<part>`; D141 measured `minus-graph`
+worse).

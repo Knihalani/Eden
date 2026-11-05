@@ -60,13 +60,6 @@ export interface Source {
    * A source whose next cursor is the server's own may return more (its whole page): rows cut from it would be skipped.
    */
   list?(scope: Scope, cursor: string | undefined, limit: number, signal: AbortSignal): Promise<ListPage>;
-  /**
-   * The largest `limit` this source's `list` honours, when it says so (an MCP list tool's schema `maximum`, an
-   * operator's setting, a source that holds its items). With the engine's `syncBigPageSize`, a backfill or a sweep
-   * asks up to this many items a page instead of `syncPageSize`: fewer calls for the same listing. Absent: every page
-   * asks `syncPageSize`. A wrapper around a source must copy it, as it copies `notifies`.
-   */
-  readonly listPageMax?: number;
   close?(): Promise<void>;
 }
 

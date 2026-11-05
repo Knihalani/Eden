@@ -71,11 +71,6 @@ export interface McpSpec {
    * with `syncPush`, its synced copy is polled when told it changed rather than on a guess.
    */
   notifies?: boolean;
-  /**
-   * The largest page the list tool honours, when its schema declares no `maximum` (`McpSourceOptions.listPageMax`):
-   * the sync's backfill and sweeps then ask up to `syncBigPageSize` rows a page. A whole number, 1 to 1,000.
-   */
-  listPageMax?: number;
 }
 
 export type SourceSpec = StaticSpec | McpSpec;
@@ -341,10 +336,6 @@ class Lease implements Source {
     return this.inner.notifies === true;
   }
 
-  get listPageMax(): number | undefined {
-    return this.inner.listPageMax;
-  }
-
   get fetchReportsGone(): boolean {
     return this.inner.fetchReportsGone === true;
   }
@@ -387,7 +378,6 @@ function build(spec: SourceSpec): Source {
     listTool: spec.listTool,
     trustedReadTools: spec.trustedReadTools,
     ...(spec.notifies === true ? { notifies: true } : {}),
-    ...(spec.listPageMax !== undefined ? { listPageMax: spec.listPageMax } : {}),
   });
 }
 
@@ -488,10 +478,6 @@ export function checkSpecs(raw: unknown, where: string): SourceSpec[] {
     }
     if (s.notifies !== undefined && typeof s.notifies !== "boolean") {
       throw new SourceConfigError(`${at}.notifies must be true or false`);
-    }
-    const max = s.listPageMax;
-    if (max !== undefined && !(typeof max === "number" && Number.isInteger(max) && max >= 1 && max <= 1_000)) {
-      throw new SourceConfigError(`${at}.listPageMax must be a whole number from 1 to 1000`);
     }
   });
   return raw as SourceSpec[];

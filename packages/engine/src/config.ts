@@ -214,16 +214,6 @@ export interface EngineConfig {
   /** Items asked per listing page. */
   syncPageSize: number;
   /**
-   * Items a backfill or sweep page asks of a source that declares a larger page safe (`Source.listPageMax`: an MCP
-   * list tool's schema `maximum`, an operator's setting): min(this, the source's max), when that is above
-   * `syncPageSize`. A source that errs on the big page is asked that page again at `syncPageSize` within the same
-   * read, and only `syncPageSize` from then on (per user and source). 0: off, every page is `syncPageSize`. Polls are
-   * unchanged (their pages are sized by `syncPollPageSize`). At most 1,000 (`MAX_LIST_ROWS`). Off in the default, a
-   * trial (D142): at 500 it cut background listing calls 3.7x in sync-econ, but moved the funnel's reader-screen pool
-   * (hidden 230 -> 228, decoys 229 -> 228 of 384) for a cause not yet shown, so it was not promoted.
-   */
-  syncBigPageSize: number;
-  /**
    * An incremental poll's smallest first page (0: polls read `syncPageSize` pages, as backfill and sweeps do). Set, a
    * poll's first page is twice what the source's learned change rate expects since its last poll, at least this and
    * at most `syncPageSize`. While no page reaches what was already synced, the next page tops the items asked up to
@@ -553,7 +543,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sync: true,
   syncMaxItems: 3_000,
   syncPageSize: 100,
-  syncBigPageSize: 0,
   syncPollPageSize: 5,
   syncStaleChance: 0.15,
   syncMaxStaleMs: 6 * 3_600_000,
