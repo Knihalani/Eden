@@ -14,10 +14,7 @@
  * holds, the share of deleted items it still holds, and the delay from an item's arrival to its being synced. No
  * model call.
  *
- *   bun packages/sim/src/lab/sync-econ.ts [--days 3] [--lookups 30] [--seed 1] [--big-pages 500] [--json out.json]
- *
- * `--big-pages N` sets `syncBigPageSize` (D142; the default's value, 0, when absent): backfill and sweeps ask pages
- * of min(N, 500), as the sources here declare `listPageMax` 500.
+ *   bun packages/sim/src/lab/sync-econ.ts [--days 3] [--lookups 30] [--seed 1] [--json out.json]
  *
  * The arrival rates (per working day: mail 60, chat 150, calendar 6, docs 8, CRM 4) and the 3% same-day deletes are
  * assumptions for the comparison, not measurements of real users.
@@ -38,8 +35,6 @@ const opt = (name: string, fallback: string) => {
 const DAYS = Number(opt("days", "3"));
 const LOOKUPS = Number(opt("lookups", "30"));
 const SEED = Number(opt("seed", "1"));
-/** `syncBigPageSize` for this run; absent, the default's. */
-const BIG_PAGES = args.includes("--big-pages") ? Number(opt("big-pages", "0")) : undefined;
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const MIN = 60_000;
@@ -64,8 +59,6 @@ interface Planned {
 class ArrivingSource implements Source {
   readonly kind = "sim";
   readonly description: string;
-  /** Its listing honours pages up to 500 (`syncBigPageSize`), as SimSource's does. */
-  readonly listPageMax = 500;
   lists = 0;
   constructor(
     readonly id: string,
@@ -134,7 +127,7 @@ async function run(mode: Mode) {
     budget: new Budget(),
     model: null,
     now: () => clock,
-    config: { sync: true, ...(BIG_PAGES === undefined ? {} : { syncBigPageSize: BIG_PAGES }) },
+    config: { sync: true },
   });
   const sync = partner.sync!;
   sync.track(scope, clock);
