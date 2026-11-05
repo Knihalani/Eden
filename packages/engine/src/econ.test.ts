@@ -236,7 +236,7 @@ describe("the card maker and its routing", () => {
     const { seen, model } = recorder();
     await new ModelCardMaker(model).make([item("a", "Ops", "Frozen.")], "2026-10-27", AbortSignal.timeout(1_000));
     expect(seen[0]).toMatchObject({ maxTokens: 2_000 });
-    // No effort at all (the configuration every lab card call measured), not `reasoning: undefined`.
+    // No effort at all (the configuration every Haiku lab card call measured), not `reasoning: undefined`.
     expect("reasoning" in seen[0]!).toBe(false);
     expect(seen[0]!.messages[0]!.content).toContain("Today is 2026-10-27");
     expect(cardMessages([item("a", "Ops", "Frozen.")], "2026-10-27")).toEqual(seen[0]!.messages);

@@ -59,10 +59,12 @@ that would be $0.0021 per call, $0.00021 per item, about $0.32 per user-month, a
 reasons that much. Request time adds one BM25 search over the user's requests (no model, no call).
 
 **Card reasoning (D149): none by default.** Until D149 `ModelCardMaker` always sent reasoning "low" (D59), which the
-servers send to OpenRouter (`build.ts` wires `models.cards`), while every lab card call ran on `AnthropicModel` with
-thinking off (`pi-ab.ts`, `hermes-ab.ts` and `cards-enrich.ts` pass no thinking option; `anthropic.ts` defaults it
-to off and sends effort only with adaptive thinking): all 5,158 `eden.cards` ledger rows, $2.298, $0.000445 a call,
-p50 2,699 ms, 625 output tokens a call. So every card and intent figure in this file describes "off", and the
+servers send to OpenRouter (`build.ts` wires `models.cards`), while every Haiku 5.5 card call in the lab ran on
+`AnthropicModel` with thinking off (`pi-ab.ts`, `hermes-ab.ts` and `cards-enrich.ts` pass no thinking option;
+`anthropic.ts` defaults it to off and sends effort only with adaptive thinking): all 5,158 `eden.cards` ledger rows,
+$2.298, $0.000445 a call, p50 2,699 ms, 625 output tokens a call. So every Haiku card and intent figure in this file
+describes "off"; the earlier glm-5.3-flash and nemotron figures through OpenRouter (D59's measurement above, D66's
+re-carding, the intent estimates, and the replayed `cards-v2.jsonl` the funnel reads) were made with "low". The
 default now sends no reasoning field; `{ reasoning: "low" }` (and up) still sends that effort. The output caps are
 unchanged. Timed on Haiku 5.5, Anthropic-direct, lab provider, cached (the system block read from the cache on both
 arms), the shipped shape (`cardsEconomy` batches of 20 train items, seed 41, `intent` on, 6,000-token cap), arms

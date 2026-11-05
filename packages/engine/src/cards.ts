@@ -524,9 +524,10 @@ export interface CardMakerOptions {
   maxTokens?: number;
   /**
    * How hard the model reasons before it writes the cards (and, with `intent`, the requests). Default "off" (D149,
-   * amending D59): no effort is sent, the request every lab card call measured (the lab's Anthropic model runs with
-   * thinking off, so D59's "low" never reached it: all 5,158 `eden.cards` ledger rows). Callers may pass "low" and up;
-   * the output caps stay as they are, and reasoning tokens spend them (D45). Same values as the reader's (D144).
+   * amending D59): no effort is sent, the request every Haiku lab card call measured (the lab's Anthropic model runs
+   * with thinking off, so "low" never reached Haiku there: all 5,158 `eden.cards` ledger rows; D59's and D66's
+   * glm-5.3-flash figures through OpenRouter did run with "low"). Callers may pass "low" and up; the output caps stay
+   * as they are, and reasoning tokens spend them (D45). Same values as the reader's (D144).
    */
   reasoning?: ReaderReasoning;
 }
