@@ -6,6 +6,7 @@ export {
   checkAsk,
   checkSourceChanged,
   checkSourceItems,
+  checkSourceRemoved,
   isId,
   MAX_PUSHED_ITEMS,
   MAX_QUESTION_CHARS,

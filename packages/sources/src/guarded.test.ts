@@ -316,6 +316,41 @@ describe("SourceFanout fetch", () => {
     ).toBeNull();
   });
 
+  test("fetchChecked: ok, gone only from a source whose null means gone, failed otherwise", async () => {
+    const f = new SourceFanout({ sanitize: redactAll });
+    const opts = { timeoutMs: 1_000 };
+    const ok = await f.fetchChecked(
+      readable(async () => item("token secretXYZ")),
+      scope,
+      "1",
+      opts,
+    );
+    expect(ok.status === "ok" && ok.item.text).toBe("token [REDACTED]");
+    const holds = { ...readable(async () => null), fetchReportsGone: true };
+    expect(await f.fetchChecked(holds, scope, "1", opts)).toEqual({ status: "gone" });
+    // A null from a source that does not say it means gone (an MCP tool) proves nothing.
+    expect(
+      await f.fetchChecked(
+        readable(async () => null),
+        scope,
+        "1",
+        opts,
+      ),
+    ).toEqual({ status: "failed" });
+    expect(
+      await f.fetchChecked(
+        source(async () => []),
+        scope,
+        "1",
+        opts,
+      ),
+    ).toEqual({ status: "failed" });
+    const throws = readable(async () => {
+      throw new Error("500");
+    });
+    expect(await f.fetchChecked({ ...throws, fetchReportsGone: true }, scope, "2", opts)).toEqual({ status: "failed" });
+  });
+
   test("a failing source opens the breaker for searches too; a failing gate does not count against the source", async () => {
     const breaker = { minCalls: 2, failureRate: 0.5, openMs: 60_000 };
     const f = new SourceFanout({ sanitize: (x) => x, breaker, ratePerSec: 100, burst: 100 });

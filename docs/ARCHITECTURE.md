@@ -155,6 +155,17 @@ first. A notification that carries the changed items passes the secret gate and 
 Such a source is otherwise polled only by the daily sweep and after `syncPushMaxStaleMs` (24 h) with no notification,
 the bound on a lost one. Sources that do not notify are polled as before.
 
+**Freshness at delivery** (D126, `verifyDelivery` with `verifyAfterMs` 10 min and `verifyTimeoutMs` 1.5 s, `packetAge`;
+`partner.ts` `verifyItems`, `deliverChecked`; `SourceFanout.fetchChecked`). Every slow-path, reader, anticipation,
+firewall and `ask` delivery goes through `deliverChecked`: an item whose copy is older than `verifyAfterMs`, or was
+read before its source last signalled a change (`Sync.signalledSince`), is fetched again by its ref first, all in
+parallel. A changed copy is stored and delivered instead; one the source no longer has (`gone`, only from a source with
+`Source.fetchReportsGone`) is dropped from the cache and left out; one that cannot be checked is delivered as held,
+labelled "[source · as of 3 h ago]" with `packetAge`. An item current by its source's notifications
+(`Sync.notifiedCurrent`) needs no re-read. The fast path, which may not call a source, sends a doubted item to the slow
+path. Deletion notifications (`ContextPartner.sourceRemoved`, `POST /v1/sources/removed`) drop items at once. The
+re-reads are traced as "verify" decisions with their `sourceCalls`.
+
 **Poll behind the lookup** (D65, `syncPollBehind`, on in the default, D112; with `sync` and `syncOnDemand`): without it,
 a lookup that finds a synced source stale waits for that source's on-demand poll (`sync.freshen`, one or two listing
 calls; up to three with `syncPollPageSize`), which was most of Eden's time on the agent's critical path in ALL (p50 503

@@ -273,6 +273,21 @@ export class EdenClient {
   }
 
   /**
+   * Forwards a deletion notification: the source no longer has these refs (a message deleted or recalled, a doc or
+   * event removed). Eden drops them at once. Never throws; resolves to how many were held (0 when unreachable).
+   */
+  async sourceRemoved(sourceId: string, refs: string[]): Promise<number> {
+    const { tenantId, userId } = this.options;
+    const res = await this.post<{ removed?: number }>("/v1/sources/removed", {
+      ...(tenantId ? { tenantId } : {}),
+      userId,
+      sourceId,
+      refs,
+    });
+    return typeof res?.removed === "number" ? res.removed : 0;
+  }
+
+  /**
    * Forwards the items a change notification carried (a Slack event's message, a trigger's payload): held as synced,
    * with no source call. Never throws; resolves to how many were stored new or changed (0 when unreachable).
    */

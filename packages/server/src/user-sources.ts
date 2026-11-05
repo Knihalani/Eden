@@ -336,6 +336,10 @@ class Lease implements Source {
     return this.inner.notifies === true;
   }
 
+  get fetchReportsGone(): boolean {
+    return this.inner.fetchReportsGone === true;
+  }
+
   search(query: SearchQuery, signal: AbortSignal) {
     return this.call(() => this.inner.search(query, signal));
   }

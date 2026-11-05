@@ -58,13 +58,16 @@ export function connectorOptions(opt: (name: string, fallback: string) => string
  * The fields a wrapper around a source must keep (a harness's timing wrapper): everything the engine reads off a
  * `Source` besides its calls. A wrapper that dropped `notifies` once made `--push` do nothing (pi-ab, then hermes-ab).
  */
-export function sourceFields(source: Source): Pick<Source, "id" | "kind" | "description" | "listsByTime" | "notifies"> {
+export function sourceFields(
+  source: Source,
+): Pick<Source, "id" | "kind" | "description" | "listsByTime" | "notifies" | "fetchReportsGone"> {
   return {
     id: source.id,
     kind: source.kind,
     description: source.description,
     listsByTime: source.listsByTime,
     notifies: source.notifies,
+    fetchReportsGone: source.fetchReportsGone,
   };
 }
 

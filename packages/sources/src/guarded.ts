@@ -190,13 +190,30 @@ export class SourceFanout {
     ref: string,
     options: { timeoutMs: number; signal?: AbortSignal },
   ): Promise<ContextItem | null> {
-    if (!source.fetch) return null;
+    const got = await this.fetchChecked(source, scope, ref, options);
+    return got.status === "ok" ? got.item : null;
+  }
+
+  /**
+   * `fetch`, telling apart what `fetch` folds into null: the source answered with the item (`ok`), answered that it
+   * has no such item (`gone`: a null from a source whose `fetchReportsGone` is true), or could not say (`failed`: no
+   * fetch, a guard skipped the call, an error, a timeout, a gate failure, a null from any other source). A freshness
+   * check drops an item only when it is `gone`.
+   */
+  async fetchChecked(
+    source: Source,
+    scope: Scope,
+    ref: string,
+    options: { timeoutMs: number; signal?: AbortSignal },
+  ): Promise<{ status: "ok"; item: ContextItem } | { status: "gone" } | { status: "failed" }> {
+    const failed = { status: "failed" } as const;
+    if (!source.fetch) return failed;
     const timeout = AbortSignal.timeout(options.timeoutMs);
     const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
     const key = `${scopeKey(scope)}|${source.id}`;
     const s = this.state(key);
     const epoch = this.admit(key, s);
-    if (typeof epoch !== "number") return null;
+    if (typeof epoch !== "number") return failed;
     const started = performance.now();
     let raw: ContextItem | null;
     try {
@@ -205,25 +222,27 @@ export class SourceFanout {
       const message = String(e);
       if (signal.aborted && !timeout.aborted) {
         s.limiter.release("ignored"); // The caller gave up: no evidence against the source.
-        return null;
+        return failed;
       }
       s.latency.record(performance.now() - started);
       s.limiter.release("dropped");
       s.breaker.failure(epoch);
       if (RATE_LIMITED.test(message)) this.rate.penalize(key, retryAfterMs(message) ?? 5_000);
-      return null;
+      return failed;
     }
     // The source answered: its permit and breaker are settled once, here. Gating is ours, not the source's: a gate
     // that fails or runs out of time drops the item and says nothing against the source.
     s.latency.record(performance.now() - started);
     s.limiter.release("ok");
     s.breaker.success(epoch);
-    if (!raw) return null;
+    // Null is "no such item" only from a source that says so (`fetchReportsGone`); from another (an MCP tool's
+    // reply without the asked-for row could be an error worded as prose) it says nothing either way.
+    if (!raw) return source.fetchReportsGone === true ? { status: "gone" } : failed;
     try {
       const [item] = await this.options.sanitize([raw], signal);
-      return item ?? null;
+      return item ? { status: "ok", item } : failed;
     } catch {
-      return null;
+      return failed;
     }
   }
 

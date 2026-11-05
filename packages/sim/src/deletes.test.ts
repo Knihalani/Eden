@@ -1,0 +1,39 @@
+import { describe, expect, test } from "bun:test";
+import { REALISTIC, simSources } from "./sources";
+import { runQuality } from "./quality";
+import { applyDelete, planDeletes } from "./updates";
+import { buildWorld } from "./world";
+
+describe("source-side deletions (--deletes)", () => {
+  test("planned only for fact-stating items, deterministic per seed; applied, the sources no longer serve them", async () => {
+    const w = buildWorld({ seed: 7 });
+    const plan = planDeletes(w, 5, 3, 0.2);
+    expect(plan.length).toBeGreaterThan(0);
+    expect(planDeletes(buildWorld({ seed: 7 }), 5, 3, 0.2)).toEqual(plan);
+    expect(planDeletes(w, 5, 3, 0)).toEqual([]);
+    const byId = new Map(w.items.map((i) => [i.id, i]));
+    for (const d of plan) {
+      expect(d.session).toBeGreaterThanOrEqual(1);
+      for (const id of d.items) expect(byId.get(id)!.facts.length).toBeGreaterThan(0);
+    }
+    const first = plan[0]!;
+    const victim = byId.get(first.items[0]!)!;
+    const sources = simSources(w, REALISTIC, 0, 1);
+    const src = sources.find((s) => s.id === victim.sourceId)!;
+    expect(await src.fetch(victim.ref, { tenantId: "t", userId: "u" }, AbortSignal.timeout(1_000))).not.toBeNull();
+    expect(applyDelete(w, first)).toEqual(new Set([victim.sourceId]));
+    src.reindex();
+    expect(w.items.some((i) => i.id === victim.id)).toBe(false);
+    for (const f of victim.facts) expect(w.facts.get(f)!.items).not.toContain(victim.id);
+    expect(await src.fetch(victim.ref, { tenantId: "t", userId: "u" }, AbortSignal.timeout(1_000))).toBeNull();
+  });
+
+  test("the quality run counts deleted deliveries; with payload notifications Eden delivers none", async () => {
+    const base = { users: 1, sessionsPerUser: 6, seed: 2, profiles: REALISTIC, timeScale: 0, waitMs: 0, model: null };
+    const off = await runQuality(base);
+    expect(off.deletes).toEqual({ planned: 0, applied: 0, deletedDelivered: 0, deletedCited: 0 });
+    const pushed = await runQuality({ ...base, deletes: 0.3, push: "payload" });
+    expect(pushed.deletes.applied).toBeGreaterThan(0);
+    expect(pushed.deletes.deletedDelivered + pushed.deletes.deletedCited).toBe(0);
+  });
+});

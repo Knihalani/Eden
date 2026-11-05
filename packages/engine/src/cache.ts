@@ -612,6 +612,23 @@ export class ItemCache {
     return n;
   }
 
+  /**
+   * Drops items by id, synced or not: the source no longer has them (a deletion notification, a fetch that found the
+   * item gone). Their cards and graph entries go with them (`onDropped`). Returns how many were held.
+   */
+  removeItems(scope: Scope, ids: Iterable<string>): number {
+    const u = this.peek(scope);
+    if (!u) return 0;
+    let n = 0;
+    for (const id of ids) {
+      const e = u.items.get(id);
+      if (!e) continue;
+      this.drop(u, e);
+      n++;
+    }
+    return n;
+  }
+
   /** Synced items the user's cache holds (D57). */
   syncedCount(scope: Scope): number {
     return this.peek(scope)?.synced ?? 0;

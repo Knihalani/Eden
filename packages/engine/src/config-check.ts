@@ -80,6 +80,8 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncPollBehind: ["sync", "syncOnDemand"],
   syncPush: SYNC,
   syncPushMaxStaleMs: ["sync", "syncPush"],
+  verifyAfterMs: ["verifyDelivery"],
+  verifyTimeoutMs: ["verifyDelivery"],
   syncCatchupPages: SYNC,
   syncMaxUsersPerTenant: SYNC,
   syncLocalAll: SYNC,

@@ -46,6 +46,12 @@ export interface Source {
    */
   readonly notifies?: boolean;
   search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]>;
+  /**
+   * Whether `fetch` returning null means the source no longer has the item (deleted), rather than "could not say":
+   * true for sources that hold their items (static, the sim). Absent (an MCP tool, whose reply may lack the row for
+   * other reasons): a null fetch proves nothing, and a freshness check keeps the item (labelled with its age).
+   */
+  readonly fetchReportsGone?: boolean;
   /** One item by its source ref, for refreshing a cached item. */
   fetch?(ref: string, scope: Scope, signal: AbortSignal): Promise<ContextItem | null>;
   /**

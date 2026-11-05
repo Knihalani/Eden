@@ -36,6 +36,8 @@ export function renderPacket(
      * the agent reads it as Eden's reading and not the item's words. Validated and bounded by `parseReader`.
      */
     note?: (item: ContextItem) => string | undefined;
+    /** `packetAge`: how old the item's copy is ("as of 3 h ago"), said beside its source; undefined when current. */
+    age?: (item: ContextItem) => string | undefined;
   },
 ): string {
   const before = options.shownBefore;
@@ -88,7 +90,8 @@ export function renderPacket(
     // across an 8 KB item that is then cut to a few hundred bytes (9% of end-to-end CPU; pipeline.bench.ts).
     const prefix = item.text.length > room * 2 + 64 ? item.text.slice(0, room * 2 + 64) : item.text;
     const cut = prefix.length < item.text.length;
-    let line = `- [${item.sourceId}] ${title}${inert(oneLine(prefix))}`;
+    const age = options.age?.(item);
+    let line = `- [${item.sourceId}${age ? ` · ${inert(age)}` : ""}] ${title}${inert(oneLine(prefix))}`;
     const size = utf8Length(line);
     if (size > room || cut) line = truncateUtf8(line, room - 3) + "…"; // "…" is 3 bytes
     lines.push(line);

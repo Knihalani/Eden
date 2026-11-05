@@ -137,6 +137,11 @@ interface SourceSync {
   notifies: boolean;
   /** Change notifications received (`Sync.changed`). */
   notices: number;
+  /**
+   * When the latest notification came (-Infinity before any). A signal does not say which item changed, and the poll
+   * it causes reads only the newest page: a copy read before it is in doubt until read again (`notifiedCurrent`).
+   */
+  noticedAt: number;
   /** `notices` when the last complete poll began: the copy is behind while they differ. */
   noticesPolled: number;
   /** `notices` when the backfill's latest page began: what the backfill has read when it ends (`warmUp`). */
@@ -244,6 +249,7 @@ export class SyncManager {
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
     if (!s || !s.notifies) return false;
     s.notices++;
+    s.noticedAt = this.deps.now();
     return true;
   }
 
@@ -265,6 +271,38 @@ export class SyncManager {
     }
     while (s.pushed.size > MAX_PUSHED) s.pushed.delete(s.pushed.keys().next().value as string);
     return n;
+  }
+
+  /**
+   * Items the source deleted (a deletion notification, or a fetch that found them gone): no longer counted as synced
+   * from it, nor as pushed. The caller drops them from the cache. O(ids).
+   */
+  removed(scope: Scope, sourceId: string, ids: Iterable<string>): void {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    if (!s) return;
+    for (const id of ids) {
+      s.ids.delete(id);
+      s.pushed.delete(id);
+      s.missed.delete(id);
+    }
+  }
+
+  /**
+   * Whether an item read at `readAt` is current by its source's notifications: the source notifies (`push`), no
+   * notification is pending, the copy is within `pushMaxStaleMs`, and the item was read after the latest signal (a
+   * signal says only that something changed; its poll reads the newest page, so an older copy, or one the source has
+   * since deleted, stays in doubt until it is read again). Items a notification carried, and deletions it named
+   * (`ingest`, `removed`), need no signal. What this holds current needs no re-read to be delivered (`verifyDelivery`).
+   */
+  notifiedCurrent(scope: Scope, sourceId: string, readAt: number, now = this.deps.now()): boolean {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    return s !== undefined && s.notifies && this.isCurrent(s, now) && readAt >= s.noticedAt;
+  }
+
+  /** Whether a notifying source has signalled a change after `readAt`: a copy read before it is in doubt. */
+  signalledSince(scope: Scope, sourceId: string, readAt: number): boolean {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    return s !== undefined && s.notifies && s.noticedAt > readAt;
   }
 
   /** Whether the user's copy of a source has finished its backfill, current or not (`syncPollBehind`). */
@@ -772,6 +810,7 @@ function newSourceSync(id: string): SourceSync {
     reading: null,
     notifies: false,
     notices: 0,
+    noticedAt: -Infinity,
     noticesPolled: 0,
     noticesBackfill: 0,
     pushed: new Map(),
