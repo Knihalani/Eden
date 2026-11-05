@@ -60,6 +60,14 @@ export interface SyncOptions {
   /** A sync call's deadline (ms). */
   timeoutMs: number;
   /**
+   * The longest a read whose copy `signalledSince` judges can be on the wire before it is stored (D133): the partner
+   * passes its lookups' and re-reads' deadlines, `max(sourceTimeoutMs, verifyTimeoutMs)` (1.5 s each, config.ts:483
+   * and :561). The sync's own polls need none: one begun before a signal leaves `noticesPolled` behind, so the next
+   * lookup polls the newest page again. Absent: `timeoutMs`. (Measured in the freshness sim, 8 users × 20 sessions,
+   * `--push signals`: 1.5 s re-reads nothing more than D126; 5 s re-read 645 copies instead of 575.)
+   */
+  readSlackMs?: number;
+  /**
    * `syncPush`: a source that says it `notifies` is current until told it changed (`Sync.changed`) or its last poll
    * is `maxStaleMs` old, instead of by its learned change rate.
    */
@@ -291,10 +299,30 @@ export class SyncManager {
    * Whether a notifying source has signalled a change after `readAt`: a signal does not say which item changed, and the
    * poll it causes reads only the newest page, so a copy read before it (or one the source has since deleted) is in
    * doubt until it is read again (`verifyDelivery`). Items a notification carried (`ingest`) are read at its time.
+   *
+   * `readAt` is when the copy was stored, which is when its read ended: the source may have answered before a signal
+   * that landed while the call was on the wire. So a signal up to `readSlackMs` before `readAt` (and one in the same
+   * millisecond) also doubts the copy (D133, amends D126): the cost is a re-read of copies stored just after a signal.
    */
   signalledSince(scope: Scope, sourceId: string, readAt: number): boolean {
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
-    return s !== undefined && s.notifies && s.noticedAt > readAt;
+    return s !== undefined && s.notifies && s.noticedAt >= readAt - this.readSlackMs;
+  }
+
+  /**
+   * Whether a notifying source signalled a change after `startedAt`, the time a read began (`ContextPartner.check`'s
+   * reuse of a re-read): a start is not an end, so no slack. With the slack, a re-read would refuse its own outcome for
+   * the signal that started it, and a second re-read finds the copy already current ("confirmed") while the copy in
+   * hand is the one from before the first.
+   */
+  signalledAfter(scope: Scope, sourceId: string, startedAt: number): boolean {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    return s !== undefined && s.notifies && s.noticedAt > startedAt;
+  }
+
+  /** `SyncOptions.readSlackMs`, or the sync's own call deadline when the embedder gives none. */
+  private get readSlackMs(): number {
+    return this.o.readSlackMs ?? this.o.timeoutMs;
   }
 
   /** Whether the user's copy of a source has finished its backfill, current or not (`syncPollBehind`). */

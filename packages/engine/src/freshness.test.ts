@@ -283,6 +283,59 @@ describe("review regressions (D126)", () => {
   });
 });
 
+describe("D133: a signal that lands while a read is on the wire still doubts the copy that read stores", () => {
+  /** A listed source whose fetch takes its snapshot, then runs `during` (a change and its signal), then answers. */
+  class SlowFetch extends Listed {
+    during: (() => void) | null = null;
+    override async fetch(ref: string): Promise<ContextItem | null> {
+      this.fetches++;
+      const snapshot = this.item(ref);
+      await Promise.resolve();
+      const hook = this.during;
+      this.during = null;
+      hook?.();
+      return snapshot;
+    }
+  }
+
+  test("the verify fetch returns the copy from before the signal: the next delivery re-reads and has the new text", async () => {
+    const src = new SlowFetch("notes");
+    seed(src);
+    const { partner, cache, advance, now } = await synced(src);
+    advance(5 * MIN);
+    partner.sourceChanged(scope, "notes"); // A change elsewhere: q1 is only doubted.
+    src.failSearch = true;
+    src.during = () => {
+      advance(1_000);
+      src.docs.set("q1", { title: "Quarterly offsite", text: "The quarterly offsite moved to Porto on 19 November." });
+      partner.sourceChanged(scope, "notes");
+    };
+    advance(MIN);
+    const first = await say(partner, "Remind me where the quarterly offsite is", "s1", now());
+    expect(first.map((i) => i.text).join("\n")).toContain("Lisbon"); // What the read returned.
+    const fetchesBefore = src.fetches;
+    advance(MIN);
+    const r = await partner.ask({ ...scope, sessionId: "s2", question: "Where is the quarterly offsite?" });
+    expect(src.fetches).toBeGreaterThan(fetchesBefore);
+    expect(r.answer).toContain("Porto");
+    expect(cache.get(scope, itemId("notes", "q1"), now())?.text).toContain("Porto");
+  });
+
+  test("a signal in the same millisecond as the store doubts the copy", () => {
+    const src = new Listed("notes");
+    const t = setup(src, PUSH);
+    t.partner.sync!.track(scope, t.now());
+    return (async () => {
+      while (!t.partner.sync!.warm(scope)) await t.partner.sync!.tick();
+      t.partner.sourceChanged(scope, "notes");
+      expect(t.partner.sync!.signalledSince(scope, "notes", t.now())).toBe(true);
+      // Up to the slack (the lookups' and re-reads' deadline, 1.5 s) before the store a signal doubts it; past it, not.
+      expect(t.partner.sync!.signalledSince(scope, "notes", t.now() + 1_500)).toBe(true);
+      expect(t.partner.sync!.signalledSince(scope, "notes", t.now() + 60_000)).toBe(false);
+    })();
+  });
+});
+
 describe("review regressions (D126), second round", () => {
   test("a poll whose listing predates a deletion neither stores the item nor counts it as synced", async () => {
     const src = new Listed("notes");

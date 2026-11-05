@@ -36,7 +36,12 @@ interface Entry {
   item: ContextItem;
   fetchedAt: number;
   doc: number;
-  sketch: Sketch | null;
+  /**
+   * Near-duplicate sketch (`sketchOf`), computed on the item's first return as a hit (`sketched`), not at `put`: most
+   * stored items are never a hit, and sketching each was a third of the sync's backfill CPU (ingest.bench.ts).
+   * Undefined: not computed yet; null: the item has no own words.
+   */
+  sketch: Sketch | null | undefined;
   /**
    * Held by the user's background sync (D57): counted against `maxSyncedPerUser`, not `maxItemsPerUser`, kept for
    * `syncTtlMs`, and dropped by the sync when its source no longer lists it. A lookup that returns it keeps it synced.
@@ -127,11 +132,6 @@ class UserCache {
       onTermFreed: releaseTerms ? (t) => this.vocab.release(t) : undefined,
     });
   }
-  /**
-   * Ids its source said are gone (`removeItems` with a hold), until when (ms): a copy of one that a search or listing
-   * read before the deletion is not stored again meanwhile. Oldest first; at most `MAX_GONE`.
-   */
-  gone: Map<string, number> | null = null;
   /** Vocabulary size after the last rebuild. */
   baseline = 0;
   /** Changes whenever an item is added, changed or dropped (`ItemCache.revision`); unique across rebuilds. */
@@ -305,16 +305,34 @@ export function sanitizeItem(raw: ContextItem, maxTextChars = DEFAULT_CACHE_LIMI
   };
 }
 
-/** Ids held as gone per user at most (`UserCache.gone`). */
-const MAX_GONE = 1_000;
+/**
+ * Gone-holds (`removeItems` with a hold) kept per tenant at most, across its users: past it, the oldest go. A hold is
+ * a short key and a number (~100 B; the 10,000-removal test in cache.test.ts measures it), so a tenant's holds stay
+ * within a few MB however many users a deletion feed names. They are not per user: a hold for a user Eden has never
+ * seen (a lookup may still be in flight) must not allocate a user's cache nor count against `maxUsersPerTenant`.
+ */
+const MAX_HOLDS_PER_TENANT = 20_000;
 
-/** Whether `id` is held as gone at `now`; an expired hold is dropped. */
-function isGone(gone: Map<string, number>, id: string, now: number): boolean {
-  const until = gone.get(id);
+/** A gone-hold's key within its tenant: the user, length-prefixed so no id can pass for a user boundary, and the id. */
+function holdKey(userId: string, id: string): string {
+  return `${userId.length}:${userId}${id}`;
+}
+
+/** Whether `key` is held as gone at `now`; an expired hold is dropped. */
+function isGone(held: Map<string, number>, key: string, now: number): boolean {
+  const until = held.get(key);
   if (until === undefined) return false;
   if (now < until) return true;
-  gone.delete(id);
+  held.delete(key);
   return false;
+}
+
+/** Drops expired holds from the front of a tenant's (oldest-first) holds, stopping at the first live one. */
+function trimHolds(held: Map<string, number>, now: number): void {
+  for (const [k, until] of held) {
+    if (now < until) break;
+    held.delete(k);
+  }
 }
 
 /**
@@ -332,6 +350,11 @@ let bodyIds = new Uint32Array(4_096);
 export class ItemCache {
   private readonly users = new Map<string, UserCache>();
   private readonly perTenant = new Map<string, number>();
+  /**
+   * Gone-holds per tenant (`removeItems` with a hold): `holdKey(user, id)` → until when (ms), oldest first, at most
+   * `MAX_HOLDS_PER_TENANT`. Apart from the users' caches, so holding an id never allocates one or evicts a user.
+   */
+  private readonly holds = new Map<string, Map<string, number>>();
   private readonly limits: CacheLimits;
   /** Whether each user's items are also put in a knowledge graph (`enableGraph`). */
   private graphs = false;
@@ -508,9 +531,10 @@ export class ItemCache {
     const u = this.touch(scope);
     this.sweep(u, now);
     const changed: ContextItem[] = [];
+    const held = this.holds.get(scope.tenantId);
     for (const raw of items) {
       const item = sanitized ? raw : sanitizeItem(raw, this.limits.maxTextChars);
-      if (u.gone !== null && isGone(u.gone, item.id, now)) continue;
+      if (held !== undefined && isGone(held, holdKey(scope.userId, item.id), now)) continue;
       const old = u.items.get(item.id);
       if (old && synced && !old.synced) {
         unlink(u, old); // Out of the lookups' list into the sync's (re-placed below, refreshed or dropped).
@@ -554,7 +578,7 @@ export class ItemCache {
       this.graphOf(u, now)?.add(item, now);
       const doc = this.index(u, item);
       // `raw` always set (if undefined), so every entry has one shape.
-      const entry: Entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item), prev: null, next: null, raw: from };
+      const entry: Entry = { item, fetchedAt: now, doc, sketch: undefined, prev: null, next: null, raw: from };
       if (isSynced) {
         entry.synced = true;
         u.synced++;
@@ -634,22 +658,29 @@ export class ItemCache {
    * Drops items by id, synced or not: the source no longer has them (a deletion notification, a fetch that found the
    * item gone). Their cards and graph entries go with them (`onDropped`). With `holdMs`, a later `put` of one of them
    * is ignored until `now + holdMs` (or `revive`): a search or listing that read it before the deletion cannot bring it
-   * back. Returns how many were held.
+   * back. The hold is kept even for a user with no cache yet (their first lookup may be in flight), in the tenant's
+   * bounded holds (`holds`): it allocates no user's cache and evicts no user. Returns how many cached items were
+   * dropped (not how many ids were held).
    */
   removeItems(scope: Scope, ids: Iterable<string>, now = Date.now(), holdMs = 0): number {
-    const u = holdMs > 0 ? this.touch(scope) : this.peek(scope);
-    if (!u) return 0;
+    let held: Map<string, number> | undefined;
+    if (holdMs > 0) {
+      held = this.holds.get(scope.tenantId);
+      if (held === undefined) this.holds.set(scope.tenantId, (held = new Map()));
+      else trimHolds(held, now);
+    }
+    const u = this.peek(scope);
     let n = 0;
     for (const id of ids) {
-      if (holdMs > 0) {
-        const gone = (u.gone ??= new Map());
-        gone.delete(id);
-        gone.set(id, now + holdMs);
-        while (gone.size > MAX_GONE) gone.delete(gone.keys().next().value!);
+      if (held !== undefined) {
+        const key = holdKey(scope.userId, id);
+        held.delete(key); // Re-insert: the map stays oldest first.
+        held.set(key, now + holdMs);
+        if (held.size > MAX_HOLDS_PER_TENANT) held.delete(held.keys().next().value!);
       }
-      const e = u.items.get(id);
+      const e = u?.items.get(id);
       if (!e) continue;
-      this.drop(u, e);
+      this.drop(u!, e);
       n++;
     }
     return n;
@@ -657,14 +688,19 @@ export class ItemCache {
 
   /** Lifts `removeItems`' hold on these ids: their source has them (a notification carried them, a re-read found). */
   revive(scope: Scope, ids: Iterable<string>): void {
-    const gone = this.peek(scope)?.gone;
-    if (gone) for (const id of ids) gone.delete(id);
+    const held = this.holds.get(scope.tenantId);
+    if (held) for (const id of ids) held.delete(holdKey(scope.userId, id));
   }
 
   /** Whether `removeItems` holds this id as gone at `now` (a page read before its deletion must not count it). */
   isHeldGone(scope: Scope, id: string, now = Date.now()): boolean {
-    const gone = this.peek(scope)?.gone;
-    return gone !== undefined && gone !== null && isGone(gone, id, now);
+    const held = this.holds.get(scope.tenantId);
+    return held !== undefined && isGone(held, holdKey(scope.userId, id), now);
+  }
+
+  /** Gone-holds kept for the tenant (`removeItems`), expired ones not yet swept included: for tests and bounds. */
+  holdCount(tenantId: string): number {
+    return this.holds.get(tenantId)?.size ?? 0;
   }
 
   /** Synced items the user's cache holds (D57). */
@@ -766,7 +802,7 @@ export class ItemCache {
       if (!e || !this.alive(e, now)) continue;
       out.push({
         item: e.item,
-        sketch: e.sketch,
+        sketch: sketched(u, e),
         doc: e.doc,
         score: res.scores[j]!,
         coverage: res.coverage[j]!,
@@ -800,9 +836,10 @@ export class ItemCache {
       const e = u.byDoc[res.docs[j]!];
       if (!e || !sources.has(e.item.sourceId) || !this.alive(e, now)) continue;
       if (all && res.matched[j]! < n) continue;
+      // Sketched below, only once the per-source cap has kept it: up to `depth` hits are built here.
       hits.push({
         item: e.item,
-        sketch: e.sketch,
+        sketch: null,
         doc: e.doc,
         score: res.scores[j]!,
         coverage: res.coverage[j]!,
@@ -811,11 +848,13 @@ export class ItemCache {
     }
     if (all) hits.sort((a, b) => (b.item.updatedAt ?? 0) - (a.item.updatedAt ?? 0));
     const per = new Map<string, number>();
-    return hits.filter((h) => {
+    const kept = hits.filter((h) => {
       const k = per.get(h.item.sourceId) ?? 0;
       per.set(h.item.sourceId, k + 1);
       return k < limit;
     });
+    for (const h of kept) h.sketch = sketched(u, u.byDoc[h.doc]!);
+    return kept;
   }
 
   /**
@@ -830,14 +869,17 @@ export class ItemCache {
     for (const e of u.items.values()) {
       const start = e.item.meta?.start;
       if (!start || !days.has(start.slice(0, 10)) || !this.alive(e, now)) continue;
-      out.push({ item: e.item, sketch: e.sketch, doc: e.doc, score: 0, coverage: 0, matched: 0 });
+      out.push({ item: e.item, sketch: null, doc: e.doc, score: 0, coverage: 0, matched: 0 });
     }
     // Zone-less starts read as UTC (`parseWhen`); one that does not parse sorts last (NaN compares false).
     const at = (h: CacheHit) => {
       const t = parseWhen(h.item.meta!.start!);
       return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
     };
-    return out.sort((a, b) => at(a) - at(b) || 0).slice(0, limit);
+    const kept = out.sort((a, b) => at(a) - at(b) || 0).slice(0, limit);
+    // Sketched after the cut: every item on the day was a candidate above.
+    for (const h of kept) h.sketch = sketched(u, u.byDoc[h.doc]!);
+    return kept;
   }
 
   /** A probe this user made within `maxAgeMs` (D46): its ids, when every one is still cached and fresh; else null. */
@@ -864,7 +906,7 @@ export class ItemCache {
     for (const id of ids) {
       const e = u.items.get(id);
       if (e && this.alive(e, now)) {
-        out.push({ item: e.item, sketch: e.sketch, doc: e.doc, score: 0, coverage: 0, matched: 0 });
+        out.push({ item: e.item, sketch: sketched(u, e), doc: e.doc, score: 0, coverage: 0, matched: 0 });
       }
     }
     return out;
@@ -986,6 +1028,11 @@ export class ItemCache {
    */
   expireIdle(now = Date.now()): number {
     let n = 0;
+    // Expired gone-holds go too, and a tenant left with none: holds outlive no one's interest in them.
+    for (const [tenant, held] of this.holds) {
+      trimHolds(held, now);
+      if (held.size === 0) this.holds.delete(tenant);
+    }
     // Deleting the entry being visited is safe in a Map walk: no copy of 10k+ users per tick.
     for (const [key, u] of this.users) {
       // Holds items, none expired: nothing to sweep, and alive. (A user with none may be dropped below.) A merge left
@@ -1044,6 +1091,13 @@ export class ItemCache {
   forget(scope: Scope, sourceId?: string): void {
     if (!sourceId) {
       this.dropUser(scopeKey(scope), scope.tenantId);
+      // The user's gone-holds go with them (a scan of the tenant's holds, at most `MAX_HOLDS_PER_TENANT`).
+      const held = this.holds.get(scope.tenantId);
+      if (held) {
+        const prefix = holdKey(scope.userId, "");
+        for (const k of held.keys()) if (k.startsWith(prefix)) held.delete(k);
+        if (held.size === 0) this.holds.delete(scope.tenantId);
+      }
       return;
     }
     const u = this.peek(scope);
@@ -1068,6 +1122,12 @@ function sameDetails(a: ContextItem, b: ContextItem): boolean {
   if (a.url !== b.url || a.updatedAt !== b.updatedAt) return false;
   if (a.meta === b.meta) return true;
   return a.meta !== undefined && b.meta !== undefined && JSON.stringify(a.meta) === JSON.stringify(b.meta);
+}
+
+/** The entry's sketch, computed on first use and kept (`Entry.sketch`). */
+function sketched(u: UserCache, e: Entry): Sketch | null {
+  if (e.sketch === undefined) e.sketch = sketchOf(u, e.item);
+  return e.sketch;
 }
 
 function sketchOf(u: UserCache, item: ContextItem): Sketch | null {

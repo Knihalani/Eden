@@ -600,6 +600,7 @@ export class ContextPartner {
             catchupPages: c.syncCatchupPages,
             maxUsersPerTenant: c.syncMaxUsersPerTenant,
             timeoutMs: Math.max(c.sourceTimeoutMs, 5_000),
+            readSlackMs: Math.max(c.sourceTimeoutMs, c.verifyTimeoutMs),
             push: c.syncPush,
             pushMaxStaleMs: c.syncPushMaxStaleMs,
           },
@@ -3402,7 +3403,7 @@ export class ContextPartner {
       held &&
       now - held.at <= CHECK_REUSE_MS &&
       held.settled !== "failed" &&
-      this.sync?.signalledSince(s.scope, item.sourceId, held.at) !== true
+      this.sync?.signalledAfter(s.scope, item.sourceId, held.at) !== true
     )
       return held.outcome;
     const entry: { at: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome } = {
