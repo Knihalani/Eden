@@ -108,7 +108,11 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   each chosen source's status (`sources`: the fan-out's, or "local" for a synced source answered from the index);
   `honestAnswer` names any that did not answer (error, timeout, circuit open, busy, limited) and says the empty answer
   is not an all-clear, and `AskResponse.sources` carries the statuses. A new lookup path an ask answers from must
-  return statuses too, or an outage reads as "nothing".
+  return statuses too, or an outage reads as "nothing". A failed on-demand sync poll (`freshen`) feeds the status
+  through `localOf`, not a status of its own: it leaves the copy not current, so the source is searched live and that
+  search's status stands. An ask never passes `behind`, so a warm-but-stale copy is not "local" there
+  (`review-regressions.test.ts`); only the reader push's first reading answers from it. Probes are extra queries
+  beside a chosen source's own search, whose outcome gives the source's status.
 - **Shown means handed out.** With `askDedup`, what an injection showed is noted (`noteShown`) in `handOut`, which
   every path that gives the agent an injection calls (observe's reply, `takePending`, the firewall's finding, the
   ask's own answer), not when `deliver` builds it: a queued packet the agent has not taken was shown nothing, so an

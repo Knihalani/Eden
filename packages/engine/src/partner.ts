@@ -4747,7 +4747,6 @@ function modelAttrs(res: {
   };
 }
 
-/** A search's span attributes: how many sources answered each way. */
 /**
  * An ask's answer text (D127): `packet` (empty when no item answers), with the sources the ask chose that did not
  * answer named. An empty answer reads "Nothing in the connected sources." only when every chosen source answered (or
@@ -4768,6 +4767,7 @@ function honestAnswer(packet: string, sources: readonly SourceStatus[] | undefin
   return `Nothing in ${answered.join(", ")}. Could not reach ${names}, so this is not an all-clear.`;
 }
 
+/** A search's span attributes: how many sources answered each way. */
 function outcomeAttrs(outcomes: readonly FanoutOutcome[]): Record<string, number> {
   const out: Record<string, number> = { sources: outcomes.length };
   for (const o of outcomes) out[o.status] = (out[o.status] ?? 0) + 1;

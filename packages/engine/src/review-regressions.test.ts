@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget, FakeModel } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
-import { StaticSource, type Source } from "@eden/sources";
+import { StaticSource, type ListPage, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { DEFAULT_CONFIG } from "./config";
 import { CORE_CONFIG } from "./parts";
@@ -500,5 +500,70 @@ describe("deep audit 2026-11-05 ask-false-all-clear (D127): an outage is not 'no
     const r = await ask([]);
     expect(r.answer).toBe("Nothing in the connected sources.");
     expect(r.sources).toEqual([]);
+  });
+});
+
+describe("deep audit 2026-11-05 ask-false-all-clear (D127): a failed sync poll is not a local answer", () => {
+  const HOUR = 3_600_000;
+  const T0 = Date.UTC(2026, 10, 5, 9);
+  const who = { tenantId: "t", userId: "u", sessionId: "poll" };
+  const lunch: ContextItem = {
+    id: "mail:m1",
+    sourceId: "mail",
+    ref: "m1",
+    title: "Lunch",
+    text: "Lunch with Priya moved to Friday",
+    updatedAt: T0 - HOUR,
+  };
+  /** A synced source whose list (the sync's poll) and search both throw once `down` is set. */
+  const flaky = () => {
+    const src = {
+      id: "mail",
+      kind: "test",
+      description: "mail",
+      down: false,
+      lists: 0,
+      async search(): Promise<ContextItem[]> {
+        if (src.down) throw new Error("503 upstream down");
+        return [lunch];
+      },
+      async list(): Promise<ListPage> {
+        src.lists++;
+        if (src.down) throw new Error("503 upstream down");
+        return { items: [lunch], next: null };
+      },
+    };
+    return src;
+  };
+
+  test("syncOnDemand, the poll and the search throw on a stale synced copy: not 'local', no all-clear", async () => {
+    let clock = T0;
+    const src = flaky();
+    const p = new ContextPartner({
+      sources: async () => [src],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { ...DEFAULT_CONFIG, sync: true, syncOnDemand: true, sourceTimeoutMs: 300 },
+    });
+    // Track the user and warm the synced copy while the source is healthy.
+    await p.observe({ ...who, at: clock, kind: "user_message", text: "hello" } as AgentEvent, { waitMs: 0 });
+    for (let i = 0; i < 10 && !p.sync!.warm(who); i++) await p.sync!.tick();
+    expect(p.sync!.warm(who)).toBe(true);
+    // Past the staleness bound the copy is no longer current, and the source goes down: the ask's on-demand poll
+    // fails, so the copy stays not current (`localOf` leaves it out) and the failed live search gives its status.
+    clock += DEFAULT_CONFIG.syncMaxStaleMs + HOUR;
+    src.down = true;
+    expect(p.sync!.current(who, "mail", clock)).toBe(false);
+    const listed = src.lists;
+    const r = await p.ask({ ...who, question: "When is lunch with Priya?" });
+    expect(src.lists).toBeGreaterThan(listed); // the on-demand poll ran, and failed
+    const status = r.sources?.find((x) => x.sourceId === "mail")?.status;
+    expect(status).toBeDefined();
+    expect(status).not.toBe("local");
+    expect(r.answer).not.toContain("Nothing in the connected sources.");
+    expect(r.answer).toContain("Could not reach mail");
   });
 });

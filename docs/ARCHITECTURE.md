@@ -272,7 +272,10 @@ item means before deciding whether it is about the same thing and binds. With `a
 items it rejected by name leave the ask's answer; an item it flagged never does. A drop that would empty the answer is
 made only when the reader was shown every candidate the ask had (none cut by `askReaderPool` or the prompt's 60-item
 cap; D114): otherwise "Nothing in the connected sources" would be a false all-clear over items it never read (D93's
-guard). With `readerPush` (on in the default), a
+guard). A source outage is the other false all-clear (D127, audit 2026-11-05 `ask-false-all-clear`): an ask says
+"Nothing in the connected sources." only when every source it chose answered (ok, cached, stale, or from the synced
+index); otherwise its answer names the sources that failed (error, timeout, circuit open, busy, limited) and says it
+is not an all-clear, and `AskResponse.sources` carries each chosen source's status. With `readerPush` (on in the default), a
 user request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
 flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
@@ -339,7 +342,11 @@ the graph walk and the card finds) and answers first with the candidates a rule 
 and no extra source call. With `askDedup` (D77, on in the default) each session keeps `Session.shown`: the words its
 packets and answers showed the agent, per item id and version (at most 64 items, never shared across sessions or
 users), so a later answer says an unchanged item by its new parts only, or "(shown above)"; an item whose words
-changed at its source counts as not shown.
+changed at its source counts as not shown. Shown is recorded when an injection is handed out (`handOut`: observe's
+reply, `takePending`, the firewall's finding, the ask's own answer), not when a packet is built (audit 2026-11-05
+`ask-shown-before-handed-out`): a packet still queued in `s.pending` was shown nothing, so an ask before `takePending`
+says its items in full, and drops the queued packet only when it cited every one of its items. A new delivery path
+hands out through `handOut`; noting shown at build brings back an ask's "(shown above)" for items the agent never got.
 `askRank` and `rankTies` (D82), `supersede` (D81), `askContext` (D83) and their composition ALL4 (D84) were deleted by
 D112 (no measurement favoured them on).
 
