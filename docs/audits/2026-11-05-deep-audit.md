@@ -778,8 +778,8 @@ is old calls 1`.
 - 12 findings packaged into R2-P1 to R2-P8; 2 of them only in part (R2-3, R2-9).
 - 3 rejected with decisions: D135, D137, D138. Parts of R2-3 and R2-9 rejected: D134, D136.
 - 1 fixed in this commit: R2-13 (D133).
-- Decisions written this round: D133 to D140. Reserved for fixers: D141 (R2-P8's graph verdict) and D142 (any
-  other). Fixers do not edit docs/DECISIONS.md; a proposed row goes in the commit message under `Decision row:`.
+- Decisions written this round: D133 to D140. D141 (R2-P8's graph verdict) is now written in docs/DECISIONS.md; D142
+  is the big-pages package's (`lc-sync-big-pages`, proposed in its commit). Fixers do not edit docs/DECISIONS.md; a proposed row goes in the commit message under `Decision row:`.
 
 ## Work packages (round 2)
 
@@ -847,8 +847,8 @@ Plans and acceptance checks (the run's structured output has the same):
 
 | Item                                                            | Why                                                                                                                 |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Deleting the graph's code (R2-8), if D141 says remove           | Waits for R2-P8's measurement, and touches cache.ts, which R2-P3 holds this round. Round 3.                         |
-| Graph Stage 2, lighter extraction (R2-8)                        | Only if D141 keeps the graph.                                                                                       |
+| Deleting the graph's code (R2-8)                                | Rejected by D141: the graph stays in the default (+4 hidden, +2 decoys of 384 on the paid funnel).                  |
+| Graph Stage 2, lighter extraction (R2-8)                        | D141 keeps the graph; Stage 2 is its recorded next step, the `graphLite` trial (gate in D141), not yet built.       |
 | Starting re-reads when the reader's stream names an item (R2-3) | Needs reader-stream plumbing in partner.ts (held by R2-P1) and a live latency run; D134 keeps the count until then. |
 | A cheaper endpoint for intent-only card items (R2-10, Stage 2)  | An owner decision under D12/D98 about a new model endpoint: external.                                               |
 
@@ -857,3 +857,30 @@ Plans and acceptance checks (the run's structured output has the same):
 - This file: `docs/audits/2026-11-05-deep-audit.md`.
 - Decisions D127-D132 (round 1) and D133-D140 (round 2): `docs/DECISIONS.md`.
 - Integration branch: `audit/2026-11-05-integration`, branched from main 6911f514d.
+
+## Closing the run (loose ends)
+
+Checked on `audit/2026-11-05-integration` at 7d10b8ae3: every `audit/2026-11-05-*` branch is merged into it. Every
+item this run deferred or left to a decision, with its final status and where it is recorded:
+
+| Item (finding id) | Final status | Recorded in | Next step |
+| --- | --- | --- | --- |
+| `sync-sweep-backfill-big-pages` (14) | Handed to its own package | Package `lc-sync-big-pages`; D142 proposed in its commit | That package's safe design (finding 14): a trial switch, big pages only for token-paged lists or a declared schema maximum, retry at 100 on error, offset lists end only on an empty page |
+| `painpoint-prod-reader-unmeasured` (4), stage 1: paid timing of the shipped reader | Blocked externally. The $0 part (the reader's first failure logged once per process, `readerFailureLog` in packages/server/src/build.ts) shipped in round 1 | This file, finding 4 and "Deferred" | This environment's OpenRouter key gets 403 "violation of provider Terms Of Service" for Anthropic models, and the lab `SpendLedger` meters only `claude-*` ids. The owner supplies a key OpenRouter serves for `anthropic/claude-haiku-5.5`; then a ledger entry type for OpenRouter ids before any reader timing run |
+| `eval-live-measures-unshipped` (3): the paid `--live` run | Wiring fixed (D128); the paid run is blocked externally (same key block) | D128 | With a served key: `bun run eval --live --usd-cap 0.05` (D128) |
+| `quality-reader-veto-rule-path` (16): the by-name veto screen | Broad veto rejected (D130); the by-name screen is blocked externally (same key block) | D130 | Run after the live reader eval above, as D130 says |
+| `quality-reader-ceiling-gated` (15) | Rejected | D129 | None |
+| `fresh-per-ref-signals` (17) | Rejected | D131 | None |
+| `devloop-agent-replay-identical-eden` (18) | Rejected as proposed; open with the Hermes request-replay item (audit 2026-11-04, section 5) | D132 | That Hermes request-replay item |
+| `fresh-readat-race` (11), exact per-copy variant | Closed: read marks are stored per copy (`ItemCache.put`'s `readMark`, `Entry.readMark`) | D133 | None |
+| `d133-no-decision-row` (R2-13) | Closed: the D133 row is written | D133, commit 463f6fdfc | None |
+| `scale-graph-dominates-ingest` (R2-8): deleting the graph's code | Rejected: the graph stays in the default | D141 | None |
+| `scale-graph-dominates-ingest` (R2-8): Stage 2, a lighter graph | Off for now | D141 | The `graphLite` trial (owner: repo owner, ends 2026-12-17): `ingest.bench.ts` `+graph` stage at least 2x cheaper per item and the 5 pool tasks of docs/research/graph-ablation.md still in the pool on the $0 stub screen (`bun run funnel --json F` against `--baseline`); a loss goes back to the paid screen. Trials-table row added with the switch |
+| `fresh-checkahead-speculative-rereads` (R2-3), stage 2 | `VERIFY_AHEAD` stays 3; re-reads start only once the reader is called | D134 | Starting re-reads when the reader's stream names an item needs reader-stream plumbing and a live latency run (paid, same key block) |
+| `cost-intent-requests-keyword-output` (R2-10) | Rejected | D137 | A cheaper endpoint for intent-only card items is an owner decision under D12/D98 (external) |
+| `r2-results-cache-dead-weight` (R2-11) | Rejected: the results cache stays | D135 | None |
+| `cold-user-sources-on-path` (R2-16) | Rejected | D138 | None |
+| `mem-conflict-analysis-weakmap` (R2-9) | WeakMap kept, shared frozen empty array shipped (R2-P4); byte cap rejected | D136 | None |
+
+The run added no `TODO`/`FIXME` and no `EngineConfig` key. The 41 stale `origin/claude/r10-*` remote branches and the
+Hermes live check of the default (owner approval for a checkout) stay open from the 2026-11-04 audit.

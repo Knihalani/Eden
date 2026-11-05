@@ -11,7 +11,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 
 | File | Owns |
 |---|---|
-| `partner.ts` (5.5k lines) | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues |
+| `partner.ts` (5,081 lines) | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues |
 | `config.ts`, `parts.ts` | `EngineConfig`, `DEFAULT_CONFIG` (the unified default, D112: thresholds such as `confidentScore` 1.1, D6, and every part on); `PARTS` (each part's settings that take it out), `withoutParts`, `CORE_CONFIG` (every part out) |
 | `cache.ts` | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem` |
 | `text.ts`, `situation.ts` | Cues with no model (entities, content terms, chatter); a coarse situation label for routing |
@@ -56,7 +56,7 @@ user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`.
 ## Test
 
 ```bash
-bun run test:pkg engine          # 43 files, ~4 s wall in parallel (~15 s one by one); partner and reader lead
+bun run test:pkg engine          # 49 files, 8-10 s wall (two runs, shared 4-core box, 2026-11-05); partner and reader lead
 bun test ./packages/engine/src/conflict.test.ts      # one file, from the repo root (the preload is read from cwd)
 bun run eval                     # the scenario metrics; paste the JSON in the PR when behaviour changes
 bun run funnel --jobs 4          # the lab's $0 screen of the default on train (reader stub; docs/LAB.md)

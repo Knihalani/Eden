@@ -412,7 +412,7 @@ backfill costs 358–381 µs per item and 5,230–5,237 B per item (5.2–5.4x t
 unchanged items stays 3.4–6.1 µs per item. Arithmetic, not measured: a cold restart that backfills 10,000 users ×
 3,000 items at about 370 µs each is about 11,100 CPU-seconds per process, about half of it the graph. The graph adds
 no paid call; the paid-reader funnel credits it with 4 more hidden facts surfaced of 384 (and 2 more decoys), so it
-stays in the default and a cheaper graph is the next step (proposed D141).
+stays in the default and a cheaper graph (the `graphLite` trial, not yet built) is the next step (D141).
 
 Anticipation (D60, `anticipate`, in the default since D112; docs/research/moon-anticipate.md) adds no model call on any
 path: its predictions are fixed linear reads of an event's head, and its prefetches are source calls within
