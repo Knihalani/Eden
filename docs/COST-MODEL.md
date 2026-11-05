@@ -404,6 +404,16 @@ A synced user costs about 4 MB of heap per ~1,500 items and ~200 ms of CPU to ba
 measurement, not re-run). The combined funnel implies more, about 420 ms per user (16.9 s of extra process CPU over 40
 users with ALL), because there the graph and the cards are built on every synced item too (below).
 
+The shipped ingest path, measured (2026-11-05, docs/research/graph-ablation.md): `ingest.bench.ts` used to time only
+the cache's own work (its `core` line: 66–79 µs per backfilled item, 2,595 B of heap per item, 200 users × 500 items
+of 1,599 chars on average). Through a `ContextPartner` on `DEFAULT_CONFIG` with no model (its `shipped` line) the same
+backfill costs 358–381 µs per item and 5,230–5,237 B per item (5.2–5.4x the CPU, 2.0x the heap): the graph's add is
+182–192 µs and 2.6 KB of it, recording mentions in the source map 109–115 µs (SQLite, outside the heap). Re-listing
+unchanged items stays 3.4–6.1 µs per item. Arithmetic, not measured: a cold restart that backfills 10,000 users ×
+3,000 items at about 370 µs each is about 11,100 CPU-seconds per process, about half of it the graph. The graph adds
+no paid call; the paid-reader funnel credits it with 4 more hidden facts surfaced of 384 (and 2 more decoys), so it
+stays in the default and a cheaper graph is the next step (proposed D141).
+
 Anticipation (D60, `anticipate`, in the default since D112; docs/research/moon-anticipate.md) adds no model call on any
 path: its predictions are fixed linear reads of an event's head, and its prefetches are source calls within
 `anticipateCalls` (4 per event, `probeCalls` for a draft) and `anticipateSessionCalls` (24 per session). Measured
