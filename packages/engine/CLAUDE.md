@@ -69,16 +69,16 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   clock-independent in D58).
 - Regressions found in reviews go to `regressions.test.ts`, `review-regressions.test.ts` or the track's own
   `*-review.test.ts`; add to them rather than editing an old expectation.
-- `new ModelReaderMaker(model, { reasoning })` takes `"off"` (the default since D144: no effort sent, the request
-  every lab quality figure measured), `"low"`, `"medium"` or `"high"`. No `EngineConfig` key wires it; the servers
-  build it with no options, so they ship "off". D96's decoy cut came from the prompt writing `why` before `binds`
-  (READER_SYSTEM v4/v5), not from provider reasoning. On Haiku 5.5 (Anthropic-direct, default pool) "low" was 2.38x
-  slower at p50, 1.59x dearer, and 38 of 60 calls ran past `askReaderWaitMs` (docs/COST-MODEL.md, `reader-time.ts`).
-  When a caller asks for reasoning, OpenRouter excludes it from the reply but bills it as output;
-  `usage.reasoningTokens` (from `completion_tokens_details.reasoning_tokens`, unset when not reported) shows that
-  share. The lab's reader replay key treats a `claude-*` reader request with no reasoning as the pre-D144 "low" line
-  (`reader-disk.ts`, `keyedReasoning`), so recorded caches still replay. Making reasoning the default again needs a
-  decision and a decoy measurement.
+- `ModelReaderMaker` sends no reasoning field and has no option to send one (D144 made "off" the default, D155
+  deleted the option): that is the request every lab quality figure measured. D96's decoy cut came from the prompt
+  writing `why` before `binds` (READER_SYSTEM v4/v5), not from provider reasoning. On Haiku 5.5 (Anthropic-direct,
+  default pool) effort "low" was 2.38x slower at p50, 1.59x dearer, and 38 of 60 calls ran past `askReaderWaitMs`
+  (docs/COST-MODEL.md, `reader-time.ts`). The lab's "low" arms add the effort through a model wrapper
+  (`eval-live.ts`), never through the maker. If a wrapped model asks for reasoning, OpenRouter excludes it from the
+  reply but bills it as output; `usage.reasoningTokens` (from `completion_tokens_details.reasoning_tokens`, unset when
+  not reported) shows that share. The lab's reader replay key treats a `claude-*` reader request with no reasoning as
+  the pre-D144 "low" line (`reader-disk.ts`, `keyedReasoning`), so recorded caches still replay; keep that mapping
+  when touching the request. Sending reasoning again needs a decision and a decoy measurement, as a trial (D112).
 - `Held` (what a tool result or agent message holds, for `alreadyHas`) is two sorted unique typed arrays, searched by
   binary search: a remap (`rebuildVocab`) must sort and dedupe again, since new ids do not keep the old order. Pair
   keys stay exact Float64 (`pairKey`): a hashed key could hold back a delivery on a collision. `held.test.ts` measures
@@ -101,11 +101,11 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   state, and its held page would answer with the old copy. `sourceNotice` gives the reason a notice did not act
   ("push-off", "not-synced", "not-notifying"; no I/O, so an unknown id is "not-synced"). `sourceItems` redacts before
   storing (D10); `ingest` stores only items of that source.
-- `new ModelCardMaker(model, { reasoning })` defaults to `"off"` (D149, amending D59): no reasoning field is sent,
-  the request every lab card and intent figure measured (all 5,158 `eden.cards` ledger rows ran with thinking off).
-  `buildPartner` passes no `reasoning`, so the servers ship "off". "low" was 1.82x slower at p50 and 1.54x dearer on
-  Haiku 5.5 (docs/COST-MODEL.md, run `close-cards-reasoning`). Turning it back on needs a decision, as for the
-  reader (D144).
+- `ModelCardMaker` sends no reasoning field and has no option to send one (D149 made "off" the default, amending
+  D59; D155 deleted the option): the request every lab card and intent figure measured (all 5,158 `eden.cards` ledger
+  rows ran with thinking off). Effort "low" was 1.82x slower at p50 and 1.54x dearer on Haiku 5.5 (docs/COST-MODEL.md,
+  run `close-cards-reasoning`). Sending it again needs a decision, as for the reader. The judge (`partner.ts`, lab-only:
+  the servers wire none) still sends "low"; changing that needs a judge measurement (D155).
 - The graph reads an item's first `READ_CHARS` = 1,000 characters of text (D150; its title and `meta.people` are read
   on their own). That cut D141's `+graph` ingest stage 2.1-2.3x with every train screen identical; a name past
   character 1,000 is not a graph node (`kg.test.ts`). Raising it again re-runs `ingest.bench.ts` and the funnel
