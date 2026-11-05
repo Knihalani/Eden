@@ -14,9 +14,8 @@
 import { heapStats } from "bun:jsc";
 import { createHash } from "node:crypto";
 import type { ContextItem } from "@eden/protocol";
-import { extractEntities, ItemCache, seedsOf, timeWindow } from "@eden/engine";
-// The graph itself is not exported by the engine; the benchmark times its two halves directly.
-import { extract, UserGraph } from "../../../engine/src/kg";
+// The benchmark times the graph's two halves (`extract`, the insert into `UserGraph`) directly.
+import { extract, extractEntities, ItemCache, seedsOf, timeWindow, UserGraph } from "@eden/engine";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { clearSlot, dress } from "./hidden-context";

@@ -10,6 +10,7 @@
   "dependencies": {
     "@eden/client": "workspace:*",
     "@eden/engine": "workspace:*",
+    "@eden/eval": "workspace:*",
     "@eden/graph": "workspace:*",
     "@eden/llm": "workspace:*",
     "@eden/primitives": "workspace:*",
