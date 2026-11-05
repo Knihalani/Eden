@@ -527,26 +527,108 @@ describe("ItemCache gone-holds (removeItems with a hold) never allocate or evict
     expect(cache.holdCount("t")).toBe(0);
   });
 
-  test("holds are bounded per tenant: past 20,000, the least recently held user's oldest go", () => {
+  test("holds are bounded per tenant: past 100,000, the least recently held user's oldest go, each counted", () => {
     const cache = new ItemCache({ expireEveryMs: 0 });
-    for (let u = 0; u < 25; u++) {
+    for (let u = 0; u < 105; u++) {
       const ids = Array.from({ length: 1_000 }, (_, i) => `mail:u${u}m${i}`);
       cache.removeItems({ tenantId: "t", userId: `user${u}` }, ids, T + u, 10 * MIN);
     }
-    expect(cache.holdCount("t")).toBe(20_000);
+    expect(cache.holdCount("t")).toBe(100_000);
+    expect(cache.holdsEvicted("t")).toBe(5_000); // All live: nothing had expired to go first.
+    expect(cache.holdsEvicted()).toBe(5_000);
     expect(cache.isHeldGone({ tenantId: "t", userId: "user0" }, "mail:u0m999", T)).toBe(false);
     expect(cache.isHeldGone({ tenantId: "t", userId: "user4" }, "mail:u4m999", T)).toBe(false);
     expect(cache.isHeldGone({ tenantId: "t", userId: "user5" }, "mail:u5m0", T)).toBe(true);
-    expect(cache.isHeldGone({ tenantId: "t", userId: "user24" }, "mail:u24m999", T)).toBe(true);
+    expect(cache.isHeldGone({ tenantId: "t", userId: "user104" }, "mail:u104m999", T)).toBe(true);
     // Another tenant's holds are its own.
     cache.removeItems({ tenantId: "u", userId: "user0" }, ["mail:u0m0"], T, 10 * MIN);
     expect(cache.holdCount("u")).toBe(1);
-    expect(cache.holdCount("t")).toBe(20_000);
+    expect(cache.holdCount("t")).toBe(100_000);
     // A hold re-set by a user moves to the back: its user is now the most recently held.
-    cache.removeItems({ tenantId: "t", userId: "user5" }, ["mail:u5m0"], T + 100, 10 * MIN);
-    cache.removeItems({ tenantId: "t", userId: "late" }, ["mail:late"], T + 100, 10 * MIN);
+    cache.removeItems({ tenantId: "t", userId: "user5" }, ["mail:u5m0"], T + 200, 10 * MIN);
+    cache.removeItems({ tenantId: "t", userId: "late" }, ["mail:late"], T + 200, 10 * MIN);
     expect(cache.isHeldGone({ tenantId: "t", userId: "user5" }, "mail:u5m0", T)).toBe(true);
     expect(cache.isHeldGone({ tenantId: "t", userId: "user6" }, "mail:u6m0", T)).toBe(false);
+    expect(cache.holdsEvicted("t")).toBe(5_001);
+    // The count outlives the holds: a tenant whose holds all expired still reports what it lost.
+    cache.expireIdle(T + 11 * MIN);
+    expect(cache.holdCount("t")).toBe(0);
+    expect(cache.holdsEvicted("t")).toBe(5_001);
+    expect(cache.holdCount("u")).toBe(0);
+    expect(cache.holdsEvicted("u")).toBe(0);
+  });
+
+  test("10,000 users x 5 removals spread over 10 minutes are all held at the end, none evicted, ≤600 B a hold", () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    const users = 10_000;
+    const each = 5;
+    const total = users * each; // ~83 deletions a second for one tenant: 2.5x the old 20,000 cap's break-even.
+    const ids = Array.from({ length: total }, (_, k) => `mail:u${k % users}m${Math.floor(k / users)}`);
+    const scopes = Array.from({ length: users }, (_, i) => ({ tenantId: "t", userId: `user${i}` }));
+    const at = (k: number) => T + Math.floor((k * (10 * MIN - 1)) / total);
+    Bun.gc(true);
+    const before = process.memoryUsage().heapUsed;
+    for (let k = 0; k < total; k++) cache.removeItems(scopes[k % users]!, [ids[k]!], at(k), 10 * MIN);
+    Bun.gc(true);
+    const perHold = (process.memoryUsage().heapUsed - before) / total;
+    console.log(`gone-holds: ${perHold.toFixed(0)} B heap per hold, ${total} holds across ${users} users`);
+    const end = T + 10 * MIN - 1; // Every removal's hold (the first's included) ends after this.
+    expect(cache.holdCount("t")).toBe(total);
+    expect(cache.holdsEvicted("t")).toBe(0);
+    let held = 0;
+    for (let k = 0; k < total; k++) if (cache.isHeldGone(scopes[k % users]!, ids[k]!, end)) held++;
+    expect(held).toBe(total);
+    expect(perHold).toBeLessThanOrEqual(600);
+  });
+
+  test("over the tenant cap, expired holds go tenant-wide before any live one", () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    // 100 users fill the cap with short holds that end at T + 1 minute.
+    for (let u = 0; u < 100; u++) {
+      const ids = Array.from({ length: 1_000 }, (_, i) => `mail:u${u}m${i}`);
+      cache.removeItems({ tenantId: "t", userId: `old${u}` }, ids, T, MIN);
+    }
+    expect(cache.holdCount("t")).toBe(100_000);
+    // Later, other users' removals push the tenant over: the expired go, no live hold is lost.
+    const fresh = Array.from({ length: 5_000 }, (_, i) => `mail:f${i}`);
+    for (let i = 0; i < 5; i++) {
+      cache.removeItems(
+        { tenantId: "t", userId: `new${i}` },
+        fresh.slice(i * 1_000, (i + 1) * 1_000),
+        T + 2 * MIN,
+        MIN,
+      );
+    }
+    expect(cache.holdsEvicted("t")).toBe(0);
+    expect(cache.holdsEvicted()).toBe(0);
+    expect(cache.holdCount("t")).toBe(5_000);
+    for (let i = 0; i < 5; i++) {
+      expect(cache.isHeldGone({ tenantId: "t", userId: `new${i}` }, `mail:f${i * 1_000}`, T + 2 * MIN)).toBe(true);
+    }
+  });
+
+  test("one tenant's evictions touch neither another tenant's holds nor its count", () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    const other = { tenantId: "b", userId: "user0" };
+    cache.removeItems(other, ["mail:u0m0", "mail:u0m1"], T, 10 * MIN);
+    for (let u = 0; u < 102; u++) {
+      const ids = Array.from({ length: 1_000 }, (_, i) => `mail:u${u}m${i}`);
+      cache.removeItems({ tenantId: "a", userId: `user${u}` }, ids, T + 1, 10 * MIN);
+    }
+    // Per user too: one user's bulk deletion past 1,000 is counted, in its own tenant only.
+    const bulk = Array.from({ length: 1_500 }, (_, i) => `mail:bulk${i}`);
+    cache.removeItems({ tenantId: "a", userId: "bulk" }, bulk, T + 2, 10 * MIN);
+    expect(cache.holdCount("a")).toBe(100_000);
+    expect(cache.holdsEvicted("a")).toBe(2_000 + 500 + 1_000);
+    expect(cache.holdCount("b")).toBe(2);
+    expect(cache.holdsEvicted("b")).toBe(0);
+    expect(cache.isHeldGone(other, "mail:u0m0", T + 3)).toBe(true);
+    expect(cache.isHeldGone(other, "mail:u0m1", T + 3)).toBe(true);
+    expect(cache.holdsEvicted()).toBe(3_500);
+    // Forgetting a user of one tenant leaves the other's holds and both counts.
+    cache.forget({ tenantId: "a", userId: "bulk" });
+    expect(cache.holdsEvicted("a")).toBe(3_500);
+    expect(cache.holdCount("b")).toBe(2);
   });
 });
 
