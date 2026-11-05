@@ -27,7 +27,16 @@ import { Rng } from "./rng";
 import { buildSessions, type AskCase, type Label, type SimTask, type SimTurn } from "./sessions";
 import { draftOf, type DraftMode } from "./drafts";
 import { simSources, type ProfileSet, type SimSource } from "./sources";
-import { applyUpdate, factsShown, planUpdates, relabel, type FactUpdate } from "./updates";
+import {
+  applyDelete,
+  applyUpdate,
+  factsShown,
+  planDeletes,
+  planUpdates,
+  relabel,
+  type FactUpdate,
+  type ItemDelete,
+} from "./updates";
 import { buildWorld, HOUR, type World, type WorldItem } from "./world";
 
 export interface QualityOptions {
@@ -44,6 +53,14 @@ export interface QualityOptions {
   noiseScale?: number;
   /** Share of clock-time facts that get a new version at the source before a later session (`updates.ts`). */
   updates?: number;
+  /** Share of fact-stating items the source deletes before a later session (`updates.ts` `planDeletes`). */
+  deletes?: number;
+  /**
+   * How source changes reach Eden (`syncPush`): `signals` forwards a change notification for each update and
+   * deletion, `payload` forwards the changed items themselves and the deleted refs; `none` (the default) forwards
+   * nothing. Any mode but `none` marks every sim source as notifying.
+   */
+  push?: "none" | "signals" | "payload";
   agentToolRate?: number;
   /**
    * A "user is typing" draft before each user message (`drafts.ts`; a simulation assumption: sessions carry none),
@@ -221,6 +238,12 @@ export interface QualityReport {
    * many of them showed the old version (a stale cached copy).
    */
   updates: { planned: number; applied: number; updatedDelivered: number; staleDelivered: number };
+  /**
+   * Source-side deletions (`--deletes`): planned and applied; items delivered (packets) and cited (asks) after their
+   * source deleted them, a stale delivery of another kind; and `verifyDelivery`'s re-reads and outcomes.
+   */
+  deletes: { planned: number; applied: number; deletedDelivered: number; deletedCited: number };
+  freshness: { checked: number; confirmed: number; changed: number; gone: number; failed: number; calls: number };
   model: { callsPerTurn: number; costPerTurnUsd: number; costPer1kTurnsUsd: number };
   sources: {
     /** Every connector call per lookup, refresh fetches included. */
@@ -366,6 +389,11 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
   let fetches = 0;
   let updatedDelivered = 0;
   let staleDelivered = 0;
+  let deletesPlanned = 0;
+  let deletesApplied = 0;
+  let deletedDelivered = 0;
+  let deletedCited = 0;
+  const freshness = { checked: 0, confirmed: 0, changed: 0, gone: 0, failed: 0, calls: 0 };
   let notInert = 0;
   let sourceCalls = 0;
   /** With the background sync (`sync`, D57): its listing calls, apart from request-time ones, and local answers. */
@@ -399,11 +427,17 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     // Its own seed: a run without updates draws exactly as before.
     const updates = planUpdates(world, sessions.length, o.seed * 15_331 + u, o.updates ?? 0);
     relabel(sessions, asks, updates);
-    return { world, sessions, asks, updates, sources: simSources(world, o.profiles, o.timeScale, o.seed + u) };
+    const deletes = planDeletes(world, sessions.length, o.seed * 17_389 + u, o.deletes ?? 0);
+    const sources = simSources(world, o.profiles, o.timeScale, o.seed + u);
+    if ((o.push ?? "none") !== "none") for (const s of sources) s.notifies = true;
+    return { world, sessions, asks, updates, deletes, sources };
   });
   const runUser = async (u: number) => {
-    const { world, sessions, asks, updates, sources } = prepared[u]!;
+    const { world, sessions, asks, updates, deletes, sources } = prepared[u]!;
     updatesPlanned += updates.length;
+    deletesPlanned += deletes.length;
+    /** Items the source has deleted so far: a delivery of one is stale. */
+    const deleted = new Set<string>();
     const applied: FactUpdate[] = [];
     const byId = new Map(world.items.map((i) => [i.id, i]));
     const secrets = world.items.filter((i) => i.secret).map((i) => i.secret!);
@@ -454,6 +488,22 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       ...(cards ? { cards } : {}),
     });
     const who = { tenantId: "sim", userId: `u${u}` };
+    /** `push`: what an integrator forwards when the source changes items or deletes them. */
+    const notify = async (touched: Set<string>, changed: string[], gone: WorldItem[]) => {
+      const mode = o.push ?? "none";
+      if (mode === "none") return;
+      for (const s of sources) {
+        if (!touched.has(s.id)) continue;
+        if (mode === "signals") {
+          partner.sourceChanged(who, s.id);
+          continue;
+        }
+        const items = s.listAll().filter((i) => changed.includes(i.id));
+        if (items.length > 0) await partner.sourceItems(who, s.id, items);
+        const refs = gone.filter((i) => i.sourceId === s.id).map((i) => i.ref);
+        if (refs.length > 0) partner.sourceRemoved(who, s.id, refs);
+      }
+    };
     const pace = new Rng(o.seed * 104_729 + u);
     // The background sync's timer (`sync`): a tick every five simulated minutes, the clock run through the gap.
     const sync = partner.sync;
@@ -502,6 +552,15 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         applied.push(up);
         updatesApplied++;
         for (const s of sources) if (touched.has(s.id)) s.reindex();
+        await notify(touched, up.items, []);
+      }
+      for (const d of deletes.filter((x) => x.session === si)) {
+        const refs = new Map(world.items.filter((i) => d.items.includes(i.id)).map((i) => [i.id, i]));
+        const touched = applyDelete(world, d);
+        deletesApplied++;
+        for (const id of d.items) deleted.add(id);
+        for (const s of sources) if (touched.has(s.id)) s.reindex();
+        await notify(touched, [], [...refs.values()]);
       }
       if (o.sync) {
         const added = cache.put(
@@ -681,6 +740,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         arrivals.push({ at, immediate, ids, shown, stated, wallMs: wall, why: inj.reason.split(":")[0] ?? "" });
         for (const id of ids) {
           itemsDelivered++;
+          if (deleted.has(id)) deletedDelivered++;
           const item = byId.get(id);
           if (!item) continue;
           const facts = shown.get(id)!;
@@ -811,8 +871,9 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     // ── ask ──
     for (const c of asks) {
       clock += pace.lognormal(60_000, 0.8); // Questions come spread out, not in one burst.
-      await scoreAsk(partner, who, c, byId, secrets);
+      await scoreAsk(partner, who, c, byId, secrets, deleted);
     }
+    for (const k of Object.keys(freshness) as (keyof typeof freshness)[]) freshness[k] += partner.freshness[k];
     for (const s of sources) {
       sourceCalls += s.stats.calls;
       fetches += s.stats.fetches;
@@ -850,12 +911,14 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     c: AskCase,
     byId: Map<string, WorldItem>,
     secrets: string[],
+    deletedIds: ReadonlySet<string>,
   ) {
     const res = await partner.ask({ ...who, sessionId: "ask", question: c.question, maxItems: 5 });
     ask.cases++;
     if (res.usedModel) ask.usedModel++;
     for (const s of secrets) if (res.answer.includes(s)) secretsLeaked++;
     const ids = res.citations.map((x) => x.itemId);
+    deletedCited += ids.filter((id) => deletedIds.has(id)).length;
     if (!ids.length) ask.empty++;
     ask.cited += ids.length;
     const want = new Set([...c.must, ...c.ok]);
@@ -925,6 +988,8 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     noiseShare: r3(noise / Math.max(1, itemsDelivered)),
     privacy: { secretsPlanted, secretsLeaked, injectionItemsDelivered: injectionItems, deliveredNotInert: notInert },
     updates: { planned: updatesPlanned, applied: updatesApplied, updatedDelivered, staleDelivered },
+    deletes: { planned: deletesPlanned, applied: deletesApplied, deletedDelivered, deletedCited },
+    freshness,
     model: {
       callsPerTurn: r3(modelCalls / turns),
       costPerTurnUsd: cost / turns,

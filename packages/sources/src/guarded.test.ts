@@ -316,6 +316,86 @@ describe("SourceFanout fetch", () => {
     ).toBeNull();
   });
 
+  test("fetchChecked: ok, gone only from a source whose null means gone, failed otherwise", async () => {
+    const f = new SourceFanout({ sanitize: redactAll });
+    const opts = { timeoutMs: 1_000 };
+    const ok = await f.fetchChecked(
+      readable(async () => item("token secretXYZ")),
+      scope,
+      "1",
+      opts,
+    );
+    expect(ok.status === "ok" && ok.item.text).toBe("token [REDACTED]");
+    const holds = { ...readable(async () => null), fetchReportsGone: true };
+    expect(await f.fetchChecked(holds, scope, "1", opts)).toEqual({ status: "gone" });
+    // A null from a source that does not say it means gone (an MCP tool) proves nothing.
+    expect(
+      await f.fetchChecked(
+        readable(async () => null),
+        scope,
+        "1",
+        opts,
+      ),
+    ).toEqual({ status: "failed" });
+    expect(
+      await f.fetchChecked(
+        source(async () => []),
+        scope,
+        "1",
+        opts,
+      ),
+    ).toEqual({ status: "failed" });
+    const throws = readable(async () => {
+      throw new Error("500");
+    });
+    expect(await f.fetchChecked({ ...throws, fetchReportsGone: true }, scope, "2", opts)).toEqual({ status: "failed" });
+  });
+
+  test("dropResults: the next search of that user's source asks it again; other users and sources keep theirs", async () => {
+    const f = new SourceFanout({ sanitize: (x) => x });
+    const other = { tenantId: "t", userId: "v" };
+    const src = source(async () => [item("renewal on Friday")]);
+    await f.search([src], query(), { timeoutMs: 1_000 });
+    await f.search([src], { ...query(), scope: other }, { timeoutMs: 1_000 });
+    expect((await f.search([src], query(), { timeoutMs: 1_000 }))[0]!.status).toBe("cached");
+    f.dropResults(scope, "s");
+    expect((await f.search([src], query(), { timeoutMs: 1_000 }))[0]!.status).toBe("ok");
+    expect((await f.search([src], { ...query(), scope: other }, { timeoutMs: 1_000 }))[0]!.status).toBe("cached");
+    expect(src.calls).toBe(3);
+  });
+
+  test("dropResults is per (user, source): another user's in-flight search still holds its page", async () => {
+    const f = new SourceFanout({ sanitize: (x) => x });
+    const other = { tenantId: "t", userId: "v" };
+    const held = (resolve: (r: () => void) => void) => new Promise<void>((r) => resolve(r));
+    let free: () => void = () => {};
+    const gate = held((r) => (free = r));
+    const src = source(async (call) => {
+      if (call === 1) await gate;
+      return [item("renewal on Friday")];
+    });
+    const running = f.search([src], query(), { timeoutMs: 1_000 });
+    await Bun.sleep(1);
+    f.dropResults(other, "s"); // Another user's notification while this user's call runs.
+    free();
+    await running;
+    expect((await f.search([src], query(), { timeoutMs: 1_000 }))[0]!.status).toBe("cached");
+    // This user's own drop while a call runs: the page is not held.
+    let free2: () => void = () => {};
+    const gate2 = held((r) => (free2 = r));
+    const slow = source(async () => {
+      await gate2;
+      return [item("renewal on Friday")];
+    });
+    const q2 = query("invoice");
+    const own = f.search([slow], q2, { timeoutMs: 1_000 });
+    await Bun.sleep(1);
+    f.dropResults(scope, "s");
+    free2();
+    await own;
+    expect((await f.search([slow], q2, { timeoutMs: 1_000 }))[0]!.status).not.toBe("cached");
+  });
+
   test("a failing source opens the breaker for searches too; a failing gate does not count against the source", async () => {
     const breaker = { minCalls: 2, failureRate: 0.5, openMs: 60_000 };
     const f = new SourceFanout({ sanitize: (x) => x, breaker, ratePerSec: 100, burst: 100 });

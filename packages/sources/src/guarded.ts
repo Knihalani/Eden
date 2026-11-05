@@ -114,6 +114,8 @@ interface PerSource {
    * the first one: most (user, source) pairs never see the planner.
    */
   callLatency?: RollingHistogram;
+  /** `dropResults` calls for this (user, source): a call running across one does not hold its page. */
+  drops?: number;
 }
 
 /** Planner calls a connector's call-latency quantile needs before it is trusted. */
@@ -190,13 +192,30 @@ export class SourceFanout {
     ref: string,
     options: { timeoutMs: number; signal?: AbortSignal },
   ): Promise<ContextItem | null> {
-    if (!source.fetch) return null;
+    const got = await this.fetchChecked(source, scope, ref, options);
+    return got.status === "ok" ? got.item : null;
+  }
+
+  /**
+   * `fetch`, telling apart what `fetch` folds into null: the source answered with the item (`ok`), answered that it
+   * has no such item (`gone`: a null from a source whose `fetchReportsGone` is true), or could not say (`failed`: no
+   * fetch, a guard skipped the call, an error, a timeout, a gate failure, a null from any other source). A freshness
+   * check drops an item only when it is `gone`.
+   */
+  async fetchChecked(
+    source: Source,
+    scope: Scope,
+    ref: string,
+    options: { timeoutMs: number; signal?: AbortSignal },
+  ): Promise<{ status: "ok"; item: ContextItem } | { status: "gone" } | { status: "failed" }> {
+    const failed = { status: "failed" } as const;
+    if (!source.fetch) return failed;
     const timeout = AbortSignal.timeout(options.timeoutMs);
     const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
     const key = `${scopeKey(scope)}|${source.id}`;
     const s = this.state(key);
     const epoch = this.admit(key, s);
-    if (typeof epoch !== "number") return null;
+    if (typeof epoch !== "number") return failed;
     const started = performance.now();
     let raw: ContextItem | null;
     try {
@@ -205,25 +224,27 @@ export class SourceFanout {
       const message = String(e);
       if (signal.aborted && !timeout.aborted) {
         s.limiter.release("ignored"); // The caller gave up: no evidence against the source.
-        return null;
+        return failed;
       }
       s.latency.record(performance.now() - started);
       s.limiter.release("dropped");
       s.breaker.failure(epoch);
       if (RATE_LIMITED.test(message)) this.rate.penalize(key, retryAfterMs(message) ?? 5_000);
-      return null;
+      return failed;
     }
     // The source answered: its permit and breaker are settled once, here. Gating is ours, not the source's: a gate
     // that fails or runs out of time drops the item and says nothing against the source.
     s.latency.record(performance.now() - started);
     s.limiter.release("ok");
     s.breaker.success(epoch);
-    if (!raw) return null;
+    // Null is "no such item" only from a source that says so (`fetchReportsGone`); from another (an MCP tool's
+    // reply without the asked-for row could be an error worded as prose) it says nothing either way.
+    if (!raw) return source.fetchReportsGone === true ? { status: "gone" } : failed;
     try {
       const [item] = await this.options.sanitize([raw], signal);
-      return item ?? null;
+      return item ? { status: "ok", item } : failed;
     } catch {
-      return null;
+      return failed;
     }
   }
 
@@ -305,6 +326,24 @@ export class SourceFanout {
   }
 
   /**
+   * Drops the results held for one of a user's sources, keeping its breaker, limits and latency: the source changed or
+   * deleted something, so a held page may show it as it was. A call still running when this happens holds nothing.
+   */
+  dropResults(scope: Scope, sourceId: string): void {
+    const key = `${scopeKey(scope)}|${sourceId}`;
+    // Counted per (user, source), not on `forgets`: one user's notifications must not stop other users' calls from
+    // holding their pages or recording their latency. No state means no call of this pair is running.
+    const s = this.per.get(key);
+    if (s) s.drops = (s.drops ?? 0) + 1;
+    this.results?.deleteWhere((k) => k.startsWith(`${key}|`));
+  }
+
+  /** `dropResults` calls so far for a (user, source), to compare across a call. */
+  private dropsOf(key: string): number {
+    return this.per.get(key)?.drops ?? 0;
+  }
+
+  /**
    * One more call to a source within a lookup already admitted (the query planner's extra calls): takes a token from
    * the same per-(user, source) rate limit, so the limit counts calls, not lookups. False when the limit is spent.
    */
@@ -363,6 +402,7 @@ export class SourceFanout {
             // Only the flight's leader runs this: a call that joins it is not one the connector receives.
             calls.made++;
             const forgets = this.forgets;
+            const drops = this.dropsOf(sourceKey(q));
             const t0 = performance.now();
             let raw: ContextItem[];
             try {
@@ -377,7 +417,8 @@ export class SourceFanout {
             }
             this.recordCall(sourceKey(q), t0, forgets);
             const items = await this.gate(raw, sig);
-            if (!sig.aborted && this.forgets === forgets) this.results?.set(k, items, sizeOf(items));
+            const held = this.forgets === forgets && this.dropsOf(sourceKey(q)) === drops;
+            if (!sig.aborted && held) this.results?.set(k, items, sizeOf(items));
             return items;
           },
           signal,
@@ -499,6 +540,7 @@ export class SourceFanout {
 
     const started = performance.now();
     const forgets = this.forgets;
+    const drops = this.dropsOf(sourceKey);
     // Set once the source has answered: a deadline that runs out after that ran out in our gate, not at the source.
     let answered = false;
     try {
@@ -516,8 +558,9 @@ export class SourceFanout {
       s.latency.record(performance.now() - started);
       s.limiter.release("ok");
       s.breaker.success(epoch);
-      // A forget while the call ran: writing the result back could undo it.
-      if (this.forgets === forgets) this.results?.set(cacheKey, items, sizeOf(items));
+      // A forget, or this pair's `dropResults`, while the call ran: writing the result back could undo it.
+      if (this.forgets === forgets && this.dropsOf(sourceKey) === drops)
+        this.results?.set(cacheKey, items, sizeOf(items));
       return done("ok", items);
     } catch (e) {
       const message = String(e);

@@ -137,6 +137,11 @@ interface SourceSync {
   notifies: boolean;
   /** Change notifications received (`Sync.changed`). */
   notices: number;
+  /**
+   * When the latest notification came (-Infinity before any). A signal does not say which item changed, and the poll
+   * it causes reads only the newest page: a copy read before it is in doubt until read again (`signalledSince`).
+   */
+  noticedAt: number;
   /** `notices` when the last complete poll began: the copy is behind while they differ. */
   noticesPolled: number;
   /** `notices` when the backfill's latest page began: what the backfill has read when it ends (`warmUp`). */
@@ -244,6 +249,7 @@ export class SyncManager {
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
     if (!s || !s.notifies) return false;
     s.notices++;
+    s.noticedAt = this.deps.now();
     return true;
   }
 
@@ -265,6 +271,30 @@ export class SyncManager {
     }
     while (s.pushed.size > MAX_PUSHED) s.pushed.delete(s.pushed.keys().next().value as string);
     return n;
+  }
+
+  /**
+   * Items the source deleted (a deletion notification, or a fetch that found them gone): no longer counted as synced
+   * from it, nor as pushed. The caller drops them from the cache. O(ids).
+   */
+  removed(scope: Scope, sourceId: string, ids: Iterable<string>): void {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    if (!s) return;
+    for (const id of ids) {
+      s.ids.delete(id);
+      s.pushed.delete(id);
+      s.missed.delete(id);
+    }
+  }
+
+  /**
+   * Whether a notifying source has signalled a change after `readAt`: a signal does not say which item changed, and the
+   * poll it causes reads only the newest page, so a copy read before it (or one the source has since deleted) is in
+   * doubt until it is read again (`verifyDelivery`). Items a notification carried (`ingest`) are read at its time.
+   */
+  signalledSince(scope: Scope, sourceId: string, readAt: number): boolean {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    return s !== undefined && s.notifies && s.noticedAt > readAt;
   }
 
   /** Whether the user's copy of a source has finished its backfill, current or not (`syncPollBehind`). */
@@ -665,8 +695,11 @@ export class SyncManager {
   private store(u: UserSync, s: SourceSync, items: ContextItem[], changedIds?: Set<string>): number {
     // The same user object and source state: work for a user forgotten and back since must not land.
     if (u.gone || items.length === 0 || this.users.get(u.key) !== u || u.sources.get(s.id) !== s) return 0;
-    const own = items.filter((it) => it.sourceId === s.id);
-    const changed = this.deps.cache.put(u.scope, own, this.deps.now(), true, true);
+    const now = this.deps.now();
+    // An item its source said is gone (`ItemCache.isHeldGone`) was listed before the deletion: neither stored nor
+    // counted as synced, or the listing would undo `removed`.
+    const own = items.filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now));
+    const changed = this.deps.cache.put(u.scope, own, now, true, true);
     if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
     for (const it of own) {
@@ -772,6 +805,7 @@ function newSourceSync(id: string): SourceSync {
     reading: null,
     notifies: false,
     notices: 0,
+    noticedAt: -Infinity,
     noticesPolled: 0,
     noticesBackfill: 0,
     pushed: new Map(),

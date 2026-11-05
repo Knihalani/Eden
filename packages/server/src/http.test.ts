@@ -406,3 +406,16 @@ describe("change notifications (syncPush)", () => {
     expect((await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items: badMeta })).status).toBe(400);
   });
 });
+
+describe("deletion notifications (syncPush)", () => {
+  test("sources/removed: checked input, 200 with how many were held", async () => {
+    expect(await (await post("/v1/sources/removed", { userId: "u1", sourceId: "crm", refs: ["d9"] })).json()).toEqual({
+      ok: true,
+      removed: 0,
+    });
+    expect((await post("/v1/sources/removed", { userId: "u1", sourceId: "crm", refs: [] })).status).toBe(400);
+    expect((await post("/v1/sources/removed", { userId: "u1", sourceId: "crm", refs: [7] })).status).toBe(400);
+    const many = Array.from({ length: 101 }, (_, i) => `r${i}`);
+    expect((await post("/v1/sources/removed", { userId: "u1", sourceId: "crm", refs: many })).status).toBe(400);
+  });
+});

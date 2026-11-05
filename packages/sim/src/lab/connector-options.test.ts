@@ -53,9 +53,10 @@ describe("connector options (--source-profile, --push)", () => {
       description: s!.description,
       listsByTime: s!.listsByTime,
       notifies: true,
+      fetchReportsGone: true,
     });
     // Every optional, non-call member of `Source` today: a new one must be added here and to `sourceFields`.
-    const optional: (keyof typeof kept)[] = ["listsByTime", "notifies"];
+    const optional: (keyof typeof kept)[] = ["listsByTime", "notifies", "fetchReportsGone"];
     for (const k of optional) expect(k in kept).toBe(true);
   });
 });

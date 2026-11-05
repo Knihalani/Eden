@@ -56,6 +56,9 @@ export class StaticSource implements Source {
       .map((x) => x.item);
   }
 
+  /** It holds its documents: a ref it does not have is not there. */
+  readonly fetchReportsGone = true;
+
   async fetch(ref: string): Promise<ContextItem | null> {
     return this.items.find((i) => i.ref === ref) ?? null;
   }

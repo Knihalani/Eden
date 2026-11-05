@@ -16,7 +16,18 @@ export interface Trace {
    *   its cost and its one model call, which the ask's own "answer" trace leaves out. Emitted even after the session
    *   closed. No items.
    */
-  decision: "skipped" | "repeat" | "silent" | "fast" | "sources" | "model" | "answer" | "reader-push" | "reader-late";
+  /** "verify": `verifyDelivery`'s re-reads before a delivery, traced apart so traces sum to what the connectors got. */
+  decision:
+    | "skipped"
+    | "repeat"
+    | "silent"
+    | "fast"
+    | "sources"
+    | "model"
+    | "answer"
+    | "reader-push"
+    | "reader-late"
+    | "verify";
   reason: string;
   latencyMs: number;
   /**

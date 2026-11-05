@@ -203,12 +203,23 @@ of Eden's connector bill. If you already receive the provider's change notificat
   its next use, however many notifications came first. For a busy inbox this saves little: it changes about every
   hour, so it is polled about as often as before.
 
+- **Items the source deleted** (a recalled or deleted message, a removed doc or event; Gmail history, Slack's
+  `message_deleted`, Graph and HubSpot deletions all report them): `POST /v1/sources/removed {userId, sourceId,
+  refs}`, at most 100 refs, or `client.sourceRemoved(sourceId, refs)`. Eden drops them at once (their cards and graph
+  entries too); without this a deleted item is only noticed by the daily sweep, two sweeps in a row.
+
 Declare the sources you forward: `"notifies": true` in the user's source spec (`EDEN_USER_SOURCES_FILE` or your
 `SourceDirectory`), or `notifies: true` on a `Source` you build. A source that notifies is polled only when told it
 changed, by the daily sweep (which also drops what the source deleted), and after `syncPushMaxStaleMs` (24 hours)
 with no notification, so a lost notification is bounded. Sources you do not forward are polled as before. The routes
 answer 200 with what was done: `synced` is false when the source is not synced for the user or not declared as
 notifying (the notification is ignored), and `stored` counts the items held new or changed.
+
+A signal that says only "this source changed" does not say what changed. Eden then treats every item it read from
+that source before the signal as unconfirmed, and reads such an item again by its id before delivering it (D126: about
+0.5 re-reads per agent turn in the simulation, each one connector call; a source without a fetch tool is delivered as
+held). Notifications that carry their items or name their deletions need no re-reads, so prefer them where the
+provider offers them.
 
 Receiving notifications has its own cost, which Eden does not see: a platform may bill trigger runs, and a Gmail push
 carries only a history id that your code turns into items with a `history.list` call.

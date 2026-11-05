@@ -3,5 +3,6 @@
   "syncPollBehind": false,
   "syncPollPageSize": 0,
   "readerPushBehind": false,
-  "syncPush": false
+  "syncPush": false,
+  "verifyDelivery": false
 }

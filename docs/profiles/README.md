@@ -13,6 +13,7 @@ compare against the default, or to switch a part off in a deployment that must (
 | [`minus-cards.json`](minus-cards.json) | 214 / 210 | 0.8 | 0.48 | 0.0147 | 10.7 |
 | [`minus-sync.json`](minus-sync.json) | 197 / 190 | 0.8 | 0.48 | 0.0147 | 12.1 |
 | [`minus-grounds.json`](minus-grounds.json) | 210 / 210 | 0.893 | 0.5 | 0 | 8.6 |
+| [`minus-freshness.json`](minus-freshness.json) (2026-11-05) | 214 / 211 | as the default | as the default | as the default | — |
 
 Measured 2026-11-03, $0, no model key:
 

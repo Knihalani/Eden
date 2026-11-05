@@ -155,6 +155,21 @@ first. A notification that carries the changed items passes the secret gate and 
 Such a source is otherwise polled only by the daily sweep and after `syncPushMaxStaleMs` (24 h) with no notification,
 the bound on a lost one. Sources that do not notify are polled as before.
 
+**Freshness at delivery** (D126, `verifyDelivery`, in the default, with `verifyTimeoutMs` 1.5 s; `partner.ts`
+`verifyItems`, `checkAhead`, `deliverChecked`; `SourceFanout.fetchChecked`). Every slow-path, reader, anticipation,
+firewall and `ask` delivery goes through `deliverChecked`: an item read before its source last signalled a change
+(`Sync.signalledSince`, a `syncPush` signal that does not say which item changed) is fetched again by its ref first, in
+parallel; a reader's likely picks are re-read beside its call, so the delivery seldom waits. A changed copy is stored
+and delivered instead; one the source no longer has (`gone`, only from a source with `Source.fetchReportsGone`) is
+dropped from the cache and left out; one that cannot be checked is delivered as held. With no signal nothing is
+re-read: a copy's age alone is no doubt (re-reading by age was measured live and deleted, D126), and a silent source's
+changes arrive through polls and the daily sweep. The fast path, which may not call a source, sends a doubted item to
+the slow path. Deletion notifications (`ContextPartner.sourceRemoved`, `POST /v1/sources/removed`) drop items at once;
+a deleted item, from a notification or a re-read, is also dropped from the fan-out's held search pages
+(`SourceFanout.dropResults`, as on every signal) and kept out of the cache for 10 minutes (`ItemCache.removeItems`'
+hold), so a page read before the deletion cannot bring it back.
+The re-reads are traced as "verify" decisions with their `sourceCalls`.
+
 **Poll behind the lookup** (D65, `syncPollBehind`, on in the default, D112; with `sync` and `syncOnDemand`): without it,
 a lookup that finds a synced source stale waits for that source's on-demand poll (`sync.freshen`, one or two listing
 calls; up to three with `syncPollPageSize`), which was most of Eden's time on the agent's critical path in ALL (p50 503

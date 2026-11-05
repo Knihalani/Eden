@@ -206,3 +206,17 @@ export function checkSourceItems(
   }
   return { ok: true, value: { ...head.value, items } };
 }
+
+/** A deletion notification's body (`POST /v1/sources/removed`): the source's refs it no longer has, at most 100. */
+export function checkSourceRemoved(
+  v: unknown,
+): Checked<{ tenantId: string; userId: string; sourceId: string; refs: string[] }> {
+  const head = checkSourceChanged(v);
+  if (!head.ok) return head;
+  const refs = (v as Record<string, unknown>).refs;
+  if (!Array.isArray(refs) || refs.length === 0) return { ok: false, error: "refs must be a non-empty array" };
+  if (refs.length > MAX_PUSHED_ITEMS) return { ok: false, error: `at most ${MAX_PUSHED_ITEMS} refs per call` };
+  if (!refs.every((r) => isText(r, 512) && r.length > 0))
+    return { ok: false, error: "each ref must be 1-512 characters" };
+  return { ok: true, value: { ...head.value, refs: refs as string[] } };
+}
