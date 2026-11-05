@@ -120,6 +120,19 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   cited; one cited in part stays queued (`review-regressions.test.ts`).
 - `confident()` is one loop that stops at the cap, cheap tests first; every test in it must judge one item alone (no
   state across items), or stopping early would change its output.
+- **A re-read never revives a held-gone id (D126).** `recheck` checks `ItemCache.isHeldGone` after its fetch and
+  before `revive`/`store`: a `sourceRemoved` can land while the fetch is on the wire, and reviving would lift the
+  hold and deliver the deleted item. Any new path that stores a re-read or pushed copy must not `revive` an id a
+  removal holds unless that copy is itself newer than the removal (`sourceItems` is: the source sent it again).
+- **`checkAhead` runs only once the reader will be called (D134):** after `readAsk`'s empty-pool and `readerGate`
+  returns. Moving it back above the gate makes every gated ask pay up to `VERIFY_AHEAD` connector calls.
+- **One deadline per lookup (D140).** `searchLive` takes `deadlineAt` once, after resolving the sources and before
+  the on-demand poll; the poll's signal, the live search's `timeoutMs`, the planner and the probes
+  (`ProbeOpts.deadlineAt`) get only what is left. Do not give a later stage a fresh `sourceTimeoutMs`: an ask waits
+  for its poll, so the stages add up. Under `MIN_SEARCH_MS` (50) left, the search is skipped with "timeout" statuses
+  and no call (no rate token or breaker failure for a call that could not answer). `Sync.freshen` skips a source
+  whose on-demand poll gave up within `demandTimeoutMs` (= `sourceTimeoutMs`), so the next lookup searches it live
+  instead of waiting on the same listing.
 - `fetchChecked`'s `gone` needs `Source.fetchReportsGone`: an MCP tool's null fetch proves nothing, so verification
   never deletes an MCP item on its own; deletions there come from `sourceRemoved` or the sweep.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on

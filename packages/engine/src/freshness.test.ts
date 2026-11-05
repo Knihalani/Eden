@@ -4,8 +4,9 @@ import { Budget } from "@eden/llm";
 import { itemId, type AgentEvent, type ContextItem, type Scope } from "@eden/protocol";
 import type { SearchQuery, Source } from "@eden/sources";
 import { ItemCache, sanitizedId } from "./cache";
-import { ContextPartner } from "./partner";
+import { ContextPartner, type ReaderReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
+import { AskReader, type ReaderMaker } from "./reader";
 
 const MIN = 60_000;
 const T0 = Date.UTC(2026, 10, 2, 9);
@@ -321,6 +322,29 @@ describe("D133: a signal that lands while a read is on the wire doubts the copy 
     expect(cache.get(scope, itemId("notes", "q1"), now())?.text).toContain("Porto");
   });
 
+  test("a removal notification that lands while the re-read is on the wire wins: the item is not revived", async () => {
+    const src = new SlowFetch("notes");
+    seed(src);
+    const { partner, cache, advance, now } = await synced(src);
+    advance(5 * MIN);
+    partner.sourceChanged(scope, "notes"); // q1 is doubted: the delivery re-reads it.
+    src.failSearch = true;
+    let removed = -1;
+    src.during = () => {
+      // The fetch has its snapshot (q1 still there); the deletion and its notification land before it answers.
+      src.docs.delete("q1");
+      removed = partner.sourceRemoved(scope, "notes", ["q1"]);
+    };
+    advance(MIN);
+    const got = await say(partner, "Remind me where the quarterly offsite is", "s1", now());
+    expect(removed).toBe(1);
+    expect(src.fetches).toBeGreaterThanOrEqual(1);
+    const cited = got.flatMap((i) => i.citations.map((c) => c.itemId));
+    expect(cited).not.toContain(itemId("notes", "q1"));
+    expect(cache.get(scope, itemId("notes", "q1"), now())).toBeFalsy();
+    expect(cache.isHeldGone(scope, itemId("notes", "q1"), now())).toBe(true); // The gone-hold stands.
+  });
+
   test("a signal in the same millisecond as a read's start, after it began, doubts the copy; one before does not", async () => {
     const src = new Listed("notes");
     seed(src);
@@ -392,5 +416,63 @@ describe("review regressions (D126), second round", () => {
       .get("t/u")
       ?.sources.get("notes")?.ids;
     expect(ids?.has(itemId("notes", "q1"))).toBe(false);
+  });
+});
+
+describe("checkAhead waits for the reader's gate (D134)", () => {
+  test("a gated ask (no reader call) re-reads no doubted pool item it does not deliver", async () => {
+    // Two sources: a calendar that never notifies (its copy is never doubted) leads the ask; notes, which signalled a
+    // change, has a doubted item that is in the reader's pool but not delivered.
+    const notes = new Listed("notes");
+    seed(notes);
+    const cal = new Mutable("cal");
+    cal.docs.set("t1", {
+      title: "Train to the quarterly offsite",
+      text: "Train to the quarterly offsite in Lisbon: the 08:10 train, seat 42.",
+    });
+    let calls = 0;
+    const reports: ReaderReport[] = [];
+    const maker: ReaderMaker = {
+      read: async () => {
+        calls++;
+        return { bears: [], costUsd: 0, usage: { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0 } };
+      },
+    };
+    const clock = T0;
+    const partner = new ContextPartner({
+      sources: async () => [cal, notes],
+      sourceMap: new SourceMap(":memory:", { seed: 1 }),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      reader: new AskReader({ maker, budget: new Budget(), now: () => clock }),
+      onReader: (r) => reports.push(r),
+      config: {
+        ...CORE_CONFIG,
+        ...PUSH,
+        confidentScore: 0.1,
+        minMatchedTerms: 1,
+        askReader: true,
+        askReaderWaitMs: 200,
+        readerGate: true,
+      },
+    });
+    partner.sync!.track(scope, clock);
+    while (!partner.sync!.warm(scope)) await partner.sync!.tick();
+    partner.sourceChanged(scope, "notes"); // q1 is doubted from here on.
+    notes.blind = true; // The poll and the search bring nothing: only the held (doubted) copy is in the pool.
+    const before = notes.fetches;
+    const r = await partner.ask({
+      ...scope,
+      sessionId: "s1",
+      question: "Book the train to the quarterly offsite",
+      maxItems: 1,
+    });
+    expect(reports.map((x) => x.outcome)).toEqual(["gated"]);
+    expect(reports[0]!.pool).toContain(itemId("notes", "q1"));
+    expect(r.citations.map((c) => c.itemId)).toEqual([itemId("cal", "t1")]);
+    expect(calls).toBe(0);
+    expect(notes.fetches - before).toBe(0);
   });
 });
