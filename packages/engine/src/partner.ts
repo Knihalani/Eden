@@ -1282,7 +1282,7 @@ export class ContextPartner {
     const grounding = spans?.open("ground", cue.span);
     // What the question's people and days ground comes first (D44); a named day's other events only through it, so
     // a question about a topic is not padded with that day's calendar.
-    const onDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
+    const onDay = (x: Scored) => cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true;
     const grounded = this.grounded(
       s,
       cue,
@@ -2006,7 +2006,7 @@ export class ContextPartner {
     for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
     // Events on a day the request names are candidates whether or not they share its words (D44); they rank after
     // every item that does, so the judge, when there is one, sees them only if there is room.
-    const timed = cue.time?.days.size ? cache.timed(s.scope, cue.time.days, this.now()) : [];
+    const timed = cue.time?.days.size ? cache.timed(s.scope, cue.time.days, this.now(), 30, cue.offset) : [];
     if (query.length === 0 && timed.length === 0 && !options.probed?.length && !options.walked?.length) return [];
     const entities = cue.entities.map((e) => {
       // An entity with a term no cached item holds matches nothing (never intern it: that grows the cache's vocab).
@@ -2082,7 +2082,12 @@ export class ContextPartner {
         // Occurrences of a recurring event read alike but are not the same thing: another day is another item.
         .filter(
           (x, i, all) =>
-            !all.slice(0, i).some((y) => nearDuplicate(x.sketch, y.sketch) && startDay(x.item) === startDay(y.item)),
+            !all
+              .slice(0, i)
+              .some(
+                (y) =>
+                  nearDuplicate(x.sketch, y.sketch) && startDay(x.item, cue.offset) === startDay(y.item, cue.offset),
+              ),
         )
     );
   }
@@ -2135,7 +2140,7 @@ export class ContextPartner {
     const none = { items: [] as Scored[], how: "" };
     const pool = candidates.filter((x) => !bulkMail(x.item));
     const time = cue.time;
-    const onDay = (x: Scored) => time !== null && time.days.has(startDay(x.item) ?? "");
+    const onDay = (x: Scored) => time !== null && time.days.has(startDay(x.item, cue.offset) ?? "");
     const upcoming = (x: Scored) => startMs(x.item) >= cue.at;
     const soonest = (a: Scored, b: Scored) => startMs(a.item) - startMs(b.item);
     const acts = this.acts(s, cue, eventKind);
@@ -2162,7 +2167,7 @@ export class ContextPartner {
         const m = startMinutes(x.item);
         return m !== null && overlaps(x.item, m, range) && !isSubject(x.item, cue.raw);
       };
-      const clashes = pool.filter((x) => time.days.has(startDay(x.item) ?? "") && near(x)).sort(soonest);
+      const clashes = pool.filter((x) => time.days.has(startDay(x.item, cue.offset) ?? "") && near(x)).sort(soonest);
       if (clashes.length > 0) return { items: clashes.slice(0, this.max()), how: "clash" };
     }
     // With `groundConflict`: what would change the action (or the answer), tied to what the request names or asks
@@ -2318,7 +2323,7 @@ export class ContextPartner {
     const span = absenceSpan(item, cue.at);
     if (span === null || [...time.days].some((d) => d >= span.from && d <= span.to)) return false;
     // An item that names a day the request names is about that day too ("Offsite Fri 6 Nov … Sam is away 9-10 Nov").
-    return !daysNamed(item, cue.at).some((d) => time.days.has(d)) && !time.days.has(startDay(item) ?? "");
+    return !daysNamed(item, cue.at).some((d) => time.days.has(d)) && !time.days.has(startDay(item, cue.offset) ?? "");
   }
 
   /**
@@ -2351,7 +2356,7 @@ export class ContextPartner {
       const item = x.item;
       const w = ctx.walked?.get(item.id);
       const card = ctx.carded?.get(item.id);
-      const day = startDay(item);
+      const day = startDay(item, cue.offset);
       const at = startMs(item);
       const span = hasDays ? absenceSpan(item, cue.at) : null;
       const verdict = this.verdict(item, cue);
@@ -2505,7 +2510,8 @@ export class ContextPartner {
     if (cue.external || this.imperative(cue)) return true;
     const days = cue.time?.days;
     if (days && days.size > 0) {
-      if (days.has(startDay(x.item) ?? "") || daysNamed(x.item, cue.at).some((d) => days.has(d))) return true;
+      if (days.has(startDay(x.item, cue.offset) ?? "") || daysNamed(x.item, cue.at).some((d) => days.has(d)))
+        return true;
     }
     return namesRef(this.frame(cue), x.item);
   }
@@ -2560,7 +2566,7 @@ export class ContextPartner {
     );
     const titleWordsOf = (x: Scored) => new Set(x.item.title.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
     const events = pool.filter((x) => startDay(x.item) !== null);
-    const onDay = (x: Scored) => time !== null && time.days.has(startDay(x.item) ?? "");
+    const onDay = (x: Scored) => time !== null && time.days.has(startDay(x.item, cue.offset) ?? "");
     const pick = (xs: Scored[], how: string, many = false) => {
       const dated = xs.filter(onDay).sort((a, b) => startMs(a.item) - startMs(b.item));
       if (dated.length > 0) return { items: many ? dated.slice(0, this.max()) : [dated[0]!], how: `${how}-day` };
@@ -3730,7 +3736,7 @@ export class ContextPartner {
     intents: ReadonlyMap<string, IntentFind> = new Map(),
   ): Scored[] {
     // An event on a day the request names is a candidate whatever it scores on words (D44).
-    const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
+    const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true;
     // A consequence find that does not conflict is no candidate: it shares nothing with the request but its class.
     // A graph walk's own finds (`graph`) are not either: they have their seats and ground, and no other path.
     // An intent hit (`intent`) is: its requests say the request is one it would change. The rule paths still read
@@ -4228,7 +4234,7 @@ export class ContextPartner {
         return await this.deliverChecked(s, sure, "proactive", `sources:${cue.id}`, cue);
       }
       // An event on a day the request names is a candidate whatever it scores on words (D44).
-      const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
+      const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true;
       const probed = new Set(probedIds ?? []);
       const eligible = this.eligible(scored, cue, probed, bridged, carded, intents);
       // The walk's finds (`graph`), whatever they score on words: they get seats and the graph's conflict ground,
