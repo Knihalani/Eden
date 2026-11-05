@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { readerMessages, type ReaderInput } from "@eden/engine";
-import { parsePrompt, pct, summarize, type TimedCall } from "./reader-time";
+import { ModelReaderMaker, readerMessages, type ReaderInput } from "@eden/engine";
+import type { ChatRequest, Model } from "@eden/llm";
+import { atLowEffort, parsePrompt, pct, summarize, type TimedCall } from "./reader-time";
 
 const item = (i: number, extra: Partial<ReaderInput["items"][number]> = {}) => ({
   id: `x${i}`,
@@ -32,6 +33,36 @@ describe("reader-time pools", () => {
   test("what is not a reader prompt is refused, not guessed", () => {
     expect(parsePrompt("")).toBeNull();
     expect(parsePrompt("<today>x</today>\n<request>y</request>\n<items>\n<item>broken</item>\n</items>")).toBeNull();
+  });
+});
+
+describe("reader-time arms", () => {
+  test("the low arm's model receives reasoning \"low\"; the off arm's receives no reasoning key; same prompt", async () => {
+    const seen: ChatRequest[] = [];
+    const model: Model = {
+      id: "stub",
+      async chat(request) {
+        seen.push(request);
+        return {
+          text: '{"bears":[]}',
+          costUsd: 0,
+          model: "stub",
+          latencyMs: 1,
+          usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
+        };
+      },
+    };
+    const input: ReaderInput = { request: "Pay the invoice", today: "2026-10-27", items: [item(0)] };
+    const signal = new AbortController().signal;
+    await new ModelReaderMaker(model).read(input, signal);
+    const low = atLowEffort(model);
+    expect(low.id).toBe("stub");
+    await new ModelReaderMaker(low).read(input, signal);
+    expect("reasoning" in seen[0]!).toBe(false);
+    expect(seen[1]!.reasoning).toBe("low");
+    // Only the effort differs: the replay key (the prompt) is the same on both arms.
+    const { reasoning: _, ...rest } = seen[1]!;
+    expect(rest).toEqual(seen[0]!);
   });
 });
 
