@@ -4,7 +4,7 @@
  * event, adds context before each model call, and is offered to the model as an `ask_context` tool.
  *
  *   EDEN_DEV=1 EDEN_SOURCES_FILE=examples/personal-agent/sources.json bun run dev    # terminal 1
- *   bun examples/personal-agent/agent.ts "move lunch with Priya Raman to Friday"     # terminal 2, offline
+ *   bun examples/personal-agent/agent.ts "move lunch with Priya Raman to Friday"     # terminal 2, offline (default)
  *   OPENAI_API_KEY=… bun examples/personal-agent/agent.ts "move lunch with Priya Raman to Friday"   # a real model
  *
  * Without OPENAI_API_KEY (or with AGENT_MODEL=stub) the agent is a scripted stand-in that needs no key and no
@@ -72,7 +72,10 @@ async function chat(messages: Message[]): Promise<Message> {
   return ((await res.json()) as { choices: { message: Message }[] }).choices[0]!.message;
 }
 
-const userText = process.argv.slice(2).join(" ") || "What's on my plate this week?";
+// The default is the documented request above, which the sample sources answer: their calendar items carry no dates,
+// so a date-scoped request ("what's on my plate this week?") honestly finds nothing and would greet a first run with
+// "Nothing in the connected sources." (agent.test.ts runs the agent with no argument and expects a [calendar] item).
+const userText = process.argv.slice(2).join(" ") || "move lunch with Priya Raman to Friday";
 let messages: Message[] = [
   { role: "system", content: "You are the user's personal assistant. Be brief." },
   { role: "user", content: userText },
