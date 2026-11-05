@@ -462,6 +462,21 @@ interface Scored {
  */
 type Undo = Map<string, { was: LedgerEntry | undefined; set: LedgerEntry; sketch: Sketch | null }>;
 
+/** How one source an ask chose fared (D127; `AskResponse.sources`). */
+type SourceStatus = NonNullable<AskResponse["sources"]>[number];
+
+/** The statuses of a source that answered (D127): the connector, the fan-out's held result, or the synced index. */
+const ANSWERED = new Set(["ok", "cached", "stale", "local"]);
+
+/** How the answer names a status that did not answer (`unreached`). */
+const STATUS_WORDS: Record<string, string> = {
+  error: "failed",
+  timeout: "timed out",
+  open: "failing, skipped",
+  busy: "busy",
+  limited: "rate-limited",
+};
+
 interface Built {
   sourceIds: string[];
   /** The delivered items, for the planner's delivery credit when the injection is handed out (D39). */
@@ -469,6 +484,13 @@ interface Built {
   text: string;
   /** Edge types the knowledge graph reached the delivered items by (`graph`), learned from on use. */
   graphMask: number;
+  /**
+   * With `askDedup`: the items and the text the agent is shown, noted as shown (`noteShown`) when the injection is
+   * handed out, not when it is built: a queued packet the agent has not taken was shown nothing, and an ask before
+   * the agent takes it says its items in full (deep audit 2026-11-05 `ask-shown-before-handed-out`). Cleared once
+   * noted.
+   */
+  shown?: { items: readonly ContextItem[]; text: string };
 }
 
 /**
@@ -1356,7 +1378,10 @@ export class ContextPartner {
     const rendering = spans?.open("render", cue.span);
     const answering = this.answering(s, cue);
     if (reading?.notes.size) answering.note = (item) => reading.notes.get(item.id);
-    const answer = items.length ? renderPacket(items, answering) : "Nothing in the connected sources.";
+    const packet = items.length ? renderPacket(items, answering) : "";
+    // D127: "nothing" is said only when the sources the ask chose answered; one that failed is named, in the text
+    // (an MCP caller sees only the text) and in `sources`.
+    const answer = honestAnswer(packet, searched.sources, searched.unresolved === true);
     if (rendering) spans!.close(rendering, { items: items.length });
     if (this.deps.onCandidates) {
       this.dump(
@@ -1379,9 +1404,18 @@ export class ContextPartner {
         "answer",
         "ask",
         cue,
-        answer,
+        packet,
       );
+      // The answer is handed out as it is returned: its items are noted as shown now.
       this.handOut(s, injection);
+      // A packet still queued for the agent whose every item this answer says in full is not handed out again; one it
+      // covers only in part stays queued (its other items are news). Removed, never `withdraw`n: the agent now has
+      // each of its items, so what its delivery marked stands.
+      const cited = new Set(items.map((i) => i.id));
+      for (let k = s.pending.length - 1; k >= 0; k--) {
+        const queued = s.pending[k]!.citations;
+        if (queued.length > 0 && queued.every((c) => cited.has(c.itemId))) s.pending.splice(k, 1);
+      }
     }
     const latencyMs = Math.round(performance.now() - t0);
     this.trace({
@@ -1400,7 +1434,14 @@ export class ContextPartner {
       ...(local !== undefined ? { localSources: local, syncCalls: syncCalls ?? 0 } : {}),
     });
     if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "answer", delivered: items.length > 0 });
-    return { answer, citations: citationsOf(items), usedModel, costUsd, latencyMs };
+    return {
+      answer,
+      citations: citationsOf(items),
+      usedModel,
+      costUsd,
+      latencyMs,
+      ...(searched.sources ? { sources: searched.sources } : {}),
+    };
   }
 
   /**
@@ -1862,6 +1903,12 @@ export class ContextPartner {
   /** Starts usage tracking: from the moment the agent actually receives an injection, against what it had seen. */
   private handOut(s: Session, injection: Injection): void {
     const built = this.built.get(injection);
+    // Every path that gives the agent an injection comes through here: what it was shown is noted first, before the
+    // usage tracking's early returns (an injection already tracked or recorded was still shown).
+    if (built?.shown) {
+      this.noteShown(s, built.shown.items, built.shown.text);
+      built.shown = undefined;
+    }
     if (!built || s.outstanding.has(injection.id)) return;
     if (this.recordedOf(s.scope)?.has(injection.id)) return;
     s.outstanding.set(injection.id, {
@@ -2020,19 +2067,27 @@ export class ContextPartner {
   }
 
   private confident(scored: Scored[], cue: Cue): Scored[] {
-    const sure = scored
-      .filter((x) => x.score >= this.config.confidentScore && x.matched >= this.config.minMatchedTerms)
+    // One pass that stops at the cap: every test judges one item alone, so stopping early returns what filtering all
+    // and then slicing returned. The cheap tests run first; `cleared` (the conflict test, about half the fast path's
+    // CPU in pipeline.bench) and `beyondName` run only on what survives them, and only until the cap is reached.
+    const cap = Math.min(this.config.maxItemsPerInjection, this.config.confidentItems);
+    const sure: Scored[] = [];
+    for (const x of scored) {
+      if (sure.length >= cap) break;
+      if (x.score < this.config.confidentScore || x.matched < this.config.minMatchedTerms) continue;
       // Bulk mail is never pushed without a model's say: a newsletter arriving is no reason to speak.
-      .filter((x) => !bulkMail(x.item))
+      if (bulkMail(x.item)) continue;
       // Nor, with `quietSettled`, an item that only says things stand as expected (`settled`); nor, with
       // `groundAway`, an absence on other days than the request names (`awayElsewhere`).
-      .filter((x) => !this.config.quietSettled || !settled(x.item))
-      .filter((x) => !this.awayElsewhere(x.item, cue))
+      if (this.config.quietSettled && settled(x.item)) continue;
+      if (this.awayElsewhere(x.item, cue)) continue;
       // Nor, with `quietClear`, one about what the request names whose decisive value does not conflict with it.
-      .filter((x) => !this.cleared(x, cue))
+      if (this.cleared(x, cue)) continue;
       // Nor, with `quietNameOnly`, one only a name ties to the request.
-      .filter((x) => this.beyondName(x, cue));
-    return sure.slice(0, Math.min(this.config.maxItemsPerInjection, this.config.confidentItems));
+      if (!this.beyondName(x, cue)) continue;
+      sure.push(x);
+    }
+    return sure;
   }
 
   /**
@@ -2608,9 +2663,22 @@ export class ContextPartner {
     /** With `sync`: sources answered from the local index, and listing calls of on-demand polls (in `calls`). */
     local?: number;
     syncCalls?: number;
+    /**
+     * How each source this lookup chose fared (D127): the fan-out's status, or "local" for one answered from the
+     * synced index. A sync poll that failed leaves its source not current, so it is searched live and its status is
+     * that search's; probes are extra queries beside a chosen source's own search, which gives the source's status.
+     */
+    sources?: SourceStatus[];
+    /** The user's sources could not be resolved at all: nothing was searched, which is not an empty result. */
+    unresolved?: true;
   }> {
-    const all = await this.deps.sources(s.scope).catch((): Source[] => []);
-    if (all.length === 0 || s.closed) return { calls: 0 };
+    let unresolved = false;
+    const all = await this.deps.sources(s.scope).catch((): Source[] => {
+      unresolved = true;
+      return [];
+    });
+    if (unresolved) return { calls: 0, sources: [], unresolved: true };
+    if (all.length === 0 || s.closed) return { calls: 0, sources: [] };
     // The background sync (D57): a source whose synced copy is current answers from the user's local index, at no
     // call; with `syncOnDemand`, a stale one is polled first (one listing call, rather than its search and probes).
     let local: Set<string> | null = null;
@@ -2764,8 +2832,16 @@ export class ContextPartner {
       const via = planned[k];
       made += via ? via.made : reachedSource(outcomes[k]!) ? 1 : 0;
     }
+    // Each source the lookup chose, as it fared (D127): a listing goes to the sources that list by time, anything else
+    // to every routed one; a synced source answered here from the local index, the rest by the fan-out's outcome.
+    const statusOf = new Map(outcomes.map((o) => [o.sourceId, o.status]));
+    const sources: SourceStatus[] = (listing ? listers : routed).map((x) => ({
+      sourceId: x.id,
+      status: local?.has(x.id) ? "local" : (statusOf.get(x.id) ?? "error"),
+    }));
     const result = {
       calls: made + syncCalls,
+      sources,
       ...(plans ? { plans } : {}),
       ...(this.sync ? { local: local?.size ?? 0, syncCalls } : {}),
     };
@@ -4544,11 +4620,6 @@ export class ContextPartner {
       createdAt: this.now(),
     };
     if (rendering) spans!.close(rendering);
-    // What the agent was shown of each item: an answer's lines are its items' in order (not folded); a model's
-    // composed answer has no item lines and is attributed to none.
-    if (this.config.askDedup) {
-      this.noteShown(s, shown === undefined ? items : scored.map((x) => x.item), shown ?? injection.text);
-    }
     const walks = WALKS.get(cue);
     let graphMask = 0;
     for (const x of scored) graphMask |= walks?.get(x.item.id)?.mask ?? 0;
@@ -4558,6 +4629,11 @@ export class ContextPartner {
       items: items.map((i) => ({ sourceId: i.sourceId, id: i.id })),
       // Only the words the agent received: an item's text past the packet's cut is not evidence of use.
       text: shownText(shown ?? injection.text),
+      // What the agent will have been shown of each item once it is handed out (`markShown`): an answer's lines are
+      // its items' in order (not folded); a model's composed answer has no item lines and is attributed to none.
+      ...(this.config.askDedup
+        ? { shown: { items: shown === undefined ? items : scored.map((x) => x.item), text: shown ?? injection.text } }
+        : {}),
     });
     return injection;
   }
@@ -4672,6 +4748,26 @@ function modelAttrs(res: {
 }
 
 /** A search's span attributes: how many sources answered each way. */
+/**
+ * An ask's answer text (D127): `packet` (empty when no item answers), with the sources the ask chose that did not
+ * answer named. An empty answer reads "Nothing in the connected sources." only when every chosen source answered (or
+ * none was chosen); otherwise it says which could not be reached and that this is not an all-clear. Source ids are the
+ * operator's names for its connectors, not source text.
+ */
+function honestAnswer(packet: string, sources: readonly SourceStatus[] | undefined, unresolved = false): string {
+  if (unresolved) {
+    const none = "Could not reach the connected sources (they could not be listed), so this is not an all-clear.";
+    return packet ? `${packet}\n${none}` : none;
+  }
+  const missed = (sources ?? []).filter((x) => !ANSWERED.has(x.status));
+  if (missed.length === 0) return packet || "Nothing in the connected sources.";
+  const names = missed.map((x) => `${x.sourceId} (${STATUS_WORDS[x.status] ?? x.status})`).join(", ");
+  if (packet) return `${packet}\nCould not reach ${names}: this answer may be missing what they hold.`;
+  const answered = (sources ?? []).filter((x) => ANSWERED.has(x.status)).map((x) => x.sourceId);
+  if (answered.length === 0) return `Could not reach ${names}, so this is not an all-clear: nothing was checked.`;
+  return `Nothing in ${answered.join(", ")}. Could not reach ${names}, so this is not an all-clear.`;
+}
+
 function outcomeAttrs(outcomes: readonly FanoutOutcome[]): Record<string, number> {
   const out: Record<string, number> = { sources: outcomes.length };
   for (const o of outcomes) out[o.status] = (out[o.status] ?? 0) + 1;

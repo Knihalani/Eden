@@ -648,6 +648,8 @@ describe("the reader in the engine (config.askReader)", () => {
     );
     expect(empty.reports[0]!.checked).toBe(empty.reports[0]!.pool.length);
     expect(empty.answers.u1![0]!.ids).toEqual([]);
+    // Its source answered: the empty answer is what the reader read, an honest "nothing" (D127 leaves it as it was).
+    expect(empty.answers.u1![0]!.answer).toBe("Nothing in the connected sources.");
     const cut = await run(
       { askReader: true, askReaderDrop: true, askReaderPool: 2 },
       { maker: new ScriptedReader(() => [], { reject: all }) },
