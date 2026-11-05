@@ -1,5 +1,163 @@
 # Deep audit (2026-11-05)
 
+## Final summary of the whole run (for the owner)
+
+This section closes the run. It covers two audit rounds and two final clean-up steps. Every number comes from a
+command or commit message recorded in this run; numbers marked "estimate" were not measured. Benchmarks ran on a
+4-core machine shared with other agents, so timings move between runs.
+
+Words used below:
+
+- **Ask**: the agent asks Eden a direct question.
+- **Fast path**: the work Eden does on every event without any model call.
+- **Re-read**: Eden fetches an item again to check it is still current before handing it out.
+- **Eval / funnel**: the two free ($0) quality screens. The eval scores 31 scenarios (precision, recall, false
+  fires). The funnel counts hidden facts found and decoys handed out on the six training suites.
+- **Reader**: the small paid model that reads candidate items before Eden hands them out.
+- **Integration branch**: `audit/2026-11-05-integration`, where every fix of this run is merged. It is not in `main`
+  yet.
+
+### 1. The bottom line
+
+Eden could tell an agent "Nothing in the connected sources." when every source was down. That is now an honest
+"could not reach" answer (D127). A deleted message could come back and be delivered if the deletion arrived while
+Eden was re-checking it, and three timing races let old copies be handed out as current. All four are fixed and
+tested. Several caches were not truly bounded in memory, and the fast path repeated the same analysis on every
+event. The fast path now takes 1.16-1.31 ms per event instead of 3.01-3.08 ms on the pipeline benchmark (2.3-2.7x),
+with eval and funnel scores unchanged (precision 0.8276, recall 0.48, false fires 0; hidden 214/384, decoys
+211/384). Paid model cost did not change; the shipped paid reader is still untimed, because this environment's key
+is refused (403) for the default model.
+
+### 2. Findings by dimension
+
+"Found" is every candidate. "Verified" survived two independent checks. "Fixed" means the fix is merged in the
+integration branch (git confirms it). "Closed by decision" means verified but not fixed, with a decision row
+saying why. "Open part" counts verified findings that still have work left (some are also fixed in part).
+
+| Dimension    | Found | Verified | Rejected at verification | Fixed (merged) | Closed by decision | Open part |
+| ------------ | ----: | -------: | -----------------------: | -------------: | -----------------: | --------: |
+| Correctness  |     9 |        6 |                        1 |              6 |                  0 |         0 |
+| Scale        |     9 |        6 |                        1 |              5 |                  1 |         1 |
+| Latency      |     8 |        3 |                        1 |              2 |                  1 |         0 |
+| Cost         |     8 |        4 |                        0 |              1 |                  3 |         3 |
+| Quality      |     3 |        3 |                        0 |              1 |                  2 |         1 |
+| Pain points  |     7 |        3 |                        0 |              3 |                  0 |         1 |
+| Inefficiency |     4 |        1 |                        1 |              1 |                  0 |         0 |
+| Dev loop     |    14 |        8 |                        1 |              7 |                  1 |         2 |
+| Moonshot     |     2 |        1 |                        0 |              0 |                  1 |         0 |
+| **Total**    |    64 |       35 |                        5 |             26 |                  9 |         8 |
+
+24 found candidates were neither verified nor rejected: the run's ledger records no outcome for them (see section
+5). Review: git shows review-fix commits on four branches (`r1-ask-honest-answers` 2ec5fc401,
+`r1-engine-cache-sync-holds` c9ee1f304, `r2-r2-worktree-check-caches` ee46478d4, `final1-lc-sync-big-pages`
+f41ee1512). The other branches are single fix commits; git alone cannot show whether a reviewer passed them
+unchanged.
+
+### 3. What was achieved
+
+One row per merged fix. "Before -> after" is from the fix's own commit unless noted. "Default" means it ships in
+`DEFAULT_CONFIG` or in the shipped code path for everyone.
+
+| Fix (branch)                                                                                      | Before -> after (measured unless labelled)                                                                                                                                                                                                                         | Outcome                                                          |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| Honest ask when sources fail; "shown above" only after hand-out (`r1-ask-honest-answers`)         | All-failed ask: "Nothing in the connected sources." -> names the unreachable sources and says it is not an all-clear (tests). Eval unchanged.                                                                                                                      | Default (D127)                                                   |
+| Docs keep the measured 3 s wait (`r1-docs-integration-wait`)                                      | README, INTEGRATION.md and the example set a 1,500 ms wait -> they use the client's 3,000 ms default.                                                                                                                                                              | Default (docs)                                                   |
+| Deletion holds, lazy sketch, read marks (`r1-engine-cache-sync-holds`)                            | Deletion notice for an unseen user: ~27.8 KB of cache and a real user evicted -> 410 B per removal, no eviction. Ingest backfill 94.2/91.5 -> 58.8/52.9 µs/item. Signal-during-read race: repro fixed; freshness sim unchanged (575 re-reads, stale 1, deleted 0). | Default (D133)                                                   |
+| Results cache bounded and fast to drop (`r1-fanout-results-cache`)                                | 200,000 empty pages: ~69 MB held -> under the 4 MB test budget. Dropping one user's pages from 10,000 entries: 1.355 -> 0.005 ms mean (scratch bench). Cost: +63 B per entry.                                                                                      | Default                                                          |
+| Per-item analysis cache and fold early exit (`r1-fastpath-analysis-cache`)                        | Pipeline bench 3.08/3.01 -> 1.31/1.16 ms/event; observe p99 14.8/14.1 -> 5.3/4.8 ms. 0 verdict differences over 72,234 compared.                                                                                                                                   | Default                                                          |
+| `eval --live` measures what ships (`r1-shipped-reader-path`)                                      | `--live` ran judge on, reader off -> the shipped wiring, and refuses to start without `--usd-cap`. A failing reader is now logged once instead of failing silently. No paid run (blocked, section 5).                                                              | Default (D128)                                                   |
+| Faster freshness simulation (`r1-sim-reindex-memo`)                                               | 22.2 s -> 11.9 s (memo) -> 5.6 s (`--jobs 4`), same report.                                                                                                                                                                                                        | Dev tool                                                         |
+| Deleted item no longer revived; one ask deadline; no wasted re-reads (`r2-r2-engine-fresh-ask`)   | Deletion during a re-read: item delivered -> not delivered (test). Time before the reader with hanging sources: 3,020 -> 1,524/1,503 ms. A gated ask: 1 re-read -> 0.                                                                                              | Default (D134, D140)                                             |
+| Joined source calls respect change signals (`r2-r2-fanout-joined-flights`)                        | Engine repro: 2 of 2 deliveries stale (verifier) -> repro passes. Eval, funnel and freshness sim unchanged.                                                                                                                                                        | Default (D133)                                                   |
+| Deletion holds last 10 minutes for large tenants (`r2-r2-tenant-holds-cap`)                       | Per-tenant cap 20,000 -> 100,000 holds, so holds last the full 10 minutes up to ~167 deletions/s instead of ~33 (arithmetic from the cap).                                                                                                                         | Default                                                          |
+| One shared empty array in the analysis cache (`r2-r2-conflict-empty-marks`)                       | 6,805 -> 3,413 B per assessed item (38.3 -> 19.2 MB on the test workload). Pipeline speed unchanged.                                                                                                                                                               | Default (D136)                                                   |
+| Funnel runs one process per core (`r2-r2-funnel-grouped-shards`)                                  | `bun run funnel` 24.1-26.4 s -> 11.7-15.4 s wall, for 1.25-1.5x the CPU.                                                                                                                                                                                           | Dev default (D139)                                               |
+| Check caches that carry to a new worktree (`r2-r2-worktree-check-caches`)                         | First `format:check` in a new worktree 13.5 s -> 1.4-1.8 s; first `typecheck` 11.1 s -> 3.6-4.0 s (docs/TESTING.md).                                                                                                                                               | Dev default; `CHECK_COLD=1` skips the caches                     |
+| Docs carry `--usd-cap`; slow tests trimmed (`r2-r2-devloop-tests-docs`)                           | Documented `bun run eval --live` exited 2 -> docs show `--live --usd-cap 0.05`. review-regressions test file 4.0 s -> 1.0-1.1 s.                                                                                                                                   | Dev default                                                      |
+| Ingest bench measures what ships; paid graph test (`r2-r2-graph-ablation`)                        | The bench measured the core only: 73.4 µs/item; the shipped path is 380.6 µs/item (5.18x). Paid funnel ($0.43): with graph 247 hidden / 127 decoys, without 243 / 129.                                                                                             | Measurement; the graph stays default (D141)                      |
+| Decision rows and closing table (`final1-lc-decisions-docs`)                                      | Docs only: D141 row and the "Closing the run" table.                                                                                                                                                                                                               | Docs                                                             |
+| Bigger backfill and sweep pages (`final1-lc-sync-big-pages`, then `final2-delete-sync-big-pages`) | Backfill calls per user 33 -> 9; source calls per user-day 126.8 -> 103 (sim). But the reader's pool fell 230/229 -> 228/228 and the paid reader lost 2 hidden facts of 384 in both paired runs.                                                                   | Shipped off as a trial (D142), then removed with its code (D143) |
+
+The final tree (326d93876, before this summary) passes `bun run check`: 1,614 tests pass, 0 fail, in 135 files
+(the run started at 1,536 in 129). Eval and funnel equal the starting baseline. No paid calls were made outside
+the graph test ($0.43) and the big-pages reader screen ($0.1875).
+
+### 4. Decisions made during the run
+
+All rows are in `docs/DECISIONS.md` (lines 133-149).
+
+| Decision                                                              | Evidence                                                                                                 | Row  |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---- |
+| An ask whose sources failed says so; it is not an all-clear           | Two scratch tests with failing sources got "Nothing in the connected sources."                           | D127 |
+| `eval --live` wires what ships and needs a dollar cap                 | It ran judge on and reader off, the reverse of the servers                                               | D128 |
+| Reader push on question turns is not reopened                         | Oracle ceiling recall 0.52; D99/D112 measured it live and deleted it                                     | D129 |
+| A broad reader veto over rule deliveries is rejected                  | It drops right items with wrong ones even with a perfect reader                                          | D130 |
+| Change signals stay source-wide                                       | The payload path already gives 0 re-reads to integrators who know what changed                           | D131 |
+| Agent replay at time scale 0 is not built                             | It would score timing regressions as neutral                                                             | D132 |
+| Freshness is judged by read marks, not read times                     | Race repro now re-reads; freshness sim unchanged (575 re-reads, stale 1, deleted 0)                      | D133 |
+| Re-reads ahead of the reader stay at 3, start only if the reader runs | Lowering it saves at most 1.34x calls, under the 1.5x bar; gated asks now do 0 re-reads                  | D134 |
+| The source results cache stays                                        | 1 hit in ~860 lookups, but the harnesses cannot repeat a query; not evidence it is dead                  | D135 |
+| Analysis cache keeps its WeakMap with one shared empty array          | 8,598 -> 3,956 B per item (verifier); a byte cap would undo the speed gain                               | D136 |
+| Intent requests stay sentences                                        | Keyword output saves an estimated 1.06-1.13x per call, under the 1.25x bar                               | D137 |
+| A cold user's sources are not warmed in the background                | No measured first-lookup gain; connect already sits inside the 1.5 s deadline                            | D138 |
+| `bun run funnel` runs one process per core                            | 1.6-2.4x faster wall (verifier); identical task rows                                                     | D139 |
+| An ask's poll and live search share one deadline                      | Worst case before the reader ~3,010 ms -> ~1,500 ms; eval and funnel counts unchanged                    | D140 |
+| The knowledge graph stays in the default                              | Paid funnel: +4 hidden, +2 decoys of 384 with it; eval identical                                         | D141 |
+| Big sync pages as a trial, off by default                             | Calls 33 -> 9 per backfill, but the reader's pool moved 230/229 -> 228/228                               | D142 |
+| The big-pages trial ends and its code is deleted                      | Paid reader lost 2 hidden of 384 in both runs; the gain is listing calls only, which cost no model money | D143 |
+
+### 5. What is still open, and why
+
+| Open item                                                                                               | Why it is open                                                                                                                                                               | Next step                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Merge the integration branch into `main`                                                                | External action: `main` is still at 6911f514d. Engine, server and privacy changes need the `reviewer` subagent first (CLAUDE.md step 5); the last integrator did not run it. | Run the reviewer on `main..audit/2026-11-05-integration`, fix its findings, `bun run check`, then merge.                              |
+| Paid timing of the shipped reader (`painpoint-prod-reader-unmeasured`, stage 1)                         | External action: this key gets 403 "violation of provider Terms Of Service" for Anthropic models, and the lab ledger meters only `claude-*` ids.                             | Owner supplies a key OpenRouter serves for `anthropic/claude-haiku-5.5`; add a ledger entry type for OpenRouter ids; time the reader. |
+| The paid `eval --live` run (`eval-live-measures-unshipped`)                                             | Same key block. The wiring is fixed.                                                                                                                                         | With a served key: `bun run eval --live --usd-cap 0.05`.                                                                              |
+| Reader veto by name (`quality-reader-veto-rule-path`)                                                   | Paid; it needs the live eval above first (D130).                                                                                                                             | Screen it after the live eval.                                                                                                        |
+| Start re-reads when the reader's stream names an item (`fresh-checkahead-speculative-rereads`, stage 2) | Needs reader streaming and a paid live latency run (same key block).                                                                                                         | After the key is fixed, build behind a trial and time it (D134).                                                                      |
+| A lighter graph (`scale-graph-dominates-ingest`, stage 2)                                               | D141 chose it as the next step at the end of the run; it was not built in this run.                                                                                          | Build the `graphLite` trial (owner: repo owner, ends 2026-12-17) with D141's gate.                                                    |
+| A cheaper model endpoint for intent-only card items (`cost-intent-requests-keyword-output`, stage 2)    | External: an owner decision about a new endpoint (D12/D98).                                                                                                                  | Owner decides.                                                                                                                        |
+| Exact request replay in the agent lab (`devloop-agent-replay-identical-eden`)                           | Rejected as proposed by D132.                                                                                                                                                | Do it with the Hermes request-replay item from the 2026-11-04 audit.                                                                  |
+| Big sync pages (`sync-sweep-backfill-big-pages`)                                                        | Rejected after measurement (D143).                                                                                                                                           | Reopen only with a tie-break for equal-score ask candidates that does not depend on ingest order.                                     |
+| 24 candidates with no recorded outcome                                                                  | The ledger lists them as found but neither verified nor rejected; nothing in docs/ mentions them.                                                                            | Next audit round: verify or drop each one (list below).                                                                               |
+| Carried from the 2026-11-04 audit                                                                       | 41 stale `origin/claude/r10-*` branches and a Hermes live check need owner approval.                                                                                         | Owner approves; then delete the branches and run the check.                                                                           |
+
+The 24 candidates: `ingest-inline-secret-prefilter`, `memory-user-fixed-overhead`, `example-default-prompt-empty`,
+`sourcechanged-silent-false`, `timed-utc-start-day`, `lat-speculative-first-call`, `lat-reader-stream-early-settle`,
+`lat-reader-ids-only-card-bearing`, `reader-push-ask-verdict-reuse`, `cost-reader-pool-gate-learned`,
+`ab-baseline-cache`, `fresh-sourcechanged-keeps-pages`, `freshen-only-routed-sources`, `anthropic-cache-dead-flag`,
+`where-1-5x-impossible`, `lazy-mcp-sdk`, `config-errors-one-at-a-time`, `funnel-ceiling`,
+`r2-anticipate-redundant-under-sync`, `r2-fastpath-tail-is-delivery-render`, `render-pick-score-fastpath`,
+`client-sourceremoved-ambiguous-zero`, `format-check-needs-git`, `devloop-simindex-incremental`.
+
+**Where the run's data and git disagree:**
+
+- Git confirms all 19 `audit/2026-11-05-*` branches are merged in the integration branch
+  (`git branch --merged`). No disagreement there.
+- The ledger's "resolved" list counts 9 findings closed by decision (not fixed) as resolved, and lists some ids
+  twice. Section 2 separates them.
+- The ledger's "unresolved" list is empty, but 8 verified findings still have open parts (above).
+- The ledger still lists `fresh-readat-race`'s exact per-copy variant as deferred. Git shows it done: c9ee1f304
+  stores a read mark with every copy (D133).
+- The ledger still lists deleting the graph's code as waiting; D141 has since rejected it.
+- The round-1 text below says 20 findings were verified; its own numbered list and the ledger have 19.
+
+### 6. Where everything is
+
+- This file: `docs/audits/2026-11-05-deep-audit.md`. Round 1 and round 2 details follow below.
+- Decisions D127-D143: `docs/DECISIONS.md`, lines 133-149.
+- Integration branch: `audit/2026-11-05-integration` (branched from `main` at 6911f514d; this summary is its tip).
+- Per-package branches (local; this checkout has no `origin` copy of any of them):
+  - Round 1: `audit/2026-11-05-r1-ask-honest-answers`, `-r1-docs-integration-wait`, `-r1-engine-cache-sync-holds`,
+    `-r1-fanout-results-cache`, `-r1-fastpath-analysis-cache`, `-r1-shipped-reader-path`, `-r1-sim-reindex-memo`.
+  - Round 2: `audit/2026-11-05-r2-r2-engine-fresh-ask`, `-r2-r2-fanout-joined-flights`, `-r2-r2-tenant-holds-cap`,
+    `-r2-r2-conflict-empty-marks`, `-r2-r2-funnel-grouped-shards`, `-r2-r2-worktree-check-caches`,
+    `-r2-r2-devloop-tests-docs`, `-r2-r2-graph-ablation`.
+  - Final steps: `audit/2026-11-05-final1-lc-decisions-docs`, `-final1-lc-sync-big-pages`,
+    `-final2-delete-sync-big-pages`.
+- Research notes written or updated: `docs/research/graph-ablation.md`, `docs/research/econ-background.md`,
+  `docs/research/freshness.md`.
+
 ## Summary (read this first)
 
 This audit ran on `main` at 6911f514d (after D126, freshness). It found 20 problems that survived adversarial
@@ -855,7 +1013,7 @@ Plans and acceptance checks (the run's structured output has the same):
 ## Where everything is
 
 - This file: `docs/audits/2026-11-05-deep-audit.md`.
-- Decisions D127-D132 (round 1) and D133-D140 (round 2): `docs/DECISIONS.md`.
+- Decisions D127-D132 (round 1), D133-D140 (round 2) and D141-D143 (final steps): `docs/DECISIONS.md`.
 - Integration branch: `audit/2026-11-05-integration`, branched from main 6911f514d.
 
 ## Closing the run (loose ends)
@@ -863,24 +1021,24 @@ Plans and acceptance checks (the run's structured output has the same):
 Checked on `audit/2026-11-05-integration` at 7d10b8ae3: every `audit/2026-11-05-*` branch is merged into it. Every
 item this run deferred or left to a decision, with its final status and where it is recorded:
 
-| Item (finding id) | Final status | Recorded in | Next step |
-| --- | --- | --- | --- |
-| `sync-sweep-backfill-big-pages` (14) | Built behind a trial (D142), measured, deleted (D143): not neutral (reader-screen pool 230/229 to 228/228 at $0; a reproducible -2 hidden of 384 on the paid reader), from the ask's tie order among equal-score candidates following ingest order | D142, D143; docs/research/econ-background.md | Reopen only with a measured, ingest-order-independent tie-break for equal-score ask candidates (D143) |
-| `painpoint-prod-reader-unmeasured` (4), stage 1: paid timing of the shipped reader | Blocked externally. The $0 part (the reader's first failure logged once per process, `readerFailureLog` in packages/server/src/build.ts) shipped in round 1 | This file, finding 4 and "Deferred" | This environment's OpenRouter key gets 403 "violation of provider Terms Of Service" for Anthropic models, and the lab `SpendLedger` meters only `claude-*` ids. The owner supplies a key OpenRouter serves for `anthropic/claude-haiku-5.5`; then a ledger entry type for OpenRouter ids before any reader timing run |
-| `eval-live-measures-unshipped` (3): the paid `--live` run | Wiring fixed (D128); the paid run is blocked externally (same key block) | D128 | With a served key: `bun run eval --live --usd-cap 0.05` (D128) |
-| `quality-reader-veto-rule-path` (16): the by-name veto screen | Broad veto rejected (D130); the by-name screen is blocked externally (same key block) | D130 | Run after the live reader eval above, as D130 says |
-| `quality-reader-ceiling-gated` (15) | Rejected | D129 | None |
-| `fresh-per-ref-signals` (17) | Rejected | D131 | None |
-| `devloop-agent-replay-identical-eden` (18) | Rejected as proposed; open with the Hermes request-replay item (audit 2026-11-04, section 5) | D132 | That Hermes request-replay item |
-| `fresh-readat-race` (11), exact per-copy variant | Closed: read marks are stored per copy (`ItemCache.put`'s `readMark`, `Entry.readMark`) | D133 | None |
-| `d133-no-decision-row` (R2-13) | Closed: the D133 row is written | D133, commit 463f6fdfc | None |
-| `scale-graph-dominates-ingest` (R2-8): deleting the graph's code | Rejected: the graph stays in the default | D141 | None |
-| `scale-graph-dominates-ingest` (R2-8): Stage 2, a lighter graph | Off for now | D141 | The `graphLite` trial (owner: repo owner, ends 2026-12-17): `ingest.bench.ts` `+graph` stage at least 2x cheaper per item and the 5 pool tasks of docs/research/graph-ablation.md still in the pool on the $0 stub screen (`bun run funnel --json F` against `--baseline`); a loss goes back to the paid screen. Trials-table row added with the switch |
-| `fresh-checkahead-speculative-rereads` (R2-3), stage 2 | `VERIFY_AHEAD` stays 3; re-reads start only once the reader is called | D134 | Starting re-reads when the reader's stream names an item needs reader-stream plumbing and a live latency run (paid, same key block) |
-| `cost-intent-requests-keyword-output` (R2-10) | Rejected | D137 | A cheaper endpoint for intent-only card items is an owner decision under D12/D98 (external) |
-| `r2-results-cache-dead-weight` (R2-11) | Rejected: the results cache stays | D135 | None |
-| `cold-user-sources-on-path` (R2-16) | Rejected | D138 | None |
-| `mem-conflict-analysis-weakmap` (R2-9) | WeakMap kept, shared frozen empty array shipped (R2-P4); byte cap rejected | D136 | None |
+| Item (finding id)                                                                  | Final status                                                                                                                                                                                                                                       | Recorded in                                  | Next step                                                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sync-sweep-backfill-big-pages` (14)                                               | Built behind a trial (D142), measured, deleted (D143): not neutral (reader-screen pool 230/229 to 228/228 at $0; a reproducible -2 hidden of 384 on the paid reader), from the ask's tie order among equal-score candidates following ingest order | D142, D143; docs/research/econ-background.md | Reopen only with a measured, ingest-order-independent tie-break for equal-score ask candidates (D143)                                                                                                                                                                                                                                                   |
+| `painpoint-prod-reader-unmeasured` (4), stage 1: paid timing of the shipped reader | Blocked externally. The $0 part (the reader's first failure logged once per process, `readerFailureLog` in packages/server/src/build.ts) shipped in round 1                                                                                        | This file, finding 4 and "Deferred"          | This environment's OpenRouter key gets 403 "violation of provider Terms Of Service" for Anthropic models, and the lab `SpendLedger` meters only `claude-*` ids. The owner supplies a key OpenRouter serves for `anthropic/claude-haiku-5.5`; then a ledger entry type for OpenRouter ids before any reader timing run                                   |
+| `eval-live-measures-unshipped` (3): the paid `--live` run                          | Wiring fixed (D128); the paid run is blocked externally (same key block)                                                                                                                                                                           | D128                                         | With a served key: `bun run eval --live --usd-cap 0.05` (D128)                                                                                                                                                                                                                                                                                          |
+| `quality-reader-veto-rule-path` (16): the by-name veto screen                      | Broad veto rejected (D130); the by-name screen is blocked externally (same key block)                                                                                                                                                              | D130                                         | Run after the live reader eval above, as D130 says                                                                                                                                                                                                                                                                                                      |
+| `quality-reader-ceiling-gated` (15)                                                | Rejected                                                                                                                                                                                                                                           | D129                                         | None                                                                                                                                                                                                                                                                                                                                                    |
+| `fresh-per-ref-signals` (17)                                                       | Rejected                                                                                                                                                                                                                                           | D131                                         | None                                                                                                                                                                                                                                                                                                                                                    |
+| `devloop-agent-replay-identical-eden` (18)                                         | Rejected as proposed; open with the Hermes request-replay item (audit 2026-11-04, section 5)                                                                                                                                                       | D132                                         | That Hermes request-replay item                                                                                                                                                                                                                                                                                                                         |
+| `fresh-readat-race` (11), exact per-copy variant                                   | Closed: read marks are stored per copy (`ItemCache.put`'s `readMark`, `Entry.readMark`)                                                                                                                                                            | D133                                         | None                                                                                                                                                                                                                                                                                                                                                    |
+| `d133-no-decision-row` (R2-13)                                                     | Closed: the D133 row is written                                                                                                                                                                                                                    | D133, commit 463f6fdfc                       | None                                                                                                                                                                                                                                                                                                                                                    |
+| `scale-graph-dominates-ingest` (R2-8): deleting the graph's code                   | Rejected: the graph stays in the default                                                                                                                                                                                                           | D141                                         | None                                                                                                                                                                                                                                                                                                                                                    |
+| `scale-graph-dominates-ingest` (R2-8): Stage 2, a lighter graph                    | Off for now                                                                                                                                                                                                                                        | D141                                         | The `graphLite` trial (owner: repo owner, ends 2026-12-17): `ingest.bench.ts` `+graph` stage at least 2x cheaper per item and the 5 pool tasks of docs/research/graph-ablation.md still in the pool on the $0 stub screen (`bun run funnel --json F` against `--baseline`); a loss goes back to the paid screen. Trials-table row added with the switch |
+| `fresh-checkahead-speculative-rereads` (R2-3), stage 2                             | `VERIFY_AHEAD` stays 3; re-reads start only once the reader is called                                                                                                                                                                              | D134                                         | Starting re-reads when the reader's stream names an item needs reader-stream plumbing and a live latency run (paid, same key block)                                                                                                                                                                                                                     |
+| `cost-intent-requests-keyword-output` (R2-10)                                      | Rejected                                                                                                                                                                                                                                           | D137                                         | A cheaper endpoint for intent-only card items is an owner decision under D12/D98 (external)                                                                                                                                                                                                                                                             |
+| `r2-results-cache-dead-weight` (R2-11)                                             | Rejected: the results cache stays                                                                                                                                                                                                                  | D135                                         | None                                                                                                                                                                                                                                                                                                                                                    |
+| `cold-user-sources-on-path` (R2-16)                                                | Rejected                                                                                                                                                                                                                                           | D138                                         | None                                                                                                                                                                                                                                                                                                                                                    |
+| `mem-conflict-analysis-weakmap` (R2-9)                                             | WeakMap kept, shared frozen empty array shipped (R2-P4); byte cap rejected                                                                                                                                                                         | D136                                         | None                                                                                                                                                                                                                                                                                                                                                    |
 
 The run added no `TODO`/`FIXME`. It added one `EngineConfig` key, `syncBigPageSize` (D142, a trial), and D143
 deleted it with its code and tests, so the run ends with no new key. The 41 stale `origin/claude/r10-*` remote
