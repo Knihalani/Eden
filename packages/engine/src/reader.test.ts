@@ -323,17 +323,20 @@ describe("the reader's prompt and output (reader.ts)", () => {
     expect(model.calls[1]!.cacheKey).toBeUndefined();
   });
 
-  test("the model maker asks for low reasoning by default; 'off' sends no effort and 'high' passes through", async () => {
+  test("the model maker sends no reasoning by default (D144); 'low' and 'high' pass through when asked", async () => {
     const model = new FakeModel(() => '{"bears":[]}');
     const signal = new AbortController().signal;
     await new ModelReaderMaker(model).read(input(), signal);
     await new ModelReaderMaker(model, { reasoning: "off" }).read(input(), signal);
+    await new ModelReaderMaker(model, { reasoning: "low" }).read(input(), signal);
     await new ModelReaderMaker(model, { reasoning: "high" }).read(input(), signal);
-    expect(model.calls[0]!.reasoning).toBe("low");
-    expect("reasoning" in model.calls[1]!).toBe(false);
-    expect(model.calls[2]!.reasoning).toBe("high");
+    // The default request is the measured reader's: no reasoning field at all, the same request as an explicit "off".
+    expect("reasoning" in model.calls[0]!).toBe(false);
+    expect(model.calls[0]).toEqual(model.calls[1]!);
+    expect(model.calls[2]!.reasoning).toBe("low");
+    expect(model.calls[3]!.reasoning).toBe("high");
     // The prompt is the same whatever the effort: the replay cache key (READER_VERSION) does not change.
-    expect(model.calls[1]!.messages).toEqual(model.calls[0]!.messages);
+    expect(model.calls[2]!.messages).toEqual(model.calls[0]!.messages);
   });
 
   test("the model maker hands the call's usage back unchanged, reasoning tokens included", async () => {

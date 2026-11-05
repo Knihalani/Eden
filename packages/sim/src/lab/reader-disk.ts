@@ -18,6 +18,7 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import type { ChatRequest, ChatResponse, Model } from "@eden/llm";
+import { readerMessages } from "@eden/engine";
 
 interface Line {
   k: string;
@@ -56,12 +57,28 @@ export function promptKey(model: string, request: ChatRequest, salt?: Record<str
         messages: request.messages,
         maxTokens: request.maxTokens,
         json: request.json === true,
-        reasoning: request.reasoning ?? null,
+        reasoning: keyedReasoning(model, request),
         ...(salt ? { salt } : {}),
       }),
     )
     .digest("hex")
     .slice(0, 40);
+}
+
+/** The reader's fixed instructions, as `ModelReaderMaker` sends them (its system message does not depend on input). */
+const READER_SYSTEM = readerMessages({ request: "", items: [], today: "" })[0]!.content;
+
+/**
+ * The reasoning a key carries. A reader request (`READER_SYSTEM`) to a `claude-*` model with none keys as "low": until
+ * D144 `ModelReaderMaker` sent "low" by default, and the lab's `AnthropicModel` ignores the field with thinking off
+ * (anthropic.ts, `anthropicBody`), which every recorded `claude-*` reader line ran with. So a pre-D144 line and
+ * today's request without reasoning are the same call, and the recorded caches keep replaying (train1-6 seeds 41-42
+ * on `.local/mkt/reader-train-4142.jsonl`: 1,250 misses without this, 5 with it, as before D144). Other models and
+ * roles key what they send: on OpenRouter "low" really reasons, so a line made with it does not answer "off".
+ */
+function keyedReasoning(model: string, request: ChatRequest): string | null {
+  if (request.reasoning) return request.reasoning;
+  return model.startsWith("claude-") && request.messages[0]?.content === READER_SYSTEM ? "low" : null;
 }
 
 /** What a `ReplayModel` keys on beyond the request, and how it replays. */
