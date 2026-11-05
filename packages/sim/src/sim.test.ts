@@ -3,7 +3,14 @@ import { judgeMessages, parseJudge } from "@eden/engine";
 import { OracleJudge } from "./judge";
 import { buildSessions } from "./sessions";
 import { IDEAL, REALISTIC, SimIndex, SimSource } from "./sources";
-import { runQuality } from "./quality";
+import {
+  mergeTallies,
+  qualityReport,
+  runQuality,
+  tallyQuality,
+  type QualityReport,
+  type QualityTally,
+} from "./quality";
 import { applyUpdate, factsShown, planUpdates, relabel } from "./updates";
 import { buildWorld } from "./world";
 
@@ -104,6 +111,55 @@ describe("quality runner", () => {
     expect(r.ask.cases).toBeGreaterThan(10);
     expect(r.funnel.mustFacts).toBeGreaterThan(0);
   });
+
+  test("user-range tallies merge into the whole run's report (quality-cli --jobs), timing aside", async () => {
+    const o = {
+      users: 3,
+      sessionsPerUser: 3,
+      seed: 3,
+      profiles: REALISTIC,
+      timeScale: 0,
+      waitMs: 0,
+      model: null,
+      updates: 0.5,
+      deletes: 0.1,
+      push: "signals" as const,
+    };
+    const untimed = (r: QualityReport) => JSON.stringify({ ...r, latency: null, cpu: null });
+    const whole = await runQuality(o);
+    // Shards print their tallies as JSON, so the merge reads them as parsed JSON.
+    const shards = await Promise.all(
+      [
+        [0, 1],
+        [1, 3],
+      ].map(
+        async ([a, b]) => JSON.parse(JSON.stringify(await tallyQuality({ ...o, userRange: [a!, b!] }))) as QualityTally,
+      ),
+    );
+    const merged = mergeTallies(shards);
+    expect(merged.users).toBe(3);
+    expect(untimed(qualityReport(merged, o))).toBe(untimed(whole));
+    // Latency percentiles come from the concatenated samples, not from shard percentiles.
+    expect(merged.samples.observeMs.length).toBe(
+      shards[0]!.samples.observeMs.length + shards[1]!.samples.observeMs.length,
+    );
+    // Merging adds; the inputs are left as they were.
+    expect(shards[0]!.users).toBe(1);
+    await expect(tallyQuality({ ...o, userRange: [2, 4] })).rejects.toThrow(/userRange/);
+    await expect(tallyQuality({ ...o, userRange: [1, 1] })).rejects.toThrow(/no user/);
+  }, 20_000);
+
+  test("mergeTallies sums key by key, keeps first-seen key order, and treats any key as plain data", () => {
+    const t = (needDecisions: Record<string, number>): QualityTally =>
+      ({ users: 1, counts: { needDecisions }, samples: { observeMs: [1], deliveryMs: [], injBytes: [2] } }) as never;
+    const m = mergeTallies([t({ b: 1 }), t(JSON.parse('{"a": 2, "b": 3, "__proto__": 4}'))]);
+    expect(Object.keys(m.counts.needDecisions)).toEqual(["b", "a", "__proto__"]);
+    expect(m.counts.needDecisions.b).toBe(4);
+    expect(Object.hasOwn(m.counts.needDecisions, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(m.counts.needDecisions)).toBe(Object.prototype);
+    expect(m.samples.observeMs).toEqual([1, 1]);
+    expect(() => mergeTallies([])).toThrow();
+  });
 });
 
 describe("oracle judge", () => {
@@ -151,6 +207,39 @@ describe("source-side updates", () => {
     expect(item.facts).toContain(u.next);
     expect(factsShown(item, oldText, [u])).toContain(u.fact); // A copy cached before the update states the old fact.
     expect(factsShown(item, item.text, [u])).toContain(u.next);
+  });
+
+  test("an in-place edit reaches search after reindex: the per-item memo never serves the old words", async () => {
+    const w = buildWorld({ seed: 4 });
+    const item = w.items.find((i) => i.sourceId === "drive")!;
+    const other = w.items.find((i) => i.sourceId === "drive" && i !== item)!;
+    const ranked = new SimSource(new SimIndex("drive", w), IDEAL.drive!, 0, 1);
+    const substring = new SimSource(new SimIndex("drive", w), { ...IDEAL.drive!, semantics: "substring" }, 0, 1);
+    const ids = async (s: SimSource, text: string) =>
+      (await s.search({ scope, text, entities: [], limit: 50 }, signal)).map((h) => h.id);
+    const oldWord = "Zebrafinch";
+    const newWord = "Quokkaville";
+    // The item first states the old word (indexed, so memoised), then is edited in place, as applyUpdate does.
+    item.text = `${item.text} Venue: ${oldWord}.`;
+    ranked.reindex();
+    substring.reindex();
+    expect(await ids(ranked, oldWord)).toEqual([item.id]);
+    expect(await ids(substring, oldWord)).toEqual([item.id]);
+    item.text = item.text.replaceAll(oldWord, newWord);
+    item.title = `${item.title} Ünïcode`;
+    // Before the reindex the old index still answers; after it the new words are found and the old ones are gone.
+    expect(await ids(ranked, newWord)).toEqual([]);
+    ranked.reindex();
+    substring.reindex();
+    expect(await ids(ranked, newWord)).toEqual([item.id]);
+    expect(await ids(ranked, oldWord)).toEqual([]);
+    expect(await ids(substring, newWord.toLowerCase())).toEqual([item.id]);
+    expect(await ids(substring, oldWord)).toEqual([]);
+    expect(await ids(ranked, "unicode")).toContain(item.id); // The title's new word, accents folded.
+    // An unchanged item reads the same through a fresh index (served from the memo).
+    expect(await ids(ranked, other.title)).toEqual(
+      await ids(new SimSource(new SimIndex("drive", w), IDEAL.drive!, 0, 1), other.title),
+    );
   });
 
   test("relabel moves later sessions' tool output, uses and asks to the new version; old and new text read apart", () => {
