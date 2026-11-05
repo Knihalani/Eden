@@ -194,20 +194,32 @@ this recipe ran ALL3, with the same numbers; `--suite train1 --seeds 41` takes 3
 takes 22 s (122/240 hidden, 91/240 decoys). The `--baseline` diff lists every task that moved. A gain that is a
 coin flip between hidden and decoys (broad-set.md: rules on unseen writing) is not a gain.
 
-**`--jobs N` (default 1 at `--time 0`)** runs one `hidden-funnel.ts` process per suite × seed shard, N at a time, and merges their
-rows before the score; every shard's output is printed whole, in order, then the merged totals (the sync, cards and
-reader replay counters summed; `overBudget` and `cpu` lines stay per shard). Checked on 2026-11-03 (4 cores, ALL3,
-train, seeds 41–42, with `--ask` and cards): `--jobs 1` 32.8 s and 34.4 s, `--jobs 4` 21.3 s and 15.7 s; the 768
-perTask rows were identical in order once their timing fields (`ms`, `deliveryMs`, `askMs`) were removed, the score
-lines identical, and the summed sync and cards counters equal to the single run's. The shards contend for cores, so
-with N > 1 ms/task (and the sync's ms/user) is not a latency figure: the run says so; quote latency from `--jobs 1`.
+**`--jobs N` at `--time 0` (default: one per core, D139)** runs N `hidden-funnel.ts` processes at once, each over a
+block of suites × seeds (`groupShards` in funnel-merge.ts: train × seeds 41–42 on 4 cores is four blocks of 3 suites
+× 1 seed), and merges their rows before the score (`mergeParts`: perTask laid out in the one-process order from each
+row's own suite and seed); every process's output is printed whole, in order, then the merged totals (the sync, cards
+and reader replay counters summed; `overBudget` and `cpu` lines stay per process). Blocks rather than one process per
+shard because each process repeats its start-up (worlds, cards, backfill) in CPU: the old `--jobs 4` (12 one-shard
+processes, 4 at a time) took 68–72 s of CPU against about 50 s for four blocks (audit 2026-11-05 round 2 verifiers,
+not re-run here). Measured
+2026-11-05 on 4 cores shared with other agents (load 1.3–5.9), `bun run funnel`, `time`, wall and user+sys CPU:
+before (one process) 26.4, 24.5, 24.1 s wall and 31.7, 30.0, 31.2 s CPU; after (4 blocks) 11.7, 12.5, 15.4 s wall and
+43.7, 46.4, 46.0 s CPU. Interleaved pairs, `--jobs 1` (the old default) then the new default: 24.2/16.5, 25.3/14.1,
+26.0/14.0 s wall; 31.1/42.6, 32.2/40.6, 30.7/38.5 s CPU. So 1.5–2.0x faster in wall for 1.25–1.5x the CPU of one
+process. `bun run funnel --json A.json` and `bun run funnel --jobs 1 --json B.json`: the 768 perTask rows identical
+in order once `ms`, `askMs`, `deliveryMs` and `readerWaitMs` were removed, and rows, totals, per-suite summaries,
+cards, reader and sync counters (bar `warmMs`) equal; score 214/384 hidden, 211/384 decoys both. The processes contend
+for cores, so with N > 1 ms/task (and the sync's ms/user) is not a latency figure: the run says CONTENDED; **quote
+latency from `--jobs 1`**, and a `--baseline` that compares ms/task needs `--jobs 1` on both sides. A `--seeds` list
+that repeats a seed is refused (blocks would run it once where one process runs it twice).
 `--jobs` falls back to one process, and says so, with `--record` (the ledger books one entry per suite, and a seed
 shard would book a partial run), with any of `--packets`, `--card-log`, `--reader-log`, `--ask-diag`,
 `--candidates` or `--timeline` (each process clears and rewrites that one file), and with `--judge live` or
 `--reader live` (paid calls and rate limits in parallel). A replayed reader (`--reader replay`) and a replayed bridge
 shard; their reader misses are summed for the miss gate.
 
-**`--time` shards too** (since audit 2026-11-03b round 2; it used to force one process). At `-- --time 1` a task's
+**`--time` shards too** (since audit 2026-11-03b round 2; it used to force one process), one process per suite × seed
+shard, N at a time (not blocks: the shards sleep rather than burn CPU, so start-up is cheap beside them). At `-- --time 1` a task's
 time is mostly the connectors' simulated latency, which is sleeping, not CPU, so concurrent shards barely slow each
 other and ms/task stays a latency figure; inside each process the hidden and control variants also run at once at
 `--time` > 0 (`-- --serial` keeps variants and seeds one after another). **Without `--jobs`, a `--time` > 0 run uses

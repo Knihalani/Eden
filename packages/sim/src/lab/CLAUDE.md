@@ -16,7 +16,7 @@ cards-enrich, presets, suites, free, spend` (`.ts`): check `git log origin/main`
 | `presets.ts` | `PRESETS`: only `default`, `minus-<part>` (one per `PARTS` entry) and `minus-all` (the core), made from @eden/engine (D112); `effective(override)` reads what a preset runs |
 | `hidden-funnel.ts` | The no-model funnel: each task through Eden alone; returned/cached/delivered, decoys, calls, ms; `--ask`, `--cards`, `--intent`, `--reader`, `--timeline`, `--json` |
 | `funnel.ts` | `bun run funnel`: the funnel with a preset, replayed cards and `--ask`, and the funnel score; refuses held-out suites without `--blind` |
-| `funnel-merge.ts` | funnel.ts's arithmetic, tested in-process: `defaultJobs` (`--time` > 0 shards concurrently by default), `amortisedCalls` (merged connector calls), `callMismatches` (shards whose traces miss calls) |
+| `funnel-merge.ts` | funnel.ts's arithmetic, tested in-process: `defaultJobs` (one process per core at `--time 0`, D139; `--time` > 0 shards concurrently), `groupShards` (blocks of suites × seeds per process at `--time 0`), `mergeParts` (parts to the one-process JSON, perTask from each row's own suite and seed), `amortisedCalls` (merged connector calls), `callMismatches` (processes whose traces miss calls) |
 | `flags.ts` | Strict flags for the $0 CLIs (funnel, hidden-funnel, quality-cli): unknown flag, stray argument or missing value exits 2, `--help` prints usage; `labConfig` checks `--config`/`--set` with @eden/engine's `checkEngineConfig` |
 | `pi-ab.ts`, `pi-conditions.ts`, `pi-timeline.ts`, `pi-ab-report.ts` | The live A/B on the Pi harness (the standard agent): conditions `none,tools,eden,both[-judge][~variant][+flag][@w<ms>]`, per-task timelines, report |
 | `hermes-ab.ts` + `hermes-{conditions,host,proxy,worker,anthropic}.ts` | The same A/B on Hermes Agent (Python workers, `../../lab/hermes/`), Eden as MCP server + plugin |
@@ -95,6 +95,9 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
   --ledger ledger-summary.jsonl --run PREFIX` recomputes it from the spend ledger (docs/research/haiku-phase3.md)
   and exits 1 when the columns miss the header's Eden total by more than $0.01.
 - Funnel decoys surfaced overstate harm: live agents reject most decoys (docs/research/broad-set.md).
+- **`bun run funnel`'s ms/task is CONTENDED by default** (D139, since 2026-11-05): at `--time 0` it runs one process
+  per core over blocks of suites × seeds. Quote latency, or diff ms/task against a `--baseline`, only from `--jobs 1`
+  on both sides; the counts and the score do not depend on it (768 of 768 perTask rows identical).
 - A wrapper around a sim source must copy `notifies` (and `listsByTime`) or `--push` silently does nothing: pi-ab's
   timing wrapper dropped it once, and the run polled as if no source notified.
 - Hermes needs its `mcp` extra (`uv sync --frozen --no-install-project --extra mcp`), else "Hermes has no ask_context".
