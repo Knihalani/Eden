@@ -72,8 +72,13 @@ const MAX_NODES_PER_ITEM = 48;
  * with its item (`UserGraph.long`) and a walk from a day it covers scans for it.
  */
 const MAX_SPAN_DAYS = 21;
-/** Characters of an item read: what names it and constrains it comes early. */
-const READ_CHARS = 4_000;
+/**
+ * Characters of an item's text read (its title and `meta.people` are read on their own): what names it and
+ * constrains it comes early. 1,000, not 4,000 (D150): on `ingest.bench.ts` the graph's per-item backfill fell 2.1-2.3x
+ * and its heap 37%, and every train screen (stub funnel, Haiku reader replay, eval) was the same task by task
+ * (docs/research/graph-ablation.md, stage 2).
+ */
+const READ_CHARS = 1_000;
 /** A node on more than this many items is a hub (the user's own name, their company): it spreads nothing. */
 const HUB = 400;
 /** Links a node keeps to other nodes (a person's addresses and names; an organisation's people). */
