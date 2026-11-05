@@ -4,7 +4,7 @@ import { Budget } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { StaticSource } from "@eden/sources";
 import { ItemCache } from "./cache";
-import { arrangedVisit, assess, frameOf, mayConstrain, namesRef, type Verdict } from "./conflict";
+import { analyse, arrangedVisit, assess, frameOf, mayConstrain, namesRef, type Verdict } from "./conflict";
 import { timeWindow } from "./grounding";
 import { ContextPartner } from "./partner";
 import { cleanEntities } from "./probes";
@@ -402,5 +402,22 @@ describe("assess: an item's analysis is read once and reused", () => {
     const second = assess(marta, off, NOW);
     expect(second).toBe(assess(marta, { ...off }, NOW));
     expect(second).not.toBe(first);
+  });
+
+  test("empty marks share one frozen array across statements, items and vocabularies (D136)", () => {
+    const a = item("Lunch", "Thanks for lunch today. The new office has a nice view of the river.");
+    const b = item("Robert away", "Robert Haddad is on leave 26 Oct to 6 Nov. Lunch was fine.");
+    const empties: (readonly number[])[] = [];
+    for (const vocab of [false, true])
+      for (const it of [a, b])
+        for (const st of analyse(it, vocab).statements)
+          for (const m of [st.blocked, st.objectBlocks, st.moves, st.clears, st.reaffirms])
+            if (m.length === 0) empties.push(m);
+    expect(empties.length).toBeGreaterThan(10);
+    expect(new Set(empties).size).toBe(1);
+    expect(Object.isFrozen(empties[0])).toBe(true);
+    // The leave is still read as a block: a mark that is there is kept, and the verdict is the same.
+    expect(analyse(b, true).statements.some((st) => st.blocked.length > 0)).toBe(true);
+    expect(assess(frame("Book a call with Robert Haddad on Monday 2 November"), b, NOW)).toBe("conflict");
   });
 });

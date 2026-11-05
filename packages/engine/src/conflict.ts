@@ -480,12 +480,13 @@ interface Statement {
   s: string;
   /** Not read: too short, boilerplate or (`conflictVocab`) a courtesy. It still ties the statement after it. */
   skip: boolean;
-  blocked: number[];
+  /** The marks below are `EMPTY_MARKS` when there are none, as almost always (`kept`). */
+  blocked: readonly number[];
   /** `BLOCKS_OBJECT`'s marks, which block only in a statement holding one of the request's words. */
-  objectBlocks: number[];
-  moves: number[];
-  clears: number[];
-  reaffirms: number[];
+  objectBlocks: readonly number[];
+  moves: readonly number[];
+  clears: readonly number[];
+  reaffirms: readonly number[];
   /** The last mark of a thing done or a standing constraint, -1 for none. */
   lastDone: number;
   /**
@@ -500,15 +501,25 @@ interface Statement {
   changes?: number[];
 }
 
+/**
+ * The one array every statement without a mark of some kind holds (D136). An analysis is cached for as long as its
+ * item (`ANALYSES`), and nearly every mark array is empty (99.9% on the bench workload): a fresh `[]` each was about
+ * half the cache's heap. Frozen, since it is shared by every item; the marks are only read, spread and filtered.
+ */
+const EMPTY_MARKS: readonly number[] = Object.freeze([]);
+
+/** A statement's marks as kept in its analysis: `EMPTY_MARKS` for none. */
+const kept = (marks: number[]): readonly number[] => (marks.length > 0 ? marks : EMPTY_MARKS);
+
 /** A statement that is not read (`Statement.skip`). */
 const skipped = (s: string): Statement => ({
   s,
   skip: true,
-  blocked: [],
-  objectBlocks: [],
-  moves: [],
-  clears: [],
-  reaffirms: [],
+  blocked: EMPTY_MARKS,
+  objectBlocks: EMPTY_MARKS,
+  moves: EMPTY_MARKS,
+  clears: EMPTY_MARKS,
+  reaffirms: EMPTY_MARKS,
   lastDone: -1,
   dated: false,
 });
@@ -549,8 +560,11 @@ interface AnalysisEntry {
   views: [Analysis | undefined, Analysis | undefined];
 }
 
-/** An item read for `assess` with or without `conflictVocab` (`vocab`), once per item object and vocabulary. */
-function analyse(item: ContextItem, vocab: boolean): Analysis {
+/**
+ * An item read for `assess` with or without `conflictVocab` (`vocab`), once per item object and vocabulary. Exported
+ * for tests only (`conflict.test.ts` checks what an analysis keeps).
+ */
+export function analyse(item: ContextItem, vocab: boolean): Analysis {
   let e = ANALYSES.get(item);
   if (!e || e.text !== item.text || e.title !== item.title || e.updatedAt !== item.updatedAt) {
     e = { text: item.text, title: item.title, updatedAt: item.updatedAt, views: [undefined, undefined] };
@@ -590,11 +604,11 @@ function analysis(item: ContextItem, V: boolean, other: Analysis | undefined): A
     statements.push({
       s,
       skip: false,
-      blocked: marksOf(s, blocks, true),
-      objectBlocks: V ? marks(s, BLOCKS_OBJECT, true) : [],
-      moves: marks(s, MOVES, true),
-      clears: marksOf(s, clears, false),
-      reaffirms: marks(s, REAFFIRMS, false),
+      blocked: kept(marksOf(s, blocks, true)),
+      objectBlocks: V ? kept(marks(s, BLOCKS_OBJECT, true)) : EMPTY_MARKS,
+      moves: kept(marks(s, MOVES, true)),
+      clears: kept(marksOf(s, clears, false)),
+      reaffirms: kept(marks(s, REAFFIRMS, false)),
       lastDone: Math.max(-1, ...marks(s, DONE, true), ...marksOf(s, standing, true)),
       // `search` ignores the shared list's global `lastIndex`.
       dated: /\d/.test(s) || (V && s.search(WEEKDAY_END) >= 0),
