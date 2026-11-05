@@ -327,6 +327,9 @@ const UNTIED = new RegExp(
  * What an item says about a request's frame (`Frame`): `conflict`, `clear` or `none`. Sentences are read in order;
  * one about a date or an amount decides for the sentences after it that only repeat its point ("… while Robert is
  * away"), and a clearing statement anywhere after a blocking one wins ("was blocked, but … the date holds").
+ *
+ * What depends on the item alone (its statements, their marks, its words and references) is read once per item and
+ * vocabulary (`analyse`); what depends on the request (ties, dates, amounts, the twin check) is read here each time.
  */
 export function assess(
   frame: Frame,
@@ -338,41 +341,30 @@ export function assess(
   // A consequence probe's find (`consequence.ts`) is tied to the request by its action class's own words: "freeze"
   // and "production" tie a release request that says neither. Plural "s" dropped, as for the request's own words.
   const extra = extraTies ? new Set([...extraTies].map(stem)) : null;
-  const V = frame.vocab;
-  const blocks = V ? [BLOCKS, BLOCKS_MORE] : [BLOCKS];
-  const clears = V ? [CLEARS, CLEARS_MORE] : [CLEARS];
-  const standing = V ? [STANDING, STANDING_MORE] : [STANDING];
-  const marksOf = (x: string, res: RegExp[], blocking: boolean) => res.flatMap((re) => marks(x, re, blocking));
+  const V = frame.vocab === true;
+  const a = analyse(item, V);
   // A message from someone the request names speaks for them: its "I" is them ("I'm vegetarian" from Sam).
-  const sender = /^from:\s*([^<\n]{2,80})/im.exec(item.text.slice(0, 2_000))?.[1]?.toLowerCase() ?? "";
   // `speaks`: the knowledge graph (`kg.ts`) says the item's author is someone the request names, or one of their
   // organisation's people, or the person the request names by role ("my manager"), though no name matches here.
   const fromNamed =
-    speaks || (sender !== "" && frame.names.some((n) => n.split(/\s+/).every((w) => sender.includes(w))));
+    speaks || (a.sender !== "" && frame.names.some((n) => n.split(/\s+/).every((w) => a.sender.includes(w))));
   // A statement is tied to the request when it holds one of its words, or speaks in the first person from someone
   // it names. Only a tied statement's conflict is the request's ("travel over £500 needs pre-approval" in a mail
   // from Oskar is no conflict with lunch with Oskar). A request that names someone ties by name only: another
   // company's overdue invoice shares its words, not its names. A chat line's speaker ("[09:14] Lars: …") is who says
   // it, like a message's sender.
   const isNamed = (who: string) => frame.names.some((n) => n.split(/\s+/).every((w) => who.includes(w)));
-  const tied = (line: string) => {
-    const said = SPEAKER.exec(line);
-    const s = said ? line.slice(said[0].length) : line;
-    const words = (s.match(/[a-z][a-z0-9'-]{1,}/g) ?? []).map((w) => stem(V ? unpossess(w) : w));
-    const ties = frame.names.length > 0 ? [frame.nameTies] : [frame.nameTies, frame.wordTies];
-    if (extra) ties.push(extra);
-    if (words.some((w) => ties.some((t) => t.has(w)))) return true;
-    return (fromNamed || (said !== null && isNamed(said[1]!))) && FIRST_PERSON.test(s);
+  const ties = frame.names.length > 0 ? [frame.nameTies] : [frame.nameTies, frame.wordTies];
+  if (extra) ties.push(extra);
+  const tied = (t: Tie) => {
+    if (t.words.some((w) => ties.some((x) => x.has(w)))) return true;
+    return (fromNamed || (t.speaker !== null && isNamed(t.speaker))) && t.firstPerson;
   };
-  // The message's own words: no headers, greetings, signature, confidentiality footer or notification boilerplate
-  // ("This email and any attachments are confidential" is no constraint on anything).
-  const whole = `${item.title}. ${compactText(item.text.slice(0, MAX_TEXT).replace(HEADERS, ""), NO_FOCUS, MAX_TEXT)}`;
   // A sibling reference: the item is about Q2 where the request says Q3, another invoice than the one named.
-  if (twin(frame.refs, refsOf(whole, V && hasDomain(frame)))) return "clear";
-  const body = whole.toLowerCase().replace(/[\u2013\u2014]/g, "-");
+  if (frame.refs.length > 0 && twin(frame.refs, refsFor(a, V && hasDomain(frame)))) return "clear";
   // `conflictVocab`: a relative date ("until Monday", "till the 10th") counts from when the item was written, not
   // from the request: "back Monday" sent on 1 Oct meant 5 Oct. With no known date it is read as no date.
-  const anchor = V ? sentAt(item) : null;
+  const anchor = a.anchor;
   let state: Verdict = "none";
   // Whether a statement behind the current conflict is tied to the request.
   let tiedConflict = false;
@@ -382,15 +374,15 @@ export function assess(
   let firm: Set<string> | null = null;
   // Cleared by a date: the block is about other days.
   let elsewhere = false;
-  const conflict = (s: string, isFirm: boolean, money = false) => {
+  const conflict = (st: Statement, isFirm: boolean, money = false) => {
     // A conflict on an amount is tied by the amount itself; a statement is also tied by the sentence before it, or by
     // the item's title, naming what it is about ("Rebecca Stone (Soylent Foods)". "Status: no longer at …").
     // With `conflictVocab`, a table's row is not tied by the row above it: that is another record.
-    const t = money || tied(s) || (!(V && s.startsWith("|")) && tied(before)) || titled;
+    const t = money || tied(tieOf(st, V)) || (!(V && st.s.startsWith("|")) && tied(tieOf(before, V))) || titled;
     tiedConflict = state === "conflict" ? tiedConflict || t : t;
     state = "conflict";
-    if (isFirm) firm = wordsOf(s);
-    if (V && t) conflictWords = wordsOf(s);
+    if (isFirm) firm = wordsFor(st);
+    if (V && t) conflictWords = wordsFor(st);
   };
   // A clearance is a near-miss twin's mark only where something could have blocked: after a blocking statement in
   // the item, or in words that say a block is gone ("lifted", "back from leave", "unchanged"). "Happy to jump on a
@@ -401,91 +393,242 @@ export function assess(
   // a row clears only when it is tied to the request too, or shares a word with the conflicting statement. (In prose
   // a clearance need not repeat the name: "SSO was blocked, but the cert came through and the date holds".)
   let conflictWords: Set<string> | null = null;
-  const clear = (s: string) => {
+  const clear = (st: Statement) => {
+    const s = st.s;
     if (!blockSeen && !REVERSAL.test(s) && !(V && REVERSAL_MORE.test(s))) return;
-    if (firm && ![...wordsOf(s)].some((w) => firm!.has(w))) return;
+    if (firm && ![...wordsFor(st)].some((w) => firm!.has(w))) return;
     if (V && s.startsWith("|") && state === "conflict" && tiedConflict && frame.names.length > 0 && conflictWords) {
       const cw: Set<string> = conflictWords;
-      if (!tied(s) && ![...wordsOf(s)].some((w) => cw.has(w))) return;
+      if (!tied(tieOf(st, V)) && ![...wordsFor(st)].some((w) => cw.has(w))) return;
     }
     state = "clear";
     firm = null;
     conflictWords = null;
     elsewhere = false;
   };
-  const titled = tied(item.title.toLowerCase());
+  const titled = tied(a.title);
   // A statement that holds one of the request's own words other than a name (`BLOCKS_OBJECT`).
-  const objectTied = (line: string) =>
-    (line.match(/[a-z][a-z0-9'-]{1,}/g) ?? [])
-      .map((w) => stem(unpossess(w)))
-      .some((w) => frame.wordTies.has(w) && !frame.nameTies.has(w));
-  let before = "";
-  let s = "";
-  // `conflictVocab`: a table's rows are statements of their own ("| Aperture Labs | Suspended |" and "| Pied Piper |
-  // Approved |"), also when the text was flattened onto one line (a row ends where the next begins: "| |").
-  for (const sentence of body.split(V ? SENTENCES_ROWS : SENTENCES)) {
-    before = s;
-    // A restriction that has ended is lifted: "the minimum term ended on 30 Jun" frees the request, unlike "the
-    // passport expired on 30 Sep", where what ended is the thing the request needs.
-    s = sentence.trim().replace(RESTRICTION_ENDED, "$1 lifted");
-    if (s.length < 3 || BOILER.test(s)) continue;
-    // `conflictVocab`: a sign-off courtesy is no statement ("happy to jump on a call"), and an idiom is no block
-    // ("can't wait for Friday").
-    if (V) {
-      if (COURTESY.test(s)) continue;
-      s = s.replace(IDIOMS, (m) => " ".repeat(m.length));
-    }
+  const objectTied = (st: Statement) => objectWordsOf(st).some((w) => frame.wordTies.has(w) && !frame.nameTies.has(w));
+  // The statement before the one read, read itself or not: it ties the one after it by naming what it is about.
+  let before: Statement = NO_STATEMENT;
+  const statements = a.statements;
+  for (let i = 0; i < statements.length; i++) {
+    const st = statements[i]!;
+    before = i > 0 ? statements[i - 1]! : NO_STATEMENT;
+    if (st.skip) continue;
+    const s = st.s;
     const money = amountVerdict(frame, s);
-    if (money === "conflict") conflict(s, true, true);
+    if (money === "conflict") conflict(st, true, true);
     else if (money === "clear") [state, firm] = ["clear", null];
     if (money !== "none") continue;
-    const blocked = [...marksOf(s, blocks, true), ...(V && objectTied(s) ? marks(s, BLOCKS_OBJECT, true) : [])];
+    const blocked =
+      V && st.objectBlocks.length > 0 && objectTied(st) ? [...st.blocked, ...st.objectBlocks] : st.blocked;
     const lastBlock = Math.max(-1, ...blocked);
     // A reaffirming word after a block or move in the sentence confirms it, so it clears only before the first.
-    const firstBlock = Math.min(Number.MAX_SAFE_INTEGER, ...blocked, ...marks(s, MOVES, true));
-    const lastClear = Math.max(
-      -1,
-      ...marksOf(s, clears, false),
-      ...marks(s, REAFFIRMS, false).filter((at) => at < firstBlock),
-    );
+    const firstBlock = Math.min(Number.MAX_SAFE_INTEGER, ...blocked, ...st.moves);
+    const lastClear = Math.max(-1, ...st.clears, ...st.reaffirms.filter((at) => at < firstBlock));
     // Something done already, or a standing constraint (an allergy, a confidentiality): when does not matter, and
     // a clearing word after it in the same sentence undoes it ("tested for coeliac and it's negative").
     // So is a change to what the request assumes is as usual ("same as usual" against "goes from £1650 to £1710").
-    const lastDone = Math.max(
-      -1,
-      ...marks(s, DONE, true),
-      ...marksOf(s, standing, true),
-      ...(frame.routine ? marks(s, CHANGES, true) : []),
-    );
-    const lastMove = Math.max(-1, ...marks(s, MOVES, true));
+    const lastDone = Math.max(st.lastDone, ...(frame.routine ? changesOf(st) : []));
+    const lastMove = Math.max(-1, ...st.moves);
     if (lastBlock >= 0 || lastDone >= 0 || lastMove >= 0) blockSeen = true;
-    if (lastDone > lastClear) conflict(s, true);
+    if (lastDone > lastClear) conflict(st, true);
     else if (lastClear > Math.max(lastBlock, lastMove)) {
       // A clearing statement with a date of its own ("EHIC valid to 2029") is about its own matter.
-      if (!(firm && dateVerdict(frame, s, now, false, V, anchor) !== "none")) clear(s);
+      if (!(firm && st.dated && dateVerdict(frame, s, now, false, V, anchor) !== "none")) clear(st);
     } else {
-      const dated = dateVerdict(frame, s, now, lastBlock >= 0, V, anchor);
-      if (dated === "conflict") conflict(s, true);
+      const dated = st.dated ? dateVerdict(frame, s, now, lastBlock >= 0, V, anchor) : "none";
+      if (dated === "conflict") conflict(st, true);
       else if (lastMove >= 0) {
         // Moved: unless the request acts on the new day, it acts on the old one. Days after "from" are the old ones.
         const fresh = datesOf(s.replace(/\bfrom (?:[a-z]+,? )?\d{1,2}(?:st|nd|rd|th)? [a-z]+/g, " "), now, V, anchor);
         // The day it moved to is the end of what is read as a span ("to Friday 30 October").
         const onNew = frame.named && fresh.spans.some((sp) => frame.days.includes(sp.to));
-        if (onNew) clear(s);
-        else conflict(s, false);
+        if (onNew) clear(st);
+        else conflict(st, false);
       } else if (dated === "clear") {
         // A block over other days clears; a date with no block only says later blocks are about other days.
-        if (lastBlock >= 0) clear(s);
+        if (lastBlock >= 0) clear(st);
         elsewhere = true;
       }
       // A block with no date of its own repeats a dated one before it ("… while Robert is away").
-      else if (lastBlock >= 0 && !firm && !elsewhere) conflict(s, false);
+      else if (lastBlock >= 0 && !firm && !elsewhere) conflict(st, false);
     }
   }
   // (`state` is set in the closures above, which narrowing does not see.)
   const verdict = state as Verdict;
   return verdict === "conflict" && !tiedConflict ? "none" : verdict;
 }
+
+/** What ties a statement to a request (`assess`'s `tied`): its words, and who says it in the first person. */
+interface Tie {
+  /** Its distinct words, stemmed (and with `conflictVocab` without a possessive), its speaker's left out. */
+  words: string[];
+  /** A chat line's speaker ("[09:14] lars nilsen: "), or null. */
+  speaker: string | null;
+  /** Whether it speaks in the first person. */
+  firstPerson: boolean;
+}
+
+/**
+ * One statement of an item as `assess` reads it, with the marks of every pattern list in it: they depend on the
+ * statement alone. `blocked`, `clears` and `lastDone` follow the vocabulary the analysis was made for.
+ */
+interface Statement {
+  /** The statement, lower case, an ended restriction read as lifted and (`conflictVocab`) its idioms blanked. */
+  s: string;
+  /** Not read: too short, boilerplate or (`conflictVocab`) a courtesy. It still ties the statement after it. */
+  skip: boolean;
+  blocked: number[];
+  /** `BLOCKS_OBJECT`'s marks, which block only in a statement holding one of the request's words. */
+  objectBlocks: number[];
+  moves: number[];
+  clears: number[];
+  reaffirms: number[];
+  /** The last mark of a thing done or a standing constraint, -1 for none. */
+  lastDone: number;
+  /**
+   * Whether it may state a date (`datesOf`): every date form holds a digit but a weekday after an end word ("until
+   * Sunday", `conflictVocab` only). Without one, `dateVerdict` is "none" whatever the request and the day.
+   */
+  dated: boolean;
+  /** Read on first use (`tieOf`, `wordsFor`, `objectWordsOf`, `changesOf`): most statements never need them. */
+  tie?: Tie;
+  words?: Set<string>;
+  objectWords?: string[];
+  changes?: number[];
+}
+
+/** A statement that is not read (`Statement.skip`). */
+const skipped = (s: string): Statement => ({
+  s,
+  skip: true,
+  blocked: [],
+  objectBlocks: [],
+  moves: [],
+  clears: [],
+  reaffirms: [],
+  lastDone: -1,
+  dated: false,
+});
+
+/** What the first statement of an item has before it. Frozen: it is shared by every item, so nothing is noted on it. */
+const NO_STATEMENT: Statement = Object.freeze({
+  ...skipped(""),
+  tie: Object.freeze({ words: [], speaker: null, firstPerson: false }),
+});
+
+/** An item as `assess` reads it for one vocabulary (`analyse`). */
+interface Analysis {
+  /** The sender in its `From:` line, lower case, or "". */
+  sender: string;
+  /** The item's title as a statement's tie. */
+  title: Tie;
+  statements: Statement[];
+  /** When the item was written (`sentAt`), read only with `conflictVocab`. */
+  anchor: number | null;
+  /** The text the references are read from (title and compacted text). */
+  whole: string;
+  /** Its references, without and with domains (`refsOf`), read on first use. */
+  refs: [Ref[] | undefined, Ref[] | undefined];
+}
+
+/**
+ * The analyses of items, per item object and vocabulary ([without, with] `conflictVocab`). Held weakly: an entry
+ * lives as long as the item it reads (a cache's stored copy), and is about that item's text alone, so it is no
+ * state of any tenant. The fields an analysis reads are kept beside it: an item whose text, title or date changed in
+ * place is read again, so a stale analysis is never served.
+ */
+const ANALYSES = new WeakMap<ContextItem, AnalysisEntry>();
+
+interface AnalysisEntry {
+  text: string;
+  title: string;
+  updatedAt: number | undefined;
+  views: [Analysis | undefined, Analysis | undefined];
+}
+
+/** An item read for `assess` with or without `conflictVocab` (`vocab`), once per item object and vocabulary. */
+function analyse(item: ContextItem, vocab: boolean): Analysis {
+  let e = ANALYSES.get(item);
+  if (!e || e.text !== item.text || e.title !== item.title || e.updatedAt !== item.updatedAt) {
+    e = { text: item.text, title: item.title, updatedAt: item.updatedAt, views: [undefined, undefined] };
+    ANALYSES.set(item, e);
+  }
+  const k = vocab ? 1 : 0;
+  return (e.views[k] ??= analysis(item, vocab, e.views[1 - k]));
+}
+
+/** `analyse`'s work: `other` is the item's analysis for the other vocabulary, whose item-only parts are shared. */
+function analysis(item: ContextItem, V: boolean, other: Analysis | undefined): Analysis {
+  const blocks = V ? [BLOCKS, BLOCKS_MORE] : [BLOCKS];
+  const clears = V ? [CLEARS, CLEARS_MORE] : [CLEARS];
+  const standing = V ? [STANDING, STANDING_MORE] : [STANDING];
+  const marksOf = (x: string, res: RegExp[], blocking: boolean) => res.flatMap((re) => marks(x, re, blocking));
+  const sender = other?.sender ?? /^from:\s*([^<\n]{2,80})/im.exec(item.text.slice(0, 2_000))?.[1]?.toLowerCase() ?? "";
+  // The message's own words: no headers, greetings, signature, confidentiality footer or notification boilerplate
+  // ("This email and any attachments are confidential" is no constraint on anything).
+  const whole =
+    other?.whole ??
+    `${item.title}. ${compactText(item.text.slice(0, MAX_TEXT).replace(HEADERS, ""), NO_FOCUS, MAX_TEXT)}`;
+  const body = whole.toLowerCase().replace(/[–—]/g, "-");
+  const statements: Statement[] = [];
+  // `conflictVocab`: a table's rows are statements of their own ("| Aperture Labs | Suspended |" and "| Pied Piper |
+  // Approved |"), also when the text was flattened onto one line (a row ends where the next begins: "| |").
+  for (const sentence of body.split(V ? SENTENCES_ROWS : SENTENCES)) {
+    // A restriction that has ended is lifted: "the minimum term ended on 30 Jun" frees the request, unlike "the
+    // passport expired on 30 Sep", where what ended is the thing the request needs.
+    let s = sentence.trim().replace(RESTRICTION_ENDED, "$1 lifted");
+    // `conflictVocab`: a sign-off courtesy is no statement ("happy to jump on a call"), and an idiom is no block
+    // ("can't wait for Friday").
+    if (s.length < 3 || BOILER.test(s) || (V && COURTESY.test(s))) {
+      statements.push(skipped(s));
+      continue;
+    }
+    if (V) s = s.replace(IDIOMS, (m) => " ".repeat(m.length));
+    statements.push({
+      s,
+      skip: false,
+      blocked: marksOf(s, blocks, true),
+      objectBlocks: V ? marks(s, BLOCKS_OBJECT, true) : [],
+      moves: marks(s, MOVES, true),
+      clears: marksOf(s, clears, false),
+      reaffirms: marks(s, REAFFIRMS, false),
+      lastDone: Math.max(-1, ...marks(s, DONE, true), ...marksOf(s, standing, true)),
+      // `search` ignores the shared list's global `lastIndex`.
+      dated: /\d/.test(s) || (V && s.search(WEEKDAY_END) >= 0),
+    });
+  }
+  return {
+    sender,
+    title: tieIn(item.title.toLowerCase(), V),
+    statements,
+    anchor: V ? sentAt(item) : null,
+    whole,
+    refs: other?.refs ?? [undefined, undefined],
+  };
+}
+
+/** An analysis's references (`refsOf`), with domains or without, read once. */
+function refsFor(a: Analysis, domains: boolean): Ref[] {
+  const k = domains ? 1 : 0;
+  return (a.refs[k] ??= refsOf(a.whole, domains));
+}
+
+/** What ties a line to a request (`Tie`): with `vocab`, a word's possessive is dropped ("leila's" ties "leila"). */
+function tieIn(line: string, vocab: boolean): Tie {
+  const said = SPEAKER.exec(line);
+  const s = said ? line.slice(said[0].length) : line;
+  const words = new Set((s.match(/[a-z][a-z0-9'-]{1,}/g) ?? []).map((w) => stem(vocab ? unpossess(w) : w)));
+  return { words: [...words], speaker: said ? said[1]! : null, firstPerson: FIRST_PERSON.test(s) };
+}
+
+const tieOf = (st: Statement, vocab: boolean): Tie => (st.tie ??= tieIn(st.s, vocab));
+const wordsFor = (st: Statement): Set<string> => (st.words ??= wordsOf(st.s));
+const changesOf = (st: Statement): number[] => (st.changes ??= marks(st.s, CHANGES, true));
+const objectWordsOf = (st: Statement): string[] =>
+  (st.objectWords ??= (st.s.match(/[a-z][a-z0-9'-]{1,}/g) ?? []).map((w) => stem(unpossess(w))));
 
 /** Where a statement ends: a sentence's end, a line, a "but", a chat line's time. */
 const SENTENCES = /[.!?;\n]+\s|\n+|,? but |\s(?=\[\d{1,2}:\d{2}\])/;

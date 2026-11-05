@@ -53,17 +53,24 @@ export interface FoldOptions {
 
 /**
  * The items to show, in their order: each one that echoes an item kept above it (same occurrence, nothing rare to
- * add) left out. The first item is always kept.
+ * add) left out. The first item is always kept. A packet with no occurrence on two items has no echo: it is returned
+ * as it is (the same array).
  */
 export function foldEchoes<T extends { item: ContextItem }>(xs: T[], o: FoldOptions): T[] {
   if (xs.length < 2) return xs;
+  const texts = xs.map((x) => ownText(x.item, o.self, o.year));
+  const pinned = texts.map((t) => anchorsOf(t));
+  // An echo shares an anchor with an item above it: with no anchor on two items there is none, and no item's words
+  // need reading (the costly part). Most packets pin no occurrence twice.
+  if (!repeats(pinned)) return xs;
   const selfWords = new Set((o.self ?? "").toLowerCase().split(/\s+/).filter(Boolean));
   const words = new Set<string>();
   const anchors = new Set<string>();
   const kept: T[] = [];
-  for (const x of xs) {
-    const said = ownText(x.item, o.self, o.year);
-    const mine = anchorsOf(said);
+  for (let i = 0; i < xs.length; i++) {
+    const x = xs[i]!;
+    const said = texts[i]!;
+    const mine = pinned[i]!;
     const tokens = tokensOf(said).filter((w) => !selfWords.has(w));
     const novel = tokens.filter((w) => !words.has(w) && !o.focus.has(w));
     const names = namesOf(said);
@@ -80,11 +87,39 @@ export function foldEchoes<T extends { item: ContextItem }>(xs: T[], o: FoldOpti
   return kept;
 }
 
+/** Whether one anchor is on two items (`anchorsOf` gives each item's anchors once). */
+function repeats(pinned: string[][]): boolean {
+  const seen = new Set<string>();
+  for (const mine of pinned) {
+    for (const a of mine) {
+      if (seen.has(a)) return true;
+      seen.add(a);
+    }
+  }
+  return false;
+}
+
 /** An item's title and its own message's parts (no headers, no quoted thread), as compaction reads them. */
 function ownText(item: ContextItem, self?: string | null, year?: number): string {
+  const was = OWN.get(item);
+  if (was && was.text === item.text && was.title === item.title && was.self === self && was.year === year) {
+    return was.own;
+  }
   const parts = messageParts(item.text, undefined, year, self, { title: item.title });
-  return [item.title, ...parts.filter((p) => !p.header && !p.quoted).map((p) => p.text)].join("\n");
+  const own = [item.title, ...parts.filter((p) => !p.header && !p.quoted).map((p) => p.text)].join("\n");
+  OWN.set(item, { text: item.text, title: item.title, self, year, own });
+  return own;
 }
+
+/**
+ * `ownText` per item object, for the arguments it was read with: the same items are delivered again and again, and
+ * reading a message's parts is most of folding's cost. Held weakly, so an entry goes with its item (a cache's stored
+ * copy, which belongs to one user); an item whose text or title changed in place is read again.
+ */
+const OWN = new WeakMap<
+  ContextItem,
+  { text: string; title: string; self: string | null | undefined; year: number | undefined; own: string }
+>();
 
 /** The occurrences a text pins: "mon|18:00" for each weekday-and-time it names. */
 export function anchorsOf(text: string): string[] {

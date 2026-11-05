@@ -4,7 +4,7 @@ import { Budget } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { StaticSource } from "@eden/sources";
 import { ItemCache } from "./cache";
-import { arrangedVisit, assess, frameOf, mayConstrain, namesRef } from "./conflict";
+import { arrangedVisit, assess, frameOf, mayConstrain, namesRef, type Verdict } from "./conflict";
 import { timeWindow } from "./grounding";
 import { ContextPartner } from "./partner";
 import { cleanEntities } from "./probes";
@@ -331,5 +331,76 @@ describe("arrangedVisit (readerGateVisits, D124)", () => {
     expect(arrangedVisit("make sure someone is in charge of the slides.")).toBe(false);
     // The visit must be in the booking's sentence.
     expect(arrangedVisit("i booked flights. he'll come too.")).toBe(false);
+  });
+});
+
+describe("assess: an item's analysis is read once and reused", () => {
+  const vframe = (request: string, vocab: boolean) =>
+    frameOf(request, timeWindow(request, NOW)?.days ?? null, NOW, cleanEntities(extractEntities(request)), vocab);
+  // Request, title, text, and the verdict without and with `conflictVocab` (as conflict-vocab.test.ts reads them).
+  const cases: [string, string, string, Verdict, Verdict][] = [
+    [
+      "Book a call with Marta on Thursday 5 November",
+      "Leave",
+      "From: Marta Ruiz <marta@example.com>\n\nI'm off from 2 Nov to 13 Nov, back after that.",
+      "none",
+      "conflict",
+    ],
+    ["Share the data export with Contoso", "DPA status", "Contoso: DPA not signed yet.", "none", "conflict"],
+    // A domain: only a request naming one reads the item's domains.
+    [
+      "Renew the acme-events.com domain",
+      "Domains",
+      "Let acme-promo.com lapse at expiry; do not renew.",
+      "conflict",
+      "clear",
+    ],
+    [
+      "Get Robert Haddad to sign off the MSA by Friday",
+      "Robert away",
+      "Robert Haddad is on leave 26 Oct to 6 Nov.",
+      "conflict",
+      "conflict",
+    ],
+  ];
+
+  test("one item object gives the same verdicts across frames with different vocab, in any order", () => {
+    for (const [request, title, text, plain, wide] of cases) {
+      const it = item(title, text);
+      // Interleaved: an analysis made for one vocabulary never answers for the other.
+      for (const v of [false, true, false, true, true, false]) {
+        const got = assess(vframe(request, v), it, NOW);
+        expect(got).toBe(v ? wide : plain);
+        // A fresh copy of the item (no analysis yet) agrees.
+        expect(assess(vframe(request, v), { ...it }, NOW)).toBe(got);
+      }
+      // Another request against the same item: the item's analysis is shared, the frame's work is not.
+      for (const v of [false, true]) {
+        const other = vframe("Plan the offsite with Marta in March", v);
+        expect(assess(other, it, NOW)).toBe(assess(other, { ...it }, NOW));
+      }
+    }
+  });
+
+  test("an item whose text, title or date changes in place is read again", () => {
+    const ask = "Get Robert Haddad to sign off the MSA by Friday";
+    const it = item("Robert away", "Robert Haddad is on leave 26 Oct to 6 Nov.");
+    expect(assess(frame(ask), it, NOW)).toBe("conflict");
+    it.text = "Robert Haddad is on leave 16 Nov to 20 Nov.";
+    expect(assess(frame(ask), it, NOW)).toBe("clear");
+    it.title = "Re: MSA";
+    expect(assess(frame(ask), it, NOW)).toBe(assess(frame(ask), { ...it }, NOW));
+    // With `conflictVocab` a relative date counts from when the item was written (`sentAt`).
+    const marta = vframe("Book a call with Marta Ruiz on Thursday 29 October", true);
+    const off = item("Leave", "From: Marta Ruiz <marta@example.com>\n\nI'm off until Friday.");
+    // Written Monday 26 Oct: off until Friday 30 Oct, over the call.
+    off.updatedAt = Date.parse("2026-10-26T09:00:00Z");
+    const first = assess(marta, off, NOW);
+    expect(first).toBe("conflict");
+    // Written Saturday 10 Oct: off until Friday 16 Oct, before it.
+    off.updatedAt = Date.parse("2026-10-10T09:00:00Z");
+    const second = assess(marta, off, NOW);
+    expect(second).toBe(assess(marta, { ...off }, NOW));
+    expect(second).not.toBe(first);
   });
 });
