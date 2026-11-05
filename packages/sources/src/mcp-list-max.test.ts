@@ -8,12 +8,24 @@ const scope = { tenantId: "t", userId: "u" };
 
 /**
  * A list server over `n` rows, newest first. `paging` picks its cursor argument; `max` is the `maximum` its schema
- * declares on the page size (none when undefined); `cap` is what it really returns at most per page, silently.
+ * declares on the page size (none when undefined); `cap` is what it really returns at most per page, silently;
+ * `ignoreOffset` sends the first rows whatever offset it is asked; `idOf` names row `i` (default `r${i}`).
  */
-function server(o: { n: number; paging: "offset" | "token"; max?: number; cap?: number }) {
+function server(o: {
+  n: number;
+  paging: "offset" | "token";
+  max?: number;
+  cap?: number;
+  ignoreOffset?: boolean;
+  idOf?: (i: number) => string;
+}) {
   const s = new McpServer({ name: "rows", version: "1" });
   const calls: Record<string, unknown>[] = [];
-  const rows = Array.from({ length: o.n }, (_, i) => ({ id: `r${i}`, title: `Row ${i}`, text: `row ${i}` }));
+  const rows = Array.from({ length: o.n }, (_, i) => ({
+    id: o.idOf?.(i) ?? `r${i}`,
+    title: `Row ${i}`,
+    text: `r ${i}`,
+  }));
   s.registerTool(
     "search_rows",
     { inputSchema: { query: z.string() }, annotations: { readOnlyHint: true } },
@@ -27,7 +39,8 @@ function server(o: { n: number; paging: "offset" | "token"; max?: number; cap?: 
     calls.push(a);
     const asked = Number(a.limit ?? 50);
     const size = Math.min(asked, o.cap ?? Infinity);
-    const at = o.paging === "offset" ? Number(a.offset ?? 0) : a.cursor ? Number(String(a.cursor).slice(1)) : 0;
+    const offset = o.ignoreOffset ? 0 : Number(a.offset ?? 0);
+    const at = o.paging === "offset" ? offset : a.cursor ? Number(String(a.cursor).slice(1)) : 0;
     const page = rows.slice(at, at + size);
     const next = o.paging === "token" && at + size < rows.length ? `c${at + size}` : undefined;
     return { content: [{ type: "text", text: JSON.stringify({ rows: page, ...(next ? { nextCursor: next } : {}) }) }] };
@@ -144,6 +157,54 @@ describe("McpSource.listPageMax (big sync pages, D142)", () => {
     const s = source(srv);
     expect((await listAll(s, 100)).length).toBe(250);
     expect(calls).toEqual([{ limit: 100 }, { offset: 100, limit: 100 }, { offset: 200, limit: 100 }]);
+    await s.close();
+  });
+
+  test("an offset server that ignores the offset, asked 500: the repeated page ends the listing (2 calls)", async () => {
+    // A short page (30 rows) would otherwise continue for ever past `DEFAULT_LIST_PAGE`.
+    const short = server({ n: 30, paging: "offset", max: 500, ignoreOffset: true });
+    const a = source(short.server);
+    expect((await listAll(a, 500)).length).toBe(60); // The 30 rows twice: the second page is the repeat.
+    expect(short.calls).toEqual([{ limit: 500 }, { offset: 30, limit: 500 }]);
+    await a.close();
+    // A full page (600 rows, 500 a page) at 500 ends the same way.
+    const full = server({ n: 600, paging: "offset", max: 500, ignoreOffset: true });
+    const b = source(full.server);
+    expect(new Set(await listAll(b, 500)).size).toBe(500);
+    expect(full.calls).toEqual([{ limit: 500 }, { offset: 500, limit: 500 }]);
+    await b.close();
+  });
+
+  test("a big page's cursor carries its first row's mark; the server is sent the offset alone", async () => {
+    const { server: srv, calls } = server({ n: 250, paging: "offset", max: 500, cap: 100 });
+    const s = source(srv);
+    const one = await s.list!(scope, undefined, 500, AbortSignal.timeout(2_000));
+    expect(one.next).toBe("100:r0");
+    // A retry of that page at 100 (the engine's fallback) reads the same cursor and pages as before from there.
+    const two = await s.list!(scope, one.next!, 100, AbortSignal.timeout(2_000));
+    expect(two.items[0]!.ref).toBe("r100");
+    expect(two.next).toBe("200");
+    expect(calls).toEqual([{ limit: 500 }, { offset: 100, limit: 100 }]);
+    await s.close();
+  });
+
+  test("long or colon-holding row ids: a long ref is marked by length and hash, and the listing still completes", async () => {
+    const long = (i: number) => `x:${"é".repeat(300)}:${i}`;
+    const { server: srv, calls } = server({ n: 250, paging: "offset", max: 500, cap: 100, idOf: long });
+    const s = source(srv);
+    const one = await s.list!(scope, undefined, 500, AbortSignal.timeout(2_000));
+    expect(one.next!.length).toBeLessThan(40);
+    expect(one.next!.startsWith("100:#")).toBe(true);
+    const ids = [...one.items.map((it) => it.ref)];
+    let cursor = one.next;
+    while (cursor) {
+      const page = await s.list!(scope, cursor, 500, AbortSignal.timeout(2_000));
+      ids.push(...page.items.map((it) => it.ref));
+      if (page.items.length === 0) break;
+      cursor = page.next;
+    }
+    expect(new Set(ids).size).toBe(250);
+    expect(calls.map((c) => c.offset ?? 0)).toEqual([0, 100, 200, 250]);
     await s.close();
   });
 

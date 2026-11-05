@@ -147,12 +147,16 @@ while no page reaches what was already synced, the next tops the items asked up 
 call (an on-demand poll: one to three calls, against one or two). Backfill and sweeps keep `syncPageSize`, except for
 a source that declares a bigger page safe (`Source.listPageMax`: an MCP list tool's schema `maximum` on its page-size
 argument, read at connect, or the operator's `listPageMax`; the sim's sources say 500): there they ask
-min(`syncBigPageSize`, that max) items a page (D142; 500 in the default, 0 = off). A big page that fails ("error" or
-"timeout") is asked again at `syncPageSize` within the same read, and that (user, source) is asked `syncPageSize` from
-then on (`SourceSync.smallPages`, gone with the user's sync state). `McpSource` guards a server that caps a page below
-its declared maximum: an offset listing asked for more than 100 (`DEFAULT_LIST_PAGE`) goes on after a short non-empty
-page and ends only on an empty one, so a silent cap costs one empty call per listing, never the rows past it (which two
-sweeps would drop as deleted). Polls keep their own pages. Measured (`sync-econ.ts --days 6`, seeds 1 and 2):
+min(`syncBigPageSize`, that max) items a page (D142; 0 = off, and off in the default: with 500 the funnel's
+reader-screen pool moved, hidden 230 → 228 and decoys 229 → 228 of 384, so it was not promoted). A big page that fails
+("error" or "timeout") is asked again at `syncPageSize` within the same read (taking a sync budget token like any page;
+with none left, at the next tick), and that (user, source) is asked `syncPageSize` from then on
+(`SourceSync.smallPages`, gone with the user's sync state). `McpSource` guards a server that caps a page below its
+declared maximum: an offset listing asked for more than 100 (`DEFAULT_LIST_PAGE`) goes on after a short non-empty page
+and ends only on an empty one, so a silent cap costs one empty call per listing, never the rows past it (which two
+sweeps would drop as deleted). A big page's cursor carries its first row's mark (`offset:mark`), and a page that opens
+on the same row ends the listing, so a server that ignores the offset costs one extra call, not a listing that never
+ends. Polls keep their own pages. Measured with it on (`sync-econ.ts --days 6 --big-pages 500`, seeds 1 and 2):
 background calls per user-day 33.8 → 9.2 and 33.7 → 9.2, freshness unchanged
 (docs/research/econ-background.md). `SyncStats` counts the items listed (`demandItems`, `backgroundItems`) beside the
 calls.

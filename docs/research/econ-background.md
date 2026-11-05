@@ -149,11 +149,11 @@ itself, which would remove those calls, but that puts tenant-relayed content int
 ### Big pages for backfill and sweeps (D142, 2026-11-05)
 
 Backfill and the daily sweep re-list a source whole, so their call count is the listing's length over the page size.
-At `syncPageSize` 100 they were about a quarter of all listing calls. `syncBigPageSize` (500 in the default) asks
-min(500, `Source.listPageMax`) a page of a source that declares a max (an MCP list tool's schema `maximum`, an
-operator's setting; the sim's sources declare 500), falls back to 100 for good on a failed big page, and leaves polls
-alone. `bun packages/sim/src/lab/sync-econ.ts --days 6 --seed N` (one user, five sources, 30 lookups a day; the default
-except the one setting):
+At `syncPageSize` 100 they were about a quarter of all listing calls. `syncBigPageSize` (0, off, in the default: see
+below; 500 measured here) asks min(500, `Source.listPageMax`) a page of a source that declares a max (an MCP list
+tool's schema `maximum`, an operator's setting; the sim's sources declare 500), falls back to 100 for good on a failed
+big page, and leaves polls alone. `bun packages/sim/src/lab/sync-econ.ts --days 6 --seed N --big-pages {0,500}` (one user, five sources, 30
+lookups a day; the default except the one setting):
 
 | Seed | `syncBigPageSize` | Backfill calls | Background / user-day | All calls / user-day | In lookups / user-day | Fresh at lookup | Deleted still held | Delay p50 / p90 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -165,11 +165,13 @@ except the one setting):
 Background calls fall 3.7x, all listing calls 1.23x, at no paid cost and no freshness loss; calls inside lookups move
 by under 1% either way (the polls are unchanged; the sweep's timing shifts which lookups find a source stale).
 
-The other $0 screens, on vs `--set '{"syncBigPageSize":0}'`: `bun run funnel --jobs 4` (train1–6, seeds 41–42) surfaced
+The other $0 screens, `--set '{"syncBigPageSize":500}'` vs the default (0): `bun run funnel --jobs 4` (train1–6, seeds 41–42) surfaced
 the same tasks (hidden 214/384, decoys 211/384, an empty task-by-task diff) with the sync's own calls down from 432
 backfill + 497 background to 168 + 170; the reader screen's pool moved from hidden 230/384, decoys 229/384 to 228/384,
-228/384, all from one template (`unreleased-feature-promise`: its planted chat was ranked out of the pool at the
-lookup in three of its four rows, a change in when the synced copy was polled, not in what was synced). On seeds
+228/384, all from one template (train4 `unreleased-feature-promise`: hidden at seeds 41 and 42, control at seed 41,
+each in the pool at 0 and not at 500). Why is unproven (a different poll timing is a guess, not shown by a probe).
+**Not promoted:** the plan required the pool to stay at 230/229, so `syncBigPageSize` ships at 0 (code and tests stay,
+on by setting); promoting it needs a probe that shows the cause and a decision that accepts the pool move. On seeds
 43–44 both screens are identical on and off (hidden 208/384, decoys 209/384; pool 229/384, 228/384). `bun run eval`:
 identical except latency (precision 0.8276, recall 0.48, falseFireRate 0). Freshness sim (`quality-cli.ts --users 8
 --sessions 20 --updates 0.6 --deletes 0.05 --push signals`): staleDelivered 1 → 1, deletedDelivered 0 → 0, deleted
@@ -242,8 +244,8 @@ bun packages/sim/src/lab/cards-enrich.ts --dir DIR --funnel hidden,heldout,heldo
   --batch 20 --sort price --spend DIR/spend.jsonl --cap 0.28
 # Sync modes (no model):
 bun packages/sim/src/lab/sync-econ.ts --days 3
-# Big pages (D142): the default, and before (a scratch edit of sync-econ.ts's config to { sync: true, syncBigPageSize: 0 }):
-bun packages/sim/src/lab/sync-econ.ts --days 6 --seed 1   # and --seed 2
+# Big pages (D142): off (the default) and on:
+bun packages/sim/src/lab/sync-econ.ts --days 6 --seed 1 --big-pages 0     # and --big-pages 500; and --seed 2
 ```
 
 Card file: `econ-price20-v2.jsonl` (sha256 `a4200cbe…0668`), the price-routed re-card, kept for `ALL2`'s funnel and

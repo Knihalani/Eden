@@ -218,7 +218,9 @@ export interface EngineConfig {
    * list tool's schema `maximum`, an operator's setting): min(this, the source's max), when that is above
    * `syncPageSize`. A source that errs on the big page is asked that page again at `syncPageSize` within the same
    * read, and only `syncPageSize` from then on (per user and source). 0: off, every page is `syncPageSize`. Polls are
-   * unchanged (their pages are sized by `syncPollPageSize`). At most 1,000 (`MAX_LIST_ROWS`).
+   * unchanged (their pages are sized by `syncPollPageSize`). At most 1,000 (`MAX_LIST_ROWS`). Off in the default, a
+   * trial (D142): at 500 it cut background listing calls 3.7x in sync-econ, but moved the funnel's reader-screen pool
+   * (hidden 230 -> 228, decoys 229 -> 228 of 384) for a cause not yet shown, so it was not promoted.
    */
   syncBigPageSize: number;
   /**
@@ -551,7 +553,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sync: true,
   syncMaxItems: 3_000,
   syncPageSize: 100,
-  syncBigPageSize: 500,
+  syncBigPageSize: 0,
   syncPollPageSize: 5,
   syncStaleChance: 0.15,
   syncMaxStaleMs: 6 * 3_600_000,

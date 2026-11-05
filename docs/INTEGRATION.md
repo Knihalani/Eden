@@ -216,6 +216,12 @@ with no notification, so a lost notification is bounded. Sources you do not forw
 answer 200 with what was done: `synced` is false when the source is not synced for the user or not declared as
 notifying (the notification is ignored), and `stored` counts the items held new or changed.
 
+Big sync pages (D142): `"listPageMax": N` (a whole number, 1 to 1,000) in a user's MCP source spec tells Eden the
+largest page its list tool honours, for a tool whose schema declares no `maximum` on its page-size argument (one that
+does is read at connect). With the engine setting `syncBigPageSize` above 100 (0, off, in the default), backfill and
+the daily sweep then ask min(`syncBigPageSize`, N) rows a page instead of 100; polls are unchanged. Set it only to
+what the server really returns: a big page that fails is asked again at 100, and that source stays at 100.
+
 A signal that says only "this source changed" does not say what changed. Eden then treats every item it read from
 that source before the signal as unconfirmed, and reads such an item again by its id before delivering it (D126: about
 0.5 re-reads per agent turn in the simulation, each one connector call; a source without a fetch tool is delivered as

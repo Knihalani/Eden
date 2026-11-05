@@ -55,7 +55,10 @@ bun run test:pkg sources        # ~3 s; planner and shapes are the largest files
   must copy it as it copies `notifies`, or the source is silently listed at 100 a page again. `McpSource` sets it only
   from a schema `maximum` or the operator's `listPageMax`, never on a guess, and its offset listing asked past
   `DEFAULT_LIST_PAGE` (100) ends only on an empty page: do not restore "a short page ends it" there, or a server that
-  caps silently ends every sweep after page 1 and two sweeps drop the rest as deleted (`mcp-list-max.test.ts`).
+  caps silently ends every sweep after page 1 and two sweeps drop the rest as deleted (`mcp-list-max.test.ts`). The
+  big page's cursor is `offset:mark` (its first row's ref, or length and hash past 256 chars): a page opening on the
+  marked row ends the listing, or a server that ignores the offset would never end a backfill or sweep. The engine's
+  `syncBigPageSize` is 0 in the default (not promoted, D142), so this runs only where an operator turns it on.
 
 ## Where next
 

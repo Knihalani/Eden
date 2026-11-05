@@ -60,13 +60,13 @@ function setup(resolve: (scope: Scope) => Source[], config: Record<string, unkno
     budget: new Budget(),
     model: null,
     now: () => clock,
-    // The core with only the sync on, at the default's page sizes (`syncBigPageSize` 500, D142).
+    // The core with only the sync on, and big pages on at 500 (off in the default, D142: a test of the switch).
     config: {
       ...CORE_CONFIG,
       sync: true,
       syncCallsPerMin: 600,
       syncSweepMs: HOUR,
-      syncBigPageSize: DEFAULT_CONFIG.syncBigPageSize,
+      syncBigPageSize: 500,
       ...config,
     },
   });
@@ -82,7 +82,7 @@ type Message = { jsonrpc: "2.0"; id?: number | string; method?: string; params?:
  * read-only, offset-paged `list_rows` whose schema declares `maximum: 500` on `limit` but which returns at most 100
  * rows a page, silently (finding 14: a server that caps below what it says).
  */
-function cappingConnector(rows: { id: string; title: string; text: string }[]) {
+function cappingConnector(rows: { id: string; title: string; text: string }[], o: { ignoreOffset?: boolean } = {}) {
   const listCalls: Record<string, unknown>[] = [];
   const tools = [
     {
@@ -112,7 +112,8 @@ function cappingConnector(rows: { id: string; title: string; text: string }[]) {
       const args = (m.params?.arguments ?? {}) as Record<string, unknown>;
       if (m.params?.name === "search_rows") return { content: [{ type: "text", text: "[]" }] };
       listCalls.push(args);
-      const at = Number(args.offset ?? 0);
+      // `ignoreOffset`: a server whose schema has `offset` but which sends the first rows whatever it is asked.
+      const at = o.ignoreOffset ? 0 : Number(args.offset ?? 0);
       const page = rows.slice(at, at + Math.min(Number(args.limit ?? 20), 100));
       return { content: [{ type: "text", text: JSON.stringify({ rows: page }) }] };
     }
@@ -170,9 +171,13 @@ async function sweep(env: ReturnType<typeof setup>, s: Scope = scope) {
 }
 
 describe("big sync pages (syncBigPageSize, D142)", () => {
-  test("the default asks 500 a page of a source that declares 500 safe", () => {
-    expect(DEFAULT_CONFIG.syncBigPageSize).toBe(500);
+  test("off in the default: a source that declares 500 safe is still asked 100 a page", async () => {
+    // Not promoted (D142): the funnel's reader-screen pool moved (230/229 -> 228/228 of 384) with it on.
+    expect(DEFAULT_CONFIG.syncBigPageSize).toBe(0);
     expect(DEFAULT_CONFIG.syncPageSize).toBe(100);
+    const src = new PagedSource("mail", 250, 500);
+    await warm(setup(() => [src], { syncBigPageSize: DEFAULT_CONFIG.syncBigPageSize }));
+    expect(src.limits).toEqual([100, 100, 100]);
   });
 
   test("a source declaring listPageMax 500 is backfilled and swept in pages of 500", async () => {
@@ -279,6 +284,27 @@ describe("big sync pages (syncBigPageSize, D142)", () => {
     expect(failing.limits).toEqual([500, 100, 100]);
   });
 
+  test("the retry at 100 takes a budget token: with none left the page waits for the next tick, no back-off", async () => {
+    const src = new PagedSource("mail", 250, 500);
+    src.rejectBig = true;
+    // 3 calls a minute: a burst of 1, one token every 20 s.
+    const env = setup(() => [src], { syncCallsPerMin: 3 });
+    env.partner.sync!.track(scope);
+    await env.partner.sync!.tick();
+    // The big page took the only token and failed; the retry found none, so no second call this tick.
+    expect(src.limits).toEqual([500]);
+    expect(env.partner.sync!.stats.backgroundCalls).toBe(1);
+    env.advance(20_000); // One token back, and no back-off was set (a failure would have set 30 s).
+    await env.partner.sync!.tick();
+    expect(src.limits).toEqual([500, 100]);
+    for (let i = 0; i < 10 && !env.partner.sync!.warm(scope); i++) {
+      env.advance(20_000);
+      await env.partner.sync!.tick();
+    }
+    expect(src.limits).toEqual([500, 100, 100, 100]);
+    expect(env.cache.syncedCount(scope)).toBe(250);
+  });
+
   test("isolation: the remembered fallback is per tenant, user and source, and forget clears it", async () => {
     const a = { tenantId: "t1", userId: "u" };
     const b = { tenantId: "t2", userId: "u" }; // Same user id, another tenant.
@@ -330,6 +356,27 @@ describe("big sync pages (syncBigPageSize, D142)", () => {
     expect(env.partner.sync!.stats.deleted).toBe(0);
     expect(env.cache.syncedCount(scope)).toBe(350);
     for (const r of rows) expect(env.cache.isSynced(scope, itemId("rows", r.id))).toBe(true);
+    await source.close();
+  });
+
+  test("an MCP offset list that ignores the offset, asked 500: backfill and sweeps end after one repeated page", async () => {
+    const rows = Array.from({ length: 30 }, (_, i) => ({ id: `r${i}`, title: `Row ${i}`, text: `row ${i}` }));
+    const { source, listCalls } = cappingConnector(rows, { ignoreOffset: true });
+    // Connected first, so the schema's maximum (500) is known from the first page on.
+    await source.list!(scope, undefined, 1, AbortSignal.timeout(2_000));
+    listCalls.length = 0;
+    const env = setup(() => [source]);
+    await warm(env);
+    // 30 rows at offset 0, then offset 30 sends the same 30: the repeat ends the listing.
+    expect(listCalls).toEqual([{ limit: 500 }, { offset: 30, limit: 500 }]);
+    expect(env.cache.syncedCount(scope)).toBe(30);
+    listCalls.length = 0;
+    await sweep(env);
+    await sweep(env);
+    // Each sweep ends the same way (2 calls), not one call every tick for ever; nothing dropped.
+    expect(listCalls.map((c) => c.offset ?? 0)).toEqual([0, 30, 0, 30]);
+    expect(env.partner.sync!.stats.deleted).toBe(0);
+    expect(env.cache.syncedCount(scope)).toBe(30);
     await source.close();
   });
 

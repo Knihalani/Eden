@@ -44,7 +44,8 @@ export interface SyncOptions {
   /**
    * `syncBigPageSize`: a backfill or sweep page asks min(this, `Source.listPageMax`) items of a source that declares a
    * max, when that is above `pageSize`. A big page that fails ("error", "timeout") is asked again at `pageSize` in the
-   * same read, and the (user, source) is asked `pageSize` from then on (`SourceSync.smallPages`). 0 or absent: off.
+   * same read (taking a budget token like any page; none left, at the next tick), and the (user, source) is asked
+   * `pageSize` from then on (`SourceSync.smallPages`). 0 or absent: off.
    */
   bigPageSize?: number;
   /** A source's synced copy is stale once the chance that it changed since the last poll reaches this. */
@@ -779,10 +780,10 @@ export class SyncManager {
 
   /**
    * A backfill or sweep page: the source's big page when it declares one safe (`bigPage`), else `pageSize`. A big page
-   * that fails is counted as a background call and asked again at `pageSize` at once (one extra call, so the read
-   * goes on instead of backing off), and the source is asked `pageSize` from then on: a server that refuses, or times
-   * out on, a big page costs one call once, not every sweep. A guard's skip ("limited", "busy", "open") is no
-   * evidence about the page size and is returned as it is.
+   * that fails is counted as a background call and asked again at `pageSize` at once (one extra call, within the
+   * sync's budget, so the read goes on instead of backing off), and the source is asked `pageSize` from then on: a
+   * server that refuses, or times out on, a big page costs one call once, not every sweep. A guard's skip ("limited",
+   * "busy", "open") is no evidence about the page size and is returned as it is.
    */
   private async listWhole(
     phase: "backfill" | "sweep",
@@ -797,6 +798,9 @@ export class SyncManager {
     if (limit <= this.o.pageSize || (page !== "error" && page !== "timeout") || u.gone) return page;
     this.stats.backgroundCalls++;
     s.smallPages = true;
+    // The retry is a call of its own, so it takes a budget token as every page does; with none left the page waits
+    // for the next tick ("limited": no failure, no backoff, the sweep kept), asked at `pageSize` then.
+    if (this.budget.take(budgetKey(u, s)) > 0) return "limited";
     return this.list(phase, source, u.scope, cursor, this.o.pageSize, given);
   }
 
