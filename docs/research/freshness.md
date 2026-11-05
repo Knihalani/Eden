@@ -94,6 +94,25 @@ simulation shows it fixing 6 of 7 stale updates and every deleted packet. Re-rea
 deleted with their settings (D112: not neutral at no extra paid cost). Settings left: `verifyDelivery` (on) and
 `verifyTimeoutMs` (1.5 s); the part is `freshness` (`docs/profiles/minus-freshness.json`).
 
+## Follow-ups (deep audit 2026-11-05, round 2)
+
+- **A re-read in flight no longer undoes a deletion.** `recheck` revived the item (`ItemCache.revive`) whenever its
+  fetch answered, so a `sourceRemoved` that landed during the round trip was undone and the item delivered and cached
+  again, with its gone-hold lifted. It now returns "gone" when the id is held gone once the fetch returns: the id was a
+  cached candidate when the re-read began and `removeItems` drops what it holds, so a live hold means the deletion
+  came during the fetch. Test: `freshness.test.ts`, "a removal notification that lands while the re-read is on the
+  wire wins" (cited `notes:q1` before the fix, nothing after).
+- **Re-reads ahead wait for the reader's gate (D134).** `checkAhead` ran before `readAsk`'s empty-pool and
+  `readerGate` returns, so a gated ask paid up to `VERIFY_AHEAD` (3) re-reads for a reading that never happened. It
+  now runs after them. Test: `freshness.test.ts`, "a gated ask (no reader call) re-reads no doubted pool item it does
+  not deliver" (1 fetch before, 0 after). `VERIFY_AHEAD` stays 3 and the ask's own `verifyItems` is not narrowed
+  (D134 gives the measurements). quality-cli wires no reader, so its re-read count does not move (575 before and
+  after); the saving on gated asks in production is not measured.
+- **One deadline per ask (D140).** The ask's on-demand poll and its live search had a 1.5 s deadline each, in series.
+  They now share one (`ask-deadline.test.ts`: a source whose listing and search both hang held the reader back 3,020
+  ms before, under 1,750 ms after). `bun run eval`, `bun run funnel` (task by task, `--baseline`) and the quality-cli
+  run below were unchanged, so it is in the default with no trial switch (D140's condition).
+
 ## Reproduce
 
 ```bash

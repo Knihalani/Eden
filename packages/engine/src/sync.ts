@@ -60,6 +60,12 @@ export interface SyncOptions {
   /** A sync call's deadline (ms). */
   timeoutMs: number;
   /**
+   * A lookup's deadline (ms, `sourceTimeoutMs`): for this long after a lookup's on-demand poll of a source ran out of
+   * time, `freshen` does not poll that source again (D140). A listing that just hung would most likely take the next
+   * lookup's whole deadline too; the source is searched live instead. 0 or absent: every lookup polls.
+   */
+  demandTimeoutMs?: number;
+  /**
    * `syncPush`: a source that says it `notifies` is current until told it changed (`Sync.changed`) or its last poll
    * is `maxStaleMs` old, instead of by its learned change rate.
    */
@@ -126,6 +132,8 @@ interface SourceSync {
   beta: number;
   failures: number;
   retryAt: number;
+  /** When a lookup's on-demand poll of this source last gave up before it answered (`demandTimeoutMs`). */
+  demandGaveUpAt: number;
   /**
    * The poll, sweep or page read in flight, so two never overlap. It resolves to how many items that read stored new
    * or changed (`reading`), so a lookup that waited on it instead of polling knows whether the index moved.
@@ -374,6 +382,8 @@ export class SyncManager {
         const s = u.sources.get(source.id);
         if (s) this.notes(s, source);
         if (!s || s.phase !== "warm" || this.isCurrent(s, now) || !source.list) return;
+        // Its last on-demand poll just ran out of time (D140): not current, so the lookup searches it live.
+        if (now - s.demandGaveUpAt < (this.o.demandTimeoutMs ?? 0)) return;
         if (s.busy) {
           // A read already running (a sweep, a catch-up, or another lookup's poll): its answer, not a second call.
           own.fresh += await Promise.race([s.busy, aborted(signal).then(() => 0)]);
@@ -589,8 +599,14 @@ export class SyncManager {
     const itemCap = maxPages * this.o.pageSize;
     const first = adaptive ? Math.min(this.firstPage(s, started), itemCap) : this.o.pageSize;
     let asked = 0;
+    // A lookup's poll that stops because the lookup ran out of time (or ended): no evidence against the source, but
+    // the next lookup within `demandTimeoutMs` searches it live rather than wait on its listing again (D140).
+    const gaveUp = () => {
+      if (demand) s.demandGaveUpAt = this.deps.now();
+    };
     for (let p = 0; adaptive ? asked < itemCap && p <= maxPages : p < maxPages; p++) {
-      if (u.gone || signal?.aborted) return;
+      if (u.gone) return;
+      if (signal?.aborted) return gaveUp();
       if (this.budget.take(budgetKey(u, s)) > 0) return;
       const topUp = this.o.pageSize - (asked % this.o.pageSize);
       const limit = !adaptive ? this.o.pageSize : p === 0 ? first : Math.min(topUp, itemCap - asked);
@@ -605,7 +621,7 @@ export class SyncManager {
       if (typeof page === "string") {
         if (page !== "limited" && page !== "busy") this.count(demand, tally);
         // The lookup gave up (its deadline, the session ending): no evidence against the source, no back-off.
-        if (signal?.aborted) return;
+        if (signal?.aborted) return gaveUp();
         this.failed(s, page);
         return;
       }
@@ -826,6 +842,7 @@ function newSourceSync(id: string): SourceSync {
     beta: 1,
     failures: 0,
     retryAt: 0,
+    demandGaveUpAt: -Infinity,
     busy: null,
     reading: null,
     notifies: false,

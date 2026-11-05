@@ -400,6 +400,8 @@ interface ProbeOpts {
   after?: Promise<void>;
   /** Synced sources whose copy is current (`sync`, D57): they answer from the local index, at no call. */
   local?: ReadonlySet<string> | null;
+  /** The lookup's deadline (`performance.now()` time, D140); absent: `sourceTimeoutMs` from when the probes start. */
+  deadlineAt?: number;
 }
 /** `intent`'s reciprocal-rank constant: rank 0 scores 1/k (the usual 60 flattens a five-item list to a tie). */
 const ASK_FUSE_K = 2;
@@ -622,6 +624,7 @@ export class ContextPartner {
             catchupPages: c.syncCatchupPages,
             maxUsersPerTenant: c.syncMaxUsersPerTenant,
             timeoutMs: Math.max(c.sourceTimeoutMs, 5_000),
+            demandTimeoutMs: c.sourceTimeoutMs,
             push: c.syncPush,
             pushMaxStaleMs: c.syncPushMaxStaleMs,
           },
@@ -1527,8 +1530,6 @@ export class ContextPartner {
       pool.length <= READER_MAX_ITEMS &&
       ranked.every((x) => seen.has(x.item.id)) &&
       chosen.every((x) => seen.has(x.item.id));
-    // The likely deliveries are re-read while the reader reads (`verifyDelivery`): the delivery then waits on no call.
-    this.checkAhead(s, pool);
     const t0 = performance.now();
     const report = (outcome: ReaderReport["outcome"], flagged: ReaderReport["flagged"] = []) =>
       this.deps.onReader?.({
@@ -1570,6 +1571,10 @@ export class ContextPartner {
         return null;
       }
     }
+    // The likely deliveries are re-read while the reader reads (`verifyDelivery`): the delivery then waits on no call.
+    // Only once the reader will read (D134): an empty pool or a gated ask has no reading to overlap, and its delivery
+    // re-reads what it actually cites (`verifyItems`), so a re-read started ahead there is a connector call wasted.
+    this.checkAhead(s, pool);
     const input: ReaderInput = {
       request: main,
       ...(request && cue.raw !== request ? { question: cue.raw } : {}),
@@ -2681,13 +2686,18 @@ export class ContextPartner {
     });
     if (unresolved) return { calls: 0, sources: [], unresolved: true };
     if (all.length === 0 || s.closed) return { calls: 0, sources: [] };
+    // One deadline for the whole lookup (D140): the on-demand poll, the live search, the planner's cascade and the
+    // probes share it. An ask waits for its poll, so a poll and a search with deadlines of their own could hold the
+    // reader back twice `sourceTimeoutMs` (a listing that hangs, then the search that follows it).
+    const deadlineAt = performance.now() + this.config.sourceTimeoutMs;
+    const left = () => Math.max(0, deadlineAt - performance.now());
     // The background sync (D57): a source whose synced copy is current answers from the user's local index, at no
     // call; with `syncOnDemand`, a stale one is polled first (one listing call, rather than its search and probes).
     let local: Set<string> | null = null;
     let syncCalls = 0;
     if (this.sync) {
       if (this.config.syncOnDemand) {
-        const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(this.config.sourceTimeoutMs)]);
+        const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(left())]);
         const freshening = this.spans?.open("sync.freshen", cue.span, { async: true });
         const tally = { fresh: 0 };
         const polled = this.sync.freshen(s.scope, all, signal, tally).then((calls) => {
@@ -2761,9 +2771,8 @@ export class ContextPartner {
           offsetMinutes: cue.offset,
         }
       : undefined;
-    // The fan-out's deadline for this lookup, so the planner's cascade sends only the calls that can still answer. A
-    // listing goes to each source as it is: the planner's shapes are ways of sending words, and it has none.
-    const deadlineAt = performance.now() + this.config.sourceTimeoutMs;
+    // The planner's cascade sends only the calls that can still answer by `deadlineAt`. A listing goes to each source
+    // as it is: the planner's shapes are ways of sending words, and it has none.
     const spans = this.spans;
     const searchSpan = spans?.open("search", cue.span, { async: true, listing });
     // With spans on, each call a source answers is a child span of this search (`traced`).
@@ -2789,23 +2798,32 @@ export class ContextPartner {
     // A probe that fails is no probe; a session that closes mid-search leaves it to finish on its own (it checks).
     // The lookup's own search starts first: the fan-out admits a call when it starts (a per-source concurrency slot),
     // and probes started before it could take the slots and leave the request itself skipped as busy.
-    const searching = this.fanout.search(
-      chosen,
-      {
-        scope: s.scope,
-        text: listing ? "" : cue.text,
-        entities: cue.entities,
-        limit: 8,
-        ...(window ? { window } : {}),
-      },
-      { timeoutMs: this.config.sourceTimeoutMs, signal: s.abort.signal },
-    );
+    // A poll that used up the deadline leaves no time to search: each chosen source is a timeout with no call, so no
+    // rate token, concurrency slot or breaker failure is spent on a call that could not answer (the probes' 50 ms).
+    const searching =
+      left() < MIN_SEARCH_MS
+        ? Promise.resolve(
+            chosen.map((x): FanoutOutcome => ({ sourceId: x.id, status: "timeout", items: [], latencyMs: 0 })),
+          )
+        : this.fanout.search(
+            chosen,
+            {
+              scope: s.scope,
+              text: listing ? "" : cue.text,
+              entities: cue.entities,
+              limit: 8,
+              ...(window ? { window } : {}),
+            },
+            // What the poll left of the lookup's deadline (D140).
+            { timeoutMs: left(), signal: s.abort.signal },
+          );
     const settled = searching.catch(() => null);
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing = this.config.probes
       ? this.probe(s, cue, routed, all, listing, probed, settled, shared, {
           ...this.lookupOpts(s, cue),
           local,
+          deadlineAt,
         }).catch(() => {})
       : null;
     // The same query answered by the synced sources from the local index (D57): no call, nothing to store.
@@ -2928,7 +2946,7 @@ export class ContextPartner {
     const probesSpan = spans?.open("probes", cue.span, { async: true });
     // Calls the consequence probe made (outside `budget`).
     let extra = 0;
-    const deadline = performance.now() + this.config.sourceTimeoutMs;
+    const deadline = opts.deadlineAt ?? performance.now() + this.config.sourceTimeoutMs;
     const kept = out.kept;
     const send = async (
       kind: ProbeKind,
@@ -3527,6 +3545,13 @@ export class ContextPartner {
       if (got.status === "gone") {
         this.freshness.gone++;
         this.dropGone(s.scope, item.sourceId, [item.id]);
+        return "gone";
+      }
+      // A removal that landed while the fetch was on the wire (`sourceRemoved`) wins over what it read: the id was a
+      // cached candidate when the re-read began, and `removeItems` drops what it holds gone, so a live hold now means
+      // the deletion came after. Reviving it would undo the deletion and deliver it (D126).
+      if (this.deps.cache.isHeldGone(s.scope, item.id, this.now())) {
+        this.freshness.gone++;
         return "gone";
       }
       const copy = { ...got.item, id: item.id, sourceId: item.sourceId, ref: item.ref };
@@ -5030,6 +5055,8 @@ const MAX_CHECKS = 64;
 const CHECK_REUSE_MS = 30_000;
 /** How long an item its source said is gone is kept from being stored again (the fan-out's stale-result window). */
 const GONE_HOLD_MS = 10 * 60_000;
+/** A lookup with less of its deadline left than this sends no live search (D140): no call could answer in time. */
+const MIN_SEARCH_MS = 50;
 /** Doubted candidates of a reader's pool re-read beside its call (`checkAhead`): about what a delivery cites. */
 const VERIFY_AHEAD = 3;
 

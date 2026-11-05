@@ -162,7 +162,8 @@ change (`Sync.signalledSince`, a `syncPush` signal that does not say which item 
 first, in parallel. A read's start is a mark, not a time (D133): every lookup, probe, re-read and sync page takes
 `Sync.mark()` (a count of signals) before its call and stores it with its copies (`ItemCache.readMark`), so a signal
 that lands while a call is on the wire doubts what it brings, and items a notification carried, or a poll the signal
-started, do not; a reader's likely picks are re-read beside its call, so the delivery seldom waits. A changed copy is stored
+started, do not; a reader's likely picks are re-read beside its call, so the delivery seldom waits (only once the
+reader will be called: an empty pool or a `readerGate`d ask starts none, D134). A changed copy is stored
 and delivered instead; one the source no longer has (`gone`, only from a source with `Source.fetchReportsGone`) is
 dropped from the cache and left out; one that cannot be checked is delivered as held. With no signal nothing is
 re-read: a copy's age alone is no doubt (re-reading by age was measured live and deleted, D126), and a silent source's
@@ -170,7 +171,9 @@ changes arrive through polls and the daily sweep. The fast path, which may not c
 the slow path. Deletion notifications (`ContextPartner.sourceRemoved`, `POST /v1/sources/removed`) drop items at once;
 a deleted item, from a notification or a re-read, is also dropped from the fan-out's held search pages
 (`SourceFanout.dropResults`, as on every signal) and kept out of the cache for 10 minutes (`ItemCache.removeItems`'
-hold), so a page read before the deletion cannot bring it back.
+hold), so a page read before the deletion cannot bring it back. A re-read that is on the wire when a deletion
+notification lands does not revive the item (`recheck` checks `ItemCache.isHeldGone` before storing): it counts as
+gone.
 The re-reads are traced as "verify" decisions with their `sourceCalls`.
 
 **Poll behind the lookup** (D65, `syncPollBehind`, on in the default, D112; with `sync` and `syncOnDemand`): without it,
@@ -184,7 +187,11 @@ grounded (so it makes no judge call); after silence with no model, as the lookup
 can carry a copy the poll then finds edited; the ledger records each delivered item's words with the flag, and the
 follow-up delivers the corrected copy (the departure from D40 is that the old copy went out first).
 `ObserveResult.pending` stays true while a poll or follow-up is running. The agent's `ask_context` still waits for the
-poll; the reader's push does not (`readerPushBehind`, below).
+poll; the reader's push does not (`readerPushBehind`, below). A lookup has one deadline, `sourceTimeoutMs` (1.5 s) from
+when its sources are resolved (D140): the on-demand poll, the live search, the planner's cascade and the probes share
+it, so a listing that hangs and the search after it hold an ask back about 1.5 s before the reader starts, not 3 s.
+With under 50 ms left, the live search is skipped and each chosen source reports "timeout" (no call). A source whose
+on-demand poll ran out of time is not polled again by a lookup for the next `sourceTimeoutMs`: it is searched live.
 
 **Deleted by D112:** `decideConflict` (D67), `judgeBehind`, push relaying (`syncPush`, `sourcePushes`,
 `sourceChanged`, D66) and the other switches D112 lists. The candidates' facts (`decide.ts`) still reach the lab only
