@@ -42,6 +42,13 @@ bun run test:pkg sources        # ~3 s; planner and shapes are the largest files
 - Planner tests are statistical over seeded generators: keep seeds fixed; a change to arm selection usually needs
   the planner research runs (`docs/research/query-planner-results.md`), not a test tweak.
 - The planner's defaults are decided by D31–D33 on held-out simulation sets; changing them needs a new decision.
+- **A call joins a flight only while it is joinable (D133).** `one()` and `planCalls` lead flights through `lead`,
+  which keys each flight by its result key plus a sequence number and keeps the leader's drop mark and `forgets`
+  beside it (`leads`, set and cleared inside the flight's own function, so it lives exactly as long as the call and
+  stays counted by `dropResults` after the caller that started it gives up). A caller after a `dropResults` of the
+  pair, or any `forget`, leads a fresh call: joining would hand it the copy from before the change, which the engine
+  stores under the joiner's later read mark, undoubted. Never join with a bare `flights.has(resultKey)`
+  (`joined-flight.test.ts` here and in the engine).
 
 ## Where next
 

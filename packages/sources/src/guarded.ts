@@ -137,6 +137,19 @@ interface DropMark {
   drops: number;
 }
 
+/**
+ * The call leading the flight for one result key, beside the flight itself: its flight key (the result key and a
+ * sequence number, so a caller that may not join leads a new flight under its own key) and its drop mark and
+ * `forgets` when it started. A caller joins only while neither moved: a call begun before a `dropResults` read the
+ * source as it was, and a lookup after the drop that joined it would get (and store under its own later read mark,
+ * D133) the copy from before the change.
+ */
+interface Lead {
+  flight: string;
+  mark: DropMark;
+  forgets: number;
+}
+
 /** Planner calls a connector's call-latency quantile needs before it is trusted. */
 const MIN_CALL_SAMPLES = 5;
 /**
@@ -179,6 +192,12 @@ export class SourceFanout {
   private forgets = 0;
   /** Calls that may write a page back, by (user, source), while they run: what `dropResults` must reach. */
   private readonly running = new Map<string, Running>();
+  /**
+   * The flight leading each result key, while its call runs (set and cleared inside the flight's own function, so it
+   * is bounded by the calls in flight and released however the call ends).
+   */
+  private readonly leads = new Map<string, Lead>();
+  private flightSeq = 0;
   private readonly maxStates: number;
 
   constructor(options: FanoutOptions) {
@@ -398,6 +417,42 @@ export class SourceFanout {
     return mark.running.drops === mark.drops;
   }
 
+  /** The flight a call for `key` may join: one in flight with no drop for its pair and no `forget` since it began. */
+  private joinable(key: string): string | undefined {
+    const lead = this.leads.get(key);
+    if (!lead || !this.flights.has(lead.flight)) return undefined;
+    return this.undropped(lead.mark) && this.forgets === lead.forgets ? lead.flight : undefined;
+  }
+
+  /**
+   * Runs `fn` as the leader of a new flight for result key `key` of pair `pair`, registered (`enter`) and joinable
+   * for exactly as long as `fn` runs, even after the caller that started it stops waiting while others still do.
+   * `fn` gets the call's drop mark and `forgets` at its start, to decide whether to hold its result.
+   */
+  private lead(
+    key: string,
+    pair: string,
+    fn: (signal: AbortSignal, mark: DropMark, forgets: number) => Promise<ContextItem[]>,
+    signal: AbortSignal | undefined,
+  ): Promise<ContextItem[]> {
+    const flight = `${key}\u0002${++this.flightSeq}`;
+    return this.flights.run(
+      flight,
+      async (sig) => {
+        const mark = this.enter(pair);
+        const lead: Lead = { flight, mark, forgets: this.forgets };
+        this.leads.set(key, lead);
+        try {
+          return await fn(sig, mark, lead.forgets);
+        } finally {
+          this.leave(pair, mark);
+          if (this.leads.get(key) === lead) this.leads.delete(key);
+        }
+      },
+      signal,
+    );
+  }
+
   /**
    * One more call to a source within a lookup already admitted (the query planner's extra calls): takes a token from
    * the same per-(user, source) rate limit, so the limit counts calls, not lookups. False when the limit is spent.
@@ -450,37 +505,36 @@ export class SourceFanout {
           if (got) return got;
         }
         const k = key(q);
-        const run = this.flights.run(
-          k,
-          async (sig) => {
-            // Only the flight's leader runs this: a call that joins it is not one the connector receives.
-            calls.made++;
-            const forgets = this.forgets;
-            const drops = this.enter(sourceKey(q));
-            try {
-              const t0 = performance.now();
-              let raw: ContextItem[];
-              try {
-                raw = await source.search(q, sig);
-              } catch (e) {
-                // A call cut off by the timeout counts with its time so far (a lower bound): the slow calls are the
-                // ones the estimate must see. One abandoned for another reason (the session ended, the user was
-                // forgotten) or failing fast says nothing about latency.
-                if ((sig.reason as Error | undefined)?.name === "TimeoutError")
-                  this.recordCall(sourceKey(q), t0, forgets);
-                throw e;
-              }
-              this.recordCall(sourceKey(q), t0, forgets);
-              const items = await this.gate(raw, sig);
-              const held = this.forgets === forgets && this.undropped(drops);
-              if (!sig.aborted && held) this.results?.set(k, items, sizeOf(k, items));
-              return items;
-            } finally {
-              this.leave(sourceKey(q), drops);
-            }
-          },
-          signal,
-        );
+        // A call in flight for the same query joins, unless a drop or forget came since it began (`joinable`).
+        const flight = this.joinable(k);
+        const run = flight
+          ? this.flights.run(flight, () => Promise.resolve([]), signal)
+          : this.lead(
+              k,
+              sourceKey(q),
+              async (sig, drops, forgets) => {
+                // Only the flight's leader runs this: a call that joins it is not one the connector receives.
+                calls.made++;
+                const t0 = performance.now();
+                let raw: ContextItem[];
+                try {
+                  raw = await source.search(q, sig);
+                } catch (e) {
+                  // A call cut off by the timeout counts with its time so far (a lower bound): the slow calls are the
+                  // ones the estimate must see. One abandoned for another reason (the session ended, the user was
+                  // forgotten) or failing fast says nothing about latency.
+                  if ((sig.reason as Error | undefined)?.name === "TimeoutError")
+                    this.recordCall(sourceKey(q), t0, forgets);
+                  throw e;
+                }
+                this.recordCall(sourceKey(q), t0, forgets);
+                const items = await this.gate(raw, sig);
+                const held = this.forgets === forgets && this.undropped(drops);
+                if (!sig.aborted && held) this.results?.set(k, items, sizeOf(k, items));
+                return items;
+              },
+              signal,
+            );
         if (shared) shared.set(sk, run);
         return run;
       },
@@ -585,9 +639,11 @@ export class SourceFanout {
       stale !== undefined ? done("stale", stale, error ?? status) : done(status, [], error);
 
     // Joining a call already in flight costs the source nothing: no permit, no rate-limit token, no breaker probe.
-    if (this.flights.has(cacheKey)) {
+    // Not one begun before a drop or forget (`joinable`): the caller then leads a fresh call below.
+    const flight = this.joinable(cacheKey);
+    if (flight) {
       try {
-        return { ...done("ok", await this.flights.run(cacheKey, () => Promise.resolve([]), deadline)), joined: true };
+        return { ...done("ok", await this.flights.run(flight, () => Promise.resolve([]), deadline)), joined: true };
       } catch (e) {
         return { ...fallback(timeout.aborted ? "timeout" : "error", String(e)), joined: true };
       }
@@ -597,6 +653,8 @@ export class SourceFanout {
     if (typeof epoch !== "number") return fallback(epoch);
 
     const started = performance.now();
+    // This caller's own mark, held until it has decided whether to write back (the flight's mark, which `lead` keeps
+    // for joining, ends with the call, a few microtasks before this caller resumes).
     const forgets = this.forgets;
     const drops = this.enter(sourceKey);
     // Set once the source has answered: a deadline that runs out after that ran out in our gate, not at the source.
@@ -604,8 +662,9 @@ export class SourceFanout {
     try {
       // A planned source whose calls went through `planCalls` returns items sanitized there: not gated twice.
       const presanitized = source instanceof PlannedSource && source.via !== undefined && this.minted.has(source.via);
-      const items = await this.flights.run(
+      const items = await this.lead(
         cacheKey,
+        sourceKey,
         async (signal) => {
           const raw = await source.search(query, signal);
           answered = true;
