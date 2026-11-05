@@ -74,5 +74,5 @@ is "what's on the agenda with elena this week?", where the judge delivers the 1:
 ```bash
 bun packages/sim/src/quality-cli.ts --profile realistic --seed 41 --planner --live    # $0.006–0.008 per seed (41–43)
 EDEN_MODEL=anthropic/claude-haiku-5.5 bun packages/sim/src/quality-cli.ts --profile realistic --seed 41 --planner --live
-bun run eval --live
+bun run eval --live --judge --usd-cap 0.05   # the judge shape; plain --live meant this before D128
 ```

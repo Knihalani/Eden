@@ -9,18 +9,25 @@
  *   [--timeline out.jsonl] [--sync]
  *   [--cards DIR/cards-v2.jsonl]
  *   [--drafts clause|half [--typing-ms 1500]]
+ *   [--jobs N] [--user-range A:B] [--tally]
  *
  * Plays generated sessions over simulated sources and prints the quality report as JSON. Without --live no model is
  * used (free, deterministic at --time 0). --time 1 runs source latency and agent pacing in real time.
  * --timeline records every engine span, per user, with CPU% and RSS each second (`lab/timeline.ts`); read it with
  * `lab/timeline-report.ts`.
+ *
+ * Shards: users are independent (own world, seeds, engine), and at --time 0 they play one after another, so
+ * `--jobs N` runs N processes of this script, each on a contiguous `--user-range A:B` (users A to B-1, with the seeds
+ * they have in the whole run) printing its raw tally (`--tally`), and merges the tallies before any ratio or
+ * percentile: the JSON is the one-process run's except wall time, CPU time and latency. Refused with --live (each
+ * shard would spend on its own, outside any shared ledger) and --timeline (one file, one writer).
  */
 import { checkEngineConfig } from "@eden/engine";
 import { OpenRouterModel } from "@eden/llm";
 import { flags, parseJson } from "./lab/flags";
 import { Timeline } from "./lab/timeline";
 import { DiskCardMaker } from "./lab/cards-disk";
-import { runQuality } from "./quality";
+import { mergeTallies, qualityReport, tallyQuality, type QualityOptions, type QualityTally } from "./quality";
 import { IDEAL, REALISTIC, REALISTIC_ENTITIES, ZOO_HELDOUT_A, ZOO_HELDOUT_B, ZOO_TUNE } from "./sources";
 
 // Strict (lab/flags.ts): an unknown flag exits 2 before any world is built; `--help` prints the header above.
@@ -55,17 +62,23 @@ const cli = flags(
         "cards",
         "drafts",
         "typing-ms",
+        "jobs",
+        "user-range",
       ].map((k) => [k, "value" as const]),
     ),
     ...Object.fromEntries(
-      ["planner", "planner-no-cascade", "planner-no-reuse", "live", "brief", "sync"].map((k) => [k, "bool" as const]),
+      ["planner", "planner-no-cascade", "planner-no-reuse", "live", "brief", "sync", "tally"].map((k) => [
+        k,
+        "bool" as const,
+      ]),
     ),
   },
   `
 bun packages/sim/src/quality-cli.ts [--users 6] [--sessions 15] [--seed 1] [--profile realistic|ideal|entities|
   zoo-tune|zoo-a|zoo-b] [--planner ...] [--time 0] [--wait 0] [--noise 1] [--updates 0] [--tool-rate 0.4]
   [--judge none|perfect|noisy] [--live] [--brief] [--config '{"probes":true}'] [--timeline F] [--sync]
-  [--cards F] [--drafts clause|half [--typing-ms 1500]]   (bun run sim; the header of quality-cli.ts has every flag)`,
+  [--cards F] [--drafts clause|half [--typing-ms 1500]] [--jobs N] [--user-range A:B] [--tally]
+  (bun run sim; the header of quality-cli.ts has every flag)`,
 );
 if (cli.rest.length) {
   console.error(`quality-cli: unexpected arguments after --: ${cli.rest.join(" ")}; --help lists the flags`);
@@ -115,9 +128,10 @@ const timeline = timelinePath
     })
   : null;
 const t0 = performance.now();
-const report = await runQuality({
+const users = Number(arg("users", "6"));
+const opts: QualityOptions = {
   ...(timeline ? { spanSink: (lane: string) => timeline.sink(lane) } : {}),
-  users: Number(arg("users", "6")),
+  users,
   sessionsPerUser: Number(arg("sessions", "15")),
   seed: Number(arg("seed", "1")),
   profiles,
@@ -166,8 +180,73 @@ const report = await runQuality({
         },
       }
     : undefined,
-});
+  ...(has("user-range") ? { userRange: userRange(arg("user-range", "")) } : {}),
+};
+
+/** `A:B`: users A to B-1 of `--users`. */
+function userRange(text: string): [number, number] {
+  const m = /^(\d+):(\d+)$/.exec(text);
+  const r: [number, number] = m ? [Number(m[1]), Number(m[2])] : [NaN, NaN];
+  if (!m || r[0] >= r[1] || r[1] > users) {
+    console.error(`quality-cli: --user-range must be A:B with 0 <= A < B <= --users (${users}), got "${text}"`);
+    process.exit(2);
+  }
+  return r;
+}
+
+const jobs = has("jobs") ? Number(arg("jobs", "1")) : 1;
+if (!Number.isInteger(jobs) || jobs < 1) {
+  console.error("quality-cli: --jobs must be a whole number of at least 1");
+  process.exit(2);
+}
+if (jobs > 1) {
+  for (const f of ["live", "timeline", "user-range", "tally"])
+    if (has(f)) {
+      console.error(`quality-cli: --jobs cannot run with --${f} (the header of quality-cli.ts says why)`);
+      process.exit(2);
+    }
+}
+
+/**
+ * The tallies of `n` shard processes over contiguous user ranges, in user order (`mergeTallies` relies on it): each
+ * runs this script with this run's flags but --jobs, plus its --user-range and --tally.
+ */
+async function shardTallies(n: number): Promise<QualityTally[]> {
+  const shards = Math.min(n, users);
+  const argv = process.argv.slice(2);
+  const own: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--jobs")
+      i++; // And its value.
+    else own.push(argv[i]!);
+  }
+  const ranges = Array.from({ length: shards }, (_, k) => [
+    Math.floor((k * users) / shards),
+    Math.floor(((k + 1) * users) / shards),
+  ]);
+  return Promise.all(
+    ranges.map(async ([a, b]) => {
+      const p = Bun.spawn([process.execPath, import.meta.path, ...own, "--user-range", `${a}:${b}`, "--tally"], {
+        stdout: "pipe",
+        stderr: "inherit",
+      });
+      const [out, code] = await Promise.all([new Response(p.stdout).text(), p.exited]);
+      if (code !== 0) {
+        console.error(`quality-cli: shard ${a}:${b} exited ${code}`);
+        process.exit(1);
+      }
+      return JSON.parse(out) as QualityTally;
+    }),
+  );
+}
+
+const tally = jobs > 1 ? mergeTallies(await shardTallies(jobs)) : await tallyQuality(opts);
 await timeline?.close();
+if (has("tally")) {
+  console.log(JSON.stringify(tally));
+  process.exit(0);
+}
+const report = qualityReport(tally, opts);
 const out = has("brief")
   ? {
       overall: report.overall,

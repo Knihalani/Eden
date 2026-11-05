@@ -12,20 +12,146 @@ files=$(
 )
 prettier=node_modules/.bin/prettier
 
-# Prettier's cache skips a file whose content (not mtime, which checkouts reset) is unchanged since a run that found
-# it formatted; the cache key also covers the Prettier version and options. It lives under the gitignored
-# node_modules/.cache. CHECK_COLD=1 drops it, for a final run that trusts nothing from an earlier one.
-cache=(--cache --cache-strategy content --cache-location node_modules/.cache/prettier/.prettier-cache)
-if [ "${CHECK_COLD:-}" = "1" ]; then
-  cache=()
+# The known-formatted set: one `<blob id> <path>` line per file content that Prettier found formatted, so a later run
+# hands Prettier only the files whose content (or path, which picks the parser) it has not seen. Prettier's own
+# --cache cannot do this across checkouts: it keys absolute paths, so every new git worktree started cold (13 s).
+# The set lives under the git common dir, which every worktree of the repo shares, in a file named by a key over
+# everything else that decides the result: the Prettier version and every Prettier config, ignore, .editorconfig
+# and package.json file (package.json may hold a "prettier" key). Content is hashed from the working tree, raw
+# (--no-filters), so unstaged edits count. Writes go to a temp file renamed into place: worktrees that check at once
+# can lose each other's additions (a later run re-checks those), never corrupt the set. CHECK_COLD=1 neither reads
+# nor writes it, for a final run that trusts nothing from an earlier one. Any failure here falls back to checking
+# every file.
+#
+# What enters the set comes only from Prettier's exit status and bare paths, never from parsing its log: --check runs
+# Prettier as `--list-different --no-color`, which prints each unformatted path alone on a line. (Parsing `[warn]
+# path` log lines let FORCE_COLOR=1, which colours the tag, record an unformatted file as formatted.) A path checked
+# is recorded only when its content hashes the same before and after Prettier read it.
+
+# shared_set: the set's path for this checkout, creating its directory; fails when anything is missing.
+shared_set() {
+  local common version configs key
+  common=$(git rev-parse --path-format=absolute --git-common-dir) || return 1
+  version=$(sed -n 's/^  "version": *"\([^"]*\)".*/\1/p' node_modules/prettier/package.json) || return 1
+  [ -n "$version" ] || return 1
+  configs=$(
+    git ls-files --cached --others --exclude-standard |
+      grep -E '(^|/)(\.prettierrc[^/]*|prettier\.config\.[^/]*|\.prettierignore|\.editorconfig|package\.json)$' |
+      grep -v -E '^archived/'
+  ) || return 1
+  key=$(
+    echo "prettier $version"
+    paste -d' ' <(git hash-object --no-filters --stdin-paths <<<"$configs") <(echo "$configs")
+  ) || return 1
+  key=$(git hash-object --stdin <<<"$key") || return 1
+  mkdir -p "$common/eden-check-cache" || return 1
+  # Sets for an old key (another Prettier or config) and temp files a killed run left behind. The current key's set
+  # is spared: a run that finds every file known never rewrites it, so its age says nothing about its use.
+  find "$common/eden-check-cache" -type f -mtime +14 ! -name "prettier-$key" -delete || true
+  echo "$common/eden-check-cache/prettier-$key"
+}
+
+# entries PATHS: each path (one per line) as `<blob id> <path>`, hashed from the working tree.
+entries() {
+  paste -d' ' <(git hash-object --no-filters --stdin-paths <<<"$1") <(echo "$1")
+}
+
+set_file=
+known=
+unknown=
+if [ "${CHECK_COLD:-}" != "1" ]; then
+  set_file=$(shared_set 2>/dev/null) || set_file=
+fi
+if [ -n "$set_file" ]; then
+  current=$(entries "$files" 2>/dev/null) || set_file=
+fi
+todo=$files
+if [ -n "$set_file" ]; then
+  # Only well-formed lines are trusted; the rest are files Prettier has not passed in this configuration.
+  known=$(grep -E '^[0-9a-f]{40,64} [^ ]+$' "$set_file" 2>/dev/null) || known=
+  # Marks the set in use for the pruning in shared_set, which a run that writes nothing would otherwise not do.
+  touch -c "$set_file" 2>/dev/null || true
+  if unknown=$(grep -v -x -F -f <(echo "$known") <<<"$current"); then
+    todo=$(cut -d' ' -f2- <<<"$unknown")
+  elif [ $? = 1 ]; then
+    todo= # grep's "no line left": every file is known
+  fi
 fi
 
-# shellcheck disable=SC2086 # one argument per file; tracked paths have no spaces
+# remember MODE PASSED: adds PASSED (paths, one per line, all in $todo) to the set, hashed now so --write records the
+# formatted content. For check, an entry is kept only if it also is in $unknown, hashed before Prettier ran: a file
+# edited while Prettier ran was checked in some other content.
+remember() {
+  [ -n "$set_file" ] && [ -n "$2" ] || return 0
+  {
+    local fresh tmp
+    fresh=$(entries "$2") || return 0
+    if [ "$1" = check ]; then
+      fresh=$(grep -x -F -f <(echo "$unknown") <<<"$fresh") || return 0
+    fi
+    tmp=$(mktemp "$set_file.tmp.XXXXXX") || return 0
+    # Newest last; the cap keeps the set to a few MB however many contents it has seen.
+    if { echo "$known" && echo "$fresh"; } | grep -E '^[0-9a-f]{40,64} [^ ]+$' | awk '!seen[$0]++' |
+      tail -n 50000 >"$tmp"; then
+      mv -f "$tmp" "$set_file"
+    else
+      rm -f "$tmp"
+    fi
+  } 2>/dev/null
+  return 0
+}
+
+# all_known: true, saying so, when the set holds every file and Prettier has nothing to do (it fails on no files).
+all_known() {
+  [ -z "$todo" ] || return 1
+  echo "Prettier: all $(wc -l <<<"$files" | tr -d ' ') files already known formatted (CHECK_COLD=1 rechecks)."
+}
+
+# check: Prettier's --check over $todo, reported in its words but run as --list-different. Exit 0 remembers all of
+# $todo. Exit 1 remembers $todo less the listed paths, and only when every listed line is exactly a path in $todo
+# (anything else, a log line say, remembers nothing). Exit 2 (a syntax error, a crash) remembers nothing.
+check() {
+  all_known && return 0
+  local out status=0 passed
+  echo "Checking formatting..."
+  # Errors (stderr) go straight to the terminal; only stdout, the bare paths, is read.
+  # shellcheck disable=SC2086 # one argument per file; tracked paths have no spaces
+  out=$(FORCE_COLOR=0 $prettier --list-different --no-color $todo) || status=$?
+  if [ "$status" = 0 ]; then
+    echo "All matched files use Prettier code style!"
+    remember check "$todo"
+    return 0
+  fi
+  [ -z "$out" ] || sed 's/^/[warn] /' <<<"$out"
+  if [ "$status" = 1 ] && [ -n "$out" ]; then
+    local n
+    n=$(wc -l <<<"$out" | tr -d ' ')
+    [ "$n" = 1 ] && n="the above file" || n="$n files"
+    echo "[warn] Code style issues found in $n. Run Prettier with --write to fix."
+    if ! grep -q -v -x -F -f <(echo "$todo") <<<"$out"; then
+      passed=$(grep -v -x -F -f <(echo "$out") <<<"$todo") && remember check "$passed"
+    fi
+  fi
+  return "$status"
+}
+
+# write: Prettier's --write over $todo; only a clean exit, every file now formatted, is remembered.
+write() {
+  all_known && return 0
+  local status=0
+  # shellcheck disable=SC2086
+  $prettier --write --log-level warn $todo || status=$?
+  [ "$status" != 0 ] || remember write "$todo"
+  return "$status"
+}
+
 if [ "${1:-}" = "--check" ]; then
   status=0
-  $prettier ${cache[@]+"${cache[@]}"} --check $files || status=1
-  # Uncached and over every file, so an overlong comment is caught however warm Prettier's cache is.
+  check || status=1
+  # Uncached and over every file, so an overlong comment is caught whatever the known-formatted set holds: the set
+  # records Prettier's verdict only, and this checker (and the limit it reads) can change without changing its key.
+  # shellcheck disable=SC2086
   bun scripts/check-line-length.ts $files || status=1
   exit $status
 fi
-$prettier ${cache[@]+"${cache[@]}"} --write --log-level warn $files
+write

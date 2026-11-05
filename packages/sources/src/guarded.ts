@@ -91,7 +91,10 @@ export interface FanoutOptions {
    * are dropped.
    */
   sanitize: (items: ContextItem[], signal: AbortSignal) => ContextItem[] | Promise<ContextItem[]>;
-  /** Result cache budget in bytes of item text (default 32 MB); 0 disables caching. */
+  /**
+   * Result cache budget in bytes (default 32 MB); 0 disables caching. A page is charged its estimated heap: item text,
+   * its key, and a measured overhead per entry and per item (`sizeOf`), so an empty page is not free.
+   */
   cacheBytes?: number;
   /** A cached result is fresh for this long (default 60 s), then stale (servable on failure) until `staleMs`. */
   freshMs?: number;
@@ -102,6 +105,8 @@ export interface FanoutOptions {
   breaker?: BreakerOptions;
   /** Concurrency limit per (user, source): AIMD between 1 and `maxConcurrency` (default 4). */
   maxConcurrency?: number;
+  /** Per-source state is kept for at most this many (user, source) pairs (default 100,000); tests make it small. */
+  maxStates?: number;
   now?: () => number;
 }
 
@@ -114,8 +119,35 @@ interface PerSource {
    * the first one: most (user, source) pairs never see the planner.
    */
   callLatency?: RollingHistogram;
-  /** `dropResults` calls for this (user, source): a call running across one does not hold its page. */
-  drops?: number;
+}
+
+/**
+ * The calls of one (user, source) running now that may write a page back, and the `dropResults` calls since the
+ * first of them started. Kept apart from `PerSource`, which can be evicted while a call runs: a drop must reach every
+ * call it overlaps. Exists only while a call runs, so it is bounded by the calls in flight.
+ */
+interface Running {
+  calls: number;
+  drops: number;
+}
+
+/** A call's place in its pair's `Running`: the drops seen when it started. */
+interface DropMark {
+  running: Running;
+  drops: number;
+}
+
+/**
+ * The call leading the flight for one result key, beside the flight itself: its flight key (the result key and a
+ * sequence number, so a caller that may not join leads a new flight under its own key) and its drop mark and
+ * `forgets` when it started. A caller joins only while neither moved: a call begun before a `dropResults` read the
+ * source as it was, and a lookup after the drop that joined it would get (and store under its own later read mark,
+ * D133) the copy from before the change.
+ */
+interface Lead {
+  flight: string;
+  mark: DropMark;
+  forgets: number;
 }
 
 /** Planner calls a connector's call-latency quantile needs before it is trusted. */
@@ -132,6 +164,20 @@ const GATE_ERROR = "GateError";
 /** Per-source state kept for at most this many (user, source) pairs; the least recently used is dropped. */
 const MAX_STATES = 100_000;
 
+/**
+ * A results-cache key: the (user, source) pair, length-prefixed so the pair is read back exactly (`pairOf`) whatever
+ * characters a tenant, user or source id holds, then the rest of the query.
+ */
+function resultKey(pair: string, rest: string): string {
+  return `${pair.length}:${pair}|${rest}`;
+}
+
+/** The (user, source) pair a `resultKey` belongs to: the results cache's group, so a drop is O(that pair's pages). */
+function pairOf(key: string): string {
+  const colon = key.indexOf(":");
+  return key.slice(colon + 1, colon + 1 + Number(key.slice(0, colon)));
+}
+
 export class SourceFanout {
   private readonly per = new Map<string, PerSource>();
   private readonly flights = new Singleflight<string, ContextItem[]>();
@@ -144,10 +190,20 @@ export class SourceFanout {
   private readonly minted = new WeakSet<PlanCalls>();
   /** Counts `forget` calls: a planner call that started before one does not write its result back. */
   private forgets = 0;
+  /** Calls that may write a page back, by (user, source), while they run: what `dropResults` must reach. */
+  private readonly running = new Map<string, Running>();
+  /**
+   * The flight leading each result key, while its call runs (set and cleared inside the flight's own function, so it
+   * is bounded by the calls in flight and released however the call ends).
+   */
+  private readonly leads = new Map<string, Lead>();
+  private flightSeq = 0;
+  private readonly maxStates: number;
 
   constructor(options: FanoutOptions) {
     this.options = options;
     this.now = options.now ?? Date.now;
+    this.maxStates = Math.max(1, options.maxStates ?? MAX_STATES);
     const bytes = options.cacheBytes ?? 32_000_000;
     this.results =
       bytes > 0
@@ -156,6 +212,7 @@ export class SourceFanout {
             staleAfterMs: options.freshMs ?? 60_000,
             expireAfterMs: options.staleMs ?? 600_000,
             now: this.now,
+            group: pairOf,
           })
         : null;
     const ratePerSec = options.ratePerSec ?? 5;
@@ -321,7 +378,8 @@ export class SourceFanout {
   forget(scope: Scope, sourceId?: string): void {
     const prefix = sourceId ? `${scopeKey(scope)}|${sourceId}|` : `${scopeKey(scope)}|`;
     this.forgets++;
-    this.results?.deleteWhere((k) => k.startsWith(prefix));
+    if (sourceId) this.results?.deleteGroup(`${scopeKey(scope)}|${sourceId}`);
+    else this.results?.deleteWhere((k) => pairOf(k).startsWith(prefix)); // Rare (forget-a-user): a scan is fine.
     for (const k of [...this.per.keys()]) if (`${k}|`.startsWith(prefix) || k.startsWith(prefix)) this.per.delete(k);
   }
 
@@ -332,15 +390,67 @@ export class SourceFanout {
   dropResults(scope: Scope, sourceId: string): void {
     const key = `${scopeKey(scope)}|${sourceId}`;
     // Counted per (user, source), not on `forgets`: one user's notifications must not stop other users' calls from
-    // holding their pages or recording their latency. No state means no call of this pair is running.
-    const s = this.per.get(key);
-    if (s) s.drops = (s.drops ?? 0) + 1;
-    this.results?.deleteWhere((k) => k.startsWith(`${key}|`));
+    // holding their pages or recording their latency. Counted on the pair's running calls, not on its `PerSource`
+    // (which LRU eviction can drop mid-call, losing the drop): no running call means none can write a page back.
+    const r = this.running.get(key);
+    if (r) r.drops++;
+    this.results?.deleteGroup(key);
   }
 
-  /** `dropResults` calls so far for a (user, source), to compare across a call. */
-  private dropsOf(key: string): number {
-    return this.per.get(key)?.drops ?? 0;
+  /** Registers a call of a (user, source) that may write a page back; `leave` it when it ends, however it ends. */
+  private enter(key: string): DropMark {
+    let running = this.running.get(key);
+    if (!running) {
+      running = { calls: 0, drops: 0 };
+      this.running.set(key, running);
+    }
+    running.calls++;
+    return { running, drops: running.drops };
+  }
+
+  private leave(key: string, mark: DropMark): void {
+    if (--mark.running.calls === 0 && this.running.get(key) === mark.running) this.running.delete(key);
+  }
+
+  /** No `dropResults` for the call's pair since it entered. */
+  private undropped(mark: DropMark): boolean {
+    return mark.running.drops === mark.drops;
+  }
+
+  /** The flight a call for `key` may join: one in flight with no drop for its pair and no `forget` since it began. */
+  private joinable(key: string): string | undefined {
+    const lead = this.leads.get(key);
+    if (!lead || !this.flights.has(lead.flight)) return undefined;
+    return this.undropped(lead.mark) && this.forgets === lead.forgets ? lead.flight : undefined;
+  }
+
+  /**
+   * Runs `fn` as the leader of a new flight for result key `key` of pair `pair`, registered (`enter`) and joinable
+   * for exactly as long as `fn` runs, even after the caller that started it stops waiting while others still do.
+   * `fn` gets the call's drop mark and `forgets` at its start, to decide whether to hold its result.
+   */
+  private lead(
+    key: string,
+    pair: string,
+    fn: (signal: AbortSignal, mark: DropMark, forgets: number) => Promise<ContextItem[]>,
+    signal: AbortSignal | undefined,
+  ): Promise<ContextItem[]> {
+    const flight = `${key}\u0002${++this.flightSeq}`;
+    return this.flights.run(
+      flight,
+      async (sig) => {
+        const mark = this.enter(pair);
+        const lead: Lead = { flight, mark, forgets: this.forgets };
+        this.leads.set(key, lead);
+        try {
+          return await fn(sig, mark, lead.forgets);
+        } finally {
+          this.leave(pair, mark);
+          if (this.leads.get(key) === lead) this.leads.delete(key);
+        }
+      },
+      signal,
+    );
   }
 
   /**
@@ -371,10 +481,9 @@ export class SourceFanout {
    * with the planner's `permit`.
    */
   planCalls(source: Source, shared?: SharedCalls): CountedPlanCalls {
-    const key = (q: SearchQuery) =>
-      `${scopeKey(q.scope)}|${source.id}|plan|${q.limit}|${q.text}` +
-      (q.window ? `|${q.window.start}..${q.window.end}` : "");
     const sourceKey = (q: SearchQuery) => `${scopeKey(q.scope)}|${source.id}`;
+    const key = (q: SearchQuery) =>
+      resultKey(sourceKey(q), `plan|${q.limit}|${q.text}` + (q.window ? `|${q.window.start}..${q.window.end}` : ""));
     const calls: CountedPlanCalls = {
       made: 0,
       expectMs: (q, quantile) => {
@@ -396,33 +505,36 @@ export class SourceFanout {
           if (got) return got;
         }
         const k = key(q);
-        const run = this.flights.run(
-          k,
-          async (sig) => {
-            // Only the flight's leader runs this: a call that joins it is not one the connector receives.
-            calls.made++;
-            const forgets = this.forgets;
-            const drops = this.dropsOf(sourceKey(q));
-            const t0 = performance.now();
-            let raw: ContextItem[];
-            try {
-              raw = await source.search(q, sig);
-            } catch (e) {
-              // A call cut off by the timeout counts with its time so far (a lower bound): the slow calls are the ones
-              // the estimate must see. One abandoned for another reason (the session ended, the user was forgotten)
-              // or failing fast says nothing about latency.
-              if ((sig.reason as Error | undefined)?.name === "TimeoutError")
+        // A call in flight for the same query joins, unless a drop or forget came since it began (`joinable`).
+        const flight = this.joinable(k);
+        const run = flight
+          ? this.flights.run(flight, () => Promise.resolve([]), signal)
+          : this.lead(
+              k,
+              sourceKey(q),
+              async (sig, drops, forgets) => {
+                // Only the flight's leader runs this: a call that joins it is not one the connector receives.
+                calls.made++;
+                const t0 = performance.now();
+                let raw: ContextItem[];
+                try {
+                  raw = await source.search(q, sig);
+                } catch (e) {
+                  // A call cut off by the timeout counts with its time so far (a lower bound): the slow calls are the
+                  // ones the estimate must see. One abandoned for another reason (the session ended, the user was
+                  // forgotten) or failing fast says nothing about latency.
+                  if ((sig.reason as Error | undefined)?.name === "TimeoutError")
+                    this.recordCall(sourceKey(q), t0, forgets);
+                  throw e;
+                }
                 this.recordCall(sourceKey(q), t0, forgets);
-              throw e;
-            }
-            this.recordCall(sourceKey(q), t0, forgets);
-            const items = await this.gate(raw, sig);
-            const held = this.forgets === forgets && this.dropsOf(sourceKey(q)) === drops;
-            if (!sig.aborted && held) this.results?.set(k, items, sizeOf(items));
-            return items;
-          },
-          signal,
-        );
+                const items = await this.gate(raw, sig);
+                const held = this.forgets === forgets && this.undropped(drops);
+                if (!sig.aborted && held) this.results?.set(k, items, sizeOf(k, items));
+                return items;
+              },
+              signal,
+            );
         if (shared) shared.set(sk, run);
         return run;
       },
@@ -490,7 +602,7 @@ export class SourceFanout {
       this.per.delete(key); // Re-insert: Map order is least recently used first.
       this.per.set(key, s);
     } else {
-      if (this.per.size >= MAX_STATES) this.per.delete(this.per.keys().next().value as string);
+      if (this.per.size >= this.maxStates) this.per.delete(this.per.keys().next().value as string);
       s = {
         breaker: new CircuitBreaker({ ...this.options.breaker, now: this.now }),
         limiter: new AimdLimiter({ initial: 2, min: 1, max: this.options.maxConcurrency ?? 4 }),
@@ -511,7 +623,7 @@ export class SourceFanout {
     const elapsed = () => Math.round(performance.now() - t0);
     const sourceKey = `${scopeKey(query.scope)}|${source.id}`;
     const span = query.window ? `|${query.window.start}..${query.window.end}` : "";
-    const cacheKey = `${sourceKey}|${query.limit}|${query.text}|${query.entities.join("\u0001")}${span}`;
+    const cacheKey = resultKey(sourceKey, `${query.limit}|${query.text}|${query.entities.join("\u0001")}${span}`);
     const done = (status: FanoutStatus, items: ContextItem[], error?: string): FanoutOutcome => ({
       sourceId: source.id,
       status,
@@ -527,9 +639,11 @@ export class SourceFanout {
       stale !== undefined ? done("stale", stale, error ?? status) : done(status, [], error);
 
     // Joining a call already in flight costs the source nothing: no permit, no rate-limit token, no breaker probe.
-    if (this.flights.has(cacheKey)) {
+    // Not one begun before a drop or forget (`joinable`): the caller then leads a fresh call below.
+    const flight = this.joinable(cacheKey);
+    if (flight) {
       try {
-        return { ...done("ok", await this.flights.run(cacheKey, () => Promise.resolve([]), deadline)), joined: true };
+        return { ...done("ok", await this.flights.run(flight, () => Promise.resolve([]), deadline)), joined: true };
       } catch (e) {
         return { ...fallback(timeout.aborted ? "timeout" : "error", String(e)), joined: true };
       }
@@ -539,15 +653,18 @@ export class SourceFanout {
     if (typeof epoch !== "number") return fallback(epoch);
 
     const started = performance.now();
+    // This caller's own mark, held until it has decided whether to write back (the flight's mark, which `lead` keeps
+    // for joining, ends with the call, a few microtasks before this caller resumes).
     const forgets = this.forgets;
-    const drops = this.dropsOf(sourceKey);
+    const drops = this.enter(sourceKey);
     // Set once the source has answered: a deadline that runs out after that ran out in our gate, not at the source.
     let answered = false;
     try {
       // A planned source whose calls went through `planCalls` returns items sanitized there: not gated twice.
       const presanitized = source instanceof PlannedSource && source.via !== undefined && this.minted.has(source.via);
-      const items = await this.flights.run(
+      const items = await this.lead(
         cacheKey,
+        sourceKey,
         async (signal) => {
           const raw = await source.search(query, signal);
           answered = true;
@@ -559,8 +676,8 @@ export class SourceFanout {
       s.limiter.release("ok");
       s.breaker.success(epoch);
       // A forget, or this pair's `dropResults`, while the call ran: writing the result back could undo it.
-      if (this.forgets === forgets && this.dropsOf(sourceKey) === drops)
-        this.results?.set(cacheKey, items, sizeOf(items));
+      if (this.forgets === forgets && this.undropped(drops))
+        this.results?.set(cacheKey, items, sizeOf(cacheKey, items));
       return done("ok", items);
     } catch (e) {
       const message = String(e);
@@ -588,16 +705,33 @@ export class SourceFanout {
       s.breaker.failure(epoch);
       if (RATE_LIMITED.test(message)) this.rate.penalize(sourceKey, retryAfterMs(message) ?? 5_000);
       return fallback(timedOut ? "timeout" : "error", message);
+    } finally {
+      this.leave(sourceKey, drops);
     }
   }
 }
 
-/** A result's weight in the cache: bytes of item text, at least 1. */
-function sizeOf(items: ContextItem[]): number {
-  return Math.max(
-    1,
-    items.reduce((n, it) => n + it.title.length + it.text.length, 0),
-  );
+/**
+ * Heap of one held page beyond its key and items, at steady state under eviction: the cache's slot (typed arrays,
+ * ring), index and group entries, the page array, and its share of the ghost list (about one evicted key per live
+ * one). Measured through this fan-out (200,000-400,000 empty pages, 16 MB budget, heap held by the cache = `bun:jsc`
+ * heapSize after a full GC minus the same with the cache dropped): 789 / 971 / 1,252 B per live entry at 81 / 141 /
+ * 381-char keys, so 627-689 B after charging the key at 2 B a character. Rounded up with ~10% margin.
+ */
+const ENTRY_OVERHEAD = 768;
+/** Heap of one item beyond its title and text (the object, id, ref, source id): measured 93 B for short fields. */
+const ITEM_OVERHEAD = 100;
+
+/**
+ * A result's weight in the cache, an estimate of its heap: the key at two bytes a character (it is held twice, live
+ * and later as a ghost, at one byte a character for Latin-1 text), each item's title and text at one byte a character
+ * (Latin-1 text is stored one byte a character; other scripts take two, so this undercounts them), and the measured
+ * overheads. Before, an empty page cost 1 byte and the key nothing: the 32 MB budget held ~32M entries (~10 GB).
+ */
+function sizeOf(key: string, items: ContextItem[]): number {
+  let n = ENTRY_OVERHEAD + key.length * 2;
+  for (const it of items) n += ITEM_OVERHEAD + it.title.length + it.text.length;
+  return n;
 }
 
 /** A Retry-After hint in an error message ("retry after 30", "Retry-After: 12"), in ms. */

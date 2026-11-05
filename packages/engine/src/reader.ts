@@ -566,7 +566,19 @@ export class AskReader {
   };
 
   constructor(
-    private readonly deps: { maker: ReaderMaker; budget: Budget; now: () => number },
+    private readonly deps: {
+      maker: ReaderMaker;
+      budget: Budget;
+      now: () => number;
+      /**
+       * Told of each call that failed (the maker threw, e.g. a provider's 403, or replied with nothing readable),
+       * never of one aborted by its caller or by `forget`. The read still fails open to the no-model path whatever
+       * this does: it is how an embedder makes a reader that fails on every call visible (the server logs the first
+       * one, build.ts). It gets the raw error, whose text is the provider's and may hold anything: redact it before
+       * logging. A hook that throws is ignored.
+       */
+      onFailure?: (error: unknown) => void;
+    },
     limits: Partial<ReaderLimits> = {},
   ) {
     this.limits = { ...DEFAULT_READER_LIMITS, ...limits };
@@ -664,6 +676,7 @@ export class AskReader {
       if (forgotten.aborted) return { verdict: null, ...spent };
       if (!got.bears) {
         this.stats.failures++;
+        this.failed(new Error("reader reply unreadable (cut off at the token cap, or not the expected JSON)"));
         return { verdict: null, ...spent };
       }
       const verdict: ReaderVerdict = {
@@ -675,11 +688,22 @@ export class AskReader {
       };
       this.keep(scope, AskReader.inner(session, input), verdict);
       return { verdict, ...spent };
-    } catch {
+    } catch (err) {
       this.deps.budget.settle(reservation, 0);
       this.stats.failures++;
+      // A caller that gave up (its wait, a closed session) or a forgotten user is not a reader failure.
+      if (!signal.aborted) this.failed(err);
       // A call that failed was still made (and counted in `stats.calls`); it settled at no cost.
       return { verdict: null, costUsd: 0, called: true, overBudget: false };
+    }
+  }
+
+  /** Tells `onFailure`, which can never break the fail-open path. */
+  private failed(error: unknown): void {
+    try {
+      this.deps.onFailure?.(error);
+    } catch {
+      // The hook is the embedder's logging; the reader answers whatever it does.
     }
   }
 

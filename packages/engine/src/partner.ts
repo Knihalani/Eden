@@ -286,7 +286,7 @@ interface Session {
    * `verifyDelivery`: re-reads under way or just made, by item id (`check`): started ahead, beside the reader's call,
    * and taken by the delivery that follows. Bounded (`MAX_CHECKS`); dropped with the session.
    */
-  checks?: Map<string, { at: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome }>;
+  checks?: Map<string, { at: number; mark: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome }>;
   /**
    * With `askDedup`: the words each item's line showed the agent in this session's packets and answers (lowercase),
    * by item id and version (`shownKey`: an item changed at its source under the same id counts as not shown), at
@@ -400,6 +400,8 @@ interface ProbeOpts {
   after?: Promise<void>;
   /** Synced sources whose copy is current (`sync`, D57): they answer from the local index, at no call. */
   local?: ReadonlySet<string> | null;
+  /** The lookup's deadline (`performance.now()` time, D140); absent: `sourceTimeoutMs` from when the probes start. */
+  deadlineAt?: number;
 }
 /** `intent`'s reciprocal-rank constant: rank 0 scores 1/k (the usual 60 flattens a five-item list to a tie). */
 const ASK_FUSE_K = 2;
@@ -462,6 +464,21 @@ interface Scored {
  */
 type Undo = Map<string, { was: LedgerEntry | undefined; set: LedgerEntry; sketch: Sketch | null }>;
 
+/** How one source an ask chose fared (D127; `AskResponse.sources`). */
+type SourceStatus = NonNullable<AskResponse["sources"]>[number];
+
+/** The statuses of a source that answered (D127): the connector, the fan-out's held result, or the synced index. */
+const ANSWERED = new Set(["ok", "cached", "stale", "local"]);
+
+/** How the answer names a status that did not answer (`unreached`). */
+const STATUS_WORDS: Record<string, string> = {
+  error: "failed",
+  timeout: "timed out",
+  open: "failing, skipped",
+  busy: "busy",
+  limited: "rate-limited",
+};
+
 interface Built {
   sourceIds: string[];
   /** The delivered items, for the planner's delivery credit when the injection is handed out (D39). */
@@ -469,6 +486,13 @@ interface Built {
   text: string;
   /** Edge types the knowledge graph reached the delivered items by (`graph`), learned from on use. */
   graphMask: number;
+  /**
+   * With `askDedup`: the items and the text the agent is shown, noted as shown (`noteShown`) when the injection is
+   * handed out, not when it is built: a queued packet the agent has not taken was shown nothing, and an ask before
+   * the agent takes it says its items in full (deep audit 2026-11-05 `ask-shown-before-handed-out`). Cleared once
+   * noted.
+   */
+  shown?: { items: readonly ContextItem[]; text: string };
 }
 
 /**
@@ -498,8 +522,11 @@ export class ContextPartner {
   private readonly recorded = new Map<string, Map<string, Map<string, Recorded>>>();
   private readonly now: () => number;
   private readonly fanout: SourceFanout;
-  /** `verifyDelivery`'s outcomes since start: items checked, confirmed, changed, gone, unverifiable, calls made. */
-  readonly freshness = { checked: 0, confirmed: 0, changed: 0, gone: 0, failed: 0, calls: 0 };
+  /**
+   * `verifyDelivery`'s outcomes since start: items checked, confirmed, changed, gone, unverifiable, calls made; and
+   * gone-holds the cache's caps dropped while still live (`ItemCache.holdsEvicted`), which reopen D126's race.
+   */
+  readonly freshness = { checked: 0, confirmed: 0, changed: 0, gone: 0, failed: 0, calls: 0, holdsEvicted: 0 };
   /** The secret gate every item passes before it is held (D10): the fanout's, and `sourceItems`'. */
   private readonly redact: (items: ContextItem[]) => ContextItem[] | Promise<ContextItem[]>;
   /** What each user's probes bring back (`probeFresh`, `probeYield`). */
@@ -600,6 +627,7 @@ export class ContextPartner {
             catchupPages: c.syncCatchupPages,
             maxUsersPerTenant: c.syncMaxUsersPerTenant,
             timeoutMs: Math.max(c.sourceTimeoutMs, 5_000),
+            demandTimeoutMs: c.sourceTimeoutMs,
             push: c.syncPush,
             pushMaxStaleMs: c.syncPushMaxStaleMs,
           },
@@ -1356,7 +1384,10 @@ export class ContextPartner {
     const rendering = spans?.open("render", cue.span);
     const answering = this.answering(s, cue);
     if (reading?.notes.size) answering.note = (item) => reading.notes.get(item.id);
-    const answer = items.length ? renderPacket(items, answering) : "Nothing in the connected sources.";
+    const packet = items.length ? renderPacket(items, answering) : "";
+    // D127: "nothing" is said only when the sources the ask chose answered; one that failed is named, in the text
+    // (an MCP caller sees only the text) and in `sources`.
+    const answer = honestAnswer(packet, searched.sources, searched.unresolved === true, searched.closed === true);
     if (rendering) spans!.close(rendering, { items: items.length });
     if (this.deps.onCandidates) {
       this.dump(
@@ -1379,9 +1410,18 @@ export class ContextPartner {
         "answer",
         "ask",
         cue,
-        answer,
+        packet,
       );
+      // The answer is handed out as it is returned: its items are noted as shown now.
       this.handOut(s, injection);
+      // A packet still queued for the agent whose every item this answer says in full is not handed out again; one it
+      // covers only in part stays queued (its other items are news). Removed, never `withdraw`n: the agent now has
+      // each of its items, so what its delivery marked stands.
+      const cited = new Set(items.map((i) => i.id));
+      for (let k = s.pending.length - 1; k >= 0; k--) {
+        const queued = s.pending[k]!.citations;
+        if (queued.length > 0 && queued.every((c) => cited.has(c.itemId))) s.pending.splice(k, 1);
+      }
     }
     const latencyMs = Math.round(performance.now() - t0);
     this.trace({
@@ -1400,7 +1440,14 @@ export class ContextPartner {
       ...(local !== undefined ? { localSources: local, syncCalls: syncCalls ?? 0 } : {}),
     });
     if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "answer", delivered: items.length > 0 });
-    return { answer, citations: citationsOf(items), usedModel, costUsd, latencyMs };
+    return {
+      answer,
+      citations: citationsOf(items),
+      usedModel,
+      costUsd,
+      latencyMs,
+      ...(searched.sources ? { sources: searched.sources } : {}),
+    };
   }
 
   /**
@@ -1486,8 +1533,6 @@ export class ContextPartner {
       pool.length <= READER_MAX_ITEMS &&
       ranked.every((x) => seen.has(x.item.id)) &&
       chosen.every((x) => seen.has(x.item.id));
-    // The likely deliveries are re-read while the reader reads (`verifyDelivery`): the delivery then waits on no call.
-    this.checkAhead(s, pool);
     const t0 = performance.now();
     const report = (outcome: ReaderReport["outcome"], flagged: ReaderReport["flagged"] = []) =>
       this.deps.onReader?.({
@@ -1529,6 +1574,10 @@ export class ContextPartner {
         return null;
       }
     }
+    // The likely deliveries are re-read while the reader reads (`verifyDelivery`): the delivery then waits on no call.
+    // Only once the reader will read (D134): an empty pool or a gated ask has no reading to overlap, and its delivery
+    // re-reads what it actually cites (`verifyItems`), so a re-read started ahead there is a connector call wasted.
+    this.checkAhead(s, pool);
     const input: ReaderInput = {
       request: main,
       ...(request && cue.raw !== request ? { question: cue.raw } : {}),
@@ -1721,8 +1770,8 @@ export class ContextPartner {
   /**
    * A deletion notification (`syncPush`): the source no longer has these refs (a message deleted or recalled, a doc
    * removed, an event deleted). They are dropped at once from the cache, the sync's bookkeeping, their cards, the graph
-   * and held search pages, and held as gone for a while, so nothing delivers them again. Returns how many were held; 0
-   * when push is off. No I/O.
+   * and held search pages, and held as gone for a while, so nothing delivers them again. Returns how many cached items
+   * were dropped (ids held as gone but not cached count 0); 0 when push is off. No I/O.
    */
   sourceRemoved(scope: Scope, sourceId: string, refs: string[]): number {
     if (!this.config.syncPush || refs.length === 0) return 0;
@@ -1862,6 +1911,12 @@ export class ContextPartner {
   /** Starts usage tracking: from the moment the agent actually receives an injection, against what it had seen. */
   private handOut(s: Session, injection: Injection): void {
     const built = this.built.get(injection);
+    // Every path that gives the agent an injection comes through here: what it was shown is noted first, before the
+    // usage tracking's early returns (an injection already tracked or recorded was still shown).
+    if (built?.shown) {
+      this.noteShown(s, built.shown.items, built.shown.text);
+      built.shown = undefined;
+    }
     if (!built || s.outstanding.has(injection.id)) return;
     if (this.recordedOf(s.scope)?.has(injection.id)) return;
     s.outstanding.set(injection.id, {
@@ -2020,19 +2075,27 @@ export class ContextPartner {
   }
 
   private confident(scored: Scored[], cue: Cue): Scored[] {
-    const sure = scored
-      .filter((x) => x.score >= this.config.confidentScore && x.matched >= this.config.minMatchedTerms)
+    // One pass that stops at the cap: every test judges one item alone, so stopping early returns what filtering all
+    // and then slicing returned. The cheap tests run first; `cleared` (the conflict test, about half the fast path's
+    // CPU in pipeline.bench) and `beyondName` run only on what survives them, and only until the cap is reached.
+    const cap = Math.min(this.config.maxItemsPerInjection, this.config.confidentItems);
+    const sure: Scored[] = [];
+    for (const x of scored) {
+      if (sure.length >= cap) break;
+      if (x.score < this.config.confidentScore || x.matched < this.config.minMatchedTerms) continue;
       // Bulk mail is never pushed without a model's say: a newsletter arriving is no reason to speak.
-      .filter((x) => !bulkMail(x.item))
+      if (bulkMail(x.item)) continue;
       // Nor, with `quietSettled`, an item that only says things stand as expected (`settled`); nor, with
       // `groundAway`, an absence on other days than the request names (`awayElsewhere`).
-      .filter((x) => !this.config.quietSettled || !settled(x.item))
-      .filter((x) => !this.awayElsewhere(x.item, cue))
+      if (this.config.quietSettled && settled(x.item)) continue;
+      if (this.awayElsewhere(x.item, cue)) continue;
       // Nor, with `quietClear`, one about what the request names whose decisive value does not conflict with it.
-      .filter((x) => !this.cleared(x, cue))
+      if (this.cleared(x, cue)) continue;
       // Nor, with `quietNameOnly`, one only a name ties to the request.
-      .filter((x) => this.beyondName(x, cue));
-    return sure.slice(0, Math.min(this.config.maxItemsPerInjection, this.config.confidentItems));
+      if (!this.beyondName(x, cue)) continue;
+      sure.push(x);
+    }
+    return sure;
   }
 
   /**
@@ -2608,16 +2671,39 @@ export class ContextPartner {
     /** With `sync`: sources answered from the local index, and listing calls of on-demand polls (in `calls`). */
     local?: number;
     syncCalls?: number;
+    /**
+     * How each source this lookup chose fared (D127): the fan-out's status, or "local" for one answered from the
+     * synced index. A sync poll that failed leaves its source not current, so it is searched live and its status is
+     * that search's; probes are extra queries beside a chosen source's own search, which gives the source's status.
+     */
+    sources?: SourceStatus[];
+    /** The user's sources could not be resolved at all: nothing was searched, which is not an empty result. */
+    unresolved?: true;
+    /** The session ended before the search ran: nothing was searched, which is not an empty result either (D127). */
+    closed?: true;
   }> {
-    const all = await this.deps.sources(s.scope).catch((): Source[] => []);
-    if (all.length === 0 || s.closed) return { calls: 0 };
+    // Before any call: what this lookup stores was read under it, so a signal while it runs doubts it (D133).
+    const readMark = this.sync?.mark() ?? 0;
+    let unresolved = false;
+    const all = await this.deps.sources(s.scope).catch((): Source[] => {
+      unresolved = true;
+      return [];
+    });
+    if (unresolved) return { calls: 0, sources: [], unresolved: true };
+    if (s.closed) return { calls: 0, sources: [], closed: true };
+    if (all.length === 0) return { calls: 0, sources: [] };
+    // One deadline for the whole lookup (D140): the on-demand poll, the live search, the planner's cascade and the
+    // probes share it. An ask waits for its poll, so a poll and a search with deadlines of their own could hold the
+    // reader back twice `sourceTimeoutMs` (a listing that hangs, then the search that follows it).
+    const deadlineAt = performance.now() + this.config.sourceTimeoutMs;
+    const left = () => Math.max(0, deadlineAt - performance.now());
     // The background sync (D57): a source whose synced copy is current answers from the user's local index, at no
     // call; with `syncOnDemand`, a stale one is polled first (one listing call, rather than its search and probes).
     let local: Set<string> | null = null;
     let syncCalls = 0;
     if (this.sync) {
       if (this.config.syncOnDemand) {
-        const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(this.config.sourceTimeoutMs)]);
+        const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(left())]);
         const freshening = this.spans?.open("sync.freshen", cue.span, { async: true });
         const tally = { fresh: 0 };
         const polled = this.sync.freshen(s.scope, all, signal, tally).then((calls) => {
@@ -2655,7 +2741,7 @@ export class ContextPartner {
             })
             .catch(() => false);
         } else syncCalls = await polled;
-        if (s.closed) return { calls: syncCalls, syncCalls };
+        if (s.closed) return { calls: syncCalls, syncCalls, sources: [], closed: true };
       }
       local = this.localOf(s, all, behind);
     }
@@ -2691,9 +2777,8 @@ export class ContextPartner {
           offsetMinutes: cue.offset,
         }
       : undefined;
-    // The fan-out's deadline for this lookup, so the planner's cascade sends only the calls that can still answer. A
-    // listing goes to each source as it is: the planner's shapes are ways of sending words, and it has none.
-    const deadlineAt = performance.now() + this.config.sourceTimeoutMs;
+    // The planner's cascade sends only the calls that can still answer by `deadlineAt`. A listing goes to each source
+    // as it is: the planner's shapes are ways of sending words, and it has none.
     const spans = this.spans;
     const searchSpan = spans?.open("search", cue.span, { async: true, listing });
     // With spans on, each call a source answers is a child span of this search (`traced`).
@@ -2719,23 +2804,32 @@ export class ContextPartner {
     // A probe that fails is no probe; a session that closes mid-search leaves it to finish on its own (it checks).
     // The lookup's own search starts first: the fan-out admits a call when it starts (a per-source concurrency slot),
     // and probes started before it could take the slots and leave the request itself skipped as busy.
-    const searching = this.fanout.search(
-      chosen,
-      {
-        scope: s.scope,
-        text: listing ? "" : cue.text,
-        entities: cue.entities,
-        limit: 8,
-        ...(window ? { window } : {}),
-      },
-      { timeoutMs: this.config.sourceTimeoutMs, signal: s.abort.signal },
-    );
+    // A poll that used up the deadline leaves no time to search: each chosen source is a timeout with no call, so no
+    // rate token, concurrency slot or breaker failure is spent on a call that could not answer (the probes' 50 ms).
+    const searching =
+      left() < MIN_SEARCH_MS
+        ? Promise.resolve(
+            chosen.map((x): FanoutOutcome => ({ sourceId: x.id, status: "timeout", items: [], latencyMs: 0 })),
+          )
+        : this.fanout.search(
+            chosen,
+            {
+              scope: s.scope,
+              text: listing ? "" : cue.text,
+              entities: cue.entities,
+              limit: 8,
+              ...(window ? { window } : {}),
+            },
+            // What the poll left of the lookup's deadline (D140).
+            { timeoutMs: left(), signal: s.abort.signal },
+          );
     const settled = searching.catch(() => null);
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing = this.config.probes
       ? this.probe(s, cue, routed, all, listing, probed, settled, shared, {
           ...this.lookupOpts(s, cue),
           local,
+          deadlineAt,
         }).catch(() => {})
       : null;
     // The same query answered by the synced sources from the local index (D57): no call, nothing to store.
@@ -2764,8 +2858,16 @@ export class ContextPartner {
       const via = planned[k];
       made += via ? via.made : reachedSource(outcomes[k]!) ? 1 : 0;
     }
+    // Each source the lookup chose, as it fared (D127): a listing goes to the sources that list by time, anything else
+    // to every routed one; a synced source answered here from the local index, the rest by the fan-out's outcome.
+    const statusOf = new Map(outcomes.map((o) => [o.sourceId, o.status]));
+    const sources: SourceStatus[] = (listing ? listers : routed).map((x) => ({
+      sourceId: x.id,
+      status: local?.has(x.id) ? "local" : (statusOf.get(x.id) ?? "error"),
+    }));
     const result = {
       calls: made + syncCalls,
+      sources,
       ...(plans ? { plans } : {}),
       ...(this.sync ? { local: local?.size ?? 0, syncCalls } : {}),
     };
@@ -2787,7 +2889,7 @@ export class ContextPartner {
       // Mentions are recorded for items new to the cache or changed, so an item many lookups return is not counted
       // each time (that let one item dominate routing, and was ~10% of server CPU). They are written with the put,
       // before the next yield: a session closing in between must not leave items cached whose mentions never land.
-      this.store(s, o.items, cue.span);
+      this.store(s, o.items, cue.span ?? 0, false, readMark);
     }
     if (probing) {
       const graceSpan = spans?.open("probes.grace", cue.span, { async: true });
@@ -2841,6 +2943,8 @@ export class ContextPartner {
       clearTimeout(timer);
       if (s.closed) return;
     }
+    // Before the probes' calls: what they store was read under it (D133).
+    const readMark = this.sync?.mark() ?? 0;
     const lanes = new Map<string, Promise<unknown>>();
     const budget = opts.budget ?? this.config.probeCalls;
     const local = opts.local ?? null;
@@ -2848,7 +2952,7 @@ export class ContextPartner {
     const probesSpan = spans?.open("probes", cue.span, { async: true });
     // Calls the consequence probe made (outside `budget`).
     let extra = 0;
-    const deadline = performance.now() + this.config.sourceTimeoutMs;
+    const deadline = opts.deadlineAt ?? performance.now() + this.config.sourceTimeoutMs;
     const kept = out.kept;
     const send = async (
       kind: ProbeKind,
@@ -3037,7 +3141,8 @@ export class ContextPartner {
         }
       }
       if (!s.closed) {
-        this.store(s, whole > 5 && !window ? outcomes.flatMap((o) => o.items.slice(0, whole)) : items, parent);
+        const kept = whole > 5 && !window ? outcomes.flatMap((o) => o.items.slice(0, whole)) : items;
+        this.store(s, kept, parent, false, readMark);
       }
       if (keep) for (const i of items) if (!kept.includes(i.id)) kept.push(i.id);
       // Only a complete answer is remembered: a source that failed or timed out is asked again next time.
@@ -3223,11 +3328,14 @@ export class ContextPartner {
     return best !== null && now - bestAt >= this.config.probeMemoMs ? best : null;
   }
 
-  /** Caches sanitized items and records the entity mentions of those new to the cache or changed. */
-  private store(s: Session, items: ContextItem[], parent = 0, synced = false): number {
+  /**
+   * Caches sanitized items, read under `readMark` (`Sync.mark` when their read began), and records the entity mentions
+   * of those new to the cache or changed.
+   */
+  private store(s: Session, items: ContextItem[], parent: number, synced: boolean, readMark: number): number {
     const spans = this.spans;
     const putting = items.length > 0 ? spans?.open("cache.put", parent, { items: items.length }) : undefined;
-    const added = this.deps.cache.put(s.scope, items, this.now(), true, synced);
+    const added = this.deps.cache.put(s.scope, items, this.now(), true, synced, readMark);
     if (putting) spans!.close(putting, { added: added.length });
     // An item seen again unchanged keeps its card alive; one evicted by the same put is not carded at all.
     if (this.config.cards)
@@ -3319,7 +3427,7 @@ export class ContextPartner {
    */
   private stale(s: Session, scored: Scored[]): boolean {
     const now = this.now();
-    if (this.config.verifyDelivery && scored.some((x) => this.doubted(s, x.item, now))) return true;
+    if (this.config.verifyDelivery && scored.some((x) => this.doubted(s, x.item))) return true;
     const after = this.config.refreshAfterMs;
     if (after <= 0) return false;
     // A synced item counts by when the sync last read it too (D57): its source's copy may be current, but the fast
@@ -3334,13 +3442,15 @@ export class ContextPartner {
   }
 
   /**
-   * Whether an item must be re-read before it is delivered (`verifyDelivery`): its source signalled a change after the
-   * copy was read (`Sync.signalledSince`) and no listing or notification has brought it again since. A copy's age alone
-   * does not doubt it (D126: re-reading by age cost 4.6 connector calls and 0.33 s per task live, for no measured gain;
-   * a silent source's changes reach Eden through the sync's polls and sweeps).
+   * Whether an item must be re-read before it is delivered (`verifyDelivery`): its source signalled a change since the
+   * copy's read began (`Sync.signalledSince` on its `ItemCache.readMark`; D133: not since it was stored, which a
+   * signal while the call was on the wire precedes) and no listing or notification has brought it again since. A
+   * copy's age alone does not doubt it (D126: re-reading by age cost 4.6 connector calls and 0.33 s per task live, for
+   * no measured gain; a silent source's changes reach Eden through the sync's polls and sweeps).
    */
-  private doubted(s: Session, item: ContextItem, now: number): boolean {
-    return this.sync?.signalledSince(s.scope, item.sourceId, this.readAt(s, item, now)) === true;
+  private doubted(s: Session, item: ContextItem): boolean {
+    const mark = this.deps.cache.readMark(s.scope, item.id);
+    return mark !== undefined && this.sync?.signalledSince(s.scope, item.sourceId, mark) === true;
   }
 
   /**
@@ -3358,7 +3468,7 @@ export class ContextPartner {
       const held = s.checks?.get(id);
       return held !== undefined && now - held.at <= CHECK_REUSE_MS;
     };
-    const due = scored.filter((x) => recent(x.item.id) || this.doubted(s, x.item, now));
+    const due = scored.filter((x) => recent(x.item.id) || this.doubted(s, x.item));
     if (due.length === 0) return scored;
     const t0 = performance.now();
     const before = this.freshness.calls;
@@ -3402,12 +3512,16 @@ export class ContextPartner {
       held &&
       now - held.at <= CHECK_REUSE_MS &&
       held.settled !== "failed" &&
-      this.sync?.signalledSince(s.scope, item.sourceId, held.at) !== true
+      this.sync?.signalledSince(s.scope, item.sourceId, held.mark) !== true
     )
       return held.outcome;
-    const entry: { at: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome } = {
+    // The read mark before the re-read's call (D133): a signal while it is on the wire doubts what it stores, and
+    // refuses its reuse.
+    const mark = this.sync?.mark() ?? 0;
+    const entry: { at: number; mark: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome } = {
       at: now,
-      outcome: this.recheck(s, item).then((o) => (entry.settled = o)),
+      mark,
+      outcome: this.recheck(s, item, mark).then((o) => (entry.settled = o)),
     };
     const outcome = entry.outcome;
     checks.delete(item.id);
@@ -3416,7 +3530,7 @@ export class ContextPartner {
     return outcome;
   }
 
-  private async recheck(s: Session, item: ContextItem): Promise<CheckOutcome> {
+  private async recheck(s: Session, item: ContextItem, readMark: number): Promise<CheckOutcome> {
     this.freshness.checked++;
     try {
       const all = await this.deps.sources(s.scope).catch((): Source[] => []);
@@ -3439,11 +3553,18 @@ export class ContextPartner {
         this.dropGone(s.scope, item.sourceId, [item.id]);
         return "gone";
       }
+      // A removal that landed while the fetch was on the wire (`sourceRemoved`) wins over what it read: the id was a
+      // cached candidate when the re-read began, and `removeItems` drops what it holds gone, so a live hold now means
+      // the deletion came after. Reviving it would undo the deletion and deliver it (D126).
+      if (this.deps.cache.isHeldGone(s.scope, item.id, this.now())) {
+        this.freshness.gone++;
+        return "gone";
+      }
       const copy = { ...got.item, id: item.id, sourceId: item.sourceId, ref: item.ref };
       this.deps.cache.revive(s.scope, [item.id]);
       const synced = this.deps.cache.isSynced(s.scope, item.id);
       // Stored as read now (its fetch time moves), as synced when the sync held it; carded and noted like any read.
-      const changed = this.store(s, [copy], 0, synced) > 0;
+      const changed = this.store(s, [copy], 0, synced, readMark) > 0;
       // A held search page may still show the old copy: a later lookup must not store it back.
       if (changed) this.fanout.dropResults(s.scope, item.sourceId);
       if (changed) this.freshness.changed++;
@@ -3463,7 +3584,10 @@ export class ContextPartner {
   private dropGone(scope: Scope, sourceId: string, ids: string[]): number {
     this.sync?.removed(scope, sourceId, ids);
     this.fanout.dropResults(scope, sourceId);
-    return this.deps.cache.removeItems(scope, ids, this.now(), GONE_HOLD_MS);
+    const evicted = this.deps.cache.holdsEvicted(scope.tenantId);
+    const n = this.deps.cache.removeItems(scope, ids, this.now(), GONE_HOLD_MS);
+    this.freshness.holdsEvicted += this.deps.cache.holdsEvicted(scope.tenantId) - evicted;
+    return n;
   }
 
   /**
@@ -3473,11 +3597,10 @@ export class ContextPartner {
    */
   private checkAhead(s: Session, pool: readonly Scored[]): void {
     if (!this.config.verifyDelivery) return;
-    const now = this.now();
     let n = 0;
     for (const x of pool) {
       if (n >= VERIFY_AHEAD) break;
-      if (!this.doubted(s, x.item, now)) continue;
+      if (!this.doubted(s, x.item)) continue;
       n++;
       void this.check(s, x.item);
     }
@@ -4544,11 +4667,6 @@ export class ContextPartner {
       createdAt: this.now(),
     };
     if (rendering) spans!.close(rendering);
-    // What the agent was shown of each item: an answer's lines are its items' in order (not folded); a model's
-    // composed answer has no item lines and is attributed to none.
-    if (this.config.askDedup) {
-      this.noteShown(s, shown === undefined ? items : scored.map((x) => x.item), shown ?? injection.text);
-    }
     const walks = WALKS.get(cue);
     let graphMask = 0;
     for (const x of scored) graphMask |= walks?.get(x.item.id)?.mask ?? 0;
@@ -4558,6 +4676,11 @@ export class ContextPartner {
       items: items.map((i) => ({ sourceId: i.sourceId, id: i.id })),
       // Only the words the agent received: an item's text past the packet's cut is not evidence of use.
       text: shownText(shown ?? injection.text),
+      // What the agent will have been shown of each item once it is handed out (`markShown`): an answer's lines are
+      // its items' in order (not folded); a model's composed answer has no item lines and is attributed to none.
+      ...(this.config.askDedup
+        ? { shown: { items: shown === undefined ? items : scored.map((x) => x.item), text: shown ?? injection.text } }
+        : {}),
     });
     return injection;
   }
@@ -4669,6 +4792,35 @@ function modelAttrs(res: {
     costUsd: res.costUsd,
     truncated: res.truncated === true,
   };
+}
+
+/**
+ * An ask's answer text (D127): `packet` (empty when no item answers), with the sources the ask chose that did not
+ * answer named. An empty answer reads "Nothing in the connected sources." only when every chosen source answered (or
+ * none was chosen); otherwise it says which could not be reached and that this is not an all-clear. Source ids are the
+ * operator's names for its connectors, not source text.
+ */
+function honestAnswer(
+  packet: string,
+  sources: readonly SourceStatus[] | undefined,
+  unresolved = false,
+  closed = false,
+): string {
+  if (closed) {
+    const none = "The session ended before the sources were searched, so this is not an all-clear.";
+    return packet ? `${packet}\n${none}` : none;
+  }
+  if (unresolved) {
+    const none = "Could not reach the connected sources (they could not be listed), so this is not an all-clear.";
+    return packet ? `${packet}\n${none}` : none;
+  }
+  const missed = (sources ?? []).filter((x) => !ANSWERED.has(x.status));
+  if (missed.length === 0) return packet || "Nothing in the connected sources.";
+  const names = missed.map((x) => `${x.sourceId} (${STATUS_WORDS[x.status] ?? x.status})`).join(", ");
+  if (packet) return `${packet}\nCould not reach ${names}: this answer may be missing what they hold.`;
+  const answered = (sources ?? []).filter((x) => ANSWERED.has(x.status)).map((x) => x.sourceId);
+  if (answered.length === 0) return `Could not reach ${names}, so this is not an all-clear: nothing was checked.`;
+  return `Nothing in ${answered.join(", ")}. Could not reach ${names}, so this is not an all-clear.`;
 }
 
 /** A search's span attributes: how many sources answered each way. */
@@ -4921,6 +5073,8 @@ const MAX_CHECKS = 64;
 const CHECK_REUSE_MS = 30_000;
 /** How long an item its source said is gone is kept from being stored again (the fan-out's stale-result window). */
 const GONE_HOLD_MS = 10 * 60_000;
+/** A lookup with less of its deadline left than this sends no live search (D140): no call could answer in time. */
+const MIN_SEARCH_MS = 50;
 /** Doubted candidates of a reader's pool re-read beside its call (`checkAhead`): about what a delivery cites. */
 const VERIFY_AHEAD = 3;
 

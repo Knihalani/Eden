@@ -60,6 +60,12 @@ export interface SyncOptions {
   /** A sync call's deadline (ms). */
   timeoutMs: number;
   /**
+   * A lookup's deadline (ms, `sourceTimeoutMs`): for this long after a lookup's on-demand poll of a source ran out of
+   * time, `freshen` does not poll that source again (D140). A listing that just hung would most likely take the next
+   * lookup's whole deadline too; the source is searched live instead. 0 or absent: every lookup polls.
+   */
+  demandTimeoutMs?: number;
+  /**
    * `syncPush`: a source that says it `notifies` is current until told it changed (`Sync.changed`) or its last poll
    * is `maxStaleMs` old, instead of by its learned change rate.
    */
@@ -126,6 +132,8 @@ interface SourceSync {
   beta: number;
   failures: number;
   retryAt: number;
+  /** When a lookup's on-demand poll of this source last gave up before it answered (`demandTimeoutMs`). */
+  demandGaveUpAt: number;
   /**
    * The poll, sweep or page read in flight, so two never overlap. It resolves to how many items that read stored new
    * or changed (`reading`), so a lookup that waited on it instead of polling knows whether the index moved.
@@ -138,10 +146,11 @@ interface SourceSync {
   /** Change notifications received (`Sync.changed`). */
   notices: number;
   /**
-   * When the latest notification came (-Infinity before any). A signal does not say which item changed, and the poll
-   * it causes reads only the newest page: a copy read before it is in doubt until read again (`signalledSince`).
+   * The sync's read mark (`SyncManager.mark`) the latest notification set (0 before any). A signal does not say which
+   * item changed, and the poll it causes reads only the newest page: a copy whose read began before it is in doubt
+   * until read again (`signalledSince`).
    */
-  noticedAt: number;
+  noticedMark: number;
   /** `notices` when the last complete poll began: the copy is behind while they differ. */
   noticesPolled: number;
   /** `notices` when the backfill's latest page began: what the backfill has read when it ends (`warmUp`). */
@@ -180,6 +189,11 @@ export class SyncManager {
   private readonly users = new Map<string, UserSync>();
   private readonly budget: Gcra<string>;
   private ticking = false;
+  /**
+   * Change notifications taken, across every user and source (`mark`): it orders reads against signals. Global, so a
+   * user's state dropped and made again (eviction, `untrack`) starts past every mark a stored copy holds.
+   */
+  private marks = 0;
   readonly stats: SyncStats = {
     backgroundCalls: 0,
     demandCalls: 0,
@@ -249,7 +263,7 @@ export class SyncManager {
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
     if (!s || !s.notifies) return false;
     s.notices++;
-    s.noticedAt = this.deps.now();
+    s.noticedMark = ++this.marks;
     return true;
   }
 
@@ -264,7 +278,8 @@ export class SyncManager {
     if (!u || !s || s.phase !== "warm") return 0;
     // Only what the push changed is marked: a replayed, unchanged item was synced before and is a true boundary.
     const changed = new Set<string>();
-    const n = this.store(u, s, items, changed);
+    // Read under the mark its signal set (`sourceChanged` comes first): no doubt of what it brought.
+    const n = this.store(u, s, items, this.marks, changed);
     for (const id of changed) {
       s.pushed.delete(id); // Re-insert: the map stays in arrival order.
       s.pushed.set(id, ++s.pushSeq);
@@ -288,13 +303,25 @@ export class SyncManager {
   }
 
   /**
-   * Whether a notifying source has signalled a change after `readAt`: a signal does not say which item changed, and the
-   * poll it causes reads only the newest page, so a copy read before it (or one the source has since deleted) is in
-   * doubt until it is read again (`verifyDelivery`). Items a notification carried (`ingest`) are read at its time.
+   * The read mark now: taken when a read of a source begins and stored with the copies it brings (`ItemCache.put`'s
+   * `readMark`), so `signalledSince` can tell a signal that came after the read began from one before it. A read's
+   * end, or its copy's store time, cannot: a signal that lands while the call is on the wire (or in the same
+   * millisecond) comes before the store yet may follow what the source answered (D133, amends D126). O(1).
    */
-  signalledSince(scope: Scope, sourceId: string, readAt: number): boolean {
+  mark(): number {
+    return this.marks;
+  }
+
+  /**
+   * Whether a notifying source has signalled a change since `readMark` (`mark` when the copy's read began): a signal
+   * does not say which item changed, and the poll it causes reads only the newest page, so a copy read before it (or
+   * one the source has since deleted) is in doubt until it is read again (`verifyDelivery`). Items a notification
+   * carried (`ingest`) are read under the mark its signal set; the sync's polls under the mark when each page's call
+   * began, so a poll a signal starts does not doubt what it brings.
+   */
+  signalledSince(scope: Scope, sourceId: string, readMark: number): boolean {
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
-    return s !== undefined && s.notifies && s.noticedAt > readAt;
+    return s !== undefined && s.notifies && s.noticedMark > readMark;
   }
 
   /** Whether the user's copy of a source has finished its backfill, current or not (`syncPollBehind`). */
@@ -355,6 +382,8 @@ export class SyncManager {
         const s = u.sources.get(source.id);
         if (s) this.notes(s, source);
         if (!s || s.phase !== "warm" || this.isCurrent(s, now) || !source.list) return;
+        // Its last on-demand poll just ran out of time (D140): not current, so the lookup searches it live.
+        if (now - s.demandGaveUpAt < (this.o.demandTimeoutMs ?? 0)) return;
         if (s.busy) {
           // A read already running (a sweep, a catch-up, or another lookup's poll): its answer, not a second call.
           own.fresh += await Promise.race([s.busy, aborted(signal).then(() => 0)]);
@@ -462,12 +491,13 @@ export class SyncManager {
       let page: Awaited<ReturnType<SourceFanout["list"]>> | undefined;
       next.noticesBackfill = next.notices;
       await this.run(next, async () => {
+        const readMark = this.marks;
         page = await this.list("backfill", source, u.scope, next.cursor, this.o.pageSize, {
           timeoutMs: this.o.timeoutMs,
           reserve: SERVING_HEADROOM,
         });
         // Stored within the read, so what it stored is the read's (`SourceSync.reading`).
-        if (typeof page !== "string" && !u.gone) this.store(u, next, page.items);
+        if (typeof page !== "string" && !u.gone) this.store(u, next, page.items, readMark);
       });
       if (page === undefined || u.gone) return;
       if (typeof page === "string") {
@@ -569,12 +599,19 @@ export class SyncManager {
     const itemCap = maxPages * this.o.pageSize;
     const first = adaptive ? Math.min(this.firstPage(s, started), itemCap) : this.o.pageSize;
     let asked = 0;
+    // A lookup's poll that stops because the lookup ran out of time (or ended): no evidence against the source, but
+    // the next lookup within `demandTimeoutMs` searches it live rather than wait on its listing again (D140).
+    const gaveUp = () => {
+      if (demand) s.demandGaveUpAt = this.deps.now();
+    };
     for (let p = 0; adaptive ? asked < itemCap && p <= maxPages : p < maxPages; p++) {
-      if (u.gone || signal?.aborted) return;
+      if (u.gone) return;
+      if (signal?.aborted) return gaveUp();
       if (this.budget.take(budgetKey(u, s)) > 0) return;
       const topUp = this.o.pageSize - (asked % this.o.pageSize);
       const limit = !adaptive ? this.o.pageSize : p === 0 ? first : Math.min(topUp, itemCap - asked);
       asked += limit;
+      const readMark = this.marks;
       const page = await this.list(demand ? "demand" : "poll", source, u.scope, cursor, limit, {
         timeoutMs: this.o.timeoutMs,
         signal,
@@ -584,7 +621,7 @@ export class SyncManager {
       if (typeof page === "string") {
         if (page !== "limited" && page !== "busy") this.count(demand, tally);
         // The lookup gave up (its deadline, the session ending): no evidence against the source, no back-off.
-        if (signal?.aborted) return;
+        if (signal?.aborted) return gaveUp();
         this.failed(s, page);
         return;
       }
@@ -593,7 +630,7 @@ export class SyncManager {
       else this.stats.backgroundItems += page.items.length;
       s.failures = 0;
       const stored = new Set<string>();
-      const fresh = this.store(u, s, page.items, stored);
+      const fresh = this.store(u, s, page.items, readMark, stored);
       changed += fresh;
       if (tally) tally.fresh += fresh;
       // The listing has reached what was synced before: an item held unchanged that a notification did not bring.
@@ -656,6 +693,7 @@ export class SyncManager {
     for (let p = 0; p < MAX_POLL_PAGES; p++) {
       if (u.gone) return;
       if (this.budget.take(budgetKey(u, s)) > 0) return;
+      const readMark = this.marks;
       const page = await this.list("sweep", source, u.scope, sw.cursor, this.o.pageSize, {
         timeoutMs: this.o.timeoutMs,
         reserve: SERVING_HEADROOM,
@@ -670,7 +708,7 @@ export class SyncManager {
       this.stats.backgroundCalls++;
       this.stats.backgroundItems += page.items.length;
       const first = sw.seen.size === 0;
-      const fresh = this.store(u, s, page.items);
+      const fresh = this.store(u, s, page.items, readMark);
       for (const it of page.items) sw.seen.add(it.id);
       // The sweep's first page is the newest: it is also a poll.
       if (first) this.polled(s, started, fresh, notices, pushSeq);
@@ -691,15 +729,18 @@ export class SyncManager {
     }
   }
 
-  /** Stores a page's (redacted) items as synced; returns how many were new or changed (their ids into `changedIds`). */
-  private store(u: UserSync, s: SourceSync, items: ContextItem[], changedIds?: Set<string>): number {
+  /**
+   * Stores a page's (redacted) items as synced, read under `readMark` (`mark` when its call began); returns how many
+   * were new or changed (their ids into `changedIds`).
+   */
+  private store(u: UserSync, s: SourceSync, items: ContextItem[], readMark: number, changedIds?: Set<string>): number {
     // The same user object and source state: work for a user forgotten and back since must not land.
     if (u.gone || items.length === 0 || this.users.get(u.key) !== u || u.sources.get(s.id) !== s) return 0;
     const now = this.deps.now();
     // An item its source said is gone (`ItemCache.isHeldGone`) was listed before the deletion: neither stored nor
     // counted as synced, or the listing would undo `removed`.
     const own = items.filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now));
-    const changed = this.deps.cache.put(u.scope, own, now, true, true);
+    const changed = this.deps.cache.put(u.scope, own, now, true, true, readMark);
     if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
     for (const it of own) {
@@ -801,11 +842,12 @@ function newSourceSync(id: string): SourceSync {
     beta: 1,
     failures: 0,
     retryAt: 0,
+    demandGaveUpAt: -Infinity,
     busy: null,
     reading: null,
     notifies: false,
     notices: 0,
-    noticedAt: -Infinity,
+    noticedMark: 0,
     noticesPolled: 0,
     noticesBackfill: 0,
     pushed: new Map(),

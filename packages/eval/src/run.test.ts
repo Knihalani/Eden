@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ORACLE_LABEL, proxyOf, runScenarios, unwiredFlags } from "./run";
+import { readerMessages } from "@eden/engine";
+import { OpenRouterModel, type ChatRequest, type ChatResponse, type Model, type OpenRouterOptions } from "@eden/llm";
+import { DEFAULT_ROLE_MODEL, modelRolesFromEnv } from "../../server/src/models";
+import { EVAL_TENANT, fromEnvVia, liveWiring, ORACLE_LABEL, proxyOf, runScenarios, unwiredFlags } from "./run";
 import type { Scenario } from "./scenario";
 
 const scenario = JSON.parse(
@@ -160,6 +163,149 @@ describe("eval harness: the reader family (--reader stub|oracle)", () => {
       (s) => s.split(" ")[0],
     );
     expect(named).toEqual(["askReader", "cards", "intent"]);
+  });
+});
+
+/** Stands in for OpenRouter (no network): records each request, bills `costUsd`, answers "nothing bears" or throws. */
+class FakeRoleModel implements Model {
+  readonly calls: ChatRequest[] = [];
+  constructor(
+    readonly options: OpenRouterOptions,
+    private readonly behave: { costUsd?: number; throws?: string } = {},
+  ) {}
+  get id() {
+    return this.options.model;
+  }
+  async chat(request: ChatRequest): Promise<ChatResponse> {
+    this.calls.push(request);
+    if (this.behave.throws) throw new Error(this.behave.throws);
+    const usage = { inputTokens: 100, outputTokens: 10, cachedInputTokens: 0 };
+    const costUsd = this.behave.costUsd ?? 0;
+    return { text: '{"bears":[]}', usage, costUsd, model: this.id, latencyMs: 0, truncated: false };
+  }
+}
+
+/** A factory of fakes, keeping what it made. */
+const factory = (behave: { costUsd?: number; throws?: string } = {}) => {
+  const made: FakeRoleModel[] = [];
+  const make = (o: OpenRouterOptions) => {
+    const m = new FakeRoleModel(o, behave);
+    made.push(m);
+    return m;
+  };
+  return { made, make };
+};
+
+const KEYED = { OPENROUTER_API_KEY: "test-key-not-real" };
+
+describe("eval harness: --live wires what ships (D128)", () => {
+  const freeze = load("large-vendor-freeze");
+  // The reader's system prompt, as ModelReaderMaker sends it.
+  const readerSystem = readerMessages({ request: "x", items: [], today: "2026-10-01" })[0]!.content;
+
+  test("shipped: no judge, and the reader is ModelReaderMaker on the servers' role model and routing", async () => {
+    const { made, make } = factory();
+    const live = liveWiring({ judge: false, usdCap: 1, env: KEYED, make })!;
+    expect(live.model).toBeNull();
+    // The model the servers build with a key: the reader role is the first made, Haiku 5.5, throughput-routed, ZDR.
+    const roles = modelRolesFromEnv(KEYED, (o) => new FakeRoleModel(o));
+    expect((live.readerModel as FakeRoleModel).options).toEqual((roles.reader as FakeRoleModel).options);
+    expect(made[0]!.options).toMatchObject({ model: DEFAULT_ROLE_MODEL, sort: "throughput", zdr: true });
+    expect(live.readerModel).toBe(made[0]!);
+    const m = await runScenarios([freeze], {
+      model: live.model,
+      waitMs: 1_000,
+      readerModel: live.readerModel,
+      spend: live.spend,
+    });
+    const calls = made[0]!.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    // Every call is the reader's, made as ModelReaderMaker makes it: its prompt, JSON, reasoning "low"; no judge.
+    for (const c of calls) {
+      expect(c.messages[0]!.content).toBe(readerSystem);
+      expect(c).toMatchObject({ json: true, reasoning: "low", maxTokens: 2_000 });
+    }
+    expect(m.readerPool).toMatchObject({ reader: "live", calls: calls.length, failures: 0 });
+    expect(m.decisions.model).toBeUndefined();
+  });
+
+  test("--judge reproduces the old wiring: the judge from OpenRouterModel.fromEnv, no live reader", async () => {
+    const { made, make } = factory();
+    const old = liveWiring({ judge: true, usdCap: 1, env: KEYED, make })!;
+    expect(old.readerModel).toBeNull();
+    expect(old.model).toBe(made[0]!);
+    // fromEnvVia builds exactly OpenRouterModel.fromEnv's model (its options, the key included, compared as JSON).
+    expect(JSON.stringify(new OpenRouterModel(made[0]!.options))).toBe(JSON.stringify(OpenRouterModel.fromEnv(KEYED)));
+    expect(fromEnvVia({}, make)).toBeNull();
+    // Without a factory it is OpenRouterModel.fromEnv's own model.
+    const real = liveWiring({ judge: true, usdCap: 1, env: KEYED })!;
+    expect(real.model).toBeInstanceOf(OpenRouterModel);
+    expect(real.model!.id).toBe("z-ai/glm-5.3-flash");
+    expect(real.readerModel).toBeNull();
+    // The stub reader beside the judge, as `--live --judge --reader stub` runs (the old `--live --reader stub`).
+    const m = await runScenarios([freeze], { model: old.model, waitMs: 1_000, reader: "stub", spend: old.spend });
+    expect(m.readerPool!.reader).toBe("stub");
+    expect(made.length).toBe(1);
+  });
+
+  test("no key: no wiring; a cap that is not a positive number is refused", () => {
+    expect(liveWiring({ judge: false, usdCap: 1, env: {} })).toBeNull();
+    expect(liveWiring({ judge: true, usdCap: 1, env: {} })).toBeNull();
+    for (const cap of [0, -1, NaN, Infinity]) {
+      expect(() => liveWiring({ judge: false, usdCap: cap, env: KEYED, make: factory().make })).toThrow();
+    }
+  });
+
+  test("the cap is hard: past it the budget refuses the call, and the run falls back to its no-model path", async () => {
+    const free = factory();
+    const uncapped = liveWiring({ judge: false, usdCap: 100, env: KEYED, make: free.make })!;
+    // Every scenario: several of them call the reader, so the cap is shared across scenarios, not per scenario.
+    const dir = join(import.meta.dir, "..", "scenarios");
+    const every = readdirSync(dir)
+      .filter((f) => f.endsWith(".json"))
+      .sort()
+      .map((f) => JSON.parse(readFileSync(join(dir, f), "utf8")) as Scenario);
+    const wide = { model: null, waitMs: 1_000, readerModel: uncapped.readerModel, spend: uncapped.spend };
+    await runScenarios(every, wide);
+    expect(free.made[0]!.calls.length).toBeGreaterThan(1);
+    // $0.002 a call (the reader's reservation estimate) under a $0.003 cap: one call, then refusals.
+    const paid = factory({ costUsd: 0.002 });
+    const capped = liveWiring({ judge: false, usdCap: 0.003, env: KEYED, make: paid.make })!;
+    const m = await runScenarios(every, {
+      model: null,
+      waitMs: 1_000,
+      readerModel: capped.readerModel,
+      spend: capped.spend,
+    });
+    expect(paid.made[0]!.calls.length).toBe(1);
+    expect(capped.spend.spent(EVAL_TENANT)).toBeCloseTo(0.002, 10);
+    expect(m.falseFireRate).toBe(0);
+  });
+
+  test("a reader refused on every call is counted and told, and the run still scores (fail open)", async () => {
+    const refused = factory({ throws: "openrouter 403: violation of provider Terms Of Service" });
+    const live = liveWiring({ judge: false, usdCap: 1, env: KEYED, make: refused.make })!;
+    const told: unknown[] = [];
+    const m = await runScenarios([freeze], {
+      model: null,
+      waitMs: 1_000,
+      readerModel: live.readerModel,
+      spend: live.spend,
+      onReaderFailure: (e) => told.push(e),
+    });
+    const calls = refused.made[0]!.calls.length;
+    expect(calls).toBeGreaterThan(0);
+    expect(m.readerPool).toMatchObject({ calls, failures: calls });
+    expect(told.length).toBe(calls);
+    // Delivered what the stub run delivers: a failed reading changes nothing the rules deliver.
+    const stub = await runScenarios([freeze], { model: null, waitMs: 1_000, reader: "stub" });
+    expect(m.counts).toEqual(stub.counts);
+  });
+
+  test("a stub reader and a live one are exclusive", async () => {
+    const live = liveWiring({ judge: false, usdCap: 1, env: KEYED, make: factory().make })!;
+    const both = { model: null, waitMs: 0, reader: "stub" as const, readerModel: live.readerModel };
+    expect(runScenarios([freeze], both)).rejects.toThrow("exclusive");
   });
 });
 
