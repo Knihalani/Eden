@@ -100,6 +100,72 @@ describe("S3FifoCache review regressions", () => {
   });
 });
 
+describe("S3FifoCache groups", () => {
+  const groupOf = (k: string) => k.slice(0, k.indexOf("/"));
+
+  test("deleteGroup removes exactly one group's live entries", () => {
+    const c = new S3FifoCache<string, number>({ maxBytes: 1_000, group: groupOf });
+    for (const g of ["a", "b", "ab"]) for (let i = 0; i < 5; i++) c.set(`${g}/${i}`, i);
+    expect(c.deleteGroup("a")).toBe(5);
+    for (let i = 0; i < 5; i++) {
+      expect(c.get(`a/${i}`)).toBeUndefined();
+      expect(c.get(`b/${i}`)).toBe(i);
+      expect(c.get(`ab/${i}`)).toBe(i);
+    }
+    expect(c.deleteGroup("a")).toBe(0);
+    expect(c.deleteGroup("missing")).toBe(0);
+    expect(c.size).toBe(10);
+    expect(c.groupCount).toBe(2);
+    // The group comes back with new keys after its drop.
+    c.set("a/9", 9);
+    expect(c.get("a/9")).toBe(9);
+    expect(c.deleteGroup("a")).toBe(1);
+  });
+
+  test("keys leaving by delete, expiry, eviction and an oversized replace leave their group too (no leak)", () => {
+    let now = 0;
+    const c = new S3FifoCache<string, number>({ maxBytes: 50, expireAfterMs: 10, now: () => now, group: groupOf });
+    c.set("d/1", 1);
+    expect(c.delete("d/1")).toBe(true);
+    c.set("x/1", 1);
+    now = 20;
+    expect(c.get("x/1")).toBeUndefined(); // expired
+    c.set("o/1", 1);
+    c.set("o/1", 2, 500); // larger than the cache: removed
+    expect(c.groupCount).toBe(0);
+    // Eviction: 10,000 groups through a 50-entry cache, some read so they go through main.
+    for (let i = 0; i < 10_000; i++) {
+      c.set(`g${i}/k`, i);
+      if (i % 3 === 0) c.get(`g${i}/k`);
+    }
+    expect(c.size).toBeLessThanOrEqual(50);
+    expect(c.groupCount).toBe(c.size);
+    const held = c.size;
+    let removed = 0;
+    for (let i = 0; i < 10_000; i++) removed += c.deleteGroup(`g${i}`);
+    expect(removed).toBe(held);
+    expect(c.size).toBe(0);
+    expect(c.groupCount).toBe(0);
+  });
+
+  test("replacing a key keeps it in its group once; slots reused after a group drop are not corrupted", () => {
+    const c = new S3FifoCache<string, number>({ maxBytes: 1_000, group: groupOf });
+    for (let round = 0; round < 200; round++) {
+      for (let i = 0; i < 10; i++) c.set(`u${round % 4}/${i}`, round);
+      for (let i = 0; i < 10; i++) c.set(`u${round % 4}/${i}`, round + 1); // replace
+      expect(c.deleteGroup(`u${(round + 1) % 4}`)).toBe(round >= 3 ? 10 : 0);
+    }
+    expect(c.size).toBe(30);
+    expect(c.groupCount).toBe(3);
+    expect(c.get("u3/0")).toBe(200);
+  });
+
+  test("deleteGroup without a group function throws (a caller bug, not a silent no-op)", () => {
+    const c = new S3FifoCache<string, number>({ maxBytes: 10 });
+    expect(() => c.deleteGroup("a")).toThrow();
+  });
+});
+
 describe("TopK", () => {
   test("keeps the k best, drains best first, and exposes the entry floor", () => {
     const t = new TopK(3);
