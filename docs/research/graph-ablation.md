@@ -3,8 +3,8 @@
 Status: 2026-11-05. Deep audit 2026-11-05 round 2, work package `r2-graph-ablation` (findings
 `devloop-ingest-bench-not-shipped-path` and `scale-graph-dominates-ingest`). Every number below comes from a command
 run in this session on the integration branch (`audit/2026-11-05-integration`, 463f6fdfc, plus this change), on a
-shared 4-core container with other agents running. Proposed decision: D141 (in the commit message; may collide,
-renumber on merge).
+shared 4-core container with other agents running. Decision: D141 in docs/DECISIONS.md (graph stays in the default;
+deleting its code rejected; stage 2 is the `graphLite` trial still to build).
 
 ## In plain words
 
@@ -138,7 +138,7 @@ run, $0.1719 and $0.1868 for the two default runs, $0.0568 for minus-graph (the 
 ledger stood at $6.44 before the round and $6.87 after it. One reader call costs $0.000282–0.000285 as made, 2,784–2,814
 input and 177 output tokens on average.
 
-## Decision (proposed D141) and stage 2
+## Decision (D141) and stage 2
 
 **Keep `graph` in the default.** The paid screen shows a small but reproducible gain (+4 hidden, +2 decoys surfaced of
 384), so the part is not neutral and D112 does not remove it. Its cost is CPU and memory on ingest, not paid calls:
@@ -146,9 +146,10 @@ about 182–192 µs of the shipped 358–381 µs per backfilled item, and 2.0x t
 
 Stage 2 (a trial, not built here): make the graph cheaper without losing those tasks. Candidates from the finding:
 extract only the headers and the first ~1,000 characters of each item, or add only lookup items (not every synced
-item) to the graph. The gate: `ingest.bench.ts`'s `+graph` stage at least 2x cheaper; the five pool tasks above still
-in the reader's pool (the stub screen shows the pool at $0: `bun run funnel -- --reader stub` with `--baseline`), and
-`graph-memory.ts`'s fingerprint is expected to change. A stage 2 that loses them goes back to this paid screen.
+item) to the graph. D141 names it: a trial switch `graphLite` (owner: repo owner, ends 2026-12-17), with no
+trials-table row until the switch exists. The gate: `ingest.bench.ts`'s `+graph` stage at least 2x cheaper; the five
+pool tasks above still in the reader's pool (the stub screen shows the pool at $0: `bun run funnel -- --reader stub`
+with `--baseline`), and `graph-memory.ts`'s fingerprint is expected to change. A stage 2 that loses them goes back to this paid screen.
 
 Limits: one suite family (train), two seeds, intent inert, one paid read of minus-graph. A live agent (Pi) run was not
 made: the gain is 4 tasks of 384 and the decision is to keep the default as it is, which needs no agent run.

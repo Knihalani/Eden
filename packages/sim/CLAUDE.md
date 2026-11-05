@@ -37,7 +37,7 @@ BEFORE tree and makes the tables of docs/research/final-before-after.md).
 ## Test
 
 ```bash
-bun run test:pkg sim             # 24 files, ~7 s wall in parallel (21 s CPU); reader-stub and sim.test (~3 s) lead
+bun run test:pkg sim             # 33 files, 12-14 s wall (two runs, shared 4-core box, 2026-11-05); reader-stub and sim.test lead
 bun run sim --users 2 --sessions 5         # a small quality run (JSON), no model, ~1 s
 ```
 
