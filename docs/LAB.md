@@ -44,7 +44,7 @@ written by hand.
 | Preset | What |
 |---|---|
 | `default` | The unified default: NEWL (D99) plus poll behind, small poll pages, no probe grace, the push's reader not waiting for the poll, the slow-path queue (D112). Cards, intent and the reader need their dependencies (`--cards`, `--intent`, a reader); without them they are inert, as in a server with no model key |
-| `minus-<part>` | The default with one of `PARTS` (`packages/engine/src/parts.ts`) taken out: probes, grounds, fallback, compaction, judge, graph, anticipate, sync, askVerdicts, cards, intent, reader, slowPathQueue, probeGrace |
+| `minus-<part>` | The default with one of `PARTS` (`packages/engine/src/parts.ts`) taken out: probes, grounds, fallback, compaction, judge, graph, anticipate, sync, freshness, askVerdicts, cards, intent, reader, slowPathQueue, probeGrace |
 | `minus-all` | The default with every part taken out: `CORE_CONFIG`, the no-feature core (the old production default) |
 
 A trial (DECISIONS.md, "Trial switches") is measured as `--set '{...}'` over `default` (funnel) or
@@ -392,6 +392,22 @@ minute on free models (hermes-lab.md, estimates).
 
 `market.py` (in `packages/sim/lab/before-after/`) prices a run's `tools` and `eden` arms per agent model and
 connector plan; `--reuse-arms` copies the `tools` arm of an earlier run on the same profile, so only Eden is paid for.
+
+### 5c. Staleness (no model, `bun run sim`)
+
+The quality runner (`quality-cli.ts`) changes the world during a run and counts what Eden delivers stale:
+
+- `--updates RATE`: facts with a clock time move one to three hours before a later session (`updates.ts`); a delivered
+  copy still showing the old time is `updates.staleDelivered` of `updatedDelivered`.
+- `--deletes RATE`: fact-stating items are deleted at the source before a later session (`planDeletes`); a packet
+  item or an ask citation of one is `deletes.deletedDelivered` / `deletedCited`.
+- `--push none|signals|payload`: how changes reach Eden (signals call `sourceChanged`; payload calls `sourceItems` and
+  `sourceRemoved`). `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed, changed, gone, failed, calls).
+
+D126's matrix: `bun packages/sim/src/quality-cli.ts --users 8 --sessions 20 --updates 0.6 --deletes 0.05
+[--push signals|payload] [--config '{"verifyDelivery":false}']`, about 50 s each, $0 (`verifyDelivery` is in the
+default and acts only on signals). Do not pass
+`--sync`: it is an oracle that reloads every item each session and hides staleness.
 
 ### 6. Full benchmark (blind, both harnesses)
 

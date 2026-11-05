@@ -264,6 +264,18 @@ export interface EngineConfig {
    */
   syncPushMaxStaleMs: number;
   /**
+   * Every item about to be delivered (a packet or an `ask` answer, from the slow path, the reader's push, anticipation
+   * or the action firewall) whose source signalled a change after the copy was read (`Sync.signalledSince`, with
+   * `syncPush`) is fetched again by its ref first (`SourceFanout.fetchChecked`, within `verifyTimeoutMs`, in parallel;
+   * a reader's likely picks are re-read beside its call). A changed copy is stored and delivered in its place; one the
+   * source no longer has (`gone`, only from a source with `fetchReportsGone`) is dropped from the cache and not
+   * delivered; one that could not be checked is delivered as held. The fast path, which may not call a source, hands
+   * such items to the slow path. Each check is one connector call; with no signal nothing is re-read (D126).
+   */
+  verifyDelivery: boolean;
+  /** With `verifyDelivery`: each re-read's deadline (ms); past it the item is delivered as held. */
+  verifyTimeoutMs: number;
+  /**
    * A per-user knowledge graph over every cached item (`kg.ts`; docs/research/moon-graph.md): people, organisations,
    * projects and systems, identifiers, channels, roles and days, joined by typed edges. A lookup walks it from the
    * request's names, ids, roles and days (spreading activation, `graphBudgetMs` at most, no model, no source call);
@@ -545,6 +557,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncLocalAll: true,
   syncPush: true,
   syncPushMaxStaleMs: 24 * 3_600_000,
+  verifyDelivery: true,
+  verifyTimeoutMs: 1_500,
   cards: true,
   cardsEconomy: true,
   cardItems: 1,

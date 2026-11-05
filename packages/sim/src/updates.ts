@@ -110,3 +110,39 @@ export function factsShown(item: WorldItem, text: string, applied: readonly Fact
   }
   return facts;
 }
+
+/** Items deleted at the source before a session (`--deletes`): a recalled message, a removed doc or event. */
+export interface ItemDelete {
+  /** Index of the first session that no longer sees them. */
+  session: number;
+  items: string[];
+}
+
+/**
+ * Which items the source deletes, and before which session: each item that states a fact (what Eden delivers) with
+ * probability `rate`, before a session after the first. Its own seed: a run without deletions draws as before.
+ */
+export function planDeletes(world: World, sessions: number, seed: number, rate: number): ItemDelete[] {
+  if (!(rate > 0) || sessions < 2) return [];
+  const r = new Rng(seed);
+  const out: ItemDelete[] = [];
+  for (const it of world.items) {
+    if (it.facts.length === 0 || !r.chance(rate)) continue;
+    out.push({ session: r.int(1, sessions - 1), items: [it.id] });
+  }
+  return out;
+}
+
+/** Removes the items from the world (the source no longer serves them). Returns the source ids touched. */
+export function applyDelete(world: World, d: ItemDelete): Set<string> {
+  const touched = new Set<string>();
+  const gone = new Set(d.items);
+  for (let i = world.items.length - 1; i >= 0; i--) {
+    const it = world.items[i]!;
+    if (!gone.has(it.id)) continue;
+    touched.add(it.sourceId);
+    world.items.splice(i, 1);
+  }
+  for (const f of world.facts.values()) f.items = f.items.filter((id) => !gone.has(id));
+  return touched;
+}

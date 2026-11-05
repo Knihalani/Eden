@@ -13,6 +13,7 @@
  *   POST /v1/sources/changed {tenantId,userId,sourceId} → {ok, synced}: a change notification (`syncPush`)
  *   POST /v1/sources/items   {tenantId,userId,sourceId,items:[{ref,title?,text,url?,updatedAt?,meta?}]}
  *                                                    → {ok, stored}: the items a notification carried (`syncPush`)
+ *   POST /v1/sources/removed {tenantId,userId,sourceId,refs:[…]} → {ok, removed}: refs the source deleted (`syncPush`)
  *   GET  /healthz
  *
  * Auth: `Authorization: Bearer <key>`; the key fixes the tenant, and a body naming another tenant is refused.
@@ -24,7 +25,7 @@
  */
 import type { ContextPartner } from "@eden/engine";
 import { Gcra } from "@eden/primitives";
-import { checkAsk, checkEvent, checkSourceChanged, checkSourceItems, isId } from "@eden/protocol";
+import { checkAsk, checkEvent, checkSourceChanged, checkSourceItems, checkSourceRemoved, isId } from "@eden/protocol";
 import { DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
 import type { UserSources } from "./user-sources";
 
@@ -149,6 +150,13 @@ export function createHandler(
           if (!checked.ok) return fail(400, checked.error);
           const { userId, sourceId, items } = checked.value;
           return json({ ok: true, stored: await partner.sourceItems({ tenantId: tenant, userId }, sourceId, items) });
+        }
+        case "/v1/sources/removed": {
+          // A deletion the integrator was told of (a recalled message, a deleted doc or event): dropped at once.
+          const checked = checkSourceRemoved(body);
+          if (!checked.ok) return fail(400, checked.error);
+          const { userId, sourceId, refs } = checked.value;
+          return json({ ok: true, removed: partner.sourceRemoved({ tenantId: tenant, userId }, sourceId, refs) });
         }
         case "/v1/sources": {
           if (!userSources) return fail(404, "per-user sources are not configured (EDEN_USER_SOURCES_FILE)");
