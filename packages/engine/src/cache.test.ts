@@ -507,20 +507,46 @@ describe("ItemCache gone-holds (removeItems with a hold) never allocate or evict
     expect(cache.put(bob, [q1], T + 3_000 + 10 * MIN)).toHaveLength(1);
   });
 
-  test("holds are bounded per tenant, expire on the tick, and go with a forgotten user", () => {
+  test("one user's bulk deletion keeps 1,000 of their holds and leaves another user's hold in force", () => {
     const cache = new ItemCache({ expireEveryMs: 0 });
+    const bob = { tenantId: "t", userId: "bob" };
+    cache.removeItems(bob, ["mail:x"], T, 10 * MIN); // Bob's hold comes first, so it is the tenant's oldest.
     const ids = Array.from({ length: 25_000 }, (_, i) => `mail:m${i}`);
     cache.removeItems(alice, ids, T, 10 * MIN);
-    expect(cache.holdCount("t")).toBe(20_000);
-    expect(cache.isHeldGone(alice, "mail:m0", T)).toBe(false); // The oldest went first.
+    expect(cache.holdCount("t")).toBe(1_001);
+    expect(cache.isHeldGone(bob, "mail:x", T)).toBe(true);
+    expect(cache.put(bob, [item("mail", "x", "A deleted message")], T + MIN)).toHaveLength(0);
+    expect(cache.isHeldGone(alice, "mail:m0", T)).toBe(false); // Alice's oldest went first.
+    expect(cache.isHeldGone(alice, "mail:m23999", T)).toBe(false);
+    expect(cache.isHeldGone(alice, "mail:m24000", T)).toBe(true);
     expect(cache.isHeldGone(alice, "mail:m24999", T)).toBe(true);
-    const bob = { tenantId: "t", userId: "bob" };
-    cache.removeItems(bob, ["mail:x"], T, 10 * MIN);
     cache.forget(alice);
     expect(cache.holdCount("t")).toBe(1);
     expect(cache.isHeldGone(bob, "mail:x", T)).toBe(true);
     cache.expireIdle(T + 10 * MIN);
     expect(cache.holdCount("t")).toBe(0);
+  });
+
+  test("holds are bounded per tenant: past 20,000, the least recently held user's oldest go", () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    for (let u = 0; u < 25; u++) {
+      const ids = Array.from({ length: 1_000 }, (_, i) => `mail:u${u}m${i}`);
+      cache.removeItems({ tenantId: "t", userId: `user${u}` }, ids, T + u, 10 * MIN);
+    }
+    expect(cache.holdCount("t")).toBe(20_000);
+    expect(cache.isHeldGone({ tenantId: "t", userId: "user0" }, "mail:u0m999", T)).toBe(false);
+    expect(cache.isHeldGone({ tenantId: "t", userId: "user4" }, "mail:u4m999", T)).toBe(false);
+    expect(cache.isHeldGone({ tenantId: "t", userId: "user5" }, "mail:u5m0", T)).toBe(true);
+    expect(cache.isHeldGone({ tenantId: "t", userId: "user24" }, "mail:u24m999", T)).toBe(true);
+    // Another tenant's holds are its own.
+    cache.removeItems({ tenantId: "u", userId: "user0" }, ["mail:u0m0"], T, 10 * MIN);
+    expect(cache.holdCount("u")).toBe(1);
+    expect(cache.holdCount("t")).toBe(20_000);
+    // A hold re-set by a user moves to the back: its user is now the most recently held.
+    cache.removeItems({ tenantId: "t", userId: "user5" }, ["mail:u5m0"], T + 100, 10 * MIN);
+    cache.removeItems({ tenantId: "t", userId: "late" }, ["mail:late"], T + 100, 10 * MIN);
+    expect(cache.isHeldGone({ tenantId: "t", userId: "user5" }, "mail:u5m0", T)).toBe(true);
+    expect(cache.isHeldGone({ tenantId: "t", userId: "user6" }, "mail:u6m0", T)).toBe(false);
   });
 });
 

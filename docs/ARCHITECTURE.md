@@ -157,9 +157,12 @@ the bound on a lost one. Sources that do not notify are polled as before.
 
 **Freshness at delivery** (D126, `verifyDelivery`, in the default, with `verifyTimeoutMs` 1.5 s; `partner.ts`
 `verifyItems`, `checkAhead`, `deliverChecked`; `SourceFanout.fetchChecked`). Every slow-path, reader, anticipation,
-firewall and `ask` delivery goes through `deliverChecked`: an item read before its source last signalled a change
-(`Sync.signalledSince`, a `syncPush` signal that does not say which item changed) is fetched again by its ref first, in
-parallel; a reader's likely picks are re-read beside its call, so the delivery seldom waits. A changed copy is stored
+firewall and `ask` delivery goes through `deliverChecked`: an item whose read began before its source last signalled a
+change (`Sync.signalledSince`, a `syncPush` signal that does not say which item changed) is fetched again by its ref
+first, in parallel. A read's start is a mark, not a time (D133): every lookup, probe, re-read and sync page takes
+`Sync.mark()` (a count of signals) before its call and stores it with its copies (`ItemCache.readMark`), so a signal
+that lands while a call is on the wire doubts what it brings, and items a notification carried, or a poll the signal
+started, do not; a reader's likely picks are re-read beside its call, so the delivery seldom waits. A changed copy is stored
 and delivered instead; one the source no longer has (`gone`, only from a source with `Source.fetchReportsGone`) is
 dropped from the cache and left out; one that cannot be checked is delivered as held. With no signal nothing is
 re-read: a copy's age alone is no doubt (re-reading by age was measured live and deleted, D126), and a silent source's
