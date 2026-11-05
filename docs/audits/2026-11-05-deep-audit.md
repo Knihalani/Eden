@@ -1,5 +1,148 @@
 # Deep audit (2026-11-05)
 
+## Final summary of the second pass (for the owner, read this first)
+
+Written on 2026-11-05 at `audit/2026-11-05-integration` c839af3e2. Every number here comes from a commit message, a
+section further down this file, a decision row, or a command run while writing this summary (named where used).
+"Estimate" marks figures nobody measured. Paid calls in this pass went only to Anthropic (`HAIKU_API_KEY`,
+`claude-haiku-5-5` for every role). The spend ledger (`.local/mkt/ledger.jsonl`) now sums to $7.73 (a `bun -e` sum,
+32,232 rows). It held $7.05 when the pass began, so the pass spent about $0.68 of its $17 cap.
+
+Two words used throughout:
+
+- **The reader** is the one paid model call on Eden's main path. It reads a short list of candidate items and says
+  which ones matter for what the agent is doing.
+- **The lab** is the test bench (`packages/sim`). It calls Anthropic directly. The servers that ship call the model
+  through OpenRouter, a reseller.
+
+### 1. Bottom line
+
+The reader that shipped was not the reader that was tested. It asked the model to "think" first; the tested one did
+not. On Haiku, thinking made each reader call 2.38x slower at the median and 1.59x dearer, with no quality gain, and
+most asks gave up waiting for it. That is fixed: the servers now send exactly what the lab measured, and the option to
+think was deleted. Three correctness bugs are fixed: a stale copy could survive a change notice, a slow connector
+could hide an answer Eden already held, and an event stamped in UTC could land on the wrong day. The knowledge graph
+now reads 1,000 characters per item instead of 4,000, which makes its part of ingest 2.1-2.3x cheaper in CPU with no
+change on any quality screen, and a light user's memory is about half what it was. What is left is mostly one thing:
+nobody has yet checked what OpenRouter does with these requests, because this run was allowed to pay Anthropic only.
+
+### 2. Findings by area
+
+"Found" is every candidate the hunt raised (53). "Verified" is what two independent checkers confirmed (17).
+"Fixed" means a code or docs change is merged into the integration branch with `bun run check`, `bun run eval` and the
+funnel green on the merged tree; it also counts 2 found-but-unverified items that were fixed later
+(`corr-timed-utc-start-day`, `scale-graph-dominates-ingest-stage2`). "Closed" means rejected, decided against, or a
+negative result with nothing to fix. Each "open" item has a reason and a next step in section 5.
+
+| Area | Found | Verified | Fixed and merged | Closed without a fix | Still open |
+| --- | --- | --- | --- | --- | --- |
+| Correctness | 5 | 2 | 3 | 2 | 0 |
+| User pain points | 3 | 3 | 3 | 0 | 0 |
+| Dev loop | 14 | 5 | 5 | 6 | 3 |
+| Latency | 7 | 2 | 1 (Anthropic half) | 5 | 1, plus the OpenRouter half of the fix |
+| Cost | 7 | 2 | 0 | 5 | 2 |
+| Scale and memory | 8 | 1 | 2 | 5 | 1 |
+| Quality | 5 | 0 | 0 | 3 | 2 |
+| Redesigns ("moonshots") | 2 | 2 | 1 (Anthropic half) | 1 | the OpenRouter half of the fix |
+| Waste ("inefficiency") | 2 | 0 | 0 | 2 | 0 |
+| **Total** | **53** | **17** | **15** | **29** | **9**, plus 2 OpenRouter halves |
+
+About "reviewed": each package was checked by the run before merging, and the merged tree passed the gate after each
+of the three integration steps (1,657, then 1,666, then 1,666 tests, 0 failures). The repo's own `reviewer` subagent
+has **not** yet run on the whole engine and server diff. CLAUDE.md requires that before merging into `main`; it is
+open item O1.
+
+### 3. What was achieved
+
+One row per merged branch. All timings are Anthropic-direct on the lab, `claude-haiku-5-5`.
+
+| Fix (branch) | Before -> after (measured unless marked) | Outcome |
+| --- | --- | --- |
+| Reader thinks no more (`r1-s1-reader-reasoning-off`, D144) | At the default pool, 60 calls per arm: p50 2,822 -> 1,187 ms (2.38x); p90 4,176 -> 1,612 ms; calls over the 2.5 s ask wait 38/60 -> 0/60; $0.000447 -> $0.000281 per call (1.59x) | Shipped as default |
+| Live eval on Anthropic (`r1-s2-eval-live-anthropic`) | `eval --live` could reach OpenRouter only -> runs the shipped wiring on Haiku: 6 reader calls, $0.00092, precision 0.8276, recall 0.48, false fires 0. Eval now declares its server dependency, so `test:changed` reruns it when server code changes | Shipped (lab tool) |
+| Change notices clear held pages (`r1-s3-notify-held-pages`, D148) | A notice left the old search page in use for up to 60 s fresh, then 600 s stale -> every notice drops it. An ignored notice now says why (`push-off`, `not-synced`, `not-notifying`). A slow poll now answers from a held page instead of a fake timeout. Covered by new tests; no timing measured | Shipped as default |
+| Smaller per-user sketcher (`r1-s4-sketcher-lazy-arrays`) | Memory per one-item user, 5,000 users: 29,567 -> 13,248 bytes (2.23x) at 10 terms; 33,166 -> 16,845 bytes (1.97x) at 100 terms. Heavy users unchanged (1,149 -> 1,148 bytes per item) | Shipped as default |
+| Faster dev loop (`r1-s5-devloop-timers-bench`) | `ask-deadline.test.ts`: CPU 7.65 -> 0.27 s, wall 7.77 -> 2.7 s. Ingest bench `--quick`: 76.5 -> 16.9 s wall | Shipped; `--quick` is an opt-in dev flag and the full bench is unchanged |
+| Example agent finds something (`r1-s6-example-default-prompt`) | First run printed "Nothing in the connected sources." -> cites the sample calendar; a test now runs it with no argument | Shipped |
+| Sources file checked at start (`r1-s7-sources-file-validation`) | A bad, missing or duplicate source id loaded silently, and `{}` crashed with a stack trace -> exits with code 2 and one line naming the bad entry | Shipped |
+| $0 replay of a paid reader run (`r1-s8-reader-replay-cache`) | A reader-quality screen cost $0.19-0.43 (from the finding, not re-measured) -> $0, reproducing the paid run exactly (hidden 247/384, decoys 127/384) | Shipped (lab tool) |
+| Cards think no more (`final1-cards-reasoning-off`, D149) | Thinking was 1.82x slower at p50, 1.54x dearer and 1.74x the output tokens (35 calls, $0.0453) -> no thinking | Shipped as default |
+| Graph reads 1,000 characters (`final1-graph-read-chars-1000`, D150) | Graph stage of ingest: 173.9 -> 74.3 µs per item (2.34x) and 167.4 -> 79.1 (2.12x) in two pairs; whole ingest 5.17x -> 3.56x the core cost; memory 5,188 -> 4,222 bytes per item. Funnel, paid-reader replay and eval unchanged | Shipped as default, no switch |
+| UTC start on the right day (`final1-timed-zone-day`) | New test failed 2 of 5 cases -> passes. Eval and funnel unchanged | Shipped as default |
+| Eval's "thinking" arm fixed (`final1-eval-live-thinking-arm`) | The adaptive arm thought at the model's default effort -> sends effort "low", the arm D144 timed | Shipped (lab tool) |
+| Final live checks (`final1-final-live-ab`) | Measurement, not a change. Pi: Eden 77.3% of hidden facts vs 9.4% for plain tools, 0/128 false concerns. Hermes: 70.3% vs 4.7%, 1/64. Eden cost $0.834 per 1,000 tasks on Pi. Spent $0.516 | Recorded in docs/research/final-live-2026-11-05.md |
+| Thinking options deleted (`final2-drop-maker-reasoning-options`, D155) | The reader and card makers could still be asked to think -> they cannot. No product code ever asked | Removed |
+| Docs (`final1-close-docs`, `final2-close-docs-loose-ends`) | Decision rows D149-D157 and the closing tables in this file | Docs only |
+
+On the merged tree, the integration check's `bun packages/engine/bench/ingest.bench.ts` gave whole ingest 3.57x the
+core cost, against a 5.02x baseline. The box is shared, so treat those timings as noisy.
+
+### 4. Decisions made during the run
+
+| Decision | Evidence | Row |
+| --- | --- | --- |
+| The reader sends no thinking request | 2.38x slower at p50, 1.59x dearer, quality neutral | D144 |
+| OpenRouter caching (`anthropicCache`) becomes a trial ending 2026-12-03; cost figures are labelled "lab provider, cached" | The flag was dead code; production pays an estimated 1.22-1.32x per reader call without it | D145 |
+| No batch or cheaper endpoint for cards and intent | No batch tier on OpenRouter; at most 1.14-1.33x all-in (estimate) | D146 |
+| No streaming reader; no local copy of the reader | Streaming: an estimated 1.12x at p50. Local model: earlier no-model attempts could not tell real items from decoys (score 0.544, where 0.5 is chance) | D147 |
+| Change notices always drop held pages; ignored notices say why; slow polls fall back to held pages | Bugs B6, B12 and note 8a, with new tests | D148 |
+| Cards send no thinking request | 1.82x slower, 1.54x dearer | D149 |
+| The graph reads 1,000 characters, not 4,000 | Graph stage 2.12-2.34x faster; every quality screen unchanged | D150 |
+| No "veto by name" over rule-path deliveries | Every such delivery happens before the reader has read anything | D151 |
+| No re-reads started from a streamed reader | At most 1.34x, on connector calls that cost nothing | D152 |
+| Anticipation stays | Removing it: hidden +0 −0, decoys +2 −1, 1.16x fewer unpaid connector calls | D153 |
+| No request replay for the Pi and Hermes harnesses | A Pi seed costs about $0.135, and reader changes now screen at $0 | D154 |
+| The thinking options are deleted from the code | No caller used them, and every measurement of thinking was worse | D155 |
+| No speculative first agent call | At most 1.05-1.14x on task time, for 21-40% more agent spend (estimates) | D156 |
+| No learned gate in front of the reader | A perfect gate caps at 2.19x on the reader, about 1.41x on model spend (estimate); the learned one decided 2.5% of calls | D157 |
+
+### 5. Still open, and why
+
+| # | Item | Why it is open | Next step |
+| --- | --- | --- | --- |
+| O1 | Merge into `main` | Needs the `reviewer` subagent on the engine and server diff first (CLAUDE.md step 5) | Run the reviewer on `git diff main audit/2026-11-05-integration`, fix its correctness findings, then `bun run check` and `bun run eval` on the final tree, and merge |
+| O2 | Turning OpenRouter caching on (D145) | Needs a paid OpenRouter call; this run could pay Anthropic only | One probe with an OpenRouter key: two calls at realistic spacing, check for cached tokens above 0 on the second. Decide by 2026-12-03 |
+| O3 | Cost and speed of the shipped path through OpenRouter | Same reason. All the numbers above are Anthropic-direct | Re-run `packages/sim/src/lab/reader-time.ts` through OpenRouter once a key is available |
+| O4 | How OpenRouter treats "low" thinking | Same reason. The servers no longer send it; only the lab-only judge does | Only if a judge is ever shipped: one OpenRouter call, check for an error or thinking tokens |
+| O5 | `ask-deadline.test.ts` failed once (801 ms against a 750 ms limit) on a loaded box | A timing test; the next two full runs passed | Watch it; if it fails again, widen the bound or move it to a fake clock |
+| O6 | 42 stale `origin/claude/r10-*` branches | Deleting remote branches needs the owner's approval | Owner approves, then delete them |
+| O7 | `quality-retrieval-unranked-quarter` and `quality-push-skipped-top15` | Found, never verified in this run's single round. The first says two thirds of paid misses are facts the ask never ranks (a vocabulary gap); the second counts 13 misses the push skipped | Verify in the next audit; this is the biggest quality lever left |
+| O8 | `devloop-funnel-setup-share` (caching funnel start-up, up to 1.7x), `devloop-ingest-bench-frozen-clock`, `devloop-test-discovery-hidden-dirs` | Found, never verified in this run | Verify in the next audit |
+| O9 | `lat-ask-reader-overlap-poll`, `scale-kg-label-substring-retention`, `cost-poll-tuning-no-1-5x` (its free 1.12x from full poll pages) | Found, never verified; all low severity | Verify in the next audit; take the small free wins if they hold |
+
+### 6. Where the data and git disagree
+
+I checked every claimed fix against git. `git branch --no-merged audit/2026-11-05-integration --list
+'audit/2026-11-05*'` prints nothing: all 16 second-pass branches (and every first-pass branch) are merged. The run's
+own data differs from what shipped in a few places; the tables above use what shipped.
+
+- The ask-deadline fix: the finding proposed a 300 ms timeout and 7.8 -> 1.6 s. What shipped uses 500 ms and gives
+  7.77 -> 2.7 s wall.
+- The sketcher: the finding said about 30 KB per user and 1.75x. The commit measured 29,567 -> 13,248 bytes, 2.23x.
+- The ingest bench: the finding expected 5.4x per run. What shipped is an opt-in `--quick` flag (76.5 -> 16.9 s,
+  4.5x); the default full run is unchanged.
+- The reader slowdown: the finding said 2.8-3.2x at p50 on larger probes. At the shipped pool size it measured 2.38x.
+- The run's "deferred" list still names items 1-11 as waiting. The closing sections below show them done or decided;
+  only the OpenRouter items (O2-O4) are really still waiting.
+
+### 7. Where everything is
+
+- This file: `docs/audits/2026-11-05-deep-audit.md`. The sections below hold every finding, work package, deferred
+  item and closing table.
+- Integration branch: `audit/2026-11-05-integration`. Before this summary it was at c839af3e2. It is ahead of `main`
+  (cf38efb09) by 69 files, +3,204 −220 lines (`git diff --stat main audit/2026-11-05-integration`).
+- Per-package branches (second pass):
+  - Round 1: `audit/2026-11-05-r1-s1-reader-reasoning-off` (06f760ebd), `-r1-s2-eval-live-anthropic` (230f3d8af),
+    `-r1-s3-notify-held-pages` (c0c18202d), `-r1-s4-sketcher-lazy-arrays` (98d31ef6e),
+    `-r1-s5-devloop-timers-bench` (e41478b13), `-r1-s6-example-default-prompt` (8b0897d54),
+    `-r1-s7-sources-file-validation` (ef8217ef1), `-r1-s8-reader-replay-cache` (8ada6d9bc).
+  - Closing: `audit/2026-11-05-final1-cards-reasoning-off` (04456fa6c), `-final1-graph-read-chars-1000` (79a583032),
+    `-final1-timed-zone-day` (c98570273), `-final1-eval-live-thinking-arm` (686c6f4b7), `-final1-close-docs`
+    (3293a0e95), `-final1-final-live-ab` (ac8624185), `-final2-drop-maker-reasoning-options` (c338b74fc),
+    `-final2-close-docs-loose-ends` (637a9ada9).
+- Decisions: `docs/DECISIONS.md` rows D144-D157. Measured reader timings: `docs/COST-MODEL.md` (`s1-reader-time`).
+  Live checks: `docs/research/final-live-2026-11-05.md`.
+
 ## Second pass (2026-11-05, Anthropic-only): summary for the owner
 
 This pass audited `audit/2026-11-05-integration` at 323395554, after the first pass (everything below "Final summary
