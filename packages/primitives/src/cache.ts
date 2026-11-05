@@ -19,12 +19,25 @@
  * TTLs. `staleAfterMs`: past it `get` still returns the value and `isStale` is true, for stale-while-revalidate.
  * `expireAfterMs`: past it the entry is gone. Both are per entry, defaulted per cache. The clock is read only for
  * entries that have a TTL.
+ *
+ * Groups. With a `group` function, live keys are also indexed by group, so `deleteGroup` drops one group's entries in
+ * O(group) instead of `deleteWhere`'s scan of the whole cache. The index is kept wherever a key leaves (delete,
+ * expiry, eviction, an oversized replace). Ghost keys are not grouped: a dropped group's ghosts only affect promotion.
  */
-export interface CacheOptions {
+export interface CacheOptions<K = unknown> {
   maxBytes: number;
   staleAfterMs?: number;
   expireAfterMs?: number;
   now?: () => number;
+  /** A key's group, for `deleteGroup`; called once per inserted key. Without it `deleteGroup` throws. */
+  group?: (key: K) => unknown;
+}
+
+/** One group's live keys. `detached` once `deleteGroup` took it out of the map, so its leaving keys skip it. */
+interface Group<K> {
+  readonly id: unknown;
+  readonly keys: Set<K>;
+  detached: boolean;
 }
 
 const LIVE = 1;
@@ -86,13 +99,22 @@ export class S3FifoCache<K, V> {
   private readonly staleAfterMs: number;
   private readonly expireAfterMs: number;
   private readonly now: () => number;
+  private readonly groupFn: ((key: K) => unknown) | undefined;
+  /** Live keys by group (only with `group`); a group with no live key is removed. */
+  private readonly groups = new Map<unknown, Group<K>>();
+  /**
+   * Each live slot's group record (only with `group`): a leaving key does not recompute its group, and slots share
+   * their group's record instead of each holding its own copy of the group value (measured: +115 B/entry otherwise).
+   */
+  private groupOfSlot: (Group<K> | undefined)[] = [];
 
-  constructor(options: CacheOptions) {
+  constructor(options: CacheOptions<K>) {
     this.maxBytes = Math.max(1, options.maxBytes);
     this.smallTarget = Math.max(1, Math.floor(this.maxBytes / 10));
     this.expireAfterMs = options.expireAfterMs ?? Infinity;
     this.staleAfterMs = Math.min(options.staleAfterMs ?? Infinity, this.expireAfterMs);
     this.now = options.now ?? Date.now;
+    this.groupFn = options.group;
     const initial = 64;
     this.bytesOf = new Float64Array(initial);
     this.freq = new Uint8Array(initial);
@@ -176,6 +198,7 @@ export class S3FifoCache<K, V> {
     this.staleAt[slot] = now + staleAfter;
     this.expiresAt[slot] = now + expireAfter;
     this.index.set(key, slot);
+    if (this.groupFn !== undefined) this.joinGroup(slot, key);
     if (this.ghost.delete(key)) {
       this.flags[slot] = LIVE | IN_MAIN;
       this.main.push(slot);
@@ -195,6 +218,27 @@ export class S3FifoCache<K, V> {
     return true;
   }
 
+  /**
+   * Removes every live entry of a group (the cache needs a `group` function). O(entries in the group). Returns how
+   * many were removed.
+   */
+  deleteGroup(group: unknown): number {
+    if (this.groupFn === undefined) throw new Error("S3FifoCache.deleteGroup needs the `group` option");
+    const g = this.groups.get(group);
+    if (g === undefined) return 0;
+    // Detached first: each kill below then finds no group set to update.
+    this.groups.delete(group);
+    g.detached = true;
+    let n = 0;
+    for (const key of g.keys) {
+      const slot = this.index.get(key);
+      if (slot === undefined) continue;
+      this.kill(slot);
+      n++;
+    }
+    return n;
+  }
+
   /** Removes every entry whose key matches. O(n): for forget-a-user, not for the hot path. */
   deleteWhere(match: (key: K) => boolean): number {
     let n = 0;
@@ -210,13 +254,35 @@ export class S3FifoCache<K, V> {
 
   /** Marks a slot dead and drops its key and value now; the slot itself is freed when it reaches a FIFO head. */
   private kill(slot: number): void {
-    this.index.delete(this.keys[slot]!);
+    this.unindex(slot);
     if ((this.flags[slot]! & IN_MAIN) !== 0) this.mainBytes -= this.bytesOf[slot]!;
     else this.smallBytes -= this.bytesOf[slot]!;
     this.flags[slot]! &= ~LIVE;
     this.keys[slot] = undefined;
     this.values[slot] = undefined;
     if (++this.dead > Math.max(64, this.index.size)) this.compact();
+  }
+
+  /** Removes a live slot's key from the index (and its group's set). Every way a key leaves goes through here. */
+  private unindex(slot: number): void {
+    const key = this.keys[slot]!;
+    this.index.delete(key);
+    if (this.groupFn === undefined) return;
+    const g = this.groupOfSlot[slot];
+    this.groupOfSlot[slot] = undefined;
+    if (g === undefined || g.detached) return;
+    if (g.keys.delete(key) && g.keys.size === 0) this.groups.delete(g.id);
+  }
+
+  private joinGroup(slot: number, key: K): void {
+    const id = this.groupFn!(key);
+    let g = this.groups.get(id);
+    if (g === undefined) {
+      g = { id, keys: new Set(), detached: false };
+      this.groups.set(id, g);
+    }
+    g.keys.add(key);
+    this.groupOfSlot[slot] = g;
   }
 
   /** Drops dead slots from both rings and frees them. O(slots), amortized over at least as many kills. */
@@ -229,6 +295,11 @@ export class S3FifoCache<K, V> {
         else this.release(slot);
       }
     }
+  }
+
+  /** Groups with a live key (with `group`), for leak tests. */
+  get groupCount(): number {
+    return this.groups.size;
   }
 
   /** Slots allocated (live, dead or free), for leak tests. */
@@ -291,7 +362,7 @@ export class S3FifoCache<K, V> {
       return;
     }
     const key = this.keys[slot]!;
-    this.index.delete(key);
+    this.unindex(slot);
     this.release(slot);
     this.remember(key);
   }
@@ -310,7 +381,7 @@ export class S3FifoCache<K, V> {
         continue;
       }
       this.mainBytes -= this.bytesOf[slot]!;
-      this.index.delete(this.keys[slot]!);
+      this.unindex(slot);
       this.release(slot);
       return;
     }
@@ -321,7 +392,7 @@ export class S3FifoCache<K, V> {
     if (slot < 0) return;
     if ((this.flags[slot]! & LIVE) !== 0) {
       this.smallBytes -= this.bytesOf[slot]!;
-      this.index.delete(this.keys[slot]!);
+      this.unindex(slot);
     }
     this.release(slot);
   }
