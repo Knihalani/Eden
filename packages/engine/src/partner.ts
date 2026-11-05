@@ -1387,7 +1387,7 @@ export class ContextPartner {
     const packet = items.length ? renderPacket(items, answering) : "";
     // D127: "nothing" is said only when the sources the ask chose answered; one that failed is named, in the text
     // (an MCP caller sees only the text) and in `sources`.
-    const answer = honestAnswer(packet, searched.sources, searched.unresolved === true);
+    const answer = honestAnswer(packet, searched.sources, searched.unresolved === true, searched.closed === true);
     if (rendering) spans!.close(rendering, { items: items.length });
     if (this.deps.onCandidates) {
       this.dump(
@@ -2679,6 +2679,8 @@ export class ContextPartner {
     sources?: SourceStatus[];
     /** The user's sources could not be resolved at all: nothing was searched, which is not an empty result. */
     unresolved?: true;
+    /** The session ended before the search ran: nothing was searched, which is not an empty result either (D127). */
+    closed?: true;
   }> {
     // Before any call: what this lookup stores was read under it, so a signal while it runs doubts it (D133).
     const readMark = this.sync?.mark() ?? 0;
@@ -2688,7 +2690,8 @@ export class ContextPartner {
       return [];
     });
     if (unresolved) return { calls: 0, sources: [], unresolved: true };
-    if (all.length === 0 || s.closed) return { calls: 0, sources: [] };
+    if (s.closed) return { calls: 0, sources: [], closed: true };
+    if (all.length === 0) return { calls: 0, sources: [] };
     // One deadline for the whole lookup (D140): the on-demand poll, the live search, the planner's cascade and the
     // probes share it. An ask waits for its poll, so a poll and a search with deadlines of their own could hold the
     // reader back twice `sourceTimeoutMs` (a listing that hangs, then the search that follows it).
@@ -2738,7 +2741,7 @@ export class ContextPartner {
             })
             .catch(() => false);
         } else syncCalls = await polled;
-        if (s.closed) return { calls: syncCalls, syncCalls };
+        if (s.closed) return { calls: syncCalls, syncCalls, sources: [], closed: true };
       }
       local = this.localOf(s, all, behind);
     }
@@ -4797,7 +4800,16 @@ function modelAttrs(res: {
  * none was chosen); otherwise it says which could not be reached and that this is not an all-clear. Source ids are the
  * operator's names for its connectors, not source text.
  */
-function honestAnswer(packet: string, sources: readonly SourceStatus[] | undefined, unresolved = false): string {
+function honestAnswer(
+  packet: string,
+  sources: readonly SourceStatus[] | undefined,
+  unresolved = false,
+  closed = false,
+): string {
+  if (closed) {
+    const none = "The session ended before the sources were searched, so this is not an all-clear.";
+    return packet ? `${packet}\n${none}` : none;
+  }
   if (unresolved) {
     const none = "Could not reach the connected sources (they could not be listed), so this is not an all-clear.";
     return packet ? `${packet}\n${none}` : none;

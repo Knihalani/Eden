@@ -111,7 +111,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   return statuses too, or an outage reads as "nothing". A failed on-demand sync poll (`freshen`) feeds the status
   through `localOf`, not a status of its own: it leaves the copy not current, so the source is searched live and that
   search's status stands. An ask never passes `behind`, so a warm-but-stale copy is not "local" there
-  (`review-regressions.test.ts`); only the reader push's first reading answers from it. Probes are extra queries
+  (`review-regressions.test.ts`); only the reader push's first reading answers from it. A session that ends before the
+  search runs returns `closed`, and the answer says so rather than "nothing". Probes are extra queries
   beside a chosen source's own search, whose outcome gives the source's status.
 - **Shown means handed out.** With `askDedup`, what an injection showed is noted (`noteShown`) in `handOut`, which
   every path that gives the agent an injection calls (observe's reply, `takePending`, the firewall's finding, the

@@ -474,6 +474,24 @@ describe("deep audit 2026-11-05 ask-false-all-clear (D127): an outage is not 'no
     expect(r.answer).toContain("not an all-clear");
   });
 
+  test("the session ends while the ask resolves its sources: not 'nothing', it says the session ended", async () => {
+    let end: () => Promise<unknown> = async () => {};
+    const { p } = make(
+      {
+        config: { ...DEFAULT_CONFIG, sourceTimeoutMs: 300 },
+        sources: async () => {
+          await end(); // The session_end lands while the ask is under way.
+          return [empty("crm")];
+        },
+      },
+      [],
+    );
+    end = () => p.observe({ ...who, at: Date.now(), kind: "session_end" } as AgentEvent);
+    const r = await p.ask({ ...who, question });
+    expect(r.answer).not.toContain("Nothing in the connected sources.");
+    expect(r.answer).toContain("not an all-clear");
+  });
+
   test("one healthy source with nothing: still 'Nothing in the connected sources.', its status ok", async () => {
     const r = await ask([empty("crm")]);
     expect(r.answer).toBe("Nothing in the connected sources.");
