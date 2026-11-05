@@ -286,7 +286,7 @@ interface Session {
    * `verifyDelivery`: re-reads under way or just made, by item id (`check`): started ahead, beside the reader's call,
    * and taken by the delivery that follows. Bounded (`MAX_CHECKS`); dropped with the session.
    */
-  checks?: Map<string, { at: number; outcome: Promise<CheckOutcome> }>;
+  checks?: Map<string, { at: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome }>;
   /**
    * With `askDedup`: the words each item's line showed the agent in this session's packets and answers (lowercase),
    * by item id and version (`shownKey`: an item changed at its source under the same id counts as not shown), at
@@ -1315,11 +1315,15 @@ export class ContextPartner {
       );
       // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
       const was = behind ? new Map(fresh.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
+      // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
+      // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
+      const checked = fresh.length > 0 && !s.closed && latest ? await this.verifyItems(s, fresh, cue) : [];
+      const still = internal.request === undefined || internal.request === s.requests;
       const injection =
-        fresh.length > 0 && !s.closed && latest
-          ? await this.deliverChecked(s, fresh, "proactive", `reader:${cue.id}`, cue)
+        checked.length > 0 && !s.closed && still
+          ? this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
-      if (injection && was) this.keepUndo(s, injection, fresh, was);
+      if (injection && was) this.keepUndo(s, injection, checked, was);
       if (injection) s.pending.push(injection);
       const latencyMs = Math.round(performance.now() - t0);
       // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
@@ -1689,7 +1693,10 @@ export class ContextPartner {
    */
   sourceChanged(scope: Scope, sourceId: string): boolean {
     if (!this.config.syncPush || !this.sync) return false;
-    return this.sync.changed(scope, sourceId);
+    const took = this.sync.changed(scope, sourceId);
+    // A held search page predates the change: the next lookup asks the source again.
+    if (took) this.fanout.dropResults(scope, sourceId);
+    return took;
   }
 
   /**
@@ -1697,23 +1704,33 @@ export class ContextPartner {
    * trigger's payload. They pass the secret gate and are stored as synced, with no source call. Items naming another
    * source are left out. Returns how many were new or changed; 0 when push is off or the source is not synced yet.
    */
-  /**
-   * A deletion notification (`syncPush`): the source no longer has these refs (a message deleted or recalled, a doc
-   * removed, an event deleted). They are dropped at once from the cache, the sync's bookkeeping, their cards and the
-   * graph, so nothing delivers them again. Returns how many were held; 0 when push is off. No I/O.
-   */
-  sourceRemoved(scope: Scope, sourceId: string, refs: string[]): number {
-    if (!this.config.syncPush || refs.length === 0) return 0;
-    const ids = refs.slice(0, MAX_PUSHED_ITEMS).map((ref) => itemId(sourceId, ref));
-    this.sync?.removed(scope, sourceId, ids);
-    return this.deps.cache.removeItems(scope, ids);
-  }
-
   async sourceItems(scope: Scope, sourceId: string, items: ContextItem[]): Promise<number> {
     if (!this.config.syncPush || !this.sync || items.length === 0) return 0;
     const own = items.filter((it) => it.sourceId === sourceId).slice(0, MAX_PUSHED_ITEMS);
     const clean = await this.redact(own);
-    return this.sync.ingest(scope, sourceId, clean);
+    // The source has them (again): a deletion held earlier no longer stands.
+    this.deps.cache.revive(
+      scope,
+      clean.map((i) => i.id),
+    );
+    const n = this.sync.ingest(scope, sourceId, clean);
+    if (n > 0) this.fanout.dropResults(scope, sourceId);
+    return n;
+  }
+
+  /**
+   * A deletion notification (`syncPush`): the source no longer has these refs (a message deleted or recalled, a doc
+   * removed, an event deleted). They are dropped at once from the cache, the sync's bookkeeping, their cards, the graph
+   * and held search pages, and held as gone for a while, so nothing delivers them again. Returns how many were held; 0
+   * when push is off. No I/O.
+   */
+  sourceRemoved(scope: Scope, sourceId: string, refs: string[]): number {
+    if (!this.config.syncPush || refs.length === 0) return 0;
+    // By the id the cache keys the item by: a ref holding something the gate redacts is keyed by its hash.
+    const ids = refs
+      .slice(0, MAX_PUSHED_ITEMS)
+      .map((ref) => sanitizedId({ id: itemId(sourceId, ref), sourceId, ref, title: "", text: "" }));
+    return this.dropGone(scope, sourceId, ids);
   }
 
   /**
@@ -3207,10 +3224,10 @@ export class ContextPartner {
   }
 
   /** Caches sanitized items and records the entity mentions of those new to the cache or changed. */
-  private store(s: Session, items: ContextItem[], parent = 0): void {
+  private store(s: Session, items: ContextItem[], parent = 0, synced = false): number {
     const spans = this.spans;
     const putting = items.length > 0 ? spans?.open("cache.put", parent, { items: items.length }) : undefined;
-    const added = this.deps.cache.put(s.scope, items, this.now(), true);
+    const added = this.deps.cache.put(s.scope, items, this.now(), true, synced);
     if (putting) spans!.close(putting, { added: added.length });
     // An item seen again unchanged keeps its card alive; one evicted by the same put is not carded at all.
     if (this.config.cards)
@@ -3220,6 +3237,7 @@ export class ContextPartner {
       );
     this.enqueueCards(s.scope, added);
     this.recordMentions(s.scope, added, parent);
+    return added.length;
   }
 
   /** `cards`: what is new to the cache (looked up or synced) is read for constraints in the background, off-path. */
@@ -3334,7 +3352,13 @@ export class ContextPartner {
   private async verifyItems(s: Session, scored: Scored[], cue: Cue): Promise<Scored[]> {
     if (!this.config.verifyDelivery || scored.length === 0) return scored;
     const now = this.now();
-    const due = scored.filter((x) => this.doubted(s, x.item, now));
+    // Doubted now, or re-read just before (`checkAhead`): that re-read made the cached copy current, but the copy in
+    // hand is the one the pool was built from, so its outcome still applies.
+    const recent = (id: string) => {
+      const held = s.checks?.get(id);
+      return held !== undefined && now - held.at <= CHECK_REUSE_MS;
+    };
+    const due = scored.filter((x) => recent(x.item.id) || this.doubted(s, x.item, now));
     if (due.length === 0) return scored;
     const t0 = performance.now();
     const before = this.freshness.calls;
@@ -3373,44 +3397,73 @@ export class ContextPartner {
     const checks = (s.checks ??= new Map());
     const now = this.now();
     const held = checks.get(item.id);
-    if (held && now - held.at <= CHECK_REUSE_MS) return held.outcome;
-    const outcome = this.recheck(s, item);
+    // Reused while it runs, or for a while after if it settled; never past a newer signal, and never a failure.
+    if (
+      held &&
+      now - held.at <= CHECK_REUSE_MS &&
+      held.settled !== "failed" &&
+      this.sync?.signalledSince(s.scope, item.sourceId, held.at) !== true
+    )
+      return held.outcome;
+    const entry: { at: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome } = {
+      at: now,
+      outcome: this.recheck(s, item).then((o) => (entry.settled = o)),
+    };
+    const outcome = entry.outcome;
     checks.delete(item.id);
-    checks.set(item.id, { at: now, outcome });
+    checks.set(item.id, entry);
     while (checks.size > MAX_CHECKS) checks.delete(checks.keys().next().value as string);
     return outcome;
   }
 
   private async recheck(s: Session, item: ContextItem): Promise<CheckOutcome> {
     this.freshness.checked++;
-    const all = await this.deps.sources(s.scope).catch((): Source[] => []);
-    const source = all.find((x) => x.id === item.sourceId);
-    if (!source?.fetch) {
+    try {
+      const all = await this.deps.sources(s.scope).catch((): Source[] => []);
+      const source = all.find((x) => x.id === item.sourceId);
+      if (!source?.fetch) {
+        this.freshness.failed++;
+        return "failed";
+      }
+      this.freshness.calls++;
+      const got = await this.fanout.fetchChecked(source, s.scope, item.ref, {
+        timeoutMs: this.config.verifyTimeoutMs,
+        signal: s.abort.signal,
+      });
+      if (got.status === "failed" || s.closed) {
+        this.freshness.failed++;
+        return "failed";
+      }
+      if (got.status === "gone") {
+        this.freshness.gone++;
+        this.dropGone(s.scope, item.sourceId, [item.id]);
+        return "gone";
+      }
+      const copy = { ...got.item, id: item.id, sourceId: item.sourceId, ref: item.ref };
+      this.deps.cache.revive(s.scope, [item.id]);
+      const synced = this.deps.cache.isSynced(s.scope, item.id);
+      // Stored as read now (its fetch time moves), as synced when the sync held it; carded and noted like any read.
+      const changed = this.store(s, [copy], 0, synced) > 0;
+      // A held search page may still show the old copy: a later lookup must not store it back.
+      if (changed) this.fanout.dropResults(s.scope, item.sourceId);
+      if (changed) this.freshness.changed++;
+      else this.freshness.confirmed++;
+      return changed ? "changed" : "confirmed";
+    } catch {
+      // Never throws: a re-read started ahead is not awaited (`checkAhead`), and its outcome is shared.
       this.freshness.failed++;
       return "failed";
     }
-    this.freshness.calls++;
-    const got = await this.fanout.fetchChecked(source, s.scope, item.ref, {
-      timeoutMs: this.config.verifyTimeoutMs,
-      signal: s.abort.signal,
-    });
-    if (got.status === "failed" || s.closed) {
-      this.freshness.failed++;
-      return "failed";
-    }
-    if (got.status === "gone") {
-      this.freshness.gone++;
-      this.deps.cache.removeItems(s.scope, [item.id]);
-      this.sync?.removed(s.scope, item.sourceId, [item.id]);
-      return "gone";
-    }
-    const copy = { ...got.item, id: item.id, sourceId: item.sourceId, ref: item.ref };
-    const synced = this.deps.cache.isSynced(s.scope, item.id);
-    // Stored as read now (its fetch time moves), and as synced when the sync held it.
-    const changed = this.deps.cache.put(s.scope, [copy], this.now(), true, synced).length > 0;
-    if (changed) this.freshness.changed++;
-    else this.freshness.confirmed++;
-    return changed ? "changed" : "confirmed";
+  }
+
+  /**
+   * Items their source no longer has: dropped from the cache (and held as gone for `GONE_HOLD_MS`, so a search or
+   * listing read before the deletion cannot store them back), from the sync's bookkeeping and from held search pages.
+   */
+  private dropGone(scope: Scope, sourceId: string, ids: string[]): number {
+    this.sync?.removed(scope, sourceId, ids);
+    this.fanout.dropResults(scope, sourceId);
+    return this.deps.cache.removeItems(scope, ids, this.now(), GONE_HOLD_MS);
   }
 
   /**
@@ -4866,6 +4919,8 @@ type CheckOutcome = "confirmed" | "changed" | "gone" | "failed";
 /** Re-reads a session keeps (`Session.checks`), and how long one is reused before an item is read again (ms). */
 const MAX_CHECKS = 64;
 const CHECK_REUSE_MS = 30_000;
+/** How long an item its source said is gone is kept from being stored again (the fan-out's stale-result window). */
+const GONE_HOLD_MS = 10 * 60_000;
 /** Doubted candidates of a reader's pool re-read beside its call (`checkAhead`): about what a delivery cites. */
 const VERIFY_AHEAD = 3;
 

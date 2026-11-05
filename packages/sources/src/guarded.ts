@@ -324,6 +324,16 @@ export class SourceFanout {
   }
 
   /**
+   * Drops the results held for one of a user's sources, keeping its breaker, limits and latency: the source changed or
+   * deleted something, so a held page may show it as it was. A call still running when this happens holds nothing.
+   */
+  dropResults(scope: Scope, sourceId: string): void {
+    const prefix = `${scopeKey(scope)}|${sourceId}|`;
+    this.forgets++;
+    this.results?.deleteWhere((k) => k.startsWith(prefix));
+  }
+
+  /**
    * One more call to a source within a lookup already admitted (the query planner's extra calls): takes a token from
    * the same per-(user, source) rate limit, so the limit counts calls, not lookups. False when the limit is spent.
    */

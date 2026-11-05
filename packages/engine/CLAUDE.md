@@ -98,7 +98,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   (connectors differ: `toItems` keeps whatever text the tool returned) and bulk footers; a connector giving neither
   is judged on its footers alone.
 - **Deliveries go through `deliverChecked` (D126)** in every async path, so `verifyDelivery` can re-read copies a signal put in doubt;
-  only the fast path calls `deliver` directly, and it hands a doubted item (`doubted`) to the slow path instead. A new
+  only the fast path calls `deliver` directly, and it hands a doubted item (`doubted`) to the slow path instead. The
+  reader's push runs `verifyItems` itself, re-checks that no newer user message came during the re-reads, then calls
+  `deliver`: a packet marked delivered and not queued would be lost. A re-read started ahead (`checkAhead`) makes the
+  cached copy current, so `verifyItems` also applies a session's recent re-reads, not only doubted items. A new
   delivery path uses `deliverChecked`, never `deliver`, or it can send a stale copy. `deliverChecked` itself calls
   `deliver` (a bulk rename of `return this.deliver(` once made it call itself forever: the tests hung, not failed).
 - `fetchChecked`'s `gone` needs `Source.fetchReportsGone`: an MCP tool's null fetch proves nothing, so verification

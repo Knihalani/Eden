@@ -127,6 +127,11 @@ class UserCache {
       onTermFreed: releaseTerms ? (t) => this.vocab.release(t) : undefined,
     });
   }
+  /**
+   * Ids its source said are gone (`removeItems` with a hold), until when (ms): a copy of one that a search or listing
+   * read before the deletion is not stored again meanwhile. Oldest first; at most `MAX_GONE`.
+   */
+  gone: Map<string, number> | null = null;
   /** Vocabulary size after the last rebuild. */
   baseline = 0;
   /** Changes whenever an item is added, changed or dropped (`ItemCache.revision`); unique across rebuilds. */
@@ -304,6 +309,18 @@ export function sanitizeItem(raw: ContextItem, maxTextChars = DEFAULT_CACHE_LIMI
  * The id an item has once sanitized: its own, unless its ref held something the gate redacts, then a hash of the ref.
  * For places that keep only an item's id (shadow records) without paying to redact its text.
  */
+/** Ids held as gone per user at most (`UserCache.gone`). */
+const MAX_GONE = 1_000;
+
+/** Whether `id` is held as gone at `now`; an expired hold is dropped. */
+function isGone(gone: Map<string, number>, id: string, now: number): boolean {
+  const until = gone.get(id);
+  if (until === undefined) return false;
+  if (now < until) return true;
+  gone.delete(id);
+  return false;
+}
+
 export function sanitizedId(raw: ContextItem, sanitizedRef = sanitizeForStore(raw.ref)): string {
   if (sanitizedRef === raw.ref) return raw.id;
   return itemId(raw.sourceId, `h-${createHash("sha256").update(raw.ref).digest("hex").slice(0, 16)}`);
@@ -493,6 +510,7 @@ export class ItemCache {
     const changed: ContextItem[] = [];
     for (const raw of items) {
       const item = sanitized ? raw : sanitizeItem(raw, this.limits.maxTextChars);
+      if (u.gone !== null && isGone(u.gone, item.id, now)) continue;
       const old = u.items.get(item.id);
       if (old && synced && !old.synced) {
         unlink(u, old); // Out of the lookups' list into the sync's (re-placed below, refreshed or dropped).
@@ -614,19 +632,33 @@ export class ItemCache {
 
   /**
    * Drops items by id, synced or not: the source no longer has them (a deletion notification, a fetch that found the
-   * item gone). Their cards and graph entries go with them (`onDropped`). Returns how many were held.
+   * item gone). Their cards and graph entries go with them (`onDropped`). With `holdMs`, a later `put` of one of them
+   * is ignored until `now + holdMs` (or `revive`): a search or listing that read it before the deletion cannot bring it
+   * back. Returns how many were held.
    */
-  removeItems(scope: Scope, ids: Iterable<string>): number {
-    const u = this.peek(scope);
+  removeItems(scope: Scope, ids: Iterable<string>, now = Date.now(), holdMs = 0): number {
+    const u = holdMs > 0 ? this.touch(scope) : this.peek(scope);
     if (!u) return 0;
     let n = 0;
     for (const id of ids) {
+      if (holdMs > 0) {
+        const gone = (u.gone ??= new Map());
+        gone.delete(id);
+        gone.set(id, now + holdMs);
+        while (gone.size > MAX_GONE) gone.delete(gone.keys().next().value!);
+      }
       const e = u.items.get(id);
       if (!e) continue;
       this.drop(u, e);
       n++;
     }
     return n;
+  }
+
+  /** Lifts `removeItems`' hold on these ids: their source has them (a notification carried them, a re-read found). */
+  revive(scope: Scope, ids: Iterable<string>): void {
+    const gone = this.peek(scope)?.gone;
+    if (gone) for (const id of ids) gone.delete(id);
   }
 
   /** Synced items the user's cache holds (D57). */

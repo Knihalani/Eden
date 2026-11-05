@@ -351,6 +351,19 @@ describe("SourceFanout fetch", () => {
     expect(await f.fetchChecked({ ...throws, fetchReportsGone: true }, scope, "2", opts)).toEqual({ status: "failed" });
   });
 
+  test("dropResults: the next search of that user's source asks it again; other users and sources keep theirs", async () => {
+    const f = new SourceFanout({ sanitize: (x) => x });
+    const other = { tenantId: "t", userId: "v" };
+    const src = source(async () => [item("renewal on Friday")]);
+    await f.search([src], query(), { timeoutMs: 1_000 });
+    await f.search([src], { ...query(), scope: other }, { timeoutMs: 1_000 });
+    expect((await f.search([src], query(), { timeoutMs: 1_000 }))[0]!.status).toBe("cached");
+    f.dropResults(scope, "s");
+    expect((await f.search([src], query(), { timeoutMs: 1_000 }))[0]!.status).toBe("ok");
+    expect((await f.search([src], { ...query(), scope: other }, { timeoutMs: 1_000 }))[0]!.status).toBe("cached");
+    expect(src.calls).toBe(3);
+  });
+
   test("a failing source opens the breaker for searches too; a failing gate does not count against the source", async () => {
     const breaker = { minCalls: 2, failureRate: 0.5, openMs: 60_000 };
     const f = new SourceFanout({ sanitize: (x) => x, breaker, ratePerSec: 100, burst: 100 });

@@ -164,7 +164,10 @@ and delivered instead; one the source no longer has (`gone`, only from a source 
 dropped from the cache and left out; one that cannot be checked is delivered as held. With no signal nothing is
 re-read: a copy's age alone is no doubt (re-reading by age was measured live and deleted, D126), and a silent source's
 changes arrive through polls and the daily sweep. The fast path, which may not call a source, sends a doubted item to
-the slow path. Deletion notifications (`ContextPartner.sourceRemoved`, `POST /v1/sources/removed`) drop items at once.
+the slow path. Deletion notifications (`ContextPartner.sourceRemoved`, `POST /v1/sources/removed`) drop items at once;
+a deleted item, from a notification or a re-read, is also dropped from the fan-out's held search pages
+(`SourceFanout.dropResults`, as on every signal) and kept out of the cache for 10 minutes (`ItemCache.removeItems`'
+hold), so a page read before the deletion cannot bring it back.
 The re-reads are traced as "verify" decisions with their `sourceCalls`.
 
 **Poll behind the lookup** (D65, `syncPollBehind`, on in the default, D112; with `sync` and `syncOnDemand`): without it,

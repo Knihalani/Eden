@@ -3,7 +3,7 @@ import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import { itemId, type AgentEvent, type ContextItem, type Scope } from "@eden/protocol";
 import type { SearchQuery, Source } from "@eden/sources";
-import { ItemCache } from "./cache";
+import { ItemCache, sanitizedId } from "./cache";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 
@@ -18,6 +18,8 @@ class Mutable implements Source {
   fetches = 0;
   failFetch = false;
   failSearch = false;
+  /** Search and listing answer with nothing, as an index that has not caught up would (no failure, no breaker). */
+  blind = false;
   docs = new Map<string, { title: string; text: string }>();
   constructor(
     readonly id: string,
@@ -30,6 +32,7 @@ class Mutable implements Source {
   async search(q: SearchQuery): Promise<ContextItem[]> {
     this.searches++;
     if (this.failSearch) throw new Error("503 Service Unavailable");
+    if (this.blind) return [];
     const words = q.text
       .toLowerCase()
       .split(/\W+/)
@@ -72,6 +75,7 @@ class Listed extends Mutable {
   readonly notifies = true;
   async list(_s: Scope, cursor: string | undefined, limit: number) {
     if (this.failSearch) throw new Error("503 Service Unavailable");
+    if (this.blind) return { items: [], next: null };
     const all = [...this.docs.keys()].map((r) => this.item(r)!);
     const at = cursor ? Number(cursor) : 0;
     return { items: all.slice(at, at + limit), next: at + limit < all.length ? String(at + limit) : null };
@@ -188,5 +192,93 @@ describe("sourceRemoved: a deletion notification drops the items at once", () =>
     await say(off.partner, "Where is the quarterly offsite?", "s1", off.now());
     expect(off.partner.sourceRemoved(scope, "notes", ["q1"])).toBe(0);
     expect(off.cache.get(scope, itemId("notes", "q1"), off.now())).toBeTruthy();
+  });
+});
+
+describe("review regressions (D126)", () => {
+  test("an item removed by notification is not brought back by a held search page", async () => {
+    const src = new Mutable("notes");
+    seed(src);
+    const { partner, cache, advance, now } = setup(src, { sync: true, syncPush: true });
+    await say(partner, "Where is the quarterly offsite?", "s1", now()); // The fan-out now holds the page with q1.
+    src.docs.delete("q1");
+    expect(partner.sourceRemoved(scope, "notes", ["q1"])).toBe(1);
+    advance(5_000); // Inside the fan-out's 60 s fresh window.
+    const got = await say(partner, "Where is the quarterly offsite?", "s2", now());
+    expect(got.flatMap((i) => i.citations.map((c) => c.itemId))).not.toContain(itemId("notes", "q1"));
+    expect(cache.get(scope, itemId("notes", "q1"), now())).toBeFalsy();
+  });
+
+  test("a held copy read before the deletion is not stored again; one the source carries again is", () => {
+    const c = new ItemCache();
+    const q1 = { id: itemId("notes", "q1"), sourceId: "notes", ref: "q1", title: "Offsite", text: "Lisbon" };
+    c.put(scope, [q1], T0);
+    expect(c.removeItems(scope, [q1.id], T0, 10 * MIN)).toBe(1);
+    c.put(scope, [q1], T0 + MIN);
+    expect(c.get(scope, q1.id, T0 + MIN)).toBeFalsy();
+    c.put(scope, [q1], T0 + 11 * MIN); // The hold has ended.
+    expect(c.get(scope, q1.id, T0 + 11 * MIN)).toBeTruthy();
+    c.removeItems(scope, [q1.id], T0 + 12 * MIN, 10 * MIN);
+    c.revive(scope, [q1.id]);
+    c.put(scope, [q1], T0 + 13 * MIN);
+    expect(c.get(scope, q1.id, T0 + 13 * MIN)).toBeTruthy();
+    // Per user: another user's copy is untouched by the hold.
+    const other = { tenantId: "t", userId: "v" };
+    c.removeItems(scope, [q1.id], T0 + 14 * MIN, 10 * MIN);
+    c.put(other, [q1], T0 + 14 * MIN);
+    expect(c.get(other, q1.id, T0 + 14 * MIN)).toBeTruthy();
+  });
+
+  test("a deletion notification finds an item whose ref the gate redacted", async () => {
+    const ref = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8";
+    const src = new Mutable("notes");
+    src.docs.set(ref, { title: "Quarterly offsite", text: "The quarterly offsite is in Lisbon on 12 November." });
+    const { partner, cache, now } = setup(src, { sync: true, syncPush: true });
+    await say(partner, "Where is the quarterly offsite?", "s1", now());
+    const id = sanitizedId({ id: itemId("notes", ref), sourceId: "notes", ref, title: "", text: "" });
+    expect(id).not.toBe(itemId("notes", ref)); // Keyed by the ref's hash.
+    expect(cache.get(scope, id, now())).toBeTruthy();
+    expect(partner.sourceRemoved(scope, "notes", [ref])).toBe(1);
+  });
+
+  test("a second signal after a re-read is read again, not answered from the first", async () => {
+    const src = new Listed("notes");
+    seed(src);
+    const { partner, advance, now } = await synced(src);
+    advance(5 * MIN);
+    src.docs.set("q1", { title: "Quarterly offsite", text: "The quarterly offsite moved to Porto on 19 November." });
+    partner.sourceChanged(scope, "notes");
+    src.blind = true;
+    advance(MIN);
+    const first = await say(partner, "Remind me where the quarterly offsite is", "s2", now());
+    expect(first.map((i) => i.text).join("\n")).toContain("Porto");
+    const fetches = src.fetches;
+    advance(5_000); // Inside the re-read's 30 s reuse.
+    src.docs.set("q1", { title: "Quarterly offsite", text: "The quarterly offsite moved to Madrid on 26 November." });
+    partner.sourceChanged(scope, "notes");
+    advance(1_000);
+    const r = await partner.ask({ ...scope, sessionId: "s2", question: "Where is the quarterly offsite now?" });
+    expect(src.fetches).toBeGreaterThan(fetches);
+    expect(r.answer).toContain("Madrid");
+  });
+
+  test("a failed re-read is not reused: the next delivery tries again", async () => {
+    const src = new Listed("notes");
+    seed(src);
+    const { partner, advance, now } = await synced(src);
+    advance(5 * MIN);
+    src.docs.set("q1", { title: "Quarterly offsite", text: "The quarterly offsite moved to Porto on 19 November." });
+    partner.sourceChanged(scope, "notes");
+    src.blind = true;
+    src.failFetch = true;
+    advance(MIN);
+    await partner.ask({ ...scope, sessionId: "s2", question: "Where is the quarterly offsite?" });
+    const fetches = src.fetches;
+    expect(fetches).toBeGreaterThanOrEqual(1);
+    src.failFetch = false;
+    advance(2_000);
+    const r = await partner.ask({ ...scope, sessionId: "s2", question: "Where is the quarterly offsite now?" });
+    expect(src.fetches).toBeGreaterThan(fetches);
+    expect(r.answer).toContain("Porto");
   });
 });
