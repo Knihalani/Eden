@@ -179,16 +179,59 @@ export interface Fault {
   ratePerSecUntil?: number;
 }
 
+/** One item's words, as every `SimIndex` holding it reads them. Shared between indexes, so never mutated. */
+interface ItemAnalysis {
+  /** The title and text it was computed from: `applyUpdate` edits items in place, so a mismatch means recompute. */
+  readonly title: string;
+  readonly text: string;
+  readonly tf: ReadonlyMap<string, number>;
+  readonly len: number;
+  readonly terms: ReadonlySet<string>;
+  readonly titleTerms: ReadonlySet<string>;
+  readonly folded: string;
+}
+
+/**
+ * Per-item analysis memo, keyed on the item object: an entry goes when its item (and so its world) is collected,
+ * so it holds nothing past a run. It is a pure function of the item's own title and text, so indexes sharing a world
+ * share it without mixing anything between worlds.
+ */
+const analysed = new WeakMap<WorldItem, ItemAnalysis>();
+
+function analyse(it: WorldItem): ItemAnalysis {
+  const hit = analysed.get(it);
+  if (hit && hit.title === it.title && hit.text === it.text) return hit;
+  // The text normalized once for its words and its folded copy, and the title's words read once: building indexes
+  // was over half the CPU of a held-out funnel run (timeline spans and a profile, docs/research/moon-telemetry.md).
+  const whole = plain(`${it.title}\n${it.text}`);
+  const ws = wordsOfPlain(whole);
+  const titleWords = words(it.title);
+  const tf = new Map<string, number>();
+  for (const w of ws) tf.set(w, (tf.get(w) ?? 0) + 1);
+  for (const w of titleWords) tf.set(w, (tf.get(w) ?? 0) + 2); // Titles weigh more, as every engine does.
+  const a: ItemAnalysis = {
+    title: it.title,
+    text: it.text,
+    tf,
+    len: ws.length,
+    terms: new Set(ws),
+    titleTerms: new Set(titleWords),
+    folded: foldOfPlain(whole),
+  };
+  analysed.set(it, a);
+  return a;
+}
+
 /**
  * One source's items in one world, indexed once and shared by every simulated user given that world: the term
  * sets and BM25 statistics are the expensive part, and per-user state (quota, errors, stats) lives in `SimSource`.
  */
 export class SimIndex {
   readonly items: WorldItem[];
-  private readonly terms: Set<string>[] = [];
-  private readonly titleTerms: Set<string>[] = [];
+  private readonly terms: ReadonlySet<string>[] = [];
+  private readonly titleTerms: ReadonlySet<string>[] = [];
   private readonly df = new Map<string, number>();
-  private readonly tf: Map<string, number>[] = [];
+  private readonly tf: ReadonlyMap<string, number>[] = [];
   private readonly lens: number[] = [];
   private readonly avgLen: number;
   /** Term → indexes of items holding it (ascending): searches touch postings, not every item. */
@@ -202,26 +245,19 @@ export class SimIndex {
     readonly world: World,
   ) {
     this.items = world.items.filter((i) => i.sourceId === id);
-    // Each text normalized once for its words and its folded copy, and the title's words read once: building indexes
-    // was over half the CPU of a held-out funnel run (timeline spans and a profile, docs/research/moon-telemetry.md).
+    // Each item's analysis comes from the memo (`analyse`): a reindex after an update re-reads only the changed
+    // items and rebuilds df and the postings. Re-reading every item was about half a freshness run's wall time.
     for (const it of this.items) {
-      const whole = plain(`${it.title}\n${it.text}`);
-      const ws = wordsOfPlain(whole);
-      const titleWords = words(it.title);
-      const tf = new Map<string, number>();
-      for (const w of ws) tf.set(w, (tf.get(w) ?? 0) + 1);
-      for (const w of titleWords) tf.set(w, (tf.get(w) ?? 0) + 2); // Titles weigh more, as every engine does.
-      for (const w of tf.keys()) this.df.set(w, (this.df.get(w) ?? 0) + 1);
-      this.tf.push(tf);
-      this.lens.push(ws.length);
-      const termSet = new Set(ws);
-      const titleSet = new Set(titleWords);
+      const a = analyse(it);
+      for (const w of a.tf.keys()) this.df.set(w, (this.df.get(w) ?? 0) + 1);
+      this.tf.push(a.tf);
+      this.lens.push(a.len);
       const i = this.terms.length;
-      for (const w of termSet) push(this.postings, w, i);
-      for (const w of titleSet) push(this.titlePostings, w, i);
-      this.terms.push(termSet);
-      this.titleTerms.push(titleSet);
-      this.folded.push(foldOfPlain(whole));
+      for (const w of a.terms) push(this.postings, w, i);
+      for (const w of a.titleTerms) push(this.titlePostings, w, i);
+      this.terms.push(a.terms);
+      this.titleTerms.push(a.titleTerms);
+      this.folded.push(a.folded);
     }
     this.avgLen = this.lens.reduce((s, x) => s + x, 0) / Math.max(1, this.lens.length);
   }

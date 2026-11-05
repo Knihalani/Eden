@@ -405,9 +405,22 @@ The quality runner (`quality-cli.ts`) changes the world during a run and counts 
   `sourceRemoved`). `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed, changed, gone, failed, calls).
 
 D126's matrix: `bun packages/sim/src/quality-cli.ts --users 8 --sessions 20 --updates 0.6 --deletes 0.05
-[--push signals|payload] [--config '{"verifyDelivery":false}']`, about 50 s each, $0 (`verifyDelivery` is in the
+[--push signals|payload] [--config '{"verifyDelivery":false}'] [--jobs 4]`, $0 (`verifyDelivery` is in the
 default and acts only on signals). Do not pass
 `--sync`: it is an oracle that reloads every item each session and hides staleness.
+
+Speed (audit 2026-11-05, sim-reindex-memo; 4 cores, `--push signals`, wall time of one run each):
+
+- Every update or delete rebuilds the touched connector's index (`SimSource.reindex`). Each item's words, term
+  counts and folded text are memoised per item object (`analyse` in `sources.ts`), and each memo entry is recomputed
+  when the item's title or text no longer match the ones it was computed from (`applyUpdate` edits items in place). A
+  reindex therefore re-reads only the changed items and rebuilds df and the postings: 22.2 s → 11.9 s.
+- `--jobs N` runs N processes of quality-cli.ts, each on a contiguous `--user-range A:B` with the seeds those users
+  have in the whole run. Each shard prints its raw tally (`--tally`). The parent merges the tallies (`mergeTallies`:
+  counts summed, latency and byte samples concatenated) before any ratio or percentile is taken, so the JSON is the
+  one-process run's, byte for byte, apart from `wallSeconds`, `latency` and `cpu`. `--jobs 4`: 5.6 s.
+- `--jobs` is refused with `--live` (each shard would spend on its own, outside a shared ledger) and with
+  `--timeline` (one file, one writer).
 
 ### 6. Full benchmark (blind, both harnesses)
 

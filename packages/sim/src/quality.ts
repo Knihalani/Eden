@@ -41,6 +41,11 @@ import { buildWorld, HOUR, type World, type WorldItem } from "./world";
 
 export interface QualityOptions {
   users: number;
+  /**
+   * Play only users [from, to) of the `users` (`quality-cli.ts --user-range`, and each shard of `--jobs`): every
+   * user keeps the seeds it has in the whole run, so the shards' tallies merge (`mergeTallies`) into the whole run's.
+   */
+  userRange?: readonly [number, number];
   sessionsPerUser: number;
   seed: number;
   profiles: ProfileSet;
@@ -352,7 +357,135 @@ async function settle(partner: ContextPartner, key: string): Promise<void> {
   for (let i = 0; i < 2_000 && busy(sessions.get(key)); i++) await Bun.sleep(1);
 }
 
+/** Every user's sessions played and scored: the run's report. */
 export async function runQuality(o: QualityOptions): Promise<QualityReport> {
+  return qualityReport(await tallyQuality(o), o);
+}
+
+/**
+ * The raw counts and samples of a run (or of a user range of one), before any ratio or percentile: shards' tallies
+ * merge by plain sums (`mergeTallies`), and `qualityReport` turns the whole into rates, so a sharded run reports what
+ * one process would (as funnel-merge.ts merges the funnel's shards). Plain JSON, so a shard can print it.
+ */
+export interface QualityTally {
+  /** Users played. */
+  users: number;
+  /** Every count, summed key by key when tallies merge (arrays position by position). */
+  counts: {
+    total: Counter;
+    ambiguous: Counter;
+    byType: Record<string, Counter>;
+    byStyle: Record<string, Counter>;
+    thirds: Counter[];
+    thirdLookups: number[];
+    thirdCalls: number[];
+    shadowSeen: {
+      records: number;
+      limited: number;
+      errors: number;
+      calls: number;
+      servedEmptyShadowFound: number;
+      overlapSum: number;
+      overlapN: number;
+    };
+    shadowTruth: {
+      needTurns: number;
+      wouldAdd: number;
+      wouldLose: number;
+      signalled: number;
+      signalledAndAdded: number;
+    };
+    scalars: {
+      turns: number;
+      injections: number;
+      itemsDelivered: number;
+      redundant: number;
+      noise: number;
+      secretsPlanted: number;
+      secretsLeaked: number;
+      injectionItems: number;
+      updatesPlanned: number;
+      updatesApplied: number;
+      fetches: number;
+      updatedDelivered: number;
+      staleDelivered: number;
+      deletesPlanned: number;
+      deletesApplied: number;
+      deletedDelivered: number;
+      deletedCited: number;
+      notInert: number;
+      sourceCalls: number;
+      useful: number;
+      results: number;
+      errors: number;
+      limited: number;
+      aborted: number;
+      lookups: number;
+      modelCalls: number;
+      costUsd: number;
+    };
+    freshness: QualityReport["freshness"];
+    syncUse: { backfill: number; background: number; demand: number; localSources: number; lookups: number };
+    ask: {
+      cases: number;
+      hits: number;
+      must: number;
+      rr: number;
+      cited: number;
+      citedRelevant: number;
+      empty: number;
+      usedModel: number;
+    };
+    judged: { calls: number; candidates: number; relevantCandidates: number; unmatched: number };
+    funnel: QualityReport["funnel"];
+    needDecisions: Record<string, number>;
+    byReason: QualityReport["byReason"];
+    decisions: Record<string, number>;
+    plans: Record<string, { lookups: number; empty: number; calls: number }>;
+    anticipation: QualityReport["anticipation"];
+    /** Process CPU time, microseconds. */
+    cpu: { user: number; system: number };
+  };
+  /** Raw samples, concatenated when tallies merge: percentiles are taken over the whole run's. */
+  samples: { observeMs: number[]; deliveryMs: number[]; injBytes: number[] };
+}
+
+/**
+ * Shards' tallies as one: counts summed (a key new in a later tally is added after the earlier ones' keys, the
+ * order a single process meets them in at `--time 0`, where users play one after another), samples concatenated.
+ */
+export function mergeTallies(tallies: readonly QualityTally[]): QualityTally {
+  if (tallies.length === 0) throw new Error("mergeTallies: no tallies");
+  const out = structuredClone(tallies[0]!);
+  for (const t of tallies.slice(1)) {
+    out.users += t.users;
+    addInto(out.counts as unknown as Record<string, unknown>, t.counts as unknown as Record<string, unknown>);
+    for (const k of ["observeMs", "deliveryMs", "injBytes"] as const) out.samples[k].push(...t.samples[k]);
+  }
+  return out;
+}
+
+/** `from` added into `into`: numbers summed, objects and arrays key by key, missing keys copied. */
+function addInto(into: Record<string, unknown>, from: Record<string, unknown>): void {
+  // Keys are reasons and types the engine names; defined, not assigned, so even "__proto__" stays a plain key.
+  const set = (k: string, v: unknown) =>
+    Object.defineProperty(into, k, { value: v, enumerable: true, writable: true, configurable: true });
+  for (const [k, v] of Object.entries(from)) {
+    const cur = Object.hasOwn(into, k) ? into[k] : undefined;
+    if (typeof v === "number") set(k, (typeof cur === "number" ? cur : 0) + v);
+    else if (v && typeof v === "object") {
+      if (cur && typeof cur === "object") addInto(cur as Record<string, unknown>, v as Record<string, unknown>);
+      else set(k, structuredClone(v));
+    }
+  }
+}
+
+/** Plays the users of `o` (or its `userRange`) and returns their raw tally. */
+export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
+  const [firstUser, endUser] = o.userRange ?? [0, o.users];
+  if (!Number.isInteger(firstUser) || !Number.isInteger(endUser) || firstUser < 0 || endUser > o.users)
+    throw new Error(`userRange must be integers within [0, ${o.users}], got ${firstUser}:${endUser}`);
+  if (firstUser >= endUser) throw new Error(`userRange ${firstUser}:${endUser} holds no user`);
   const cpu0 = process.cpuUsage();
   const anticipation = { calls: 0, mustImmediate: 0, mustPrefetched: 0 };
   const total = counter();
@@ -417,7 +550,8 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
   // concurrently; at timeScale 0 one at a time, which keeps instant runs simple to profile.
   // Worlds, sessions and connector indexes are built before any user plays: building them is the harness's work,
   // and doing it as concurrent users start would stall the others' calls and show up as engine latency.
-  const prepared = Array.from({ length: o.users }, (_, u) => {
+  const prepared = Array.from({ length: endUser - firstUser }, (_, k) => {
+    const u = firstUser + k;
     const world = buildWorld({ seed: o.seed * 1_000 + u, noiseScale: o.noiseScale });
     const { sessions, asks } = buildSessions(world, {
       seed: o.seed * 7_919 + u,
@@ -433,7 +567,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     return { world, sessions, asks, updates, deletes, sources };
   });
   const runUser = async (u: number) => {
-    const { world, sessions, asks, updates, deletes, sources } = prepared[u]!;
+    const { world, sessions, asks, updates, deletes, sources } = prepared[u - firstUser]!;
     updatesPlanned += updates.length;
     deletesPlanned += deletes.length;
     /** Items the source has deleted so far: a delivery of one is stale. */
@@ -897,11 +1031,11 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       judged.unmatched += oracle.stats.unmatched;
     }
   };
-  const lanes = o.timeScale > 0 ? o.users : 1;
-  let nextUser = 0;
+  const lanes = o.timeScale > 0 ? endUser - firstUser : 1;
+  let nextUser = firstUser;
   await Promise.all(
     Array.from({ length: lanes }, async () => {
-      while (nextUser < o.users) await runUser(nextUser++);
+      while (nextUser < endUser) await runUser(nextUser++);
     }),
   );
 
@@ -947,8 +1081,77 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     if (p.found === 0) e.empty++;
     e.calls += p.calls;
   }
-  const cost = traces.reduce((s, t) => s + t.costUsd, 0);
-  const modelCalls = traces.reduce((s, t) => s + t.modelCalls, 0);
+  const cpu = process.cpuUsage(cpu0);
+  return {
+    users: endUser - firstUser,
+    counts: {
+      total,
+      ambiguous,
+      byType: Object.fromEntries(byType),
+      byStyle: Object.fromEntries(byStyle),
+      thirds,
+      thirdLookups,
+      thirdCalls,
+      shadowSeen,
+      shadowTruth,
+      scalars: {
+        turns,
+        injections,
+        itemsDelivered,
+        redundant,
+        noise,
+        secretsPlanted,
+        secretsLeaked,
+        injectionItems,
+        updatesPlanned,
+        updatesApplied,
+        fetches,
+        updatedDelivered,
+        staleDelivered,
+        deletesPlanned,
+        deletesApplied,
+        deletedDelivered,
+        deletedCited,
+        notInert,
+        sourceCalls,
+        useful,
+        results,
+        errors,
+        limited,
+        aborted,
+        lookups,
+        modelCalls: traces.reduce((s, t) => s + t.modelCalls, 0),
+        costUsd: traces.reduce((s, t) => s + t.costUsd, 0),
+      },
+      freshness,
+      syncUse,
+      ask,
+      judged,
+      funnel,
+      needDecisions,
+      byReason,
+      decisions,
+      plans,
+      anticipation,
+      cpu: { user: cpu.user, system: cpu.system },
+    },
+    samples: { observeMs, deliveryMs, injBytes },
+  };
+}
+
+/** A tally (one process's, or shards' merged) as the report: rates, percentiles and shares. */
+export function qualityReport(t: QualityTally, o: Pick<QualityOptions, "config">): QualityReport {
+  const { total, ambiguous, thirds, thirdLookups, thirdCalls, shadowSeen, shadowTruth } = t.counts;
+  const { freshness, syncUse, ask, judged, funnel, needDecisions, byReason, decisions, plans, anticipation } = t.counts;
+  const { turns, injections, itemsDelivered, redundant, noise, secretsPlanted, secretsLeaked } = t.counts.scalars;
+  const { injectionItems, updatesPlanned, updatesApplied, fetches, updatedDelivered, staleDelivered } =
+    t.counts.scalars;
+  const { deletesPlanned, deletesApplied, deletedDelivered, deletedCited, notInert, sourceCalls } = t.counts.scalars;
+  const { useful, results, errors, limited, aborted, lookups, modelCalls } = t.counts.scalars;
+  const cost = t.counts.scalars.costUsd;
+  const { observeMs, deliveryMs, injBytes } = t.samples;
+  const byType = Object.entries(t.counts.byType);
+  const byStyle = Object.entries(t.counts.byStyle);
   const r3 = (x: number) => Math.round(x * 1000) / 1000;
   const shadow: ShadowReport | undefined =
     shadowSeen.records === 0
@@ -1044,10 +1247,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     needDecisions: Object.fromEntries(Object.entries(needDecisions).sort((a, b) => b[1] - a[1])),
     byReason,
     anticipation,
-    cpu: (() => {
-      const c = process.cpuUsage(cpu0);
-      return { userMs: Math.round(c.user / 1000), systemMs: Math.round(c.system / 1000) };
-    })(),
+    cpu: { userMs: Math.round(t.counts.cpu.user / 1000), systemMs: Math.round(t.counts.cpu.system / 1000) },
   };
 }
 
