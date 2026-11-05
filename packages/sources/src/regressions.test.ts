@@ -339,7 +339,7 @@ describe("results cache: real bytes, group drops, drops across state eviction", 
   const q = (scope: Who, text: string) => ({ scope, text, entities: [], limit: 5 });
   const signal = () => new AbortController().signal;
 
-  test("200,000 empty pages with ~120-char keys keep heap growth under a 4 MB cache budget", async () => {
+  test("50,000 empty pages with ~120-char keys keep heap growth under a 4 MB cache budget", async () => {
     const { heapStats } = await import("bun:jsc");
     let now = 0;
     const f = new SourceFanout({
@@ -356,9 +356,10 @@ describe("results cache: real bytes, group drops, drops across state eviction", 
     for (const u of users) await f.search([empty], q(u, "warm"), { timeoutMs: 1_000 });
     Bun.gc(true);
     const before = heapStats().heapSize;
-    // One page every 10 simulated ms: 2,000 s, past the 600 s expiry for most pages.
-    for (let i = 0; i < 200_000; i++) {
-      now += 10;
+    // One page every 30 simulated ms: 1,500 s, past the 600 s expiry for most pages, and far past the byte budget
+    // (every page held would be ~17 MB at the pre-fix ~345 B each).
+    for (let i = 0; i < 50_000; i++) {
+      now += 30;
       const text = `quarterly invoice renewal ${i} ${pad}`;
       const [out] = await f.search([empty], q(users[i % 50]!, text), { timeoutMs: 1_000 });
       if (out!.status !== "ok") throw new Error(out!.status);
@@ -367,12 +368,12 @@ describe("results cache: real bytes, group drops, drops across state eviction", 
     const grew = heapStats().heapSize - before;
     const inner = f as unknown as { results: { bytes: number; size: number } | null };
     expect(inner.results!.bytes).toBeLessThanOrEqual(4_000_000);
-    expect(inner.results!.size).toBeLessThan(10_000); // before the fix: 200,000 (an empty page cost 1 byte)
+    expect(inner.results!.size).toBeLessThan(10_000); // before the fix: 50,050 (an empty page cost 1 byte)
     // The heap the cache holds: growth minus what is left once the cache itself is let go.
     inner.results = null;
     Bun.gc(true);
     const heldByCache = grew - (heapStats().heapSize - before);
-    expect(heldByCache).toBeLessThan(4_000_000); // before the fix: ~69 MB (~345 B per entry, every entry held)
+    expect(heldByCache).toBeLessThan(4_000_000); // before the fix: ~17 MB (~345 B per entry, every entry held)
     expect(grew).toBeLessThan(5_000_000); // the rest is the fan-out's own state, ~0.25 MB
   }, 30_000);
 

@@ -338,19 +338,31 @@ describe("near-duplicates (dedup integration)", () => {
   });
 });
 
-/** A `StaticSource` that answers each search after `ms`: the slow path's packet is still queued when an ask comes. */
-class SlowSource extends StaticSource {
-  constructor(
-    id: string,
-    items: { ref: string; title: string; text: string }[],
-    private readonly ms: number,
-  ) {
-    super(id, "docs", items);
-  }
+/**
+ * A `StaticSource` whose every search is held until the test releases it: the slow path's packet is still queued when
+ * an ask comes, with no wall-clock wait standing for "the search is slow" (as slow-path-queue.test.ts does).
+ */
+class HeldSource extends StaticSource {
+  private readonly waiting: (() => void)[] = [];
+  /** Searches made so far, held or answered. */
+  made = 0;
   override async search(...args: Parameters<StaticSource["search"]>) {
-    await Bun.sleep(this.ms);
+    this.made++;
+    await new Promise<void>((resolve) => this.waiting.push(resolve));
     return super.search(...args);
   }
+  /** Answers the oldest search still held. */
+  release(): void {
+    const next = this.waiting.shift();
+    if (!next) throw new Error("no search is held");
+    next();
+  }
+}
+
+/** Turns the event loop until `cond` holds; fails, rather than hanging, if it never does. */
+async function until(cond: () => boolean, what: string) {
+  for (let i = 0; i < 5_000 && !cond(); i++) await new Promise<void>((resolve) => setImmediate(resolve));
+  if (!cond()) throw new Error(`never happened: ${what}`);
 }
 
 describe("deep audit 2026-11-05 ask-shown-before-handed-out: shown means handed out", () => {
@@ -366,22 +378,34 @@ describe("deep audit 2026-11-05 ask-shown-before-handed-out: shown means handed 
   };
   const po = "Raise a PO for the Aperture Labs licence renewal, £48k, and route it to the CFO";
   const who = { tenantId: "t", userId: "u", sessionId: "shown" };
-  const partner = (items: { ref: string; title: string; text: string }[]) =>
-    new ContextPartner({
-      sources: async () => [new SlowSource("drive", items, 300)],
+  const partner = (items: { ref: string; title: string; text: string }[]) => {
+    const source = new HeldSource("drive", "docs", items);
+    const p = new ContextPartner({
+      sources: async () => [source],
       sourceMap: new SourceMap(),
       cache: new ItemCache(),
       budget: new Budget(),
       model: null,
       config: { ...DEFAULT_CONFIG },
     });
-  // Observe returns at once; the slow path queues its packet once the 300 ms search is back.
-  const queue = async (p: ContextPartner) => {
+    return Object.assign(p, { source });
+  };
+  // Packets queued for the session, read without handing them out (`takePending` would): the one test-only peek at
+  // the partner's private session state, so the test waits for the queue itself rather than for a guessed time.
+  const queued = (p: ContextPartner) => {
+    const sessions = (p as unknown as { sessions: Map<string, { pending: unknown[] }> }).sessions;
+    return sessions.get(`${who.tenantId}/${who.userId}#${who.sessionId}`)?.pending.length ?? 0;
+  };
+  // Observe returns at once while the search is held; once it is released, the slow path queues its packet.
+  const queue = async (p: ContextPartner & { source: HeldSource }) => {
     const r = await p.observe({ ...who, at: Date.now(), kind: "user_message", text: po } as AgentEvent, {
       waitMs: 0,
     });
     expect(r.injection).toBeNull();
-    await Bun.sleep(1_500);
+    await until(() => p.source.made === 1, "the slow path's search");
+    expect(queued(p)).toBe(0);
+    p.source.release();
+    await until(() => queued(p) === 1, "the slow path's packet queued");
   };
 
   test("an ask before takePending says the queued item in full, not '(shown above)', and is not repeated", async () => {

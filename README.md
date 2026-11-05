@@ -22,7 +22,7 @@ Needs [Bun](https://bun.sh) 1.3+.
 bun install
 bun run check                      # format, typecheck, tests
 bun run eval                       # seed scenarios, no model (free, deterministic)
-OPENROUTER_API_KEY=… bun run eval --live
+OPENROUTER_API_KEY=… bun run eval --live --usd-cap 0.05   # the shipped wiring, hard spend cap (D128)
 
 # The API, with example sources and no auth:
 EDEN_DEV=1 EDEN_SOURCES_FILE=examples/personal-agent/sources.json EDEN_TRACE=1 bun run dev
