@@ -2,7 +2,7 @@
 /** Starts the partner's HTTP API. `bun run dev` from the repo root. */
 import { warmGate } from "@eden/redact";
 import { loadConfig } from "./config";
-import { sourcesFromEnv } from "./connectors";
+import { sourcesOrExit } from "./connectors";
 import { buildPartner, startGatePool } from "./build";
 import { engineConfig } from "./engine-config";
 import { createHandler } from "./http";
@@ -11,9 +11,10 @@ import { modelRolesFromEnv } from "./models";
 const started = performance.now();
 const config = loadConfig();
 const engine = engineConfig();
+// Per-user sources when EDEN_USER_SOURCES_FILE is set (D108); forget closes their connections. Before the gate pool,
+// so a bad sources file exits 2 with its message before any worker starts.
+const sources = sourcesOrExit();
 const gatePool = await startGatePool(config.gateWorkers);
-// Per-user sources when EDEN_USER_SOURCES_FILE is set (D108); forget closes their connections.
-const sources = sourcesFromEnv();
 const partner = buildPartner({
   gatePool,
   sources: sources.resolver,
@@ -39,5 +40,6 @@ const keys = Object.keys(engine);
 console.log(
   `eden partner listening on http://${server.hostname}:${server.port}${config.dev ? " (dev, no auth)" : ""}` +
     ` (startup ${startupMs} ms; model roles ${process.env.OPENROUTER_API_KEY ? "on" : "off (no OPENROUTER_API_KEY)"}` +
+    `; sources ${sources.shared} shared${sources.userSources ? " + per user (EDEN_USER_SOURCES_FILE)" : ""}` +
     `${keys.length > 0 ? `; engine settings: ${keys.join(", ")}` : ""})`,
 );
