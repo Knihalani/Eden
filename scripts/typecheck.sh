@@ -36,6 +36,35 @@ fi
 # run re-checks only what an edit can reach: an edit to a widely imported file costs close to a cold run.
 # CHECK_COLD=1 checks from scratch.
 cache_dir=node_modules/.cache/tsc
+
+# A new git worktree has no build info, and its first check ran cold (11 s against 3.4 s warm). Its paths are
+# relative to the build info file, so another worktree's carries over: copy in the most recently written one, which
+# is most likely to be of a nearby commit (in an audit run, a sibling on the same integration branch; main's can be
+# 40 files behind and save nothing). A copy, never a link: two checkouts writing one file would race. tsc trusts
+# nothing in it unchecked: each file's recorded version is its content hash, so a copy from another branch re-checks
+# what differs, and an unreadable one (copied mid-write) is treated as absent.
+seed_cache() {
+  local here wt from= tmp
+  here=$(pwd -P)
+  while IFS= read -r wt; do
+    [ -f "$wt/node_modules/.cache/tsc/tsconfig.tsbuildinfo" ] || continue
+    [ "$(cd "$wt" && pwd -P)" != "$here" ] || continue
+    if [ -z "$from" ] || [ "$wt/node_modules/.cache/tsc/tsconfig.tsbuildinfo" -nt "$from/tsconfig.tsbuildinfo" ]; then
+      from=$wt/node_modules/.cache/tsc
+    fi
+  done < <(git worktree list --porcelain | sed -n 's/^worktree //p')
+  [ -n "$from" ] || return 0
+  mkdir -p node_modules/.cache
+  tmp=$(mktemp -d node_modules/.cache/tsc.seed.XXXXXX) || return 0
+  cp "$from"/*.tsbuildinfo "$tmp"/ 2>/dev/null || true
+  # A rename, so a check running beside this one sees no directory or a whole one; if one appeared meanwhile, keep it.
+  if [ -d "$cache_dir" ] || ! mv "$tmp" "$cache_dir" 2>/dev/null; then rm -rf "$tmp"; fi
+  rm -rf "${cache_dir:?}/${tmp##*/}" # mv moved it inside a directory created between the test and the rename
+  [ -d "$cache_dir" ] && echo "── seeded $cache_dir from ${from%/node_modules/.cache/tsc}"
+}
+if [ "${CHECK_COLD:-}" != "1" ] && [ ! -d "$cache_dir" ]; then
+  seed_cache || true
+fi
 mkdir -p "$cache_dir"
 
 # check CHECKER PROJECT [EXTRA FLAGS...]: one program through one checker.
