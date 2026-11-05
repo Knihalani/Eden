@@ -69,12 +69,16 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   clock-independent in D58).
 - Regressions found in reviews go to `regressions.test.ts`, `review-regressions.test.ts` or the track's own
   `*-review.test.ts`; add to them rather than editing an old expectation.
-- `new ModelReaderMaker(model, { reasoning })` takes `"low"` (the default, production's value), `"medium"`, `"high"`
-  or `"off"` (no effort sent). No `EngineConfig` key wires it yet. OpenRouter excludes reasoning from the reply but
-  bills it as output; `usage.reasoningTokens` (from `completion_tokens_details.reasoning_tokens`, unset when not
-  reported) shows that share. Lab reader latencies (Anthropic, thinking off by default) exclude it, so they
-  understate production wherever the routed endpoint reasons. Changing the default needs a decision and a decoy
-  measurement (D96: reasoning before the verdict is what keeps decoys out).
+- `new ModelReaderMaker(model, { reasoning })` takes `"off"` (the default since D144: no effort sent, the request
+  every lab quality figure measured), `"low"`, `"medium"` or `"high"`. No `EngineConfig` key wires it; the servers
+  build it with no options, so they ship "off". D96's decoy cut came from the prompt writing `why` before `binds`
+  (READER_SYSTEM v4/v5), not from provider reasoning. On Haiku 5.5 (Anthropic-direct, default pool) "low" was 2.38x
+  slower at p50, 1.59x dearer, and 38 of 60 calls ran past `askReaderWaitMs` (docs/COST-MODEL.md, `reader-time.ts`).
+  When a caller asks for reasoning, OpenRouter excludes it from the reply but bills it as output;
+  `usage.reasoningTokens` (from `completion_tokens_details.reasoning_tokens`, unset when not reported) shows that
+  share. The lab's reader replay key treats a `claude-*` reader request with no reasoning as the pre-D144 "low" line
+  (`reader-disk.ts`, `keyedReasoning`), so recorded caches still replay. Making reasoning the default again needs a
+  decision and a decoy measurement.
 - `Held` (what a tool result or agent message holds, for `alreadyHas`) is two sorted unique typed arrays, searched by
   binary search: a remap (`rebuildVocab`) must sort and dedupe again, since new ids do not keep the old order. Pair
   keys stay exact Float64 (`pairKey`): a hashed key could hold back a delivery on a collision. `held.test.ts` measures

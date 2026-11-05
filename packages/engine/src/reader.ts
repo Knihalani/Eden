@@ -43,8 +43,8 @@ export const READER_REQUEST_CHARS = 400;
 export const READER_WHY_WORDS = 15;
 const READER_WHY_CHARS = 120;
 /**
- * Output cap: the answer is a few short entries, but low-effort reasoning comes first and counts against it (D45).
- * A cut-off reply is unreadable, so the ask falls back to its usual answer.
+ * Output cap: the answer is a few short entries, but reasoning, when a caller asks for it (off by default, D144),
+ * comes first and counts against it (D45). A cut-off reply is unreadable, so the ask falls back to its usual answer.
  */
 const READER_MAX_TOKENS = 2_000;
 
@@ -469,9 +469,12 @@ export type ReaderReasoning = "low" | "medium" | "high" | "off";
 
 export interface ModelReaderOptions {
   /**
-   * Default "low", today's production value. Reasoning tokens are billed as output and add to latency, but
-   * OpenRouter excludes them from the reply, so only `usage.reasoningTokens` shows them. Changing the default needs a
-   * decision and a decoy measurement: D96 found that reasoning before the verdict is what keeps decoys out.
+   * Default "off" (D144): no effort is sent, which is the reader every lab quality figure measured (D96, D98, D125
+   * ran it on Anthropic with thinking off). D96's decoy cut came from the prompt's own reasoning, `why` written before
+   * `binds` (READER_SYSTEM v4/v5), not from provider reasoning. Provider reasoning on Haiku 5.5 made a call about 3x
+   * slower at p50, most calls past `askReaderWaitMs`, and about 1.5x dearer (docs/COST-MODEL.md). Callers may still
+   * pass "low" and up; reasoning tokens are billed as output, and OpenRouter excludes them from the reply, so only
+   * `usage.reasoningTokens` shows them.
    */
   reasoning?: ReaderReasoning;
 }
@@ -483,7 +486,7 @@ export class ModelReaderMaker implements ReaderMaker {
     private readonly model: Model,
     options: ModelReaderOptions = {},
   ) {
-    this.reasoning = options.reasoning ?? "low";
+    this.reasoning = options.reasoning ?? "off";
   }
 
   async read(input: ReaderInput, signal: AbortSignal) {
@@ -509,8 +512,8 @@ export interface ReaderLimits {
   /** A verdict older than this is read again, and dropped (ms): about a session's idle timeout. */
   ttlMs: number;
   /**
-   * The estimate a call is reserved at (docs/COST-MODEL.md): about 4,500 tokens in for 30 items, up to 2,000 out with
-   * reasoning, at the list price.
+   * The estimate a call is reserved at (docs/COST-MODEL.md): about 4,500 tokens in for 30 items, up to 2,000 out
+   * (room for reasoning a caller asks for), at the list price.
    */
   estimateUsd: number;
 }

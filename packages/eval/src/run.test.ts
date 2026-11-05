@@ -220,10 +220,11 @@ describe("eval harness: --live wires what ships (D128)", () => {
     });
     const calls = made[0]!.calls;
     expect(calls.length).toBeGreaterThan(0);
-    // Every call is the reader's, made as ModelReaderMaker makes it: its prompt, JSON, reasoning "low"; no judge.
+    // Every call is the reader's, made as ModelReaderMaker makes it: its prompt, JSON, no reasoning (D144); no judge.
     for (const c of calls) {
       expect(c.messages[0]!.content).toBe(readerSystem);
-      expect(c).toMatchObject({ json: true, reasoning: "low", maxTokens: 2_000 });
+      expect(c).toMatchObject({ json: true, maxTokens: 2_000 });
+      expect("reasoning" in c).toBe(false);
     }
     expect(m.readerPool).toMatchObject({ reader: "live", calls: calls.length, failures: 0 });
     expect(m.decisions.model).toBeUndefined();
