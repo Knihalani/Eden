@@ -232,12 +232,49 @@ describe("the card maker and its routing", () => {
     return { seen, model };
   };
 
-  test("D59's call: low reasoning, the 2,000-token cap, today in the system prompt", async () => {
+  test("D59's call as D149 amends it: no reasoning, the 2,000-token cap, today in the system prompt", async () => {
     const { seen, model } = recorder();
     await new ModelCardMaker(model).make([item("a", "Ops", "Frozen.")], "2026-10-27", AbortSignal.timeout(1_000));
-    expect(seen[0]).toMatchObject({ reasoning: "low", maxTokens: 2_000 });
+    expect(seen[0]).toMatchObject({ maxTokens: 2_000 });
+    // No effort at all (the configuration every lab card call measured), not `reasoning: undefined`.
+    expect("reasoning" in seen[0]!).toBe(false);
     expect(seen[0]!.messages[0]!.content).toContain("Today is 2026-10-27");
     expect(cardMessages([item("a", "Ops", "Frozen.")], "2026-10-27")).toEqual(seen[0]!.messages);
+  });
+
+  test('reasoning is opt-in: "off" sends none, "low" and up send that effort, the caps unchanged', async () => {
+    const one = [item("a", "Ops", "Frozen.")];
+    const off = recorder();
+    await new ModelCardMaker(off.model, { reasoning: "off" }).make(one, "2026-10-27", AbortSignal.timeout(1_000));
+    expect("reasoning" in off.seen[0]!).toBe(false);
+    const low = recorder();
+    await new ModelCardMaker(low.model, { reasoning: "low" }).make(one, "2026-10-27", AbortSignal.timeout(1_000));
+    expect(low.seen[0]).toMatchObject({ reasoning: "low", maxTokens: 2_000 });
+    const high = recorder();
+    await new ModelCardMaker(high.model, { reasoning: "high" }).make(
+      one,
+      "2026-10-27",
+      AbortSignal.timeout(1_000),
+      false,
+      true,
+    );
+    expect(high.seen[0]).toMatchObject({ reasoning: "high", maxTokens: 3_000 });
+  });
+
+  test("intent calls and retries follow the same reasoning setting", async () => {
+    const one = [item("a", "Ops", "Frozen.")];
+    const plain = recorder();
+    const retry = recorder();
+    const maker = new ModelCardMaker(plain.model, { retry: retry.model });
+    await maker.make(one, "2026-10-27", AbortSignal.timeout(1_000), false, true);
+    await maker.make(one, "2026-10-27", AbortSignal.timeout(1_000), true);
+    expect(plain.seen[0]!.maxTokens).toBe(3_000);
+    expect("reasoning" in plain.seen[0]!).toBe(false);
+    expect("reasoning" in retry.seen[0]!).toBe(false);
+    const lowRetry = recorder();
+    const low = new ModelCardMaker(plain.model, { retry: lowRetry.model, reasoning: "low" });
+    await low.make(one, "2026-10-27", AbortSignal.timeout(1_000), true);
+    expect(lowRetry.seen[0]).toMatchObject({ reasoning: "low" });
   });
 
   test("the cap grows with a batch past ten (200 tokens an item)", async () => {
