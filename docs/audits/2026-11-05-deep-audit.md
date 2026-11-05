@@ -840,8 +840,8 @@ Plans and acceptance checks (the run's structured output has the same):
   both lines with per-stage us/item and B/item; the paid funnel uses `--spend-ledger .local/mkt/ledger.jsonl
 --spend-cap 25 --spend-headroom 0.3` with Haiku 5.5 and costs under $1 (ledger delta reported); graph-ablation.md
   gives default vs minus-graph hidden and decoys task by task, quality-cli with and without the graph,
-  graph-memory.ts, and a proposed D141 row (remove under D112 if neutral at no extra paid cost, else keep and plan
-  Stage 2).
+  graph-memory.ts, and a D141 row to propose (remove under D112 if neutral at no extra paid cost, else keep and plan
+  Stage 2). D141 is now written: keep.
 
 ## Deferred (round 2)
 
