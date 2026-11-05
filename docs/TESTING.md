@@ -27,6 +27,31 @@ under archived/ not run. On 1.3.13 three tests in those files fail (`utf8.test.t
 failing with the old bunfig, and two `redos.test.ts` timing tests), and the run took 107 s; the gate is measured on
 1.4.4.
 
+## Bun's unref'd-timer spin (Bun 1.4.4, 2026-11-05)
+
+Bun 1.4.4 busy-polls a core while the only pending timers are unref'd ones (an `unref()`'d `setTimeout`,
+`AbortSignal.timeout`). The engine and sources unref their deadline timers so they never hold a process open
+(`guarded.ts`, `partner.ts`, `cache.ts`), and some tests wait on those deadlines for real. Repro: a test that awaits an
+unref'd 1.5 s `setTimeout` used 1,443 ms of CPU over 1,500 ms of wall; with any ref'd `setInterval` alive (periods
+1 s, 60 s and 2^31-1 ms tried) it used 3-4 ms. `scripts/test-preload.ts` therefore keeps one ref'd interval (period
+one hour, never fires in a run) and clears it in its global `afterAll`; checked under `--parallel` (each worker loads
+the preload: 3-5 ms CPU per waiting file, the run exits at once) and in one process across three files. Remove it once
+a Bun release stops spinning (re-run the repro). One-shot lab CLIs that wait on `AbortSignal.timeout` with nothing else
+ref'd would spin the same way; not checked.
+
+`bun test packages/engine/src/ask-deadline.test.ts` (`time`, 4-core shared box):
+
+| | real | user |
+|---|---|---|
+| Before: `TIMEOUT` 1,500 ms, no keep-alive | 7.77 s | 7.65 s |
+| Keep-alive only (two runs) | 7.74, 7.73 s | 0.27, 0.28 s |
+| Keep-alive and `TIMEOUT` 500 ms (two runs) | 2.71, 2.75 s | 0.27, 0.31 s |
+
+The test's bound is now `TIMEOUT * 1.5` (750 ms) instead of `TIMEOUT + 250`: one deadline must land under it and a
+regression to two deadlines (D140) lands at 1,000 ms, 250 ms clear. A cut to 300 ms with the fixed +250 ms would have
+left 50 ms between the two. Observed time before the reader at 500 ms: 501-601 ms (three runs, five asks each). Under
+load (four busy-loop processes on the 4 cores) the file passed 20 of 20 runs, 2.83-3.14 s each.
+
 ## Caches in format:check and typecheck
 
 Both caches carry to a fresh git worktree (each audit fixer, reviewer and integrator gets one), and
@@ -280,6 +305,15 @@ adds the cache's knowledge graph, and `shipped` runs a `ContextPartner` on `DEFA
 modes) and the heap with the sources' raw items released; a fourth argument (`core`, `graph`, `shipped`) runs one
 mode. 200 × 500, two runs: `core` 66.1–73.4 µs/item, `shipped` 357.6–380.6 µs/item (5.2–5.4x) and 2.0x the heap
 per item; about 75 s wall in all (docs/research/graph-ablation.md).
+
+`--quick` (2026-11-05) runs 40 × 500 for a screen while iterating; the default stays 200 × 500, the size every
+recorded figure uses. One run of each, the same session, load about 2.2: the default took 76.5 s wall (core 82.4,
+graph 274.5, shipped 367.3 µs/item; held 2,595 / 5,225 / 5,234 B/item; `+graph` 192.1 µs/item; shipped/core 4.46x),
+`--quick` 16.9 s (core 91.0, graph 275.5, shipped 398.6 µs/item; held 2,734 / 5,363 / 5,380 B/item; `+graph`
+184.5 µs/item; shipped/core 4.38x). Its µs/item came within 0.4-10.4% of the full size, but its held memory per item
+reads 3-5% higher (a fixed per-user cost over fewer items), so a quick memory figure is never set against a 200 × 500
+one; the bench prints that note under its header. The modes still run one after another: run at once on a 4-core box
+they would contend for CPU and GC, and the stage differences are per-mode subtractions.
 
 ## Rules for new tests
 
