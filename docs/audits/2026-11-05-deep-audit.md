@@ -455,8 +455,10 @@ counts 8): 58 files, +2,367 −146 (`git diff --stat main audit/2026-11-05-integ
 `git log main..audit/2026-11-05-integration` also lists the first pass's history (65 commits, 26 merges). This
 closing step's packages (`final1-cards-reasoning-off` for D149, `final1-graph-read-chars-1000` for D150,
 `final1-timed-zone-day`, `final1-eval-live-thinking-arm`, `final1-close-docs` and `final1-final-live-ab`) have since
-been merged into the integration branch: `git branch --no-merged audit/2026-11-05-integration --list
-'audit/2026-11-05*'` prints none (run in "Closing the second pass: final loose ends" below). Merging into `main`
+been merged into the integration branch: at a0e4da57e, `git branch --no-merged audit/2026-11-05-integration --list
+'audit/2026-11-05*'` printed none (run in "Closing the second pass: final loose ends" below). That check ran before
+the two final2 packages (`final2-close-docs-loose-ends` and `final2-drop-maker-reasoning-options`), which merge
+together after their review. Merging into `main`
 needs the `reviewer` subagent on the engine and server diff first (CLAUDE.md step 5), then `bun run check` and `bun
 run eval` on the final tree.
 
@@ -561,8 +563,11 @@ All on a0e4da57e plus this step's docs (documentation changes only), on the shar
 - `bun packages/engine/bench/ingest.bench.ts`, two full runs: `core` 68.7 and 65.1 µs per backfilled item, `shipped`
   261.8 and 258.9 (3.81x and 3.98x `core`), `+graph` 86.2 and 90.3. docs/COST-MODEL.md now gives these post-D150
   figures in place of the pre-D150 ones (5.2-5.4x) and no longer calls `graphLite` "not yet built".
-- `git branch --no-merged audit/2026-11-05-integration --list 'audit/2026-11-05*'` prints nothing: every branch of
-  both passes is merged into the integration branch.
+- At a0e4da57e, before the two final2 packages, `git branch --no-merged audit/2026-11-05-integration --list
+  'audit/2026-11-05*'` printed nothing: every first-pass and final1 branch was merged into the integration branch.
+  The two final2 branches (`audit/2026-11-05-final2-close-docs-loose-ends`, which holds this section, and
+  `audit/2026-11-05-final2-drop-maker-reasoning-options`) are not merged by construction; they merge together
+  after this review.
 - `git branch -r | grep -c r10-` prints 42.
 
 ### What this step closed
@@ -592,7 +597,6 @@ All on a0e4da57e plus this step's docs (documentation changes only), on the shar
 > transport, and decided the D130 veto by name (D151) ("Closing the second pass" above); `main` (cf38efb09) holds the
 > first pass, and the second pass waits in the integration branch for the reviewer and a merge. See "Closing the
 > second pass: final loose ends" above for the current state.
-
 
 This section closes the run. It covers two audit rounds and two final clean-up steps. Every number comes from a
 command or commit message recorded in this run; numbers marked "estimate" were not measured. Benchmarks ran on a

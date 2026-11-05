@@ -481,19 +481,19 @@ A synced user costs about 4 MB of heap per ~1,500 items and ~200 ms of CPU to ba
 measurement, not re-run). The combined funnel implies more, about 420 ms per user (16.9 s of extra process CPU over 40
 users with ALL), because there the graph and the cards are built on every synced item too (below).
 
-The shipped ingest path, measured (2026-11-05, after D150; docs/research/graph-ablation.md): `ingest.bench.ts` times
-the cache's own work (its `core` line) and the same backfill through a `ContextPartner` on `DEFAULT_CONFIG` with no
-model (its `shipped` line), 200 users × 500 items of 1,599 chars on average. Two full runs of
+The shipped ingest path, measured (2026-11-05, after D150; docs/research/graph-ablation.md): `ingest.bench.ts` times the
+cache's own work (its `core` line) and the same backfill through a `ContextPartner` on `DEFAULT_CONFIG` with no model
+(its `shipped` line), 200 users × 500 items of 1,599 chars on average. Two full runs of
 `bun packages/engine/bench/ingest.bench.ts` at a0e4da57e (shared 4-core box): `core` 68.7 and 65.1 µs per backfilled
-item, 2,562 B of heap per item; `shipped` 261.8 and 258.9 µs and 4,218-4,223 B per item (3.81x and 3.98x the CPU, 1.65x the
-heap). Of the difference, the graph's add (`+graph`) is 86.2 and 90.3 µs and 1,662-1,663 B per item, and recording
-mentions in the source map (`+onStored`) 106.9 and 103.5 µs (SQLite, outside the heap). Re-listing unchanged items
-stays 3.9-5.1 µs per item. Before D150 the graph read 4,000 characters per item and the same bench gave `shipped`
-358-381 µs and 5.2-5.4x `core`, the graph's add 182-192 µs and 2.6 KB; D150 cut the read to 1,000 characters with
-every train screen identical, which closed the planned `graphLite` trial with no switch. Arithmetic, not measured: a
-cold restart that backfills 10,000 users × 3,000 items at about 260 µs each is about 7,800 CPU-seconds per process,
-about a third of it the graph. The graph adds no paid call; the paid-reader funnel credits it with 4 more hidden
-facts surfaced of 384 (and 2 more decoys), so it stays in the default (D141).
+item, 2,562 B of heap per item; `shipped` 261.8 and 258.9 µs and 4,218-4,223 B per item (3.81x and 3.98x the CPU, 1.65x
+the heap). Of the difference, the graph's add (`+graph`) is 86.2 and 90.3 µs and 1,662-1,663 B per item, and recording
+mentions in the source map (`+onStored`) 106.9 and 103.5 µs (SQLite, outside the heap). Re-listing unchanged items stays
+3.9-5.1 µs per item. Before D150 the graph read 4,000 characters per item and the same bench gave `shipped` 358-381 µs
+and 5.2-5.4x `core`, the graph's add 182-192 µs and 2.6 KB; D150 cut the read to 1,000 characters with every train
+screen identical, which closed the planned `graphLite` trial with no switch. Arithmetic, not measured: a cold restart
+that backfills 10,000 users × 3,000 items at about 260 µs each is about 7,800 CPU-seconds per process, about a third of
+it the graph. The graph adds no paid call; the paid-reader funnel credits it with 4 more hidden facts surfaced of 384
+(and 2 more decoys), so it stays in the default (D141).
 
 Anticipation (D60, `anticipate`, in the default since D112; docs/research/moon-anticipate.md) adds no model call on any
 path: its predictions are fixed linear reads of an event's head, and its prefetches are source calls within
