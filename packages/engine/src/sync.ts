@@ -695,8 +695,11 @@ export class SyncManager {
   private store(u: UserSync, s: SourceSync, items: ContextItem[], changedIds?: Set<string>): number {
     // The same user object and source state: work for a user forgotten and back since must not land.
     if (u.gone || items.length === 0 || this.users.get(u.key) !== u || u.sources.get(s.id) !== s) return 0;
-    const own = items.filter((it) => it.sourceId === s.id);
-    const changed = this.deps.cache.put(u.scope, own, this.deps.now(), true, true);
+    const now = this.deps.now();
+    // An item its source said is gone (`ItemCache.isHeldGone`) was listed before the deletion: neither stored nor
+    // counted as synced, or the listing would undo `removed`.
+    const own = items.filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now));
+    const changed = this.deps.cache.put(u.scope, own, now, true, true);
     if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
     for (const it of own) {

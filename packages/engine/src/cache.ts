@@ -305,10 +305,6 @@ export function sanitizeItem(raw: ContextItem, maxTextChars = DEFAULT_CACHE_LIMI
   };
 }
 
-/**
- * The id an item has once sanitized: its own, unless its ref held something the gate redacts, then a hash of the ref.
- * For places that keep only an item's id (shadow records) without paying to redact its text.
- */
 /** Ids held as gone per user at most (`UserCache.gone`). */
 const MAX_GONE = 1_000;
 
@@ -321,6 +317,10 @@ function isGone(gone: Map<string, number>, id: string, now: number): boolean {
   return false;
 }
 
+/**
+ * The id an item has once sanitized: its own, unless its ref held something the gate redacts, then a hash of the ref.
+ * For places that keep only an item's id (shadow records) without paying to redact its text.
+ */
 export function sanitizedId(raw: ContextItem, sanitizedRef = sanitizeForStore(raw.ref)): string {
   if (sanitizedRef === raw.ref) return raw.id;
   return itemId(raw.sourceId, `h-${createHash("sha256").update(raw.ref).digest("hex").slice(0, 16)}`);
@@ -659,6 +659,12 @@ export class ItemCache {
   revive(scope: Scope, ids: Iterable<string>): void {
     const gone = this.peek(scope)?.gone;
     if (gone) for (const id of ids) gone.delete(id);
+  }
+
+  /** Whether `removeItems` holds this id as gone at `now` (a page read before its deletion must not count it). */
+  isHeldGone(scope: Scope, id: string, now = Date.now()): boolean {
+    const gone = this.peek(scope)?.gone;
+    return gone !== undefined && gone !== null && isGone(gone, id, now);
   }
 
   /** Synced items the user's cache holds (D57). */

@@ -114,6 +114,8 @@ interface PerSource {
    * the first one: most (user, source) pairs never see the planner.
    */
   callLatency?: RollingHistogram;
+  /** `dropResults` calls for this (user, source): a call running across one does not hold its page. */
+  drops?: number;
 }
 
 /** Planner calls a connector's call-latency quantile needs before it is trusted. */
@@ -328,9 +330,17 @@ export class SourceFanout {
    * deleted something, so a held page may show it as it was. A call still running when this happens holds nothing.
    */
   dropResults(scope: Scope, sourceId: string): void {
-    const prefix = `${scopeKey(scope)}|${sourceId}|`;
-    this.forgets++;
-    this.results?.deleteWhere((k) => k.startsWith(prefix));
+    const key = `${scopeKey(scope)}|${sourceId}`;
+    // Counted per (user, source), not on `forgets`: one user's notifications must not stop other users' calls from
+    // holding their pages or recording their latency. No state means no call of this pair is running.
+    const s = this.per.get(key);
+    if (s) s.drops = (s.drops ?? 0) + 1;
+    this.results?.deleteWhere((k) => k.startsWith(`${key}|`));
+  }
+
+  /** `dropResults` calls so far for a (user, source), to compare across a call. */
+  private dropsOf(key: string): number {
+    return this.per.get(key)?.drops ?? 0;
   }
 
   /**
@@ -392,6 +402,7 @@ export class SourceFanout {
             // Only the flight's leader runs this: a call that joins it is not one the connector receives.
             calls.made++;
             const forgets = this.forgets;
+            const drops = this.dropsOf(sourceKey(q));
             const t0 = performance.now();
             let raw: ContextItem[];
             try {
@@ -406,7 +417,8 @@ export class SourceFanout {
             }
             this.recordCall(sourceKey(q), t0, forgets);
             const items = await this.gate(raw, sig);
-            if (!sig.aborted && this.forgets === forgets) this.results?.set(k, items, sizeOf(items));
+            const held = this.forgets === forgets && this.dropsOf(sourceKey(q)) === drops;
+            if (!sig.aborted && held) this.results?.set(k, items, sizeOf(items));
             return items;
           },
           signal,
@@ -528,6 +540,7 @@ export class SourceFanout {
 
     const started = performance.now();
     const forgets = this.forgets;
+    const drops = this.dropsOf(sourceKey);
     // Set once the source has answered: a deadline that runs out after that ran out in our gate, not at the source.
     let answered = false;
     try {
@@ -545,8 +558,9 @@ export class SourceFanout {
       s.latency.record(performance.now() - started);
       s.limiter.release("ok");
       s.breaker.success(epoch);
-      // A forget while the call ran: writing the result back could undo it.
-      if (this.forgets === forgets) this.results?.set(cacheKey, items, sizeOf(items));
+      // A forget, or this pair's `dropResults`, while the call ran: writing the result back could undo it.
+      if (this.forgets === forgets && this.dropsOf(sourceKey) === drops)
+        this.results?.set(cacheKey, items, sizeOf(items));
       return done("ok", items);
     } catch (e) {
       const message = String(e);

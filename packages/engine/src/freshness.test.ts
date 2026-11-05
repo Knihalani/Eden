@@ -282,3 +282,26 @@ describe("review regressions (D126)", () => {
     expect(r.answer).toContain("Porto");
   });
 });
+
+describe("review regressions (D126), second round", () => {
+  test("a poll whose listing predates a deletion neither stores the item nor counts it as synced", async () => {
+    const src = new Listed("notes");
+    seed(src);
+    src.docs.set("q2", { title: "Lunch", text: "Lunch orders are due by noon." });
+    const { partner, cache, advance, now } = await synced(src);
+    const before = cache.syncedCount(scope);
+    // The notification lands before the source's listing reflects the deletion: the listing still has q1.
+    expect(partner.sourceRemoved(scope, "notes", ["q1"])).toBe(1);
+    advance(MIN);
+    partner.sourceChanged(scope, "notes"); // A poll follows, reading the stale listing.
+    await say(partner, "Where is the quarterly offsite?", "s1", now());
+    expect(cache.get(scope, itemId("notes", "q1"), now())).toBeFalsy();
+    expect(cache.syncedCount(scope)).toBe(before - 1);
+    const ids = (
+      partner.sync as unknown as { users: Map<string, { sources: Map<string, { ids: Set<string> }> }> }
+    ).users
+      .get("t/u")
+      ?.sources.get("notes")?.ids;
+    expect(ids?.has(itemId("notes", "q1"))).toBe(false);
+  });
+});

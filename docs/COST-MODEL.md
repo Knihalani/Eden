@@ -289,7 +289,9 @@ docs/research/cost-fixes.md and eden-market-effect.md.
 before its source's latest signal-only notification: about 0.48 per agent turn in the simulation with signals, none
 with item-carrying notifications or none at all (the live market runs: unchanged). Re-reading by age was measured at
 +4.6 calls per task live and rejected; on a $12-per-1,000-calls platform that would have been about $55 per 1,000
-tasks.
+tasks. A signal, an item-carrying notification or a deletion also drops the search pages Eden holds for that user's
+source (`SourceFanout.dropResults`, held 60 s fresh), so the next lookup there searches again instead of reusing one:
+at most one extra search per notification (not separately measured).
 
 - The background column spreads each seed's card and intent spend over that seed's task runs; with only 64 tasks per
   simulated user it is mostly the one-time backfill, an upper bound on the steady state. In this run the checked-in
