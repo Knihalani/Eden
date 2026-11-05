@@ -283,6 +283,95 @@ describe("review regressions (D126)", () => {
   });
 });
 
+describe("D133: a signal that lands while a read is on the wire doubts the copy it stores, and no other", () => {
+  /** A listed source whose fetch takes its snapshot, then runs `during` (a change and its signal), then answers. */
+  class SlowFetch extends Listed {
+    during: (() => void) | null = null;
+    override async fetch(ref: string): Promise<ContextItem | null> {
+      this.fetches++;
+      const snapshot = this.item(ref);
+      await Promise.resolve();
+      const hook = this.during;
+      this.during = null;
+      hook?.();
+      return snapshot;
+    }
+  }
+
+  test("the verify fetch returns the copy from before the signal: the next delivery re-reads and has the new text", async () => {
+    const src = new SlowFetch("notes");
+    seed(src);
+    const { partner, cache, advance, now } = await synced(src);
+    advance(5 * MIN);
+    partner.sourceChanged(scope, "notes"); // A change elsewhere: q1 is only doubted.
+    src.failSearch = true;
+    src.during = () => {
+      advance(1_000);
+      src.docs.set("q1", { title: "Quarterly offsite", text: "The quarterly offsite moved to Porto on 19 November." });
+      partner.sourceChanged(scope, "notes");
+    };
+    advance(MIN);
+    const first = await say(partner, "Remind me where the quarterly offsite is", "s1", now());
+    expect(first.map((i) => i.text).join("\n")).toContain("Lisbon"); // What the read returned.
+    const fetchesBefore = src.fetches;
+    advance(MIN);
+    const r = await partner.ask({ ...scope, sessionId: "s2", question: "Where is the quarterly offsite?" });
+    expect(src.fetches).toBeGreaterThan(fetchesBefore);
+    expect(r.answer).toContain("Porto");
+    expect(cache.get(scope, itemId("notes", "q1"), now())?.text).toContain("Porto");
+  });
+
+  test("a signal in the same millisecond as a read's start, after it began, doubts the copy; one before does not", async () => {
+    const src = new Listed("notes");
+    seed(src);
+    const { partner, cache, now } = await synced(src);
+    const sync = partner.sync!;
+    const readMark = sync.mark(); // A read begins ...
+    partner.sourceChanged(scope, "notes"); // ... and a signal lands in the same millisecond, before it answers.
+    cache.put(scope, [src.item("q1")!], now(), false, true, readMark);
+    expect(sync.signalledSince(scope, "notes", cache.readMark(scope, itemId("notes", "q1"))!)).toBe(true);
+    // A read that began after that signal, in the same millisecond still: not in doubt.
+    cache.put(scope, [src.item("q1")!], now(), false, true, sync.mark());
+    expect(sync.signalledSince(scope, "notes", cache.readMark(scope, itemId("notes", "q1"))!)).toBe(false);
+    // An unchanged copy from a read begun earlier does not move the mark back.
+    cache.put(scope, [src.item("q1")!], now(), false, true, readMark);
+    expect(sync.signalledSince(scope, "notes", cache.readMark(scope, itemId("notes", "q1"))!)).toBe(false);
+  });
+
+  test("items a notification carried are not re-read at the next delivery", async () => {
+    const src = new Listed("notes");
+    seed(src);
+    const { partner, advance, now } = await synced(src);
+    advance(5 * MIN);
+    src.docs.set("q1", { title: "Quarterly offsite", text: "The quarterly offsite moved to Porto on 19 November." });
+    partner.sourceChanged(scope, "notes"); // The signal and the items it carried, at the same instant.
+    await partner.sourceItems(scope, "notes", [src.item("q1")!]);
+    src.failSearch = true;
+    advance(MIN);
+    const before = src.fetches;
+    const got = await say(partner, "Remind me where the quarterly offsite is", "s2", now());
+    expect(src.fetches).toBe(before);
+    expect(got.map((i) => i.text).join("\n")).toContain("Porto");
+  });
+
+  test("copies the poll a signal causes stores within the next moments are not re-read", async () => {
+    const src = new Listed("notes");
+    seed(src);
+    const { partner, advance, now } = await synced(src);
+    advance(5 * MIN);
+    src.docs.set("q1", { title: "Quarterly offsite", text: "The quarterly offsite moved to Porto on 19 November." });
+    partner.sourceChanged(scope, "notes");
+    advance(200); // A lookup 200 ms after the signal polls the source and stores the new copy.
+    await say(partner, "Remind me where the quarterly offsite is", "s1", now());
+    const before = src.fetches;
+    advance(MIN);
+    src.failSearch = true;
+    const got = await say(partner, "What about the quarterly offsite plan", "s2", now());
+    expect(src.fetches).toBe(before);
+    expect(got.map((i) => i.text).join("\n")).not.toContain("Lisbon");
+  });
+});
+
 describe("review regressions (D126), second round", () => {
   test("a poll whose listing predates a deletion neither stores the item nor counts it as synced", async () => {
     const src = new Listed("notes");
