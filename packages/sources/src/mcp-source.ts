@@ -69,6 +69,12 @@ export interface McpSourceOptions {
     args?: (cursor: string | undefined, limit: number) => Record<string, unknown>;
     fixed?: Record<string, unknown>;
   };
+  /**
+   * The largest page the list tool honours, as the operator knows it (`Source.listPageMax`): for a tool whose schema
+   * declares no `maximum` on its page-size argument, or one called through `args`. With a declared `maximum`, the
+   * smaller of the two. Absent with no declared maximum: the engine asks its `syncPageSize` (100) every page.
+   */
+  listPageMax?: number;
   /** Tools the server does not annotate read-only but an operator has verified are. */
   trustedReadTools?: string[];
   /** A connection that closes sooner than this after connecting delays the next connect (default 5 s). */
@@ -85,6 +91,17 @@ const RETRY_AFTER_MS = 30_000;
 const QUICK_CLOSE_MS = 5_000;
 /** Pages of `tools/list` read at most: a server that keeps returning cursors cannot hold a connect forever. */
 const MAX_TOOL_PAGES = 20;
+/**
+ * The page size every list tool is assumed to honour (the engine's `syncPageSize`). An offset listing asked for more
+ * may be capped silently by its server, so past this a short page does not end it (`listPage`).
+ */
+export const DEFAULT_LIST_PAGE = 100;
+
+/** A page-size bound as a whole number of rows in [1, `MAX_LIST_ROWS`], or undefined when it is not one. */
+function pageBound(v: unknown): number | undefined {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 1) return undefined;
+  return Math.min(Math.floor(v), MAX_LIST_ROWS);
+}
 
 /** Every tool the server lists, across `tools/list` pages. */
 async function listAllTools(client: Client): Promise<Awaited<ReturnType<Client["listTools"]>>["tools"]> {
@@ -111,6 +128,8 @@ export class McpSource implements Source {
   private mapping: ArgMapping | null = null;
   private fetchMapping: FetchMapping | null = null;
   private listMapping: ListMapping | null = null;
+  /** The `maximum` the list tool's schema declares on its page-size argument, read at connect. */
+  private listSchemaMax: number | undefined;
   /** `list`, when a list tool is configured (D57); undefined otherwise, so the source is never synced. */
   readonly list?: Source["list"];
   readonly notifies: boolean;
@@ -168,6 +187,8 @@ export class McpSource implements Source {
               );
             }
             this.listMapping = m;
+            const props = (t.inputSchema as { properties?: Record<string, { maximum?: unknown }> }).properties;
+            this.listSchemaMax = m.limit ? pageBound(props?.[m.limit]?.maximum) : undefined;
           }
         }
         // A dropped connection (a stdio server that exited, an expired HTTP session) clears the client, so the next
@@ -205,6 +226,19 @@ export class McpSource implements Source {
    */
   get listsByTime(): boolean {
     return this.mapping?.window?.events === true;
+  }
+
+  /**
+   * The largest page the list tool honours (`Source.listPageMax`): the `maximum` its schema declares on the page-size
+   * argument (read at connect), the operator's `listPageMax`, or the smaller of both; undefined when neither says, so
+   * the engine never asks a bigger page than its own on a guess. No list tool: undefined.
+   */
+  get listPageMax(): number | undefined {
+    if (!this.options.listTool) return undefined;
+    const operator = pageBound(this.options.listPageMax);
+    const schema = this.listSchemaMax;
+    if (operator === undefined) return schema;
+    return schema === undefined ? operator : Math.min(operator, schema);
   }
 
   async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {
@@ -256,6 +290,9 @@ export class McpSource implements Source {
    * One page of the user's records through the list tool, most recently updated first (D57), and the cursor of the
    * next. The next cursor is the server's (`nextCursor`, `nextPageToken`, Slack's `response_metadata.next_cursor`
    * and the like) or, for a tool that pages by offset, this one plus the rows returned while a page comes back full.
+   * An offset page asked for more than `DEFAULT_LIST_PAGE` rows (a big sync page) may be cut short by a server that
+   * caps its page silently: there, any non-empty page continues and only an empty one ends the listing, so a cap
+   * costs one extra empty call, never the rows past it (a sweep would drop them as deleted).
    * An error result throws, so a sync never reads a failed page as an empty listing (which would drop every item).
    * A page that is not offset-paged may hold more than `limit` items (the server's whole page). Items are not
    * redacted here: whoever holds them runs them through the gate (D10).
@@ -275,7 +312,8 @@ export class McpSource implements Source {
     const page: ListPage = { items, next: null };
     if (offset) {
       const at = cursor === undefined ? 0 : Number(cursor);
-      page.next = items.length >= limit && Number.isSafeInteger(at) ? String(at + items.length) : null;
+      const more = limit > DEFAULT_LIST_PAGE ? items.length > 0 : items.length >= limit;
+      page.next = more && Number.isSafeInteger(at) ? String(at + items.length) : null;
     } else if (listTool.args || this.listMapping?.cursor) {
       page.next = nextCursorOf(result.content, result.structuredContent);
     }

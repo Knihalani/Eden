@@ -617,6 +617,7 @@ export class ContextPartner {
           {
             maxItems: c.syncMaxItems,
             pageSize: c.syncPageSize,
+            bigPageSize: c.syncBigPageSize,
             pollPageSize: c.syncPollPageSize,
             staleChance: c.syncStaleChance,
             maxStaleMs: c.syncMaxStaleMs,
@@ -4702,6 +4703,7 @@ export class ContextPartner {
       description: source.description,
       ...(source.listsByTime !== undefined ? { listsByTime: source.listsByTime } : {}),
       ...(source.notifies !== undefined ? { notifies: source.notifies } : {}),
+      ...(source.listPageMax !== undefined ? { listPageMax: source.listPageMax } : {}),
       ...(source.fetchReportsGone !== undefined ? { fetchReportsGone: source.fetchReportsGone } : {}),
       // A listing (the sync, D57) is traced by the sync itself (`sync.list`): passed through as it is.
       ...(source.list ? { list: source.list.bind(source) } : {}),

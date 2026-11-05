@@ -366,6 +366,8 @@ export class SimSource implements Source {
   notifies = false;
   /** The world is the source: a ref it no longer has was deleted. */
   readonly fetchReportsGone = true;
+  /** Its offset listing honours any page up to this (`syncBigPageSize`), as Gmail's list tool does up to 500. */
+  readonly listPageMax = 500;
   /** The calendar lists by time, as its list call does (D44). */
   get listsByTime(): boolean {
     return this.id === "calendar";

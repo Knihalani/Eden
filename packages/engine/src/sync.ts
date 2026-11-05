@@ -38,9 +38,15 @@ export interface SyncOptions {
    * poll's first page is sized to the changes the source's learned rate expects since its last poll (twice that, at
    * least this, at most `pageSize`). A page after it that is needed tops the items asked up to the next multiple of
    * `pageSize`, so a poll lists at most what `maxPages` full pages would, in at most `maxPages + 1` calls. Backfill
-   * and sweeps always read `pageSize`.
+   * and sweeps read `pageSize`, or `bigPageSize`.
    */
   pollPageSize?: number;
+  /**
+   * `syncBigPageSize`: a backfill or sweep page asks min(this, `Source.listPageMax`) items of a source that declares a
+   * max, when that is above `pageSize`. A big page that fails ("error", "timeout") is asked again at `pageSize` in the
+   * same read, and the (user, source) is asked `pageSize` from then on (`SourceSync.smallPages`). 0 or absent: off.
+   */
+  bigPageSize?: number;
   /** A source's synced copy is stale once the chance that it changed since the last poll reaches this. */
   staleChance: number;
   /** ... or once its last poll is this old (ms), whatever the chance. */
@@ -162,6 +168,11 @@ interface SourceSync {
    */
   pushed: Map<string, number>;
   pushSeq: number;
+  /**
+   * A big page (`bigPageSize`) failed for this source: backfill and sweeps ask `pageSize` from now on. Per user and
+   * source, gone with the user's sync state (dropped, forgotten) or the source's (no longer listed).
+   */
+  smallPages: boolean;
 }
 
 interface UserSync {
@@ -492,10 +503,7 @@ export class SyncManager {
       next.noticesBackfill = next.notices;
       await this.run(next, async () => {
         const readMark = this.marks;
-        page = await this.list("backfill", source, u.scope, next.cursor, this.o.pageSize, {
-          timeoutMs: this.o.timeoutMs,
-          reserve: SERVING_HEADROOM,
-        });
+        page = await this.listWhole("backfill", u, next, source, next.cursor);
         // Stored within the read, so what it stored is the read's (`SourceSync.reading`).
         if (typeof page !== "string" && !u.gone) this.store(u, next, page.items, readMark);
       });
@@ -694,10 +702,7 @@ export class SyncManager {
       if (u.gone) return;
       if (this.budget.take(budgetKey(u, s)) > 0) return;
       const readMark = this.marks;
-      const page = await this.list("sweep", source, u.scope, sw.cursor, this.o.pageSize, {
-        timeoutMs: this.o.timeoutMs,
-        reserve: SERVING_HEADROOM,
-      });
+      const page = await this.listWhole("sweep", u, s, source, sw.cursor);
       if (u.gone) return;
       if (typeof page === "string") {
         if (page !== "limited" && page !== "busy") this.stats.backgroundCalls++;
@@ -770,6 +775,37 @@ export class SyncManager {
     if (why === "busy" || why === "limited") return;
     s.failures++;
     s.retryAt = this.deps.now() + Math.min(30 * 60_000, 30_000 * 2 ** (s.failures - 1));
+  }
+
+  /**
+   * A backfill or sweep page: the source's big page when it declares one safe (`bigPage`), else `pageSize`. A big page
+   * that fails is counted as a background call and asked again at `pageSize` at once (one extra call, so the read
+   * goes on instead of backing off), and the source is asked `pageSize` from then on: a server that refuses, or times
+   * out on, a big page costs one call once, not every sweep. A guard's skip ("limited", "busy", "open") is no
+   * evidence about the page size and is returned as it is.
+   */
+  private async listWhole(
+    phase: "backfill" | "sweep",
+    u: UserSync,
+    s: SourceSync,
+    source: Source,
+    cursor: string | undefined,
+  ): ReturnType<SourceFanout["list"]> {
+    const given = { timeoutMs: this.o.timeoutMs, reserve: SERVING_HEADROOM };
+    const limit = this.bigPage(s, source);
+    const page = await this.list(phase, source, u.scope, cursor, limit, given);
+    if (limit <= this.o.pageSize || (page !== "error" && page !== "timeout") || u.gone) return page;
+    this.stats.backgroundCalls++;
+    s.smallPages = true;
+    return this.list(phase, source, u.scope, cursor, this.o.pageSize, given);
+  }
+
+  /** Items a backfill or sweep page asks of `source`: min(`bigPageSize`, its `listPageMax`), or `pageSize`. */
+  private bigPage(s: SourceSync, source: Source): number {
+    const big = this.o.bigPageSize ?? 0;
+    const max = source.listPageMax;
+    if (big <= 0 || s.smallPages || typeof max !== "number" || !Number.isFinite(max)) return this.o.pageSize;
+    return Math.max(this.o.pageSize, Math.floor(Math.min(big, max)));
   }
 
   /** One listing call through the fan-out's guards, as a `sync.list` span when tracing (content-free: D19). */
@@ -852,6 +888,7 @@ function newSourceSync(id: string): SourceSync {
     noticesBackfill: 0,
     pushed: new Map(),
     pushSeq: 0,
+    smallPages: false,
   };
 }
 

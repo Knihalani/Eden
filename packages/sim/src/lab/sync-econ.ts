@@ -59,6 +59,8 @@ interface Planned {
 class ArrivingSource implements Source {
   readonly kind = "sim";
   readonly description: string;
+  /** Its listing honours pages up to 500 (`syncBigPageSize`), as SimSource's does. */
+  readonly listPageMax = 500;
   lists = 0;
   constructor(
     readonly id: string,
