@@ -69,6 +69,7 @@ const PUSH: Key[] = ["askReader", "readerPush"];
 export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncMaxItems: SYNC,
   syncPageSize: SYNC,
+  syncBigPageSize: SYNC,
   syncPollPageSize: SYNC,
   syncStaleChance: SYNC,
   syncMaxStaleMs: SYNC,
@@ -160,6 +161,8 @@ const RANGES: Partial<Record<Key, Range>> = {
   confidentItems: COUNT,
   syncMaxItems: SIZE,
   syncPageSize: SIZE,
+  // 0 is off; else at least `syncPageSize` (checked in `checkEngineConfig`) and at most McpSource's `MAX_LIST_ROWS`.
+  syncBigPageSize: { integer: true, max: 1_000 },
   syncPollPageSize: COUNT,
   syncStaleChance: SHARE,
   syncCallsPerMin: COUNT,
@@ -231,6 +234,13 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
       );
     }
     out[key] = given;
+  }
+  // A big page smaller than the normal one would be no big page: 0 says off.
+  if (typeof out.syncBigPageSize === "number" && out.syncBigPageSize !== 0) {
+    const pageSize = (out.syncPageSize as number | undefined) ?? DEFAULT_CONFIG.syncPageSize;
+    if (out.syncBigPageSize < pageSize) {
+      throw new Error(`${where}: "syncBigPageSize" must be 0 (off) or at least "syncPageSize" (${pageSize})`);
+    }
   }
   if (options.parents !== false) {
     const merged = { ...DEFAULT_CONFIG, ...out } as EngineConfig;

@@ -69,6 +69,12 @@ export interface McpSourceOptions {
     args?: (cursor: string | undefined, limit: number) => Record<string, unknown>;
     fixed?: Record<string, unknown>;
   };
+  /**
+   * The largest page the list tool honours, as the operator knows it (`Source.listPageMax`): for a tool whose schema
+   * declares no `maximum` on its page-size argument, or one called through `args`. With a declared `maximum`, the
+   * smaller of the two. Absent with no declared maximum: the engine asks its `syncPageSize` (100) every page.
+   */
+  listPageMax?: number;
   /** Tools the server does not annotate read-only but an operator has verified are. */
   trustedReadTools?: string[];
   /** A connection that closes sooner than this after connecting delays the next connect (default 5 s). */
@@ -85,6 +91,40 @@ const RETRY_AFTER_MS = 30_000;
 const QUICK_CLOSE_MS = 5_000;
 /** Pages of `tools/list` read at most: a server that keeps returning cursors cannot hold a connect forever. */
 const MAX_TOOL_PAGES = 20;
+/**
+ * The page size every list tool is assumed to honour (the engine's `syncPageSize`). An offset listing asked for more
+ * may be capped silently by its server, so past this a short page does not end it (`listPage`).
+ */
+export const DEFAULT_LIST_PAGE = 100;
+
+/** A page-size bound as a whole number of rows in [1, `MAX_LIST_ROWS`], or undefined when it is not one. */
+function pageBound(v: unknown): number | undefined {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 1) return undefined;
+  return Math.min(Math.floor(v), MAX_LIST_ROWS);
+}
+
+/**
+ * An offset listing's cursor: the offset, and after a big page (`listPage`) the mark of that page's first row, as
+ * `offset:mark`. A cursor that is not a number keeps today's reading (`Number`, so not a safe integer: no next page).
+ */
+function offsetCursor(cursor: string | undefined): { at: number; mark: string | undefined } {
+  if (cursor === undefined) return { at: 0, mark: undefined };
+  const i = cursor.indexOf(":");
+  if (i < 0) return { at: Number(cursor), mark: undefined };
+  return { at: Number(cursor.slice(0, i)), mark: cursor.slice(i + 1) };
+}
+
+/** Longest row ref a cursor's mark carries as it is; a longer one is marked by its length and hash. */
+const MAX_MARK_CHARS = 256;
+
+/** A row's mark for the repeated-page test: its ref, or for a long ref its length and FNV-1a hash. */
+function rowMark(item: ContextItem): string {
+  const ref = item.ref;
+  if (ref.length <= MAX_MARK_CHARS) return ref;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < ref.length; i++) h = Math.imul(h ^ ref.charCodeAt(i), 0x01000193);
+  return `#${ref.length}.${(h >>> 0).toString(36)}`;
+}
 
 /** Every tool the server lists, across `tools/list` pages. */
 async function listAllTools(client: Client): Promise<Awaited<ReturnType<Client["listTools"]>>["tools"]> {
@@ -111,6 +151,8 @@ export class McpSource implements Source {
   private mapping: ArgMapping | null = null;
   private fetchMapping: FetchMapping | null = null;
   private listMapping: ListMapping | null = null;
+  /** The `maximum` the list tool's schema declares on its page-size argument, read at connect. */
+  private listSchemaMax: number | undefined;
   /** `list`, when a list tool is configured (D57); undefined otherwise, so the source is never synced. */
   readonly list?: Source["list"];
   readonly notifies: boolean;
@@ -168,6 +210,8 @@ export class McpSource implements Source {
               );
             }
             this.listMapping = m;
+            const props = (t.inputSchema as { properties?: Record<string, { maximum?: unknown }> }).properties;
+            this.listSchemaMax = m.limit ? pageBound(props?.[m.limit]?.maximum) : undefined;
           }
         }
         // A dropped connection (a stdio server that exited, an expired HTTP session) clears the client, so the next
@@ -205,6 +249,19 @@ export class McpSource implements Source {
    */
   get listsByTime(): boolean {
     return this.mapping?.window?.events === true;
+  }
+
+  /**
+   * The largest page the list tool honours (`Source.listPageMax`): the `maximum` its schema declares on the page-size
+   * argument (read at connect), the operator's `listPageMax`, or the smaller of both; undefined when neither says, so
+   * the engine never asks a bigger page than its own on a guess. No list tool: undefined.
+   */
+  get listPageMax(): number | undefined {
+    if (!this.options.listTool) return undefined;
+    const operator = pageBound(this.options.listPageMax);
+    const schema = this.listSchemaMax;
+    if (operator === undefined) return schema;
+    return schema === undefined ? operator : Math.min(operator, schema);
   }
 
   async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {
@@ -256,6 +313,11 @@ export class McpSource implements Source {
    * One page of the user's records through the list tool, most recently updated first (D57), and the cursor of the
    * next. The next cursor is the server's (`nextCursor`, `nextPageToken`, Slack's `response_metadata.next_cursor`
    * and the like) or, for a tool that pages by offset, this one plus the rows returned while a page comes back full.
+   * An offset page asked for more than `DEFAULT_LIST_PAGE` rows (a big sync page) may be cut short by a server that
+   * caps its page silently: there, any non-empty page continues and only an empty one ends the listing, so a cap
+   * costs one extra empty call, never the rows past it (a sweep would drop them as deleted). A server that ignores
+   * the offset (the same rows at every offset) would then never end: the next page opening on the row this one
+   * opened on ends the listing, after one extra call.
    * An error result throws, so a sync never reads a failed page as an empty listing (which would drop every item).
    * A page that is not offset-paged may hold more than `limit` items (the server's whole page). Items are not
    * redacted here: whoever holds them runs them through the gate (D10).
@@ -263,19 +325,28 @@ export class McpSource implements Source {
   private async listPage(_scope: Scope, cursor: string | undefined, limit: number, signal: AbortSignal) {
     const listTool = this.options.listTool!;
     const client = await this.connect();
-    const args = listTool.args ? listTool.args(cursor, limit) : buildListArgs(this.listMapping!, cursor, limit);
+    const offset = !listTool.args && this.listMapping?.cursor?.kind === "offset";
+    const { at, mark } = offset ? offsetCursor(cursor) : { at: 0, mark: undefined };
+    // The server is sent the offset alone: a mark is Eden's, not the server's.
+    const sent = offset && mark !== undefined ? String(at) : cursor;
+    const args = listTool.args ? listTool.args(cursor, limit) : buildListArgs(this.listMapping!, sent, limit);
     const result = await client.callTool({ name: listTool.name, arguments: args }, undefined, { signal });
     if (result.isError) throw new Error(`${this.id}: ${listTool.name} returned an error`);
     // Only an offset page may be cut to `limit`: Eden's next offset counts the rows it returns. A server's own token
     // points past the whole page it sent, so rows cut from a token page (a tool with no page-size argument, or an
     // operator's `args` that ignores `limit`) would never be listed; the page is kept whole, up to `MAX_LIST_ROWS`.
-    const offset = !listTool.args && this.listMapping?.cursor?.kind === "offset";
     const keep = offset ? limit : Math.max(limit, MAX_LIST_ROWS);
     const items = toItems(this.id, result.content, keep, result.structuredContent);
     const page: ListPage = { items, next: null };
     if (offset) {
-      const at = cursor === undefined ? 0 : Number(cursor);
-      page.next = items.length >= limit && Number.isSafeInteger(at) ? String(at + items.length) : null;
+      // A page that opens on the row the page before opened on comes from a server that ignores the offset: it would
+      // send the same rows for ever, so the listing ends here (what it holds was listed already).
+      const repeated = mark !== undefined && items.length > 0 && rowMark(items[0]!) === mark;
+      const big = limit > DEFAULT_LIST_PAGE;
+      const more = !repeated && (big ? items.length > 0 : items.length >= limit);
+      // A big page's next cursor carries its first row's mark (`offset:mark`), for the repeat test above.
+      const next = big && items.length > 0 ? `${at + items.length}:${rowMark(items[0]!)}` : String(at + items.length);
+      page.next = more && Number.isSafeInteger(at) ? next : null;
     } else if (listTool.args || this.listMapping?.cursor) {
       page.next = nextCursorOf(result.content, result.structuredContent);
     }

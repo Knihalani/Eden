@@ -60,13 +60,14 @@ export function connectorOptions(opt: (name: string, fallback: string) => string
  */
 export function sourceFields(
   source: Source,
-): Pick<Source, "id" | "kind" | "description" | "listsByTime" | "notifies" | "fetchReportsGone"> {
+): Pick<Source, "id" | "kind" | "description" | "listsByTime" | "notifies" | "listPageMax" | "fetchReportsGone"> {
   return {
     id: source.id,
     kind: source.kind,
     description: source.description,
     listsByTime: source.listsByTime,
     notifies: source.notifies,
+    listPageMax: source.listPageMax,
     fetchReportsGone: source.fetchReportsGone,
   };
 }
