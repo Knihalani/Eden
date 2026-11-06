@@ -22,8 +22,15 @@
  * dropped, minus the heap before the users were built: the text the cache keeps is counted. The source map's SQLite
  * pages live outside the JS heap and are not counted.
  *
- * Run: `bun packages/engine/bench/ingest.bench.ts [users=200] [itemsPerUser=500] [mode=all|core|graph|shipped]`, or
- * `bun packages/engine/bench/ingest.bench.ts --quick`.
+ * Run: `bun packages/engine/bench/ingest.bench.ts [--world] [users=200] [itemsPerUser=500] [mode=all|core|graph|
+ * shipped]`, or `bun packages/engine/bench/ingest.bench.ts --quick [--world]`.
+ *
+ * Text: by default the bench workload's (`workload.ts`: names, topics and filler, all Latin-1, which the engine holds
+ * at a byte a character). `--world` takes each user's items from the sim world instead (`buildWorld` seed 1, noise
+ * scale 5: 6,892 items, spread evenly over the world's items in order, with its titles and `meta`), where about 30% of
+ * items hold characters past Latin-1 and so are held at two bytes a character, and names are in many scripts (D169).
+ * Its figures compare only with other `--world` runs. (A bench may read the lab's world; nothing in the engine does.)
+ *
  * No model, no network. The default 200 × 500 is the size every recorded figure uses (D111, D141, docs/TESTING.md);
  * compare only like with like. `--quick` runs 40 × 500 (about 5x faster) for a screen while iterating: its µs/item
  * stay within ~10% of the full size, but held memory per item reads ~3-5% higher (a fixed per-user cost spread over
@@ -40,7 +47,8 @@ import { SyncManager, type SyncOptions } from "../src/sync";
 import { buildWorkload } from "./workload";
 
 const QUICK = process.argv.includes("--quick");
-const args = process.argv.slice(2).filter((a) => a !== "--quick");
+const WORLD = process.argv.includes("--world");
+const args = process.argv.slice(2).filter((a) => a !== "--quick" && a !== "--world");
 if (QUICK && args.length > 0) throw new Error("--quick runs 40 × 500 in every mode; it takes no other arguments");
 const USERS = QUICK ? 40 : Number(args[0] ?? 200);
 const PER_USER = QUICK ? 500 : Number(args[1] ?? 500);
@@ -86,16 +94,33 @@ const heap = () => {
   return process.memoryUsage().heapUsed;
 };
 
-async function run(mode: Mode): Promise<Result> {
+/** The bench workload's items (Latin-1 text), at least `PER_USER`. */
+async function workloadPool(): Promise<ContextItem[]> {
   const signal = new AbortController().signal;
   const w = buildWorkload({ itemsPerSource: Math.ceil(PER_USER / 4) + 50, events: 1, seed: 7 });
-  const pool = (
+  return (
     await Promise.all(
       w.sources.map((s) =>
         s.search({ scope: w.scope, text: "", entities: w.people.slice(0, 300), limit: 10_000 }, signal),
       ),
     )
   ).flat();
+}
+
+/** `PER_USER` items of the sim world (`--world`), spread evenly over its items in the order the world made them. */
+async function worldPool(): Promise<ContextItem[]> {
+  const { buildWorld } = await import("../../sim/src/world");
+  const all = buildWorld({ seed: 1, noiseScale: 5 }).items;
+  if (all.length < PER_USER) throw new Error(`the world has ${all.length} items, fewer than ${PER_USER}`);
+  return Array.from({ length: PER_USER }, (_, i) => {
+    const it = all[Math.floor((i * all.length) / PER_USER)]!;
+    const item: ContextItem = { id: it.id, sourceId: it.sourceId, ref: it.ref, title: it.title, text: it.text };
+    return it.meta ? { ...item, meta: it.meta } : item;
+  });
+}
+
+async function run(mode: Mode): Promise<Result> {
+  const pool = WORLD ? await worldPool() : await workloadPool();
   if (pool.length < PER_USER) throw new Error(`the workload has ${pool.length} items, fewer than ${PER_USER}`);
   const avgChars = Math.round(pool.slice(0, PER_USER).reduce((s, i) => s + i.text.length, 0) / PER_USER);
 
@@ -226,14 +251,16 @@ if (MODE !== "all") {
 } else {
   const results: Result[] = [];
   for (const mode of MODES) {
-    const child = Bun.spawnSync([process.execPath, import.meta.path, String(USERS), String(PER_USER), mode], {
-      stderr: "inherit",
-    });
+    const argv = [process.execPath, import.meta.path, ...(WORLD ? ["--world"] : []), String(USERS), String(PER_USER)];
+    const child = Bun.spawnSync([...argv, mode], { stderr: "inherit" });
     if (child.exitCode !== 0) throw new Error(`mode ${mode} failed (exit ${child.exitCode})`);
     results.push(JSON.parse(child.stdout.toString().trim().split("\n").at(-1)!) as Result);
   }
   const [core, graph, shipped] = results as [Result, Result, Result];
-  console.log(`${USERS} users × ${PER_USER} synced items (avg text ${core.avgChars} chars), pages of ${PAGE}`);
+  console.log(
+    `${USERS} users × ${PER_USER} synced items (${WORLD ? "sim world" : "workload"} text, avg ${core.avgChars} chars), ` +
+      `pages of ${PAGE}`,
+  );
   if (QUICK) {
     console.log(
       `--quick: a screen, not a record. Memory per item is not comparable with 200 × 500 figures (a per-user fixed ` +
