@@ -1,6 +1,170 @@
 # Deep audit (2026-11-06)
 
-## Summary (for the owner, read this first)
+## Final summary (for the owner, read this first)
+
+Written at the end of the run, from `audit/2026-11-06-integration` 841fed61e (2 rounds plus 2 closing passes). Every
+number here comes from the decision log (docs/DECISIONS.md), the package commits, or a command run while writing this
+summary. Estimates are labelled. The older summaries further down are kept as history; where they disagree with this
+one (for example, "D159 was not promoted"), this one is current.
+
+A few words used below:
+
+- **Hidden facts / decoys.** The test lab plants 384 facts the agent needs ("hidden") and 384 look-alikes it must not
+  be told about ("decoys"). More hidden found is better; fewer decoys shown is better.
+- **Reader.** The small paid model (Claude Haiku) that reads candidate items and decides what matters.
+- **Intent.** Eden guesses, ahead of time, which requests each item could answer, so it can find the item later.
+- **Train / held-out.** Train suites are used for tuning. Held-out suites are kept back to check the result.
+- **Trial.** New behaviour behind a switch, with a rule fixed in advance that either promotes it or deletes it (D112).
+
+### 1. The bottom line
+
+The test bench was measuring a product that does not ship (intent switched off), so earlier quality numbers were too
+low and some decisions rested on the wrong baseline. That is fixed, and the shipped default now finds 311 of 384 hidden
+facts on the train replay, against 273 when the bench was first corrected, with decoys unchanged at 137. On
+the held-out live check it raised hidden 97 to 103 of 128, at no measured extra cost. Two bugs that let a deleted
+message or document come back and be delivered are fixed. The server now uses every core by default (about 3.2x the
+events per second on 4 cores), and a big tenant knowledge base no longer blocks the server for a third of a second on
+every search. Two ideas meant to cut cost or raise recall were built, measured and deleted because they did not pass
+their own rules.
+
+### 2. Findings by dimension
+
+"Closed by a decision" means the finding was true but the right move was to write it down, not change code (a ceiling,
+a measured no-win, or a trial that failed its gate). "Rejected" means the verifiers did not confirm it.
+
+| Dimension   | Found  | Rejected | Verified | Fixed and reviewed | Closed by a decision | Still open |
+| ----------- | ------ | -------- | -------- | ------------------ | -------------------- | ---------- |
+| Quality     | 12     | 2        | 9        | 7                  | 2                    | 1          |
+| Correctness | 7      | 1        | 5        | 5                  | 0                    | 1          |
+| Dev loop    | 13     | 1        | 6        | 5                  | 5                    | 2          |
+| Cost        | 5      | 2        | 2        | 0                  | 3                    | 0          |
+| Scale       | 9      | 2        | 3        | 3                  | 2                    | 2          |
+| Latency     | 7      | 1        | 3        | 0                  | 3                    | 3          |
+| Moonshot    | 2      | 1        | 1        | 0                  | 1                    | 0          |
+| Pain point  | 3      | 1        | 0        | 1                  | 0                    | 1          |
+| **Total**   | **58** | **11**   | **29**   | **21**             | **16**               | **10**     |
+
+Where the ledger and git disagree, or the ledger is silent:
+
+- 18 found findings are in neither the ledger's verified list nor its rejected list, yet the ledger's "unresolved"
+  list is empty. Seven are old 2026-11-05 items (O5, O8, O9) that D180 closed; they are counted under "Closed by a
+  decision". One (`docs-stale-funnel-preset-and-blind`) is already corrected on the integration branch (root
+  CLAUDE.md no longer says "preset ALL3"; the `UNRUN_BLIND` comment says held-out 9-13 were read), so it is counted
+  as fixed. The other 10 have no record anywhere in docs/ and are counted as still open (section 5).
+- The ledger's deferred list still says round 1's F5, F6 and F10 "stay open". Git says otherwise: F5 is fixed (commit
+  f086b5605 is in the integration branch), F6's trial was built and deleted (f7fd5f0ca, D186), and F10 is closed
+  (D184).
+- `devloop-test-changed-engine-runs-e2e`: the ledger says 18.6 to 9.35 s, D161 says 17.96 to 8.91 s. Both are 2.0x;
+  they are different runs.
+- Every one of the 21 package branches the ledger names is merged into `audit/2026-11-06-integration` (checked with
+  `git branch --merged`). The integration branch itself is **not** merged into `origin/main` yet.
+
+### 3. What was achieved
+
+One row per merged package branch, in merge order. Train figures are train1-6, seeds 41-42. "Recipe 2a" is the $0
+replay of the committed paid reader cache (docs/LAB.md).
+
+| Package (branch suffix)          | The fix                                                                   | Measured before -> after                                                                                                        | Outcome                                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `r1-intent-shipped-baseline`     | The lab tests the shipped default (intent on) (D158)                      | Stub reader pool 230/229 -> 257/240 hidden/decoys; "never ranked" gap 92 -> 64 of 384; paid read 247/127 -> 279/133             | Shipped as the lab's default                                                                  |
+| `r1-sourceitems-removal-race`    | A delete during redaction is no longer undone (D160)                      | Bug reproduced twice -> fixed; no model call, no I/O                                                                            | Shipped as default                                                                            |
+| `r1-test-changed-defer-e2e`      | Fast test loop skips six end-to-end files; `check` still runs them (D161) | Engine-edit `test:changed` 17.96 -> 8.91 s (2.0x)                                                                               | Shipped (dev tooling)                                                                         |
+| `r1-ask-diag-coverage`           | `--ask-diag` says why an item is never ranked (D162)                      | The 64 never-ranked hidden facts split into 21 with no intent requests and 43 with requests that do not match                   | Shipped (lab tooling)                                                                         |
+| `r1-server-router`               | Multi-process server router (D163)                                        | 4 children vs 1 process: 2.15x and 2.06x events/s on 4 shared cores                                                             | Behind a flag (`EDEN_PROCESSES=1`): the gate swung across 1.5x between runs; promoted by D178 |
+| `r1-graph-soa`                   | Graph stored as typed arrays (D169)                                       | Graph memory 1,703 -> 719 B/item (2.37x); walks identical over 200 seeds                                                        | Shipped as default                                                                            |
+| `r1-close-docs-ceilings`         | Four ceilings written down (D164-D167)                                    | Docs only                                                                                                                       | Recorded                                                                                      |
+| `r2-intent-constraint-only`      | Stop reading items for intent alone (D170)                                | Card model items 13,604 -> 2,113, calls 822 -> 300; role cost about 4.5x lower (estimate)                                       | Removed (D177): fresh paid pair hidden 286 -> 281, decoys 140 -> 144, outside its gate        |
+| `r2-intent-replay-coverage`      | Intent replay covers every planted fact and held-out 13                   | Intent file 6,771 -> 7,315 lines; planted coverage 286/384 -> 384/384 hidden; recipe 2a 273/137 -> 281/139                      | Shipped (lab data)                                                                            |
+| `r2-pi-cost-cache-neutral`       | Cost check ignores prompt-cache luck between arms (D171)                  | D159's 47 same-ask pairs: billed +0.0461 $/1k -> cache-neutral -0.0002 $/1k                                                     | Shipped (lab report)                                                                          |
+| `r2-removal-sequence`            | A second delete during redaction is no longer undone (D176)               | Bug reproduced by three agents -> fixed; heap per hold 176 -> 208 B                                                             | Shipped as default                                                                            |
+| `r2-router-hardening`            | A hung restarted child is killed and retried; bench uses medians (D172)   | Hung child stayed down (503) -> restarted with backoff; tests split into two files                                              | Shipped as default                                                                            |
+| `r2-static-source-index`         | Inverted index for the built-in static source (D175)                      | Per search at 4,000 docs 38.3 -> 0.351 ms (109x); at 40,000 docs 34.3 -> 2.64 ms; heap 4,575 -> 246 B/doc                       | Shipped as default                                                                            |
+| `r2-kg-oracle-seeds`             | Fast loop runs 25 graph-test seeds, `check` runs 200 (D176)               | `kg.test.ts` 5.97-6.91 s -> 1.87-2.34 s in `test:changed`; median about 1.18x on the engine set                                 | Shipped (dev tooling)                                                                         |
+| `r2-ask-diag-precision-split`    | Lab splits shown decoys by cause (D173)                                   | 137 decoys shown = 23 reader-flagged + 68 rule path + 46 listed only                                                            | Shipped (reporting only; gates unchanged)                                                     |
+| `final1-intent-closeout`         | Looser intent thresholds 0.2/1/12 (D179); trial D170 ended (D177)         | Held-out 13 live: hidden 97 -> 103 of 128, false concerns 2 -> 1, cost -0.0453 $/1k (CI -0.1164..+0.0268); recipe 2a 281 -> 311 | Shipped as default                                                                            |
+| `final1-router-default`          | Server uses every core by default (D178)                                  | 1,169 -> 3,759 events/s on 4 shared cores (median 3.23x, lowest 3.22x)                                                          | Shipped as default                                                                            |
+| `final1-funnel-parallel-diag`    | Diagnostic lab runs use every core (F5)                                   | `--ask-diag` 27.8 -> 12.6 s (2.21x); repeat 33.8 -> 18.5 s (1.83x); output byte-identical                                       | Shipped (lab tooling)                                                                         |
+| `final1-close-docs-2026-11-06`   | Decisions D177-D182 and the closing section                               | Docs only                                                                                                                       | Recorded                                                                                      |
+| `final2-action-gate-verbs-trial` | Reader also reads requests whose verb was missing from a list (D186)      | Recipe 2a hidden 311 -> 310, decoys 137 -> 121, reader calls 651 -> 764 (+17.4%)                                                | Removed by its pre-set rule (needed hidden +3 and calls at most +10%)                         |
+| `final2-close3-docs-decisions`   | Decisions D183-D186 and closing pass 3                                    | Docs only                                                                                                                       | Recorded                                                                                      |
+
+Paid spend: the spend ledger sums to $14.51 over 56,501 rows (a `bun -e` sum run while writing this). It held $11.49
+when round 1 was written, so about $3.02 was spent after that point (estimate: it does not split out the finders'
+earlier runs). About $3.19 is left under the $18 cap and its $0.30 headroom.
+
+### 4. Decisions made during the run
+
+| Decision                                                                   | Evidence                                                                            | Row  |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---- |
+| The lab screens the shipped default (intent on)                            | Stub pool 230/229 inert vs 257/240 with intent                                      | D158 |
+| Loosen intent thresholds once a live pair agrees; first pair: not promoted | Train paid pairs +17-21 hidden; first Pi pair cost +0.070 $/1k (later found biased) | D159 |
+| A removal during redaction wins                                            | Reproduced twice in a scratch test                                                  | D160 |
+| Fast test loop defers six end-to-end files                                 | 17.96 -> 8.91 s                                                                     | D161 |
+| The ask's lexical depth stays at 12, reader pool at 15                     | Cap 12 -> 60 moved the pool 257/240 -> 258/237 only                                 | D162 |
+| Build the multi-process router as a trial, caps divided by N               | 2.15x and 2.06x events/s on 4 cores                                                 | D163 |
+| No prompt cache for reader items                                           | At most 1.17-1.28x on reader cost (estimate)                                        | D164 |
+| Eden's path is reader time; no 1.5x on task wall below the model           | Reader is 94.5% of Eden's path on hidden tasks                                      | D165 |
+| Do not move the push reading off the agent's start                         | 66 of 75 useful pushes end in single-request tasks                                  | D166 |
+| Do not overlap the ask's reader with its poll                              | Upper bound 1.13-1.14x on ask batches                                               | D167 |
+| Reject the "action unless it is a question" rule                           | Chat lines like "thanks!" and "Lol" became paid reader calls                        | D168 |
+| Graph moves to typed arrays only if its memory halves                      | Passed: 1,703 -> 719 B/item                                                         | D169 |
+| Trial: skip intent-only card reads                                         | Items 13,604 -> 2,113 at an equal $0 screen                                         | D170 |
+| Paired cost checks use cache-neutral prices                                | Billed +0.0461 vs neutral -0.0002 $/1k on identical asks                            | D171 |
+| Router trial decided on a median of 3 or more runs; restart deadline       | Single runs landed at 1.32x to 3.70x                                                | D172 |
+| Lab reports shown decoys by cause; gates unchanged                         | 23 of 137 decoys were reader-flagged                                                | D173 |
+| Do not rank asks on question plus request                                  | Paid reader: hidden +0.5 points, CI -2.1..+3.1                                      | D174 |
+| Static source gets lazy term sets, then an inverted index                  | 109x per search at 4,000 docs                                                       | D175 |
+| 25 graph-test seeds in the fast loop; per-hold sequence for removals       | `kg.test.ts` 1.87-2.34 s at 25 seeds; second-removal bug reproduced                 | D176 |
+| End trial D170 and delete it                                               | Fresh paid pair hidden 286 -> 281, decoys 140 -> 144                                | D177 |
+| `EDEN_PROCESSES` defaults to the core count                                | Median 3.23x, lowest 3.22x                                                          | D178 |
+| Promote intent thresholds 0.2/1/12                                         | Held-out 13 live pair passed all three pre-set parts                                | D179 |
+| Close the 2026-11-05 audit's O5, O8 and O9 with no code change             | 25 of 25 test passes; ceilings below 1.5x                                           | D180 |
+| Do not compress item text                                                  | About 1.42x per item (estimate), below the 1.5x bar                                 | D181 |
+| F6, F10 and F25 wait for D179 (superseded by D184-D186)                    | They had to be screened on the final thresholds                                     | D182 |
+| Keep `fallbackAsks` in the default                                         | Removing it changes 4 decoys from two templates; eval loses precision and recall    | D183 |
+| Close request-side query expansion, not built                              | 45 of 384 unranked at top 60; about 3-6 tasks to gain (estimate)                    | D184 |
+| Do not build unordered subset replay                                       | A paid arm costs about $0.19; ordered replay already matched only 493 of 600        | D185 |
+| Trial the verb-recognising reader gate; deleted by its rule                | Hidden 311 -> 310, reader calls +17.4%                                              | D186 |
+
+### 5. What is still open, and why
+
+| Item                                                                             | Why it is open                                                                                                                                | Next step                                                                                          |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| The integration branch is not merged into `main`                                 | External action: merging is the last step and has not been done                                                                               | Open a PR from `audit/2026-11-06-integration`, run `bun run check` and `bun run eval` on it, merge |
+| `bun run eval` was not run on the final tree 841fed61e                           | The sandbox refused any command containing "eval" during the last merge; the engine source did not change since 397c78b00, where eval matched | Run `bun run eval` on 841fed61e before the merge to `main` and paste the JSON in the PR            |
+| No blind held-out suite is left (`quality-no-unspent-blind-suite`)               | Held-out 9-13 have all been read; any "blind" claim would be false                                                                            | Write a new held-out suite before the next decision that needs a blind check                       |
+| `correctness-kg-day-node-utc`: the graph files an event's day in UTC             | Found, never verified or rejected; no doc records it                                                                                          | Verify in the next audit round; if true, use the user's offset as the pass-2 timed-zone fix did    |
+| `devloop-sim-test-longest-file`: `sim.test.ts` takes 6.2 s                       | Found, never verified or rejected; no doc records it                                                                                          | Verify next round                                                                                  |
+| `devloop-funnel-set-after-dashdash`: `--set` after `--` gives a poor error       | Found, never verified or rejected; no doc records it                                                                                          | Verify next round; a clearer error message is the likely fix                                       |
+| `scale-router-gate-workers-multiply`: each router child starts its own gate pool | Found, never verified or rejected; it matters more now that the router is on by default (D178)                                                | Verify next round, first of these                                                                  |
+| `scale-shared-source-copied-per-user`: tenant-wide documents copied per user     | Found, never verified or rejected; no doc records it                                                                                          | Verify next round                                                                                  |
+| `lat-draft-speculative-read-pool-drift`                                          | Found, never verified or rejected; no doc records it                                                                                          | Verify next round                                                                                  |
+| `lat-reader-entry-cap-unenforced`                                                | Found, never verified or rejected; no doc records it                                                                                          | Verify next round                                                                                  |
+| `lat-reader-stream-settle-binding-first-measured`                                | Found, never verified or rejected; no doc records it                                                                                          | Verify next round                                                                                  |
+| `integrator-example-works-port-naming`: `PORT`, not `EDEN_PORT`, in the example  | Found, never verified or rejected; no doc records it                                                                                          | Verify next round                                                                                  |
+| 11 findings rejected by the verifiers (listed in the ledger)                     | Rejected by review: not confirmed, or not material                                                                                            | None; reopen one only with a new measurement                                                       |
+
+Nothing waits for paid spend beyond the budget. Two options are recorded but not open: promoting the verb gate for its
+decoy cut alone would need a new decision accepting +17% reader calls (D186), and query expansion reopens if more than
+15% of hidden facts become unranked (D184).
+
+### 6. Where everything is
+
+- This audit: `docs/audits/2026-11-06-deep-audit.md` (rounds 1 and 2, the closing sections, and this summary).
+- Decisions: `docs/DECISIONS.md` rows D158-D186; the trials table below them.
+- The integration branch: `audit/2026-11-06-integration` (841fed61e before this summary).
+- Per-package branches, all merged into the integration branch:
+  - Round 1: `audit/2026-11-06-r1-intent-shipped-baseline`, `-r1-sourceitems-removal-race`,
+    `-r1-test-changed-defer-e2e`, `-r1-ask-diag-coverage`, `-r1-server-router`, `-r1-graph-soa`, `-r1-close-docs-ceilings`.
+  - Round 2: `audit/2026-11-06-r2-intent-constraint-only`, `-r2-intent-replay-coverage`, `-r2-pi-cost-cache-neutral`,
+    `-r2-removal-sequence`, `-r2-router-hardening`, `-r2-static-source-index`, `-r2-kg-oracle-seeds`,
+    `-r2-ask-diag-precision-split`.
+  - Closing: `audit/2026-11-06-final1-intent-closeout`, `-final1-router-default`, `-final1-funnel-parallel-diag`,
+    `-final1-close-docs-2026-11-06`, `-final2-action-gate-verbs-trial`, `-final2-close3-docs-decisions`.
+- Research notes behind the numbers: `docs/research/edge-intent.md`, `docs/research/graph-soa.md`,
+  `docs/research/pi-cache-neutral-cost.md`, `docs/research/new-minus-intent.md`.
+
+## Round 1 summary (history; the final summary above is current)
 
 Written on 2026-11-06 from `main` a8747e057. Every number below comes from a command that the finder or one of the
 two independent verifiers ran (named in each finding), or is labelled an estimate with its arithmetic. Paid calls go
@@ -720,11 +884,11 @@ without it). Every other removal loses hidden facts or adds decoys, or changes n
 
 ### Every item still deferred at the start of this pass
 
-| Item                                                                                    | Where it ends                                                                                                                                       | Row                 |
-| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| D182 (F6, F10 and F25 waiting for D179)                                                 | D179 landed; each item has its own row below, and D182 points at them                                                                               | D184-D186           |
-| F6 `quality-push-skipped-imperative-list` (and 2026-11-05 `quality-push-skipped-top15`) | Trial `readerVerbGate`, package `action-gate-verbs-trial`: 62 hidden and 62 control skipped of 768, 46 of the hidden already surfaced (ceiling +16); deleted by its pre-set rule (hidden -1, reader calls +17.4%) | D186 |
-| F10 `moonshot-ask-query-expansion-ceiling`                                              | Closed, not built: 45 of 384 hidden unranked at top 60; about 3-6 tasks gained (estimate: 45 × 0.065..0.130), at or just above ±3 noise; closed on D115's false concerns 0.0% to 4.7% and D89's own Budget, call and COST-MODEL line; reopen at >15% unranked | D184                |
-| F25 `devloop-retrieval-screen-set-subset-replay`                                        | Not built: a paid arm costs about $0.19, a top-up cents; an unordered replay is looser than D117's 493 of 600                                       | D185 (D117 stands)  |
-| 2026-11-05 O7, the unranked quarter                                                     | 92 unranked, then 64 after D158, now 45 at top 60; the remaining bridge is F10, closed                                                              | D184                |
-| The preset screen predates D179 (Closing)                                               | Re-run above with the replayed paid reader; only minus `fallback` differs, and it is kept                                                           | D183                |
+| Item                                                                                    | Where it ends                                                                                                                                                                                                                                                 | Row                |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| D182 (F6, F10 and F25 waiting for D179)                                                 | D179 landed; each item has its own row below, and D182 points at them                                                                                                                                                                                         | D184-D186          |
+| F6 `quality-push-skipped-imperative-list` (and 2026-11-05 `quality-push-skipped-top15`) | Trial `readerVerbGate`, package `action-gate-verbs-trial`: 62 hidden and 62 control skipped of 768, 46 of the hidden already surfaced (ceiling +16); deleted by its pre-set rule (hidden -1, reader calls +17.4%)                                             | D186               |
+| F10 `moonshot-ask-query-expansion-ceiling`                                              | Closed, not built: 45 of 384 hidden unranked at top 60; about 3-6 tasks gained (estimate: 45 × 0.065..0.130), at or just above ±3 noise; closed on D115's false concerns 0.0% to 4.7% and D89's own Budget, call and COST-MODEL line; reopen at >15% unranked | D184               |
+| F25 `devloop-retrieval-screen-set-subset-replay`                                        | Not built: a paid arm costs about $0.19, a top-up cents; an unordered replay is looser than D117's 493 of 600                                                                                                                                                 | D185 (D117 stands) |
+| 2026-11-05 O7, the unranked quarter                                                     | 92 unranked, then 64 after D158, now 45 at top 60; the remaining bridge is F10, closed                                                                                                                                                                        | D184               |
+| The preset screen predates D179 (Closing)                                               | Re-run above with the replayed paid reader; only minus `fallback` differs, and it is kept                                                                                                                                                                     | D183               |
