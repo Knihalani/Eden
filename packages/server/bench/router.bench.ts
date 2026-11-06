@@ -1,8 +1,8 @@
 /**
  * The multi-process router's gate (D163): events per second the whole server sustains with observe p99 at or under a
- * fixed target, for one process (main.ts with EDEN_PROCESSES unset, what ships today), the router over one child (the
- * hop's cost alone) and the router over N children. D163 makes N > 1 the default only at >= 1.5x on 4 cores; D172
- * decides it on repetitions: the median of the per-repetition ratios at least 1.5x and the lowest at least 1.2x.
+ * fixed target, for one process (main.ts with EDEN_PROCESSES=1; unset is the core count since D178), the router over
+ * one child (the hop's cost alone) and the router over N children. D163 made N > 1 the default only at >= 1.5x on 4
+ * cores; D172 decided it on repetitions: the median of the per-repetition ratios at least 1.5x, the lowest 1.2x.
  *
  * Each server runs in its own process tree, never in this one: this process is only the load generator (it competes
  * for the same cores, as any co-located client would; the figure is a lower bound on a box with a separate client).
@@ -89,6 +89,9 @@ async function main() {
     EDEN_TENANT_RPS: "1000000",
     EDEN_TENANT_BURST: "1000000",
     PORT: "0",
+    // The single arm is one process: unset, main.ts would start the router over the core count (D178). The router
+    // arms set their own N (`--serve-router`), and their children ignore it (EDEN_ROUTER_CHILD).
+    EDEN_PROCESSES: "1",
   });
 
   const bodies = Array.from({ length: USERS }, (_, u) => (turn: number) => {

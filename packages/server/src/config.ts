@@ -23,13 +23,16 @@
  *                    read and checked at startup by `sourcesFromEnv`, not here.
  * EDEN_MAX_BODY_BYTES largest request body the HTTP API reads, default 8 MB (8,388,608, D100): above the ~6 MB worst
  *                    case of a valid event, far below Bun's 128 MB default. Larger bodies get 413.
- * EDEN_PROCESSES     server processes behind the router (router.ts, D113, D163), 1-64; default 1, one process and no
- *                    router. Above 1, each tenant/user is pinned to one child, each child keeps its own source-map
- *                    file (`childSourceMapPath`), and each divides the per-tenant caps (rate, burst, model spend) by N.
+ * EDEN_PROCESSES     server processes behind the router (router.ts, D113, D163), 1-64; default the core count
+ *                    (`os.availableParallelism()`, capped at 64; D172's gate passed, D178), which is 1, one process
+ *                    and no router, on a one-core machine. 1 serves in this process with no router. Above 1, each
+ *                    tenant/user is pinned to one child, each child keeps its own source-map file
+ *                    (`childSourceMapPath`), and each divides the per-tenant caps (rate, burst, model spend) by N.
  * EDEN_ROUTER_CHILD  set by the router only ("i/N"): this process is child i of N.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { edenHome, isId, scopeKey } from "@eden/protocol";
 
@@ -49,7 +52,10 @@ export interface ServerConfig {
   queryPlanner: "off" | "serve" | "shadow";
   /** Largest request body the HTTP API reads (EDEN_MAX_BODY_BYTES); 8 MB by default (D100). */
   maxBodyBytes: number;
-  /** Server processes behind the router (EDEN_PROCESSES, D163); 1 serves in this process with no router. */
+  /**
+   * Server processes behind the router (EDEN_PROCESSES, D163); the core count when unset (D178), capped at
+   * MAX_PROCESSES. 1 serves in this process with no router; a router child is always 1.
+   */
   processes: number;
   /**
    * Set when the router started this process (EDEN_ROUTER_CHILD): it is child `index` of `count`. The tenant rate and
@@ -67,7 +73,11 @@ export const MAX_PROCESSES = 64;
  */
 export const DEFAULT_MAX_BODY_BYTES = 8_388_608;
 
-export function loadConfig(env = process.env): ServerConfig {
+/**
+ * `cores` is the machine's core count, a parameter so tests can pin it; the default reads it at call time
+ * (`availableParallelism` honours CPU affinity, unlike `cpus().length`).
+ */
+export function loadConfig(env = process.env, cores = availableParallelism()): ServerConfig {
   const port = Number(env.PORT ?? 8790);
   if (!Number.isInteger(port) || port < 0 || port > 65_535)
     throw new Error(`PORT must be a port number, got ${env.PORT}`);
@@ -103,7 +113,7 @@ export function loadConfig(env = process.env): ServerConfig {
     queryPlanner: plannerMode(env.EDEN_QUERY_PLANNER),
     maxBodyBytes: bodyBytes(env.EDEN_MAX_BODY_BYTES),
     // A child never starts a router of its own, whatever EDEN_PROCESSES it inherited.
-    processes: child ? 1 : processCount(env.EDEN_PROCESSES),
+    processes: child ? 1 : processCount(env.EDEN_PROCESSES, cores),
     child,
   };
 }
@@ -119,9 +129,14 @@ export function childSourceMapPath(base: string, index: number): string {
   return base.endsWith(".db") ? `${base.slice(0, -3)}.${index}.db` : `${base}.${index}`;
 }
 
-/** EDEN_PROCESSES as a whole number 1-64; 1 when unset. */
-function processCount(raw: string | undefined): number {
-  if (raw === undefined || raw === "") return 1;
+/**
+ * EDEN_PROCESSES as a whole number 1-64; the core count when unset or empty (D178: the router over N children
+ * measured 3.26x one process on 4 cores, D172's bar), at least 1 and at most MAX_PROCESSES.
+ */
+function processCount(raw: string | undefined, cores: number): number {
+  if (raw === undefined || raw === "") {
+    return Math.min(Math.max(1, Number.isInteger(cores) ? cores : 1), MAX_PROCESSES);
+  }
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 1 || n > MAX_PROCESSES) {
     throw new Error(`EDEN_PROCESSES must be a whole number 1-${MAX_PROCESSES}, got ${raw}`);

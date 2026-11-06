@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SourceMap } from "@eden/graph";
 import { tenantSpendFor } from "./build";
-import { childSourceMapPath, loadConfig } from "./config";
+import { availableParallelism } from "node:os";
+import { childSourceMapPath, loadConfig, MAX_PROCESSES } from "./config";
 import { childFor, rehomeSourceMaps, startRouter, userOf, type Router } from "./router";
 
 const KEY = "k_acme_0123456789abcdef";
@@ -77,7 +78,7 @@ describe("routing key", () => {
 describe("per-child caps and files (D163)", () => {
   test("a child divides the tenant rate and burst by N; burst stays at least 1", () => {
     const base = { EDEN_API_KEYS: keys, EDEN_TENANT_RPS: "200", EDEN_TENANT_BURST: "6" };
-    const one = loadConfig(base);
+    const one = loadConfig({ ...base, EDEN_PROCESSES: "1" });
     expect([one.tenantRatePerSec, one.tenantBurst, one.processes, one.child]).toEqual([200, 6, 1, null]);
     const child = loadConfig({ ...base, EDEN_ROUTER_CHILD: "3/4", EDEN_PROCESSES: "4" });
     expect(child.child).toEqual({ index: 3, count: 4 });
@@ -85,6 +86,26 @@ describe("per-child caps and files (D163)", () => {
     // A child never routes again, whatever it inherited.
     expect(child.processes).toBe(1);
     expect(loadConfig({ ...base, EDEN_ROUTER_CHILD: "0/8" }).tenantBurst).toBe(1);
+  });
+
+  test("EDEN_PROCESSES defaults to the core count, capped at 64; 1 is no router; a child is always 1 (D178)", () => {
+    const base = { EDEN_API_KEYS: keys };
+    // Unset and empty both mean the machine's cores (the second argument pins them here).
+    for (const cores of [4, 2, 64]) {
+      expect(loadConfig(base, cores).processes).toBe(cores);
+      expect(loadConfig({ ...base, EDEN_PROCESSES: "" }, cores).processes).toBe(cores);
+    }
+    expect(loadConfig(base, 128).processes).toBe(MAX_PROCESSES);
+    // A one-core machine keeps one process and no router; a nonsense count falls back to it.
+    for (const cores of [1, 0, -3, 1.5, NaN]) expect(loadConfig(base, cores).processes).toBe(1);
+    // An explicit 1 is one process whatever the cores; an explicit N is N.
+    expect(loadConfig({ ...base, EDEN_PROCESSES: "1" }, 8).processes).toBe(1);
+    expect(loadConfig({ ...base, EDEN_PROCESSES: "3" }, 8).processes).toBe(3);
+    // A child never starts a router of its own, with EDEN_PROCESSES unset or inherited.
+    expect(loadConfig({ ...base, EDEN_ROUTER_CHILD: "0/4" }, 8).processes).toBe(1);
+    expect(loadConfig({ ...base, EDEN_ROUTER_CHILD: "2/4", EDEN_PROCESSES: "4" }, 8).processes).toBe(1);
+    // Without the argument it reads the machine: the real core count, capped.
+    expect(loadConfig(base).processes).toBe(Math.min(availableParallelism(), MAX_PROCESSES));
   });
 
   test("EDEN_PROCESSES and EDEN_ROUTER_CHILD are validated", () => {
