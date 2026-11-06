@@ -1,0 +1,99 @@
+model claude-haiku-5-5, grader claude-haiku-5-5, spent $0.1240, 192 runs
+errors 0, ungraded 0
+
+== request
+
+== arrival
+
+== hidden
+tools       n= 32 facts 0.094 success 0.094 lexical 0.125 calls 2.28 tools 3.75 in 3319 out 584 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.438 p50 5.1s leaks 0
+eden        n= 32 facts 0.656 success 0.656 lexical 0.531 calls 1.72 tools 1.06 in 1713 out 465 injected 1.09 late 0.00 edenCalls 1.31 $/1k 0.721 p50 5.2s leaks 0
+both        n= 32 facts 0.531 success 0.531 lexical 0.500 calls 2.13 tools 3.03 in 3077 out 569 injected 1.09 late 0.00 edenCalls 0.69 $/1k 0.582 p50 5.9s leaks 0
+
+== control
+tools       n= 32 facts 0.000 success 0.000 lexical 0.000 calls 2.28 tools 3.88 in 3158 out 565 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.421 p50 4.9s leaks 0
+eden        n= 32 facts 0.000 success 0.000 lexical 0.000 calls 1.91 tools 1.38 in 1841 out 476 injected 0.72 late 0.00 edenCalls 1.63 $/1k 0.760 p50 6.3s leaks 0
+both        n= 32 facts 0.000 success 0.000 lexical 0.000 calls 2.19 tools 3.44 in 3105 out 558 injected 0.78 late 0.00 edenCalls 0.69 $/1k 0.570 p50 5.4s leaks 0
+
+== offworld
+
+== paired fact-recall differences, bootstrap 95% interval
+eden       - tools  hidden   n= 32 +0.563 (+0.406..+0.750)
+eden       - tools  control  n= 32 +0.000 (+0.000..+0.000)
+both       - tools  hidden   n= 32 +0.438 (+0.281..+0.594)
+both       - tools  control  n= 32 +0.000 (+0.000..+0.000)
+
+== hidden context raised, by template (tools / eden / both)
+piano-exam       0/1  1/1  1/1
+jury-summons     0/1  1/1  0/1
+talk-slides      0/1  0/1  0/1
+smart-meter      0/1  0/1  0/1
+blood-donation   0/1  0/1  0/1
+payroll-giving   0/1  1/1  1/1
+lock-change      0/1  0/1  0/1
+no-bots          1/1  1/1  1/1
+screen-reader    0/1  1/1  1/1
+singapore        1/1  1/1  1/1
+surname-change   0/1  1/1  1/1
+cost-centre      0/1  1/1  1/1
+rebrand          0/1  0/1  0/1
+visitor-badges   0/1  0/1  0/1
+fire-drill       0/1  0/1  0/1
+remortgage       0/1  1/1  0/1
+bulky-collection 0/1  1/1  1/1
+us-clocks        0/1  1/1  0/1
+anchor-days      0/1  1/1  1/1
+sister-wedding   0/1  0/1  0/1
+bereavement      0/1  1/1  1/1
+eu-residency     1/1  1/1  1/1
+conflict-of-interest 0/1  1/1  1/1
+parking-suspension 0/1  1/1  1/1
+pronouns         0/1  0/1  1/1
+pricing-sheet    0/1  1/1  1/1
+houseguest       0/1  0/1  0/1
+broadband        0/1  1/1  0/1
+layoffs          0/1  1/1  0/1
+expense-approver 0/1  1/1  1/1
+interpreter      0/1  0/1  1/1
+hackathon        0/1  1/1  0/1
+
+== false concern raised (control), by template (tools / eden / both)
+piano-exam       0/1  0/1  0/1
+jury-summons     0/1  0/1  0/1
+talk-slides      0/1  0/1  0/1
+smart-meter      0/1  0/1  0/1
+blood-donation   0/1  0/1  0/1
+payroll-giving   0/1  0/1  0/1
+lock-change      0/1  0/1  0/1
+no-bots          0/1  0/1  0/1
+screen-reader    0/1  0/1  0/1
+singapore        0/1  0/1  0/1
+surname-change   0/1  0/1  0/1
+cost-centre      0/1  0/1  0/1
+rebrand          0/1  0/1  0/1
+visitor-badges   0/1  0/1  0/1
+fire-drill       0/1  0/1  0/1
+remortgage       0/1  0/1  0/1
+bulky-collection 0/1  0/1  0/1
+us-clocks        0/1  0/1  0/1
+anchor-days      0/1  0/1  0/1
+sister-wedding   0/1  0/1  0/1
+bereavement      0/1  0/1  0/1
+eu-residency     0/1  0/1  0/1
+conflict-of-interest 0/1  0/1  0/1
+parking-suspension 0/1  0/1  0/1
+pronouns         0/1  0/1  0/1
+pricing-sheet    0/1  0/1  0/1
+houseguest       0/1  0/1  0/1
+broadband        0/1  0/1  0/1
+layoffs          0/1  0/1  0/1
+expense-approver 0/1  0/1  0/1
+interpreter      0/1  0/1  0/1
+hackathon        0/1  0/1  0/1
+
+== by suite: hidden fact raised / false concern raised (control)
+heldout12  tools         hidden    3/32 0.094   false-concern    0/32 0.000
+heldout12  eden          hidden   21/32 0.656   false-concern    0/32 0.000
+heldout12  both          hidden   17/32 0.531   false-concern    0/32 0.000
+
+grader and lexical check agree on 186 of 192 facts (0.969)

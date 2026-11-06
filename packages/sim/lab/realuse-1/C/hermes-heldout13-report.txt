@@ -1,0 +1,98 @@
+harness hermes, model claude-haiku-5-5, grader claude-haiku-5-5, time scale 1, tools sequential
+spent $0.1956 (agent $0.0968, Eden $0.0840, grader $0.0148); 256 runs, errors 0, ungraded 0
+config {}
+cost columns, $ per 1k tasks: $/1k = agent + Eden's per-task calls; (Eden) = Eden's per-task calls (its reader and judge); bkfill = its background calls (cards, bridge), each seed's spread evenly over that seed's task runs with cards or bridge on (mostly a one-time backfill: an upper bound on the steady state); all-in = (Eden) + bkfill
+
+== hidden: hidden fact raised
+condition     n   rate   $/1k  (Eden) bkfill all-in  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+hermes        64  0.031  0.367   0.000  0.000  0.000   1.80   2.64     7238      417    5.24    9.13   21.11          534
+hermes+eden   64  0.813  0.662   0.283  0.372  0.655   1.48   1.53     6613      419    4.10   10.50   18.32          549
+
+== control: false concern
+condition     n   rate   $/1k  (Eden) bkfill all-in  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+hermes        64  0.000  0.354   0.000  0.000  0.000   1.75   2.48     7028      400    5.36    7.97   21.60          543
+hermes+eden   64  0.000  0.697   0.286  0.372  0.658   1.83   2.50     8046      445    5.99   11.53   15.93          526
+
+== traffic-weighted: w × hidden + (1 − w) × control; means weighted, p50/p90 from the pooled per-task samples
+w     condition          n hid  n ctl   $/1k  (Eden)  tools   p50 s   p90 s
+0.10  hermes              64     64  0.356   0.000   2.50    5.36    7.97
+0.10  hermes+eden         64     64  0.694   0.286   2.40    5.90   11.53
+0.50  hermes              64     64  0.361   0.000   2.56    5.26    8.49
+0.50  hermes+eden         64     64  0.679   0.284   2.02    4.63   11.12
+
+== critical path, mean ms per task (share of wall time); Eden beside the loop and grading after it
+condition     n             eden         model          tool         other    eden-bg  grading
+hermes       128           0 (0%)    2906 (55%)    1799 (34%)     605 (11%)          0      865
+hermes+eden  128       1735 (28%)    2953 (48%)    1285 (21%)      171 (3%)       2208     1095
+
+== Eden on the critical path by task kind, mean ms per task: observe (the push) and ask_context, the reader's share of Eden's path, and the wall-time multiple if Eden took no time
+condition    kind       n  wall ms   eden (% wall)  observe      ask  reader (% eden)  if-zero
+hermes+eden  hidden    64    5809   1917 (33.0%)     1486      431    1429 (74.5%)     1.49x
+hermes+eden  control   64    6479   1553 (24.0%)     1198      355    1359 (87.5%)     1.32x
+hermes+eden  reader 145 calls: p50 1120 p90 1731 mean 1231 ms, mean out 131 tok; fit 896 ms + 2.55 ms/out token (mean/floor 1.37x)
+
+== paired differences (a − b), bootstrap 95% interval over tasks
+hermes+eden - hermes hidden   n= 64 rate +0.781 (+0.672..+0.875)  wall +0.42 s (-0.39..+1.20)  $/1k +0.294 (+0.225..+0.363)
+                      n= 64 $/1k cache-neutral agent+Eden +0.2211 (+0.1004..+0.3423)  agent billed +0.0113 (-0.0313..+0.0542) cache-neutral -0.0619 (-0.1685..+0.0401)  Eden +0.2830 (+0.2506..+0.3166)
+hermes+eden - hermes control  n= 64 rate +0.000 (+0.000..+0.000)  wall +1.25 s (+0.28..+2.13)  $/1k +0.343 (+0.278..+0.407)
+                      n= 64 $/1k cache-neutral agent+Eden +0.4104 (+0.2979..+0.5250)  agent billed +0.0571 (+0.0099..+0.1048) cache-neutral +0.1245 (+0.0171..+0.2337)  Eden +0.2858 (+0.2541..+0.3183)
+hermes+eden - hermes all      n=128 $/1k billed agent+Eden +0.3186 (+0.2744..+0.3651) cache-neutral agent+Eden +0.3157 (+0.2281..+0.4053)  agent billed +0.0342 (+0.0014..+0.0652) cache-neutral +0.0313 (-0.0433..+0.1045)  Eden +0.2844 (+0.2614..+0.3068)
+hermes+eden - hermes same-ask n=101 $/1k billed agent+Eden +0.2241 (+0.1853..+0.2635) cache-neutral agent+Eden +0.1572 (+0.0790..+0.2339)  agent billed -0.0132 (-0.0464..+0.0221) cache-neutral -0.0801 (-0.1548..-0.0054)  Eden +0.2373 (+0.2181..+0.2553)
+
+== per-second profile: mean ms of each second of task time by phase, over tasks still running
+-- hermes (128 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%      0   907     0    92        0
+   1     99%      0   509   290    45        0
+   2     73%      0   194   740    59        0
+   3     71%      0   339   578    54        0
+   4     67%      0   504   380    52        0
+   5     58%      0   492   241    62        0
+   6     34%      0   588   151    98        0
+   7     22%      0   523    96   149        0
+   8     11%      0   346   206   291        0
+   9      7%      0   218   152   454        0
+  10      5%      0   428     0   572        0
+  11      5%      0   176     0   575        0
+  12      3%      0     0     0  1000        0
+  13      3%      0     0     0  1000        0
+  14      3%      0     0     0  1000        0
+  15      3%      0   151     0   849        0
+  16      3%      0  1000     0     0        0
+  17      3%      0   136   816    48        0
+  18      3%      0   128   851    21        0
+  19      3%      0   535   335    11        0
+-- hermes+eden (128 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%    841    72     0    88      900
+   1    100%    422   542    16    20      527
+   2    100%     91   662   149    16      105
+   3     82%     54   442   320    18       81
+   4     59%     71   413   402    16       81
+   5     49%    113   469   337    13      118
+   6     41%    166   393   343    10      179
+   7     36%    142   399   337    10      142
+   8     29%     65   511   307     9       78
+   9     23%     66   496   290    12       66
+  10     16%    103   578    93     9      103
+  11     11%    115   699     0     8      115
+  12      8%    387   302     0     6      387
+  13      4%    581   207    56    13      581
+  14      3%     80   749   164     7       80
+  15      3%      0   563   250     3        0
+  16      2%      0   849   144     8        0
+  17      2%      0   589     0     4        0
+  18      1%      0   308     0     9        0
+
+== agent $/1k tasks: billed, and re-priced at fixed claude-haiku-5-5 prices (neutral: cached and cache-write tokens as plain input)
+condition       n   billed       list   neutral  mix
+hermes        128     0.361     0.361     0.918
+hermes+eden   128     0.395     0.395     0.949
+
+== uptake (hidden): raised rate (n) when the planted item was in a packet, only in an ask answer, or neither
+hermes       packet   -   (0)   ask   -   (0)   neither 0.031 (64)
+hermes+eden  packet 0.923 (52)   ask 1.000 (4)   neither 0.000 (8)
+
+== Eden per task: source calls, probe queries (calls), cache hits, judge calls, slow path and ask ms
+hermes       sources 0.00  probes 0.00 (0.00 calls)  cache hits 0.00  judge 0.00 (p50 0 ms)  injected 0.00  slow p50 0 p90 0  ask p50 0 ms
+hermes+eden  sources 7.32  probes 7.13 (0.38 calls)  cache hits 0.04  judge 0.00 (p50 0 ms)  injected 0.99  slow p50 171 p90 1268  ask p50 1446 ms

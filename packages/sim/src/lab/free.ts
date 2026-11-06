@@ -36,6 +36,8 @@ export interface LabAccess {
 
 /** Models served by Anthropic's Messages API directly (`AnthropicModel`), not OpenRouter. */
 export const isAnthropic = (model: string) => model.startsWith("claude-");
+/** The models of a run that go to OpenRouter (and so need OPENROUTER_API_KEY): every one not on Anthropic (D97). */
+export const openRouterModels = (models: string[]) => [...new Set(models.filter((m) => m && !isAnthropic(m)))];
 
 /**
  * The key a model's provider needs, or a clear error naming the variable. An Anthropic key is read from

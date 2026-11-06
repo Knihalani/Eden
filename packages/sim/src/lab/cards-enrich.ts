@@ -46,6 +46,7 @@ import { buildWorld } from "../world";
 import { DiskCardMaker, loadRequests } from "./cards-disk";
 import { isCapError, keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
+import { variantsFor } from "./neutral";
 import { parseSuites, SUITES } from "./suites";
 
 const args = process.argv.slice(2);
@@ -84,7 +85,8 @@ const take = (raw: ContextItem[]) => {
 };
 if (FUNNEL) {
   for (const suite of parseSuites(FUNNEL)) {
-    for (const variant of ["hidden", "control"] as const) {
+    // A neutral world's items are the hidden world's less its planted one, read here too for completeness.
+    for (const variant of variantsFor(suite, ["hidden", "control", "neutral"] as const)) {
       for (const seed of SEEDS) {
         // As hidden-funnel.ts builds each world.
         const world = buildWorld({ seed: seed * 1_000 });

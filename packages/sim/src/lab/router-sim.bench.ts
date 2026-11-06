@@ -11,12 +11,13 @@
  * Arms, as in router.bench.ts: this file as one server process (`--child`, what EDEN_PROCESSES unset runs), the real
  * router (`startRouter`) over 1 child (the hop) and over N children, each child this file again (`entry`). The load is
  * closed-loop: C clients each send `/v1/events?waitMs=W` for the next user in turn; C steps up the ladder until p99
- * passes twice the target; an arm's figure is its best events/s among steps within the target with no errors. Each
- * arm runs REPS times, the arm order rotating every repetition (D172), and the summary is D172's: per-repetition
- * ratios, their median and lowest. Every server process writes its memory and connector counters to a file each
- * second, so the result reports RSS per process at start (worlds built, no users) and at the end of the arm, and how
- * many source calls (searches, sync lists) were made. Before the ladder each arm settles under light load (`--settle`,
- * default 75 s) past the sync timer's first tick (once a minute), so the steps see users whose sources are synced.
+ * passes twice the target on two steps in a row (`ladderStops`: one step over can be the sync timer's tick); an arm's
+ * figure is its best events/s among steps within the target with no errors. Each arm runs REPS times, the arm order
+ * rotating every repetition (D172), and the summary is D172's: per-repetition ratios, their median and lowest. Every
+ * server process writes its memory and connector counters to a file each second, so the result reports RSS per
+ * process at start (worlds built, no users) and at the end of the arm, and how many source calls (searches, sync
+ * lists) were made. Before the ladder each arm settles under light load (`--settle`, default 75 s) past the sync
+ * timer's first tick (once a minute), so the steps see users whose sources are synced.
  *
  * The worlds are built in every process (sim data, not Eden's): read memory as end minus start.
  *
@@ -33,7 +34,15 @@ import { buildPartner, createHandler, loadConfig, startGatePool } from "@eden/se
 import { startRouter } from "../../../server/src/router";
 import { worldOf } from "../server";
 import { buildWorld } from "../world";
-import { gateSummary, median, profilesNamed, simResolver, userEventBodies, worldIndexes } from "./router-sim";
+import {
+  gateSummary,
+  ladderStops,
+  median,
+  profilesNamed,
+  simResolver,
+  userEventBodies,
+  worldIndexes,
+} from "./router-sim";
 
 const TENANTS = 8;
 const LADDER = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128];
@@ -271,7 +280,8 @@ async function main() {
         `  ${name} C=${c}: ${r.eventsPerSec.toFixed(0)} ev/s, p50 ${r.p50.toFixed(1)} ms, p99 ${r.p99.toFixed(1)} ms` +
           (r.errors ? `, ${r.errors} errors` : ""),
       );
-      if (r.p99 > TARGET * 2) break;
+      const p99s = steps.map((x) => x.p99);
+      if (ladderStops(p99s, TARGET)) break;
     }
     await Bun.sleep(1_100); // one more stats write after the last step
     const end = readStats(statsDir);

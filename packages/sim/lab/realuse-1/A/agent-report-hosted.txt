@@ -1,0 +1,133 @@
+model claude-haiku-5-5, grader claude-haiku-5-5, spent $0.2626, 384 runs
+errors 0, ungraded 0
+
+== request
+
+== arrival
+
+== hidden
+tools       n= 64 facts 0.234 success 0.234 lexical 0.203 calls 2.03 tools 2.98 in 2480 out 522 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.334 p50 5.7s leaks 0
+eden        n= 64 facts 0.641 success 0.641 lexical 0.516 calls 1.39 tools 0.61 in 1375 out 433 injected 1.30 late 0.00 edenCalls 1.06 $/1k 0.564 p50 4.4s leaks 0
+
+== control
+tools       n= 64 facts 0.000 success 0.000 lexical 0.047 calls 1.98 tools 2.78 in 2391 out 519 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.331 p50 5.4s leaks 0
+eden        n= 64 facts 0.000 success 0.000 lexical 0.109 calls 1.58 tools 0.95 in 1610 out 469 injected 0.97 late 0.00 edenCalls 1.39 $/1k 0.676 p50 5.5s leaks 0
+
+== neutral (nothing planted: any concern counts as a false one)
+tools       n= 64 facts 0.000 success 0.000 lexical 0.000 calls 2.06 tools 3.16 in 2488 out 530 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.336 p50 5.9s leaks 0
+eden        n= 64 facts 0.016 success 0.016 lexical 0.000 calls 1.88 tools 1.28 in 1886 out 504 injected 0.59 late 0.00 edenCalls 1.67 $/1k 0.774 p50 6.8s leaks 0
+
+== offworld
+
+== paired fact-recall differences, bootstrap 95% interval
+eden       - tools  hidden   n= 64 +0.406 (+0.266..+0.547)
+eden       - tools  control  n= 64 +0.000 (+0.000..+0.000)
+eden       - tools  neutral  n= 64 +0.016 (+0.000..+0.047)
+
+== hidden context raised, by template (tools / eden)
+renewal-already-won 2/2  2/2
+review-room-closure 0/2  0/2
+webinar-speaker-quiet-period 0/2  2/2
+freelance-budget-line 2/2  2/2
+maya-saturday-party 0/2  2/2
+mum-away-sunday  0/2  0/2
+school-early-finish 0/2  0/2
+sister-gift-bought 2/2  1/2
+physio-preauth   0/2  2/2
+flu-clinic-slot  0/2  1/2
+maya-sesame-allergy 0/2  0/2
+inhaler-review-due 0/2  0/2
+isa-allowance    1/2  2/2
+council-tax-direct-debit 0/2  0/2
+builder-deposit-paid 1/2  1/2
+pension-change-freeze 0/2  2/2
+rail-strike-cologne 0/2  2/2
+lisbon-room-booked 2/2  1/2
+esta-expired     0/2  1/2
+driving-licence-expiry 0/2  0/2
+washer-repair-cover 2/2  2/2
+street-closure-delivery 0/2  2/2
+sofa-lift-outage 0/2  1/2
+smart-meter-booked 0/2  1/2
+road-tax-direct-debit 0/2  2/2
+contents-auto-renewed 0/2  2/2
+wills-not-ready  0/2  2/2
+nda-already-signed 2/2  2/2
+stag-weekend-moved 0/2  2/2
+restaurant-refurb 1/2  2/2
+book-club-host-taken 0/2  1/2
+race-family-weekend 0/2  1/2
+
+== false concern raised (control), by template (tools / eden)
+renewal-already-won 0/2  0/2
+review-room-closure 0/2  0/2
+webinar-speaker-quiet-period 0/2  0/2
+freelance-budget-line 0/2  0/2
+maya-saturday-party 0/2  0/2
+mum-away-sunday  0/2  0/2
+school-early-finish 0/2  0/2
+sister-gift-bought 0/2  0/2
+physio-preauth   0/2  0/2
+flu-clinic-slot  0/2  0/2
+maya-sesame-allergy 0/2  0/2
+inhaler-review-due 0/2  0/2
+isa-allowance    0/2  0/2
+council-tax-direct-debit 0/2  0/2
+builder-deposit-paid 0/2  0/2
+pension-change-freeze 0/2  0/2
+rail-strike-cologne 0/2  0/2
+lisbon-room-booked 0/2  0/2
+esta-expired     0/2  0/2
+driving-licence-expiry 0/2  0/2
+washer-repair-cover 0/2  0/2
+street-closure-delivery 0/2  0/2
+sofa-lift-outage 0/2  0/2
+smart-meter-booked 0/2  0/2
+road-tax-direct-debit 0/2  0/2
+contents-auto-renewed 0/2  0/2
+wills-not-ready  0/2  0/2
+nda-already-signed 0/2  0/2
+stag-weekend-moved 0/2  0/2
+restaurant-refurb 0/2  0/2
+book-club-host-taken 0/2  0/2
+race-family-weekend 0/2  0/2
+
+== any concern raised (neutral), by template (tools / eden)
+renewal-already-won 0/2  0/2
+review-room-closure 0/2  0/2
+webinar-speaker-quiet-period 0/2  0/2
+freelance-budget-line 0/2  0/2
+maya-saturday-party 0/2  0/2
+mum-away-sunday  0/2  0/2
+school-early-finish 0/2  0/2
+sister-gift-bought 0/2  0/2
+physio-preauth   0/2  0/2
+flu-clinic-slot  0/2  0/2
+maya-sesame-allergy 0/2  0/2
+inhaler-review-due 0/2  0/2
+isa-allowance    0/2  1/2
+council-tax-direct-debit 0/2  0/2
+builder-deposit-paid 0/2  0/2
+pension-change-freeze 0/2  0/2
+rail-strike-cologne 0/2  0/2
+lisbon-room-booked 0/2  0/2
+esta-expired     0/2  0/2
+driving-licence-expiry 0/2  0/2
+washer-repair-cover 0/2  0/2
+street-closure-delivery 0/2  0/2
+sofa-lift-outage 0/2  0/2
+smart-meter-booked 0/2  0/2
+road-tax-direct-debit 0/2  0/2
+contents-auto-renewed 0/2  0/2
+wills-not-ready  0/2  0/2
+nda-already-signed 0/2  0/2
+stag-weekend-moved 0/2  0/2
+restaurant-refurb 0/2  0/2
+book-club-host-taken 0/2  0/2
+race-family-weekend 0/2  0/2
+
+== by suite: hidden fact raised / false concern raised (control)
+heldout14  tools         hidden   15/64 0.234   false-concern    0/64 0.000   neutral-concern    0/64 0.000
+heldout14  eden          hidden   41/64 0.641   false-concern    0/64 0.000   neutral-concern    1/64 0.016
+
+grader and lexical check agree on 359 of 384 facts (0.935)

@@ -9,7 +9,10 @@
  *   [--timeline out.jsonl] [--sync]
  *   [--cards DIR/cards-v2.jsonl]
  *   [--drafts clause|half [--typing-ms 1500]]
- *   [--jobs N] [--user-range A:B] [--tally]
+ *   [--jobs N] [--user-range A:B] [--tally] [--source-profile JSON|FILE]
+ *
+ * `--source-profile` overrides fields of the chosen `--profile` per source (`withOverrides`, as pi-ab.ts's flag does
+ * over REALISTIC): e.g. `'{"gmail":{"errorRate":1}}'` for a Gmail outage, `'{"crm":{"ratePerSec":1}}'` for a 429 storm.
  *
  * Plays generated sessions over simulated sources and prints the quality report as JSON. Without --live no model is
  * used (free, deterministic at --time 0). --time 1 runs source latency and agent pacing in real time.
@@ -28,7 +31,18 @@ import { flags, parseJson } from "./lab/flags";
 import { Timeline } from "./lab/timeline";
 import { DiskCardMaker } from "./lab/cards-disk";
 import { mergeTallies, qualityReport, tallyQuality, type QualityOptions, type QualityTally } from "./quality";
-import { IDEAL, REALISTIC, REALISTIC_ENTITIES, ZOO_HELDOUT_A, ZOO_HELDOUT_B, ZOO_TUNE } from "./sources";
+import { readFileSync } from "node:fs";
+import {
+  IDEAL,
+  REALISTIC,
+  REALISTIC_ENTITIES,
+  withOverrides,
+  ZOO_HELDOUT_A,
+  ZOO_HELDOUT_B,
+  ZOO_TUNE,
+  type ProfileSet,
+  type SourceProfile,
+} from "./sources";
 
 // Strict (lab/flags.ts): an unknown flag exits 2 before any world is built; `--help` prints the header above.
 const cli = flags(
@@ -64,6 +78,7 @@ const cli = flags(
         "typing-ms",
         "jobs",
         "user-range",
+        "source-profile",
       ].map((k) => [k, "value" as const]),
     ),
     ...Object.fromEntries(
@@ -78,6 +93,7 @@ bun packages/sim/src/quality-cli.ts [--users 6] [--sessions 15] [--seed 1] [--pr
   zoo-tune|zoo-a|zoo-b] [--planner ...] [--time 0] [--wait 0] [--noise 1] [--updates 0] [--tool-rate 0.4]
   [--judge none|perfect|noisy] [--live] [--brief] [--config '{"probes":true}'] [--timeline F] [--sync]
   [--cards F] [--drafts clause|half [--typing-ms 1500]] [--jobs N] [--user-range A:B] [--tally]
+  [--source-profile JSON|FILE]
   (bun run sim; the header of quality-cli.ts has every flag)`,
 );
 if (cli.rest.length) {
@@ -111,8 +127,19 @@ const PROFILES = {
   "zoo-a": ZOO_HELDOUT_A,
   "zoo-b": ZOO_HELDOUT_B,
 };
-const profiles = PROFILES[arg("profile", "realistic") as keyof typeof PROFILES];
-if (!profiles) throw new Error(`--profile must be one of ${Object.keys(PROFILES).join(", ")}`);
+const baseProfiles = PROFILES[arg("profile", "realistic") as keyof typeof PROFILES];
+if (!baseProfiles) throw new Error(`--profile must be one of ${Object.keys(PROFILES).join(", ")}`);
+const profiles = ((): ProfileSet => {
+  if (!has("source-profile")) return baseProfiles;
+  const text = arg("source-profile", "");
+  try {
+    const over = parseJson(text.trim().startsWith("{") ? text : readFileSync(text, "utf8"), "--source-profile");
+    return withOverrides(baseProfiles, over as Record<string, Partial<SourceProfile>>);
+  } catch (error) {
+    console.error(`quality-cli: ${(error as Error).message}`);
+    process.exit(2);
+  }
+})();
 const live = has("live");
 const model = live ? OpenRouterModel.fromEnv() : null;
 if (live && !model) throw new Error("--live needs OPENROUTER_API_KEY");

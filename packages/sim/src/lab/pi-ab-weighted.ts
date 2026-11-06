@@ -172,3 +172,80 @@ export function weightedLines(rows: WeightedRow[]): string[] {
     ),
   ];
 }
+
+/** RealUse-1's traffic assumption (labelled so): of 10 tasks, 1 hidden, 1 control and 8 neutral (neutral.ts). */
+export const REALUSE_MIX = { hidden: 0.1, control: 0.1, neutral: 0.8 } as const;
+
+/** A mix row over any task kinds: per kind its share of traffic, its samples and (optionally) its rates. */
+export interface MixRow {
+  condition: string;
+  shares: Record<string, number>;
+  n: Record<string, number>;
+  perK: number;
+  edenPerK: number;
+  tools: number;
+  p50: number;
+  p90: number;
+  /** The share of the mix's tasks that raised a concern that was wrong (control and neutral rates, weighted). */
+  falseConcern: number | null;
+  /** The share of the mix's tasks that raised the hidden fact (the hidden rate times its share). */
+  raised: number | null;
+}
+
+/**
+ * The traffic-weighted row of one condition over several task kinds (shares summing to 1), as `weightedRow` does for
+ * two: means weighted by share, p50/p90 from the pooled samples each weighted `share / n_kind`. `rate` per kind (the
+ * graded hidden or false-concern rate) is optional. Null when a kind with a share above 0 has no sample.
+ */
+export function mixRow(
+  condition: string,
+  kinds: Record<string, { share: number; samples: WeightedSample[]; rate?: number }>,
+): MixRow | null {
+  const live = Object.entries(kinds).filter(([, k]) => k.share > 0);
+  if (!live.length || live.some(([, k]) => !k.samples.length)) return null;
+  const total = live.reduce((n, [, k]) => n + k.share, 0);
+  const mix = (pick: (s: WeightedSample) => number) =>
+    live.reduce((acc, [, k]) => acc + (k.share / total) * mean(k.samples.map(pick)), 0);
+  const pooled = live.flatMap(([, k]) =>
+    k.samples.map((s) => ({ v: s.wallS, weight: k.share / total / k.samples.length })),
+  );
+  const rateOf = (name: string) => {
+    const k = kinds[name];
+    return k && k.share > 0 && k.rate !== undefined ? (k.share / total) * k.rate : null;
+  };
+  const wrong = ["control", "neutral"].map(rateOf);
+  // A kind in the mix with samples but no graded rate leaves the false-concern share unknown, not smaller.
+  const wrongKnown = ["control", "neutral"].every(
+    (name) => !kinds[name] || kinds[name]!.share <= 0 || kinds[name]!.rate !== undefined,
+  );
+  return {
+    condition,
+    shares: Object.fromEntries(live.map(([name, k]) => [name, k.share / total])),
+    n: Object.fromEntries(live.map(([name, k]) => [name, k.samples.length])),
+    perK: 1_000 * mix((s) => s.usd + s.edenUsd),
+    edenPerK: 1_000 * mix((s) => s.edenUsd),
+    tools: mix((s) => s.tools),
+    p50: weightedQuantile(pooled, 0.5),
+    p90: weightedQuantile(pooled, 0.9),
+    falseConcern:
+      !wrongKnown || wrong.every((x) => x === null) ? null : wrong.reduce<number>((a, x) => a + (x ?? 0), 0),
+    raised: rateOf("hidden"),
+  };
+}
+
+/** The RealUse-1 mix section of a report (1 hidden, 1 control, 8 neutral in 10; an assumption). */
+export function mixLines(rows: MixRow[]): string[] {
+  if (!rows.length) return [];
+  const f = (x: number | null, d: number, width: number) => (x === null ? "-" : fixed(x, d)).padStart(width);
+  return [
+    "\n== traffic mix (assumed): 1 hidden, 1 control, 8 neutral in 10; means weighted, p50/p90 pooled; raised = " +
+      "share of all tasks raising the hidden fact, false = share raising a wrong concern (control + neutral)",
+    "condition        n hid  n ctl  n neu   $/1k  (Eden)  tools   p50 s   p90 s  raised   false",
+    ...rows.map(
+      (r) =>
+        `${r.condition.padEnd(16)} ${String(r.n.hidden ?? 0).padStart(5)} ${String(r.n.control ?? 0).padStart(6)} ` +
+        `${String(r.n.neutral ?? 0).padStart(6)} ${f(r.perK, 3, 6)} ${f(r.edenPerK, 3, 7)} ${f(r.tools, 2, 6)} ` +
+        `${f(r.p50, 2, 7)} ${f(r.p90, 2, 7)} ${f(r.raised, 3, 7)} ${f(r.falseConcern, 3, 7)}`,
+    ),
+  ];
+}

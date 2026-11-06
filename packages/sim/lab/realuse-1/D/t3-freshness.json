@@ -1,0 +1,215 @@
+{
+ "t3-none": {
+  "precision": 0.574,
+  "recall": 0.46,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 345,
+  "turns": 1210,
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 46,
+   "staleDelivered": 7
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 7,
+   "deletedCited": 12
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 0.907,
+   "fetches": 0,
+   "usefulResultShare": 0.427,
+   "errors": 12,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 987
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.847,
+   "mrr": 0.646,
+   "precision": 0.449,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t3-payload": {
+  "precision": 0.581,
+  "recall": 0.442,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 320,
+  "turns": 1210,
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 38,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 0.217,
+   "fetches": 0,
+   "usefulResultShare": 0.491,
+   "errors": 6,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 789
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.836,
+   "mrr": 0.637,
+   "precision": 0.445,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t3-signals-noverify": {
+  "precision": 0.576,
+  "recall": 0.46,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 342,
+  "turns": 1210,
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 44,
+   "staleDelivered": 7
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 7,
+   "deletedCited": 12
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 0.36,
+   "fetches": 0,
+   "usefulResultShare": 0.443,
+   "errors": 6,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 926
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.847,
+   "mrr": 0.646,
+   "precision": 0.449,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t3-signals": {
+  "precision": 0.588,
+  "recall": 0.454,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 337,
+  "turns": 1210,
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 43,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 1
+  },
+  "freshness": {
+   "checked": 575,
+   "confirmed": 542,
+   "changed": 11,
+   "gone": 13,
+   "failed": 9,
+   "calls": 575
+  },
+  "reReadsPerTurn": 0.4752,
+  "sources": {
+   "callsPerLookup": 0.75,
+   "fetches": 571,
+   "usefulResultShare": 0.447,
+   "errors": 13,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 1205
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.836,
+   "mrr": 0.637,
+   "precision": 0.446,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "_command": "bun packages/sim/src/quality-cli.ts --users 8 --sessions 20 --updates 0.6 --deletes 0.05 --jobs 4 --push none|signals|payload [--config '{\"verifyDelivery\":false}']"
+}

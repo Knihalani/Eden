@@ -25,7 +25,7 @@
  * arriving message is an `external` event, not the user prompt that wraps it.
  *
  *   OPENROUTER_API_KEY=… bun packages/sim/src/lab/hermes-ab.ts --hermes-src DIR [--hermes-python PY]
- *     [--suite dev6a] [--seeds 41] [--variants hidden,control] [--conditions hermes,hermes+eden]
+ *     [--suite dev6a] [--seeds 41] [--variants hidden,control[,neutral]] [--conditions hermes,hermes+eden]
  *     [--config ALL3] [--variant-config '{"A5":{…}}'] [--model z-ai/glm-5.3-flash] [--grader …] [--budget 0.6]
  *     [--card-model m] [--cards FILE [--cards-out FILE]] [--intent default|none|FILE[,FILE]]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--limit n] [--templates a,b] [--concurrency 4]
@@ -80,6 +80,7 @@ import {
   type RunResult,
   type Task,
 } from "./ab-common";
+import { variantsFor } from "./neutral";
 import { DiskCardMaker, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
 import { isAnthropic, isCapError, keyFor, labAccess, labModel, providerPrefs } from "./free";
 import { parseHermesConditions, type HermesCondition } from "./hermes-conditions";
@@ -100,8 +101,8 @@ const opt = (name: string, fallback: string) => {
   return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
 };
 const DRY = args.includes("--dry");
+// The OpenRouter key, needed only when some model of the run is not `claude-*` (checked once the models are known).
 const KEY = process.env.OPENROUTER_API_KEY;
-if (!KEY && !DRY) throw new Error("needs OPENROUTER_API_KEY");
 const HERMES_SRC = resolve(opt("hermes-src", process.env.HERMES_SRC ?? ""));
 if (!existsSync(join(HERMES_SRC, "run_agent.py"))) throw new Error(`--hermes-src ${HERMES_SRC}: not a hermes checkout`);
 const HERMES_PY = opt("hermes-python", join(HERMES_SRC, ".venv/bin/python"));
@@ -113,7 +114,8 @@ const MODEL = opt("model", "z-ai/glm-5.3-flash");
 const GRADER = opt("grader", "anthropic/claude-haiku-5.5");
 const BUDGET = Number(opt("budget", "0.6"));
 const SUITE_LIST = parseSuites(opt("suite", "heldout"));
-const VARIANTS = opt("variants", "hidden,control").split(",") as ("hidden" | "control")[];
+// `neutral` (neutral.ts) runs only on the suites that build it; the others run their hidden and control variants.
+const VARIANTS = opt("variants", "hidden,control").split(",") as ("hidden" | "control" | "neutral")[];
 const CONDITION_NAMES = opt("conditions", "hermes,hermes+eden").split(",");
 const OUT = opt("out", "hermes-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
@@ -143,12 +145,10 @@ const usesCards = CONDITIONS.some((c) => c.withPartner && effective(c.config).ca
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
 const USES_READER = CONDITIONS.some((c) => c.withPartner && effective(c.config).askReader);
-const ACCESS = labAccess(args, [
-  MODEL,
-  GRADER,
-  ...(usesCards ? [CARD_MODEL] : []),
-  ...(USES_READER ? [READER_MODEL] : []),
-]);
+const RUN_MODELS = [MODEL, GRADER, ...(usesCards ? [CARD_MODEL] : []), ...(USES_READER ? [READER_MODEL] : [])];
+const ACCESS = labAccess(args, RUN_MODELS);
+// Every model on Anthropic (`claude-*`, D97): no OpenRouter key needed, and none is used.
+if (!KEY && !DRY && RUN_MODELS.some((m) => !isAnthropic(m))) throw new Error("needs OPENROUTER_API_KEY");
 const PACER = ACCESS.pacer;
 /** A task starts only while the cap leaves room for all of it: its model requests (one spare) and its grading. */
 const TASK_REQUESTS = MAX_ITERATIONS + 2;
@@ -768,7 +768,7 @@ const proxy = modelProxy({
 
 const worlds = SEEDS.flatMap((seed) =>
   SUITE_LIST.flatMap((suite) =>
-    VARIANTS.map((variant) => {
+    variantsFor(suite, VARIANTS).map((variant) => {
       const w = worldOf(seed, suite, variant, LIMITS);
       const picked = TEMPLATES ? { ...w, tasks: w.tasks.filter((t) => TEMPLATES.has(t.type)) } : w;
       return { ...(LIMIT > 0 ? { ...picked, tasks: picked.tasks.slice(0, LIMIT) } : picked), suite, variant };

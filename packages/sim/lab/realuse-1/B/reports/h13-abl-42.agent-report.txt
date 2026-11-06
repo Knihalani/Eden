@@ -1,0 +1,101 @@
+model claude-haiku-5-5, grader claude-haiku-5-5, spent $0.2430, 320 runs
+errors 0, ungraded 0
+
+== request
+
+== arrival
+
+== hidden
+eden~minus-reader n= 32 facts 0.469 success 0.469 lexical 0.500 calls 1.63 tools 1.13 in 1765 out 483 injected 0.97 late 0.03 edenCalls 0.00 $/1k 0.348 p50 4.4s leaks 0
+eden~minus-intent n= 32 facts 0.625 success 0.625 lexical 0.594 calls 1.53 tools 0.88 in 1610 out 440 injected 1.53 late 0.00 edenCalls 1.69 $/1k 0.722 p50 5.1s leaks 0
+eden~minus-sync n= 32 facts 0.375 success 0.375 lexical 0.250 calls 1.59 tools 1.00 in 1574 out 438 injected 0.94 late 0.16 edenCalls 1.78 $/1k 0.780 p50 7.1s leaks 0
+eden~minus-grounds n= 32 facts 0.875 success 0.875 lexical 0.688 calls 1.38 tools 0.66 in 1327 out 398 injected 1.03 late 0.00 edenCalls 1.56 $/1k 0.700 p50 3.9s leaks 0
+eden~minus-graph n= 32 facts 0.750 success 0.750 lexical 0.656 calls 1.31 tools 0.53 in 1312 out 393 injected 1.59 late 0.00 edenCalls 1.41 $/1k 0.605 p50 3.9s leaks 0
+
+== control
+eden~minus-reader n= 32 facts 0.000 success 0.000 lexical 0.125 calls 1.81 tools 1.31 in 1924 out 497 injected 0.69 late 0.00 edenCalls 0.00 $/1k 0.354 p50 5.2s leaks 0
+eden~minus-intent n= 32 facts 0.000 success 0.000 lexical 0.031 calls 1.81 tools 1.22 in 1841 out 477 injected 1.00 late 0.00 edenCalls 1.84 $/1k 0.795 p50 5.9s leaks 0
+eden~minus-sync n= 32 facts 0.000 success 0.000 lexical 0.063 calls 1.78 tools 1.31 in 1812 out 476 injected 0.78 late 0.03 edenCalls 2.13 $/1k 0.841 p50 7.6s leaks 0
+eden~minus-grounds n= 32 facts 0.000 success 0.000 lexical 0.063 calls 1.88 tools 1.50 in 1930 out 485 injected 0.41 late 0.00 edenCalls 2.22 $/1k 0.963 p50 6.5s leaks 0
+eden~minus-graph n= 32 facts 0.031 success 0.031 lexical 0.063 calls 1.75 tools 1.09 in 1734 out 459 injected 0.84 late 0.00 edenCalls 1.91 $/1k 0.821 p50 6.6s leaks 0
+
+== offworld
+
+== paired fact-recall differences, bootstrap 95% interval
+
+== hidden context raised, by template (eden~minus-reader / eden~minus-intent / eden~minus-sync / eden~minus-grounds / eden~minus-graph)
+gutters-landlord 0/1  0/1  0/1  1/1  0/1
+maya-pool-fee    0/1  1/1  0/1  1/1  1/1
+hygienist-plan   0/1  1/1  0/1  1/1  0/1
+passport-validity 0/1  0/1  0/1  0/1  0/1
+board-pack-deadline 0/1  0/1  0/1  0/1  0/1
+events-domain    0/1  0/1  0/1  0/1  0/1
+deal-desk-approval 1/1  1/1  0/1  1/1  1/1
+vendor-bill-correction 0/1  0/1  0/1  0/1  0/1
+offsite-allhands 0/1  0/1  0/1  1/1  1/1
+starter-laptop   0/1  1/1  1/1  1/1  1/1
+expenses-cutoff  1/1  0/1  0/1  1/1  1/1
+car-mot          1/1  0/1  0/1  1/1  1/1
+trainer-away     1/1  1/1  1/1  1/1  1/1
+client-leave     0/1  1/1  1/1  1/1  1/1
+dpa-hold         1/1  1/1  1/1  1/1  1/1
+summit-pass      1/1  1/1  1/1  1/1  1/1
+broadband-exit-fee 1/1  1/1  0/1  1/1  1/1
+ellie-new-address 1/1  1/1  1/1  1/1  1/1
+tax-already-filed 0/1  0/1  0/1  1/1  1/1
+crm-admin-freeze 0/1  0/1  0/1  1/1  1/1
+offer-salary-band 1/1  1/1  1/1  1/1  1/1
+marshal-sleepover-pickup 0/1  1/1  1/1  1/1  0/1
+cobalt-cutover-dinner 1/1  1/1  1/1  1/1  1/1
+mortgage-allowance 1/1  1/1  1/1  1/1  1/1
+climbing-membership 0/1  0/1  0/1  1/1  0/1
+export-contact-left 1/1  1/1  1/1  1/1  1/1
+leave-blackout   1/1  1/1  0/1  1/1  1/1
+bake-sale-nut-free 1/1  1/1  0/1  1/1  1/1
+migration-maintenance 1/1  1/1  0/1  1/1  1/1
+book-club-copies 0/1  1/1  1/1  1/1  1/1
+mum-surgery-moved 0/1  1/1  0/1  1/1  1/1
+website-freeze   0/1  0/1  0/1  1/1  1/1
+
+== false concern raised (control), by template (eden~minus-reader / eden~minus-intent / eden~minus-sync / eden~minus-grounds / eden~minus-graph)
+gutters-landlord 0/1  0/1  0/1  0/1  0/1
+maya-pool-fee    0/1  0/1  0/1  0/1  0/1
+hygienist-plan   0/1  0/1  0/1  0/1  0/1
+passport-validity 0/1  0/1  0/1  0/1  0/1
+board-pack-deadline 0/1  0/1  0/1  0/1  0/1
+events-domain    0/1  0/1  0/1  0/1  0/1
+deal-desk-approval 0/1  0/1  0/1  0/1  0/1
+vendor-bill-correction 0/1  0/1  0/1  0/1  0/1
+offsite-allhands 0/1  0/1  0/1  0/1  0/1
+starter-laptop   0/1  0/1  0/1  0/1  0/1
+expenses-cutoff  0/1  0/1  0/1  0/1  0/1
+car-mot          0/1  0/1  0/1  0/1  0/1
+trainer-away     0/1  0/1  0/1  0/1  0/1
+client-leave     0/1  0/1  0/1  0/1  0/1
+dpa-hold         0/1  0/1  0/1  0/1  0/1
+summit-pass      0/1  0/1  0/1  0/1  0/1
+broadband-exit-fee 0/1  0/1  0/1  0/1  0/1
+ellie-new-address 0/1  0/1  0/1  0/1  0/1
+tax-already-filed 0/1  0/1  0/1  0/1  0/1
+crm-admin-freeze 0/1  0/1  0/1  0/1  0/1
+offer-salary-band 0/1  0/1  0/1  0/1  1/1
+marshal-sleepover-pickup 0/1  0/1  0/1  0/1  0/1
+cobalt-cutover-dinner 0/1  0/1  0/1  0/1  0/1
+mortgage-allowance 0/1  0/1  0/1  0/1  0/1
+climbing-membership 0/1  0/1  0/1  0/1  0/1
+export-contact-left 0/1  0/1  0/1  0/1  0/1
+leave-blackout   0/1  0/1  0/1  0/1  0/1
+bake-sale-nut-free 0/1  0/1  0/1  0/1  0/1
+migration-maintenance 0/1  0/1  0/1  0/1  0/1
+book-club-copies 0/1  0/1  0/1  0/1  0/1
+mum-surgery-moved 0/1  0/1  0/1  0/1  0/1
+website-freeze   0/1  0/1  0/1  0/1  0/1
+
+== by suite: hidden fact raised / false concern raised (control)
+heldout13  eden~minus-reader hidden   15/32 0.469   false-concern    0/32 0.000
+heldout13  eden~minus-intent hidden   20/32 0.625   false-concern    0/32 0.000
+heldout13  eden~minus-sync hidden   12/32 0.375   false-concern    0/32 0.000
+heldout13  eden~minus-grounds hidden   28/32 0.875   false-concern    0/32 0.000
+heldout13  eden~minus-graph hidden   24/32 0.750   false-concern    1/32 0.031
+
+grader and lexical check agree on 287 of 320 facts (0.897)

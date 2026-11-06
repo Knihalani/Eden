@@ -90,6 +90,11 @@ def eden_sources(t, op=None):
     return n
 
 
+def asks(t):
+    """The task's ask_context calls (tool spans), counted among the agent's tool calls but not connector calls."""
+    return sum(1 for e in t["events"] if e.get("ev") == "tool.ask_context" and e.get("ph") == "B")
+
+
 def boot(diffs, n=4000, seed=7):
     rng = random.Random(seed)
     m = [statistics.mean(rng.choices(diffs, k=len(diffs))) for _ in range(n)]
@@ -112,7 +117,8 @@ def main():
         lines.append(f"Eden's background spend (cards, intent), cold-cache upper bound: ${1000 * bg:.3f} per 1,000 "
                      "tasks, "
                      "included in every Agent + Eden cost below.\n")
-        for kind in ("hidden", "control"):
+        # neutral (RealUse-1): the same requests with nothing planted; any concern counts as a false one.
+        for kind in ("hidden", "control", "neutral"):
             ids = sorted(
                 tid
                 for (c, tid), (r, t) in runs.items()
@@ -126,7 +132,8 @@ def main():
                 rows[cond] = {
                     "rate": [raised(r) for r, _ in rs],
                     "wall": [t["wallMs"] / 1000 for _, t in rs],
-                    "agentCalls": [r["toolCalls"] for r, _ in rs],
+                    # ask_context is a tool call but not a connector call: the ask's own source calls are Eden's.
+                    "agentCalls": [r["toolCalls"] - asks(t) for r, t in rs],
                     "edenCalls": [eden_sources(t) for _, t in rs],
                     "edenLists": [eden_sources(t, "list") for _, t in rs],
                     "edenUsd": [r.get("edenCostUsd", 0) for r, _ in rs],
@@ -134,7 +141,7 @@ def main():
                     "billed": [r["costUsd"] for r, _ in rs],
                 }
             a, b = rows["eden"], rows["tools"]
-            what = "hidden facts raised" if kind == "hidden" else "false concerns"
+            what = {"hidden": "hidden facts raised", "control": "false concerns"}.get(kind, "any concern (neutral)")
             lines.append(f"### {kind} tasks (n = {len(ids)} paired)\n")
             lines.append("| | Agent alone | Agent + Eden | Difference (95% CI) |")
             lines.append("|---|---|---|---|")
