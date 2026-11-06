@@ -86,9 +86,9 @@ Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too),
 | Cards (dev/held-out worlds) | `cards-enrich.ts` | `--cards packages/sim/lab/cards/cards-v2.jsonl` | yes |
 | Cards (train worlds, 746 items, 75 calls, $0.0233 on glm-5.3-flash; broad-set.md) | `cards-enrich.ts --funnel train --seeds 41,42` | `cards-train.jsonl` (merge with v2: `bun run funnel` does) | yes |
 | Cards, price-routed batch 20 | `cards-enrich.ts --sort price --batch 20` | `econ-price20-v2.jsonl` (econ-background.md) | yes |
-| Intent requests (D87) | `cards-enrich.ts --intent --dir D` | `--intent D/intent-v2.jsonl` (needs `--cards`) | the Haiku campaign's no (`.local/haiku/intent/`); the train worlds (seeds 41–44) and held-out 10–11, made for D110, yes: `packages/sim/lab/distilled/intent-v2.jsonl.gz` (gunzip it) |
+| Intent requests (D87) | `cards-enrich.ts --intent --dir D` | `--intent D/intent-v2.jsonl` (needs `--cards`) | the Haiku campaign's no (`.local/haiku/intent/`); the train worlds (seeds 41–44) and held-out 10–11 (seeds 41–42), made for D110, yes: `packages/sim/lab/distilled/intent-v2.jsonl.gz`, which `bun run funnel` unpacks and replays by default when it covers the run (D158; `--intent none` opts out) |
 | Bridge queries (D89) | `bridge-enrich.ts --out F` | `--bridge F` | no |
-| Reader calls (D95) | `--reader live --reader-model m --reader-cache F` | `--reader replay --reader-model m --reader-cache F` (the same `m`: the key hashes it; a prompt not cached fails open; misses exit 3, below) | the default on train, seeds 41–42, Haiku 5.5 (D141's paid run), yes: `packages/sim/lab/distilled/reader-haiku-train-4142.jsonl.gz` (gunzip it; recipe 2a); others no |
+| Reader calls (D95) | `--reader live --reader-model m --reader-cache F` | `--reader replay --reader-model m --reader-cache F` (the same `m`: the key hashes it; a prompt not cached fails open; misses exit 3, below) | the default on train, seeds 41–42, Haiku 5.5, cards and intent replayed (D158), yes: `packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz` (gunzip it; recipe 2a); D141's intent-inert `reader-haiku-train-4142.jsonl.gz` is history, replayed with `--intent none` (with intent on it misses most prompts); others no |
 
 `pi-ab.ts`/`hermes-ab.ts` read `--cards FILE` and write cards they had to make live to `--cards-out` (default
 `<out>.cards.jsonl`); name that file in later runs. Keep run outputs under `.local/` (git ignores it).
@@ -188,10 +188,13 @@ bun run funnel --json .local/base.json                       # default, train1-6
 bun run funnel --set '{"myFlag":true}' --baseline .local/base.json --json .local/new.json
 ```
 
-The default on train, seeds 41–42, `--jobs 4`, cards replayed, reader stub (nothing binds), intent inert: hidden
-214/384, decoys 211/384, as ALL3's (measured 2026-11-03, D112; with a real reader, use recipe 2). Before 2026-11-03
-this recipe ran ALL3, with the same numbers; `--suite train1 --seeds 41` takes 3 s; `--suite dev6a,dev6b --seeds 41,42,43,44`
-takes 22 s (122/240 hidden, 91/240 decoys). The `--baseline` diff lists every task that moved. A gain that is a
+The default on train, seeds 41–42, `--jobs 4`, cards and intent requests replayed (D158), reader stub (nothing binds):
+hidden 243/384, decoys 228/384; reader pool hidden 257/384, decoys 240/384 (measured 2026-11-06, 13.5 s; D159's
+looser intent arm, 0.2/1/12, gave 258/243 and pool 270/246 and did not ship). With a real reader, use recipe 2a.
+`--intent none` gives the pre-D158 intent-inert screen, hidden 214/384, decoys 211/384 (pool 230/229), as ALL3's
+(measured 2026-11-03, D112, and again 2026-11-06); every $0 stub number recorded before D158 is that inert shape.
+Before 2026-11-03 this recipe ran ALL3, with the same numbers; `--suite train1 --seeds 41` takes 3 s;
+`--suite dev6a,dev6b --seeds 41,42,43,44` takes 22 s (122/240 hidden, 91/240 decoys). The `--baseline` diff lists every task that moved. A gain that is a
 coin flip between hidden and decoys (broad-set.md: rules on unseen writing) is not a gain.
 
 **`--jobs N` at `--time 0` (default: one per core, D139)** runs N `hidden-funnel.ts` processes at once, each over a
@@ -299,10 +302,13 @@ Measured on train1–6, seeds 41–42, 4 cores, no key set:
 | ALL3 `--packet-k 10,15,20` | 18.6 s | top-10 237 (256 with delivered/cited), top-15 264 (272), top-20 279 (282) hidden of 384; decoys top-15 268 (275); top-15 packet 3,808 bytes |
 | NEWL stub `--lead-in clause` | 22.4 s | draft pool non-empty 640/768; Jaccard mean 0.688; final ⊆ draft 237/640; hidden in draft pool 213/384 (in final pool 228) |
 
-Limits: the intent index finds nothing without `-- --intent F` (not checked in), so NEW/NEWL pools here lack intent
-hits that the paid screens had; the prompt sizes are of the stub's reads only. Such a run says so: with `intent` on
-and no replayed request found for any item (no `--intent F`, or a file for other items), every TOTAL and pool line
-and the JSON `label` carry `[intent inert: no replay]`, the JSON has `intent: {state, asked, found}` (`off`, `inert`
+Limits: the rows of the table above ran before D158, intent inert (the intent index finds nothing without a replay
+file), so their pools lack the intent hits that the paid screens had; the prompt sizes are of the stub's reads only.
+Since D158 `bun run funnel` replays the checked-in `intent-v2.jsonl.gz` by default when it covers the run's suites and
+seeds (train seeds 41–44, held-out 10–11 seeds 41–42), and prints `intent: live|inert (why)` under the score header;
+`--intent none` gives the old inert shape. A run says when it is inert: with `intent` on and no replayed request
+found for any item (`--intent none`, an uncovered run, or a file for other items), every TOTAL and pool line and the
+JSON `label` carry `[intent inert: no replay]`, the JSON has `intent: {state, asked, found}` (`off`, `inert`
 or `live`), and `--reader stub|oracle` refuses a `--baseline` whose intent state differs (an inert NEWL screen reads
 the same prompts as `--set '{"intent":false}'`, so a comparison across states would read as "intent does nothing").
 A baseline written before the field existed, with intent configured, is `unknown` and refused. `--reader-log F` works
@@ -344,38 +350,48 @@ reader cache at $0. The haiku-opt.md command sets `askReaderWaitMs: 60000` so la
 
 ### 2a. The default's paid Haiku reading, replayed at $0
 
-The reader cache of D141's first paid default run (docs/research/graph-ablation.md, "default (1st paid read)",
-committed in cea000ba6; it also holds that run's minus-graph calls) is checked in gzipped: 866 lines, all
-`claude-haiku-5-5`, plain md5 `9a492c00cf9724306e3e4743e2882982`. It covers the default (ALL3 with the reader) on
-train1–6, seeds 41–42, cards replayed, intent inert. The cache is plain JSONL that a live reader appends to, so it is
-unpacked under `.local/` (`--reader-cache` refuses a `.gz`):
+The reader cache of the shipped default (D158: cards and intent requests replayed; intent thresholds 0.35/2/6, as
+D159 left them) on train1–6, seeds 41–42, is checked in gzipped:
+`packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz`, 652 lines, all `claude-haiku-5-5`, plain md5
+`7338ca275b420905f50b4fd640783273`. It was recorded on 2026-11-06 from an empty cache by one metered live run (ledger
+run `ib-reader-intent-cache-default`: 652 calls, $0.18548, 418 s, TOTAL hidden 274/384, decoys 137/384, 0 misses).
+The cache is plain JSONL that a live reader appends to, so it is unpacked under `.local/` (`--reader-cache` refuses a
+`.gz`):
 
 ```bash
-gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142.jsonl.gz > .local/reader-haiku-train-4142.jsonl
+gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz > .local/reader-haiku-train-4142-intent.jsonl
 bun run funnel --jobs 4 --allow-misses --json .local/haiku-default.json -- --reader replay \
-  --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142.jsonl
+  --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl
 ```
 
-Measured on 2026-11-05 (audit/2026-11-05-r1-s8-reader-replay-cache, 10 s wall, no key, no ledger flag, so no spend
-and no ledger rows): `merged reader replay {"replayed":648,"sent":0,"missed":5,"failed":0}`, TOTAL hidden 247/384,
-decoys 127/384, reader pool hidden 230/384 and decoy 229/384, the same as graph-ablation.md's paid row. The 5 misses
-(answered without the reader, fail open) are why the recipe needs `--allow-misses`; without it the run exits 3. A
-`--baseline .local/haiku-default.json` then screens a change against the paid reading at $0.
+Measured on 2026-11-06 (11.2 s wall, no ledger flag, so no spend): `merged reader replay
+{"replayed":645,"sent":0,"missed":5,"failed":0}`, TOTAL hidden 273/384, decoys 137/384, reader pool hidden 257/384
+and decoy 240/384. The 5 misses (answered without the reader, fail open) are why the recipe needs `--allow-misses`;
+without it the run exits 3. A `--baseline .local/haiku-default.json` then screens a change against the paid reading
+at $0.
+
+**The older, intent-inert cache.** `reader-haiku-train-4142.jsonl.gz` (866 lines, plain md5
+`9a492c00cf9724306e3e4743e2882982`) is D141's first paid default run (docs/research/graph-ablation.md, committed in
+cea000ba6; it also holds that run's minus-graph calls), recorded with cards replayed and intent inert. It is kept for
+history and replays with `--intent none` (2026-11-06: replayed 648, missed 5, TOTAL 247/127, pool 230/229; the same as
+on 2026-11-05). With intent replayed it misses most prompts (the audit's run: 396 replayed, 489 missed). Every figure
+below and in D141–D157 that cites 247/127 is that intent-inert reading, not the shipped default.
 
 - **`--reader-model claude-haiku-5-5` is required.** The key hashes the model id (`promptKey`), and the default
-  model is `z-ai/glm-5.3-flash`: without the flag every one of the 1,250 prompts misses, the score falls to the stub
-  reader's 214/211, and the funnel prints `READER HINT` naming the cache's recorded model.
+  model is `z-ai/glm-5.3-flash`: without the flag every prompt misses, the score falls to the stub reader's, and the
+  funnel prints `READER HINT` naming the cache's recorded model.
 - **What it screens.** A change that only takes items out of the reader's pool (a veto, a gate, a smaller pool) at
   $0 with `--reader-subset` on a `--reader-log` made by replaying this cache (subset replay, above; approximate and
-  labelled). Measured the same day: replaying with `--reader-log .local/log.jsonl` (653 lines, 247/127 again), then
-  `--set '{"askReaderPool":10}' ... --reader-subset .local/log.jsonl` gave `{"replayed":17,"missed":3,"subset":602}`,
-  hidden 230/384, decoys 140/384, labelled APPROXIMATE, at $0. A change that adds or re-renders pool items misses
-  for those prompts.
-- **When it goes stale.** Any change upstream of the reader's input (sync, retrieval, ranking, rendering, the day or
-  request text), a `READER_VERSION` bump or another reader prompt misses: the miss count says how much. Top the
-  misses up with one metered live run into a copy (`--reader live --reader-model claude-haiku-5-5 --reader-cache
-  .local/reader-haiku-train-4142.jsonl --spend-ledger .local/mkt/ledger.jsonl --spend-cap 17 --spend-headroom 0.3`);
-  a fresh default reading cost $0.17–0.19 (ledger runs ga-default and ga-default2).
+  labelled). Measured on 2026-11-05 on the intent-inert cache: replaying with `--reader-log .local/log.jsonl` (653
+  lines, 247/127 again), then `--set '{"askReaderPool":10}' ... --reader-subset .local/log.jsonl` gave
+  `{"replayed":17,"missed":3,"subset":602}`, hidden 230/384, decoys 140/384, labelled APPROXIMATE, at $0. A change
+  that adds or re-renders pool items misses for those prompts.
+- **When it goes stale.** Any change upstream of the reader's input (sync, retrieval, ranking, rendering, the intent
+  requests or thresholds, the day or request text), a `READER_VERSION` bump or another reader prompt misses: the miss
+  count says how much. Top the misses up with one metered live run into a copy (`--reader live --reader-model
+  claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl --spend-ledger .local/mkt/ledger.jsonl
+  --spend-cap 18 --spend-headroom 0.3 --run-label NAME`); a fresh default reading cost $0.17–0.19 (ledger runs
+  ga-default, ga-default2, ib-reader-intent-cache and ib-reader-intent-cache-default).
 
 ### 3. Blind check (once, pre-registered)
 

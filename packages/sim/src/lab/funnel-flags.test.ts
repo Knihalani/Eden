@@ -255,7 +255,42 @@ describe("funnel.ts flags", () => {
     );
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("refused");
-    expect(r.stderr).toContain("baseline's intent is off and this run's is inert");
+    // The default replays the checked-in intent requests on train 41-42 (D158), so this run is live.
+    expect(r.stderr).toContain("baseline's intent is off and this run's is live");
+    // `--intent none` keeps the pre-D158 inert screen, refused against the same baseline.
+    const none = spawnSync(
+      "bun",
+      [join(lab, "funnel.ts"), "--preset", "default", "--intent", "none", "--baseline", base, "--", "--reader", "stub"],
+      { encoding: "utf8", env: noKey },
+    );
+    expect(none.status).toBe(2);
+    expect(none.stderr).toContain("baseline's intent is off and this run's is inert");
+  });
+
+  test("an intent-inert baseline is refused by the default's intent-replayed screen, before running anything", () => {
+    const base = join(scratch(), "inert.json");
+    writeFileSync(base, JSON.stringify({ config: {}, intent: { state: "inert" }, perTask: [] }));
+    const r = spawnSync(
+      "bun",
+      [join(lab, "funnel.ts"), "--preset", "default", "--baseline", base, "--", "--reader", "stub"],
+      { encoding: "utf8", env: noKey },
+    );
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("intent-v2.jsonl.gz by default");
+    expect(r.stderr).toContain("baseline's intent is inert and this run's is live");
+  });
+
+  test("a run the checked-in intent requests do not cover stays inert and says why", () => {
+    const base = join(scratch(), "live.json");
+    writeFileSync(base, JSON.stringify({ config: {}, intent: { state: "live" }, perTask: [] }));
+    const r = spawnSync(
+      "bun",
+      [join(lab, "funnel.ts"), "--suite", "train1", "--seeds", "45", "--baseline", base, "--", "--reader", "stub"],
+      { encoding: "utf8", env: noKey },
+    );
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("do not cover train1 seed 45");
+    expect(r.stderr).toContain("baseline's intent is live and this run's is inert");
   });
 
   test("--time shards: --jobs is honoured, and rows match one process's without their timing fields", async () => {

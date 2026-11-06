@@ -197,13 +197,14 @@ longer than 1,000 characters, and 114 and 106 longer than 4,000, so the screens 
 
 ```bash
 S=<scratch dir>; gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142.jsonl.gz > $S/reader-haiku.jsonl
-# before (4,000), then after (1,000) with --baseline of the before run:
-bun run funnel --jobs 4 --json $S/base-stub.json
-bun run funnel --jobs 4 --baseline $S/base-stub.json --json $S/new-stub.json
-bun run funnel --jobs 4 --allow-misses --json $S/base-replay.json -- --reader replay \
+# before (4,000), then after (1,000) with --baseline of the before run. These screens ran intent inert; since D158
+# the funnel replays intent by default, so --intent none reproduces them (and the cache below is intent inert).
+bun run funnel --jobs 4 --intent none --json $S/base-stub.json
+bun run funnel --jobs 4 --intent none --baseline $S/base-stub.json --json $S/new-stub.json
+bun run funnel --jobs 4 --intent none --allow-misses --json $S/base-replay.json -- --reader replay \
   --reader-model claude-haiku-5-5 --reader-cache $S/reader-haiku.jsonl
-bun run funnel --jobs 4 --allow-misses --baseline $S/base-replay.json --json $S/new-replay.json -- --reader replay \
-  --reader-model claude-haiku-5-5 --reader-cache $S/reader-haiku.jsonl
+bun run funnel --jobs 4 --intent none --allow-misses --baseline $S/base-replay.json --json $S/new-replay.json \
+  -- --reader replay --reader-model claude-haiku-5-5 --reader-cache $S/reader-haiku.jsonl
 bun run eval
 ```
 

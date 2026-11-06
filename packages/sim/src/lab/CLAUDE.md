@@ -15,7 +15,7 @@ cards-enrich, presets, suites, free, spend` (`.ts`): check `git log origin/main`
 | `hidden-context.ts`, `hidden-*.ts` | The suites: each plants one item (hidden) or a near-miss decoy (control) per template in a world |
 | `presets.ts` | `PRESETS`: only `default`, `minus-<part>` (one per `PARTS` entry) and `minus-all` (the core), made from @eden/engine (D112); `effective(override)` reads what a preset runs |
 | `hidden-funnel.ts` | The no-model funnel: each task through Eden alone; returned/cached/delivered, decoys, calls, ms; `--ask`, `--cards`, `--intent`, `--reader`, `--timeline`, `--json` |
-| `funnel.ts` | `bun run funnel`: the funnel with a preset, replayed cards and `--ask`, and the funnel score; refuses held-out suites without `--blind` |
+| `funnel.ts` | `bun run funnel`: the funnel with a preset, replayed cards, replayed intent requests (`intent-v2.jsonl.gz` when it covers the run, D158; `--intent none` opts out) and `--ask`, and the funnel score; refuses held-out suites without `--blind` |
 | `funnel-merge.ts` | funnel.ts's arithmetic, tested in-process: `defaultJobs` (one process per core at `--time 0`, D139; `--time` > 0 shards concurrently), `groupShards` (blocks of suites × seeds per process at `--time 0`), `mergeParts` (parts to the one-process JSON, perTask from each row's own suite and seed), `amortisedCalls` (merged connector calls), `callMismatches` (processes whose traces miss calls) |
 | `flags.ts` | Strict flags for the $0 CLIs (funnel, hidden-funnel, quality-cli): unknown flag, stray argument or missing value exits 2, `--help` prints usage; `labConfig` checks `--config`/`--set` with @eden/engine's `checkEngineConfig` |
 | `pi-ab.ts`, `pi-conditions.ts`, `pi-timeline.ts`, `pi-ab-report.ts` | The live A/B on the Pi harness (the standard agent): conditions `none,tools,eden,both[-judge][~variant][+flag][@w<ms>]`, per-task timelines, report |
@@ -79,9 +79,12 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
 - **One seed per `pi-ab.ts` process.** One process for four seeds over nine suites was killed for memory (14 GB;
   docs/research/pi-full-benchmark.md); the Haiku campaign ran three processes at once, RSS up to 3.35 GB each.
 - The default needs `--cards`, `--intent` (requests replayed) and a reader for its model parts; without them they are
-  inert (the funnel screens with `--reader stub` when none is named). Read settings through `effective()`: a preset
-  is an override, and `default` is `{}`. The harnesses wait 3,000 ms on the first observe (`@w<ms>` changes it; 1 s
-  lost 7.6–18.1 points, D98).
+  inert (the funnel screens with `--reader stub` when none is named). `bun run funnel` passes the checked-in cards
+  and, since D158, the checked-in intent requests (train seeds 41–44, held-out 10–11 seeds 41–42) itself; a run
+  outside that coverage, or with `--intent none`, is intent inert and every TOTAL line says so. Numbers recorded
+  before D158 (214/211 stub, 247/127 replayed, D112–D153) are intent-inert ones: compare like with like. Read
+  settings through `effective()`: a preset is an override, and `default` is `{}`. The harnesses wait 3,000 ms on the
+  first observe (`@w<ms>` changes it; 1 s lost 7.6–18.1 points, D98).
 - Pi's `both` arm gets no `ask_context` (only `eden` does); Hermes gets both.
 - **pi-ab and hermes-ab default to `--time-scale 1`** (since 2026-11-03): sources take their profiles' assumed
   latency, so the "Eden on the critical path" column includes the on-demand sync poll. Earlier results (every
