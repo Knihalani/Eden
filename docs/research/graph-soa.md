@@ -41,7 +41,8 @@ All on this box (4 cores, shared with other agents, Bun 1.4.4), 2026-11-06. "Bef
 |---|---|---|---|---|---|
 | before | 1,668 B/item | 1,703 B/item | 70.1 µs/item | 4,460 B/item | 4,454 B/item |
 | after | 716 B/item | 719 B/item | 72.2 µs/item | 3,465 B/item | 3,458 B/item |
-| ratio | 2.33x smaller | **2.37x smaller** | +3% (within run-to-run noise on this box) | 1.29x | 1.29x |
+| after, final commit | 716 B/item | 719 B/item | 70.0 µs/item | 3,465 B/item | 3,459 B/item |
+| ratio | 2.33x smaller | **2.37x smaller** | unchanged (70.0-72.2 against 70.1) | 1.29x | 1.29x |
 
 Gate (D169): `+graph` released at least 2x smaller. 1,703 → 719 passes (the finding's 1,721 was the `--quick` figure).
 
@@ -87,11 +88,12 @@ decodes each reached node's label from the arena once per walk; on this shared b
 - `kg-store.test.ts` (the D58 reference graph, 3 seeds × 1,500 steps, bounds, memo) passes unchanged but for the one
   field read above.
 
-Screens on the final tree:
+Screens on the final commit (the funnel and eval re-run after the last code change):
 
 - `bun run funnel --jobs 4 --baseline <before json>`: hidden +0 −0, decoys +0 −0 (train1–6, seeds 41–42; TOTAL hidden
   214/384, decoys 211/384; pool hidden 230/384, decoys 229/384, both runs).
 - `bun run eval`: precision 0.8276, recall 0.48, falseFireRate 0, before and after. The JSON differs only in wall-clock
   latency and `plannedLookups` (121 or 122), which varies run to run on the old code too (5 runs: 121, 122, 121, 121,
-  121).
+  121). Latency, four runs each: p50 0.29-0.50 ms and p95 7.4-10.7 ms before, p50 0.31-0.63 ms and p95 7.7-12.3 ms
+  after: overlapping, on a box shared with other agents.
 - `bun run check`: 1,671 pass, 0 fail.
