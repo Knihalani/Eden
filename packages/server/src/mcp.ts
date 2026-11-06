@@ -4,7 +4,7 @@
  * events API or the SDK's message hook.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { renderAnswer, type ContextPartner } from "@eden/engine";
+import { oneLine, renderAnswer, type ContextPartner } from "@eden/engine";
 import { ASK_CONTEXT_DESCRIPTION, type Scope } from "@eden/protocol";
 import { z } from "zod";
 
@@ -19,8 +19,11 @@ export function createMcpServer(partner: ContextPartner, who: Scope & { sessionI
     },
     async ({ question }) => {
       const res = await partner.ask({ ...who, question });
-      // Titles and URLs are source text (an email subject is attacker-controlled): they go in a data envelope too.
-      const cites = res.citations.map((c, i) => `[${i}] ${c.sourceId}: ${c.title}${c.url ? ` (${c.url})` : ""}`);
+      // Titles and URLs are source text (an email subject is attacker-controlled): they go in a data envelope too, one
+      // line each, so a line break in a title cannot forge another `[n]` source line.
+      const cites = res.citations.map(
+        (c, i) => `[${i}] ${c.sourceId}: ${oneLine(c.title)}${c.url ? ` (${oneLine(c.url)})` : ""}`,
+      );
       const text = cites.length ? `${res.answer}\n\nSources:\n${renderAnswer(cites.join("\n"))}` : res.answer;
       return { content: [{ type: "text", text }] };
     },

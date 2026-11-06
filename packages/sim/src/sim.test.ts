@@ -58,6 +58,25 @@ describe("simulated sources", () => {
   const w = buildWorld({ seed: 5 });
   const arc = w.arcs.find((a) => a.kind === "meeting")!;
 
+  test("a rate under one request a second still answers one request per 1/rate seconds (RealUse-1 D)", async () => {
+    // The bucket used to hold at most `rate` tokens and needed one to pass, so 0.2/s refused every call.
+    const slow = { ...REALISTIC.crm!, latency: { medianMs: 0, sigma: 0 }, errorRate: 0, ratePerSec: 0.2 };
+    const crm = new SimSource(new SimIndex("crm", w), slow, 0.001, 1); // 1 ms real = 1 s simulated
+    const q = { scope, text: arc.person!.full, entities: [], limit: 5 };
+    await crm.search(q, signal); // the first call of a fresh bucket passes
+    await expect(crm.search(q, signal)).rejects.toThrow(/429/); // the second, at once, is over the rate
+    await Bun.sleep(8); // over 5 simulated seconds: one more token
+    await crm.search(q, signal);
+    expect(crm.stats.limited).toBe(1);
+  });
+
+  test("a rate of 0 refuses every call", async () => {
+    const shut = { ...REALISTIC.crm!, latency: { medianMs: 0, sigma: 0 }, errorRate: 0, ratePerSec: 0 };
+    const crm = new SimSource(new SimIndex("crm", w), shut, 0.001, 1);
+    const q = { scope, text: arc.person!.full, entities: [], limit: 5 };
+    await expect(crm.search(q, signal)).rejects.toThrow(/429/);
+  });
+
   test("AND search returns only items with every term; snippets cut the body", async () => {
     const gmail = new SimSource(new SimIndex("gmail", w), REALISTIC.gmail!, 0, 1);
     const terms = [arc.slots.activity!, arc.person!.first];

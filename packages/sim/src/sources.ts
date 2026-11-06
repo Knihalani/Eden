@@ -403,7 +403,7 @@ export class SimSource implements Source {
     this.id = index.id;
     this.description = index.world.sources[index.id] ?? index.id;
     this.rng = new Rng(seed);
-    this.tokens = profile.ratePerSec ?? Infinity;
+    this.tokens = profile.ratePerSec === undefined ? Infinity : Math.max(1, profile.ratePerSec);
   }
 
   /**
@@ -537,9 +537,12 @@ export class SimSource implements Source {
   /** A token bucket in simulated time: real elapsed time divided by the time scale. */
   private take(rate: number): boolean {
     if (this.timeScale === 0) return true; // Instant runs have no real time to rate-limit over.
+    if (rate <= 0) return false; // A rate of 0 is an outage of 429s, not a bucket of one.
     const now = performance.now();
     const simSeconds = (now - this.lastRefill) / 1_000 / this.timeScale;
-    this.tokens = Math.min(rate, this.tokens + simSeconds * rate);
+    // The bucket holds at least one token: with `rate` as its size, a rate under 1/s never reached the one token a
+    // call takes, and refused every call (RealUse-1 D: perf-cli's 0.2/s CRM storm was a full outage).
+    this.tokens = Math.min(Math.max(1, rate), this.tokens + simSeconds * rate);
     this.lastRefill = now;
     if (this.tokens < 1) return false;
     this.tokens--;
