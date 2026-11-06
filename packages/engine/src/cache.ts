@@ -28,6 +28,7 @@ import { sanitizeForStore } from "@eden/redact";
 import type { ListReuse } from "@eden/sources";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
 import { squash, UserGraph, type Seed, type Walked, type WalkOptions } from "./kg";
+import { clearDecoded, packItem, repackLike } from "./packed-text";
 import { head, termIds } from "./text";
 
 const NO_TERMS = new Uint32Array(0);
@@ -280,6 +281,14 @@ export interface CacheLimits {
    * On by default (D112): `churn.bench.ts` worst put 274.5 to 26.3 ms, heap 38.9 to 25.0 MB.
    */
   releaseTerms: boolean;
+  /**
+   * Hold each stored item's text deflated (`packed-text.ts`) and decode it on read through its `text` getter (D188,
+   * which reopened D111's compressed text as a trial and promoted it): cached text was about half a synced user's
+   * heap. `ingest.bench.ts --world`, shipped, 200 users x 500 items: 3,799-3,953 to 2,368-2,543 B/item released
+   * (1.55-1.61x), backfill 1.17-1.30x the CPU; `pipeline.bench.ts` 1.01-1.04x; eval and funnel identical. Off: text as
+   * plain strings (the benches' `--plain`, for before/after figures).
+   */
+  packText: boolean;
 }
 
 export const DEFAULT_CACHE_LIMITS: CacheLimits = {
@@ -291,6 +300,7 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   syncTtlMs: 7 * 24 * 3_600_000,
   expireEveryMs: 10 * 60_000,
   releaseTerms: true,
+  packText: true,
 };
 
 /**
@@ -699,9 +709,11 @@ export class ItemCache {
         if (!sameDetails(old.item, item)) u.revision = ++this.revisions;
         tally(u, old.item, -1);
         tallyOffset(u, old.item, -1);
-        old.item = item;
-        tally(u, item, 1);
-        tallyOffset(u, item, 1);
+        // The new copy's fields, its text still deflated (the held bytes reused: same words, no second deflate).
+        const fresh = this.limits.packText ? repackLike(item, old.item) : item;
+        old.item = fresh;
+        tally(u, fresh, 1);
+        tallyOffset(u, fresh, 1);
         old.raw = from; // What this copy was redacted from, if a listing said; a lookup's copy ends the reuse.
         old.fetchedAt = now;
         old.readMark = Math.max(old.readMark, readMark); // The same words: current as of the later read.
@@ -717,9 +729,11 @@ export class ItemCache {
       // Added before the item is: a graph built on first use (`graphOf`) must not read it twice.
       this.graphOf(u, now)?.add(item, now);
       const doc = this.index(u, item);
+      // The copy held: with `packText`, its text deflated (the tallies, graph and index above read the plain one).
+      const stored = this.limits.packText ? packItem(item) : item;
       // `raw` always set (if undefined), so every entry has one shape.
       const entry: Entry = {
-        item,
+        item: stored,
         fetchedAt: now,
         readMark,
         doc,
@@ -736,7 +750,7 @@ export class ItemCache {
       link(u, entry);
       u.byDoc[doc] = entry;
       u.revision = ++this.revisions;
-      changed.push(item);
+      changed.push(stored);
     }
     if (u.synced === 0) {
       while (u.items.size > this.limits.maxItemsPerUser) this.drop(u, u.items.values().next().value as Entry);
@@ -812,6 +826,7 @@ export class ItemCache {
    * how many cached items were dropped (not how many ids were held).
    */
   removeItems(scope: Scope, ids: Iterable<string>, now = Date.now(), holdMs = 0): number {
+    clearDecoded(); // A deleted item's decoded text does not stay in the memo.
     let held: TenantHolds | undefined;
     if (holdMs > 0) {
       held = this.holds.get(scope.tenantId);
@@ -1261,6 +1276,7 @@ export class ItemCache {
   }
 
   forget(scope: Scope, sourceId?: string): void {
+    clearDecoded(); // The decode memo may hold their text (`packed-text.ts`).
     if (!sourceId) {
       this.dropUser(scopeKey(scope), scope.tenantId);
       // The user's gone-holds go with them.

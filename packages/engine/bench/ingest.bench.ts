@@ -22,8 +22,9 @@
  * dropped, minus the heap before the users were built: the text the cache keeps is counted. The source map's SQLite
  * pages live outside the JS heap and are not counted.
  *
- * Run: `bun packages/engine/bench/ingest.bench.ts [--world] [users=200] [itemsPerUser=500] [mode=all|core|graph|
- * shipped]`, or `bun packages/engine/bench/ingest.bench.ts --quick [--world]`.
+ * Run: `bun packages/engine/bench/ingest.bench.ts [--world] [--plain] [users=200] [itemsPerUser=500]
+ * [mode=all|core|graph|shipped]`, or `bun packages/engine/bench/ingest.bench.ts --quick [--world] [--plain]`. `--plain`
+ * holds item text as plain strings (`CacheLimits.packText` off), the layout before D188.
  *
  * Text: by default the bench workload's (`workload.ts`: names, topics and filler, all Latin-1, which the engine holds
  * at a byte a character). `--world` takes each user's items from the sim world instead (`buildWorld` seed 1, noise
@@ -48,7 +49,9 @@ import { buildWorkload } from "./workload";
 
 const QUICK = process.argv.includes("--quick");
 const WORLD = process.argv.includes("--world");
-const args = process.argv.slice(2).filter((a) => a !== "--quick" && a !== "--world");
+/** `--plain`: the cache holds item text as plain strings (`packText` off; D188's before), in every mode. */
+const PLAIN = process.argv.includes("--plain");
+const args = process.argv.slice(2).filter((a) => a !== "--quick" && a !== "--world" && a !== "--plain");
 if (QUICK && args.length > 0) throw new Error("--quick runs 40 × 500 in every mode; it takes no other arguments");
 const USERS = QUICK ? 40 : Number(args[0] ?? 200);
 const PER_USER = QUICK ? 500 : Number(args[1] ?? 500);
@@ -143,7 +146,12 @@ async function run(mode: Mode): Promise<Result> {
   const byUser = new Map(users.map((x) => [x.scope.userId, x.source]));
   const sources = async (scope: Scope) => [byUser.get(scope.userId)!];
 
-  const cache = new ItemCache({ maxSyncedPerUser: PER_USER, maxUsersPerTenant: USERS + 1, expireEveryMs: 0 });
+  const cache = new ItemCache({
+    maxSyncedPerUser: PER_USER,
+    maxUsersPerTenant: USERS + 1,
+    expireEveryMs: 0,
+    packText: !PLAIN,
+  });
   let sync: SyncManager;
   let sweepAfter: number;
   if (mode === "shipped") {
@@ -251,7 +259,14 @@ if (MODE !== "all") {
 } else {
   const results: Result[] = [];
   for (const mode of MODES) {
-    const argv = [process.execPath, import.meta.path, ...(WORLD ? ["--world"] : []), String(USERS), String(PER_USER)];
+    const argv = [
+      process.execPath,
+      import.meta.path,
+      ...(WORLD ? ["--world"] : []),
+      ...(PLAIN ? ["--plain"] : []),
+      String(USERS),
+      String(PER_USER),
+    ];
     const child = Bun.spawnSync([...argv, mode], { stderr: "inherit" });
     if (child.exitCode !== 0) throw new Error(`mode ${mode} failed (exit ${child.exitCode})`);
     results.push(JSON.parse(child.stdout.toString().trim().split("\n").at(-1)!) as Result);
