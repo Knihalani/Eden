@@ -2,11 +2,20 @@
   "part": "C",
   "tier": "T1 Hermes",
   "suite": "heldout13 (read)",
-  "seeds": [41, 42],
-  "conditions": ["hermes", "hermes+eden"],
-  "variants": ["hidden", "control"],
-  "status": "blocked",
-  "spentUsd": 0,
+  "seeds": [
+    41,
+    42
+  ],
+  "conditions": [
+    "hermes",
+    "hermes+eden"
+  ],
+  "variants": [
+    "hidden",
+    "control"
+  ],
+  "status": "run by the parent session (the part C session was blocked by its permission check)",
+  "spentUsd": 0.6068,
   "hermesCommit": "06433066f4",
   "blocker": {
     "step": "hermes-ab.ts smoke run (starts Python workers in the cloned hermes-agent .venv)",
@@ -17,5 +26,59 @@
     }
   },
   "metrics": null,
-  "doc": "docs/research/realuse-1/C-hermes.md"
+  "doc": "docs/research/realuse-1/C-hermes.md",
+  "results": {
+    "heldout13": {
+      "hidden": {
+        "hermes": 0.031,
+        "hermes+eden": 0.813,
+        "diff": [
+          0.781,
+          0.672,
+          0.875
+        ]
+      },
+      "control": {
+        "hermes": 0.0,
+        "hermes+eden": 0.0
+      },
+      "usdPer1kAllTasksDiff": [
+        0.3186,
+        0.2744,
+        0.3651
+      ],
+      "spentUsd": 0.1956
+    },
+    "heldout14": {
+      "hidden": {
+        "hermes": 0.156,
+        "hermes+eden": 0.672,
+        "diff": [
+          0.516,
+          0.375,
+          0.641
+        ]
+      },
+      "control": {
+        "hermes": 0.0,
+        "hermes+eden": 0.031
+      },
+      "neutral": {
+        "hermes": 0.0,
+        "hermes+eden": 0.016
+      },
+      "neutralWallDiffS": [
+        1.58,
+        1.03,
+        2.1
+      ],
+      "usdPer1kAllTasksDiff": [
+        0.2689,
+        0.2369,
+        0.3003
+      ],
+      "spentUsd": 0.2134,
+      "spentIncludingKilledAttempt": 0.4112
+    }
+  }
 }
