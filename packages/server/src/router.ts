@@ -4,8 +4,15 @@
  * budgets, reader and card caches, sync) lives in the one process that serves the user, so the engine's work spreads
  * over cores only if each user always reaches the same process: the router sends each request to child
  * `childFor(tenant, userId, N)`, a stable hash of the tenant (from the API key, as http.ts reads it) and the body's
- * `userId`. Sticky by construction: no table, nothing to keep or forget here, and `/v1/forget` reaches the child that
- * holds the user's state.
+ * `userId`. Sticky by construction: no table, nothing to keep or forget here.
+ *
+ * Changing N reshuffles users: most land on another child, where their in-memory state starts over (as after any
+ * restart, D8) and the source-map rows the old child wrote are not read. Those rows hold per-user entity names, so
+ * forget must still reach them: `/v1/forget` goes to every child (rare and cheap), each deleting the user's rows from
+ * its own file, and answers with the owning child's answer, or 503 when any child could not forget. Files no current
+ * child opens (`source-map.db` when N > 1, `source-map.<i>.db` for i >= N, or every `.<i>` file when N is 1) are
+ * merged into the current set before any child starts (`rehomeSourceMaps`): each user's rows go to the file of the
+ * child that now serves them and the stranded file is deleted, so no file is left that forget never reaches.
  *
  * What changes with N children (D163), each in the child, not here:
  * - each child has its own source-map file (`childSourceMapPath`), since one SQLite file must have one writer;
@@ -16,16 +23,20 @@
  * `{error}` ("temporarily unable to serve context", what an integration treats as silence), never a 500, while the
  * other children keep serving. An exited child is started again after `restartMs` (doubling to 30 s while it keeps
  * failing); its users' in-memory state is gone, as after any restart (D8), and its source-map file is reopened.
- * `/healthz` answers here: 200 when every child is up, 503 naming how many are.
+ * `/healthz` answers here: 200 while at least one child is up (`up` < `processes` in the body says the instance is
+ * degraded: alert on that, but a load balancer must not pull every user for one child's 1/N), 503 when none is.
  *
  * The router reads each POST body once to find `userId` (a `JSON.parse` the child repeats; router.bench.ts measures
  * the hop) and forwards the bytes unchanged with the `authorization` and `content-type` headers. A declared
  * content-length past `maxBodyBytes` is refused here with the handler's 413 (D100) so it is never buffered twice;
  * every other answer, auth, rate limit and validation included, is the child's.
  */
+import { Database } from "bun:sqlite";
+import { existsSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { SourceMap } from "@eden/graph";
 import { fnv1a, mix32 } from "@eden/primitives";
-import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
+import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, MAX_PROCESSES, type ServerConfig } from "./config";
 
 /** The child a tenant/user is served by: stable across restarts and router instances, spread by a mixed FNV-1a. */
 export function childFor(tenant: string, userId: string, children: number): number {
@@ -53,6 +64,105 @@ export function userOf(body: Uint8Array): string {
   return "";
 }
 
+/**
+ * Moves the source-map rows of files that no process of an N-process server opens into the files it does (D163), then
+ * deletes the stranded files. Owned: `base` when N is 1, else `childSourceMapPath(base, i)` for i < N. Each user's
+ * rows go to the file of `childFor(tenant, user, N)`: counts add up (`mention`, `utility`), a planner arm already in
+ * the target wins. Run before any process opens the files (the router before its children, `main.ts` before
+ * `buildPartner`). Returns the stranded files it merged. Throws, so the server does not start, when a stranded file
+ * cannot be read or deleted: a file left behind would hold rows that `/v1/forget` never reaches.
+ *
+ * Not atomic across files: each target is one transaction that copies a user's rows and deletes them from the
+ * stranded file, but SQLite in WAL mode commits each attached file on its own, so a crash between the two commits can
+ * leave a row in both. The next start moves it again and its counts add twice (learning only, which shrugs it off);
+ * no row is ever lost to forget, which reaches every current file and leaves no stranded one.
+ */
+export function rehomeSourceMaps(base: string, n: number, log: (line: string) => void = console.error): string[] {
+  if (base === "" || base === ":memory:") return [];
+  const owned = n <= 1 ? [base] : Array.from({ length: n }, (_, i) => childSourceMapPath(base, i));
+  const candidates = [base, ...Array.from({ length: MAX_PROCESSES }, (_, i) => childSourceMapPath(base, i))];
+  const stranded = candidates.filter((f) => !owned.includes(f) && existsSync(f));
+  for (const file of stranded) {
+    const src = new Database(file);
+    let users = 0;
+    try {
+      src.exec("PRAGMA busy_timeout = 2000");
+      const tables = new Set(
+        (src.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map(
+          (r) => r.name,
+        ),
+      );
+      const present = TABLES.filter((t) => tables.has(t));
+      const byOwner = new Map<number, string[]>();
+      const scopes = new Set<string>();
+      for (const t of present) {
+        for (const { scope } of src.query(`SELECT DISTINCT scope FROM ${t}`).all() as { scope: string }[]) {
+          scopes.add(scope);
+        }
+      }
+      for (const scope of scopes) {
+        // Scope keys are "tenant/user" (protocol's scopeKey); a tenant id never holds "/" (config.ts checks isId).
+        const slash = scope.indexOf("/");
+        const owner = slash < 0 ? 0 : childFor(scope.slice(0, slash), scope.slice(slash + 1), n);
+        let list = byOwner.get(owner);
+        if (!list) byOwner.set(owner, (list = []));
+        list.push(scope);
+      }
+      users = scopes.size;
+      for (const [owner, list] of byOwner) mergeInto(owned[owner]!, file, present, list);
+    } finally {
+      src.close();
+    }
+    for (const suffix of ["", "-wal", "-shm"]) rmSync(file + suffix, { force: true });
+    log(
+      `eden: EDEN_PROCESSES is ${n}; moved the source-map rows of ${users} users from ${file}, which no process ` +
+        `opens any more, into the current files and deleted it`,
+    );
+  }
+  return stranded;
+}
+
+const TABLES = ["mention", "utility", "planner_arm"] as const;
+
+/** One transaction on `target`: copy `scopes`' rows from the attached stranded file, then delete them there. */
+function mergeInto(target: string, from: string, tables: readonly string[], scopes: string[]): void {
+  // Creates the schema in a target no child has opened yet, exactly as the child will.
+  new SourceMap(target).close();
+  const db = new Database(target);
+  try {
+    db.exec("PRAGMA busy_timeout = 2000");
+    db.query("ATTACH DATABASE ? AS stranded").run(from);
+    db.transaction(() => {
+      db.exec("CREATE TEMP TABLE moving (scope TEXT PRIMARY KEY)");
+      const add = db.query("INSERT OR IGNORE INTO moving (scope) VALUES (?)");
+      for (const scope of scopes) add.run(scope);
+      const moving = "scope IN (SELECT scope FROM temp.moving)";
+      if (tables.includes("mention")) {
+        db.exec(`INSERT INTO main.mention (scope, entity, source_id, count, last_seen)
+          SELECT scope, entity, source_id, count, last_seen FROM stranded.mention WHERE ${moving}
+          ON CONFLICT (scope, entity, source_id) DO UPDATE SET count = count + excluded.count,
+            last_seen = MAX(last_seen, excluded.last_seen)`);
+      }
+      if (tables.includes("utility")) {
+        db.exec(`INSERT INTO main.utility (scope, situation, source_id, shown, used)
+          SELECT scope, situation, source_id, shown, used FROM stranded.utility WHERE ${moving}
+          ON CONFLICT (scope, situation, source_id) DO UPDATE SET shown = shown + excluded.shown,
+            used = used + excluded.used`);
+      }
+      if (tables.includes("planner_arm")) {
+        db.exec(`INSERT INTO main.planner_arm (scope, source_id, bucket, shape, alpha, beta)
+          SELECT scope, source_id, bucket, shape, alpha, beta FROM stranded.planner_arm WHERE ${moving}
+          ON CONFLICT (scope, source_id, bucket, shape) DO NOTHING`);
+      }
+      for (const t of tables) db.exec(`DELETE FROM stranded.${t} WHERE ${moving}`);
+      db.exec("DROP TABLE temp.moving");
+    })();
+    db.exec("DETACH DATABASE stranded");
+  } finally {
+    db.close();
+  }
+}
+
 const decoder = new TextDecoder();
 const UNAVAILABLE = "temporarily unable to serve context";
 const MAX_RESTART_MS = 30_000;
@@ -71,6 +181,8 @@ export interface RouterOptions {
   startTimeoutMs?: number;
   /** Receives each child's stdout (tests, the bench); unset, children write to the router's stdout. */
   onOutput?: (index: number, text: string) => void;
+  /** Told each child's pid as it is spawned (tests check that a failed start leaves no child running). */
+  onSpawn?: (index: number, pid: number) => void;
   /** Operational lines (a child exited, restarted); default stderr. */
   log?: (line: string) => void;
 }
@@ -149,6 +261,7 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
       });
       c.proc = proc;
       c.pid = proc.pid;
+      options.onSpawn?.(c.index, proc.pid);
       if (options.onOutput && proc.stdout instanceof ReadableStream) void pipeOut(proc.stdout, c.index);
       void proc.exited.then((code) => {
         if (c.proc !== proc) return;
@@ -188,6 +301,9 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
       }),
     );
   };
+
+  // Before any child opens its file: no row may sit in a file no child of this N reaches (forget would miss it).
+  rehomeSourceMaps(config.sourceMapPath, n, log);
 
   try {
     let deadline: ReturnType<typeof setTimeout> | undefined;
@@ -229,6 +345,18 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     }
   };
 
+  // Forget goes to every child (D163): after N changed, a child other than the owner can still hold the user's
+  // source-map rows. The caller gets the owner's answer (its 400 for a bad body, say); a 2xx there with any other
+  // child down or failing is a 503, so the caller retries until every file is clean.
+  const forgetEverywhere = async (owner: Child, req: Request, url: URL, body: Uint8Array): Promise<Response> => {
+    const answers = await Promise.all(children.map((c) => forward(c, req, url, body)));
+    const mine = answers[owner.index]!;
+    for (const r of answers) if (r !== mine) void r.arrayBuffer().catch(() => {}); // Frees each connection.
+    if (mine.status < 200 || mine.status >= 300) return mine;
+    if (answers.some((r) => r.status < 200 || r.status >= 300)) return fail(503, UNAVAILABLE);
+    return mine;
+  };
+
   const server = Bun.serve({
     port: config.port,
     hostname: config.host,
@@ -239,10 +367,9 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
       if (req.method === "GET" && url.pathname === "/healthz") {
         const up = children.filter((c) => c.up).length;
         if (up === n) return Response.json({ ok: true, processes: n, up });
-        return Response.json(
-          { ok: false, processes: n, up, error: `${n - up} of ${n} processes down` },
-          { status: 503 },
-        );
+        // Degraded, not down: 503 here would let a load balancer silence every user for one child's 1/N.
+        const error = `${n - up} of ${n} processes down`;
+        return Response.json({ ok: up > 0, processes: n, up, error }, { status: up > 0 ? 200 : 503 });
       }
       const tenant = tenantOf(req);
       // Only an authenticated POST is read for its user; anything else gets the child's own answer (405, 401).
@@ -255,7 +382,9 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
       } catch {
         return fail(400, "body could not be read");
       }
-      return forward(children[childFor(tenant, userOf(body), n)]!, req, url, body);
+      const owner = children[childFor(tenant, userOf(body), n)]!;
+      if (url.pathname === "/v1/forget") return forgetEverywhere(owner, req, url, body);
+      return forward(owner, req, url, body);
     },
     // Nothing above should throw; if it does, the caller gets the server's 503, never Bun's default 500.
     error: () => fail(503, UNAVAILABLE),

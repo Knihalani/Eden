@@ -10,17 +10,27 @@ import { buildPartner, startGatePool } from "./build";
 import { engineConfig } from "./engine-config";
 import { createHandler } from "./http";
 import { modelRolesFromEnv } from "./models";
+import { rehomeSourceMaps, runRouter } from "./router";
 
 const started = performance.now();
 const config = loadConfig();
 if (config.processes > 1) {
-  const { runRouter } = await import("./router");
   await runRouter(config);
 } else {
   await serve(config);
 }
 
 async function serve(config: ServerConfig): Promise<void> {
+  // One process (no router): the `.<i>` files a router's children wrote are merged back into this one before it is
+  // opened, so forget reaches every row (D163). A router child skips this: the router did it before starting it.
+  if (!config.child) {
+    try {
+      rehomeSourceMaps(config.sourceMapPath, 1);
+    } catch (e) {
+      console.error(`eden: cannot merge stranded source-map files: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(2);
+    }
+  }
   const engine = engineConfig();
   // Per-user sources when EDEN_USER_SOURCES_FILE is set (D108); forget closes their connections. Before the gate
   // pool, so a bad sources file exits 2 with its message before any worker starts.

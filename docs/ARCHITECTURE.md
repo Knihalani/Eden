@@ -54,15 +54,26 @@ With `EDEN_PROCESSES=N` (N > 1; default 1, one process and no router) `main.ts` 
 (`packages/server/src/router.ts`): one Bun.serve front and N child server processes, each `main.ts` again. Each
 request goes to child `hash(tenant/userId) mod N`, the tenant from the API key and `userId` from the body (one
 `JSON.parse`, 0.27 µs for a 131-byte event and 0.7 ms for a 1 MB items body in `router.bench.ts`), so a user always
-reaches the same child and `/v1/forget` reaches the child holding their state. The router keeps no per-user state.
+reaches the same child. The router keeps no per-user state.
 Each child has its own source-map file (`source-map.<i>.db`: one SQLite writer per file) and holds 1/N of every
 per-tenant cap: the request rate and burst (`EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`) and the daily model spend
 (`EDEN_MODEL_USD_PER_TENANT_DAY`). The caps are split, not shared, so a tenant whose users hash unevenly meets its
 cap sooner on the busier child. A child that is down gives its users 503 (never 500) while the others serve, and
 is started again after 1 s (doubling to 30 s while it keeps failing); its users' in-memory state starts over, as
-after any restart (D8). `/healthz` on the router is 503 while any child is down. D163 makes N > 1 the default only
+after any restart (D8). `/healthz` on the router is 200 while at least one child is up (its body's `up` below
+`processes` means degraded: alert on that) and 503 only when none is, so a load balancer never pulls every user for
+one child's share; use it as the readiness check.
+
+Changing N reshuffles users: most land on another child, where their in-memory state (cache, sessions, budgets)
+starts over, as after a restart, and the learning their old child wrote to its source-map file is no longer read.
+Those rows still hold the user's entity names, so `/v1/forget` goes to every child, each deleting the user's rows
+from its own file; the caller gets the owning child's answer, or 503 (retry) when any child could not forget.
+Files that no process of the new N opens (`source-map.db` when N > 1, `source-map.<i>.db` for i >= N, every
+`.<i>` file when N is 1) are merged at start, before any child opens a file: each user's rows move into the file of
+the child that now serves them (counts add up) and the stranded file is deleted. A stranded file that cannot be read
+stops the start, since a file left behind would hold rows forget never reaches. D163 makes N > 1 the default only
 once `router.bench.ts` shows at least 1.5x the events per second of one process at the same observe p99 on 4 cores,
-on the merged tree.
+on the merged tree (a trial in DECISIONS.md).
 
 ## The two speeds
 

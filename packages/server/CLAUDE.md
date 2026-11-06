@@ -18,7 +18,7 @@ its model roles.
 | `src/connectors.ts`    | `staticSources`/`staticResolver` (`EDEN_SOURCES_FILE`, static and shared by every user; every entry checked by `checkSpecs` as static, `SourceConfigError` naming the entry); `sourcesFromEnv` (adds `UserSources` when `EDEN_USER_SOURCES_FILE` is set); `sourcesOrExit` (both servers: a bad sources file prints one line, no stack, and exits 2)                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `src/user-sources.ts`  | `UserSources` (D108): per-(tenant, user) sources from a `SourceDirectory` (`fileDirectory` for `EDEN_USER_SOURCES_FILE`, or an embedding's vault), MCP connections cached per scope and closed on forget, idle (15 min), the per-tenant cap (10,000 users), a changed spec, or a directory error or timeout (5 s); `checkSpecs`                                                                                                                                                                                                                                                                                                      |
 | `src/main.ts`          | `bun run dev`; with `EDEN_PROCESSES` > 1 it starts the router instead, and as a router child (`EDEN_ROUTER_CHILD`) passes `processes` to `buildPartner`, logs its divided caps and reports its port over IPC; passes `EDEN_MAX_BODY_BYTES` to `Bun.serve` as `maxRequestBodySize`; warms the secret gate (`warmGate`) before listening and logs `startup N ms` and the shared source count                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `src/router.ts`        | The multi-process router (D113, D163): `startRouter`/`runRouter` spawn N `main.ts` children (each `PORT=0`, its own `source-map.<i>.db`), route each request by `childFor(tenant, userId, N)` (tenant from the key, `userOf` parses the body's top-level `userId`), forward the bytes unchanged, answer `/healthz` and an oversized declared length themselves, return 503 for a dead child and restart it (1 s, doubling to 30 s); `bench/router.bench.ts` is its gate |
+| `src/router.ts`        | The multi-process router (D113, D163): `startRouter`/`runRouter` spawn N `main.ts` children (each `PORT=0`, its own `source-map.<i>.db`), route each request by `childFor(tenant, userId, N)` (tenant from the key, `userOf` parses the body's top-level `userId`), forward the bytes unchanged, answer `/healthz` (200 while any child is up, 503 when none is) and an oversized declared length themselves, send `/v1/forget` to every child (owner's answer, 503 if any failed), return 503 for a dead child and restart it (1 s, doubling to 30 s); `rehomeSourceMaps` merges source-map files no child of the current N opens into the current set and deletes them (router before its children, `main.ts` before `buildPartner` with one process); `bench/router.bench.ts` is its gate |
 
 ## Rules that apply here
 
@@ -66,9 +66,15 @@ its model roles.
   burst (`loadConfig`) and spend cap (`buildPartner`'s `processes`) are, or N children raise it N-fold. Each child
   writes its own source-map file; never point two children at one. The router answers only `/healthz`, an oversized
   declared length (413) and a dead child (503); every other answer, auth included, is the child's.
-  `router.test.ts` starts real child processes (about 1.5 s). The gate is `bun packages/server/bench/router.bench.ts`
-  (events/s at a fixed observe p99, one process vs the router over 1 and N children; >= 1.5x on 4 cores to make N > 1
-  the default).
+  `router.test.ts` starts real child processes (about 2.5 s for the file). The gate is
+  `bun packages/server/bench/router.bench.ts` (events/s at a fixed observe p99, one process vs the router over 1 and
+  N children; >= 1.5x on 4 cores to make N > 1 the default; a trial row in docs/DECISIONS.md).
+- **Changing N reshuffles users (D163).** Their in-memory state starts over on their new child and their old
+  child's source-map rows are no longer read, but they still hold entity names: `/v1/forget` therefore goes to every
+  child (a 503 unless all succeed), and `rehomeSourceMaps` moves rows out of files no process of the new N opens
+  (`source-map.db` when N > 1, `.<i>` for i >= N, all `.<i>` when N = 1) before anything opens them, then deletes
+  those files; an unreadable one stops the start. Any new per-user file must get the same treatment.
+  `/healthz` stays 200 while any child is up (`up` < `processes` is degraded); load balancers use it.
 - **Secrets.** Never log API keys or request bodies; `EDEN_API_KEYS` entries need keys of 16+ characters.
 
 ## Test
