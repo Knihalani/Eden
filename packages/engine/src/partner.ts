@@ -577,8 +577,6 @@ export class ContextPartner {
       if (this.config.intent) cards.intend();
       // `cardsLean`: what the prefilter rejects is read for requests only when a person wrote it recently.
       if (this.config.intent && this.config.cardsLean) cards.lean(this.config.cardsLeanDays);
-      // `intentConstraintOnly` (D170, a trial): what the prefilter rejects is not read for requests at all.
-      if (this.config.intent && this.config.intentConstraintOnly) cards.constrain();
     }
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).

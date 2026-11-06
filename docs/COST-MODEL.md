@@ -58,6 +58,12 @@ tokens per ten-item call over 184 calls (24 of them retries of a batch cut off a
 that would be $0.0021 per call, $0.00021 per item, about $0.32 per user-month, an upper bound for a model that
 reasons that much. Request time adds one BM25 search over the user's requests (no model, no call).
 
+The match thresholds (`intentMinCoverage` 0.2, `intentMinMatched` 1, `intentHits` 12 since D179) add no call: a looser
+match only lets more intent hits into the ask's reader pool, which is capped at `askReaderPool` items either way. On
+Pi held-out 13 seeds 41–44, intent replayed (ledger runs `close-d159-pi-41` to `-44`, $0.534;
+docs/research/edge-intent.md, "D179 result"), the paired cache-neutral agent+Eden cost moved −0.031 $/1k tasks (95%
+CI −0.080..+0.015), Eden's own −0.015 (−0.047..+0.018), and reader calls 450 to 433.
+
 **Card reasoning (D149): none by default.** Until D149 `ModelCardMaker` always sent reasoning "low" (D59), which the
 servers send to OpenRouter (`build.ts` wires `models.cards`), while every Haiku 5.5 card call in the lab ran on
 `AnthropicModel` with thinking off (`pi-ab.ts`, `hermes-ab.ts` and `cards-enrich.ts` pass no thinking option;
@@ -412,10 +418,18 @@ at most one extra search per notification (not separately measured).
 - Per user, cold: the intent requests cost about $0.071 per user backfill (1,487.5 items at $0.0000510 an item,
   docs/research/new-minus-intent.md) on top of the cards (ALL3's card backfill was $0.106 per 1k Pi tasks on held-out
   13, docs/research/haiku-phase3.md). The per-user-day budget ($0.25) bounds a day's backfill.
-- `intentConstraintOnly` (D170, a trial, off): an item the card prefilter rejects is not read for its requests alone.
-  Measured at $0 (`bun run funnel --jobs 4 -- --intent <gunzipped intent-v2>`, train1–6 seeds 41–42, 24 simulated
-  users, 2026-11-06): items sent to the card model 13,604 to 2,113 (6.44x fewer; the 11,491 request-only items go),
-  calls 822 to 300 (2.74x); held-out 10–11 (`--blind`, measurement only) 4,514 to 650 items and 266 to 98 calls.
+- `intentConstraintOnly` (D170, a trial; **ended by D177**, switch and code deleted under D112): an item the card
+  prefilter rejects was not read for its requests alone. It failed its own gate: a fresh-cache paired run on
+  train1–6 seeds 41–42 (Haiku 5.5 reader live in both arms; ledger runs `close-d170-fresh-base`, 652 calls,
+  $0.1864, and `close-d170-fresh-co`, 654 calls, $0.1866) gave hidden/decoys 286/140 (default) against 281/144
+  (paired hidden −1.30 points, CI −4.17..+1.56; decoys +1.04, CI −1.82..+3.91); a top-up of the committed cache
+  (`close-d170-co`, 269 calls, $0.0786) replayed 281/139 against 279/144. Decoys rose 4 and 5 tasks, beyond the
+  gate's ±3, and hidden flagged by the reader fell (238 to 228, 234 to 226). The saving below stays unclaimed.
+  (Those scores are the planning run's on 4503fabb6; the ledger rows are re-summed in this branch.) What it would
+  have saved, measured at $0 (`bun run funnel --jobs 4 -- --intent <gunzipped intent-v2>`, train1–6 seeds 41–42,
+  24 simulated users, 2026-11-06): items sent to the card model 13,604 to 2,113 (6.44x fewer; the 11,491
+  request-only items go), calls 822 to 300 (2.74x); held-out 10–11 (`--blind`, measurement only) 4,514 to 650
+  items and 266 to 98 calls.
   Estimated $, not measured (the funnel replays cards and intent): the 522 calls saved at $0.000445 a call (above) are
   $0.232 for the 24 users, and the 11,491 items at the intent figure of $0.0000501 an item are $0.576; so about
   $0.010–$0.024 per cold user's backfill. Scaled onto the post-D125 Pi background of $0.387 per 1k tasks by calls

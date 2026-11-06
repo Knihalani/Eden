@@ -15,6 +15,7 @@ import {
   type CardMaker,
 } from "./cards";
 import { cleanRequests, IntentIndex, intentTerms, MAX_REQUEST_CHARS, MAX_REQUESTS, stemWord } from "./intent";
+import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { AskReader, type ReaderInput, type ReaderMaker } from "./reader";
@@ -321,7 +322,7 @@ describe("intent in the engine (config.intent)", () => {
   });
 });
 
-describe("a one-term intent hit at D159's measured arm (coverage 0.2, matched 1, hits 12; not shipped)", () => {
+describe("a one-term intent hit at the default thresholds (coverage 0.2, matched 1, hits 12; D159 arm, D179)", () => {
   // The request shares one word ("laptop") with the warranty item's requests and none with its text; the offsite
   // item's requests hold the request's other words, so the warranty hit covers well under half the known idf.
   const warranty = item("w", "Warranty", "Your Dell cover renews on the 3rd; reply to keep it.");
@@ -390,7 +391,13 @@ describe("a one-term intent hit at D159's measured arm (coverage 0.2, matched 1,
     return { out, cards };
   };
 
-  test("it is one matched term under the old bar: the default thresholds drop it, the loose ones keep it", async () => {
+  test("the default ships D159's loose thresholds (promoted by D179 on a Pi held-out 13 pair, intent replayed)", () => {
+    expect(DEFAULT_CONFIG.intentMinCoverage).toBe(LOOSE.intentMinCoverage);
+    expect(DEFAULT_CONFIG.intentMinMatched).toBe(LOOSE.intentMinMatched);
+    expect(DEFAULT_CONFIG.intentHits).toBe(LOOSE.intentHits);
+  });
+
+  test("it is one matched term under the old bar: the old thresholds drop it, the default keeps it", async () => {
     const { cards } = await run({});
     const scope = { tenantId: "t", userId: "u1" };
     const found = cards.intentFinds(scope, REQUEST, NOW + 2 * HOUR, 12, () => true);
@@ -403,6 +410,8 @@ describe("a one-term intent hit at D159's measured arm (coverage 0.2, matched 1,
   test("loose, it enters the ask's reader pool; at the old bar it does not", async () => {
     const loose = await run(LOOSE);
     expect(loose.out.u1!.pool).toContain(warranty.id);
+    // The core configuration takes the default's thresholds: with nothing given, the hit is in the pool too.
+    expect((await run({})).out.u1!.pool).toContain(warranty.id);
     const strict = await run({ intentMinCoverage: 0.35, intentMinMatched: 2, intentHits: 6 });
     // The reader was called at the old bar too: the two-term offsite hit fills its pool.
     expect(strict.out.u1!.pool).toContain(offsite.id);
