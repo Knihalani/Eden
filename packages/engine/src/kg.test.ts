@@ -1000,9 +1000,29 @@ function same(a: UserGraph, b: PreviousGraph, keys: string[], r: () => number): 
   }
 }
 
+/**
+ * Seeds of the differential test below: 200 (D169's gate) in `bun run check` and `test:pkg`; `test:changed` sets
+ * KG_DIFF_SEEDS=25 (D176: about 2 s for the file instead of 6). Not EDEN_-prefixed: scripts/test-preload.ts clears
+ * those. A value that is not a positive whole number reads as 200, so a typo can only run more seeds, never fewer.
+ */
+function diffSeeds(raw: string | undefined): number {
+  const n = Number(raw);
+  return raw !== undefined && /^\s*\d+\s*$/.test(raw) && Number.isSafeInteger(n) && n >= 1 ? n : 200;
+}
+const DIFF_SEEDS = diffSeeds(process.env.KG_DIFF_SEEDS);
+
 describe("UserGraph against the storage before D169", () => {
-  test("200 seeds of adds, changed copies, removes, learning and bounds: the same walks", () => {
-    for (let seed = 1; seed <= 200; seed++) {
+  test("the seed count reads KG_DIFF_SEEDS, and anything but a positive whole number is 200", () => {
+    expect(diffSeeds(undefined)).toBe(200);
+    expect(diffSeeds("25")).toBe(25);
+    expect(diffSeeds(" 25 ")).toBe(25);
+    for (const bad of ["", "0", "-5", "2.5", "abc", "1e3", "25x", "0x19", "99999999999999999999"]) {
+      expect(diffSeeds(bad)).toBe(200);
+    }
+  });
+
+  test(`${DIFF_SEEDS} seeds of adds, changed copies, removes, learning and bounds: the same walks`, () => {
+    for (let seed = 1; seed <= DIFF_SEEDS; seed++) {
       const r = rng(seed);
       // Every eighth seed bounds the node ids, so copies are refused and the held one stays.
       const maxIds = seed % 8 === 0 ? 60 + Math.floor(r() * 200) : undefined;
