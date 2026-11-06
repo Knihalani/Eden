@@ -53,6 +53,7 @@ import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { flags, labConfig, parseJson } from "./flags";
 import { INTENT_FILE, INTENT_PATH, intentUncovered } from "./cards-disk";
+import { plantedCoverageLine, surfacedLines, type SurfacedRow } from "./ask-coverage";
 import { amortisedCalls, callMismatches, defaultJobs, groupShards, mergeParts, type PartOut } from "./funnel-merge";
 import { effective, PRESETS } from "./presets";
 import { allMissedHint, cacheModels, missGate, MISS_EXIT } from "./reader-disk";
@@ -456,6 +457,11 @@ for (const [suite, a] of [...bySuite].sort()) {
 }
 console.log(`  ${"TOTAL".padEnd(10)} hidden ${total[0]}/${total[1]}  decoys ${total[2]}/${total[3]}${tag}${inert}`);
 console.log(`  ${beforeModelLine(rows, passValue("wait-ms") || "default")}`);
+// D173 (reporting only; the O7 gates stay decoys in pool and total surfaced, D165): how the surfaced items were
+// surfaced, and the planted items' intent replay coverage, over the merged rows (each process prints only its block).
+for (const l of surfacedLines("TOTAL", rows as SurfacedRow[])) console.log(`  ${l}${tag}${inert}`);
+const plantedLine = plantedCoverageLine(rows as SurfacedRow[]);
+if (plantedLine) console.log(`  intent: ${plantedLine}`);
 // The reader's pool (any reader), `--packet-k` and the draft's pool (`--lead-in` with a no-model reader), per suite.
 const packetK = passValue("packet-k").split(",").filter(Boolean).map(Number);
 const screen = [...bySuite.keys()].sort().flatMap((suite) =>
