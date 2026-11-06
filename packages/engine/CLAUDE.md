@@ -69,12 +69,16 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   clock-independent in D58).
 - Regressions found in reviews go to `regressions.test.ts`, `review-regressions.test.ts` or the track's own
   `*-review.test.ts`; add to them rather than editing an old expectation.
-- `new ModelReaderMaker(model, { reasoning })` takes `"low"` (the default, production's value), `"medium"`, `"high"`
-  or `"off"` (no effort sent). No `EngineConfig` key wires it yet. OpenRouter excludes reasoning from the reply but
-  bills it as output; `usage.reasoningTokens` (from `completion_tokens_details.reasoning_tokens`, unset when not
-  reported) shows that share. Lab reader latencies (Anthropic, thinking off by default) exclude it, so they
-  understate production wherever the routed endpoint reasons. Changing the default needs a decision and a decoy
-  measurement (D96: reasoning before the verdict is what keeps decoys out).
+- `ModelReaderMaker` sends no reasoning field and has no option to send one (D144 made "off" the default, D155
+  deleted the option): that is the request every lab quality figure measured. D96's decoy cut came from the prompt
+  writing `why` before `binds` (READER_SYSTEM v4/v5), not from provider reasoning. On Haiku 5.5 (Anthropic-direct,
+  default pool) effort "low" was 2.38x slower at p50, 1.59x dearer, and 38 of 60 calls ran past `askReaderWaitMs`
+  (docs/COST-MODEL.md, `reader-time.ts`). The lab's "low" arms add the effort through a model wrapper
+  (`eval-live.ts`), never through the maker. If a wrapped model asks for reasoning, OpenRouter excludes it from the
+  reply but bills it as output; `usage.reasoningTokens` (from `completion_tokens_details.reasoning_tokens`, unset when
+  not reported) shows that share. The lab's reader replay key treats a `claude-*` reader request with no reasoning as
+  the pre-D144 "low" line (`reader-disk.ts`, `keyedReasoning`), so recorded caches still replay; keep that mapping
+  when touching the request. Sending reasoning again needs a decision and a decoy measurement, as a trial (D112).
 - `Held` (what a tool result or agent message holds, for `alreadyHas`) is two sorted unique typed arrays, searched by
   binary search: a remap (`rebuildVocab`) must sort and dedupe again, since new ids do not keep the old order. Pair
   keys stay exact Float64 (`pairKey`): a hashed key could hold back a delivery on a collision. `held.test.ts` measures
@@ -90,9 +94,22 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   already running (`SourceSync.busy`, which resolves to what that read stored) counts what it stored, not one, and
   `freshen` returns only its own calls. `probeGraceMs` is 0 in the default (D112): a lookup no longer waits for its
   probes (D47's grace), so a slow probe's finds only reach later turns.
-- `syncPush` (D125) acts only on sources whose `notifies` is true. Any wrapper around a `Source` (tracing, timing, a
-  lease) must copy `notifies` as it copies `listsByTime`, or notifications are silently ignored and the source is
-  polled on its learned rate. `sourceItems` redacts before storing (D10); `ingest` stores only items of that source.
+- `syncPush` (D125) polls on a notice only for sources whose `notifies` is true. Any wrapper around a `Source`
+  (tracing, timing, a lease) must copy `notifies` as it copies `listsByTime`, or notifications are silently ignored
+  and the source is polled on its learned rate. Every notice (and every `sourceItems` call with items of that source)
+  still drops the source's held search pages, notifying or not (D148): a search-only notifying source has no sync
+  state, and its held page would answer with the old copy. `sourceNotice` gives the reason a notice did not act
+  ("push-off", "not-synced", "not-notifying"; no I/O, so an unknown id is "not-synced"). `sourceItems` redacts before
+  storing (D10); `ingest` stores only items of that source.
+- `ModelCardMaker` sends no reasoning field and has no option to send one (D149 made "off" the default, amending
+  D59; D155 deleted the option): the request every lab card and intent figure measured (all 5,158 `eden.cards` ledger
+  rows ran with thinking off). Effort "low" was 1.82x slower at p50 and 1.54x dearer on Haiku 5.5 (docs/COST-MODEL.md,
+  run `close-cards-reasoning`). Sending it again needs a decision, as for the reader. The judge (`partner.ts`, lab-only:
+  the servers wire none) still sends "low"; changing that needs a judge measurement (D155).
+- The graph reads an item's first `READ_CHARS` = 1,000 characters of text (D150; its title and `meta.people` are read
+  on their own). That cut D141's `+graph` ingest stage 2.1-2.3x with every train screen identical; a name past
+  character 1,000 is not a graph node (`kg.test.ts`). Raising it again re-runs `ingest.bench.ts` and the funnel
+  screens, and there is no `graphLite` switch: D150 closed it.
 - `cardsLean` (D125) only narrows what the intent index reads (`readForIntent`): constraint-worded items are carded
   whatever their sender or age. `automated` reads a `From:` line in the text or a `meta.from`/`meta.sender` field
   (connectors differ: `toItems` keeps whatever text the tool returned) and bulk footers; a connector giving neither
@@ -130,8 +147,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **One deadline per lookup (D140).** `searchLive` takes `deadlineAt` once, after resolving the sources and before
   the on-demand poll; the poll's signal, the live search's `timeoutMs`, the planner and the probes
   (`ProbeOpts.deadlineAt`) get only what is left. Do not give a later stage a fresh `sourceTimeoutMs`: an ask waits
-  for its poll, so the stages add up. Under `MIN_SEARCH_MS` (50) left, the search is skipped with "timeout" statuses
-  and no call (no rate token or breaker failure for a call that could not answer). `Sync.freshen` skips a source
+  for its poll, so the stages add up. Under `MIN_SEARCH_MS` (50) left, the search is skipped with no call (no rate
+  token or breaker failure for a call that could not answer): a source whose page for the query the fan-out holds
+  answers from it (`SourceFanout.held`: "cached", or "stale" past `freshMs`), any other is a "timeout" (D148). `held`
+  shares `one()`'s key (`pageKey`); a peek with its own key would silently miss. `Sync.freshen` skips a source
   whose on-demand poll gave up within `demandTimeoutMs` (= `sourceTimeoutMs`), so the next lookup searches it live
   instead of waiting on the same listing.
 - `fetchChecked`'s `gone` needs `Source.fetchReportsGone`: an MCP tool's null fetch proves nothing, so verification

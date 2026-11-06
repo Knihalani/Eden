@@ -39,7 +39,7 @@ export type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";
 export { requestedRange } from "./probes";
-export { seedsOf, type Seed, type Walked } from "./kg";
+export { extract, seedsOf, UserGraph, type Seed, type Walked } from "./kg";
 export {
   ACTIONS,
   CARD_KINDS,

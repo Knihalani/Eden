@@ -28,10 +28,12 @@
  *   comparable). docs/LAB.md 1c.
  *
  * The default reads with the reader: with no `-- --reader` the screen uses `--reader stub` ($0); a real reading
- * needs `-- --reader replay --reader-cache F` or `--reader live --reader-model m`, and the intent requests
- * `-- --intent F`. Neither file is checked in (docs/LAB.md).
+ * needs `-- --reader replay --reader-model m --reader-cache F` or `--reader live --reader-model m`, and the intent
+ * requests `-- --intent F`. A Haiku reader cache for the default on train, seeds 41-42, is checked in gzipped
+ * (`packages/sim/lab/distilled/reader-haiku-train-4142.jsonl.gz`; docs/LAB.md has the recipe).
  * A replayed reader prompt that is not in the cache fails open (the ask answers without the reader), so the run
  * prints the miss count and exits 3 after the score unless `--allow-misses`: such a run is part read, part not.
+ * When every prompt missed and no `--reader-model` was given, it also says so: the cache key hashes the model id.
  * `-- --reader stub` screens the default at $0 with no key: the reader's pool per suite (hidden and decoy in pool,
  * pool items, prompt size); its delivery counts are not the preset's. `-- --reader oracle[:p_hit,p_false]` is a
  * ground-truth proxy, every line labelled so. Both shard. `-- --packet-k 10,15,20` prints the planted item in the
@@ -44,7 +46,7 @@ import { join } from "node:path";
 import { flags, labConfig, parseJson } from "./flags";
 import { amortisedCalls, callMismatches, defaultJobs, groupShards, mergeParts, type PartOut } from "./funnel-merge";
 import { effective, PRESETS } from "./presets";
-import { missGate, MISS_EXIT } from "./reader-disk";
+import { allMissedHint, cacheModels, missGate, MISS_EXIT } from "./reader-disk";
 import {
   beforeModelLine,
   INTENT_INERT,
@@ -365,7 +367,7 @@ interface TaskRow extends ScreenRow {
 }
 const tasks = (file: string) => (JSON.parse(readFileSync(file, "utf8")) as { perTask: TaskRow[] }).perTask;
 const outJson = JSON.parse(readFileSync(out, "utf8")) as {
-  reader?: { missed: number; subset?: number };
+  reader?: { replayed: number; sent: number; missed: number; subset?: number };
   config?: Record<string, unknown>;
   intent?: { state?: IntentState };
 };
@@ -467,4 +469,9 @@ if (baseline) {
 rmSync(scratch, { recursive: true, force: true });
 const gate = missGate(readerReplay?.missed ?? 0, allowMisses);
 if (gate.message) console.error(`\nfunnel: ${gate.message}`);
+// Every prompt missed with no `--reader-model`: almost always a cache made under another model (promptKey hashes it).
+const hint = readerReplay
+  ? allMissedHint(readerReplay, has("--reader-model"), cacheModels(passValue("reader-cache")))
+  : null;
+if (hint) console.error(`funnel: ${hint}`);
 process.exit(gate.code);

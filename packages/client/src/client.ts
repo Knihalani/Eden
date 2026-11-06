@@ -18,7 +18,12 @@ import {
   type AskResponse,
   type Injection,
   type ObserveResult,
+  type SourceChangedReason,
+  type SourceChangedResult,
 } from "@eden/protocol";
+
+/** The reasons `/v1/sources/changed` gives (`SourceChangedReason`); anything else from a server is dropped. */
+const REASONS: ReadonlySet<string> = new Set<SourceChangedReason>(["push-off", "not-synced", "not-notifying"]);
 
 /** The server's id rule (`isId` in @eden/protocol), as its 400s word it. */
 const ID_RULE = "1-128 characters of [A-Za-z0-9._:@-]";
@@ -260,21 +265,35 @@ export class EdenClient {
   /**
    * Forwards a change notification for one of the user's sources (a Gmail watch, a Calendar or Drive channel, a
    * webhook): with the server's `syncPush`, the source is polled at its next use instead of on a guess. Never throws;
-   * resolves false when the partner could not be reached or does not sync that source.
+   * resolves false when the partner could not be reached or does not sync that source (`sourceNotice` says why).
    */
   async sourceChanged(sourceId: string): Promise<boolean> {
+    return (await this.sourceNotice(sourceId))?.synced === true;
+  }
+
+  /**
+   * `sourceChanged` with the server's reason when nothing was synced: "push-off", "not-synced" (an unknown user or
+   * source id, a search-only source, or one not synced yet) or "not-notifying" (the source is not declared
+   * `notifies`). Never throws; resolves null when the partner could not be reached (reported to `onError`). An older
+   * server sends no reason.
+   */
+  async sourceNotice(sourceId: string): Promise<SourceChangedResult | null> {
     const { tenantId, userId } = this.options;
-    const res = await this.post<{ synced?: boolean }>("/v1/sources/changed", {
+    const res = await this.post<{ synced?: unknown; reason?: unknown }>("/v1/sources/changed", {
       ...(tenantId ? { tenantId } : {}),
       userId,
       sourceId,
     });
-    return res?.synced === true;
+    if (!res) return null;
+    const reason = typeof res.reason === "string" && REASONS.has(res.reason) ? res.reason : undefined;
+    return { synced: res.synced === true, ...(reason ? { reason: reason as SourceChangedReason } : {}) };
   }
 
   /**
    * Forwards a deletion notification: the source no longer has these refs (a message deleted or recalled, a doc or
-   * event removed). Eden drops them at once. Never throws; resolves to how many were held (0 when unreachable).
+   * event removed). Eden drops them at once and holds them as gone, so nothing delivers them again. Never throws;
+   * resolves to how many cached items were dropped: 0 is a success when none were cached (the hold still stands), and
+   * 0 too when the partner could not be reached, which is reported to `onError`.
    */
   async sourceRemoved(sourceId: string, refs: string[]): Promise<number> {
     const { tenantId, userId } = this.options;

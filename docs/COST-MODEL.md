@@ -25,7 +25,7 @@ OpenRouter returns the real cost per call (`usage.cost`), and the engine books t
 | Call                                                                                                        | Input bound                                                                                    | Output bound                      | Cost at $0.15 / $0.50, uncached |
 | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------- |
 | Judge                                                                                                       | system ≈ 100 tok + window ≤ 4,000 chars (≈ 1,000 tok) + ≤ 6 candidates × ≈ 100 tok ≈ 1,700 tok | 512 tok, reasoning included (D45) | ≈ $0.00051                      |
-| Card enrichment (`cards`, in the default since D112 and kept there by D113(5); background, never per event) | system ≈ 700 tok + ≤ 10 items × (title ≤ 160 + own text ≤ 900 chars) ≈ 3,400 tok               | 2,000 tok, reasoning included     | ≈ $0.0015                       |
+| Card enrichment (`cards`, in the default since D112 and kept there by D113(5); background, never per event) | system ≈ 700 tok + ≤ 10 items × (title ≤ 160 + own text ≤ 900 chars) ≈ 3,400 tok               | 2,000 tok, no reasoning (D149)    | ≈ $0.0015                       |
 
 Queued request (`slowPathQueue`, D102, in the default since D112). No new kind of call: a request that arrives while
 the session's slow path is busy is looked up once that slow path settles, instead of being dropped. One slot per
@@ -58,6 +58,34 @@ tokens per ten-item call over 184 calls (24 of them retries of a batch cut off a
 that would be $0.0021 per call, $0.00021 per item, about $0.32 per user-month, an upper bound for a model that
 reasons that much. Request time adds one BM25 search over the user's requests (no model, no call).
 
+**Card reasoning (D149): none by default.** Until D149 `ModelCardMaker` always sent reasoning "low" (D59), which the
+servers send to OpenRouter (`build.ts` wires `models.cards`), while every Haiku 5.5 card call in the lab ran on
+`AnthropicModel` with thinking off (`pi-ab.ts`, `hermes-ab.ts` and `cards-enrich.ts` pass no thinking option;
+`anthropic.ts` defaults it to off and sends effort only with adaptive thinking): all 5,158 `eden.cards` ledger rows,
+$2.298, $0.000445 a call, p50 2,699 ms, 625 output tokens a call. So every Haiku card and intent figure in this file
+describes "off"; the earlier glm-5.3-flash and nemotron figures through OpenRouter (D59's measurement above, D66's
+re-carding, the intent estimates, and the replayed `cards-v2.jsonl` the funnel reads) were made with "low". The
+maker now sends no reasoning field, and since D155 it has no option to send one: "low" exists only as a lab arm,
+sent through a model wrapper that adds the effort to each request (as `eval-live.ts` does for the reader). The output
+caps are unchanged. Timed on Haiku 5.5, Anthropic-direct, lab provider, cached (the system block read from the cache
+on both arms), the shipped shape (`cardsEconomy` batches of 20 train items, seed 41, `intent` on, 6,000-token cap),
+arms interleaved per batch: "off" is `new ModelCardMaker(model)` with thinking off; "low" sent effort "low" with
+adaptive thinking, so the effort reaches the model (at the time through the maker's own `reasoning` option, which
+D155 deleted; the request is the same). Percentiles are nearest-rank.
+
+| Arm (run `close-cards-reasoning`, 2026-11-05) | Calls | p50 / p90 ms   | TTFT p50 ms | Thought | Truncated | Tokens in (cached) / out | $ per call |
+| --------------------------------------------- | ----- | -------------- | ----------- | ------- | --------- | ------------------------ | ---------- |
+| off                                           | 17    | 5,406 / 8,862  | 542         | 0       | 0         | 3,801 (1,242) / 1,484    | $0.001012  |
+| low (adaptive)                                | 18    | 9,863 / 18,017 | 5,756       | 18      | 0         | 3,809 (1,248) / 2,580    | $0.001561  |
+
+"low" is 1.82x slower at p50 (2.03x at p90), 1.54x dearer a call and writes 1.74x the output tokens; no batch was cut
+off at the cap on either arm. Items given at least one request: 318 of 340 off, 299 of 360 low (no labels here, so
+not a quality figure). The run stopped at its own $0.045 limit after 17 batch pairs and one more "low" call: 35 ledger
+rows, $0.0453 ($0.0172 off, $0.0281 low). It used a scratch script outside the repo (`ModelCardMaker` over
+`labModel("claude-haiku-5-5")`, as `reader-time.ts` does for the reader) with `--spend-ledger .local/mkt/ledger.jsonl
+--spend-cap 17 --spend-headroom 0.3 --run-label close-cards-reasoning`. How OpenRouter maps effort "low" for
+`anthropic/claude-haiku-5.5` stays unmeasured (D145), as for the reader (D144).
+
 The bridging query (D89) was deleted by D112; its cost notes are in git history.
 
 Ask-time reader (D95, `askReader`, in the default since D112; `reader.ts`). One call per `ask` about an action (an
@@ -68,13 +96,61 @@ repeated ask makes none. Input: the system prompt (about 450 tokens) and up to 3
 glm-5.3-flash, 2026-11-02, OpenRouter's reported cost): 0.86 calls per task (124 asks read in 144 tasks). Two
 endpoints, with very different reasoning lengths:
 
-Measured on Claude Haiku 5.5 (lab, D96, docs/research/haiku-opt.md): prompt v5 over a 30-item pool is about 3,770 tokens
-in and 250 out, 24% of the prompt read from the cache (the instructions), $0.00042 per call ($0.10 / $0.50 per million,
-cache reads at a tenth), p50 1.41 s and p90 1.99 s with thinking off. With `readerPush` (D96) the same call is also made
-once per user request that acts (an imperative request), whether or not the agent asks: at about $0.00042 a call, $0.42
-per thousand acting requests. Phase 3 (D99): prompt v7 is about 3,900 tokens in and 190 out, $0.00040 a call; the leaner
-operating point (pool 15, 240-character snippets, `readerGate`) about 2,900 in and 180 out, $0.00029 a call (30% less
-Eden cost per task live; the default's reader, D112). `askReaderStanding` and `askReaderQuestions` were deleted by
+**Every Haiku 5.5 reader and card figure in this file is "lab provider, cached" (D145)** unless it says otherwise: it
+was measured on the lab's `AnthropicModel` (Anthropic directly, thinking off, the system prompt always read from the
+prompt cache after the first call), not on the path the servers ship, which reaches `anthropic/claude-haiku-5.5`
+through OpenRouter and sends no cache breakpoint (`anthropicCache` is a trial, off). Re-priced with no cache, the lab
+ledger's `eden.reader` rows cost 1.32x and its `eden.cards` rows 1.27x what they did (D145; the gap at lab traffic
+density, an upper bound for sparser traffic). The OpenRouter path's cost and latency are **unmeasured**: this
+audit's runs could call Anthropic only.
+
+Measured on Claude Haiku 5.5 (lab provider, cached; D96, docs/research/haiku-opt.md): prompt v5 over a 30-item pool is
+about 3,770 tokens in and 250 out, 24% of the prompt read from the cache (the instructions), $0.00042 per call ($0.10 /
+$0.50 per million, cache reads at a tenth), p50 1.41 s and p90 1.99 s with thinking off. With `readerPush` (D96) the
+same call is also made once per user request that acts (an imperative request), whether or not the agent asks: at
+about $0.00042 a call, $0.42 per thousand acting requests. Phase 3 (D99, lab provider, cached): prompt v7 is about
+3,900 tokens in and 190 out, $0.00040 a call; the leaner operating point (pool 15, 240-character snippets,
+`readerGate`) about 2,900 in and 180 out, $0.00029 a call (30% less Eden cost per task live; the default's reader,
+D112).
+
+**Reader reasoning (D144): the default sends none.** Until D144 `ModelReaderMaker` defaulted to reasoning "low", which
+the servers send to OpenRouter, while every lab figure above (and D96's, D98's and D125's quality) ran with thinking
+off. Timed on Haiku 5.5, Anthropic-direct, lab provider, cached (the system prompt read from the cache on both arms):
+"off" is `new ModelReaderMaker(model)` on `AnthropicModel` with thinking off; "low" sent effort "low" with adaptive
+thinking, so the effort reaches the model (`output_config.effort`). "Low" is a lab arm only: the runs below passed it
+as the maker's `reasoning` option, which D155 deleted, and the lab now sends it through a model wrapper that adds
+the effort to each request (`eval-live.ts`, `reader-time.ts`); the request is the same. Percentiles are
+nearest-rank; "thought" is a call whose stream held a thinking block; the wait is `askReaderWaitMs` (2,500 ms).
+
+| Run (ledger label)                                                   | Arm            | Calls | p50 / p90 ms  | TTFT p50 ms | Thought | Over 2.5 s | Tokens in (cached) / out | $ per call |
+| -------------------------------------------------------------------- | -------------- | ----- | ------------- | ----------- | ------- | ---------- | ------------------------ | ---------- |
+| `s1-reader-time`: 60 real train pools, 14.6 items (pool 15, 240 ch.) | off            | 60    | 1,187 / 1,612 | 582         | 0       | 0          | 2,796 (945) / 173        | $0.000281  |
+| same pools, interleaved                                              | low (adaptive) | 60    | 2,822 / 4,176 | 2,559       | 46      | 38         | 2,797 (946) / 506        | $0.000447  |
+| `pp-reader-time` (audit probe): one 30-item pool, 10 calls per arm   | off            | 10    | 1,235 / 1,384 | 636         | n/a     | 0          | 3,192 (945) / 228        | $0.000348  |
+| same                                                                 | off, uncached  | 10    | 1,338 / 1,507 | 646         | n/a     | 1          | 3,192 (0) / 228          | $0.000433  |
+| same                                                                 | low (adaptive) | 10    | 3,449 / 4,319 | 3,158       | n/a     | 6          | 3,193 (946) / 582        | $0.000526  |
+| same                                                                 | low, uncached  | 10    | 3,536 / 4,059 | 2,922       | n/a     | 7          | 3,193 (0) / 623          | $0.000631  |
+
+At the default's pool, "low" is 2.38x slower at p50 and 2.59x at p90, 1.59x dearer per call, and 38 of 60 calls
+(63%) ran past the wait, where the ask answers without the reader while the call is still paid for; "off" had none
+past it (slowest 2,102 ms). Latency under "low" is bimodal: the 46 calls that thought took a median 3,242 ms (38 of
+them past the wait), the 14 that did not 1,150 ms, like "off". Both arms flagged the same items on 50 of 60 pools and
+43 items each (the pools carry no labels here, so this is agreement, not quality; quality is D144's: haiku-opt.md's
+one thinking-on row, 117 hidden and 89 decoys against 114 and 88 off). The `s1-reader-time` run is 120 ledger rows,
+$0.0437 ($0.0169 off, $0.0268 low), 2026-11-05. The `pp-reader-time` rows were re-tallied from the ledger in blocks of
+ten (role `eden.reader.pp`, no thinking flag recorded). Reproduce:
+
+```bash
+bun run funnel --jobs 4 -- --reader-log .local/s1/pools.jsonl                     # $0: 657 distinct train pools
+bun packages/sim/src/lab/reader-time.ts --pools .local/s1/pools.jsonl --calls 60 \
+  --spend-ledger .local/mkt/ledger.jsonl --spend-cap 17 --spend-headroom 0.3 --run-label s1-reader-time
+```
+
+How OpenRouter maps effort "low" for `anthropic/claude-haiku-5.5` is **unmeasured**: adaptive thinking (the arm
+timed here) or enabled thinking with a token budget, which Haiku 5.5 refuses with HTTP 400 (the audit's
+`lat-audit-reasoning` enabled-1024 rows: no tokens, about 160 ms), so the reader would have failed open on every call.
+"off" avoids both. Time the same two arms through OpenRouter once a key it serves Anthropic models for exists
+(`reader-time.ts` times `claude-*` ids only). `askReaderStanding` and `askReaderQuestions` were deleted by
 D112 (NEW2 was not adopted): they added about 3,000 input tokens a call and a push read of every user message. An
 `ask_context` the agent then makes about the same request is a second full call unless its question is the request word
 for word: the verdict cache is keyed by the request, the question and the focused pool (`readerKey`), and a paraphrase
@@ -90,8 +166,8 @@ at `askReaderWaitMs`. `AskResponse.costUsd` holds only a call that answered in t
 alone. A reader given a default `new Budget()` stops after 20 reads a session (`callsPerSession`; settling at the actual
 cost frees the dollar cap, so the count binds first): about 20 user messages when each is read once, fewer when an ask
 reads a pool its push did not. Refused reads report the outcome "budget"; size the reader's own `Budget` for longer
-sessions. The intent index's requests for every item of a world (D87) cost $0.0000501 per item on Haiku 5.5 (3,331
-items, 355 calls, $0.177), once per item version.
+sessions. The intent index's requests for every item of a world (D87) cost $0.0000501 per item on Haiku 5.5 (lab provider,
+cached; 3,331 items, 355 calls, $0.177), once per item version.
 
 | Routing (`sort`)           | Endpoint      | Calls | Tokens in / out per call | $ per call (reported) | Latency p50 / p90 | Over 2.5 s |
 | -------------------------- | ------------- | ----- | ------------------------ | --------------------- | ----------------- | ---------- |
@@ -215,7 +291,7 @@ and `--replay FILE.jsonl ...` fits per call, with cached input apart when the li
 | Reader calls, an oracle gate over any needed fact                                                                                  | perfect skip of pools with no needed item                                                                    | default-nogate 2.07x (42 calls), default 1.57x; history: NEW2 2.19x (199)                                                                                                                                                                                                                                                                                                                                                    | `bun run gate-traffic`, "oracle gate" line; NEW2 at 51b55c9a8                                                                                                                                                                                    |
 | Reader calls, an oracle gate over reader facts only (constraint, blocker, paid)                                                    | perfect skip of pools with nothing the reader is for                                                         | default-nogate 3.63x (24 calls), default 2.75x; history: NEW2 8.90x (49 calls; 5.38x, 81 calls, counting reader facts the turn may use)                                                                                                                                                                                                                                                                                      | `bun run gate-traffic`, "oracle gate" line; NEW2 at 51b55c9a8                                                                                                                                                                                    |
 | Reader calls, a verdict reused across one user's sessions                                                                          | cache by exact input / pool / same type and binding set                                                      | NEWL-nogate (now default-nogate) 1.10x / 1.18x / 1.61x; history: NEW2 1.27x / 1.50x / 2.19x                                                                                                                                                                                                                                                                                                                                  | `bun run gate-traffic --reuse` (2026-11-03); NEW2 at 51b55c9a8                                                                                                                                                                                   |
-| Reader cost per call, whole input read from the prompt cache                                                                       | cached per-user prefix                                                                                       | about 3.0x: 3,921 × $0.01/M + 188 × $0.5/M = $0.000133 against $0.000401                                                                                                                                                                                                                                                                                                                                                     | **estimate**: ignores cache writes (1.25x, pricing.ts:21) and the focus-dependent request part                                                                                                                                                   |
+| Reader cost per call, whole input read from the prompt cache                                                                       | cached per-user prefix                                                                                       | about 3.0x: 3,921 × $0.01/M + 188 × $0.5/M = $0.000133 against $0.000401 (lab provider, cached)                                                                                                                                                                                                                                                                                                                              | **estimate**: ignores cache writes (1.25x, pricing.ts:21) and the focus-dependent request part                                                                                                                                                   |
 | Reader cost per call, cheaper model endpoint                                                                                       | cheapest glm-5.3-flash endpoint                                                                              | under 2x on input ($0.0513/M against Haiku's $0.10/M); glm list price is dearer than Haiku                                                                                                                                                                                                                                                                                                                                   | packages/llm/src/pricing.ts:15, :20-22                                                                                                                                                                                                           |
 | Sharing a verdict between push and ask                                                                                             | one cache                                                                                                    | none: the key hashes the request, the question and the items as read                                                                                                                                                                                                                                                                                                                                                         | packages/engine/src/reader.ts:262-270 (`readerKey`)                                                                                                                                                                                              |
 | Engine CPU on the fast path                                                                                                        | lazy `confident()` (stop at the cap, cheap tests first; audit 2026-11-05 `fastpath-assess-eager-unmemoized`) | before 3.762 / 3.190 / 3.441 ms per event, observe p50 213.3 / 179.6 / 193.2 µs, p99 18,145 / 16,132 / 15,836 µs; after 2.569 / 2.699 / 2.490 ms per event, p50 181.5 / 185.9 / 175.3 µs, p99 11,562 / 11,603 / 10,819 µs (means 3.464 → 2.586 ms, 1.34x per event); a reader call (p50 1,190 ms, above) still costs about 460x an event (1,190 / 2.586). The per-item analysis cache (the finding's part 2) is the next row | `bun packages/engine/bench/pipeline.bench.ts`, 3 interleaved pairs, base 9c4779fe5's partner.ts against this branch, shared 4-core box, load average 3.1-3.5 (2026-11-05). The old row (0.389 ms, p50 104.8 µs, p99 848 µs) no longer reproduces |
@@ -265,8 +341,8 @@ user's request, the ask its question). No judge is wired (the measured setup ran
 `TenantSpend` cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25). Over any cap the role is skipped and the
 no-model path answers. Without a key nothing is called and the same default runs with no model.
 
-Per task (live, Pi harness, Haiku 5.5 as agent, grader and Eden's roles, blind held-out 13, seeds 41–42, 64 hidden +
-64 control tasks per condition, `--time-scale 1`; `.local/unify`, 2026-11-03, D112; the last row `.local/lc`,
+Per task (live, Pi harness, Haiku 5.5 as agent, grader and Eden's roles, all lab provider, cached (D145), blind
+held-out 13, seeds 41–42, 64 hidden + 64 control tasks per condition, `--time-scale 1`; `.local/unify`, 2026-11-03, D112; the last row `.local/lc`,
 2026-11-04, D123, docs/research/live-checks-1104.md, within run-to-run noise of D112's):
 
 | Configuration                                 | Eden per-task calls, $/1k hidden / control | Background (cards + intent), $/1k tasks | Agent + Eden per-task, $/1k hidden / control |
@@ -276,7 +352,7 @@ Per task (live, Pi harness, Haiku 5.5 as agent, grader and Eden's roles, blind h
 | Unified default                               | 0.385 / 0.547                              | 0.451                                   | 0.667 / 0.900                                |
 | Default after D114/D119, rerun (D123)         | 0.332 / 0.510                              | 0.459                                   | 0.577 / 0.830                                |
 
-**After D125** (docs/research/cost-fixes.md; Pi, held-out 13, seeds 41–44, both market latency profiles, 512 Eden task
+**After D125** (docs/research/cost-fixes.md; lab provider, cached; Pi, held-out 13, seeds 41–44, both market latency profiles, 512 Eden task
 runs per arm, hidden and control pooled; per 1,000 tasks): the old default spent $0.318 on the agent, $0.448 on the
 reader and $0.900 on cards and intent ($1.666); the default with `cardsLean` and `syncPush` spent $0.323, $0.458 and
 $0.387 ($1.168, −30%). Cards are a cold-cache figure (every item of a fresh user, 64 tasks per user). Connector calls
@@ -294,7 +370,8 @@ tasks. A signal, an item-carrying notification or a deletion also drops the sear
 source (`SourceFanout.dropResults`, held 60 s fresh), so the next lookup there searches again instead of reusing one:
 at most one extra search per notification (not separately measured).
 
-- The background column spreads each seed's card and intent spend over that seed's task runs; with only 64 tasks per
+- Every dollar figure in these bullets is lab provider, cached (D145). The background column spreads each seed's card
+  and intent spend over that seed's task runs; with only 64 tasks per
   simulated user it is mostly the one-time backfill, an upper bound on the steady state. In this run the checked-in
   card cache replayed 4,634 cards, so new cards and intent requests cost $0.058 (seed 41) and $0.057 (seed 42) for
   two partner conditions: about $0.03 per user per condition, a lower bound for a cold user.
@@ -306,8 +383,8 @@ at most one extra search per notification (not separately measured).
   $0.290 (Hermes).
 - Each role's own budget is `DEFAULT_LIMITS` (as in the measured Pi setup): at the reader's $0.002 reservation that is
   about 10 reads per session, past which a long session's later requests take the no-model path.
-- Reader calls are about 2,800 uncached input tokens ($0.00028) and 200 output tokens ($0.0001) each on Haiku 5.5
-  (haiku-phase3.md); the budget reserves $0.002 a call (`DEFAULT_READER_LIMITS.estimateUsd`).
+- Reader calls are about 2,800 input tokens ($0.00028 priced uncached) and 200 output tokens ($0.0001) each on Haiku
+  5.5 (haiku-phase3.md, lab provider, thinking off; D144 made "off" the shipped default); the budget reserves $0.002 a call (`DEFAULT_READER_LIMITS.estimateUsd`).
 
 ## Budget defaults (`packages/llm/src/budget.ts`)
 
@@ -404,15 +481,19 @@ A synced user costs about 4 MB of heap per ~1,500 items and ~200 ms of CPU to ba
 measurement, not re-run). The combined funnel implies more, about 420 ms per user (16.9 s of extra process CPU over 40
 users with ALL), because there the graph and the cards are built on every synced item too (below).
 
-The shipped ingest path, measured (2026-11-05, docs/research/graph-ablation.md): `ingest.bench.ts` used to time only
-the cache's own work (its `core` line: 66–79 µs per backfilled item, 2,595 B of heap per item, 200 users × 500 items
-of 1,599 chars on average). Through a `ContextPartner` on `DEFAULT_CONFIG` with no model (its `shipped` line) the same
-backfill costs 358–381 µs per item and 5,230–5,237 B per item (5.2–5.4x the CPU, 2.0x the heap): the graph's add is
-182–192 µs and 2.6 KB of it, recording mentions in the source map 109–115 µs (SQLite, outside the heap). Re-listing
-unchanged items stays 3.4–6.1 µs per item. Arithmetic, not measured: a cold restart that backfills 10,000 users ×
-3,000 items at about 370 µs each is about 11,100 CPU-seconds per process, about half of it the graph. The graph adds
-no paid call; the paid-reader funnel credits it with 4 more hidden facts surfaced of 384 (and 2 more decoys), so it
-stays in the default and a cheaper graph (the `graphLite` trial, not yet built) is the next step (D141).
+The shipped ingest path, measured (2026-11-05, after D150; docs/research/graph-ablation.md): `ingest.bench.ts` times the
+cache's own work (its `core` line) and the same backfill through a `ContextPartner` on `DEFAULT_CONFIG` with no model
+(its `shipped` line), 200 users × 500 items of 1,599 chars on average. Two full runs of
+`bun packages/engine/bench/ingest.bench.ts` at a0e4da57e (shared 4-core box): `core` 68.7 and 65.1 µs per backfilled
+item, 2,562 B of heap per item; `shipped` 261.8 and 258.9 µs and 4,218-4,223 B per item (3.81x and 3.98x the CPU, 1.65x
+the heap). Of the difference, the graph's add (`+graph`) is 86.2 and 90.3 µs and 1,662-1,663 B per item, and recording
+mentions in the source map (`+onStored`) 106.9 and 103.5 µs (SQLite, outside the heap). Re-listing unchanged items stays
+3.9-5.1 µs per item. Before D150 the graph read 4,000 characters per item and the same bench gave `shipped` 358-381 µs
+and 5.2-5.4x `core`, the graph's add 182-192 µs and 2.6 KB; D150 cut the read to 1,000 characters with every train
+screen identical, which closed the planned `graphLite` trial with no switch. Arithmetic, not measured: a cold restart
+that backfills 10,000 users × 3,000 items at about 260 µs each is about 7,800 CPU-seconds per process, about a third of
+it the graph. The graph adds no paid call; the paid-reader funnel credits it with 4 more hidden facts surfaced of 384
+(and 2 more decoys), so it stays in the default (D141).
 
 Anticipation (D60, `anticipate`, in the default since D112; docs/research/moon-anticipate.md) adds no model call on any
 path: its predictions are fixed linear reads of an event's head, and its prefetches are source calls within

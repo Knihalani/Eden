@@ -70,8 +70,12 @@ export class OpenRouterModel implements Model {
       max_tokens: request.maxTokens,
       temperature: request.temperature ?? 0,
       ...(request.json ? { response_format: { type: "json_object" } } : {}),
-      // The reasoning itself is never read: excluding it keeps it off the wire (it is still billed as output).
-      ...(request.reasoning ? { reasoning: { effort: request.reasoning, exclude: true } } : {}),
+      // The reasoning itself is never read: excluding it keeps it off the wire (it is still billed as output). With no
+      // effort asked, an Anthropic model gets no reasoning field, so it does not think (D144, D149: thinking was slower
+      // and dearer for no gain). Another model (an `EDEN_MODEL` override) may reason by default at its provider's
+      // effort, and those tokens count against `maxTokens` (D45's truncation): it gets "low", excluded, as the roles
+      // asked before D155.
+      ...reasoningField(this.options.model, request.reasoning),
       provider: {
         data_collection: this.options.allowLogging ? "allow" : "deny",
         zdr: this.options.allowLogging ? false : (this.options.zdr ?? true),
@@ -154,4 +158,10 @@ interface OpenRouterResponse {
     prompt_tokens_details?: { cached_tokens?: number };
     completion_tokens_details?: { reasoning_tokens?: number };
   };
+}
+
+/** The request's `reasoning` field (see `chat`): none for an Anthropic model asked for none; else excluded, "low". */
+function reasoningField(model: string, effort: ChatRequest["reasoning"]) {
+  if (effort) return { reasoning: { effort, exclude: true } };
+  return model.startsWith("anthropic/") ? {} : { reasoning: { effort: "low" as const, exclude: true } };
 }

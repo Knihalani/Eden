@@ -497,9 +497,12 @@ export interface CardBatch {
   truncated?: boolean;
 }
 
-/** Output cap per batch: ten short cards and low-effort reasoning (D45's lesson: reasoning spends the cap). */
+/**
+ * Output cap per batch: ten short cards. The maker sends no reasoning effort (D155); the cap keeps D45's headroom for
+ * a model that reasons on its own whatever it is asked, since a cut batch is unreadable past the cut.
+ */
 const CARD_MAX_TOKENS = 2_000;
-/** ... and per item past ten: a batch of twenty (`cardsEconomy`) gets 4,000, since reasoning grows with the batch. */
+/** ... and per item past ten: a batch of twenty (`cardsEconomy`) gets 4,000, since the output grows with the batch. */
 const CARD_TOKENS_PER_ITEM = 200;
 /** With `intent`, up to four short requests per item ride along (about 80 tokens each item), so the cap grows. */
 const INTENT_MAX_TOKENS = 3_000;
@@ -520,6 +523,11 @@ export interface CardMakerOptions {
   maxTokens?: number;
 }
 
+/**
+ * The card maker's model call. It sends no reasoning effort (D149, D155): the request every lab card and intent figure
+ * measured (all 5,158 `eden.cards` ledger rows ran with thinking off). "low" on Haiku 5.5 was 1.82x slower at p50 and
+ * 1.54x dearer (docs/COST-MODEL.md), so no option asks for it (D155).
+ */
 export class ModelCardMaker implements CardMaker {
   constructor(
     private readonly model: Model,
@@ -535,7 +543,6 @@ export class ModelCardMaker implements CardMaker {
         (intent
           ? Math.max(INTENT_MAX_TOKENS, INTENT_TOKENS_PER_ITEM * items.length)
           : Math.max(CARD_MAX_TOKENS, CARD_TOKENS_PER_ITEM * items.length)),
-      reasoning: "low",
       json: true,
       signal,
     });

@@ -396,6 +396,21 @@ describe("SourceFanout fetch", () => {
     expect((await f.search([slow], q2, { timeoutMs: 1_000 }))[0]!.status).not.toBe("cached");
   });
 
+  test("held pages are per user: another user or tenant sees none, and one user's drop leaves another's", async () => {
+    const f = new SourceFanout({ sanitize: (x) => x });
+    const userB = { tenantId: "t", userId: "v" };
+    const otherTenant = { tenantId: "t2", userId: "u" };
+    const src = source(async () => [item("renewal on Friday")]);
+    await f.search([src], query(), { timeoutMs: 1_000 });
+    await f.search([src], { ...query(), scope: userB }, { timeoutMs: 1_000 });
+    expect(f.held("s", query())?.items).toHaveLength(1);
+    expect(f.held("s", { ...query(), scope: { tenantId: "t", userId: "w" } })).toBeUndefined();
+    expect(f.held("s", { ...query(), scope: otherTenant })).toBeUndefined();
+    f.dropResults(scope, "s");
+    expect(f.held("s", query())).toBeUndefined();
+    expect(f.held("s", { ...query(), scope: userB })?.items).toHaveLength(1);
+  });
+
   test("a failing source opens the breaker for searches too; a failing gate does not count against the source", async () => {
     const breaker = { minCalls: 2, failureRate: 0.5, openMs: 60_000 };
     const f = new SourceFanout({ sanitize: (x) => x, breaker, ratePerSec: 100, burst: 100 });

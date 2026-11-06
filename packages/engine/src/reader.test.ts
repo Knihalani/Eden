@@ -307,7 +307,7 @@ describe("the reader's prompt and output (reader.ts)", () => {
     expect(readerKey(a)).not.toBe(readerKey(changed));
   });
 
-  test("the model maker asks for JSON with room for reasoning; a cut-off reply is unreadable", async () => {
+  test("the model maker asks for JSON with a 1,000-token-plus cap; a cut-off reply is unreadable", async () => {
     const model = new FakeModel(() => ({ text: '{"bears":[{"i":0,"k":"blocks","why":"x"}]}', truncated: true }));
     const got = await new ModelReaderMaker(model).read(input(), new AbortController().signal);
     expect(got.bears).toBeNull();
@@ -323,17 +323,11 @@ describe("the reader's prompt and output (reader.ts)", () => {
     expect(model.calls[1]!.cacheKey).toBeUndefined();
   });
 
-  test("the model maker asks for low reasoning by default; 'off' sends no effort and 'high' passes through", async () => {
+  test("the model maker sends no reasoning field at all (D144, D155)", async () => {
     const model = new FakeModel(() => '{"bears":[]}');
-    const signal = new AbortController().signal;
-    await new ModelReaderMaker(model).read(input(), signal);
-    await new ModelReaderMaker(model, { reasoning: "off" }).read(input(), signal);
-    await new ModelReaderMaker(model, { reasoning: "high" }).read(input(), signal);
-    expect(model.calls[0]!.reasoning).toBe("low");
-    expect("reasoning" in model.calls[1]!).toBe(false);
-    expect(model.calls[2]!.reasoning).toBe("high");
-    // The prompt is the same whatever the effort: the replay cache key (READER_VERSION) does not change.
-    expect(model.calls[1]!.messages).toEqual(model.calls[0]!.messages);
+    await new ModelReaderMaker(model).read(input(), new AbortController().signal);
+    // The measured reader's request: no `reasoning` key, not `reasoning: undefined`.
+    expect("reasoning" in model.calls[0]!).toBe(false);
   });
 
   test("the model maker hands the call's usage back unchanged, reasoning tokens included", async () => {

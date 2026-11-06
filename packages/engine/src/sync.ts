@@ -268,6 +268,16 @@ export class SyncManager {
   }
 
   /**
+   * Why `changed` ignored a notification for this source: no sync state for it (an unknown user or source, a typo'd
+   * id, a search-only source, or one no lookup has synced yet; telling these apart would need the user's sources,
+   * which is I/O), or synced but not declared `notifies`. O(1), no I/O.
+   */
+  ignoredBecause(scope: Scope, sourceId: string): "not-synced" | "not-notifying" {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    return s ? "not-notifying" : "not-synced";
+  }
+
+  /**
    * Items a notification carried (`syncPush`, `ContextPartner.sourceItems`), already redacted: stored as synced, as a
    * poll would, with no call. The source's copy is not marked current by them (other changes may have come
    * unannounced): only a poll does that. Returns how many were new or changed; 0 for a source not synced yet.

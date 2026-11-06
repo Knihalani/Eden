@@ -123,6 +123,21 @@ export interface ActionCheck {
   latencyMs: number;
 }
 
+/**
+ * Why a change notification (`/v1/sources/changed`) acted on nothing: push sync is off on the server (`syncPush` or
+ * `sync`), the source has no sync state for the user (an unknown user or source id, a search-only source, or one no
+ * lookup has synced yet), or it is synced but not declared `notifies`. Held search pages for the source are dropped
+ * either way while push is on.
+ */
+export type SourceChangedReason = "push-off" | "not-synced" | "not-notifying";
+
+/** What a change notification did: `synced` when the source's copy will be polled at its next use; else why not. */
+export interface SourceChangedResult {
+  synced: boolean;
+  /** Set only when `synced` is false. Optional and additive: absent from older servers. */
+  reason?: SourceChangedReason;
+}
+
 /** How a later turn showed whether the agent used an injection. Feeds source learning. */
 export interface Feedback extends Scope {
   sessionId: string;

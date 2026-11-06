@@ -67,8 +67,9 @@ Eden first grounds the request in the items' structure (D44, `grounding.ts`): wh
 attendees, senders and recipients) and when it starts (`meta.start`). A full name the request acts on matches a
 participant by identity; a request about meeting someone takes only an event with them, any other one also needs a word
 of its topic; days the request names ("this Sunday", "next week", "12 November"), resolved at the user's own UTC offset
-(the one most of their events carry), select the events on them, and "the next X" (an event: "the next call") the
-earliest upcoming. A question about nothing but a time is sent as a listing of those days (`SearchQuery.window`, no
+(the one most of their events carry), select the events on them (an event's day is the date its start was written
+with, except that a start in UTC at a user with another offset is read at theirs: 23:30Z on the 6th is the 7th at
++01:00), and "the next X" (an event: "the next call") the earliest upcoming. A question about nothing but a time is sent as a listing of those days (`SearchQuery.window`, no
 words) to the sources that list by time (`Source.listsByTime`: an event range, not a mail filter), skipping the planner,
 and grounds that day's events. `ask` grounds the same way. Failing that, the best candidate alone is delivered if it
 holds three or more query terms and scores at least 0.8 (coverage plus the entity bonus; D36). The result is returned
@@ -152,6 +153,7 @@ counts the items listed (`demandItems`, `backgroundItems`) beside the calls.
 integrator forwards the provider's change notifications is not polled on its learned change rate. A notification marks
 it behind (`Sync.changed`, O(1)), and the next lookup that reads it polls it once, however many notifications came
 first. A notification that carries the changed items passes the secret gate and is stored as synced, with no call.
+Every notification (with `syncPush` on) also drops the source's held search pages, synced or not (D148).
 Such a source is otherwise polled only by the daily sweep and after `syncPushMaxStaleMs` (24 h) with no notification,
 the bound on a lost one. Sources that do not notify are polled as before.
 

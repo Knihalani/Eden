@@ -387,6 +387,7 @@ describe("change notifications (syncPush)", () => {
     expect(await (await post("/v1/sources/changed", { userId: "u1", sourceId: "crm" })).json()).toEqual({
       ok: true,
       synced: false,
+      reason: "not-synced",
     });
     const items = [{ ref: "d2", title: "Globex", text: "Dana Lee approved the renewal", updatedAt: 1 }];
     expect(await (await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items })).json()).toEqual({
@@ -404,6 +405,68 @@ describe("change notifications (syncPush)", () => {
     expect((await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items: many })).status).toBe(400);
     const badMeta = [{ ref: "r", text: "x", meta: { a: 1 } }];
     expect((await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items: badMeta })).status).toBe(400);
+  });
+});
+
+describe("change notifications: why one did nothing (still 200)", () => {
+  /** A source that lists (so a lookup syncs it for the user) and may declare `notifies`. */
+  const listing = (id: string, notifies: boolean) => ({
+    id,
+    kind: "test",
+    description: id,
+    notifies,
+    search: async () => [],
+    list: async () => ({ items: [], next: null }),
+  });
+  const handlerFor = (engine: Record<string, unknown>) => {
+    const p = buildPartner({
+      sources: async () => [listing("cal", false), listing("mail", true)],
+      model: null,
+      engine,
+    });
+    p.stopSync(); // The test drives the sync itself.
+    const h = createHandler(p, { keys: new Map([[key, "acme"]]), dev: false });
+    const send = (body: unknown) =>
+      h(
+        new Request("http://x/v1/sources/changed", {
+          method: "POST",
+          headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    return { p, send };
+  };
+
+  test("push-off, not-synced (unknown user, typo'd or unsynced source), not-notifying; none when it acts", async () => {
+    const off = handlerFor({ syncPush: false });
+    const res = await off.send({ userId: "u1", sourceId: "mail" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, synced: false, reason: "push-off" });
+
+    const { p, send } = handlerFor({});
+    const scope = { tenantId: "acme", userId: "u1" };
+    // Before a lookup has synced the user's sources, every one of them is not synced.
+    expect(await (await send({ userId: "u1", sourceId: "mail" })).json()).toEqual({
+      ok: true,
+      synced: false,
+      reason: "not-synced",
+    });
+    p.sync!.track(scope, Date.now());
+    while (!p.sync!.warm(scope)) await p.sync!.tick();
+    expect(await (await send({ userId: "u1", sourceId: "mail" })).json()).toEqual({ ok: true, synced: true });
+    expect(await (await send({ userId: "u1", sourceId: "cal" })).json()).toEqual({
+      ok: true,
+      synced: false,
+      reason: "not-notifying",
+    });
+    for (const body of [
+      { userId: "u1", sourceId: "calender" },
+      { userId: "nobody", sourceId: "mail" },
+    ]) {
+      const r = await send(body);
+      expect(r.status).toBe(200);
+      expect(await r.json()).toEqual({ ok: true, synced: false, reason: "not-synced" });
+    }
   });
 });
 

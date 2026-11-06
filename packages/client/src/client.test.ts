@@ -391,3 +391,56 @@ describe("edenId", () => {
     expect(edenId("\uD800".repeat(40)).startsWith("h:")).toBe(true);
   });
 });
+
+describe("change notifications", () => {
+  const replying = (body: () => unknown, status = 200) =>
+    (async () => Response.json(body(), { status })) as unknown as typeof fetch;
+
+  test("sourceNotice exposes the server's reason; sourceChanged stays a boolean", async () => {
+    for (const reason of ["push-off", "not-synced", "not-notifying"] as const) {
+      const eden = new EdenClient({
+        userId: "u",
+        sessionId: "s",
+        fetch: replying(() => ({ ok: true, synced: false, reason })),
+      });
+      expect(await eden.sourceNotice("mail")).toEqual({ synced: false, reason });
+      expect(await eden.sourceChanged("mail")).toBe(false);
+    }
+    const ok = new EdenClient({ userId: "u", sessionId: "s", fetch: replying(() => ({ ok: true, synced: true })) });
+    expect(await ok.sourceNotice("mail")).toEqual({ synced: true });
+    expect(await ok.sourceChanged("mail")).toBe(true);
+  });
+
+  test("an older server (no reason) or an unknown reason: no reason, never a throw", async () => {
+    const old = new EdenClient({ userId: "u", sessionId: "s", fetch: replying(() => ({ ok: true, synced: false })) });
+    expect(await old.sourceNotice("mail")).toEqual({ synced: false });
+    const odd = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      fetch: replying(() => ({ ok: true, synced: "yes", reason: "<b>later</b>" })),
+    });
+    expect(await odd.sourceNotice("mail")).toEqual({ synced: false });
+    expect(await odd.sourceChanged("mail")).toBe(false);
+  });
+
+  test("unreachable or an error status: sourceNotice null, sourceChanged false, reported to onError", async () => {
+    const errors: unknown[] = [];
+    const down = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      baseUrl: "http://127.0.0.1:9",
+      timeoutMs: 200,
+      onError: (e) => errors.push(e),
+    });
+    expect(await down.sourceNotice("mail")).toBeNull();
+    expect(await down.sourceChanged("mail")).toBe(false);
+    const bad = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      fetch: replying(() => ({ error: "sourceId is malformed" }), 400),
+      onError: (e) => errors.push(e),
+    });
+    expect(await bad.sourceNotice("a/b")).toBeNull();
+    expect(errors.length).toBe(3);
+  });
+});

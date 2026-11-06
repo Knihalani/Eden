@@ -125,7 +125,21 @@ describe("OpenRouterModel", () => {
     expect(out).toMatchObject({ text: "{}", costUsd: 0.0001 });
     expect(out.usage.inputTokens).toBe(1000);
     expect(out.truncated).toBe(false);
-    expect(sent.reasoning).toBeUndefined();
+    // A non-Anthropic model asked for no effort is held to "low", excluded: it may reason by default (D45).
+    expect(sent.reasoning).toEqual({ effort: "low", exclude: true });
+  });
+
+  test("an Anthropic model asked for no effort gets no reasoning field, so it does not think (D144, D155)", async () => {
+    let sent: any;
+    const fake = (async (_url: string, init: RequestInit) => {
+      sent = JSON.parse(String(init.body));
+      return Response.json({ choices: [{ message: { content: "ok" } }], usage: {} });
+    }) as unknown as typeof fetch;
+    const model = new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake });
+    await model.chat({ messages: [{ role: "user", content: "hi" }], maxTokens: 50 });
+    expect("reasoning" in sent).toBe(false);
+    await model.chat({ messages: [{ role: "user", content: "hi" }], maxTokens: 50, reasoning: "medium" });
+    expect(sent.reasoning).toEqual({ effort: "medium", exclude: true });
   });
 
   test("data collection is denied unless the caller (the lab, on free models) explicitly allows it", async () => {
@@ -185,7 +199,7 @@ describe("OpenRouterModel", () => {
   test("the default glm request body is unchanged: plain string content, no cache_control (snapshot)", async () => {
     const { sent, fake } = capture();
     await new OpenRouterModel({ apiKey: "k", model: "z-ai/glm-5.3-flash", fetch: fake }).chat(cachedRequest);
-    // The body as it was before cache_control support, byte for byte.
+    // The body as before cache_control support, byte for byte, plus D155's reasoning hold for non-Anthropic models.
     expect(JSON.stringify(sent[0])).toBe(
       JSON.stringify({
         model: "z-ai/glm-5.3-flash",
@@ -198,6 +212,8 @@ describe("OpenRouterModel", () => {
         max_tokens: 50,
         temperature: 0,
         response_format: { type: "json_object" },
+        // A non-Anthropic model is held to low, excluded reasoning when asked for none (it may reason by default).
+        reasoning: { effort: "low", exclude: true },
         provider: { data_collection: "deny", zdr: true, allow_fallbacks: true },
         usage: { include: true },
         session_id: "u-3f9a",
