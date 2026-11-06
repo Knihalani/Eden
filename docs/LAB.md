@@ -392,6 +392,43 @@ below and in D141–D157 that cites 247/127 is that intent-inert reading, not th
   claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl --spend-ledger .local/mkt/ledger.jsonl
   --spend-cap 18 --spend-headroom 0.3 --run-label NAME`); a fresh default reading cost $0.17–0.19 (ledger runs
   ga-default, ga-default2, ib-reader-intent-cache and ib-reader-intent-cache-default).
+- **How the surfaced items were surfaced (D173, reporting only).** Every run (each process's block, then the merged
+  score) prints, after TOTAL, `hidden surfaced` and `decoys surfaced` split into **flagged** (the reader flagged the
+  item in the request's last reading, whatever injection carried it), **rule path** (delivered without the flag, by
+  the injection's `why`: grounded-conflict, fallback, sources, ...) and **listed only** (cited by the ask with no flag
+  and no delivery: `readAsk`'s `rest`, chosen minus explicit rejections), and `decoys flagged in pool` beside `decoys
+  in pool`; `--json` carries `surfacedBy` on each perTask row. The recipe above, 2026-11-06 (16 s, $0): TOTAL 273/137
+  and pool 257/240 unchanged; decoys surfaced 137 = flagged 23 + rule path 68 (grounded-conflict 28, fallback 19,
+  sources 9, anticipated-conflict 4, grounded-card 3, cache 2, grounded-clash 2, grounded-graph 1) + listed only 46;
+  decoys flagged in pool 23 of 240; hidden 273 = 227 + 22 + 24. **The O7 precision gates are unchanged**: decoys in
+  pool and total surfaced (D165, D173). Gating on flagged plus rule path would drop the 46 listed-only decoys and
+  loosen a precision guard, so it needs a new decision; the split says where a decoy came from, not that it is
+  harmless.
+- **Planted coverage of the intent replay (D173).** With an intent file loaded, every run prints `planted items with
+  an intent replay line: hidden H/N, decoys D/N` beside `replayed requests for X of Y items asked`, with a WARNING
+  below 100%. Planted items are a few percent of the items asked but most of the file's holes: on 2026-11-06
+  `intent-v2` covered 13,440 of 13,604 items asked and only 286/384 hidden and 341/384 decoys (98 and 43 not in
+  replay; 141 of the 164 misses), so the $0 screens run a quarter of planted hidden facts with no requests. A WARNING
+  means intent and bridge screens on that run under-read intent; top the file up (`cards-enrich.ts --intent`,
+  metered) before trusting a bucket split.
+- **`--ask-diag F` buckets** (one process). A planted item the ask left unranked is split into not cached; not sent,
+  prefilter rejects; **not in replay** (the intent replay has no line for its content, a lab artefact, told apart
+  from a line with no requests since D173); no intent requests; and requests but no match: no shared term, under
+  thresholds, **passes but past the first intentHits raw hits** (it passes the thresholds but the engine never sees
+  it), over thresholds (inside the engine's cut and still not a candidate). The intent hit is read as the engine
+  reads it (`intentFinds` with k = `intentHits` and the ask's arrival, thresholds after; partner.ts `intentFinds`,
+  cards.ts `intentFinds`), plus an unbounded call for the past-the-cut bucket; expired cards either call drops are
+  counted on the `dropped` line. A last line counts every row not in replay, ranked or not. The recipe above with
+  `-- --ask-diag F` (one process), 2026-11-06: hidden rank -1 64/384 = not in replay 18, no intent requests 3,
+  requests but no match 43 (no shared term 8, under thresholds 35, past the cut 0, over 0); decoys 77/384 = not
+  sent 4, not in replay 14, no match 59 (21, 38, 0, 0); not in replay over every row: hidden 98/384, decoys 43/384.
+- **Changes to the ask's cue are screened with a paid reader, never the stub (D174).** The stub got the sign of an
+  ask-wording effect wrong: on train1–6 seeds 41–42 it put a narrow agent-worded ask at 191/188 against 243/228
+  request-worded, and a question-plus-request union back at 239/227; paid Haiku reads (ledger runs
+  `audit3r2-narrow` $0.1185, `audit3r2-union` $0.1851) gave narrow 279/129 against the replay's 273/137 (paired
+  hidden +1.6 points, CI -1.2..+4.4) and union 281/140 against narrow (hidden +0.5, CI -2.1..+3.1; decoys +2.9, CI
+  -0.7..+6.4). These are D174's figures, not re-run here. Screen ask-cue changes with a metered live top-up of this
+  cache.
 
 ### 3. Blind check (once, pre-registered)
 
