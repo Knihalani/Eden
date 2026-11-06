@@ -32,7 +32,17 @@
 import { existsSync, readFileSync } from "node:fs";
 import { Rng } from "../rng";
 import { backfillShares, type Background, type RunResult, type Task } from "./ab-common";
-import { TRAFFIC_WEIGHTS, weightedFromReport, weightedLines, weightedRow, type WeightedRow } from "./pi-ab-weighted";
+import {
+  mixLines,
+  mixRow,
+  REALUSE_MIX,
+  TRAFFIC_WEIGHTS,
+  weightedFromReport,
+  weightedLines,
+  weightedRow,
+  type MixRow,
+  type WeightedRow,
+} from "./pi-ab-weighted";
 import { pairedWith } from "./pi-conditions";
 import {
   cacheNeutral,
@@ -192,10 +202,12 @@ console.log(
 );
 
 // ---- Outcomes and cost, per condition and task kind.
-const KINDS = ["hidden", "control", "request", "arrival", "offworld"] as const;
+const KINDS = ["hidden", "control", "neutral", "request", "arrival", "offworld"] as const;
 const what: Record<string, string> = {
   hidden: "hidden fact raised",
   control: "false concern",
+  // Nothing planted (neutral.ts): the grader counts any concern as a false one.
+  neutral: "any concern (nothing planted; counts as a false concern)",
   request: "fact recall",
   arrival: "fact recall",
   offworld: "",
@@ -250,6 +262,25 @@ for (const kind of KINDS) {
     conditions.map((c) => weightedRow(c, samplesOf(c, "hidden"), samplesOf(c, "control"), w)),
   ).filter((r): r is WeightedRow => r !== null);
   for (const line of weightedLines(rows)) console.log(line);
+  // RealUse-1's mix (1 hidden, 1 control, 8 neutral in 10), only for runs with neutral tasks.
+  const rateOf = (c: string, kind: Task["kind"]) => {
+    const graded = ok.filter((r) => r.condition === c && r.facts && tasks.get(r.task)!.kind === kind);
+    return graded.length ? mean(graded.map(recall)) : undefined;
+  };
+  const mixes = conditions
+    .map((c) =>
+      mixRow(
+        c,
+        Object.fromEntries(
+          (["hidden", "control", "neutral"] as const).map((k) => {
+            const rate = rateOf(c, k);
+            return [k, { share: REALUSE_MIX[k], samples: samplesOf(c, k), ...(rate !== undefined ? { rate } : {}) }];
+          }),
+        ),
+      ),
+    )
+    .filter((r): r is MixRow => r !== null);
+  for (const line of mixLines(mixes)) console.log(line);
 }
 
 // ---- The critical path: where each task's wall time went.
@@ -403,7 +434,7 @@ for (const c of conditions) {
 }
 console.log("\n== paired differences (a − b), bootstrap 95% interval over tasks");
 for (const [a, b] of PAIRS) {
-  for (const kind of ["hidden", "control", "request", "arrival"] as const) {
+  for (const kind of ["hidden", "control", "neutral", "request", "arrival"] as const) {
     const pairs = [...byTask.values()].filter((v) => v.has(a) && v.has(b) && tasks.get(v.get(a)!.task)!.kind === kind);
     const graded = pairs.filter((v) => v.get(a)!.facts && v.get(b)!.facts);
     if (!pairs.length) continue;

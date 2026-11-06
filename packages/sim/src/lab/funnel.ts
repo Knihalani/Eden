@@ -30,6 +30,8 @@
  * - With intent on and nothing replayed (`--intent none`, an uncovered run, or a file for other items), every TOTAL
  *   and pool line and the JSON label say `[intent inert: no replay]`; `--reader stub|oracle` refuse a `--baseline`
  *   whose intent differs.
+ * - `-- --neutral`: also the `neutral` variant of the suites that build it (neutral.ts, held-out 14): the same
+ *   requests with nothing planted, reported on NEUTRAL lines and in the JSON's `neutral` block, never in the score.
  * - `-- --wait-ms N` (the observe's wait) prints the deliveries made before the agent's first model call;
  *   `-- --overlap` sends each request while another lookup is in flight (slowPathQueue's case; scores not
  *   comparable). docs/LAB.md 1c.
@@ -69,6 +71,7 @@ import {
   type PartOut,
 } from "./funnel-merge";
 import { effective, PRESETS } from "./presets";
+import { mergeNeutral, neutralLine, type NeutralOut } from "./neutral";
 import { allMissedHint, cacheModels, missGate, MISS_EXIT } from "./reader-disk";
 import {
   beforeModelLine,
@@ -431,7 +434,9 @@ async function runGroups() {
     cleanup();
     process.exit(stopping ?? results[failed]!.status ?? 1);
   }
-  const parts = groups.map((_, i) => JSON.parse(readFileSync(partJson(i), "utf8")) as PartOut);
+  const parts = groups.map(
+    (_, i) => JSON.parse(readFileSync(partJson(i), "utf8")) as PartOut & { neutral?: NeutralOut },
+  );
   writeFileSync(out, JSON.stringify(merged(parts), null, 2));
 }
 
@@ -439,8 +444,14 @@ async function runGroups() {
  * The processes' JSON in hidden-funnel.ts's own shape for the same suites and seeds (`mergeParts`). Prints the merged
  * totals, since each process's own summary lines cover its block only.
  */
-function merged(parts: PartOut[]) {
+function merged(parts: (PartOut & { neutral?: NeutralOut })[]) {
   const m = mergeParts(parts, groups, suites, seedList);
+  // `-- --neutral`: the neutral rows, merged apart from the planted tasks' (neutral.ts).
+  const neutral = mergeNeutral(parts, suites, seedList);
+  if (neutral) {
+    for (const [suite, r] of Object.entries(neutral.suites)) console.log(`merged ${neutralLine(suite, r)}`);
+    if (Object.keys(neutral.suites).length > 1) console.log(`merged ${neutralLine("TOTAL", neutral.total)}`);
+  }
   const { total, sync } = m;
   const intent = { state: intentState(run, m.intentUse), ...m.intentUse };
   const n = Math.max(1, total.hidden.n + total.control.n);
@@ -492,6 +503,7 @@ function merged(parts: PartOut[]) {
     ...(m.reader ? { reader: m.reader } : {}),
     ...(suites.length > 1 ? { suites: m.bySuite } : {}),
     perTask: m.perTask,
+    ...(neutral ? { neutral } : {}),
   };
 }
 

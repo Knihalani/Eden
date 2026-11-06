@@ -112,7 +112,8 @@ def main():
         lines.append(f"Eden's background spend (cards, intent), cold-cache upper bound: ${1000 * bg:.3f} per 1,000 "
                      "tasks, "
                      "included in every Agent + Eden cost below.\n")
-        for kind in ("hidden", "control"):
+        # neutral (RealUse-1): the same requests with nothing planted; any concern counts as a false one.
+        for kind in ("hidden", "control", "neutral"):
             ids = sorted(
                 tid
                 for (c, tid), (r, t) in runs.items()
@@ -134,7 +135,7 @@ def main():
                     "billed": [r["costUsd"] for r, _ in rs],
                 }
             a, b = rows["eden"], rows["tools"]
-            what = "hidden facts raised" if kind == "hidden" else "false concerns"
+            what = {"hidden": "hidden facts raised", "control": "false concerns"}.get(kind, "any concern (neutral)")
             lines.append(f"### {kind} tasks (n = {len(ids)} paired)\n")
             lines.append("| | Agent alone | Agent + Eden | Difference (95% CI) |")
             lines.append("|---|---|---|---|")

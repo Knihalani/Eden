@@ -11,7 +11,8 @@ cards-enrich, presets, suites, free, spend` (`.ts`): check `git log origin/main`
 
 | File | Owns |
 |---|---|
-| `suites.ts` | `SUITES` by name, `parseSuites` (`all`, `heldout-all`, `train`), `UNRUN_BLIND` (held-out 9-13, left out of `all`; all read already) |
+| `suites.ts` | `SUITES` by name, `parseSuites` (`all`, `heldout-all`, `train`), `UNRUN_BLIND` (held-out 9-14, left out of `all`; 9-13 read already, 14 run once for RealUse-1) |
+| `neutral.ts` | The `neutral` variant (RealUse-1): `NEUTRAL_SUITES` (held-out 14), `variantsFor`, the funnel's NEUTRAL summary and its merge |
 | `hidden-context.ts`, `hidden-*.ts` | The suites: each plants one item (hidden) or a near-miss decoy (control) per template in a world |
 | `presets.ts` | `PRESETS`: only `default`, `minus-<part>` (one per `PARTS` entry) and `minus-all` (the core), made from @eden/engine (D112); `effective(override)` reads what a preset runs |
 | `hidden-funnel.ts` | The no-model funnel: each task through Eden alone; returned/cached/delivered, decoys, calls, ms; `--ask`, `--cards`, `--intent`, `--reader`, `--timeline`, `--json` |

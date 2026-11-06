@@ -67,6 +67,10 @@
  *
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
+ *
+ * `--neutral` also runs the `neutral` variant of the suites that build it (neutral.ts: the same requests, nothing
+ * planted) and prints a NEUTRAL line per suite (any packet delivered, items, bytes, ask items, calls, ms per task); its
+ * rows go to the JSON's `neutral` block, never to `rows`, `total` or `perTask`.
  */
 import { appendFileSync, writeFileSync } from "node:fs";
 import {
@@ -124,6 +128,15 @@ import {
   type ScreenRow,
 } from "./reader-stub";
 import { packetLine } from "./uptake";
+import {
+  addNeutralRows,
+  addNeutralTask,
+  neutralLine,
+  neutralRow,
+  supportsNeutral,
+  type NeutralOut,
+  type NeutralRow,
+} from "./neutral";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
 import {
@@ -188,7 +201,10 @@ const cli = flags(
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
-      ["overlap", "sync", "ask", "serial", "allow-misses", "no-record", "cpu", "allow-logging"].map((k) => [k, B]),
+      ["overlap", "sync", "ask", "serial", "allow-misses", "no-record", "cpu", "allow-logging", "neutral"].map((k) => [
+        k,
+        B,
+      ]),
     ),
   },
   `
@@ -249,6 +265,12 @@ const ASK = cli.has("ask");
 const ASK_Q = opt("ask-question", "request");
 if (ASK_Q !== "request" && ASK_Q !== "narrow") throw new Error("--ask-question must be request or narrow");
 const SERIAL = cli.has("serial");
+/**
+ * `--neutral`: also run each suite's `neutral` variant where the suite builds it (neutral.ts): the same requests with
+ * nothing planted. Reported apart (the NEUTRAL lines and the JSON's `neutral` block); the hidden and control figures
+ * are unchanged by it.
+ */
+const NEUTRAL = cli.has("neutral");
 const NOOP_SPANS = opt("spans", "") === "noop";
 const REAL_SYNC = RUN.sync;
 if (REAL_SYNC && SYNC) throw new Error("--sync (the oracle) and the real sync (config sync) are exclusive");
@@ -499,12 +521,14 @@ type Rows = Map<string, { hidden: Row; control: Row }>;
 const row = (): Row => ({ n: 0, returned: 0, cached: 0, delivered: 0, calls: 0, ms: 0 });
 
 /** One suite through the funnel: per-template rows and one record per task. Each suite plants its own worlds. */
-async function runSuite(suite: string): Promise<{ rows: Rows; perTask: Record<string, unknown>[]; wall: number }> {
+async function runSuite(
+  suite: string,
+): Promise<{ rows: Rows; perTask: Record<string, unknown>[]; wall: number; neutral: TaskRow[] }> {
   const rows: Rows = new Map();
   const perTask: Record<string, unknown>[] = [];
   const started = performance.now();
   const variants = ["hidden", "control"] as const;
-  const runVariant = async (variant: (typeof variants)[number]) => {
+  const runVariant = async (variant: (typeof variants)[number] | "neutral") => {
     const results: TaskRow[][] = [];
     if (SERIAL) for (const seed of SEEDS) results.push(await runSeed(suite, variant, seed));
     else results.push(...(await Promise.all(SEEDS.map((seed) => runSeed(suite, variant, seed)))));
@@ -512,10 +536,20 @@ async function runSuite(suite: string): Promise<{ rows: Rows; perTask: Record<st
   };
   // At `--time` > 0 a task's wall time is mostly connector sleeps, so the two variants (each in its own worlds) run
   // at once, as seeds do; `--serial` keeps them one after the other. The rows are folded in the same order either way.
-  const byVariant =
-    TIME > 0 && !SERIAL
-      ? await Promise.all(variants.map(runVariant))
-      : [await runVariant("hidden"), await runVariant("control")];
+  // `--neutral` on a suite that builds it: the same requests with nothing planted, after (or beside) the two variants;
+  // its rows stay out of `rows` and `perTask`, so every hidden/control figure is the run's without it.
+  const neutralToo = NEUTRAL && supportsNeutral(suite);
+  const runNeutral = async () => (neutralToo ? (await runVariant("neutral")).flat() : []);
+  let neutral: TaskRow[] = [];
+  let byVariant: TaskRow[][][];
+  if (TIME > 0 && !SERIAL) {
+    const [h, c, n] = await Promise.all([runVariant("hidden"), runVariant("control"), runNeutral()]);
+    byVariant = [h, c];
+    neutral = n;
+  } else {
+    byVariant = [await runVariant("hidden"), await runVariant("control")];
+    neutral = await runNeutral();
+  }
   for (const [v, results] of byVariant.entries()) {
     const variant = variants[v]!;
     for (const r of results) {
@@ -533,12 +567,12 @@ async function runSuite(suite: string): Promise<{ rows: Rows; perTask: Record<st
       }
     }
   }
-  return { rows, perTask, wall: (performance.now() - started) / 1000 };
+  return { rows, perTask, wall: (performance.now() - started) / 1000, neutral };
 }
 
 interface TaskRow {
   seed: number;
-  variant: "hidden" | "control";
+  variant: "hidden" | "control" | "neutral";
   template: string;
   returned: boolean;
   cached: boolean;
@@ -589,7 +623,7 @@ interface TaskRow {
 }
 
 /** One suite's tasks in one seed's world, in order, as one user would bring them. */
-async function runSeed(suite: string, variant: "hidden" | "control", seed: number): Promise<TaskRow[]> {
+async function runSeed(suite: string, variant: "hidden" | "control" | "neutral", seed: number): Promise<TaskRow[]> {
   const perTask: TaskRow[] = [];
   const world = buildWorld({ seed: seed * 1_000 });
   const before = world.items.length;
@@ -840,7 +874,8 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
         syncUse.background += n;
       }
     } else clock += 3_600_000;
-    const id = planted[i]!.id;
+    // A neutral task plants nothing: no item has the empty id, so every planted-item field reads false.
+    const id = variant === "neutral" ? "" : planted[i]!.id;
     const sessionId = task.id;
     returned.clear();
     prefetched.clear();
@@ -996,7 +1031,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       // so a byte cut can be checked for the fact it keeps (docs/research/gen-tokens.md).
       const extra = {
         detail: task.detail,
-        plantedText: `${planted[i]!.title} ${planted[i]!.text}`,
+        plantedText: planted[i] ? `${planted[i]!.title} ${planted[i]!.text}` : "",
         ...(answered ? { answer: answered.answer, answerIds: answered.citations.map((c) => c.itemId) } : {}),
       };
       appendFileSync(PACKETS, JSON.stringify({ ...line, ...extra }) + "\n");
@@ -1160,9 +1195,10 @@ if (ORACLE) {
 const header = "template                 hidden: returned delivered   control: decoy delivered   calls/task  ms/task";
 const grand = { hidden: row(), control: row() };
 const runs: { suite: string; rows: Rows; perTask: Record<string, unknown>[]; wall: number; total: typeof grand }[] = [];
+const neutralOut: NeutralOut = { total: neutralRow(), suites: {}, perTask: [] };
 const cpu0 = process.cpuUsage();
 for (const suite of SUITE_LIST) {
-  const { rows, perTask, wall } = await runSuite(suite);
+  const { rows, perTask, wall, neutral } = await runSuite(suite);
   const total = { hidden: row(), control: row() };
   if (SUITE_LIST.length > 1) console.log(`\n== ${suite}`);
   console.log(header);
@@ -1174,6 +1210,17 @@ for (const suite of SUITE_LIST) {
   for (const l of screenLines(suite, perTask as unknown as ScreenRow[], PACKET_K)) console.log(l + TAG + inertTag());
   // D173: surfaced split into reader-flagged, rule path and listed only (reporting only; the gates are unchanged).
   for (const l of surfacedLines(suite, perTask as unknown as SurfacedRow[])) console.log(l + TAG + inertTag());
+  if (neutral.length) {
+    const n = neutralRow();
+    for (const t of neutral) {
+      addNeutralTask(n, t);
+      const { variant: _v, ...rest } = t;
+      neutralOut.perTask.push({ suite, ...rest });
+    }
+    neutralOut.suites[suite] = n;
+    addNeutralRows(neutralOut.total, n);
+    console.log(neutralLine(suite, n) + TAG + inertTag());
+  }
   add(grand, total);
   runs.push({ suite, rows, perTask, wall, total });
 }
@@ -1185,6 +1232,11 @@ if (SUITE_LIST.length > 1) {
   const all = runs.flatMap((r) => r.perTask) as unknown as ScreenRow[];
   for (const l of screenLines("TOTAL", all, PACKET_K)) console.log(l + TAG + inertTag());
   for (const l of surfacedLines("TOTAL", all as unknown as SurfacedRow[])) console.log(l + TAG + inertTag());
+}
+if (NEUTRAL) {
+  const skipped = SUITE_LIST.filter((s) => !supportsNeutral(s));
+  if (skipped.length) console.log(`--neutral: ${skipped.join(", ")} build no neutral variant (neutral.ts)`);
+  if (Object.keys(neutralOut.suites).length > 1) console.log(neutralLine("TOTAL", neutralOut.total) + TAG + inertTag());
 }
 // What an agent that collects before its first model call would hold (`beforeModel`), against the wait it gave.
 {
@@ -1398,6 +1450,8 @@ if (out) {
         ...(SUITE_LIST.length > 1 ? { suites } : {}),
         // Per task, with the suite: how each planted item was delivered (`why`), for breakdowns by path.
         perTask: runs.flatMap((r) => r.perTask.map((t) => ({ suite: r.suite, ...t }))),
+        // `--neutral`: the neutral variant's rows, apart from the planted tasks' (neutral.ts).
+        ...(NEUTRAL ? { neutral: neutralOut } : {}),
       },
       null,
       2,

@@ -18,7 +18,7 @@ interface Task {
   id: string;
   /** Absent in results files written before suites.ts: then read from the id. */
   suite?: string;
-  kind: "request" | "arrival" | "offworld" | "hidden" | "control";
+  kind: "request" | "arrival" | "offworld" | "hidden" | "control" | "neutral";
   type: string;
   must: { id: string; detail: string }[];
 }
@@ -75,7 +75,9 @@ const tasks = new Map(run.tasks.map((t) => [t.id, t]));
 /** A task's suite: recorded, or the id's second part (`w41:heldout2-control:<template>`) for hidden-context tasks. */
 const suiteOf = (t: Task) =>
   t.suite ??
-  (t.kind === "hidden" || t.kind === "control" ? (t.id.split(":")[1] ?? "hidden").replace(/-control$/, "") : "lookups");
+  (t.kind === "hidden" || t.kind === "control" || t.kind === "neutral"
+    ? (t.id.split(":")[1] ?? "hidden").replace(/-(control|neutral)$/, "")
+    : "lookups");
 const conditions = [...new Set(results.map((r) => r.condition))];
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
@@ -104,8 +106,11 @@ const ungraded = ok.filter((r) => tasks.get(r.task)!.kind !== "offworld" && !r.f
 console.log(`model ${run.model}, grader ${run.grader}, spent $${run.spent.toFixed(4)}, ${results.length} runs`);
 console.log(`errors ${results.length - ok.length}, ungraded ${ungraded}${ungraded ? " (left out of recall)" : ""}`);
 
-for (const kind of ["request", "arrival", "hidden", "control", "offworld"] as const) {
-  console.log(`\n== ${kind}`);
+for (const kind of ["request", "arrival", "hidden", "control", "neutral", "offworld"] as const) {
+  const rows = conditions.filter((c) => ok.some((r) => r.condition === c && tasks.get(r.task)!.kind === kind));
+  // A kind no run has prints nothing (neutral is new: a results file without it reads as before).
+  if (kind === "neutral" && !rows.length) continue;
+  console.log(`\n== ${kind}${kind === "neutral" ? " (nothing planted: any concern counts as a false one)" : ""}`);
   for (const c of conditions) {
     const rs = ok.filter((r) => r.condition === c && tasks.get(r.task)!.kind === kind);
     if (!rs.length) continue;
@@ -156,8 +161,8 @@ for (const [a, b] of [
   ["both-judge+p", "tools"],
 ] as const) {
   // Pooled only where the kinds measure one thing: a hidden task's hit and a control's false alarm do not add.
-  const mixed = run.tasks.some((t) => t.kind === "control");
-  for (const kind of [mixed ? undefined : null, "request", "arrival", "hidden", "control"] as const) {
+  const mixed = run.tasks.some((t) => t.kind === "control" || t.kind === "neutral");
+  for (const kind of [mixed ? undefined : null, "request", "arrival", "hidden", "control", "neutral"] as const) {
     if (kind === undefined) continue;
     const xs = [...byTask]
       .filter(([t, v]) => v.has(a) && v.has(b) && (kind === null || tasks.get(t)!.kind === kind))
@@ -175,11 +180,16 @@ for (const [a, b] of [
 }
 
 // Hidden-context tasks: how many of each template's tasks each condition raised the hidden fact on.
-for (const kind of ["hidden", "control"] as const) {
+for (const kind of ["hidden", "control", "neutral"] as const) {
   const hidden = ok.filter((r) => tasks.get(r.task)!.kind === kind && r.facts);
   if (!hidden.length) continue;
   const types = [...new Set(hidden.map((r) => tasks.get(r.task)!.type))];
-  const what = kind === "hidden" ? "hidden context raised" : "false concern raised (control)";
+  const what =
+    kind === "hidden"
+      ? "hidden context raised"
+      : kind === "control"
+        ? "false concern raised (control)"
+        : "any concern raised (neutral)";
   console.log(`\n== ${what}, by template (${conditions.join(" / ")})`);
   for (const type of types) {
     const cells = conditions.map((c) => {
@@ -191,8 +201,10 @@ for (const kind of ["hidden", "control"] as const) {
 }
 
 // Per suite: how often each condition raised the hidden fact (hidden tasks) and a false concern (control tasks).
-const hiddenSuites = [...new Set(run.tasks.filter((t) => t.kind === "hidden" || t.kind === "control").map(suiteOf))];
-const suiteRate = (c: string, suite: string, kind: "hidden" | "control") => {
+const hiddenSuites = [
+  ...new Set(run.tasks.filter((t) => t.kind === "hidden" || t.kind === "control" || t.kind === "neutral").map(suiteOf)),
+];
+const suiteRate = (c: string, suite: string, kind: "hidden" | "control" | "neutral") => {
   const rs = ok.filter(
     (r) => r.condition === c && r.facts && tasks.get(r.task)!.kind === kind && suiteOf(tasks.get(r.task)!) === suite,
   );
@@ -204,10 +216,14 @@ if (hiddenSuites.length) {
     for (const c of conditions) {
       const h = suiteRate(c, suite, "hidden");
       const f = suiteRate(c, suite, "control");
-      if (!h.n && !f.n) continue;
+      const z = suiteRate(c, suite, "neutral");
+      if (!h.n && !f.n && !z.n) continue;
       const cell = (x: { hit: number; n: number }) =>
         x.n ? `${`${x.hit}/${x.n}`.padStart(7)} ${(x.hit / x.n).toFixed(3)}` : `${"-".padStart(7)}      `;
-      console.log(`${suite.padEnd(10)} ${c.padEnd(13)} hidden ${cell(h)}   false-concern ${cell(f)}`);
+      console.log(
+        `${suite.padEnd(10)} ${c.padEnd(13)} hidden ${cell(h)}   false-concern ${cell(f)}` +
+          (z.n ? `   neutral-concern ${cell(z)}` : ""),
+      );
     }
   }
 }
@@ -233,7 +249,7 @@ if (at >= 0) {
   const metrics: Record<string, number> = { graderAgreement: agree / Math.max(1, total), runs: results.length };
   const q = (xs: number[], p: number) => [...xs].sort((a, b) => a - b)[Math.floor((xs.length - 1) * p)] ?? 0;
   for (const c of conditions) {
-    for (const kind of ["request", "arrival", "hidden", "control", "offworld"] as const) {
+    for (const kind of ["request", "arrival", "hidden", "control", "neutral", "offworld"] as const) {
       const rs = ok.filter((r) => r.condition === c && tasks.get(r.task)!.kind === kind);
       if (!rs.length) continue;
       const g = rs.filter((r) => r.facts);
@@ -268,6 +284,8 @@ if (at >= 0) {
       const f = suiteRate(c, suite, "control");
       if (h.n) metrics[`${c}.suite.${suite}.hidden`] = h.hit / h.n;
       if (f.n) metrics[`${c}.suite.${suite}.falseConcern`] = f.hit / f.n;
+      const z = suiteRate(c, suite, "neutral");
+      if (z.n) metrics[`${c}.suite.${suite}.neutralConcern`] = z.hit / z.n;
     }
   }
   const rows = results.map((r) => {
