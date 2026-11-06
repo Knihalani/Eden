@@ -23,7 +23,14 @@ answer bytes?
   the planted item is cited, `askKept`: of the task's `detail` key words (numbers, words of four letters or more) that
   the planted item holds, the share the answer's text holds too. A proxy for "the answer says the fact", not a grader.
 - `hidden-funnel.ts --ask-diag out.jsonl` writes per task the planted id, whether it was cached, its rank among the
-  ask's candidates, the cited ids, the candidates' facts, and the answer's text (sim data only).
+  ask's candidates, the cited ids, the candidates' facts, and the answer's text (sim data only). With cards and intent
+  on, each row also carries `coverage` (`ask-coverage.ts`): `cardRead` (the card model was sent the item),
+  `notSentPrefilterRejects` (not sent, and the prefilter rejects it: `cardsLean` skipped it or it was still queued),
+  `replayRequests` (requests the loaded intent replay holds for its content, null with none loaded), `heldRequests`
+  (requests the engine held at the ask) and `intent` (its hit for the question: `coverage`, `matched`, `passes` the
+  `intentMinMatched`/`intentMinCoverage` thresholds, and `rank` among the passing hits, -1 when it fails them; null
+  with no shared term or no requests). The run prints the rank -1 items per variant split into those buckets
+  (audit 2026-11-06 F7 has the train numbers).
 - `pi-ab.ts` records each `ask_context` call's question (through `sanitizeForStore`, at most 500 characters), the ids
   its answer cited and its bytes, on the task line (`asks`, `UptakeLog.answer`) and as a timeline point (`eden.ask`).
   The sim's data is fake; the point is that a later run can replay the questions agents really ask, which the funnel

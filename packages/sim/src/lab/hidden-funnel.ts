@@ -79,6 +79,10 @@ import {
   cpuNow,
   ItemCache,
   type CandidateDump,
+  type CardMaker,
+  worthCarding,
+  worthCardingStrict,
+  ECONOMY_CARD_LIMITS,
   type Trace,
   readerMessages,
 } from "@eden/engine";
@@ -86,6 +90,7 @@ import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner } from "@eden/sources";
+import { sanitizeForStore } from "@eden/redact";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
@@ -121,6 +126,7 @@ import {
 import { packetLine } from "./uptake";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
+import { coverageLines, intentPlace, type AskCoverage } from "./ask-coverage";
 
 const args = process.argv.slice(2);
 const V = "value" as const;
@@ -416,12 +422,27 @@ if (PACKETS) writeFileSync(PACKETS, "");
  */
 const CANDIDATES = opt("candidates", "");
 if (CANDIDATES) writeFileSync(CANDIDATES, "");
+/** partner.ts's `INTENT_QUERY_CHARS` (not exported): `--ask-diag` searches the intent index with as much. */
+const INTENT_QUERY_CHARS = 400;
 /**
  * `--ask-diag out.jsonl` (with `--ask`): each task's ask candidates with their facts (`CandidateDump`, path "ask"),
  * the planted item's id and rank among them, and whether it was cached, one line per task (docs/research/gen-ask.md).
+ * Each line's `coverage` (`ask-coverage.ts`, with cards and intent on) says whether the intent index could reach the
+ * planted item: requests in the replay and held at the ask, sent to the card model or not, and its hit for the
+ * question; the run splits the rank -1 items into not sent (prefilter rejects), no intent requests, and no match.
  */
 const ASK_DIAG = opt("ask-diag", "");
 if (ASK_DIAG) writeFileSync(ASK_DIAG, "");
+/**
+ * Each `--ask-diag` row's variant, rank, cached flag and coverage facts (`ask-coverage.ts`), for the run's split of
+ * the rank -1 items: not sent (prefilter rejects), no intent requests, requests but no match.
+ */
+const askDiagRows: { variant: string; rank: number; cached: boolean; coverage: AskCoverage | null }[] = [];
+/** Expired cards the diagnostic's own intent search dropped (`intentFinds` drops what it passes); printed when any. */
+let diagDropped = 0;
+/** The enricher's prefilter as configured (`cardsEconomy` is strict unless `--card-limits` says otherwise). */
+const STRICT_PREFILTER =
+  typeof CARD_LIMITS.strict === "boolean" ? CARD_LIMITS.strict : RUN.cardsEconomy && !!ECONOMY_CARD_LIMITS.strict;
 const timeline = TIMELINE
   ? new Timeline(TIMELINE, { tool: "hidden-funnel", suites: SUITE_LIST, seeds: SEEDS, config: CONFIG, sync: SYNC })
   : null;
@@ -605,8 +626,22 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       syncUse.demand += t.syncCalls ?? 0;
     }
   };
-  const cards = cardMaker
-    ? new CardEnricher({ maker: cardMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
+  // With `--ask-diag`, the lane's own record of the contents its card model was sent (by `cardKey`): the shared maker
+  // serves every lane, and hidden and control worlds of one seed share most items' content.
+  const sentToCards = new Set<string>();
+  const laneMaker: CardMaker | null =
+    cardMaker && ASK_DIAG
+      ? {
+          // Not `async`: the maker's own promise, so the drain batches as without `--ask-diag` (an async wrapper's
+          // microtask hops cut the cards-use calls from 822 to 766 and moved when requests were held).
+          make: (items, today, signal, retry, intent) => {
+            for (const it of items) sentToCards.add(cardKey(it));
+            return cardMaker.make(items, today, signal, retry, intent);
+          },
+        }
+      : cardMaker;
+  const cards = laneMaker
+    ? new CardEnricher({ maker: laneMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
     : null;
   if (cards) cardLanes.push(cards);
   // The lane's asks run one at a time: the model's latency for this task's call (as made, when replayed) is kept so a
@@ -701,6 +736,43 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     return !!(s?.inflight || s?.ant?.running || s?.behind);
   };
   const scope = { tenantId: "funnel", userId: `w${seed}` };
+  /**
+   * `--ask-diag`: whether the intent index could reach a planted item at its ask (`ask-coverage.ts`). Read after the
+   * ask, at no call: the replay's requests for its content, the requests the engine held, whether the card model was
+   * sent it and whether the prefilter rejects it, and its hit for the question (`intentPlace`) as the engine
+   * searches it (redacted, its first `INTENT_QUERY_CHARS`), against the thresholds. Null with cards or intent off.
+   */
+  const coverageOf = (item: ReturnType<ItemCache["get"]>, question: string): AskCoverage | null => {
+    if (!cards || !RUN.cards || !RUN.intent || !item) return null;
+    const hash = cardKey(item);
+    const cardRead = sentToCards.has(hash);
+    const prefilter = STRICT_PREFILTER ? worthCardingStrict(item) : worthCarding(item);
+    const replay = INTENT_FILES.length ? (cardMaker?.requests.get(hash)?.length ?? 0) : null;
+    const held = cards.requestsOf(scope, item.id, clock).length;
+    let intent: AskCoverage["intent"] = null;
+    if (held > 0) {
+      // Every hash the user holds, so the planted item's place is known even far down; a hit's place among the
+      // passing ones is what the engine's first `intentHits` are cut from.
+      const size = cards.intentSize(scope);
+      const finds = cards.intentFinds(
+        scope,
+        sanitizeForStore(question).slice(0, INTENT_QUERY_CHARS),
+        clock,
+        size,
+        (x) => cache.get(scope, x, clock) !== null,
+      );
+      diagDropped += size - cards.intentSize(scope);
+      intent = intentPlace(finds, item.id, RUN.intentMinMatched, RUN.intentMinCoverage);
+    }
+    return {
+      cardRead,
+      // Not `cardsLean` itself: an item still queued at the ask is here too (ask-coverage.ts says why).
+      notSentPrefilterRejects: !cardRead && !prefilter,
+      replayRequests: replay,
+      heldRequests: held,
+      intent,
+    };
+  };
   // The real sync: the backfill runs before the first task, from half an hour before it on the simulated clock (a
   // minute per tick), so the tasks see the same clock as without it.
   const sync = REAL_SYNC ? partner.sync! : null;
@@ -858,6 +930,10 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     if (ASK_DIAG && answered) {
       const d = askDumps.get(sessionId);
       askDumps.delete(sessionId);
+      const cachedItem = cache.get(scope, id, clock);
+      const rank = d ? d.candidates.findIndex((c) => c.id === id) : -1;
+      const coverage = coverageOf(cachedItem, question);
+      askDiagRows.push({ variant, rank, cached: !!cachedItem, coverage });
       const line = {
         suite,
         seed,
@@ -866,10 +942,11 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
         request: task.text,
         question,
         planted: id,
-        cached: !!cache.get(scope, id, clock),
+        cached: !!cachedItem,
         delivered: got.includes(id),
         askCited,
-        rank: d ? d.candidates.findIndex((c) => c.id === id) : -1,
+        rank,
+        coverage,
         cited: answered.citations.map((c) => c.itemId),
         answer: answered.answer,
         detail: task.detail,
@@ -1087,6 +1164,11 @@ if (RUN.intent && RUN.cards) {
   console.log(
     `intent: ${intentNow()} (replayed requests for ${intentUse.found} of ${intentUse.asked} items asked)` + inertTag(),
   );
+}
+// `--ask-diag`: why the ask left planted items out of its candidates (rank -1), by intent coverage (ask-coverage.ts).
+if (ASK_DIAG) {
+  for (const l of coverageLines(askDiagRows)) console.log(l + inertTag());
+  if (diagDropped) console.log(`ask-diag: its intent searches dropped ${diagDropped} expired cards (a side effect)`);
 }
 // calls/task above are what the connectors received; the traces' sum is printed to catch accounting drift in the
 // engine. It also counts fetches (which `SimSource` counts apart), and a call still running when a task's window
