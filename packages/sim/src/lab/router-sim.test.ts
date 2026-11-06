@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { REALISTIC } from "../sources";
 import { buildWorld } from "../world";
-import { gateSummary, median, profilesNamed, simResolver, userEventBodies, worldIndexes } from "./router-sim";
+import {
+  gateSummary,
+  ladderStops,
+  median,
+  profilesNamed,
+  simResolver,
+  userEventBodies,
+  worldIndexes,
+} from "./router-sim";
 
 describe("router-sim helpers (audit 2026-11-06 F23)", () => {
   test("profiles: realistic is REALISTIC; the market profiles change only latency and errors", () => {
@@ -64,5 +72,15 @@ describe("router-sim helpers (audit 2026-11-06 F23)", () => {
         [160, 150, 130],
       ]).meetsD172,
     ).toBe(true);
+  });
+
+  test("the ladder stops on two steps in a row over twice the target, not on one burst (RealUse-1 E)", () => {
+    expect(ladderStops([], 100)).toBe(false);
+    expect(ladderStops([250], 100)).toBe(false); // one step over: may be the sync tick, keep stepping
+    expect(ladderStops([90, 205], 100)).toBe(false);
+    expect(ladderStops([90, 205, 80], 100)).toBe(false); // recovered
+    expect(ladderStops([90, 205, 210], 100)).toBe(true);
+    expect(ladderStops([150, 199], 100)).toBe(false); // over the target, not over twice it
+    expect(ladderStops([201, 200], 100)).toBe(false); // exactly twice is not past it
   });
 });

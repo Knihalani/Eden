@@ -76,6 +76,18 @@ export function median(xs: number[]): number {
 const round2 = (x: number) => +x.toFixed(2);
 
 /**
+ * Whether the ladder stops after the steps measured so far (p99 of each, in order): only when the last two both passed
+ * twice the target. One step over can be a background burst rather than the load: the sync timer's minute tick lists
+ * every user's sources, and a 5 s step it lands on reads a high p99. Stopping on the first such step once ended a
+ * router×4 arm at C=2 with 54 events/s, against 3,663 and 3,808 in its other repetitions (RealUse-1 part E,
+ * docs/research/realuse-1/E-speed-scale.md). A step over the target still never counts towards the arm's figure.
+ */
+export function ladderStops(p99s: number[], target: number): boolean {
+  const n = p99s.length;
+  return n >= 2 && p99s[n - 1]! > target * 2 && p99s[n - 2]! > target * 2;
+}
+
+/**
  * D172's reading of `runs[arm][rep]` (arms: single, router over 1, router over N): each repetition's ratio divides by
  * the single process of the same repetition (0 when that arm met the target at no step).
  */
