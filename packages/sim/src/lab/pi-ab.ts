@@ -456,7 +456,7 @@ function meteredModel(
 /** The tool parameter every search tool and `ask_context` takes: one string, as agent-ab declares it. */
 const queryParams = Type.Object({ query: Type.String({ description: "What to search for" }) });
 // What the Eden-free arms see and how they are graded, recorded with the results so `--reuse-arms` can check it.
-const PROMPTS_HASH = armPromptsHash({ queryParams });
+const PROMPTS_HASH = armPromptsHash({ queryParams }, VARIANTS.includes("neutral"));
 const askParams = Type.Object({ question: Type.String() });
 
 /**

@@ -5,7 +5,7 @@
  */
 import type { ChatMessage } from "@eden/llm";
 import type { ContextItem } from "@eden/protocol";
-import { compactText, inert } from "./render";
+import { compactText, inert, oneLine } from "./render";
 
 /** A compacted candidate's room in the judge's input: about what 280 characters of an uncompacted one take. */
 const JUDGE_ITEM_BYTES = 280;
@@ -27,7 +27,9 @@ export function judgeMessages(
 ): ChatMessage[] {
   const each = size.itemBytes ?? JUDGE_ITEM_BYTES;
   const text = (c: ContextItem) => (focus ? compactText(c.text, focus, each) : clip(c.text, 280));
-  const list = candidates.map((c, i) => `[${i}] (${c.sourceId}) ${inert(clip(c.title, 80))} — ${inert(text(c))}`);
+  const list = candidates.map(
+    (c, i) => `[${i}] (${c.sourceId}) ${inert(oneLine(clip(c.title, 80)))} — ${inert(text(c))}`,
+  );
   return [
     {
       role: "system",

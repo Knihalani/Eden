@@ -12,7 +12,7 @@
  *   [--jobs N] [--user-range A:B] [--tally] [--source-profile JSON|FILE]
  *
  * `--source-profile` overrides fields of the chosen `--profile` per source (`withOverrides`, as pi-ab.ts's flag does
- * over REALISTIC): e.g. `'{"gmail":{"errorRate":1}}'` for a Gmail outage, `{"ratePerSec":1}` for a 429 storm.
+ * over REALISTIC): e.g. `'{"gmail":{"errorRate":1}}'` for a Gmail outage, `'{"crm":{"ratePerSec":1}}'` for a 429 storm.
  *
  * Plays generated sessions over simulated sources and prints the quality report as JSON. Without --live no model is
  * used (free, deterministic at --time 0). --time 1 runs source latency and agent pacing in real time.
@@ -93,6 +93,7 @@ bun packages/sim/src/quality-cli.ts [--users 6] [--sessions 15] [--seed 1] [--pr
   zoo-tune|zoo-a|zoo-b] [--planner ...] [--time 0] [--wait 0] [--noise 1] [--updates 0] [--tool-rate 0.4]
   [--judge none|perfect|noisy] [--live] [--brief] [--config '{"probes":true}'] [--timeline F] [--sync]
   [--cards F] [--drafts clause|half [--typing-ms 1500]] [--jobs N] [--user-range A:B] [--tally]
+  [--source-profile JSON|FILE]
   (bun run sim; the header of quality-cli.ts has every flag)`,
 );
 if (cli.rest.length) {

@@ -481,7 +481,7 @@ export function backfillShares(background: Background[]): Map<string, number> {
  * different prompt from the arms run now, which biases exactly the paired comparison reuse serves. `extra` is what a
  * harness adds (pi-ab: the tool's parameter schema).
  */
-export function armPromptsHash(extra: unknown = null): string {
+export function armPromptsHash(extra: unknown = null, neutral = false): string {
   const world = { now: Date.UTC(2026, 0, 5, 9), user: { full: "Probe User", email: "probe@example.test" } };
   const probeWorld = world as unknown as World;
   const source = { id: "mail", description: "the user's mail" } as unknown as SimSource;
@@ -514,6 +514,9 @@ export function armPromptsHash(extra: unknown = null): string {
         caps: { MAX_STEPS, TOOL_ITEMS, TOOL_CHARS },
         grade: tasks.map((t) => gradeMessages(t, "The probe answer.")),
         extra,
+        // Only a run with neutral tasks hashes their grader prompt, so earlier results keep their hash and a change
+        // to the neutral wording refuses `--reuse-arms` of neutral grades made under the old one.
+        ...(neutral ? { neutralGrade: gradeMessages(probe("neutral", "user_message"), "The probe answer.") } : {}),
       }),
     )
     .digest("hex")
