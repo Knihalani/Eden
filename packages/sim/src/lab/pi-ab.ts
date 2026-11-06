@@ -221,7 +221,12 @@ const INTENT_FILES = INTENT.files;
 if (INTENT_FILES.length && !CARDS_FILE) throw new Error("--intent needs --cards");
 for (const f of INTENT_FILES) if (!existsSync(f)) throw new Error(`--intent ${f}: no such file`);
 const diskCards = CARDS_FILE
-  ? new DiskCardMaker(CARDS_FILE, undefined, { out: CARDS_OUT, requests: INTENT_FILES })
+  ? new DiskCardMaker(CARDS_FILE, undefined, {
+      out: CARDS_OUT,
+      requests: INTENT_FILES,
+      // No requests file: no replayed requests at all, not the `r` lines an earlier run left in --cards-out.
+      cardRequests: INTENT_FILES.length > 0,
+    })
   : null;
 
 /** `--replay`'s counts per role, as the results file and the spend line give them. */

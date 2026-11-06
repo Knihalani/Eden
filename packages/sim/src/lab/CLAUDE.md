@@ -88,8 +88,10 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
   `[intent inert: no replay]`). Before that they replayed no requests unless `--intent` was given, so every held-out
   13 Pi/Hermes figure up to then (the final live run, the D159 pair) had requests only for items carded live: intent
   inert for about two thirds of items (estimate, docs/research/edge-intent.md). `--cards-out` now keeps a live call's
-  requests (`{h, c, r}`) and replays them. Numbers recorded before D158 (214/211 stub, 247/127 replayed,
-  D112–D153) are intent-inert ones: compare like with like. Read settings through `effective()`: a preset is an
+  requests (`{h, c, r}`) and replays them, only when a requests file is replayed: `--intent none` and an uncovered
+  run skip those `r` lines (`cardRequests: false`), so they replay nothing and the inert label (0 found) is true.
+  Numbers recorded before D158 (214/211 stub, 247/127 replayed, D112–D153) are intent-inert ones: compare like with
+  like. Read settings through `effective()`: a preset is an
   override, and `default` is `{}`. The harnesses wait 3,000 ms on the first observe (`@w<ms>` changes it; 1 s lost
   7.6–18.1 points, D98).
 - Pi's `both` arm gets no `ask_context` (only `eden` does); Hermes gets both.

@@ -138,8 +138,11 @@ export function intentLine(o: {
 }): string {
   if (!o.wanted) return "intent: off";
   if (!o.cardsReplayed) return "intent: live (the card model writes the requests of the items it cards)";
-  const inert = o.files.length === 0 ? `  ${INTENT_INERT}` : "";
-  return `intent: replayed ${o.found} of ${o.of} items (${o.note || "no --intent"})${inert}`;
+  // Inert is what the replay holds, not which files were named: a named file that matches nothing is inert too, and
+  // requests replayed from the card files alone (no requests file) are a partial replay, said so.
+  const label =
+    o.found === 0 ? `  ${INTENT_INERT}` : o.files.length === 0 ? "  [intent partial: from the card files only]" : "";
+  return `intent: replayed ${o.found} of ${o.of} items (${o.note || "no --intent"})${label}`;
 }
 
 /**
@@ -185,9 +188,11 @@ export class DiskCardMaker implements CardMaker {
    * `options.shared`: another maker of the same files, whose cards and calls in flight this one shares, so several
    * makers read the files once and see each other's new cards (pi-ab's streams), and its replayed requests.
    * `options.requests`: requests files (`loadRequests`, `.gz` read as is) replayed when a call asks for requests; they
-   * win over requests in the card files (`r` lines a live call wrote). An item with requests
-   * but no replayed card is given a none card, so the cards a run matches are exactly the card files' (the requests'
-   * files may hold cards of their own, from another model: they are not read here).
+   * win over requests in the card files (`r` lines a live call wrote). `options.cardRequests: false` skips those `r`
+   * lines, so a run that opts out of replayed intent (`--intent none`, or a run the checked-in file does not cover)
+   * replays none, whatever an earlier run left in `--cards-out` (a live call's requests still count). An item with
+   * requests but no replayed card is given a none card, so the cards a run matches are exactly the card files' (the
+   * requests' files may hold cards of their own, from another model: they are not read here).
    */
   constructor(
     file: string,
@@ -196,13 +201,15 @@ export class DiskCardMaker implements CardMaker {
       out?: string;
       shared?: { cards: Map<string, Card | null>; inflight: Inflight; requests?: Map<string, string[]> };
       requests?: string[];
+      cardRequests?: boolean;
     } = {},
   ) {
     this.out = options.out ?? file;
     this.cards = options.shared?.cards ?? loadCards(file);
     this.inflight = options.shared?.inflight ?? new Map();
     const cardFiles = options.out && !samePath(options.out, file) ? [file, options.out] : [file];
-    this.requests = options.shared?.requests ?? loadRequests(...cardFiles, ...(options.requests ?? []));
+    const replayed = options.cardRequests === false ? [] : cardFiles;
+    this.requests = options.shared?.requests ?? loadRequests(...replayed, ...(options.requests ?? []));
     if (!options.shared && options.out) for (const [h, c] of loadCards(options.out)) this.cards.set(h, c);
   }
 

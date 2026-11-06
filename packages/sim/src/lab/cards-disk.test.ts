@@ -226,6 +226,49 @@ describe("samePath", () => {
   });
 });
 
+describe("opting out of replayed intent (cardRequests: false)", () => {
+  test("a card file's `r` line with --intent none replays no requests, and the header says inert", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const replay = join(dir, "cards.jsonl");
+    const out = join(dir, "earlier-run.cards.jsonl");
+    writeFileSync(replay, `${JSON.stringify({ h: cardKey(item(9)), c: card(9), r: ["from cards"] })}\n`);
+    // An earlier run's --cards-out, appended to by a live call: a card with requests and a requests-only line.
+    writeFileSync(
+      out,
+      `${JSON.stringify({ h: cardKey(item(10)), c: card(10), r: ["from out"] })}\n` +
+        `${JSON.stringify({ h: cardKey(item(11)), r: ["requests only"] })}\n`,
+    );
+    const run = { wanted: true, cardsReplayed: true, suites: ["heldout13"], seeds: [41] };
+    const none = harnessIntent("none", run);
+    const disk = new DiskCardMaker(replay, undefined, {
+      out,
+      requests: none.files,
+      cardRequests: none.files.length > 0,
+    });
+    expect(disk.requests.size).toBe(0);
+    const got = await disk.make([item(9), item(10), item(11)], "d", signal, false, true);
+    expect(reqs(got)).toEqual([null, null, null]);
+    // The cards still replay; the requests-only item stays uncovered.
+    expect(got.cards.map((c) => c?.kind ?? null)).toEqual(["absence", "absence", null]);
+    const count = intentCoverage([[item(9), item(10), item(11)]], disk.requests);
+    expect(intentLine({ wanted: true, cardsReplayed: true, ...none, ...count })).toBe(
+      `intent: replayed 0 of 3 items (--intent none)  ${INTENT_INERT}`,
+    );
+    // An uncovered default opts out the same way.
+    const uncovered = harnessIntent("default", { ...run, seeds: [45] });
+    expect(uncovered.files).toEqual([]);
+    const disk2 = new DiskCardMaker(replay, undefined, { out, requests: [], cardRequests: false });
+    expect(reqs(await disk2.make([item(9), item(10)], "d", signal, false, true))).toEqual([null, null]);
+    // Without the opt-out the same files replay their `r` lines (the round trip a covered run relies on).
+    const on = new DiskCardMaker(replay, undefined, { out });
+    expect(reqs(await on.make([item(9), item(10), item(11)], "d", signal, false, true))).toEqual([
+      ["from cards"],
+      ["from out"],
+      ["requests only"],
+    ]);
+  });
+});
+
 describe("the harnesses' intent replay (D158)", () => {
   const run = { wanted: true, cardsReplayed: true, suites: ["heldout13"], seeds: [41, 42, 43, 44] };
 
@@ -251,8 +294,14 @@ describe("the harnesses' intent replay (D158)", () => {
   test("the header labels a run with no covering file inert", () => {
     const base = { wanted: true, cardsReplayed: true, note: "x", found: 3, of: 4 };
     expect(intentLine({ ...base, files: ["f"] })).toBe("intent: replayed 3 of 4 items (x)");
-    expect(intentLine({ ...base, files: [], note: "--intent none" })).toBe(
-      `intent: replayed 3 of 4 items (--intent none)  ${INTENT_INERT}`,
+    // Inert is what the replay holds: nothing found is inert, whatever was named.
+    expect(intentLine({ ...base, files: [], note: "--intent none", found: 0 })).toBe(
+      `intent: replayed 0 of 4 items (--intent none)  ${INTENT_INERT}`,
+    );
+    expect(intentLine({ ...base, files: ["f"], found: 0 })).toBe(`intent: replayed 0 of 4 items (x)  ${INTENT_INERT}`);
+    // Requests from the card files alone (no requests file) are a partial replay, never labelled inert.
+    expect(intentLine({ ...base, files: [], note: "" })).toBe(
+      "intent: replayed 3 of 4 items (no --intent)  [intent partial: from the card files only]",
     );
     expect(intentLine({ ...base, files: [], wanted: false })).toBe("intent: off");
   });

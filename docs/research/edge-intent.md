@@ -174,7 +174,11 @@ is inert there.
   hold), and a run with no covering file is labelled `[intent inert: no replay]`. The results file and the summary
   line say the same.
 - DiskCardMaker now appends a live call's requests with its card (`{h, c, r}`; `{h, r}` when there is no card) to
-  `--cards-out`, and replays them from there.
+  `--cards-out`, and replays them from there, but only in a run that replays a requests file: with `--intent none`
+  or a run the checked-in file does not cover, those `r` lines are skipped (`cardRequests: false`), so an opt-out arm
+  or an uncovered shard replays no requests at all, and its header (`intent: replayed 0 of m items ...
+  [intent inert: no replay]`) says so. The inert label follows what was replayed (0 found), not which files were
+  named.
 
 **Measured, $0 unless priced** (train1–6, seeds 41–42, `--jobs 4`; "before" is the same tree with the old file passed
 as `--intent`):
