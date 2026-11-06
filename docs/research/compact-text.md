@@ -1,4 +1,4 @@
-# Compact item text (D177)
+# Compact item text (D188)
 
 Deep audit 2026-11-06, finding F9 stage 2 (`scale-graph-soa-and-compact-text`), after stage 1 (the graph as
 struct-of-arrays, D169). It reopened D111's "compressed cold text tier" as a trial and was promoted the same day.

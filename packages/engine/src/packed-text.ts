@@ -1,5 +1,5 @@
 /**
- * Compact item text for the cache (`CacheLimits.packText`, on by default; D177 reopened D111's compressed text). A
+ * Compact item text for the cache (`CacheLimits.packText`, on by default; D188 reopened D111's compressed text). A
  * JS string holding one character past Latin-1 (a typographic dash, an arrow) is two bytes a character, and cached
  * item text was about half of a synced user's heap (ingest.bench.ts `--world`). A packed item keeps its text deflated
  * (Latin-1 bytes when every character fits, else UTF-8) and decodes it on read: `text` is an own, enumerable getter,

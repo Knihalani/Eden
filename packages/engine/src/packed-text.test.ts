@@ -16,7 +16,7 @@ function item(id: string, text: string, extra: Partial<ContextItem> = {}): Conte
   return { id, sourceId: "mail", ref: `mail:${id}`, title: `Subject ${id}`, text, ...extra };
 }
 
-describe("packItem (packText, D177)", () => {
+describe("packItem (packText, D188)", () => {
   test("a packed item reads, spreads, serialises and compares as the original", () => {
     const raw = item("a", longText("one"), { meta: { from: "Zoë" }, updatedAt: 5 });
     const packed = packItem(raw);

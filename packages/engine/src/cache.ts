@@ -282,7 +282,7 @@ export interface CacheLimits {
    */
   releaseTerms: boolean;
   /**
-   * Hold each stored item's text deflated (`packed-text.ts`) and decode it on read through its `text` getter (D177,
+   * Hold each stored item's text deflated (`packed-text.ts`) and decode it on read through its `text` getter (D188,
    * which reopened D111's compressed text as a trial and promoted it): cached text was about half a synced user's
    * heap. `ingest.bench.ts --world`, shipped, 200 users x 500 items: 3,799-3,953 to 2,368-2,543 B/item released
    * (1.55-1.61x), backfill 1.17-1.30x the CPU; `pipeline.bench.ts` 1.01-1.04x; eval and funnel identical. Off: text as

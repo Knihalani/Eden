@@ -332,7 +332,7 @@ sources 2.8 s, protocol 2.3 s, eval 0.6 s, graph 0.3 s, client 0.1 s, llm 0.1 s 
 (`SyncManager` → `SourceFanout.list` with `sanitizeItem` as the redaction hook → `ItemCache.put`), each with their own
 copy of the workload's items (1,599 chars of text on average), then sweeps every user once with nothing changed. It
 prints the heap per user after a full GC and the CPU per item of the backfill (every item new) and of the sweep (every
-item unchanged). A change to the cache, the index, redaction or the sync reports these before and after. Since D177
+item unchanged). A change to the cache, the index, redaction or the sync reports these before and after. Since D188
 the cache holds item text deflated; `--plain` runs the old layout (plain strings) for a before figure, and `--world`
 uses the sim world's text, whose typographic characters make plain strings two bytes a character.
 

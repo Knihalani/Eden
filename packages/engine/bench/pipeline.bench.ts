@@ -23,7 +23,7 @@ import { WorkerPool } from "@eden/primitives";
 import { ContextPartner, GATE_MODULE, ItemCache, type Trace } from "../src/index";
 import { buildWorkload } from "./workload";
 
-/** `--plain`: the cache holds item text as plain strings (`packText` off; D177's before). */
+/** `--plain`: the cache holds item text as plain strings (`packText` off; D188's before). */
 const PLAIN = process.argv.includes("--plain");
 const argv = process.argv.filter((a) => a !== "--plain");
 const itemsPerSource = Number(argv[2] ?? 1_500);
