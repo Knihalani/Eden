@@ -42,7 +42,23 @@ eval), wall time of the whole command:
 | After (`--base HEAD` over the committed change, so the selection is the same) | 9.26 s, 9.48 s | 991 pass, 0 fail | 87 |
 | The printed command for the six, serial | 15.00 s | 71 pass, 0 fail | 6 |
 
-About 1.9-2.0x on the engine inner loop; 991 + 71 = 1,062, so nothing is lost, only moved to `check`. A one-line
+About 1.9-2.0x on the engine inner loop; 991 + 71 = 1,062, so nothing is lost, only moved to `check`.
+
+### The graph's differential test at 25 seeds in `test:changed` (D176, measured 2026-11-06, 4-core container)
+
+`packages/engine/src/kg.test.ts` checks `UserGraph` against an in-file copy of the storage before D169
+(`PreviousGraph`) over `KG_DIFF_SEEDS` seeds, 200 by default. `test:changed` (and so `check:fast`) sets
+`KG_DIFF_SEEDS=25` (`FAST_ENV` in `scripts/test-select.ts`) and prints it; `test:pkg`, `bun run check` and a plain
+`bun test` run 200. A value the caller sets stands (`KG_DIFF_SEEDS=200 bun run test:changed` runs the full oracle).
+The variable has no `EDEN_` prefix because `scripts/test-preload.ts` clears those. The same edit to `text.ts` as
+above, committed, `bun scripts/test-select.ts changed --base HEAD`, three alternating pairs (load average 2.4-4.2):
+
+| | Bun's [s] | Wall | Tests | expect() calls |
+|---|---|---|---|---|
+| 200 seeds (`KG_DIFF_SEEDS=200` set by the caller) | 12.04, 13.01, 12.35 s | 12.15, 13.13, 12.49 s | 1,034 in 89 files | 212,066 |
+| 25 seeds (what `test:changed` sets) | 10.19, 10.52, 10.27 s | 10.31, 10.64, 10.39 s | 1,034 in 89 files | 112,032 |
+
+About 2 s (1.2x) per engine edit. The run stays above D161's 9.26-9.48 s; where the rest went was not measured. A one-line
 change in `packages/sim/src/world.ts` defers nothing: `test:changed` ran 229 tests in 34 files, the same as
 `bun run test:pkg sim` (12.53 s and 12.45 s).
 
@@ -294,6 +310,7 @@ these changes save (the per-test differences above). The one failure seen in the
 | File | ms | Where the time goes | Proposal |
 |---|---|---|---|
 | packages/redact/src/linear.test.ts (before the split) | 9,541 | "every gitleaks rule outside RE2_RULES" 6.5 s; RE2 vs JS equivalence 3.7 s | Done: split into `linear.test.ts` + `redos.test.ts` |
+| packages/engine/src/kg.test.ts | 6,100 (200 seeds); 1,950 (`KG_DIFF_SEEDS=25`) (bun's [s], 2026-11-06) | "the same walks" against `PreviousGraph` (115,853 expects at 200 seeds, 15,819 at 25) | Done: 25 seeds in `test:changed`, 200 in `check` and `test:pkg` (D176, above) |
 | packages/sim/src/sim.test.ts | 3,542 (6,625-7,246 on 2026-11-05, above) | "a run without updates scores exactly as before" 2.1 s (two `runQuality` runs) | Share one `runQuality` result between the tests that read it, or 3 sessions instead of 6 (it has a 20 s timeout now) |
 | packages/server/src/http.test.ts | 2,671 | the 60,000-deep body test 2.5 s | See validate below |
 | packages/protocol/src/validate.test.ts | 2,305 | 60,000-deep array: `JSON.stringify` throwing RangeError costs 2.3 s in JSC (20,000 deep: 2 ms, no throw) | Find the smallest depth that still overflows on Linux and macOS and use it; keep one deep case |

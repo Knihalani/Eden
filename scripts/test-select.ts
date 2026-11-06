@@ -11,10 +11,11 @@
  * packages/ and examples/ (scripts, bun.lock, tsconfig, bunfig), and nothing when only Markdown changed. Data a
  * package's tests read from outside it maps to that package (`DATA_DIRS`); the rest of docs/ is skipped. It defers
  * the end-to-end files in `DEFERRED` when their package is only a dependent of what changed, and prints them with the
- * command that runs them (D161). It is a fast loop, not a gate: `bun run check` runs every test before a merge, and
- * `test:pkg` runs every file of the packages it names. Arguments after `--` go to `bun test`;
- * `--dry` prints the directories it would test and runs nothing; `--base REF` diffs against REF instead (`--base
- * HEAD`: only what is not committed yet). EDEN_TEST_SELECT_ROOT names another repository to select in (its test).
+ * command that runs them (D161). It sets `FAST_ENV` for its run (kg.test.ts's differential test at 25 seeds, not
+ * 200; D176). It is a fast loop, not a gate: `bun run check` runs every test at full count before a merge, and
+ * `test:pkg` runs every file of the packages it names. Arguments after `--` go to `bun test`; `--dry` prints the
+ * directories it would test and runs nothing; `--base REF` diffs against REF instead (`--base HEAD`: only what is
+ * not committed yet). EDEN_TEST_SELECT_ROOT names another repository to select in (its test).
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -39,8 +40,10 @@ export const DATA_DIRS: Record<string, string> = { "docs/profiles/": "packages/s
 
 /**
  * End-to-end files that `test:changed` skips when their package is selected only as a dependent of a changed package
- * (D161): together 9 of the 18 s an engine edit took. They run when their own package changed, in `test:pkg`, and in
- * `bun run check`. A list, not a `.e2e.test.ts` suffix, because docs and package CLAUDE.md files name these files.
+ * (D161): together 9 of the 18 s an engine edit took when D161 measured it. They run when their own package changed,
+ * in `test:pkg`, and in `bun run check`. A list, not a `.e2e.test.ts` suffix, because docs and package CLAUDE.md files
+ * name these files. Since D169 the engine's own kg.test.ts holds a 200-seed differential test (about 4.7-5 s of a
+ * 6 s file); `test:changed` runs it at 25 seeds through `FAST_ENV` (D176) rather than deferring it.
  */
 export const DEFERRED = [
   "packages/sim/src/sim.test.ts",
@@ -50,6 +53,21 @@ export const DEFERRED = [
   "packages/sim/src/lab/gate-traffic.test.ts",
   "packages/eval/src/run.test.ts",
 ];
+
+/**
+ * Variables `test:changed` (and so `check:fast`) sets for its run and `test:pkg` does not, so `bun run check` and
+ * `test:pkg` keep the full counts. KG_DIFF_SEEDS: kg.test.ts's differential test against the storage before D169 runs
+ * 25 seeds instead of 200 (D176). No EDEN_ prefix: scripts/test-preload.ts clears those before a test loads.
+ */
+export const FAST_ENV: Record<string, string> = { KG_DIFF_SEEDS: "25" };
+
+/** The environment `bun test` runs under for `mode`: `FAST_ENV` added for `changed`, where the caller set none. */
+export function testEnv(mode: string | undefined, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  if (mode !== "changed") return env;
+  const out = { ...env };
+  for (const [k, v] of Object.entries(FAST_ENV)) if (out[k] === undefined) out[k] = v;
+  return out;
+}
 
 export interface Pkg {
   dir: string;
@@ -199,13 +217,16 @@ function main(): void {
     process.exit(0);
   }
   if (withTests) console.log(`testing ${withTests.join(" ")}`);
+  const env = testEnv(mode, process.env);
+  const fast = Object.keys(FAST_ENV).map((k) => `${k}=${env[k]}`);
+  if (mode === "changed") console.log(`test:changed: ${fast.join(" ")} (\`bun run check\` runs the full counts; D176)`);
   if (dry) {
     if (!withTests) console.log("testing everything");
     process.exit(0);
   }
   const ignore = deferred.map((f) => `--path-ignore-patterns=${f}`);
   const args = [...(withTests ?? []), ...ignore, ...extra];
-  const r = spawnSync(join(root, "scripts/test.sh"), args, { cwd: root, stdio: "inherit" });
+  const r = spawnSync(join(root, "scripts/test.sh"), args, { cwd: root, stdio: "inherit", env });
   process.exit(r.status ?? 1);
 }
 
