@@ -29,7 +29,7 @@ import { plantTrain5 } from "./hidden-train5";
 import { plantTrain6 } from "./hidden-train6";
 
 export type { HiddenTask };
-/** `neutral` (RealUse-1): the same requests with nothing planted; only suites in NEUTRAL_SUITES build it (neutral.ts). */
+/** `neutral` (RealUse-1): the same requests, nothing planted; only suites in NEUTRAL_SUITES build it (neutral.ts). */
 export type Variant = "hidden" | "control" | "neutral";
 export type Plant = (world: World, seed: number, variant: Variant) => HiddenTask[];
 

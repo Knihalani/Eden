@@ -1,0 +1,92 @@
+{
+  "suite": "heldout14",
+  "seeds": [41, 42, 43, 44],
+  "config": {},
+  "label": "default",
+  "intent": {
+    "state": "live",
+    "asked": 6601,
+    "found": 6585
+  },
+  "total": {
+    "hidden": {
+      "n": 128,
+      "returned": 1,
+      "cached": 128,
+      "delivered": 33,
+      "calls": 376,
+      "ms": 2777.0399999999995
+    },
+    "control": {
+      "n": 128,
+      "returned": 1,
+      "cached": 128,
+      "delivered": 28,
+      "calls": 393,
+      "ms": 1712.0499999999997
+    }
+  },
+  "cards": {
+    "enqueued": 17983,
+    "prefiltered": 16721,
+    "leanSkipped": 11055,
+    "reused": 153,
+    "carded": 913,
+    "sent": 6601,
+    "sentenceReused": 174,
+    "calls": 396,
+    "retries": 0,
+    "costUsd": 0,
+    "failures": 0,
+    "overBudget": 0,
+    "unanchored": 9,
+    "implausible": 13,
+    "requestOnly": 5666,
+    "requested": 6563,
+    "users": 12
+  },
+  "sync": {
+    "backfill": 216,
+    "background": 216,
+    "demand": 0,
+    "demandAll": 1039,
+    "lookups": 768,
+    "localSources": 3840,
+    "warmMs": 9394.703549,
+    "demandSeen": 1039,
+    "demandItems": 5090,
+    "backgroundItems": 35966,
+    "users": 12
+  },
+  "neutral": {
+    "total": {
+      "n": 128,
+      "anyDelivered": 55,
+      "items": 60,
+      "packets": 55,
+      "packetBytes": 15739,
+      "askItems": 621,
+      "anyFlagged": 0,
+      "calls": 376,
+      "ms": 1739.5899999999997
+    },
+    "suites": {
+      "heldout14": {
+        "n": 128,
+        "anyDelivered": 55,
+        "items": 60,
+        "packets": 55,
+        "packetBytes": 15739,
+        "askItems": 621,
+        "anyFlagged": 0,
+        "calls": 376,
+        "ms": 1739.5899999999997
+      }
+    }
+  },
+  "hiddenSurfaced": 100,
+  "hiddenAnyPacket": 86,
+  "controlSurfaced": 84,
+  "controlAnyPacket": 80,
+  "note": "bun run funnel --blind --suite heldout14 --seeds 41,42,43,44 -- --neutral; reader stub; run once, before 10 hidden planted items (seeds 41-42) got their intent lines"
+}

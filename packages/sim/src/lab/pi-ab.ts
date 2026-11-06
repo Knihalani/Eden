@@ -48,7 +48,8 @@
  * records the packets the agent's requests saw, the item ids they cited, the ids `ask_context` answers cited, and the
  * task's planted item id (hidden-context suites), so a report can tell delivery from uptake.
  *
- *   OPENROUTER_API_KEY=… bun packages/sim/src/lab/pi-ab.ts [--suite heldout] [--seeds 41] [--variants hidden,control[,neutral]]
+ *   OPENROUTER_API_KEY=… bun packages/sim/src/lab/pi-ab.ts [--suite heldout] [--seeds 41]
+ *     [--variants hidden,control[,neutral]]
  *     [--conditions none,tools,eden,both] [--config H|'{"probes":true}'] [--model z-ai/glm-5.3-flash]
  *     [--grader anthropic/claude-haiku-5.5] [--budget 0.6] [--out pi-ab.json] [--timeline dir] [--time-scale 1]
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
