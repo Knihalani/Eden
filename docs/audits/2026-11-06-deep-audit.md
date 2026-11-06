@@ -1,5 +1,19 @@
 # Deep audit (2026-11-06)
 
+## Parallel cloud sessions (2026-11-06, merged after the run)
+
+To finish faster, five cloud sessions worked from `756401564` (rounds 1-2 merged) beside the run's closing stage. Each
+pushed its own branch, ran the repo's checks and the `reviewer` subagent, and reported back; the parent session merged
+them into this branch and renumbered their decision rows (each had taken D177).
+
+| Session (branch) | Outcome | Measured |
+| --- | --- | --- |
+| Review of rounds 1-2 (`claude/p3-review-fixes`) | APPROVE; one fix: the router stops its children when its own port cannot be bound | new test fails without the fix; check 1,756 pass |
+| Fresh hunt (`claude/p3-fresh-hunt`, D187) | client SDK: a malformed 2xx no longer throws into the agent's loop, `waitMs` clamped; protocol 400s name their limit; the secret gate redacts Discord webhook URLs | each with a failing test first; 26 secret shapes probed, 17 crafted 1 MB inputs linear (4-121 ms) |
+| F9 stage 2 (`claude/p3-f9-compact-text`, D188, supersedes D181) | item text held deflated in the cache, on by default | memory per item 3,799-3,953 -> 2,368-2,543 B (1.55-1.61x); pipeline 0.920 -> 0.958 ms/event (1.04x); backfill CPU 1.30x; eval and funnel identical |
+| F10 (`claude/p3-f10-query-expansion`, D189, confirms D184) | no-model query expansion built as a trial and deleted | 31 of 58 unranked facts share no word with any user item; the trial moved 0 hidden and 0 decoys into the pool; $0 spent |
+| F23 + F25 (`claude/p3-f23-f25`) | router gate on simulated users; a seed-41 retrieval screen | router x4 vs one process 5.96x (REALISTIC) and 3.36x (hosted); the screen 6.0-6.4 s vs 10.0-10.5 s, equal task by task on three past changes |
+
 ## Final summary (for the owner, read this first)
 
 Written at the end of the run, from `audit/2026-11-06-integration` 841fed61e (2 rounds plus 2 closing passes). Every
