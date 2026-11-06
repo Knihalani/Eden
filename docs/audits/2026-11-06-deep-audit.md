@@ -194,7 +194,19 @@ funnel --json`. Openers include Switch, Cash in, Open, RSVP, Agree, Spin up, Pro
 - **Fix.** D162: the cap stays at 12. Stage 1 ($0): `--ask-diag` says whether the planted item has intent requests
   and whether cards lean-skipped it, separating missing coverage from a bridge that does not match. Later trials
   (`intentConstraintAll`, which does not exist yet and would need a COST-MODEL.md estimate first) wait for that answer.
-- **Status.** Round 1 stage 1, package `ask-diag-coverage`.
+- **Status.** Round 1 stage 1, package `ask-diag-coverage`: done. Train1-6, seeds 41-42, stub reader, cards
+  replayed, `bun run funnel --jobs 1 -- --intent <gunzipped packages/sim/lab/distilled/intent-v2.jsonl.gz>
+  --ask-diag F` (768 rows; every other line, `cards use` calls 822 included, identical to the run without
+  `--ask-diag`):
+  - hidden rank -1 64/384: not sent with the prefilter rejecting 0, no intent requests 21, requests but no match 43
+    (no shared term 8, under the thresholds 35, over them 0). All 21 were sent to the card model; 18 have no
+    requests in the replay, 3 have some the engine did not hold at the ask.
+  - decoys rank -1 77/384: not sent with the prefilter rejecting 4, no intent requests 14, requests but no match 59
+    (21 / 38 / 0). The 4 have 2-4 replay requests (read at recording time) and none held; the lab cannot say whether
+    `cardsLean` skipped them or they were still queued (`readForIntent` is not in `@eden/engine`'s index).
+  - Reading: the hidden gap is mostly a bridge that does not match (43), then items read with no requests (21);
+    `cardsLean` skips none of the 64, so a read-all trial (`intentConstraintAll`) has nothing to gain here. Decoys sit
+    in the same buckets in larger numbers, so a looser bridge must be screened on decoys in pool.
 
 ### F8. D113's multi-process router was decided but never built
 

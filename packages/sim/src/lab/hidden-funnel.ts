@@ -126,7 +126,7 @@ import {
 import { packetLine } from "./uptake";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
-import { coverageLines, type AskCoverage } from "./ask-coverage";
+import { coverageLines, intentPlace, type AskCoverage } from "./ask-coverage";
 
 const args = process.argv.slice(2);
 const V = "value" as const;
@@ -428,14 +428,14 @@ const INTENT_QUERY_CHARS = 400;
  * `--ask-diag out.jsonl` (with `--ask`): each task's ask candidates with their facts (`CandidateDump`, path "ask"),
  * the planted item's id and rank among them, and whether it was cached, one line per task (docs/research/gen-ask.md).
  * Each line's `coverage` (`ask-coverage.ts`, with cards and intent on) says whether the intent index could reach the
- * planted item: requests in the replay and held at the ask, read or lean-skipped, and its hit for the question; the
- * run prints the rank -1 items split into lean-skipped, no intent requests, and requests but no match.
+ * planted item: requests in the replay and held at the ask, sent to the card model or not, and its hit for the
+ * question; the run splits the rank -1 items into not sent (prefilter rejects), no intent requests, and no match.
  */
 const ASK_DIAG = opt("ask-diag", "");
 if (ASK_DIAG) writeFileSync(ASK_DIAG, "");
 /**
  * Each `--ask-diag` row's variant, rank, cached flag and coverage facts (`ask-coverage.ts`), for the run's split of
- * the rank -1 items: lean-skipped, no intent requests, requests but no match.
+ * the rank -1 items: not sent (prefilter rejects), no intent requests, requests but no match.
  */
 const askDiagRows: { variant: string; rank: number; cached: boolean; coverage: AskCoverage | null }[] = [];
 /** Expired cards the diagnostic's own intent search dropped (`intentFinds` drops what it passes); printed when any. */
@@ -632,7 +632,9 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   const laneMaker: CardMaker | null =
     cardMaker && ASK_DIAG
       ? {
-          make: async (items, today, signal, retry, intent) => {
+          // Not `async`: the maker's own promise, so the drain batches as without `--ask-diag` (an async wrapper's
+          // microtask hops cut the cards-use calls from 822 to 766 and moved when requests were held).
+          make: (items, today, signal, retry, intent) => {
             for (const it of items) sentToCards.add(cardKey(it));
             return cardMaker.make(items, today, signal, retry, intent);
           },
@@ -737,7 +739,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   /**
    * `--ask-diag`: whether the intent index could reach a planted item at its ask (`ask-coverage.ts`). Read after the
    * ask, at no call: the replay's requests for its content, the requests the engine held, whether the card model was
-   * sent it (else, the prefilter rejecting it, `cardsLean` skipped it), and its hit for the question as the engine
+   * sent it and whether the prefilter rejects it, and its hit for the question (`intentPlace`) as the engine
    * searches it (redacted, its first `INTENT_QUERY_CHARS`), against the thresholds. Null with cards or intent off.
    */
   const coverageOf = (item: ReturnType<ItemCache["get"]>, question: string): AskCoverage | null => {
@@ -760,21 +762,12 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
         (x) => cache.get(scope, x, clock) !== null,
       );
       diagDropped += size - cards.intentSize(scope);
-      const passes = (h: { matched: number; coverage: number }) =>
-        h.matched >= RUN.intentMinMatched && h.coverage >= RUN.intentMinCoverage;
-      let place = 0;
-      for (const { ids, hit } of finds) {
-        if (ids.includes(item.id)) {
-          const ok = passes(hit);
-          intent = { coverage: hit.coverage, matched: hit.matched, passes: ok, rank: ok ? place : -1 };
-          break;
-        }
-        if (passes(hit)) place += ids.length;
-      }
+      intent = intentPlace(finds, item.id, RUN.intentMinMatched, RUN.intentMinCoverage);
     }
     return {
       cardRead,
-      leanSkipped: RUN.cardsLean && !cardRead && !prefilter,
+      // Not `cardsLean` itself: an item still queued at the ask is here too (ask-coverage.ts says why).
+      notSentPrefilterRejects: !cardRead && !prefilter,
       replayRequests: replay,
       heldRequests: held,
       intent,
