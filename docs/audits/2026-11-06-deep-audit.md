@@ -637,17 +637,17 @@ and its $0.3 headroom (estimate: 18 - 14.48 - 0.3).
 | Item                                                    | Where it ends                                                                                                     | Row                      |
 | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------ |
 | F5 `devloop-ask-diag-forces-one-process` (round 1)      | Fixed by package `funnel-parallel-diag` (commit f086b5605): diagnostic runs use every core, parts merged in order | none (lab tooling)       |
-| F6 `quality-push-skipped-imperative-list` (round 1)     | Waits for D179; the verb-recognising trial also covers the 2026-11-05 audit's `quality-push-skipped-top15`        | D182 (D168)              |
-| F10 `moonshot-ask-query-expansion-ceiling` (round 1)    | Waits for D179: it screens on the final intent thresholds                                                         | D182                     |
+| F6 `quality-push-skipped-imperative-list` (round 1)     | Waits for D179; the verb-recognising trial also covers the 2026-11-05 audit's `quality-push-skipped-top15`        | D182, then D186 (D168)   |
+| F10 `moonshot-ask-query-expansion-ceiling` (round 1)    | Waits for D179: it screens on the final intent thresholds                                                         | D182, then D184          |
 | F9 stage 2, deflated `item.text` (round 1)              | Not built: about 1.42x per item (estimate) for CPU on every ask read                                              | D181 (D111 stands)       |
 | F15 stage 2, the `intentConstraintOnly` gates (round 2) | Failed the fresh-cache paid pair (hidden 286 to 281, decoys 140 to 144); switch deleted                           | D177 (ends D170)         |
 | F18 step 4 and F20 stage 2, re-decide D159 on Pi        | Pi held-out 13 pair, intent replayed, D171's cost; promoted 0.2/1/12                                              | D179                     |
 | F23's deciding run, the `EDEN_PROCESSES` default        | Passed D172's rule before and after the StaticSource fix; default is the core count                               | D178 (ends D163's trial) |
-| F25 `devloop-retrieval-screen-set-subset-replay`        | Waits for D179: its wide recording goes stale when the thresholds change                                          | D182                     |
+| F25 `devloop-retrieval-screen-set-subset-replay`        | Waits for D179: its wide recording goes stale when the thresholds change                                          | D182, then D185          |
 | 2026-11-05 O5 `ask-deadline.test.ts` timing             | 25 of 25 passes; bound kept (D140)                                                                                | D180 (a)                 |
 | 2026-11-05 O8, three dev-loop items                     | Funnel start-up is the engine's own backfill; ingest bench clock is correct; no hidden test directories           | D180 (b)-(d)             |
 | 2026-11-05 O9, two remaining items                      | Label retention fixed by D169's copies; poll tuning below the 1.5x bar and unpaid                                 | D180 (e)-(f)             |
-| 2026-11-05 O7, the unranked quarter                     | Superseded by D158 and D162; the remaining bridge is F10                                                          | D182                     |
+| 2026-11-05 O7, the unranked quarter                     | Superseded by D158 and D162; the remaining bridge is F10                                                          | D182, then D184          |
 
 ### The $0 preset screen on the merged tree
 
@@ -670,4 +670,61 @@ stub reader, train1-6 seeds 41-42, intent replayed. The pool proxy is the reader
 No part's removal beats the default on the pool proxy: every removal but four loses hidden facts: the three
 identical ones change nothing, and minus `anticipate` keeps hidden with one decoy fewer, inside the ±3-task noise
 (D153 already kept anticipation). Nothing is promoted or deleted from this screen. The screen predates D179's
-thresholds.
+thresholds; the post-D179 screen, with the replayed paid reader, is in "Closing pass 3" below.
+
+## Closing pass 3
+
+Written on 2026-11-06 from `audit/2026-11-06-integration` 397c78b00 (every closing package merged, D179's
+thresholds in the default). Every number here comes from a run in this pass on 4 shared cores, at $0.
+
+### The post-D179 preset screen with the replayed paid reader
+
+Command (LAB.md recipe 2a plus `--preset P`; train1-6, seeds 41-42, cards and intent replayed):
+
+```bash
+gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz > R
+bun packages/sim/src/lab/funnel.ts --preset P --jobs 4 --allow-misses -- --reader replay \
+  --reader-model claude-haiku-5-5 --reader-cache R
+```
+
+The cache holds the default's reading, so a preset that changes the reader's prompts misses it. Misses are answered
+without the reader (fail open), so only the 0-miss rows are exact; the others only approximate a paid reading.
+
+| Preset                                                                  | Surfaced (hidden/decoys of 384) | Reader pool (hidden/decoys) | Replayed / missed |
+| ----------------------------------------------------------------------- | ------------------------------- | --------------------------- | ----------------- |
+| `default`                                                               | 311/137                         | 278/254                     | 651 / 0           |
+| minus `probes`                                                          | 282/188                         | 274/245                     | 301 / 662         |
+| minus `grounds`                                                         | 309/147                         | 276/255                     | 598 / 106         |
+| minus `fallback`                                                        | 311/133                         | 278/254                     | 651 / 0           |
+| minus `compaction`, `judge`, `freshness`, `slowPathQueue`, `probeGrace` | identical to `default`          | 278/254                     | 651 / 0           |
+| minus `graph`                                                           | 305/154                         | 279/253                     | 516 / 264         |
+| minus `anticipate`                                                      | 309/144                         | 278/253                     | 605 / 77          |
+| minus `sync`                                                            | 229/203                         | 213/189                     | 0 / 1,242         |
+| minus `askVerdicts`                                                     | 299/227                         | 275/248                     | 207 / 862         |
+| minus `cards`                                                           | 216/207                         | 232/225                     | 37 / 1,156        |
+| minus `intent`                                                          | 226/156                         | 230/229                     | 419 / 449         |
+| minus `reader`                                                          | 281/256                         | 0/0 (no reader)             | 0 / 0             |
+
+Only minus `fallback` departs from the default among the exact rows: 4 decoys fewer, which `--baseline` shows are two
+templates times two seeds. D183 keeps the part (no $0 arm moves, and `bun run eval` loses precision and recall
+without it). Every other removal loses hidden facts or adds decoys, or changes nothing.
+
+### Checks run in this pass
+
+- `bun run check` on the final tree: format, types and 1,760 tests pass, 0 fail, over 143 files.
+- `bun run eval`: precision 0.8276, recall 0.48, falseFireRate 0, unchanged.
+- `bun test packages/server/src/router.test.ts packages/engine/src/ask-deadline.test.ts`, 3 runs: 18 pass, 0 fail
+  each time.
+- `git branch --no-merged HEAD --list 'audit/2026-11-06-*'` prints nothing: no audit branch is left unmerged.
+- `git diff a8747e057 HEAD -- packages scripts examples` adds no `TODO` or `FIXME` line.
+
+### Every item still deferred at the start of this pass
+
+| Item                                                                                    | Where it ends                                                                                                                                       | Row                 |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| D182 (F6, F10 and F25 waiting for D179)                                                 | D179 landed; each item has its own row below, and D182 points at them                                                                               | D184-D186           |
+| F6 `quality-push-skipped-imperative-list` (and 2026-11-05 `quality-push-skipped-top15`) | Trial `readerVerbGate`, package `action-gate-verbs-trial`: 62 hidden and 62 control skipped of 768, 46 of the hidden already surfaced (ceiling +16) | D186 (trials table) |
+| F10 `moonshot-ask-query-expansion-ceiling`                                              | Closed, not built: 45 of 384 hidden unranked at top 60; about 3-6 tasks gained (estimate: 45 × 0.065..0.130), at or just above ±3 noise; closed on D115's false concerns 0.0% to 4.7% and D89's own Budget, call and COST-MODEL line; reopen at >15% unranked | D184                |
+| F25 `devloop-retrieval-screen-set-subset-replay`                                        | Not built: a paid arm costs about $0.19, a top-up cents; an unordered replay is looser than D117's 493 of 600                                       | D185 (D117 stands)  |
+| 2026-11-05 O7, the unranked quarter                                                     | 92 unranked, then 64 after D158, now 45 at top 60; the remaining bridge is F10, closed                                                              | D184                |
+| The preset screen predates D179 (Closing)                                               | Re-run above with the replayed paid reader; only minus `fallback` differs, and it is kept                                                           | D183                |
