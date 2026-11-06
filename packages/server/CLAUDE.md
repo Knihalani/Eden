@@ -71,8 +71,9 @@ its model roles.
   past it fails `startRouter` and leaves no process. The router tests start real child processes: `router.test.ts`
   holds the pure tests and the shared two-child router (routing, forget, auth, dead child 503);
   `router-processes.test.ts` holds the tests that start routers of their own (divided burst, a child that cannot
-  start, N 2 -> 3 -> 2, the hanging restart), so `--parallel` runs the two files side by side. Do not move a
-  router-starting test back into the first file. The gate is `bun packages/server/bench/router.bench.ts` (events/s at
+  start, N 2 -> 3 -> 2, the hanging restart) and runs them with `test.concurrent` (each has its own temp dir and
+  router), so `--parallel` runs the two files side by side: 1.70-1.76 s for both against 2.56-2.65 s for the one
+  file before (3 runs each, load average 5-6). Do not move a router-starting test back into the first file. The gate is `bun packages/server/bench/router.bench.ts` (events/s at
   a fixed observe p99, one process vs the router over 1 and N children; trial row in docs/DECISIONS.md). Its source
   is an in-process 400-doc `StaticSource`, whose search is much of each event's CPU, so the figure moves when
   StaticSource does. One run is noise (1.32-3.70 on one tree, D172): it runs each arm at least 3 times (5th argument,
