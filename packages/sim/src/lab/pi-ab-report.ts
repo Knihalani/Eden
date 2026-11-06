@@ -261,6 +261,100 @@ for (const c of conditions) {
   );
 }
 
+// ---- Eden's share of the path split by task kind, by observe (the push) against the agent's asks, and by the reader
+// inside both: the ceiling a change below the model can reach (D165). Eden's path spans outrank every other category
+// in `breakdown`, so their union is exactly the eden column above; the reader is counted where it overlaps that union.
+{
+  type Iv = [number, number];
+  const merged = (spans: Span[]): Iv[] => {
+    const out: Iv[] = [];
+    for (const s of [...spans].sort((a, b) => a.start - b.start)) {
+      const last = out[out.length - 1];
+      if (last && s.start <= last[1]) last[1] = Math.max(last[1], s.end);
+      else out.push([s.start, s.end]);
+    }
+    return out;
+  };
+  const length = (xs: Iv[]) => xs.reduce((n, [a, b]) => n + (b - a), 0);
+  const overlap = (xs: Iv[], ys: Iv[]) => {
+    let n = 0;
+    for (let i = 0, j = 0; i < xs.length && j < ys.length;) {
+      n += Math.max(0, Math.min(xs[i]![1], ys[j]![1]) - Math.max(xs[i]![0], ys[j]![0]));
+      if (xs[i]![1] < ys[j]![1]) i++;
+      else j++;
+    }
+    return n;
+  };
+  const rows: string[] = [];
+  for (const c of conditions)
+    for (const kind of KINDS) {
+      const recs = [...records.values()].filter((r) => r.condition === c && r.kind === kind);
+      // Conditions with no Eden on the path (none, tools, both: Pi's both arm has no ask_context but does observe).
+      if (!recs.some((r) => r.events.some((e) => e.cat === "eden" && e.lane === "path"))) continue;
+      const parts = recs.map((r) => {
+        // Clipped to the task's wall time, as `breakdown` is.
+        const path = spansFor
+          .get(key(r.task, r.condition))!
+          .filter((s) => s.lane === "path" && s.cat === "eden" && s.start < r.wallMs)
+          .map((s) => ({ ...s, end: Math.min(s.end, r.wallMs) }));
+        const eden = merged(path);
+        return {
+          eden: length(eden),
+          observe: length(merged(path.filter((s) => s.ev === "eden.observe"))),
+          ask: length(merged(path.filter((s) => s.ev.startsWith("tool.")))),
+          reader: overlap(eden, merged(path.filter((s) => s.ev === "eden.reader"))),
+        };
+      });
+      const wall = mean(recs.map((r) => r.wallMs));
+      const m = (pick: (p: (typeof parts)[number]) => number) => mean(parts.map(pick));
+      const eden = m((p) => p.eden);
+      rows.push(
+        `${c.padEnd(12)} ${kind.padEnd(8)} ${String(recs.length).padStart(3)} ${f(wall, 0).padStart(7)} ` +
+          `${`${f(eden, 0)} (${f((100 * eden) / Math.max(1, wall), 1)}%)`.padStart(14)} ` +
+          `${f(
+            m((p) => p.observe),
+            0,
+          ).padStart(8)} ${f(
+            m((p) => p.ask),
+            0,
+          ).padStart(8)} ` +
+          `${`${f(
+            m((p) => p.reader),
+            0,
+          )} (${f((100 * m((p) => p.reader)) / Math.max(1, eden), 1)}%)`.padStart(15)} ` +
+          `${f(wall / Math.max(1, wall - eden), 2).padStart(8)}x`,
+      );
+    }
+  if (rows.length) {
+    console.log(
+      "\n== Eden on the critical path by task kind, mean ms per task: observe (the push) and ask_context, the " +
+        "reader's share of Eden's path, and the wall-time multiple if Eden took no time",
+    );
+    console.log("condition    kind       n  wall ms   eden (% wall)  observe      ask  reader (% eden)  if-zero");
+    for (const row of rows) console.log(row);
+  }
+  // Each reader call's latency against its output tokens (the span's `out`): the intercept is the floor no change
+  // below the model removes. A fit of this run and endpoint, not a universal floor (reader-latency-fit.ts fits others).
+  for (const c of conditions) {
+    const calls = [...records.values()]
+      .filter((r) => r.condition === c)
+      .flatMap((r) => spansFor.get(key(r.task, r.condition))!.filter((s) => s.ev === "eden.reader"))
+      .map((s) => ({ ms: s.end - s.start, out: Number(s.data?.out ?? NaN) }))
+      .filter((x) => Number.isFinite(x.out));
+    if (calls.length < 2) continue;
+    const mx = mean(calls.map((x) => x.out));
+    const my = mean(calls.map((x) => x.ms));
+    const sxx = calls.reduce((n, x) => n + (x.out - mx) ** 2, 0);
+    const slope = sxx ? calls.reduce((n, x) => n + (x.out - mx) * (x.ms - my), 0) / sxx : 0;
+    const ms = calls.map((x) => x.ms);
+    console.log(
+      `${c.padEnd(12)} reader ${calls.length} calls: p50 ${f(quantile(ms, 0.5), 0)} p90 ${f(quantile(ms, 0.9), 0)}` +
+        ` mean ${f(my, 0)} ms, mean out ${f(mx, 0)} tok; fit ${f(my - slope * mx, 0)} ms + ${f(slope, 2)} ms/out token` +
+        ` (mean/floor ${f(my / Math.max(1, my - slope * mx), 2)}x)`,
+    );
+  }
+}
+
 // ---- Paired differences: the same task under two conditions, a bootstrap over tasks for the 95% interval.
 const byTask = new Map<string, Map<string, RunResult>>();
 for (const r of ok) {
