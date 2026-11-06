@@ -1,0 +1,155 @@
+{
+ "live": true,
+ "wiring": "shipped (D128: no judge, the role reader) on a lab transport",
+ "provider": "anthropic-direct (lab, D97)",
+ "transport": "Anthropic Messages API direct, not OpenRouter (what ships): same model family, not bit-identical",
+ "readerModel": "claude-haiku-5-5",
+ "thinking": "off",
+ "usdCap": 0.05,
+ "spentUsd": 0.0009263000000000003,
+ "ledger": {
+  "run": "realuse1-D-t7",
+  "role": "eden.reader",
+  "rows": 6,
+  "bookedUsd": 0.0009263
+ },
+ "waitMs": 2000,
+ "planner": true,
+ "inert": [
+  "cards (needs a card maker; the eval wires none, so no card is made or matched)",
+  "intent (needs the card maker's intent requests; not wired)"
+ ],
+ "scenarios": 31,
+ "turns": 148,
+ "scoredTurns": 104,
+ "precision": 0.8333333333333334,
+ "recall": 0.5,
+ "falseFireRate": 0,
+ "counts": {
+  "expected": 50,
+  "found": 25,
+  "delivered": 30,
+  "deliveredExpected": 25,
+  "silentTurns": 68,
+  "falseFires": 0
+ },
+ "modelCallsPerTurn": 0.04054054054054054,
+ "costPerTurnUsd": 6.2587837837837836e-06,
+ "latencyP50Ms": 0.29781500000001415,
+ "latencyP95Ms": 26.967917999999997,
+ "decisions": {
+  "skipped": 87,
+  "silent": 44,
+  "reader-push": 17,
+  "fallback": 6,
+  "sources": 18,
+  "answer": 6
+ },
+ "plannedLookups": 109,
+ "byCategory": {
+  "adversarial": {
+   "scenarios": 6,
+   "scoredTurns": 19,
+   "precision": 1,
+   "recall": 0.6,
+   "falseFireRate": 0
+  },
+  "follow-ups": {
+   "scenarios": 3,
+   "scoredTurns": 9,
+   "precision": 1,
+   "recall": 0.5,
+   "falseFireRate": 0
+  },
+  "inbox": {
+   "scenarios": 5,
+   "scoredTurns": 19,
+   "precision": 1,
+   "recall": 0.6666666666666666,
+   "falseFireRate": 0
+  },
+  "purchases": {
+   "scenarios": 4,
+   "scoredTurns": 11,
+   "precision": 0.5,
+   "recall": 0.14285714285714285,
+   "falseFireRate": 0
+  },
+  "relationships": {
+   "scenarios": 4,
+   "scoredTurns": 12,
+   "precision": 0.75,
+   "recall": 0.42857142857142855,
+   "falseFireRate": 0
+  },
+  "scheduling": {
+   "scenarios": 6,
+   "scoredTurns": 26,
+   "precision": 0.9090909090909091,
+   "recall": 0.6666666666666666,
+   "falseFireRate": 0
+  },
+  "travel": {
+   "scenarios": 3,
+   "scoredTurns": 8,
+   "precision": 0.5,
+   "recall": 0.3333333333333333,
+   "falseFireRate": 0
+  }
+ },
+ "privacy": {
+  "secretsPlanted": 2,
+  "secretsExposed": 3,
+  "secretsLeaked": 0,
+  "injections": 31,
+  "notInert": 0
+ },
+ "ask": {
+  "cases": 6,
+  "answered": 6,
+  "recall": 1
+ },
+ "readerPool": {
+  "reader": "live",
+  "calls": 6,
+  "failures": 0,
+  "reads": 13,
+  "meanPoolItems": 3.6923076923076925,
+  "expected": 50,
+  "expectedInPool": 15,
+  "ask": {
+   "expected": 6,
+   "expectedInPool": 0
+  },
+  "byCategory": {
+   "adversarial": {
+    "expected": 5,
+    "expectedInPool": 0
+   },
+   "follow-ups": {
+    "expected": 4,
+    "expectedInPool": 0
+   },
+   "inbox": {
+    "expected": 6,
+    "expectedInPool": 3
+   },
+   "purchases": {
+    "expected": 7,
+    "expectedInPool": 2
+   },
+   "relationships": {
+    "expected": 7,
+    "expectedInPool": 3
+   },
+   "scheduling": {
+    "expected": 15,
+    "expectedInPool": 3
+   },
+   "travel": {
+    "expected": 6,
+    "expectedInPool": 4
+   }
+  }
+ }
+}

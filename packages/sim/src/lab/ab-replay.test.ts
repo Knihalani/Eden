@@ -284,6 +284,9 @@ describe("pi-ab --reuse-arms", () => {
     // The fingerprint is stable, and moves with what the harness adds (pi-ab: the tool's parameter schema).
     expect(armPromptsHash({ params: "query" })).toBe(prior.promptsHash!);
     expect(armPromptsHash({ params: "q" })).not.toBe(prior.promptsHash!);
+    // A run with neutral tasks also hashes their grader prompt; one without keeps its earlier hash.
+    expect(armPromptsHash({ params: "query" }, false)).toBe(prior.promptsHash!);
+    expect(armPromptsHash({ params: "query" }, true)).not.toBe(prior.promptsHash!);
     const changed = { ...now, promptsHash: armPromptsHash({ params: "q" }) };
     expect(() => reusableArms(prior, changed, ["none"])).toThrow(/prompts \(promptsHash\) differs/);
     const { promptsHash: _old, ...unrecorded } = prior;

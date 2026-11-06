@@ -48,7 +48,8 @@
  * records the packets the agent's requests saw, the item ids they cited, the ids `ask_context` answers cited, and the
  * task's planted item id (hidden-context suites), so a report can tell delivery from uptake.
  *
- *   OPENROUTER_API_KEY=… bun packages/sim/src/lab/pi-ab.ts [--suite heldout] [--seeds 41] [--variants hidden,control]
+ *   OPENROUTER_API_KEY=… bun packages/sim/src/lab/pi-ab.ts [--suite heldout] [--seeds 41]
+ *     [--variants hidden,control[,neutral]]
  *     [--conditions none,tools,eden,both] [--config H|'{"probes":true}'] [--model z-ai/glm-5.3-flash]
  *     [--grader anthropic/claude-haiku-5.5] [--budget 0.6] [--out pi-ab.json] [--timeline dir] [--time-scale 1]
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
@@ -121,9 +122,19 @@ import {
   type RunResult,
   type Task,
 } from "./ab-common";
+import { variantsFor } from "./neutral";
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
 import { DiskCardMaker, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
-import { isAnthropic, isCapError, labAccess, labModel, piModelFor, piRegistry, providerPrefs } from "./free";
+import {
+  isAnthropic,
+  isCapError,
+  labAccess,
+  labModel,
+  openRouterModels,
+  piModelFor,
+  piRegistry,
+  providerPrefs,
+} from "./free";
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
 import { effective, PRESETS } from "./presets";
 import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Budgeted } from "./reader-disk";
@@ -138,8 +149,9 @@ const opt = (name: string, fallback: string) => {
   return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
 };
 const DRY = args.includes("--dry");
+// Only needed when some role runs on OpenRouter: a run with every role on `claude-*` goes to Anthropic alone (D97), and
+// is checked once the models are known (`openRouterModels`, below).
 const KEY = process.env.OPENROUTER_API_KEY;
-if (!KEY && !DRY) throw new Error("needs OPENROUTER_API_KEY");
 const SEEDS = opt("seeds", "41").split(",").map(Number);
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
 const GRADER = opt("grader", "anthropic/claude-haiku-5.5");
@@ -147,7 +159,8 @@ const BUDGET = Number(opt("budget", "0.6"));
 const SUITE = opt("suite", "heldout");
 const LOOKUPS = SUITE === "lookups";
 const SUITE_LIST = LOOKUPS ? ["lookups"] : parseSuites(SUITE);
-const VARIANTS = opt("variants", "hidden,control").split(",") as ("hidden" | "control")[];
+// `neutral` (neutral.ts) runs only on the suites that build it; the others run their hidden and control variants.
+const VARIANTS = opt("variants", "hidden,control").split(",") as ("hidden" | "control" | "neutral")[];
 const ACT = args.includes("--act");
 const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden,eden-act-firewall" : "none,tools,eden,both").split(",");
 const OUT = opt("out", "pi-ab.json");
@@ -176,21 +189,26 @@ const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
   act: ACT,
   defaults: DEFAULT_CONFIG as unknown as Record<string, unknown>,
 });
-// A flag whose dependency this harness cannot give it would run a different configuration under the flag's name: a
-// run that says R or ALL must be R or ALL (the review of moon/combined). Cards need a model; the sync, list tools.
-if (CONDITIONS.some((c) => c.withPartner && effective(c.config).cards) && !KEY && !DRY)
-  throw new Error("config.cards needs OPENROUTER_API_KEY for its enrichment");
-// Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
 const USES_READER = CONDITIONS.some((c) => c.withPartner && effective(c.config).askReader);
-const ACCESS = labAccess(args, [
+// Every model a role of this run calls, once: the pacer and spend ledger are set up for them, and the key check below
+// reads the same list, so a role added here cannot go unchecked.
+const RUN_MODELS = [
   MODEL,
   GRADER,
   ...(CONDITIONS.some((c) => c.withPartner && effective(c.config).cards) ? [CARD_MODEL] : []),
   ...(USES_READER ? [READER_MODEL] : []),
-]);
+];
+// Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
+const ACCESS = labAccess(args, RUN_MODELS);
 const PACER = ACCESS.pacer;
+// A flag whose dependency this harness cannot give it would run a different configuration under the flag's name: a
+// run that says R or ALL must be R or ALL (the review of moon/combined). Cards need a model, so a role on OpenRouter
+// needs its key; one on Anthropic uses HAIKU_API_KEY (keyFor).
+const OPENROUTER_ROLES = openRouterModels(RUN_MODELS);
+if (OPENROUTER_ROLES.length && !KEY && !DRY)
+  throw new Error(`${OPENROUTER_ROLES.join(", ")}: needs OPENROUTER_API_KEY`);
 /** A task starts only while the cap leaves room for all of it: its model requests and its grading. */
 const TASK_REQUESTS = MAX_STEPS + 1;
 let capStopped = 0;
@@ -438,7 +456,7 @@ function meteredModel(
 /** The tool parameter every search tool and `ask_context` takes: one string, as agent-ab declares it. */
 const queryParams = Type.Object({ query: Type.String({ description: "What to search for" }) });
 // What the Eden-free arms see and how they are graded, recorded with the results so `--reuse-arms` can check it.
-const PROMPTS_HASH = armPromptsHash({ queryParams });
+const PROMPTS_HASH = armPromptsHash({ queryParams }, VARIANTS.includes("neutral"));
 const askParams = Type.Object({ question: Type.String() });
 
 /**
@@ -1084,7 +1102,7 @@ async function runWorld(
 
 const worlds = SEEDS.flatMap((seed) =>
   SUITE_LIST.flatMap((suite) =>
-    (LOOKUPS ? ["hidden" as const] : VARIANTS).map((variant) => {
+    (LOOKUPS ? ["hidden" as const] : variantsFor(suite, VARIANTS)).map((variant) => {
       const w = worldOf(seed, suite, variant, LIMITS);
       const picked = TEMPLATES ? { ...w, tasks: w.tasks.filter((t) => TEMPLATES.has(t.type)) } : w;
       return LIMIT > 0 ? { ...picked, tasks: picked.tasks.slice(0, LIMIT) } : picked;

@@ -20,6 +20,7 @@ import { plantHeldout10 } from "./hidden-heldout10";
 import { plantHeldout11 } from "./hidden-heldout11";
 import { plantHeldout12 } from "./hidden-heldout12";
 import { plantHeldout13 } from "./hidden-heldout13";
+import { plantHeldout14 } from "./hidden-heldout14";
 import { plantTrain1 } from "./hidden-train1";
 import { plantTrain2 } from "./hidden-train2";
 import { plantTrain3 } from "./hidden-train3";
@@ -28,55 +29,69 @@ import { plantTrain5 } from "./hidden-train5";
 import { plantTrain6 } from "./hidden-train6";
 
 export type { HiddenTask };
-export type Variant = "hidden" | "control";
+/** `neutral` (RealUse-1): the same requests, nothing planted; only suites in NEUTRAL_SUITES build it (neutral.ts). */
+export type Variant = "hidden" | "control" | "neutral";
 export type Plant = (world: World, seed: number, variant: Variant) => HiddenTask[];
 
+/** A suite written before `neutral`: asking it for one throws (it would read any variant but hidden as the control). */
+const twoVariant =
+  (name: string, plant: (world: World, seed: number, variant: "hidden" | "control") => HiddenTask[]): Plant =>
+  (world, seed, variant) => {
+    if (variant === "neutral") throw new Error(`${name} builds no neutral variant (neutral.ts NEUTRAL_SUITES)`);
+    return plant(world, seed, variant);
+  };
+
 export const SUITES: Record<string, Plant> = {
-  hidden: plantHidden,
-  heldout: plantHeldout,
-  heldout2: plantHeldout2,
-  heldout3: plantHeldout3,
-  heldout4: plantHeldout4,
+  hidden: twoVariant("hidden", plantHidden),
+  heldout: twoVariant("heldout", plantHeldout),
+  heldout2: twoVariant("heldout2", plantHeldout2),
+  heldout3: twoVariant("heldout3", plantHeldout3),
+  heldout4: twoVariant("heldout4", plantHeldout4),
   // Written after D47, blind to the engine and to every other suite; never tuned on (docs/research/lean-probes.md).
-  heldout5: plantHeldout5,
+  heldout5: twoVariant("heldout5", plantHeldout5),
   // Written after D48 for the D49-D53 work, blind to the engine and to every other suite; measurement only.
-  heldout6: plantHeldout6,
+  heldout6: twoVariant("heldout6", plantHeldout6),
   // Written after D53, blind to the engine and to every other suite; measurement only.
-  heldout7: plantHeldout7,
+  heldout7: twoVariant("heldout7", plantHeldout7),
   // Written after D55, blind to the engine and to every other suite; measurement only.
-  heldout8: plantHeldout8,
+  heldout8: twoVariant("heldout8", plantHeldout8),
   // Written for the econ tracks, blind to the engine and to every other suite; registered unread, measurement
   // only: never run it while tuning.
-  heldout9: plantHeldout9,
+  heldout9: twoVariant("heldout9", plantHeldout9),
   // development suites, written after D72; tune on them.
-  dev6a: plantDev6a,
-  dev6b: plantDev6b,
+  dev6a: twoVariant("dev6a", plantDev6a),
+  dev6b: twoVariant("dev6b", plantDev6b),
   // Blind, written after D79 by an author who saw no other suite; measurement only.
-  heldout10: plantHeldout10,
+  heldout10: twoVariant("heldout10", plantHeldout10),
   // blind, written after D80; measurement only
-  heldout11: plantHeldout11,
+  heldout11: twoVariant("heldout11", plantHeldout11),
   // blind, written after D85; measurement only
-  heldout12: plantHeldout12,
+  heldout12: twoVariant("heldout12", plantHeldout12),
   // blind, written for the Haiku phase 3 by an author who saw only the world generator, the text helpers and the
   // HiddenTask interface; registered unread, measurement only: run once, at the end of phase 3
-  heldout13: plantHeldout13,
+  heldout13: twoVariant("heldout13", plantHeldout13),
+  // RealUse-1's blind suite, written by an author who saw only heldout13's format, this registry, the sim world API
+  // and the benchmark's design (docs/research/benchmark-realuse-1.md); the first suite with a `neutral` variant.
+  // Measurement only: run once for RealUse-1, never tune on it.
+  heldout14: plantHeldout14,
   // The broad tuning set: six suites written blind (each author saw only the world generator, the text helpers and
   // the HiddenTask interface), one life area each, so a change must generalise across authors to show up. Tune on them.
-  train1: plantTrain1,
-  train2: plantTrain2,
-  train3: plantTrain3,
-  train4: plantTrain4,
-  train5: plantTrain5,
-  train6: plantTrain6,
+  train1: twoVariant("train1", plantTrain1),
+  train2: twoVariant("train2", plantTrain2),
+  train3: twoVariant("train3", plantTrain3),
+  train4: twoVariant("train4", plantTrain4),
+  train5: twoVariant("train5", plantTrain5),
+  train6: twoVariant("train6", plantTrain6),
 };
 export const SUITE_NAMES = Object.keys(SUITES);
 const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
 const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
 /**
  * Held-out suites kept out of `all` so a tuning command cannot spend them; held-out 9-13 have been read (D72, D80,
- * D85, D98, D112) and a blind round needs a new suite. A run names them to measure on them (with `--blind`).
+ * D85, D98, D112) and a blind round needs a new suite. Held-out 14 is RealUse-1's blind suite (run once for it). A run
+ * names them to measure on them (with `--blind`).
  */
-export const UNRUN_BLIND = ["heldout9", "heldout10", "heldout11", "heldout12", "heldout13"];
+export const UNRUN_BLIND = ["heldout9", "heldout10", "heldout11", "heldout12", "heldout13", "heldout14"];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**
