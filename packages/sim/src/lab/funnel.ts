@@ -47,7 +47,7 @@
  * ground-truth proxy, every line labelled so. Both shard. `-- --packet-k 10,15,20` prints the planted item in the
  * ask's top K. With `-- --lead-in clause` and a no-model reader, the draft's pool against the request's (docs/LAB.md).
  */
-import { spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -110,9 +110,12 @@ const cli = flags(
 );
 const opt = cli.opt;
 const passthrough = cli.rest;
-/** The run's temp directory (merged cards, intent requests, part files), removed on every exit path. */
+/** The run's temp directory (merged cards, intent requests, part files), removed on exit, SIGINT and SIGTERM. */
 let scratch = "";
-/** The sharded output files' parts (`<file>.part-<i>`, next to each named file), removed on every exit path. */
+/**
+ * The sharded output files' parts (`<file>.part-<i>`, next to each named file), removed on exit, SIGINT and SIGTERM
+ * (not on SIGKILL, which no process can catch).
+ */
 let outputParts: PartFile[] = [];
 const cleanup = () => {
   if (scratch) rmSync(scratch, { recursive: true, force: true });
@@ -120,6 +123,25 @@ const cleanup = () => {
 };
 // Also on an uncaught throw (a merge that refuses its parts): no part file outlives the run.
 process.on("exit", cleanup);
+/** The running hidden-funnel processes and their close, stopped with the launcher so none writes after the cleanup. */
+const children = new Map<ChildProcess, Promise<unknown>>();
+/** The exit code of the signal being handled: no new process starts, and a child it stopped exits with that code. */
+let stopping: number | undefined;
+// 'exit' does not fire on a signal: pass it on to the children (a SIGTERM sent to the launcher alone does not reach
+// them), wait up to 5 s for them to close so no late write recreates a part, then clean up and exit as the signal
+// would (128 + its number).
+for (const [signal, code] of [
+  ["SIGINT", 130],
+  ["SIGTERM", 143],
+] as const) {
+  process.on(signal, async () => {
+    stopping = code;
+    for (const child of children.keys()) child.kill(signal);
+    await Promise.race([Promise.all(children.values()), new Promise((done) => setTimeout(done, 5000))]);
+    cleanup();
+    process.exit(code);
+  });
+}
 const fail = (message: string): never => {
   cleanup();
   console.error(`funnel: ${message}`);
@@ -330,7 +352,7 @@ if (jobs === 1) {
   // A run with reader misses still wrote its rows: score them, then fail below.
   if (run.status !== 0 && run.status !== MISS_EXIT) {
     cleanup();
-    process.exit(run.status ?? 1);
+    process.exit(stopping ?? run.status ?? 1);
   }
 } else {
   await runGroups();
@@ -379,17 +401,25 @@ async function runGroups() {
   const results: { status: number | null; seconds: number }[] = [];
   let next = 0;
   const worker = async () => {
-    for (let i = next++; i < groups.length; i = next++) {
+    for (let i = next++; i < groups.length && stopping === undefined; i = next++) {
       // Each process's stdout and stderr go to its own file, printed whole below so they do not interleave.
       const fd = openSync(partLog(i), "w");
       const started = performance.now();
       const child = spawn("bun", argsOf(i), { stdio: ["ignore", fd, fd] });
-      const status = await new Promise<number | null>((done) => child.on("close", (code) => done(code)));
+      const closed = new Promise<number | null>((done) => child.on("close", (code) => done(code)));
+      children.set(child, closed);
+      const status = await closed;
+      children.delete(child);
       closeSync(fd);
       results[i] = { status, seconds: (performance.now() - started) / 1000 };
     }
   };
   await Promise.all(Array.from({ length: jobs }, worker));
+  // Stopped by a signal: the children closed on it, so their results are partial. Exit as the signal handler would.
+  if (stopping !== undefined) {
+    cleanup();
+    process.exit(stopping);
+  }
   for (const [i, g] of groups.entries()) {
     const r = results[i]!;
     console.log(`\n== ${groupName(g)} (exit ${r.status}, ${r.seconds.toFixed(1)} s)`);
@@ -399,7 +429,7 @@ async function runGroups() {
   if (failed >= 0) {
     console.error(`funnel: ${groupName(groups[failed]!)} failed (its output is above)`);
     cleanup();
-    process.exit(results[failed]!.status ?? 1);
+    process.exit(stopping ?? results[failed]!.status ?? 1);
   }
   const parts = groups.map((_, i) => JSON.parse(readFileSync(partJson(i), "utf8")) as PartOut);
   writeFileSync(out, JSON.stringify(merged(parts), null, 2));

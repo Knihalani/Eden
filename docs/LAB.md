@@ -32,8 +32,9 @@ per suite for train1–6 and held-out 10–12.
 
 - **Never tune on `heldout*`.** `bun run funnel` refuses them without `--blind`. A new blind round needs a new suite
   written by an author who saw no engine code.
-- `UNRUN_BLIND` (heldout9–12) keeps them out of `--suite all`, but every one has been run since: treat the list as
-  "not in `all`", not as "fresh".
+- `UNRUN_BLIND` (held-out 9–13) keeps them out of `--suite all` so a tuning command cannot spend them, but all five
+  have been read (D72, D80, D85, D98, D112): treat the list as "not in `all`", not as "fresh". A blind round needs a
+  new suite.
 - Seeds: 41–44 for funnel work (41–42 on train), 41–48 for the Haiku benchmark. Same seed, same world, same tasks.
 
 ## Configurations (`presets.ts`)
@@ -216,11 +217,16 @@ cards, reader and sync counters (bar `warmMs`) equal; score 214/384 hidden, 211/
 for cores, so with N > 1 ms/task (and the sync's ms/user) is not a latency figure: the run says CONTENDED; **quote
 latency from `--jobs 1`**, and a `--baseline` that compares ms/task needs `--jobs 1` on both sides. A `--seeds` list
 that repeats a seed is refused (blocks would run it once where one process runs it twice).
-`--jobs` falls back to one process, and says so, with `--record` (the ledger books one entry per suite, and a seed
-shard would book a partial run), with any of `--packets`, `--card-log`, `--reader-log`, `--ask-diag`,
-`--candidates` or `--timeline` (each process clears and rewrites that one file), and with `--judge live` or
-`--reader live` (paid calls and rate limits in parallel). A replayed reader (`--reader replay`) and a replayed bridge
-shard; their reader misses are summed for the miss gate.
+The per-task output files shard (since audit 2026-11-06): with `--packets`, `--card-log`, `--reader-log`,
+`--ask-diag` or `--candidates`, process i writes `<file>.part-<i>`, and after the run the parts are merged into the
+named file in one canonical order (suite, seed, variant, template, then each line's own order) and deleted; the
+merged file is byte for byte what one process writes, except `--card-log`, whose lines carry no task and keep part
+order. The ask-diag bucket lines are printed once, from the merged file. The parts are also removed on SIGINT and
+SIGTERM (the launcher stops its processes first and exits 130 or 143), not on SIGKILL. `--jobs` still falls back to
+one process, and says why, with `--record` (the ledger books one entry per suite, and a seed shard would book a
+partial run), with `--timeline` (per-process CPU and RSS would be contended), and with `--judge live` or
+`--reader live` (one append-only cache file and one spend stream per run; a parallel live top-up is not built). A
+replayed reader (`--reader replay`) and a replayed bridge shard; their reader misses are summed for the miss gate.
 
 **`--time` shards too** (since audit 2026-11-03b round 2; it used to force one process), one process per suite × seed
 shard, N at a time (not blocks: the shards sleep rather than burn CPU, so start-up is cheap beside them). At `-- --time 1` a task's
@@ -414,7 +420,7 @@ below and in D141–D157 that cites 247/127 is that intent-inert reading, not th
   replay; 141 of the 164 misses), so the $0 screens run a quarter of planted hidden facts with no requests. A WARNING
   means intent and bridge screens on that run under-read intent; top the file up (`cards-enrich.ts --intent`,
   metered) before trusting a bucket split.
-- **`--ask-diag F` buckets** (one process). A planted item the ask left unranked is split into not cached; not sent,
+- **`--ask-diag F` buckets** (printed from the merged file at any `--jobs`). A planted item the ask left unranked is split into not cached; not sent,
   prefilter rejects; **not in replay** (the intent replay has no line for its content, a lab artefact, told apart
   from a line with no requests since D173); no intent requests; and requests but no match: no shared term, under
   thresholds, **passes but past the first intentHits raw hits** (it passes the thresholds but the engine never sees
@@ -422,7 +428,7 @@ below and in D141–D157 that cites 247/127 is that intent-inert reading, not th
   reads it (`intentFinds` with k = `intentHits` and the ask's arrival, thresholds after; partner.ts `intentFinds`,
   cards.ts `intentFinds`), plus an unbounded call for the past-the-cut bucket; expired cards either call drops are
   counted on the `dropped` line. A last line counts every row not in replay, ranked or not. The recipe above with
-  `-- --ask-diag F` (one process), 2026-11-06: hidden rank -1 64/384 = not in replay 18, no intent requests 3,
+  `-- --ask-diag F` (run then as one process; `--jobs` gives the same lines), 2026-11-06: hidden rank -1 64/384 = not in replay 18, no intent requests 3,
   requests but no match 43 (no shared term 8, under thresholds 35, past the cut 0, over 0); decoys 77/384 = not
   sent 4, not in replay 14, no match 59 (21, 38, 0, 0); not in replay over every row: hidden 98/384, decoys 43/384.
 - **Changes to the ask's cue are screened with a paid reader, never the stub (D174).** The stub got the sign of an

@@ -76,6 +76,30 @@ const funnelTimed = (jobs: string) => {
 
 /** The per-task output files a funnel.ts run writes (they shard with `--jobs`, audit 2026-11-06). */
 const OUTPUT_FLAGS = ["ask-diag", "packets", "card-log", "reader-log", "candidates"];
+/**
+ * funnel.ts sharding `--ask-diag` over 2 processes, sent `signal` once a part file exists. Returns its exit status,
+ * how many parts were seen, and the part files left a second after it exited (a late child write would show there).
+ */
+const funnelSignalled = async (signal: "SIGTERM" | "SIGINT") => {
+  const dir = scratch();
+  const p = Bun.spawn(
+    [
+      "bun",
+      join(lab, "funnel.ts"),
+      ...["--suite", "train1", "--seeds", "41,42", "--jobs", "2", "--set", JSON.stringify(smallSync)],
+      ...["--json", join(dir, "f.json"), "--", "--ask-diag", join(dir, "diag.jsonl")],
+    ],
+    { env: noKey, stdout: "ignore", stderr: "ignore" },
+  );
+  const parts = () => readdirSync(dir).filter((n) => n.includes(".part-"));
+  const deadline = Date.now() + 30_000;
+  while (parts().length === 0 && p.exitCode === null && Date.now() < deadline) await Bun.sleep(50);
+  const partsSeen = parts().length;
+  p.kill(signal);
+  const status = await p.exited;
+  await Bun.sleep(1000);
+  return { status, partsSeen, partsLeft: parts() };
+};
 /** funnel.ts at `--time 0` on train1 seeds 41 and 42 with every per-task output file, into its own directory. */
 const funnelOutputs = async (jobs: string) => {
   const dir = scratch();
@@ -103,6 +127,7 @@ let runs: {
   outputsSolo: Promise<Run & { dir: string }>;
   outputsSharded: Promise<Run & { dir: string }>;
   soloWhy: Promise<Run>;
+  signalled: Promise<{ status: number | null; partsSeen: number; partsLeft: string[] }>;
 };
 // A reader cache with one line recorded under a model that is not the default: every prompt of a run misses it.
 let otherCache = "";
@@ -120,6 +145,7 @@ beforeAll(() => {
     missModel: replay(["--reader-model", "claude-haiku-5-5"]),
     outputsSolo: funnelOutputs("1"),
     outputsSharded: funnelOutputs("2"),
+    signalled: funnelSignalled("SIGTERM"),
     // `--record` and `--reader live` keep one process and say why. The flag after them is unknown, so hidden-funnel.ts
     // exits 2 before anything runs: nothing is recorded or read, and no key is in the env either way.
     soloWhy: (async () => {
@@ -381,6 +407,14 @@ describe("funnel.ts flags", () => {
     expect(summary(sharded.stdout).length).toBeGreaterThanOrEqual(2);
     expect(summary(sharded.stdout)).toEqual(summary(solo.stdout));
   }, 120_000);
+
+  test("a SIGTERM stops the run's processes and leaves no part file", async () => {
+    const r = await runs.signalled;
+    // The parts existed when the signal went out, and the launcher exited as a SIGTERM would (128 + 15).
+    expect(r.partsSeen).toBeGreaterThan(0);
+    expect(r.status).toBe(143);
+    expect(r.partsLeft).toEqual([]);
+  }, 60_000);
 
   test("--record and --reader live keep one process and print why", async () => {
     const r = await runs.soloWhy;
