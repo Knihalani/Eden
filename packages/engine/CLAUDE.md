@@ -11,7 +11,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 
 | File | Owns |
 |---|---|
-| `partner.ts` (5,081 lines) | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues |
+| `partner.ts` (about 5,130 lines) | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues |
 | `config.ts`, `parts.ts` | `EngineConfig`, `DEFAULT_CONFIG` (the unified default, D112: thresholds such as `confidentScore` 1.1, D6, and every part on); `PARTS` (each part's settings that take it out), `withoutParts`, `CORE_CONFIG` (every part out) |
 | `cache.ts` | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem` |
 | `text.ts`, `situation.ts` | Cues with no model (entities, content terms, chatter); a coarse situation label for routing |
