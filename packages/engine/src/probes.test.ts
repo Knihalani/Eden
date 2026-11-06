@@ -739,8 +739,13 @@ describe("the reader's request gate and D168's chat lines", () => {
       "Got it",
       "Sam says hi",
       "Good news: the offsite is on",
-      "When you do Mum's FreshCart order for Friday, add a pack of ibuprofen and some paracetamol.",
     ];
     for (const line of chat) expect([line, isImperative(line, MORE_VERBS)]).toEqual([line, false]);
+  });
+
+  test("a known miss, kept after D186: a request worded off the verb list does not open the reader", () => {
+    // A real request to act, not a chat line. This records the gate's measured miss so a later fix shows here.
+    const line = "When you do Mum's FreshCart order for Friday, add a pack of ibuprofen and some paracetamol.";
+    expect(isImperative(line, MORE_VERBS)).toBe(false);
   });
 });

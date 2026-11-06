@@ -549,6 +549,7 @@ export class ItemCache {
     const u = this.users.get(key);
     if (!u || !this.users.delete(key)) return;
     this.dropped?.(u.scope, null);
+    clearDecoded(); // An expired or evicted user's decoded text does not stay in the memo (`packed-text.ts`).
     const n = (this.perTenant.get(tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(tenantId);
     else this.perTenant.set(tenantId, n);
