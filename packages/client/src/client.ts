@@ -189,7 +189,11 @@ export class EdenClient {
       });
       if (!res.ok) throw new Error(`eden ${path}: ${res.status}${await serverError(res)}`);
       const answer: unknown = await res.json();
-      if (valid && !valid(answer)) throw new Error(`eden ${path}: not a ${path.slice(4)} answer`);
+      if (valid && !valid(answer)) {
+        const route = path.split("?")[0]!;
+        const name = route.slice("/v1/".length);
+        throw new Error(`eden ${route}: not ${/^[aeiou]/.test(name) ? "an" : "a"} ${name} answer`);
+      }
       return answer as T;
     } catch (e) {
       failed?.(e);

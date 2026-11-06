@@ -91,6 +91,11 @@ describe("what hits", () => {
       `alerts go to https://${"discord" + ".com/api/webhooks/"}123456789012345678/${alnum(68)} now`,
       "eden-discord-webhook",
     ],
+    [
+      "Discord webhook URL on a versioned API path, host in capitals",
+      `log: POST https://${"Discord" + ".com/api/v10/webhooks/"}123456789012345678/${alnum(68)} 204`,
+      "eden-discord-webhook",
+    ],
     ["AWS key id below the entropy floor", `id ${"AK" + "IA"}${"Q".repeat(16)} is set`, "eden-aws-key-id"],
     ["entropy + keyword", `deploy secret ${alnum(40, 5)}3 rotates monthly`, "eden-entropy-keyword"],
   ];

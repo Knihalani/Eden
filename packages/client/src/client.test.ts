@@ -476,6 +476,9 @@ describe("an answer of the wrong shape is no context (D14)", () => {
       expect(all).toEqual([]);
       expect(withContext([{ role: "user", content: "q" }], all)).toHaveLength(1);
     }
+    const { eden, errors } = answering("5");
+    await eden.observe({ kind: "user_message", text: "x" });
+    expect(String(errors[0])).toBe("Error: eden /v1/events: not an events answer");
   });
 
   test("ask returns null unless the answer is a string with a citations array; each case is reported", async () => {
