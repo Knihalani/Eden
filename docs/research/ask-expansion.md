@@ -28,7 +28,8 @@ bun run funnel --jobs 1 --allow-misses -- --reader replay --reader-model claude-
 ## Why the user's own items cannot bridge it
 
 A probe outside the engine (each of the 58 tasks' whole world put in one `ItemCache`, the request's content terms
-searched as `rank` does; scratch script, not kept) read the request against the planted item and the user's
+searched as `rank` does; a scratch script not kept in the repo, so these figures are reproducible only by rewriting
+it from this description) read the request against the planted item and the user's
 vocabulary:
 
 - 31 of the 58 planted hidden items share no content word with the request (decoys: 40 of 71).
@@ -71,11 +72,21 @@ bun run funnel --jobs 4 --set '{"askExpand":true}' --baseline .local/stub-base.j
 - Stub reader: TOTAL 259/235 in both arms; reader pool hidden 262/384 and decoys 246/384 in both; task by task, 0
   hidden and 0 decoys gained or lost in the pool. 62 tasks' pools grew, by 130 items in all: mean pool 12.3 to 12.5
   items, mean prompt 7,519 to 7,574 characters over the same 653 reader calls.
-- Replayed paid reader with the switch on: 120 of the 706 prompts changed (missed, answered fail-open), pool 262/246
-  unchanged. The surfaced totals of that run (284/148) mix reader and no-reader answers and are not a reading.
+- Replayed paid reader with the switch on: 706 reader calls against the default's 649, 120 of them prompts the cache
+  did not hold (answered fail-open); pool 262/246 unchanged. The extra calls come with the misses (a missed reading is
+  a failure, not a cached verdict, so a later ask of the same request calls again: an inference from the reader's
+  `failures` counts, 120 here and 2 in the default; both stub arms made 653). The surfaced totals of that run (284/148) mix reader and no-reader answers and are not a reading.
 - `bun run eval` (no reader), and `bun run eval --reader stub` with and without `--config '{"askExpand":true}'`:
   precision 0.8276, recall 0.48, falseFireRate 0, ask recall 1 in all three.
 - `--ask-diag` is identical by construction: the finds sit outside the ask's ranked candidates.
+
+**How much the empty-seat rule left reachable.** In the default stub run, 122 hidden tasks have no planted item in
+the reader's pool: 62 had no reading (outcome `skipped`, pool 0), 57 a full pool of 15 (53 read, 4 gated) and only 3
+had a free seat (14 items). So "0 gained" in the pool is largely what the empty-seat rule allows, not the expansion's
+own reach. The probe above is the evidence that the expansion has none to give, and the reviewer of this change ran a
+variant that lets the finds take seats (inserted after the first 10 of the ask's order, no room limit; their run on
+commit 8fd2884 with that edit, not re-run here): reader pool hidden 262 to 258 (+2, -6) and decoys 246 to 238, so
+displacing candidates loses more planted facts than it finds.
 
 No paid call was made. With no planted item added to any pool, the reader cannot flag one, so the paid train top-up
 (about 120 calls) and the blind held-out 13 Pi pair would have measured reader noise and spent the blind suite on an
