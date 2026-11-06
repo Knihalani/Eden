@@ -6,19 +6,13 @@ import { QueryPlanner, StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { timeWindow } from "./grounding";
 import { ContextPartner } from "./partner";
-import { AskReader, type ReaderInput, type ReaderMaker } from "./reader";
 import {
   absenceSpan,
-  ACTION_VERBS,
-  CHAT_REPLIES,
   cleanEntities,
-  GATE_VERBS,
-  isActionRequest,
-  isChatReply,
-  isImperative,
-  MORE_VERBS,
   endMinutes,
+  isImperative,
   isScheduling,
+  MORE_VERBS,
   isSubject,
   mentions,
   addresses,
@@ -731,158 +725,22 @@ describe("more of D48's settings, through the engine", () => {
   });
 });
 
-// D168's trial (`readerVerbGate`): the reader's request gate recognises more verbs and refuses chat replies.
-describe("the reader's verb gate (readerVerbGate, D168)", () => {
-  // The chat lines D168's verifier turned into paid pushes under the rejected closed-class rule.
-  const chat = [
-    "thanks!",
-    "ok sounds good",
-    "Lol",
-    "Yes",
-    "Done",
-    "Got it",
-    "Sam says hi",
-    "Good news: the offsite is on",
-    "When you do Mum's FreshCart order for Friday, add a pack of ibuprofen and some paracetamol.",
-  ];
-  // One opener per train template the default's gate skipped (31 templates; "X's last day was Friday, please
-  // remove ...", "When you do ..." and "I can't make ..." do not open with a verb and stay skipped).
-  const requests = [
-    "Switch our gas and electricity from Voltwise to Octane Energy's Flex tariff.",
-    "Cash in £3,000 of my Premium Bonds to pay for a new boiler.",
-    "Claim the working-from-home tax relief on HMRC's site for this year.",
-    "Open a Junior ISA for Maya with Halden and put £500 in to get it going.",
-    "Apply for a 0% balance transfer card with Calder this week and move the £3,100 across.",
-    "RSVP yes for Theo to Freddie Nash's 4th birthday at Jungle Jim's soft play.",
-    "Top up Maya's dinner account on ParentPay with £50.",
-    "Open a change ticket to renew the TLS certificate on api.northwind.co.",
-    "Page the database on-call about the elevated error rates on search this morning.",
-    "Cut the marketing site over to the new CDN on Friday morning.",
-    "Clean up the unused IAM roles in the prod AWS accounts.",
-    "Spin up four more A100 nodes for the fine-tuning experiments this week.",
-    "Can you tag v2.8.0 of billing-service and publish the release notes?",
-    "Purge the 2019 application logs from the logging cluster to free up some disk.",
-    "Create a shared admin login for the Zentrix console.",
-    "Provision 40 more seats for Acme today and add them to their next bill.",
-    "Export last quarter's usage data for Acme and send it to Brightwell Insights.",
-    "Clear out the old Acme folder in Drive and delete the 2024 email threads.",
-    "Kick off the Acme pilot on Monday using their live production data.",
-    "Agree to 90-day payment terms for Saskia Brandt's first order.",
-    "Countersign Acme's agreement for their data-enrichment service today.",
-    "Enter me into the Thames Valley 10K on Sunday 1 November.",
-    "Register me for the Hollins Park five-a-side league.",
-    "Extend Joss Kettering's freelance contract by another three months.",
-    "Reimburse Sam the £180 for the train tickets — just do a bank transfer.",
-    "Promote Dana Reyes to team lead and announce it at Monday's all-hands.",
-  ];
-
-  test("D168's chat lines are not requests to act, with the wider verbs too", () => {
-    for (const line of chat) {
-      expect([line, isActionRequest(line)]).toEqual([line, false]);
-      expect([line, isImperative(line, GATE_VERBS)]).toEqual([line, false]);
-    }
-  });
-
-  test("one opener per skipped train template is a request with the gate, and was not one without it", () => {
-    for (const line of requests) {
-      expect([line, isActionRequest(line)]).toEqual([line, true]);
-      expect([line, isImperative(line, MORE_VERBS)]).toEqual([line, false]);
-    }
-  });
-
-  test("every request the old gate took, the new gate takes, unless it is a chat reply", () => {
-    for (const line of ["Book a table for me and Sam", "please give Dana edit access", "Refund Ola's deposit"]) {
-      expect(isImperative(line, MORE_VERBS)).toBe(true);
-      expect(isActionRequest(line)).toBe(true);
-    }
-    // "thank" is a LEADING verb ("Thank Dana for the flowers"), but a thanks is a reply.
-    expect(isImperative("Thank you so much!", MORE_VERBS)).toBe(true);
-    expect(isActionRequest("Thank you so much!")).toBe(false);
-    expect(isActionRequest("Thank Dana for the flowers")).toBe(true);
-    // A question asking to be told stays a question.
-    expect(isActionRequest("Can you tell me if the billing migration finished?")).toBe(false);
-  });
-
-  test("chat replies, alone, joined or as a first clause", () => {
-    for (const r of CHAT_REPLIES) expect([r, isChatReply(r), isActionRequest(r)]).toEqual([r, true, false]);
-    for (const r of ["OK, sounds good!", "ok thanks", "Yes!!", "  done.  ", "Cool — got it", "thanks for sorting it"]) {
-      expect([r, isChatReply(r)]).toEqual([r, true]);
-    }
-    expect(isChatReply("Open a Junior ISA for Maya")).toBe(false);
-    expect(isChatReply("")).toBe(false);
-    expect(isActionRequest("")).toBe(false);
-    expect(isActionRequest("   ")).toBe(false);
-    expect(isActionRequest("please")).toBe(false);
-  });
-
-  test("a verb only ACTION_VERBS names needs an object, and reads as a noun before a copula", () => {
-    expect(isActionRequest("Switch")).toBe(false);
-    expect(isActionRequest("Page is blank")).toBe(false);
-    expect(isActionRequest("Top's fine")).toBe(false);
-    expect(isActionRequest("Switch was flaky this morning")).toBe(false);
-    // A message opening with a pronoun, question word or preposition is not a request, whatever follows.
-    for (const line of ["I can't make it on Saturday", "What did Sam say?", "After lunch, open the ticket"]) {
-      expect([line, isActionRequest(line)]).toEqual([line, false]);
-    }
-  });
-
-  test("case variants, unicode and long text", () => {
-    expect(isActionRequest("SWITCH our broadband to Zest")).toBe(true);
-    expect(isActionRequest("Ŝwitch our broadband")).toBe(false);
-    expect(isActionRequest("Open \ud800 the ticket")).toBe(true);
-    expect(isChatReply("thanks" + " a".repeat(100_000))).toBe(true);
-    expect(isActionRequest("Open the ticket " + "x".repeat(100_000))).toBe(true);
-  });
-
-  test("the wider set is ACTION_VERBS beside MORE_VERBS; neither widens LEADING (which cleans names)", () => {
-    for (const v of MORE_VERBS) expect(GATE_VERBS.has(v)).toBe(true);
-    for (const v of ACTION_VERBS) expect(GATE_VERBS.has(v)).toBe(true);
-    expect(cleanEntities(["Switch Rose Kimura"])).toEqual(["Switch Rose Kimura"]);
-  });
-
-  describe("in the engine", () => {
-    const scope = { tenantId: "t", userId: "u" };
-    const at = Date.parse("2026-10-27T09:00:00Z");
-    class Count implements ReaderMaker {
-      calls: ReaderInput[] = [];
-      async read(input: ReaderInput) {
-        this.calls.push(input);
-        return { bears: [], costUsd: 0 };
-      }
-    }
-    const run = async (readerVerbGate: boolean, texts: string[]) => {
-      const maker = new Count();
-      const src = new StaticSource("mail", "Mail", [
-        { ref: "gas", title: "Voltwise exit fees", text: "Leaving the Voltwise fixed gas tariff early costs £150" },
-        { ref: "thanks", title: "Offsite photos", text: "thanks for the offsite photos, sounds good, done" },
-      ]);
-      const p = new ContextPartner({
-        sources: async () => [src],
-        sourceMap: new SourceMap(),
-        cache: new ItemCache(),
-        budget: new Budget(),
-        model: null,
-        now: () => at,
-        reader: new AskReader({ maker, budget: new Budget(), now: () => at }),
-        config: { ...CORE_CONFIG, askReader: true, readerPush: true, readerVerbGate },
-      });
-      for (const [n, text] of texts.entries()) {
-        const event = { ...scope, sessionId: `s${n}`, at, kind: "user_message", text } as AgentEvent;
-        await p.observe(event, { waitMs: 1_000 });
-      }
-      return maker.calls.length;
-    };
-    const switchGas = "Switch our gas from Voltwise to Octane Energy's Flex tariff";
-
-    test("with the switch, a request opening with a wider verb is read; without it, it is not", async () => {
-      expect(await run(false, [switchGas])).toBe(0);
-      expect(await run(true, [switchGas])).toBe(1);
-    });
-
-    test("with the switch, chat replies open no reader call; without it, a thanks did", async () => {
-      const lines = ["thanks!", "ok sounds good", "Done", "Thank you for the offsite photos"];
-      expect(await run(true, lines)).toBe(0);
-      expect(await run(false, lines)).toBe(1);
-    });
+// The reader's request gate (`isImperative(raw, MORE_VERBS)`, partner.ts: the push in `observe` and `readAsk`) opens a
+// paid reader call. D168's verifier found these chat lines opening one under a wider rule; the shipped gate must not.
+// (D168's verb-recognising trial was measured and deleted, 2026-11-06: commit 3fa94529f holds its code.)
+describe("the reader's request gate and D168's chat lines", () => {
+  test("no chat line is a request to act", () => {
+    const chat = [
+      "thanks!",
+      "ok sounds good",
+      "Lol",
+      "Yes",
+      "Done",
+      "Got it",
+      "Sam says hi",
+      "Good news: the offsite is on",
+      "When you do Mum's FreshCart order for Friday, add a pack of ibuprofen and some paracetamol.",
+    ];
+    for (const line of chat) expect([line, isImperative(line, MORE_VERBS)]).toEqual([line, false]);
   });
 });

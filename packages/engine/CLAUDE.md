@@ -136,6 +136,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   ask's own answer), not when `deliver` builds it: a queued packet the agent has not taken was shown nothing, so an
   ask before `takePending` says its items in full. The ask then drops from `s.pending` a packet whose every item it
   cited; one cited in part stays queued (`review-regressions.test.ts`).
+- The reader's request gate (the push in `observe`, `readAsk`'s "acts") is `isImperative(raw, MORE_VERBS)`. D168's
+  verb-recognising widening (a trial switch with wider verbs and a chat-reply blocklist) was measured and deleted on
+  2026-11-06 (+17% reader calls, hidden 311 to 310, decoys 137 to 121; the code is in commit 3fa94529f): widening it
+  again needs a decision that accepts the extra calls.
 - `confident()` is one loop that stops at the cap, cheap tests first; every test in it must judge one item alone (no
   state across items), or stopping early would change its output.
 - **A re-read never revives a held-gone id (D126).** `recheck` checks `ItemCache.isHeldGone` after its fetch and
