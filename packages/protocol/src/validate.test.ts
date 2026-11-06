@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { itemId } from "./ids";
-import { checkAsk, checkEvent, checkSourceItems } from "./validate";
+import { MAX_QUESTION_CHARS, checkAsk, checkEvent, checkSourceItems } from "./validate";
 
 const scope = { tenantId: "acme", userId: "u_1", sessionId: "s_1" };
 
@@ -167,5 +167,46 @@ describe("checkSourceItems", () => {
     expect(checkSourceItems({ tenantId: "t", userId: "u", sourceId: "slack", items: [{ ref: "r" }] }).ok).toBe(false);
     const updated = { tenantId: "t", userId: "u", sourceId: "s", items: [{ ref: "r", text: "x", updatedAt: "now" }] };
     expect(checkSourceItems(updated).ok).toBe(false);
+  });
+});
+
+describe("an over-long field is refused with a message naming the limit, not a wrong reason", () => {
+  const scope = { tenantId: "t", userId: "u", sessionId: "s" };
+  const errorOf = (r: { ok: boolean; error?: string }) => (r.ok ? null : r.error);
+
+  test("a question past MAX_QUESTION_CHARS says so; an empty one is still non-empty", () => {
+    expect(errorOf(checkAsk({ ...scope, question: "q".repeat(MAX_QUESTION_CHARS + 1) }))).toBe(
+      "question must be a string of at most 10,000 characters",
+    );
+    expect(errorOf(checkAsk({ ...scope, question: " " }))).toBe("question must be non-empty");
+  });
+
+  test("event text, tool and source past their limits name the limit", () => {
+    const long = "x".repeat(1_000_001);
+    expect(errorOf(checkEvent({ ...scope, kind: "user_message", text: long }))).toBe(
+      "user_message.text must be a string of at most 1,000,000 characters",
+    );
+    expect(errorOf(checkEvent({ ...scope, kind: "tool_call", tool: "t".repeat(201), input: {} }))).toBe(
+      "tool_call.tool must be a string of at most 200 characters",
+    );
+    expect(errorOf(checkEvent({ ...scope, kind: "tool_result", tool: "t", output: long }))).toBe(
+      "tool_result needs tool (at most 200 characters) and output (at most 1,000,000) as strings",
+    );
+    expect(errorOf(checkEvent({ ...scope, kind: "external", source: "s".repeat(201), text: "x" }))).toBe(
+      "external needs source (at most 200 characters) and text (at most 1,000,000) as strings",
+    );
+  });
+
+  test("a pushed item's title or url that is not a string says so, as one past the limit does", () => {
+    const base = { tenantId: "t", userId: "u", sourceId: "src" };
+    expect(errorOf(checkSourceItems({ ...base, items: [{ ref: "r", text: "x", title: 5 }] }))).toBe(
+      "items[0].title must be a string of at most 2,000 characters",
+    );
+    expect(errorOf(checkSourceItems({ ...base, items: [{ ref: "r", text: "x", url: "u".repeat(2_001) }] }))).toBe(
+      "items[0].url must be a string of at most 2,000 characters",
+    );
+    expect(errorOf(checkSourceItems({ ...base, items: [{ ref: "r", text: "x".repeat(200_001) }] }))).toBe(
+      "items[0].text must be a string of at most 200,000 characters",
+    );
   });
 });
