@@ -356,10 +356,11 @@ hidden-funnel's), then prints `RETRIEVAL SCREEN`: per variant, planted items ret
 (the retrieval figure) and surfaced, over the pairs `packages/sim/lab/retrieval-screen.json` lists (`select FULL.json`
 rewrites it; 192 of 192 covered), and with `--baseline` every task whose fields moved. It is a screen, not a result.
 
-Measured 2026-11-06 (4 cores, load 1.4–3.4, stub reader unless named). Time, `bun run funnel` against the screen:
-10.0–10.5 s against 6.0–6.4 s at the default jobs (3 runs each), 22.1 s against 11.8–12.5 s at `--jobs 1`; with the
-Haiku replay 10.6 s (647 replayed, 2 missed) against 6.3 s (324 replayed, 0 missed). The default on the screen:
-hidden pool 130/192, surfaced 127; decoys pool 121, surfaced 118 (full: 262/246 and 259/235). With the Haiku
+Measured 2026-11-06 (4 cores, load average 3.4 at the start of the timing runs, stub reader unless named). Time, `bun
+run funnel` against the screen: 10.0–10.5 s against 6.0–6.4 s at the default jobs (3 runs each), 22.1 s against
+11.8–12.5 s at `--jobs 1` (both through `bun run funnel`; `run --jobs 1` gives the same grid); with the Haiku replay
+10.6 s (647 replayed, 2 missed) against 6.3 s (324 replayed, 0 missed). The default on the screen: hidden pool 130/192,
+surfaced 127; decoys pool 121, surfaced 118 (full: 262/246 and 259/235). With the Haiku
 replay, the screen's 384 rows equal the full replay's rows for the same tasks (0 moved). Agreement with the full
 funnel on four past changes (`agree`, each change run both ways against the default):
 
@@ -370,15 +371,17 @@ funnel on four past changes (`agree`, each change run both ways against the defa
 | `--preset minus-intent` | 384/384 | 42 / 42 | −32, −45; −17, −24 | −17, −20; −8, −12 | agree |
 | `--preset minus-graph` | 384/384 | 6 / 6 | −1, +3; −2, +1 | −1, +1; −1, 0 | differ |
 
-Every task agreed in every change, as it must (same worlds, same order). The verdict, the sign of the totals, agreed
-on the three changes that moved 32 tasks or more and differed on minus-graph, which moves 6 of the screen's tasks and
-15 of 768 in the full funnel (the others moved 67–88): below about five moved tasks a half-size screen cannot tell a direction, so read its task list, not its
-total. Prefixes were tried and dropped: `-- --limit 16` and `--limit 8` per suite (4.7–4.9 s and 4.2 s) moved one
-default task of their 192 and 96 rows (each suite clears only its own tasks' calendar slots, `clearSlot`), so the screen's rows
-would no longer be the funnel's. A change that re-renders the reader's pool still misses the reader cache; its paid
-top-up on the screen is about half a full one (324 of 649 calls, about $0.09 at recipe 2a's $0.185 for 652 calls,
-an estimate). It does not answer what F25's unordered subset replay would: no recorded reading is reused for a pool
-it was not given (D117 is unchanged).
+Every task agreed in every change, as it must (same worlds, same order): that is a determinism check, not evidence that
+the screen predicts. The evidence is the verdict, the sign of the totals, which agreed on the three changes that moved
+32 tasks or more and differed on minus-graph, which moves 6 of the screen's tasks and 15 of 768 in the full funnel (the
+others moved 67–88). So far the sign was wrong at 6 moved screen tasks and right at 32 or more, with nothing measured
+between: for a change that moves fewer than about 30 screen tasks, read the task list, not the totals. Prefixes were
+tried and dropped: `-- --limit 16` and `--limit 8` per suite (4.7–4.9 s and 4.2 s) moved one default task of their 192
+and 96 rows (each suite clears only its own tasks' calendar slots, `clearSlot`), so the screen's rows would no longer be
+the funnel's. A change that re-renders the reader's pool still misses the reader cache; its paid top-up on the screen is
+about half a full one (324 of 649 calls, about $0.09 at recipe 2a's $0.185 for 652 calls, an estimate). It does not
+answer what F25's unordered subset replay would: no recorded reading is reused for a pool it was not given (D117 is
+unchanged).
 
 ### 2. The same with Eden's reader live (NEW)
 

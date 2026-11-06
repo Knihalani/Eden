@@ -23,11 +23,13 @@
  *   bun packages/sim/src/lab/router-sim.bench.ts [--children 4] [--seconds 5] [--p99 100] [--wait 0] [--reps 3]
  *     [--profile realistic|direct|hosted] [--users 400] [--worlds 8] [--time 1] [--settle 75]
  */
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { warmGate } from "@eden/redact";
 import { buildPartner, createHandler, loadConfig, startGatePool } from "@eden/server";
+// `startRouter` is not part of @eden/server's exports (the servers start it from main.ts); lab code reaches in, as
+// packages/server/bench/router.bench.ts does from inside the package.
 import { startRouter } from "../../../server/src/router";
 import { worldOf } from "../server";
 import { buildWorld } from "../world";
@@ -95,7 +97,10 @@ async function serveChild(): Promise<void> {
     }
     const mem = process.memoryUsage();
     const line = { pid: process.pid, worldsMs, users: users.size, rss: mem.rss, heapUsed: mem.heapUsed, ...totals };
-    writeFileSync(join(SIM.statsDir, `${process.pid}.json`), JSON.stringify(line));
+    // Written aside and renamed into place, so a reader never sees a half-written file.
+    const file = join(SIM.statsDir, `${process.pid}.json`);
+    writeFileSync(`${file}.tmp`, JSON.stringify(line));
+    renameSync(`${file}.tmp`, file);
   };
   writeStats();
   setInterval(writeStats, 1_000);
@@ -206,10 +211,21 @@ async function main() {
     return { clients, eventsPerSec: lat.length / secs, p50: q(0.5), p99: q(0.99), errors };
   }
 
-  const readStats = (statsDir: string): ProcStats[] =>
+  // Every server process's last stats; `alive` false for one that has exited (a child the router restarted mid-arm:
+  // its replacement has its own file, and the result shows both rather than mixing them).
+  const alive = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const readStats = (statsDir: string): (ProcStats & { alive: boolean })[] =>
     readdirSync(statsDir)
       .filter((f) => f.endsWith(".json"))
-      .map((f) => JSON.parse(readFileSync(join(statsDir, f), "utf8")) as ProcStats);
+      .map((f) => JSON.parse(readFileSync(join(statsDir, f), "utf8")) as ProcStats)
+      .map((st) => ({ ...st, alive: alive(st.pid) }));
 
   async function arm(name: string, cmd: string[], who: "partner" | "router", tag: string) {
     const home = join(dir, tag);
@@ -266,8 +282,10 @@ async function main() {
     const mb = (b: number) => +(b / 1_048_576).toFixed(1);
     const startRss = new Map(start.map((s) => [s.pid, s.rss]));
     const procs = end.map((s) => ({
+      ...(s.alive ? {} : { exited: true }),
       users: s.users,
-      rssStartMb: mb(startRss.get(s.pid) ?? NaN),
+      // A child started after the arm began (a restart) has no start reading: null in the JSON.
+      rssStartMb: startRss.has(s.pid) ? mb(startRss.get(s.pid)!) : null,
       rssEndMb: mb(s.rss),
       calls: s.calls,
       lists: s.lists,
@@ -323,8 +341,10 @@ async function main() {
         max: +Math.max(...runs[a]!).toFixed(0),
         // Every server process of the arm (the children for a router arm), each repetition: memory and calls.
         processes: procs[a],
-        medianRssEndMbPerProcess: +median(all.map((p) => p.rssEndMb)).toFixed(1),
-        medianRssGrowthMbPerProcess: +median(all.map((p) => p.rssEndMb - p.rssStartMb)).toFixed(1),
+        medianRssEndMbPerProcess: +median(all.flatMap((p) => (p.exited ? [] : [p.rssEndMb]))).toFixed(1),
+        medianRssGrowthMbPerProcess: +median(
+          all.flatMap((p) => (p.rssStartMb === null || p.exited ? [] : [p.rssEndMb - p.rssStartMb])),
+        ).toFixed(1),
       };
     }),
     ...gateSummary(runs),

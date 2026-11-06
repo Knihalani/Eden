@@ -14,12 +14,12 @@
 | `CHECK_COLD=1 bun run check` | The same, without the Prettier and tsc caches | When a cache is in doubt |
 | `bun test ./packages/x/src/y.test.ts` | One file | Debugging; **from the repo root only** |
 
-**Screens, not tests: the retrieval screen (audit 2026-11-06 F25, docs/LAB.md recipe 1d).** Before the $0 funnel on all of
-train, a change to retrieval, ranking, intent, probes, the graph or sync can be screened on half of it:
-`bun packages/sim/src/lab/retrieval-screen.ts run --set '{...}' --baseline .local/screen-base.json` (train1–6, seed
-41; 6.0–6.4 s against `bun run funnel`'s 10.0–10.5 s on 4 cores, 11.8–12.5 s against 22.1 s at `--jobs 1`;
-measured 2026-11-06, load 1.4–3.4). Its rows equal the funnel's for the same tasks; its totals can show the wrong
-sign for a change that moves only a few tasks, so `bun run funnel --baseline` still gates. Its unit tests
+**Screens, not tests: the retrieval screen (audit 2026-11-06 F25, docs/LAB.md recipe 1d).** Before the $0 funnel on all
+of train, a change to retrieval, ranking, intent, probes, the graph or sync can be screened on half of it: `bun
+packages/sim/src/lab/retrieval-screen.ts run --set '{...}' --baseline .local/screen-base.json` (train1–6, seed 41;
+6.0–6.4 s against `bun run funnel`'s 10.0–10.5 s on 4 cores, 11.8–12.5 s against 22.1 s at `--jobs 1`; measured
+2026-11-06, load 1.4–3.4). Its rows equal the funnel's for the same tasks; its totals can show the wrong sign for a
+change that moves only a few tasks, so `bun run funnel --baseline` still gates. Its unit tests
 (`retrieval-screen.test.ts`, 14 ms) and the router-on-sim bench's (`router-sim.test.ts`, 0.42–0.47 s, builds three
 worlds) are in `test:pkg sim`.
 

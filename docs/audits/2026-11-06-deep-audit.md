@@ -547,7 +547,8 @@ intent-v2>`, train1-6 seeds 41-42, $0: `cards use` sent 13,604 items (11,491 req
   against a real reading; it departs from D117 and needs its own decision.
 - **Status.** Deferred: see below. Round 3: a retrieval screen without the unordered replay (`retrieval-screen.ts`,
   docs/LAB.md 1d): train1–6 seed 41, where every replay cache answers with 0 misses; 0.6x the funnel's wall time,
-  rows equal to the funnel's on every task in four past changes, verdict signs equal on the three that moved 32+ tasks.
+  its rows are the funnel's (same worlds, a determinism check); as a predictor, its totals' signs matched the
+  funnel's on the three past changes that moved 32+ screen tasks and not on minus-graph (6).
   The unordered subset replay and its decision stay open.
 
 ### F26. D159's row said the looser thresholds join the default

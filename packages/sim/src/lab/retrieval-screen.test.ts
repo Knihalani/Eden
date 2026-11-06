@@ -80,6 +80,18 @@ describe("retrieval screen (audit 2026-11-06 F25)", () => {
     expect(off.signsAgree).toBe(false);
   });
 
+  test("agreement reports screen tasks the full runs lack instead of counting them as agreeing", () => {
+    const base = [row({ template: "a" })];
+    const r = agreement({
+      fullBase: base,
+      fullNext: base,
+      screenBase: [row({ template: "q" })],
+      screenNext: [row({ template: "q" })],
+    });
+    expect(r.missing).toEqual(["train1|hidden|41|q"]);
+    expect(r.agree).toBe(0);
+  });
+
   test("the funnel arguments put the screen's grid first and its prefix after --", () => {
     const a = screenArgs(
       { suites: ["train2", "train5"], seeds: [41], limit: 12 },
@@ -101,6 +113,7 @@ describe("retrieval screen (audit 2026-11-06 F25)", () => {
       "--reader",
       "stub",
     ]);
+    expect(screenArgs({ suites: ["train1"], seeds: [41], limit: 0 }, ["--jobs", "1"], "/x")).toContain("--jobs");
     expect(() => screenArgs({ suites: ["train1"], seeds: [41], limit: 0 }, ["--suite", "train3"], "/x")).toThrow(
       /--suite/,
     );

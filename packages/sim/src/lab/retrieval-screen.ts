@@ -19,8 +19,9 @@
  * the connectors returned, the cache held, the reader's pool held (`poolHas`, the retrieval figure) and the funnel
  * surfaced, and with `--baseline` (an earlier screen JSON) the fields that moved, task by task. `agree` checks the
  * screen against full-funnel runs of the same change. A screen is not a result: a change it passes still runs
- * `bun run funnel --baseline` on all of train before it is reported, and a change that moves fewer than about five
- * tasks can show a different sign on the screen (minus-graph did, recipe 1d).
+ * `bun run funnel --baseline` on all of train before it is reported. Its totals' sign matched the funnel's for three
+ * past changes that moved 32 or more screen tasks and not for minus-graph, which moved 6 (recipe 1d): for a change
+ * that moves fewer than about 30, read the task list, not the totals.
  *
  *   bun packages/sim/src/lab/retrieval-screen.ts run [--json F] [--baseline SCREEN.json] [funnel flags]
  *     [-- hidden-funnel flags]
@@ -28,7 +29,7 @@
  *   bun packages/sim/src/lab/retrieval-screen.ts agree FULL_BASE FULL_NEXT SCREEN_BASE SCREEN_NEXT
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -122,9 +123,13 @@ export function agreement(o: {
   keys?: Set<string>;
 }) {
   const keys = o.keys ?? new Set(o.screenNext.map((r) => taskKey(r)));
+  const fullNextKeys = new Set(o.fullNext.map((r) => taskKey(r, true)));
   const full = retrievalDiff(o.fullBase, o.fullNext, keys);
   const screen = retrievalDiff(o.screenBase, o.screenNext, keys);
   const tasks = o.screenNext.filter((r) => keys.has(taskKey(r)));
+  // A screen task the full runs lack would count as agreeing when neither moved: report it instead.
+  const inBoth = new Set(o.fullBase.map((r) => taskKey(r, true)).filter((k) => fullNextKeys.has(k)));
+  const missing = tasks.map((r) => taskKey(r, true)).filter((k) => !inBoth.has(k));
   const disagree: { key: string; full: string[]; screen: string[] }[] = [];
   for (const r of tasks) {
     const k = taskKey(r, true);
@@ -150,7 +155,8 @@ export function agreement(o: {
   );
   return {
     tasks: tasks.length,
-    agree: tasks.length - disagree.length,
+    agree: tasks.length - disagree.length - missing.filter((k) => !disagree.some((d) => d.key === k)).length,
+    missing,
     disagree,
     fullMoved: full.size,
     screenMoved: screen.size,
@@ -168,9 +174,9 @@ export function screenArgs(screen: typeof SCREEN, passthrough: readonly string[]
   const cut = passthrough.indexOf("--");
   const mine = cut < 0 ? [...passthrough] : passthrough.slice(0, cut);
   const theirs = cut < 0 ? [] : passthrough.slice(cut + 1);
-  for (const f of ["--suite", "--seeds", "--json", "--jobs"]) {
+  for (const f of ["--suite", "--seeds", "--json"]) {
     if (mine.includes(f))
-      throw new Error(`retrieval-screen: ${f} is the screen's own; run bun run funnel for another grid`);
+      throw new Error(`${f} is the screen's own; run bun run funnel for another grid`);
   }
   const hidden = [...(screen.limit > 0 ? ["--limit", String(screen.limit)] : []), ...theirs];
   return [
@@ -222,17 +228,26 @@ async function main(argv: string[]): Promise<number> {
       screenNext: rowsOf(sn!),
       keys: screenKeys(),
     });
-    console.log(JSON.stringify({ ...r, disagree: r.disagree.slice(0, 20), disagreeCount: r.disagree.length }, null, 1));
-    return r.disagree.length === 0 && r.signsAgree ? 0 : 1;
+    const shown = { ...r, disagree: r.disagree.slice(0, 20), missing: r.missing.slice(0, 20) };
+    console.log(
+      JSON.stringify({ ...shown, disagreeCount: r.disagree.length, missingCount: r.missing.length }, null, 1),
+    );
+    return r.disagree.length === 0 && r.missing.length === 0 && r.signsAgree ? 0 : 1;
   }
   if (cmd === "run") {
     let json = "";
     let baseline = "";
     const pass: string[] = [];
     for (let i = 0; i < rest.length; i++) {
-      if (rest[i] === "--json" && pass.indexOf("--") < 0) json = rest[++i] ?? "";
-      else if (rest[i] === "--baseline" && pass.indexOf("--") < 0) baseline = rest[++i] ?? "";
-      else pass.push(rest[i]!);
+      const own = (rest[i] === "--json" || rest[i] === "--baseline") && pass.indexOf("--") < 0;
+      if (!own) {
+        pass.push(rest[i]!);
+        continue;
+      }
+      const value = rest[i + 1];
+      if (!value || value.startsWith("--")) throw new Error(`${rest[i]} needs a file`);
+      if (rest[i++] === "--json") json = value;
+      else baseline = value;
     }
     const scratch = mkdtempSync(join(tmpdir(), "eden-retrieval-screen-"));
     const out = json || join(scratch, "screen.json");
@@ -244,6 +259,11 @@ async function main(argv: string[]): Promise<number> {
     if (res.status !== 0 && res.status !== 3) {
       rmSync(scratch, { recursive: true, force: true });
       return res.status ?? 1;
+    }
+    if (!existsSync(out)) {
+      // `--help`, or a funnel that stopped before writing rows: nothing to score.
+      rmSync(scratch, { recursive: true, force: true });
+      return res.status ?? 0;
     }
     const keys = screenKeys();
     const rows = rowsOf(out);
@@ -264,4 +284,11 @@ async function main(argv: string[]): Promise<number> {
   return 2;
 }
 
-if (import.meta.main) process.exit(await main(process.argv.slice(2)));
+if (import.meta.main) {
+  // A bad argument is a usage error (exit 2, one line), as in the lab's strict CLIs, not a stack trace.
+  const code = await main(process.argv.slice(2)).catch((e: unknown) => {
+    console.error(`retrieval-screen: ${e instanceof Error ? e.message : String(e)}`);
+    return 2;
+  });
+  process.exit(code);
+}
