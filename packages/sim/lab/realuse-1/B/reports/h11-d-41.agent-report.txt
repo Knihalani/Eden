@@ -1,0 +1,99 @@
+model claude-haiku-5-5, grader claude-haiku-5-5, spent $0.1079, 192 runs
+errors 0, ungraded 0
+
+== request
+
+== arrival
+
+== hidden
+tools       n= 32 facts 0.188 success 0.188 lexical 0.156 calls 2.03 tools 2.91 in 2528 out 502 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.348 p50 4.2s leaks 0
+eden        n= 32 facts 0.750 success 0.750 lexical 0.719 calls 1.50 tools 0.72 in 1461 out 384 injected 1.03 late 0.00 edenCalls 1.09 $/1k 0.609 p50 4.4s leaks 0
+both        n= 32 facts 0.625 success 0.625 lexical 0.531 calls 1.84 tools 2.19 in 2429 out 475 injected 0.91 late 0.00 edenCalls 0.75 $/1k 0.508 p50 4.6s leaks 0
+
+== control
+tools       n= 32 facts 0.000 success 0.000 lexical 0.000 calls 2.13 tools 3.16 in 2687 out 515 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.350 p50 4.4s leaks 0
+eden        n= 32 facts 0.063 success 0.063 lexical 0.125 calls 1.72 tools 1.00 in 1678 out 426 injected 0.78 late 0.00 edenCalls 1.38 $/1k 0.710 p50 5.2s leaks 0
+both        n= 32 facts 0.031 success 0.031 lexical 0.094 calls 1.97 tools 2.50 in 2536 out 469 injected 0.78 late 0.00 edenCalls 0.69 $/1k 0.480 p50 5.1s leaks 0
+
+== offworld
+
+== paired fact-recall differences, bootstrap 95% interval
+eden       - tools  hidden   n= 32 +0.563 (+0.375..+0.719)
+eden       - tools  control  n= 32 +0.063 (+0.000..+0.156)
+both       - tools  hidden   n= 32 +0.438 (+0.250..+0.625)
+both       - tools  control  n= 32 +0.031 (+0.000..+0.094)
+
+== hidden context raised, by template (tools / eden / both)
+mains-water-works 0/1  0/1  0/1
+corsa-borrowed   0/1  1/1  1/1
+bond-maturity    0/1  1/1  1/1
+flu-jab-clash    0/1  1/1  1/1
+motor-cover-lapse 0/1  0/1  0/1
+tube-closure     0/1  1/1  1/1
+lift-out         0/1  0/1  0/1
+closed-period    0/1  1/1  1/1
+pottery-course   0/1  0/1  0/1
+loss-adjuster    0/1  0/1  0/1
+stove-with-jamie 0/1  0/1  0/1
+mum-cataract     0/1  1/1  0/1
+offsite-bristol  0/1  0/1  0/1
+vendor-rate-card 0/1  1/1  1/1
+reviewer-resigned 0/1  1/1  1/1
+contact-left     1/1  1/1  1/1
+accountant-fee   0/1  1/1  0/1
+trainer-price    0/1  1/1  1/1
+sow-new-entity   0/1  1/1  1/1
+voice-rest       0/1  1/1  0/1
+friend-moving    1/1  1/1  1/1
+go-live-moved    0/1  0/1  0/1
+half-marathon    0/1  1/1  0/1
+export-ticket-blocked 0/1  1/1  1/1
+membership-autorenewed 1/1  1/1  1/1
+pension-headroom 1/1  1/1  1/1
+rooms-refurb     0/1  1/1  1/1
+rds-maintenance  0/1  1/1  1/1
+rail-works       1/1  1/1  1/1
+hide-lens-limit  0/1  1/1  1/1
+swim-direct-debit 0/1  1/1  1/1
+party-venue-table 1/1  1/1  1/1
+
+== false concern raised (control), by template (tools / eden / both)
+mains-water-works 0/1  0/1  0/1
+corsa-borrowed   0/1  0/1  0/1
+bond-maturity    0/1  0/1  0/1
+flu-jab-clash    0/1  0/1  0/1
+motor-cover-lapse 0/1  0/1  0/1
+tube-closure     0/1  0/1  0/1
+lift-out         0/1  0/1  0/1
+closed-period    0/1  0/1  0/1
+pottery-course   0/1  0/1  0/1
+loss-adjuster    0/1  0/1  0/1
+stove-with-jamie 0/1  0/1  0/1
+mum-cataract     0/1  0/1  0/1
+offsite-bristol  0/1  0/1  0/1
+vendor-rate-card 0/1  0/1  0/1
+reviewer-resigned 0/1  0/1  0/1
+contact-left     0/1  0/1  0/1
+accountant-fee   0/1  1/1  0/1
+trainer-price    0/1  0/1  0/1
+sow-new-entity   0/1  0/1  0/1
+voice-rest       0/1  0/1  0/1
+friend-moving    0/1  0/1  0/1
+go-live-moved    0/1  0/1  0/1
+half-marathon    0/1  0/1  0/1
+export-ticket-blocked 0/1  0/1  0/1
+membership-autorenewed 0/1  0/1  0/1
+pension-headroom 0/1  0/1  0/1
+rooms-refurb     0/1  0/1  0/1
+rds-maintenance  0/1  0/1  0/1
+rail-works       0/1  0/1  0/1
+hide-lens-limit  0/1  1/1  1/1
+swim-direct-debit 0/1  0/1  0/1
+party-venue-table 0/1  0/1  0/1
+
+== by suite: hidden fact raised / false concern raised (control)
+heldout11  tools         hidden    6/32 0.188   false-concern    0/32 0.000
+heldout11  eden          hidden   24/32 0.750   false-concern    2/32 0.063
+heldout11  both          hidden   20/32 0.625   false-concern    1/32 0.031
+
+grader and lexical check agree on 181 of 192 facts (0.943)

@@ -1,0 +1,14 @@
+h13-d-41 heldout13 41 direct tools,eden,both
+h13-d-42 heldout13 42 direct tools,eden,both
+h13-d-43 heldout13 43 direct tools,eden,both
+h13-d-44 heldout13 44 direct tools,eden,both
+h13-abl-41 heldout13 41 direct eden~minus-reader,eden~minus-intent,eden~minus-sync,eden~minus-grounds,eden~minus-graph
+h13-abl-42 heldout13 42 direct eden~minus-reader,eden~minus-intent,eden~minus-sync,eden~minus-grounds,eden~minus-graph
+h11-d-41 heldout11 41 direct tools,eden,both
+h11-d-42 heldout11 42 direct tools,eden,both
+h10-d-41 heldout10 41 direct tools,eden,both
+h10-d-42 heldout10 42 direct tools,eden,both
+h12-d-41 heldout12 41 direct tools,eden,both
+h12-d-42 heldout12 42 direct tools,eden,both
+h13-h-41 heldout13 41 hosted tools,eden
+h13-h-42 heldout13 42 hosted tools,eden

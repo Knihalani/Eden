@@ -1,0 +1,99 @@
+model claude-haiku-5-5, grader claude-haiku-5-5, spent $0.1049, 192 runs
+errors 0, ungraded 0
+
+== request
+
+== arrival
+
+== hidden
+tools       n= 32 facts 0.188 success 0.188 lexical 0.188 calls 2.03 tools 3.00 in 2499 out 484 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.336 p50 4.9s leaks 0
+eden        n= 32 facts 0.750 success 0.750 lexical 0.500 calls 1.44 tools 0.63 in 1424 out 406 injected 1.00 late 0.00 edenCalls 0.78 $/1k 0.574 p50 4.3s leaks 0
+both        n= 32 facts 0.500 success 0.500 lexical 0.375 calls 2.00 tools 2.59 in 2724 out 501 injected 1.00 late 0.00 edenCalls 0.50 $/1k 0.488 p50 5.1s leaks 0
+
+== control
+tools       n= 32 facts 0.031 success 0.031 lexical 0.188 calls 2.19 tools 3.44 in 2776 out 528 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.360 p50 5.4s leaks 0
+eden        n= 32 facts 0.063 success 0.063 lexical 0.188 calls 1.69 tools 1.03 in 1648 out 441 injected 0.59 late 0.00 edenCalls 1.00 $/1k 0.632 p50 5.0s leaks 0
+both        n= 32 facts 0.031 success 0.031 lexical 0.219 calls 2.22 tools 3.34 in 2998 out 534 injected 0.59 late 0.00 edenCalls 0.50 $/1k 0.509 p50 5.9s leaks 0
+
+== offworld
+
+== paired fact-recall differences, bootstrap 95% interval
+eden       - tools  hidden   n= 32 +0.563 (+0.406..+0.750)
+eden       - tools  control  n= 32 +0.031 (-0.063..+0.125)
+both       - tools  hidden   n= 32 +0.313 (+0.156..+0.469)
+both       - tools  control  n= 32 +0.000 (-0.094..+0.094)
+
+== hidden context raised, by template (tools / eden / both)
+dns-transfer-lock 0/1  1/1  0/1
+font-embedding   1/1  1/1  1/1
+vet-nil-by-mouth 0/1  1/1  0/1
+grommets-water   0/1  1/1  1/1
+antibiotic-sleepover 0/1  1/1  0/1
+allotment-burning 0/1  1/1  0/1
+cracked-fork     0/1  1/1  1/1
+washer-warranty  1/1  1/1  1/1
+oss-embargo      0/1  1/1  1/1
+incubator-decon  0/1  1/1  1/1
+review-conflict  0/1  1/1  0/1
+choir-venue      0/1  1/1  1/1
+gig-backline     0/1  1/1  0/1
+oncall-week      0/1  0/1  0/1
+foodbank-shift   0/1  1/1  1/1
+shabbat-sundown  0/1  1/1  1/1
+photo-licence    1/1  1/1  1/1
+returned-goods-customs 0/1  0/1  0/1
+boundary-agreement 0/1  1/1  0/1
+midday-insulin   0/1  0/1  0/1
+rapidplay-bye    0/1  0/1  0/1
+squash-ladder    0/1  1/1  1/1
+timing-belt      0/1  0/1  0/1
+recording-retention 1/1  1/1  1/1
+chat-history-limit 0/1  0/1  0/1
+cat-thyroid      0/1  1/1  1/1
+org-2fa          0/1  1/1  1/1
+domain-registrant 1/1  1/1  1/1
+dryer-modification 0/1  0/1  0/1
+ethics-sharing   1/1  1/1  1/1
+teatime-visit    0/1  0/1  0/1
+apiary-treatment 0/1  1/1  0/1
+
+== false concern raised (control), by template (tools / eden / both)
+dns-transfer-lock 0/1  0/1  0/1
+font-embedding   0/1  0/1  0/1
+vet-nil-by-mouth 0/1  0/1  0/1
+grommets-water   0/1  0/1  0/1
+antibiotic-sleepover 0/1  0/1  0/1
+allotment-burning 0/1  0/1  0/1
+cracked-fork     0/1  0/1  0/1
+washer-warranty  0/1  0/1  1/1
+oss-embargo      0/1  0/1  0/1
+incubator-decon  0/1  0/1  0/1
+review-conflict  0/1  0/1  0/1
+choir-venue      0/1  1/1  0/1
+gig-backline     0/1  0/1  0/1
+oncall-week      0/1  0/1  0/1
+foodbank-shift   0/1  0/1  0/1
+shabbat-sundown  0/1  0/1  0/1
+photo-licence    0/1  0/1  0/1
+returned-goods-customs 0/1  0/1  0/1
+boundary-agreement 0/1  0/1  0/1
+midday-insulin   0/1  1/1  0/1
+rapidplay-bye    0/1  0/1  0/1
+squash-ladder    0/1  0/1  0/1
+timing-belt      0/1  0/1  0/1
+recording-retention 1/1  0/1  0/1
+chat-history-limit 0/1  0/1  0/1
+cat-thyroid      0/1  0/1  0/1
+org-2fa          0/1  0/1  0/1
+domain-registrant 0/1  0/1  0/1
+dryer-modification 0/1  0/1  0/1
+ethics-sharing   0/1  0/1  0/1
+teatime-visit    0/1  0/1  0/1
+apiary-treatment 0/1  0/1  0/1
+
+== by suite: hidden fact raised / false concern raised (control)
+heldout10  tools         hidden    6/32 0.188   false-concern    1/32 0.031
+heldout10  eden          hidden   24/32 0.750   false-concern    2/32 0.063
+heldout10  both          hidden   16/32 0.500   false-concern    1/32 0.031
+
+grader and lexical check agree on 163 of 192 facts (0.849)

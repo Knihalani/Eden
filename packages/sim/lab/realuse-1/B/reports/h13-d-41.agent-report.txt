@@ -1,0 +1,99 @@
+model claude-haiku-5-5, grader claude-haiku-5-5, spent $0.1201, 192 runs
+errors 0, ungraded 0
+
+== request
+
+== arrival
+
+== hidden
+tools       n= 32 facts 0.125 success 0.125 lexical 0.125 calls 2.09 tools 3.31 in 2604 out 496 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.336 p50 4.5s leaks 0
+eden        n= 32 facts 0.875 success 0.875 lexical 0.719 calls 1.31 tools 0.47 in 1305 out 386 injected 1.69 late 0.00 edenCalls 1.41 $/1k 0.677 p50 3.9s leaks 0
+both        n= 32 facts 0.750 success 0.750 lexical 0.594 calls 1.59 tools 1.72 in 2184 out 477 injected 1.84 late 0.00 edenCalls 0.94 $/1k 0.544 p50 4.8s leaks 0
+
+== control
+tools       n= 32 facts 0.000 success 0.000 lexical 0.031 calls 2.09 tools 3.25 in 2711 out 510 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.350 p50 4.9s leaks 0
+eden        n= 32 facts 0.031 success 0.031 lexical 0.063 calls 1.69 tools 1.06 in 1714 out 462 injected 1.03 late 0.00 edenCalls 1.88 $/1k 0.863 p50 6.3s leaks 0
+both        n= 32 facts 0.000 success 0.000 lexical 0.063 calls 1.94 tools 3.00 in 2561 out 524 injected 0.97 late 0.00 edenCalls 0.94 $/1k 0.594 p50 5.7s leaks 0
+
+== offworld
+
+== paired fact-recall differences, bootstrap 95% interval
+eden       - tools  hidden   n= 32 +0.750 (+0.594..+0.906)
+eden       - tools  control  n= 32 +0.031 (+0.000..+0.094)
+both       - tools  hidden   n= 32 +0.625 (+0.469..+0.781)
+both       - tools  control  n= 32 +0.000 (+0.000..+0.000)
+
+== hidden context raised, by template (tools / eden / both)
+gutters-landlord 0/1  0/1  0/1
+maya-pool-fee    0/1  1/1  1/1
+hygienist-plan   1/1  1/1  1/1
+passport-validity 0/1  1/1  0/1
+board-pack-deadline 0/1  1/1  0/1
+events-domain    0/1  0/1  0/1
+deal-desk-approval 0/1  1/1  1/1
+vendor-bill-correction 0/1  1/1  1/1
+offsite-allhands 0/1  1/1  1/1
+starter-laptop   0/1  1/1  1/1
+expenses-cutoff  0/1  1/1  1/1
+car-mot          0/1  1/1  1/1
+trainer-away     0/1  1/1  1/1
+client-leave     0/1  1/1  1/1
+dpa-hold         0/1  1/1  1/1
+summit-pass      0/1  1/1  1/1
+broadband-exit-fee 0/1  1/1  1/1
+ellie-new-address 0/1  1/1  1/1
+tax-already-filed 1/1  1/1  1/1
+crm-admin-freeze 0/1  1/1  1/1
+offer-salary-band 1/1  1/1  1/1
+marshal-sleepover-pickup 0/1  0/1  0/1
+cobalt-cutover-dinner 0/1  1/1  1/1
+mortgage-allowance 0/1  1/1  1/1
+climbing-membership 0/1  0/1  0/1
+export-contact-left 1/1  1/1  1/1
+leave-blackout   0/1  1/1  1/1
+bake-sale-nut-free 0/1  1/1  0/1
+migration-maintenance 0/1  1/1  1/1
+book-club-copies 0/1  1/1  0/1
+mum-surgery-moved 0/1  1/1  1/1
+website-freeze   0/1  1/1  1/1
+
+== false concern raised (control), by template (tools / eden / both)
+gutters-landlord 0/1  0/1  0/1
+maya-pool-fee    0/1  0/1  0/1
+hygienist-plan   0/1  0/1  0/1
+passport-validity 0/1  0/1  0/1
+board-pack-deadline 0/1  0/1  0/1
+events-domain    0/1  0/1  0/1
+deal-desk-approval 0/1  0/1  0/1
+vendor-bill-correction 0/1  1/1  0/1
+offsite-allhands 0/1  0/1  0/1
+starter-laptop   0/1  0/1  0/1
+expenses-cutoff  0/1  0/1  0/1
+car-mot          0/1  0/1  0/1
+trainer-away     0/1  0/1  0/1
+client-leave     0/1  0/1  0/1
+dpa-hold         0/1  0/1  0/1
+summit-pass      0/1  0/1  0/1
+broadband-exit-fee 0/1  0/1  0/1
+ellie-new-address 0/1  0/1  0/1
+tax-already-filed 0/1  0/1  0/1
+crm-admin-freeze 0/1  0/1  0/1
+offer-salary-band 0/1  0/1  0/1
+marshal-sleepover-pickup 0/1  0/1  0/1
+cobalt-cutover-dinner 0/1  0/1  0/1
+mortgage-allowance 0/1  0/1  0/1
+climbing-membership 0/1  0/1  0/1
+export-contact-left 0/1  0/1  0/1
+leave-blackout   0/1  0/1  0/1
+bake-sale-nut-free 0/1  0/1  0/1
+migration-maintenance 0/1  0/1  0/1
+book-club-copies 0/1  0/1  0/1
+mum-surgery-moved 0/1  0/1  0/1
+website-freeze   0/1  0/1  0/1
+
+== by suite: hidden fact raised / false concern raised (control)
+heldout13  tools         hidden    4/32 0.125   false-concern    0/32 0.000
+heldout13  eden          hidden   28/32 0.875   false-concern    1/32 0.031
+heldout13  both          hidden   24/32 0.750   false-concern    0/32 0.000
+
+grader and lexical check agree on 176 of 192 facts (0.917)

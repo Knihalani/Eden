@@ -1,0 +1,830 @@
+{
+ "h10-d-41": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   41
+  ],
+  "suites": [
+   "heldout10"
+  ],
+  "spent": 0.10487340500000006,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 651,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.06760605499999997,
+   "eden": 0.025180250000000005,
+   "grader": 0.012087100000000002
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 211.6,
+  "conditions": [
+   "both",
+   "eden",
+   "tools"
+  ],
+  "runs": 192,
+  "ungraded": 0,
+  "intent": {
+   "found": 1534,
+   "of": 1540
+  },
+  "sourceProfileGmailMedianMs": 600,
+  "background": {
+   "cardsUsd": 0,
+   "calls": 0
+  }
+ },
+ "h10-d-42": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   42
+  ],
+  "suites": [
+   "heldout10"
+  ],
+  "spent": 0.10237282500000015,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 663,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.06505187500000006,
+   "eden": 0.025107749999999995,
+   "grader": 0.0122132
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 205.1,
+  "conditions": [
+   "both",
+   "eden",
+   "tools"
+  ],
+  "runs": 192,
+  "ungraded": 0,
+  "intent": {
+   "found": 1527,
+   "of": 1537
+  },
+  "sourceProfileGmailMedianMs": 600,
+  "background": {
+   "cardsUsd": 0,
+   "calls": 0
+  }
+ },
+ "h11-d-41": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   41
+  ],
+  "suites": [
+   "heldout11"
+  ],
+  "spent": 0.10787666500000005,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 675,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.06439041500000002,
+   "eden": 0.03175974999999998,
+   "grader": 0.011726499999999996
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 187.6,
+  "conditions": [
+   "both",
+   "eden",
+   "tools"
+  ],
+  "runs": 192,
+  "ungraded": 0,
+  "intent": {
+   "found": 1526,
+   "of": 1532
+  },
+  "sourceProfileGmailMedianMs": 600,
+  "background": {
+   "cardsUsd": 0,
+   "calls": 0
+  }
+ },
+ "h11-d-42": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   42
+  ],
+  "suites": [
+   "heldout11"
+  ],
+  "spent": 0.10537396499999994,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 686,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.061080664999999985,
+   "eden": 0.03263279999999999,
+   "grader": 0.011660499999999994
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 198.1,
+  "conditions": [
+   "both",
+   "eden",
+   "tools"
+  ],
+  "runs": 192,
+  "ungraded": 0,
+  "intent": {
+   "found": 1521,
+   "of": 1531
+  },
+  "sourceProfileGmailMedianMs": 600,
+  "background": {
+   "cardsUsd": 0,
+   "calls": 0
+  }
+ },
+ "h12-d-41": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   41
+  ],
+  "suites": [
+   "heldout12"
+  ],
+  "spent": 0.12395395999999989,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 730,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.07740315999999998,
+   "eden": 0.03436789999999999,
+   "grader": 0.012182900000000002
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 220.5,
+  "conditions": [
+   "both",
+   "eden",
+   "tools"
+  ],
+  "runs": 192,
+  "ungraded": 0,
+  "intent": {
+   "found": 1523,
+   "of": 1529
+  },
+  "sourceProfileGmailMedianMs": 600,
+  "background": {
+   "cardsUsd": 0,
+   "calls": 0
+  }
+ },
+ "h12-d-42": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   42
+  ],
+  "suites": [
+   "heldout12"
+  ],
+  "spent": 0.12837540999999997,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 754,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.07665460999999998,
+   "eden": 0.03948850000000002,
+   "grader": 0.0122323
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 235.9,
+  "conditions": [
+   "both",
+   "eden",
+   "tools"
+  ],
+  "runs": 192,
+  "ungraded": 0,
+  "intent": {
+   "found": 1492,
+   "of": 1532
+  },
+  "sourceProfileGmailMedianMs": 600,
+  "background": {
+   "cardsUsd": 0.001213,
+   "calls": 12
+  }
+ },
+ "h13-abl-41": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   41
+  ],
+  "suites": [
+   "heldout13"
+  ],
+  "spent": 0.24591790500000033,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 1315,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.10389950500000002,
+   "eden": 0.12087310000000004,
+   "grader": 0.0211453
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 237.5,
+  "conditions": [
+   "eden~minus-graph",
+   "eden~minus-grounds",
+   "eden~minus-intent",
+   "eden~minus-reader",
+   "eden~minus-sync"
+  ],
+  "runs": 320,
+  "ungraded": 0,
+  "intent": {
+   "found": 1535,
+   "of": 1541
+  },
+  "sourceProfileGmailMedianMs": 600,
+  "background": {
+   "cardsUsd": 0,
+   "calls": 0
+  }
+ },
+ "h13-abl-42": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   42
+  ],
+  "suites": [
+   "heldout13"
+  ],
+  "spent": 0.24297012,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 1312,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.10116926999999998,
+   "eden": 0.12059515000000012,
+   "grader": 0.02120569999999999
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 237,
+  "conditions": [
+   "eden~minus-graph",
+   "eden~minus-grounds",
+   "eden~minus-intent",
+   "eden~minus-reader",
+   "eden~minus-sync"
+  ],
+  "runs": 320,
+  "ungraded": 0,
+  "intent": {
+   "found": 1534,
+   "of": 1544
+  },
+  "sourceProfileGmailMedianMs": 600,
+  "background": {
+   "cardsUsd": 0,
+   "calls": 0
+  }
+ },
+ "h13-d-41": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   41
+  ],
+  "suites": [
+   "heldout13"
+  ],
+  "spent": 0.12009859499999977,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 700,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.06505484500000003,
+   "eden": 0.04257895000000001,
+   "grader": 0.012464800000000005
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 211.3,
+  "conditions": [
+   "both",
+   "eden",
+   "tools"
+  ],
+  "runs": 192,
+  "ungraded": 0,
+  "intent": {
+   "found": 1535,
+   "of": 1541
+  },
+  "sourceProfileGmailMedianMs": 600,
+  "background": {
+   "cardsUsd": 0,
+   "calls": 0
+  }
+ },
+ "h13-d-42": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   42
+  ],
+  "suites": [
+   "heldout13"
+  ],
+  "spent": 0.12371974999999998,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 721,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.06757330000000004,
+   "eden": 0.04365854999999995,
+   "grader": 0.012487900000000005
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 218.6,
+  "conditions": [
+   "both",
+   "eden",
+   "tools"
+  ],
+  "runs": 192,
+  "ungraded": 0,
+  "intent": {
+   "found": 1534,
+   "of": 1544
+  },
+  "sourceProfileGmailMedianMs": 600,
+  "background": {
+   "cardsUsd": 0,
+   "calls": 0
+  }
+ },
+ "h13-d-43": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   43
+  ],
+  "suites": [
+   "heldout13"
+  ],
+  "spent": 0.12537250000000003,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 717,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.06729135,
+   "eden": 0.04561824999999999,
+   "grader": 0.012462900000000004
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 221.1,
+  "conditions": [
+   "both",
+   "eden",
+   "tools"
+  ],
+  "runs": 192,
+  "ungraded": 0,
+  "intent": {
+   "found": 1545,
+   "of": 1548
+  },
+  "sourceProfileGmailMedianMs": 600,
+  "background": {
+   "cardsUsd": 0,
+   "calls": 0
+  }
+ },
+ "h13-d-44": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   44
+  ],
+  "suites": [
+   "heldout13"
+  ],
+  "spent": 0.11799228500000004,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 710,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.06399038499999997,
+   "eden": 0.041681699999999995,
+   "grader": 0.012320200000000007
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 196.4,
+  "conditions": [
+   "both",
+   "eden",
+   "tools"
+  ],
+  "runs": 192,
+  "ungraded": 0,
+  "intent": {
+   "found": 1544,
+   "of": 1545
+  },
+  "sourceProfileGmailMedianMs": 600,
+  "background": {
+   "cardsUsd": 0,
+   "calls": 0
+  }
+ },
+ "h13-h-41": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   41
+  ],
+  "suites": [
+   "heldout13"
+  ],
+  "spent": 0.07941292499999995,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 462,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.04286902499999997,
+   "eden": 0.028319799999999985,
+   "grader": 0.0082241
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 249.9,
+  "conditions": [
+   "eden",
+   "tools"
+  ],
+  "runs": 128,
+  "ungraded": 0,
+  "intent": {
+   "found": 1535,
+   "of": 1541
+  },
+  "sourceProfileGmailMedianMs": 800,
+  "background": {
+   "cardsUsd": 0,
+   "calls": 0
+  }
+ },
+ "h13-h-42": {
+  "model": "claude-haiku-5-5",
+  "grader": "claude-haiku-5-5",
+  "seeds": [
+   42
+  ],
+  "suites": [
+   "heldout13"
+  ],
+  "spent": 0.07453122500000006,
+  "harnessVersion": "@earendil-works/pi-agent-core@1.3.0",
+  "promptsHash": "00a17863458a8419",
+  "config": {},
+  "timeScale": 1,
+  "push": {
+   "mode": "signals",
+   "rates": {
+    "gmail": 4,
+    "slack": 6,
+    "calendar": 0.3,
+    "drive": 0.3,
+    "crm": 0.2
+   }
+  },
+  "requests": {
+   "sent": 452,
+   "retried": 0,
+   "refused": 0,
+   "statuses": {},
+   "cap": 0
+  },
+  "partial": false,
+  "spend": {
+   "agent": 0.039572724999999996,
+   "eden": 0.0269213,
+   "grader": 0.008037200000000003
+  },
+  "overBudget": {
+   "reader": 0,
+   "cards": 0
+  },
+  "wallSeconds": 207.5,
+  "conditions": [
+   "eden",
+   "tools"
+  ],
+  "runs": 128,
+  "ungraded": 0,
+  "intent": {
+   "found": 1534,
+   "of": 1544
+  },
+  "sourceProfileGmailMedianMs": 800,
+  "background": {
+   "cardsUsd": 0,
+   "calls": 0
+  }
+ }
+}
