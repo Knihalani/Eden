@@ -1767,16 +1767,22 @@ export class ContextPartner {
   async sourceItems(scope: Scope, sourceId: string, items: ContextItem[]): Promise<number> {
     if (!this.config.syncPush || !this.sync || items.length === 0) return 0;
     const own = items.filter((it) => it.sourceId === sourceId).slice(0, MAX_PUSHED_ITEMS);
-    // Ids already held gone before the redaction: these items came after that removal, so they revive it (D160).
-    const goneBefore = new Set<string>();
+    // The removal holding each id gone before the redaction (0: none). These items came after that removal, so they
+    // revive it (D160).
+    const seqBefore = new Map<string, number>();
     for (const raw of own) {
       const id = sanitizedId(raw);
-      if (this.deps.cache.isHeldGone(scope, id, this.now())) goneBefore.add(id);
+      seqBefore.set(id, this.deps.cache.heldGoneSeq(scope, id, this.now()));
     }
     const redacted = await this.redact(own);
-    // A removal (`sourceRemoved`) that landed during the await came after these items: it wins, so an id held gone
-    // now but not before is neither revived nor stored (D160). `sync.mark()` cannot tell: removals never bump it.
-    const clean = redacted.filter((i) => goneBefore.has(i.id) || !this.deps.cache.isHeldGone(scope, i.id, this.now()));
+    // A removal (`sourceRemoved`) that landed during the await came after these items: it wins, so an id whose hold
+    // changed (a new hold, or a second removal of an id already held) is neither revived nor stored (D160, D176). A
+    // sequence, not a "held gone" flag: a second removal leaves the flag as it was. `sync.mark()` cannot tell either:
+    // removals never bump it.
+    const clean = redacted.filter((i) => {
+      const seq = this.deps.cache.heldGoneSeq(scope, i.id, this.now());
+      return seq === 0 || seq === seqBefore.get(i.id);
+    });
     // The source has them (again): a deletion held earlier no longer stands.
     this.deps.cache.revive(
       scope,

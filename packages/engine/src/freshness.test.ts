@@ -508,6 +508,23 @@ describe("D160: a removal that lands while sourceItems is redacting wins", () =>
       expect(cache.get(scope, itemId("notes", "q1"), now())).toBeFalsy();
       expect(cache.isHeldGone(scope, itemId("notes", "q1"), now())).toBe(true);
     });
+
+    test(`an id already held gone, removed again before the push's redaction resolves (${arm}): the removal wins`, async () => {
+      // Delete, re-push, delete (an undo then a second delete): the second removal comes after the push (D176).
+      const src = new Listed("notes");
+      seed(src);
+      const { partner, cache, advance, now } = await synced(src, {}, deps);
+      advance(5 * MIN);
+      expect(partner.sourceRemoved(scope, "notes", ["q1"])).toBe(1);
+      advance(MIN);
+      edit(src);
+      const p = partner.sourceItems(scope, "notes", [src.item("q1")!]); // Not awaited: a request still in flight.
+      src.docs.delete("q1");
+      partner.sourceRemoved(scope, "notes", ["q1"]);
+      expect(await p).toBe(0);
+      expect(cache.get(scope, itemId("notes", "q1"), now())).toBeFalsy();
+      expect(cache.isHeldGone(scope, itemId("notes", "q1"), now())).toBe(true);
+    });
   }
 
   test("a push that arrives after a completed removal still revives the item: the source sent it again", async () => {
