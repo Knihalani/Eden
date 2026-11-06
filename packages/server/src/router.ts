@@ -376,38 +376,15 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     return mine;
   };
 
-  const server = Bun.serve({
-    port: config.port,
-    hostname: config.host,
-    // The same cap as each child's (D100): a chunked body past it is refused before it is buffered here.
-    maxRequestBodySize: maxBodyBytes,
-    async fetch(req) {
-      const url = new URL(req.url);
-      if (req.method === "GET" && url.pathname === "/healthz") {
-        const up = children.filter((c) => c.up).length;
-        if (up === n) return Response.json({ ok: true, processes: n, up });
-        // Degraded, not down: 503 here would let a load balancer silence every user for one child's 1/N.
-        const error = `${n - up} of ${n} processes down`;
-        return Response.json({ ok: up > 0, processes: n, up, error }, { status: up > 0 ? 200 : 503 });
-      }
-      const tenant = tenantOf(req);
-      // Only an authenticated POST is read for its user; anything else gets the child's own answer (405, 401).
-      if (req.method !== "POST" || tenant === null)
-        return forward(children[childFor(tenant ?? "", "", n)]!, req, url, undefined);
-      if (Number(req.headers.get("content-length") ?? NaN) > maxBodyBytes) return fail(413, tooLarge);
-      let body: Uint8Array;
-      try {
-        body = new Uint8Array(await req.arrayBuffer());
-      } catch {
-        return fail(400, "body could not be read");
-      }
-      const owner = children[childFor(tenant, userOf(body), n)]!;
-      if (url.pathname === "/v1/forget") return forgetEverywhere(owner, req, url, body);
-      return forward(owner, req, url, body);
-    },
-    // Nothing above should throw; if it does, the caller gets the server's 503, never Bun's default 500.
-    error: () => fail(503, UNAVAILABLE),
-  });
+  // The router's own port can be taken (EADDRINUSE) after every child started: stop them before failing, as for a
+  // child that could not start, so a failed start leaves no process behind.
+  let server: ReturnType<typeof Bun.serve>;
+  try {
+    server = serveRouter();
+  } catch (e) {
+    await stopChildren();
+    throw e;
+  }
 
   return {
     port: server.port ?? 0,
@@ -418,6 +395,41 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
       await stopChildren();
     },
   };
+
+  function serveRouter() {
+    return Bun.serve({
+      port: config.port,
+      hostname: config.host,
+      // The same cap as each child's (D100): a chunked body past it is refused before it is buffered here.
+      maxRequestBodySize: maxBodyBytes,
+      async fetch(req) {
+        const url = new URL(req.url);
+        if (req.method === "GET" && url.pathname === "/healthz") {
+          const up = children.filter((c) => c.up).length;
+          if (up === n) return Response.json({ ok: true, processes: n, up });
+          // Degraded, not down: 503 here would let a load balancer silence every user for one child's 1/N.
+          const error = `${n - up} of ${n} processes down`;
+          return Response.json({ ok: up > 0, processes: n, up, error }, { status: up > 0 ? 200 : 503 });
+        }
+        const tenant = tenantOf(req);
+        // Only an authenticated POST is read for its user; anything else gets the child's own answer (405, 401).
+        if (req.method !== "POST" || tenant === null)
+          return forward(children[childFor(tenant ?? "", "", n)]!, req, url, undefined);
+        if (Number(req.headers.get("content-length") ?? NaN) > maxBodyBytes) return fail(413, tooLarge);
+        let body: Uint8Array;
+        try {
+          body = new Uint8Array(await req.arrayBuffer());
+        } catch {
+          return fail(400, "body could not be read");
+        }
+        const owner = children[childFor(tenant, userOf(body), n)]!;
+        if (url.pathname === "/v1/forget") return forgetEverywhere(owner, req, url, body);
+        return forward(owner, req, url, body);
+      },
+      // Nothing above should throw; if it does, the caller gets the server's 503, never Bun's default 500.
+      error: () => fail(503, UNAVAILABLE),
+    });
+  }
 }
 
 /** `main.ts` with EDEN_PROCESSES above 1: starts the router, stops the children on SIGINT/SIGTERM. */

@@ -108,6 +108,31 @@ describe("router rate limit, divided", () => {
     },
     30_000,
   );
+
+  test.concurrent(
+    "a router port already in use fails the start, and every child it started is stopped",
+    async () => {
+      const dir = tempDir("eden-router-port-");
+      const env = { ...process.env, EDEN_HOME: dir, EDEN_API_KEYS: keys };
+      const taken = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("taken") });
+      const pids: number[] = [];
+      try {
+        const start = startRouter({
+          config: { ...loadConfig(env), port: taken.port!, processes: 2 },
+          env,
+          log: () => {},
+          onOutput: () => {},
+          onSpawn: (_, pid) => pids.push(pid),
+        });
+        await expect(start).rejects.toThrow();
+      } finally {
+        void taken.stop(true);
+      }
+      expect(pids.length).toBe(2);
+      for (const pid of pids) expect(await exited(pid)).toBe(true);
+    },
+    30_000,
+  );
 });
 
 describe("changing N never strands a user's source-map rows (D163)", () => {
