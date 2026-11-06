@@ -1,0 +1,21 @@
+{
+  "part": "C",
+  "tier": "T1 Hermes",
+  "suite": "heldout13 (read)",
+  "seeds": [41, 42],
+  "conditions": ["hermes", "hermes+eden"],
+  "variants": ["hidden", "control"],
+  "status": "blocked",
+  "spentUsd": 0,
+  "hermesCommit": "06433066f4",
+  "blocker": {
+    "step": "hermes-ab.ts smoke run (starts Python workers in the cloned hermes-agent .venv)",
+    "refusal": "Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Code from External].",
+    "earlierRefusal": {
+      "step": "uv sync --frozen --no-install-project --extra mcp (inside the checkout)",
+      "refusal": "Permission for this action was denied by the Claude Code auto mode classifier. Reason: The server-side auto mode classifier judged this action dangerous (it gave no explanation)."
+    }
+  },
+  "metrics": null,
+  "doc": "docs/research/realuse-1/C-hermes.md"
+}
