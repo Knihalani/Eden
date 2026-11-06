@@ -621,3 +621,53 @@ Notes on the split:
 | F23's deciding run (the `EDEN_PROCESSES` default)  | `router-hardening`, `static-source-index`                                   | D172 decides on the merged tree, before and after the StaticSource fix, at $0                                                                                                                                                       |
 | F25 `devloop-retrieval-screen-set-subset-replay`   | `intent-replay-coverage`, `ask-diag-precision-split`                        | Its one-time wide recording (about $0.45) would go stale when the intent top-up changes reader prompts; `--reader-subset` is parsed in `hidden-funnel.ts:165`, which the diag package owns; it also needs a decision departing D117 |
 | Round 1's F5, F6, F10                              | (carried over)                                                              | Not re-verified in round 2's finding set; they stay open as round 1 recorded them                                                                                                                                                   |
+
+## Closing
+
+Written on 2026-11-06 from `audit/2026-11-06-integration` 4503fabb6 (rounds 1 and 2 merged). The closing step's
+planning runs and the final packages (`intent-closeout`, `router-default`, `funnel-parallel-diag`) settled every
+deferred item; each now has a row in docs/DECISIONS.md, D177-D182, or a merged package. The round 2 outcomes are
+appended to D158, D163, D170-D173, D175 and D176 (marked "Outcome"; D159 marked "Re-decided by D179"). The spend
+ledger (`.local/mkt/ledger.jsonl`) held $13.78 after planning; a `bun -e` sum of its `costUsd` while writing this
+section, after the final packages' paid runs, gave $14.48 over 56,382 rows, so about $3.2 is left under the $18 cap
+and its $0.3 headroom (estimate: 18 - 14.48 - 0.3).
+
+### Every deferred item
+
+| Item                                                    | Where it ends                                                                                                     | Row                      |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| F5 `devloop-ask-diag-forces-one-process` (round 1)      | Fixed by package `funnel-parallel-diag` (commit f086b5605): diagnostic runs use every core, parts merged in order | none (lab tooling)       |
+| F6 `quality-push-skipped-imperative-list` (round 1)     | Waits for D179; the verb-recognising trial also covers the 2026-11-05 audit's `quality-push-skipped-top15`        | D182 (D168)              |
+| F10 `moonshot-ask-query-expansion-ceiling` (round 1)    | Waits for D179: it screens on the final intent thresholds                                                         | D182                     |
+| F9 stage 2, deflated `item.text` (round 1)              | Not built: about 1.42x per item (estimate) for CPU on every ask read                                              | D181 (D111 stands)       |
+| F15 stage 2, the `intentConstraintOnly` gates (round 2) | Failed the fresh-cache paid pair (hidden 286 to 281, decoys 140 to 144); switch deleted                           | D177 (ends D170)         |
+| F18 step 4 and F20 stage 2, re-decide D159 on Pi        | Pi held-out 13 pair, intent replayed, D171's cost; promoted 0.2/1/12                                              | D179                     |
+| F23's deciding run, the `EDEN_PROCESSES` default        | Passed D172's rule before and after the StaticSource fix; default is the core count                               | D178 (ends D163's trial) |
+| F25 `devloop-retrieval-screen-set-subset-replay`        | Waits for D179: its wide recording goes stale when the thresholds change                                          | D182                     |
+| 2026-11-05 O5 `ask-deadline.test.ts` timing             | 25 of 25 passes; bound kept (D140)                                                                                | D180 (a)                 |
+| 2026-11-05 O8, three dev-loop items                     | Funnel start-up is the engine's own backfill; ingest bench clock is correct; no hidden test directories           | D180 (b)-(d)             |
+| 2026-11-05 O9, two remaining items                      | Label retention fixed by D169's copies; poll tuning below the 1.5x bar and unpaid                                 | D180 (e)-(f)             |
+| 2026-11-05 O7, the unranked quarter                     | Superseded by D158 and D162; the remaining bridge is F10                                                          | D182                     |
+
+### The $0 preset screen on the merged tree
+
+Every lab preset (D112: `default` and `default minus <part>`) at $0 on 4503fabb6, planning run: `bun run funnel`,
+stub reader, train1-6 seeds 41-42, intent replayed. The pool proxy is the reader pool's hidden/decoys of 384.
+
+| Preset                                      | Reader pool (hidden/decoys) |
+| ------------------------------------------- | --------------------------- |
+| `default`                                   | 262/246                     |
+| minus `probes`                              | 252/234                     |
+| minus `grounds`                             | 260/247                     |
+| minus `fallback`, `compaction`, `freshness` | identical to `default`      |
+| minus `graph`                               | 261/244                     |
+| minus `anticipate`                          | 262/245                     |
+| minus `sync`                                | 209/187                     |
+| minus `askVerdicts`                         | 255/236                     |
+| minus `cards`                               | 232/225                     |
+| minus `intent`                              | 230/229                     |
+
+No part's removal beats the default on the pool proxy: every removal but four loses hidden facts: the three
+identical ones change nothing, and minus `anticipate` keeps hidden with one decoy fewer, inside the ±3-task noise
+(D153 already kept anticipation). Nothing is promoted or deleted from this screen. The screen predates D179's
+thresholds.
