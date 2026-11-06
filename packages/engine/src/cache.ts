@@ -28,6 +28,7 @@ import { sanitizeForStore } from "@eden/redact";
 import type { ListReuse } from "@eden/sources";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
 import { squash, UserGraph, type Seed, type Walked, type WalkOptions } from "./kg";
+import { packItem } from "./packed-text";
 import { head, termIds } from "./text";
 
 const NO_TERMS = new Uint32Array(0);
@@ -280,6 +281,14 @@ export interface CacheLimits {
    * On by default (D112): `churn.bench.ts` worst put 274.5 to 26.3 ms, heap 38.9 to 25.0 MB.
    */
   releaseTerms: boolean;
+  /**
+   * Hold each stored item's text deflated (`packed-text.ts`) and decode it on read through its `text` getter (D177,
+   * which reopened D111's compressed text as a trial and promoted it): cached text was about half a synced user's
+   * heap. `ingest.bench.ts --world`, shipped, 200 users x 500 items: 3,799-3,953 to 2,368-2,543 B/item released
+   * (1.55-1.60x), backfill about 1.2x the CPU; `pipeline.bench.ts` unchanged; eval and funnel identical. Off: text as
+   * plain strings (the benches' `--plain`, for before/after figures).
+   */
+  compactText: boolean;
 }
 
 export const DEFAULT_CACHE_LIMITS: CacheLimits = {
@@ -291,6 +300,7 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   syncTtlMs: 7 * 24 * 3_600_000,
   expireEveryMs: 10 * 60_000,
   releaseTerms: true,
+  compactText: true,
 };
 
 /**
@@ -717,9 +727,11 @@ export class ItemCache {
       // Added before the item is: a graph built on first use (`graphOf`) must not read it twice.
       this.graphOf(u, now)?.add(item, now);
       const doc = this.index(u, item);
+      // The copy held: with `compactText`, its text deflated (the tallies, graph and index above read the plain one).
+      const stored = this.limits.compactText ? packItem(item) : item;
       // `raw` always set (if undefined), so every entry has one shape.
       const entry: Entry = {
-        item,
+        item: stored,
         fetchedAt: now,
         readMark,
         doc,
@@ -736,7 +748,7 @@ export class ItemCache {
       link(u, entry);
       u.byDoc[doc] = entry;
       u.revision = ++this.revisions;
-      changed.push(item);
+      changed.push(stored);
     }
     if (u.synced === 0) {
       while (u.items.size > this.limits.maxItemsPerUser) this.drop(u, u.items.values().next().value as Entry);
