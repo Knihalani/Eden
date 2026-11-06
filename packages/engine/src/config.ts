@@ -469,6 +469,13 @@ export interface EngineConfig {
    * kind or constraint word reads (R3-19; on in the default, D124, amending D122).
    */
   readerGateVisits: boolean;
+  /**
+   * With `askReader`: the reader's request gate (the push in `observe`, and `readAsk`'s "is this a request to act")
+   * recognises more verbs (`ACTION_VERBS`, probes.ts: "Switch …", "Cash in …", "RSVP yes …") and refuses chat replies
+   * ("thanks!", "ok sounds good", "Done") and messages opening with a pronoun, question word or preposition
+   * (`isActionRequest`). Trial of D168 (deep audit 2026-11-06, F6); off by default until its screen decides it.
+   */
+  readerVerbGate: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -593,4 +600,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerPushBehind: true,
   readerGate: true,
   readerGateVisits: true,
+  readerVerbGate: false,
 };

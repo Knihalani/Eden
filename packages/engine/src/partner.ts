@@ -106,6 +106,7 @@ import {
   cleanEntities,
   daysNamed,
   isAction,
+  isActionRequest,
   isImperative,
   MORE_VERBS,
   LEADING,
@@ -665,7 +666,7 @@ export class ContextPartner {
       this.deps.reader &&
       event.kind === "user_message" &&
       event.draft !== true &&
-      isImperative(event.text, MORE_VERBS)
+      (this.config.readerVerbGate ? isActionRequest(event.text) : isImperative(event.text, MORE_VERBS))
         ? // The question as an ask may carry it (`checkAsk`'s cap): the event's own cap is 100 times that, and the
           // ask redacts and tokenizes it before its first await, on the observe's critical path.
           this.ask({ ...event, question: head(event.text, MAX_QUESTION_CHARS), maxItems: 5 }, internal).catch(
@@ -1516,7 +1517,8 @@ export class ContextPartner {
     costUsd: number;
   } | null> {
     const reader = this.deps.reader!;
-    const acts = (raw: string) => isImperative(raw, MORE_VERBS);
+    // `readerVerbGate` (D168's trial): more verbs, no chat replies (`isActionRequest`).
+    const acts = (raw: string) => (this.config.readerVerbGate ? isActionRequest(raw) : isImperative(raw, MORE_VERBS));
     const request = acts(cue.raw) ? cue.raw : s.request && acts(s.request.raw) ? s.request.raw : undefined;
     if (!request && !ASKS_BLOCKERS.test(cue.raw)) return null;
     const pool: Scored[] = [];
