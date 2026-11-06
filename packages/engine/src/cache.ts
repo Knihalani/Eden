@@ -1177,6 +1177,20 @@ export class ItemCache {
     return u.index.idf(id) > Math.log(1 + (n - at + 0.5) / (at + 0.5));
   }
 
+  /**
+   * How many of the user's live items hold the term id `term` (0 for an unknown user or term), and how many live
+   * items they have. Read back from the index's idf, which is a strictly decreasing function of the count, so no
+   * second count is kept: `askExpand` (D177) uses it to keep only words on a few of the user's items.
+   */
+  docFreq(scope: Scope, term: number): { df: number; live: number } {
+    const u = this.peek(scope);
+    if (!u) return { df: 0, live: 0 };
+    const live = u.index.size;
+    // idf = ln(1 + (live - df + 0.5) / (df + 0.5)), so with r = e^idf - 1, df = (live + 0.5 - 0.5r) / (1 + r).
+    const r = Math.expm1(u.index.idf(term));
+    return { df: Math.max(0, Math.round((live + 0.5 - 0.5 * r) / (1 + r))), live };
+  }
+
   /** The cached item `doc`'s sorted unique term ids (title and body, the user's vocabulary); empty if unknown. */
   termsOf(scope: Scope, doc: number): Uint32Array {
     return this.peek(scope)?.index.termsOf(doc) ?? NO_TERMS;

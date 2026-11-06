@@ -444,6 +444,13 @@ export interface EngineConfig {
   readerPush: boolean;
   /** The characters of each item's most relevant parts the reader reads (`READER_ITEM_CHARS`, 400, is the most). */
   askReaderItemChars: number;
+  /**
+   * Trial (D177, off): with `askReader`, the ask's request is expanded with no model (`expand.ts`: pseudo-relevance
+   * feedback over the user's own index), and up to `EXPAND_HITS` items only the expansion reaches join the reader's
+   * pool after every candidate the ask found itself (they fill seats it would leave empty; never a no-model
+   * delivery). Two index searches per ask that reads, no call.
+   */
+  askExpand: boolean;
   /** With `readerPush`: the reader's kinds pushed unasked (`askReader` still shows every kind in an ask's answer). */
   readerPushKinds: string[];
   /**
@@ -591,6 +598,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askReaderDrop: true,
   readerPush: true,
   askReaderItemChars: 240,
+  askExpand: false,
   readerPushKinds: ["blocks", "limits", "changes", "done"],
   readerPushWaitMs: 60_000,
   readerPushBehind: true,
