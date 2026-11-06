@@ -34,7 +34,7 @@
 | `packages/graph` | The source map (knowledge graph layer 1): which sources mention which entities, and learned usefulness per situation. SQLite. |
 | `packages/llm` | `Model` interface, OpenRouter client (ZDR, no data collection), pricing, `Budget` (per session and per user-day) and `TenantSpend` (one cap per tenant per UTC day across roles), `FakeModel`. |
 | `packages/engine` | `ContextPartner`: cues, a per-user BM25F item cache (title, body), near-duplicate suppression, ledger, two-speed pipeline, the default's parts (`DEFAULT_CONFIG`, `PARTS` in `parts.ts`, D112), an optional model judge, usage inference, traces; span tracing of every phase in wall and CPU time, off by default (`spans.ts`, `onSpan`, `config.spans`; content-free; an observability toggle, not a product switch, D121; [research/moon-telemetry.md](research/moon-telemetry.md)). Each event is tokenized once, into a per-session vocabulary. |
-| `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), MCP server exposing `ask_context`, config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). Runs `DEFAULT_CONFIG` (D112; `EDEN_ENGINE_CONFIG` overrides keys, D103). Model roles (`models.ts`): with `OPENROUTER_API_KEY`, cards and intent (background, price-routed) and the ask-time reader (request path) run on `EDEN_MODEL` (default `anthropic/claude-haiku-5.5`, D12's ZDR routing), each with its own `Budget`, all of a tenant's roles under one cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25); no judge is wired. Without a key no role is built and the same default runs its no-model path. |
+| `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), the multi-process router (`EDEN_PROCESSES`, D163), MCP server exposing `ask_context`, config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). Runs `DEFAULT_CONFIG` (D112; `EDEN_ENGINE_CONFIG` overrides keys, D103). Model roles (`models.ts`): with `OPENROUTER_API_KEY`, cards and intent (background, price-routed) and the ask-time reader (request path) run on `EDEN_MODEL` (default `anthropic/claude-haiku-5.5`, D12's ZDR routing), each with its own `Budget`, all of a tenant's roles under one cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25); no judge is wired. Without a key no role is built and the same default runs its no-model path. |
 | `packages/client` | SDK for agent builders: `EdenClient` (fail-open) and `withContext` for message lists. |
 | `packages/eval` | Scenario harness over 26 hand-written scenarios (docs/research/eval-suite.md): precision, recall, false-fire rate, overall and per category; a privacy check (planted secrets, inert framing); direct asks; model calls and cost per turn, latency. |
 | `packages/sim` | Simulation: generated worlds and sessions with fact-level ground truth, connectors that behave like real ones, an oracle judge, and the real server under simulated agents over HTTP ([research/simulation.md](research/simulation.md)); the connector lab, open-source MCP servers over seeded backends in isolated containers ([research/connector-lab.md](research/connector-lab.md)). Not product code. |
@@ -46,6 +46,23 @@ Tenant (our customer) → user (their end user) → session (one conversation or
 Every cache, source-map row and budget is keyed by `tenant/user`; session state by `tenant/user#session`. Nothing
 crosses a user boundary. Cross-user learning, if ever added, may share only content-free aggregates
 (see [DECISIONS.md](DECISIONS.md) D9).
+
+### Several processes (D113, D163)
+
+Every piece of per-user state lives in memory in the process that serves the user, so one process uses one core.
+With `EDEN_PROCESSES=N` (N > 1; default 1, one process and no router) `main.ts` starts the router
+(`packages/server/src/router.ts`): one Bun.serve front and N child server processes, each `main.ts` again. Each
+request goes to child `hash(tenant/userId) mod N`, the tenant from the API key and `userId` from the body (one
+`JSON.parse`, 0.27 µs for a 131-byte event and 0.7 ms for a 1 MB items body in `router.bench.ts`), so a user always
+reaches the same child and `/v1/forget` reaches the child holding their state. The router keeps no per-user state.
+Each child has its own source-map file (`source-map.<i>.db`: one SQLite writer per file) and holds 1/N of every
+per-tenant cap: the request rate and burst (`EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`) and the daily model spend
+(`EDEN_MODEL_USD_PER_TENANT_DAY`). The caps are split, not shared, so a tenant whose users hash unevenly meets its
+cap sooner on the busier child. A child that is down gives its users 503 (never 500) while the others serve, and
+is started again after 1 s (doubling to 30 s while it keeps failing); its users' in-memory state starts over, as
+after any restart (D8). `/healthz` on the router is 503 while any child is down. D163 makes N > 1 the default only
+once `router.bench.ts` shows at least 1.5x the events per second of one process at the same observe p99 on 4 cores,
+on the merged tree.
 
 ## The two speeds
 
@@ -402,4 +419,5 @@ it. Tests run with TZ=UTC (`scripts/test-preload.ts`);
 
 Per-user MCP connections with OAuth and a token vault; persistent session state;
 streaming delivery; the OpenAI-compatible injecting proxy; a richer graph (entity resolution, relations, freshness);
-learned situation classification; per-agent (not just per-user) learning; multi-instance deployment.
+learned situation classification; per-agent (not just per-user) learning; multi-machine deployment (the router,
+D163, spreads users over processes on one machine; the caps it splits are per process, not shared).
