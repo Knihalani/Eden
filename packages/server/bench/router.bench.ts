@@ -1,20 +1,29 @@
 /**
  * The multi-process router's gate (D163): events per second the whole server sustains with observe p99 at or under a
  * fixed target, for one process (main.ts with EDEN_PROCESSES unset, what ships today), the router over one child (the
- * hop's cost alone) and the router over N children. D163 makes N > 1 the default only at >= 1.5x on 4 cores.
+ * hop's cost alone) and the router over N children. D163 makes N > 1 the default only at >= 1.5x on 4 cores; D172
+ * decides it on repetitions: the median of the per-repetition ratios at least 1.5x and the lowest at least 1.2x.
  *
  * Each server runs in its own process tree, never in this one: this process is only the load generator (it competes
  * for the same cores, as any co-located client would; the figure is a lower bound on a box with a separate client).
  * The load is closed-loop: C concurrent clients, each sending `/v1/events?waitMs=${WAIT}` for its own users in turn, so
  * a request returns when its slow path has (the work an event costs, not only the fast path). Users are many (USERS)
  * and spread over tenants; every server holds the same static source of DOCS generated documents, so each slow path
- * searches and scores. C steps up (1, 2, 4, ...) until p99 passes the target or throughput stops rising; the arm's
- * figure is the best throughput among steps within the target. No model (OPENROUTER_* removed), no network.
+ * searches and scores. That source is an in-process `StaticSource` index, not a network source: its search is a large
+ * share of each event's CPU, so the figure says how the router spreads that work, and moves when StaticSource does.
+ * C steps up (1, 2, 3, 4, 6, ...) until p99 passes twice the target; the arm's figure is the best throughput among
+ * steps within the target. No model (OPENROUTER_* removed), no network.
+ *
+ * Noise (D172): one run of this bench has landed on both sides of 1.5x on a shared box (1.32 to 3.70), since a server
+ * process can sit in a slow or a fast mode for a whole arm and one step past p99 drops a level. So each arm runs REPS
+ * times (at least 3), the arms alternate (the order rotates every repetition, so drift in box load falls on each arm
+ * alike), steps last 5 s by default, and the result reports every arm's median, min and max, each repetition's ratio
+ * (router over N against the single process of the same repetition), their median and the lowest.
  *
  * The router reads each body once to find its user (`userOf`); the hop is measured on its own at the end: `userOf`
  * on a typical event body and on a 1 MB `/v1/sources/items` body.
  *
- *   bun packages/server/bench/router.bench.ts [children=4] [secondsPerStep=4] [p99TargetMs=100]
+ *   bun packages/server/bench/router.bench.ts [children=4] [secondsPerStep=5] [p99TargetMs=100] [waitMs=0] [reps=3]
  */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -44,9 +53,10 @@ if (process.argv[2] === "--serve-router") {
 async function main() {
   const args = process.argv.slice(2);
   const N = Number(args[0] ?? 4);
-  const SECONDS = Number(args[1] ?? 4);
+  const SECONDS = Number(args[1] ?? 5);
   const TARGET = Number(args[2] ?? 100);
   const WAIT = Number(args[3] ?? 0);
+  const REPS = Math.max(1, Math.floor(Number(args[4] ?? 3)));
   const dir = mkdtempSync(join(tmpdir(), "eden-router-bench-"));
   const words = (
     "renewal budget launch contract invoice roadmap hiring security audit migration pricing deadline " +
@@ -177,10 +187,32 @@ async function main() {
     return { name, best, steps };
   }
 
-  console.error(`router bench: ${N} children, ${SECONDS} s per step, p99 target ${TARGET} ms, ${USERS} users`);
-  const single = await arm("single", [process.execPath, MAIN], "partner");
-  const hop = await arm("router×1", [process.execPath, import.meta.path, "--serve-router", "1"], "router");
-  const multi = await arm(`router×${N}`, [process.execPath, import.meta.path, "--serve-router", String(N)], "router");
+  const source = `an in-process StaticSource of ${DOCS} generated docs (no network source)`;
+  console.error(
+    `router bench: ${N} children, ${SECONDS} s per step, p99 target ${TARGET} ms, ${USERS} users, ${REPS} ` +
+      `repetitions per arm, alternating; source: ${source}`,
+  );
+  if (REPS < 3) console.error(`  note: D172 decides on at least 3 repetitions per arm; this run has ${REPS}`);
+  const specs = [
+    { name: "single", cmd: [process.execPath, MAIN], who: "partner" as const },
+    { name: "router×1", cmd: [process.execPath, import.meta.path, "--serve-router", "1"], who: "router" as const },
+    {
+      name: `router×${N}`,
+      cmd: [process.execPath, import.meta.path, "--serve-router", String(N)],
+      who: "router" as const,
+    },
+  ];
+  // runs[a][r]: arm a's best events/s in repetition r (0 when no step met the target).
+  const runs: number[][] = specs.map(() => []);
+  for (let r = 0; r < REPS; r++) {
+    for (let k = 0; k < specs.length; k++) {
+      const a = (k + r) % specs.length; // rotate the order: each arm runs first, second and third in turn
+      const spec = specs[a]!;
+      console.error(`repetition ${r + 1}/${REPS}, ${spec.name}:`);
+      const res = await arm(spec.name, spec.cmd, spec.who);
+      runs[a]![r] = res.best?.eventsPerSec ?? 0;
+    }
+  }
 
   // The parse hop on its own: a typical event body, and a 1 MB items body.
   const enc = new TextEncoder();
@@ -200,20 +232,38 @@ async function main() {
     itemsUs: +time(large, 50).toFixed(0),
   };
 
-  const eps = (a: typeof single) => a.best?.eventsPerSec ?? 0;
+  const median = (xs: number[]) => {
+    const s = [...xs].sort((x, y) => x - y);
+    const m = s.length >> 1;
+    return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+  };
+  const round2 = (x: number) => +x.toFixed(2);
+  // Paired by repetition: each ratio divides by the single process measured in the same repetition.
+  const ratios = runs[2]!.map((m, r) => (runs[0]![r]! > 0 ? m / runs[0]![r]! : 0));
+  const hopRatios = runs[1]!.map((h, r) => (runs[0]![r]! > 0 ? h / runs[0]![r]! : 0));
+  const medianRatio = round2(median(ratios));
+  const lowestRatio = round2(Math.min(...ratios));
   const result = {
     children: N,
     p99TargetMs: TARGET,
     secondsPerStep: SECONDS,
     users: USERS,
-    arms: [single, hop, multi].map((a) => ({
-      name: a.name,
-      eventsPerSec: +eps(a).toFixed(0),
-      atClients: a.best?.clients ?? null,
-      p99Ms: a.best ? +a.best.p99.toFixed(1) : null,
+    repetitions: REPS,
+    source,
+    arms: specs.map((spec, a) => ({
+      name: spec.name,
+      eventsPerSec: runs[a]!.map((x) => +x.toFixed(0)),
+      median: +median(runs[a]!).toFixed(0),
+      min: +Math.min(...runs[a]!).toFixed(0),
+      max: +Math.max(...runs[a]!).toFixed(0),
     })),
-    ratio: +(eps(multi) / eps(single)).toFixed(2),
-    hopRatio: +(eps(hop) / eps(single)).toFixed(2),
+    ratios: ratios.map(round2),
+    medianRatio,
+    lowestRatio,
+    hopRatios: hopRatios.map(round2),
+    medianHopRatio: round2(median(hopRatios)),
+    // D172's bar for making N > 1 the default; one run is evidence for the decision, never the decision itself.
+    meetsD172: REPS >= 3 && medianRatio >= 1.5 && lowestRatio >= 1.2,
     parseHop: parse,
   };
   console.log(JSON.stringify(result, null, 2));

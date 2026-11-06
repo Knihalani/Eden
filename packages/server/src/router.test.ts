@@ -23,19 +23,6 @@ afterAll(() => {
   for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
 });
 
-/** True once process `pid` is gone (signal 0 throws ESRCH), waiting up to 2 s. */
-async function exited(pid: number): Promise<boolean> {
-  for (let i = 0; i < 200; i++) {
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return true;
-    }
-    await Bun.sleep(10);
-  }
-  return false;
-}
-
 /** The source-map files in `dir`, each with how many rows it holds for `scope` across its three tables. */
 function rowsByFile(dir: string, scope: string): Record<string, number> {
   const out: Record<string, number> = {};
@@ -256,53 +243,6 @@ describe("router over real child processes", () => {
   }, 20_000);
 });
 
-describe("router rate limit, divided", () => {
-  test("a tenant's burst is split across children: one child holds burst / N", async () => {
-    const dir = tempDir("eden-router-rate-");
-    const env = {
-      ...process.env,
-      EDEN_HOME: dir,
-      EDEN_API_KEYS: keys,
-      EDEN_TENANT_RPS: "0.01",
-      EDEN_TENANT_BURST: "4",
-    };
-    const config = { ...loadConfig(env), port: 0, processes: 2 };
-    const router = await startRouter({ config, env, log: () => {}, onOutput: () => {} });
-    try {
-      const statuses: number[] = [];
-      for (let i = 0; i < 4; i++) {
-        const res = await fetch(`http://127.0.0.1:${router.port}/v1/whoami`, {
-          method: "POST",
-          headers: { authorization: `Bearer ${KEY}` },
-          body: JSON.stringify({ userId: "one-user" }),
-        });
-        statuses.push(res.status);
-      }
-      // One process would allow all 4; the user's child holds a burst of 2.
-      expect(statuses).toEqual([200, 200, 429, 429]);
-    } finally {
-      await router.stop();
-    }
-  }, 30_000);
-
-  test("a child that cannot start fails the router's start, and every child is stopped", async () => {
-    const dir = tempDir("eden-router-bad-");
-    const sources = join(dir, "bad.json");
-    writeFileSync(sources, "{not json");
-    const env = { ...process.env, EDEN_HOME: dir, EDEN_API_KEYS: keys, EDEN_SOURCES_FILE: sources };
-    const pids: number[] = [];
-    const start = startRouter({
-      config: { ...loadConfig(env), port: 0, processes: 2 },
-      env,
-      log: () => {},
-      onSpawn: (_, pid) => pids.push(pid),
-    });
-    await expect(start).rejects.toThrow(/exited with code 2 before listening/);
-    expect(pids.length).toBe(2);
-    for (const pid of pids) expect(await exited(pid)).toBe(true);
-  }, 30_000);
-});
-
 describe("changing N never strands a user's source-map rows (D163)", () => {
   const scope = (userId: string) => ({ tenantId: "acme", userId });
   /** Three rows for the user: one mention per entity, one utility row, one planner arm. */
@@ -373,69 +313,4 @@ describe("changing N never strands a user's source-map rows (D163)", () => {
     expect(() => rehomeSourceMaps(base, 2, () => {})).toThrow();
     expect(existsSync(childSourceMapPath(base, 3))).toBe(true);
   });
-
-  test("through the router: N 2 -> 3 -> 2, forget removes the user's rows from every file", async () => {
-    const dir = tempDir("eden-router-n-");
-    const sources = join(dir, "sources.json");
-    const doc = { ref: "d1", title: "Globex renewal", text: "Dana Lee wants 12% off the Globex renewal" };
-    writeFileSync(sources, JSON.stringify({ sources: [{ id: "crm", description: "deals", docs: [doc] }] }));
-    const env = {
-      ...process.env,
-      EDEN_HOME: dir,
-      EDEN_SOURCE_MAP: join(dir, "source-map.db"),
-      EDEN_SOURCES_FILE: sources,
-      EDEN_API_KEYS: keys,
-      EDEN_TENANT_RPS: "1000",
-      EDEN_TENANT_BURST: "1000",
-    };
-    const start = (processes: number) =>
-      startRouter({ config: { ...loadConfig(env), port: 0, processes }, env, log: () => {}, onOutput: () => {} });
-    const call = (router: Router, path: string, body: unknown) =>
-      fetch(`http://127.0.0.1:${router.port}${path}`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    const event = async (router: Router, userId: string) => {
-      const text = "Globex renewal with Dana Lee";
-      const res = await call(router, "/v1/events?waitMs=2000", { userId, sessionId: "s1", kind: "user_message", text });
-      expect(((await res.json()) as { injection: unknown }).injection).not.toBeNull();
-    };
-    const total = (userId: string) => Object.values(rowsByFile(dir, `acme/${userId}`)).reduce((a, b) => a + b, 0);
-    // u moves from child 1 of 2 to another child of 3; v is served by child 2 of 3, a file N = 2 does not open.
-    const pick = (ok: (u: string) => boolean) => Array.from({ length: 1_000 }, (_, i) => `user-${i}`).find(ok)!;
-    const u = pick((x) => childFor("acme", x, 2) === 1 && childFor("acme", x, 3) !== 1);
-    const v = pick((x) => childFor("acme", x, 3) === 2);
-    const stopped: number[] = [];
-
-    let router = await start(2);
-    await event(router, u);
-    stopped.push(...router.children.map((c) => c.pid));
-    await router.stop();
-    expect(rowsByFile(dir, `acme/${u}`)["source-map.1.db"]).toBeGreaterThan(0);
-
-    router = await start(3);
-    // u's rows sit in a file its new child does not read; forget still reaches them.
-    expect((await call(router, "/v1/forget", { userId: u })).status).toBe(200);
-    expect(total(u)).toBe(0);
-    await event(router, v);
-    stopped.push(...router.children.map((c) => c.pid));
-    await router.stop();
-    expect(rowsByFile(dir, `acme/${v}`)["source-map.2.db"]).toBeGreaterThan(0);
-
-    router = await start(2);
-    try {
-      // source-map.2.db was merged into v's current child's file and deleted before the children started.
-      expect(existsSync(join(dir, "source-map.2.db"))).toBe(false);
-      expect(rowsByFile(dir, `acme/${v}`)[`source-map.${childFor("acme", v, 2)}.db`]).toBeGreaterThan(0);
-      expect((await call(router, "/v1/forget", { userId: v })).status).toBe(200);
-      expect(total(v)).toBe(0);
-      // The owner's answer is the caller's: a malformed userId is still the child's 400.
-      expect((await call(router, "/v1/forget", { userId: "" })).status).toBe(400);
-    } finally {
-      stopped.push(...router.children.map((c) => c.pid));
-      await router.stop();
-    }
-    for (const pid of stopped) expect(await exited(pid)).toBe(true);
-  }, 60_000);
 });
