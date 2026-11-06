@@ -1,25 +1,30 @@
 #!/usr/bin/env bun
 /**
- * The retrieval screen (audit 2026-11-06 F25): a small, fast subset of train for changes to what reaches the reader
- * (retrieval, ranking, intent, probes, the graph, sync), at $0, in seconds. `bun run funnel` screens all of train
- * (train1-6 x seeds 41-42, 768 tasks) and is the gate; this screen is the inner loop before it.
+ * The retrieval screen (audit 2026-11-06 F25): the inner loop for changes to what reaches the reader (retrieval,
+ * ranking, intent, probes, the graph, sync), at $0. `bun run funnel` screens all of train (train1-6 x seeds 41-42,
+ * 768 tasks) and stays the gate; this screen runs half of it, in about 0.6x the wall time, and agrees with it task by
+ * task on every task it runs (docs/LAB.md recipe 1d has the measurements).
  *
- * The set is the part of train the replay caches cover: the checked-in Haiku reader cache, the train cards and the
- * intent requests (intent-v2) are all recorded for seeds 41-42, and the intent file lacks a line for some planted
- * items (`inReplay: false`), for which an intent change cannot show (a lab artefact, D173). The screen runs `SCREEN`'s
- * suites x seeds with hidden-funnel's `--limit` (the first `limit` tasks of each suite, in order), and scores only its
- * covered tasks (`coveredKeys`: neither variant's planted item lacks an intent line), listed in
- * `packages/sim/lab/retrieval-screen.json` by `select`. It reports, per variant, how many planted items the
- * connectors returned, the cache held, the reader's pool held (`poolHas`, the retrieval figure) and the funnel
- * surfaced, and a `--baseline` diff of those fields task by task.
+ * The set is the part of train every replay cache covers with no miss: seed 41 of train1-6. The train cards, the
+ * intent requests (intent-v2, every planted item has a line since the 2026-11-06 top-up) and the checked-in Haiku
+ * reader cache (recipe 2a) are recorded for seeds 41-42, and the reader cache replays seed 41 whole (324 calls, 0
+ * misses; its 2 misses are seed 42's), so the screen runs with the stub reader or with the paid reading replayed. A
+ * retrieval change that re-renders the reader's pool still misses the reader cache: a paid top-up of the screen is
+ * about half the full one. Each (suite, seed) is its own world and session, so a subset of whole suites x seeds is
+ * exact; a prefix of a suite (`limit`, hidden-funnel's `--limit`) is not, because each suite clears the calendar
+ * slots its own tasks ask for (`clearSlot`), and was measured to move one task in 192 (recipe 1d), so `limit` is 0.
  *
- * A screen is not a result: it is checked against the full funnel (`agree`), and a change it passes still runs
- * `bun run funnel --baseline` on all of train before it is reported. Running a prefix is not free of effects: each
- * suite clears the calendar slots its own tasks ask for (`clearSlot`), so a prefix world keeps slots that later
- * tasks would have cleared; `agree` measures what that changes.
+ * `select` lists the screen's covered pairs (`coveredKeys`: neither variant's planted item lacks an intent line) in
+ * `packages/sim/lab/retrieval-screen.json`; `run` scores only those. It reports, per variant, how many planted items
+ * the connectors returned, the cache held, the reader's pool held (`poolHas`, the retrieval figure) and the funnel
+ * surfaced, and with `--baseline` (an earlier screen JSON) the fields that moved, task by task. `agree` checks the
+ * screen against full-funnel runs of the same change. A screen is not a result: a change it passes still runs
+ * `bun run funnel --baseline` on all of train before it is reported, and a change that moves fewer than about five
+ * tasks can show a different sign on the screen (minus-graph did, recipe 1d).
  *
- *   bun packages/sim/src/lab/retrieval-screen.ts run [--json F] [--baseline SCREEN.json] [funnel flags] [-- hidden-funnel flags]
- *   bun packages/sim/src/lab/retrieval-screen.ts select FULL_DEFAULT.json      # rewrite the covered-task list
+ *   bun packages/sim/src/lab/retrieval-screen.ts run [--json F] [--baseline SCREEN.json] [funnel flags]
+ *     [-- hidden-funnel flags]
+ *   bun packages/sim/src/lab/retrieval-screen.ts select FULL_DEFAULT.json      # rewrite the covered-pair list
  *   bun packages/sim/src/lab/retrieval-screen.ts agree FULL_BASE FULL_NEXT SCREEN_BASE SCREEN_NEXT
  */
 import { spawnSync } from "node:child_process";
@@ -27,7 +32,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/** The screen's grid: suites x seeds, the first `limit` tasks of each (0: all). Chosen in docs/LAB.md recipe 1d. */
+/** The screen's grid: suites x seeds, the first `limit` tasks of each (0: all); docs/LAB.md recipe 1d. */
 export const SCREEN = { suites: ["train1", "train2", "train3", "train4", "train5", "train6"], seeds: [41], limit: 0 };
 export const SCREEN_FILE = join(import.meta.dir, "../../lab/retrieval-screen.json");
 

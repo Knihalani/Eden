@@ -335,6 +335,51 @@ train1 seed 41 wrote 54 lines for its 54 reader calls.
   `bun run funnel --jobs 4` (ALL3, train, seeds 41–42) demand items 182,742 and background items 76,796; with
   `--set '{"syncPollPageSize":5}'` 10,080 and 77,996 (D101's 182,742 → 10,080), score 214/211 both.
 
+### 1d. The retrieval screen: half of train, every task agreeing with the funnel (audit 2026-11-06 F25)
+
+For a change to what reaches the reader (retrieval, ranking, intent, probes, the graph, sync), screen first on
+`retrieval-screen.ts`, then gate on recipe 1 or 2a. The screen is train1–6 at seed 41 only: the part of train every
+replay cache covers with no miss (cards and intent requests for seeds 41–42, every planted item with an intent line;
+the Haiku reader cache of recipe 2a replays seed 41 whole, 324 calls and 0 misses, its 2 misses are seed 42's). Each
+suite × seed is its own world and session, so the screen's rows are exactly the full funnel's rows for those tasks.
+
+```bash
+bun packages/sim/src/lab/retrieval-screen.ts run --json .local/screen-base.json          # the default, stub reader
+bun packages/sim/src/lab/retrieval-screen.ts run --set '{"myFlag":true}' --baseline .local/screen-base.json
+bun packages/sim/src/lab/retrieval-screen.ts run --json .local/screen-haiku.json -- --reader replay \
+  --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl   # the paid reading, $0
+bun packages/sim/src/lab/retrieval-screen.ts agree FULL_BASE FULL_NEXT SCREEN_BASE SCREEN_NEXT  # check it
+```
+
+It runs `bun run funnel --suite train1,…,train6 --seeds 41` (any funnel flag but the grid passes through; after `--`,
+hidden-funnel's), then prints `RETRIEVAL SCREEN`: per variant, planted items returned, cached, in the reader's pool
+(the retrieval figure) and surfaced, over the pairs `packages/sim/lab/retrieval-screen.json` lists (`select FULL.json`
+rewrites it; 192 of 192 covered), and with `--baseline` every task whose fields moved. It is a screen, not a result.
+
+Measured 2026-11-06 (4 cores, load 1.4–3.4, stub reader unless named). Time, `bun run funnel` against the screen:
+10.0–10.5 s against 6.0–6.4 s at the default jobs (3 runs each), 22.1 s against 11.8–12.5 s at `--jobs 1`; with the
+Haiku replay 10.6 s (647 replayed, 2 missed) against 6.3 s (324 replayed, 0 missed). The default on the screen:
+hidden pool 130/192, surfaced 127; decoys pool 121, surfaced 118 (full: 262/246 and 259/235). With the Haiku
+replay, the screen's 384 rows equal the full replay's rows for the same tasks (0 moved). Agreement with the full
+funnel on four past changes (`agree`, each change run both ways against the default):
+
+| Change | Tasks agreeing | Moved (full on screen / screen) | Full Δ pool, surfaced (hidden; decoys) | Screen Δ | Signs |
+|---|---|---|---|---|---|
+| D159's looser intent `{"intentMinCoverage":0.2,"intentMinMatched":1,"intentHits":12}` | 384/384 | 42 / 42 | +16, +22; +8, +21 | +9, +10; +8, +14 | agree |
+| `--preset minus-probes` | 384/384 | 32 / 32 | −10, −11; −12, −9 | −4, −5; −5, −5 | agree |
+| `--preset minus-intent` | 384/384 | 42 / 42 | −32, −45; −17, −24 | −17, −20; −8, −12 | agree |
+| `--preset minus-graph` | 384/384 | 6 / 6 | −1, +3; −2, +1 | −1, +1; −1, 0 | differ |
+
+Every task agreed in every change, as it must (same worlds, same order). The verdict, the sign of the totals, agreed
+on the three changes that moved 32 tasks or more and differed on minus-graph, which moves 6 of the screen's tasks and
+15 of 768 in the full funnel (the others moved 67–88): below about five moved tasks a half-size screen cannot tell a direction, so read its task list, not its
+total. Prefixes were tried and dropped: `-- --limit 16` and `--limit 8` per suite (4.7–4.9 s and 4.2 s) moved one
+default task of their 192 and 96 rows (each suite clears only its own tasks' calendar slots, `clearSlot`), so the screen's rows
+would no longer be the funnel's. A change that re-renders the reader's pool still misses the reader cache; its paid
+top-up on the screen is about half a full one (324 of 649 calls, about $0.09 at recipe 2a's $0.185 for 652 calls,
+an estimate). It does not answer what F25's unordered subset replay would: no recorded reading is reused for a pool
+it was not given (D117 is unchanged).
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash

@@ -79,7 +79,9 @@ its model roles.
   StaticSource does. One run is noise (1.32-3.70 on one tree, D172): it runs each arm at least 3 times (5th argument,
   default 3), rotating the arm order every repetition, 5 s steps by default, and reports per-arm median, min and max,
   each repetition's ratio, `medianRatio` and `lowestRatio`; D172's bar to make N > 1 the default is median >= 1.5x
-  with the lowest >= 1.2x on 4 cores (`meetsD172`). `EDEN_PROCESSES` stays 1 until that holds on the merged tree.
+  with the lowest >= 1.2x on 4 cores (`meetsD172`). `EDEN_PROCESSES` stays 1 until that holds on the merged tree. The same gate on simulated users (per-user
+  connectors, sync, real latency) is `packages/sim/src/lab/router-sim.bench.ts` (5.96x on REALISTIC, 3.36x hosted;
+  D172's outcome); its children keep their own heaps, about 650 MB of user state per 100 users there.
 - **Changing N reshuffles users (D163).** Their in-memory state starts over on their new child and their old
   child's source-map rows are no longer read, but they still hold entity names: `/v1/forget` therefore goes to every
   child (a 503 unless all succeed), and `rehomeSourceMaps` moves rows out of files no process of the new N opens

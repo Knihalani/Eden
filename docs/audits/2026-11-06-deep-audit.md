@@ -521,6 +521,10 @@ intent-v2>`, train1-6 seeds 41-42, $0: `cards use` sent 13,604 items (11,491 req
 - **Fix.** D172: median of at least 3 repetitions, lowest at least 1.2x, longer steps, alternating arms, documented
   source; the deciding run happens on the merged tree after `static-source-index`, before and after both reported.
 - **Status.** Round 2 bench changes, package `router-hardening`; the deciding run deferred.
+  Round 3: the gate on simulated users (`packages/sim/src/lab/router-sim.bench.ts`, per-user SimSource connectors at
+  time scale 1, sync on, median of 3): router over 4 children 5.96x one process on REALISTIC (lowest 5.94x), 3.36x on
+  the market `hosted` profile (lowest 3.20x); memory per child and the figures in D172's outcome. The advantage holds,
+  so no new decision; the StaticSource deciding run stays D172's.
 
 ### F24. The graph's 200-seed differential test slows the engine loop
 
@@ -541,7 +545,10 @@ intent-v2>`, train1-6 seeds 41-42, $0: `cards use` sent 13,604 items (11,491 req
 - **Impact.** About $0.19 and 7 min per arm today (measured recording: 652 calls, $0.18548, 418 s).
 - **Fix.** An unordered subset replay labelled APPROXIMATE, gated on per-call agreement and on one changed arm's delta
   against a real reading; it departs from D117 and needs its own decision.
-- **Status.** Deferred: see below.
+- **Status.** Deferred: see below. Round 3: a retrieval screen without the unordered replay (`retrieval-screen.ts`,
+  docs/LAB.md 1d): train1–6 seed 41, where every replay cache answers with 0 misses; 0.6x the funnel's wall time,
+  rows equal to the funnel's on every task in four past changes, verdict signs equal on the three that moved 32+ tasks.
+  The unordered subset replay and its decision stay open.
 
 ### F26. D159's row said the looser thresholds join the default
 
