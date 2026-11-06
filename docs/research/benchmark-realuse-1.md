@@ -1,6 +1,6 @@
 # RealUse-1: a benchmark of Eden as it is really used (design)
 
-Status: design, 2026-11-06. Executed by parallel sessions; results in `benchmark-realuse-1-results.md`. Every paid call
+Status: design, 2026-11-06; executed the same day by parallel sessions. Results: [benchmark-realuse-1-results.md](benchmark-realuse-1-results.md). Every paid call
 goes to the Anthropic API with `HAIKU_API_KEY` (`claude-haiku-5-5` for every role: agent, grader, Eden's cards,
 intent and reader) through the lab provider (D97), metered by a spend ledger with a hard cap. This is a lab transport:
 the servers ship Haiku through OpenRouter (D12), so live figures are labelled "Anthropic-direct".
