@@ -306,6 +306,8 @@ describe("the harnesses' intent replay (D158)", () => {
     expect(intentLine({ ...base, files: [], wanted: false })).toBe("intent: off");
   });
 
+  // Own timeout: four worlds built and listed take about 5 s under `bun run check`'s parallel run, past bun's default
+  // 5 s (one of three timed checks failed on it, 5,410 ms; RealUse-1 part E).
   test("the checked-in file covers held-out 13's items (the shards INTENT_COVERS claims)", () => {
     const requests = loadRequests(INTENT_PATH);
     for (const seed of [41, 44]) {
@@ -328,5 +330,5 @@ describe("the harnesses' intent replay (D158)", () => {
         expect(mine.found).toBe(mine.of);
       }
     }
-  });
+  }, 30_000);
 });

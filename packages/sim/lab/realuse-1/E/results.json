@@ -1,0 +1,5073 @@
+{
+ "pipeline": {
+  "meta": [
+   {
+    "cmd": "bun packages/engine/bench/pipeline.bench.ts",
+    "load1Before": 0.09,
+    "rc": 0,
+    "wallS": 3.02
+   },
+   {
+    "cmd": "bun packages/engine/bench/pipeline.bench.ts",
+    "load1Before": 0.17,
+    "rc": 0,
+    "wallS": 2.33
+   },
+   {
+    "cmd": "bun packages/engine/bench/pipeline.bench.ts",
+    "load1Before": 0.17,
+    "rc": 0,
+    "wallS": 2.14
+   }
+  ],
+  "observeP50Us": {
+   "runs": [
+    184.9,
+    161.2,
+    140.4
+   ],
+   "median": 161.2,
+   "min": 140.4,
+   "max": 184.9
+  },
+  "observeP99Us": {
+   "runs": [
+    5771.0,
+    4119.8,
+    4033.3
+   ],
+   "median": 4119.8,
+   "min": 4033.3,
+   "max": 5771.0
+  },
+  "slowP99Us": {
+   "runs": [
+    4058.0,
+    3254.9,
+    2580.4
+   ],
+   "median": 3254.9,
+   "min": 2580.4,
+   "max": 4058.0
+  },
+  "lagP50Us": {
+   "runs": [
+    821.4,
+    661.9,
+    650.3
+   ],
+   "median": 661.9,
+   "min": 650.3,
+   "max": 821.4
+  },
+  "lagP99Us": {
+   "runs": [
+    10771.4,
+    7381.2,
+    7797.2
+   ],
+   "median": 7797.2,
+   "min": 7381.2,
+   "max": 10771.4
+  },
+  "msPerEvent": {
+   "runs": [
+    1.198,
+    1.006,
+    0.938
+   ],
+   "median": 1.006,
+   "min": 0.938,
+   "max": 1.198
+  },
+  "coldEvent0Us": {
+   "runs": [
+    62441.7,
+    46137.1,
+    38719.2
+   ],
+   "median": 46137.1,
+   "min": 38719.2,
+   "max": 62441.7
+  }
+ },
+ "ingest": {
+  "meta": [
+   {
+    "cmd": "bun packages/engine/bench/ingest.bench.ts",
+    "load1Before": 0.23,
+    "rc": 0,
+    "wallS": 66.17
+   },
+   {
+    "cmd": "bun packages/engine/bench/ingest.bench.ts",
+    "load1Before": 0.93,
+    "rc": 0,
+    "wallS": 61.07
+   },
+   {
+    "cmd": "bun packages/engine/bench/ingest.bench.ts",
+    "load1Before": 0.97,
+    "rc": 0,
+    "wallS": 60.81
+   }
+  ],
+  "core.backfillUsPerItem": {
+   "runs": [
+    124.9,
+    101.8,
+    105.9
+   ],
+   "median": 105.9,
+   "min": 101.8,
+   "max": 124.9
+  },
+  "core.sweepUsPerItem": {
+   "runs": [
+    7.2,
+    3.5,
+    3.6
+   ],
+   "median": 3.6,
+   "min": 3.5,
+   "max": 7.2
+  },
+  "core.heldBPerItem": {
+   "runs": [
+    3304.0,
+    3304.0,
+    3304.0
+   ],
+   "median": 3304.0,
+   "min": 3304.0,
+   "max": 3304.0
+  },
+  "core.releasedBPerItem": {
+   "runs": [
+    1921.0,
+    1921.0,
+    1921.0
+   ],
+   "median": 1921.0,
+   "min": 1921.0,
+   "max": 1921.0
+  },
+  "graph.backfillUsPerItem": {
+   "runs": [
+    195.1,
+    185.0,
+    184.2
+   ],
+   "median": 185.0,
+   "min": 184.2,
+   "max": 195.1
+  },
+  "graph.sweepUsPerItem": {
+   "runs": [
+    8.3,
+    4.0,
+    4.4
+   ],
+   "median": 4.4,
+   "min": 4.0,
+   "max": 8.3
+  },
+  "graph.heldBPerItem": {
+   "runs": [
+    4001.0,
+    4011.0,
+    4011.0
+   ],
+   "median": 4011.0,
+   "min": 4001.0,
+   "max": 4011.0
+  },
+  "graph.releasedBPerItem": {
+   "runs": [
+    2621.0,
+    2631.0,
+    2631.0
+   ],
+   "median": 2631.0,
+   "min": 2621.0,
+   "max": 2631.0
+  },
+  "shipped.backfillUsPerItem": {
+   "runs": [
+    305.8,
+    294.5,
+    288.4
+   ],
+   "median": 294.5,
+   "min": 288.4,
+   "max": 305.8
+  },
+  "shipped.sweepUsPerItem": {
+   "runs": [
+    4.0,
+    4.0,
+    3.8
+   ],
+   "median": 4.0,
+   "min": 3.8,
+   "max": 4.0
+  },
+  "shipped.heldBPerItem": {
+   "runs": [
+    4016.0,
+    4015.0,
+    4015.0
+   ],
+   "median": 4015.0,
+   "min": 4015.0,
+   "max": 4016.0
+  },
+  "shipped.releasedBPerItem": {
+   "runs": [
+    2635.0,
+    2635.0,
+    2635.0
+   ],
+   "median": 2635.0,
+   "min": 2635.0,
+   "max": 2635.0
+  },
+  "shipped.heldKBPerUser500": {
+   "median": 1960.4
+  }
+ },
+ "ingest-world": {
+  "meta": [
+   {
+    "cmd": "bun packages/engine/bench/ingest.bench.ts --world",
+    "load1Before": 1.26,
+    "rc": 0,
+    "wallS": 49.49
+   },
+   {
+    "cmd": "bun packages/engine/bench/ingest.bench.ts --world",
+    "load1Before": 1.22,
+    "rc": 0,
+    "wallS": 50.64
+   },
+   {
+    "cmd": "bun packages/engine/bench/ingest.bench.ts --world",
+    "load1Before": 1.09,
+    "rc": 0,
+    "wallS": 52.35
+   }
+  ],
+  "core.backfillUsPerItem": {
+   "runs": [
+    81.9,
+    82.6,
+    85.1
+   ],
+   "median": 82.6,
+   "min": 81.9,
+   "max": 85.1
+  },
+  "core.sweepUsPerItem": {
+   "runs": [
+    3.9,
+    3.9,
+    3.9
+   ],
+   "median": 3.9,
+   "min": 3.9,
+   "max": 3.9
+  },
+  "core.heldBPerItem": {
+   "runs": [
+    3509.0,
+    3509.0,
+    3510.0
+   ],
+   "median": 3509.0,
+   "min": 3509.0,
+   "max": 3510.0
+  },
+  "core.releasedBPerItem": {
+   "runs": [
+    1693.0,
+    1693.0,
+    1847.0
+   ],
+   "median": 1693.0,
+   "min": 1693.0,
+   "max": 1847.0
+  },
+  "graph.backfillUsPerItem": {
+   "runs": [
+    150.0,
+    143.3,
+    154.6
+   ],
+   "median": 150.0,
+   "min": 143.3,
+   "max": 154.6
+  },
+  "graph.sweepUsPerItem": {
+   "runs": [
+    4.5,
+    4.2,
+    5.5
+   ],
+   "median": 4.5,
+   "min": 4.2,
+   "max": 5.5
+  },
+  "graph.heldBPerItem": {
+   "runs": [
+    4165.0,
+    4186.0,
+    4173.0
+   ],
+   "median": 4173.0,
+   "min": 4165.0,
+   "max": 4186.0
+  },
+  "graph.releasedBPerItem": {
+   "runs": [
+    2365.0,
+    2377.0,
+    2374.0
+   ],
+   "median": 2374.0,
+   "min": 2365.0,
+   "max": 2377.0
+  },
+  "shipped.backfillUsPerItem": {
+   "runs": [
+    229.4,
+    245.8,
+    246.8
+   ],
+   "median": 245.8,
+   "min": 229.4,
+   "max": 246.8
+  },
+  "shipped.sweepUsPerItem": {
+   "runs": [
+    4.8,
+    7.1,
+    5.3
+   ],
+   "median": 5.3,
+   "min": 4.8,
+   "max": 7.1
+  },
+  "shipped.heldBPerItem": {
+   "runs": [
+    4197.0,
+    4188.0,
+    4197.0
+   ],
+   "median": 4197.0,
+   "min": 4188.0,
+   "max": 4197.0
+  },
+  "shipped.releasedBPerItem": {
+   "runs": [
+    2378.0,
+    2368.0,
+    2377.0
+   ],
+   "median": 2377.0,
+   "min": 2368.0,
+   "max": 2378.0
+  },
+  "shipped.heldKBPerUser500": {
+   "median": 2049.3
+  }
+ },
+ "index-memory": {
+  "packed.1x6892.BPerItem": {
+   "runs": [
+    415.0,
+    415.0,
+    415.0
+   ],
+   "median": 415.0,
+   "min": 415.0,
+   "max": 415.0
+  },
+  "packed.500x20.BPerItem": {
+   "runs": [
+    922.0,
+    922.0,
+    922.0
+   ],
+   "median": 922.0,
+   "min": 922.0,
+   "max": 922.0
+  },
+  "itemCache.6892.BPerItemAfterTick": {
+   "runs": [
+    1632.0,
+    1632.0,
+    1632.0
+   ],
+   "median": 1632.0,
+   "min": 1632.0,
+   "max": 1632.0
+  },
+  "packed.6892.searchP50Us": {
+   "runs": [
+    124.8,
+    133.1,
+    138.3
+   ],
+   "median": 133.1,
+   "min": 124.8,
+   "max": 138.3
+  },
+  "packed.6892.searchP99Us": {
+   "runs": [
+    186.8,
+    408.5,
+    371.7
+   ],
+   "median": 371.7,
+   "min": 186.8,
+   "max": 408.5
+  },
+  "packed.churnMaxUs": {
+   "runs": [
+    13001.3,
+    2832.4,
+    2734.8
+   ],
+   "median": 2832.4,
+   "min": 2734.8,
+   "max": 13001.3
+  },
+  "meta": [
+   {
+    "cmd": "bun packages/engine/bench/index-memory.bench.ts",
+    "load1Before": 1.35,
+    "rc": 0,
+    "wallS": 11.44
+   },
+   {
+    "cmd": "bun packages/engine/bench/index-memory.bench.ts",
+    "load1Before": 1.29,
+    "rc": 0,
+    "wallS": 11.72
+   },
+   {
+    "cmd": "bun packages/engine/bench/index-memory.bench.ts",
+    "load1Before": 1.7,
+    "rc": 0,
+    "wallS": 11.54
+   }
+  ]
+ },
+ "concurrent": {
+  "meta": [
+   {
+    "cmd": "bun packages/engine/bench/concurrent.bench.ts",
+    "load1Before": 1.76,
+    "rc": 0,
+    "wallS": 8.48
+   },
+   {
+    "cmd": "bun packages/engine/bench/concurrent.bench.ts",
+    "load1Before": 1.78,
+    "rc": 0,
+    "wallS": 8.48
+   },
+   {
+    "cmd": "bun packages/engine/bench/concurrent.bench.ts",
+    "load1Before": 1.74,
+    "rc": 0,
+    "wallS": 8.46
+   }
+  ],
+  "observeP50Ms": {
+   "runs": [
+    6.07,
+    7.65,
+    12.77
+   ],
+   "median": 7.65,
+   "min": 6.07,
+   "max": 12.77
+  },
+  "observeP99Ms": {
+   "runs": [
+    825.53,
+    886.95,
+    959.91
+   ],
+   "median": 886.95,
+   "min": 825.53,
+   "max": 959.91
+  },
+  "lagP99Ms": {
+   "runs": [
+    11.67,
+    11.79,
+    11.38
+   ],
+   "median": 11.67,
+   "min": 11.38,
+   "max": 11.79
+  },
+  "steadyObserveP99Ms": {
+   "runs": [
+    826.03,
+    887.89,
+    959.91
+   ],
+   "median": 887.89,
+   "min": 826.03,
+   "max": 959.91
+  },
+  "steadyLagP99Ms": {
+   "runs": [
+    8.9,
+    9.69,
+    7.35
+   ],
+   "median": 8.9,
+   "min": 7.35,
+   "max": 9.69
+  },
+  "cpuPct": {
+   "runs": [
+    106.0,
+    106.0,
+    106.0
+   ],
+   "median": 106.0,
+   "min": 106.0,
+   "max": 106.0
+  }
+ },
+ "put": {
+  "meta": [
+   {
+    "cmd": "bun packages/engine/bench/put.bench.ts",
+    "load1Before": 1.62,
+    "rc": 0,
+    "wallS": 0.47
+   },
+   {
+    "cmd": "bun packages/engine/bench/put.bench.ts",
+    "load1Before": 1.62,
+    "rc": 0,
+    "wallS": 0.48
+   },
+   {
+    "cmd": "bun packages/engine/bench/put.bench.ts",
+    "load1Before": 1.62,
+    "rc": 0,
+    "wallS": 0.47
+   }
+  ],
+  "sanitizeMeanUs": {
+   "runs": [
+    22.52,
+    21.32,
+    23.31
+   ],
+   "median": 22.52,
+   "min": 21.32,
+   "max": 23.31
+  },
+  "termIdsMeanUs": {
+   "runs": [
+    8.82,
+    9.82,
+    9.51
+   ],
+   "median": 9.51,
+   "min": 8.82,
+   "max": 9.82
+  },
+  "indexMeanUs": {
+   "runs": [
+    15.27,
+    18.31,
+    14.86
+   ],
+   "median": 15.27,
+   "min": 14.86,
+   "max": 18.31
+  },
+  "entitiesMeanUs": {
+   "runs": [
+    33.85,
+    34.61,
+    32.4
+   ],
+   "median": 33.85,
+   "min": 32.4,
+   "max": 34.61
+  }
+ },
+ "churn": {
+  "meta": [
+   {
+    "cmd": "bun packages/engine/bench/churn.bench.ts",
+    "load1Before": 1.62,
+    "rc": 0,
+    "wallS": 19.66
+   },
+   {
+    "cmd": "bun packages/engine/bench/churn.bench.ts",
+    "load1Before": 1.45,
+    "rc": 0,
+    "wallS": 20.68
+   },
+   {
+    "cmd": "bun packages/engine/bench/churn.bench.ts",
+    "load1Before": 1.47,
+    "rc": 0,
+    "wallS": 21.15
+   }
+  ],
+  "off.worstPutMs": {
+   "runs": [
+    201.38,
+    254.32,
+    216.26
+   ],
+   "median": 216.26,
+   "min": 201.38,
+   "max": 254.32
+  },
+  "on.worstPutMs": {
+   "runs": [
+    5.67,
+    6.28,
+    8.81
+   ],
+   "median": 6.28,
+   "min": 5.67,
+   "max": 8.81
+  },
+  "on.p99Ms": {
+   "runs": [
+    2.9,
+    2.88,
+    3.98
+   ],
+   "median": 2.9,
+   "min": 2.88,
+   "max": 3.98
+  },
+  "on.heapRatio": {
+   "runs": [
+    1.08,
+    1.08,
+    1.08
+   ],
+   "median": 1.08,
+   "min": 1.08,
+   "max": 1.08
+  },
+  "expireIdleP50Ms": {
+   "runs": [
+    0.19,
+    0.17,
+    0.26
+   ],
+   "median": 0.19,
+   "min": 0.17,
+   "max": 0.26
+  }
+ },
+ "router": {
+  "meta": [
+   {
+    "cmd": "bun packages/server/bench/router.bench.ts",
+    "load1Before": 1.48,
+    "rc": 0,
+    "wallS": 650.78
+   },
+   {
+    "cmd": "bun packages/server/bench/router.bench.ts",
+    "load1Before": 1.6,
+    "rc": 0,
+    "wallS": 654.57
+   },
+   {
+    "cmd": "bun packages/server/bench/router.bench.ts",
+    "load1Before": 1.8,
+    "rc": 0,
+    "wallS": 655.95
+   }
+  ],
+  "runs": [
+   {
+    "arms": {
+     "single": {
+      "eventsPerSec": [
+       1145,
+       953,
+       1170
+      ],
+      "median": 1145,
+      "min": 953,
+      "max": 1170
+     },
+     "router×1": {
+      "eventsPerSec": [
+       1057,
+       995,
+       1137
+      ],
+      "median": 1057,
+      "min": 995,
+      "max": 1137
+     },
+     "router×4": {
+      "eventsPerSec": [
+       3124,
+       3362,
+       3127
+      ],
+      "median": 3127,
+      "min": 3124,
+      "max": 3362
+     }
+    },
+    "medianRatio": 2.73,
+    "lowestRatio": 2.67,
+    "medianHopRatio": 0.97
+   },
+   {
+    "arms": {
+     "single": {
+      "eventsPerSec": [
+       1139,
+       1155,
+       1194
+      ],
+      "median": 1155,
+      "min": 1139,
+      "max": 1194
+     },
+     "router×1": {
+      "eventsPerSec": [
+       1091,
+       1143,
+       1134
+      ],
+      "median": 1134,
+      "min": 1091,
+      "max": 1143
+     },
+     "router×4": {
+      "eventsPerSec": [
+       3572,
+       3885,
+       3864
+      ],
+      "median": 3864,
+      "min": 3572,
+      "max": 3885
+     }
+    },
+    "medianRatio": 3.24,
+    "lowestRatio": 3.14,
+    "medianHopRatio": 0.96
+   },
+   {
+    "arms": {
+     "single": {
+      "eventsPerSec": [
+       1153,
+       1015,
+       1146
+      ],
+      "median": 1146,
+      "min": 1015,
+      "max": 1153
+     },
+     "router×1": {
+      "eventsPerSec": [
+       1102,
+       1154,
+       1047
+      ],
+      "median": 1102,
+      "min": 1047,
+      "max": 1154
+     },
+     "router×4": {
+      "eventsPerSec": [
+       3795,
+       3573,
+       3314
+      ],
+      "median": 3573,
+      "min": 3314,
+      "max": 3795
+     }
+    },
+    "medianRatio": 3.29,
+    "lowestRatio": 2.89,
+    "medianHopRatio": 0.96
+   }
+  ]
+ },
+ "router-sim-realistic-before": {
+  "meta": {
+   "cmd": "bun packages/sim/src/lab/router-sim.bench.ts --children 4 --seconds 5 --reps 3 --profile realistic",
+   "load1Before": 1.49,
+   "rc": 0,
+   "wallS": 1153.63
+  },
+  "settle": [
+   "single settle 75 s at C=4: 798 ev/s, 657 sync lists",
+   "router×1 settle 75 s at C=4: 767 ev/s, 572 sync lists",
+   "router×4 settle 75 s at C=4: 1330 ev/s, 2212 sync lists",
+   "router×1 settle 75 s at C=4: 826 ev/s, 547 sync lists",
+   "router×4 settle 75 s at C=4: 1453 ev/s, 2309 sync lists",
+   "single settle 75 s at C=4: 795 ev/s, 553 sync lists",
+   "router×4 settle 75 s at C=4: 1336 ev/s, 2267 sync lists",
+   "single settle 75 s at C=4: 719 ev/s, 626 sync lists",
+   "router×1 settle 75 s at C=4: 720 ev/s, 558 sync lists"
+  ],
+  "arms": [
+   {
+    "name": "single",
+    "eventsPerSec": [
+     406,
+     396,
+     309
+    ],
+    "median": 396,
+    "min": 309,
+    "max": 406,
+    "medianRssEndMbPerProcess": 1760.3,
+    "medianRssGrowthMbPerProcess": 1258.7,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 493.6,
+       "rssEndMb": 1769,
+       "calls": 56771,
+       "lists": 2534,
+       "errors": 248,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 501.6,
+       "rssEndMb": 1760.3,
+       "calls": 58442,
+       "lists": 2728,
+       "errors": 259,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 485.4,
+       "rssEndMb": 1677.7,
+       "calls": 54864,
+       "lists": 2303,
+       "errors": 242,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
+   },
+   {
+    "name": "router×1",
+    "eventsPerSec": [
+     391,
+     325,
+     362
+    ],
+    "median": 362,
+    "min": 325,
+    "max": 391,
+    "medianRssEndMbPerProcess": 1633.1,
+    "medianRssGrowthMbPerProcess": 1134.4,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 495,
+       "rssEndMb": 1642.7,
+       "calls": 55618,
+       "lists": 2265,
+       "errors": 246,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 493.6,
+       "rssEndMb": 1621.7,
+       "calls": 56190,
+       "lists": 2236,
+       "errors": 246,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 498.7,
+       "rssEndMb": 1633.1,
+       "calls": 55196,
+       "lists": 2246,
+       "errors": 257,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
+   },
+   {
+    "name": "router×4",
+    "eventsPerSec": [
+     3663,
+     3808,
+     54
+    ],
+    "median": 3663,
+    "min": 54,
+    "max": 3808,
+    "medianRssEndMbPerProcess": 1093,
+    "medianRssGrowthMbPerProcess": 604.3,
+    "processesPerRep": [
+     [
+      {
+       "users": 110,
+       "rssStartMb": 478.8,
+       "rssEndMb": 1263,
+       "calls": 14065,
+       "lists": 1977,
+       "errors": 61,
+       "limited": 1,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 487.6,
+       "rssEndMb": 1161.3,
+       "calls": 13213,
+       "lists": 1864,
+       "errors": 57,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 480.1,
+       "rssEndMb": 1080.7,
+       "calls": 11837,
+       "lists": 1663,
+       "errors": 45,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 473.1,
+       "rssEndMb": 1050,
+       "calls": 11909,
+       "lists": 1610,
+       "errors": 52,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 106,
+       "rssStartMb": 494.6,
+       "rssEndMb": 1192.2,
+       "calls": 13217,
+       "lists": 1867,
+       "errors": 55,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 497.4,
+       "rssEndMb": 1105.3,
+       "calls": 11981,
+       "lists": 1615,
+       "errors": 47,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 494.7,
+       "rssEndMb": 1106.1,
+       "calls": 11849,
+       "lists": 1661,
+       "errors": 46,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 492.2,
+       "rssEndMb": 1208.8,
+       "calls": 14007,
+       "lists": 1960,
+       "errors": 68,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 106,
+       "rssStartMb": 491.8,
+       "rssEndMb": 950.9,
+       "calls": 11713,
+       "lists": 972,
+       "errors": 51,
+       "limited": 1,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 494.9,
+       "rssEndMb": 976.4,
+       "calls": 12452,
+       "lists": 969,
+       "errors": 50,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 491.8,
+       "rssEndMb": 943.1,
+       "calls": 10786,
+       "lists": 940,
+       "errors": 45,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 465.4,
+       "rssEndMb": 966,
+       "calls": 10934,
+       "lists": 948,
+       "errors": 51,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
+   }
+  ],
+  "children": 4,
+  "p99TargetMs": 100,
+  "secondsPerStep": 5,
+  "waitMs": 0,
+  "settleSeconds": 75,
+  "users": 400,
+  "repetitions": 3,
+  "source": "per-user SimSource connectors, realistic profile, time scale 1, 8 worlds, sync on",
+  "ratios": [
+   9.02,
+   9.61,
+   0.17
+  ],
+  "medianRatio": 9.02,
+  "lowestRatio": 0.17,
+  "hopRatios": [
+   0.96,
+   0.82,
+   1.17
+  ],
+  "medianHopRatio": 0.96,
+  "meetsD172": false
+ },
+ "router-sim-hosted-before": {
+  "meta": {
+   "cmd": "bun packages/sim/src/lab/router-sim.bench.ts --children 4 --seconds 5 --reps 3 --profile hosted",
+   "load1Before": 1.39,
+   "rc": 0,
+   "wallS": 1335.48
+  },
+  "settle": [
+   "single settle 75 s at C=4: 950 ev/s, 249 sync lists",
+   "router×1 settle 75 s at C=4: 969 ev/s, 251 sync lists",
+   "router×4 settle 75 s at C=4: 1777 ev/s, 1028 sync lists",
+   "router×1 settle 75 s at C=4: 1019 ev/s, 246 sync lists",
+   "router×4 settle 75 s at C=4: 1727 ev/s, 1067 sync lists",
+   "single settle 75 s at C=4: 961 ev/s, 245 sync lists",
+   "router×4 settle 75 s at C=4: 1735 ev/s, 999 sync lists",
+   "single settle 75 s at C=4: 1077 ev/s, 239 sync lists",
+   "router×1 settle 75 s at C=4: 1023 ev/s, 271 sync lists"
+  ],
+  "arms": [
+   {
+    "name": "single",
+    "eventsPerSec": [
+     1029,
+     1004,
+     1029
+    ],
+    "median": 1029,
+    "min": 1004,
+    "max": 1029,
+    "medianRssEndMbPerProcess": 1451.6,
+    "medianRssGrowthMbPerProcess": 955.4,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 496.2,
+       "rssEndMb": 1451.6,
+       "calls": 64614,
+       "lists": 1361,
+       "errors": 530,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 500.9,
+       "rssEndMb": 1467.2,
+       "calls": 63298,
+       "lists": 1257,
+       "errors": 478,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 496.7,
+       "rssEndMb": 1431.3,
+       "calls": 65052,
+       "lists": 1313,
+       "errors": 479,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
+   },
+   {
+    "name": "router×1",
+    "eventsPerSec": [
+     933,
+     984,
+     997
+    ],
+    "median": 984,
+    "min": 933,
+    "max": 997,
+    "medianRssEndMbPerProcess": 1448.7,
+    "medianRssGrowthMbPerProcess": 953.8,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 494.9,
+       "rssEndMb": 1448.7,
+       "calls": 64527,
+       "lists": 1340,
+       "errors": 495,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 489.2,
+       "rssEndMb": 1455.6,
+       "calls": 64647,
+       "lists": 1358,
+       "errors": 549,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 493,
+       "rssEndMb": 1440.4,
+       "calls": 64746,
+       "lists": 1323,
+       "errors": 505,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
+   },
+   {
+    "name": "router×4",
+    "eventsPerSec": [
+     2865,
+     3164,
+     3234
+    ],
+    "median": 3164,
+    "min": 2865,
+    "max": 3234,
+    "medianRssEndMbPerProcess": 1000.4,
+    "medianRssGrowthMbPerProcess": 505.9,
+    "processesPerRep": [
+     [
+      {
+       "users": 91,
+       "rssStartMb": 494.6,
+       "rssEndMb": 946.2,
+       "calls": 14946,
+       "lists": 989,
+       "errors": 121,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 492.8,
+       "rssEndMb": 1044.7,
+       "calls": 16776,
+       "lists": 1251,
+       "errors": 132,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 492.8,
+       "rssEndMb": 987.7,
+       "calls": 14893,
+       "lists": 1053,
+       "errors": 115,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 489.4,
+       "rssEndMb": 1087.8,
+       "calls": 17803,
+       "lists": 1132,
+       "errors": 140,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 106,
+       "rssStartMb": 486.6,
+       "rssEndMb": 1061.5,
+       "calls": 16477,
+       "lists": 1138,
+       "errors": 145,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 487.9,
+       "rssEndMb": 967.8,
+       "calls": 14599,
+       "lists": 1009,
+       "errors": 131,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 494.8,
+       "rssEndMb": 1091.7,
+       "calls": 17715,
+       "lists": 1243,
+       "errors": 141,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 492.4,
+       "rssEndMb": 932.2,
+       "calls": 14883,
+       "lists": 975,
+       "errors": 124,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 91,
+       "rssStartMb": 486.9,
+       "rssEndMb": 959.1,
+       "calls": 14942,
+       "lists": 1024,
+       "errors": 129,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 493.1,
+       "rssEndMb": 1062.7,
+       "calls": 17526,
+       "lists": 1210,
+       "errors": 150,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 492.7,
+       "rssEndMb": 969.2,
+       "calls": 14609,
+       "lists": 962,
+       "errors": 117,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 496.1,
+       "rssEndMb": 1013,
+       "calls": 16654,
+       "lists": 1134,
+       "errors": 142,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
+   }
+  ],
+  "children": 4,
+  "p99TargetMs": 100,
+  "secondsPerStep": 5,
+  "waitMs": 0,
+  "settleSeconds": 75,
+  "users": 400,
+  "repetitions": 3,
+  "source": "per-user SimSource connectors, hosted profile, time scale 1, 8 worlds, sync on",
+  "ratios": [
+   2.78,
+   3.15,
+   3.14
+  ],
+  "medianRatio": 3.14,
+  "lowestRatio": 2.78,
+  "hopRatios": [
+   0.91,
+   0.98,
+   0.97
+  ],
+  "medianHopRatio": 0.97,
+  "meetsD172": true
+ },
+ "router-sim-realistic-after": {
+  "meta": {
+   "cmd": "bun packages/sim/src/lab/router-sim.bench.ts --children 4 --seconds 5 --reps 3 --profile realistic",
+   "load1Before": 6.63,
+   "rc": 0,
+   "wallS": 1304.98
+  },
+  "settle": [
+   "single settle 75 s at C=4: 844 ev/s, 634 sync lists",
+   "router×1 settle 75 s at C=4: 794 ev/s, 581 sync lists",
+   "router×4 settle 75 s at C=4: 1569 ev/s, 2346 sync lists",
+   "router×1 settle 75 s at C=4: 811 ev/s, 573 sync lists",
+   "router×4 settle 75 s at C=4: 1462 ev/s, 2332 sync lists",
+   "single settle 75 s at C=4: 792 ev/s, 546 sync lists",
+   "router×4 settle 75 s at C=4: 1476 ev/s, 2332 sync lists",
+   "single settle 75 s at C=4: 811 ev/s, 581 sync lists",
+   "router×1 settle 75 s at C=4: 746 ev/s, 569 sync lists"
+  ],
+  "arms": [
+   {
+    "name": "single",
+    "eventsPerSec": [
+     455,
+     413,
+     452
+    ],
+    "median": 452,
+    "min": 413,
+    "max": 455,
+    "medianRssEndMbPerProcess": 1739.5,
+    "medianRssGrowthMbPerProcess": 1247.9,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 484.1,
+       "rssEndMb": 1824.8,
+       "calls": 60223,
+       "lists": 3169,
+       "errors": 250,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 495.2,
+       "rssEndMb": 1739.2,
+       "calls": 58639,
+       "lists": 2919,
+       "errors": 255,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 491.6,
+       "rssEndMb": 1739.5,
+       "calls": 58480,
+       "lists": 2768,
+       "errors": 255,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
+   },
+   {
+    "name": "router×1",
+    "eventsPerSec": [
+     478,
+     390,
+     376
+    ],
+    "median": 390,
+    "min": 376,
+    "max": 478,
+    "medianRssEndMbPerProcess": 1773.9,
+    "medianRssGrowthMbPerProcess": 1280.6,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 493.3,
+       "rssEndMb": 1773.9,
+       "calls": 59101,
+       "lists": 2967,
+       "errors": 255,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 492.4,
+       "rssEndMb": 1783.5,
+       "calls": 59239,
+       "lists": 2967,
+       "errors": 261,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 492.1,
+       "rssEndMb": 1680.7,
+       "calls": 57261,
+       "lists": 2589,
+       "errors": 249,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
+   },
+   {
+    "name": "router×4",
+    "eventsPerSec": [
+     3950,
+     3819,
+     3566
+    ],
+    "median": 3819,
+    "min": 3566,
+    "max": 3950,
+    "medianRssEndMbPerProcess": 1108.1,
+    "medianRssGrowthMbPerProcess": 613.1,
+    "processesPerRep": [
+     [
+      {
+       "users": 91,
+       "rssStartMb": 489.9,
+       "rssEndMb": 1092.2,
+       "calls": 12053,
+       "lists": 1624,
+       "errors": 52,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 490.3,
+       "rssEndMb": 1106,
+       "calls": 12048,
+       "lists": 1654,
+       "errors": 48,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 491.4,
+       "rssEndMb": 1235.6,
+       "calls": 14319,
+       "lists": 1964,
+       "errors": 56,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 487.3,
+       "rssEndMb": 1040.5,
+       "calls": 13447,
+       "lists": 1893,
+       "errors": 57,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 93,
+       "rssStartMb": 496,
+       "rssEndMb": 1092.1,
+       "calls": 11910,
+       "lists": 1646,
+       "errors": 56,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 490.9,
+       "rssEndMb": 1220.3,
+       "calls": 14282,
+       "lists": 1968,
+       "errors": 61,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 494.6,
+       "rssEndMb": 1230.1,
+       "calls": 13399,
+       "lists": 1894,
+       "errors": 52,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 490.3,
+       "rssEndMb": 1083.2,
+       "calls": 12067,
+       "lists": 1631,
+       "errors": 44,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 93,
+       "rssStartMb": 499.8,
+       "rssEndMb": 1110.2,
+       "calls": 11889,
+       "lists": 1647,
+       "errors": 51,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 487.1,
+       "rssEndMb": 1043.6,
+       "calls": 12035,
+       "lists": 1635,
+       "errors": 51,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 480,
+       "rssEndMb": 1172.9,
+       "calls": 13364,
+       "lists": 1868,
+       "errors": 58,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 482.2,
+       "rssEndMb": 1206.2,
+       "calls": 14212,
+       "lists": 1965,
+       "errors": 64,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
+   }
+  ],
+  "children": 4,
+  "p99TargetMs": 100,
+  "secondsPerStep": 5,
+  "waitMs": 0,
+  "settleSeconds": 75,
+  "users": 400,
+  "repetitions": 3,
+  "source": "per-user SimSource connectors, realistic profile, time scale 1, 8 worlds, sync on",
+  "ratios": [
+   8.68,
+   9.25,
+   7.9
+  ],
+  "medianRatio": 8.68,
+  "lowestRatio": 7.9,
+  "hopRatios": [
+   1.05,
+   0.94,
+   0.83
+  ],
+  "medianHopRatio": 0.94,
+  "meetsD172": true
+ },
+ "router-sim-hosted-after": {
+  "meta": {
+   "cmd": "bun packages/sim/src/lab/router-sim.bench.ts --children 4 --seconds 5 --reps 3 --profile hosted",
+   "load1Before": 1.29,
+   "rc": 0,
+   "wallS": 1340.67
+  },
+  "settle": [
+   "single settle 75 s at C=4: 1110 ev/s, 249 sync lists",
+   "router×1 settle 75 s at C=4: 976 ev/s, 242 sync lists",
+   "router×4 settle 75 s at C=4: 1679 ev/s, 1001 sync lists",
+   "router×1 settle 75 s at C=4: 1000 ev/s, 263 sync lists",
+   "router×4 settle 75 s at C=4: 1593 ev/s, 967 sync lists",
+   "single settle 75 s at C=4: 1083 ev/s, 252 sync lists",
+   "router×4 settle 75 s at C=4: 1868 ev/s, 1002 sync lists",
+   "single settle 75 s at C=4: 1045 ev/s, 246 sync lists",
+   "router×1 settle 75 s at C=4: 1036 ev/s, 240 sync lists"
+  ],
+  "arms": [
+   {
+    "name": "single",
+    "eventsPerSec": [
+     991,
+     1056,
+     1100
+    ],
+    "median": 1056,
+    "min": 991,
+    "max": 1100,
+    "medianRssEndMbPerProcess": 1459.1,
+    "medianRssGrowthMbPerProcess": 964.3,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 499.7,
+       "rssEndMb": 1435.5,
+       "calls": 64603,
+       "lists": 1353,
+       "errors": 521,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 494.8,
+       "rssEndMb": 1459.1,
+       "calls": 65506,
+       "lists": 1291,
+       "errors": 486,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 494.6,
+       "rssEndMb": 1465.6,
+       "calls": 65179,
+       "lists": 1331,
+       "errors": 486,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
+   },
+   {
+    "name": "router×1",
+    "eventsPerSec": [
+     997,
+     1062,
+     1091
+    ],
+    "median": 1062,
+    "min": 997,
+    "max": 1091,
+    "medianRssEndMbPerProcess": 1433.8,
+    "medianRssGrowthMbPerProcess": 932.1,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 491.5,
+       "rssEndMb": 1418.9,
+       "calls": 64885,
+       "lists": 1381,
+       "errors": 534,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 501.7,
+       "rssEndMb": 1433.8,
+       "calls": 64747,
+       "lists": 1329,
+       "errors": 507,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 501.1,
+       "rssEndMb": 1439.7,
+       "calls": 65165,
+       "lists": 1324,
+       "errors": 523,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
+   },
+   {
+    "name": "router×4",
+    "eventsPerSec": [
+     3016,
+     3522,
+     3210
+    ],
+    "median": 3210,
+    "min": 3016,
+    "max": 3522,
+    "medianRssEndMbPerProcess": 1022.1,
+    "medianRssGrowthMbPerProcess": 528.6,
+    "processesPerRep": [
+     [
+      {
+       "users": 106,
+       "rssStartMb": 485.4,
+       "rssEndMb": 1038.4,
+       "calls": 16571,
+       "lists": 1226,
+       "errors": 122,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 495.1,
+       "rssEndMb": 938.2,
+       "calls": 14577,
+       "lists": 952,
+       "errors": 124,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 492.2,
+       "rssEndMb": 948.8,
+       "calls": 14897,
+       "lists": 1000,
+       "errors": 116,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 494,
+       "rssEndMb": 1098.5,
+       "calls": 17606,
+       "lists": 1204,
+       "errors": 155,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 93,
+       "rssStartMb": 495.8,
+       "rssEndMb": 971.3,
+       "calls": 14683,
+       "lists": 1012,
+       "errors": 113,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 490,
+       "rssEndMb": 987.1,
+       "calls": 14663,
+       "lists": 1050,
+       "errors": 107,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 491.2,
+       "rssEndMb": 1050.2,
+       "calls": 17348,
+       "lists": 1117,
+       "errors": 137,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 493.9,
+       "rssEndMb": 1052,
+       "calls": 16417,
+       "lists": 1128,
+       "errors": 139,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 110,
+       "rssStartMb": 459.9,
+       "rssEndMb": 1069.7,
+       "calls": 17655,
+       "lists": 1189,
+       "errors": 153,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 498.2,
+       "rssEndMb": 1012.4,
+       "calls": 14942,
+       "lists": 997,
+       "errors": 120,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 488.8,
+       "rssEndMb": 1031.8,
+       "calls": 16664,
+       "lists": 1154,
+       "errors": 130,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 494.1,
+       "rssEndMb": 993,
+       "calls": 15318,
+       "lists": 1108,
+       "errors": 127,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
+   }
+  ],
+  "children": 4,
+  "p99TargetMs": 100,
+  "secondsPerStep": 5,
+  "waitMs": 0,
+  "settleSeconds": 75,
+  "users": 400,
+  "repetitions": 3,
+  "source": "per-user SimSource connectors, hosted profile, time scale 1, 8 worlds, sync on",
+  "ratios": [
+   3.04,
+   3.33,
+   2.92
+  ],
+  "medianRatio": 3.04,
+  "lowestRatio": 2.92,
+  "hopRatios": [
+   1.01,
+   1.01,
+   0.99
+  ],
+  "medianHopRatio": 1.01,
+  "meetsD172": true
+ },
+ "sim-perf": {
+  "cold": [
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts cold",
+     "load1Before": 1.77,
+     "rc": 0,
+     "wallS": 5.18
+    },
+    "serverStartupMs": 2810,
+    "spawnToListeningMs": 2975,
+    "firstRequestMs": 234.3,
+    "firstLookupColdUserMs": 920.8,
+    "secondLookupSameUserMs": 364.5,
+    "firstLookupAnotherColdUserMs": 539.1,
+    "note": "lookup times include real (simulated) source latency, waitMs=5000"
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts cold",
+     "load1Before": 1.62,
+     "rc": 0,
+     "wallS": 5.42
+    },
+    "serverStartupMs": 2839,
+    "spawnToListeningMs": 2971,
+    "firstRequestMs": 198.4,
+    "firstLookupColdUserMs": 937.3,
+    "secondLookupSameUserMs": 814.6,
+    "firstLookupAnotherColdUserMs": 356.4,
+    "note": "lookup times include real (simulated) source latency, waitMs=5000"
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts cold",
+     "load1Before": 1.49,
+     "rc": 0,
+     "wallS": 5.41
+    },
+    "serverStartupMs": 2844,
+    "spawnToListeningMs": 2977,
+    "firstRequestMs": 188.2,
+    "firstLookupColdUserMs": 917.3,
+    "secondLookupSameUserMs": 812,
+    "firstLookupAnotherColdUserMs": 359.4,
+    "note": "lookup times include real (simulated) source latency, waitMs=5000"
+   }
+  ],
+  "steady": [
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts steady",
+     "load1Before": 1.45,
+     "rc": 0,
+     "wallS": 93.6
+    },
+    "client": {
+     "users": 300,
+     "durationS": 90.1,
+     "eventsPerSec": 39.2,
+     "requestsPerSec": 86.6,
+     "failedOpenRate": 0,
+     "generatorCpuPercent": 4.3,
+     "observe": {
+      "n": 3525,
+      "p50": 1.21,
+      "p95": 3.78,
+      "p99": 9.21,
+      "max": 33.59
+     },
+     "ask": {
+      "n": 151,
+      "p50": 554.09,
+      "p95": 1494.59,
+      "p99": 1508.92,
+      "max": 1509.37
+     },
+     "pending": {
+      "n": 3525,
+      "p50": 0.43,
+      "p95": 1.83,
+      "p99": 6.93,
+      "max": 42.69
+     },
+     "timeToContext": {
+      "n": 215,
+      "p50": 1517.93,
+      "p95": 4417.08,
+      "p99": 21228.93
+     },
+     "inTimeRate": 0.17,
+     "injections": 443
+    },
+    "server": {
+     "cpuPercent": 20.1,
+     "rssMb": 1161.6,
+     "heapUsedMb": 824.3,
+     "lagP99Ms": 4.9,
+     "lagMaxMs": 203.8,
+     "handlerMs": {
+      "p50": 0.13,
+      "p95": 1.75,
+      "p99": 537.53,
+      "max": 1508.56
+     },
+     "sourceCalls": 9991,
+     "cachedUsers": 300
+    }
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts steady",
+     "load1Before": 0.79,
+     "rc": 0,
+     "wallS": 93.71
+    },
+    "client": {
+     "users": 300,
+     "durationS": 90.1,
+     "eventsPerSec": 39.2,
+     "requestsPerSec": 86.6,
+     "failedOpenRate": 0,
+     "generatorCpuPercent": 4.4,
+     "observe": {
+      "n": 3527,
+      "p50": 1.2,
+      "p95": 3.98,
+      "p99": 10.97,
+      "max": 38.43
+     },
+     "ask": {
+      "n": 151,
+      "p50": 561.75,
+      "p95": 1271.06,
+      "p99": 1503.92,
+      "max": 1505.03
+     },
+     "pending": {
+      "n": 3527,
+      "p50": 0.43,
+      "p95": 2.05,
+      "p99": 8.01,
+      "max": 66.98
+     },
+     "timeToContext": {
+      "n": 220,
+      "p50": 1719.87,
+      "p95": 4209.53,
+      "p99": 5871.03
+     },
+     "inTimeRate": 0.167,
+     "injections": 455
+    },
+    "server": {
+     "cpuPercent": 20.2,
+     "rssMb": 1153.7,
+     "heapUsedMb": 822.9,
+     "lagP99Ms": 4.98,
+     "lagMaxMs": 198.3,
+     "handlerMs": {
+      "p50": 0.13,
+      "p95": 1.73,
+      "p99": 539.91,
+      "max": 1504.35
+     },
+     "sourceCalls": 10054,
+     "cachedUsers": 300
+    }
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts steady",
+     "load1Before": 0.29,
+     "rc": 0,
+     "wallS": 93.73
+    },
+    "client": {
+     "users": 300,
+     "durationS": 90,
+     "eventsPerSec": 39.1,
+     "requestsPerSec": 86.4,
+     "failedOpenRate": 0,
+     "generatorCpuPercent": 4.2,
+     "observe": {
+      "n": 3519,
+      "p50": 1.19,
+      "p95": 3.63,
+      "p99": 7.77,
+      "max": 36.92
+     },
+     "ask": {
+      "n": 149,
+      "p50": 586.83,
+      "p95": 1303.75,
+      "p99": 1504.37,
+      "max": 1507.58
+     },
+     "pending": {
+      "n": 3519,
+      "p50": 0.4,
+      "p95": 1.6,
+      "p99": 5.4,
+      "max": 38.08
+     },
+     "timeToContext": {
+      "n": 228,
+      "p50": 1780.02,
+      "p95": 4415.55,
+      "p99": 7262.48
+     },
+     "inTimeRate": 0.175,
+     "injections": 455
+    },
+    "server": {
+     "cpuPercent": 19.6,
+     "rssMb": 1162,
+     "heapUsedMb": 823.7,
+     "lagP99Ms": 4.53,
+     "lagMaxMs": 213.0,
+     "handlerMs": {
+      "p50": 0.13,
+      "p95": 1.68,
+      "p99": 573.11,
+      "max": 1506.84
+     },
+     "sourceCalls": 10096,
+     "cachedUsers": 300
+    }
+   }
+  ],
+  "ramp": [
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts ramp",
+     "load1Before": 0.41,
+     "rc": 0,
+     "wallS": 105.78
+    },
+    "note": "pacing and source latency compressed 10x: each user sends ~10x real traffic",
+    "steps": [
+     {
+      "users": 100,
+      "client": {
+       "users": 100,
+       "durationS": 20,
+       "eventsPerSec": 115.4,
+       "requestsPerSec": 253.2,
+       "failedOpenRate": 0,
+       "generatorCpuPercent": 8.3,
+       "observe": {
+        "n": 2307,
+        "p50": 1.13,
+        "p95": 5.97,
+        "p99": 13.71,
+        "max": 33.48
+       },
+       "ask": {
+        "n": 106,
+        "p50": 68.29,
+        "p95": 155.97,
+        "p99": 177.02,
+        "max": 188.41
+       },
+       "pending": {
+        "n": 2307,
+        "p50": 0.39,
+        "p95": 4.59,
+        "p99": 12.33,
+        "max": 26.25
+       },
+       "timeToContext": {
+        "n": 175,
+        "p50": 122.31,
+        "p95": 461.76,
+        "p99": 3501.55
+       },
+       "inTimeRate": 0.22,
+       "injections": 326
+      },
+      "server": {
+       "cpuPercent": 44.5,
+       "rssMb": 1133.2,
+       "heapUsedMb": 770.1,
+       "lagP99Ms": 8.24,
+       "lagMaxMs": 186.3,
+       "handlerMs": {
+        "p50": 0.12,
+        "p95": 1.75,
+        "p99": 68.96,
+        "max": 186.42
+       },
+       "sourceCalls": 6418,
+       "cachedUsers": 100
+      }
+     },
+     {
+      "users": 200,
+      "client": {
+       "users": 200,
+       "durationS": 20.1,
+       "eventsPerSec": 231,
+       "requestsPerSec": 506.4,
+       "failedOpenRate": 0,
+       "generatorCpuPercent": 12.1,
+       "observe": {
+        "n": 4619,
+        "p50": 1.2,
+        "p95": 6.99,
+        "p99": 12.37,
+        "max": 20.83
+       },
+       "ask": {
+        "n": 202,
+        "p50": 41.94,
+        "p95": 117.12,
+        "p99": 150.98,
+        "max": 168.7
+       },
+       "pending": {
+        "n": 4619,
+        "p50": 0.41,
+        "p95": 5.02,
+        "p99": 11.34,
+        "max": 41.87
+       },
+       "timeToContext": {
+        "n": 446,
+        "p50": 8.48,
+        "p95": 401.71,
+        "p99": 618.7
+       },
+       "inTimeRate": 0.339,
+       "injections": 792
+      },
+      "server": {
+       "cpuPercent": 54.2,
+       "rssMb": 1288.3,
+       "heapUsedMb": 903.2,
+       "lagP99Ms": 8.89,
+       "lagMaxMs": 28.8,
+       "handlerMs": {
+        "p50": 0.09,
+        "p95": 1.75,
+        "p99": 36.5,
+        "max": 168.23
+       },
+       "sourceCalls": 7804,
+       "cachedUsers": 200
+      }
+     },
+     {
+      "users": 400,
+      "client": {
+       "users": 400,
+       "durationS": 20.1,
+       "eventsPerSec": 459.8,
+       "requestsPerSec": 1009.6,
+       "failedOpenRate": 0,
+       "generatorCpuPercent": 19.5,
+       "observe": {
+        "n": 9196,
+        "p50": 2.77,
+        "p95": 26.65,
+        "p99": 49.51,
+        "max": 76.19
+       },
+       "ask": {
+        "n": 416,
+        "p50": 60.7,
+        "p95": 180.26,
+        "p99": 274.33,
+        "max": 336.26
+       },
+       "pending": {
+        "n": 9196,
+        "p50": 1.89,
+        "p95": 34.12,
+        "p99": 56.69,
+        "max": 65.59
+       },
+       "timeToContext": {
+        "n": 901,
+        "p50": 21.87,
+        "p95": 399.22,
+        "p99": 516.09
+       },
+       "inTimeRate": 0.359,
+       "injections": 1622
+      },
+      "server": {
+       "cpuPercent": 89.1,
+       "rssMb": 1682.6,
+       "heapUsedMb": 1176.6,
+       "lagP99Ms": 24.79,
+       "lagMaxMs": 63.1,
+       "handlerMs": {
+        "p50": 0.07,
+        "p95": 1.58,
+        "p99": 55.58,
+        "max": 307.06
+       },
+       "sourceCalls": 14930,
+       "cachedUsers": 400
+      }
+     },
+     {
+      "users": 800,
+      "client": {
+       "users": 800,
+       "durationS": 20.4,
+       "eventsPerSec": 644.2,
+       "requestsPerSec": 1418.7,
+       "failedOpenRate": 0,
+       "generatorCpuPercent": 23,
+       "observe": {
+        "n": 12884,
+        "p50": 149.57,
+        "p95": 397.36,
+        "p99": 592.32,
+        "max": 698.55
+       },
+       "ask": {
+        "n": 568,
+        "p50": 841.63,
+        "p95": 1231.2,
+        "p99": 1308.7,
+        "max": 1343.97
+       },
+       "pending": {
+        "n": 12884,
+        "p50": 163.63,
+        "p95": 383.86,
+        "p99": 563.91,
+        "max": 700.63
+       },
+       "timeToContext": {
+        "n": 1437,
+        "p50": 691.1,
+        "p95": 1305.34,
+        "p99": 1810.58
+       },
+       "inTimeRate": 0.362,
+       "injections": 2578
+      },
+      "server": {
+       "cpuPercent": 116.4,
+       "rssMb": 1902.5,
+       "heapUsedMb": 1280.8,
+       "lagP99Ms": 272.03,
+       "lagMaxMs": 290.4,
+       "handlerMs": {
+        "p50": 0.05,
+        "p95": 1.36,
+        "p99": 678.08,
+        "max": 1105.28
+       },
+       "sourceCalls": 21484,
+       "cachedUsers": 800
+      }
+     },
+     {
+      "users": 1600,
+      "client": {
+       "users": 1600,
+       "durationS": 21,
+       "eventsPerSec": 724.3,
+       "requestsPerSec": 1614.5,
+       "failedOpenRate": 0.2492,
+       "generatorCpuPercent": 24.6,
+       "observe": {
+        "n": 14486,
+        "p50": 712.55,
+        "p95": 800.37,
+        "p99": 801.08,
+        "max": 816.96
+       },
+       "ask": {
+        "n": 683,
+        "p50": 1513.24,
+        "p95": 3943.59,
+        "p99": 4659.57,
+        "max": 4667.42
+       },
+       "pending": {
+        "n": 14486,
+        "p50": 708.78,
+        "p95": 800.32,
+        "p99": 800.88,
+        "max": 816.88
+       },
+       "timeToContext": {
+        "n": 1344,
+        "p50": 1390.64,
+        "p95": 3720.42,
+        "p99": 7503.66
+       },
+       "inTimeRate": 0.373,
+       "injections": 2304
+      },
+      "server": {
+       "cpuPercent": 117.4,
+       "rssMb": 2041,
+       "heapUsedMb": 1349.7,
+       "lagP99Ms": 938.76,
+       "lagMaxMs": 1039.1,
+       "handlerMs": {
+        "p50": 0.05,
+        "p95": 1.19,
+        "p99": 856.09,
+        "max": 3413.91
+       },
+       "sourceCalls": 25417,
+       "cachedUsers": 1598
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts ramp",
+     "load1Before": 1.06,
+     "rc": 0,
+     "wallS": 105.63
+    },
+    "note": "pacing and source latency compressed 10x: each user sends ~10x real traffic",
+    "steps": [
+     {
+      "users": 100,
+      "client": {
+       "users": 100,
+       "durationS": 20,
+       "eventsPerSec": 114.7,
+       "requestsPerSec": 251.8,
+       "failedOpenRate": 0,
+       "generatorCpuPercent": 8.5,
+       "observe": {
+        "n": 2294,
+        "p50": 1.16,
+        "p95": 5.79,
+        "p99": 10.1,
+        "max": 43.13
+       },
+       "ask": {
+        "n": 104,
+        "p50": 71.45,
+        "p95": 155.8,
+        "p99": 169.29,
+        "max": 171.22
+       },
+       "pending": {
+        "n": 2294,
+        "p50": 0.38,
+        "p95": 3.84,
+        "p99": 8.81,
+        "max": 18.55
+       },
+       "timeToContext": {
+        "n": 187,
+        "p50": 151.68,
+        "p95": 491.22,
+        "p99": 6153.04
+       },
+       "inTimeRate": 0.234,
+       "injections": 327
+      },
+      "server": {
+       "cpuPercent": 44.4,
+       "rssMb": 1114.4,
+       "heapUsedMb": 769.4,
+       "lagP99Ms": 7.99,
+       "lagMaxMs": 214.9,
+       "handlerMs": {
+        "p50": 0.11,
+        "p95": 1.77,
+        "p99": 71.18,
+        "max": 170.16
+       },
+       "sourceCalls": 6388,
+       "cachedUsers": 100
+      }
+     },
+     {
+      "users": 200,
+      "client": {
+       "users": 200,
+       "durationS": 20,
+       "eventsPerSec": 230.1,
+       "requestsPerSec": 504.7,
+       "failedOpenRate": 0,
+       "generatorCpuPercent": 12,
+       "observe": {
+        "n": 4601,
+        "p50": 1.16,
+        "p95": 6.57,
+        "p99": 14.16,
+        "max": 44.38
+       },
+       "ask": {
+        "n": 203,
+        "p50": 37.95,
+        "p95": 114.45,
+        "p99": 156.13,
+        "max": 171.02
+       },
+       "pending": {
+        "n": 4601,
+        "p50": 0.4,
+        "p95": 4.7,
+        "p99": 11.84,
+        "max": 23.11
+       },
+       "timeToContext": {
+        "n": 450,
+        "p50": 6.8,
+        "p95": 395.18,
+        "p99": 1301.57
+       },
+       "inTimeRate": 0.335,
+       "injections": 784
+      },
+      "server": {
+       "cpuPercent": 53.3,
+       "rssMb": 1285.5,
+       "heapUsedMb": 902.2,
+       "lagP99Ms": 9.55,
+       "lagMaxMs": 46.1,
+       "handlerMs": {
+        "p50": 0.08,
+        "p95": 1.75,
+        "p99": 36.46,
+        "max": 169.65
+       },
+       "sourceCalls": 7848,
+       "cachedUsers": 200
+      }
+     },
+     {
+      "users": 400,
+      "client": {
+       "users": 400,
+       "durationS": 20.1,
+       "eventsPerSec": 459,
+       "requestsPerSec": 1007.8,
+       "failedOpenRate": 0,
+       "generatorCpuPercent": 18.6,
+       "observe": {
+        "n": 9180,
+        "p50": 2.91,
+        "p95": 27.03,
+        "p99": 45.63,
+        "max": 74.43
+       },
+       "ask": {
+        "n": 413,
+        "p50": 64.94,
+        "p95": 202.04,
+        "p99": 282.86,
+        "max": 310
+       },
+       "pending": {
+        "n": 9180,
+        "p50": 1.93,
+        "p95": 37.67,
+        "p99": 53.29,
+        "max": 69.43
+       },
+       "timeToContext": {
+        "n": 927,
+        "p50": 29.39,
+        "p95": 402.54,
+        "p99": 521.98
+       },
+       "inTimeRate": 0.37,
+       "injections": 1627
+      },
+      "server": {
+       "cpuPercent": 88.3,
+       "rssMb": 1663.4,
+       "heapUsedMb": 1172,
+       "lagP99Ms": 29.66,
+       "lagMaxMs": 62.1,
+       "handlerMs": {
+        "p50": 0.07,
+        "p95": 1.55,
+        "p99": 59.96,
+        "max": 266.82
+       },
+       "sourceCalls": 14796,
+       "cachedUsers": 400
+      }
+     },
+     {
+      "users": 800,
+      "client": {
+       "users": 800,
+       "durationS": 20.4,
+       "eventsPerSec": 656.9,
+       "requestsPerSec": 1446.1,
+       "failedOpenRate": 0,
+       "generatorCpuPercent": 23.6,
+       "observe": {
+        "n": 13138,
+        "p50": 148.08,
+        "p95": 411.25,
+        "p99": 560.4,
+        "max": 659.14
+       },
+       "ask": {
+        "n": 585,
+        "p50": 830.25,
+        "p95": 1163.28,
+        "p99": 1308.3,
+        "max": 1331.59
+       },
+       "pending": {
+        "n": 13138,
+        "p50": 166.58,
+        "p95": 396.66,
+        "p99": 525.82,
+        "max": 663.63
+       },
+       "timeToContext": {
+        "n": 1474,
+        "p50": 686,
+        "p95": 1195.7,
+        "p99": 1724.61
+       },
+       "inTimeRate": 0.362,
+       "injections": 2645
+      },
+      "server": {
+       "cpuPercent": 114.9,
+       "rssMb": 1894.3,
+       "heapUsedMb": 1266.7,
+       "lagP99Ms": 249.97,
+       "lagMaxMs": 264.1,
+       "handlerMs": {
+        "p50": 0.05,
+        "p95": 1.35,
+        "p99": 663.94,
+        "max": 997.32
+       },
+       "sourceCalls": 21996,
+       "cachedUsers": 800
+      }
+     },
+     {
+      "users": 1600,
+      "client": {
+       "users": 1600,
+       "durationS": 21,
+       "eventsPerSec": 712.3,
+       "requestsPerSec": 1588.4,
+       "failedOpenRate": 0.3567,
+       "generatorCpuPercent": 26.6,
+       "observe": {
+        "n": 14245,
+        "p50": 759.01,
+        "p95": 800.51,
+        "p99": 801.71,
+        "max": 814
+       },
+       "ask": {
+        "n": 676,
+        "p50": 1794.03,
+        "p95": 3933.96,
+        "p99": 4260.6,
+        "max": 4921.83
+       },
+       "pending": {
+        "n": 14245,
+        "p50": 736.76,
+        "p95": 800.44,
+        "p99": 801.28,
+        "max": 813.93
+       },
+       "timeToContext": {
+        "n": 1101,
+        "p50": 1461.17,
+        "p95": 3779.23,
+        "p99": 6546.67
+       },
+       "inTimeRate": 0.31,
+       "injections": 1910
+      },
+      "server": {
+       "cpuPercent": 114.7,
+       "rssMb": 2167.6,
+       "heapUsedMb": 1509.2,
+       "lagP99Ms": 917.43,
+       "lagMaxMs": 944.5,
+       "handlerMs": {
+        "p50": 0.05,
+        "p95": 1.24,
+        "p99": 1046.02,
+        "max": 3310.12
+       },
+       "sourceCalls": 24069,
+       "cachedUsers": 1599
+      }
+     }
+    ]
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts ramp",
+     "load1Before": 0.99,
+     "rc": 0,
+     "wallS": 106.03
+    },
+    "note": "pacing and source latency compressed 10x: each user sends ~10x real traffic",
+    "steps": [
+     {
+      "users": 100,
+      "client": {
+       "users": 100,
+       "durationS": 20,
+       "eventsPerSec": 114.9,
+       "requestsPerSec": 252.1,
+       "failedOpenRate": 0,
+       "generatorCpuPercent": 9.5,
+       "observe": {
+        "n": 2297,
+        "p50": 1.41,
+        "p95": 8.08,
+        "p99": 16.5,
+        "max": 45.29
+       },
+       "ask": {
+        "n": 105,
+        "p50": 75.81,
+        "p95": 155.22,
+        "p99": 176.23,
+        "max": 191.61
+       },
+       "pending": {
+        "n": 2297,
+        "p50": 0.47,
+        "p95": 5.69,
+        "p99": 13.63,
+        "max": 22.59
+       },
+       "timeToContext": {
+        "n": 183,
+        "p50": 149.87,
+        "p95": 472.72,
+        "p99": 6184.77
+       },
+       "inTimeRate": 0.234,
+       "injections": 331
+      },
+      "server": {
+       "cpuPercent": 49.7,
+       "rssMb": 1117.6,
+       "heapUsedMb": 772,
+       "lagP99Ms": 11.49,
+       "lagMaxMs": 262.9,
+       "handlerMs": {
+        "p50": 0.12,
+        "p95": 1.96,
+        "p99": 74.09,
+        "max": 181.99
+       },
+       "sourceCalls": 6352,
+       "cachedUsers": 100
+      }
+     },
+     {
+      "users": 200,
+      "client": {
+       "users": 200,
+       "durationS": 20,
+       "eventsPerSec": 230,
+       "requestsPerSec": 504.5,
+       "failedOpenRate": 0,
+       "generatorCpuPercent": 12.4,
+       "observe": {
+        "n": 4600,
+        "p50": 1.22,
+        "p95": 6.13,
+        "p99": 10.79,
+        "max": 23.31
+       },
+       "ask": {
+        "n": 201,
+        "p50": 32.6,
+        "p95": 107.5,
+        "p99": 155.63,
+        "max": 157.66
+       },
+       "pending": {
+        "n": 4600,
+        "p50": 0.41,
+        "p95": 4.73,
+        "p99": 12.51,
+        "max": 37.07
+       },
+       "timeToContext": {
+        "n": 450,
+        "p50": 8.24,
+        "p95": 386.94,
+        "p99": 736.94
+       },
+       "inTimeRate": 0.342,
+       "injections": 797
+      },
+      "server": {
+       "cpuPercent": 54.3,
+       "rssMb": 1288,
+       "heapUsedMb": 905.5,
+       "lagP99Ms": 9.03,
+       "lagMaxMs": 31.0,
+       "handlerMs": {
+        "p50": 0.09,
+        "p95": 1.84,
+        "p99": 29.83,
+        "max": 156.37
+       },
+       "sourceCalls": 7858,
+       "cachedUsers": 200
+      }
+     },
+     {
+      "users": 400,
+      "client": {
+       "users": 400,
+       "durationS": 20.1,
+       "eventsPerSec": 460.2,
+       "requestsPerSec": 1010.3,
+       "failedOpenRate": 0,
+       "generatorCpuPercent": 18.9,
+       "observe": {
+        "n": 9204,
+        "p50": 2.49,
+        "p95": 29.77,
+        "p99": 63.31,
+        "max": 113.09
+       },
+       "ask": {
+        "n": 416,
+        "p50": 57.11,
+        "p95": 207.84,
+        "p99": 361.03,
+        "max": 466.29
+       },
+       "pending": {
+        "n": 9204,
+        "p50": 1.53,
+        "p95": 50.16,
+        "p99": 77.52,
+        "max": 88.69
+       },
+       "timeToContext": {
+        "n": 918,
+        "p50": 22.51,
+        "p95": 432.71,
+        "p99": 721.35
+       },
+       "inTimeRate": 0.361,
+       "injections": 1644
+      },
+      "server": {
+       "cpuPercent": 86.9,
+       "rssMb": 1659.8,
+       "heapUsedMb": 1177,
+       "lagP99Ms": 25.37,
+       "lagMaxMs": 96.7,
+       "handlerMs": {
+        "p50": 0.07,
+        "p95": 1.53,
+        "p99": 55.09,
+        "max": 384.73
+       },
+       "sourceCalls": 14954,
+       "cachedUsers": 400
+      }
+     },
+     {
+      "users": 800,
+      "client": {
+       "users": 800,
+       "durationS": 20.6,
+       "eventsPerSec": 644.3,
+       "requestsPerSec": 1419,
+       "failedOpenRate": 0,
+       "generatorCpuPercent": 22.2,
+       "observe": {
+        "n": 12886,
+        "p50": 170.66,
+        "p95": 394.97,
+        "p99": 494.02,
+        "max": 547.05
+       },
+       "ask": {
+        "n": 573,
+        "p50": 888.14,
+        "p95": 1187.39,
+        "p99": 1280.76,
+        "max": 1298.53
+       },
+       "pending": {
+        "n": 12886,
+        "p50": 181.08,
+        "p95": 390.21,
+        "p99": 463.37,
+        "max": 546.64
+       },
+       "timeToContext": {
+        "n": 1440,
+        "p50": 698,
+        "p95": 1278.85,
+        "p99": 1861.58
+       },
+       "inTimeRate": 0.358,
+       "injections": 2583
+      },
+      "server": {
+       "cpuPercent": 115.1,
+       "rssMb": 1903.9,
+       "heapUsedMb": 1238.8,
+       "lagP99Ms": 254.16,
+       "lagMaxMs": 260.0,
+       "handlerMs": {
+        "p50": 0.05,
+        "p95": 1.43,
+        "p99": 705.1,
+        "max": 985.99
+       },
+       "sourceCalls": 21639,
+       "cachedUsers": 800
+      }
+     },
+     {
+      "users": 1600,
+      "client": {
+       "users": 1600,
+       "durationS": 20.9,
+       "eventsPerSec": 717.2,
+       "requestsPerSec": 1598.9,
+       "failedOpenRate": 0.3439,
+       "generatorCpuPercent": 27,
+       "observe": {
+        "n": 14344,
+        "p50": 745.55,
+        "p95": 800.5,
+        "p99": 802.71,
+        "max": 828.46
+       },
+       "ask": {
+        "n": 683,
+        "p50": 1803.18,
+        "p95": 4073.31,
+        "p99": 4409.77,
+        "max": 4965.89
+       },
+       "pending": {
+        "n": 14344,
+        "p50": 737,
+        "p95": 800.43,
+        "p99": 801.96,
+        "max": 815.68
+       },
+       "timeToContext": {
+        "n": 1171,
+        "p50": 1431.22,
+        "p95": 3862.24,
+        "p99": 5550.49
+       },
+       "inTimeRate": 0.328,
+       "injections": 2023
+      },
+      "server": {
+       "cpuPercent": 115.5,
+       "rssMb": 2182.1,
+       "heapUsedMb": 1496.8,
+       "lagP99Ms": 977.94,
+       "lagMaxMs": 1084.1,
+       "handlerMs": {
+        "p50": 0.05,
+        "p95": 1.26,
+        "p99": 1099.11,
+        "max": 3353.3
+       },
+       "sourceCalls": 24235,
+       "cachedUsers": 1599
+      }
+     }
+    ]
+   }
+  ],
+  "memory": [
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts memory",
+     "load1Before": 1.47,
+     "rc": 0,
+     "wallS": 58.04
+    },
+    "readings": [
+     {
+      "users": 0,
+      "rssMb": 1059,
+      "heapUsedMb": 667.7,
+      "cachedUsers": 0
+     },
+     {
+      "users": 250,
+      "rssMb": 1011.1,
+      "heapUsedMb": 686.3,
+      "cachedUsers": 250
+     },
+     {
+      "users": 500,
+      "rssMb": 1010.3,
+      "heapUsedMb": 690.2,
+      "cachedUsers": 500
+     },
+     {
+      "users": 1000,
+      "rssMb": 1052.9,
+      "heapUsedMb": 704.6,
+      "cachedUsers": 1000
+     },
+     {
+      "users": 1985,
+      "rssMb": 1090.8,
+      "heapUsedMb": 738.6,
+      "cachedUsers": 1984
+     }
+    ],
+    "edenOnly": {
+     "note": "readings minus the zero-user reading (the in-process sim worlds and sources)",
+     "baseline": {
+      "rssMb": 1059,
+      "heapUsedMb": 667.7
+     },
+     "rssMbPerUser": 0.004,
+     "heapMbPerUser": 0.037
+    }
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts memory",
+     "load1Before": 0.86,
+     "rc": 0,
+     "wallS": 58.15
+    },
+    "readings": [
+     {
+      "users": 0,
+      "rssMb": 1060.2,
+      "heapUsedMb": 668.4,
+      "cachedUsers": 0
+     },
+     {
+      "users": 250,
+      "rssMb": 1022,
+      "heapUsedMb": 689.1,
+      "cachedUsers": 250
+     },
+     {
+      "users": 500,
+      "rssMb": 1030.2,
+      "heapUsedMb": 693,
+      "cachedUsers": 500
+     },
+     {
+      "users": 1000,
+      "rssMb": 1071.4,
+      "heapUsedMb": 707.6,
+      "cachedUsers": 1000
+     },
+     {
+      "users": 1977,
+      "rssMb": 1108.7,
+      "heapUsedMb": 741.8,
+      "cachedUsers": 1976
+     }
+    ],
+    "edenOnly": {
+     "note": "readings minus the zero-user reading (the in-process sim worlds and sources)",
+     "baseline": {
+      "rssMb": 1060.2,
+      "heapUsedMb": 668.4
+     },
+     "rssMbPerUser": 0.016,
+     "heapMbPerUser": 0.039
+    }
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts memory",
+     "load1Before": 0.72,
+     "rc": 0,
+     "wallS": 58.42
+    },
+    "readings": [
+     {
+      "users": 0,
+      "rssMb": 1055.6,
+      "heapUsedMb": 666.6,
+      "cachedUsers": 0
+     },
+     {
+      "users": 250,
+      "rssMb": 1008.2,
+      "heapUsedMb": 686.2,
+      "cachedUsers": 250
+     },
+     {
+      "users": 500,
+      "rssMb": 1015.8,
+      "heapUsedMb": 690.1,
+      "cachedUsers": 500
+     },
+     {
+      "users": 1000,
+      "rssMb": 1039.4,
+      "heapUsedMb": 704.9,
+      "cachedUsers": 1000
+     },
+     {
+      "users": 1977,
+      "rssMb": 1081.1,
+      "heapUsedMb": 738.7,
+      "cachedUsers": 1973
+     }
+    ],
+    "edenOnly": {
+     "note": "readings minus the zero-user reading (the in-process sim worlds and sources)",
+     "baseline": {
+      "rssMb": 1055.6,
+      "heapUsedMb": 666.6
+     },
+     "rssMbPerUser": 0,
+     "heapMbPerUser": 0.038
+    }
+   }
+  ],
+  "faults": [
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts faults",
+     "load1Before": 0.68,
+     "rc": 0,
+     "wallS": 169.02
+    },
+    "faults": [
+     {
+      "fromS": 30,
+      "toS": 60,
+      "what": "gmail outage"
+     },
+     {
+      "fromS": 75,
+      "toS": 105,
+      "what": "drive 5x slower"
+     },
+     {
+      "fromS": 120,
+      "toS": 150,
+      "what": "crm limited to 0.2 req/s per user"
+     }
+    ],
+    "client": {
+     "users": 300,
+     "durationS": 165,
+     "eventsPerSec": 36.1,
+     "requestsPerSec": 79.4,
+     "failedOpenRate": 0,
+     "generatorCpuPercent": 4.1,
+     "observe": {
+      "n": 5961,
+      "p50": 1.17,
+      "p95": 3.56,
+      "p99": 8.02,
+      "max": 42.25
+     },
+     "ask": {
+      "n": 258,
+      "p50": 626.51,
+      "p95": 1507.26,
+      "p99": 1512.75,
+      "max": 1519.96
+     },
+     "pending": {
+      "n": 5961,
+      "p50": 0.42,
+      "p95": 1.35,
+      "p99": 4.6,
+      "max": 37.17
+     },
+     "timeToContext": {
+      "n": 376,
+      "p50": 1506.74,
+      "p95": 4705.61,
+      "p99": 37640.46
+     },
+     "inTimeRate": 0.18,
+     "injections": 789
+    },
+    "server": {
+     "cpuPercent": 17.3,
+     "rssMb": 1178.1,
+     "heapUsedMb": 824.6,
+     "lagP99Ms": 4.17,
+     "lagMaxMs": 215.9,
+     "handlerMs": {
+      "p50": 0.14,
+      "p95": 1.86,
+      "p99": 624.51,
+      "max": 1519.26
+     },
+     "sourceCalls": 16624,
+     "cachedUsers": 300
+    },
+    "windows": [
+     {
+      "t": 0,
+      "events": 342,
+      "observeP99": 16.3,
+      "failed": 0
+     },
+     {
+      "t": 5,
+      "events": 550,
+      "observeP99": 9.59,
+      "failed": 0
+     },
+     {
+      "t": 10,
+      "events": 215,
+      "observeP99": 4.49,
+      "failed": 0
+     },
+     {
+      "t": 15,
+      "events": 130,
+      "observeP99": 4.22,
+      "failed": 0
+     },
+     {
+      "t": 20,
+      "events": 134,
+      "observeP99": 5.27,
+      "failed": 0
+     },
+     {
+      "t": 25,
+      "events": 177,
+      "observeP99": 5.99,
+      "failed": 0
+     },
+     {
+      "t": 30,
+      "events": 180,
+      "observeP99": 10.24,
+      "failed": 0
+     },
+     {
+      "t": 35,
+      "events": 144,
+      "observeP99": 5.28,
+      "failed": 0
+     },
+     {
+      "t": 40,
+      "events": 166,
+      "observeP99": 5.83,
+      "failed": 0
+     },
+     {
+      "t": 45,
+      "events": 162,
+      "observeP99": 4.16,
+      "failed": 0
+     },
+     {
+      "t": 50,
+      "events": 164,
+      "observeP99": 4.36,
+      "failed": 0
+     },
+     {
+      "t": 55,
+      "events": 169,
+      "observeP99": 4.8,
+      "failed": 0
+     },
+     {
+      "t": 60,
+      "events": 169,
+      "observeP99": 9.55,
+      "failed": 0
+     },
+     {
+      "t": 65,
+      "events": 165,
+      "observeP99": 5.21,
+      "failed": 0
+     },
+     {
+      "t": 70,
+      "events": 165,
+      "observeP99": 4.32,
+      "failed": 0
+     },
+     {
+      "t": 75,
+      "events": 154,
+      "observeP99": 4.63,
+      "failed": 0
+     },
+     {
+      "t": 80,
+      "events": 140,
+      "observeP99": 7.22,
+      "failed": 0
+     },
+     {
+      "t": 85,
+      "events": 174,
+      "observeP99": 10.47,
+      "failed": 0
+     },
+     {
+      "t": 90,
+      "events": 195,
+      "observeP99": 9.49,
+      "failed": 0
+     },
+     {
+      "t": 95,
+      "events": 147,
+      "observeP99": 4.1,
+      "failed": 0
+     },
+     {
+      "t": 100,
+      "events": 147,
+      "observeP99": 5.1,
+      "failed": 0
+     },
+     {
+      "t": 105,
+      "events": 182,
+      "observeP99": 6.33,
+      "failed": 0
+     },
+     {
+      "t": 110,
+      "events": 152,
+      "observeP99": 4.24,
+      "failed": 0
+     },
+     {
+      "t": 115,
+      "events": 152,
+      "observeP99": 6,
+      "failed": 0
+     },
+     {
+      "t": 120,
+      "events": 155,
+      "observeP99": 4.46,
+      "failed": 0
+     },
+     {
+      "t": 125,
+      "events": 175,
+      "observeP99": 4.35,
+      "failed": 0
+     },
+     {
+      "t": 130,
+      "events": 158,
+      "observeP99": 4.39,
+      "failed": 0
+     },
+     {
+      "t": 135,
+      "events": 148,
+      "observeP99": 3.87,
+      "failed": 0
+     },
+     {
+      "t": 140,
+      "events": 185,
+      "observeP99": 7.17,
+      "failed": 0
+     },
+     {
+      "t": 145,
+      "events": 170,
+      "observeP99": 6.85,
+      "failed": 0
+     },
+     {
+      "t": 150,
+      "events": 142,
+      "observeP99": 8.04,
+      "failed": 0
+     },
+     {
+      "t": 155,
+      "events": 174,
+      "observeP99": 5.08,
+      "failed": 0
+     },
+     {
+      "t": 160,
+      "events": 179,
+      "observeP99": 17.29,
+      "failed": 0
+     }
+    ]
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts faults",
+     "load1Before": 0.27,
+     "rc": 0,
+     "wallS": 168.75
+    },
+    "faults": [
+     {
+      "fromS": 30,
+      "toS": 60,
+      "what": "gmail outage"
+     },
+     {
+      "fromS": 75,
+      "toS": 105,
+      "what": "drive 5x slower"
+     },
+     {
+      "fromS": 120,
+      "toS": 150,
+      "what": "crm limited to 0.2 req/s per user"
+     }
+    ],
+    "client": {
+     "users": 300,
+     "durationS": 165,
+     "eventsPerSec": 36.1,
+     "requestsPerSec": 79.3,
+     "failedOpenRate": 0,
+     "generatorCpuPercent": 3.9,
+     "observe": {
+      "n": 5955,
+      "p50": 1.13,
+      "p95": 3.59,
+      "p99": 7.42,
+      "max": 38.19
+     },
+     "ask": {
+      "n": 258,
+      "p50": 645.79,
+      "p95": 1505.87,
+      "p99": 1510.9,
+      "max": 1519.98
+     },
+     "pending": {
+      "n": 5955,
+      "p50": 0.4,
+      "p95": 1.32,
+      "p99": 4.23,
+      "max": 32.87
+     },
+     "timeToContext": {
+      "n": 381,
+      "p50": 1503.31,
+      "p95": 4699.08,
+      "p99": 26767.31
+     },
+     "inTimeRate": 0.183,
+     "injections": 798
+    },
+    "server": {
+     "cpuPercent": 16.9,
+     "rssMb": 1182.6,
+     "heapUsedMb": 825.8,
+     "lagP99Ms": 4.24,
+     "lagMaxMs": 193.7,
+     "handlerMs": {
+      "p50": 0.13,
+      "p95": 1.8,
+      "p99": 629.22,
+      "max": 1519.26
+     },
+     "sourceCalls": 16597,
+     "cachedUsers": 300
+    },
+    "windows": [
+     {
+      "t": 0,
+      "events": 342,
+      "observeP99": 15.27,
+      "failed": 0
+     },
+     {
+      "t": 5,
+      "events": 549,
+      "observeP99": 10.83,
+      "failed": 0
+     },
+     {
+      "t": 10,
+      "events": 216,
+      "observeP99": 4.38,
+      "failed": 0
+     },
+     {
+      "t": 15,
+      "events": 130,
+      "observeP99": 4.24,
+      "failed": 0
+     },
+     {
+      "t": 20,
+      "events": 134,
+      "observeP99": 11.67,
+      "failed": 0
+     },
+     {
+      "t": 25,
+      "events": 177,
+      "observeP99": 8.91,
+      "failed": 0
+     },
+     {
+      "t": 30,
+      "events": 180,
+      "observeP99": 8.05,
+      "failed": 0
+     },
+     {
+      "t": 35,
+      "events": 144,
+      "observeP99": 4.68,
+      "failed": 0
+     },
+     {
+      "t": 40,
+      "events": 166,
+      "observeP99": 5.32,
+      "failed": 0
+     },
+     {
+      "t": 45,
+      "events": 162,
+      "observeP99": 6.66,
+      "failed": 0
+     },
+     {
+      "t": 50,
+      "events": 164,
+      "observeP99": 3.46,
+      "failed": 0
+     },
+     {
+      "t": 55,
+      "events": 169,
+      "observeP99": 3.99,
+      "failed": 0
+     },
+     {
+      "t": 60,
+      "events": 169,
+      "observeP99": 6.67,
+      "failed": 0
+     },
+     {
+      "t": 65,
+      "events": 165,
+      "observeP99": 4.48,
+      "failed": 0
+     },
+     {
+      "t": 70,
+      "events": 165,
+      "observeP99": 8.85,
+      "failed": 0
+     },
+     {
+      "t": 75,
+      "events": 154,
+      "observeP99": 5.09,
+      "failed": 0
+     },
+     {
+      "t": 80,
+      "events": 140,
+      "observeP99": 11.59,
+      "failed": 0
+     },
+     {
+      "t": 85,
+      "events": 174,
+      "observeP99": 7.61,
+      "failed": 0
+     },
+     {
+      "t": 90,
+      "events": 196,
+      "observeP99": 10.69,
+      "failed": 0
+     },
+     {
+      "t": 95,
+      "events": 146,
+      "observeP99": 12.03,
+      "failed": 0
+     },
+     {
+      "t": 100,
+      "events": 147,
+      "observeP99": 5.38,
+      "failed": 0
+     },
+     {
+      "t": 105,
+      "events": 182,
+      "observeP99": 6.74,
+      "failed": 0
+     },
+     {
+      "t": 110,
+      "events": 153,
+      "observeP99": 4.7,
+      "failed": 0
+     },
+     {
+      "t": 115,
+      "events": 151,
+      "observeP99": 5.23,
+      "failed": 0
+     },
+     {
+      "t": 120,
+      "events": 155,
+      "observeP99": 4.49,
+      "failed": 0
+     },
+     {
+      "t": 125,
+      "events": 175,
+      "observeP99": 5.07,
+      "failed": 0
+     },
+     {
+      "t": 130,
+      "events": 159,
+      "observeP99": 20.96,
+      "failed": 0
+     },
+     {
+      "t": 135,
+      "events": 147,
+      "observeP99": 5.9,
+      "failed": 0
+     },
+     {
+      "t": 140,
+      "events": 186,
+      "observeP99": 6.58,
+      "failed": 0
+     },
+     {
+      "t": 145,
+      "events": 169,
+      "observeP99": 4.69,
+      "failed": 0
+     },
+     {
+      "t": 150,
+      "events": 143,
+      "observeP99": 17.38,
+      "failed": 0
+     },
+     {
+      "t": 155,
+      "events": 172,
+      "observeP99": 5.64,
+      "failed": 0
+     },
+     {
+      "t": 160,
+      "events": 174,
+      "observeP99": 8.66,
+      "failed": 0
+     }
+    ]
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts faults",
+     "load1Before": 0.15,
+     "rc": 0,
+     "wallS": 168.55
+    },
+    "faults": [
+     {
+      "fromS": 30,
+      "toS": 60,
+      "what": "gmail outage"
+     },
+     {
+      "fromS": 75,
+      "toS": 105,
+      "what": "drive 5x slower"
+     },
+     {
+      "fromS": 120,
+      "toS": 150,
+      "what": "crm limited to 0.2 req/s per user"
+     }
+    ],
+    "client": {
+     "users": 300,
+     "durationS": 165,
+     "eventsPerSec": 36.1,
+     "requestsPerSec": 79.3,
+     "failedOpenRate": 0,
+     "generatorCpuPercent": 3.7,
+     "observe": {
+      "n": 5958,
+      "p50": 1.05,
+      "p95": 3.23,
+      "p99": 6.28,
+      "max": 29.29
+     },
+     "ask": {
+      "n": 257,
+      "p50": 624.44,
+      "p95": 1507.65,
+      "p99": 1511.37,
+      "max": 1512.76
+     },
+     "pending": {
+      "n": 5958,
+      "p50": 0.37,
+      "p95": 1.19,
+      "p99": 3.83,
+      "max": 30.27
+     },
+     "timeToContext": {
+      "n": 389,
+      "p50": 1510.88,
+      "p95": 4410.54,
+      "p99": 34719.82
+     },
+     "inTimeRate": 0.181,
+     "injections": 789
+    },
+    "server": {
+     "cpuPercent": 16.1,
+     "rssMb": 1165.5,
+     "heapUsedMb": 806.5,
+     "lagP99Ms": 3.84,
+     "lagMaxMs": 196.6,
+     "handlerMs": {
+      "p50": 0.12,
+      "p95": 1.66,
+      "p99": 622.72,
+      "max": 1512.2
+     },
+     "sourceCalls": 16720,
+     "cachedUsers": 300
+    },
+    "windows": [
+     {
+      "t": 0,
+      "events": 342,
+      "observeP99": 16.58,
+      "failed": 0
+     },
+     {
+      "t": 5,
+      "events": 550,
+      "observeP99": 7.99,
+      "failed": 0
+     },
+     {
+      "t": 10,
+      "events": 215,
+      "observeP99": 3.16,
+      "failed": 0
+     },
+     {
+      "t": 15,
+      "events": 130,
+      "observeP99": 3.68,
+      "failed": 0
+     },
+     {
+      "t": 20,
+      "events": 134,
+      "observeP99": 4.72,
+      "failed": 0
+     },
+     {
+      "t": 25,
+      "events": 178,
+      "observeP99": 6.23,
+      "failed": 0
+     },
+     {
+      "t": 30,
+      "events": 179,
+      "observeP99": 4.35,
+      "failed": 0
+     },
+     {
+      "t": 35,
+      "events": 144,
+      "observeP99": 6.94,
+      "failed": 0
+     },
+     {
+      "t": 40,
+      "events": 166,
+      "observeP99": 4.26,
+      "failed": 0
+     },
+     {
+      "t": 45,
+      "events": 163,
+      "observeP99": 6.27,
+      "failed": 0
+     },
+     {
+      "t": 50,
+      "events": 163,
+      "observeP99": 3.05,
+      "failed": 0
+     },
+     {
+      "t": 55,
+      "events": 169,
+      "observeP99": 3.12,
+      "failed": 0
+     },
+     {
+      "t": 60,
+      "events": 169,
+      "observeP99": 6.19,
+      "failed": 0
+     },
+     {
+      "t": 65,
+      "events": 165,
+      "observeP99": 5.91,
+      "failed": 0
+     },
+     {
+      "t": 70,
+      "events": 165,
+      "observeP99": 5.55,
+      "failed": 0
+     },
+     {
+      "t": 75,
+      "events": 155,
+      "observeP99": 6.59,
+      "failed": 0
+     },
+     {
+      "t": 80,
+      "events": 139,
+      "observeP99": 3.32,
+      "failed": 0
+     },
+     {
+      "t": 85,
+      "events": 174,
+      "observeP99": 5.22,
+      "failed": 0
+     },
+     {
+      "t": 90,
+      "events": 196,
+      "observeP99": 7.97,
+      "failed": 0
+     },
+     {
+      "t": 95,
+      "events": 147,
+      "observeP99": 8.2,
+      "failed": 0
+     },
+     {
+      "t": 100,
+      "events": 146,
+      "observeP99": 4.08,
+      "failed": 0
+     },
+     {
+      "t": 105,
+      "events": 182,
+      "observeP99": 5.12,
+      "failed": 0
+     },
+     {
+      "t": 110,
+      "events": 153,
+      "observeP99": 4.24,
+      "failed": 0
+     },
+     {
+      "t": 115,
+      "events": 151,
+      "observeP99": 6.41,
+      "failed": 0
+     },
+     {
+      "t": 120,
+      "events": 155,
+      "observeP99": 5.41,
+      "failed": 0
+     },
+     {
+      "t": 125,
+      "events": 175,
+      "observeP99": 4.17,
+      "failed": 0
+     },
+     {
+      "t": 130,
+      "events": 159,
+      "observeP99": 5.35,
+      "failed": 0
+     },
+     {
+      "t": 135,
+      "events": 147,
+      "observeP99": 3.24,
+      "failed": 0
+     },
+     {
+      "t": 140,
+      "events": 186,
+      "observeP99": 7.32,
+      "failed": 0
+     },
+     {
+      "t": 145,
+      "events": 169,
+      "observeP99": 7.7,
+      "failed": 0
+     },
+     {
+      "t": 150,
+      "events": 143,
+      "observeP99": 9.01,
+      "failed": 0
+     },
+     {
+      "t": 155,
+      "events": 173,
+      "observeP99": 4.45,
+      "failed": 0
+     },
+     {
+      "t": 160,
+      "events": 176,
+      "observeP99": 9.55,
+      "failed": 0
+     }
+    ]
+   }
+  ],
+  "hot": [
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts hot",
+     "load1Before": 0.18,
+     "rc": 0,
+     "wallS": 42.82
+    },
+    "client": {
+     "users": 2400,
+     "durationS": 22.1,
+     "eventsPerSec": 1011.6,
+     "requestsPerSec": 2258.7,
+     "failedOpenRate": 0.7698,
+     "generatorCpuPercent": 33.4,
+     "observe": {
+      "n": 20231,
+      "p50": 800.23,
+      "p95": 801,
+      "p99": 803.34,
+      "max": 817.96
+     },
+     "ask": {
+      "n": 939,
+      "p50": 4400.12,
+      "p95": 5811.13,
+      "p99": 6233.13,
+      "max": 7005.94
+     },
+     "pending": {
+      "n": 20231,
+      "p50": 800.21,
+      "p95": 801.01,
+      "p99": 803.95,
+      "max": 817.42
+     },
+     "timeToContext": {
+      "n": 758,
+      "p50": 4327.49,
+      "p95": 6203.88,
+      "p99": 13944.75
+     },
+     "inTimeRate": 0.14,
+     "injections": 1174
+    },
+    "server": {
+     "cpuPercent": 118.7,
+     "rssMb": 2174.8,
+     "heapUsedMb": 1350.1,
+     "lagP99Ms": 1326.62,
+     "lagMaxMs": 1326.6,
+     "handlerMs": {
+      "p50": 0.05,
+      "p95": 0.89,
+      "p99": 3151.81,
+      "max": 3824.49
+     },
+     "sourceCalls": 32823,
+     "cachedUsers": 3058
+    }
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts hot",
+     "load1Before": 0.82,
+     "rc": 0,
+     "wallS": 42.69
+    },
+    "client": {
+     "users": 2400,
+     "durationS": 22.1,
+     "eventsPerSec": 1011.2,
+     "requestsPerSec": 2258.2,
+     "failedOpenRate": 0.7871,
+     "generatorCpuPercent": 31.8,
+     "observe": {
+      "n": 20224,
+      "p50": 800.22,
+      "p95": 800.97,
+      "p99": 803.27,
+      "max": 823.22
+     },
+     "ask": {
+      "n": 946,
+      "p50": 4988.03,
+      "p95": 6879.94,
+      "p99": 7510.92,
+      "max": 7707.98
+     },
+     "pending": {
+      "n": 20224,
+      "p50": 800.21,
+      "p95": 800.98,
+      "p99": 803.48,
+      "max": 823.07
+     },
+     "timeToContext": {
+      "n": 747,
+      "p50": 4942.96,
+      "p95": 7488,
+      "p99": 14319.45
+     },
+     "inTimeRate": 0.138,
+     "injections": 1137
+    },
+    "server": {
+     "cpuPercent": 118.3,
+     "rssMb": 2177.8,
+     "heapUsedMb": 1354.6,
+     "lagP99Ms": 1049.06,
+     "lagMaxMs": 2273.1,
+     "handlerMs": {
+      "p50": 0.05,
+      "p95": 0.92,
+      "p99": 3664.66,
+      "max": 5197.32
+     },
+     "sourceCalls": 33766,
+     "cachedUsers": 3068
+    }
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts hot",
+     "load1Before": 0.99,
+     "rc": 0,
+     "wallS": 43.12
+    },
+    "client": {
+     "users": 2400,
+     "durationS": 22.2,
+     "eventsPerSec": 1007,
+     "requestsPerSec": 2247.9,
+     "failedOpenRate": 0.8006,
+     "generatorCpuPercent": 31.7,
+     "observe": {
+      "n": 20139,
+      "p50": 800.23,
+      "p95": 802.15,
+      "p99": 963.71,
+      "max": 1036.59
+     },
+     "ask": {
+      "n": 925,
+      "p50": 5249.3,
+      "p95": 7051.53,
+      "p99": 7456.52,
+      "max": 8000.27
+     },
+     "pending": {
+      "n": 20139,
+      "p50": 800.21,
+      "p95": 802.67,
+      "p99": 970.63,
+      "max": 1040.03
+     },
+     "timeToContext": {
+      "n": 700,
+      "p50": 5111.02,
+      "p95": 7415.45,
+      "p99": 12088.32
+     },
+     "inTimeRate": 0.132,
+     "injections": 1082
+    },
+    "server": {
+     "cpuPercent": 117.1,
+     "rssMb": 2192,
+     "heapUsedMb": 1344.2,
+     "lagP99Ms": 2071.83,
+     "lagMaxMs": 2071.8,
+     "handlerMs": {
+      "p50": 0.05,
+      "p95": 0.99,
+      "p99": 3686.34,
+      "max": 5032.95
+     },
+     "sourceCalls": 32543,
+     "cachedUsers": 3054
+    }
+   }
+  ],
+  "soak": [
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts soak",
+     "load1Before": 1.21,
+     "rc": 0,
+     "wallS": 606.5
+    },
+    "minutes": 10,
+    "client": {
+     "users": 300,
+     "durationS": 600.1,
+     "eventsPerSec": 32.6,
+     "requestsPerSec": 71.3,
+     "failedOpenRate": 0,
+     "generatorCpuPercent": 3.7,
+     "observe": {
+      "n": 19585,
+      "p50": 1.11,
+      "p95": 3.76,
+      "p99": 8.3,
+      "max": 261.41
+     },
+     "ask": {
+      "n": 898,
+      "p50": 600.86,
+      "p95": 1284.98,
+      "p99": 1505.89,
+      "max": 1511.98
+     },
+     "pending": {
+      "n": 19585,
+      "p50": 0.38,
+      "p95": 1.13,
+      "p99": 3.61,
+      "max": 35.59
+     },
+     "timeToContext": {
+      "n": 1690,
+      "p50": 1840.96,
+      "p95": 4807.35,
+      "p99": 28813.59
+     },
+     "inTimeRate": 0.217,
+     "injections": 2880
+    },
+    "samples": [
+     {
+      "minute": 1,
+      "simulatedHours": 2,
+      "rssMb": 1108.2,
+      "heapUsedMb": 766.8,
+      "sessions": 281,
+      "lagP99Ms": 4.9,
+      "cpuPercent": 22.6
+     },
+     {
+      "minute": 2,
+      "simulatedHours": 5,
+      "rssMb": 1146.5,
+      "heapUsedMb": 799.5,
+      "sessions": 273,
+      "lagP99Ms": 4.48,
+      "cpuPercent": 20.1
+     },
+     {
+      "minute": 3,
+      "simulatedHours": 7,
+      "rssMb": 1188.9,
+      "heapUsedMb": 827.5,
+      "sessions": 269,
+      "lagP99Ms": 4.3,
+      "cpuPercent": 18.8
+     },
+     {
+      "minute": 4,
+      "simulatedHours": 10,
+      "rssMb": 1222.7,
+      "heapUsedMb": 850.1,
+      "sessions": 266,
+      "lagP99Ms": 4.18,
+      "cpuPercent": 18
+     },
+     {
+      "minute": 5,
+      "simulatedHours": 12,
+      "rssMb": 1243.5,
+      "heapUsedMb": 868.5,
+      "sessions": 265,
+      "lagP99Ms": 4.05,
+      "cpuPercent": 17.5
+     },
+     {
+      "minute": 6,
+      "simulatedHours": 14,
+      "rssMb": 1284.1,
+      "heapUsedMb": 883.4,
+      "sessions": 273,
+      "lagP99Ms": 3.99,
+      "cpuPercent": 17.2
+     },
+     {
+      "minute": 7,
+      "simulatedHours": 17,
+      "rssMb": 1291.2,
+      "heapUsedMb": 895.7,
+      "sessions": 262,
+      "lagP99Ms": 3.87,
+      "cpuPercent": 16.9
+     },
+     {
+      "minute": 8,
+      "simulatedHours": 19,
+      "rssMb": 1303.7,
+      "heapUsedMb": 907.9,
+      "sessions": 262,
+      "lagP99Ms": 3.83,
+      "cpuPercent": 16.8
+     },
+     {
+      "minute": 9,
+      "simulatedHours": 22,
+      "rssMb": 1312.2,
+      "heapUsedMb": 919.1,
+      "sessions": 262,
+      "lagP99Ms": 3.79,
+      "cpuPercent": 16.6
+     },
+     {
+      "minute": 10,
+      "simulatedHours": 24,
+      "rssMb": 1323,
+      "heapUsedMb": 921.8,
+      "sessions": 0,
+      "lagP99Ms": 3.8,
+      "cpuPercent": 16.5
+     }
+    ]
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts soak",
+     "load1Before": 0.26,
+     "rc": 0,
+     "wallS": 606.48
+    },
+    "minutes": 10,
+    "client": {
+     "users": 300,
+     "durationS": 600.1,
+     "eventsPerSec": 32.6,
+     "requestsPerSec": 71.3,
+     "failedOpenRate": 0,
+     "generatorCpuPercent": 3.7,
+     "observe": {
+      "n": 19582,
+      "p50": 1.11,
+      "p95": 3.72,
+      "p99": 7.64,
+      "max": 413.11
+     },
+     "ask": {
+      "n": 898,
+      "p50": 615.94,
+      "p95": 1321.79,
+      "p99": 1505.86,
+      "max": 1515.59
+     },
+     "pending": {
+      "n": 19582,
+      "p50": 0.38,
+      "p95": 1.19,
+      "p99": 3.72,
+      "max": 77.3
+     },
+     "timeToContext": {
+      "n": 1708,
+      "p50": 1845.34,
+      "p95": 4719.62,
+      "p99": 20012.74
+     },
+     "inTimeRate": 0.224,
+     "injections": 2894
+    },
+    "samples": [
+     {
+      "minute": 1,
+      "simulatedHours": 2,
+      "rssMb": 1126.9,
+      "heapUsedMb": 777.5,
+      "sessions": 281,
+      "lagP99Ms": 5.14,
+      "cpuPercent": 23.1
+     },
+     {
+      "minute": 2,
+      "simulatedHours": 5,
+      "rssMb": 1175.7,
+      "heapUsedMb": 809.9,
+      "sessions": 273,
+      "lagP99Ms": 4.42,
+      "cpuPercent": 19.9
+     },
+     {
+      "minute": 3,
+      "simulatedHours": 7,
+      "rssMb": 1203.6,
+      "heapUsedMb": 838.1,
+      "sessions": 269,
+      "lagP99Ms": 4.21,
+      "cpuPercent": 18.6
+     },
+     {
+      "minute": 4,
+      "simulatedHours": 10,
+      "rssMb": 1231.4,
+      "heapUsedMb": 862.9,
+      "sessions": 266,
+      "lagP99Ms": 4.03,
+      "cpuPercent": 17.7
+     },
+     {
+      "minute": 5,
+      "simulatedHours": 12,
+      "rssMb": 1263.8,
+      "heapUsedMb": 879.8,
+      "sessions": 265,
+      "lagP99Ms": 4.01,
+      "cpuPercent": 17.3
+     },
+     {
+      "minute": 6,
+      "simulatedHours": 14,
+      "rssMb": 1276.7,
+      "heapUsedMb": 894.5,
+      "sessions": 273,
+      "lagP99Ms": 3.99,
+      "cpuPercent": 17.1
+     },
+     {
+      "minute": 7,
+      "simulatedHours": 17,
+      "rssMb": 1290.9,
+      "heapUsedMb": 905.8,
+      "sessions": 262,
+      "lagP99Ms": 3.91,
+      "cpuPercent": 16.8
+     },
+     {
+      "minute": 8,
+      "simulatedHours": 19,
+      "rssMb": 1308,
+      "heapUsedMb": 918.3,
+      "sessions": 262,
+      "lagP99Ms": 3.88,
+      "cpuPercent": 16.7
+     },
+     {
+      "minute": 9,
+      "simulatedHours": 22,
+      "rssMb": 1341.5,
+      "heapUsedMb": 929,
+      "sessions": 262,
+      "lagP99Ms": 3.83,
+      "cpuPercent": 16.6
+     },
+     {
+      "minute": 10,
+      "simulatedHours": 24,
+      "rssMb": 1348.7,
+      "heapUsedMb": 931.3,
+      "sessions": 0,
+      "lagP99Ms": 3.8,
+      "cpuPercent": 16.4
+     }
+    ]
+   },
+   {
+    "meta": {
+     "cmd": "bun packages/sim/src/perf-cli.ts soak",
+     "load1Before": 0.09,
+     "rc": 0,
+     "wallS": 606.54
+    },
+    "minutes": 10,
+    "client": {
+     "users": 300,
+     "durationS": 600,
+     "eventsPerSec": 32.6,
+     "requestsPerSec": 71.3,
+     "failedOpenRate": 0,
+     "generatorCpuPercent": 3.7,
+     "observe": {
+      "n": 19575,
+      "p50": 1.13,
+      "p95": 3.8,
+      "p99": 7.87,
+      "max": 309.98
+     },
+     "ask": {
+      "n": 898,
+      "p50": 601.1,
+      "p95": 1185.95,
+      "p99": 1505.86,
+      "max": 1582.88
+     },
+     "pending": {
+      "n": 19575,
+      "p50": 0.39,
+      "p95": 1.21,
+      "p99": 3.98,
+      "max": 310.6
+     },
+     "timeToContext": {
+      "n": 1710,
+      "p50": 1845.46,
+      "p95": 4750.58,
+      "p99": 22906.85
+     },
+     "inTimeRate": 0.224,
+     "injections": 2880
+    },
+    "samples": [
+     {
+      "minute": 1,
+      "simulatedHours": 2,
+      "rssMb": 1111.1,
+      "heapUsedMb": 760.2,
+      "sessions": 281,
+      "lagP99Ms": 4.93,
+      "cpuPercent": 22.9
+     },
+     {
+      "minute": 2,
+      "simulatedHours": 5,
+      "rssMb": 1189.3,
+      "heapUsedMb": 792.2,
+      "sessions": 274,
+      "lagP99Ms": 4.38,
+      "cpuPercent": 20
+     },
+     {
+      "minute": 3,
+      "simulatedHours": 7,
+      "rssMb": 1215.6,
+      "heapUsedMb": 821.4,
+      "sessions": 269,
+      "lagP99Ms": 4.21,
+      "cpuPercent": 18.9
+     },
+     {
+      "minute": 4,
+      "simulatedHours": 10,
+      "rssMb": 1253.4,
+      "heapUsedMb": 844.4,
+      "sessions": 266,
+      "lagP99Ms": 4.06,
+      "cpuPercent": 18.1
+     },
+     {
+      "minute": 5,
+      "simulatedHours": 12,
+      "rssMb": 1269.9,
+      "heapUsedMb": 862.8,
+      "sessions": 263,
+      "lagP99Ms": 4.0,
+      "cpuPercent": 17.6
+     },
+     {
+      "minute": 6,
+      "simulatedHours": 14,
+      "rssMb": 1289.8,
+      "heapUsedMb": 877.5,
+      "sessions": 273,
+      "lagP99Ms": 3.97,
+      "cpuPercent": 17.4
+     },
+     {
+      "minute": 7,
+      "simulatedHours": 17,
+      "rssMb": 1299.3,
+      "heapUsedMb": 889.4,
+      "sessions": 262,
+      "lagP99Ms": 3.94,
+      "cpuPercent": 17.2
+     },
+     {
+      "minute": 8,
+      "simulatedHours": 19,
+      "rssMb": 1311.7,
+      "heapUsedMb": 901.2,
+      "sessions": 262,
+      "lagP99Ms": 3.91,
+      "cpuPercent": 17
+     },
+     {
+      "minute": 9,
+      "simulatedHours": 22,
+      "rssMb": 1334.7,
+      "heapUsedMb": 912.2,
+      "sessions": 262,
+      "lagP99Ms": 3.92,
+      "cpuPercent": 16.9
+     },
+     {
+      "minute": 10,
+      "simulatedHours": 24,
+      "rssMb": 1345,
+      "heapUsedMb": 914,
+      "sessions": 0,
+      "lagP99Ms": 3.87,
+      "cpuPercent": 16.7
+     }
+    ]
+   }
+  ]
+ },
+ "dev-loop": {
+  "check": {
+   "meta": [
+    {
+     "cmd": "bun run check",
+     "load1Before": 0.18,
+     "rc": 0,
+     "wallS": 53.88
+    },
+    {
+     "cmd": "bun run check",
+     "load1Before": 4.04,
+     "rc": 1,
+     "wallS": 36.42
+    },
+    {
+     "cmd": "bun run check",
+     "load1Before": 6.5,
+     "rc": 0,
+     "wallS": 35.48
+    }
+   ],
+   "wallS": {
+    "runs": [
+     53.88,
+     36.42,
+     35.48
+    ],
+    "median": 36.42,
+    "min": 35.48,
+    "max": 53.88
+   },
+   "rc": [
+    0,
+    1,
+    0
+   ]
+  },
+  "test-changed": {
+   "meta": [
+    {
+     "cmd": "append a comment line to packages/engine/src/text.ts; bun run test:changed; git checkout -- packages/engine/src/text.ts",
+     "load1Before": 7.76,
+     "rc": 0,
+     "wallS": 23.56
+    },
+    {
+     "cmd": "append a comment line to packages/engine/src/text.ts; bun run test:changed; git checkout -- packages/engine/src/text.ts",
+     "load1Before": 8.66,
+     "rc": 0,
+     "wallS": 23.94
+    },
+    {
+     "cmd": "append a comment line to packages/engine/src/text.ts; bun run test:changed; git checkout -- packages/engine/src/text.ts",
+     "load1Before": 9.58,
+     "rc": 0,
+     "wallS": 23.97
+    }
+   ],
+   "wallS": {
+    "runs": [
+     23.56,
+     23.94,
+     23.97
+    ],
+    "median": 23.94,
+    "min": 23.56,
+    "max": 23.97
+   },
+   "rc": [
+    0,
+    0,
+    0
+   ]
+  },
+  "funnel": {
+   "meta": [
+    {
+     "cmd": "bun run funnel --jobs 4",
+     "load1Before": 10.0,
+     "rc": 0,
+     "wallS": 12.07
+    },
+    {
+     "cmd": "bun run funnel --jobs 4",
+     "load1Before": 9.29,
+     "rc": 0,
+     "wallS": 11.84
+    },
+    {
+     "cmd": "bun run funnel --jobs 4",
+     "load1Before": 8.98,
+     "rc": 0,
+     "wallS": 11.53
+    }
+   ],
+   "wallS": {
+    "runs": [
+     12.07,
+     11.84,
+     11.53
+    ],
+    "median": 11.84,
+    "min": 11.53,
+    "max": 12.07
+   },
+   "rc": [
+    0,
+    0,
+    0
+   ]
+  }
+ },
+ "reader-time": [
+  {
+   "meta": {
+    "cmd": "bun packages/sim/src/lab/reader-time.ts --pools .local/realuse1-e/pools.jsonl --calls 60 --spend-ledger .local/ledger.jsonl --spend-cap 1 --run-label realuse1-e-reader-time-1 --json .local/realuse1-e/reader-time.1.json",
+    "load1Before": 2.16,
+    "rc": 0,
+    "wallS": 235.16
+   },
+   "model": "claude-haiku-5-5",
+   "pools": 60,
+   "waitMs": 2500,
+   "off": {
+    "calls": 60,
+    "failed": 0,
+    "p50Ms": 1140,
+    "p90Ms": 1515,
+    "ttftP50Ms": 463,
+    "overWait": 1,
+    "thought": 0,
+    "meanInputTokens": 2872,
+    "meanCachedTokens": 929,
+    "meanOutputTokens": 184,
+    "meanCostUsd": 0.00029580458333333345,
+    "totalCostUsd": 0.017748275000000008,
+    "parsed": 60,
+    "flaggedItems": 55
+   },
+   "low": {
+    "calls": 60,
+    "failed": 0,
+    "p50Ms": 2812,
+    "p90Ms": 4387,
+    "ttftP50Ms": 2483,
+    "overWait": 34,
+    "thought": 44,
+    "meanInputTokens": 2873,
+    "meanCachedTokens": 930,
+    "meanOutputTokens": 505,
+    "meanCostUsd": 0.0004562581666666667,
+    "totalCostUsd": 0.027375490000000002,
+    "parsed": 60,
+    "flaggedItems": 56
+   },
+   "agreement": {
+    "both": 60,
+    "same": 45
+   }
+  },
+  {
+   "meta": {
+    "cmd": "bun packages/sim/src/lab/reader-time.ts --pools .local/realuse1-e/pools.jsonl --calls 60 --spend-ledger .local/ledger.jsonl --spend-cap 1 --run-label realuse1-e-reader-time-2 --json .local/realuse1-e/reader-time.2.json",
+    "load1Before": 0.09,
+    "rc": 0,
+    "wallS": 244.0
+   },
+   "model": "claude-haiku-5-5",
+   "pools": 60,
+   "waitMs": 2500,
+   "off": {
+    "calls": 60,
+    "failed": 0,
+    "p50Ms": 1123,
+    "p90Ms": 1485,
+    "ttftP50Ms": 470,
+    "overWait": 1,
+    "thought": 0,
+    "meanInputTokens": 2872,
+    "meanCachedTokens": 945,
+    "meanOutputTokens": 169,
+    "meanCostUsd": 0.000286435,
+    "totalCostUsd": 0.0171861,
+    "parsed": 60,
+    "flaggedItems": 53
+   },
+   "low": {
+    "calls": 60,
+    "failed": 0,
+    "p50Ms": 3095,
+    "p90Ms": 4192,
+    "ttftP50Ms": 2607,
+    "overWait": 41,
+    "thought": 43,
+    "meanInputTokens": 2873,
+    "meanCachedTokens": 946,
+    "meanOutputTokens": 516,
+    "meanCostUsd": 0.00046027833333333327,
+    "totalCostUsd": 0.027616699999999998,
+    "parsed": 60,
+    "flaggedItems": 53
+   },
+   "agreement": {
+    "both": 60,
+    "same": 43
+   }
+  },
+  {
+   "meta": {
+    "cmd": "bun packages/sim/src/lab/reader-time.ts --pools .local/realuse1-e/pools.jsonl --calls 60 --spend-ledger .local/ledger.jsonl --spend-cap 1 --run-label realuse1-e-reader-time-3 --json .local/realuse1-e/reader-time.3.json",
+    "load1Before": 0.01,
+    "rc": 0,
+    "wallS": 236.88
+   },
+   "model": "claude-haiku-5-5",
+   "pools": 60,
+   "waitMs": 2500,
+   "off": {
+    "calls": 60,
+    "failed": 0,
+    "p50Ms": 1081,
+    "p90Ms": 1390,
+    "ttftP50Ms": 435,
+    "overWait": 0,
+    "thought": 0,
+    "meanInputTokens": 2872,
+    "meanCachedTokens": 945,
+    "meanOutputTokens": 169,
+    "meanCostUsd": 0.00028681000000000003,
+    "totalCostUsd": 0.0172086,
+    "parsed": 60,
+    "flaggedItems": 61
+   },
+   "low": {
+    "calls": 60,
+    "failed": 0,
+    "p50Ms": 3001,
+    "p90Ms": 4292,
+    "ttftP50Ms": 2624,
+    "overWait": 38,
+    "thought": 46,
+    "meanInputTokens": 2873,
+    "meanCachedTokens": 946,
+    "meanOutputTokens": 541,
+    "meanCostUsd": 0.000472595,
+    "totalCostUsd": 0.0283557,
+    "parsed": 60,
+    "flaggedItems": 53
+   },
+   "agreement": {
+    "both": 60,
+    "same": 45
+   }
+  }
+ ],
+ "concurrent-rate-sweep": {
+  "cmd": "bun packages/engine/bench/concurrent.bench.ts <rate> [8 2]",
+  "runs": [
+   {
+    "rate": 200,
+    "gatePool": 0,
+    "run": 1,
+    "observeP50Ms": 3.62,
+    "observeP99Ms": 33.6,
+    "observeMaxMs": 56.23,
+    "cpuPct": 95
+   },
+   {
+    "rate": 200,
+    "gatePool": 0,
+    "run": 2,
+    "observeP50Ms": 5.3,
+    "observeP99Ms": 35.36,
+    "observeMaxMs": 45.54,
+    "cpuPct": 99
+   },
+   {
+    "rate": 200,
+    "gatePool": 0,
+    "run": 3,
+    "observeP50Ms": 4.29,
+    "observeP99Ms": 40.0,
+    "observeMaxMs": 47.97,
+    "cpuPct": 98
+   },
+   {
+    "rate": 300,
+    "gatePool": 0,
+    "run": 1,
+    "observeP50Ms": 3.59,
+    "observeP99Ms": 606.19,
+    "observeMaxMs": 609.83,
+    "cpuPct": 97
+   },
+   {
+    "rate": 300,
+    "gatePool": 0,
+    "run": 2,
+    "observeP50Ms": 6.02,
+    "observeP99Ms": 645.37,
+    "observeMaxMs": 652.31,
+    "cpuPct": 98
+   },
+   {
+    "rate": 300,
+    "gatePool": 0,
+    "run": 3,
+    "observeP50Ms": 4.11,
+    "observeP99Ms": 565.2,
+    "observeMaxMs": 568.65,
+    "cpuPct": 97
+   },
+   {
+    "rate": 350,
+    "gatePool": 0,
+    "run": 1,
+    "observeP50Ms": 7.51,
+    "observeP99Ms": 925.92,
+    "observeMaxMs": 927.84,
+    "cpuPct": 100
+   },
+   {
+    "rate": 350,
+    "gatePool": 0,
+    "run": 2,
+    "observeP50Ms": 4.33,
+    "observeP99Ms": 619.35,
+    "observeMaxMs": 639.06,
+    "cpuPct": 106
+   },
+   {
+    "rate": 350,
+    "gatePool": 0,
+    "run": 3,
+    "observeP50Ms": 7.74,
+    "observeP99Ms": 871.83,
+    "observeMaxMs": 875.63,
+    "cpuPct": 102
+   },
+   {
+    "rate": 400,
+    "gatePool": 0,
+    "run": 1,
+    "observeP50Ms": 6.78,
+    "observeP99Ms": 734.55,
+    "observeMaxMs": 746.65,
+    "cpuPct": 107
+   },
+   {
+    "rate": 400,
+    "gatePool": 0,
+    "run": 2,
+    "observeP50Ms": 5.58,
+    "observeP99Ms": 701.42,
+    "observeMaxMs": 712.22,
+    "cpuPct": 106
+   },
+   {
+    "rate": 400,
+    "gatePool": 0,
+    "run": 3,
+    "observeP50Ms": 10.3,
+    "observeP99Ms": 707.43,
+    "observeMaxMs": 716.64,
+    "cpuPct": 109
+   },
+   {
+    "rate": 400,
+    "gatePool": 2,
+    "run": 1,
+    "observeP50Ms": 2.15,
+    "observeP99Ms": 528.31,
+    "observeMaxMs": 534.18,
+    "cpuPct": 101
+   },
+   {
+    "rate": 400,
+    "gatePool": 2,
+    "run": 2,
+    "observeP50Ms": 5.72,
+    "observeP99Ms": 908.43,
+    "observeMaxMs": 909.04,
+    "cpuPct": 102
+   },
+   {
+    "rate": 400,
+    "gatePool": 2,
+    "run": 3,
+    "observeP50Ms": 4.61,
+    "observeP99Ms": 930.64,
+    "observeMaxMs": 931.25,
+    "cpuPct": 106
+   }
+  ]
+ },
+ "cards-disk-test-alone": [
+  {
+   "cmd": "bun test ./packages/sim/src/lab/cards-disk.test.ts",
+   "load1Before": 0.02,
+   "rc": 0,
+   "wallS": 2.37
+  },
+  {
+   "cmd": "bun test ./packages/sim/src/lab/cards-disk.test.ts",
+   "load1Before": 0.02,
+   "rc": 0,
+   "wallS": 1.47
+  },
+  {
+   "cmd": "bun test ./packages/sim/src/lab/cards-disk.test.ts",
+   "load1Before": 0.26,
+   "rc": 0,
+   "wallS": 1.57
+  }
+ ],
+ "reader-time-spend": {
+  "calls": 360,
+  "usd": 0.135491,
+  "cap": 1,
+  "runs": [
+   "realuse1-e-reader-time-1",
+   "realuse1-e-reader-time-2",
+   "realuse1-e-reader-time-3"
+  ]
+ },
+ "funnel-pools": {
+  "cmd": "bun run funnel --jobs 4 -- --reader-log .local/realuse1-e/pools.jsonl",
+  "load1Before": 1.02,
+  "rc": 0,
+  "wallS": 11.37
+ },
+ "machine": {
+  "nproc": 4,
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "memGiB": 15,
+  "kernel": "6.18.44",
+  "bun": "1.4.4",
+  "env": "OPENROUTER_API_KEY and BUN_OPTIONS unset",
+  "date": "2026-11-06"
+ }
+}
