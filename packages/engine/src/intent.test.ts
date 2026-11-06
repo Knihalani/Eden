@@ -321,7 +321,7 @@ describe("intent in the engine (config.intent)", () => {
   });
 });
 
-describe("a one-term intent hit (D159's thresholds: intentMinCoverage 0.2, intentMinMatched 1, intentHits 12)", () => {
+describe("a one-term intent hit at D159's measured arm (coverage 0.2, matched 1, hits 12; not shipped)", () => {
   // The request shares one word ("laptop") with the warranty item's requests and none with its text; the offsite
   // item's requests hold the request's other words, so the warranty hit covers well under half the known idf.
   const warranty = item("w", "Warranty", "Your Dell cover renews on the 3rd; reply to keep it.");

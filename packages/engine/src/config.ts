@@ -401,12 +401,7 @@ export interface EngineConfig {
   cardsLean: boolean;
   /** With `cardsLean`: how old (days, by its date or its start) an unconstrained item may be and still be read. */
   cardsLeanDays: number;
-  /**
-   * Items the intent index may add to a request's candidates, best first. With `intentMinCoverage` and
-   * `intentMinMatched`: 12, 0.2 and 1 in the default since D159 (6, 0.35 and 2 before). Train1–6 seeds 41–42, intent
-   * replayed: reader pool hidden 257 → 270 of 384, decoys 240 → 246, no-model deliveries unchanged; Pi held-out 13
-   * seeds 41–42 (previously read): hidden 48 → 50 of 64, false concerns 1 → 0 of 64.
-   */
+  /** Items the intent index may add to a request's candidates, best first. */
   intentHits: number;
   /** The least share of the request's (known) idf an item's requests must hold to count as a hit. */
   intentMinCoverage: number;
@@ -578,9 +573,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intent: true,
   cardsLean: true,
   cardsLeanDays: 30,
-  intentHits: 12,
-  intentMinCoverage: 0.2,
-  intentMinMatched: 1,
+  intentHits: 6,
+  intentMinCoverage: 0.35,
+  intentMinMatched: 2,
   intentWeight: 1,
   intentSeats: 1,
   askReader: true,
