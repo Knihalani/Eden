@@ -141,7 +141,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **A re-read never revives a held-gone id (D126).** `recheck` checks `ItemCache.isHeldGone` after its fetch and
   before `revive`/`store`: a `sourceRemoved` can land while the fetch is on the wire, and reviving would lift the
   hold and deliver the deleted item. Any new path that stores a re-read or pushed copy must not `revive` an id a
-  removal holds unless that copy is itself newer than the removal (`sourceItems` is: the source sent it again).
+  removal holds unless that copy is itself newer than the removal. `sourceItems` is newer only than a removal that
+  was held before it began: one that lands during its redaction await wins, so it notes the ids held gone before the
+  await and drops any held gone after it but not before (D160; `sync.mark()` cannot tell, removals never bump it).
 - **`checkAhead` runs only once the reader will be called (D134):** after `readAsk`'s empty-pool and `readerGate`
   returns. Moving it back above the gate makes every gated ask pay up to `VERIFY_AHEAD` connector calls.
 - **One deadline per lookup (D140).** `searchLive` takes `deadlineAt` once, after resolving the sources and before
