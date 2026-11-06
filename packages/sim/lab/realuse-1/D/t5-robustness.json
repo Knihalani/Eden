@@ -1,0 +1,2243 @@
+{
+ "t5-all-down": {
+  "precision": null,
+  "recall": 0,
+  "falseFireRate": 0,
+  "falseFires": 0,
+  "silentTurns": 253,
+  "delivered": 0,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 3.703,
+   "fetches": 0,
+   "usefulResultShare": 0,
+   "errors": 11888,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 777
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0,
+   "mrr": 0,
+   "precision": 0,
+   "emptyRate": 1,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5-entities": {
+  "precision": 0.585,
+  "recall": 0.454,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 316,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 0.956,
+   "fetches": 0,
+   "usefulResultShare": 0.447,
+   "errors": 12,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 930
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.869,
+   "mrr": 0.665,
+   "precision": 0.463,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5-err10": {
+  "precision": 0.583,
+  "recall": 0.454,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 319,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 0.998,
+   "fetches": 0,
+   "usefulResultShare": 0.486,
+   "errors": 264,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 968
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.869,
+   "mrr": 0.665,
+   "precision": 0.463,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5-err30": {
+  "precision": 0.589,
+  "recall": 0.454,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 321,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 1.177,
+   "fetches": 0,
+   "usefulResultShare": 0.516,
+   "errors": 1325,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 1038
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.869,
+   "mrr": 0.665,
+   "precision": 0.463,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5-gmail-cal-down": {
+  "precision": 0.563,
+  "recall": 0.184,
+  "falseFireRate": 0,
+  "falseFires": 0,
+  "silentTurns": 253,
+  "delivered": 158,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 1.697,
+   "fetches": 0,
+   "usefulResultShare": 0.385,
+   "errors": 4743,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 909
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.303,
+   "mrr": 0.303,
+   "precision": 0.192,
+   "emptyRate": 0.117,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5-gmail-down": {
+  "precision": 0.739,
+  "recall": 0.328,
+  "falseFireRate": 0,
+  "falseFires": 0,
+  "silentTurns": 253,
+  "delivered": 199,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 1.248,
+   "fetches": 0,
+   "usefulResultShare": 0.487,
+   "errors": 2373,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 914
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.539,
+   "mrr": 0.536,
+   "precision": 0.319,
+   "emptyRate": 0.022,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5-ideal": {
+  "precision": 0.572,
+  "recall": 0.466,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 341,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 0.963,
+   "fetches": 0,
+   "usefulResultShare": 0.446,
+   "errors": 0,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 922
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.883,
+   "mrr": 0.682,
+   "precision": 0.478,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5-realistic": {
+  "precision": 0.585,
+  "recall": 0.454,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 316,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 0.956,
+   "fetches": 0,
+   "usefulResultShare": 0.447,
+   "errors": 12,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 930
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.869,
+   "mrr": 0.665,
+   "precision": 0.463,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5-zoo-a": {
+  "precision": 0.585,
+  "recall": 0.454,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 316,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 0.957,
+   "fetches": 0,
+   "usefulResultShare": 0.451,
+   "errors": 12,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 929
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.869,
+   "mrr": 0.665,
+   "precision": 0.463,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5-zoo-b": {
+  "precision": 0.585,
+  "recall": 0.454,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 316,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 0.957,
+   "fetches": 0,
+   "usefulResultShare": 0.46,
+   "errors": 12,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 929
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.869,
+   "mrr": 0.665,
+   "precision": 0.463,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5-zoo-tune": {
+  "precision": 0.585,
+  "recall": 0.454,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 316,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 0.956,
+   "fetches": 0,
+   "usefulResultShare": 0.447,
+   "errors": 12,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 930
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.869,
+   "mrr": 0.665,
+   "precision": 0.463,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5ns-gmail-down": {
+  "precision": 0.734,
+  "recall": 0.316,
+  "falseFireRate": 0,
+  "falseFires": 0,
+  "silentTurns": 253,
+  "delivered": 184,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 6.748,
+   "fetches": 0,
+   "usefulResultShare": 0.472,
+   "errors": 596,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 773
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.519,
+   "mrr": 0.517,
+   "precision": 0.34,
+   "emptyRate": 0.042,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5ns-ideal": {
+  "precision": 0.589,
+  "recall": 0.472,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 331,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 6.792,
+   "fetches": 0,
+   "usefulResultShare": 0.356,
+   "errors": 0,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 766
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.889,
+   "mrr": 0.68,
+   "precision": 0.482,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5ns-realistic": {
+  "precision": 0.665,
+  "recall": 0.442,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 275,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 7.584,
+   "fetches": 0,
+   "usefulResultShare": 0.419,
+   "errors": 30,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 771
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.856,
+   "mrr": 0.65,
+   "precision": 0.496,
+   "emptyRate": 0.017,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5ns-zoo-a": {
+  "precision": 0.676,
+  "recall": 0.429,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 262,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 7.617,
+   "fetches": 0,
+   "usefulResultShare": 0.344,
+   "errors": 31,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 771
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.847,
+   "mrr": 0.636,
+   "precision": 0.487,
+   "emptyRate": 0.019,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5ns-zoo-b": {
+  "precision": 0.605,
+  "recall": 0.439,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 301,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 7.332,
+   "fetches": 0,
+   "usefulResultShare": 0.39,
+   "errors": 30,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 769
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.883,
+   "mrr": 0.672,
+   "precision": 0.481,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5ns-zoo-tune": {
+  "precision": 0.664,
+  "recall": 0.433,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 274,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 7.475,
+   "fetches": 0,
+   "usefulResultShare": 0.356,
+   "errors": 30,
+   "limited": 0,
+   "aborted": 0,
+   "lookups": 772
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.861,
+   "mrr": 0.651,
+   "precision": 0.492,
+   "emptyRate": 0.014,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5r-healthy": {
+  "precision": 0.585,
+  "recall": 0.454,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 316,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 0.954,
+   "fetches": 0,
+   "usefulResultShare": 0.446,
+   "errors": 10,
+   "limited": 0,
+   "aborted": 6,
+   "lookups": 931
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.869,
+   "mrr": 0.665,
+   "precision": 0.463,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5r-rate02-err10": {
+  "precision": null,
+  "recall": 0,
+  "falseFireRate": 0,
+  "falseFires": 0,
+  "silentTurns": 253,
+  "delivered": 0,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 4.347,
+   "fetches": 0,
+   "usefulResultShare": 0,
+   "errors": 0,
+   "limited": 12365,
+   "aborted": 22,
+   "lookups": 777
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0,
+   "mrr": 0,
+   "precision": 0,
+   "emptyRate": 1,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5r-rate02": {
+  "precision": null,
+  "recall": 0,
+  "falseFireRate": 0,
+  "falseFires": 0,
+  "silentTurns": 253,
+  "delivered": 0,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 4.347,
+   "fetches": 0,
+   "usefulResultShare": 0,
+   "errors": 0,
+   "limited": 12365,
+   "aborted": 22,
+   "lookups": 777
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0,
+   "mrr": 0,
+   "precision": 0,
+   "emptyRate": 1,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5r-rate1": {
+  "precision": 0.586,
+  "recall": 0.454,
+  "falseFireRate": 0.008,
+  "falseFires": 2,
+  "silentTurns": 253,
+  "delivered": 319,
+  "turns": 1210,
+  "updates": {
+   "planned": 0,
+   "applied": 0,
+   "updatedDelivered": 0,
+   "staleDelivered": 0
+  },
+  "deletes": {
+   "planned": 0,
+   "applied": 0,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "reReadsPerTurn": 0.0,
+  "sources": {
+   "callsPerLookup": 1.08,
+   "fetches": 0,
+   "usefulResultShare": 0.415,
+   "errors": 15,
+   "limited": 2226,
+   "aborted": 6,
+   "lookups": 978
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.869,
+   "mrr": 0.665,
+   "precision": 0.463,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  },
+  "privacy": {
+   "secretsPlanted": 32,
+   "secretsLeaked": 0,
+   "injectionItemsDelivered": 0,
+   "deliveredNotInert": 0
+  }
+ },
+ "t5r-rate02-afterfix": {
+  "precision": 0.599,
+  "recall": 0.46,
+  "falseFireRate": 0.008,
+  "sources": {
+   "callsPerLookup": 1.281,
+   "fetches": 0,
+   "usefulResultShare": 0.417,
+   "errors": 8,
+   "limited": 2864,
+   "aborted": 10,
+   "lookups": 1018
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.869,
+   "mrr": 0.665,
+   "precision": 0.464,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  }
+ },
+ "t5r-rate02-err10-afterfix": {
+  "precision": 0.614,
+  "recall": 0.466,
+  "falseFireRate": 0.004,
+  "sources": {
+   "callsPerLookup": 1.365,
+   "fetches": 0,
+   "usefulResultShare": 0.383,
+   "errors": 138,
+   "limited": 2955,
+   "aborted": 9,
+   "lookups": 1034
+  },
+  "ask": {
+   "cases": 360,
+   "recallAt5": 0.869,
+   "mrr": 0.665,
+   "precision": 0.465,
+   "emptyRate": 0,
+   "usedModelRate": 0
+  }
+ },
+ "askHonesty": {
+  "before": [
+   {
+    "profile": "healthy",
+    "timeScale": 0,
+    "asks": 360,
+    "recallAt5": 0.869,
+    "withUnreached": 6,
+    "honest": 6,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 7,
+    "statuses": {
+     "ok": 1794,
+     "error": 6
+    },
+    "example": "Could not reach drive (failed): this answer may be missing what they hold."
+   },
+   {
+    "profile": "errors-10pct",
+    "timeScale": 0,
+    "asks": 360,
+    "recallAt5": 0.847,
+    "withUnreached": 154,
+    "honest": 154,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 4,
+    "statuses": {
+     "ok": 1612,
+     "error": 188
+    },
+    "example": "Could not reach calendar (failed): this answer may be missing what they hold."
+   },
+   {
+    "profile": "errors-30pct",
+    "timeScale": 0,
+    "asks": 360,
+    "recallAt5": 0.789,
+    "withUnreached": 308,
+    "honest": 308,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 3,
+    "statuses": {
+     "error": 553,
+     "ok": 1247
+    },
+    "example": "Could not reach crm (failed), calendar (failed), gmail (failed): this answer may be missing what they hold."
+   },
+   {
+    "profile": "gmail-down",
+    "timeScale": 0,
+    "asks": 360,
+    "recallAt5": 0.511,
+    "withUnreached": 360,
+    "honest": 360,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 0,
+    "statuses": {
+     "ok": 1433,
+     "error": 367
+    },
+    "example": "Could not reach gmail (failed): this answer may be missing what they hold."
+   },
+   {
+    "profile": "gmail+calendar-down",
+    "timeScale": 0,
+    "asks": 360,
+    "recallAt5": 0.303,
+    "withUnreached": 360,
+    "honest": 360,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 0,
+    "statuses": {
+     "ok": 1076,
+     "error": 724
+    },
+    "example": "Could not reach calendar (failed), gmail (failed): this answer may be missing what they hold."
+   },
+   {
+    "profile": "all-down",
+    "timeScale": 0,
+    "asks": 360,
+    "recallAt5": 0,
+    "withUnreached": 360,
+    "honest": 360,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 0,
+    "statuses": {
+     "error": 1800
+    },
+    "example": "Could not reach crm (failed), slack (failed), calendar (failed), gmail (failed), drive (failed), so this is not an all-clear: nothing was checked."
+   },
+   {
+    "profile": "rate-1-per-s",
+    "timeScale": 0.05,
+    "asks": 360,
+    "recallAt5": 0.464,
+    "withUnreached": 352,
+    "honest": 352,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 2,
+    "statuses": {
+     "error": 1046,
+     "ok": 737,
+     "timeout": 9,
+     "busy": 8
+    },
+    "example": "Could not reach crm (failed), calendar (failed), drive (failed): this answer may be missing what they hold."
+   },
+   {
+    "profile": "rate-0.2-per-s",
+    "timeScale": 0.05,
+    "asks": 360,
+    "recallAt5": 0,
+    "withUnreached": 360,
+    "honest": 360,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 0,
+    "statuses": {
+     "error": 1775,
+     "timeout": 12,
+     "busy": 13
+    },
+    "example": "Could not reach crm (failed), slack (failed), calendar (failed), gmail (failed), drive (failed), so this is not an all-clear: nothing was checked."
+   },
+   {
+    "profile": "rate-0.2-per-s+errors-10pct",
+    "timeScale": 0.05,
+    "asks": 360,
+    "recallAt5": 0,
+    "withUnreached": 360,
+    "honest": 360,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 0,
+    "statuses": {
+     "error": 1775,
+     "timeout": 12,
+     "busy": 13
+    },
+    "example": "Could not reach crm (failed), slack (failed), calendar (failed), gmail (failed), drive (failed), so this is not an all-clear: nothing was checked."
+   }
+  ],
+  "afterBucketFix": [
+   {
+    "profile": "healthy",
+    "timeScale": 0,
+    "asks": 360,
+    "recallAt5": 0.869,
+    "withUnreached": 6,
+    "honest": 6,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 7,
+    "statuses": {
+     "ok": 1794,
+     "error": 6
+    },
+    "example": "Could not reach drive (failed): this answer may be missing what they hold."
+   },
+   {
+    "profile": "errors-10pct",
+    "timeScale": 0,
+    "asks": 360,
+    "recallAt5": 0.847,
+    "withUnreached": 154,
+    "honest": 154,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 4,
+    "statuses": {
+     "ok": 1612,
+     "error": 188
+    },
+    "example": "Could not reach calendar (failed): this answer may be missing what they hold."
+   },
+   {
+    "profile": "errors-30pct",
+    "timeScale": 0,
+    "asks": 360,
+    "recallAt5": 0.789,
+    "withUnreached": 308,
+    "honest": 308,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 3,
+    "statuses": {
+     "error": 553,
+     "ok": 1247
+    },
+    "example": "Could not reach crm (failed), calendar (failed), gmail (failed): this answer may be missing what they hold."
+   },
+   {
+    "profile": "gmail-down",
+    "timeScale": 0,
+    "asks": 360,
+    "recallAt5": 0.511,
+    "withUnreached": 360,
+    "honest": 360,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 0,
+    "statuses": {
+     "ok": 1433,
+     "error": 367
+    },
+    "example": "Could not reach gmail (failed): this answer may be missing what they hold."
+   },
+   {
+    "profile": "gmail+calendar-down",
+    "timeScale": 0,
+    "asks": 360,
+    "recallAt5": 0.303,
+    "withUnreached": 360,
+    "honest": 360,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 0,
+    "statuses": {
+     "ok": 1076,
+     "error": 724
+    },
+    "example": "Could not reach calendar (failed), gmail (failed): this answer may be missing what they hold."
+   },
+   {
+    "profile": "all-down",
+    "timeScale": 0,
+    "asks": 360,
+    "recallAt5": 0,
+    "withUnreached": 360,
+    "honest": 360,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 0,
+    "statuses": {
+     "error": 1800
+    },
+    "example": "Could not reach crm (failed), slack (failed), calendar (failed), gmail (failed), drive (failed), so this is not an all-clear: nothing was checked."
+   },
+   {
+    "profile": "rate-1-per-s",
+    "timeScale": 0.05,
+    "asks": 360,
+    "recallAt5": 0.483,
+    "withUnreached": 348,
+    "honest": 348,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 1,
+    "statuses": {
+     "error": 1054,
+     "ok": 727,
+     "timeout": 8,
+     "busy": 11
+    },
+    "example": "Could not reach crm (failed), calendar (failed), drive (failed): this answer may be missing what they hold."
+   },
+   {
+    "profile": "rate-0.2-per-s",
+    "timeScale": 0.05,
+    "asks": 360,
+    "recallAt5": 0.167,
+    "withUnreached": 357,
+    "honest": 357,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 0,
+    "statuses": {
+     "error": 1532,
+     "ok": 228,
+     "busy": 31,
+     "timeout": 9
+    },
+    "example": "Could not reach crm (failed), calendar (failed), drive (failed): this answer may be missing what they hold."
+   },
+   {
+    "profile": "rate-0.2-per-s+errors-10pct",
+    "timeScale": 0.05,
+    "asks": 360,
+    "recallAt5": 0.156,
+    "withUnreached": 359,
+    "honest": 359,
+    "falseAllClear": 0,
+    "silentAboutFailure": 0,
+    "allClearWhenHealthy": 0,
+    "statuses": {
+     "error": 1548,
+     "ok": 199,
+     "busy": 44,
+     "timeout": 9
+    },
+    "example": "Could not reach crm (failed), calendar (failed), drive (failed): this answer may be missing what they hold."
+   }
+  ]
+ },
+ "perfFaults": {
+  "before": {
+   "faults": [
+    {
+     "fromS": 30,
+     "toS": 60,
+     "what": "gmail outage"
+    },
+    {
+     "fromS": 75,
+     "toS": 105,
+     "what": "drive 5x slower"
+    },
+    {
+     "fromS": 120,
+     "toS": 150,
+     "what": "crm limited to 0.2 req/s per user"
+    }
+   ],
+   "failedOpen": 0,
+   "requests": 13117,
+   "inTimeRate": 0.167,
+   "needTurns": 1382,
+   "latency": {
+    "ask": {
+     "n": 257,
+     "p50": 636.34,
+     "p95": 1504.68,
+     "p99": 1507.22,
+     "max": 1508.31
+    },
+    "observe": {
+     "n": 5971,
+     "p50": 0.82,
+     "p95": 2.68,
+     "p99": 5.87,
+     "max": 38.7
+    },
+    "observe:user_message": {
+     "n": 2232,
+     "p50": 1.34,
+     "p95": 3,
+     "p99": 8.15,
+     "max": 19.2
+    }
+   },
+   "timeToContext": {
+    "n": 371,
+    "p50": 1504.75,
+    "p95": 4034.1,
+    "p99": 7698.98
+   },
+   "windows": [
+    {
+     "t": 0,
+     "events": 341,
+     "observeP50": 0.87,
+     "observeP99": 10.91,
+     "failed": 0,
+     "needTurns": 94,
+     "needInTime": 15
+    },
+    {
+     "t": 5,
+     "events": 551,
+     "observeP50": 0.66,
+     "observeP99": 5.55,
+     "failed": 0,
+     "needTurns": 122,
+     "needInTime": 11
+    },
+    {
+     "t": 10,
+     "events": 215,
+     "observeP50": 0.64,
+     "observeP99": 3.57,
+     "failed": 0,
+     "needTurns": 22,
+     "needInTime": 2
+    },
+    {
+     "t": 15,
+     "events": 130,
+     "observeP50": 0.78,
+     "observeP99": 2.55,
+     "failed": 0,
+     "needTurns": 29,
+     "needInTime": 3
+    },
+    {
+     "t": 20,
+     "events": 134,
+     "observeP50": 0.91,
+     "observeP99": 5.43,
+     "failed": 0,
+     "needTurns": 37,
+     "needInTime": 9
+    },
+    {
+     "t": 25,
+     "events": 179,
+     "observeP50": 0.96,
+     "observeP99": 3.32,
+     "failed": 0,
+     "needTurns": 43,
+     "needInTime": 8
+    },
+    {
+     "t": 30,
+     "events": 178,
+     "observeP50": 0.96,
+     "observeP99": 5.62,
+     "failed": 0,
+     "needTurns": 40,
+     "needInTime": 4
+    },
+    {
+     "t": 35,
+     "events": 144,
+     "observeP50": 0.96,
+     "observeP99": 3.22,
+     "failed": 0,
+     "needTurns": 36,
+     "needInTime": 1
+    },
+    {
+     "t": 40,
+     "events": 166,
+     "observeP50": 0.97,
+     "observeP99": 5.19,
+     "failed": 0,
+     "needTurns": 43,
+     "needInTime": 6
+    },
+    {
+     "t": 45,
+     "events": 162,
+     "observeP50": 0.88,
+     "observeP99": 4.67,
+     "failed": 0,
+     "needTurns": 43,
+     "needInTime": 5
+    },
+    {
+     "t": 50,
+     "events": 164,
+     "observeP50": 0.87,
+     "observeP99": 2.85,
+     "failed": 0,
+     "needTurns": 40,
+     "needInTime": 4
+    },
+    {
+     "t": 55,
+     "events": 169,
+     "observeP50": 0.82,
+     "observeP99": 8.65,
+     "failed": 0,
+     "needTurns": 44,
+     "needInTime": 5
+    },
+    {
+     "t": 60,
+     "events": 169,
+     "observeP50": 0.68,
+     "observeP99": 2.77,
+     "failed": 0,
+     "needTurns": 32,
+     "needInTime": 6
+    },
+    {
+     "t": 65,
+     "events": 165,
+     "observeP50": 0.77,
+     "observeP99": 3.28,
+     "failed": 0,
+     "needTurns": 45,
+     "needInTime": 6
+    },
+    {
+     "t": 70,
+     "events": 165,
+     "observeP50": 0.79,
+     "observeP99": 3.42,
+     "failed": 0,
+     "needTurns": 39,
+     "needInTime": 9
+    },
+    {
+     "t": 75,
+     "events": 155,
+     "observeP50": 0.83,
+     "observeP99": 3.37,
+     "failed": 0,
+     "needTurns": 32,
+     "needInTime": 7
+    },
+    {
+     "t": 80,
+     "events": 139,
+     "observeP50": 1.05,
+     "observeP99": 3.03,
+     "failed": 0,
+     "needTurns": 33,
+     "needInTime": 7
+    },
+    {
+     "t": 85,
+     "events": 174,
+     "observeP50": 0.85,
+     "observeP99": 3.65,
+     "failed": 0,
+     "needTurns": 44,
+     "needInTime": 9
+    },
+    {
+     "t": 90,
+     "events": 196,
+     "observeP50": 0.96,
+     "observeP99": 6.09,
+     "failed": 0,
+     "needTurns": 48,
+     "needInTime": 8
+    },
+    {
+     "t": 95,
+     "events": 146,
+     "observeP50": 0.81,
+     "observeP99": 2.88,
+     "failed": 0,
+     "needTurns": 22,
+     "needInTime": 2
+    },
+    {
+     "t": 100,
+     "events": 147,
+     "observeP50": 1.01,
+     "observeP99": 4.22,
+     "failed": 0,
+     "needTurns": 30,
+     "needInTime": 6
+    },
+    {
+     "t": 105,
+     "events": 182,
+     "observeP50": 0.89,
+     "observeP99": 5.22,
+     "failed": 0,
+     "needTurns": 44,
+     "needInTime": 7
+    },
+    {
+     "t": 110,
+     "events": 153,
+     "observeP50": 0.74,
+     "observeP99": 3.63,
+     "failed": 0,
+     "needTurns": 42,
+     "needInTime": 5
+    },
+    {
+     "t": 115,
+     "events": 151,
+     "observeP50": 0.85,
+     "observeP99": 3.79,
+     "failed": 0,
+     "needTurns": 37,
+     "needInTime": 5
+    },
+    {
+     "t": 120,
+     "events": 156,
+     "observeP50": 0.76,
+     "observeP99": 4.61,
+     "failed": 0,
+     "needTurns": 36,
+     "needInTime": 7
+    },
+    {
+     "t": 125,
+     "events": 174,
+     "observeP50": 0.71,
+     "observeP99": 5.49,
+     "failed": 0,
+     "needTurns": 33,
+     "needInTime": 8
+    },
+    {
+     "t": 130,
+     "events": 158,
+     "observeP50": 0.94,
+     "observeP99": 2.91,
+     "failed": 0,
+     "needTurns": 41,
+     "needInTime": 10
+    },
+    {
+     "t": 135,
+     "events": 148,
+     "observeP50": 0.64,
+     "observeP99": 2.68,
+     "failed": 0,
+     "needTurns": 27,
+     "needInTime": 6
+    },
+    {
+     "t": 140,
+     "events": 186,
+     "observeP50": 0.82,
+     "observeP99": 6.51,
+     "failed": 0,
+     "needTurns": 51,
+     "needInTime": 15
+    },
+    {
+     "t": 145,
+     "events": 169,
+     "observeP50": 0.72,
+     "observeP99": 4.81,
+     "failed": 0,
+     "needTurns": 30,
+     "needInTime": 8
+    },
+    {
+     "t": 150,
+     "events": 143,
+     "observeP50": 0.76,
+     "observeP99": 9.97,
+     "failed": 0,
+     "needTurns": 31,
+     "needInTime": 10
+    },
+    {
+     "t": 155,
+     "events": 173,
+     "observeP50": 0.76,
+     "observeP99": 3.72,
+     "failed": 0,
+     "needTurns": 37,
+     "needInTime": 8
+    },
+    {
+     "t": 160,
+     "events": 189,
+     "observeP50": 0.91,
+     "observeP99": 19.2,
+     "failed": 0,
+     "needTurns": 55,
+     "needInTime": 9
+    }
+   ],
+   "server": {
+    "cpuPercent": 13.8,
+    "rssMb": 1212.3,
+    "heapUsedMb": 825.1,
+    "sourceCalls": 16623,
+    "sources": {
+     "gmail": {
+      "calls": 3214,
+      "errors": 544,
+      "limited": 0
+     },
+     "calendar": {
+      "calls": 3595,
+      "errors": 7,
+      "limited": 0
+     },
+     "drive": {
+      "calls": 3257,
+      "errors": 21,
+      "limited": 0
+     },
+     "crm": {
+      "calls": 3234,
+      "errors": 14,
+      "limited": 444
+     },
+     "slack": {
+      "calls": 3341,
+      "errors": 11,
+      "limited": 0
+     }
+    },
+    "lagMs": {
+     "p50": 0.09895299999698182,
+     "p99": 2.679301000000123,
+     "max": 192.72079900000017
+    },
+    "modelCalls": 0
+   }
+  },
+  "afterBucketFix": {
+   "faults": [
+    {
+     "fromS": 30,
+     "toS": 60,
+     "what": "gmail outage"
+    },
+    {
+     "fromS": 75,
+     "toS": 105,
+     "what": "drive 5x slower"
+    },
+    {
+     "fromS": 120,
+     "toS": 150,
+     "what": "crm limited to 0.2 req/s per user"
+    }
+   ],
+   "failedOpen": 0,
+   "requests": 13079,
+   "inTimeRate": 0.198,
+   "needTurns": 1378,
+   "latency": {
+    "ask": {
+     "n": 257,
+     "p50": 637.02,
+     "p95": 1504.41,
+     "p99": 1509.35,
+     "max": 1511.35
+    },
+    "observe": {
+     "n": 5952,
+     "p50": 0.77,
+     "p95": 2.47,
+     "p99": 5.1,
+     "max": 21.06
+    },
+    "observe:user_message": {
+     "n": 2215,
+     "p50": 1.24,
+     "p95": 2.91,
+     "p99": 5.43,
+     "max": 16.95
+    }
+   },
+   "timeToContext": {
+    "n": 410,
+    "p50": 1508.32,
+    "p95": 4318.03,
+    "p99": 15493.75
+   },
+   "windows": [
+    {
+     "t": 0,
+     "events": 342,
+     "observeP50": 0.78,
+     "observeP99": 13.32,
+     "failed": 0,
+     "needTurns": 94,
+     "needInTime": 18
+    },
+    {
+     "t": 5,
+     "events": 550,
+     "observeP50": 0.59,
+     "observeP99": 5.78,
+     "failed": 0,
+     "needTurns": 122,
+     "needInTime": 16
+    },
+    {
+     "t": 10,
+     "events": 215,
+     "observeP50": 0.6,
+     "observeP99": 3.11,
+     "failed": 0,
+     "needTurns": 22,
+     "needInTime": 3
+    },
+    {
+     "t": 15,
+     "events": 130,
+     "observeP50": 0.83,
+     "observeP99": 2.95,
+     "failed": 0,
+     "needTurns": 29,
+     "needInTime": 4
+    },
+    {
+     "t": 20,
+     "events": 134,
+     "observeP50": 0.78,
+     "observeP99": 10.04,
+     "failed": 0,
+     "needTurns": 37,
+     "needInTime": 8
+    },
+    {
+     "t": 25,
+     "events": 178,
+     "observeP50": 0.83,
+     "observeP99": 4.9,
+     "failed": 0,
+     "needTurns": 42,
+     "needInTime": 8
+    },
+    {
+     "t": 30,
+     "events": 179,
+     "observeP50": 0.83,
+     "observeP99": 9.96,
+     "failed": 0,
+     "needTurns": 41,
+     "needInTime": 4
+    },
+    {
+     "t": 35,
+     "events": 144,
+     "observeP50": 0.77,
+     "observeP99": 7.31,
+     "failed": 0,
+     "needTurns": 36,
+     "needInTime": 2
+    },
+    {
+     "t": 40,
+     "events": 166,
+     "observeP50": 0.88,
+     "observeP99": 2.53,
+     "failed": 0,
+     "needTurns": 43,
+     "needInTime": 4
+    },
+    {
+     "t": 45,
+     "events": 163,
+     "observeP50": 0.62,
+     "observeP99": 3.86,
+     "failed": 0,
+     "needTurns": 43,
+     "needInTime": 4
+    },
+    {
+     "t": 50,
+     "events": 163,
+     "observeP50": 0.63,
+     "observeP99": 3.07,
+     "failed": 0,
+     "needTurns": 40,
+     "needInTime": 7
+    },
+    {
+     "t": 55,
+     "events": 169,
+     "observeP50": 0.79,
+     "observeP99": 3.05,
+     "failed": 0,
+     "needTurns": 44,
+     "needInTime": 5
+    },
+    {
+     "t": 60,
+     "events": 169,
+     "observeP50": 0.68,
+     "observeP99": 4.4,
+     "failed": 0,
+     "needTurns": 32,
+     "needInTime": 8
+    },
+    {
+     "t": 65,
+     "events": 165,
+     "observeP50": 0.77,
+     "observeP99": 3.34,
+     "failed": 0,
+     "needTurns": 45,
+     "needInTime": 10
+    },
+    {
+     "t": 70,
+     "events": 165,
+     "observeP50": 0.68,
+     "observeP99": 5.58,
+     "failed": 0,
+     "needTurns": 39,
+     "needInTime": 11
+    },
+    {
+     "t": 75,
+     "events": 155,
+     "observeP50": 0.66,
+     "observeP99": 4.35,
+     "failed": 0,
+     "needTurns": 32,
+     "needInTime": 8
+    },
+    {
+     "t": 80,
+     "events": 139,
+     "observeP50": 0.81,
+     "observeP99": 10.66,
+     "failed": 0,
+     "needTurns": 33,
+     "needInTime": 7
+    },
+    {
+     "t": 85,
+     "events": 174,
+     "observeP50": 0.63,
+     "observeP99": 5.54,
+     "failed": 0,
+     "needTurns": 44,
+     "needInTime": 9
+    },
+    {
+     "t": 90,
+     "events": 196,
+     "observeP50": 0.76,
+     "observeP99": 5.35,
+     "failed": 0,
+     "needTurns": 48,
+     "needInTime": 14
+    },
+    {
+     "t": 95,
+     "events": 147,
+     "observeP50": 0.7,
+     "observeP99": 3.25,
+     "failed": 0,
+     "needTurns": 22,
+     "needInTime": 3
+    },
+    {
+     "t": 100,
+     "events": 146,
+     "observeP50": 0.88,
+     "observeP99": 2.61,
+     "failed": 0,
+     "needTurns": 30,
+     "needInTime": 7
+    },
+    {
+     "t": 105,
+     "events": 182,
+     "observeP50": 0.75,
+     "observeP99": 5.03,
+     "failed": 0,
+     "needTurns": 44,
+     "needInTime": 9
+    },
+    {
+     "t": 110,
+     "events": 153,
+     "observeP50": 0.71,
+     "observeP99": 3,
+     "failed": 0,
+     "needTurns": 42,
+     "needInTime": 5
+    },
+    {
+     "t": 115,
+     "events": 151,
+     "observeP50": 0.87,
+     "observeP99": 4.92,
+     "failed": 0,
+     "needTurns": 37,
+     "needInTime": 9
+    },
+    {
+     "t": 120,
+     "events": 157,
+     "observeP50": 0.8,
+     "observeP99": 3.55,
+     "failed": 0,
+     "needTurns": 37,
+     "needInTime": 10
+    },
+    {
+     "t": 125,
+     "events": 173,
+     "observeP50": 0.73,
+     "observeP99": 6.82,
+     "failed": 0,
+     "needTurns": 32,
+     "needInTime": 10
+    },
+    {
+     "t": 130,
+     "events": 159,
+     "observeP50": 0.83,
+     "observeP99": 2.63,
+     "failed": 0,
+     "needTurns": 42,
+     "needInTime": 12
+    },
+    {
+     "t": 135,
+     "events": 148,
+     "observeP50": 0.87,
+     "observeP99": 3.61,
+     "failed": 0,
+     "needTurns": 26,
+     "needInTime": 5
+    },
+    {
+     "t": 140,
+     "events": 185,
+     "observeP50": 0.89,
+     "observeP99": 12.88,
+     "failed": 0,
+     "needTurns": 51,
+     "needInTime": 20
+    },
+    {
+     "t": 145,
+     "events": 169,
+     "observeP50": 0.83,
+     "observeP99": 3.51,
+     "failed": 0,
+     "needTurns": 30,
+     "needInTime": 6
+    },
+    {
+     "t": 150,
+     "events": 143,
+     "observeP50": 0.83,
+     "observeP99": 8.6,
+     "failed": 0,
+     "needTurns": 31,
+     "needInTime": 11
+    },
+    {
+     "t": 155,
+     "events": 173,
+     "observeP50": 1.02,
+     "observeP99": 6.82,
+     "failed": 0,
+     "needTurns": 37,
+     "needInTime": 6
+    },
+    {
+     "t": 160,
+     "events": 170,
+     "observeP50": 0.97,
+     "observeP99": 8.7,
+     "failed": 0,
+     "needTurns": 51,
+     "needInTime": 10
+    }
+   ],
+   "server": {
+    "cpuPercent": 13.2,
+    "rssMb": 1192.2,
+    "heapUsedMb": 829.2,
+    "sourceCalls": 16711,
+    "sources": {
+     "gmail": {
+      "calls": 3211,
+      "errors": 543,
+      "limited": 0
+     },
+     "calendar": {
+      "calls": 3580,
+      "errors": 5,
+      "limited": 0
+     },
+     "drive": {
+      "calls": 3318,
+      "errors": 12,
+      "limited": 0
+     },
+     "crm": {
+      "calls": 3279,
+      "errors": 18,
+      "limited": 235
+     },
+     "slack": {
+      "calls": 3316,
+      "errors": 18,
+      "limited": 0
+     }
+    },
+    "lagMs": {
+     "p50": 0.0975189999999202,
+     "p99": 2.5366289999983564,
+     "max": 176.7996890000004
+    },
+    "modelCalls": 0
+   }
+  }
+ }
+}

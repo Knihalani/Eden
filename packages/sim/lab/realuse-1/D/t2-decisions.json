@@ -1,0 +1,996 @@
+{
+ "eval": {
+  "live": false,
+  "waitMs": 2000,
+  "planner": true,
+  "inert": [
+   "askReader (needs a reader: pass --reader stub|oracle)",
+   "cards (needs a card maker; the eval wires none, so no card is made or matched)",
+   "intent (needs the card maker's intent requests; not wired)"
+  ],
+  "scenarios": 31,
+  "turns": 148,
+  "scoredTurns": 104,
+  "precision": 0.8275862068965517,
+  "recall": 0.48,
+  "falseFireRate": 0,
+  "counts": {
+   "expected": 50,
+   "found": 24,
+   "delivered": 29,
+   "deliveredExpected": 24,
+   "silentTurns": 68,
+   "falseFires": 0
+  },
+  "modelCallsPerTurn": 0,
+  "costPerTurnUsd": 0,
+  "latencyP50Ms": 0.44615299999998115,
+  "latencyP95Ms": 5.983656999999994,
+  "decisions": {
+   "skipped": 87,
+   "silent": 44,
+   "fallback": 6,
+   "sources": 18,
+   "answer": 6
+  },
+  "plannedLookups": 122,
+  "byCategory": {
+   "adversarial": {
+    "scenarios": 6,
+    "scoredTurns": 19,
+    "precision": 1,
+    "recall": 0.6,
+    "falseFireRate": 0
+   },
+   "follow-ups": {
+    "scenarios": 3,
+    "scoredTurns": 9,
+    "precision": 1,
+    "recall": 0.5,
+    "falseFireRate": 0
+   },
+   "inbox": {
+    "scenarios": 5,
+    "scoredTurns": 19,
+    "precision": 1,
+    "recall": 0.6666666666666666,
+    "falseFireRate": 0
+   },
+   "purchases": {
+    "scenarios": 4,
+    "scoredTurns": 11,
+    "precision": 0.5,
+    "recall": 0.14285714285714285,
+    "falseFireRate": 0
+   },
+   "relationships": {
+    "scenarios": 4,
+    "scoredTurns": 12,
+    "precision": 0.75,
+    "recall": 0.42857142857142855,
+    "falseFireRate": 0
+   },
+   "scheduling": {
+    "scenarios": 6,
+    "scoredTurns": 26,
+    "precision": 0.9,
+    "recall": 0.6,
+    "falseFireRate": 0
+   },
+   "travel": {
+    "scenarios": 3,
+    "scoredTurns": 8,
+    "precision": 0.5,
+    "recall": 0.3333333333333333,
+    "falseFireRate": 0
+   }
+  },
+  "privacy": {
+   "secretsPlanted": 2,
+   "secretsExposed": 3,
+   "secretsLeaked": 0,
+   "injections": 30,
+   "notInert": 0
+  },
+  "ask": {
+   "cases": 6,
+   "answered": 6,
+   "recall": 1
+  }
+ },
+ "funnel": {
+  "minus-all": {
+   "hidden": 122,
+   "decoys": 127,
+   "suites": {
+    "train1": [
+     24,
+     26
+    ],
+    "train2": [
+     16,
+     26
+    ],
+    "train3": [
+     20,
+     19
+    ],
+    "train4": [
+     22,
+     19
+    ],
+    "train5": [
+     22,
+     20
+    ],
+    "train6": [
+     18,
+     17
+    ]
+   },
+   "hiddenDelivered": 24,
+   "decoysDelivered": 42,
+   "callsPerTask": 9.2,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 24,
+    "listed": 98
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 42,
+    "listed": 85
+   },
+   "wallS": 2.549
+  },
+  "minus-anticipate": {
+   "hidden": 281,
+   "decoys": 256,
+   "poolHidden": 278,
+   "poolDecoys": 253,
+   "meanPool": 12.5,
+   "suites": {
+    "train1": [
+     55,
+     52
+    ],
+    "train2": [
+     47,
+     48
+    ],
+    "train3": [
+     41,
+     40
+    ],
+    "train4": [
+     44,
+     39
+    ],
+    "train5": [
+     41,
+     36
+    ],
+    "train6": [
+     53,
+     41
+    ]
+   },
+   "hiddenDelivered": 98,
+   "decoysDelivered": 72,
+   "callsPerTask": 2.7,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 98,
+    "listed": 183
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 72,
+    "listed": 184
+   },
+   "requestCallsPerTask": 2.69,
+   "amortisedCallsPerTask": 3.81,
+   "wallS": 8.625
+  },
+  "minus-askVerdicts": {
+   "hidden": 297,
+   "decoys": 265,
+   "poolHidden": 275,
+   "poolDecoys": 248,
+   "meanPool": 12.0,
+   "suites": {
+    "train1": [
+     57,
+     55
+    ],
+    "train2": [
+     49,
+     50
+    ],
+    "train3": [
+     48,
+     40
+    ],
+    "train4": [
+     44,
+     40
+    ],
+    "train5": [
+     42,
+     40
+    ],
+    "train6": [
+     57,
+     40
+    ]
+   },
+   "hiddenDelivered": 98,
+   "decoysDelivered": 72,
+   "callsPerTask": 3.1,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 98,
+    "listed": 199
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 72,
+    "listed": 193
+   },
+   "requestCallsPerTask": 3.13,
+   "amortisedCallsPerTask": 4.33,
+   "wallS": 7.946
+  },
+  "minus-cards": {
+   "hidden": 214,
+   "decoys": 210,
+   "poolHidden": 232,
+   "poolDecoys": 225,
+   "meanPool": 11.9,
+   "suites": {
+    "train1": [
+     43,
+     43
+    ],
+    "train2": [
+     28,
+     34
+    ],
+    "train3": [
+     36,
+     35
+    ],
+    "train4": [
+     28,
+     32
+    ],
+    "train5": [
+     35,
+     29
+    ],
+    "train6": [
+     44,
+     37
+    ]
+   },
+   "hiddenDelivered": 98,
+   "decoysDelivered": 75,
+   "callsPerTask": 3.1,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 98,
+    "listed": 116
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 75,
+    "listed": 135
+   },
+   "requestCallsPerTask": 3.06,
+   "amortisedCallsPerTask": 4.23,
+   "wallS": 17.313
+  },
+  "minus-compaction": {
+   "hidden": 281,
+   "decoys": 256,
+   "poolHidden": 278,
+   "poolDecoys": 254,
+   "meanPool": 12.5,
+   "suites": {
+    "train1": [
+     55,
+     52
+    ],
+    "train2": [
+     47,
+     48
+    ],
+    "train3": [
+     41,
+     40
+    ],
+    "train4": [
+     44,
+     39
+    ],
+    "train5": [
+     41,
+     36
+    ],
+    "train6": [
+     53,
+     41
+    ]
+   },
+   "hiddenDelivered": 98,
+   "decoysDelivered": 72,
+   "callsPerTask": 3.1,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 98,
+    "listed": 183
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 72,
+    "listed": 184
+   },
+   "requestCallsPerTask": 3.13,
+   "amortisedCallsPerTask": 4.33,
+   "wallS": 8.727
+  },
+  "minus-fallback": {
+   "hidden": 281,
+   "decoys": 256,
+   "poolHidden": 278,
+   "poolDecoys": 254,
+   "meanPool": 12.5,
+   "suites": {
+    "train1": [
+     55,
+     52
+    ],
+    "train2": [
+     47,
+     48
+    ],
+    "train3": [
+     41,
+     40
+    ],
+    "train4": [
+     44,
+     39
+    ],
+    "train5": [
+     41,
+     36
+    ],
+    "train6": [
+     53,
+     41
+    ]
+   },
+   "hiddenDelivered": 97,
+   "decoysDelivered": 68,
+   "callsPerTask": 3.1,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 97,
+    "listed": 184
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 68,
+    "listed": 188
+   },
+   "requestCallsPerTask": 3.13,
+   "amortisedCallsPerTask": 4.33,
+   "wallS": 9.096
+  },
+  "minus-freshness": {
+   "hidden": 281,
+   "decoys": 256,
+   "poolHidden": 278,
+   "poolDecoys": 254,
+   "meanPool": 12.5,
+   "suites": {
+    "train1": [
+     55,
+     52
+    ],
+    "train2": [
+     47,
+     48
+    ],
+    "train3": [
+     41,
+     40
+    ],
+    "train4": [
+     44,
+     39
+    ],
+    "train5": [
+     41,
+     36
+    ],
+    "train6": [
+     53,
+     41
+    ]
+   },
+   "hiddenDelivered": 98,
+   "decoysDelivered": 72,
+   "callsPerTask": 3.1,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 98,
+    "listed": 183
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 72,
+    "listed": 184
+   },
+   "requestCallsPerTask": 3.13,
+   "amortisedCallsPerTask": 4.33,
+   "wallS": 9.03
+  },
+  "minus-graph": {
+   "hidden": 287,
+   "decoys": 255,
+   "poolHidden": 279,
+   "poolDecoys": 253,
+   "meanPool": 12.4,
+   "suites": {
+    "train1": [
+     55,
+     52
+    ],
+    "train2": [
+     48,
+     48
+    ],
+    "train3": [
+     43,
+     40
+    ],
+    "train4": [
+     44,
+     39
+    ],
+    "train5": [
+     42,
+     35
+    ],
+    "train6": [
+     55,
+     41
+    ]
+   },
+   "hiddenDelivered": 93,
+   "decoysDelivered": 70,
+   "callsPerTask": 3.1,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 93,
+    "listed": 194
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 70,
+    "listed": 185
+   },
+   "requestCallsPerTask": 3.08,
+   "amortisedCallsPerTask": 4.27,
+   "wallS": 7.447
+  },
+  "minus-grounds": {
+   "hidden": 281,
+   "decoys": 255,
+   "poolHidden": 276,
+   "poolDecoys": 255,
+   "meanPool": 12.5,
+   "suites": {
+    "train1": [
+     55,
+     52
+    ],
+    "train2": [
+     47,
+     48
+    ],
+    "train3": [
+     42,
+     40
+    ],
+    "train4": [
+     44,
+     39
+    ],
+    "train5": [
+     40,
+     35
+    ],
+    "train6": [
+     53,
+     41
+    ]
+   },
+   "hiddenDelivered": 52,
+   "decoysDelivered": 68,
+   "callsPerTask": 2.9,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 52,
+    "listed": 229
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 68,
+    "listed": 187
+   },
+   "requestCallsPerTask": 2.88,
+   "amortisedCallsPerTask": 4.0,
+   "wallS": 8.411
+  },
+  "minus-intent": {
+   "hidden": 214,
+   "decoys": 211,
+   "poolHidden": 230,
+   "poolDecoys": 229,
+   "meanPool": 12.3,
+   "suites": {
+    "train1": [
+     44,
+     43
+    ],
+    "train2": [
+     28,
+     34
+    ],
+    "train3": [
+     36,
+     35
+    ],
+    "train4": [
+     29,
+     32
+    ],
+    "train5": [
+     35,
+     30
+    ],
+    "train6": [
+     42,
+     37
+    ]
+   },
+   "hiddenDelivered": 97,
+   "decoysDelivered": 72,
+   "callsPerTask": 3.1,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 97,
+    "listed": 117
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 72,
+    "listed": 139
+   },
+   "requestCallsPerTask": 3.13,
+   "amortisedCallsPerTask": 4.33,
+   "wallS": 16.835
+  },
+  "minus-judge": {
+   "hidden": 281,
+   "decoys": 256,
+   "poolHidden": 278,
+   "poolDecoys": 254,
+   "meanPool": 12.5,
+   "suites": {
+    "train1": [
+     55,
+     52
+    ],
+    "train2": [
+     47,
+     48
+    ],
+    "train3": [
+     41,
+     40
+    ],
+    "train4": [
+     44,
+     39
+    ],
+    "train5": [
+     41,
+     36
+    ],
+    "train6": [
+     53,
+     41
+    ]
+   },
+   "hiddenDelivered": 98,
+   "decoysDelivered": 72,
+   "callsPerTask": 3.1,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 98,
+    "listed": 183
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 72,
+    "listed": 184
+   },
+   "requestCallsPerTask": 3.13,
+   "amortisedCallsPerTask": 4.33,
+   "wallS": 8.646
+  },
+  "minus-probeGrace": {
+   "hidden": 281,
+   "decoys": 256,
+   "poolHidden": 278,
+   "poolDecoys": 254,
+   "meanPool": 12.5,
+   "suites": {
+    "train1": [
+     55,
+     52
+    ],
+    "train2": [
+     47,
+     48
+    ],
+    "train3": [
+     41,
+     40
+    ],
+    "train4": [
+     44,
+     39
+    ],
+    "train5": [
+     41,
+     36
+    ],
+    "train6": [
+     53,
+     41
+    ]
+   },
+   "hiddenDelivered": 98,
+   "decoysDelivered": 72,
+   "callsPerTask": 3.1,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 98,
+    "listed": 183
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 72,
+    "listed": 184
+   },
+   "requestCallsPerTask": 3.13,
+   "amortisedCallsPerTask": 4.33,
+   "wallS": 8.724
+  },
+  "minus-probes": {
+   "hidden": 276,
+   "decoys": 250,
+   "poolHidden": 274,
+   "poolDecoys": 245,
+   "meanPool": 12.4,
+   "suites": {
+    "train1": [
+     55,
+     51
+    ],
+    "train2": [
+     46,
+     48
+    ],
+    "train3": [
+     40,
+     37
+    ],
+    "train4": [
+     43,
+     39
+    ],
+    "train5": [
+     40,
+     36
+    ],
+    "train6": [
+     52,
+     39
+    ]
+   },
+   "hiddenDelivered": 89,
+   "decoysDelivered": 67,
+   "callsPerTask": 3.1,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 89,
+    "listed": 187
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 67,
+    "listed": 183
+   },
+   "requestCallsPerTask": 3.14,
+   "amortisedCallsPerTask": 4.39,
+   "wallS": 8.486
+  },
+  "minus-reader": {
+   "hidden": 281,
+   "decoys": 256,
+   "suites": {
+    "train1": [
+     55,
+     52
+    ],
+    "train2": [
+     47,
+     48
+    ],
+    "train3": [
+     41,
+     40
+    ],
+    "train4": [
+     44,
+     39
+    ],
+    "train5": [
+     41,
+     36
+    ],
+    "train6": [
+     53,
+     41
+    ]
+   },
+   "hiddenDelivered": 98,
+   "decoysDelivered": 72,
+   "callsPerTask": 3.1,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 98,
+    "listed": 183
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 72,
+    "listed": 184
+   },
+   "requestCallsPerTask": 3.12,
+   "amortisedCallsPerTask": 4.33,
+   "wallS": 7.936
+  },
+  "minus-slowPathQueue": {
+   "hidden": 281,
+   "decoys": 256,
+   "poolHidden": 278,
+   "poolDecoys": 254,
+   "meanPool": 12.5,
+   "suites": {
+    "train1": [
+     55,
+     52
+    ],
+    "train2": [
+     47,
+     48
+    ],
+    "train3": [
+     41,
+     40
+    ],
+    "train4": [
+     44,
+     39
+    ],
+    "train5": [
+     41,
+     36
+    ],
+    "train6": [
+     53,
+     41
+    ]
+   },
+   "hiddenDelivered": 98,
+   "decoysDelivered": 72,
+   "callsPerTask": 3.1,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 98,
+    "listed": 183
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 72,
+    "listed": 184
+   },
+   "requestCallsPerTask": 3.13,
+   "amortisedCallsPerTask": 4.33,
+   "wallS": 8.831
+  },
+  "minus-sync": {
+   "hidden": 229,
+   "decoys": 203,
+   "poolHidden": 213,
+   "poolDecoys": 189,
+   "meanPool": 11.6,
+   "suites": {
+    "train1": [
+     40,
+     34
+    ],
+    "train2": [
+     31,
+     39
+    ],
+    "train3": [
+     39,
+     34
+    ],
+    "train4": [
+     32,
+     32
+    ],
+    "train5": [
+     38,
+     32
+    ],
+    "train6": [
+     49,
+     32
+    ]
+   },
+   "hiddenDelivered": 96,
+   "decoysDelivered": 74,
+   "callsPerTask": 14.8,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 96,
+    "listed": 133
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 74,
+    "listed": 129
+   },
+   "wallS": 6.4
+  },
+  "replay": {
+   "hidden": 311,
+   "decoys": 137,
+   "poolHidden": 278,
+   "poolDecoys": 254,
+   "meanPool": 12.5,
+   "suites": {
+    "train1": [
+     55,
+     28
+    ],
+    "train2": [
+     49,
+     19
+    ],
+    "train3": [
+     51,
+     20
+    ],
+    "train4": [
+     49,
+     26
+    ],
+    "train5": [
+     50,
+     26
+    ],
+    "train6": [
+     57,
+     18
+    ]
+   },
+   "hiddenDelivered": 278,
+   "decoysDelivered": 91,
+   "callsPerTask": 3.2,
+   "hiddenBy": {
+    "flagged": 258,
+    "rule": 20,
+    "listed": 33
+   },
+   "decoysBy": {
+    "flagged": 23,
+    "rule": 69,
+    "listed": 45
+   },
+   "readerReplay": {
+    "replayed": 651,
+    "sent": 0,
+    "missed": 0,
+    "failed": 0
+   },
+   "requestCallsPerTask": 3.2,
+   "amortisedCallsPerTask": 4.42,
+   "wallS": 10.429,
+   "diag hidden rank -1": "ask-diag: hidden rank -1 45/384: not sent, prefilter rejects 0, not in replay 0, no intent requests 3, requests but no match 42 (no shared term 10, under thresholds 27, passes but past the first intentHits raw hits 5, over thresholds 0)",
+   "diag decoy rank -1": "ask-diag: decoy rank -1 60/384: not sent, prefilter rejects 4, not in replay 0, no intent requests 0, requests but no match 56 (no shared term 25, under thresholds 27, passes but past the first intentHits raw hits 4, over thresholds 0)",
+   "askDiag": [
+    "ask-diag: hidden rank -1 45/384: not sent, prefilter rejects 0, not in replay 0, no intent requests 3, requests but no match 42 (no shared term 10, under thresholds 27, passes but past the first intentHits raw hits 5, over thresholds 0)",
+    "ask-diag: decoy rank -1 60/384: not sent, prefilter rejects 4, not in replay 0, no intent requests 0, requests but no match 56 (no shared term 25, under thresholds 27, passes but past the first intentHits raw hits 4, over thresholds 0)",
+    "ask-diag: not in replay, every row (ranked or not): hidden 0/384, decoy 0/384"
+   ]
+  },
+  "stub": {
+   "hidden": 281,
+   "decoys": 256,
+   "poolHidden": 278,
+   "poolDecoys": 254,
+   "meanPool": 12.5,
+   "suites": {
+    "train1": [
+     55,
+     52
+    ],
+    "train2": [
+     47,
+     48
+    ],
+    "train3": [
+     41,
+     40
+    ],
+    "train4": [
+     44,
+     39
+    ],
+    "train5": [
+     41,
+     36
+    ],
+    "train6": [
+     53,
+     41
+    ]
+   },
+   "hiddenDelivered": 98,
+   "decoysDelivered": 72,
+   "callsPerTask": 3.1,
+   "hiddenBy": {
+    "flagged": 0,
+    "rule": 98,
+    "listed": 183
+   },
+   "decoysBy": {
+    "flagged": 0,
+    "rule": 72,
+    "listed": 184
+   },
+   "requestCallsPerTask": 3.13,
+   "amortisedCallsPerTask": 4.33,
+   "wallS": 10.526,
+   "diag hidden rank -1": "ask-diag: hidden rank -1 45/384: not sent, prefilter rejects 0, not in replay 0, no intent requests 3, requests but no match 42 (no shared term 10, under thresholds 27, passes but past the first intentHits raw hits 5, over thresholds 0)",
+   "diag decoy rank -1": "ask-diag: decoy rank -1 60/384: not sent, prefilter rejects 4, not in replay 0, no intent requests 0, requests but no match 56 (no shared term 25, under thresholds 27, passes but past the first intentHits raw hits 4, over thresholds 0)",
+   "askDiag": [
+    "ask-diag: hidden rank -1 45/384: not sent, prefilter rejects 0, not in replay 0, no intent requests 3, requests but no match 42 (no shared term 10, under thresholds 27, passes but past the first intentHits raw hits 5, over thresholds 0)",
+    "ask-diag: decoy rank -1 60/384: not sent, prefilter rejects 4, not in replay 0, no intent requests 0, requests but no match 56 (no shared term 25, under thresholds 27, passes but past the first intentHits raw hits 4, over thresholds 0)",
+    "ask-diag: not in replay, every row (ranked or not): hidden 0/384, decoy 0/384"
+   ]
+  },
+  "_note": "train1-6, seeds 41-42, --jobs 4, cards+intent replayed (D158). stub = --reader stub; replay = recipe 2a, claude-haiku-5-5 cache md5 47eb6393a75b49c14f0f7b802473fd59. minus-* are stub screens. Measured on b85fc1d9 (before this branch's fixes); after the fixes stub and replay are +0 -0 against these."
+ }
+}
