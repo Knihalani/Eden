@@ -11,12 +11,12 @@ cards-enrich, presets, suites, free, spend` (`.ts`): check `git log origin/main`
 
 | File | Owns |
 |---|---|
-| `suites.ts` | `SUITES` by name, `parseSuites` (`all`, `heldout-all`, `train`), `UNRUN_BLIND` (left out of `all`) |
+| `suites.ts` | `SUITES` by name, `parseSuites` (`all`, `heldout-all`, `train`), `UNRUN_BLIND` (held-out 9-13, left out of `all`; all read already) |
 | `hidden-context.ts`, `hidden-*.ts` | The suites: each plants one item (hidden) or a near-miss decoy (control) per template in a world |
 | `presets.ts` | `PRESETS`: only `default`, `minus-<part>` (one per `PARTS` entry) and `minus-all` (the core), made from @eden/engine (D112); `effective(override)` reads what a preset runs |
 | `hidden-funnel.ts` | The no-model funnel: each task through Eden alone; returned/cached/delivered, decoys, calls, ms; `--ask`, `--cards`, `--intent`, `--reader`, `--timeline`, `--json` |
-| `funnel.ts` | `bun run funnel`: the funnel with a preset, replayed cards, replayed intent requests (`intent-v2.jsonl.gz` when it covers the run, D158; `--intent none` opts out) and `--ask`, and the funnel score; refuses held-out suites without `--blind` |
-| `funnel-merge.ts` | funnel.ts's arithmetic, tested in-process: `defaultJobs` (one process per core at `--time 0`, D139; `--time` > 0 shards concurrently), `groupShards` (blocks of suites × seeds per process at `--time 0`), `mergeParts` (parts to the one-process JSON, perTask from each row's own suite and seed), `amortisedCalls` (merged connector calls), `callMismatches` (processes whose traces miss calls) |
+| `funnel.ts` | `bun run funnel`: the funnel with a preset, replayed cards, replayed intent requests (`intent-v2.jsonl.gz` when it covers the run, D158; `--intent none` opts out) and `--ask`, and the funnel score; refuses held-out suites without `--blind`. With `--jobs N` the per-task output files (`--ask-diag`, `--packets`, `--card-log`, `--reader-log`, `--candidates`) shard: process i writes `<file>.part-<i>`, merged into the named file in one canonical order and deleted, and the ask-diag bucket lines are printed from the merged rows; `--record`, `--timeline`, `--reader live` and `--judge live` keep one process and print why |
+| `funnel-merge.ts` | funnel.ts's arithmetic, tested in-process: `defaultJobs` (one process per core at `--time 0`, D139; `--time` > 0 shards concurrently), `groupShards` (blocks of suites × seeds per process at `--time 0`), `mergeParts` (parts to the one-process JSON, perTask from each row's own suite and seed), `partFiles`/`partArgs`/`mergeLines` (the sharded output files and their canonical order: suite, seed, variant, template, then each line's own), `soloReasons` (what keeps one process, and why), `amortisedCalls` (merged connector calls), `callMismatches` (processes whose traces miss calls) |
 | `flags.ts` | Strict flags for the $0 CLIs (funnel, hidden-funnel, quality-cli): unknown flag, stray argument or missing value exits 2, `--help` prints usage; `labConfig` checks `--config`/`--set` with @eden/engine's `checkEngineConfig` |
 | `pi-ab.ts`, `pi-conditions.ts`, `pi-timeline.ts`, `pi-ab-report.ts` | The live A/B on the Pi harness (the standard agent): conditions `none,tools,eden,both[-judge][~variant][+flag][@w<ms>]`, per-task timelines, report |
 | `hermes-ab.ts` + `hermes-{conditions,host,proxy,worker,anthropic}.ts` | The same A/B on Hermes Agent (Python workers, `../../lab/hermes/`), Eden as MCP server + plugin |
@@ -42,8 +42,13 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
 - **Never tune on held-out suites.** `heldout*` are measurement only; tune on `train` (the broad set) or
   `dev6a`/`dev6b`. Held-out 5–9 are contaminated (D80); 10 and 11 were run several times in the funnel (Haiku
   campaign); 12 was first read by a strong model in D98. A new blind round needs a new suite.
-- **UNRUN_BLIND** keeps unrun blind suites out of `all`; the first run that names one spends it. The list in
-  `suites.ts` still names heldout9–12 although D72, D80, D85 and D98 ran them: do not trust it as a "fresh" list.
+- **UNRUN_BLIND** keeps held-out suites out of `all` so a tuning command cannot spend them. Held-out 9–13 have all
+  been read (D72, D80, D85, D98; held-out 13 backed D112 and the final live run), so none of them is blind: a blind
+  round needs a new suite. funnel.ts says so when a run names one.
+- **`--reader live` and `--judge live` keep the funnel to one process.** A live reader appends its top-up to one
+  reader cache file and spends through one ledger stream; a parallel live top-up (per-process cache parts merged
+  after, headroom split across processes) is not built. `--record` and `--timeline` keep one too (one ledger entry
+  per suite; per-process CPU and RSS would be contended). Diagnostic output files shard (funnel.ts).
 - **Free models (D91):** `<id>:free` needs `--allow-logging` (prompts are logged; sim data only); every request goes
   through one `Pacer` (default 18/min with a free model; the account allows about 20/min and 1,000/day, retries
   count); `--max-requests` caps a run, and a capped run is PARTIAL and not recorded.
