@@ -5,6 +5,9 @@
  * same default configuration runs its no-model path. No judge is wired: the measured default ran without one.
  *
  * EDEN_MODEL                     the roles' model, default `anthropic/claude-haiku-5.5` (the measured model, D98, D99).
+ *                                An Anthropic model is sent no reasoning request (it does not think, D144); any other
+ *                                is held to "low" effort, excluded (`OpenRouterModel`), since it may reason by default
+ *                                and its reasoning counts against the reply cap (D45). Only Haiku 5.5 is measured.
  * EDEN_MODEL_ZDR=off             drops the ZDR routing requirement (data collection stays denied).
  * EDEN_MODEL_USD_PER_TENANT_DAY  one cap on a tenant's model spend per UTC day, shared by every role; default 25.
  *

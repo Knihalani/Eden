@@ -169,6 +169,10 @@ The server reads the end user's accounts with that user's credentials, never ano
 
   The file is checked at startup (a bad entry or an unset env header stops the server with a message naming it) and
   re-read when it changes, entry by entry (a broken entry is that user's error; the rest apply). `EDEN_SOURCES_FILE` stays for static documents every user shares; its entries need `docs`.
+  Since the 2026-11-05 audit the server checks this file at start and exits with code 2, naming the entry, where it
+  once loaded silently: an entry with no `description`, an id outside `[A-Za-z0-9._:@-]` (such as "My Notes"), a
+  duplicate id, a document missing `ref`, `title` or `text`, or a file that is not a list (`{}`). Fix the named entry;
+  the HTTP API could not address such a source anyway.
 - **Your own directory**, when you embed the server: `new UserSources({ directory: async (scope) => specs })` reads
   the user's connected accounts and tokens from your vault, then pass `userSources.resolver` to `buildPartner` and
   `userSources` to `createHandler`. Return specs with `url` and `headers` (or the same `transport` function while a
