@@ -594,12 +594,6 @@ export interface CardLimits {
    * when it is not automated and is dated within this many days or upcoming (`readForIntent`).
    */
   leanDays: number;
-  /**
-   * With `intent` (`intentConstraintOnly`, D170; `constrain()` sets it): an item the prefilter rejects is not read
-   * for its requests alone; it keeps no card at no call, as without `intent`. Constraint-worded items are read with
-   * their requests as before.
-   */
-  constraintOnly: boolean;
 }
 
 export const DEFAULT_CARD_LIMITS: CardLimits = {
@@ -613,7 +607,6 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   sentenceReuse: false,
   intent: false,
   leanDays: 0,
-  constraintOnly: false,
 };
 
 /** The queue bound with `intent` (`CardEnricher.intend`), unless one was given. */
@@ -666,8 +659,6 @@ class UserCards {
   readonly sentenceOf = new Map<string, string>();
   draining: Promise<void> | null = null;
   readonly abort = new AbortController();
-  /** With `constraintOnly`: this user's items the prefilter rejected and intent left unread (`intentSkippedFor`). */
-  intentSkipped = 0;
 }
 
 /** Counters for research and cost reporting. */
@@ -676,8 +667,6 @@ export interface CardStats {
   prefiltered: number;
   /** Items the prefilter rejected that `cardsLean` left unread for intent (automated or old). */
   leanSkipped: number;
-  /** Items the prefilter rejected that `intentConstraintOnly` left unread for intent (D170), every user's. */
-  intentSkipped: number;
   reused: number;
   carded: number;
   /** Items sent to the model (each batch's size). */
@@ -713,7 +702,6 @@ export class CardEnricher {
     enqueued: 0,
     prefiltered: 0,
     leanSkipped: 0,
-    intentSkipped: 0,
     reused: 0,
     carded: 0,
     sent: 0,
@@ -751,14 +739,13 @@ export class CardEnricher {
    * built with: a limit given at construction wins, so the lab can vary one setting at a time.
    */
   economize(): void {
-    // `intend()` and `constrain()` before or after: what they set stands.
-    const { intent, maxQueue, constraintOnly } = this.limits;
+    // `intend()` before or after: what it set stands.
+    const { intent, maxQueue } = this.limits;
     this.limits = {
       ...DEFAULT_CARD_LIMITS,
       ...ECONOMY_CARD_LIMITS,
       ...this.given,
       intent,
-      constraintOnly,
       ...(intent ? { maxQueue } : {}),
     };
   }
@@ -779,19 +766,6 @@ export class CardEnricher {
    */
   lean(days: number): void {
     this.limits = { ...this.limits, leanDays: Math.max(0, days) };
-  }
-
-  /**
-   * Turns on `intentConstraintOnly` (D170, a trial): with `intent`, an item the prefilter rejects is not read for its
-   * requests alone. Train1–6 seeds 41–42 ($0 funnel): 6.4x fewer items sent, hidden in the reader's pool unchanged.
-   */
-  constrain(): void {
-    this.limits = { ...this.limits, constraintOnly: true };
-  }
-
-  /** This user's items that `constrain()` left unread for intent (0 for a user the enricher does not hold). */
-  intentSkippedFor(scope: Scope): number {
-    return this.users.get(scopeKey(scope))?.intentSkipped ?? 0;
   }
 
   private user(scope: Scope): UserCards {
@@ -871,12 +845,8 @@ export class CardEnricher {
       if (!(this.limits.strict ? worthCardingStrict(item) : worthCarding(item))) {
         this.stats.prefiltered++;
         // With `intent`, an item with no constraint language may still bear on a request (an event, a thread about
-        // a project): it is read for its requests, and its card stays none. With `constraintOnly` (D170) it is not.
-        if (this.limits.intent && this.limits.constraintOnly) {
-          this.stats.intentSkipped++;
-          u.intentSkipped++;
-          this.keep(u, hash, { card: null, at: now, seenAt: now });
-        } else if (this.limits.intent && readForIntent(item, now, this.limits.leanDays)) {
+        // a project): it is read for its requests, and its card stays none.
+        if (this.limits.intent && readForIntent(item, now, this.limits.leanDays)) {
           this.enlist(u, { item, hash, only: true });
         } else {
           if (this.limits.intent) this.stats.leanSkipped++;

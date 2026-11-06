@@ -71,6 +71,18 @@ $0.1894): hidden surfaced 275 to 281, paired +1.56 points (95% CI −1.41..+4.54
 nothing measurable here. The lab's planted facts are constraint-worded by design, so these screens cannot see an
 unworded item that bears on a request only through its requests; `cards.test.ts` shows the switch misses such an item.
 
+**Result, 2026-11-06 (D177: the trial ended, the switch deleted).** The pre-registered gate was a fresh-cache paid pair
+with hidden not lower and decoys not higher beyond ±3 tasks. Run again on the merged tree (4503fabb6, train1–6 seeds
+41–42, Claude Haiku 5.5 reader live in both arms, empty reader cache per arm): default 286/140 against
+`intentConstraintOnly` 281/144, paired hidden −1.30 points (95% CI −4.17..+1.56), decoys +1.04 points (CI
+−1.82..+3.91); ledger runs `close-d170-fresh-base` (652 calls, $0.1864) and `close-d170-fresh-co` (654 calls, $0.1866).
+A top-up of the committed reader cache (`close-d170-co`, 269 calls, $0.0786) replayed 281/139 against 279/144. Hidden
+flagged by the reader fell in both pairs (238 to 228, 234 to 226), and the reader pool at $0 went 262/246 to 258/241.
+Decoys rose 4 and 5 tasks, beyond ±3, and hidden fell: the request-only reads do buy something after all (the earlier
+pair's +1.56 was noise), so the switch, its stat and its tests are deleted under D112. `cardsLean`, `cardsLeanDays`,
+`readForIntent` and `automated` stay (they were to go only on promotion). The scores are the planning run's; the
+ledger rows were re-summed when the switch was deleted.
+
 ## Spend
 
 $0.8299 of a $1 cap, all Claude Haiku 5.5 through the lab's Anthropic provider (D97), one spend ledger:
