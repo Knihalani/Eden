@@ -934,7 +934,14 @@ function makeItem(r: () => number, id: string, crowd: number): ContextItem {
     const first = many ? `Crowd${Math.floor(r() * 120)}` : pick(FIRST);
     const last = pick(LAST);
     const org = many ? "hooli" : pick(ORGS);
-    const local = r() < 0.1 ? "no-reply" : `${first.toLowerCase()}.${last.toLowerCase()}`.replace(/[^\w.]/g, "x");
+    const roll = r();
+    // Long addresses too (a key longer than the graph's character arena holds when it is interned, D169's bug).
+    const local =
+      roll < 0.1
+        ? "no-reply"
+        : roll < 0.15
+          ? `notifications-noreply-${"x".repeat(Math.floor(r() * 90))}`
+          : `${first.toLowerCase()}.${last.toLowerCase()}`.replace(/[^\w.]/g, "x");
     return `${first} ${last} <${local}@${org}.com>`;
   };
   const lines: string[] = [`From: ${person()}`];
@@ -942,6 +949,7 @@ function makeItem(r: () => number, id: string, crowd: number): ContextItem {
   lines.push("");
   const n = 1 + Math.floor(r() * 4);
   for (let k = 0; k < n; k++) lines.push(r() < 0.3 ? `[09:${10 + k}] ${pick(FIRST)}: ${pick(LINES)}` : pick(LINES));
+  if (r() < 0.1) lines.push(`Invoice INV-${String(Math.floor(r() * 1e9)).repeat(1 + Math.floor(r() * 6))} is due.`);
   const chat = r() < 0.25;
   const title = chat
     ? `#${pick(["legal", "team", "ops"])}: ${pick(FIRST)}`
@@ -1073,6 +1081,97 @@ describe("UserGraph against the storage before D169", () => {
       b.add(it, at);
     }
     same(a, b, keysOf(pool.values()), r);
+  });
+
+  /** `a` and `b` hold the same graph after `items`, and every key the items name is in `a` exactly as in `b`. */
+  function sameAfter(a: UserGraph, b: PreviousGraph, items: ContextItem[]): string[] {
+    for (const it of items) {
+      a.add(it, at);
+      b.add(it, at);
+    }
+    const keys = keysOf(items);
+    same(a, b, keys, rng(7));
+    for (const k of keys) expect(a.has(k)).toBe(b.has(k));
+    return keys;
+  }
+
+  test("a fresh graph's first key longer than 32 characters is stored whole (the arena compacts as it is written)", () => {
+    const cases = [
+      item("gmail:a", "Hello", "From: X <bartholomewmaximilianfeather@gmail.com>\n\nSee you then."),
+      item(
+        "gmail:b",
+        "Invoice INV-123456789012345678901234567890",
+        "Invoice INV-123456789012345678901234567890 is due.",
+      ),
+      item("gmail:c", "Meeting with Bartholomew Maximilian Featherstonehaugh-Worthingtonshire", "Agenda attached."),
+      item("gmail:d", "Hi", "From: <notifications-noreply@accounts.google.com>\n\nYour sign-in."),
+    ];
+    for (const it of cases) {
+      const a = new UserGraph();
+      const keys = sameAfter(a, new PreviousGraph(), [it]);
+      const long = keys.filter((k) => k.length > 32 && a.has(k));
+      expect(long.length).toBeGreaterThan(0);
+      // (Read back whole: a truncated key would be written with zero code units in its tail.)
+      for (const k of a.keys()) expect(k).not.toContain("\0");
+    }
+    expect(new UserGraph().has("x")).toBe(false);
+    const g = new UserGraph();
+    g.add(cases[0]!, at);
+    expect(g.has("e:bartholomewmaximilianfeather@gmail.com")).toBe(true);
+  });
+
+  /** The longest address `EMAIL` reads (64 + 1 + 5 x 63 + 4 characters): `extract`'s longest key, 386 with "e:". */
+  const longest = (c: string) =>
+    `${c.repeat(64)}@${[1, 2, 3, 4, 5].map((k) => `${c}${k}`.repeat(32).slice(0, 63)).join(".")}`;
+
+  test("a fresh graph's first key at extract's longest, and one past 1,000 characters, is stored whole", () => {
+    const address = longest("q");
+    const it = item("gmail:long", "Hello", `From: Ann Lee <${address}>\n\nSee you.`);
+    const a = new UserGraph();
+    sameAfter(a, new PreviousGraph(), [it]);
+    expect(`e:${address}`.length).toBe(386);
+    expect(a.keys()).toContain(`e:${address}`);
+    expect(a.has(`e:${address}`)).toBe(true);
+    // No item names a key this long (`extract` bounds every key, above), so it is interned directly: the arena's
+    // first compaction (64 words) must still make room for all of it.
+    const g = new UserGraph() as unknown as {
+      intern(key: string, kind: string, label: string): number;
+      keyOf(id: number): string;
+      labelOf(id: number): string;
+      idOf(key: string): number;
+    };
+    const key = `n:${"k".repeat(1_200)}`;
+    const label = "L".repeat(1_500);
+    const id = g.intern(key, "name", label);
+    expect(g.keyOf(id)).toBe(key);
+    expect(g.labelOf(id)).toBe(label);
+    expect(g.idOf(key)).toBe(id);
+  });
+
+  test("an id reused after churn and interned with a key longer than the live characters is stored whole", () => {
+    const r = rng(99);
+    const a = new UserGraph();
+    const b = new PreviousGraph();
+    const pool: ContextItem[] = [];
+    for (let k = 0; k < 400; k++) pool.push(makeItem(r, `gmail:c${k}`, 0.3));
+    sameAfter(a, b, pool);
+    // Everything out: the ids go back to the free list with stale offsets, and the character arena compacts.
+    for (const it of pool) {
+      a.remove(it.id);
+      b.remove(it.id);
+    }
+    const chars = (a as unknown as { chars: { w: Uint16Array; top: number; dead: number } }).chars;
+    // The key outgrows both the characters still live and the room left, so writing it compacts the arena.
+    expect(chars.top - chars.dead).toBeLessThan(386);
+    expect(chars.w.length - chars.top).toBeLessThan(386);
+    const before = chars.w;
+    const address = longest("z");
+    const long = item("gmail:late", "Hello", `From: Bo Ng <${address}>\n\nAsk Ingrid García.`);
+    sameAfter(a, b, [long]);
+    expect(chars.w).not.toBe(before);
+    sameAfter(a, b, [makeItem(r, "gmail:after", 0.3), pool[0]!]);
+    expect(a.has(`e:${address}`)).toBe(true);
+    for (const k of a.keys()) expect(k).not.toContain("\0");
   });
 
   test("labels are copied out of the item text: a long text is not kept alive by its nodes", () => {

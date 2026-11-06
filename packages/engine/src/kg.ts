@@ -801,7 +801,15 @@ class Arena<W extends Words> {
 
   private compact(n: number): void {
     const from = this.w;
-    const to = this.make(Math.max(64, Math.ceil((this.top - this.dead + n) * 1.5)));
+    // Sized from what the owners report, not from `top - dead`: a block an owner reports and the counts missed
+    // (an owner that marks a block live before writing it) would otherwise run the new array short, and the next
+    // `alloc` would return an offset past its end, where writes are silently dropped.
+    let live = 0;
+    this.owners((off, _used, size) => {
+      live += size;
+      return off;
+    });
+    const to = this.make(Math.max(64, Math.ceil((Math.max(live, this.top - this.dead) + n) * 1.5)));
     let top = 0;
     this.owners((off, used, size) => {
       (to as Int32Array).set((from as Int32Array).subarray(off, off + used), top);
@@ -1009,8 +1017,9 @@ export class UserGraph {
     const w = this.chars.w;
     const at = this.keyAt[id]! + 2;
     for (let k = 0; same && k < label.length; k++) same = w[at + k] === label.charCodeAt(k);
-    this.labelLen[id] = same ? KEY_LABEL : label.length;
+    // (Owned only once written: `write` may compact `chars`, which moves every block `labelLen` says is held.)
     if (!same && label.length > 0) this.labelAt[id] = this.write(label);
+    this.labelLen[id] = same ? KEY_LABEL : label.length;
   }
 
   /** The id of `key`, made (out of the graph) if it has none. */
@@ -1024,8 +1033,12 @@ export class UserGraph {
     this.kind[id] = KIND_CODE[kind];
     this.ni[id] = this.nl[id] = this.refs[id] = this.itemsCap[id] = this.linksCap[id] = 0;
     this.labelLen[id] = 0;
+    // The key is owned (`keyLen` set) only once written: `write` may compact `chars`, which moves every block of an
+    // id not FREE by its `keyAt`/`keyLen`; a length set first would copy a stale block in and size the array short.
+    this.keyLen[id] = 0;
+    const at = this.write(key);
+    this.keyAt[id] = at;
     this.keyLen[id] = key.length;
-    this.keyAt[id] = this.write(key);
     this.hash[id] = h;
     this.setLabel(id, label);
     this.ids.put(id);

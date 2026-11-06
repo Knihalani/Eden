@@ -42,9 +42,11 @@ All on this box (4 cores, shared with other agents, Bun 1.4.4), 2026-11-06. "Bef
 | before | 1,668 B/item | 1,703 B/item | 70.1 µs/item | 4,460 B/item | 4,454 B/item |
 | after | 716 B/item | 719 B/item | 72.2 µs/item | 3,465 B/item | 3,458 B/item |
 | after, final commit | 716 B/item | 719 B/item | 70.0 µs/item | 3,465 B/item | 3,459 B/item |
+| after the review fix | 716 B/item | 719 B/item | 71.8 µs/item | 3,464 B/item | 3,457 B/item |
 | ratio | 2.33x smaller | **2.37x smaller** | unchanged (70.0-72.2 against 70.1) | 1.29x | 1.29x |
 
 Gate (D169): `+graph` released at least 2x smaller. 1,703 → 719 passes (the finding's 1,721 was the `--quick` figure).
+The reviewer's own runs gave 1,732 → 720.
 
 ### `--world` (new): 200 × 500 items of the sim world, `buildWorld` seed 1, noise scale 5
 
@@ -72,6 +74,38 @@ links arena about 1, tables and the rest about 80. 2.18 nodes per item, as befor
 Warm pairs over three runs: add 51.2-60.6 µs before, 51.4-55.3 after; walk 36.4-46.7 µs before, 40.3-43.8 after
 (after hoisting the arena reads out of the walk's loops); remove 1.48-1.80 µs before, 1.52-1.85 after. The walk now
 decodes each reached node's label from the arena once per walk; on this shared box the difference is within noise.
+
+## The review fix: a key interned across a compaction was stored truncated
+
+The first version set a new id's `state` (NAMED) and `keyLen` before writing its key into the character arena. When
+that write filled the arena, `Arena.compact` asked the owners for their blocks, and the half-made id reported a block
+of `keyLen` words at a stale (or zero) `keyAt`. The compaction copied that block, advanced its top by it, and had sized
+the new array from `top - dead` alone, which did not count it; the write then got an offset past the array's end and
+its tail was dropped (typed-array writes out of range are silently ignored). On a fresh graph, the first item whose
+first key was over 32 characters (`From: X <bartholomewmaximilianfeather@gmail.com>`, a 43-character
+`notifications-noreply@accounts.google.com`) was stored as `e:bartholomewmaximilianf\0\0…`, and `has(key)` was false
+right after `add`. `setLabel` had the same order for a label stored apart from its key. The 200-seed test missed it:
+its names never made a key longer than the arena's 64 words when it compacted.
+
+Fix (`kg.ts`): `intern` sets `keyLen` to 0 until the key is written, then its offset and length; `setLabel` sets
+`labelLen` only after the label is written; `Arena.compact` sizes the new array from the words the owners report
+(at least `top - dead`), so an owner that miscounts can no longer make an `alloc` return an offset past the end.
+
+Regression tests (`kg.test.ts`, each against `PreviousGraph`; all four failed on the first version and pass now):
+
+- A fresh graph whose first item's first key is longer than 32 characters (the reviewer's three inputs and the
+  Google address): every key stored whole, `has` true, the same walks.
+- A fresh graph whose first key is `extract`'s longest (386 characters: a 64-character local part and five
+  63-character domain labels; `extract` bounds every key, so no item gives one past 1,000) and a 1,200-character key
+  with a 1,500-character label interned directly: both read back whole.
+- 400 items added and all removed (ids freed with stale offsets, the arena compacted below 386 live characters),
+  then a 386-character key interned on a reused id: the arena compacts during the write and the key is whole.
+- The seeded generator now also makes long addresses (`notifications-noreply-` plus up to 89 characters) and long
+  invoice ids, so the 200-seed test reaches the long-key compaction path (it fails on the first version).
+
+Re-run after the fix: the full bench above (`+graph` 716 / 719 B/item, 71.8 µs/item), `bun run funnel --jobs 4
+--baseline <before json>` with the before run on 46285584e's `kg.ts`: hidden +0 −0, decoys +0 −0 (TOTAL hidden 214/384,
+decoys 211/384; pool 230/384 and 229/384); `bun run eval`: precision 0.8276, recall 0.48, falseFireRate 0.
 
 ## Equivalence
 
