@@ -83,7 +83,7 @@ export function renderPacket(
     if (room < 40) break;
     const note = options.note?.(item);
     const said = note ? `${READER_TAG}${inert(oneLine(note).replace(/\|/g, "/"))} | ` : "";
-    const title = said + (item.title ? `${inert(item.title)}: ` : "");
+    const title = said + (item.title ? `${inert(oneLine(item.title))}: ` : "");
     // Collapse whitespace only in a prefix that can fill the room (a char is at least one byte once collapsed), not
     // across an 8 KB item that is then cut to a few hundred bytes (9% of end-to-end CPU; pipeline.bench.ts).
     const prefix = item.text.length > room * 2 + 64 ? item.text.slice(0, room * 2 + 64) : item.text;
@@ -142,7 +142,12 @@ export function citationsOf(items: ContextItem[]): Citation[] {
   return items.map((i) => ({ itemId: i.id, sourceId: i.sourceId, title: i.title, url: i.url }));
 }
 
-const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
+/**
+ * One item, one line: a line break in source text (title or body) must not start a line of its own, or it could forge
+ * another item's `- [source]` line inside the envelope. `\s` covers U+2028/U+2029 but not NEL (U+0085), which some
+ * readers treat as a line break, so NEL is added.
+ */
+const oneLine = (s: string) => s.replace(/[\s\u0085]+/g, " ").trim();
 
 // The parts of a message that carry nothing for the agent: recipients, greetings, stock pleasantries, sign-offs and
 // the signature after them.
