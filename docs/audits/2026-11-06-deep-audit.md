@@ -627,9 +627,10 @@ Notes on the split:
 Written on 2026-11-06 from `audit/2026-11-06-integration` 4503fabb6 (rounds 1 and 2 merged). The closing step's
 planning runs and the final packages (`intent-closeout`, `router-default`, `funnel-parallel-diag`) settled every
 deferred item; each now has a row in docs/DECISIONS.md, D177-D182, or a merged package. The round 2 outcomes are
-appended to D158, D163 and D170-D176 (marked "Outcome"). The spend ledger (`.local/mkt/ledger.jsonl`) held $13.78
-after planning; a `bun -e` sum of its `costUsd` while writing this section, after the final packages' paid runs, gave
-$14.48 over 56,382 rows, so about $3.2 is left under the $18 cap and its $0.3 headroom (estimate: 18 - 14.48 - 0.3).
+appended to D158, D163, D170-D173, D175 and D176 (marked "Outcome"; D159 marked "Re-decided by D179"). The spend
+ledger (`.local/mkt/ledger.jsonl`) held $13.78 after planning; a `bun -e` sum of its `costUsd` while writing this
+section, after the final packages' paid runs, gave $14.48 over 56,382 rows, so about $3.2 is left under the $18 cap
+and its $0.3 headroom (estimate: 18 - 14.48 - 0.3).
 
 ### Every deferred item
 
@@ -666,7 +667,7 @@ stub reader, train1-6 seeds 41-42, intent replayed. The pool proxy is the reader
 | minus `cards`                               | 232/225                     |
 | minus `intent`                              | 230/229                     |
 
-No part's removal beats the default on the pool proxy: every removal but three loses hidden facts, the three
+No part's removal beats the default on the pool proxy: every removal but four loses hidden facts: the three
 identical ones change nothing, and minus `anticipate` keeps hidden with one decoy fewer, inside the ±3-task noise
 (D153 already kept anticipation). Nothing is promoted or deleted from this screen. The screen predates D179's
 thresholds.
