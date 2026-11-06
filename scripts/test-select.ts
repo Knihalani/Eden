@@ -11,10 +11,11 @@
  * packages/ and examples/ (scripts, bun.lock, tsconfig, bunfig), and nothing when only Markdown changed. Data a
  * package's tests read from outside it maps to that package (`DATA_DIRS`); the rest of docs/ is skipped. It defers
  * the end-to-end files in `DEFERRED` when their package is only a dependent of what changed, and prints them with the
- * command that runs them (D161), and sets `FAST_ENV` (kg.test.ts's differential test at 25 seeds, D176). It is a fast loop, not a gate: `bun run check` runs every test before a merge, and
- * `test:pkg` runs every file of the packages it names. Arguments after `--` go to `bun test`;
- * `--dry` prints the directories it would test and runs nothing; `--base REF` diffs against REF instead (`--base
- * HEAD`: only what is not committed yet). EDEN_TEST_SELECT_ROOT names another repository to select in (its test).
+ * command that runs them (D161). It sets `FAST_ENV` for its run (kg.test.ts's differential test at 25 seeds, not
+ * 200; D176). It is a fast loop, not a gate: `bun run check` runs every test at full count before a merge, and
+ * `test:pkg` runs every file of the packages it names. Arguments after `--` go to `bun test`; `--dry` prints the
+ * directories it would test and runs nothing; `--base REF` diffs against REF instead (`--base HEAD`: only what is
+ * not committed yet). EDEN_TEST_SELECT_ROOT names another repository to select in (its test).
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
