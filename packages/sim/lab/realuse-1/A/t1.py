@@ -6,21 +6,24 @@ Reads each results file with its timeline (`<timeline>/tasks.jsonl`) and writes 
 no transcripts) and prints it as tables. Per profile, condition and task kind (hidden, control, neutral):
 
 - rate: hidden facts raised (hidden), false concerns (control), any concern (neutral), as the grader read them;
-- wall p50, p90, mean (s); Eden on the critical path: the union of Eden's spans the agent waits on (the observe and
-  reader spans on the path lane, and every ask_context call), in ms and as a share of the task's wall time;
+- wall p50, p90, mean (s); Eden on the critical path: the union of Eden's spans on the agent's path (category eden,
+  lane path: the observe, the reader and every ask_context call), in ms and as a share of the task's wall time;
 - agent tokens per task (fresh input, cache read, cache write, output) and the agent's $ as billed;
-- Eden's $ per task: per-task calls (the reader) as billed, plus the stream's background spend (cards) spread over
-  its tasks (`bkfill`, as pi-ab-report.ts spreads it);
-- connector calls per task: the agent's searches, Eden's by kind (search, list, fetch);
+- Eden's $ per task: per-task calls (the reader) as billed, plus the seed's background spend (cards) spread evenly
+  over every task run of its Eden streams (`bkfill`, `backfillShares` in ab-common.ts; its split by kind means nothing);
+- connector calls per task: the agent's searches (its tool calls less `ask_context`), Eden's by kind (search, list,
+  fetch); `ask_context` calls apart (the ask's own source calls are among Eden's);
 - reader calls, packets and packet bytes per task (Eden's injections as the agent saw them).
 
 Paired bootstrap 95% intervals (4,000 resamples over tasks, seed 7) on differences: tools vs eden, tools vs both,
 eden vs both within a profile, and direct vs hosted for one condition. The traffic-weighted figure mixes 1 hidden,
 1 control and 8 neutral tasks in 10 (an assumption): means weighted by share, p50/p90 from the pooled weighted samples,
-and its intervals resample each kind's pairs on their own. The ledger gives Eden's and the run's $ by role per run label.
+and its intervals resample each kind's pairs on their own. The ledger gives Eden's and the run's $ by role per run
+label. An ungraded result (no verdict) is left out of every rate, as pi-ab-report.ts leaves it out.
 """
 
 import json
+import math
 import os
 import random
 import statistics
@@ -43,34 +46,36 @@ def union_ms(spans):
 
 
 def spans(events):
-    """Closed spans (name, start, end, lane, data of the begin event) from B/E event pairs."""
+    """Closed spans (name, start, end, lane, data of the begin event, category) from B/E event pairs."""
     open_, out = {}, []
     for e in events:
         if e.get("ph") == "B":
             open_[e.get("id")] = e
         elif e.get("ph") == "E" and e.get("id") in open_:
             b = open_.pop(e["id"])
-            out.append((b["ev"], b["t"], e["t"], b.get("lane"), b.get("data") or {}))
+            out.append((b["ev"], b["t"], e["t"], b.get("lane"), b.get("data") or {}, b.get("cat")))
     return out
 
 
 def task_row(r, t, bkfill):
     sp = spans(t["events"])
-    path = [(a, b) for (ev, a, b, lane, _) in sp if ev.startswith("eden.") and lane == "path"]
-    asks = [(a, b) for (ev, a, b, _, _) in sp if ev == "eden.ask"]
-    eden_path = union_ms(path + asks)
+    # Category eden on the path lane: the observe, the reader and the ask_context tool span (`eden.ask` is a point).
+    eden_path = union_ms([(a, b) for (_, a, b, lane, _, cat) in sp if cat == "eden" and lane == "path"])
+    asks = sum(1 for (ev, *_rest) in sp if ev == "tool.ask_context")
     req = t.get("requests") or []
     cached = sum(q.get("cached", 0) for q in req)
     write = sum(q.get("cacheWrite", 0) for q in req)
     tin = sum(q["in"] for q in req)
     src = {"search": 0, "list": 0, "fetch": 0}
-    for ev, _, _, _, data in sp:
+    for ev, _, _, _, data, _ in sp:
         if ev == "eden.source":
             op = data.get("op")
             src[op] = src.get(op, 0) + 1
     injects = [e for e in t["events"] if e.get("ev") == "eden.inject" and e.get("ph") == "I"]
     must = r["_must"]
-    rate = sum(1 for m in must if (r.get("facts") or {}).get(m["id"])) / max(1, len(must))
+    # Ungraded (no verdict): no rate, left out of every rate mean and paired rate difference.
+    graded = r.get("facts") is not None or not must
+    rate = sum(1 for m in must if (r.get("facts") or {}).get(m["id"])) / max(1, len(must)) if graded else None
     wall = r["wallMs"] / 1000
     return {
         "rate": rate,
@@ -85,11 +90,12 @@ def task_row(r, t, bkfill):
         "edenTaskUsd": r.get("edenCostUsd", 0),
         "edenBgUsd": bkfill,
         "allInUsd": r["costUsd"] + r.get("edenCostUsd", 0) + bkfill,
-        "agentCalls": r["toolCalls"],
+        "agentCalls": r["toolCalls"] - asks,
+        "askCalls": asks,
         "edenSearch": src.get("search", 0),
         "edenList": src.get("list", 0),
         "edenFetch": src.get("fetch", 0),
-        "connectorCalls": r["toolCalls"] + sum(src.values()),
+        "connectorCalls": r["toolCalls"] - asks + sum(src.values()),
         "readerCalls": sum(1 for (ev, *_rest) in sp if ev == "eden.reader"),
         "packets": len(injects),
         "packetBytes": sum((e.get("data") or {}).get("chars", 0) for e in injects),
@@ -102,11 +108,16 @@ def load(paths):
     for p in paths:
         d = json.load(open(p))
         tasks = {t["id"]: t for t in d["tasks"]}
+        # As backfillShares (ab-common.ts): each seed's background spend over every task run of its Eden streams.
+        by_seed = {}
+        for b in d.get("background") or []:
+            usd, runs = by_seed.get(b["seed"], (0.0, 0))
+            by_seed[b["seed"]] = (usd + b["cardsUsd"] + b["bridgeUsd"], runs + len(b["tasks"]))
         bg = {}
         for b in d.get("background") or []:
-            n = max(1, len(b["tasks"]))
+            usd, runs = by_seed[b["seed"]]
             for tid in b["tasks"]:
-                bg[(b["condition"], tid)] = (b["cardsUsd"] + b["bridgeUsd"]) / n
+                bg[(b["condition"], tid)] = usd / runs if runs else 0.0
         tl = os.path.join(d.get("timeline") or p[: -len(".json")], "tasks.jsonl")
         lines = {}
         for line in open(tl):
@@ -137,8 +148,9 @@ def load(paths):
 
 
 def q(xs, p):
+    """As pi-timeline.ts's quantile: the smallest value with at least p of the samples at or below it."""
     xs = sorted(xs)
-    return xs[min(len(xs) - 1, int(p * len(xs)))] if xs else None
+    return xs[max(0, math.ceil(p * len(xs)) - 1)] if xs else None
 
 
 def wq(pairs, p):
@@ -168,6 +180,7 @@ FIELDS = (
     "edenBgUsd",
     "allInUsd",
     "agentCalls",
+    "askCalls",
     "edenSearch",
     "edenList",
     "edenFetch",
@@ -183,7 +196,7 @@ FIELDS = (
 def summarise(rs):
     out = {"n": len(rs)}
     for f in FIELDS:
-        out[f] = mean([r[f] for r in rs])
+        out[f] = mean([r[f] for r in rs if r[f] is not None])
     walls = [r["wall"] for r in rs]
     out.update(wallP50=q(walls, 0.5), wallP90=q(walls, 0.9), wallMean=mean(walls))
     out["perK"] = 1000 * out["allInUsd"] if rs else None
@@ -210,15 +223,26 @@ def paired(a_rows, b_rows):
             continue
         out[kind] = {"n": len(ids)}
         for f, scale in DIFF:
-            out[kind][f] = boot([scale * (a_rows[(kind, i)][f] - b_rows[(kind, i)][f]) for i in ids])
+            # A rate is paired only where both arms were graded.
+            both = [i for i in ids if a_rows[(kind, i)][f] is not None and b_rows[(kind, i)][f] is not None]
+            out[kind][f] = boot([scale * (a_rows[(kind, i)][f] - b_rows[(kind, i)][f]) for i in both])
     if all(k in out for k in KINDS):
         rng = random.Random(11)
-        per = {
-            k: sorted(t for (kk, t) in a_rows if kk == k and (kk, t) in b_rows)
-            for k in KINDS
-        }
         out["mix"] = {}
         for f, scale in DIFF + (("wrong", 1),):
+            key = "rate" if f == "wrong" else f
+            per = {
+                k: sorted(
+                    t
+                    for (kk, t) in a_rows
+                    if kk == k
+                    and (kk, t) in b_rows
+                    and a_rows[(kk, t)][key] is not None
+                    and b_rows[(kk, t)][key] is not None
+                )
+                for k in KINDS
+            }
+
             def val(rows, k, i):
                 if f == "wrong":
                     return rows[(k, i)]["rate"] if k != "hidden" else 0.0
@@ -251,9 +275,17 @@ def mix_row(by_kind):
         return None
     pooled = [(r["wall"], MIX[k] / len(by_kind[k])) for k in KINDS for r in by_kind[k]]
     m = lambda f: sum(MIX[k] * statistics.mean(r[f] for r in by_kind[k]) for k in KINDS)  # noqa: E731
+
+    def rate(k):
+        graded = [r["rate"] for r in by_kind[k] if r["rate"] is not None]
+        return statistics.mean(graded) if graded else None
+
+    rates = {k: rate(k) for k in KINDS}
     return {
-        "raised": MIX["hidden"] * statistics.mean(r["rate"] for r in by_kind["hidden"]),
-        "wrongConcern": sum(MIX[k] * statistics.mean(r["rate"] for r in by_kind[k]) for k in ("control", "neutral")),
+        "raised": None if rates["hidden"] is None else MIX["hidden"] * rates["hidden"],
+        "wrongConcern": None
+        if rates["control"] is None or rates["neutral"] is None
+        else MIX["control"] * rates["control"] + MIX["neutral"] * rates["neutral"],
         "perK": 1000 * m("allInUsd"),
         "edenPerK": 1000 * (m("edenTaskUsd") + m("edenBgUsd")),
         "wallMean": m("wall"),
@@ -325,7 +357,7 @@ def show(s):
         print(f"\n## {name}")
         print(
             "cond  kind     n   rate  p50s  p90s meanS edenPathMs share  inFresh cRead cWrite  out  agent$/1k "
-            "edenTask$/1k bkfill$/1k allIn$/1k agentCalls eSearch eList eFetch reader packets bytes"
+            "edenTask$/1k bkfill$/1k allIn$/1k agentCalls asks eSearch eList eFetch reader packets bytes"
         )
         for c, kinds in conds.items():
             for k in KINDS:
@@ -337,7 +369,8 @@ def show(s):
                     f"{fmt(r['wallMean'], 2)} {fmt(r['edenPathMs'], 0):>6} {fmt(r['edenPathShare'])} "
                     f"{fmt(r['inFresh'], 0):>6} {fmt(r['cacheRead'], 0):>5} {fmt(r['cacheWrite'], 0):>5} "
                     f"{fmt(r['out'], 0):>4} {fmt(1000 * r['agentUsd']):>7} {fmt(1000 * r['edenTaskUsd']):>7} "
-                    f"{fmt(1000 * r['edenBgUsd']):>7} {fmt(r['perK']):>7} {fmt(r['agentCalls'], 2)} "
+                    f"{fmt(1000 * r['edenBgUsd']):>7} {fmt(r['perK']):>7} "
+                    f"{fmt(r['agentCalls'], 2)} {fmt(r['askCalls'], 2)} "
                     f"{fmt(r['edenSearch'], 2)} {fmt(r['edenList'], 2)} {fmt(r['edenFetch'], 2)} "
                     f"{fmt(r['readerCalls'], 2)} {fmt(r['packets'], 2)} {fmt(r['packetBytes'], 0)}"
                 )

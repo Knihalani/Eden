@@ -521,35 +521,18 @@ type Rows = Map<string, { hidden: Row; control: Row }>;
 const row = (): Row => ({ n: 0, returned: 0, cached: 0, delivered: 0, calls: 0, ms: 0 });
 
 /** One suite through the funnel: per-template rows and one record per task. Each suite plants its own worlds. */
-async function runSuite(
-  suite: string,
-): Promise<{ rows: Rows; perTask: Record<string, unknown>[]; wall: number; neutral: TaskRow[] }> {
+async function runSuite(suite: string): Promise<{ rows: Rows; perTask: Record<string, unknown>[]; wall: number }> {
   const rows: Rows = new Map();
   const perTask: Record<string, unknown>[] = [];
   const started = performance.now();
   const variants = ["hidden", "control"] as const;
-  const runVariant = async (variant: (typeof variants)[number] | "neutral") => {
-    const results: TaskRow[][] = [];
-    if (SERIAL) for (const seed of SEEDS) results.push(await runSeed(suite, variant, seed));
-    else results.push(...(await Promise.all(SEEDS.map((seed) => runSeed(suite, variant, seed)))));
-    return results;
-  };
+  const runVariant = (variant: (typeof variants)[number]) => runSeeds(suite, variant);
   // At `--time` > 0 a task's wall time is mostly connector sleeps, so the two variants (each in its own worlds) run
   // at once, as seeds do; `--serial` keeps them one after the other. The rows are folded in the same order either way.
-  // `--neutral` on a suite that builds it: the same requests with nothing planted, after (or beside) the two variants;
-  // its rows stay out of `rows` and `perTask`, so every hidden/control figure is the run's without it.
-  const neutralToo = NEUTRAL && supportsNeutral(suite);
-  const runNeutral = async () => (neutralToo ? (await runVariant("neutral")).flat() : []);
-  let neutral: TaskRow[] = [];
-  let byVariant: TaskRow[][][];
-  if (TIME > 0 && !SERIAL) {
-    const [h, c, n] = await Promise.all([runVariant("hidden"), runVariant("control"), runNeutral()]);
-    byVariant = [h, c];
-    neutral = n;
-  } else {
-    byVariant = [await runVariant("hidden"), await runVariant("control")];
-    neutral = await runNeutral();
-  }
+  const byVariant =
+    TIME > 0 && !SERIAL
+      ? await Promise.all(variants.map(runVariant))
+      : [await runVariant("hidden"), await runVariant("control")];
   for (const [v, results] of byVariant.entries()) {
     const variant = variants[v]!;
     for (const r of results) {
@@ -567,7 +550,15 @@ async function runSuite(
       }
     }
   }
-  return { rows, perTask, wall: (performance.now() - started) / 1000, neutral };
+  return { rows, perTask, wall: (performance.now() - started) / 1000 };
+}
+
+/** One suite and variant over every seed: one after the other with `--serial`, else at once. */
+async function runSeeds(suite: string, variant: "hidden" | "control" | "neutral"): Promise<TaskRow[][]> {
+  const results: TaskRow[][] = [];
+  if (SERIAL) for (const seed of SEEDS) results.push(await runSeed(suite, variant, seed));
+  else results.push(...(await Promise.all(SEEDS.map((seed) => runSeed(suite, variant, seed)))));
+  return results;
 }
 
 interface TaskRow {
@@ -1198,7 +1189,7 @@ const runs: { suite: string; rows: Rows; perTask: Record<string, unknown>[]; wal
 const neutralOut: NeutralOut = { total: neutralRow(), suites: {}, perTask: [] };
 const cpu0 = process.cpuUsage();
 for (const suite of SUITE_LIST) {
-  const { rows, perTask, wall, neutral } = await runSuite(suite);
+  const { rows, perTask, wall } = await runSuite(suite);
   const total = { hidden: row(), control: row() };
   if (SUITE_LIST.length > 1) console.log(`\n== ${suite}`);
   console.log(header);
@@ -1210,17 +1201,6 @@ for (const suite of SUITE_LIST) {
   for (const l of screenLines(suite, perTask as unknown as ScreenRow[], PACKET_K)) console.log(l + TAG + inertTag());
   // D173: surfaced split into reader-flagged, rule path and listed only (reporting only; the gates are unchanged).
   for (const l of surfacedLines(suite, perTask as unknown as SurfacedRow[])) console.log(l + TAG + inertTag());
-  if (neutral.length) {
-    const n = neutralRow();
-    for (const t of neutral) {
-      addNeutralTask(n, t);
-      const { variant: _v, ...rest } = t;
-      neutralOut.perTask.push({ suite, ...rest });
-    }
-    neutralOut.suites[suite] = n;
-    addNeutralRows(neutralOut.total, n);
-    console.log(neutralLine(suite, n) + TAG + inertTag());
-  }
   add(grand, total);
   runs.push({ suite, rows, perTask, wall, total });
 }
@@ -1233,7 +1213,77 @@ if (SUITE_LIST.length > 1) {
   for (const l of screenLines("TOTAL", all, PACKET_K)) console.log(l + TAG + inertTag());
   for (const l of surfacedLines("TOTAL", all as unknown as SurfacedRow[])) console.log(l + TAG + inertTag());
 }
+/**
+ * `--neutral`: its own phase, after every suite's hidden and control tasks (and so never beside them at `--time` > 0).
+ * The run-wide counters (connector calls, sync, intent, cards, reader and judge use, the miss gate) are snapshotted
+ * before it and restored after, so every hidden/control figure and gate is the run's without it; the phase's own
+ * deltas go to the `neutral` block.
+ */
 if (NEUTRAL) {
+  const copy = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
+  const counters = () => ({
+    sync: copy(syncUse),
+    calls: copy(callCheck),
+    intent: copy(intentUse),
+    judge: copy(usage),
+    busy: copy(busyTraces),
+    reader: readerModel
+      ? {
+          replayed: readerModel.replayed,
+          sent: readerModel.sent,
+          missed: readerModel.missed,
+          failed: readerModel.failed,
+          subsetReplayed: readerModel.subsetReplayed,
+        }
+      : null,
+  });
+  const before = counters();
+  const lanes = { cards: cardLanes.length, reader: readerLanes.length, distill: distillLanes.length };
+  const askRows = askDiagRows.length;
+  const cpuBefore = taskCpuUs;
+  for (const suite of SUITE_LIST.filter(supportsNeutral)) {
+    const n = neutralRow();
+    for (const t of (await runSeeds(suite, "neutral")).flat()) {
+      addNeutralTask(n, t);
+      const { variant: _v, ...rest } = t;
+      neutralOut.perTask.push({ suite, ...rest });
+    }
+    neutralOut.suites[suite] = n;
+    addNeutralRows(neutralOut.total, n);
+    console.log(neutralLine(suite, n) + TAG + inertTag());
+  }
+  const after = counters();
+  const delta = (a: Record<string, number>, b: Record<string, number>) =>
+    Object.fromEntries(Object.keys(a).map((k) => [k, Number(((a[k] ?? 0) - (b[k] ?? 0)).toFixed(3))]));
+  const sum = (xs: { stats: object }[]) => {
+    const out: Record<string, number> = {};
+    for (const x of xs)
+      for (const [k, v] of Object.entries(x.stats)) if (typeof v === "number") out[k] = (out[k] ?? 0) + v;
+    return out;
+  };
+  neutralOut.use = {
+    calls: delta(after.calls, before.calls),
+    intent: delta(after.intent, before.intent),
+    ...(REAL_SYNC ? { sync: delta(after.sync, before.sync) } : {}),
+    ...(after.reader && before.reader ? { reader: delta(after.reader, before.reader) } : {}),
+    ...(cardLanes.length > lanes.cards ? { cards: sum(cardLanes.slice(lanes.cards)) } : {}),
+    ...(LIVE ? { judge: delta(after.judge, before.judge) } : {}),
+  };
+  // Restore: the neutral phase leaves no trace in the hidden/control figures, the ledger record or the miss gate.
+  Object.assign(syncUse, before.sync);
+  Object.assign(callCheck, before.calls);
+  Object.assign(intentUse, before.intent);
+  Object.assign(usage, before.judge);
+  Object.assign(busyTraces, before.busy);
+  if (readerModel && before.reader) Object.assign(readerModel, before.reader);
+  cardLanes.length = lanes.cards;
+  readerLanes.length = lanes.reader;
+  distillLanes.length = lanes.distill;
+  askDiagRows.length = askRows;
+  taskCpuUs = cpuBefore;
+  if (neutralOut.use.reader?.missed) {
+    console.log(`NEUTRAL reader misses: ${neutralOut.use.reader.missed} (not in the miss gate; neutral rows only)`);
+  }
   const skipped = SUITE_LIST.filter((s) => !supportsNeutral(s));
   if (skipped.length) console.log(`--neutral: ${skipped.join(", ")} build no neutral variant (neutral.ts)`);
   if (Object.keys(neutralOut.suites).length > 1) console.log(neutralLine("TOTAL", neutralOut.total) + TAG + inertTag());

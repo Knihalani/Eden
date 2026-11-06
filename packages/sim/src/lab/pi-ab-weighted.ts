@@ -214,6 +214,10 @@ export function mixRow(
     return k && k.share > 0 && k.rate !== undefined ? (k.share / total) * k.rate : null;
   };
   const wrong = ["control", "neutral"].map(rateOf);
+  // A kind in the mix with samples but no graded rate leaves the false-concern share unknown, not smaller.
+  const wrongKnown = ["control", "neutral"].every(
+    (name) => !kinds[name] || kinds[name]!.share <= 0 || kinds[name]!.rate !== undefined,
+  );
   return {
     condition,
     shares: Object.fromEntries(live.map(([name, k]) => [name, k.share / total])),
@@ -223,7 +227,8 @@ export function mixRow(
     tools: mix((s) => s.tools),
     p50: weightedQuantile(pooled, 0.5),
     p90: weightedQuantile(pooled, 0.9),
-    falseConcern: wrong.every((x) => x === null) ? null : wrong.reduce<number>((a, x) => a + (x ?? 0), 0),
+    falseConcern:
+      !wrongKnown || wrong.every((x) => x === null) ? null : wrong.reduce<number>((a, x) => a + (x ?? 0), 0),
     raised: rateOf("hidden"),
   };
 }

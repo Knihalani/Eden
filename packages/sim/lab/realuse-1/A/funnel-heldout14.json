@@ -88,5 +88,6 @@
   "hiddenAnyPacket": 86,
   "controlSurfaced": 84,
   "controlAnyPacket": 80,
-  "note": "bun run funnel --blind --suite heldout14 --seeds 41,42,43,44 -- --neutral; reader stub; run once, before 10 hidden planted items (seeds 41-42) got their intent lines"
+  "note": "bun run funnel --blind --suite heldout14 --seeds 41,42,43,44 -- --neutral; reader stub; run once, before 10 hidden planted items (seeds 41-42) got their intent lines",
+  "caveat": "run before the neutral phase was separated (review fix): its run-wide sync, cards and intent counters include the neutral lanes (users 12 = 3 variants x 4 seeds); the score, rows, surfaced counts and the neutral block are unaffected"
 }

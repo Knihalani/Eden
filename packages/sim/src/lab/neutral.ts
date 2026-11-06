@@ -92,6 +92,8 @@ export function neutralLine(name: string, r: NeutralRow): string {
 /** hidden-funnel.ts's `neutral` JSON block (present only with `--neutral`). */
 export interface NeutralOut {
   total: NeutralRow;
+  /** The neutral phase's own use of the run-wide counters (connector calls, intent, sync, reader, cards, judge). */
+  use?: Record<string, Record<string, number>>;
   suites: Record<string, NeutralRow>;
   perTask: ({ suite: string; seed: number; template: string } & NeutralTask)[];
 }
@@ -126,5 +128,14 @@ export function mergeNeutral(
   const seen = [...cells.values()].reduce((n, l) => n + l.length, 0);
   if (perTask.length !== seen) throw new Error(`${seen} neutral rows laid out as ${perTask.length}`);
   const suitesOut = Object.fromEntries(suites.filter((s) => bySuite[s]).map((s) => [s, bySuite[s]!]));
-  return { total, suites: suitesOut, perTask };
+  // Each process's neutral-phase counters, summed key by key.
+  let use: NeutralOut["use"];
+  for (const p of parts) {
+    for (const [group, counts] of Object.entries(p.neutral!.use ?? {})) {
+      use ??= {};
+      const into = (use[group] ??= {});
+      for (const [k, v] of Object.entries(counts)) into[k] = (into[k] ?? 0) + v;
+    }
+  }
+  return { total, suites: suitesOut, perTask, ...(use ? { use } : {}) };
 }

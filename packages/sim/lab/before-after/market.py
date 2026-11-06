@@ -90,6 +90,11 @@ def eden_sources(t, op=None):
     return n
 
 
+def asks(t):
+    """The task's ask_context calls (tool spans), counted among the agent's tool calls but not connector calls."""
+    return sum(1 for e in t["events"] if e.get("ev") == "tool.ask_context" and e.get("ph") == "B")
+
+
 def boot(diffs, n=4000, seed=7):
     rng = random.Random(seed)
     m = [statistics.mean(rng.choices(diffs, k=len(diffs))) for _ in range(n)]
@@ -127,7 +132,8 @@ def main():
                 rows[cond] = {
                     "rate": [raised(r) for r, _ in rs],
                     "wall": [t["wallMs"] / 1000 for _, t in rs],
-                    "agentCalls": [r["toolCalls"] for r, _ in rs],
+                    # ask_context is a tool call but not a connector call: the ask's own source calls are Eden's.
+                    "agentCalls": [r["toolCalls"] - asks(t) for r, t in rs],
                     "edenCalls": [eden_sources(t) for _, t in rs],
                     "edenLists": [eden_sources(t, "list") for _, t in rs],
                     "edenUsd": [r.get("edenCostUsd", 0) for r, _ in rs],

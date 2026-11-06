@@ -152,6 +152,16 @@ describe("the RealUse-1 traffic mix", () => {
     expect(mixLines([row]).join("\n")).toContain("1 hidden, 1 control, 8 neutral");
   });
 
+  test("an ungraded kind in the mix leaves the false-concern share unknown, not smaller", () => {
+    const row = mixRow("x", {
+      hidden: { share: 0.1, samples: [s(1)], rate: 0.5 },
+      control: { share: 0.1, samples: [s(1)], rate: 0.2 },
+      neutral: { share: 0.8, samples: [s(1)] },
+    })!;
+    expect(row.falseConcern).toBeNull();
+    expect(row.raised).toBeCloseTo(0.05, 9);
+  });
+
   test("a kind with a share but no samples gives no row; with shares 0.5/0.5/0 it is the two-kind weighted row", () => {
     expect(mixRow("x", { hidden: { share: 0.5, samples: [s(1)] }, neutral: { share: 0.5, samples: [] } })).toBeNull();
     const h = [s(1, 0.01, 0.001, 2), s(3, 0.02, 0.002, 1)];
@@ -206,5 +216,11 @@ describe("hidden-funnel --neutral", () => {
       rows.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !timing.has(k))));
     expect(strip(withN.json.perTask)).toEqual(strip(base.json.perTask));
     expect(withN.json.perTask.every((t: { variant: string }) => t.variant !== "neutral")).toBe(true);
+    // The run-wide counters too: the neutral phase's use goes to its own block, never into the run's.
+    const noTime = (x: Record<string, unknown> | undefined) =>
+      x && Object.fromEntries(Object.entries(x).filter(([k]) => k !== "warmMs"));
+    for (const k of ["calls", "intent", "cards", "reader"]) expect(withN.json[k]).toEqual(base.json[k]);
+    expect(noTime(withN.json.sync)).toEqual(noTime(base.json.sync));
+    expect(withN.json.neutral.use.calls.received).toBeGreaterThan(0);
   }, 60_000);
 });

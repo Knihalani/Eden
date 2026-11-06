@@ -661,9 +661,11 @@ function reconcile(reportFile: string, ledgerFile: string, run: string): boolean
   const ledger = readFileSync(ledgerFile, "utf8")
     .split("\n")
     .filter((l) => l.trim())
-    .map((l) => JSON.parse(l) as { run: string; role: string; usd: number })
+    // A summary line carries `usd`; a raw spend-ledger line (spend.ts) carries `costUsd`.
+    .map((l) => JSON.parse(l) as { run: string; role: string; usd?: number; costUsd?: number })
     .filter((l) => l.run.startsWith(run));
-  const usd = (pred: (role: string) => boolean) => ledger.filter((l) => pred(l.role)).reduce((n, l) => n + l.usd, 0);
+  const usd = (pred: (role: string) => boolean) =>
+    ledger.filter((l) => pred(l.role)).reduce((n, l) => n + (l.usd ?? l.costUsd ?? 0), 0);
   const isBg = (role: string) => role === "eden.cards" || role === "eden.bridge";
   const bgUsd = usd(isBg);
   const taskUsd = usd((role) => role.startsWith("eden.") && !isBg(role));
@@ -672,7 +674,7 @@ function reconcile(reportFile: string, ledgerFile: string, run: string): boolean
   let kind = "";
   for (const line of lines) {
     if (line.startsWith("== critical path")) break;
-    const head = /^== (hidden|control|request|arrival|offworld)/.exec(line);
+    const head = /^== (hidden|control|neutral|request|arrival|offworld)/.exec(line);
     if (head) kind = head[1]!;
     else if (!line.trim()) kind = "";
     else if (kind && !line.startsWith("condition")) {
