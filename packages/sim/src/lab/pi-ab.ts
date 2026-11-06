@@ -186,26 +186,24 @@ const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
   act: ACT,
   defaults: DEFAULT_CONFIG as unknown as Record<string, unknown>,
 });
-// A flag whose dependency this harness cannot give it would run a different configuration under the flag's name: a
-// run that says R or ALL must be R or ALL (the review of moon/combined). Cards need a model; the sync, list tools.
-// Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
 const USES_READER = CONDITIONS.some((c) => c.withPartner && effective(c.config).askReader);
-const ACCESS = labAccess(args, [
+// Every model a role of this run calls, once: the pacer and spend ledger are set up for them, and the key check below
+// reads the same list, so a role added here cannot go unchecked.
+const RUN_MODELS = [
   MODEL,
   GRADER,
   ...(CONDITIONS.some((c) => c.withPartner && effective(c.config).cards) ? [CARD_MODEL] : []),
   ...(USES_READER ? [READER_MODEL] : []),
-]);
+];
+// Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
+const ACCESS = labAccess(args, RUN_MODELS);
 const PACER = ACCESS.pacer;
-// Cards (and the judge, the agent, the grader) on OpenRouter need its key; on Anthropic, HAIKU_API_KEY (keyFor).
-const OPENROUTER_ROLES = openRouterModels([
-  MODEL,
-  GRADER,
-  ...(CONDITIONS.some((c) => c.withPartner && effective(c.config).cards) ? [CARD_MODEL] : []),
-  ...(USES_READER ? [READER_MODEL] : []),
-]);
+// A flag whose dependency this harness cannot give it would run a different configuration under the flag's name: a
+// run that says R or ALL must be R or ALL (the review of moon/combined). Cards need a model, so a role on OpenRouter
+// needs its key; one on Anthropic uses HAIKU_API_KEY (keyFor).
+const OPENROUTER_ROLES = openRouterModels(RUN_MODELS);
 if (OPENROUTER_ROLES.length && !KEY && !DRY)
   throw new Error(`${OPENROUTER_ROLES.join(", ")}: needs OPENROUTER_API_KEY`);
 /** A task starts only while the cap leaves room for all of it: its model requests and its grading. */
