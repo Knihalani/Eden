@@ -53,7 +53,6 @@ import {
 } from "@eden/sources";
 import { IntentPatterns, predict, PREDICT_NAMES } from "./anticipate";
 import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache, type Sketch } from "./cache";
-import { expandAsk } from "./expand";
 import { SyncManager } from "./sync";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
@@ -1303,19 +1302,12 @@ export class ContextPartner {
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
     // it stops waiting at `readerPushWaitMs`), bounded by the reader's call and the session's close.
-    // `askExpand` (trial, D177): what only the request's expansion reaches, after every candidate the ask found.
-    // Only into seats the pool leaves empty, so no candidate is displaced and `readAsk`'s `readsAll` reads as before.
-    const room = this.config.askExpand
-      ? Math.min(this.config.askReaderPool, READER_POOL_CAP) - new Set([...order, ...scored].map((x) => x.item.id)).size
-      : 0;
-    const expanded =
-      room > 0 && this.config.askReader && this.deps.reader ? this.expandedFor(s, cue, scored).slice(0, room) : [];
     const reading =
       this.config.askReader && this.deps.reader
         ? await this.readAsk(
             s,
             cue,
-            expanded.length > 0 ? [...order, ...scored, ...expanded] : [...order, ...scored],
+            [...order, ...scored],
             chosen,
             limit,
             internal.push ? Infinity : this.config.askReaderWaitMs,
@@ -2026,7 +2018,9 @@ export class ContextPartner {
     const cache = this.deps.cache;
     const vocab = cache.peekVocab(s.scope);
     if (!vocab) return []; // No cache for this user: nothing to rank, and nothing allocated.
-    const query = this.queryIds(cue, vocab);
+    const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
+    const query: number[] = [];
+    for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
     // Events on a day the request names are candidates whether or not they share its words (D44); they rank after
     // every item that does, so the judge, when there is one, sees them only if there is room.
     const timed = cue.time?.days.size ? cache.timed(s.scope, cue.time.days, this.now(), 30, cue.offset) : [];
@@ -2113,27 +2107,6 @@ export class ContextPartner {
               ),
         )
     );
-  }
-
-  /** The cue's text and entities as term ids in the user's vocabulary, stopwords left out: what `rank` searches. */
-  private queryIds(cue: Cue, vocab: Vocab): number[] {
-    const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
-    const query: number[] = [];
-    for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
-    return query;
-  }
-
-  /**
-   * `askExpand` (trial, D177): items the request's no-model expansion reaches (`expand.ts`) that the ask's candidates
-   * do not hold, nor near-duplicate, scored 0 so they rank after every candidate. Only the reader's pool reads them.
-   */
-  private expandedFor(s: Session, cue: Cue, scored: readonly Scored[]): Scored[] {
-    const vocab = this.deps.cache.peekVocab(s.scope);
-    if (!vocab) return [];
-    const held = new Set(scored.map((x) => x.item.id));
-    return expandAsk(this.deps.cache, s.scope, this.queryIds(cue, vocab), held, this.now())
-      .filter((h) => !scored.some((x) => nearDuplicate(x.sketch, h.sketch)))
-      .map((h) => ({ item: h.item, matched: 0, score: 0, sketch: h.sketch, doc: h.doc }));
   }
 
   private confident(scored: Scored[], cue: Cue): Scored[] {
