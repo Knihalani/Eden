@@ -24,7 +24,7 @@
  *
  * Run: `bun packages/engine/bench/ingest.bench.ts [--world] [--plain] [users=200] [itemsPerUser=500]
  * [mode=all|core|graph|shipped]`, or `bun packages/engine/bench/ingest.bench.ts --quick [--world] [--plain]`. `--plain`
- * holds item text as plain strings (`CacheLimits.compactText` off), the layout before D177.
+ * holds item text as plain strings (`CacheLimits.packText` off), the layout before D177.
  *
  * Text: by default the bench workload's (`workload.ts`: names, topics and filler, all Latin-1, which the engine holds
  * at a byte a character). `--world` takes each user's items from the sim world instead (`buildWorld` seed 1, noise
@@ -49,7 +49,7 @@ import { buildWorkload } from "./workload";
 
 const QUICK = process.argv.includes("--quick");
 const WORLD = process.argv.includes("--world");
-/** `--plain`: the cache holds item text as plain strings (`compactText` off; D177's before), in every mode. */
+/** `--plain`: the cache holds item text as plain strings (`packText` off; D177's before), in every mode. */
 const PLAIN = process.argv.includes("--plain");
 const args = process.argv.slice(2).filter((a) => a !== "--quick" && a !== "--world" && a !== "--plain");
 if (QUICK && args.length > 0) throw new Error("--quick runs 40 × 500 in every mode; it takes no other arguments");
@@ -150,7 +150,7 @@ async function run(mode: Mode): Promise<Result> {
     maxSyncedPerUser: PER_USER,
     maxUsersPerTenant: USERS + 1,
     expireEveryMs: 0,
-    compactText: !PLAIN,
+    packText: !PLAIN,
   });
   let sync: SyncManager;
   let sweepAfter: number;

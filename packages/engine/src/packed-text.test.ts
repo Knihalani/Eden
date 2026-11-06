@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
 import { ItemCache } from "./cache";
 import { termIds } from "./text";
-import { isPacked, MIN_PACK_CHARS, packItem } from "./packed-text";
+import { decodedCount, isPacked, MIN_PACK_CHARS, packItem } from "./packed-text";
 
 const scope = { tenantId: "t", userId: "u" };
 const NOW = Date.UTC(2026, 10, 6, 9);
@@ -16,7 +16,7 @@ function item(id: string, text: string, extra: Partial<ContextItem> = {}): Conte
   return { id, sourceId: "mail", ref: `mail:${id}`, title: `Subject ${id}`, text, ...extra };
 }
 
-describe("packItem (compactText, D177)", () => {
+describe("packItem (packText, D177)", () => {
   test("a packed item reads, spreads, serialises and compares as the original", () => {
     const raw = item("a", longText("one"), { meta: { from: "Zoë" }, updatedAt: 5 });
     const packed = packItem(raw);
@@ -48,7 +48,7 @@ describe("packItem (compactText, D177)", () => {
   });
 });
 
-describe("ItemCache with compactText", () => {
+describe("ItemCache with packText", () => {
   test("stores packed copies, returns the same text, and refreshes an unchanged copy without re-indexing", () => {
     const cache = new ItemCache();
     const raw = item("a", longText("one"));
@@ -58,14 +58,39 @@ describe("ItemCache with compactText", () => {
     const rev = cache.revision(scope);
     expect(cache.put(scope, [item("a", longText("one"))], NOW + 1)).toEqual([]);
     expect(cache.revision(scope)).toBe(rev);
+    // A refresh with the same words (a lookup's fresh copy, new details) keeps the text deflated (review finding).
+    cache.put(scope, [item("a", longText("one"), { updatedAt: 9 })], NOW + 1);
+    const refreshed = cache.get(scope, "a", NOW + 1)!;
+    expect(isPacked(refreshed)).toBe(true);
+    expect(refreshed.text).toBe(raw.text);
+    expect(refreshed.updatedAt).toBe(9);
     const changed = cache.put(scope, [item("a", longText("two"))], NOW + 2);
     expect(changed.map((c) => c.text)).toEqual([longText("two")]);
   });
 
-  test("search ranks identically with and without compactText", () => {
-    const plain = new ItemCache({ compactText: false });
+  test("text with a lone surrogate stays plain, so an unchanged refresh is not a change (review finding)", () => {
+    const cache = new ItemCache();
+    const cut = `${longText("emoji")}\uD83D`;
+    const raw = item("e", cut);
+    expect(packItem(raw)).toBe(raw);
+    expect(cache.put(scope, [raw], NOW)[0]!.text).toBe(cut);
+    const rev = cache.revision(scope);
+    expect(cache.put(scope, [item("e", cut)], NOW + 1)).toEqual([]);
+    expect(cache.revision(scope)).toBe(rev);
+  });
+
+  test("forgetting a user leaves the decode memo empty of their text", () => {
+    const cache = new ItemCache();
+    cache.put(scope, [item("a", longText("gone"))], NOW);
+    expect(cache.get(scope, "a", NOW)!.text).toBe(longText("gone"));
+    cache.forget(scope);
+    expect(decodedCount()).toBe(0);
+  });
+
+  test("search ranks identically with and without packText", () => {
+    const plain = new ItemCache({ packText: false });
     const compact = new ItemCache();
-    expect(isPacked(new ItemCache({ compactText: false }).put(scope, [item("p", longText("p"))], NOW)[0]!)).toBe(false);
+    expect(isPacked(new ItemCache({ packText: false }).put(scope, [item("p", longText("p"))], NOW)[0]!)).toBe(false);
     const items = Array.from({ length: 40 }, (_, i) =>
       item(`m${i}`, `${longText(`n${i}`)}${i % 3 === 0 ? " quarterly forecast" : ""}`),
     );

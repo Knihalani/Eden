@@ -24,8 +24,13 @@ Latin-1 text is deflated as Latin-1 bytes and decoded with `Buffer.toString("lat
 process-wide memo of decoded texts, keyed by each item's own bytes, serves repeated reads of one candidate.
 
 `ItemCache.put` indexes, tallies and adds to the graph from the plain copy, then holds the packed copy; `put`
-returns the held copies. `CacheLimits.compactText` (on by default) turns it off; the ingest and pipeline benches take
+returns the held copies. `CacheLimits.packText` (on by default) turns it off; the ingest and pipeline benches take
 `--plain` for the old layout.
+
+The review found two defects, fixed before merge: a refresh with the same words (a lookup's fresh copy, a re-read,
+a push) put a plain copy back in place of the packed one (now `repackLike` keeps the held bytes), and text with a lone
+surrogate came back from UTF-8 with U+FFFD, so every refresh re-indexed it (such text now stays plain). The memo is
+cleared by `forget` and `removeItems`.
 
 One fix during the work: the first version decoded every text with `TextDecoder`. That gives a two-byte string for
 any accented Latin-1 letter, and every regex and hash over item text ran slower: `pipeline.bench.ts` 1.17x (eight
@@ -40,7 +45,8 @@ released", B/item; backfill µs/item):
 |---|---|---|---|
 | pair 1 | 3,799 B, 159.4 µs | 2,368 B, 194.8 µs | 1.60x memory, 1.22x backfill CPU |
 | pair 2 | 3,953 B, 163.7 µs | 2,543 B, 196.8 µs | 1.55x memory, 1.20x backfill CPU |
-| final tree | 3,808 B, 172.1 µs | 2,378 B, 200.8 µs | 1.60x memory, 1.17x backfill CPU |
+| pair 3 | 3,808 B, 172.1 µs | 2,378 B, 200.8 µs | 1.60x memory, 1.17x backfill CPU |
+| after review fixes | 3,808 B, 170.9 µs | 2,368 B, 222.1 µs | 1.61x memory, 1.30x backfill CPU |
 
 Core mode (no graph, no `onStored`): 3,145 → 1,692 and 1,847 B/item (1.70-1.86x). Sweeps (an unchanged re-listing)
 unchanged, 4-7 µs/item either way. On the bench's own all-Latin-1 workload (no `--world`): shipped 3,457 → 2,635
@@ -50,7 +56,7 @@ The "raw released" figure is bimodal on this VM in `--quick` runs (the same buil
 one run to the next), so compare full-size runs only.
 
 `bun packages/engine/bench/pipeline.bench.ts [--plain]`, eight interleaved runs each on the final tree, ms/event:
-plain 0.872-1.025 (median 0.965), compact 0.943-1.075 (median 0.979): 1.01x, inside the 1.1x gate.
+plain 0.872-1.025 (median 0.965), compact 0.943-1.075 (median 0.979): 1.01x, inside the 1.1x gate. After the review's fixes, eight more each: plain median 0.920, compact 0.958 (1.04x).
 
 `index-memory.bench.ts` measures the index alone, text excluded; it does not change (415 B/item at 6,892 items).
 
@@ -61,7 +67,7 @@ replayed) hidden 259/384, decoys 235/384, pool 262/246, `--baseline` against the
 
 ## Costs left
 
-- Backfill CPU is about 1.2x (the deflate, about 26 µs an item). Sweeps, the common case, are unchanged.
+- Backfill CPU is 1.17-1.30x (the deflate, about 26 µs an item). Sweeps, the common case, are unchanged.
 - Each decode is about 7 µs for a 1 KB text; the memo keeps the ask path's repeated reads off that.
 - The memo holds at most 256 decoded texts per process (at most about 4 MB at the 8,000-character cap).
 - Memos keyed by an item that keep its decoded text (`fold.ts`'s, `conflict.ts`'s) hold a plain copy for items that

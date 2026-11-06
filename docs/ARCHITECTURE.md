@@ -415,6 +415,11 @@ moved on by wall time since), so a simulation on an injected clock expires on it
 only through a `WeakRef`, so a cache nobody closes (labs build one per task) is still collected, and its timer stops.
 A user's vocabulary releases each term no live item holds once the index compacts it away (`releaseTerms`, on in the
 default, D112), so its term ids follow the live items without a rebuild.
+Each cached item's text is held deflated (`CacheLimits.packText`, on by default, D177; `packed-text.ts`): the stored
+copy's `text` is a getter that decodes it, with a 256-entry memo of recent decodes that `forget` and `removeItems`
+clear. Index, tallies and graph are built from the plain text before it is packed; a refresh with the same words
+keeps the held bytes. Sim-world text, where one arrow or dash makes a whole JS string two bytes a character, costs
+about 1.6x less heap per synced user, for 1.2-1.3x the backfill CPU.
 
 Dates in items are read the same on every host: `parseWhen` (`grounding.ts`) reads a zone-less date or date-time (a
 `Date:` header without a zone, a calendar start with no offset, "14 Oct 2026") as UTC, not the server process's local
