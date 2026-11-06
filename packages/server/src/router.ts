@@ -23,6 +23,9 @@
  * `{error}` ("temporarily unable to serve context", what an integration treats as silence), never a 500, while the
  * other children keep serving. An exited child is started again after `restartMs` (doubling to 30 s while it keeps
  * failing); its users' in-memory state is gone, as after any restart (D8), and its source-map file is reopened.
+ * Every start, a restart included, has its own deadline (`startTimeoutMs`, D172): a child that has not reported its
+ * port by then is killed (SIGKILL), so a start-up stall (a wedged gate worker, a slow file open) becomes one more
+ * failed start, retried with the same backoff, instead of a child that holds 1/N of the users at 503 forever.
  * `/healthz` answers here: 200 while at least one child is up (`up` < `processes` in the body says the instance is
  * degraded: alert on that, but a load balancer must not pull every user for one child's 1/N), 503 when none is.
  *
@@ -177,7 +180,10 @@ export interface RouterOptions {
   entry?: string;
   /** Wait before an exited child is started again; default 1,000 ms, doubled while it keeps failing to start. */
   restartMs?: number;
-  /** How long the first start of every child may take; default 30 s. */
+  /**
+   * How long each start of a child (the first and every restart) may take to report its port before it is killed;
+   * default 30 s. A first start past it fails `startRouter`; a restart past it is retried with backoff (D172).
+   */
   startTimeoutMs?: number;
   /** Receives each child's stdout (tests, the bench); unset, children write to the router's stdout. */
   onOutput?: (index: number, text: string) => void;
@@ -216,6 +222,7 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   const env = options.env ?? process.env;
   const entry = options.entry ?? fileURLToPath(new URL("./main.ts", import.meta.url));
   const baseRestartMs = options.restartMs ?? 1_000;
+  const startTimeoutMs = options.startTimeoutMs ?? 30_000;
   const log = options.log ?? console.error;
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const tooLarge = `body must be at most ${maxBodyBytes.toLocaleString("en-US")} bytes`;
@@ -231,7 +238,8 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     timer: null,
   }));
 
-  // Each start resolves when the child reports its port, rejects if it exits first.
+  // Each start resolves when the child reports its port, rejects if it exits first or misses its deadline (it is then
+  // killed, and its exit takes the usual path: logged, and restarted with backoff unless the router is stopping).
   const spawn = (c: Child): Promise<void> =>
     new Promise((resolve, reject) => {
       const childEnv: Record<string, string> = {};
@@ -244,6 +252,9 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         EDEN_SOURCE_MAP: childSourceMapPath(config.sourceMapPath, c.index),
       });
       let ready = false;
+      let timedOut = false;
+      // Assigned just below, before any IPC message or exit can be delivered (both arrive on later ticks).
+      let deadline: ReturnType<typeof setTimeout> | undefined;
       const proc = Bun.spawn([process.execPath, entry], {
         env: childEnv,
         stdin: "ignore",
@@ -253,6 +264,7 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
           const port = (message as { edenListening?: unknown } | null)?.edenListening;
           if (ready || typeof port !== "number") return;
           ready = true;
+          clearTimeout(deadline);
           c.port = port;
           c.up = true;
           c.restartMs = baseRestartMs;
@@ -261,14 +273,25 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
       });
       c.proc = proc;
       c.pid = proc.pid;
+      deadline = setTimeout(() => {
+        if (ready || c.proc !== proc) return;
+        timedOut = true;
+        log(
+          `eden router: child ${c.index} (pid ${proc.pid}) did not report its port in ${startTimeoutMs} ms; ` +
+            `killing it`,
+        );
+        proc.kill("SIGKILL");
+      }, startTimeoutMs);
       options.onSpawn?.(c.index, proc.pid);
       if (options.onOutput && proc.stdout instanceof ReadableStream) void pipeOut(proc.stdout, c.index);
       void proc.exited.then((code) => {
+        clearTimeout(deadline);
         if (c.proc !== proc) return;
         c.up = false;
         c.port = 0;
         c.proc = null;
-        if (!ready) reject(new Error(`eden router: child ${c.index} exited with code ${code} before listening`));
+        if (timedOut) reject(new Error(`eden router: child ${c.index} did not start in ${startTimeoutMs} ms`));
+        else if (!ready) reject(new Error(`eden router: child ${c.index} exited with code ${code} before listening`));
         if (stopping) return;
         log(
           `eden router: child ${c.index} (pid ${proc.pid}) exited with code ${code}; restarting in ${c.restartMs} ms`,
@@ -305,15 +328,11 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   // Before any child opens its file: no row may sit in a file no child of this N reaches (forget would miss it).
   rehomeSourceMaps(config.sourceMapPath, n, log);
 
+  // Each spawn carries its own deadline, so this settles within `startTimeoutMs` (plus the kill) either way. On a
+  // failure the exit handler has already scheduled a restart; stopChildren sets `stopping` and clears that timer
+  // before it can fire, then stops every child still starting or up, so a failed start leaves no process behind.
   try {
-    let deadline: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      deadline = setTimeout(
-        () => reject(new Error("eden router: children did not start in time")),
-        options.startTimeoutMs ?? 30_000,
-      );
-    });
-    await Promise.race([Promise.all(children.map(spawn)), timeout]).finally(() => clearTimeout(deadline));
+    await Promise.all(children.map(spawn));
   } catch (e) {
     await stopChildren();
     throw e;
