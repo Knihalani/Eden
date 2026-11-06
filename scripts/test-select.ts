@@ -9,8 +9,10 @@
  *
  * `test:changed` runs everything when it cannot tell what changed (no origin/main) or when a change is outside
  * packages/ and examples/ (scripts, bun.lock, tsconfig, bunfig), and nothing when only Markdown changed. Data a
- * package's tests read from outside it maps to that package (`DATA_DIRS`); the rest of docs/ is skipped. It is a
- * fast loop, not a gate: `bun run check` runs every test before a merge. Arguments after `--` go to `bun test`;
+ * package's tests read from outside it maps to that package (`DATA_DIRS`); the rest of docs/ is skipped. It defers
+ * the end-to-end files in `DEFERRED` when their package is only a dependent of what changed, and prints them with the
+ * command that runs them (D161). It is a fast loop, not a gate: `bun run check` runs every test before a merge, and
+ * `test:pkg` runs every file of the packages it names. Arguments after `--` go to `bun test`;
  * `--dry` prints the directories it would test and runs nothing; `--base REF` diffs against REF instead (`--base
  * HEAD`: only what is not committed yet). EDEN_TEST_SELECT_ROOT names another repository to select in (its test).
  */
@@ -34,6 +36,20 @@ const extra = dash >= 0 ? argv.slice(dash + 1) : [];
  * would otherwise pass test:changed and check:fast.
  */
 export const DATA_DIRS: Record<string, string> = { "docs/profiles/": "packages/server" };
+
+/**
+ * End-to-end files that `test:changed` skips when their package is selected only as a dependent of a changed package
+ * (D161): together 9 of the 18 s an engine edit took. They run when their own package changed, in `test:pkg`, and in
+ * `bun run check`. A list, not a `.e2e.test.ts` suffix, because docs and package CLAUDE.md files name these files.
+ */
+export const DEFERRED = [
+  "packages/sim/src/sim.test.ts",
+  "packages/sim/src/lab/funnel-flags.test.ts",
+  "packages/sim/src/lab/reader-stub.test.ts",
+  "packages/sim/src/deletes.test.ts",
+  "packages/sim/src/lab/gate-traffic.test.ts",
+  "packages/eval/src/run.test.ts",
+];
 
 export interface Pkg {
   dir: string;
@@ -62,8 +78,8 @@ const git = (...args: string[]) => {
   return r.status === 0 ? r.stdout : null;
 };
 
-/** The workspace directories to test, or null for everything. */
-function changedDirs(pkgs: Pkg[]): string[] | null {
+/** The packages to test and the ones a file changed in, or null for everything. */
+function changedDirs(pkgs: Pkg[]): Selection | null {
   const base = git("merge-base", "HEAD", baseRef ?? "origin/main")?.trim();
   if (!base) {
     console.error(`test:changed: no merge base with ${baseRef ?? "origin/main"} (git fetch?); running every test`);
@@ -73,7 +89,13 @@ function changedDirs(pkgs: Pkg[]): string[] | null {
   for (const out of [git("diff", "--name-only", base), git("ls-files", "--others", "--exclude-standard")]) {
     for (const f of (out ?? "").split("\n")) if (f) files.add(f);
   }
-  return touchedPackages([...files], pkgs);
+  return selectPackages([...files], pkgs);
+}
+
+/** Package directories in workspace order: `dirs` to test, and the subset `direct` that a changed file is in. */
+export interface Selection {
+  dirs: string[];
+  direct: string[];
 }
 
 /**
@@ -81,6 +103,11 @@ function changedDirs(pkgs: Pkg[]): string[] | null {
  * when a file is outside the packages, the data directories and the skipped docs.
  */
 export function touchedPackages(files: string[], pkgs: Pkg[], log = console.error): string[] | null {
+  return selectPackages(files, pkgs, log)?.dirs ?? null;
+}
+
+/** `touchedPackages`, also saying which packages changed themselves rather than only depend on a change. */
+export function selectPackages(files: string[], pkgs: Pkg[], log = console.error): Selection | null {
   const touched = new Set<string>();
   for (const f of files) {
     if (f.endsWith(".md")) continue;
@@ -93,6 +120,7 @@ export function touchedPackages(files: string[], pkgs: Pkg[], log = console.erro
     }
     touched.add(pkg.name);
   }
+  const direct = pkgs.filter((p) => touched.has(p.name)).map((p) => p.dir);
   // Dependents, to a fixed point: a change to a package can break any package that imports it.
   let grew = true;
   while (grew) {
@@ -104,7 +132,16 @@ export function touchedPackages(files: string[], pkgs: Pkg[], log = console.erro
       }
     }
   }
-  return pkgs.filter((p) => touched.has(p.name)).map((p) => p.dir);
+  return { dirs: pkgs.filter((p) => touched.has(p.name)).map((p) => p.dir), direct };
+}
+
+/** The `DEFERRED` files whose package is in `sel.dirs` only as a dependent, in `DEFERRED` order (D161). */
+export function deferredFiles(sel: Selection): string[] {
+  const owner = (f: string) => sel.dirs.find((d) => f.startsWith(`${d}/`));
+  return DEFERRED.filter((f) => {
+    const dir = owner(f);
+    return dir !== undefined && !sel.direct.includes(dir);
+  });
 }
 
 if (import.meta.main) main();
@@ -112,8 +149,12 @@ if (import.meta.main) main();
 function main(): void {
   const pkgs = workspace();
   let dirs: string[] | null;
+  let deferred: string[] = [];
   if (mode === "changed") {
-    dirs = changedDirs(pkgs);
+    const sel = changedDirs(pkgs);
+    dirs = sel?.dirs ?? null;
+    // Only files that exist: a stale entry must not make `bun test` ignore a pattern that matches nothing new.
+    if (sel) deferred = deferredFiles(sel).filter((f) => existsSync(join(root, f)));
   } else if (mode === "pkg" && names.length) {
     dirs = names.map((n) => {
       const hit = pkgs.find((p) => p.dir === n.replace(/\/$/, "") || p.dir.endsWith(`/${n}`) || p.name === n);
@@ -131,16 +172,30 @@ function main(): void {
     console.log(`test:changed: no package code changed since ${baseRef ?? "origin/main"}; nothing to test`);
     process.exit(0);
   }
-  // Packages with no test file of their own (protocol's types-only edits still reach their dependents' tests).
+  // A Bun without --path-ignore-patterns cannot skip single files: run them rather than fail.
+  if (deferred.length && !dry && !bunCanIgnorePaths()) {
+    console.log("test:changed: this bun test has no --path-ignore-patterns; running the end-to-end files too");
+    deferred = [];
+  }
+  // Packages with no test file of their own (protocol's types-only edits still reach their dependents' tests), or
+  // whose only test files are deferred.
   const withTests = dirs?.filter((d) => {
     const r = spawnSync("find", [d, "-name", "*.test.ts", "-not", "-path", "*/node_modules/*"], {
       cwd: root,
       encoding: "utf8",
     });
-    return r.stdout.trim().length > 0;
+    return r.stdout.split("\n").some((f) => f && !deferred.includes(f));
   });
+  if (deferred.length) {
+    console.log(
+      `test:changed: deferred ${deferred.length} end-to-end file(s) of packages that only depend on what changed ` +
+        "(`bun run check` runs them; D161):",
+    );
+    for (const f of deferred) console.log(`  ${f}`);
+    console.log(`  run them: bun test ${deferred.map((f) => `./${f}`).join(" ")}`);
+  }
   if (withTests && withTests.length === 0) {
-    console.log(`no test files under ${dirs!.join(", ")}`);
+    console.log(`no test files to run under ${dirs!.join(", ")}`);
     process.exit(0);
   }
   if (withTests) console.log(`testing ${withTests.join(" ")}`);
@@ -148,6 +203,13 @@ function main(): void {
     if (!withTests) console.log("testing everything");
     process.exit(0);
   }
-  const r = spawnSync(join(root, "scripts/test.sh"), [...(withTests ?? []), ...extra], { cwd: root, stdio: "inherit" });
+  const ignore = deferred.map((f) => `--path-ignore-patterns=${f}`);
+  const args = [...(withTests ?? []), ...ignore, ...extra];
+  const r = spawnSync(join(root, "scripts/test.sh"), args, { cwd: root, stdio: "inherit" });
   process.exit(r.status ?? 1);
+}
+
+function bunCanIgnorePaths(): boolean {
+  const r = spawnSync("bun", ["test", "--help"], { cwd: root, encoding: "utf8" });
+  return `${r.stdout}${r.stderr}`.includes("--path-ignore-patterns");
 }

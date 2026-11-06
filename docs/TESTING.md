@@ -5,7 +5,7 @@
 | Command | What it runs | When |
 |---|---|---|
 | `bun run test` | Every `*.test.ts` under packages/, examples/, scripts/, in parallel (`scripts/test.sh`) | Before a merge (part of `check`) |
-| `bun run test:changed` | Packages touched since the merge base with origin/main, plus their dependents | The inner loop |
+| `bun run test:changed` | Packages touched since the merge base with origin/main, plus their dependents, minus six end-to-end files of packages that are only dependents (D161, below) | The inner loop |
 | `bun run test:pkg engine sim` | Named packages | Working inside one package |
 | `bun run check:fast` | format:check + typecheck:fast (tsgo) + test:changed | Before pushing a work-in-progress commit |
 | `bun run typecheck:fast` | The typecheck on tsgo, TypeScript 7's native preview (about 5x faster) | The inner loop |
@@ -18,6 +18,33 @@
 cleared) is read from the working directory, so `bun test` started inside a package skips it. `test:changed` treats
 a change outside packages/ and examples/ (scripts, bun.lock, tsconfig, bunfig) as "run everything", and skips
 Markdown-only changes. `TEST_SERIAL=1 bun run test` runs in one process, as before parallelism.
+
+### End-to-end files deferred by `test:changed` (D161, measured 2026-11-06, 4-core container, Bun 1.4.4)
+
+`DEFERRED` in `scripts/test-select.ts` lists six end-to-end files: `packages/sim/src/sim.test.ts`,
+`packages/sim/src/lab/funnel-flags.test.ts`, `packages/sim/src/lab/reader-stub.test.ts`,
+`packages/sim/src/deletes.test.ts`, `packages/sim/src/lab/gate-traffic.test.ts` and `packages/eval/src/run.test.ts`.
+When `test:changed` (and so `check:fast`) selects sim or eval only because it depends on what changed, it skips these
+files, passing `--path-ignore-patterns` to `bun test` through `scripts/test.sh`, and prints them with a `bun test`
+command that runs them. When sim or eval itself changed, its files run. `test:pkg` and `bun run check` run every file;
+`test:changed` still runs everything when a change is outside the packages. A package left with no other test file
+drops out of the run (eval, whose only test file is `run.test.ts`, after an engine edit). A Bun without
+`--path-ignore-patterns` runs the files rather than fail. The cost: an engine change that only the end-to-end
+simulation catches passes the fast loop and fails at `check` (or in `bun run eval`, which engine behaviour changes run
+anyway).
+
+A one-line comment appended to `packages/engine/src/text.ts`, `bun run test:changed` (selects engine, server, sim and
+eval), wall time of the whole command:
+
+| | Wall | Tests | Files |
+|---|---|---|---|
+| Before (integration tip 46285584e) | 18.50 s, 18.24 s | 1,062 pass, 0 fail | 93 |
+| After (`--base HEAD` over the committed change, so the selection is the same) | 9.26 s, 9.48 s | 991 pass, 0 fail | 87 |
+| The printed command for the six, serial | 15.00 s | 71 pass, 0 fail | 6 |
+
+About 1.9-2.0x on the engine inner loop; 991 + 71 = 1,062, so nothing is lost, only moved to `check`. A one-line
+change in `packages/sim/src/world.ts` defers nothing: `test:changed` ran 229 tests in 34 files, the same as
+`bun run test:pkg sim` (12.53 s and 12.45 s).
 
 A bare `bun test` at the repo root skips `archived/` through `pathIgnorePatterns` in `bunfig.toml`, so it runs the
 same 102 files as `scripts/test.sh`, but serially: 1,362 pass, 0 fail in 30.0 s (Bun 1.4.4, 2026-11-03). Before the
