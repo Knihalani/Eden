@@ -1,0 +1,138 @@
+harness pi, model claude-haiku-5-5, grader claude-haiku-5-5, time scale 1, tools parallel
+spent $0.1959 (agent $0.0999, Eden $0.0755, grader $0.0204); 288 runs, errors 0, ungraded 0
+config {}
+cost columns, $ per 1k tasks: $/1k = agent + Eden's per-task calls; (Eden) = Eden's per-task calls (its reader and judge); bkfill = its background calls (cards, bridge), each seed's spread evenly over that seed's task runs with cards or bridge on (mostly a one-time backfill: an upper bound on the steady state); all-in = (Eden) + bkfill
+
+== hidden: hidden fact raised
+condition     n   rate   $/1k  (Eden) bkfill all-in  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+tools         32  0.188  0.342   0.000  0.000  0.000   1.97   2.88     2433      508    4.53    7.05   10.83          557
+eden          32  0.625  0.637   0.295  0.113  0.408   1.41   0.63     1407      449    3.88    7.54    9.43          446
+both          32  0.531  0.531   0.202  0.113  0.315   1.72   2.03     2291      499    4.79    7.43   10.93          484
+
+== control: false concern
+condition     n   rate   $/1k  (Eden) bkfill all-in  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+tools         32  0.000  0.339   0.000  0.000  0.000   2.00   2.91     2431      525    4.74    6.96    9.29          485
+eden          32  0.000  0.754   0.388  0.113  0.502   1.63   0.97     1648      467    4.78    8.34   10.11          491
+both          32  0.031  0.548   0.204  0.113  0.318   1.81   2.34     2391      532    5.51    7.47    9.86          496
+
+== neutral: any concern (nothing planted; counts as a false concern)
+condition     n   rate   $/1k  (Eden) bkfill all-in  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+tools         32  0.031  0.339   0.000  0.000  0.000   2.06   3.09     2495      523    4.84    6.83    8.92          509
+eden          32  0.000  0.795   0.417  0.113  0.530   1.81   1.28     1883      506    5.52    7.80    9.27          475
+both          32  0.031  0.517   0.174  0.113  0.287   1.94   2.66     2530      516    5.17    8.26    9.25          510
+
+== traffic-weighted: w × hidden + (1 − w) × control; means weighted, p50/p90 from the pooled per-task samples
+w     condition          n hid  n ctl   $/1k  (Eden)  tools   p50 s   p90 s
+0.10  tools               32     32  0.339   0.000   2.90    4.74    6.96
+0.10  eden                32     32  0.742   0.379   0.93    4.78    8.34
+0.10  both                32     32  0.546   0.204   2.31    5.51    7.47
+0.50  tools               32     32  0.341   0.000   2.89    4.68    6.97
+0.50  eden                32     32  0.696   0.342   0.80    4.31    8.05
+0.50  both                32     32  0.540   0.203   2.19    5.03    7.47
+
+== traffic mix (assumed): 1 hidden, 1 control, 8 neutral in 10; means weighted, p50/p90 pooled; raised = share of all tasks raising the hidden fact, false = share raising a wrong concern (control + neutral)
+condition        n hid  n ctl  n neu   $/1k  (Eden)  tools   p50 s   p90 s  raised   false
+tools               32     32     32  0.339   0.000   3.05    4.84    6.87   0.019   0.025
+eden                32     32     32  0.775   0.402   1.18    5.45    7.80   0.063   0.000
+both                32     32     32  0.521   0.180   2.56    5.17    8.26   0.053   0.028
+
+== critical path, mean ms per task (share of wall time); Eden beside the loop and grading after it
+condition     n             eden         model          tool         other    eden-bg  grading
+tools         96           0 (0%)    3611 (76%)    1133 (24%)        1 (0%)          0      733
+eden          96       2119 (40%)    3177 (60%)        0 (0%)        1 (0%)       2718      828
+both          96       1054 (19%)    3567 (65%)     835 (15%)        1 (0%)       1665      753
+
+== Eden on the critical path by task kind, mean ms per task: observe (the push) and ask_context, the reader's share of Eden's path, and the wall-time multiple if Eden took no time
+condition    kind       n  wall ms   eden (% wall)  observe      ask  reader (% eden)  if-zero
+eden         hidden    32    4619   1664 (36.0%)     1049      615    1163 (69.9%)     1.56x
+eden         control   32    5491   2292 (41.7%)     1071     1217    1677 (73.2%)     1.72x
+eden         neutral   32    5781   2400 (41.5%)      964     1436    1591 (66.3%)     1.71x
+both         hidden    32    5337   1117 (20.9%)     1117        0     891 (79.8%)     1.26x
+both         control   32    5507   1054 (19.1%)     1054        0     968 (91.9%)     1.24x
+both         neutral   32    5525    990 (17.9%)      990        0     825 (83.3%)     1.22x
+eden         reader 134 calls: p50 1071 p90 1759 mean 1179 ms, mean out 150 tok; fit 683 ms + 3.30 ms/out token (mean/floor 1.73x)
+both         reader 72 calls: p50 1113 p90 1747 mean 1193 ms, mean out 145 tok; fit 794 ms + 2.76 ms/out token (mean/floor 1.50x)
+
+== paired differences (a − b), bootstrap 95% interval over tasks
+eden       - tools  hidden   n= 32 rate +0.438 (+0.219..+0.625)  wall -0.04 s (-0.94..+0.83)  $/1k +0.295 (+0.189..+0.406)
+                      n= 32 $/1k cache-neutral agent+Eden +0.1630 (+0.0418..+0.2868)  agent billed -0.0003 (-0.0499..+0.0508) cache-neutral -0.1320 (-0.2013..-0.0656)  Eden +0.2950 (+0.2179..+0.3762)
+eden       - tools  control  n= 32 rate +0.000 (+0.000..+0.000)  wall +0.64 s (-0.18..+1.38)  $/1k +0.415 (+0.294..+0.543)
+                      n= 32 $/1k cache-neutral agent+Eden +0.2808 (+0.1579..+0.4157)  agent billed +0.0270 (-0.0191..+0.0731) cache-neutral -0.1073 (-0.1673..-0.0502)  Eden +0.3881 (+0.2861..+0.4937)
+eden       - tools  neutral  n= 32 rate -0.031 (-0.094..+0.000)  wall +1.05 s (+0.24..+1.86)  $/1k +0.456 (+0.323..+0.599)
+                      n= 32 $/1k cache-neutral agent+Eden +0.3469 (+0.2054..+0.4903)  agent billed +0.0395 (-0.0147..+0.0959) cache-neutral -0.0697 (-0.1339..-0.0041)  Eden +0.4166 (+0.3161..+0.5183)
+eden       - tools  all      n= 96 $/1k billed agent+Eden +0.3886 (+0.3149..+0.4645) cache-neutral agent+Eden +0.2635 (+0.1882..+0.3438)  agent billed +0.0221 (-0.0070..+0.0521) cache-neutral -0.1030 (-0.1419..-0.0655)  Eden +0.3665 (+0.3086..+0.4258)
+eden       - tools  same-ask n= 37 $/1k billed agent+Eden +0.2010 (+0.1589..+0.2450) cache-neutral agent+Eden +0.0456 (-0.0072..+0.1010)  agent billed -0.0509 (-0.0957..-0.0072) cache-neutral -0.2064 (-0.2653..-0.1518)  Eden +0.2520 (+0.2269..+0.2739)
+both       - tools  hidden   n= 32 rate +0.344 (+0.156..+0.531)  wall +0.68 s (+0.14..+1.28)  $/1k +0.188 (+0.130..+0.246)
+                      n= 32 $/1k cache-neutral agent+Eden +0.1830 (+0.1213..+0.2501)  agent billed -0.0135 (-0.0496..+0.0244) cache-neutral -0.0189 (-0.0685..+0.0329)  Eden +0.2019 (+0.1583..+0.2414)
+both       - tools  control  n= 32 rate +0.031 (+0.000..+0.094)  wall +0.66 s (+0.05..+1.25)  $/1k +0.209 (+0.156..+0.263)
+                      n= 32 $/1k cache-neutral agent+Eden +0.2036 (+0.1387..+0.2656)  agent billed +0.0049 (-0.0258..+0.0323) cache-neutral -0.0008 (-0.0445..+0.0351)  Eden +0.2044 (+0.1604..+0.2504)
+both       - tools  neutral  n= 32 rate +0.000 (-0.094..+0.094)  wall +0.79 s (+0.03..+1.53)  $/1k +0.178 (+0.121..+0.236)
+                      n= 32 $/1k cache-neutral agent+Eden +0.1741 (+0.1090..+0.2441)  agent billed +0.0044 (-0.0326..+0.0362) cache-neutral +0.0002 (-0.0534..+0.0497)  Eden +0.1739 (+0.1318..+0.2111)
+both       - tools  all      n= 96 $/1k billed agent+Eden +0.1920 (+0.1598..+0.2231) cache-neutral agent+Eden +0.1869 (+0.1483..+0.2260)  agent billed -0.0014 (-0.0217..+0.0173) cache-neutral -0.0065 (-0.0338..+0.0199)  Eden +0.1934 (+0.1695..+0.2186)
+both       - tools  same-ask n= 96 $/1k billed agent+Eden +0.1920 (+0.1595..+0.2233) cache-neutral agent+Eden +0.1869 (+0.1496..+0.2264)  agent billed -0.0014 (-0.0206..+0.0184) cache-neutral -0.0065 (-0.0330..+0.0207)  Eden +0.1934 (+0.1665..+0.2174)
+both       - eden   hidden   n= 32 rate -0.094 (-0.250..+0.063)  wall +0.72 s (-0.08..+1.54)  $/1k -0.106 (-0.204..-0.015)
+                      n= 32 $/1k cache-neutral agent+Eden +0.0200 (-0.0891..+0.1286)  agent billed -0.0132 (-0.0594..+0.0324) cache-neutral +0.1131 (+0.0546..+0.1775)  Eden -0.0930 (-0.1634..-0.0338)
+both       - eden   control  n= 32 rate +0.031 (+0.000..+0.094)  wall +0.02 s (-0.83..+0.85)  $/1k -0.206 (-0.337..-0.077)
+                      n= 32 $/1k cache-neutral agent+Eden -0.0772 (-0.2166..+0.0553)  agent billed -0.0221 (-0.0786..+0.0353) cache-neutral +0.1065 (+0.0328..+0.1786)  Eden -0.1837 (-0.2787..-0.0927)
+both       - eden   neutral  n= 32 rate +0.031 (+0.000..+0.094)  wall -0.26 s (-1.04..+0.55)  $/1k -0.278 (-0.405..-0.156)
+                      n= 32 $/1k cache-neutral agent+Eden -0.1728 (-0.3005..-0.0456)  agent billed -0.0350 (-0.0968..+0.0229) cache-neutral +0.0699 (-0.0012..+0.1401)  Eden -0.2427 (-0.3215..-0.1637)
+both       - eden   all      n= 96 $/1k billed agent+Eden -0.1966 (-0.2658..-0.1266) cache-neutral agent+Eden -0.0766 (-0.1516..-0.0046)  agent billed -0.0234 (-0.0560..+0.0089) cache-neutral +0.0965 (+0.0569..+0.1361)  Eden -0.1731 (-0.2200..-0.1266)
+both       - eden   same-ask n= 37 $/1k billed agent+Eden +0.0579 (+0.0199..+0.0992) cache-neutral agent+Eden +0.1988 (+0.1465..+0.2522)  agent billed +0.0544 (+0.0176..+0.0939) cache-neutral +0.1953 (+0.1444..+0.2508)  Eden +0.0034 (-0.0125..+0.0242)
+
+== per-second profile: mean ms of each second of task time by phase, over tasks still running
+-- tools (96 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%      0   997     2     1        0
+   1    100%      0   470   474     0        0
+   2     86%      0   623   355     0        0
+   3     82%      0   716   214     0        0
+   4     68%      0   676   156     0        0
+   5     45%      0   698    69     0        0
+   6     25%      0   585    98     0        0
+   7      9%      0   526   111     0        0
+   8      4%      0   671    68     0        0
+   9      2%      0   643     0     0        0
+  10      1%      0   827     0     1        0
+-- eden (96 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%    756   244     0     0      962
+   1    100%    376   624     0     0      496
+   2    100%    313   667     0     0      317
+   3     94%    334   530     0     0      364
+   4     67%    347   484     0     0      349
+   5     45%    264   607     0     0      272
+   6     34%     31   815     0     0       58
+   7     23%      0   719     0     0        0
+   8     11%      0   716     0     0        0
+   9      5%      0   444     0     0        0
+  10      1%      0   108     0     0        0
+-- both (96 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%    748   252     0     0      949
+   1    100%    264   648    84     0      376
+   2     99%     41   675   241     0       45
+   3     89%      0   634   275     0       19
+   4     74%      0   695   191     0        3
+   5     53%      0   710   150     0        0
+   6     41%      0   700    95     0        0
+   7     25%      0   614    34     0       42
+   8     10%      0   693     0     0        0
+   9      5%      0   530     0     0        0
+  10      1%      0   929     0     0        0
+
+== agent $/1k tasks: billed, and re-priced at fixed claude-haiku-5-5 prices (neutral: cached and cache-write tokens as plain input)
+condition       n   billed       list   neutral  mix
+tools          96     0.340     0.340     0.505
+eden           96     0.362     0.362     0.402
+both           96     0.339     0.339     0.498
+
+== uptake (hidden): raised rate (n) when the planted item was in a packet, only in an ask answer, or neither
+tools        packet   -   (0)   ask   -   (0)   neither 0.188 (32)
+eden         packet 0.824 (17)   ask 0.857 (7)   neither 0.000 (8)
+both         packet 0.875 (16)   ask   -   (0)   neither 0.188 (16)
+
+== Eden per task: source calls, probe queries (calls), cache hits, judge calls, slow path and ask ms
+eden         sources 8.93  probes 8.22 (0.57 calls)  cache hits 0.06  judge 0.00 (p50 0 ms)  injected 0.83  slow p50 31 p90 1134  ask p50 1278 ms
+both         sources 5.91  probes 6.71 (0.33 calls)  cache hits 0.05  judge 0.00 (p50 0 ms)  injected 0.79  slow p50 115 p90 909  ask p50 1160 ms
+
+== process: 281 s sampled, CPU p50 5.4% p90 12.8% max 71.3% of a core; CPU time user 17.6 s system 3.1 s (72 ms per run); RSS max 395.2 MB; tasks in flight max 9

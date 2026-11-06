@@ -20,15 +20,23 @@ Every suite plants one item per template into a seeded world (~1,500 items); the
 agent should raise, the control variant a near-miss decoy (resolved, another entity, prerequisite met). 32 templates
 per suite for train1–6 and held-out 10–12.
 
-| Name | Use | Status |
-|---|---|---|
-| `train` = `train1`–`train6` | **Tune here.** Six authors, written blind, one life area each (broad-set.md) | Tuning set |
-| `dev6a`, `dev6b` | Development suites (after D72); two authors, so rules overfit their wording (broad-set.md) | Tuning, with care |
-| `hidden`, `heldout`, `heldout2`–`heldout4` | The old in-sample suites; every configuration since D47 was tuned on them | In-sample |
-| `heldout5`–`heldout8` | Blind, measurement only | Run many times; contaminated by dev6a/6b templates (D80) |
-| `heldout9` | Blind (econ tracks) | Run in D72; contaminated (D80) |
-| `heldout10`, `heldout11` | Blind | Run in D80, D85, and several times in the Haiku campaign's funnel (haiku-benchmark.md) |
-| `heldout12` | Blind | First run with a strong model in D98 |
+| Name                                       | Use                                                                                                   | Status                                                                                 |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `train` = `train1`–`train6`                | **Tune here.** Six authors, written blind, one life area each (broad-set.md)                          | Tuning set                                                                             |
+| `dev6a`, `dev6b`                           | Development suites (after D72); two authors, so rules overfit their wording (broad-set.md)            | Tuning, with care                                                                      |
+| `hidden`, `heldout`, `heldout2`–`heldout4` | The old in-sample suites; every configuration since D47 was tuned on them                             | In-sample                                                                              |
+| `heldout5`–`heldout8`                      | Blind, measurement only                                                                               | Run many times; contaminated by dev6a/6b templates (D80)                               |
+| `heldout9`                                 | Blind (econ tracks)                                                                                   | Run in D72; contaminated (D80)                                                         |
+| `heldout10`, `heldout11`                   | Blind                                                                                                 | Run in D80, D85, and several times in the Haiku campaign's funnel (haiku-benchmark.md) |
+| `heldout12`                                | Blind                                                                                                 | First run with a strong model in D98                                                   |
+| `heldout14`                                | Blind, RealUse-1's (benchmark-realuse-1.md); 32 templates over 8 life areas, with a `neutral` variant | Run once for RealUse-1 (realuse-1/A-heldout14.md)                                      |
+
+**The `neutral` variant** (held-out 14 only; `neutral.ts`, `NEUTRAL_SUITES`): the same request as `hidden` and
+`control` with nothing planted. `bun run funnel ... -- --neutral` prints NEUTRAL lines (any packet delivered, items,
+bytes, ask items, calls, ms per task) and a JSON `neutral` block, never mixed into the score; `pi-ab.ts` and
+`hermes-ab.ts` take `--variants hidden,control,neutral` (other suites skip neutral), the grader counts any concern on
+a neutral task as a false one, and `pi-ab-report.ts` adds a `neutral` table and the RealUse-1 traffic mix (1 hidden,
+1 control, 8 neutral in 10; an assumption). An older suite asked for `neutral` throws.
 
 - **Never tune on `heldout*`.** `bun run funnel` refuses them without `--blind`. A new blind round needs a new suite
   written by an author who saw no engine code.
@@ -42,11 +50,11 @@ per suite for train1–6 and held-out 10–12.
 One product (D112): the engine's `DEFAULT_CONFIG` is the configuration, and the presets are made from it, never
 written by hand.
 
-| Preset | What |
-|---|---|
-| `default` | The unified default: NEWL (D99) plus poll behind, small poll pages, no probe grace, the push's reader not waiting for the poll, the slow-path queue (D112). Cards, intent and the reader need their dependencies (`--cards`, `--intent`, a reader); without them they are inert, as in a server with no model key |
-| `minus-<part>` | The default with one of `PARTS` (`packages/engine/src/parts.ts`) taken out: probes, grounds, fallback, compaction, judge, graph, anticipate, sync, freshness, askVerdicts, cards, intent, reader, slowPathQueue, probeGrace |
-| `minus-all` | The default with every part taken out: `CORE_CONFIG`, the no-feature core (the old production default) |
+| Preset         | What                                                                                                                                                                                                                                                                                                              |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `default`      | The unified default: NEWL (D99) plus poll behind, small poll pages, no probe grace, the push's reader not waiting for the poll, the slow-path queue (D112). Cards, intent and the reader need their dependencies (`--cards`, `--intent`, a reader); without them they are inert, as in a server with no model key |
+| `minus-<part>` | The default with one of `PARTS` (`packages/engine/src/parts.ts`) taken out: probes, grounds, fallback, compaction, judge, graph, anticipate, sync, freshness, askVerdicts, cards, intent, reader, slowPathQueue, probeGrace                                                                                       |
+| `minus-all`    | The default with every part taken out: `CORE_CONFIG`, the no-feature core (the old production default)                                                                                                                                                                                                            |
 
 A trial (DECISIONS.md, "Trial switches") is measured as `--set '{...}'` over `default` (funnel) or
 `--variant-config '{"X":{...}}' --conditions eden,eden~X` (pi-ab, hermes-ab, whose `--config` defaults to `default`);
@@ -67,14 +75,14 @@ not strict yet.
 
 ## Harnesses
 
-| Harness | Command | What it measures |
-|---|---|---|
-| No-model funnel | `hidden-funnel.ts` (`bun run funnel` wraps it) | Per task: planted item returned, cached, delivered; with `--ask`, cited by an ask; decoy delivered on controls; source calls and ms per task. Deterministic at `--time 0` |
-| Pi (standard agent) | `pi-ab.ts` | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][@w<ms>]`, graded by a second model; per-task timelines |
-| Hermes | `hermes-ab.ts --hermes-src DIR` | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`); same tasks, grader and results format as Pi |
-| In-house loop | `agent-ab.ts` | The pre-Pi loop; label any result from it as such (CLAUDE.md) |
-| Simulation | `bun run sim`, `bun run sim:perf` | Generated sessions (recall, precision, false fires) and the real server under load |
-| Connector lab | `bun run sim:lab:build && bun run sim:lab` | Real MCP servers in Docker over seeded backends |
+| Harness             | Command                                        | What it measures                                                                                                                                                          |
+| ------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No-model funnel     | `hidden-funnel.ts` (`bun run funnel` wraps it) | Per task: planted item returned, cached, delivered; with `--ask`, cited by an ask; decoy delivered on controls; source calls and ms per task. Deterministic at `--time 0` |
+| Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][@w<ms>]`, graded by a second model; per-task timelines              |
+| Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`); same tasks, grader and results format as Pi                                  |
+| In-house loop       | `agent-ab.ts`                                  | The pre-Pi loop; label any result from it as such (CLAUDE.md)                                                                                                             |
+| Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load                                                                                        |
+| Connector lab       | `bun run sim:lab:build && bun run sim:lab`     | Real MCP servers in Docker over seeded backends                                                                                                                           |
 
 Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too), `agent-ab-report.ts` (shared tables,
 `--record <label>` into the ledger), `act-report.ts` (`--act` runs), `timeline-report.ts` (funnel timelines),
@@ -82,14 +90,14 @@ Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too),
 
 ## Replay caches: make once, replay free
 
-| Cache | Made by | Replayed with | Checked in |
-|---|---|---|---|
-| Cards (dev/held-out worlds) | `cards-enrich.ts` | `--cards packages/sim/lab/cards/cards-v2.jsonl` | yes |
-| Cards (train worlds, 746 items, 75 calls, $0.0233 on glm-5.3-flash; broad-set.md) | `cards-enrich.ts --funnel train --seeds 41,42` | `cards-train.jsonl` (merge with v2: `bun run funnel` does) | yes |
-| Cards, price-routed batch 20 | `cards-enrich.ts --sort price --batch 20` | `econ-price20-v2.jsonl` (econ-background.md) | yes |
-| Intent requests (D87) | `cards-enrich.ts --intent --dir D` | `--intent D/intent-v2.jsonl` (needs `--cards`) | the Haiku campaign's no (`.local/haiku/intent/`); the train worlds (seeds 41–44) and held-out 10–11 (seeds 41–42), made for D110, yes: `packages/sim/lab/distilled/intent-v2.jsonl.gz`, which `bun run funnel` unpacks and replays by default when it covers the run (D158; `--intent none` opts out) |
-| Bridge queries (D89) | `bridge-enrich.ts --out F` | `--bridge F` | no |
-| Reader calls (D95) | `--reader live --reader-model m --reader-cache F` | `--reader replay --reader-model m --reader-cache F` (the same `m`: the key hashes it; a prompt not cached fails open; misses exit 3, below) | the default on train, seeds 41–42, Haiku 5.5, cards and intent replayed (D158), yes: `packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz` (gunzip it; recipe 2a); D141's intent-inert `reader-haiku-train-4142.jsonl.gz` is history, replayed with `--intent none` (with intent on it misses most prompts); others no |
+| Cache                                                                             | Made by                                           | Replayed with                                                                                                                               | Checked in                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cards (dev/held-out worlds)                                                       | `cards-enrich.ts`                                 | `--cards packages/sim/lab/cards/cards-v2.jsonl`                                                                                             | yes                                                                                                                                                                                                                                                                                                                                                                                   |
+| Cards (train worlds, 746 items, 75 calls, $0.0233 on glm-5.3-flash; broad-set.md) | `cards-enrich.ts --funnel train --seeds 41,42`    | `cards-train.jsonl` (merge with v2: `bun run funnel` does)                                                                                  | yes                                                                                                                                                                                                                                                                                                                                                                                   |
+| Cards, price-routed batch 20                                                      | `cards-enrich.ts --sort price --batch 20`         | `econ-price20-v2.jsonl` (econ-background.md)                                                                                                | yes                                                                                                                                                                                                                                                                                                                                                                                   |
+| Intent requests (D87)                                                             | `cards-enrich.ts --intent --dir D`                | `--intent D/intent-v2.jsonl` (needs `--cards`)                                                                                              | the Haiku campaign's no (`.local/haiku/intent/`); the train worlds (seeds 41–44) and held-out 10–11 (seeds 41–42), made for D110, plus held-out 13 and 14 (seeds 41–44; 14 topped up on Haiku 5.5 for RealUse-1), yes: `packages/sim/lab/distilled/intent-v2.jsonl.gz`, which `bun run funnel` unpacks and replays by default when it covers the run (D158; `--intent none` opts out) |
+| Bridge queries (D89)                                                              | `bridge-enrich.ts --out F`                        | `--bridge F`                                                                                                                                | no                                                                                                                                                                                                                                                                                                                                                                                    |
+| Reader calls (D95)                                                                | `--reader live --reader-model m --reader-cache F` | `--reader replay --reader-model m --reader-cache F` (the same `m`: the key hashes it; a prompt not cached fails open; misses exit 3, below) | the default on train, seeds 41–42, Haiku 5.5, cards and intent replayed (D158), yes: `packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz` (gunzip it; recipe 2a); D141's intent-inert `reader-haiku-train-4142.jsonl.gz` is history, replayed with `--intent none` (with intent on it misses most prompts); others no                                                 |
 
 `pi-ab.ts`/`hermes-ab.ts` read `--cards FILE` and write cards they had to make live to `--cards-out` (default
 `<out>.cards.jsonl`); name that file in later runs. Keep run outputs under `.local/` (git ignores it).
@@ -138,11 +146,11 @@ messages can reach the cap (an estimate, not measured in the lab). The unit test
 
 ## Scorers (`packages/sim/lab/scripts/`, run with `python3 -I`)
 
-| Script | Input | Output |
-|---|---|---|
-| `funnel-score.py F.json …` | funnel `--json` files | per suite: hidden surfaced (delivered or ask-cited) and decoys surfaced; with a reader, hidden and decoy in the reader's pool. `bun run funnel` prints the same |
-| `reader-score.py BASE.json RUN.json` | two funnel files on the same tasks | the reader's effect: surfaced base → reader, 2.5 s-capped, flags, latency p50/p90, flag kinds |
-| `haiku-bench.py LEDGER.jsonl RUN.json …` | pi-ab/hermes-ab results + timelines + spend ledger | rates per harness, suite group and condition; paired bootstrap CIs; tokens, cache shares; cost by role |
+| Script                                   | Input                                              | Output                                                                                                                                                          |
+| ---------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `funnel-score.py F.json …`               | funnel `--json` files                              | per suite: hidden surfaced (delivered or ask-cited) and decoys surfaced; with a reader, hidden and decoy in the reader's pool. `bun run funnel` prints the same |
+| `reader-score.py BASE.json RUN.json`     | two funnel files on the same tasks                 | the reader's effect: surfaced base → reader, 2.5 s-capped, flags, latency p50/p90, flag kinds                                                                   |
+| `haiku-bench.py LEDGER.jsonl RUN.json …` | pi-ab/hermes-ab results + timelines + spend ledger | rates per harness, suite group and condition; paired bootstrap CIs; tokens, cache shares; cost by role                                                          |
 
 ## Providers and money
 
@@ -275,11 +283,11 @@ bun run funnel --jobs 4 -- --reader stub --lead-in clause # draft pool against t
 ```
 
 - **`--reader stub`** says nothing binds and prints, per suite, `hidden in pool X/N, decoy in pool Y/N, mean pool
-  items, mean prompt chars (standing prefix)`. Pool means the ids the reader was given for the request (the push's
+items, mean prompt chars (standing prefix)`. Pool means the ids the reader was given for the request (the push's
   read and the ask's, `ReaderReport.pool`). It measures pool content; it is **not a bound** on NEW's hidden rate: the
   rule paths, the ask's own citations and the push still deliver items the reader never read (NEWL's paid screen
   delivered 254/384 hidden, haiku-phase3.md, against 230/384 in its stub pool here, though that screen also had
-  intent requests). Its hidden and decoy *delivered* counts are not the preset's:
+  intent requests). Its hidden and decoy _delivered_ counts are not the preset's:
   with a reader that never binds, NEW falls back toward its rule paths (NEWL under stub: 214/211, ALL3's numbers). Use
   it for changes upstream of the reader: pool building, retrieval, ordering, gating, standing items.
 - **`--reader oracle[:p_hit,p_false]`** (default 1,0) flags the planted hidden item as bearing with probability
@@ -304,12 +312,12 @@ bun run funnel --jobs 4 -- --reader stub --lead-in clause # draft pool against t
 
 Measured on train1–6, seeds 41–42, 4 cores, no key set:
 
-| Run | Wall | Result |
-|---|---|---|
-| NEWL `--reader stub` (twice) | 18.5 s, 18.2 s | hidden in pool 230/384, decoy in pool 229/384, mean pool 12.3 items, mean prompt 7,501 chars over 656 stub calls; identical perTask rows (timing removed) and score |
-| NEWL `--reader oracle:0.9,0.1` | 20.7 s (`--jobs 4`), 37.4 s (`--jobs 1`) | proxy: hidden 245/384, decoys 134/384; same rows at both job counts |
-| ALL3 `--packet-k 10,15,20` | 18.6 s | top-10 237 (256 with delivered/cited), top-15 264 (272), top-20 279 (282) hidden of 384; decoys top-15 268 (275); top-15 packet 3,808 bytes |
-| NEWL stub `--lead-in clause` | 22.4 s | draft pool non-empty 640/768; Jaccard mean 0.688; final ⊆ draft 237/640; hidden in draft pool 213/384 (in final pool 228) |
+| Run                            | Wall                                     | Result                                                                                                                                                              |
+| ------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NEWL `--reader stub` (twice)   | 18.5 s, 18.2 s                           | hidden in pool 230/384, decoy in pool 229/384, mean pool 12.3 items, mean prompt 7,501 chars over 656 stub calls; identical perTask rows (timing removed) and score |
+| NEWL `--reader oracle:0.9,0.1` | 20.7 s (`--jobs 4`), 37.4 s (`--jobs 1`) | proxy: hidden 245/384, decoys 134/384; same rows at both job counts                                                                                                 |
+| ALL3 `--packet-k 10,15,20`     | 18.6 s                                   | top-10 237 (256 with delivered/cited), top-15 264 (272), top-20 279 (282) hidden of 384; decoys top-15 268 (275); top-15 packet 3,808 bytes                         |
+| NEWL stub `--lead-in clause`   | 22.4 s                                   | draft pool non-empty 640/768; Jaccard mean 0.688; final ⊆ draft 237/640; hidden in draft pool 213/384 (in final pool 228)                                           |
 
 Limits: the rows of the table above ran before D158, intent inert (the intent index finds nothing without a replay
 file), so their pools lack the intent hits that the paid screens had; the prompt sizes are of the stub's reads only.
@@ -330,7 +338,7 @@ train1 seed 41 wrote 54 lines for its 54 reader calls.
   before). Each delivered task records `beforeModel`: the planted item came with the reply or was pending right
   after it, so an agent that collects before its first model call holds it. Later arrivals still count as delivered
   (collected up to the default window), so the funnel score does not move. ALL3, `--suite train1,train2 --seeds 41
-  --jobs 2 -- --time 1` (36 s each): wait 0 delivered 5 of 28 before the first model call (hidden 3/14, decoys 2/14),
+--jobs 2 -- --time 1` (36 s each): wait 0 delivered 5 of 28 before the first model call (hidden 3/14, decoys 2/14),
   wait 1,500 26 of 28 (12/14, 14/14), the default 3,000 27 of 28 (13/14, 14/14); score 36/64 and 39/64 in all three.
   The client SDK and server default `waitMs` to 0 (D98).
 - **`-- --overlap`** sends the suite's next request in the same session, not waited for, just before each request,
@@ -372,12 +380,12 @@ surfaced 127; decoys pool 121, surfaced 118 (full: 262/246 and 259/235). With th
 replay, the screen's 384 rows equal the full replay's rows for the same tasks (0 moved). Agreement with the full
 funnel on four past changes (`agree`, each change run both ways against the default):
 
-| Change | Tasks agreeing | Moved (full on screen / screen) | Full Δ pool, surfaced (hidden; decoys) | Screen Δ | Signs |
-|---|---|---|---|---|---|
-| D159's looser intent `{"intentMinCoverage":0.2,"intentMinMatched":1,"intentHits":12}` | 384/384 | 42 / 42 | +16, +22; +8, +21 | +9, +10; +8, +14 | agree |
-| `--preset minus-probes` | 384/384 | 32 / 32 | −10, −11; −12, −9 | −4, −5; −5, −5 | agree |
-| `--preset minus-intent` | 384/384 | 42 / 42 | −32, −45; −17, −24 | −17, −20; −8, −12 | agree |
-| `--preset minus-graph` | 384/384 | 6 / 6 | −1, +3; −2, +1 | −1, +1; −1, 0 | differ |
+| Change                                                                                | Tasks agreeing | Moved (full on screen / screen) | Full Δ pool, surfaced (hidden; decoys) | Screen Δ          | Signs  |
+| ------------------------------------------------------------------------------------- | -------------- | ------------------------------- | -------------------------------------- | ----------------- | ------ |
+| D159's looser intent `{"intentMinCoverage":0.2,"intentMinMatched":1,"intentHits":12}` | 384/384        | 42 / 42                         | +16, +22; +8, +21                      | +9, +10; +8, +14  | agree  |
+| `--preset minus-probes`                                                               | 384/384        | 32 / 32                         | −10, −11; −12, −9                      | −4, −5; −5, −5    | agree  |
+| `--preset minus-intent`                                                               | 384/384        | 42 / 42                         | −32, −45; −17, −24                     | −17, −20; −8, −12 | agree  |
+| `--preset minus-graph`                                                                | 384/384        | 6 / 6                           | −1, +3; −2, +1                         | −1, +1; −1, 0     | differ |
 
 Every task agreed in every change, as it must (same worlds, same order): that is a determinism check, not evidence that
 the screen predicts. The evidence is the verdict, the sign of the totals, which agreed on the three changes that moved
@@ -455,15 +463,15 @@ below and in D141–D157 that cites 247/127 is that intent-inert reading, not th
 - **When it goes stale.** Any change upstream of the reader's input (sync, retrieval, ranking, rendering, the intent
   requests or thresholds, the day or request text), a `READER_VERSION` bump or another reader prompt misses: the miss
   count says how much. Top the misses up with one metered live run into a copy (`--reader live --reader-model
-  claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl --spend-ledger .local/mkt/ledger.jsonl
-  --spend-cap 18 --spend-headroom 0.3 --run-label NAME`); a fresh default reading cost $0.17–0.19 (ledger runs
+claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl --spend-ledger .local/mkt/ledger.jsonl
+--spend-cap 18 --spend-headroom 0.3 --run-label NAME`); a fresh default reading cost $0.17–0.19 (ledger runs
   ga-default, ga-default2, ib-reader-intent-cache and ib-reader-intent-cache-default).
 - **How the surfaced items were surfaced (D173, reporting only).** Every run (each process's block, then the merged
   score) prints, after TOTAL, `hidden surfaced` and `decoys surfaced` split into **flagged** (the reader flagged the
   item in the request's last reading, whatever injection carried it), **rule path** (delivered without the flag, by
   the injection's `why`: grounded-conflict, fallback, sources, ...) and **listed only** (cited by the ask with no flag
   and no delivery: `readAsk`'s `rest`, chosen minus explicit rejections), and `decoys flagged in pool` beside `decoys
-  in pool`; `--json` carries `surfacedBy` on each perTask row. The recipe above, 2026-11-06 (16 s, $0): TOTAL 273/137
+in pool`; `--json` carries `surfacedBy` on each perTask row. The recipe above, 2026-11-06 (16 s, $0): TOTAL 273/137
   and pool 257/240 unchanged; decoys surfaced 137 = flagged 23 + rule path 68 (grounded-conflict 28, fallback 19,
   sources 9, anticipated-conflict 4, grounded-card 3, cache 2, grounded-clash 2, grounded-graph 1) + listed only 46;
   decoys flagged in pool 23 of 240; hidden 273 = 227 + 22 + 24. **The O7 precision gates are unchanged**: decoys in
@@ -471,7 +479,7 @@ below and in D141–D157 that cites 247/127 is that intent-inert reading, not th
   loosen a precision guard, so it needs a new decision; the split says where a decoy came from, not that it is
   harmless.
 - **Planted coverage of the intent replay (D173).** With an intent file loaded, every run prints `planted items with
-  an intent replay line: hidden H/N, decoys D/N` beside `replayed requests for X of Y items asked`, with a WARNING
+an intent replay line: hidden H/N, decoys D/N` beside `replayed requests for X of Y items asked`, with a WARNING
   below 100%. Planted items are a few percent of the items asked but most of the file's holes: on 2026-11-06
   `intent-v2` covered 13,440 of 13,604 items asked and only 286/384 hidden and 341/384 decoys (98 and 43 not in
   replay; 141 of the 164 misses), so the $0 screens run a quarter of planted hidden facts with no requests. A WARNING

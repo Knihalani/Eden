@@ -78,6 +78,8 @@ export const INTENT_COVERS: Record<string, string[]> = {
   heldout10: ["41", "42"],
   heldout11: ["41", "42"],
   heldout13: ["41", "42", "43", "44"],
+  // RealUse-1 (docs/research/realuse-1/A-heldout14.md): topped up on Haiku 5.5, 2026-11-06.
+  heldout14: ["41", "42", "43", "44"],
 };
 
 /** The suite × seed shards INTENT_FILE was not made for. */

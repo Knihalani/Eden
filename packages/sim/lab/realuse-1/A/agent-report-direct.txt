@@ -1,0 +1,140 @@
+model claude-haiku-5-5, grader claude-haiku-5-5, spent $0.7754, 1152 runs
+errors 0, ungraded 0
+
+== request
+
+== arrival
+
+== hidden
+tools       n=128 facts 0.203 success 0.203 lexical 0.148 calls 2.07 tools 3.09 in 2574 out 527 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.350 p50 5.0s leaks 0
+eden        n=128 facts 0.656 success 0.656 lexical 0.500 calls 1.36 tools 0.57 in 1348 out 434 injected 1.34 late 0.02 edenCalls 1.06 $/1k 0.619 p50 3.9s leaks 0
+both        n=128 facts 0.570 success 0.570 lexical 0.414 calls 1.73 tools 1.97 in 2371 out 494 injected 1.27 late 0.00 edenCalls 0.77 $/1k 0.536 p50 4.8s leaks 0
+
+== control
+tools       n=128 facts 0.000 success 0.000 lexical 0.047 calls 2.08 tools 3.15 in 2574 out 543 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.351 p50 5.0s leaks 0
+eden        n=128 facts 0.000 success 0.000 lexical 0.109 calls 1.56 tools 0.91 in 1592 out 469 injected 1.02 late 0.00 edenCalls 1.33 $/1k 0.708 p50 5.0s leaks 0
+both        n=128 facts 0.016 success 0.016 lexical 0.141 calls 1.84 tools 2.39 in 2466 out 531 injected 0.97 late 0.00 edenCalls 0.77 $/1k 0.553 p50 5.5s leaks 0
+
+== neutral (nothing planted: any concern counts as a false one)
+tools       n=128 facts 0.016 success 0.016 lexical 0.008 calls 2.11 tools 3.24 in 2593 out 539 injected 0.00 late 0.00 edenCalls 0.00 $/1k 0.349 p50 4.9s leaks 0
+eden        n=128 facts 0.055 success 0.055 lexical 0.000 calls 1.79 tools 1.22 in 1814 out 494 injected 0.60 late 0.00 edenCalls 1.58 $/1k 0.753 p50 5.6s leaks 0
+both        n=128 facts 0.023 success 0.023 lexical 0.000 calls 1.98 tools 2.92 in 2567 out 535 injected 0.60 late 0.00 edenCalls 0.74 $/1k 0.524 p50 5.6s leaks 0
+
+== offworld
+
+== paired fact-recall differences, bootstrap 95% interval
+eden       - tools  hidden   n=128 +0.453 (+0.344..+0.555)
+eden       - tools  control  n=128 +0.000 (+0.000..+0.000)
+eden       - tools  neutral  n=128 +0.039 (+0.000..+0.086)
+both       - tools  hidden   n=128 +0.367 (+0.281..+0.461)
+both       - tools  control  n=128 +0.016 (+0.000..+0.039)
+both       - tools  neutral  n=128 +0.008 (-0.023..+0.039)
+
+== hidden context raised, by template (tools / eden / both)
+renewal-already-won 4/4  4/4  4/4
+review-room-closure 0/4  1/4  0/4
+webinar-speaker-quiet-period 0/4  4/4  4/4
+freelance-budget-line 4/4  3/4  4/4
+maya-saturday-party 0/4  4/4  4/4
+mum-away-sunday  0/4  0/4  0/4
+school-early-finish 0/4  0/4  0/4
+sister-gift-bought 3/4  0/4  2/4
+physio-preauth   0/4  4/4  4/4
+flu-clinic-slot  0/4  3/4  0/4
+maya-sesame-allergy 0/4  1/4  1/4
+inhaler-review-due 0/4  1/4  0/4
+isa-allowance    2/4  4/4  4/4
+council-tax-direct-debit 0/4  2/4  2/4
+builder-deposit-paid 0/4  4/4  3/4
+pension-change-freeze 0/4  4/4  4/4
+rail-strike-cologne 0/4  4/4  4/4
+lisbon-room-booked 4/4  2/4  2/4
+esta-expired     0/4  2/4  2/4
+driving-licence-expiry 0/4  0/4  1/4
+washer-repair-cover 2/4  3/4  4/4
+street-closure-delivery 0/4  4/4  4/4
+sofa-lift-outage 0/4  2/4  3/4
+smart-meter-booked 0/4  3/4  3/4
+road-tax-direct-debit 0/4  4/4  0/4
+contents-auto-renewed 0/4  4/4  2/4
+wills-not-ready  2/4  4/4  4/4
+nda-already-signed 4/4  4/4  4/4
+stag-weekend-moved 0/4  3/4  0/4
+restaurant-refurb 1/4  4/4  4/4
+book-club-host-taken 0/4  2/4  0/4
+race-family-weekend 0/4  0/4  0/4
+
+== false concern raised (control), by template (tools / eden / both)
+renewal-already-won 0/4  0/4  0/4
+review-room-closure 0/4  0/4  1/4
+webinar-speaker-quiet-period 0/4  0/4  0/4
+freelance-budget-line 0/4  0/4  0/4
+maya-saturday-party 0/4  0/4  0/4
+mum-away-sunday  0/4  0/4  0/4
+school-early-finish 0/4  0/4  0/4
+sister-gift-bought 0/4  0/4  0/4
+physio-preauth   0/4  0/4  0/4
+flu-clinic-slot  0/4  0/4  0/4
+maya-sesame-allergy 0/4  0/4  0/4
+inhaler-review-due 0/4  0/4  0/4
+isa-allowance    0/4  0/4  0/4
+council-tax-direct-debit 0/4  0/4  0/4
+builder-deposit-paid 0/4  0/4  0/4
+pension-change-freeze 0/4  0/4  0/4
+rail-strike-cologne 0/4  0/4  0/4
+lisbon-room-booked 0/4  0/4  1/4
+esta-expired     0/4  0/4  0/4
+driving-licence-expiry 0/4  0/4  0/4
+washer-repair-cover 0/4  0/4  0/4
+street-closure-delivery 0/4  0/4  0/4
+sofa-lift-outage 0/4  0/4  0/4
+smart-meter-booked 0/4  0/4  0/4
+road-tax-direct-debit 0/4  0/4  0/4
+contents-auto-renewed 0/4  0/4  0/4
+wills-not-ready  0/4  0/4  0/4
+nda-already-signed 0/4  0/4  0/4
+stag-weekend-moved 0/4  0/4  0/4
+restaurant-refurb 0/4  0/4  0/4
+book-club-host-taken 0/4  0/4  0/4
+race-family-weekend 0/4  0/4  0/4
+
+== any concern raised (neutral), by template (tools / eden / both)
+renewal-already-won 1/4  3/4  1/4
+review-room-closure 0/4  0/4  0/4
+webinar-speaker-quiet-period 1/4  0/4  0/4
+freelance-budget-line 0/4  0/4  1/4
+maya-saturday-party 0/4  2/4  0/4
+mum-away-sunday  0/4  1/4  0/4
+school-early-finish 0/4  0/4  0/4
+sister-gift-bought 0/4  0/4  0/4
+physio-preauth   0/4  0/4  0/4
+flu-clinic-slot  0/4  0/4  0/4
+maya-sesame-allergy 0/4  0/4  0/4
+inhaler-review-due 0/4  0/4  0/4
+isa-allowance    0/4  0/4  0/4
+council-tax-direct-debit 0/4  0/4  0/4
+builder-deposit-paid 0/4  0/4  0/4
+pension-change-freeze 0/4  0/4  0/4
+rail-strike-cologne 0/4  0/4  0/4
+lisbon-room-booked 0/4  0/4  0/4
+esta-expired     0/4  0/4  0/4
+driving-licence-expiry 0/4  0/4  0/4
+washer-repair-cover 0/4  0/4  0/4
+street-closure-delivery 0/4  0/4  0/4
+sofa-lift-outage 0/4  0/4  0/4
+smart-meter-booked 0/4  0/4  0/4
+road-tax-direct-debit 0/4  0/4  0/4
+contents-auto-renewed 0/4  0/4  0/4
+wills-not-ready  0/4  0/4  1/4
+nda-already-signed 0/4  0/4  0/4
+stag-weekend-moved 0/4  0/4  0/4
+restaurant-refurb 0/4  1/4  0/4
+book-club-host-taken 0/4  0/4  0/4
+race-family-weekend 0/4  0/4  0/4
+
+== by suite: hidden fact raised / false concern raised (control)
+heldout14  tools         hidden  26/128 0.203   false-concern   0/128 0.000   neutral-concern   2/128 0.016
+heldout14  eden          hidden  84/128 0.656   false-concern   0/128 0.000   neutral-concern   7/128 0.055
+heldout14  both          hidden  73/128 0.570   false-concern   2/128 0.016   neutral-concern   3/128 0.023
+
+grader and lexical check agree on 1044 of 1152 facts (0.906)
