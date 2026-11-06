@@ -412,6 +412,14 @@ at most one extra search per notification (not separately measured).
 - Per user, cold: the intent requests cost about $0.071 per user backfill (1,487.5 items at $0.0000510 an item,
   docs/research/new-minus-intent.md) on top of the cards (ALL3's card backfill was $0.106 per 1k Pi tasks on held-out
   13, docs/research/haiku-phase3.md). The per-user-day budget ($0.25) bounds a day's backfill.
+- `intentConstraintOnly` (D170, a trial, off): an item the card prefilter rejects is not read for its requests alone.
+  Measured at $0 (`bun run funnel --jobs 4 -- --intent <gunzipped intent-v2>`, train1–6 seeds 41–42, 24 simulated
+  users, 2026-11-06): items sent to the card model 13,604 to 2,113 (6.44x fewer; the 11,491 request-only items go),
+  calls 822 to 300 (2.74x); held-out 10–11 (`--blind`, measurement only) 4,514 to 650 items and 266 to 98 calls.
+  Estimated $, not measured (the funnel replays cards and intent): the 522 calls saved at $0.000445 a call (above) are
+  $0.232 for the 24 users, and the 11,491 items at the intent figure of $0.0000501 an item are $0.576; so about
+  $0.010–$0.024 per cold user's backfill. Scaled onto the post-D125 Pi background of $0.387 per 1k tasks by calls
+  (300/822) or items (2,113/13,604), the background becomes about $0.141 or $0.060 per 1k tasks.
 - Per task, larger sample (haiku-phase3.md, held-out 13 seeds 41–44): NEWL agent + reader $0.638 per 1k hidden Pi
   tasks ($0.744 all-in); traffic-weighted at one task in ten carrying a fact, Eden's own calls $0.518 per 1k (Pi) and
   $0.290 (Hermes).

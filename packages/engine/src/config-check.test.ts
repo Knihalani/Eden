@@ -89,6 +89,18 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     expect(() =>
       checkEngineConfig({ ...push, readerPush: false, readerPushWaitMs: 5_000 }, { deps: ALL_DEPS }),
     ).toThrow(/"readerPushWaitMs" acts only/);
+    // `intentConstraintOnly` (D170): a trial, off in the default; on, it needs the cards dependency and intent on.
+    expect(DEFAULT_CONFIG.intentConstraintOnly).toBe(false);
+    expect(checkEngineConfig({ intentConstraintOnly: true }, { deps: ALL_DEPS })).toEqual({
+      intentConstraintOnly: true,
+    });
+    expect(() => checkEngineConfig({ intentConstraintOnly: true })).toThrow(
+      /"intentConstraintOnly" needs the partner's cards dependency/,
+    );
+    expect(() => checkEngineConfig({ intent: false, intentConstraintOnly: true }, { deps: ALL_DEPS })).toThrow(
+      /"intentConstraintOnly" acts only with "cards" and "intent" on, and this configuration has "intent" off/,
+    );
+    expect(() => checkEngineConfig({ intentConstraintOnly: "yes" })).toThrow(/must be a boolean/);
     // `parents: false` (the server's file, merged over the defaults as it always was) skips it.
     expect(checkEngineConfig({ graph: false, graphItems: 8 }, { parents: false })).toEqual({
       graph: false,

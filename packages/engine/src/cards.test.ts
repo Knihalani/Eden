@@ -463,3 +463,168 @@ describe("cards in the engine (config.cards)", () => {
     expect(cardKey(a)).not.toBe(cardKey({ ...a, text: "other words" }));
   });
 });
+
+describe("intentConstraintOnly (D170): what the prefilter rejects is not read for its requests alone", () => {
+  const scope = { tenantId: "t", userId: "u1" };
+  const other = { tenantId: "t", userId: "u2" };
+  /** Records the items each call carried; answers no card and no request. */
+  class CountMaker implements CardMaker {
+    calls: { titles: string[]; intent: boolean }[] = [];
+    async make(items: ContextItem[], _today: string, _signal: AbortSignal, _retry?: boolean, intent?: boolean) {
+      this.calls.push({ titles: items.map((i) => i.title), intent: intent === true });
+      const none: Card = { kind: "none", actions: [], entities: [], statement: "" };
+      return {
+        cards: items.map(() => none),
+        ...(intent ? { requests: items.map((): string[] => []) } : {}),
+        costUsd: 0.001,
+      };
+    }
+  }
+  const worded = item("w", "Ops", "The Kestrel cluster is frozen from 4 to 9 November.");
+  // No deontic or status wording: the prefilter rejects it, though a request ("book drinks with Sam") bears on it.
+  const plain = item("p", "Catching up", "Fancy drinks sometime next week? I was thinking Hoppers.");
+  const enricher = (constrained: boolean) => {
+    const maker = new CountMaker();
+    const e = new CardEnricher({ maker, budget: new Budget(), now: () => NOW });
+    e.intend();
+    if (constrained) e.constrain();
+    return { maker, e };
+  };
+
+  test("a constraint-worded item is still read, with its requests asked for", async () => {
+    expect(worthCarding(worded)).toBe(true);
+    const { maker, e } = enricher(true);
+    e.enqueue(scope, [worded]);
+    await e.idle();
+    expect(maker.calls).toEqual([{ titles: ["Ops"], intent: true }]);
+    expect(e.stats.sent).toBe(1);
+    expect(e.stats.requestOnly).toBe(0);
+    expect(e.stats.intentSkipped).toBe(0);
+  });
+
+  test("a rejected item makes no model call with the switch on, and still does with it off", async () => {
+    expect(worthCarding(plain)).toBe(false);
+    const on = enricher(true);
+    on.e.enqueue(scope, [plain]);
+    await on.e.idle();
+    expect(on.maker.calls).toEqual([]);
+    expect(on.e.stats.intentSkipped).toBe(1);
+    expect(on.e.stats.requestOnly).toBe(0);
+    // Remembered as no card: the same content again is reused, never read or counted twice.
+    on.e.enqueue(scope, [{ ...plain, id: "chat:p2" }]);
+    await on.e.idle();
+    expect(on.maker.calls).toEqual([]);
+    expect(on.e.stats.reused).toBe(1);
+    expect(on.e.stats.intentSkipped).toBe(1);
+
+    const off = enricher(false);
+    off.e.enqueue(scope, [plain]);
+    await off.e.idle();
+    expect(off.maker.calls).toEqual([{ titles: ["Catching up"], intent: true }]);
+    expect(off.e.stats.requestOnly).toBe(1);
+    expect(off.e.stats.intentSkipped).toBe(0);
+  });
+
+  test("without intent the switch changes nothing: a rejected item is simply not carded", async () => {
+    const maker = new CountMaker();
+    const e = new CardEnricher({ maker, budget: new Budget(), now: () => NOW });
+    e.constrain();
+    e.enqueue(scope, [plain, worded]);
+    await e.idle();
+    expect(maker.calls).toEqual([{ titles: ["Ops"], intent: false }]);
+    expect(e.stats.intentSkipped).toBe(0);
+  });
+
+  test("the skipped count is per user: two scopes do not share it, and forgetting one drops its count", async () => {
+    const { e } = enricher(true);
+    e.enqueue(scope, [plain, item("q", "Weekend", "Shall we walk the dog on Saturday?")]);
+    e.enqueue(other, [plain]);
+    await e.idle();
+    expect(e.intentSkippedFor(scope)).toBe(2);
+    expect(e.intentSkippedFor(other)).toBe(1);
+    expect(e.intentSkippedFor({ tenantId: "t2", userId: "u1" })).toBe(0);
+    expect(e.stats.intentSkipped).toBe(3);
+    e.forget(scope);
+    expect(e.intentSkippedFor(scope)).toBe(0);
+    expect(e.intentSkippedFor(other)).toBe(1);
+  });
+
+  test("its known miss: an unworded item that bears on a request only through its requests is not found", async () => {
+    // The finding's caveat: the lab's planted facts are constraint-worded, so its screens cannot see this case. A chat
+    // invitation with no deontic wording bears on "reserve a restaurant for the team dinner" (Friday is taken), and
+    // shares no word with it: only its requests bridge them. With the switch on it is never read, so the ask misses it.
+    const invite = item("i", "Catching up", "Fancy drinks at Hoppers on Friday? Sam and Priya are in.");
+    expect(worthCarding(invite)).toBe(false);
+    const request = "Reserve a restaurant for the team dinner";
+    const ask = async (constraintOnly: boolean) => {
+      let clock = NOW;
+      class Requests extends CountMaker {
+        override async make(items: ContextItem[], today: string, signal: AbortSignal, retry?: boolean, i?: boolean) {
+          const out = await super.make(items, today, signal, retry, i);
+          return {
+            ...out,
+            ...(i ? { requests: items.map(() => ["reserve a restaurant", "plan the team dinner"]) } : {}),
+          };
+        }
+      }
+      const maker = new Requests();
+      const cards = new CardEnricher({ maker, budget: new Budget(), now: () => clock });
+      const source: Source = {
+        id: "chat",
+        kind: "test",
+        description: "Team chat",
+        search: async (q) => (/hoppers|drinks/i.test(q.text) ? [invite] : []),
+      };
+      const p = new ContextPartner({
+        sources: async () => [source],
+        sourceMap: new SourceMap(),
+        cache: new ItemCache(),
+        budget: new Budget(),
+        model: null,
+        now: () => clock,
+        config: { ...CORE_CONFIG, cards: true, intent: true, intentConstraintOnly: constraintOnly },
+        cards,
+      });
+      const ev = { ...scope, sessionId: "s1", at: clock, kind: "user_message", text: "Drinks at Hoppers?" };
+      await p.observe(ev as AgentEvent, { waitMs: 1_000 });
+      await cards.idle();
+      clock += HOUR;
+      const a = await p.ask({ ...scope, sessionId: "s2", question: request });
+      return { cited: a.citations.map((c) => c.itemId), calls: maker.calls.length };
+    };
+    const off = await ask(false);
+    expect(off.cited).toEqual([invite.id]);
+    expect(off.calls).toBe(1);
+    const on = await ask(true);
+    expect(on.cited).toEqual([]);
+    expect(on.calls).toBe(0);
+  });
+
+  test("the partner turns it on from its config, only with intent on", async () => {
+    const build = (config: Partial<typeof CORE_CONFIG>) => {
+      const maker = new CountMaker();
+      const cards = new CardEnricher({ maker, budget: new Budget(), now: () => NOW });
+      new ContextPartner({
+        sources: async () => [],
+        sourceMap: new SourceMap(),
+        cache: new ItemCache(),
+        budget: new Budget(),
+        model: null,
+        now: () => NOW,
+        config: { ...CORE_CONFIG, cards: true, ...config },
+        cards,
+      });
+      return { maker, cards };
+    };
+    const on = build({ intent: true, intentConstraintOnly: true });
+    on.cards.enqueue(scope, [plain]);
+    await on.cards.idle();
+    expect(on.maker.calls).toEqual([]);
+    expect(on.cards.stats.intentSkipped).toBe(1);
+    const off = build({ intent: true });
+    off.cards.enqueue(scope, [plain]);
+    await off.cards.idle();
+    expect(off.maker.calls.length).toBe(1);
+    expect(off.cards.stats.intentSkipped).toBe(0);
+  });
+});
