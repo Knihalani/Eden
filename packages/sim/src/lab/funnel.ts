@@ -21,10 +21,11 @@
  *   block of suite × seed shards and all run at once, default one per core (D139; ms/task is then contended, so
  *   `--jobs 1` for latency); at `--time` > 0 one per shard, N at a time, default min(shards, 12, 3 × cores), since
  *   those shards wait on sleeps. Some flags force 1 (the `--jobs` note below says which and why).
- * - `--intent default` (D158): the checked-in intent requests (`intent-v2`, train seeds 41-44 and held-out 10-11
- *   seeds 41-42; INTENT_COVERS), unpacked into a temp file and passed as `-- --intent`, when the configuration has
- *   intent and cards and the run's suites and seeds are all covered, so the screen runs the shipped default. `none`
- *   leaves intent inert (the pre-D158 screens); a file, or `-- --intent F`, replays that file.
+ * - `--intent default` (D158): the checked-in intent requests (`intent-v2`, train seeds 41-44, held-out 10-11
+ *   seeds 41-42 and held-out 13 seeds 41-44; INTENT_COVERS in cards-disk.ts), unpacked into a temp file and passed
+ *   as `-- --intent`, when the configuration has intent and cards and the run's suites and seeds are all covered, so
+ *   the screen runs the shipped default. `none` leaves intent inert (the pre-D158 screens); a file, or
+ *   `-- --intent F`, replays that file.
  * - With intent on and nothing replayed (`--intent none`, an uncovered run, or a file for other items), every TOTAL
  *   and pool line and the JSON label say `[intent inert: no replay]`; `--reader stub|oracle` refuse a `--baseline`
  *   whose intent differs.
@@ -51,6 +52,7 @@ import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { flags, labConfig, parseJson } from "./flags";
+import { INTENT_FILE, INTENT_PATH, intentUncovered } from "./cards-disk";
 import { amortisedCalls, callMismatches, defaultJobs, groupShards, mergeParts, type PartOut } from "./funnel-merge";
 import { effective, PRESETS } from "./presets";
 import { allMissedHint, cacheModels, missGate, MISS_EXIT } from "./reader-disk";
@@ -142,23 +144,8 @@ if (run.askReader && !has("--reader")) {
   console.error("funnel: the reader is on and no `-- --reader`: screening with `--reader stub` ($0, nothing binds)");
   passthrough.push("--reader", "stub");
 }
-/**
- * The checked-in intent requests and the suites and seeds they were made for (cards-enrich.ts --intent with Haiku for
- * D110: train1-6 seeds 41-44, held-out 10-11 seeds 41-42). The file is keyed on item content, so a run outside these
- * would replay only the items its worlds happen to share: it stays inert and says so rather than half-replaying.
- */
-const INTENT_FILE = "intent-v2.jsonl.gz";
-const INTENT_COVERS: Record<string, string[]> = {
-  ...Object.fromEntries(parseSuites("train").map((s) => [s, ["41", "42", "43", "44"]])),
-  heldout10: ["41", "42"],
-  heldout11: ["41", "42"],
-};
-/** The suite × seed shards INTENT_FILE was not made for. */
-function intentUncovered(suiteList: string[], seedsAsked: string[]): string[] {
-  return suiteList.flatMap((s) =>
-    seedsAsked.filter((seed) => !INTENT_COVERS[s]?.includes(String(Number(seed)))).map((seed) => `${s} seed ${seed}`),
-  );
-}
+// The checked-in intent requests and the shards they cover (train seeds 41-44, held-out 10-11 seeds 41-42, held-out
+// 13 seeds 41-44): INTENT_COVERS in cards-disk.ts, which the live harnesses read too.
 const labDir = join(import.meta.dir, "..", "..", "lab");
 scratch = mkdtempSync(join(tmpdir(), "eden-funnel-"));
 const seeds = opt("seeds", "41,42");
@@ -184,7 +171,7 @@ if (has("--intent")) {
     intentNote = `the checked-in requests do not cover ${shown}`;
   } else {
     const file = join(scratch, "intent.jsonl");
-    writeFileSync(file, gunzipSync(readFileSync(join(labDir, "distilled", INTENT_FILE))));
+    writeFileSync(file, gunzipSync(readFileSync(INTENT_PATH)));
     passthrough.push("--intent", file);
     intentNote = `${INTENT_FILE} by default, D158`;
     intentByDefault = true;

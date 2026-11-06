@@ -27,12 +27,15 @@
  *   OPENROUTER_API_KEY=… bun packages/sim/src/lab/hermes-ab.ts --hermes-src DIR [--hermes-python PY]
  *     [--suite dev6a] [--seeds 41] [--variants hidden,control] [--conditions hermes,hermes+eden]
  *     [--config ALL3] [--variant-config '{"A5":{…}}'] [--model z-ai/glm-5.3-flash] [--grader …] [--budget 0.6]
- *     [--card-model m] [--cards FILE [--cards-out FILE]] [--intent FILE]
+ *     [--card-model m] [--cards FILE [--cards-out FILE]] [--intent default|none|FILE[,FILE]]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--limit n] [--templates a,b] [--concurrency 4]
  *     [--max-iterations 6] [--out hermes-ab.json] [--timeline dir] [--time-scale 1] [--dump FILE] [--dry]
  *
  * `--time-scale` (default 1) gives the sim sources their profiles' assumed latency, as pi-ab does (its header says why,
  * and when 0, instant connectors, is still acceptable: a stated quality-only rerun). Runs before 2026-11-03 used 0.
+ *
+ * `--intent` as pi-ab takes it (D158): with `--cards` and intent on, the checked-in requests are replayed by default
+ * where they cover the run, and the header prints `intent: replayed n of m items` or labels the run intent inert.
  *
  * `--hermes-src` is a hermes-agent checkout with its dependencies in `<src>/.venv` (`uv sync --frozen
  * --no-install-project`); the run records its commit.
@@ -77,7 +80,7 @@ import {
   type RunResult,
   type Task,
 } from "./ab-common";
-import { DiskCardMaker, samePath } from "./cards-disk";
+import { DiskCardMaker, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
 import { isAnthropic, isCapError, keyFor, labAccess, labModel, providerPrefs } from "./free";
 import { parseHermesConditions, type HermesCondition } from "./hermes-conditions";
 import { edenMcpServer, labRouter, type StreamHost, type TaskBinding } from "./hermes-host";
@@ -154,7 +157,16 @@ const CARDS_FILE = opt("cards", "");
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
 if (CARDS_FILE && samePath(CARDS_OUT, CARDS_FILE)) throw new Error(`--cards-out ${CARDS_OUT} is the --cards file`);
 if (CARDS_FILE && !existsSync(CARDS_FILE)) throw new Error(`--cards ${CARDS_FILE}: no such file`);
-const INTENT_FILES = opt("intent", "").split(",").filter(Boolean);
+// The intent requests (D158), resolved as pi-ab does: the checked-in file by default where it covers the run, with
+// cards replayed and intent on; `--intent none` opts out; a run it does not cover is labelled intent inert.
+const INTENT_WANTED = CONDITIONS.some((c) => c.withPartner && effective(c.config).intent && effective(c.config).cards);
+const INTENT = harnessIntent(opt("intent", "default"), {
+  wanted: INTENT_WANTED,
+  cardsReplayed: !!CARDS_FILE,
+  suites: SUITE_LIST,
+  seeds: SEEDS,
+});
+const INTENT_FILES = INTENT.files;
 if (INTENT_FILES.length && !CARDS_FILE) throw new Error("--intent needs --cards");
 for (const f of INTENT_FILES) if (!existsSync(f)) throw new Error(`--intent ${f}: no such file`);
 const diskCards = CARDS_FILE
@@ -758,6 +770,15 @@ const worlds = SEEDS.flatMap((seed) =>
     }),
   ),
 );
+// The requests replayed for the items the run's sources hold, counted before anything is spent (`--dry` shows it).
+const intentCount =
+  INTENT_WANTED && diskCards
+    ? intentCoverage(
+        worlds.map((w) => simSources(w.world, CONNECTORS.profiles, 0, w.seed).flatMap((s) => s.listAll())),
+        diskCards.requests,
+      )
+    : { found: 0, of: 0 };
+const INTENT_LINE = intentLine({ wanted: INTENT_WANTED, cardsReplayed: !!CARDS_FILE, ...INTENT, ...intentCount });
 console.error(
   `hermes-ab: ${worlds.reduce((n, w) => n + w.tasks.length, 0)} tasks × ${CONDITIONS.length} conditions ` +
     `(${CONDITIONS.map((c) => c.name).join(",")}), hermes ${HERMES_COMMIT}, model ${MODEL}, grader ${GRADER}, ` +
@@ -769,6 +790,7 @@ console.error(
     (ACCESS.allowLogging ? ", ALLOW-LOGGING (lab only)" : "") +
     `, concurrency ${CONCURRENCY}, requests ≤${PACER.remaining === Infinity ? "∞" : PACER.remaining}`,
 );
+console.error(`hermes-ab: ${INTENT_LINE}`);
 if (DRY) process.exit(0);
 
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: labRouter(streams), idleTimeout: 255 });
@@ -813,6 +835,7 @@ writeFileSync(
       config: CONFIG,
       ...(Object.keys(CONFIG_VARIANTS).length ? { variantConfig: CONFIG_VARIANTS } : {}),
       ...(CARDS_FILE ? { cards: { replay: CARDS_FILE, out: CARDS_OUT } } : {}),
+      ...(INTENT_WANTED ? { intent: { line: INTENT_LINE, files: INTENT_FILES, ...intentCount } } : {}),
       timeScale: TIME_SCALE,
       ...connectorHeader(CONNECTORS),
       ...(ACCESS.allowLogging ? { allowLogging: true } : {}),
@@ -841,7 +864,8 @@ console.error(
     `time-scale ${TIME_SCALE}; ${PACER.sent} requests (${PACER.retried} retried, ${JSON.stringify(PACER.statuses)}), ` +
     `${orphanRequests} orphan` +
     (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : "") +
-    (stoppedStreams ? `; PARTIAL: ${stoppedStreams} streams stopped on a failure (logged above)` : ""),
+    (stoppedStreams ? `; PARTIAL: ${stoppedStreams} streams stopped on a failure (logged above)` : "") +
+    (INTENT_WANTED ? `; ${INTENT_LINE}` : ""),
 );
 console.error(overBudgetLine(budgeted));
 // Traffic-weighted rows (pi-ab-weighted.ts): most traffic is silent, so the hidden-only cost columns understate. The

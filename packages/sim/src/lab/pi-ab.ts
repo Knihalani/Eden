@@ -30,9 +30,15 @@
  * `--cards FILE` (alias `--cards-disk`) replays implication cards from a disk cache (`cards-disk.ts`, as the funnel
  * does) and makes only the missing ones live, so the conditions of a run, and later runs, do not each pay for the same
  * enrichment. FILE is only read; new cards go to `--cards-out` (default `<out>.cards.jsonl`), which later runs replay
- * too when they name it. Every stream shares one copy of both. `--card-sort price` routes the live card maker to
- * OpenRouter's cheapest compliant endpoint (D66); a batch cut off at its output cap is sent again with default
- * routing.
+ * too when they name it (its cards and, as `{h, c, r}`, the intent requests a live call made). Every stream shares
+ * one copy of both. `--card-sort price` routes the live card maker to OpenRouter's cheapest compliant endpoint (D66);
+ * a batch cut off at its output cap is sent again with default routing.
+ *
+ * `--intent` (D158): with `--cards` and intent on, the checked-in requests (`intent-v2.jsonl.gz`, INTENT_COVERS in
+ * cards-disk.ts) are replayed by default when they cover the run's suites and seeds; `none` replays none, a list of
+ * files those. The header prints `intent: replayed n of m items` (of the items the run's sources hold) and labels a
+ * run with no covering file `[intent inert: no replay]`. Before 2026-11-06 nothing was replayed unless `--intent` was
+ * given, so held-out 13 Pi figures from then had requests only for the items carded live (about a third).
  *
  * Every task records a timeline on one monotonic clock (`pi-timeline.ts`): task start; Eden's observe; its slow path,
  * search, probe queries, refresh and judge (the engine's spans, `spans.ts`), each of Eden's source calls, its cache
@@ -47,7 +53,7 @@
  *     [--grader anthropic/claude-haiku-5.5] [--budget 0.6] [--out pi-ab.json] [--timeline dir] [--time-scale 1]
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
  *     [--variant-config '{"name":{...}}'] [--act] [--cards FILE [--cards-out FILE]] [--card-sort price]
- *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent FILE]
+ *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent default|none|FILE[,FILE]]
  *     [--replay DIR [--replay-timing] [--replay-only]] [--reuse-arms earlier.json]
  *
  * `--replay DIR` replays the reader's and the grader's calls from DIR and appends new ones; `--reuse-arms F` copies the
@@ -116,7 +122,7 @@ import {
   type Task,
 } from "./ab-common";
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
-import { DiskCardMaker, samePath } from "./cards-disk";
+import { DiskCardMaker, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
 import { isAnthropic, isCapError, labAccess, labModel, piModelFor, piRegistry, providerPrefs } from "./free";
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
 import { effective, PRESETS } from "./presets";
@@ -201,7 +207,17 @@ if (CARDS_FILE && !existsSync(CARDS_FILE)) throw new Error(`--cards ${CARDS_FILE
  * One copy of the disk cards for every stream: read once, each stream sees the cards the others made, and a card
  * another stream is making now is waited for rather than made twice.
  */
-const INTENT_FILES = opt("intent", "").split(",").filter(Boolean);
+// The intent requests (D158): with cards replayed the card model writes requests only for the items it cards live,
+// so the checked-in requests are replayed by default where they cover the run, as the funnel does (`--intent none`
+// opts out; a list of files replays those). A run they do not cover is labelled intent inert in its header.
+const INTENT_WANTED = CONDITIONS.some((c) => c.withPartner && effective(c.config).intent && effective(c.config).cards);
+const INTENT = harnessIntent(opt("intent", "default"), {
+  wanted: INTENT_WANTED,
+  cardsReplayed: !!CARDS_FILE,
+  suites: SUITE_LIST,
+  seeds: SEEDS,
+});
+const INTENT_FILES = INTENT.files;
 if (INTENT_FILES.length && !CARDS_FILE) throw new Error("--intent needs --cards");
 for (const f of INTENT_FILES) if (!existsSync(f)) throw new Error(`--intent ${f}: no such file`);
 const diskCards = CARDS_FILE
@@ -1070,6 +1086,16 @@ const worlds = SEEDS.flatMap((seed) =>
     }),
   ),
 );
+// What the intent index will have: the requests replayed for the items the run's sources hold (`intent: replayed n of
+// m items`), counted before anything is spent so `--dry` shows it.
+const intentCount =
+  INTENT_WANTED && diskCards
+    ? intentCoverage(
+        worlds.map((w) => simSources(w.world, CONNECTORS.profiles, 0, w.seed).flatMap((s) => s.listAll())),
+        diskCards.requests,
+      )
+    : { found: 0, of: 0 };
+const INTENT_LINE = intentLine({ wanted: INTENT_WANTED, cardsReplayed: !!CARDS_FILE, ...INTENT, ...intentCount });
 console.error(
   `pi-ab: ${worlds.reduce((n, w) => n + w.tasks.length, 0)} tasks × ${CONDITIONS.length} conditions ` +
     `(${CONDITIONS.map((c) => c.name).join(",")}), model ${MODEL}, grader ${GRADER}, cap $${BUDGET}, suites ` +
@@ -1081,6 +1107,7 @@ console.error(
     `, requests ≤${PACER.remaining === Infinity ? "∞" : PACER.remaining}` +
     (REPLAY_DIR ? `, replay ${REPLAY_DIR}${REPLAY_ONLY ? " (only)" : ""}${REPLAY_TIMING ? " (timed)" : ""}` : ""),
 );
+console.error(`pi-ab: ${INTENT_LINE}`);
 /** The arms `--reuse-arms` copies (checked before anything is spent, `--dry` included), with their timeline lines. */
 const reused: { conditions: string[]; results: RunResult[]; records: TaskRecord[] } = {
   conditions: [],
@@ -1159,6 +1186,7 @@ writeFileSync(
       ...(Object.keys(CONFIG_VARIANTS).length ? { variantConfig: CONFIG_VARIANTS } : {}),
       ...(ACT ? { act: true } : {}),
       ...(CARDS_FILE ? { cards: { replay: CARDS_FILE, out: CARDS_OUT } } : {}),
+      ...(INTENT_WANTED ? { intent: { line: INTENT_LINE, files: INTENT_FILES, ...intentCount } } : {}),
       timeScale: TIME_SCALE,
       ...connectorHeader(CONNECTORS),
       ...(ACCESS.allowLogging ? { allowLogging: true } : {}),
@@ -1188,7 +1216,8 @@ console.error(
     `time-scale ${TIME_SCALE}; ${PACER.sent} requests (${PACER.retried} retried, ${JSON.stringify(PACER.statuses)})` +
     (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : "") +
     (REPLAY_DIR ? `; ${replayLine()}` : "") +
-    (REUSE_FILE ? `; reused ${reused.results.length} runs (${reused.conditions.join(",")}) at $0` : ""),
+    (REUSE_FILE ? `; reused ${reused.results.length} runs (${reused.conditions.join(",")}) at $0` : "") +
+    (INTENT_WANTED ? `; ${INTENT_LINE}` : ""),
 );
 console.error(overBudgetLine(budgeted));
 const replayMisses = (readerReplay?.missed ?? 0) + (graderReplay?.missed ?? 0);

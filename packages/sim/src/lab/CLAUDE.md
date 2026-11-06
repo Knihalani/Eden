@@ -26,7 +26,7 @@ cards-enrich, presets, suites, free, spend` (`.ts`): check `git log origin/main`
 | `eval-live.ts` | `bun run eval --live` on Anthropic (claude-haiku-5-5, `HAIKU_API_KEY`, ledger role `eden.reader`): the eval's `liveWiring` (D128) with a `make` that returns `labModel`; `--thinking off\|adaptive`, `--usd-cap` (default 0.05), `--wait`; a lab transport, not what ships |
 | `free.ts`, `spend.ts`, `free-smoke.ts` | Lab access: pacer, `--allow-logging`, `--rpm`, `--max-requests`, keys; the Anthropic spend ledger and cap |
 | `ask-coverage.ts` | `--ask-diag`'s coverage facts for a planted item the ask left unranked: `intentPlace` (partner.ts's intent-hit cut, lab-side), the buckets (not sent with the prefilter rejecting, no intent requests, no shared term, under/over thresholds) and the run's summary lines (audit 2026-11-06 F7) |
-| `cards-enrich.ts`, `cards-disk.ts`, `reader-disk.ts` | Make once, replay free: cards (+ `--intent` requests), reader calls; `SubsetReplay` (`--reader-subset`, D117: a missed prompt answered from a recorded superset pool, approximate and labelled) |
+| `cards-enrich.ts`, `cards-disk.ts`, `reader-disk.ts` | Make once, replay free: cards (+ `--intent` requests; `INTENT_COVERS` and the harnesses' default `--intent` live in cards-disk.ts), reader calls; `SubsetReplay` (`--reader-subset`, D117: a missed prompt answered from a recorded superset pool, approximate and labelled) |
 | `gate-traffic.ts`, `reader-latency-fit.ts` | No-model reader instruments: calls, gating and oracle-gate ceilings per preset (`--reuse`: cross-session verdict reuse); the reader latency fit (floor, ms per token) |
 | `timeline.ts`, `timeline-report.ts` | `--timeline` spans, CPU% and RSS per second; where the time went |
 | `ledger.ts`, `bench.ts`, `bench-compare.ts` | The benchmark ledger (`bench/ledger.jsonl`, `bench/runs/`) |
@@ -81,11 +81,17 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
   docs/research/pi-full-benchmark.md); the Haiku campaign ran three processes at once, RSS up to 3.35 GB each.
 - The default needs `--cards`, `--intent` (requests replayed) and a reader for its model parts; without them they are
   inert (the funnel screens with `--reader stub` when none is named). `bun run funnel` passes the checked-in cards
-  and, since D158, the checked-in intent requests (train seeds 41–44, held-out 10–11 seeds 41–42) itself; a run
-  outside that coverage, or with `--intent none`, is intent inert and every TOTAL line says so. Numbers recorded
-  before D158 (214/211 stub, 247/127 replayed, D112–D153) are intent-inert ones: compare like with like. Read
-  settings through `effective()`: a preset is an override, and `default` is `{}`. The harnesses wait 3,000 ms on the
-  first observe (`@w<ms>` changes it; 1 s lost 7.6–18.1 points, D98).
+  and, since D158, the checked-in intent requests (train seeds 41–44, held-out 10–11 seeds 41–42, held-out 13 seeds
+  41–44; INTENT_COVERS in cards-disk.ts) itself; a run outside that coverage, or with `--intent none`, is intent
+  inert and every TOTAL line says so. **pi-ab and hermes-ab do the same since 2026-11-06** (with `--cards` and intent
+  on, the covering file is replayed by default; the header prints `intent: replayed n of m items` or
+  `[intent inert: no replay]`). Before that they replayed no requests unless `--intent` was given, so every held-out
+  13 Pi/Hermes figure up to then (the final live run, the D159 pair) had requests only for items carded live: intent
+  inert for about two thirds of items (estimate, docs/research/edge-intent.md). `--cards-out` now keeps a live call's
+  requests (`{h, c, r}`) and replays them. Numbers recorded before D158 (214/211 stub, 247/127 replayed,
+  D112–D153) are intent-inert ones: compare like with like. Read settings through `effective()`: a preset is an
+  override, and `default` is `{}`. The harnesses wait 3,000 ms on the first observe (`@w<ms>` changes it; 1 s lost
+  7.6–18.1 points, D98).
 - Pi's `both` arm gets no `ask_context` (only `eden` does); Hermes gets both.
 - **pi-ab and hermes-ab default to `--time-scale 1`** (since 2026-11-03): sources take their profiles' assumed
   latency, so the "Eden on the critical path" column includes the on-demand sync poll. Earlier results (every

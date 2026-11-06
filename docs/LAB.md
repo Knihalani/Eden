@@ -189,8 +189,9 @@ bun run funnel --set '{"myFlag":true}' --baseline .local/base.json --json .local
 ```
 
 The default on train, seeds 41–42, `--jobs 4`, cards and intent requests replayed (D158), reader stub (nothing binds):
-hidden 243/384, decoys 228/384; reader pool hidden 257/384, decoys 240/384 (measured 2026-11-06, 13.5 s; D159's
-looser intent arm, 0.2/1/12, gave 258/243 and pool 270/246 and did not ship). With a real reader, use recipe 2a.
+hidden 259/384, decoys 235/384; reader pool hidden 262/384, decoys 246/384 (measured 2026-11-06 after intent-v2 was
+topped up for its missing planted items, 11 s; before that 243/228 and pool 257/240, the figures D159's looser arm,
+0.2/1/12, was screened against at 258/243 and pool 270/246; it did not ship). With a real reader, use recipe 2a.
 `--intent none` gives the pre-D158 intent-inert screen, hidden 214/384, decoys 211/384 (pool 230/229), as ALL3's
 (measured 2026-11-03, D112, and again 2026-11-06); every $0 stub number recorded before D158 is that inert shape.
 Before 2026-11-03 this recipe ran ALL3, with the same numbers; `--suite train1 --seeds 41` takes 3 s;
@@ -352,9 +353,11 @@ reader cache at $0. The haiku-opt.md command sets `askReaderWaitMs: 60000` so la
 
 The reader cache of the shipped default (D158: cards and intent requests replayed; intent thresholds 0.35/2/6, as
 D159 left them) on train1–6, seeds 41–42, is checked in gzipped:
-`packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz`, 652 lines, all `claude-haiku-5-5`, plain md5
-`7338ca275b420905f50b4fd640783273`. It was recorded on 2026-11-06 from an empty cache by one metered live run (ledger
-run `ib-reader-intent-cache-default`: 652 calls, $0.18548, 418 s, TOTAL hidden 274/384, decoys 137/384, 0 misses).
+`packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz`, 725 lines, all `claude-haiku-5-5`, plain md5
+`44ff521ea2f21487c0b876c03d28e133`. It was recorded on 2026-11-06 from an empty cache by one metered live run (ledger
+run `ib-reader-intent-cache-default`: 652 calls, $0.18548, 418 s, TOTAL hidden 274/384, decoys 137/384, 0 misses),
+then topped up the same day for the completed intent file (ledger run `r2-intent-reader-topup`: 73 calls, $0.02102;
+docs/research/edge-intent.md).
 The cache is plain JSONL that a live reader appends to, so it is unpacked under `.local/` (`--reader-cache` refuses a
 `.gz`):
 
@@ -364,11 +367,11 @@ bun run funnel --jobs 4 --allow-misses --json .local/haiku-default.json -- --rea
   --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl
 ```
 
-Measured on 2026-11-06 (11.2 s wall, no ledger flag, so no spend): `merged reader replay
-{"replayed":645,"sent":0,"missed":5,"failed":0}`, TOTAL hidden 273/384, decoys 137/384, reader pool hidden 257/384
-and decoy 240/384. The 5 misses (answered without the reader, fail open) are why the recipe needs `--allow-misses`;
-without it the run exits 3. A `--baseline .local/haiku-default.json` then screens a change against the paid reading
-at $0.
+Measured on 2026-11-06 after the top-up (no ledger flag, so no spend): `merged reader replay
+{"replayed":647,"sent":0,"missed":2,"failed":0}`, TOTAL hidden 281/384, decoys 139/384, reader pool hidden 262/384
+and decoy 246/384 (before it, with the older intent file: 645 replayed, 5 missed, 273/137, pool 257/240). The
+misses (answered without the reader, fail open) are why the recipe needs `--allow-misses`; without it the run exits 3.
+A `--baseline .local/haiku-default.json` then screens a change against the paid reading at $0.
 
 **The older, intent-inert cache.** `reader-haiku-train-4142.jsonl.gz` (866 lines, plain md5
 `9a492c00cf9724306e3e4743e2882982`) is D141's first paid default run (docs/research/graph-ablation.md, committed in
