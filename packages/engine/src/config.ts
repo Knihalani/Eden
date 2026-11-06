@@ -401,6 +401,12 @@ export interface EngineConfig {
   cardsLean: boolean;
   /** With `cardsLean`: how old (days, by its date or its start) an unconstrained item may be and still be read. */
   cardsLeanDays: number;
+  /**
+   * Trial (D170, off): with `intent`, an item the card prefilter rejects is not read for its requests alone; only
+   * constraint-worded items are sent to the card model, with their requests. Train1–6 seeds 41–42 ($0 funnel,
+   * intent replayed): items sent 13,604 to 2,113 and calls 822 to 300; reader pool hidden/decoys 257/240 to 257/235.
+   */
+  intentConstraintOnly: boolean;
   /** Items the intent index may add to a request's candidates, best first. */
   intentHits: number;
   /** The least share of the request's (known) idf an item's requests must hold to count as a hit. */
@@ -573,6 +579,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intent: true,
   cardsLean: true,
   cardsLeanDays: 30,
+  intentConstraintOnly: false,
   intentHits: 6,
   intentMinCoverage: 0.35,
   intentMinMatched: 2,

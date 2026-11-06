@@ -58,8 +58,18 @@ an 8-point loss into a 2-point one without tuning on what it reads.
 
 Cheaper ways to keep intent's recall stay open and unmeasured: intent requests only for items a user's sources
 actually hold over time (batching or the batch endpoint, audit finding 6 Stage 3, which waits on D98's provider
-decision), or a cheaper model for the request-only items. The audit's Stage 2 (intent only on items the strict
-prefilter passes) is in effect intent off and is not worth a run.
+decision), or a cheaper model for the request-only items. The audit's Stage 2 (intent only on items the
+prefilter passes) was skipped here as "in effect intent off"; that guess was wrong.
+
+**Correction, 2026-11-06 (D170, trial `intentConstraintOnly`).** The arm was run on the shipped default (with
+`cardsLean`), train1–6 seeds 41–42, intent requests replayed. At $0 (stub reader): items sent to the card model 13,604
+to 2,113 and calls 822 to 300, the same cost as intent off, yet the reader's pool keeps all of intent's gain: hidden
+257 to 257 and decoys 240 to 235 (intent off: 230/229). A fresh-cache paid pair (reader live on Claude Haiku 5.5,
+empty reader cache per arm; ledger runs `r2-intent-co-base`, 653 calls, $0.1874, and `r2-intent-co-on`, 656 calls,
+$0.1894): hidden surfaced 275 to 281, paired +1.56 points (95% CI −1.41..+4.54); decoys 136 to 139, +0.78 points
+(CI −1.87..+3.44). Intent's gain comes from the requests of constraint-worded items; the request-only reads bought
+nothing measurable here. The lab's planted facts are constraint-worded by design, so these screens cannot see an
+unworded item that bears on a request only through its requests; `cards.test.ts` shows the switch misses such an item.
 
 ## Spend
 
