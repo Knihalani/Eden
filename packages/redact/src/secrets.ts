@@ -117,6 +117,9 @@ const PROVIDER_SHAPES: [string, RegExp][] = [
   ["eden-mailgun", /\bkey-[0-9a-f]{32}\b/g],
   ["eden-telegram", /\b\d{8,10}:AA[A-Za-z0-9_-]{32,}/g],
   ["eden-aws-key-id", /\b(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}\b/g],
+  // A Discord webhook URL is a bearer capability (anyone holding it posts as the webhook); gitleaks has no rule for
+  // it. The token is 68 characters today; 60+ leaves room without matching a path that merely names a webhook.
+  ["eden-discord-webhook", /\bdiscord(?:app)?\.com\/api\/webhooks\/\d{17,20}\/[A-Za-z0-9_-]{60,}/g],
 ];
 const ENTROPY_TOKEN = /\S{32,}/g;
 /** How far from a long token rule (d) looks for a secret keyword. */
@@ -544,6 +547,7 @@ const SHAPE_LITERALS: Record<string, string[]> = {
   "eden-mailgun": ["key-"],
   "eden-telegram": [":aa"],
   "eden-aws-key-id": ["a3t", "akia", "asia", "abia", "acca"],
+  "eden-discord-webhook": ["discord"],
 };
 
 /**

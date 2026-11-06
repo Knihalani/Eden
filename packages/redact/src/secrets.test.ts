@@ -25,6 +25,7 @@ describe("the vendored gitleaks rules", () => {
       "eden-aws-key-id",
       "eden-aws-secret",
       "eden-cfat",
+      "eden-discord-webhook",
       "eden-entropy-keyword",
       "eden-keyword",
       "eden-legacy-keyword",
@@ -85,6 +86,11 @@ describe("what hits", () => {
     ["OpenAI project key without its marker", `use ${"sk" + "-proj-"}${alnum(48)} here`, "eden-openai"],
     ["Mailgun key without the word mailgun", `${"key" + "-"}${"0123456789abcdef".repeat(2)} works`, "eden-mailgun"],
     ["Telegram bot token without the word", `bot ${"1234567890:" + "AA"}${alnum(33)} is live`, "eden-telegram"],
+    [
+      "Discord webhook URL (anyone holding it can post)",
+      `alerts go to https://${"discord" + ".com/api/webhooks/"}123456789012345678/${alnum(68)} now`,
+      "eden-discord-webhook",
+    ],
     ["AWS key id below the entropy floor", `id ${"AK" + "IA"}${"Q".repeat(16)} is set`, "eden-aws-key-id"],
     ["entropy + keyword", `deploy secret ${alnum(40, 5)}3 rotates monthly`, "eden-entropy-keyword"],
   ];
