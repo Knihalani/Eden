@@ -175,8 +175,7 @@ export function screenArgs(screen: typeof SCREEN, passthrough: readonly string[]
   const mine = cut < 0 ? [...passthrough] : passthrough.slice(0, cut);
   const theirs = cut < 0 ? [] : passthrough.slice(cut + 1);
   for (const f of ["--suite", "--seeds", "--json"]) {
-    if (mine.includes(f))
-      throw new Error(`${f} is the screen's own; run bun run funnel for another grid`);
+    if (mine.includes(f)) throw new Error(`${f} is the screen's own; run bun run funnel for another grid`);
   }
   const hidden = [...(screen.limit > 0 ? ["--limit", String(screen.limit)] : []), ...theirs];
   return [
