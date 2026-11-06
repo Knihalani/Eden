@@ -570,3 +570,12 @@ hole, a rate of 0, the simulation.md note, and a whitespace-only title rendering
 - **429 wording:** a connector's 429 reads "failed" in an ask's answer. Naming it "rate-limited" would be more
   specific.
 - **New Relic keys:** a bare `NRAK-` key passes the gate.
+
+## Gate
+
+`bun run check` on the final tree `7ad66001`: format, types and 1,795 tests, 0 failures, exit 0. One earlier run on
+`75486bd0` failed a single test: `redos.test.ts`, "the sweep's cost … still flags a rule that backtracks". That test is
+a control: it asserts that a deliberately backtracking engine costs more than 40 ms on its crafted run, and it read
+36.6–37.3 ms three times in a row, then passed in the gate run. This branch does not touch `packages/redact`. It is a
+machine- and load-dependent control that can fail on a fast core, and it does not weaken the ReDoS guard. `bun run
+eval` on the final tree is unchanged: 0.828 / 0.48 / 0, 0 leaked, 0 not inert.
