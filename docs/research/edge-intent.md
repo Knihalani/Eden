@@ -107,7 +107,8 @@ never reaches another user or tenant).
 finder and verifiers, not re-run here) went 277/135 → 296/132, 274/136 → 295/132 and 277/133 → 294/134 at equal
 reader calls (653 vs 655 in the finder's pair). The checked-in reader cache is of the shipped default (0.35/2/6,
 intent replayed; ledger run `ib-reader-intent-cache-default`, 652 calls, $0.18548): hidden 274/384, decoys 137/384,
-and it replays at $0 as 273/137 with 5 misses in 11.2 s (docs/LAB.md recipe 2a). An earlier recording at 0.2/1/12
+and it replays at $0 as 273/137 with 5 misses in 11.2 s (docs/LAB.md recipe 2a). It was topped up on 2026-11-06
+for the completed intent file (below): 281/139 with 2 misses. An earlier recording at 0.2/1/12
 (ledger run `ib-reader-intent-cache`, 654 calls, $0.18646, 295/135) was replaced when the thresholds stayed.
 
 **Pi, held-out 13 (previously read, not blind).** `pi-ab.ts --suite heldout13 --variants hidden,control
@@ -140,6 +141,59 @@ docs/COST-MODEL.md line, or a better-powered Pi pair with the intent file replay
 
 `bun run eval` is unchanged (precision 0.8276, recall 0.48, falseFireRate 0): the eval wires no card maker, so intent
 is inert there.
+
+### Replay coverage completed, and the harnesses replay it by default (2026-11-06, audit round 2)
+
+**What was wrong.** Two lab gaps, not engine ones:
+
+- pi-ab.ts and hermes-ab.ts replayed no intent file unless `--intent` was given, and every held-out 13 recipe
+  (final-live-2026-11-05.md, the D159 pair above) gave none. A live card call writes requests only for the items it
+  cards (486 to 514 new card lines per seed, none of which kept its requests on disk). The funnel builds about 1,541
+  held-out 13 items per seed, so **held-out 13 Pi and Hermes figures before this change were intent-inert for about
+  two thirds of items** (estimate: (1,541 − 486) / 1,541 ≈ 68% for seed 41; the result files do not record per-item
+  card hits). They measure the default with intent mostly off. Compare them with like, and read D159's pair as
+  underpowered for this reason.
+- intent-v2 had no line for 98 of 384 planted hidden items and 43 of 384 decoys on train seeds 41–42. The funnel
+  printed `replayed requests for 13440 of 13604 items asked`, and 141 of the 164 items without requests were planted
+  ones.
+
+**What changed.**
+
+- intent-v2 was topped up rather than re-recorded. `cards-enrich.ts --intent --model claude-haiku-5-5` with the
+  ledger flags ran against the existing file for held-out 13 seeds 41–44, train seeds 41–44 and held-out 10–11 seeds
+  41–42. It took four passes, because Haiku leaves some items of a batch unanswered and the next pass asks for them
+  again; the last two passes used `--batch 5`. There were 84 calls in all, for $0.0641 (ledger runs `r2-intent-topup-*`).
+  The file went from 6,771 to 7,315 lines, and none of the new lines has an empty `r`. Every `--dry` for those suites
+  and seeds now says `to enrich 0`. INTENT_COVERS (now in cards-disk.ts, shared by the funnel and the harnesses) adds
+  held-out 13 seeds 41–44.
+- The intent-on reader cache was topped up by one metered live run (`r2-intent-reader-topup`: 73 calls, $0.02102).
+  The cache went from 652 to 725 lines (plain md5 `44ff521ea2f21487c0b876c03d28e133`).
+- pi-ab.ts and hermes-ab.ts now resolve `--intent` as the funnel does. If the configuration has intent and cards and
+  `--cards` is given, the checked-in file is replayed by default when it covers every suite and seed of the run.
+  `--intent none` opts out. The header prints `intent: replayed n of m items` (m counts the items the run's sources
+  hold), and a run with no covering file is labelled `[intent inert: no replay]`. The results file and the summary
+  line say the same.
+- DiskCardMaker now appends a live call's requests with its card (`{h, c, r}`; `{h, r}` when there is no card) to
+  `--cards-out`, and replays them from there, but only in a run that replays a requests file: with `--intent none`
+  or a run the checked-in file does not cover, those `r` lines are skipped (`cardRequests: false`), so an opt-out arm
+  or an uncovered shard replays no requests at all, and its header (`intent: replayed 0 of m items ...
+  [intent inert: no replay]`) says so. The inert label follows what was replayed (0 found), not which files were
+  named.
+
+**Measured, $0 unless priced** (train1–6, seeds 41–42, `--jobs 4`; "before" is the same tree with the old file passed
+as `--intent`):
+
+| | Before (old intent-v2) | After (topped up) |
+|---|---|---|
+| Items asked with replayed requests | 13,440 of 13,604 (audit) | 13,580 of 13,604; the other 24 are 2 items whose line has an empty `r` (the model gave none), and no item lacks a line |
+| Stub TOTAL hidden / decoys | 243/228 | 259/235 |
+| Stub reader pool hidden / decoys | 257/240 | 262/246 |
+| Haiku reader replay: TOTAL hidden / decoys (misses) | 273/137 (5), old cache | 281/139 (2), topped-up cache |
+| Pi dry run, held-out 13: items with requests, seeds 41/42/43/44 | 0 by default; 1,471/1,470/1,451/1,453 with the old file | 1,535 of 1,541, 1,534 of 1,544, 1,545 of 1,548, 1,544 of 1,545 |
+
+The paid-reader diff against the before run is hidden +10 −2, decoys +3 −1 (task by task, `--baseline`). These are
+lab inputs, so no default moves. The pool's decoys move with hidden, as they did in the audit's top-ups. The D159
+pair has not been re-run: the round deferred it. A re-run now replays intent by default.
 
 The wider 40/0/1 arm waits for the action-request gate trial (D168). The intent-on reader cache goes stale whenever
 the intent file, the thresholds or anything upstream of the reader changes.

@@ -270,7 +270,11 @@ const CARDS = opt("cards", "");
  */
 const INTENT_FILES = opt("intent", "").split(",").filter(Boolean);
 /** One replaying maker for every seed and suite: the disk cache is read once. */
-const cardMaker = CARDS ? new DiskCardMaker(CARDS, undefined, { requests: INTENT_FILES }) : null;
+// With no --intent, no requests are replayed at all (not a card file's `r` lines), so `--ask-diag`'s replay figure
+// (null with no --intent) says what the run replayed.
+const cardMaker = CARDS
+  ? new DiskCardMaker(CARDS, undefined, { requests: INTENT_FILES, cardRequests: INTENT_FILES.length > 0 })
+  : null;
 if (INTENT_FILES.length && !cardMaker) throw new Error("--intent needs --cards");
 /**
  * `--card-log out.jsonl`: every item the enrichment sent for a card (its content hash, title, the head of its text
