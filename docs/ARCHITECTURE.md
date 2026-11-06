@@ -47,7 +47,7 @@ Every cache, source-map row and budget is keyed by `tenant/user`; session state 
 crosses a user boundary. Cross-user learning, if ever added, may share only content-free aggregates
 (see [DECISIONS.md](DECISIONS.md) D9).
 
-### Several processes (D113, D163)
+### Several processes (D113, D163, D178)
 
 Every piece of per-user state lives in memory in the process that serves the user, so one process uses one core.
 With `EDEN_PROCESSES=N` (N > 1; unset, the core count capped at 64, D178; 1, or a one-core machine, is one
@@ -59,7 +59,10 @@ reaches the same child. The router keeps no per-user state.
 Each child has its own source-map file (`source-map.<i>.db`: one SQLite writer per file) and holds 1/N of every
 per-tenant cap: the request rate and burst (`EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`) and the daily model spend
 (`EDEN_MODEL_USD_PER_TENANT_DAY`). The caps are split, not shared, so a tenant whose users hash unevenly meets its
-cap sooner on the busier child. A child that is down gives its users 503 (never 500) while the others serve, and
+cap sooner on the busier child, and since the default N is the core count, a tenant with one user gets 1/N of each
+cap ($6.25 a day, 50 rps, burst 100 on 4 cores): raise its caps or run `EDEN_PROCESSES=1`. The default count
+also honours a cgroup v2 CPU quota (`machineCores`), but containers should set `EDEN_PROCESSES` explicitly; each
+process costs about 67 MB idle (docs/INTEGRATION.md, "Processes and per-tenant caps"). A child that is down gives its users 503 (never 500) while the others serve, and
 is started again after 1 s (doubling to 30 s while it keeps failing); its users' in-memory state starts over, as
 after any restart (D8). `/healthz` on the router is 200 while at least one child is up (its body's `up` below
 `processes` means degraded: alert on that) and 503 only when none is, so a load balancer never pulls every user for

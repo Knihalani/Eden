@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { SourceMap } from "@eden/graph";
 import { tenantSpendFor } from "./build";
 import { availableParallelism } from "node:os";
-import { childSourceMapPath, loadConfig, MAX_PROCESSES } from "./config";
+import { cgroupCpuQuota, childSourceMapPath, loadConfig, machineCores, MAX_PROCESSES } from "./config";
 import { childFor, rehomeSourceMaps, startRouter, userOf, type Router } from "./router";
 
 const KEY = "k_acme_0123456789abcdef";
@@ -105,7 +105,38 @@ describe("per-child caps and files (D163)", () => {
     expect(loadConfig({ ...base, EDEN_ROUTER_CHILD: "0/4" }, 8).processes).toBe(1);
     expect(loadConfig({ ...base, EDEN_ROUTER_CHILD: "2/4", EDEN_PROCESSES: "4" }, 8).processes).toBe(1);
     // Without the argument it reads the machine: the real core count, capped.
-    expect(loadConfig(base).processes).toBe(Math.min(availableParallelism(), MAX_PROCESSES));
+    expect(loadConfig(base).processes).toBe(Math.min(machineCores(), MAX_PROCESSES));
+    expect(machineCores()).toBeLessThanOrEqual(availableParallelism());
+  });
+
+  test("a cgroup v2 cpu.max quota lowers the default; none, unreadable or garbled leaves the cores (D178)", () => {
+    const fs = (files: Record<string, string>) => (path: string) => files[path] ?? null;
+    const root = "/sys/fs/cgroup/cpu.max";
+    // A container at its namespace root with a 1-CPU quota must not start a child per host core.
+    expect(cgroupCpuQuota(fs({ "/proc/self/cgroup": "0::/\n", [root]: "100000 100000\n" }))).toBe(1);
+    expect(machineCores(fs({ "/proc/self/cgroup": "0::/\n", [root]: "100000 100000\n" }))).toBe(1);
+    // Floored like Bun's v1 rounding, at least 1.
+    expect(cgroupCpuQuota(fs({ "/proc/self/cgroup": "0::/", [root]: "250000 100000" }))).toBe(2);
+    expect(cgroupCpuQuota(fs({ "/proc/self/cgroup": "0::/", [root]: "50000 100000" }))).toBe(1);
+    // No quota ("max"), no file, cgroup v1 only, or nonsense: null, the machine's count stands.
+    expect(cgroupCpuQuota(fs({ "/proc/self/cgroup": "0::/", [root]: "max 100000" }))).toBeNull();
+    expect(cgroupCpuQuota(fs({ "/proc/self/cgroup": "0::/" }))).toBeNull();
+    expect(cgroupCpuQuota(fs({ "/proc/self/cgroup": "4:cpu:/x\n1:name=systemd:/" }))).toBeNull();
+    expect(cgroupCpuQuota(fs({}))).toBeNull();
+    for (const bad of ["", "x y", "100000 0", "-1 100000", "1e5 100000"]) {
+      expect(cgroupCpuQuota(fs({ "/proc/self/cgroup": "0::/", [root]: bad }))).toBeNull();
+    }
+    expect(machineCores(fs({}))).toBe(availableParallelism());
+    // The least quota on the cgroup or any ancestor wins: a parent's 2 CPUs cap a child's 8.
+    const nested = fs({
+      "/proc/self/cgroup": "0::/kubepods/pod1/c1\n",
+      "/sys/fs/cgroup/kubepods/pod1/c1/cpu.max": "800000 100000",
+      "/sys/fs/cgroup/kubepods/pod1/cpu.max": "200000 100000",
+      [root]: "max 100000",
+    });
+    expect(cgroupCpuQuota(nested)).toBe(2);
+    // A host path that is not mounted inside the container falls back to the mount root's own file.
+    expect(cgroupCpuQuota(fs({ "/proc/self/cgroup": "0::/docker/abc", [root]: "300000 100000" }))).toBe(3);
   });
 
   test("EDEN_PROCESSES and EDEN_ROUTER_CHILD are validated", () => {

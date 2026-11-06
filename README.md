@@ -57,7 +57,11 @@ no-model grounds, the knowledge graph, anticipation, background sync, implicatio
 ask-time reader. With `OPENROUTER_API_KEY` set, the cards, the intent index and the reader run on `EDEN_MODEL` (default
 `anthropic/claude-haiku-5.5`), each role under its own budget and all of a tenant's roles under one cap per UTC day
 (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25); no judge is wired. Without a key no role is built and the same default
-answers from its no-model paths. To change a setting, or take a part out (`PARTS` in `packages/engine/src/parts.ts`),
+answers from its no-model paths. The HTTP server runs one process per core by default (`EDEN_PROCESSES`, the core
+count capped at 64, D178), each user pinned to one, and every process holds 1/N of each per-tenant cap (the $25 model
+cap, `EDEN_TENANT_RPS` 200 and `EDEN_TENANT_BURST` 400): on 4 cores a tenant whose traffic comes from one user gets
+$6.25 a day, 50 rps and a burst of 100. Raise the caps or set `EDEN_PROCESSES=1` for such a tenant; in a container
+with a CPU quota set `EDEN_PROCESSES` to the quota (see [docs/INTEGRATION.md](docs/INTEGRATION.md), "Processes"). To change a setting, or take a part out (`PARTS` in `packages/engine/src/parts.ts`),
 point `EDEN_ENGINE_CONFIG` at a JSON file of engine settings (`packages/engine/src/config.ts`); an unknown key, a wrong
 type, a number out of its range or a setting that would do nothing stops startup with a message naming it (D103).
 Trial switches (such as the action firewall, `actionCheck`) stay off until measured;

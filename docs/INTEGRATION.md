@@ -259,4 +259,29 @@ the poll, the slow-path queue, vocabulary release). Run it as shipped:
   ("default minus a part") for a comparison. New behaviour arrives as a trial switch with an owner and an end date
   (DECISIONS.md, "Trial switches"); it becomes the default or is deleted.
 
+### Processes and per-tenant caps (`EDEN_PROCESSES`, D163, D178)
+
+The HTTP server runs `EDEN_PROCESSES` processes: unset, the core count (`os.availableParallelism()`, capped at 64),
+which is a router in front of N child processes; 1, and any one-core machine, is one process with no router. Each
+user is pinned to one child (`hash(tenant/userId) mod N`), so a user's state lives in one process. On 4 cores the
+router over 4 children served 3.26x the events per second of one process (D178, `packages/server/CLAUDE.md`).
+
+- **Every child holds 1/N of each per-tenant cap**, so the caps stay totals across the deploy when a tenant's users
+  spread over the children: the model spend cap (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25), the rate
+  (`EDEN_TENANT_RPS`, default 200) and the burst (`EDEN_TENANT_BURST`, default 400). A tenant whose traffic comes
+  from one user, or from a few users that hash to the same child, only ever reaches that child's share. With the
+  defaults that is $6.25 a day, 50 rps and a burst of 100 on 4 cores, and $0.39 a day, 3.1 rps and a burst of 6 on
+  64 (the arithmetic: each default divided by N). Past the spend share the reader and cards fall back to the no-model
+  path; past the rate share callers get 429. For such tenants raise the caps (by up to N) or set
+  `EDEN_PROCESSES=1`.
+- **Memory.** Each process costs about 67 MB idle: measured with `ps -o rss` 3 s after `listening` (`EDEN_DEV=1`,
+  no sources, 4 cores, two runs each), one process was 67.0-67.5 MB, and `EDEN_PROCESSES=4` was 325 MB in all (the
+  router 55 MB and each child 66.6-68.1 MB; shared pages counted in each). Budget N x 67 MB plus the router before
+  any user state.
+- **Containers with a CPU quota.** Bun's core count honours CPU affinity and a cgroup v1 CPU quota (measured: 1 under
+  `taskset -c 0` and under a 1-CPU v1 quota on 4 cores), and `loadConfig` also reads a cgroup v2 `cpu.max` quota and
+  takes the lower count. Other limits (a v2 quota in a cgroup not visible from the container, an orchestrator's
+  CPU request without a limit, a memory limit) are not seen: set `EDEN_PROCESSES` explicitly in any container, to
+  the CPUs it may use and no more than its memory limit allows at ~67 MB each.
+
 [DECISIONS.md](DECISIONS.md) holds each part's evidence.

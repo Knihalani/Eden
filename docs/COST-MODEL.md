@@ -373,7 +373,11 @@ request path (one call per acting request or ask that a candidate could constrai
 user's request, the ask its question). No judge is wired (the measured setup ran none). Each role has its own
 `Budget` (20 calls and $0.02 per session, $0.25 per user per day) and all of a tenant's roles share one
 `TenantSpend` cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25). Over any cap the role is skipped and the
-no-model path answers. Without a key nothing is called and the same default runs with no model.
+no-model path answers. Without a key nothing is called and the same default runs with no model. The HTTP server
+runs `EDEN_PROCESSES` processes, by default the core count (capped at 64, D178), and each child holds 1/N of the
+tenant cap (`tenantSpendFor`, D163): the $25 is a total only when a tenant's users spread over the children. A tenant
+whose spend comes from one user, or a few on one child, is capped at $25/N a day ($6.25 on 4 cores, $0.39 on 64);
+raise the cap or set `EDEN_PROCESSES=1` for it (docs/INTEGRATION.md, "Processes and per-tenant caps").
 
 Per task (live, Pi harness, Haiku 5.5 as agent, grader and Eden's roles, all lab provider, cached (D145), blind
 held-out 13, seeds 41–42, 64 hidden + 64 control tasks per condition, `--time-scale 1`; `.local/unify`, 2026-11-03, D112; the last row `.local/lc`,
