@@ -82,5 +82,7 @@ describe("router-sim helpers (audit 2026-11-06 F23)", () => {
     expect(ladderStops([90, 205, 210], 100)).toBe(true);
     expect(ladderStops([150, 199], 100)).toBe(false); // over the target, not over twice it
     expect(ladderStops([201, 200], 100)).toBe(false); // exactly twice is not past it
+    expect(ladderStops([200, 201], 100)).toBe(false); // nor on the earlier step
+    expect(ladderStops([250, 90, 250], 100)).toBe(false); // two overs, not in a row
   });
 });

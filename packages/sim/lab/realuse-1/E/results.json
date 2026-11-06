@@ -821,6 +821,17 @@
    "rc": 0,
    "wallS": 1153.63
   },
+  "settle": [
+   "single settle 75 s at C=4: 798 ev/s, 657 sync lists",
+   "router×1 settle 75 s at C=4: 767 ev/s, 572 sync lists",
+   "router×4 settle 75 s at C=4: 1330 ev/s, 2212 sync lists",
+   "router×1 settle 75 s at C=4: 826 ev/s, 547 sync lists",
+   "router×4 settle 75 s at C=4: 1453 ev/s, 2309 sync lists",
+   "single settle 75 s at C=4: 795 ev/s, 553 sync lists",
+   "router×4 settle 75 s at C=4: 1336 ev/s, 2267 sync lists",
+   "single settle 75 s at C=4: 719 ev/s, 626 sync lists",
+   "router×1 settle 75 s at C=4: 720 ev/s, 558 sync lists"
+  ],
   "arms": [
    {
     "name": "single",
@@ -833,7 +844,45 @@
     "min": 309,
     "max": 406,
     "medianRssEndMbPerProcess": 1760.3,
-    "medianRssGrowthMbPerProcess": 1258.7
+    "medianRssGrowthMbPerProcess": 1258.7,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 493.6,
+       "rssEndMb": 1769,
+       "calls": 56771,
+       "lists": 2534,
+       "errors": 248,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 501.6,
+       "rssEndMb": 1760.3,
+       "calls": 58442,
+       "lists": 2728,
+       "errors": 259,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 485.4,
+       "rssEndMb": 1677.7,
+       "calls": 54864,
+       "lists": 2303,
+       "errors": 242,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
    },
    {
     "name": "router×1",
@@ -846,7 +895,45 @@
     "min": 325,
     "max": 391,
     "medianRssEndMbPerProcess": 1633.1,
-    "medianRssGrowthMbPerProcess": 1134.4
+    "medianRssGrowthMbPerProcess": 1134.4,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 495,
+       "rssEndMb": 1642.7,
+       "calls": 55618,
+       "lists": 2265,
+       "errors": 246,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 493.6,
+       "rssEndMb": 1621.7,
+       "calls": 56190,
+       "lists": 2236,
+       "errors": 246,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 498.7,
+       "rssEndMb": 1633.1,
+       "calls": 55196,
+       "lists": 2246,
+       "errors": 257,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
    },
    {
     "name": "router×4",
@@ -859,7 +946,135 @@
     "min": 54,
     "max": 3808,
     "medianRssEndMbPerProcess": 1093,
-    "medianRssGrowthMbPerProcess": 604.3
+    "medianRssGrowthMbPerProcess": 604.3,
+    "processesPerRep": [
+     [
+      {
+       "users": 110,
+       "rssStartMb": 478.8,
+       "rssEndMb": 1263,
+       "calls": 14065,
+       "lists": 1977,
+       "errors": 61,
+       "limited": 1,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 487.6,
+       "rssEndMb": 1161.3,
+       "calls": 13213,
+       "lists": 1864,
+       "errors": 57,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 480.1,
+       "rssEndMb": 1080.7,
+       "calls": 11837,
+       "lists": 1663,
+       "errors": 45,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 473.1,
+       "rssEndMb": 1050,
+       "calls": 11909,
+       "lists": 1610,
+       "errors": 52,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 106,
+       "rssStartMb": 494.6,
+       "rssEndMb": 1192.2,
+       "calls": 13217,
+       "lists": 1867,
+       "errors": 55,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 497.4,
+       "rssEndMb": 1105.3,
+       "calls": 11981,
+       "lists": 1615,
+       "errors": 47,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 494.7,
+       "rssEndMb": 1106.1,
+       "calls": 11849,
+       "lists": 1661,
+       "errors": 46,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 492.2,
+       "rssEndMb": 1208.8,
+       "calls": 14007,
+       "lists": 1960,
+       "errors": 68,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 106,
+       "rssStartMb": 491.8,
+       "rssEndMb": 950.9,
+       "calls": 11713,
+       "lists": 972,
+       "errors": 51,
+       "limited": 1,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 494.9,
+       "rssEndMb": 976.4,
+       "calls": 12452,
+       "lists": 969,
+       "errors": 50,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 491.8,
+       "rssEndMb": 943.1,
+       "calls": 10786,
+       "lists": 940,
+       "errors": 45,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 465.4,
+       "rssEndMb": 966,
+       "calls": 10934,
+       "lists": 948,
+       "errors": 51,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
    }
   ],
   "children": 4,
@@ -892,6 +1107,17 @@
    "rc": 0,
    "wallS": 1335.48
   },
+  "settle": [
+   "single settle 75 s at C=4: 950 ev/s, 249 sync lists",
+   "router×1 settle 75 s at C=4: 969 ev/s, 251 sync lists",
+   "router×4 settle 75 s at C=4: 1777 ev/s, 1028 sync lists",
+   "router×1 settle 75 s at C=4: 1019 ev/s, 246 sync lists",
+   "router×4 settle 75 s at C=4: 1727 ev/s, 1067 sync lists",
+   "single settle 75 s at C=4: 961 ev/s, 245 sync lists",
+   "router×4 settle 75 s at C=4: 1735 ev/s, 999 sync lists",
+   "single settle 75 s at C=4: 1077 ev/s, 239 sync lists",
+   "router×1 settle 75 s at C=4: 1023 ev/s, 271 sync lists"
+  ],
   "arms": [
    {
     "name": "single",
@@ -904,7 +1130,45 @@
     "min": 1004,
     "max": 1029,
     "medianRssEndMbPerProcess": 1451.6,
-    "medianRssGrowthMbPerProcess": 955.4
+    "medianRssGrowthMbPerProcess": 955.4,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 496.2,
+       "rssEndMb": 1451.6,
+       "calls": 64614,
+       "lists": 1361,
+       "errors": 530,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 500.9,
+       "rssEndMb": 1467.2,
+       "calls": 63298,
+       "lists": 1257,
+       "errors": 478,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 496.7,
+       "rssEndMb": 1431.3,
+       "calls": 65052,
+       "lists": 1313,
+       "errors": 479,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
    },
    {
     "name": "router×1",
@@ -917,7 +1181,45 @@
     "min": 933,
     "max": 997,
     "medianRssEndMbPerProcess": 1448.7,
-    "medianRssGrowthMbPerProcess": 953.8
+    "medianRssGrowthMbPerProcess": 953.8,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 494.9,
+       "rssEndMb": 1448.7,
+       "calls": 64527,
+       "lists": 1340,
+       "errors": 495,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 489.2,
+       "rssEndMb": 1455.6,
+       "calls": 64647,
+       "lists": 1358,
+       "errors": 549,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 493,
+       "rssEndMb": 1440.4,
+       "calls": 64746,
+       "lists": 1323,
+       "errors": 505,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
    },
    {
     "name": "router×4",
@@ -930,7 +1232,135 @@
     "min": 2865,
     "max": 3234,
     "medianRssEndMbPerProcess": 1000.4,
-    "medianRssGrowthMbPerProcess": 505.9
+    "medianRssGrowthMbPerProcess": 505.9,
+    "processesPerRep": [
+     [
+      {
+       "users": 91,
+       "rssStartMb": 494.6,
+       "rssEndMb": 946.2,
+       "calls": 14946,
+       "lists": 989,
+       "errors": 121,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 492.8,
+       "rssEndMb": 1044.7,
+       "calls": 16776,
+       "lists": 1251,
+       "errors": 132,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 492.8,
+       "rssEndMb": 987.7,
+       "calls": 14893,
+       "lists": 1053,
+       "errors": 115,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 489.4,
+       "rssEndMb": 1087.8,
+       "calls": 17803,
+       "lists": 1132,
+       "errors": 140,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 106,
+       "rssStartMb": 486.6,
+       "rssEndMb": 1061.5,
+       "calls": 16477,
+       "lists": 1138,
+       "errors": 145,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 487.9,
+       "rssEndMb": 967.8,
+       "calls": 14599,
+       "lists": 1009,
+       "errors": 131,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 494.8,
+       "rssEndMb": 1091.7,
+       "calls": 17715,
+       "lists": 1243,
+       "errors": 141,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 492.4,
+       "rssEndMb": 932.2,
+       "calls": 14883,
+       "lists": 975,
+       "errors": 124,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 91,
+       "rssStartMb": 486.9,
+       "rssEndMb": 959.1,
+       "calls": 14942,
+       "lists": 1024,
+       "errors": 129,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 493.1,
+       "rssEndMb": 1062.7,
+       "calls": 17526,
+       "lists": 1210,
+       "errors": 150,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 492.7,
+       "rssEndMb": 969.2,
+       "calls": 14609,
+       "lists": 962,
+       "errors": 117,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 496.1,
+       "rssEndMb": 1013,
+       "calls": 16654,
+       "lists": 1134,
+       "errors": 142,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
    }
   ],
   "children": 4,
@@ -963,6 +1393,17 @@
    "rc": 0,
    "wallS": 1304.98
   },
+  "settle": [
+   "single settle 75 s at C=4: 844 ev/s, 634 sync lists",
+   "router×1 settle 75 s at C=4: 794 ev/s, 581 sync lists",
+   "router×4 settle 75 s at C=4: 1569 ev/s, 2346 sync lists",
+   "router×1 settle 75 s at C=4: 811 ev/s, 573 sync lists",
+   "router×4 settle 75 s at C=4: 1462 ev/s, 2332 sync lists",
+   "single settle 75 s at C=4: 792 ev/s, 546 sync lists",
+   "router×4 settle 75 s at C=4: 1476 ev/s, 2332 sync lists",
+   "single settle 75 s at C=4: 811 ev/s, 581 sync lists",
+   "router×1 settle 75 s at C=4: 746 ev/s, 569 sync lists"
+  ],
   "arms": [
    {
     "name": "single",
@@ -975,7 +1416,45 @@
     "min": 413,
     "max": 455,
     "medianRssEndMbPerProcess": 1739.5,
-    "medianRssGrowthMbPerProcess": 1247.9
+    "medianRssGrowthMbPerProcess": 1247.9,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 484.1,
+       "rssEndMb": 1824.8,
+       "calls": 60223,
+       "lists": 3169,
+       "errors": 250,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 495.2,
+       "rssEndMb": 1739.2,
+       "calls": 58639,
+       "lists": 2919,
+       "errors": 255,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 491.6,
+       "rssEndMb": 1739.5,
+       "calls": 58480,
+       "lists": 2768,
+       "errors": 255,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
    },
    {
     "name": "router×1",
@@ -988,7 +1467,45 @@
     "min": 376,
     "max": 478,
     "medianRssEndMbPerProcess": 1773.9,
-    "medianRssGrowthMbPerProcess": 1280.6
+    "medianRssGrowthMbPerProcess": 1280.6,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 493.3,
+       "rssEndMb": 1773.9,
+       "calls": 59101,
+       "lists": 2967,
+       "errors": 255,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 492.4,
+       "rssEndMb": 1783.5,
+       "calls": 59239,
+       "lists": 2967,
+       "errors": 261,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 492.1,
+       "rssEndMb": 1680.7,
+       "calls": 57261,
+       "lists": 2589,
+       "errors": 249,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
    },
    {
     "name": "router×4",
@@ -1001,7 +1518,135 @@
     "min": 3566,
     "max": 3950,
     "medianRssEndMbPerProcess": 1108.1,
-    "medianRssGrowthMbPerProcess": 613.1
+    "medianRssGrowthMbPerProcess": 613.1,
+    "processesPerRep": [
+     [
+      {
+       "users": 91,
+       "rssStartMb": 489.9,
+       "rssEndMb": 1092.2,
+       "calls": 12053,
+       "lists": 1624,
+       "errors": 52,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 490.3,
+       "rssEndMb": 1106,
+       "calls": 12048,
+       "lists": 1654,
+       "errors": 48,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 491.4,
+       "rssEndMb": 1235.6,
+       "calls": 14319,
+       "lists": 1964,
+       "errors": 56,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 487.3,
+       "rssEndMb": 1040.5,
+       "calls": 13447,
+       "lists": 1893,
+       "errors": 57,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 93,
+       "rssStartMb": 496,
+       "rssEndMb": 1092.1,
+       "calls": 11910,
+       "lists": 1646,
+       "errors": 56,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 490.9,
+       "rssEndMb": 1220.3,
+       "calls": 14282,
+       "lists": 1968,
+       "errors": 61,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 494.6,
+       "rssEndMb": 1230.1,
+       "calls": 13399,
+       "lists": 1894,
+       "errors": 52,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 490.3,
+       "rssEndMb": 1083.2,
+       "calls": 12067,
+       "lists": 1631,
+       "errors": 44,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 93,
+       "rssStartMb": 499.8,
+       "rssEndMb": 1110.2,
+       "calls": 11889,
+       "lists": 1647,
+       "errors": 51,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 487.1,
+       "rssEndMb": 1043.6,
+       "calls": 12035,
+       "lists": 1635,
+       "errors": 51,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 480,
+       "rssEndMb": 1172.9,
+       "calls": 13364,
+       "lists": 1868,
+       "errors": 58,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 482.2,
+       "rssEndMb": 1206.2,
+       "calls": 14212,
+       "lists": 1965,
+       "errors": 64,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
    }
   ],
   "children": 4,
@@ -1034,6 +1679,17 @@
    "rc": 0,
    "wallS": 1340.67
   },
+  "settle": [
+   "single settle 75 s at C=4: 1110 ev/s, 249 sync lists",
+   "router×1 settle 75 s at C=4: 976 ev/s, 242 sync lists",
+   "router×4 settle 75 s at C=4: 1679 ev/s, 1001 sync lists",
+   "router×1 settle 75 s at C=4: 1000 ev/s, 263 sync lists",
+   "router×4 settle 75 s at C=4: 1593 ev/s, 967 sync lists",
+   "single settle 75 s at C=4: 1083 ev/s, 252 sync lists",
+   "router×4 settle 75 s at C=4: 1868 ev/s, 1002 sync lists",
+   "single settle 75 s at C=4: 1045 ev/s, 246 sync lists",
+   "router×1 settle 75 s at C=4: 1036 ev/s, 240 sync lists"
+  ],
   "arms": [
    {
     "name": "single",
@@ -1046,7 +1702,45 @@
     "min": 991,
     "max": 1100,
     "medianRssEndMbPerProcess": 1459.1,
-    "medianRssGrowthMbPerProcess": 964.3
+    "medianRssGrowthMbPerProcess": 964.3,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 499.7,
+       "rssEndMb": 1435.5,
+       "calls": 64603,
+       "lists": 1353,
+       "errors": 521,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 494.8,
+       "rssEndMb": 1459.1,
+       "calls": 65506,
+       "lists": 1291,
+       "errors": 486,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 494.6,
+       "rssEndMb": 1465.6,
+       "calls": 65179,
+       "lists": 1331,
+       "errors": 486,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
    },
    {
     "name": "router×1",
@@ -1059,7 +1753,45 @@
     "min": 997,
     "max": 1091,
     "medianRssEndMbPerProcess": 1433.8,
-    "medianRssGrowthMbPerProcess": 932.1
+    "medianRssGrowthMbPerProcess": 932.1,
+    "processesPerRep": [
+     [
+      {
+       "users": 400,
+       "rssStartMb": 491.5,
+       "rssEndMb": 1418.9,
+       "calls": 64885,
+       "lists": 1381,
+       "errors": 534,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 501.7,
+       "rssEndMb": 1433.8,
+       "calls": 64747,
+       "lists": 1329,
+       "errors": 507,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 400,
+       "rssStartMb": 501.1,
+       "rssEndMb": 1439.7,
+       "calls": 65165,
+       "lists": 1324,
+       "errors": 523,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
    },
    {
     "name": "router×4",
@@ -1072,7 +1804,135 @@
     "min": 3016,
     "max": 3522,
     "medianRssEndMbPerProcess": 1022.1,
-    "medianRssGrowthMbPerProcess": 528.6
+    "medianRssGrowthMbPerProcess": 528.6,
+    "processesPerRep": [
+     [
+      {
+       "users": 106,
+       "rssStartMb": 485.4,
+       "rssEndMb": 1038.4,
+       "calls": 16571,
+       "lists": 1226,
+       "errors": 122,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 495.1,
+       "rssEndMb": 938.2,
+       "calls": 14577,
+       "lists": 952,
+       "errors": 124,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 492.2,
+       "rssEndMb": 948.8,
+       "calls": 14897,
+       "lists": 1000,
+       "errors": 116,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 494,
+       "rssEndMb": 1098.5,
+       "calls": 17606,
+       "lists": 1204,
+       "errors": 155,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 93,
+       "rssStartMb": 495.8,
+       "rssEndMb": 971.3,
+       "calls": 14683,
+       "lists": 1012,
+       "errors": 113,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 490,
+       "rssEndMb": 987.1,
+       "calls": 14663,
+       "lists": 1050,
+       "errors": 107,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 110,
+       "rssStartMb": 491.2,
+       "rssEndMb": 1050.2,
+       "calls": 17348,
+       "lists": 1117,
+       "errors": 137,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 493.9,
+       "rssEndMb": 1052,
+       "calls": 16417,
+       "lists": 1128,
+       "errors": 139,
+       "limited": 0,
+       "exited": null
+      }
+     ],
+     [
+      {
+       "users": 110,
+       "rssStartMb": 459.9,
+       "rssEndMb": 1069.7,
+       "calls": 17655,
+       "lists": 1189,
+       "errors": 153,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 93,
+       "rssStartMb": 498.2,
+       "rssEndMb": 1012.4,
+       "calls": 14942,
+       "lists": 997,
+       "errors": 120,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 106,
+       "rssStartMb": 488.8,
+       "rssEndMb": 1031.8,
+       "calls": 16664,
+       "lists": 1154,
+       "errors": 130,
+       "limited": 0,
+       "exited": null
+      },
+      {
+       "users": 91,
+       "rssStartMb": 494.1,
+       "rssEndMb": 993,
+       "calls": 15318,
+       "lists": 1108,
+       "errors": 127,
+       "limited": 0,
+       "exited": null
+      }
+     ]
+    ]
    }
   ],
   "children": 4,

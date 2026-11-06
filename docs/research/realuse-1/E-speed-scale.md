@@ -2,8 +2,9 @@
 
 Status: measured 2026-11-06 on branch `claude/realuse1-e-perf` (main at 957b82a9 plus the RealUse-1 design and this
 part's two lab fixes, below). Design: [benchmark-realuse-1.md](../benchmark-realuse-1.md), tier T4. Compact results:
-`packages/sim/lab/realuse-1/E/results.json` (every figure below, per run, with the command, wall time and the load
-average before each run). No engine behaviour was changed.
+`packages/sim/lab/realuse-1/E/results.json` (the figures below per run, with the command, wall time and the load
+average before each run; the concurrent probe's per-event stall lines are in this text only). No engine behaviour
+was changed.
 
 ## What this says, in plain words
 
@@ -16,13 +17,14 @@ average before each run). No engine behaviour was changed.
   inside that tail, and about 460 events/s on the HTTP ramp's mix; past saturation the client fails open at its
   800 ms bound instead of blocking the agent.
 - **Memory, not CPU, decides how many users one machine holds.** A synced user costs about 2 MB of heap per 500 items
-  (4.0–4.2 KB an item) in the shipped mode, and a server process grows 2.4–3.1 MB of RSS per active user plus about
-  300 MB of its own. By arithmetic on those figures (section 6), a 4-core 16 GB machine holds roughly 3,600–4,600
-  active users and a 16-core 64 GB machine 14,000–18,500, while their CPU would carry 5–8 times as many.
+  (4.0–4.2 KB an item) in the shipped mode, and a server process grows about 1.5–2.1 MB of RSS per active user plus
+  about 400 MB of its own. By arithmetic on those figures (section 6), a 4-core 16 GB machine holds roughly
+  5,000–7,400 active users and a 16-core 64 GB machine 20,000–29,600, while their CPU would carry 3–6 times as
+  many.
 - **The reader, Eden's one per-ask model call, answers in about 1.1 s at the median and 1.5 s at p90** (first token
   after 0.46 s), for about $0.0003 a call, with 2 calls in 180 past the engine's 2.5 s wait (Haiku 5.5 on the
   Anthropic API directly, a lab transport: the servers ship it through OpenRouter). The effort-"low" arm D144 rejected
-  stays 2.7x slower.**
+  stays 2.7x slower.
 - **The dev loop:** `bun run check` takes about 36 s warm (54 s with a cold type-check cache), `bun run test:changed`
   after a one-line engine edit 24 s, and `bun run funnel --jobs 4` 12 s.
 
@@ -38,7 +40,7 @@ run). One bench result looks like a bug and is not: the concurrent bench's 0.9 s
 | Memory | 15 GiB |
 | Kernel | Linux 6.18.44 |
 | Bun | 1.4.4 |
-| Load average before each run | 0.0–2.2 for the benches, except 6.6 before the realistic router-sim re-run (it followed `bun run check`, whose 4x parallel tests reach 10; the bench settles 75 s before measuring) |
+| Load average before each run | 0.0–2.2 for the benches, except 6.6 before the realistic router-sim re-run (it followed `bun run check`, whose 4x parallel tests reach 10; the bench settles 75 s before measuring); 0.2–10 before the dev-loop runs, which ran back to back (section 7) |
 
 Every command ran with `OPENROUTER_API_KEY` and `BUN_OPTIONS` unset (this container set `BUN_OPTIONS=--smol`), one at a
 time, from the repository root. Each was run three times and is reported as **median (min–max)**. The benches that
@@ -164,7 +166,9 @@ child) costs about 4%.
 at start), so the Eden share is the growth.
 
 Events/s at p99 ≤ 100 ms, median (min–max) of 3 repetitions per arm. "Before" ran the old ladder rule, "after" the
-fixed one (see Fixes); the after rows are the ones to quote.
+fixed one (see Fixes); the after rows are the ones to quote. The fix changes no figure in the after runs (replaying
+the old rule on their steps picks the same best step in all 18 arm-repetitions), so before/after differences other
+than the 54 are run-to-run noise; the realistic re-run also started at load 6.6 against 1.5.
 
 | Profile, rule | One process | Router over 1 | Router over 4 | Ratio 4/1 median (lowest) | Hop ratios | D172 |
 |---|---|---|---|---|---|---|
@@ -182,15 +186,17 @@ Memory per server process, after the fix (median over repetitions; users per pro
 | hosted | one process | 400 | 496 MB | 1,459 MB | 964 MB | 2.4 MB |
 | hosted | router×4, each child | 100 | 489 MB | 1,022 MB | 529 MB | 5.3 MB |
 
-A child's growth per user is twice the single process's because each process pays its own fixed growth (about
-290–300 MB: the per-user figure of the one-process arm times 100, subtracted from a child's growth). RSS is read
+Fitting both arms to `fixed + users × per-user` (one process: 400 users; a child: 100) gives a per-user growth of
+2.1 MB (realistic: (1,248 − 613) / 300) and 1.45 MB (hosted: (964 − 529) / 300), and a fixed growth per process of
+about 400 MB (realistic) and 385 MB (hosted). The one-process arm's growth over 400 (3.1 and 2.4 MB) includes that
+fixed part, so it is an upper bound per user. RSS is read
 without a forced GC, so it includes garbage not yet collected. The users are synced only as far as the run got
 (2,346 sync lists over 400 users × 5 sources by the end of the router×4 settle), not to their whole world.
 
 Meaning: on a 4-core box the shipped router serves 3,200–3,800 events/s inside a 100 ms p99. With realistic
 connectors one process is held to about 450 events/s by its tail, not its CPU (its sync ticks and slow paths share
 one event loop); spreading users over four processes multiplies that by 8.7, more than the core count. The router's
-own hop costs nothing measurable here (hop ratios 0.83–1.05).
+own hop is within noise here (median hop ratio 0.94–1.01; single repetitions 0.83–1.05).
 
 ## 4. HTTP end to end (`bun run sim:perf`)
 
@@ -260,46 +266,52 @@ Inputs, all measured above:
 - events per active user at real pacing: 39.2 events/s / 300 users = **0.131 events/s** (`sim:perf steady`, median);
 - 4-core capacity inside a 100 ms p99, shipped router over 4 children: **3,210–3,819 events/s** (router-sim after
   the fix, hosted and realistic medians; `router.bench.ts` gives 3,573);
-- memory per active user: **2.4–3.1 MB RSS** (router-sim, one process over 400 users, hosted and realistic) plus
-  about **300 MB of fixed growth per server process**; and, from ingest, **2.0 MB of heap per synced user at 500
-  items** (about 12 MB at the 3,000-item sync cap, linear arithmetic).
+- memory: **1.45–2.1 MB RSS per active user** plus **385–400 MB of fixed growth per server process** (router-sim,
+  the two-arm fit in section 3, hosted and realistic); and, from ingest, **2.0 MB of heap per synced user at 500 items**
+  (about 12 MB at the 3,000-item sync cap, linear arithmetic).
 
 Assumptions (labelled): 16 GB of RAM on the 4-core machine and 64 GB on the 16-core one; 25% of RAM kept free (GC
 headroom, OS, the runtime's own base, which these benches do not separate from the sim worlds); one server process per
 core; throughput scales linearly from 4 to 16 cores (only 4 were measured); every user counted is active, with the
-router-sim users' partial sync (above).
+router-sim users' partial sync (section 3).
 
-| Machine | CPU-bound: capacity / 0.131 | Memory-bound: (0.75 × RAM − cores × 300 MB) / MB per user | Binds |
+| Machine | CPU-bound: capacity / 0.131 | Memory-bound: (0.75 × RAM − cores × fixed) / MB per user | Binds |
 |---|---|---|---|
-| 4 cores, 16 GB | 3,210–3,819 / 0.131 ≈ **24,500–29,000** | 11,088 MB / 3.1–2.4 MB ≈ **3,600–4,600** | memory |
-| 16 cores, 64 GB | 4 × that ≈ 98,000–117,000 (assumed linear) | 44,352 MB / 3.1–2.4 MB ≈ **14,300–18,500** | memory |
+| 4 cores, 16 GB | 3,210–3,819 / 0.131 ≈ **24,500–29,000** | (12,288 − 4 × 400) / 2.1 ≈ 5,090; (12,288 − 4 × 385) / 1.45 ≈ 7,410: **5,100–7,400** | memory |
+| 16 cores, 64 GB | 4 × that ≈ 98,000–117,000 (assumed linear) | (49,152 − 16 × 400) / 2.1 ≈ 20,400; (49,152 − 16 × 385) / 1.45 ≈ 29,650: **20,000–29,600** | memory |
 
-If every user were synced to the 3,000-item cap (~12 MB of heap each), the 4-core machine would hold about 900 users
-and the 16-core one about 3,700. Either way memory binds 5–8x before CPU, so a deployment sizes by RAM per synced
-user; the CPU figures say how much headroom bursts and backfills have.
+With the conservative per-user figure (the one-process arm's whole growth over 400 users, 2.4–3.1 MB, and no fixed
+part) the 4-core machine holds 4,000–5,100 users. If every user were synced to the 3,000-item cap (~12 MB of heap
+each), it would hold about 900 users and the 16-core one about 3,600. Either way memory binds 3–6x before CPU, so a
+deployment sizes by RAM per synced user; the CPU figures say how much headroom bursts and backfills have.
 
 ## 7. Dev loop
 
 | Command | Wall time, median (min–max) | Notes |
 |---|---|---|
-| `bun run check` | 36.4 s (35.5–53.9) | 1,791 tests in 146 files; the 53.9 s run was the first, with a cold type-check cache; one run failed (below) |
-| `bun run test:changed` after a one-line engine edit (a comment appended to `packages/engine/src/text.ts`, reverted) | 23.9 s (23.6–24.0) | engine and its dependents: 1,149 tests in 98 files, one end-to-end file deferred (D161) |
+| `bun run check` | 36.4 s (35.5–53.9) | 1,791 tests in 146 files; the 53.9 s run was the first, with a cold type-check cache; the median run is the one that failed one test (below; its wall time is a full run's); load 0.2, 4.0, 6.5 before the three runs |
+| `bun run test:changed` after a one-line engine edit (a comment appended to `packages/engine/src/text.ts`, reverted) | 23.9 s (23.6–24.0) | engine and its dependents: 1,149 tests in 98 files, one end-to-end file deferred (D161); load 7.8–10 before (right after the checks) |
 | `bun run funnel --jobs 4` | 11.8 s (11.5–12.1) | train, 12 shards in 4 processes, reader stub; identical TOTAL lines in all three runs |
 
 The second `bun run check` failed one test: `cards-disk.test.ts` "the checked-in file covers held-out 13's items" took
 5,410 ms against bun's default 5 s timeout under the 4x parallel run. It builds and lists four worlds; run alone,
 the whole file (12 tests) takes 1.5–2.4 s (three runs), so the failure is contention, not a slow test.
-It now has its own 30 s timeout with the reason (docs/TESTING.md: a test over 5 s states its own).
+It now has its own 30 s timeout with the reason, as the RE2 test got for the same contention (docs/TESTING.md).
 
 ## Fixes made in this part
 
 1. **`router-sim.bench.ts` stopped its ladder on one noisy step.** With sync on, a 5 s step can coincide with the
    sync timer's minute tick; one step past twice the p99 target ended the arm. In the first realistic run a router×4
-   repetition settled at 1,336 events/s, then stopped at C=2 with 54 events/s, against 3,663 and 3,808 in its other
-   repetitions, pulling the lowest ratio to 0.17. The rule is now `ladderStops` in `router-sim.ts` (stop on two steps
-   in a row past twice the target), with a test; a step over the target still never counts towards a figure. Both
-   profiles were re-run with the fix; the first runs are kept above as "before". `packages/server/bench/router.bench.ts`
-   keeps the old rule: it has no background sync, and its three runs show no such collapse.
+   repetition settled at 1,336 events/s, ran C=1 at 54 events/s, then stopped at C=2 (66 events/s, p99 205 ms),
+   against 3,663 and 3,808 in its other repetitions, pulling the lowest ratio to 0.17. The rule is now
+   `ladderStops` in `router-sim.ts` (stop on two steps in a row past twice the target), with a test; a step over the
+   target still never counts towards a figure. Both profiles were re-run with the fix; the first runs are kept above
+   as "before". The fix reduces this failure rather than removes it: in every realistic router×4 repetition the steps
+   after the settle run slow (C=1 at 54–84 events/s against 1,330–1,569 during the settle, recovering near C=16,
+   about 35 s in), so two slow steps in a row could still end an arm early. A fuller fix (later) would re-run or skip
+   a step during which the processes' sync-list counters rose, or start the ladder once they stop rising.
+   `packages/server/bench/router.bench.ts` keeps the old rule: it has no background sync, and its three runs show no
+   such collapse.
 2. **`cards-disk.test.ts`'s coverage test got its own timeout** (section 7).
 
 Both are lab or test code; nothing in `packages/engine`, `server` or `client` changed.

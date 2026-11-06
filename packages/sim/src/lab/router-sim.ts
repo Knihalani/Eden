@@ -79,8 +79,9 @@ const round2 = (x: number) => +x.toFixed(2);
  * Whether the ladder stops after the steps measured so far (p99 of each, in order): only when the last two both passed
  * twice the target. One step over can be a background burst rather than the load: the sync timer's minute tick lists
  * every user's sources, and a 5 s step it lands on reads a high p99. Stopping on the first such step once ended a
- * router×4 arm at C=2 with 54 events/s, against 3,663 and 3,808 in its other repetitions (RealUse-1 part E,
- * docs/research/realuse-1/E-speed-scale.md). A step over the target still never counts towards the arm's figure.
+ * router×4 arm at C=2 (p99 204.6 ms) after C=1 at 54 events/s, against 3,663 and 3,808 in its other repetitions
+ * (RealUse-1 part E, docs/research/realuse-1/E-speed-scale.md). This reduces that failure, not removes it: the slow
+ * steps after the settle can span several steps. A step over the target still never counts towards a figure.
  */
 export function ladderStops(p99s: number[], target: number): boolean {
   const n = p99s.length;
