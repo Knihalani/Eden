@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Context } from "@earendil-works/pi-ai";
 import { RequestCapReached } from "@eden/llm";
 import { chat, parseGrade, type Task } from "./ab-common";
-import { isCapError, labAccess, labModel, piModelFor, piRegistry, providerPrefs } from "./free";
+import { isCapError, labAccess, labModel, openRouterModels, piModelFor, piRegistry, providerPrefs } from "./free";
 
 const FREE = "nvidia/nemotron-3.5-super-vl:free";
 const task = {
@@ -171,5 +171,18 @@ describe("grading on free models", () => {
     await expect(chat("k", meter, FREE, [], undefined, false, { fetch: capped })).rejects.toBeInstanceOf(
       RequestCapReached,
     );
+  });
+});
+
+describe("openRouterModels", () => {
+  // pi-ab once demanded OPENROUTER_API_KEY even when every role ran on Anthropic, so an Anthropic-only run with the
+  // OpenRouter key unset could not start (RealUse-1 part B).
+  test("an all-Anthropic run needs no OpenRouter key", () => {
+    expect(openRouterModels(["claude-haiku-5-5", "claude-haiku-5-5", "claude-haiku-5-5"])).toEqual([]);
+  });
+  test("names each OpenRouter model once", () => {
+    expect(openRouterModels(["claude-haiku-5-5", "z-ai/glm-5.3-flash", "z-ai/glm-5.3-flash", ""])).toEqual([
+      "z-ai/glm-5.3-flash",
+    ]);
   });
 });

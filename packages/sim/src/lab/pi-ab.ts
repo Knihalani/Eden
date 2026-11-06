@@ -123,7 +123,16 @@ import {
 } from "./ab-common";
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
 import { DiskCardMaker, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
-import { isAnthropic, isCapError, labAccess, labModel, piModelFor, piRegistry, providerPrefs } from "./free";
+import {
+  isAnthropic,
+  isCapError,
+  labAccess,
+  labModel,
+  openRouterModels,
+  piModelFor,
+  piRegistry,
+  providerPrefs,
+} from "./free";
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
 import { effective, PRESETS } from "./presets";
 import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Budgeted } from "./reader-disk";
@@ -138,8 +147,9 @@ const opt = (name: string, fallback: string) => {
   return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
 };
 const DRY = args.includes("--dry");
+// Only needed when some role runs on OpenRouter: a run with every role on `claude-*` goes to Anthropic alone (D97), and
+// is checked once the models are known (`openRouterModels`, below).
 const KEY = process.env.OPENROUTER_API_KEY;
-if (!KEY && !DRY) throw new Error("needs OPENROUTER_API_KEY");
 const SEEDS = opt("seeds", "41").split(",").map(Number);
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
 const GRADER = opt("grader", "anthropic/claude-haiku-5.5");
@@ -178,8 +188,6 @@ const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
 });
 // A flag whose dependency this harness cannot give it would run a different configuration under the flag's name: a
 // run that says R or ALL must be R or ALL (the review of moon/combined). Cards need a model; the sync, list tools.
-if (CONDITIONS.some((c) => c.withPartner && effective(c.config).cards) && !KEY && !DRY)
-  throw new Error("config.cards needs OPENROUTER_API_KEY for its enrichment");
 // Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
@@ -191,6 +199,15 @@ const ACCESS = labAccess(args, [
   ...(USES_READER ? [READER_MODEL] : []),
 ]);
 const PACER = ACCESS.pacer;
+// Cards (and the judge, the agent, the grader) on OpenRouter need its key; on Anthropic, HAIKU_API_KEY (keyFor).
+const OPENROUTER_ROLES = openRouterModels([
+  MODEL,
+  GRADER,
+  ...(CONDITIONS.some((c) => c.withPartner && effective(c.config).cards) ? [CARD_MODEL] : []),
+  ...(USES_READER ? [READER_MODEL] : []),
+]);
+if (OPENROUTER_ROLES.length && !KEY && !DRY)
+  throw new Error(`${OPENROUTER_ROLES.join(", ")}: needs OPENROUTER_API_KEY`);
 /** A task starts only while the cap leaves room for all of it: its model requests and its grading. */
 const TASK_REQUESTS = MAX_STEPS + 1;
 let capStopped = 0;
