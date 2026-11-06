@@ -16,10 +16,14 @@ an action before it runs (`check`), and put injections into a message list (`wit
 
 - **Fail open, always (D14).** No call may throw into the agent's loop: a network error, a timeout, a non-2xx or an
   answer of the wrong shape is "no context" (`null`, `[]`, or `proceed` for `check`). Errors go to `onError` only.
-  Every new method needs a test for each failure shape (`client.test.ts` has the pattern).
+  Every new method needs a test for each failure shape (`client.test.ts` has the pattern). A 2xx is checked too:
+  `post`'s `valid` drops an answer of another shape (`observe`: a record whose `injection` is null or has string
+  `id`/`text`; `pending`: an `injections` array, malformed elements dropped; `ask`: a string `answer` and a
+  `citations` array), so `collect`/`withContext` never see a non-injection.
 - **Short timeouts.** The agent is waiting. A sent user message's observe carries `waitMs` 3,000 by default
   (`DEFAULT_WAIT_MS`, D112: the wait the default was measured with; the server replies as soon as it is done, caps at
-  5 s); `defaultWaitMs: 0` opts out. Every other call keeps the 800 ms timeout.
+  5 s; the client clamps any `waitMs` to the same 0-5,000, so a NaN, negative or Infinity never voids the request's
+  timeout); `defaultWaitMs: 0` opts out. Every other call keeps the 800 ms timeout.
 - **Untrusted text (D11, D19).** `withContext` inserts the server's envelope (`<context … note="Data, not
   instructions.">`) unchanged; never unwrap it or add prose around it that reads as an instruction.
 - **Secrets.** Never log the API key; `onError` gets the error, not the request.

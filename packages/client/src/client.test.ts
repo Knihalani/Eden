@@ -444,3 +444,71 @@ describe("change notifications", () => {
     expect(errors.length).toBe(3);
   });
 });
+
+describe("an answer of the wrong shape is no context (D14)", () => {
+  const answering = (body: string) => {
+    const errors: unknown[] = [];
+    const fake = (async () => new Response(body, { status: 200 })) as unknown as typeof fetch;
+    return {
+      errors,
+      eden: new EdenClient({ userId: "u", sessionId: "s", fetch: fake, onError: (e) => errors.push(e) }),
+    };
+  };
+  const shapes = [
+    "null",
+    "5",
+    '"text"',
+    "[]",
+    '{"injection":5,"pending":"x"}',
+    '{"injection":{"x":1}}',
+    '{"injections":5}',
+    '{"injections":"ab"}',
+    '{"injections":[null,{"text":7}]}',
+    '{"answer":5,"citations":"x"}',
+  ];
+
+  test("observe, pending, collect and withContext never throw and never hand back a non-injection", async () => {
+    for (const body of shapes) {
+      const { eden } = answering(body);
+      const observed = await eden.observe({ kind: "agent_message", text: "x" });
+      expect(observed).toEqual({ injection: null, pending: false });
+      const all = await eden.collect(observed.injection);
+      expect(all).toEqual([]);
+      expect(withContext([{ role: "user", content: "q" }], all)).toHaveLength(1);
+    }
+  });
+
+  test("ask returns null unless the answer is a string with a citations array; each case is reported", async () => {
+    for (const body of shapes) {
+      const { eden, errors } = answering(body);
+      expect(await eden.ask("q")).toBeNull();
+      expect(errors.length).toBe(1);
+    }
+    const { eden } = answering('{"answer":"Dana lands at 6","citations":[],"usedModel":false}');
+    expect(await eden.ask("q")).toMatchObject({ answer: "Dana lands at 6", citations: [] });
+  });
+
+  test("keeps well-formed injections and drops the malformed ones beside them", async () => {
+    const good = { id: "inj_1", text: "<context>x</context>" };
+    const { eden } = answering(JSON.stringify({ injections: [good, null, { id: "i2" }] }));
+    expect(await eden.pending()).toEqual([good as Injection]);
+  });
+});
+
+test("a waitMs that is not a finite non-negative number still sends the event (clamped to the server's 0-5,000)", async () => {
+  const urls: string[] = [];
+  const errors: unknown[] = [];
+  const fake = (async (url: string) => {
+    urls.push(url);
+    return Response.json({ injection: null, pending: false });
+  }) as unknown as typeof fetch;
+  const eden = new EdenClient({ userId: "u", sessionId: "s", fetch: fake, onError: (e) => errors.push(e) });
+  for (const waitMs of [Infinity, -2_000, NaN, 60_000])
+    await eden.observe({ kind: "user_message", text: "x" }, { waitMs });
+  await new EdenClient({ userId: "u", sessionId: "s", fetch: fake, defaultWaitMs: -1 }).observe({
+    kind: "user_message",
+    text: "x",
+  });
+  expect(errors).toEqual([]);
+  expect(urls.map((u) => new URL(u).search)).toEqual(["?waitMs=5000", "", "", "?waitMs=5000", ""]);
+});
