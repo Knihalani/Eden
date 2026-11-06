@@ -213,3 +213,130 @@ export function mergeParts(parts: PartOut[], groups: ShardGroup[], suites: strin
     throw new Error(`${seen} task rows laid out as ${perTask.length}: repeated suite or seed?`);
   return { rows, total, sync, cards, reader, intentUse, bySuite, perTask };
 }
+
+/**
+ * hidden-funnel.ts's per-task output files that shard (audit 2026-11-06, devloop-ask-diag-forces-one-process): with
+ * several processes, process i writes each to `<file>.part-<i>` (`partArgs`; hidden-funnel.ts truncates its own part,
+ * never the shared file) and funnel.ts merges the parts into the named file in one canonical order (`mergeLines`).
+ */
+export const PART_FLAGS: readonly string[] = ["--packets", "--card-log", "--reader-log", "--ask-diag", "--candidates"];
+
+/**
+ * Why each of these keeps a run to one process whatever `--jobs` says, printed with it. A live reader's top-up
+ * appends to one reader cache file and spends through one ledger stream per process; a parallel live top-up is not
+ * built (lab CLAUDE.md).
+ */
+export const SOLO_WHY: Record<string, string> = {
+  "--record":
+    "books one ledger entry per suite (a seed shard would book a partial run), and per-process CPU and RSS " +
+    "would be contended",
+  "--timeline": "records per-process CPU and RSS each second, which other processes would contend",
+  "--judge live": "one spend stream per run (its pacer, request cap and budget are per process); not built in parallel",
+  "--reader live":
+    "one append-only reader cache file and one spend stream per run; a parallel live top-up is not built",
+};
+
+/** The reasons a run keeps one process ("flag: why"), from funnel.ts's `--record` and the flags after `--`. */
+export function soloReasons(o: { record: boolean; passthrough: readonly string[] }): string[] {
+  const value = (name: string) => {
+    const i = o.passthrough.indexOf(name);
+    return i >= 0 ? (o.passthrough[i + 1] ?? "") : "";
+  };
+  const on = [
+    ...(o.record ? ["--record"] : []),
+    ...(o.passthrough.includes("--timeline") ? ["--timeline"] : []),
+    ...(value("--judge") === "live" ? ["--judge live"] : []),
+    ...(value("--reader") === "live" ? ["--reader live"] : []),
+  ];
+  return on.map((flag) => `${flag} (${SOLO_WHY[flag]})`);
+}
+
+/** One sharded output: the flag, the file it names, and each process's part. */
+export interface PartFile {
+  flag: string;
+  file: string;
+  parts: string[];
+}
+
+/** `<file>.part-<i>`: process i's share of a sharded output file. */
+export const partPath = (file: string, i: number) => `${file}.part-${i}`;
+
+/**
+ * The sharded outputs among hidden-funnel flags (`PART_FLAGS` given a value) for `processes` processes. Throws when
+ * two flags name one file: their lines would land in one file in any case, and their parts would collide.
+ */
+export function partFiles(passthrough: readonly string[], processes: number): PartFile[] {
+  const out: PartFile[] = [];
+  for (const [i, arg] of passthrough.entries()) {
+    const file = passthrough[i + 1];
+    if (!PART_FLAGS.includes(arg) || !file || file.startsWith("--")) continue;
+    if (out.some((p) => p.file === file)) throw new Error(`${arg} and another output flag both name ${file}`);
+    out.push({ flag: arg, file, parts: Array.from({ length: processes }, (_, k) => partPath(file, k)) });
+  }
+  return out;
+}
+
+/** Process i's hidden-funnel flags: each sharded output file replaced by its part. */
+export function partArgs(passthrough: readonly string[], files: readonly PartFile[], i: number): string[] {
+  return passthrough.map((arg, k) => {
+    const named = k > 0 ? files.find((p) => p.flag === passthrough[k - 1] && p.file === arg) : undefined;
+    return named ? named.parts[i]! : arg;
+  });
+}
+
+/** A line's sort key: suite index, seed, variant (hidden 0, control 1, other 2), template. */
+type LineKey = [number, number, number, string];
+/** The key of a line with no task fields (a `--card-log` line, a torn line): before every keyed line. */
+const NO_KEY: LineKey = [-1, -1, -1, ""];
+
+/**
+ * A line's place in the canonical order, read from its own `suite`, `seed`, `variant` and `template`, or from a
+ * `--reader-log` line's `task` ("suite/variant/seed/template/id"). A suite the run did not list sorts after the
+ * listed ones (a part never holds one: hidden-funnel runs only the suites it is given).
+ */
+function lineKey(line: string, suiteAt: Map<string, number>): LineKey {
+  let row: unknown;
+  try {
+    row = JSON.parse(line);
+  } catch {
+    return NO_KEY;
+  }
+  if (typeof row !== "object" || row === null) return NO_KEY;
+  let { suite, seed, variant, template } = row as Record<string, unknown>;
+  const task = (row as { task?: unknown }).task;
+  if (suite === undefined && typeof task === "string") {
+    const bits = task.split("/");
+    // The item id is the last field; a template holding "/" keeps its inner parts.
+    if (bits.length >= 5) [suite, variant, seed, template] = [bits[0], bits[1], bits[2], bits.slice(3, -1).join("/")];
+  }
+  if (typeof suite !== "string") return NO_KEY;
+  const seedN = Number(seed);
+  return [
+    suiteAt.get(suite) ?? suiteAt.size,
+    Number.isFinite(seedN) ? seedN : -1,
+    variant === "hidden" ? 0 : variant === "control" ? 1 : 2,
+    typeof template === "string" ? template : "",
+  ];
+}
+
+/**
+ * Several processes' lines of one output file as one file in one canonical order, whatever the processes were:
+ * suite (in `suites`' order), seed, variant, template, then each line's own order (parts in process order, lines in
+ * file order; the sort is stable). Seeds run concurrently inside a process, so even one process's lines interleave;
+ * funnel.ts puts a one-process file through this too, and `--jobs 1` and `--jobs N` write the same file (`--card-log`
+ * lines carry no task, so they keep their part order). Empty lines are dropped.
+ */
+export function mergeLines(parts: readonly string[], suites: readonly string[]): string {
+  const suiteAt = new Map(suites.map((s, i) => [s, i]));
+  const lines = parts.flatMap((p) => p.split("\n").filter((l) => l.length > 0));
+  const keyed = lines.map((line, at) => ({ line, at, key: lineKey(line, suiteAt) }));
+  keyed.sort((a, b) => {
+    for (let k = 0; k < 3; k++) {
+      const d = (a.key[k] as number) - (b.key[k] as number);
+      if (d !== 0) return d;
+    }
+    if (a.key[3] !== b.key[3]) return a.key[3] < b.key[3] ? -1 : 1;
+    return a.at - b.at;
+  });
+  return keyed.map((k) => `${k.line}\n`).join("");
+}

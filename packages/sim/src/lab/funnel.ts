@@ -14,13 +14,14 @@
  *   into a temp file; used when the configuration has `cards`.
  * - `--baseline`: a `--json` file of an earlier run on the same suites and seeds; prints, task by task, the hidden
  *   items gained and lost and the decoys gained and lost.
- * - Held-out suites are refused without `--blind`: they are measurement only, never for tuning (suites.ts). The
- *   unrun blind ones (UNRUN_BLIND) are spent by the first run that names them.
+ * - Held-out suites are refused without `--blind`: they are measurement only, never for tuning (suites.ts).
+ *   UNRUN_BLIND's (held-out 9-13) are kept out of `all`; all have been read already, so none is blind any more.
  * - Not recorded in bench/ledger.jsonl unless `--record` (a screen is not a result).
  * - `--jobs N`: N hidden-funnel.ts processes, rows merged before the score (same score). At `--time 0` each takes a
  *   block of suite × seed shards and all run at once, default one per core (D139; ms/task is then contended, so
  *   `--jobs 1` for latency); at `--time` > 0 one per shard, N at a time, default min(shards, 12, 3 × cores), since
- *   those shards wait on sleeps. Some flags force 1 (the `--jobs` note below says which and why).
+ *   those shards wait on sleeps. The per-task output files (`--ask-diag`, `--packets`, …) shard and are merged;
+ *   `--record`, `--timeline`, `--reader live` and `--judge live` force 1 and say why (the `--jobs` note below).
  * - `--intent default` (D158): the checked-in intent requests (`intent-v2`, train seeds 41-44, held-out 10-11
  *   seeds 41-42 and held-out 13 seeds 41-44; INTENT_COVERS in cards-disk.ts), unpacked into a temp file and passed
  *   as `-- --intent`, when the configuration has intent and cards and the run's suites and seeds are all covered, so
@@ -46,15 +47,27 @@
  * ground-truth proxy, every line labelled so. Both shard. `-- --packet-k 10,15,20` prints the planted item in the
  * ask's top K. With `-- --lead-in clause` and a no-model reader, the draft's pool against the request's (docs/LAB.md).
  */
-import { spawn, spawnSync } from "node:child_process";
-import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { flags, labConfig, parseJson } from "./flags";
 import { INTENT_FILE, INTENT_PATH, intentUncovered } from "./cards-disk";
-import { plantedCoverageLine, surfacedLines, type SurfacedRow } from "./ask-coverage";
-import { amortisedCalls, callMismatches, defaultJobs, groupShards, mergeParts, type PartOut } from "./funnel-merge";
+import { coverageLines, plantedCoverageLine, surfacedLines, type AskCoverage, type SurfacedRow } from "./ask-coverage";
+import {
+  amortisedCalls,
+  callMismatches,
+  defaultJobs,
+  groupShards,
+  mergeLines,
+  mergeParts,
+  partArgs,
+  partFiles,
+  soloReasons,
+  type PartFile,
+  type PartOut,
+} from "./funnel-merge";
 import { effective, PRESETS } from "./presets";
 import { allMissedHint, cacheModels, missGate, MISS_EXIT } from "./reader-disk";
 import {
@@ -97,10 +110,40 @@ const cli = flags(
 );
 const opt = cli.opt;
 const passthrough = cli.rest;
-/** The run's temp directory (merged cards, intent requests, part files), removed on every exit path. */
+/** The run's temp directory (merged cards, intent requests, part files), removed on exit, SIGINT and SIGTERM. */
 let scratch = "";
-const fail = (message: string): never => {
+/**
+ * The sharded output files' parts (`<file>.part-<i>`, next to each named file), removed on exit, SIGINT and SIGTERM
+ * (not on SIGKILL, which no process can catch).
+ */
+let outputParts: PartFile[] = [];
+const cleanup = () => {
   if (scratch) rmSync(scratch, { recursive: true, force: true });
+  for (const f of outputParts) for (const part of f.parts) rmSync(part, { force: true });
+};
+// Also on an uncaught throw (a merge that refuses its parts): no part file outlives the run.
+process.on("exit", cleanup);
+/** The running hidden-funnel processes and their close, stopped with the launcher so none writes after the cleanup. */
+const children = new Map<ChildProcess, Promise<unknown>>();
+/** The exit code of the signal being handled: no new process starts, and a child it stopped exits with that code. */
+let stopping: number | undefined;
+// 'exit' does not fire on a signal: pass it on to the children (a SIGTERM sent to the launcher alone does not reach
+// them), wait up to 5 s for them to close so no late write recreates a part, then clean up and exit as the signal
+// would (128 + its number).
+for (const [signal, code] of [
+  ["SIGINT", 130],
+  ["SIGTERM", 143],
+] as const) {
+  process.on(signal, async () => {
+    stopping = code;
+    for (const child of children.keys()) child.kill(signal);
+    await Promise.race([Promise.all(children.values()), new Promise((done) => setTimeout(done, 5000))]);
+    cleanup();
+    process.exit(code);
+  });
+}
+const fail = (message: string): never => {
+  cleanup();
   console.error(`funnel: ${message}`);
   process.exit(2);
 };
@@ -115,7 +158,12 @@ if (heldout.length && !cli.has("blind")) {
   );
 }
 const unrun = suites.filter((s) => UNRUN_BLIND.includes(s));
-if (unrun.length) console.error(`funnel: ${unrun.join(", ")} never run before: this run spends them (UNRUN_BLIND)`);
+if (unrun.length) {
+  console.error(
+    `funnel: ${unrun.join(", ")} kept out of \`all\` (UNRUN_BLIND) but read before (D72, D80, D85, D98, D112): ` +
+      "not a blind measurement; a blind round needs a new suite",
+  );
+}
 
 const presetName = opt("preset", "default");
 const preset = PRESETS[presetName];
@@ -212,8 +260,8 @@ const out = opt("json", join(scratch, "funnel.json"));
 if (new Set(seedList.map(Number)).size !== seedList.length) fail(`--seeds ${seeds} repeats a seed`);
 const label = presetName + (cli.has("set") ? "+set" : "");
 
-/** hidden-funnel.ts's arguments for some suites and seeds, writing its rows to `json`. */
-const funnelArgsFor = (suiteList: string, seedList: string, json: string) => [
+/** hidden-funnel.ts's arguments for some suites and seeds, writing its rows to `json`; `pass`: the flags after `--`. */
+const funnelArgsFor = (suiteList: string, seedList: string, json: string, pass = passthrough) => [
   join(import.meta.dir, "hidden-funnel.ts"),
   "--suite",
   suiteList,
@@ -229,7 +277,7 @@ const funnelArgsFor = (suiteList: string, seedList: string, json: string) => [
   ...(cards !== "none" && run.cards ? ["--cards", cards] : []),
   ...(cli.has("record") ? [] : ["--no-record"]),
   ...(allowMisses && !has("--allow-misses") ? ["--allow-misses"] : []),
-  ...passthrough,
+  ...pass,
 ];
 const shellLine = (a: string[]) => `bun ${a.map((x) => (/[\s{"]/.test(x) ? `'${x}'` : x)).join(" ")}`;
 
@@ -245,29 +293,27 @@ const shellLine = (a: string[]) => `bun ${a.map((x) => (/[\s{"]/.test(x) ? `'${x
  * the connectors' simulated
  * latency (sleeps, not CPU), so shards barely contend and ms/task stays a latency figure (measured within a few
  * percent of one process, docs/LAB.md), and the run says how many ran at once; `--jobs` is honoured as typed, so a
- * latency study, a heavier configuration or a machine with fewer cores can choose one process. Some runs keep one
- * process whatever N says: each flag below clears and rewrites one output file per process (shards would overwrite
- * each other's), `--record` books one ledger entry per suite (a seed shard would book a partial run), and a live judge
- * or reader would multiply paid calls and rate-limit pressure in parallel.
+ * latency study, a heavier configuration or a machine with fewer cores can choose one process. The per-task output
+ * files (`--ask-diag`, `--packets`, `--card-log`, `--reader-log`, `--candidates`: `PART_FLAGS`) shard: process i
+ * writes `<file>.part-<i>`, and the parts are merged into the named file in one canonical order (`mergeLines`) and
+ * deleted (audit 2026-11-06, devloop-ask-diag-forces-one-process). Some runs keep one process whatever N says, each
+ * reason printed (`soloReasons`, funnel-merge.ts): `--record` and `--timeline` (one ledger entry per suite; per-process
+ * CPU and RSS would be contended), `--reader live` and `--judge live` (one append-only cache file and one spend stream
+ * per run; a parallel live top-up is not built).
  */
 const jobsGiven = cli.has("jobs") ? Number(opt("jobs", "1")) : undefined;
 if (jobsGiven !== undefined && (!Number.isInteger(jobsGiven) || jobsGiven < 1)) {
   fail("--jobs must be a whole number of at least 1");
 }
-const soloReasons = [
-  ...["--packets", "--card-log", "--reader-log", "--ask-diag", "--candidates", "--timeline"].filter(has),
-  ...(cli.has("record") ? ["--record"] : []),
-  ...(passValue("judge") === "live" ? ["--judge live"] : []),
-  ...(passValue("reader") === "live" ? ["--reader live"] : []),
-];
+const solo = soloReasons({ record: cli.has("record"), passthrough });
 /** `-- --time T`: connectors at their simulated latency; shards then wait on sleeps rather than contend for CPU. */
 const timeScale = Number(passValue("time") || "0");
 const shardCount = suites.length * seedList.length;
 const cores = availableParallelism();
 let jobs = defaultJobs({ ...(jobsGiven !== undefined ? { jobsGiven } : {}), timeScale, shards: shardCount, cores });
-if (jobs > 1 && soloReasons.length) {
+if (jobs > 1 && solo.length) {
   const asked = jobsGiven !== undefined ? `--jobs ${jobsGiven}` : `the default of ${jobs} jobs`;
-  console.error(`funnel: ${asked} ignored, running one job: ${soloReasons.join(", ")} needs one process`);
+  console.error(`funnel: ${asked} ignored, running one job, since each of these needs one process: ${solo.join("; ")}`);
   jobs = 1;
 }
 // The processes: at `--time 0` blocks of suites × seeds, all at once; at `--time` > 0 one per shard, `jobs` at a time.
@@ -289,6 +335,14 @@ if (jobsGiven === undefined && jobs > 1) {
   );
 }
 const groupName = (g: { suites: string[]; seeds: string[] }) => `${g.suites.join(",")} seed ${g.seeds.join(",")}`;
+// The per-task output files: one part per process when several run; with one, the file itself is the only part.
+let outputs: PartFile[] = [];
+try {
+  outputs = partFiles(passthrough, groups.length);
+} catch (error) {
+  fail((error as Error).message);
+}
+if (jobs > 1) outputParts = outputs;
 
 const t0 = performance.now();
 if (jobs === 1) {
@@ -297,19 +351,48 @@ if (jobs === 1) {
   const run = spawnSync("bun", funnelArgs, { stdio: "inherit" });
   // A run with reader misses still wrote its rows: score them, then fail below.
   if (run.status !== 0 && run.status !== MISS_EXIT) {
-    rmSync(scratch, { recursive: true, force: true });
-    process.exit(run.status ?? 1);
+    cleanup();
+    process.exit(stopping ?? run.status ?? 1);
   }
 } else {
   await runGroups();
 }
 const wall = (performance.now() - t0) / 1000;
+mergeOutputs();
+
+/**
+ * Each per-task output file in one canonical order (`mergeLines`): with several processes, their parts merged into
+ * the named file, then deleted; with one, the file put in the same order (its seeds ran concurrently, so its lines
+ * interleave), so `--jobs 1` and `--jobs N` write the same file. A file no process wrote (`--card-log` with no cards)
+ * stays unwritten.
+ */
+function mergeOutputs() {
+  for (const f of outputs) {
+    const sources = jobs > 1 ? f.parts : [f.file];
+    const present = sources.filter((p) => existsSync(p));
+    if (!present.length) continue;
+    writeFileSync(
+      f.file,
+      mergeLines(
+        present.map((p) => readFileSync(p, "utf8")),
+        suites,
+      ),
+    );
+    if (jobs > 1) for (const p of f.parts) rmSync(p, { force: true });
+  }
+}
 
 /** Runs every group, `jobs` at a time, prints each one's output in group order, and merges their JSON into `out`. */
 async function runGroups() {
   const partJson = (i: number) => join(scratch, `part-${i}.json`);
   const partLog = (i: number) => join(scratch, `part-${i}.log`);
-  const argsOf = (i: number) => funnelArgsFor(groups[i]!.suites.join(","), groups[i]!.seeds.join(","), partJson(i));
+  const argsOf = (i: number) =>
+    funnelArgsFor(
+      groups[i]!.suites.join(","),
+      groups[i]!.seeds.join(","),
+      partJson(i),
+      partArgs(passthrough, outputs, i),
+    );
   console.error(
     `funnel: ${shardCount} shards (suite × seed) in ${groups.length} processes, ${jobs} at a time on ${cores} cores` +
       (timeScale > 0 ? ` (--time ${timeScale}: concurrent shards wait on simulated connector latency, not CPU)` : "") +
@@ -318,17 +401,25 @@ async function runGroups() {
   const results: { status: number | null; seconds: number }[] = [];
   let next = 0;
   const worker = async () => {
-    for (let i = next++; i < groups.length; i = next++) {
+    for (let i = next++; i < groups.length && stopping === undefined; i = next++) {
       // Each process's stdout and stderr go to its own file, printed whole below so they do not interleave.
       const fd = openSync(partLog(i), "w");
       const started = performance.now();
       const child = spawn("bun", argsOf(i), { stdio: ["ignore", fd, fd] });
-      const status = await new Promise<number | null>((done) => child.on("close", (code) => done(code)));
+      const closed = new Promise<number | null>((done) => child.on("close", (code) => done(code)));
+      children.set(child, closed);
+      const status = await closed;
+      children.delete(child);
       closeSync(fd);
       results[i] = { status, seconds: (performance.now() - started) / 1000 };
     }
   };
   await Promise.all(Array.from({ length: jobs }, worker));
+  // Stopped by a signal: the children closed on it, so their results are partial. Exit as the signal handler would.
+  if (stopping !== undefined) {
+    cleanup();
+    process.exit(stopping);
+  }
   for (const [i, g] of groups.entries()) {
     const r = results[i]!;
     console.log(`\n== ${groupName(g)} (exit ${r.status}, ${r.seconds.toFixed(1)} s)`);
@@ -337,8 +428,8 @@ async function runGroups() {
   const failed = results.findIndex((r) => r.status !== 0 && r.status !== MISS_EXIT);
   if (failed >= 0) {
     console.error(`funnel: ${groupName(groups[failed]!)} failed (its output is above)`);
-    rmSync(scratch, { recursive: true, force: true });
-    process.exit(results[failed]!.status ?? 1);
+    cleanup();
+    process.exit(stopping ?? results[failed]!.status ?? 1);
   }
   const parts = groups.map((_, i) => JSON.parse(readFileSync(partJson(i), "utf8")) as PartOut);
   writeFileSync(out, JSON.stringify(merged(parts), null, 2));
@@ -422,10 +513,7 @@ const inert = intentNow === "inert" || intentNow === "unknown" ? `  ${INTENT_INE
 // A replay file that matched none of this run's items is only known now.
 if (intentNow !== "unknown" && noModelReader && baseline) {
   const why = intentMismatch(intentNow, intentOfRun(JSON.parse(readFileSync(baseline, "utf8"))));
-  if (why) {
-    rmSync(scratch, { recursive: true, force: true });
-    fail(`--baseline ${baseline} refused: ${why}`);
-  }
+  if (why) fail(`--baseline ${baseline} refused: ${why}`);
 }
 const surfaced = (t: TaskRow) => Boolean(t.delivered || t.askCited);
 const key = (t: TaskRow) => `${t.suite}|${t.variant}|${t.seed}|${t.template}`;
@@ -462,6 +550,17 @@ console.log(`  ${beforeModelLine(rows, passValue("wait-ms") || "default")}`);
 for (const l of surfacedLines("TOTAL", rows as SurfacedRow[])) console.log(`  ${l}${tag}${inert}`);
 const plantedLine = plantedCoverageLine(rows as SurfacedRow[]);
 if (plantedLine) console.log(`  intent: ${plantedLine}`);
+// `--ask-diag`: the rank -1 split by intent coverage (ask-coverage.ts), from the merged file's rows, so it covers the
+// whole run whatever the processes were (each process's own lines above cover its block only).
+const askDiag = outputs.find((f) => f.flag === "--ask-diag");
+if (askDiag && existsSync(askDiag.file)) {
+  type DiagRow = { variant: string; rank: number; cached: boolean; coverage?: AskCoverage | null };
+  const diagRows = readFileSync(askDiag.file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as DiagRow);
+  for (const l of coverageLines(diagRows)) console.log(`  ${l}${inert}`);
+}
 // The reader's pool (any reader), `--packet-k` and the draft's pool (`--lead-in` with a no-model reader), per suite.
 const packetK = passValue("packet-k").split(",").filter(Boolean).map(Number);
 const screen = [...bySuite.keys()].sort().flatMap((suite) =>
@@ -516,7 +615,7 @@ if (baseline) {
   for (const line of changed.slice(0, 40)) console.log(`  ${line}`);
   if (changed.length > 40) console.log(`  … ${changed.length - 40} more`);
 }
-rmSync(scratch, { recursive: true, force: true });
+cleanup();
 const gate = missGate(readerReplay?.missed ?? 0, allowMisses);
 if (gate.message) console.error(`\nfunnel: ${gate.message}`);
 // Every prompt missed with no `--reader-model`: almost always a cache made under another model (promptKey hashes it).

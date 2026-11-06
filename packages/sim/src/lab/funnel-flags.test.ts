@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ReaderInput } from "@eden/engine";
@@ -74,6 +74,47 @@ const funnelTimed = (jobs: string) => {
   );
 };
 
+/** The per-task output files a funnel.ts run writes (they shard with `--jobs`, audit 2026-11-06). */
+const OUTPUT_FLAGS = ["ask-diag", "packets", "card-log", "reader-log", "candidates"];
+/**
+ * funnel.ts sharding `--ask-diag` over 2 processes, sent `signal` once a part file exists. Returns its exit status,
+ * how many parts were seen, and the part files left a second after it exited (a late child write would show there).
+ */
+const funnelSignalled = async (signal: "SIGTERM" | "SIGINT") => {
+  const dir = scratch();
+  const p = Bun.spawn(
+    [
+      "bun",
+      join(lab, "funnel.ts"),
+      ...["--suite", "train1", "--seeds", "41,42", "--jobs", "2", "--set", JSON.stringify(smallSync)],
+      ...["--json", join(dir, "f.json"), "--", "--ask-diag", join(dir, "diag.jsonl")],
+    ],
+    { env: noKey, stdout: "ignore", stderr: "ignore" },
+  );
+  const parts = () => readdirSync(dir).filter((n) => n.includes(".part-"));
+  const deadline = Date.now() + 30_000;
+  while (parts().length === 0 && p.exitCode === null && Date.now() < deadline) await Bun.sleep(50);
+  const partsSeen = parts().length;
+  p.kill(signal);
+  const status = await p.exited;
+  await Bun.sleep(1000);
+  return { status, partsSeen, partsLeft: parts() };
+};
+/** funnel.ts at `--time 0` on train1 seeds 41 and 42 with every per-task output file, into its own directory. */
+const funnelOutputs = async (jobs: string) => {
+  const dir = scratch();
+  const run = await spawn(
+    [
+      join(lab, "funnel.ts"),
+      ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--set", JSON.stringify(smallSync)],
+      ...["--json", join(dir, "f.json"), "--", "--limit", "1"],
+      ...OUTPUT_FLAGS.flatMap((f) => [`--${f}`, join(dir, `${f}.jsonl`)]),
+    ],
+    join(dir, "f.json"),
+  );
+  return { ...run, dir };
+};
+
 // The end-to-end runs are single-threaded child processes (mostly sleeps, for the shards). They start together
 // here, before any test, and each test awaits its own: one after another they cost the sum of their wall times.
 // The default's stub run assertions are in reader-stub.test.ts, on the stub run that file makes anyway.
@@ -83,6 +124,10 @@ let runs: {
   sharded: Promise<Run>;
   missNoModel: Promise<Run>;
   missModel: Promise<Run>;
+  outputsSolo: Promise<Run & { dir: string }>;
+  outputsSharded: Promise<Run & { dir: string }>;
+  soloWhy: Promise<Run>;
+  signalled: Promise<{ status: number | null; partsSeen: number; partsLeft: string[] }>;
 };
 // A reader cache with one line recorded under a model that is not the default: every prompt of a run misses it.
 let otherCache = "";
@@ -98,6 +143,29 @@ beforeAll(() => {
     sharded: funnelTimed("2"),
     missNoModel: replay([]),
     missModel: replay(["--reader-model", "claude-haiku-5-5"]),
+    outputsSolo: funnelOutputs("1"),
+    outputsSharded: funnelOutputs("2"),
+    signalled: funnelSignalled("SIGTERM"),
+    // `--record` and `--reader live` keep one process and say why. The flag after them is unknown, so hidden-funnel.ts
+    // exits 2 before anything runs: nothing is recorded or read, and no key is in the env either way.
+    soloWhy: (async () => {
+      const env = { ...noKey, HAIKU_API_KEY: "", ANTHROPIC_API_KEY: "" };
+      const p = Bun.spawn(
+        [
+          "bun",
+          join(lab, "funnel.ts"),
+          ...["--suite", "train1", "--seeds", "41,42", "--jobs", "2", "--record"],
+          ...["--", "--reader", "live", "--no-such-flag"],
+        ],
+        { env, stdout: "pipe", stderr: "pipe" },
+      );
+      const [stdout, stderr, status] = await Promise.all([
+        new Response(p.stdout).text(),
+        new Response(p.stderr).text(),
+        p.exited,
+      ]);
+      return { status, stdout, stderr, out: "" };
+    })(),
   };
 });
 
@@ -310,4 +378,49 @@ describe("funnel.ts flags", () => {
     expect(sharded.stderr).toContain("2 at a time");
     expect(strip(sharded.rows)).toEqual(strip(solo.rows));
   }, 120_000);
+
+  test("--ask-diag and the other output files shard: same files as one process, no part left", async () => {
+    const [solo, sharded] = await Promise.all([runs.outputsSolo, runs.outputsSharded]);
+    expect(solo.status).toBe(0);
+    expect(sharded.status).toBe(0);
+    expect(sharded.stderr).not.toContain("running one job");
+    expect(sharded.stderr).toContain("in 2 processes");
+    for (const f of OUTPUT_FLAGS) {
+      const file = `${f}.jsonl`;
+      const one = readFileSync(join(solo.dir, file), "utf8");
+      const two = readFileSync(join(sharded.dir, file), "utf8");
+      expect(one.length).toBeGreaterThan(0);
+      // Card-log lines carry no task, so they keep each process's order; every other file is byte for byte the same.
+      if (f === "card-log") expect(two.split("\n").sort()).toEqual(one.split("\n").sort());
+      else expect(two).toBe(one);
+    }
+    // One ask-diag line per task (one task per variant and seed), in the canonical order.
+    const diag = readFileSync(join(sharded.dir, "ask-diag.jsonl"), "utf8").trim().split("\n");
+    const order = diag.map((l) => JSON.parse(l) as { seed: number; variant: string });
+    expect(order.map((d) => `${d.seed} ${d.variant}`)).toEqual(["41 hidden", "41 control", "42 hidden", "42 control"]);
+    for (const dir of [solo.dir, sharded.dir]) {
+      expect(readdirSync(dir).filter((n) => n.includes(".part-"))).toEqual([]);
+    }
+    // The bucket summary is printed once over the merged rows, the same in both runs.
+    const summary = (out: string) => out.split("\n").filter((l) => l.startsWith("  ask-diag: "));
+    // A hidden and a decoy line (the replay-coverage line only when a replay is loaded).
+    expect(summary(sharded.stdout).length).toBeGreaterThanOrEqual(2);
+    expect(summary(sharded.stdout)).toEqual(summary(solo.stdout));
+  }, 120_000);
+
+  test("a SIGTERM stops the run's processes and leaves no part file", async () => {
+    const r = await runs.signalled;
+    // The parts existed when the signal went out, and the launcher exited as a SIGTERM would (128 + 15).
+    expect(r.partsSeen).toBeGreaterThan(0);
+    expect(r.status).toBe(143);
+    expect(r.partsLeft).toEqual([]);
+  }, 60_000);
+
+  test("--record and --reader live keep one process and print why", async () => {
+    const r = await runs.soloWhy;
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("--jobs 2 ignored, running one job");
+    expect(r.stderr).toContain("--record (books one ledger entry per suite");
+    expect(r.stderr).toContain("--reader live (one append-only reader cache file and one spend stream per run");
+  }, 60_000);
 });
