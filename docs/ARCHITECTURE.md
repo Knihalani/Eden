@@ -79,6 +79,15 @@ stops the start, since a file left behind would hold rows forget never reaches. 
 once `router.bench.ts` shows at least 1.5x the events per second of one process at the same observe p99 on 4 cores,
 on the merged tree (a trial in DECISIONS.md).
 
+`router.bench.ts` serves one in-process StaticSource, so it measures little of what real users cost. The same gate
+on simulated users (`packages/sim/src/lab/router-sim.bench.ts`: the shipped `buildPartner` over per-user connectors
+with REALISTIC or market latency at time scale 1, sync on, 400 users, median of 3, 4 cores; D172's outcome) gave the
+router over 4 children 5.96x one process at p99 <= 100 ms on REALISTIC (4,410 against 740 events/s, lowest 5.94x)
+and 3.36x on the market `hosted` profile (4,126 against 1,229, lowest 3.20x); the hop alone costs nothing measurable
+(router over 1 child 0.98-1.05x). Memory is the price: each child keeps its own heap, and its users' state grew it
+by about 650 MB for about 100 users, against about 1,350 MB for all 400 in one process (RSS end minus start; every
+process also held about 490 MB of sim worlds that a real server does not). Size a box by children, not by users.
+
 ## The two speeds
 
 **Fast path** (every event, no network call and no model call, a few ms; it may write learning outcomes to the local

@@ -100,6 +100,9 @@ its model roles.
   3.36. So the default became the core count. Re-run on this change (the single arm now sets `EDEN_PROCESSES=1`,
   load average 1.25 at start): single median 1,169, router over 4 children 3,759, ratios 3.48/3.22/3.23 (median
   3.23, lowest 3.22), hop ratio median 0.95.
+  The same gate on simulated users (per-user connectors, sync, real latency) is
+  `packages/sim/src/lab/router-sim.bench.ts`: 5.96x on REALISTIC and 3.36x on hosted latency (D172's outcome); its
+  children keep their own heaps, about 650 MB of user state per 100 users there, so plan memory per child.
 - **Changing N reshuffles users (D163).** Their in-memory state starts over on their new child and their old
   child's source-map rows are no longer read, but they still hold entity names: `/v1/forget` therefore goes to every
   child (a 503 unless all succeed), and `rehomeSourceMaps` moves rows out of files no process of the new N opens
