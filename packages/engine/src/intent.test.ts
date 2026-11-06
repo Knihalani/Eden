@@ -17,6 +17,7 @@ import {
 import { cleanRequests, IntentIndex, intentTerms, MAX_REQUEST_CHARS, MAX_REQUESTS, stemWord } from "./intent";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
+import { AskReader, type ReaderInput, type ReaderMaker } from "./reader";
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -317,6 +318,112 @@ describe("intent in the engine (config.intent)", () => {
     cards.forget({ tenantId: "t", userId: "u1" });
     expect(cards.intentSize({ tenantId: "t", userId: "u1" })).toBe(0);
     expect(cards.intentSize({ tenantId: "t", userId: "u2" })).toBe(1);
+  });
+});
+
+describe("a one-term intent hit (D159's thresholds: intentMinCoverage 0.2, intentMinMatched 1, intentHits 12)", () => {
+  // The request shares one word ("laptop") with the warranty item's requests and none with its text; the offsite
+  // item's requests hold the request's other words, so the warranty hit covers well under half the known idf.
+  const warranty = item("w", "Warranty", "Your Dell cover renews on the 3rd; reply to keep it.");
+  const offsite = item("o", "Offsite", "The design team meets in Leeds next month.");
+  const REQUEST = "Approve the laptop order for the design team";
+  const LOOSE = { intentMinCoverage: 0.2, intentMinMatched: 1, intentHits: 12 };
+  const source: Source = {
+    id: "chat",
+    kind: "test",
+    description: "Team chat",
+    search: async (q) => (/warranty|offsite/i.test(q.text) ? [warranty, offsite] : []),
+  };
+  /** A reader that keeps the ids of every pool it is given and binds nothing. */
+  class PoolReader implements ReaderMaker {
+    pools: string[][] = [];
+    async read(input: ReaderInput) {
+      this.pools.push(input.items.map((i) => i.id));
+      return { bears: [], rejected: [], costUsd: 0 };
+    }
+  }
+
+  const run = async (config: Record<string, unknown>, users = ["u1"]) => {
+    let clock = NOW;
+    const maker = new IntentMaker({
+      Warranty: ["renew the laptop warranty"],
+      Offsite: ["approve the design team offsite"],
+    });
+    const cards = new CardEnricher({ maker, budget: new Budget(), now: () => clock });
+    const pools = new PoolReader();
+    const p = new ContextPartner({
+      sources: async () => [source],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { ...CORE_CONFIG, cards: true, intent: true, askReader: true, askReaderWaitMs: 500, ...config },
+      cards,
+      reader: new AskReader({ maker: pools, budget: new Budget(), now: () => clock }),
+    });
+    const out: Record<string, { pool: string[]; pushed: string[]; hit: boolean }> = {};
+    for (const userId of users) {
+      const scope = { tenantId: "t", userId };
+      // Only this user's lookup brings the items into their cache; their requests are made in the background.
+      if (userId === users[0]) {
+        const first = { ...scope, sessionId: "s1", at: clock, kind: "user_message" } as const;
+        await p.observe({ ...first, text: "Any news on the warranty or the offsite?" } as AgentEvent, {
+          waitMs: 1_000,
+        });
+        await cards.idle();
+      }
+      clock += HOUR;
+      const r = await p.observe(
+        { ...scope, sessionId: "s2", at: clock, kind: "user_message", text: REQUEST } as AgentEvent,
+        { waitMs: 1_000 },
+      );
+      const pushed = [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "s2" })].flatMap(
+        (i) => i.citations.map((c) => c.itemId),
+      );
+      const before = pools.pools.length;
+      await p.ask({ ...scope, sessionId: "s3", question: REQUEST });
+      const pool = pools.pools.slice(before).flat();
+      const hit = cards.intentFinds(scope, REQUEST, clock, 12, () => true).some((f) => f.ids.includes(warranty.id));
+      out[userId] = { pool, pushed, hit };
+    }
+    return { out, cards };
+  };
+
+  test("it is one matched term under the old bar: the default thresholds drop it, the loose ones keep it", async () => {
+    const { cards } = await run({});
+    const scope = { tenantId: "t", userId: "u1" };
+    const found = cards.intentFinds(scope, REQUEST, NOW + 2 * HOUR, 12, () => true);
+    const w = found.find((f) => f.ids.includes(warranty.id))!.hit;
+    expect(w.matched).toBe(1);
+    expect(w.coverage).toBeGreaterThanOrEqual(LOOSE.intentMinCoverage);
+    expect(w.coverage).toBeLessThan(0.35);
+  });
+
+  test("loose, it enters the ask's reader pool; at the old bar it does not", async () => {
+    const loose = await run(LOOSE);
+    expect(loose.out.u1!.pool).toContain(warranty.id);
+    const strict = await run({ intentMinCoverage: 0.35, intentMinMatched: 2, intentHits: 6 });
+    // The reader was called at the old bar too: the two-term offsite hit fills its pool.
+    expect(strict.out.u1!.pool).toContain(offsite.id);
+    expect(strict.out.u1!.pool).not.toContain(warranty.id);
+  });
+
+  test("loose, it is never a no-model delivery", async () => {
+    const loose = await run(LOOSE);
+    expect(loose.out.u1!.pushed).not.toContain(warranty.id);
+    expect(loose.out.u1!.pushed).toEqual([]);
+  });
+
+  test("one user's one-term hits never reach another user or tenant", async () => {
+    const { out, cards } = await run(LOOSE, ["u1", "u2"]);
+    expect(out.u1!.pool).toContain(warranty.id);
+    expect(out.u1!.hit).toBe(true);
+    // u2 never looked anything up: no requests of theirs were made, and u1's are not theirs.
+    expect(out.u2!.hit).toBe(false);
+    expect(out.u2!.pool).not.toContain(warranty.id);
+    const otherTenant = { tenantId: "t2", userId: "u1" };
+    expect(cards.intentFinds(otherTenant, REQUEST, NOW + 3 * HOUR, 12, () => true)).toEqual([]);
   });
 });
 
