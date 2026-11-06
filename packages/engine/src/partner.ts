@@ -1767,7 +1767,16 @@ export class ContextPartner {
   async sourceItems(scope: Scope, sourceId: string, items: ContextItem[]): Promise<number> {
     if (!this.config.syncPush || !this.sync || items.length === 0) return 0;
     const own = items.filter((it) => it.sourceId === sourceId).slice(0, MAX_PUSHED_ITEMS);
-    const clean = await this.redact(own);
+    // Ids already held gone before the redaction: these items came after that removal, so they revive it (D160).
+    const goneBefore = new Set<string>();
+    for (const raw of own) {
+      const id = sanitizedId(raw);
+      if (this.deps.cache.isHeldGone(scope, id, this.now())) goneBefore.add(id);
+    }
+    const redacted = await this.redact(own);
+    // A removal (`sourceRemoved`) that landed during the await came after these items: it wins, so an id held gone
+    // now but not before is neither revived nor stored (D160). `sync.mark()` cannot tell: removals never bump it.
+    const clean = redacted.filter((i) => goneBefore.has(i.id) || !this.deps.cache.isHeldGone(scope, i.id, this.now()));
     // The source has them (again): a deletion held earlier no longer stands.
     this.deps.cache.revive(
       scope,

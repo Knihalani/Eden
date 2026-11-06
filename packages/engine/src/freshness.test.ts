@@ -3,8 +3,8 @@ import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import { itemId, type AgentEvent, type ContextItem, type Scope } from "@eden/protocol";
 import type { SearchQuery, Source } from "@eden/sources";
-import { ItemCache, sanitizedId } from "./cache";
-import { ContextPartner, type ReaderReport } from "./partner";
+import { ItemCache, sanitizedId, sanitizeItem } from "./cache";
+import { ContextPartner, type PartnerDeps, type ReaderReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { AskReader, type ReaderMaker } from "./reader";
 
@@ -49,7 +49,7 @@ class Mutable implements Source {
   }
 }
 
-function setup(source: Source, config: Record<string, unknown> = {}) {
+function setup(source: Source, config: Record<string, unknown> = {}, deps: Partial<PartnerDeps> = {}) {
   let clock = T0;
   const cache = new ItemCache();
   const traces: { decision: string; sourceCalls: number }[] = [];
@@ -62,6 +62,7 @@ function setup(source: Source, config: Record<string, unknown> = {}) {
     now: () => clock,
     config: { ...CORE_CONFIG, confidentScore: 0.1, minMatchedTerms: 1, ...config },
     onTrace: (t) => traces.push(t),
+    ...deps,
   });
   return { partner, cache, traces, advance: (ms: number) => (clock += ms), now: () => clock };
 }
@@ -86,8 +87,8 @@ class Listed extends Mutable {
 const PUSH = { sync: true, syncPush: true, syncPageSize: 100, verifyDelivery: true };
 
 /** A partner whose sync has read every item of `src` once. */
-async function synced(src: Listed, config: Record<string, unknown> = {}) {
-  const t = setup(src, { ...PUSH, ...config });
+async function synced(src: Listed, config: Record<string, unknown> = {}, deps: Partial<PartnerDeps> = {}) {
+  const t = setup(src, { ...PUSH, ...config }, deps);
   t.partner.sync!.track(scope, t.now());
   while (!t.partner.sync!.warm(scope)) await t.partner.sync!.tick();
   return t;
@@ -474,5 +475,52 @@ describe("checkAhead waits for the reader's gate (D134)", () => {
     expect(r.citations.map((c) => c.itemId)).toEqual([itemId("cal", "t1")]);
     expect(calls).toBe(0);
     expect(notes.fetches - before).toBe(0);
+  });
+});
+
+describe("D160: a removal that lands while sourceItems is redacting wins", () => {
+  /** A gate pool whose redaction resolves on a later macrotask, as a worker's reply does (`EDEN_GATE_WORKERS` > 0). */
+  const slowPool: PartnerDeps["gatePool"] = {
+    runOrInline: <T>(_task: string, input: unknown) =>
+      new Promise<T>((resolve) => {
+        const { item, maxTextChars } = input as { item: ContextItem; maxTextChars: number };
+        setTimeout(() => resolve(sanitizeItem(item, maxTextChars) as T), 5);
+      }),
+  };
+  const edit = (src: Listed) =>
+    src.docs.set("q1", { title: "Quarterly offsite", text: "The quarterly offsite moved to Porto on 19 November." });
+  const arms: [string, Partial<PartnerDeps>][] = [
+    ["an async gate pool", { gatePool: slowPool }],
+    ["the inline sanitizer", {}],
+  ];
+
+  for (const [arm, deps] of arms) {
+    test(`an edit pushed, then removed before its redaction resolves (${arm}): not cached, still held gone`, async () => {
+      const src = new Listed("notes");
+      seed(src);
+      const { partner, cache, advance, now } = await synced(src, {}, deps);
+      advance(5 * MIN);
+      edit(src);
+      const p = partner.sourceItems(scope, "notes", [src.item("q1")!]); // Not awaited: a request still in flight.
+      src.docs.delete("q1");
+      expect(partner.sourceRemoved(scope, "notes", ["q1"])).toBe(1);
+      expect(await p).toBe(0);
+      expect(cache.get(scope, itemId("notes", "q1"), now())).toBeFalsy();
+      expect(cache.isHeldGone(scope, itemId("notes", "q1"), now())).toBe(true);
+    });
+  }
+
+  test("a push that arrives after a completed removal still revives the item: the source sent it again", async () => {
+    const src = new Listed("notes");
+    seed(src);
+    const { partner, cache, advance, now } = await synced(src, {}, { gatePool: slowPool });
+    advance(5 * MIN);
+    expect(partner.sourceRemoved(scope, "notes", ["q1"])).toBe(1);
+    expect(cache.isHeldGone(scope, itemId("notes", "q1"), now())).toBe(true);
+    advance(MIN);
+    edit(src);
+    expect(await partner.sourceItems(scope, "notes", [src.item("q1")!])).toBe(1);
+    expect(cache.isHeldGone(scope, itemId("notes", "q1"), now())).toBe(false);
+    expect(cache.get(scope, itemId("notes", "q1"), now())?.text).toContain("Porto");
   });
 });
