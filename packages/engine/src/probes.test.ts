@@ -10,7 +10,9 @@ import {
   absenceSpan,
   cleanEntities,
   endMinutes,
+  isImperative,
   isScheduling,
+  MORE_VERBS,
   isSubject,
   mentions,
   addresses,
@@ -720,5 +722,25 @@ describe("more of D48's settings, through the engine", () => {
     await say(p, "Set up a call with Dana Lee about the renewal");
     const lower = log.map((l) => l.toLowerCase());
     expect(new Set(lower).size).toBe(lower.length);
+  });
+});
+
+// The reader's request gate (`isImperative(raw, MORE_VERBS)`, partner.ts: the push in `observe` and `readAsk`) opens a
+// paid reader call. D168's verifier found these chat lines opening one under a wider rule; the shipped gate must not.
+// (D168's verb-recognising trial was measured and deleted, 2026-11-06: commit 3fa94529f holds its code.)
+describe("the reader's request gate and D168's chat lines", () => {
+  test("no chat line is a request to act", () => {
+    const chat = [
+      "thanks!",
+      "ok sounds good",
+      "Lol",
+      "Yes",
+      "Done",
+      "Got it",
+      "Sam says hi",
+      "Good news: the offsite is on",
+      "When you do Mum's FreshCart order for Friday, add a pack of ibuprofen and some paracetamol.",
+    ];
+    for (const line of chat) expect([line, isImperative(line, MORE_VERBS)]).toEqual([line, false]);
   });
 });

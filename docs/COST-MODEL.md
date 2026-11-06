@@ -118,6 +118,10 @@ about $0.00042 a call, $0.42 per thousand acting requests. Phase 3 (D99, lab pro
 3,900 tokens in and 190 out, $0.00040 a call; the leaner operating point (pool 15, 240-character snippets,
 `readerGate`) about 2,900 in and 180 out, $0.00029 a call (30% less Eden cost per task live; the default's reader,
 D112).
+A wider request gate (D168's verb-gate trial, measured and deleted 2026-11-06) read 124 more of 768 train tasks
+and added 113 reader calls (651 to 764, +17.4%; 0.91 a newly gated request) at $0.000278 a call (ledger run
+`close3-verbgate-topup`: 119 calls, $0.03306), so $0.041 per thousand train tasks and $0.25 per thousand newly gated
+requests; it gained no hidden item (311 to 310) and cut decoys 137 to 121 (recipe 2a replay, LAB.md).
 
 **Reader reasoning (D144): the default sends none.** Until D144 `ModelReaderMaker` defaulted to reasoning "low", which
 the servers send to OpenRouter, while every lab figure above (and D96's, D98's and D125's quality) ran with thinking
