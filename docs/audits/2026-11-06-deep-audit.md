@@ -256,7 +256,7 @@ funnel --json`. Openers include Switch, Cash in, Open, RSVP, Agree, Spin up, Pro
 - **Fix.** Stage 1 lab-only `--bridge F` replay screen, then a trial with its own Budget and a COST-MODEL.md entry.
 - **Status.** Deferred to round 2: the unranked set it targets changes with F1's thresholds
   (`intent-shipped-baseline`), and F7's diagnostic (`ask-diag-coverage`) decides whether the gap is coverage or bridge.
-  Closed after round 2 by D177 (rejected): a no-model expansion (trial `askExpand`, pseudo-relevance feedback over the
+  Closed after round 2 by D189 (rejected): a no-model expansion (trial `askExpand`, pseudo-relevance feedback over the
   user's own index) added 130 items to 62 reader pools on train1-6 seeds 41-42 and no planted fact or decoy (pool
   262/246 in both arms, eval unchanged, $0); 31 of the 58 never-ranked hidden facts share no word with the request,
   whose distinctive words no item of the user holds. The code is deleted; docs/research/ask-expansion.md.

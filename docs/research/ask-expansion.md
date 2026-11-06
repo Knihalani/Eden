@@ -1,4 +1,4 @@
-# Request-side query expansion for the ask (audit 2026-11-06 F10, D177)
+# Request-side query expansion for the ask (audit 2026-11-06 F10, D189)
 
 **Result: rejected.** A no-model expansion of the ask's request (pseudo-relevance feedback over the user's own index,
 trial `askExpand`) added 130 items to 62 reader pools on train and none of them was a planted hidden fact or a decoy.
