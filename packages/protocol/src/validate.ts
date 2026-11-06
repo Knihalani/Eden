@@ -8,7 +8,12 @@ import type { AgentEvent, AskRequest, ContextItem } from "./types";
 export type Checked<T> = { ok: true; value: T } | { ok: false; error: string };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
-const isText = (v: unknown, max = 1_000_000): v is string => typeof v === "string" && v.length <= max;
+/** The longest text an event field may carry. */
+const MAX_TEXT_CHARS = 1_000_000;
+const isText = (v: unknown, max = MAX_TEXT_CHARS): v is string => typeof v === "string" && v.length <= max;
+/** The message for a field that is not a string of at most `max` characters: too long is named, not misread. */
+const textError = (field: string, max: number) =>
+  `${field} must be a string of at most ${max.toLocaleString("en-US")} characters`;
 /** The id shape for tenants, users, sessions and injections: no `/` or `#`, which scope keys use as separators. */
 export const isId = (v: unknown): v is string => typeof v === "string" && /^[A-Za-z0-9._:@-]{1,128}$/.test(v);
 
@@ -97,14 +102,14 @@ export function checkEvent(v: unknown): Checked<AgentEvent> {
       return { ok: true, value: { ...base, kind: "session_end" } };
     case "user_message":
     case "agent_message":
-      if (!isText(v.text)) return { ok: false, error: `${v.kind}.text must be a string` };
+      if (!isText(v.text)) return { ok: false, error: textError(`${v.kind}.text`, MAX_TEXT_CHARS) };
       // A draft the user is still typing (`anticipate`): only `true` marks one, anything else is a sent message.
       if (v.kind === "user_message" && v.draft === true) {
         return { ok: true, value: { ...base, kind: "user_message", text: v.text, draft: true } };
       }
       return { ok: true, value: { ...base, kind: v.kind, text: v.text } };
     case "tool_call":
-      if (!isText(v.tool, 200)) return { ok: false, error: "tool_call.tool must be a string" };
+      if (!isText(v.tool, 200)) return { ok: false, error: textError("tool_call.tool", 200) };
       if (!jsonUnder(v.input, 1_000_000)) {
         return {
           ok: false,
@@ -113,13 +118,23 @@ export function checkEvent(v: unknown): Checked<AgentEvent> {
       }
       return { ok: true, value: { ...base, kind: "tool_call", tool: v.tool, input: v.input } };
     case "tool_result":
-      if (!isText(v.tool, 200) || !isText(v.output)) return { ok: false, error: "tool_result needs tool and output" };
+      if (!isText(v.tool, 200) || !isText(v.output)) {
+        return {
+          ok: false,
+          error: "tool_result needs tool (at most 200 characters) and output (at most 1,000,000) as strings",
+        };
+      }
       return {
         ok: true,
         value: { ...base, kind: "tool_result", tool: v.tool, output: v.output, isError: !!v.isError },
       };
     case "external":
-      if (!isText(v.source, 200) || !isText(v.text)) return { ok: false, error: "external needs source and text" };
+      if (!isText(v.source, 200) || !isText(v.text)) {
+        return {
+          ok: false,
+          error: "external needs source (at most 200 characters) and text (at most 1,000,000) as strings",
+        };
+      }
       return { ok: true, value: { ...base, kind: "external", source: v.source, text: v.text } };
     default:
       return { ok: false, error: `unknown event kind: ${String(v.kind)}` };
@@ -130,9 +145,8 @@ export function checkAsk(v: unknown): Checked<AskRequest> {
   if (!isRecord(v)) return { ok: false, error: "ask must be an object" };
   const scope = scopeError(v);
   if (scope) return { ok: false, error: scope };
-  if (!isText(v.question, MAX_QUESTION_CHARS) || !v.question.trim()) {
-    return { ok: false, error: "question must be non-empty" };
-  }
+  if (!isText(v.question, MAX_QUESTION_CHARS)) return { ok: false, error: textError("question", MAX_QUESTION_CHARS) };
+  if (!v.question.trim()) return { ok: false, error: "question must be non-empty" };
   const maxItems = typeof v.maxItems === "number" ? Math.max(1, Math.min(20, Math.floor(v.maxItems))) : undefined;
   return {
     ok: true,
@@ -178,9 +192,10 @@ export function checkSourceItems(
   for (const [n, x] of raw.entries()) {
     if (!isRecord(x)) return { ok: false, error: `items[${n}] must be an object` };
     if (!isText(x.ref, 512) || !x.ref) return { ok: false, error: `items[${n}].ref must be 1-512 characters` };
-    if (x.title !== undefined && !isText(x.title, 2_000)) return { ok: false, error: `items[${n}].title is too long` };
-    if (!isText(x.text, MAX_PUSHED_TEXT)) return { ok: false, error: `items[${n}].text must be a string` };
-    if (x.url !== undefined && !isText(x.url, 2_000)) return { ok: false, error: `items[${n}].url is malformed` };
+    if (x.title !== undefined && !isText(x.title, 2_000))
+      return { ok: false, error: textError(`items[${n}].title`, 2_000) };
+    if (!isText(x.text, MAX_PUSHED_TEXT)) return { ok: false, error: textError(`items[${n}].text`, MAX_PUSHED_TEXT) };
+    if (x.url !== undefined && !isText(x.url, 2_000)) return { ok: false, error: textError(`items[${n}].url`, 2_000) };
     if (x.updatedAt !== undefined && !(typeof x.updatedAt === "number" && Number.isFinite(x.updatedAt))) {
       return { ok: false, error: `items[${n}].updatedAt must be epoch milliseconds` };
     }
