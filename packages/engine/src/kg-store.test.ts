@@ -719,7 +719,7 @@ describe("UserGraph bounds and memory", () => {
 
   test("node ids stay under the bound however many authors items name; a refused copy keeps the held one", () => {
     const g = new UserGraph(300);
-    const ids = () => (g as unknown as { nodeAt: unknown[] }).nodeAt.length;
+    const ids = () => (g as unknown as { top: number }).top;
     for (let k = 0; k < 20; k++) g.add(chat(`slack:c${k}`, names(k * 40, 40)), at);
     expect(ids()).toBeLessThanOrEqual(300);
     g.add(chat("slack:big", names(10_000, 200)), at);

@@ -18,6 +18,13 @@
  * `ask_context` answer did, and when neither did. A variant or flag condition (`eden~ALL2`, `eden+askDedup`) is
  * paired with the condition it modifies.
  *
+ * Each paired cost difference also reads cache-neutral (D171): the agent's tokens repriced at the model's list price
+ * with cached and cache-write tokens billed as plain input, plus Eden's own cost, beside the billed difference. pi-ab
+ * runs the conditions concurrently with one system prompt, so the arm that writes the prompt cache first makes the
+ * other cheaper; D112's "no extra paid cost" reads the cache-neutral sum, and billed stays printed so a variant that
+ * really breaks within-task caching stays visible. Per pair, all kinds pooled and the pairs whose asks were identical
+ * (where nothing but the cache race can move the agent's cost) get a line of their own.
+ *
  * After the outcome tables, a traffic-weighted row per condition for w in {0.1, 0.5}: w × hidden + (1 − w) × control
  * (pi-ab-weighted.ts; most traffic is silent, so hidden-only cost understates). `--weighted report.txt` prints the
  * weighted means of a report kept only as text.
@@ -27,7 +34,15 @@ import { Rng } from "../rng";
 import { backfillShares, type Background, type RunResult, type Task } from "./ab-common";
 import { TRAFFIC_WEIGHTS, weightedFromReport, weightedLines, weightedRow, type WeightedRow } from "./pi-ab-weighted";
 import { pairedWith } from "./pi-conditions";
-import { endpointMix, ENDPOINT_PRICES, FIXED_PRICES, repricedUsd } from "./reprice";
+import {
+  cacheNeutral,
+  endpointMix,
+  ENDPOINT_PRICES,
+  FIXED_PRICES,
+  MODEL_PRICES,
+  repricedUsd,
+  type Price,
+} from "./reprice";
 import { uptakeWay } from "./uptake";
 import {
   bootstrap,
@@ -72,11 +87,14 @@ interface Record_ {
     out: number;
     cost: number;
     cached?: number;
+    cacheWrite?: number;
   }[];
   events: TimelineEvent[];
   planted?: string;
   cited?: string[];
   askCited?: string[];
+  /** The agent's ask_context calls (question, cited items); absent on a task that asked nothing. */
+  asks?: unknown[];
 }
 interface Sample {
   t: number;
@@ -261,6 +279,100 @@ for (const c of conditions) {
   );
 }
 
+// ---- Eden's share of the path split by task kind, by observe (the push) against the agent's asks, and by the reader
+// inside both: the ceiling a change below the model can reach (D165). Eden's path spans outrank every other category
+// in `breakdown`, so their union is exactly the eden column above; the reader is counted where it overlaps that union.
+{
+  type Iv = [number, number];
+  const merged = (spans: Span[]): Iv[] => {
+    const out: Iv[] = [];
+    for (const s of [...spans].sort((a, b) => a.start - b.start)) {
+      const last = out[out.length - 1];
+      if (last && s.start <= last[1]) last[1] = Math.max(last[1], s.end);
+      else out.push([s.start, s.end]);
+    }
+    return out;
+  };
+  const length = (xs: Iv[]) => xs.reduce((n, [a, b]) => n + (b - a), 0);
+  const overlap = (xs: Iv[], ys: Iv[]) => {
+    let n = 0;
+    for (let i = 0, j = 0; i < xs.length && j < ys.length;) {
+      n += Math.max(0, Math.min(xs[i]![1], ys[j]![1]) - Math.max(xs[i]![0], ys[j]![0]));
+      if (xs[i]![1] < ys[j]![1]) i++;
+      else j++;
+    }
+    return n;
+  };
+  const rows: string[] = [];
+  for (const c of conditions)
+    for (const kind of KINDS) {
+      const recs = [...records.values()].filter((r) => r.condition === c && r.kind === kind);
+      // Conditions with no Eden on the path (none, tools, both: Pi's both arm has no ask_context but does observe).
+      if (!recs.some((r) => r.events.some((e) => e.cat === "eden" && e.lane === "path"))) continue;
+      const parts = recs.map((r) => {
+        // Clipped to the task's wall time, as `breakdown` is.
+        const path = spansFor
+          .get(key(r.task, r.condition))!
+          .filter((s) => s.lane === "path" && s.cat === "eden" && s.start < r.wallMs)
+          .map((s) => ({ ...s, end: Math.min(s.end, r.wallMs) }));
+        const eden = merged(path);
+        return {
+          eden: length(eden),
+          observe: length(merged(path.filter((s) => s.ev === "eden.observe"))),
+          ask: length(merged(path.filter((s) => s.ev.startsWith("tool.")))),
+          reader: overlap(eden, merged(path.filter((s) => s.ev === "eden.reader"))),
+        };
+      });
+      const wall = mean(recs.map((r) => r.wallMs));
+      const m = (pick: (p: (typeof parts)[number]) => number) => mean(parts.map(pick));
+      const eden = m((p) => p.eden);
+      rows.push(
+        `${c.padEnd(12)} ${kind.padEnd(8)} ${String(recs.length).padStart(3)} ${f(wall, 0).padStart(7)} ` +
+          `${`${f(eden, 0)} (${f((100 * eden) / Math.max(1, wall), 1)}%)`.padStart(14)} ` +
+          `${f(
+            m((p) => p.observe),
+            0,
+          ).padStart(8)} ${f(
+            m((p) => p.ask),
+            0,
+          ).padStart(8)} ` +
+          `${`${f(
+            m((p) => p.reader),
+            0,
+          )} (${f((100 * m((p) => p.reader)) / Math.max(1, eden), 1)}%)`.padStart(15)} ` +
+          `${f(wall / Math.max(1, wall - eden), 2).padStart(8)}x`,
+      );
+    }
+  if (rows.length) {
+    console.log(
+      "\n== Eden on the critical path by task kind, mean ms per task: observe (the push) and ask_context, the " +
+        "reader's share of Eden's path, and the wall-time multiple if Eden took no time",
+    );
+    console.log("condition    kind       n  wall ms   eden (% wall)  observe      ask  reader (% eden)  if-zero");
+    for (const row of rows) console.log(row);
+  }
+  // Each reader call's latency against its output tokens (the span's `out`): the intercept is the floor no change
+  // below the model removes. A fit of this run and endpoint, not a universal floor (reader-latency-fit.ts fits others).
+  for (const c of conditions) {
+    const calls = [...records.values()]
+      .filter((r) => r.condition === c)
+      .flatMap((r) => spansFor.get(key(r.task, r.condition))!.filter((s) => s.ev === "eden.reader"))
+      .map((s) => ({ ms: s.end - s.start, out: Number(s.data?.out ?? NaN) }))
+      .filter((x) => Number.isFinite(x.out));
+    if (calls.length < 2) continue;
+    const mx = mean(calls.map((x) => x.out));
+    const my = mean(calls.map((x) => x.ms));
+    const sxx = calls.reduce((n, x) => n + (x.out - mx) ** 2, 0);
+    const slope = sxx ? calls.reduce((n, x) => n + (x.out - mx) * (x.ms - my), 0) / sxx : 0;
+    const ms = calls.map((x) => x.ms);
+    console.log(
+      `${c.padEnd(12)} reader ${calls.length} calls: p50 ${f(quantile(ms, 0.5), 0)} p90 ${f(quantile(ms, 0.9), 0)}` +
+        ` mean ${f(my, 0)} ms, mean out ${f(mx, 0)} tok; fit ${f(my - slope * mx, 0)} ms + ${f(slope, 2)} ms/out token` +
+        ` (mean/floor ${f(my / Math.max(1, my - slope * mx), 2)}x)`,
+    );
+  }
+}
+
 // ---- Paired differences: the same task under two conditions, a bootstrap over tasks for the 95% interval.
 const byTask = new Map<string, Map<string, RunResult>>();
 for (const r of ok) {
@@ -268,6 +380,11 @@ for (const r of ok) {
   byTask.get(r.task)!.set(r.condition, r);
 }
 const rng = new Rng(1);
+// D171's cache-neutral price: one model across the files, with a list price (reprice.ts); else no neutral cost.
+const model = runs[0]?.model ?? "";
+const listPrice = runs.every((r) => r.model === model) ? MODEL_PRICES[model] : undefined;
+const neutralPrice = listPrice && records.size ? cacheNeutral(listPrice) : undefined;
+const costRng = new Rng(2);
 const PAIRS = [
   ["eden", "tools"],
   ["both", "tools"],
@@ -308,7 +425,64 @@ for (const [a, b] of PAIRS) {
         `  wall ${sign(wall.mean, 2)} s (${sign(wall.lo, 2)}..${sign(wall.hi, 2)})` +
         `  $/1k ${sign(cost.mean)} (${sign(cost.lo)}..${sign(cost.hi)})`,
     );
+    const line = neutralCost(pairs, a, b, false);
+    if (line) console.log(`${" ".repeat(22)}${line}`);
   }
+  if (!neutralPrice) continue;
+  // All kinds pooled, and the pairs that asked the same questions (both arms asked nothing, mostly): with the same
+  // asks the arms send much the same requests, so a billed difference there is mostly the prompt-cache race.
+  const all = [...byTask.values()].filter(
+    (v) => v.has(a) && v.has(b) && tasks.get(v.get(a)!.task)!.kind !== "offworld",
+  );
+  const pooled = neutralCost(all, a, b, true);
+  if (pooled) console.log(`${a.padEnd(10)} - ${b.padEnd(6)} all      ${pooled}`);
+  // Only when the timelines record asks (pi-ab since 2026-11-05); an older file would read every pair as identical.
+  if ([...records.values()].some((r) => r.asks !== undefined)) {
+    const asks = (r: RunResult) => JSON.stringify(records.get(key(r.task, r.condition))?.asks ?? []);
+    const same = neutralCost(
+      all.filter((v) => asks(v.get(a)!) === asks(v.get(b)!)),
+      a,
+      b,
+      true,
+    );
+    if (same) console.log(`${a.padEnd(10)} - ${b.padEnd(6)} same-ask ${same}`);
+  }
+}
+
+/**
+ * The paired cost line of D171, $ per 1k tasks: (billed agent+Eden,) cache-neutral agent+Eden (the D112 gate), the
+ * agent billed and cache-neutral, and Eden's own per-task cost. Only pairs whose two runs both have a timeline record
+ * (the agent's requests) count; null when none does or the model has no list price. Its own Rng, so the billed
+ * intervals above are the same with or without it.
+ */
+function neutralCost(pairs: Map<string, RunResult>[], a: string, b: string, billedTotal: boolean): string | null {
+  if (!neutralPrice) return null;
+  const price = neutralPrice;
+  const agentNeutral = (r: RunResult) => {
+    const rec = records.get(key(r.task, r.condition));
+    return rec ? repricedUsd(rec.requests, price) : null;
+  };
+  type Row = { a: RunResult; b: RunResult; na: number; nb: number };
+  const rows = pairs
+    .map((v) => ({ a: v.get(a)!, b: v.get(b)!, na: agentNeutral(v.get(a)!), nb: agentNeutral(v.get(b)!) }))
+    .filter((x): x is Row => x.na !== null && x.nb !== null);
+  if (!rows.length) return null;
+  const ci = (pick: (x: Row) => number) => {
+    const d = bootstrap(
+      rows.map((x) => 1_000 * pick(x)),
+      () => costRng.next(),
+    );
+    return `${sign(d.mean, 4)} (${sign(d.lo, 4)}..${sign(d.hi, 4)})`;
+  };
+  const eden = (x: Row) => x.a.edenCostUsd - x.b.edenCostUsd;
+  const billed = (x: Row) => x.a.costUsd - x.b.costUsd;
+  const neutral = (x: Row) => x.na - x.nb;
+  return (
+    `n=${String(rows.length).padStart(3)} $/1k` +
+    (billedTotal ? ` billed agent+Eden ${ci((x) => billed(x) + eden(x))}` : "") +
+    ` cache-neutral agent+Eden ${ci((x) => neutral(x) + eden(x))}` +
+    `  agent billed ${ci(billed)} cache-neutral ${ci(neutral)}  Eden ${ci(eden)}`
+  );
 }
 
 // ---- Per second of task time: the mean ms of each second spent in each phase, over the tasks still running then.
@@ -341,10 +515,16 @@ for (const c of conditions) {
 }
 
 // ---- Agent cost re-priced at fixed endpoint prices (econ-research R3): routing moves billed cost between conditions.
-const model = runs[0]?.model ?? "";
-if (ENDPOINT_PRICES[model] && records.size) {
-  const fixed = Object.keys(FIXED_PRICES);
-  console.log(`\n== agent $/1k tasks: billed, and re-priced at fixed ${model} endpoint prices; endpoint mix (top 3)`);
+// A model billed at one price (Anthropic direct) has no endpoint mix: its list price (which should match billed) and
+// the cache-neutral price (D171) are the columns.
+if ((ENDPOINT_PRICES[model] || MODEL_PRICES[model]) && records.size) {
+  const prices: Record<string, Price> = ENDPOINT_PRICES[model] ? { ...FIXED_PRICES } : { list: MODEL_PRICES[model]! };
+  if (MODEL_PRICES[model]) prices["neutral"] = cacheNeutral(MODEL_PRICES[model]!);
+  const fixed = Object.keys(prices);
+  console.log(
+    `\n== agent $/1k tasks: billed, and re-priced at fixed ${model} prices (neutral: cached and cache-write tokens ` +
+      `as plain input)${ENDPOINT_PRICES[model] ? "; endpoint mix (top 3)" : ""}`,
+  );
   // A timeline from before pi-ab recorded cached tokens prices every token as uncached (reprice.ts): say so.
   const uncached = [...records.values()].every((r) => r.requests.every((q) => q.cached === undefined));
   if (uncached)
@@ -355,13 +535,13 @@ if (ENDPOINT_PRICES[model] && records.size) {
     if (!recs.length) continue;
     const reqs = recs.flatMap((r) => r.requests);
     const per1k = (usd: number) => f((1_000 * usd) / recs.length).padStart(10);
-    const mix = endpointMix(model, reqs)
+    const mix = (ENDPOINT_PRICES[model] ? endpointMix(model, reqs) : [])
       .slice(0, 3)
       .map(([e, share]) => `${e} ${f(share, 2)}`)
       .join(", ");
     console.log(
       `${c.padEnd(12)} ${String(recs.length).padStart(4)} ${per1k(reqs.reduce((n, q) => n + q.cost, 0)).slice(1)}` +
-        `${fixed.map((x) => per1k(repricedUsd(reqs, FIXED_PRICES[x]!))).join("")}  ${mix}`,
+        `${fixed.map((x) => per1k(repricedUsd(reqs, prices[x]!))).join("")}${mix ? `  ${mix}` : ""}`,
     );
   }
 }

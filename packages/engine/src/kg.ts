@@ -659,11 +659,16 @@ function daysOf(from: string, to: string): string[] {
 }
 
 /**
- * The graph's storage is compact (D58 held a Map per node for its items and another for its links, and every item's
- * node keys and links again as strings: 2.2 KB per item over realistic mail). Node keys are interned to small integer
- * ids and items to slots; a node's items and links are packed words in typed arrays, (item slot or node id) shifted
- * past the edge mask; what one item placed is one `Int32Array`. Orders are kept as the Maps kept them (appended,
- * removed in place), so a walk visits what it visited before in the same order.
+ * The graph's storage is struct-of-arrays (D169; D58 held a Map per node for its items and another for its links, and
+ * every item's node keys and links again as strings: 2.2 KB per item over realistic mail; then a `GNode` object per
+ * node, two strings and two `Int32Array`s each, behind a `Map` from key to id and another from item id to slot: 1.7
+ * KB). Node keys are interned to small integer ids and items to slots, through open-addressing tables of typed
+ * arrays (`Table`); what a node holds is a word in typed columns indexed by its id; its items and links are packed
+ * words, (item slot or node id) shifted past the edge mask, in blocks of two shared arenas (`Arena`); what each item
+ * placed is one block of a third; node keys and labels are UTF-16 code units in a fourth, copied there when the node
+ * is interned, so no label keeps the item text it was read from alive. Orders are kept as the Maps kept them
+ * (appended, removed in place), so a walk visits what it visited before in the same order (kg.test.ts holds the
+ * earlier storage and walks both).
  */
 const MASK_BITS = N_TYPES;
 const MASK = (1 << MASK_BITS) - 1;
@@ -671,35 +676,170 @@ const MASK = (1 << MASK_BITS) - 1;
 const MAX_INDEX = 1 << (31 - MASK_BITS);
 /** In an item's placed links: the link went on both nodes (else only the first's: the second was full). */
 const BOTH = 1 << MASK_BITS;
-const EMPTY = new Int32Array(0);
 const KINDS: Record<string, NodeKind> = { n: "name", e: "email", i: "id", c: "channel", r: "role", d: "day" };
+const KIND_OF: readonly NodeKind[] = ["name", "email", "id", "channel", "role", "day"];
+const KIND_NAME = 0;
+const KIND_ID = 2;
+const KIND_DAY = 5;
+const KIND_CODE: Record<NodeKind, number> = { name: 0, email: 1, id: 2, channel: 3, role: 4, day: 5 };
 const ALIAS = bit("alias");
 const CONSTRAINS = bit("constrains");
+/** A node id's state: free (no key), named (out of the graph, still named by a link or an author), in the graph. */
+const FREE = 0;
+const NAMED = 1;
+const LIVE = 2;
+/** A label stored as "the key past its two-character prefix" (every kind but a name, and a domain's name). */
+const KEY_LABEL = -1;
+const SPACE = /\s/;
 
-class GNode {
-  /**
-   * Whether the node is in the graph. A node out of it keeps its id (and key) while a link or an item's author still
-   * names it, so a key never has two ids and an id never two keys.
-   */
-  live = false;
-  /** Its items: (item slot << MASK_BITS | edge mask), in the order they came; `ni` used. */
-  items: Int32Array = EMPTY;
-  ni = 0;
-  /** Its links to other nodes: pairs (node id << MASK_BITS | mask, items stating it), in the order they came. */
-  links: Int32Array = EMPTY;
-  /** Links used (pairs). A link is kept while some item still states it. */
-  nl = 0;
-  /** Links on other nodes and items' authors that name this node's id. */
-  refs = 0;
-  /** The node's name as first seen written (for ties): "Umbrella Health", "inv-7174", "#legal", "2026-10-29". */
-  label: string;
-  kind: NodeKind;
-  readonly key: string;
-  constructor(key: string, kind: NodeKind, label: string) {
-    this.key = key;
-    this.kind = kind;
-    this.label = label;
+/** FNV-1a over a string's UTF-16 code units. */
+function hashOf(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16_777_619);
+  return h | 0;
+}
+/** The table position of a hash (its high bits folded in: FNV's low bits alone cluster). */
+const home = (h: number, mask: number) => (h ^ (h >>> 15)) & mask;
+
+/**
+ * An open-addressing table (linear probing, backward-shift deletion) from a string to a small integer that owns it: a
+ * node key to its id, an item id to its slot. It stores only the integers (plus one, 0 is empty); the hash and the key
+ * of each are read from the owner (`hashAt`, `is`). Kept at most half full, halved when an eighth full.
+ */
+class Table {
+  private t = new Int32Array(16);
+  private n = 0;
+  constructor(
+    private readonly hashAt: (v: number) => number,
+    private readonly is: (v: number, key: string) => boolean,
+  ) {}
+
+  /** The integer `key` maps to (`h` its `hashOf`), else -1. */
+  get(key: string, h: number): number {
+    const t = this.t;
+    const m = t.length - 1;
+    for (let i = home(h, m); ; i = (i + 1) & m) {
+      const e = t[i]!;
+      if (e === 0) return -1;
+      if (this.hashAt(e - 1) === h && this.is(e - 1, key)) return e - 1;
+    }
   }
+
+  /** Adds `v` (its key not in the table). */
+  put(v: number): void {
+    if ((this.n + 1) * 2 > this.t.length) this.resize(this.t.length * 2);
+    this.place(v);
+    this.n++;
+  }
+
+  /** Takes `v` out (it must be in). */
+  delete(v: number): void {
+    const t = this.t;
+    const m = t.length - 1;
+    let i = home(this.hashAt(v), m);
+    while (t[i] !== v + 1) i = (i + 1) & m;
+    // Every entry after the hole up to the next empty one moves into it unless its home lies between them.
+    for (let j = (i + 1) & m; t[j] !== 0; j = (j + 1) & m) {
+      const k = home(this.hashAt(t[j]! - 1), m);
+      if (i <= j ? i < k && k <= j : i < k || k <= j) continue;
+      t[i] = t[j]!;
+      i = j;
+    }
+    t[i] = 0;
+    this.n--;
+    if (this.t.length > 16 && this.n * 8 < this.t.length) this.resize(this.t.length >> 1);
+  }
+
+  private place(v: number): void {
+    const t = this.t;
+    const m = t.length - 1;
+    let i = home(this.hashAt(v), m);
+    while (t[i] !== 0) i = (i + 1) & m;
+    t[i] = v + 1;
+  }
+
+  private resize(size: number): void {
+    const old = this.t;
+    this.t = new Int32Array(size);
+    for (let i = 0; i < old.length; i++) if (old[i] !== 0) this.place(old[i]! - 1);
+  }
+}
+
+type Words = Int32Array | Uint16Array;
+
+/**
+ * Blocks of words, appended to one typed array; a block given back is only counted. When the array is full, or more
+ * than four times the words in use, the blocks in use are copied to a new array sized half again over them (`owners`
+ * names each, in a fixed order, and takes its new offset). Each copy follows appends or frees of at least half the
+ * words it copies, so it costs O(1) a word; the array is 1.5x what is in use just after a copy, 4x at most.
+ */
+class Arena<W extends Words> {
+  w: W;
+  private top = 0;
+  private dead = 0;
+  constructor(
+    private readonly make: (n: number) => W,
+    /** Calls `move(offset, words in use, words held)` for every block in use and stores what it returns. */
+    private readonly owners: (move: (off: number, used: number, size: number) => number) => void,
+  ) {
+    this.w = make(0);
+  }
+
+  /** The offset of a new block of `n` words. Moves every block (read offsets again after it). */
+  alloc(n: number): number {
+    if (this.top + n > this.w.length) this.compact(n);
+    const at = this.top;
+    this.top += n;
+    return at;
+  }
+
+  /** Gives back a block of `n` words. Moves every block when most of the array is given back. */
+  free(n: number): void {
+    this.dead += n;
+    if (this.w.length > 1_024 && (this.top - this.dead) * 4 < this.w.length) this.compact(0);
+  }
+
+  private compact(n: number): void {
+    const from = this.w;
+    // Sized from what the owners report, not from `top - dead`: a block an owner reports and the counts missed
+    // (an owner that marks a block live before writing it) would otherwise run the new array short, and the next
+    // `alloc` would return an offset past its end, where writes are silently dropped.
+    let live = 0;
+    this.owners((off, _used, size) => {
+      live += size;
+      return off;
+    });
+    const to = this.make(Math.max(64, Math.ceil((Math.max(live, this.top - this.dead) + n) * 1.5)));
+    let top = 0;
+    this.owners((off, used, size) => {
+      (to as Int32Array).set((from as Int32Array).subarray(off, off + used), top);
+      top += size;
+      return top - size;
+    });
+    this.w = to;
+    this.top = top;
+    this.dead = 0;
+  }
+}
+
+/** `xs` with room for `n` entries, grown by half (not doubled: a column is a word or a byte per node, kept tight). */
+function grown<W extends Words | Uint8Array>(xs: W, n: number): W {
+  let size = xs.length;
+  while (size < n) size = Math.ceil(size * 1.5);
+  if (size === xs.length) return xs;
+  const out = new (xs.constructor as new (n: number) => W)(size);
+  (out as Int32Array).set(xs as Int32Array);
+  return out;
+}
+
+/** A string from UTF-16 code units (in chunks: an argument list has a limit). */
+function decode(w: Uint16Array, off: number, len: number): string {
+  let s = "";
+  for (let k = 0; k < len; k += 4_096) {
+    const part = w.subarray(off + k, off + Math.min(len, k + 4_096));
+    s += String.fromCharCode.apply(null, part as unknown as number[]);
+  }
+  return s;
 }
 
 /** Scratch for `add` (one graph is built at a time: no await inside). */
@@ -707,34 +847,95 @@ const scratchNodes: number[] = [];
 const scratchLinks: number[] = [];
 const scratchAuthors: number[] = [];
 
-/** `xs` with room for `n` more words, doubled when full. */
-function room(xs: Int32Array, used: number, n: number): Int32Array {
-  if (used + n <= xs.length) return xs;
-  const grown = new Int32Array(Math.max(4, xs.length * 2, used + n));
-  grown.set(xs.subarray(0, used));
-  return grown;
-}
-
-/** `xs` halved when at most a quarter is used (an item churned off a busy node gives its room back). */
-function shrink(xs: Int32Array, used: number): Int32Array {
-  return xs.length > 8 && used <= xs.length >> 2 ? xs.slice(0, xs.length >> 1) : xs;
-}
-
 /** One user's graph. Held by the user's cache entry (`ItemCache`), so it is keyed, bounded and dropped with it. */
 export class UserGraph {
-  /** Node key → id, for every node in the graph and every id still named (`GNode.live`). */
-  private readonly ids = new Map<string, number>();
-  private readonly nodeAt: (GNode | undefined)[] = [];
+  /** Node key → id, for every node in the graph and every id still named (`state` NAMED). */
+  private readonly ids = new Table(
+    (id) => this.hash[id]!,
+    (id, key) => this.keyIs(id, key),
+  );
+  /** Ids handed out so far (the next new one), and those given back. */
+  private top = 0;
   private readonly freeIds: number[] = [];
   private liveNodes = 0;
-  /** Item id → slot, and per slot: the id, what it placed, its flags (`AUTOMATED_FLAG`, `BOUND_FLAG`). */
-  private readonly slots = new Map<string, number>();
-  private readonly itemAt: (string | undefined)[] = [];
+  // Per node id. `state`: FREE, NAMED (out of the graph: it keeps its id, and key, while a link or an item's author
+  // still names it, so a key never has two ids and an id never two keys) or LIVE. `kind`: `KIND_OF`'s index.
+  private state = new Uint8Array(16);
+  private kind = new Uint8Array(16);
+  /** Whether its label has white space (a name written out, not a domain's squashed one). */
+  private spaced = new Uint8Array(16);
+  /** Its items: (item slot << MASK_BITS | edge mask), in the order they came: offset in `itemWords`, used, held. */
+  private itemsAt = new Int32Array(16);
+  private ni = new Int32Array(16);
+  private itemsCap = new Int32Array(16);
+  /** Its links to other nodes: pairs (node id << MASK_BITS | mask, items stating it), in the order they came. */
+  private linksAt = new Int32Array(16);
+  /** Links used (pairs; a link is kept while some item still states it), and words held. */
+  private nl = new Int32Array(16);
+  private linksCap = new Int32Array(16);
+  /** Links on other nodes and items' authors that name this node's id. */
+  private refs = new Int32Array(16);
+  /** Its key ("n:umbrellahealth") in `chars`, and the key's `hashOf`. */
+  private keyAt = new Int32Array(16);
+  private keyLen = new Int32Array(16);
+  private hash = new Int32Array(16);
   /**
-   * What each item placed, to take it out again: [nodes n, links n, its node ids…, its links as (a, b, mask | BOTH)
-   * triples…, its authors' node ids (From, organiser, owner, chat speaker)…].
+   * Its name as first seen written (for ties), in `chars`: "Umbrella Health", "inv-7174", "#legal", "2026-10-29";
+   * `KEY_LABEL` when that is the key past its prefix.
    */
-  private readonly placedAt: (Int32Array | undefined)[] = [];
+  private labelAt = new Int32Array(16);
+  private labelLen = new Int32Array(16);
+  private readonly itemWords = new Arena(
+    (n) => new Int32Array(n),
+    (move) => {
+      for (let id = 0; id < this.top; id++) {
+        if (this.itemsCap[id]! > 0) this.itemsAt[id] = move(this.itemsAt[id]!, this.ni[id]!, this.itemsCap[id]!);
+      }
+    },
+  );
+  private readonly linkWords = new Arena(
+    (n) => new Int32Array(n),
+    (move) => {
+      for (let id = 0; id < this.top; id++) {
+        if (this.linksCap[id]! > 0) this.linksAt[id] = move(this.linksAt[id]!, this.nl[id]! * 2, this.linksCap[id]!);
+      }
+    },
+  );
+  private readonly chars = new Arena(
+    (n) => new Uint16Array(n),
+    (move) => {
+      for (let id = 0; id < this.top; id++) {
+        if (this.state[id] === FREE) continue;
+        this.keyAt[id] = move(this.keyAt[id]!, this.keyLen[id]!, this.keyLen[id]!);
+        const n = this.labelLen[id]!;
+        if (n > 0) this.labelAt[id] = move(this.labelAt[id]!, n, n);
+      }
+    },
+  );
+  /** Item id → slot, and per slot: the id and its `hashOf`, what it placed, its flags. */
+  private readonly slots = new Table(
+    (slot) => this.slotHash[slot]!,
+    (slot, id) => this.itemAt[slot] === id,
+  );
+  private readonly itemAt: (string | undefined)[] = [];
+  private slotHash = new Int32Array(16);
+  /**
+   * What each item placed, to take it out again, in `placedWords` (offset, words; 0 for a free slot): [nodes n, links
+   * n, its node ids…, its links as (a, b, mask | BOTH) triples…, its authors' node ids (From, organiser, owner, chat
+   * speaker)…].
+   */
+  private placedAt = new Int32Array(16);
+  private placedLen = new Int32Array(16);
+  private readonly placedWords = new Arena(
+    (n) => new Int32Array(n),
+    (move) => {
+      for (let slot = 0; slot < this.itemAt.length; slot++) {
+        const n = this.placedLen[slot]!;
+        if (n > 0) this.placedAt[slot] = move(this.placedAt[slot]!, n, n);
+      }
+    },
+  );
+  /** Per slot: `AUTOMATED_FLAG`, `BOUND_FLAG`. */
   private flags = new Uint8Array(64);
   private readonly freeSlots: number[] = [];
   /** Items with long spans (`Extraction.long`), by slot, scanned by a walk from days: at most one entry an item. */
@@ -763,42 +964,162 @@ export class UserGraph {
   /** The keys of the nodes in the graph (for tests). */
   keys(): string[] {
     const out: string[] = [];
-    for (const n of this.nodeAt) if (n?.live) out.push(n.key);
+    for (let id = 0; id < this.top; id++) if (this.state[id] === LIVE) out.push(this.keyOf(id));
     return out;
+  }
+
+  /** The id of `key` (in the graph or named), else -1. */
+  private idOf(key: string): number {
+    return this.ids.get(key, hashOf(key));
   }
 
   /** A node's id when it is in the graph, else -1. */
   private liveId(key: string): number {
-    const id = this.ids.get(key);
-    return id !== undefined && this.nodeAt[id]!.live ? id : -1;
+    const id = this.idOf(key);
+    return id >= 0 && this.state[id] === LIVE ? id : -1;
+  }
+
+  private keyIs(id: number, key: string): boolean {
+    const n = this.keyLen[id]!;
+    if (n !== key.length) return false;
+    const w = this.chars.w;
+    const at = this.keyAt[id]!;
+    for (let k = 0; k < n; k++) if (w[at + k] !== key.charCodeAt(k)) return false;
+    return true;
+  }
+
+  private keyOf(id: number): string {
+    return decode(this.chars.w, this.keyAt[id]!, this.keyLen[id]!);
+  }
+
+  private labelOf(id: number): string {
+    const n = this.labelLen[id]!;
+    return n === KEY_LABEL
+      ? decode(this.chars.w, this.keyAt[id]! + 2, this.keyLen[id]! - 2)
+      : decode(this.chars.w, this.labelAt[id]!, n);
+  }
+
+  /** Copies a string into `chars`; returns its offset. */
+  private write(s: string): number {
+    const at = this.chars.alloc(s.length);
+    const w = this.chars.w;
+    for (let k = 0; k < s.length; k++) w[at + k] = s.charCodeAt(k);
+    return at;
+  }
+
+  /** Sets a node's label (its key past the prefix when it is that, which every kind but a name's is). */
+  private setLabel(id: number, label: string): void {
+    const old = this.labelLen[id]!;
+    this.labelLen[id] = 0;
+    if (old > 0) this.chars.free(old);
+    this.spaced[id] = SPACE.test(label) ? 1 : 0;
+    let same = label.length === this.keyLen[id]! - 2;
+    const w = this.chars.w;
+    const at = this.keyAt[id]! + 2;
+    for (let k = 0; same && k < label.length; k++) same = w[at + k] === label.charCodeAt(k);
+    // (Owned only once written: `write` may compact `chars`, which moves every block `labelLen` says is held.)
+    if (!same && label.length > 0) this.labelAt[id] = this.write(label);
+    this.labelLen[id] = same ? KEY_LABEL : label.length;
   }
 
   /** The id of `key`, made (out of the graph) if it has none. */
   private intern(key: string, kind: NodeKind, label: string): number {
-    const known = this.ids.get(key);
-    if (known !== undefined) return known;
-    const id = this.freeIds.pop() ?? this.nodeAt.length;
-    this.nodeAt[id] = new GNode(key, kind, label);
-    this.ids.set(key, id);
+    const h = hashOf(key);
+    const known = this.ids.get(key, h);
+    if (known >= 0) return known;
+    const id = this.freeIds.pop() ?? this.top++;
+    if (id >= this.state.length) this.columns(id + 1);
+    this.state[id] = NAMED;
+    this.kind[id] = KIND_CODE[kind];
+    this.ni[id] = this.nl[id] = this.refs[id] = this.itemsCap[id] = this.linksCap[id] = 0;
+    this.labelLen[id] = 0;
+    // The key is owned (`keyLen` set) only once written: `write` may compact `chars`, which moves every block of an
+    // id not FREE by its `keyAt`/`keyLen`; a length set first would copy a stale block in and size the array short.
+    this.keyLen[id] = 0;
+    const at = this.write(key);
+    this.keyAt[id] = at;
+    this.keyLen[id] = key.length;
+    this.hash[id] = h;
+    this.setLabel(id, label);
+    this.ids.put(id);
     return id;
+  }
+
+  /** Room for node ids below `n`. */
+  private columns(n: number): void {
+    this.state = grown(this.state, n);
+    this.kind = grown(this.kind, n);
+    this.spaced = grown(this.spaced, n);
+    this.itemsAt = grown(this.itemsAt, n);
+    this.ni = grown(this.ni, n);
+    this.itemsCap = grown(this.itemsCap, n);
+    this.linksAt = grown(this.linksAt, n);
+    this.nl = grown(this.nl, n);
+    this.linksCap = grown(this.linksCap, n);
+    this.refs = grown(this.refs, n);
+    this.keyAt = grown(this.keyAt, n);
+    this.keyLen = grown(this.keyLen, n);
+    this.hash = grown(this.hash, n);
+    this.labelAt = grown(this.labelAt, n);
+    this.labelLen = grown(this.labelLen, n);
   }
 
   /** Frees an id that is out of the graph and named by nothing. */
   private release(id: number): void {
-    const node = this.nodeAt[id]!;
-    if (node.live || node.refs > 0) return;
-    this.ids.delete(node.key);
-    this.nodeAt[id] = undefined;
+    if (this.state[id] === LIVE || this.refs[id]! > 0) return;
+    this.ids.delete(id);
+    this.state[id] = FREE;
+    // (Each block is disowned before it is given back: `free` may move every block it still owns.)
+    const chars = this.keyLen[id]! + Math.max(0, this.labelLen[id]!);
+    const items = this.itemsCap[id]!;
+    const links = this.linksCap[id]!;
+    this.labelLen[id] = this.itemsCap[id] = this.linksCap[id] = 0;
+    this.chars.free(chars);
+    if (items > 0) this.itemWords.free(items);
+    if (links > 0) this.linkWords.free(links);
     this.freeIds.push(id);
   }
 
   /** Takes a node out of the graph when nothing holds it: no item and no link. */
   private settle(id: number): void {
-    const node = this.nodeAt[id];
-    if (!node?.live || node.ni > 0 || node.nl > 0) return;
-    node.live = false;
+    if (this.state[id] !== LIVE || this.ni[id]! > 0 || this.nl[id]! > 0) return;
+    this.state[id] = NAMED;
     this.liveNodes--;
     this.release(id);
+  }
+
+  /**
+   * Resizes a node's block of items (`links` false) or links to `size` words (doubled when full from 4, halved when a
+   * quarter used past 8, as the per-node arrays before it), keeping the words in use.
+   */
+  private resize(id: number, links: boolean, size: number): void {
+    const arena = links ? this.linkWords : this.itemWords;
+    const at = arena.alloc(size);
+    // (Read after `alloc`, which may have moved every block.)
+    const cap = links ? this.linksCap : this.itemsCap;
+    const offs = links ? this.linksAt : this.itemsAt;
+    const used = links ? this.nl[id]! * 2 : this.ni[id]!;
+    const w = arena.w;
+    if (used > 0) w.copyWithin(at, offs[id]!, offs[id]! + used);
+    const old = cap[id]!;
+    // (Owned before the old block is given back: `free` may move every block too.)
+    offs[id] = at;
+    cap[id] = size;
+    if (old > 0) arena.free(old);
+  }
+
+  /** Room for `n` more words in a node's block of items or links. */
+  private room(id: number, links: boolean, n: number): void {
+    const cap = (links ? this.linksCap : this.itemsCap)[id]!;
+    const used = links ? this.nl[id]! * 2 : this.ni[id]!;
+    if (used + n > cap) this.resize(id, links, Math.max(4, cap * 2, used + n));
+  }
+
+  /** Gives half a block back when at most a quarter of it is used (an item churned off a busy node). */
+  private shrink(id: number, links: boolean): void {
+    const cap = (links ? this.linksCap : this.itemsCap)[id]!;
+    const used = links ? this.nl[id]! * 2 : this.ni[id]!;
+    if (cap > 8 && used <= cap >> 2) this.resize(id, links, cap >> 1);
   }
 
   /** Puts an item in the graph, replacing what an earlier copy of it put there. */
@@ -807,30 +1128,34 @@ export class UserGraph {
     // A packed word must stay an int32: ids in use and every id this item could intern (its nodes, and its authors,
     // which neither `MAX_NODES` nor `MAX_NODES_PER_ITEM` bounds) stay under `maxIds`, slots under `MAX_INDEX`. Checked
     // before an earlier copy leaves: a copy refused here leaves the one held.
-    if (this.nodeAt.length - this.freeIds.length + x.nodes.size + x.authors.length > this.maxIds) return;
-    const replacing = this.slots.has(item.id);
+    if (this.top - this.freeIds.length + x.nodes.size + x.authors.length > this.maxIds) return;
+    const h = hashOf(item.id);
+    const replacing = this.slots.get(item.id, h) >= 0;
     if (!replacing && this.freeSlots.length === 0 && this.itemAt.length >= MAX_INDEX) return;
     if (replacing) this.remove(item.id);
     const slot = this.freeSlots.pop() ?? this.itemAt.length;
+    if (slot >= this.placedAt.length) {
+      this.placedAt = grown(this.placedAt, slot + 1);
+      this.placedLen = grown(this.placedLen, slot + 1);
+      this.slotHash = grown(this.slotHash, slot + 1);
+    }
     const nodes = scratchNodes;
     const links = scratchLinks;
     const authors = scratchAuthors;
     nodes.length = links.length = authors.length = 0;
     for (const [key, n] of x.nodes) {
-      let id = this.ids.get(key);
-      let node = id === undefined ? undefined : this.nodeAt[id]!;
-      if (!node?.live) {
+      let id = this.idOf(key);
+      if (id < 0 || this.state[id] !== LIVE) {
         if (this.liveNodes >= MAX_NODES) continue;
-        id ??= this.intern(key, n.kind, n.label);
-        node = this.nodeAt[id]!;
-        node.kind = n.kind;
-        node.label = n.label;
-        node.live = true;
+        if (id < 0) id = this.intern(key, n.kind, n.label);
+        else this.setLabel(id, n.label);
+        this.kind[id] = KIND_CODE[n.kind];
+        this.state[id] = LIVE;
         this.liveNodes++;
-      } else if (n.kind === "name" && /\s/.test(n.label) && !/\s/.test(node.label)) node.label = n.label;
-      node.items = room(node.items, node.ni, 1);
-      node.items[node.ni++] = (slot << MASK_BITS) | n.mask;
-      nodes.push(id!);
+      } else if (n.kind === "name" && this.spaced[id] === 0 && SPACE.test(n.label)) this.setLabel(id, n.label);
+      this.room(id, false, 1);
+      this.itemWords.w[this.itemsAt[id]! + this.ni[id]!++] = (slot << MASK_BITS) | n.mask;
+      nodes.push(id);
     }
     for (const [a, b, mask] of x.links) {
       const ia = this.liveId(a);
@@ -840,57 +1165,66 @@ export class UserGraph {
     }
     for (const k of x.authors) {
       const id = this.intern(k, KINDS[k[0]!] ?? "name", "");
-      this.nodeAt[id]!.refs++;
+      this.refs[id]!++;
       authors.push(id);
     }
-    const placed = new Int32Array(2 + nodes.length + links.length + authors.length);
-    placed[0] = nodes.length;
-    placed[1] = links.length / 3;
-    placed.set(nodes, 2);
-    placed.set(links, 2 + nodes.length);
-    placed.set(authors, 2 + nodes.length + links.length);
+    const n = 2 + nodes.length + links.length + authors.length;
+    const at = this.placedWords.alloc(n);
+    const p = this.placedWords.w;
+    p[at] = nodes.length;
+    p[at + 1] = links.length / 3;
+    let k = at + 2;
+    for (const v of nodes) p[k++] = v;
+    for (const v of links) p[k++] = v;
+    for (const v of authors) p[k++] = v;
     if (slot >= this.flags.length) {
-      const grown = new Uint8Array(this.flags.length * 2);
-      grown.set(this.flags);
-      this.flags = grown;
+      const grownFlags = new Uint8Array(this.flags.length * 2);
+      grownFlags.set(this.flags);
+      this.flags = grownFlags;
     }
     this.flags[slot] = (x.automated ? AUTOMATED_FLAG : 0) | (x.bound ? BOUND_FLAG : 0);
-    this.slots.set(item.id, slot);
     this.itemAt[slot] = item.id;
-    this.placedAt[slot] = placed;
+    this.slotHash[slot] = h;
+    this.slots.put(slot);
+    this.placedAt[slot] = at;
+    this.placedLen[slot] = n;
     if (x.long.length > 0) this.long.set(slot, x.long);
   }
 
   /** Adds one statement of a link from one node to another; false when the first is full (then nothing is added). */
   private bump(from: number, to: number, mask: number): boolean {
-    const node = this.nodeAt[from]!;
-    const l = node.links;
-    for (let k = 0; k < node.nl * 2; k += 2) {
+    const l = this.linkWords.w;
+    const at = this.linksAt[from]!;
+    const n = this.nl[from]!;
+    for (let k = at; k < at + n * 2; k += 2) {
       if (l[k]! >> MASK_BITS !== to) continue;
       l[k]! |= mask;
       l[k + 1]!++;
       return true;
     }
-    if (node.nl >= MAX_LINKS) return false;
-    node.links = room(l, node.nl * 2, 2);
-    node.links[node.nl * 2] = (to << MASK_BITS) | mask;
-    node.links[node.nl * 2 + 1] = 1;
-    node.nl++;
-    this.nodeAt[to]!.refs++;
+    if (n >= MAX_LINKS) return false;
+    this.room(from, true, 2);
+    const w = this.linkWords.w;
+    const end = this.linksAt[from]! + n * 2;
+    w[end] = (to << MASK_BITS) | mask;
+    w[end + 1] = 1;
+    this.nl[from] = n + 1;
+    this.refs[to]!++;
     return true;
   }
 
   /** Takes back one statement of a link from one node to another; the link goes with its last statement. */
   private unbump(from: number, to: number): void {
-    const node = this.nodeAt[from]!;
-    const l = node.links;
-    for (let k = 0; k < node.nl * 2; k += 2) {
+    const l = this.linkWords.w;
+    const at = this.linksAt[from]!;
+    const end = at + this.nl[from]! * 2;
+    for (let k = at; k < end; k += 2) {
       if (l[k]! >> MASK_BITS !== to) continue;
       if (--l[k + 1]! > 0) return;
-      l.copyWithin(k, k + 2, node.nl * 2);
-      node.nl--;
-      node.links = shrink(l, node.nl * 2);
-      this.nodeAt[to]!.refs--;
+      l.copyWithin(k, k + 2, end);
+      this.nl[from]!--;
+      this.shrink(from, true);
+      this.refs[to]!--;
       this.release(to);
       return;
     }
@@ -898,43 +1232,49 @@ export class UserGraph {
 
   /** Takes an item out: its edges, the links it stated, and nodes nothing else holds. */
   remove(id: string): void {
-    const slot = this.slots.get(id);
-    if (slot === undefined) return;
-    const p = this.placedAt[slot]!;
+    const slot = this.slots.get(id, hashOf(id));
+    if (slot < 0) return;
     this.memo.sentences.clear();
     this.memo.people.clear();
-    this.slots.delete(id);
+    this.slots.delete(slot);
     this.long.delete(slot);
     this.itemAt[slot] = undefined;
-    this.placedAt[slot] = undefined;
     this.freeSlots.push(slot);
-    const nodesEnd = 2 + p[0]!;
-    const linksEnd = nodesEnd + p[1]! * 3;
+    // (Only `add` places words: the block stays where it is until it is given back below.)
+    const p = this.placedWords.w;
+    const at = this.placedAt[slot]!;
+    const len = this.placedLen[slot]!;
+    this.placedLen[slot] = 0;
+    const nodesEnd = at + 2 + p[at]!;
+    const linksEnd = nodesEnd + p[at + 1]! * 3;
     for (let k = nodesEnd; k < linksEnd; k += 3) {
       this.unbump(p[k]!, p[k + 1]!);
       if (p[k + 2]! & BOTH) this.unbump(p[k + 1]!, p[k]!);
     }
-    for (let k = 2; k < nodesEnd; k++) {
-      const node = this.nodeAt[p[k]!]!;
-      const xs = node.items;
-      for (let i = 0; i < node.ni; i++) {
+    for (let k = at + 2; k < nodesEnd; k++) {
+      const node = p[k]!;
+      const xs = this.itemWords.w;
+      const start = this.itemsAt[node]!;
+      const n = this.ni[node]!;
+      for (let i = start; i < start + n; i++) {
         if (xs[i]! >> MASK_BITS !== slot) continue;
-        xs.copyWithin(i, i + 1, node.ni);
-        node.ni--;
-        node.items = shrink(xs, node.ni);
+        xs.copyWithin(i, i + 1, start + n);
+        this.ni[node] = n - 1;
+        this.shrink(node, false);
         break;
       }
-      this.settle(p[k]!);
+      this.settle(node);
     }
     // A node kept only by a link whose last item just left: gone with it.
     for (let k = nodesEnd; k < linksEnd; k += 3) {
       this.settle(p[k]!);
       this.settle(p[k + 1]!);
     }
-    for (let k = linksEnd; k < p.length; k++) {
-      this.nodeAt[p[k]!]!.refs--;
+    for (let k = linksEnd; k < at + len; k++) {
+      this.refs[p[k]!]!--;
       this.release(p[k]!);
     }
+    this.placedWords.free(len);
   }
 
   /** The learned multiplier of an edge type: its posterior mean over the prior's (0.5), between 0.25 and 2. */
@@ -984,8 +1324,8 @@ export class UserGraph {
     const isSeed = new Set<number>();
     const banned = new Set<number>();
     for (const k of opt.exclude ?? []) {
-      const id = this.ids.get(k);
-      if (id !== undefined) banned.add(id);
+      const id = this.idOf(k);
+      if (id >= 0) banned.add(id);
     }
     for (const s of seeds) {
       const id = this.liveId(s.key);
@@ -999,20 +1339,28 @@ export class UserGraph {
     // Two hops of links: a first name to the person, the person to their organisation ("Ingrid" to Ingrid Berg to
     // Globex), each hop weaker.
     // A word of a longer name seeds its own items only: "Sam" of an unknown "Sam Ortiz" is not every Sam.
-    const words = new Set(seeds.filter((s) => s.parent).map((s) => s.key));
-    let frontier = [...isSeed].filter((id) => !words.has(this.nodeAt[id]!.key));
+    const words = new Set<number>();
+    for (const s of seeds) {
+      if (!s.parent) continue;
+      const id = this.idOf(s.key);
+      if (id >= 0) words.add(id);
+    }
+    let frontier = [...isSeed].filter((id) => !words.has(id));
     for (let hop = 1; hop <= LINK_HOPS && frontier.length > 0; hop++) {
       const next: number[] = [];
       for (const key of frontier) {
-        const node = this.nodeAt[key]!;
         const from = act.get(key)!;
+        const nl = this.nl[key]!;
         // A person's few links (addresses, first name, organisation) each carry them whole; an organisation's many
         // people share its activation.
-        const fan = node.nl > 12 ? Math.sqrt(node.nl) : 1;
-        for (let k = 0; k < node.nl * 2; k += 2) {
+        const fan = nl > 12 ? Math.sqrt(nl) : 1;
+        const lw = this.linkWords.w;
+        const at = this.linksAt[key]!;
+        for (let k = 0; k < nl * 2; k += 2) {
           if (late()) break;
-          const other = node.links[k]! >> MASK_BITS;
-          const mask = node.links[k]! & MASK;
+          const word = lw[at + k]!;
+          const other = word >> MASK_BITS;
+          const mask = word & MASK;
           // A first name several people go by stands for each of them only in part ("Sam": Sam Patel or Sam Ortiz).
           const shared = mask & ALIAS ? Math.max(1, this.peopleCalled(key), this.peopleCalled(other)) : 1;
           const w = ((from.a * this.weightOf(mask)) / fan / shared) * (hop === 1 ? 1 : HOP_DECAY);
@@ -1023,10 +1371,10 @@ export class UserGraph {
           }
           // The seed's own names and addresses, or the person a role names: their items speak for the seed. An
           // organisation's members do not each speak for what the request asks of it.
-          if (hop === 1 && mask & ALIAS && node.nl <= 12 && node.ni <= HUB) near.add(other);
+          if (hop === 1 && mask & ALIAS && nl <= 12 && this.ni[key]! <= HUB) near.add(other);
         }
       }
-      frontier = next.filter((id) => this.nodeAt[id]?.live);
+      frontier = next.filter((id) => this.state[id] === LIVE);
     }
     // An item's score from one seed is the best of the nodes that seed reached it through (a person's name, address
     // and first name are one person, not three votes); its scores from different seeds add up. Keyed by item slot.
@@ -1038,25 +1386,31 @@ export class UserGraph {
     const byRef = new Set<number>();
     for (const [key, { a, origin }] of act) {
       if (late()) break;
-      const node = this.nodeAt[key];
-      if (!node?.live || node.ni > HUB) continue;
-      const spread = a / Math.log2(2 + node.ni);
+      const ni = this.ni[key]!;
+      if (this.state[key] !== LIVE || ni > HUB) continue;
+      const kind = this.kind[key]!;
+      const spread = a / Math.log2(2 + ni);
       const reached = isSeed.has(key) ? 0 : this.linkMask(key, isSeed);
-      for (let k = 0; k < node.ni; k++) {
-        const slot = node.items[k]! >> MASK_BITS;
-        const mask = node.items[k]! & MASK;
-        if (node.kind === "day" && !(mask & CONSTRAINS)) continue;
+      let label: string | undefined;
+      const iw = this.itemWords.w;
+      const at = this.itemsAt[key]!;
+      for (let k = 0; k < ni; k++) {
+        const word = iw[at + k]!;
+        const slot = word >> MASK_BITS;
+        const mask = word & MASK;
+        if (kind === KIND_DAY && !(mask & CONSTRAINS)) continue;
         const s = spread * this.weightOf(mask);
         const per = best.get(slot) ?? new Map<string, number>();
         if (s > (per.get(origin) ?? 0)) per.set(origin, s);
         best.set(slot, per);
         masks.set(slot, (masks.get(slot) ?? 0) | mask | reached);
         const v = via.get(slot) ?? [];
-        if (v.length < 6 && !v.includes(node.label)) v.push(node.label);
+        label ??= this.labelOf(key);
+        if (v.length < 6 && !v.includes(label)) v.push(label);
         via.set(slot, v);
-        if (node.kind !== "day") viaName.add(slot);
+        if (kind !== KIND_DAY) viaName.add(slot);
         if (mask & CONSTRAINS) binding.add(slot);
-        if (node.kind === "id" && isSeed.has(key)) byRef.add(slot);
+        if (kind === KIND_ID && isSeed.has(key)) byRef.add(slot);
       }
     }
     // Days a long span covers: the items holding such spans, scanned (one per cached item at most), each covering
@@ -1082,13 +1436,15 @@ export class UserGraph {
       }
     }
     const out: Walked[] = [];
+    const p = this.placedWords.w;
     for (const [slot, per] of best) {
       let s = 0;
       for (const x of per.values()) s += x;
       if (s < opt.floor) continue;
-      const p = this.placedAt[slot]!;
+      const at = this.placedAt[slot]!;
+      const end = at + this.placedLen[slot]!;
       let speaks = false;
-      for (let k = 2 + p[0]! + p[1]! * 3; k < p.length && !speaks; k++) speaks = near.has(p[k]!);
+      for (let k = at + 2 + p[at]! + p[at + 1]! * 3; k < end && !speaks; k++) speaks = near.has(p[k]!);
       const flags = this.flags[slot]!;
       out.push({
         id: this.itemAt[slot]!,
@@ -1114,20 +1470,25 @@ export class UserGraph {
     const id = this.liveId(key);
     if (id < 0) return out;
     out.add(key);
-    const node = this.nodeAt[id]!;
-    for (let k = 0; k < node.nl * 2; k += 2) {
-      if (node.links[k]! & (ALIAS | bit("member"))) out.add(this.nodeAt[node.links[k]! >> MASK_BITS]!.key);
+    const at = this.linksAt[id]!;
+    for (let k = 0; k < this.nl[id]! * 2; k += 2) {
+      const word = this.linkWords.w[at + k]!;
+      if (word & (ALIAS | bit("member"))) out.add(this.keyOf(word >> MASK_BITS));
     }
     return out;
   }
 
   /** For a one-word name (a first name), how many people go by it: its alias links to other names; else 0. */
   private peopleCalled(id: number): number {
-    const node = this.nodeAt[id];
-    if (!node?.live || node.kind !== "name" || /\s/.test(node.label)) return 0;
+    if (this.state[id] !== LIVE || this.kind[id] !== KIND_NAME || this.spaced[id] === 1) return 0;
     let n = 0;
-    for (let k = 0; k < node.nl * 2; k += 2) {
-      if (node.links[k]! & ALIAS && this.nodeAt[node.links[k]! >> MASK_BITS]!.key.startsWith("n:")) n++;
+    const w = this.linkWords.w;
+    const at = this.linksAt[id]!;
+    for (let k = 0; k < this.nl[id]! * 2; k += 2) {
+      if (!(w[at + k]! & ALIAS)) continue;
+      // Its key starts "n:".
+      const other = this.keyAt[w[at + k]! >> MASK_BITS]!;
+      if (this.chars.w[other] === 110 && this.chars.w[other + 1] === 58) n++;
     }
     return n;
   }
@@ -1135,9 +1496,10 @@ export class UserGraph {
   /** The link types by which a non-seed node was reached from the seeds (for learning). */
   private linkMask(id: number, seeds: Set<number>): number {
     let mask = 0;
-    const node = this.nodeAt[id];
-    if (!node?.live) return 0;
-    for (let k = 0; k < node.nl * 2; k += 2) if (seeds.has(node.links[k]! >> MASK_BITS)) mask |= node.links[k]! & MASK;
+    if (this.state[id] !== LIVE) return 0;
+    const w = this.linkWords.w;
+    const at = this.linksAt[id]!;
+    for (let k = at; k < at + this.nl[id]! * 2; k += 2) if (seeds.has(w[k]! >> MASK_BITS)) mask |= w[k]! & MASK;
     return mask;
   }
 }

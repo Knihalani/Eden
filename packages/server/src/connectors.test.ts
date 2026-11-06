@@ -102,7 +102,9 @@ describe("EDEN_SOURCES_FILE validation", () => {
 describe("a bad EDEN_SOURCES_FILE stops the servers with one line and exit 2", () => {
   const run = (entry: string, file: string, env: Record<string, string> = {}) => {
     const proc = Bun.spawnSync(["bun", join(import.meta.dir, entry)], {
-      env: { ...process.env, EDEN_SOURCES_FILE: file, EDEN_DEV: "1", PORT: "0", ...env },
+      // EDEN_PROCESSES=1: the exit and its one line are the server's own, not a router's over N children (the default
+      // since D178 is the core count, and scripts/test-preload.ts clears EDEN_*, so it would otherwise apply).
+      env: { ...process.env, EDEN_SOURCES_FILE: file, EDEN_DEV: "1", PORT: "0", EDEN_PROCESSES: "1", ...env },
       stdout: "pipe",
       stderr: "pipe",
       stdin: "ignore",

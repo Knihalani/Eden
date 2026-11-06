@@ -34,7 +34,7 @@
 | `packages/graph` | The source map (knowledge graph layer 1): which sources mention which entities, and learned usefulness per situation. SQLite. |
 | `packages/llm` | `Model` interface, OpenRouter client (ZDR, no data collection), pricing, `Budget` (per session and per user-day) and `TenantSpend` (one cap per tenant per UTC day across roles), `FakeModel`. |
 | `packages/engine` | `ContextPartner`: cues, a per-user BM25F item cache (title, body), near-duplicate suppression, ledger, two-speed pipeline, the default's parts (`DEFAULT_CONFIG`, `PARTS` in `parts.ts`, D112), an optional model judge, usage inference, traces; span tracing of every phase in wall and CPU time, off by default (`spans.ts`, `onSpan`, `config.spans`; content-free; an observability toggle, not a product switch, D121; [research/moon-telemetry.md](research/moon-telemetry.md)). Each event is tokenized once, into a per-session vocabulary. |
-| `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), MCP server exposing `ask_context`, config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). Runs `DEFAULT_CONFIG` (D112; `EDEN_ENGINE_CONFIG` overrides keys, D103). Model roles (`models.ts`): with `OPENROUTER_API_KEY`, cards and intent (background, price-routed) and the ask-time reader (request path) run on `EDEN_MODEL` (default `anthropic/claude-haiku-5.5`, D12's ZDR routing), each with its own `Budget`, all of a tenant's roles under one cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25); no judge is wired. Without a key no role is built and the same default runs its no-model path. |
+| `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), the multi-process router (`EDEN_PROCESSES`, default the core count, D163, D178), MCP server exposing `ask_context`, config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). Runs `DEFAULT_CONFIG` (D112; `EDEN_ENGINE_CONFIG` overrides keys, D103). Model roles (`models.ts`): with `OPENROUTER_API_KEY`, cards and intent (background, price-routed) and the ask-time reader (request path) run on `EDEN_MODEL` (default `anthropic/claude-haiku-5.5`, D12's ZDR routing), each with its own `Budget`, all of a tenant's roles under one cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25); no judge is wired. Without a key no role is built and the same default runs its no-model path. |
 | `packages/client` | SDK for agent builders: `EdenClient` (fail-open) and `withContext` for message lists. |
 | `packages/eval` | Scenario harness over 26 hand-written scenarios (docs/research/eval-suite.md): precision, recall, false-fire rate, overall and per category; a privacy check (planted secrets, inert framing); direct asks; model calls and cost per turn, latency. |
 | `packages/sim` | Simulation: generated worlds and sessions with fact-level ground truth, connectors that behave like real ones, an oracle judge, and the real server under simulated agents over HTTP ([research/simulation.md](research/simulation.md)); the connector lab, open-source MCP servers over seeded backends in isolated containers ([research/connector-lab.md](research/connector-lab.md)). Not product code. |
@@ -46,6 +46,47 @@ Tenant (our customer) → user (their end user) → session (one conversation or
 Every cache, source-map row and budget is keyed by `tenant/user`; session state by `tenant/user#session`. Nothing
 crosses a user boundary. Cross-user learning, if ever added, may share only content-free aggregates
 (see [DECISIONS.md](DECISIONS.md) D9).
+
+### Several processes (D113, D163, D178)
+
+Every piece of per-user state lives in memory in the process that serves the user, so one process uses one core.
+With `EDEN_PROCESSES=N` (N > 1; unset, the core count capped at 64, D178; 1, or a one-core machine, is one
+process and no router) `main.ts` starts the router
+(`packages/server/src/router.ts`): one Bun.serve front and N child server processes, each `main.ts` again. Each
+request goes to child `hash(tenant/userId) mod N`, the tenant from the API key and `userId` from the body (one
+`JSON.parse`, 0.27 µs for a 131-byte event and 0.7 ms for a 1 MB items body in `router.bench.ts`), so a user always
+reaches the same child. The router keeps no per-user state.
+Each child has its own source-map file (`source-map.<i>.db`: one SQLite writer per file) and holds 1/N of every
+per-tenant cap: the request rate and burst (`EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`) and the daily model spend
+(`EDEN_MODEL_USD_PER_TENANT_DAY`). The caps are split, not shared, so a tenant whose users hash unevenly meets its
+cap sooner on the busier child, and since the default N is the core count, a tenant with one user gets 1/N of each
+cap ($6.25 a day, 50 rps, burst 100 on 4 cores): raise its caps or run `EDEN_PROCESSES=1`. The default count
+also honours a cgroup v2 CPU quota (`machineCores`), but containers should set `EDEN_PROCESSES` explicitly; each
+process costs about 67 MB idle (docs/INTEGRATION.md, "Processes and per-tenant caps"). A child that is down gives its users 503 (never 500) while the others serve, and
+is started again after 1 s (doubling to 30 s while it keeps failing); its users' in-memory state starts over, as
+after any restart (D8). `/healthz` on the router is 200 while at least one child is up (its body's `up` below
+`processes` means degraded: alert on that) and 503 only when none is, so a load balancer never pulls every user for
+one child's share; use it as the readiness check.
+
+Changing N reshuffles users: most land on another child, where their in-memory state (cache, sessions, budgets)
+starts over, as after a restart, and the learning their old child wrote to its source-map file is no longer read.
+Those rows still hold the user's entity names, so `/v1/forget` goes to every child, each deleting the user's rows
+from its own file; the caller gets the owning child's answer, or 503 (retry) when any child could not forget.
+Files that no process of the new N opens (`source-map.db` when N > 1, `source-map.<i>.db` for i >= N, every
+`.<i>` file when N is 1) are merged at start, before any child opens a file: each user's rows move into the file of
+the child that now serves them (counts add up) and the stranded file is deleted. A stranded file that cannot be read
+stops the start, since a file left behind would hold rows forget never reaches. D163 makes N > 1 the default only
+once `router.bench.ts` shows at least 1.5x the events per second of one process at the same observe p99 on 4 cores,
+on the merged tree (a trial in DECISIONS.md).
+
+`router.bench.ts` serves one in-process StaticSource, so it measures little of what real users cost. The same gate
+on simulated users (`packages/sim/src/lab/router-sim.bench.ts`: the shipped `buildPartner` over per-user connectors
+with REALISTIC or market latency at time scale 1, sync on, 400 users, median of 3, 4 cores; D172's outcome) gave the
+router over 4 children 5.96x one process at p99 <= 100 ms on REALISTIC (4,410 against 740 events/s, lowest 5.94x)
+and 3.36x on the market `hosted` profile (4,126 against 1,229, lowest 3.20x); the hop alone costs nothing measurable
+(router over 1 child 0.98-1.05x). Memory is the price: each child keeps its own heap, and its users' state grew it
+by about 650 MB for about 100 users, against about 1,350 MB for all 400 in one process (RSS end minus start; every
+process also held about 490 MB of sim worlds that a real server does not). Size a box by children, not by users.
 
 ## The two speeds
 
@@ -387,6 +428,11 @@ moved on by wall time since), so a simulation on an injected clock expires on it
 only through a `WeakRef`, so a cache nobody closes (labs build one per task) is still collected, and its timer stops.
 A user's vocabulary releases each term no live item holds once the index compacts it away (`releaseTerms`, on in the
 default, D112), so its term ids follow the live items without a rebuild.
+Each cached item's text is held deflated (`CacheLimits.packText`, on by default, D188; `packed-text.ts`): the stored
+copy's `text` is a getter that decodes it, with a 256-entry memo of recent decodes that `forget` and `removeItems`
+clear. Index, tallies and graph are built from the plain text before it is packed; a refresh with the same words
+keeps the held bytes. Sim-world text, where one arrow or dash makes a whole JS string two bytes a character, costs
+about 1.6x less heap per synced user, for 1.2-1.3x the backfill CPU.
 
 Dates in items are read the same on every host: `parseWhen` (`grounding.ts`) reads a zone-less date or date-time (a
 `Date:` header without a zone, a calendar start with no offset, "14 Oct 2026") as UTC, not the server process's local
@@ -402,4 +448,5 @@ it. Tests run with TZ=UTC (`scripts/test-preload.ts`);
 
 Per-user MCP connections with OAuth and a token vault; persistent session state;
 streaming delivery; the OpenAI-compatible injecting proxy; a richer graph (entity resolution, relations, freshness);
-learned situation classification; per-agent (not just per-user) learning; multi-instance deployment.
+learned situation classification; per-agent (not just per-user) learning; multi-machine deployment (the router,
+D163, spreads users over processes on one machine; the caps it splits are per process, not shared).

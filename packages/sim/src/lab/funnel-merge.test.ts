@@ -4,7 +4,11 @@ import {
   callMismatches,
   defaultJobs,
   groupShards,
+  mergeLines,
   mergeParts,
+  partArgs,
+  partFiles,
+  soloReasons,
   zeroRow,
   type PartOut,
   type PartTask,
@@ -208,5 +212,90 @@ describe("callMismatches (audit 2026-11-03b, corr-poll-behind-calls-untraced)", 
         { name: "old shard", calls: undefined },
       ]),
     ).toEqual(["train1 seed 41: traced 53 of 225 received"]);
+  });
+});
+
+describe("sharded output files (audit 2026-11-06, devloop-ask-diag-forces-one-process)", () => {
+  test("each output flag's file becomes <file>.part-<i> in process i's flags; other flags are untouched", () => {
+    const pass = ["--reader", "stub", "--ask-diag", "/x/d.jsonl", "--packets", "p.jsonl", "--packet-k", "15"];
+    const files = partFiles(pass, 2);
+    expect(files).toEqual([
+      { flag: "--ask-diag", file: "/x/d.jsonl", parts: ["/x/d.jsonl.part-0", "/x/d.jsonl.part-1"] },
+      { flag: "--packets", file: "p.jsonl", parts: ["p.jsonl.part-0", "p.jsonl.part-1"] },
+    ]);
+    expect(partArgs(pass, files, 1)).toEqual([
+      ...["--reader", "stub", "--ask-diag", "/x/d.jsonl.part-1", "--packets", "p.jsonl.part-1"],
+      ...["--packet-k", "15"],
+    ]);
+    // Every sharding flag is recognised; a flag with no value is left to hidden-funnel.ts to refuse.
+    const all = ["--card-log", "c", "--reader-log", "r", "--candidates", "k"];
+    expect(partFiles(all, 1).map((f) => f.flag)).toEqual(["--card-log", "--reader-log", "--candidates"]);
+    expect(partFiles(["--ask-diag"], 2)).toEqual([]);
+    expect(partFiles(["--ask-diag", "--reader", "stub"], 2)).toEqual([]);
+  });
+
+  test("two output flags naming one file are refused", () => {
+    expect(() => partFiles(["--ask-diag", "o.jsonl", "--packets", "o.jsonl"], 2)).toThrow("both name o.jsonl");
+  });
+
+  test("merged lines take one canonical order: suite as listed, seed, variant, template, then their own", () => {
+    const l = (suite: string, seed: number, variant: string, template: string, n = 0) =>
+      JSON.stringify({ suite, seed, variant, template, n });
+    // Two processes' parts, each with its seeds interleaved as concurrent seeds write them.
+    const a = [l("train2", 42, "hidden", "b"), l("train2", 41, "control", "a"), l("train2", 41, "hidden", "b", 1)];
+    const b = [l("train1", 41, "hidden", "b"), l("train2", 41, "hidden", "b", 2), l("train1", 41, "hidden", "a")];
+    const want = [
+      l("train1", 41, "hidden", "a"),
+      l("train1", 41, "hidden", "b"),
+      l("train2", 41, "hidden", "b", 1),
+      l("train2", 41, "hidden", "b", 2),
+      l("train2", 41, "control", "a"),
+      l("train2", 42, "hidden", "b"),
+    ];
+    const suites = ["train1", "train2"];
+    const merged = mergeLines([`${a.join("\n")}\n`, `${b.join("\n")}\n`], suites);
+    expect(merged).toBe(`${want.join("\n")}\n`);
+    // One process's file of the same lines is put in the same order.
+    expect(mergeLines([[...a, ...b].join("\n")], suites)).toBe(merged);
+    // Only the two train2 41 hidden b lines tie: they keep the order they came in.
+    expect(mergeLines([[...a, ...b].reverse().join("\n")], suites)).toBe(
+      `${[want[0], want[1], want[3], want[2], want[4], want[5]].join("\n")}\n`,
+    );
+    // Suites in the run's order, not by name; a seed compares as a number.
+    expect(
+      mergeLines(
+        [[l("b", 10, "hidden", "x"), l("b", 9, "hidden", "x"), l("a", 1, "hidden", "x")].join("\n")],
+        ["b", "a"],
+      ),
+    ).toBe(`${[l("b", 9, "hidden", "x"), l("b", 10, "hidden", "x"), l("a", 1, "hidden", "x")].join("\n")}\n`);
+  });
+
+  test("a --reader-log line is placed by its task; lines with no task keep their order, first; empty is empty", () => {
+    const r = (task: string) => JSON.stringify({ task, prompt: "p" });
+    const card = (h: string) => JSON.stringify({ h, kind: "none" });
+    const lines = [r("train1/control/41/t/id1"), card("c1"), r("train1/hidden/41/t/x/id2"), "torn {", card("c2")];
+    expect(
+      mergeLines([lines.join("\n")], ["train1"])
+        .split("\n")
+        .filter(Boolean),
+    ).toEqual([card("c1"), "torn {", card("c2"), r("train1/hidden/41/t/x/id2"), r("train1/control/41/t/id1")]);
+    expect(mergeLines([], ["train1"])).toBe("");
+    expect(mergeLines(["", "\n"], ["train1"])).toBe("");
+    // Unicode and a lone surrogate pass through untouched.
+    const odd = JSON.stringify({ suite: "train1", seed: 41, variant: "hidden", template: "t", text: "é \ud800 ü" });
+    expect(mergeLines([odd], ["train1"])).toBe(`${odd}\n`);
+  });
+
+  test("the runs that keep one process say why: --record, --timeline, --judge live, --reader live", () => {
+    expect(soloReasons({ record: false, passthrough: ["--ask-diag", "d", "--reader", "replay"] })).toEqual([]);
+    const all = soloReasons({
+      record: true,
+      passthrough: ["--timeline", "t.jsonl", "--judge", "live", "--reader", "live"],
+    });
+    expect(all.map((r) => r.split(" (")[0])).toEqual(["--record", "--timeline", "--judge live", "--reader live"]);
+    expect(all[0]).toContain("one ledger entry per suite");
+    expect(all[1]).toContain("CPU and RSS");
+    expect(all[3]).toContain("append-only reader cache file and one spend stream");
+    expect(soloReasons({ record: false, passthrough: ["--reader", "stub"] })).toEqual([]);
   });
 });

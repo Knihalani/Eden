@@ -16,7 +16,8 @@ anything is held).
 | `src/planner.ts` | `QueryPlanner`, `PlannedSource`: Thompson sampling over shapes per (tenant, user, connector), learned cascade (D28–D33, D38, D39) |
 | `src/guarded.ts` | `SourceFanout`: per-(user, source) breaker, AIMD, GCRA, histogram; singleflight; stale-on-failure result cache; `SharedCalls` (D48); `list`'s `reuse` (`ListReuse`: a held, unchanged item is not redacted again); `fetchChecked` (ok / gone / failed, D126); `dropResults` (a changed or deleted source's held pages, D126) |
 | `src/fanout.ts` | `searchSources`: the plain parallel search with per-source outcome (an aborted `signal` is a "timeout", no call) |
-| `src/static-source.ts` | `StaticSource`: in-memory documents (tests, examples, `EDEN_SOURCES_FILE`) |
+| `src/static-source.ts` | `StaticSource`: in-memory documents (tests, examples, `EDEN_SOURCES_FILE`, per-user static specs); an inverted index built on the first search and a ref map for `fetch` (D175) |
+| `bench/static-source.bench.ts` | Old search vs lazy term sets vs the shipped index at 400 / 4,000 / 40,000 docs: construct, first-search and per-search ms, heap per doc; checks identical refs |
 | `src/fixtures/` | Real MCP `tools/list` schemas and search results captured from the connector lab (`packages/sim/src/lab/capture.ts`) |
 
 ## Rules that apply here
@@ -35,6 +36,7 @@ anything is held).
 
 ```bash
 bun run test:pkg sources        # ~3 s; planner and shapes are the largest files
+bun packages/sources/bench/static-source.bench.ts   # ~10 s; no assertions beyond identical refs
 ```
 
 ## Pitfalls
@@ -49,6 +51,26 @@ bun run test:pkg sources        # ~3 s; planner and shapes are the largest files
   pair, or any `forget`, leads a fresh call: joining would hand it the copy from before the change, which the engine
   stores under the joiner's later read mark, undoubted. Never join with a bare `flights.has(resultKey)`
   (`joined-flight.test.ts` here and in the engine).
+- **StaticSource search must stay identical to the old scan (D175).** Same `words` (not the primitives tokenizer:
+  that folds accents and would change matches), distinct query terms counted once per document, dated documents in
+  the window first, then more hits, then document order. `static-source.test.ts` keeps the old search as the oracle
+  over random queries; run it after any change. The index is built on the first search, never in the constructor
+  (the server builds one StaticSource per user scope), and `search` has no `await`, so its per-instance `hits` and
+  `dated` scratch is zeroed before it returns.
+- **Why an inverted index, not per-document term sets (D175).** The finding's stage 1 (one `Set` per document,
+  still a scan of every document) was measured beside it, on the bench's generated corpus (65 Zipf words of a
+  5,000-word vocabulary per doc, limit 10; median of 3 runs on a shared 4-core box, 2026-11-06):
+
+  | Docs | Old ms/search | Term sets ms/search | Index ms/search | Term sets heap B/doc | Index heap B/doc |
+  |---|---|---|---|---|---|
+  | 400 | 4.13 | 0.200 | 0.081 | 4,665 | 1,669 |
+  | 4,000 | 38.3 | 2.34 | 0.351 | 4,581 | 457 |
+  | 40,000 | 395 | 34.3 | 2.64 | 4,575 | 246 |
+
+  The index is 13x the term sets at 40,000 docs with about a nineteenth of their memory, past D175's bar (1.5x, no
+  more memory), so it ships. Its first search (the build) costs a little more than the term sets' (597 against 495
+  ms at 40,000 docs; one old search is 395 ms), once per instance; construction stays the items copy (0.5 ms at 400
+  docs, 3.2 ms at 40,000). The interner is a plain `Map<string, number>`, not `Vocab`, for the folding reason above.
 
 ## Where next
 

@@ -29,8 +29,8 @@ PR. `native/` is the measured Rust experiment behind D22 (hot kernels stay TypeS
   [docs/TESTING.md](docs/TESTING.md): test commands, timings, the slowest files.
 - Fast loop: `bun run test:changed` (touched packages and their dependents), `bun run test:pkg <name>`,
   `bun run check:fast` (format, types, changed tests); `bun run check` is still the gate before a merge.
-- `bun run funnel`: the no-model screen on train (preset ALL3, replayed cards, `--ask`, the funnel score;
-  `--baseline F` diffs task by task; held-out suites need `--blind`).
+- `bun run funnel`: the no-model screen on train (the shipped default with its cards and intent requests replayed,
+  D158; `--ask`, the funnel score; `--baseline F` diffs task by task; held-out suites need `--blind`).
 - `/deep-audit`: full audit → verified findings → fixes on branches with review → re-audit → plain-language report
   (`.claude/skills/deep-audit/`).
 

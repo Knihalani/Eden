@@ -2,9 +2,24 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { cardKey, type Card, type CardMaker } from "@eden/engine";
 import type { ContextItem } from "@eden/protocol";
-import { DiskCardMaker, loadCards, samePath } from "./cards-disk";
+import { REALISTIC, simSources } from "../sources";
+import { buildWorld } from "../world";
+import {
+  DiskCardMaker,
+  harnessIntent,
+  INTENT_PATH,
+  intentCoverage,
+  intentLine,
+  loadCards,
+  loadRequests,
+  samePath,
+} from "./cards-disk";
+import { clearSlot, dress } from "./hidden-context";
+import { INTENT_INERT } from "./reader-stub";
+import { SUITES } from "./suites";
 
 const item = (n: number): ContextItem => ({
   id: `i${n}`,
@@ -28,6 +43,8 @@ const liveMaker = () => {
 };
 
 const signal = new AbortController().signal;
+/** A batch's requests (present only when the call asked for them). */
+const reqs = (got: Awaited<ReturnType<CardMaker["make"]>>) => ("requests" in got ? got.requests : undefined);
 
 describe("DiskCardMaker", () => {
   test("a replay with an output file never writes the replay file (a run cannot mutate its own input)", async () => {
@@ -143,5 +160,173 @@ describe("samePath", () => {
     expect(samePath(file, join(dir, "b.cards.jsonl"))).toBe(false);
     // Relative to the working directory, as the command line gives them.
     expect(samePath("./x.jsonl", "x.jsonl")).toBe(true);
+  });
+
+  test("a live miss's requests go to the output file with its card ({h, c, r}) and replay from it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const replay = join(dir, "cards.jsonl");
+    const out = join(dir, "new.jsonl");
+    const asked: string[] = [];
+    // Cards item 5, gives item 6 requests but no card (the model gave none back), item 7 neither.
+    const live: CardMaker = {
+      async make(items, _today, _signal, _retry, intent) {
+        asked.push(...items.map((i) => i.id));
+        return {
+          cards: items.map((i) => (i.id === "i5" ? card(5) : null)),
+          costUsd: 0,
+          ...(intent
+            ? { requests: items.map((i) => (i.id === "i7" ? null : [`ask about ${i.id}`, "ünïcode ✓"])) }
+            : {}),
+        };
+      },
+    };
+    const first = await new DiskCardMaker(replay, live, { out }).make(
+      [item(5), item(6), item(7)],
+      "d",
+      signal,
+      false,
+      true,
+    );
+    expect(reqs(first)).toEqual([["ask about i5", "ünïcode ✓"], ["ask about i6", "ünïcode ✓"], null]);
+    const lines = readFileSync(out, "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    expect(lines).toEqual([
+      { h: cardKey(item(5)), c: card(5), r: ["ask about i5", "ünïcode ✓"] },
+      { h: cardKey(item(6)), r: ["ask about i6", "ünïcode ✓"] },
+    ]);
+    // The requests-only line is no card: item 6 stays uncovered for the cards.
+    expect([...loadCards(out).keys()]).toEqual([cardKey(item(5))]);
+    // A later run replaying the output file gets the requests back with no live maker at all.
+    const replayed = await new DiskCardMaker(replay, undefined, { out }).make(
+      [item(5), item(6), item(7)],
+      "d",
+      signal,
+      false,
+      true,
+    );
+    expect(reqs(replayed)).toEqual(reqs(first));
+    // Item 6 has requests and no card: covered with a none card, as a requests file's item is.
+    expect(replayed.cards.map((c) => c?.kind ?? null)).toEqual(["absence", "none", null]);
+    expect(asked).toEqual(["i5", "i6", "i7"]);
+  });
+
+  test("an explicit requests file wins over requests in the card files, and a .gz one is read as is", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const replay = join(dir, "cards.jsonl");
+    writeFileSync(replay, `${JSON.stringify({ h: cardKey(item(8)), c: null, r: ["from cards"] })}\n`);
+    const gz = join(dir, "intent.jsonl.gz");
+    writeFileSync(gz, gzipSync(`${JSON.stringify({ h: cardKey(item(8)), r: ["from intent"], c: null })}\n`));
+    expect(loadRequests(gz).get(cardKey(item(8)))).toEqual(["from intent"]);
+    const disk = new DiskCardMaker(replay, undefined, { out: join(dir, "new.jsonl"), requests: [gz] });
+    expect(reqs(await disk.make([item(8)], "d", signal, false, true))).toEqual([["from intent"]]);
+    const plain = new DiskCardMaker(replay, undefined, { out: join(dir, "new2.jsonl") });
+    expect(reqs(await plain.make([item(8)], "d", signal, false, true))).toEqual([["from cards"]]);
+  });
+});
+
+describe("opting out of replayed intent (cardRequests: false)", () => {
+  test("a card file's `r` line with --intent none replays no requests, and the header says inert", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const replay = join(dir, "cards.jsonl");
+    const out = join(dir, "earlier-run.cards.jsonl");
+    writeFileSync(replay, `${JSON.stringify({ h: cardKey(item(9)), c: card(9), r: ["from cards"] })}\n`);
+    // An earlier run's --cards-out, appended to by a live call: a card with requests and a requests-only line.
+    writeFileSync(
+      out,
+      `${JSON.stringify({ h: cardKey(item(10)), c: card(10), r: ["from out"] })}\n` +
+        `${JSON.stringify({ h: cardKey(item(11)), r: ["requests only"] })}\n`,
+    );
+    const run = { wanted: true, cardsReplayed: true, suites: ["heldout13"], seeds: [41] };
+    const none = harnessIntent("none", run);
+    const disk = new DiskCardMaker(replay, undefined, {
+      out,
+      requests: none.files,
+      cardRequests: none.files.length > 0,
+    });
+    expect(disk.requests.size).toBe(0);
+    const got = await disk.make([item(9), item(10), item(11)], "d", signal, false, true);
+    expect(reqs(got)).toEqual([null, null, null]);
+    // The cards still replay; the requests-only item stays uncovered.
+    expect(got.cards.map((c) => c?.kind ?? null)).toEqual(["absence", "absence", null]);
+    const count = intentCoverage([[item(9), item(10), item(11)]], disk.requests);
+    expect(intentLine({ wanted: true, cardsReplayed: true, ...none, ...count })).toBe(
+      `intent: replayed 0 of 3 items (--intent none)  ${INTENT_INERT}`,
+    );
+    // An uncovered default opts out the same way.
+    const uncovered = harnessIntent("default", { ...run, seeds: [45] });
+    expect(uncovered.files).toEqual([]);
+    const disk2 = new DiskCardMaker(replay, undefined, { out, requests: [], cardRequests: false });
+    expect(reqs(await disk2.make([item(9), item(10)], "d", signal, false, true))).toEqual([null, null]);
+    // Without the opt-out the same files replay their `r` lines (the round trip a covered run relies on).
+    const on = new DiskCardMaker(replay, undefined, { out });
+    expect(reqs(await on.make([item(9), item(10), item(11)], "d", signal, false, true))).toEqual([
+      ["from cards"],
+      ["from out"],
+      ["requests only"],
+    ]);
+  });
+});
+
+describe("the harnesses' intent replay (D158)", () => {
+  const run = { wanted: true, cardsReplayed: true, suites: ["heldout13"], seeds: [41, 42, 43, 44] };
+
+  test("default replays the checked-in file only where it covers every suite and seed", () => {
+    expect(harnessIntent("default", run)).toEqual({
+      files: [INTENT_PATH],
+      note: "intent-v2.jsonl.gz by default, D158",
+    });
+    expect(harnessIntent("default", { ...run, suites: ["train1", "heldout10"], seeds: ["41", "42"] }).files).toEqual([
+      INTENT_PATH,
+    ]);
+    const out = harnessIntent("default", { ...run, suites: ["heldout13", "heldout12"], seeds: [41, 45] });
+    expect(out.files).toEqual([]);
+    expect(out.note).toContain("heldout13 seed 45");
+    expect(out.note).toContain("heldout12 seed 41");
+    expect(harnessIntent("none", run)).toEqual({ files: [], note: "--intent none" });
+    expect(harnessIntent("a.jsonl,b.jsonl", run).files).toEqual(["a.jsonl", "b.jsonl"]);
+    // Intent off, or cards made live (the card model writes the requests): nothing to replay.
+    expect(harnessIntent("default", { ...run, wanted: false }).files).toEqual([]);
+    expect(harnessIntent("default", { ...run, cardsReplayed: false }).files).toEqual([]);
+  });
+
+  test("the header labels a run with no covering file inert", () => {
+    const base = { wanted: true, cardsReplayed: true, note: "x", found: 3, of: 4 };
+    expect(intentLine({ ...base, files: ["f"] })).toBe("intent: replayed 3 of 4 items (x)");
+    // Inert is what the replay holds: nothing found is inert, whatever was named.
+    expect(intentLine({ ...base, files: [], note: "--intent none", found: 0 })).toBe(
+      `intent: replayed 0 of 4 items (--intent none)  ${INTENT_INERT}`,
+    );
+    expect(intentLine({ ...base, files: ["f"], found: 0 })).toBe(`intent: replayed 0 of 4 items (x)  ${INTENT_INERT}`);
+    // Requests from the card files alone (no requests file) are a partial replay, never labelled inert.
+    expect(intentLine({ ...base, files: [], note: "" })).toBe(
+      "intent: replayed 3 of 4 items (no --intent)  [intent partial: from the card files only]",
+    );
+    expect(intentLine({ ...base, files: [], wanted: false })).toBe("intent: off");
+  });
+
+  test("the checked-in file covers held-out 13's items (the shards INTENT_COVERS claims)", () => {
+    const requests = loadRequests(INTENT_PATH);
+    for (const seed of [41, 44]) {
+      for (const variant of ["hidden", "control"] as const) {
+        // As hidden-funnel.ts and ab-common's worldOf build each world.
+        const world = buildWorld({ seed: seed * 1_000 });
+        const before = world.items.length;
+        const tasks = SUITES.heldout13!(world, seed, variant);
+        const planted = world.items.slice(before);
+        for (const it of planted) dress(world, it);
+        const keep = new Set(planted.map((it) => it.id));
+        for (const task of tasks) clearSlot(world, task.text, keep);
+        const sources = simSources(world, REALISTIC, 0, seed);
+        const { found, of } = intentCoverage([sources.flatMap((s) => s.listAll())], requests);
+        expect(of).toBeGreaterThan(1000);
+        expect(found / of).toBeGreaterThanOrEqual(0.99);
+        // Every planted item has a line with requests (the finding: a quarter of planted items had none).
+        const mine = intentCoverage([sources.flatMap((s) => s.listAll()).filter((it) => keep.has(it.id))], requests);
+        expect(mine.of).toBeGreaterThan(0);
+        expect(mine.found).toBe(mine.of);
+      }
+    }
   });
 });

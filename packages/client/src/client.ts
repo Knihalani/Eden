@@ -31,6 +31,16 @@ const ID_RULE = "1-128 characters of [A-Za-z0-9._:@-]";
 const ERROR_BODY_BYTES = 2_048;
 /** How much of the server's error text reaches `onError`. */
 const ERROR_TEXT_CHARS = 300;
+/** The server's own cap on an observe's `waitMs` (`/v1/events` clamps to it); the client clamps to the same range. */
+const MAX_WAIT_MS = 5_000;
+
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+/**
+ * Whether `v` can be handed to the agent as an injection: what `withContext` and an integration read (`id`, `text`)
+ * are strings. Anything else from a server (a proxy's JSON, an older or broken server) is no context (D14).
+ */
+const isInjection = (v: unknown): v is Injection =>
+  isRecord(v) && typeof v.id === "string" && typeof v.text === "string";
 
 /**
  * Maps any string (an email, a path-like chat id, a long external id) to a valid Eden id, injectively: two different
@@ -164,6 +174,8 @@ export class EdenClient {
     body: unknown,
     timeoutMs = this.options.timeoutMs ?? 800,
     failed?: (e: unknown) => void,
+    /** The 2xx answer's expected shape; another is reported and treated as a failure, so callers never see it. */
+    valid?: (v: unknown) => boolean,
   ): Promise<T | null> {
     try {
       const res = await (this.options.fetch ?? fetch)(`${this.baseUrl}${path}`, {
@@ -176,7 +188,13 @@ export class EdenClient {
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (!res.ok) throw new Error(`eden ${path}: ${res.status}${await serverError(res)}`);
-      return (await res.json()) as T;
+      const answer: unknown = await res.json();
+      if (valid && !valid(answer)) {
+        const route = path.split("?")[0]!;
+        const name = route.slice("/v1/".length);
+        throw new Error(`eden ${route}: not ${/^[aeiou]/.test(name) ? "an" : "a"} ${name} answer`);
+      }
+      return answer as T;
     } catch (e) {
       failed?.(e);
       this.report(e);
@@ -198,16 +216,26 @@ export class EdenClient {
    */
   async observe(event: EventInput, options: { waitMs?: number } = {}): Promise<ObserveResult> {
     const sent = event.kind === "user_message" && !event.draft;
-    const waitMs = options.waitMs ?? (sent ? (this.options.defaultWaitMs ?? DEFAULT_WAIT_MS) : undefined);
+    const asked = options.waitMs ?? (sent ? (this.options.defaultWaitMs ?? DEFAULT_WAIT_MS) : 0);
+    // Clamped to the server's own range: an Infinity, a negative or a NaN would otherwise make the request's timeout
+    // invalid, so every observe would fail before it was sent. NaN > 0 is false, so it waits 0 like a negative.
+    const waitMs = asked > 0 ? Math.min(MAX_WAIT_MS, asked) : 0;
     const wait = waitMs ? `?waitMs=${waitMs}` : "";
-    const timeout = (this.options.timeoutMs ?? 800) + (waitMs ?? 0);
+    const timeout = (this.options.timeoutMs ?? 800) + waitMs;
     const body = { ...this.who, at: Date.now(), ...event };
-    return (await this.post<ObserveResult>(`/v1/events${wait}`, body, timeout)) ?? { injection: null, pending: false };
+    const res = await this.post<ObserveResult>(`/v1/events${wait}`, body, timeout, undefined, (v) => {
+      return isRecord(v) && (v.injection === null || v.injection === undefined || isInjection(v.injection));
+    });
+    return { injection: res?.injection ?? null, pending: res?.pending === true };
   }
 
   /** Injections queued by slower lookups since the last call. */
   async pending(): Promise<Injection[]> {
-    return (await this.post<{ injections: Injection[] }>("/v1/pending", this.who))?.injections ?? [];
+    const res = await this.post<{ injections: unknown[] }>("/v1/pending", this.who, undefined, undefined, (v) => {
+      return isRecord(v) && Array.isArray(v.injections);
+    });
+    // A malformed element is dropped, not the whole queue: the well-formed ones beside it are still context.
+    return (res?.injections ?? []).filter(isInjection);
   }
 
   /** `observe`'s injection plus anything pending, in one list. */
@@ -220,6 +248,9 @@ export class EdenClient {
       "/v1/ask",
       { ...this.who, question, maxItems: options.maxItems },
       options.timeoutMs ?? 8_000,
+      undefined,
+      // What an integration reads from an answer; a body without them (a proxy's JSON, `null`) is no answer.
+      (v) => isRecord(v) && typeof v.answer === "string" && Array.isArray(v.citations),
     );
   }
 

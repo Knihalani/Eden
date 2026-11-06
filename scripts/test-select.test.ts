@@ -3,7 +3,16 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { DATA_DIRS, touchedPackages, type Pkg } from "./test-select";
+import {
+  DATA_DIRS,
+  DEFERRED,
+  deferredFiles,
+  FAST_ENV,
+  selectPackages,
+  testEnv,
+  touchedPackages,
+  type Pkg,
+} from "./test-select";
 
 /** This repo's own workspace packages with their @eden/* dependencies, read as test-select.ts reads them. */
 function repoPackages(): Pkg[] {
@@ -87,5 +96,136 @@ describe("test:changed selection", () => {
     expect(r.status).toBe(0);
     rmSync(repo, { recursive: true, force: true });
     expect(r.stdout).toContain("testing packages/server");
+  });
+
+  test("an engine-only change defers the six end-to-end files; a sim or eval change keeps its own (D161)", () => {
+    const pkgs = repoPackages();
+    const engine = selectPackages(["packages/engine/src/partner.ts"], pkgs)!;
+    expect(engine.direct).toEqual(["packages/engine"]);
+    expect(deferredFiles(engine)).toEqual(DEFERRED);
+    // sim changed itself (nothing depends on it): every sim file runs, and run.test.ts is not selected at all.
+    expect(deferredFiles(selectPackages(["packages/sim/src/lab/funnel.ts"], pkgs)!)).toEqual([]);
+    // eval changed: run.test.ts runs; sim, a dependent of eval, defers its five.
+    const evalOnly = deferredFiles(selectPackages(["packages/eval/src/run.ts"], pkgs)!);
+    expect(evalOnly).not.toContain("packages/eval/src/run.test.ts");
+    expect(evalOnly).toEqual(DEFERRED.filter((f) => f.startsWith("packages/sim/")));
+    // Engine and sim both changed: only eval's file is deferred.
+    const both = selectPackages(["packages/engine/src/partner.ts", "packages/sim/src/world.ts"], pkgs)!;
+    expect(deferredFiles(both)).toEqual(["packages/eval/src/run.test.ts"]);
+    // Outside code (null selection) defers nothing: main() runs every file.
+    expect(selectPackages(["scripts/test.sh"], pkgs, () => {})).toBeNull();
+  });
+
+  test("every deferred file exists, so a rename cannot silently stop deferring it", () => {
+    for (const f of DEFERRED) expect(existsSync(join(import.meta.dir, "..", f))).toBe(true);
+  });
+
+  test("end to end: --dry lists the deferred files and their command only when the package is a dependent", () => {
+    const repo = mkdtempSync(join(tmpdir(), "test-select-"));
+    const run = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+    run("init", "-q");
+    const manifest = (name: string, deps: string[]) =>
+      JSON.stringify({ name, dependencies: Object.fromEntries(deps.map((d) => [d, "workspace:*"])) });
+    for (const [path, body] of [
+      ["packages/engine/package.json", manifest("@eden/engine", [])],
+      ["packages/engine/src/a.ts", ""],
+      ["packages/engine/src/a.test.ts", ""],
+      ["packages/eval/package.json", manifest("@eden/eval", ["@eden/engine"])],
+      ["packages/eval/src/run.test.ts", ""],
+      ["packages/sim/package.json", manifest("@eden/sim", ["@eden/engine", "@eden/eval"])],
+      ["packages/sim/src/b.ts", ""],
+      ["packages/sim/src/sim.test.ts", ""],
+      ["packages/sim/src/other.test.ts", ""],
+    ] as const) {
+      mkdirSync(dirname(join(repo, path)), { recursive: true });
+      writeFileSync(join(repo, path), body);
+    }
+    run("add", ".");
+    run("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base");
+    const dry = () =>
+      spawnSync("bun", [join(import.meta.dir, "test-select.ts"), "changed", "--base", "HEAD", "--dry"], {
+        encoding: "utf8",
+        env: { ...process.env, EDEN_TEST_SELECT_ROOT: repo },
+      });
+    // The directories on the "testing" line, sorted: their order follows readdir, which the file system decides.
+    const tested = (stdout: string) => (stdout.match(/^testing (.*)$/m)?.[1] ?? "").split(" ").sort();
+    try {
+      writeFileSync(join(repo, "packages/engine/src/a.ts"), "// edit");
+      const engine = dry();
+      expect(engine.status).toBe(0);
+      expect(engine.stdout).toContain("deferred 2 end-to-end file(s)");
+      expect(engine.stdout).toContain(
+        "run them: bun test ./packages/sim/src/sim.test.ts ./packages/eval/src/run.test.ts",
+      );
+      // eval's only test file is deferred, so eval drops out; sim keeps other.test.ts.
+      expect(tested(engine.stdout)).toEqual(["packages/engine", "packages/sim"]);
+
+      writeFileSync(join(repo, "packages/engine/src/a.ts"), "");
+      writeFileSync(join(repo, "packages/sim/src/b.ts"), "// edit");
+      const sim = dry();
+      expect(sim.status).toBe(0);
+      expect(sim.stdout).not.toContain("deferred");
+      expect(sim.stdout).toContain("testing packages/sim\n");
+
+      // eval changed: its run.test.ts runs, sim (a dependent) defers sim.test.ts.
+      writeFileSync(join(repo, "packages/sim/src/b.ts"), "");
+      writeFileSync(join(repo, "packages/eval/src/run.test.ts"), "// edit");
+      const evalRun = dry();
+      expect(evalRun.stdout).toContain("run them: bun test ./packages/sim/src/sim.test.ts\n");
+      expect(tested(evalRun.stdout)).toEqual(["packages/eval", "packages/sim"]);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("test:changed's fast counts (D176)", () => {
+  test("changed sets KG_DIFF_SEEDS=25; pkg and other modes leave the environment as it is", () => {
+    expect(FAST_ENV).toEqual({ KG_DIFF_SEEDS: "25" });
+    const env = { PATH: "/bin" };
+    expect(testEnv("changed", env)).toEqual({ PATH: "/bin", KG_DIFF_SEEDS: "25" });
+    expect(env).toEqual({ PATH: "/bin" });
+    for (const mode of ["pkg", undefined, "other"]) expect(testEnv(mode, env).KG_DIFF_SEEDS).toBeUndefined();
+    // A count the caller set stands in every mode (KG_DIFF_SEEDS=200 bun run test:changed runs the full oracle).
+    expect(testEnv("changed", { KG_DIFF_SEEDS: "200" }).KG_DIFF_SEEDS).toBe("200");
+    expect(testEnv("pkg", { KG_DIFF_SEEDS: "7" }).KG_DIFF_SEEDS).toBe("7");
+  });
+
+  test("end to end: bun test sees KG_DIFF_SEEDS=25 under changed and nothing under pkg", () => {
+    // A throwaway repo with a copy of scripts/test.sh and a test file that prints what it sees.
+    const repo = mkdtempSync(join(tmpdir(), "test-select-"));
+    const run = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+    run("init", "-q");
+    const probe =
+      'import { test } from "bun:test";\ntest("p", () => console.log(`SEEDS=${process.env.KG_DIFF_SEEDS}`));\n';
+    for (const [path, body] of [
+      ["packages/engine/package.json", '{"name":"@eden/engine"}'],
+      ["packages/engine/src/a.ts", ""],
+      ["packages/engine/src/a.test.ts", probe],
+      ["scripts/test.sh", readFileSync(join(import.meta.dir, "test.sh"), "utf8")],
+    ] as const) {
+      mkdirSync(dirname(join(repo, path)), { recursive: true });
+      writeFileSync(join(repo, path), body, { mode: 0o755 });
+    }
+    run("add", ".");
+    run("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base");
+    const env: NodeJS.ProcessEnv = { ...process.env, EDEN_TEST_SELECT_ROOT: repo };
+    delete env.KG_DIFF_SEEDS;
+    const select = (...args: string[]) =>
+      spawnSync("bun", [join(import.meta.dir, "test-select.ts"), ...args], { cwd: repo, encoding: "utf8", env });
+    try {
+      writeFileSync(join(repo, "packages/engine/src/a.ts"), "// edit");
+      const changed = select("changed", "--base", "HEAD");
+      expect(changed.status).toBe(0);
+      expect(changed.stdout).toContain("test:changed: KG_DIFF_SEEDS=25");
+      expect(`${changed.stdout}${changed.stderr}`).toContain("SEEDS=25");
+
+      const pkg = select("pkg", "packages/engine");
+      expect(pkg.status).toBe(0);
+      expect(pkg.stdout).not.toContain("KG_DIFF_SEEDS");
+      expect(`${pkg.stdout}${pkg.stderr}`).toContain("SEEDS=undefined");
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 });

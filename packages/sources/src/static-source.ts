@@ -11,7 +11,30 @@ export interface StaticDoc {
   meta?: Record<string, string>;
 }
 
+/**
+ * The term definition of this source. Not `@eden/primitives`' tokenizer: that folds accents ("Zoë" and "zoe" are one
+ * term) and would change what matches; search results must stay as they were (D175).
+ */
 const words = (s: string) => s.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}_.-]*/gu) ?? [];
+
+/**
+ * The postings of every term: the documents that contain it, ascending, once each (CSR layout). Built on the first
+ * search, not in the constructor: the server builds one StaticSource per user scope (`user-sources.ts`), most of
+ * which may never search (D175).
+ */
+interface TermIndex {
+  /** Term → row in `starts`. */
+  ids: Map<string, number>;
+  /** Row t's postings are `docs[starts[t], starts[t + 1])`. */
+  starts: Uint32Array;
+  docs: Uint32Array;
+  /** Documents with a start day (`meta.start`), and that day: the only ones a window can list. */
+  datedDocs: Uint32Array;
+  days: string[];
+  /** Per-search scratch, one slot per document; zero between searches (search has no await). */
+  hits: Uint32Array;
+  dated: Uint8Array;
+}
 
 /**
  * A fixed set of documents with plain term-overlap search. For tests, evals, and a tenant's own reference docs
@@ -20,6 +43,8 @@ const words = (s: string) => s.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}_.-]*
 export class StaticSource implements Source {
   readonly kind = "static";
   private readonly items: ContextItem[];
+  private index: TermIndex | undefined;
+  private byRef: Map<string, ContextItem> | undefined;
 
   constructor(
     readonly id: string,
@@ -34,32 +59,106 @@ export class StaticSource implements Source {
     return this.items.some((i) => i.meta?.start !== undefined);
   }
 
+  /**
+   * Documents ranked by how many distinct query terms they contain; with a window, what starts in it comes first,
+   * matched words or not (a calendar listed by time). Ties keep document order. Cost is the query terms' postings
+   * plus the dated documents, not the whole corpus.
+   */
   async search(query: SearchQuery): Promise<ContextItem[]> {
     const terms = new Set([...words(query.text), ...query.entities.flatMap(words)]);
     const w = query.window;
-    // With a window, what starts in it comes first, matched words or not (a calendar listed by time).
-    const inWindow = (item: ContextItem) => {
-      const day = item.meta?.start?.slice(0, 10);
-      return !!w && !!day && day >= w.start && day < w.end;
-    };
     if (terms.size === 0 && !w) return [];
-    return this.items
-      .map((item) => {
-        const hay = new Set(words(`${item.title} ${item.text}`));
-        let hits = 0;
-        for (const t of terms) if (hay.has(t)) hits++;
-        return { item, hits, dated: inWindow(item) };
-      })
-      .filter((x) => x.hits > 0 || x.dated)
-      .sort((a, b) => Number(b.dated) - Number(a.dated) || b.hits - a.hits)
-      .slice(0, query.limit)
-      .map((x) => x.item);
+    const ix = (this.index ??= this.build());
+    const { hits, dated } = ix;
+    const found: number[] = [];
+    for (const t of terms) {
+      const row = ix.ids.get(t);
+      if (row === undefined) continue;
+      for (let p = ix.starts[row]!, end = ix.starts[row + 1]!; p < end; p++) {
+        const d = ix.docs[p]!;
+        const h = hits[d]!;
+        hits[d] = h + 1;
+        if (h === 0) found.push(d);
+      }
+    }
+    if (w) {
+      for (let k = 0; k < ix.datedDocs.length; k++) {
+        const day = ix.days[k]!;
+        if (day < w.start || day >= w.end) continue;
+        const d = ix.datedDocs[k]!;
+        dated[d] = 1;
+        if (hits[d] === 0) found.push(d);
+      }
+    }
+    // Dated first, then more hits, then document order: what the stable sort over all documents gave.
+    found.sort((a, b) => dated[b]! - dated[a]! || hits[b]! - hits[a]! || a - b);
+    const out = found.slice(0, query.limit).map((d) => this.items[d]!);
+    for (const d of found) {
+      hits[d] = 0;
+      dated[d] = 0;
+    }
+    return out;
   }
 
   /** It holds its documents: a ref it does not have is not there. */
   readonly fetchReportsGone = true;
 
   async fetch(ref: string): Promise<ContextItem | null> {
-    return this.items.find((i) => i.ref === ref) ?? null;
+    if (!this.byRef) {
+      this.byRef = new Map();
+      // The first document with a ref wins, as `find` did.
+      for (const i of this.items) if (!this.byRef.has(i.ref)) this.byRef.set(i.ref, i);
+    }
+    return this.byRef.get(ref) ?? null;
+  }
+
+  private build(): TermIndex {
+    const n = this.items.length;
+    const ids = new Map<string, number>();
+    const counts: number[] = [];
+    // The last document each term was counted for: a term repeated in one document is one posting.
+    const last: number[] = [];
+    // Each document's distinct term rows, in document order: document d's are `rows[ends[d - 1], ends[d])`.
+    const rows: number[] = [];
+    const ends = new Uint32Array(n);
+    for (let d = 0; d < n; d++) {
+      const item = this.items[d]!;
+      for (const t of words(`${item.title} ${item.text}`)) {
+        let row = ids.get(t);
+        if (row === undefined) {
+          row = counts.length;
+          ids.set(t, row);
+          counts.push(0);
+          last.push(-1);
+        }
+        if (last[row] === d) continue;
+        last[row] = d;
+        counts[row]!++;
+        rows.push(row);
+      }
+      ends[d] = rows.length;
+    }
+    const starts = new Uint32Array(counts.length + 1);
+    for (let t = 0; t < counts.length; t++) starts[t + 1] = starts[t]! + counts[t]!;
+    const fill = starts.slice(0, counts.length);
+    const docs = new Uint32Array(rows.length);
+    for (let d = 0, p = 0; d < n; d++) for (; p < ends[d]!; p++) docs[fill[rows[p]!]!++] = d;
+    const dated: number[] = [];
+    const days: string[] = [];
+    for (let d = 0; d < n; d++) {
+      const day = this.items[d]!.meta?.start?.slice(0, 10);
+      if (!day) continue;
+      dated.push(d);
+      days.push(day);
+    }
+    return {
+      ids,
+      starts,
+      docs,
+      datedDocs: Uint32Array.from(dated),
+      days,
+      hits: new Uint32Array(n),
+      dated: new Uint8Array(n),
+    };
   }
 }

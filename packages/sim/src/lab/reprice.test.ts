@@ -1,5 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { endpointMix, ENDPOINT_PRICES, FIXED_PRICES, inferEndpoint, repricedUsd, requestUsd } from "./reprice";
+import { anthropicCost, anthropicPrice } from "@eden/llm";
+import {
+  cacheNeutral,
+  endpointMix,
+  ENDPOINT_PRICES,
+  FIXED_PRICES,
+  inferEndpoint,
+  MODEL_PRICES,
+  type PricedRequest,
+  repricedUsd,
+  requestUsd,
+} from "./reprice";
 
 const GLM = "z-ai/glm-5.3-flash";
 
@@ -76,5 +87,48 @@ describe("re-pricing agent cost at a fixed endpoint", () => {
       ["unmatched", 0.25],
     ]);
     expect(endpointMix(GLM, [])).toEqual([]);
+  });
+
+  // Two requests of one task from D159's Pi pair (pi-41, eden~loose, a control task), as billed by Anthropic.
+  const HAIKU = MODEL_PRICES["claude-haiku-5-5"]!;
+  const first: PricedRequest = { in: 600, out: 138, cost: 0.0001439, cacheWrite: 596 };
+  const second: PricedRequest = { in: 1_300, out: 288, cost: 0.00023791, cached: 596, cacheWrite: 702 };
+
+  test("cache-write tokens are priced at the cache-write price: Haiku 5.5's requests reprice to what was billed", () => {
+    expect(requestUsd(first, HAIKU)).toBeCloseTo(first.cost, 12);
+    expect(requestUsd(second, HAIKU)).toBeCloseTo(second.cost, 12);
+    // The same prices as the lab's Anthropic client books (5-minute TTL).
+    for (const r of [first, second]) {
+      const usage = {
+        inputTokens: r.in,
+        cachedInputTokens: r.cached ?? 0,
+        cacheWriteTokens: r.cacheWrite ?? 0,
+        outputTokens: r.out,
+      };
+      expect(requestUsd(r, HAIKU)).toBeCloseTo(anthropicCost(usage, anthropicPrice("claude-haiku-5-5")), 12);
+    }
+  });
+
+  test("a price with no cache-write price bills written tokens as plain input, as before cacheWrite was recorded", () => {
+    const zai = FIXED_PRICES["Z.AI list"]!;
+    expect(requestUsd({ in: 1_000, out: 0, cost: 0, cacheWrite: 800 }, zai)).toBeCloseTo(1_000 * 1.5e-7, 12);
+  });
+
+  test("cached and written counts beyond the input are clamped, never priced as negative input", () => {
+    // 100 in, recorded 80 cached and 50 written: 80 cached, the other 20 written, none plain.
+    const over = { in: 100, out: 0, cost: 0, cached: 80, cacheWrite: 50 };
+    expect(requestUsd(over, HAIKU)).toBeCloseTo(80 * 1e-8 + 20 * 1.25e-7, 15);
+    expect(requestUsd({ in: 100, out: 0, cost: 0, cached: -5, cacheWrite: -5 }, HAIKU)).toBeCloseTo(100 * 1e-7, 15);
+  });
+
+  test("the cache-neutral price bills every input token as plain input, whoever wrote or read the cache", () => {
+    expect(cacheNeutral(HAIKU)).toEqual([1e-7, 5e-7, 1e-7, 1e-7]);
+    expect(repricedUsd([first, second], cacheNeutral(HAIKU))).toBeCloseTo(1_900 * 1e-7 + 426 * 5e-7, 12);
+    // Two arms with the same tokens, one that wrote the cache and one that read the other's write: billed apart,
+    // the same cache-neutral.
+    const wrote = { in: 600, out: 100, cost: 0, cacheWrite: 596 };
+    const read = { in: 600, out: 100, cost: 0, cached: 596 };
+    expect(requestUsd(wrote, HAIKU) - requestUsd(read, HAIKU)).toBeCloseTo(596 * (1.25e-7 - 1e-8), 12);
+    expect(requestUsd(wrote, cacheNeutral(HAIKU))).toBe(requestUsd(read, cacheNeutral(HAIKU)));
   });
 });

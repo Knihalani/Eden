@@ -10,15 +10,27 @@
  * the next run that names both files replays both.
  */
 import { appendFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
-import { cardKey, type Card, type CardMaker } from "@eden/engine";
+import { basename, dirname, join, resolve } from "node:path";
+import { gunzipSync } from "node:zlib";
+import { cardKey, ItemCache, type Card, type CardMaker } from "@eden/engine";
 import type { ContextItem } from "@eden/protocol";
+import { INTENT_INERT } from "./reader-stub";
+import { parseSuites } from "./suites";
 
-/** One line of `cards.jsonl`: an item's hash and its card (null: the model said none). */
+/**
+ * One line of `cards.jsonl`: an item's hash, its card (null: the model said none) and, when the call that made it
+ * also asked for them, the requests it would change (`r`, D87). A line with `r` and no `c` is a live call's requests
+ * for an item it gave no card: replayed as requests only, the card still uncovered.
+ */
 interface Line {
   h: string;
-  c: Card | null;
+  c?: Card | null;
+  r?: string[];
 }
+
+/** A replay file's text: gzipped files (the checked-in `distilled/*.jsonl.gz`) are read as they are committed. */
+const readText = (file: string) =>
+  file.endsWith(".gz") ? gunzipSync(readFileSync(file)).toString("utf8") : readFileSync(file, "utf8");
 
 /**
  * The requests of `cards-enrich.ts --intent` (`intent-v<N>.jsonl`, lines `{h, r, c}`): an item's hash → the requests
@@ -28,7 +40,7 @@ export function loadRequests(...files: string[]): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const file of files) {
     if (!existsSync(file)) continue;
-    for (const line of readFileSync(file, "utf8").split("\n")) {
+    for (const line of readText(file).split("\n")) {
       if (!line.trim()) continue;
       const l = JSON.parse(line) as { h: string; r?: unknown };
       if (Array.isArray(l.r))
@@ -47,9 +59,90 @@ export function loadCards(file: string): Map<string, Card | null> {
   for (const line of readFileSync(file, "utf8").split("\n")) {
     if (!line.trim()) continue;
     const l = JSON.parse(line) as Line;
-    out.set(l.h, l.c);
+    // A requests-only line holds no card: the item stays uncovered for the cards.
+    if (l.c !== undefined) out.set(l.h, l.c);
   }
   return out;
+}
+
+/**
+ * The checked-in intent requests (`cards-enrich.ts --intent` with Haiku; D110, D158, topped up on 2026-11-06) and the
+ * suite × seed shards they were made for. The file is keyed on item content, so a run outside these would replay only
+ * the items its worlds happen to share: the funnel and the live harnesses leave such a run's intent inert, and say
+ * so, rather than half-replaying.
+ */
+export const INTENT_FILE = "intent-v2.jsonl.gz";
+export const INTENT_PATH = join(import.meta.dir, "..", "..", "lab", "distilled", INTENT_FILE);
+export const INTENT_COVERS: Record<string, string[]> = {
+  ...Object.fromEntries(parseSuites("train").map((s) => [s, ["41", "42", "43", "44"]])),
+  heldout10: ["41", "42"],
+  heldout11: ["41", "42"],
+  heldout13: ["41", "42", "43", "44"],
+};
+
+/** The suite × seed shards INTENT_FILE was not made for. */
+export function intentUncovered(suites: string[], seeds: (string | number)[]): string[] {
+  return suites.flatMap((s) =>
+    seeds.filter((seed) => !INTENT_COVERS[s]?.includes(String(Number(seed)))).map((seed) => `${s} seed ${seed}`),
+  );
+}
+
+/**
+ * `--intent` for the live harnesses (pi-ab, hermes-ab), as the funnel resolves it (D158): `default` replays
+ * INTENT_PATH when the configuration has intent, the cards are replayed (`--cards`) and the file covers every suite
+ * and seed of the run; `none` replays nothing; anything else is a comma list of files. `note` says which and why.
+ */
+export function harnessIntent(
+  arg: string,
+  run: { wanted: boolean; cardsReplayed: boolean; suites: string[]; seeds: (string | number)[] },
+): { files: string[]; note: string } {
+  if (arg === "none") return { files: [], note: "--intent none" };
+  if (arg !== "default") return { files: arg.split(",").filter(Boolean), note: arg };
+  if (!run.wanted || !run.cardsReplayed) return { files: [], note: "" };
+  const uncovered = intentUncovered(run.suites, run.seeds);
+  if (!uncovered.length) return { files: [INTENT_PATH], note: `${INTENT_FILE} by default, D158` };
+  const shown = uncovered.slice(0, 4).join(", ") + (uncovered.length > 4 ? `, … ${uncovered.length - 4} more` : "");
+  return { files: [], note: `the checked-in requests do not cover ${shown}` };
+}
+
+/**
+ * How many of the items a run's sources hold (each source's `listAll`, redacted as the cache redacts them, as
+ * cards-enrich.ts reads them) have replayed requests: `found` of `of` distinct items.
+ */
+export function intentCoverage(
+  sourceItems: ContextItem[][],
+  requests: Map<string, string[]>,
+): { found: number; of: number } {
+  const keys = new Set<string>();
+  for (const raw of sourceItems) {
+    const cache = new ItemCache({ maxItemsPerUser: 100_000 });
+    for (const it of cache.put({ tenantId: "t", userId: "u" }, raw, 0)) keys.add(cardKey(it));
+  }
+  let found = 0;
+  for (const h of keys) if (requests.get(h)?.length) found++;
+  return { found, of: keys.size };
+}
+
+/**
+ * The harness header's intent line. With cards made live the card model writes each carded item's requests; with
+ * cards replayed only a replayed requests file gives the rest theirs, so a run with none covering it is labelled
+ * INTENT_INERT (what it measures is the default with intent inert for the items no live call carded).
+ */
+export function intentLine(o: {
+  wanted: boolean;
+  cardsReplayed: boolean;
+  files: string[];
+  note: string;
+  found: number;
+  of: number;
+}): string {
+  if (!o.wanted) return "intent: off";
+  if (!o.cardsReplayed) return "intent: live (the card model writes the requests of the items it cards)";
+  // Inert is what the replay holds, not which files were named: a named file that matches nothing is inert too, and
+  // requests replayed from the card files alone (no requests file) are a partial replay, said so.
+  const label =
+    o.found === 0 ? `  ${INTENT_INERT}` : o.files.length === 0 ? "  [intent partial: from the card files only]" : "";
+  return `intent: replayed ${o.found} of ${o.of} items (${o.note || "no --intent"})${label}`;
 }
 
 /**
@@ -85,17 +178,21 @@ export class DiskCardMaker implements CardMaker {
   private readonly out: string;
   /**
    * Replayed requests (`intent`, D87), by hash: a call that asks for them (`make`'s `intent`) gets each item's from
-   * here (null when none was made). A live miss's requests are kept here too, in memory only.
+   * here (null when none was made). A live miss's requests are kept here too and appended with its card to `out`
+   * (`{h, c, r}`), so a later run that replays `out` replays them.
    */
   readonly requests: Map<string, string[]>;
 
   /**
-   * `options.out`: where new cards go (its cards are replayed too); default the cache file itself.
+   * `options.out`: where new cards go (its cards and requests are replayed too); default the cache file itself.
    * `options.shared`: another maker of the same files, whose cards and calls in flight this one shares, so several
    * makers read the files once and see each other's new cards (pi-ab's streams), and its replayed requests.
-   * `options.requests`: requests files (`loadRequests`) replayed when a call asks for requests. An item with requests
-   * but no replayed card is given a none card, so the cards a run matches are exactly the card files' (the requests'
-   * files may hold cards of their own, from another model: they are not read here).
+   * `options.requests`: requests files (`loadRequests`, `.gz` read as is) replayed when a call asks for requests; they
+   * win over requests in the card files (`r` lines a live call wrote). `options.cardRequests: false` skips those `r`
+   * lines, so a run that opts out of replayed intent (`--intent none`, or a run the checked-in file does not cover)
+   * replays none, whatever an earlier run left in `--cards-out` (a live call's requests still count). An item with
+   * requests but no replayed card is given a none card, so the cards a run matches are exactly the card files' (the
+   * requests' files may hold cards of their own, from another model: they are not read here).
    */
   constructor(
     file: string,
@@ -104,12 +201,15 @@ export class DiskCardMaker implements CardMaker {
       out?: string;
       shared?: { cards: Map<string, Card | null>; inflight: Inflight; requests?: Map<string, string[]> };
       requests?: string[];
+      cardRequests?: boolean;
     } = {},
   ) {
     this.out = options.out ?? file;
     this.cards = options.shared?.cards ?? loadCards(file);
     this.inflight = options.shared?.inflight ?? new Map();
-    this.requests = options.shared?.requests ?? loadRequests(...(options.requests ?? []));
+    const cardFiles = options.out && !samePath(options.out, file) ? [file, options.out] : [file];
+    const replayed = options.cardRequests === false ? [] : cardFiles;
+    this.requests = options.shared?.requests ?? loadRequests(...replayed, ...(options.requests ?? []));
     if (!options.shared && options.out) for (const [h, c] of loadCards(options.out)) this.cards.set(h, c);
   }
 
@@ -164,13 +264,17 @@ export class DiskCardMaker implements CardMaker {
         costUsd = got.costUsd;
         truncated = got.truncated === true;
         missing.forEach((i, k) => {
-          const r = got.requests?.[k];
-          if (r) this.requests.set(cardKey(items[i]!), r);
-          const c = got.cards[k];
-          if (c === undefined || c === null) return;
           const h = cardKey(items[i]!);
+          const r = got.requests?.[k] ?? undefined;
+          if (r) this.requests.set(h, r);
+          const c = got.cards[k];
+          if (c === undefined || c === null) {
+            // Requests with no card: kept for the next run, the card left uncovered (asked again then).
+            if (r) this.append({ h, r });
+            return;
+          }
           made.set(h, c);
-          this.put(h, c.kind === "none" ? null : c);
+          this.put(h, c.kind === "none" ? null : c, r);
         });
       } finally {
         // Settled whether or not the call worked: a card it did not make is uncovered for every waiter, and the next
@@ -185,8 +289,13 @@ export class DiskCardMaker implements CardMaker {
     return { cards: out, costUsd, truncated };
   }
 
-  put(h: string, c: Card | null): void {
+  /** Keeps a card (and, when the call asked for them, the item's requests) and appends it to `out`. */
+  put(h: string, c: Card | null, r?: string[]): void {
     this.cards.set(h, c);
-    appendFileSync(this.out, `${JSON.stringify({ h, c } satisfies Line)}\n`);
+    this.append(r ? { h, c, r } : { h, c });
+  }
+
+  private append(line: Line): void {
+    appendFileSync(this.out, `${JSON.stringify(line)}\n`);
   }
 }

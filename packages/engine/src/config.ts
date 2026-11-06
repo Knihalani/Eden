@@ -401,7 +401,11 @@ export interface EngineConfig {
   cardsLean: boolean;
   /** With `cardsLean`: how old (days, by its date or its start) an unconstrained item may be and still be read. */
   cardsLeanDays: number;
-  /** Items the intent index may add to a request's candidates, best first. */
+  /**
+   * Items the intent index may add to a request's candidates, best first. The default's 12/0.2/1 (with the two
+   * below) is D159's arm, promoted by D179 on a Pi held-out 13 pair with intent replayed
+   * (docs/research/edge-intent.md).
+   */
   intentHits: number;
   /** The least share of the request's (known) idf an item's requests must hold to count as a hit. */
   intentMinCoverage: number;
@@ -573,9 +577,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intent: true,
   cardsLean: true,
   cardsLeanDays: 30,
-  intentHits: 6,
-  intentMinCoverage: 0.35,
-  intentMinMatched: 2,
+  intentHits: 12,
+  intentMinCoverage: 0.2,
+  intentMinMatched: 1,
   intentWeight: 1,
   intentSeats: 1,
   askReader: true,
