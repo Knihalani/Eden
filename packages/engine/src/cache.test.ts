@@ -632,6 +632,80 @@ describe("ItemCache gone-holds (removeItems with a hold) never allocate or evict
   });
 });
 
+describe("heldGoneSeq: each removal's sequence number, so a caller can tell a later removal from an earlier (D176)", () => {
+  const MIN = 60_000;
+  const T = Date.UTC(2026, 10, 5, 9);
+  const bob = { tenantId: "t", userId: "bob" };
+
+  test("0 when not held; a new, larger number on every hold, a re-hold in the same millisecond included", () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    expect(cache.heldGoneSeq(alice, "notes:q1", T)).toBe(0);
+    cache.removeItems(alice, ["notes:q1"], T, 10 * MIN);
+    const first = cache.heldGoneSeq(alice, "notes:q1", T);
+    expect(first).toBeGreaterThan(0);
+    expect(cache.heldGoneSeq(alice, "notes:q1", T + MIN)).toBe(first); // Unchanged while nothing else removes it.
+    cache.removeItems(alice, ["notes:q1"], T, 10 * MIN); // Same `until`: only the sequence tells the two apart.
+    const second = cache.heldGoneSeq(alice, "notes:q1", T);
+    expect(second).toBeGreaterThan(first);
+    expect(cache.holdCount("t")).toBe(1);
+    // Removal without a hold holds nothing; revived, expired or forgotten, the id reads 0 again.
+    cache.removeItems(alice, ["notes:q2"], T);
+    expect(cache.heldGoneSeq(alice, "notes:q2", T)).toBe(0);
+    cache.revive(alice, ["notes:q1"]);
+    expect(cache.heldGoneSeq(alice, "notes:q1", T)).toBe(0);
+    cache.removeItems(alice, ["notes:q1"], T, 10 * MIN);
+    expect(cache.heldGoneSeq(alice, "notes:q1", T)).toBeGreaterThan(second);
+    expect(cache.heldGoneSeq(alice, "notes:q1", T + 10 * MIN)).toBe(0);
+    expect(cache.holdCount("t")).toBe(0); // The expired hold was dropped by the read.
+    cache.removeItems(alice, ["notes:q1"], T, 10 * MIN);
+    cache.forget(alice);
+    expect(cache.heldGoneSeq(alice, "notes:q1", T)).toBe(0);
+  });
+
+  test("numbers never repeat, even after a tenant's holds are all gone and begin again", () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    cache.removeItems(alice, ["notes:q1"], T, MIN);
+    const before = cache.heldGoneSeq(alice, "notes:q1", T);
+    cache.expireIdle(T + 2 * MIN); // The tenant's holds entry goes with its last hold.
+    expect(cache.holdCount("t")).toBe(0);
+    cache.removeItems(alice, ["notes:q1"], T + 2 * MIN, MIN);
+    expect(cache.heldGoneSeq(alice, "notes:q1", T + 2 * MIN)).toBeGreaterThan(before);
+  });
+
+  test("per user and per tenant: another user's or tenant's removal of the same id leaves this one's number", () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    cache.removeItems(alice, ["notes:q1"], T, 10 * MIN);
+    const mine = cache.heldGoneSeq(alice, "notes:q1", T);
+    cache.removeItems(bob, ["notes:q1"], T, 10 * MIN);
+    cache.removeItems({ tenantId: "u", userId: "alice" }, ["notes:q1"], T, 10 * MIN);
+    expect(cache.heldGoneSeq(alice, "notes:q1", T)).toBe(mine);
+    expect(cache.heldGoneSeq(bob, "notes:q1", T)).toBeGreaterThan(mine);
+    expect(cache.heldGoneSeq({ tenantId: "u", userId: "alice" }, "notes:q1", T)).toBeGreaterThan(mine);
+    expect(cache.heldGoneSeq({ tenantId: "u", userId: "carol" }, "notes:q1", T)).toBe(0);
+    cache.revive(bob, ["notes:q1"]);
+    expect(cache.heldGoneSeq(alice, "notes:q1", T)).toBe(mine);
+  });
+
+  test("the sequence lives in the hold: the per-user and per-tenant caps drop it with the hold", () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    cache.removeItems(bob, ["mail:x"], T, 10 * MIN);
+    // Per user: past 1,000, the user's oldest go, sequence and all.
+    const ids = Array.from({ length: 1_001 }, (_, i) => `mail:m${i}`);
+    cache.removeItems(alice, ids, T, 10 * MIN);
+    expect(cache.heldGoneSeq(alice, "mail:m0", T)).toBe(0);
+    expect(cache.heldGoneSeq(alice, "mail:m1", T)).toBeGreaterThan(0);
+    expect(cache.holdCount("t")).toBe(1_001);
+    // Per tenant: past 100,000, the least recently held user's oldest go (bob's, held first).
+    for (let u = 0; u < 100; u++) {
+      const theirs = Array.from({ length: 1_000 }, (_, i) => `mail:u${u}m${i}`);
+      cache.removeItems({ tenantId: "t", userId: `user${u}` }, theirs, T + 1, 10 * MIN);
+    }
+    expect(cache.holdCount("t")).toBe(100_000);
+    expect(cache.heldGoneSeq(bob, "mail:x", T + 1)).toBe(0);
+    expect(cache.heldGoneSeq({ tenantId: "t", userId: "user99" }, "mail:u99m999", T + 1)).toBeGreaterThan(0);
+  });
+});
+
 describe("ItemCache sketches are computed when an item is first returned, not when it is stored", () => {
   test("search, searchIn, timed and hits give the same sketch, made once and kept; unreturned items have none", () => {
     const cache = new ItemCache();

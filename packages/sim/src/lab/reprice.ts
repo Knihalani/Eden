@@ -9,10 +9,16 @@
  * input price. A request that records its cached tokens (`cached`, pi-ab since the econ lab review) is priced so; one
  * that does not (older timelines) is priced as if nothing were cached, so a cache hit is unmatched and its re-priced
  * cost overstates what the fixed endpoint would have billed.
+ *
+ * Anthropic bills a prompt-cache write too (1.25x input at the 5-minute TTL), so a price may carry a cache-write
+ * price; a request that records its written tokens (`cacheWrite`, pi-ab's Anthropic agent) is priced so. A cache-
+ * neutral price (`cacheNeutral`) bills cached and written tokens as plain input: two arms of a pair that race for one
+ * prompt cache (pi-ab runs its conditions concurrently with the same system prompt) then cost what their tokens
+ * cost, not who wrote the cache first (D171).
  */
 
-/** $ per token: input, output, and a cached input token (cache read). */
-export type Price = readonly [input: number, output: number, cacheRead: number];
+/** $ per token: input, output, a cached input token (cache read) and, if billed apart, a cache-write token. */
+export type Price = readonly [input: number, output: number, cacheRead: number, cacheWrite?: number];
 
 /**
  * Endpoint prices per model, from OpenRouter's endpoints API (`/api/v1/models/<id>/endpoints`), read 2026-10-31.
@@ -50,6 +56,22 @@ export const FIXED_PRICES: Record<string, Price> = {
   "Wafer-us": [4.4e-8, 2e-7, 4.3e-8],
 };
 
+/**
+ * A model's own list price, for a model billed at one price (Anthropic direct) or for a report's cache-neutral cost.
+ * claude-haiku-5-5: an exact least-squares fit over the 404 agent requests of D159's Pi pair (pi-41, pi-42: zero
+ * residual; each task's requests sum to its billed `costUsd`), and `ANTHROPIC_PRICES` in @eden/llm. Prompts above
+ * 100k tokens bill 5x there; an agent request is far below that.
+ */
+export const MODEL_PRICES: Record<string, Price> = {
+  "claude-haiku-5-5": [1e-7, 5e-7, 1e-8, 1.25e-7],
+  "z-ai/glm-5.3-flash": [1.5e-7, 5e-7, 3e-8],
+};
+
+/** The price with cached and cache-write tokens billed as plain input: what the tokens cost with no cache at all. */
+export function cacheNeutral([pi, po]: Price): Price {
+  return [pi, po, pi, pi];
+}
+
 export interface PricedRequest {
   /** Input tokens, cached ones included (OpenRouter's `prompt_tokens`). */
   in: number;
@@ -58,12 +80,15 @@ export interface PricedRequest {
   cost: number;
   /** Of `in`, the tokens read from the endpoint's prompt cache (`prompt_tokens_details.cached_tokens`), if recorded. */
   cached?: number;
+  /** Of `in`, the tokens written to the prompt cache (Anthropic's `cache_creation_input_tokens`), if recorded. */
+  cacheWrite?: number;
 }
 
-/** What one request costs at one price. */
-export function requestUsd(r: PricedRequest, [pi, po, pc]: Price): number {
-  const cached = Math.min(r.cached ?? 0, r.in);
-  return (r.in - cached) * pi + cached * pc + r.out * po;
+/** What one request costs at one price; written tokens at the input price when the price has no cache-write price. */
+export function requestUsd(r: PricedRequest, [pi, po, pc, pw]: Price): number {
+  const cached = Math.min(Math.max(0, r.cached ?? 0), r.in);
+  const written = Math.min(Math.max(0, r.cacheWrite ?? 0), r.in - cached);
+  return (r.in - cached - written) * pi + cached * pc + written * (pw ?? pi) + r.out * po;
 }
 
 /**

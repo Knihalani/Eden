@@ -67,7 +67,7 @@ Cards replayed from `packages/sim/lab/cards/cards-v2.jsonl` in every row.
   not whether the constraint still holds. Telling the twins apart is the verdicts' job, not the index's.
 - Grid on the glm requests: `intentHits` 4/6/10 makes no difference. Coverage 0.2/0.35/0.5 gives hidden 39–40/38/36
   against decoys 29–31/27/26. Weight 0.3/0.5/1/2 gives hidden 33/36/38/38 against decoys 24/26/27/27. The defaults
-  are 0.35, 2 terms and weight 1.
+  are 0.35, 2 terms and weight 1 (6 hits); D159 (below) measured 0.2, 1 term and 12 hits and left the default alone.
 - With every flag off, `bun run eval` equals main's in every field but latency (compared field by field).
 
 ## Verdict
@@ -81,6 +81,179 @@ The free model with prompt v1 does not write enough requests to show it. Before 
 2. Pair it with a precision guard for intent-only ask seats, for example dropping one the conflict test clears or that
    `supersede` replaces.
 3. Pre-register the blind live A/B (ALL3 vs ALL3 + intent) on a fresh held-out suite.
+
+## The shipped baseline and the looser-threshold arm (D158, D159; 2026-11-06)
+
+Intent has been on in `DEFAULT_CONFIG` since D125, but `bun run funnel` replayed only the cards, so every $0 screen,
+the checked-in reader cache and the audit's "unranked quarter" (O7) measured the default with intent inert. Since D158
+the funnel unpacks and replays `packages/sim/lab/distilled/intent-v2.jsonl.gz` by default whenever it covers the run
+(train1–6 seeds 41–44, held-out 10–11 seeds 41–42), prints `intent: live|inert (why)` under the score header, and
+`--intent none` gives the old shape. The numbers below are train1–6, seeds 41–42, `bun run funnel --jobs 4 --
+--packet-k 15,30,60`, run in this package's session unless marked.
+
+| Run | Stub TOTAL (hidden/decoys of 384) | Reader pool | Top-60 hidden / decoys |
+|---|---|---|---|
+| `--intent none` (the pre-D158 screen) | 214/211 | 230/229 | 292/299 (audit's run) |
+| Intent replayed, thresholds 0.35/2/6 (the default until D179) | 243/228 | 257/240 | 320/307 |
+| Intent replayed, thresholds 0.2/1/12 (D159's arm; the default since D179) | 258/243 | 270/246 | 330/317 |
+
+Hidden items outside the ask's top 60 fall from 92 (inert, audit's run) to 64 (intent at the default thresholds) to
+54 (D159's arm). No-model deliveries do not move with the thresholds (stub JSON totals: hidden delivered 98, decoys
+delivered 72, both arms): an intent hit, one-term or not, is a reader-pool candidate only, which `intent.test.ts` pins on the
+core configuration (a one-term hit enters the ask's reader pool at 0.2/1/12 and not at 0.35/2/6, is never pushed, and
+never reaches another user or tenant).
+
+**Paid reading.** The paid Haiku pairs on train (three independent pairs, fresh cache per arm, from the audit's
+finder and verifiers, not re-run here) went 277/135 → 296/132, 274/136 → 295/132 and 277/133 → 294/134 at equal
+reader calls (653 vs 655 in the finder's pair). The checked-in reader cache is of the shipped default (0.35/2/6,
+intent replayed; ledger run `ib-reader-intent-cache-default`, 652 calls, $0.18548): hidden 274/384, decoys 137/384,
+and it replays at $0 as 273/137 with 5 misses in 11.2 s (docs/LAB.md recipe 2a). It was topped up on 2026-11-06
+for the completed intent file (below): 281/139 with 2 misses. An earlier recording at 0.2/1/12
+(ledger run `ib-reader-intent-cache`, 654 calls, $0.18646, 295/135) was replaced when the thresholds stayed. Since
+D179 the cache also holds the 0.2/1/12 readings (311/137 replayed, "D179 result" below).
+
+**Pi, held-out 13 (previously read, not blind).** `pi-ab.ts --suite heldout13 --variants hidden,control
+--time-scale 1 --config default --conditions eden,eden~loose --variant-config` with `loose` =
+`{"intentMinCoverage":0.2,"intentMinMatched":1,"intentHits":12}`, Haiku 5.5 for agent, cards, reader and grader,
+cards-v2 replayed and no `--intent` file, so only items carded live had intent requests (shared by both arms),
+`--source-profile packages/sim/lab/before-after/market-profiles/direct.json`, `--budget 0.6`, seeds 41 and 42 in two
+processes, ledger runs `ib-pi-loose-41` and `ib-pi-loose-42` ($0.1331 + $0.1339 = $0.2670):
+
+| Condition | Hidden raised (of 64) | False concerns (of 64) | Eden $/1k, hidden / control | Agent + Eden $/1k, hidden |
+|---|---|---|---|---|
+| eden (0.35/2/6) | 48 (seed 41: 24/32, 42: 24/32) | 1 | 0.374 / 0.513 | 0.645 |
+| eden~loose (0.2/1/12) | 50 (26/32, 24/32) | 0 | 0.391 / 0.525 | 0.716 |
+
+Paired, bootstrap 95% over tasks: hidden +0.031 (−0.063..+0.125), false concerns −0.016 (−0.047..0), wall +0.04 s
+on hidden tasks. The hidden tasks' $/1k rose +0.070 (+0.008..+0.129), mostly the agent's longer inputs (1,326 → 1,409
+input tokens per hidden task) as it read the extra packets; Eden's own per-task calls rose 0.017 $/1k. Over all 128
+tasks per arm (recomputed from the two result JSONs), agent plus Eden went 0.759 → 0.798 $/1k (+5.1%) and Eden alone
+0.444 → 0.458 (+3.2%).
+
+The pair is weak evidence for the thresholds: with cards-v2 replayed and no intent file, only the items carded live
+in the run had intent requests (486 and 514 new card lines for seeds 41 and 42, against 4,634 replayed cards-v2 lines
+that had none), so most held-out 13 items had no intent hits in either arm and the pair is underpowered.
+
+**Outcome: the default stays at 0.35/2/6** (superseded by D179, below: the better-powered pair this paragraph asks for
+was run, and promoted the thresholds). Hidden was neutral (the CI spans zero), not better, and the paid cost
+rose with a CI that excludes zero. D112 promotes only "measured better or neutral at no extra paid cost", which D159
+cites, and Bar 5 (Eden's cost per task) would move the wrong way. The train reader pairs (hidden about +5 points at
+equal reader calls) are the case for promoting anyway; that needs its own decision accepting the Pi cost rise and a
+docs/COST-MODEL.md line, or a better-powered Pi pair with the intent file replayed.
+
+`bun run eval` is unchanged (precision 0.8276, recall 0.48, falseFireRate 0): the eval wires no card maker, so intent
+is inert there.
+
+### Replay coverage completed, and the harnesses replay it by default (2026-11-06, audit round 2)
+
+**What was wrong.** Two lab gaps, not engine ones:
+
+- pi-ab.ts and hermes-ab.ts replayed no intent file unless `--intent` was given, and every held-out 13 recipe
+  (final-live-2026-11-05.md, the D159 pair above) gave none. A live card call writes requests only for the items it
+  cards (486 to 514 new card lines per seed, none of which kept its requests on disk). The funnel builds about 1,541
+  held-out 13 items per seed, so **held-out 13 Pi and Hermes figures before this change were intent-inert for about
+  two thirds of items** (estimate: (1,541 − 486) / 1,541 ≈ 68% for seed 41; the result files do not record per-item
+  card hits). They measure the default with intent mostly off. Compare them with like, and read D159's pair as
+  underpowered for this reason.
+- intent-v2 had no line for 98 of 384 planted hidden items and 43 of 384 decoys on train seeds 41–42. The funnel
+  printed `replayed requests for 13440 of 13604 items asked`, and 141 of the 164 items without requests were planted
+  ones.
+
+**What changed.**
+
+- intent-v2 was topped up rather than re-recorded. `cards-enrich.ts --intent --model claude-haiku-5-5` with the
+  ledger flags ran against the existing file for held-out 13 seeds 41–44, train seeds 41–44 and held-out 10–11 seeds
+  41–42. It took four passes, because Haiku leaves some items of a batch unanswered and the next pass asks for them
+  again; the last two passes used `--batch 5`. There were 84 calls in all, for $0.0641 (ledger runs `r2-intent-topup-*`).
+  The file went from 6,771 to 7,315 lines, and none of the new lines has an empty `r`. Every `--dry` for those suites
+  and seeds now says `to enrich 0`. INTENT_COVERS (now in cards-disk.ts, shared by the funnel and the harnesses) adds
+  held-out 13 seeds 41–44.
+- The intent-on reader cache was topped up by one metered live run (`r2-intent-reader-topup`: 73 calls, $0.02102).
+  The cache went from 652 to 725 lines (plain md5 `44ff521ea2f21487c0b876c03d28e133`).
+- pi-ab.ts and hermes-ab.ts now resolve `--intent` as the funnel does. If the configuration has intent and cards and
+  `--cards` is given, the checked-in file is replayed by default when it covers every suite and seed of the run.
+  `--intent none` opts out. The header prints `intent: replayed n of m items` (m counts the items the run's sources
+  hold), and a run with no covering file is labelled `[intent inert: no replay]`. The results file and the summary
+  line say the same.
+- DiskCardMaker now appends a live call's requests with its card (`{h, c, r}`; `{h, r}` when there is no card) to
+  `--cards-out`, and replays them from there, but only in a run that replays a requests file: with `--intent none`
+  or a run the checked-in file does not cover, those `r` lines are skipped (`cardRequests: false`), so an opt-out arm
+  or an uncovered shard replays no requests at all, and its header (`intent: replayed 0 of m items ...
+  [intent inert: no replay]`) says so. The inert label follows what was replayed (0 found), not which files were
+  named.
+
+**Measured, $0 unless priced** (train1–6, seeds 41–42, `--jobs 4`; "before" is the same tree with the old file passed
+as `--intent`):
+
+| | Before (old intent-v2) | After (topped up) |
+|---|---|---|
+| Items asked with replayed requests | 13,440 of 13,604 (audit) | 13,580 of 13,604; the other 24 are 2 items whose line has an empty `r` (the model gave none), and no item lacks a line |
+| Stub TOTAL hidden / decoys | 243/228 | 259/235 |
+| Stub reader pool hidden / decoys | 257/240 | 262/246 |
+| Haiku reader replay: TOTAL hidden / decoys (misses) | 273/137 (5), old cache | 281/139 (2), topped-up cache |
+| Pi dry run, held-out 13: items with requests, seeds 41/42/43/44 | 0 by default; 1,471/1,470/1,451/1,453 with the old file | 1,535 of 1,541, 1,534 of 1,544, 1,545 of 1,548, 1,544 of 1,545 |
+
+The paid-reader diff against the before run is hidden +10 −2, decoys +3 −1 (task by task, `--baseline`). These are
+lab inputs, so no default moves. The pool's decoys move with hidden, as they did in the audit's top-ups. The D159
+pair has not been re-run: the round deferred it. A re-run now replays intent by default.
+
+The wider 40/0/1 arm waits for the action-request gate trial (D168). The intent-on reader cache goes stale whenever
+the intent file, the thresholds or anything upstream of the reader changes.
+
+## D179 result: the fair Pi pair, intent replayed (2026-11-06)
+
+D159 reopened once a Pi held-out 13 pair could run with the intent file replayed and be judged on D171's
+cache-neutral cost. D179 pre-registered the rule: promote when (1) the paired hidden-raised point estimate is at
+least 0, (2) false concerns rise by no more than 3 control tasks, and (3) the cache-neutral agent+Eden $/1k paired CI
+includes 0 or lies below it. Held-out 13 is previously read (D112 and the final live run), not blind.
+
+**Run.** `pi-ab.ts --suite heldout13 --variants hidden,control --time-scale 1 --config default --conditions
+eden,eden~loose --variant-config '{"loose":{"intentMinCoverage":0.2,"intentMinMatched":1,"intentHits":12}}'`, cards-v2
+replayed with no `--intent` flag (so the checked-in intent-v2 file is replayed), Haiku 5.5 for agent, cards, reader
+and grader, `--source-profile packages/sim/lab/before-after/market-profiles/direct.json`, `--budget 0.6`, the shared
+spend ledger, one process per seed (two at a time), on this branch after D177's deletion. Every header printed
+`intent: replayed n of m items` and none said inert: 1,535 of 1,541 (seed 41), 1,534 of 1,544 (42), 1,545 of 1,548
+(43), 1,544 of 1,545 (44). Ledger runs `close-d159-pi-41` to `-44`: 597, 602, 610 and 621 calls, $0.13280, $0.13212,
+$0.13573 and $0.13292, $0.53357 in all. 512 runs, 0 errors, 0 ungraded.
+
+From `pi-ab-report.ts` on the four results files (hidden and control 128 tasks per arm; per seed from the results
+JSON with the report's recall):
+
+| Condition | Hidden raised (of 128) | False concerns (of 128) | $/1k hidden (Eden) | $/1k control (Eden) | Agent $/1k billed / neutral (all 256) |
+|---|---|---|---|---|---|
+| eden (0.35/2/6) | 97, 0.758 (seeds 24, 23, 26, 24 of 32) | 2 (1, 0, 1, 0) | 0.679 (0.391) | 0.881 (0.523) | 0.323 / 0.387 |
+| eden~loose (0.2/1/12) | 103, 0.805 (30, 26, 22, 25) | 1 (0, 0, 1, 0) | 0.660 (0.363) | 0.875 (0.520) | 0.326 / 0.371 |
+
+Paired, `eden~loose − eden`, bootstrap 95% over tasks:
+
+| Tasks | Rate | Billed agent+Eden $/1k | Cache-neutral agent+Eden $/1k | Agent cache-neutral | Eden |
+|---|---|---|---|---|---|
+| hidden (128) | +0.047 (−0.023..+0.117) | −0.019 (−0.088..+0.048) | −0.0453 (−0.1164..+0.0268) | −0.0175 (−0.0465..+0.0100) | −0.0278 (−0.0752..+0.0211) |
+| control (128) | −0.008 (−0.023..+0.000) | −0.006 (−0.067..+0.055) | −0.0172 (−0.0751..+0.0442) | −0.0147 (−0.0361..+0.0066) | −0.0025 (−0.0447..+0.0428) |
+| all (256) | | −0.0126 (−0.0578..+0.0358) | −0.0313 (−0.0797..+0.0151) | −0.0161 (−0.0339..+0.0013) | −0.0151 (−0.0471..+0.0180) |
+| same ask (84) | | +0.0372 (+0.0173..+0.0581) | +0.0104 (−0.0041..+0.0247) | +0.0059 (−0.0038..+0.0154) | +0.0045 (−0.0048..+0.0144) |
+
+The same-ask row is D171's artefact again: where both arms sent identical asks, the billed agent cost differs with a
+CI that excludes zero, and the cache-neutral one does not. Wall on hidden tasks −0.19 s (−0.49..+0.11). Reader calls
+450 (eden) and 433 (loose).
+
+**Verdict: promoted.** (1) Hidden +0.047 (6 tasks) ≥ 0. (2) False concerns 2 to 1, down 1 (D179's wording says "of 256
+control tasks"; the run has 128 per arm, and either way the rise is not above 3). (3) Cache-neutral agent+Eden $/1k:
+hidden −0.0453 (−0.1164..+0.0268), all tasks −0.0313 (−0.0797..+0.0151); both CIs include 0. `DEFAULT_CONFIG` now has
+`intentMinCoverage` 0.2, `intentMinMatched` 1, `intentHits` 12 (`intent.test.ts` pins them and the one-term hit in
+the default's reader pool, never pushed, never another user's).
+
+**Train after the change ($0 and the reader top-up).** The committed reader cache missed 1,096 prompts at the new
+thresholds (84 replayed), so it was topped up by a metered live run into a copy (ledger run
+`close-d159-reader-topup`, 570 calls, $0.16293: TOTAL 311/136) and a second for the 7 prompts that run's own replay
+still missed (`close-d159-reader-topup2`, 4 calls, $0.00109). The re-gzipped cache (docs/LAB.md recipe 2a, 1,297
+lines) replays twice identically: 651 replayed, 0 missed, TOTAL hidden 311/384, decoys 137/384, reader pool 278/254,
+hidden flagged by the reader 258. The same cache at `--set` 0.35/2/6: 647 replayed, 2 missed, 281/139, pool 262/246.
+Task by task (`--baseline`): hidden +32 −2, decoys +18 −20. The stub screen (nothing binds) reads 281/256, pool
+278/254, against 259/235 and 262/246 before: the stub lists every pooled item, so its decoys follow the pool; the
+paid reader rejects them. `bun run eval` is unchanged (precision 0.8276, recall 0.48, falseFireRate 0).
+
+**Spend.** Pi $0.53357, reader top-ups $0.16402: $0.69759 of the package's $1.40 cap, all on the shared ledger.
 
 ## Cost
 

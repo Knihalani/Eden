@@ -58,6 +58,12 @@ tokens per ten-item call over 184 calls (24 of them retries of a batch cut off a
 that would be $0.0021 per call, $0.00021 per item, about $0.32 per user-month, an upper bound for a model that
 reasons that much. Request time adds one BM25 search over the user's requests (no model, no call).
 
+The match thresholds (`intentMinCoverage` 0.2, `intentMinMatched` 1, `intentHits` 12 since D179) add no call: a looser
+match only lets more intent hits into the ask's reader pool, which is capped at `askReaderPool` items either way. On
+Pi held-out 13 seeds 41–44, intent replayed (ledger runs `close-d159-pi-41` to `-44`, $0.534;
+docs/research/edge-intent.md, "D179 result"), the paired cache-neutral agent+Eden cost moved −0.031 $/1k tasks (95%
+CI −0.080..+0.015), Eden's own −0.015 (−0.047..+0.018), and reader calls 450 to 433.
+
 **Card reasoning (D149): none by default.** Until D149 `ModelCardMaker` always sent reasoning "low" (D59), which the
 servers send to OpenRouter (`build.ts` wires `models.cards`), while every Haiku 5.5 card call in the lab ran on
 `AnthropicModel` with thinking off (`pi-ab.ts`, `hermes-ab.ts` and `cards-enrich.ts` pass no thinking option;
@@ -112,6 +118,10 @@ about $0.00042 a call, $0.42 per thousand acting requests. Phase 3 (D99, lab pro
 3,900 tokens in and 190 out, $0.00040 a call; the leaner operating point (pool 15, 240-character snippets,
 `readerGate`) about 2,900 in and 180 out, $0.00029 a call (30% less Eden cost per task live; the default's reader,
 D112).
+A wider request gate (D168's verb-gate trial, measured and deleted 2026-11-06) read 124 more of 768 train tasks
+and added 113 reader calls (651 to 764, +17.4%; 0.91 a newly gated request) at $0.000278 a call (ledger run
+`close3-verbgate-topup`: 119 calls, $0.03306), so $0.041 per thousand train tasks and $0.25 per thousand newly gated
+requests; it gained no hidden item (311 to 310) and cut decoys 137 to 121 (recipe 2a replay, LAB.md).
 
 **Reader reasoning (D144): the default sends none.** Until D144 `ModelReaderMaker` defaulted to reasoning "low", which
 the servers send to OpenRouter, while every lab figure above (and D96's, D98's and D125's quality) ran with thinking
@@ -281,6 +291,27 @@ the floor by under 5 ms. Both fits are run-level (they regress run medians, not 
 tokens, `latencyMs` and, when the provider streamed the call, `ttftMs` (reader-disk.ts; counts and timings only),
 and `--replay FILE.jsonl ...` fits per call, with cached input apart when the lines carry it.
 
+**Eden on the agent's path is reader time (D165).** Measured with `bun packages/sim/src/lab/pi-ab-report.ts
+.local/mkt/final-pi-4{1,2,3,4}.json` (2026-11-06, $0, its "Eden on the critical path by task kind" section): the
+final live Pi run of the shipped default on held-out 13 (seeds 41-44, eden arm, Haiku 5.5 through the lab's
+Anthropic-direct provider, `--time-scale 1`; docs/research/final-live-2026-11-05.md). Eden's time is the union of its
+path spans (the blocking observe and the agent's `ask_context` calls); the reader is counted where it overlaps it.
+
+| Task kind | Tasks | Wall mean | Eden on the path | Observe (push) | Asks     | Reader inside Eden's path | Wall if Eden took no time |
+| --------- | ----- | --------- | ---------------- | -------------- | -------- | ------------------------- | ------------------------- |
+| hidden    | 128   | 3,979 ms  | 1,372 ms (34.5%) | 920 ms         | 449 ms   | 1,297 ms (94.5%)          | 1.53x                     |
+| control   | 128   | 5,344 ms  | 2,083 ms (39.0%) | 994 ms         | 1,078 ms | 1,925 ms (92.4%)          | 1.64x                     |
+
+The same command's reader line: 441 calls, p50 998 ms, p90 1,471 ms, mean 1,088 ms, mean output 149 tokens; least
+squares on each call's latency against its output tokens gives **702 ms + 2.60 ms per output token** (mean/floor
+1.55x). That floor belongs to this run and endpoint: the train-screens fit above
+(`packages/sim/src/lab/reader-latency-fit.test.ts:41`) gives about 365 ms + 4.21 ms per output token. So removing all
+of Eden from the path caps task wall at 1.53x (hidden) and 1.64x (control), and a reader-only change that kept only
+the floor would save at most (1,088 − 702) / 1,088 = 35.5% of the reader time on the path: 1,297 × 0.355 = 460 ms of
+3,979 (1.13x) on hidden and 1,925 × 0.355 = 683 ms of 5,344 (1.15x) on control (**estimate**, arithmetic on the
+measured rows). Hidden found on train is already about 72% (D165; not re-measured here), so a quality multiple is
+read on misses, with decoys in pool beside it.
+
 | Component                                                                                                                          | Best lever on file                                                                                           | Ceiling                                                                                                                                                                                                                                                                                                                                                                                                                      | Source                                                                                                                                                                                                                                           |
 | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Reader latency, any reader-only change while it emits a verdict                                                                    | everything but the floor                                                                                     | 3.24x p50 (fit a), 2.27x p50 and 1.36x p90 (fit b, weak)                                                                                                                                                                                                                                                                                                                                                                     | `reader-latency-fit.ts`, default and `--runs`                                                                                                                                                                                                    |
@@ -294,6 +325,7 @@ and `--replay FILE.jsonl ...` fits per call, with cached input apart when the li
 | Reader cost per call, whole input read from the prompt cache                                                                       | cached per-user prefix                                                                                       | about 3.0x: 3,921 × $0.01/M + 188 × $0.5/M = $0.000133 against $0.000401 (lab provider, cached)                                                                                                                                                                                                                                                                                                                              | **estimate**: ignores cache writes (1.25x, pricing.ts:21) and the focus-dependent request part                                                                                                                                                   |
 | Reader cost per call, cheaper model endpoint                                                                                       | cheapest glm-5.3-flash endpoint                                                                              | under 2x on input ($0.0513/M against Haiku's $0.10/M); glm list price is dearer than Haiku                                                                                                                                                                                                                                                                                                                                   | packages/llm/src/pricing.ts:15, :20-22                                                                                                                                                                                                           |
 | Sharing a verdict between push and ask                                                                                             | one cache                                                                                                    | none: the key hashes the request, the question and the items as read                                                                                                                                                                                                                                                                                                                                                         | packages/engine/src/reader.ts:262-270 (`readerKey`)                                                                                                                                                                                              |
+| Reader cost, the items prompt-cached across calls (D164) | the ask's prompt starts with its push's whole prompt, question last | **estimate** about 1.17x on reader cost ($0.114 → about $0.097; the finding's figure), upper bound about 1.28x if every ask reused an identical push prompt within the cache's life; **measured**: the default never sets `standing` (prefix 0.0 chars on every suite), a task's calls share 2.88% of item characters as a prefix (1.72% sorted), 5 of 658 calls repeat an earlier call's item set (order ignored), items are 94.1% of the user message and 56.0% of the whole prompt (system 3,036 chars, already cached); Pi run reader 441 calls $0.114, 35.0% of input tokens cached (the system block), output 28.8% of reader cost. Not built: it would also change the prompt order quality was measured on | `bun run funnel --jobs 1 -- --reader stub --reader-log F` (2026-11-06, 658 calls; prefix shares from a python pass over F grouped by task, `i="n"` stripped); `eden.reader` rows of the four `final-pi-4N` runs in `.local/mkt/ledger.jsonl`; the estimates are the finding's arithmetic and D164's |
 | Engine CPU on the fast path                                                                                                        | lazy `confident()` (stop at the cap, cheap tests first; audit 2026-11-05 `fastpath-assess-eager-unmemoized`) | before 3.762 / 3.190 / 3.441 ms per event, observe p50 213.3 / 179.6 / 193.2 µs, p99 18,145 / 16,132 / 15,836 µs; after 2.569 / 2.699 / 2.490 ms per event, p50 181.5 / 185.9 / 175.3 µs, p99 11,562 / 11,603 / 10,819 µs (means 3.464 → 2.586 ms, 1.34x per event); a reader call (p50 1,190 ms, above) still costs about 460x an event (1,190 / 2.586). The per-item analysis cache (the finding's part 2) is the next row | `bun packages/engine/bench/pipeline.bench.ts`, 3 interleaved pairs, base 9c4779fe5's partner.ts against this branch, shared 4-core box, load average 3.1-3.5 (2026-11-05). The old row (0.389 ms, p50 104.8 µs, p99 848 µs) no longer reproduces |
 | Engine CPU on the fast path                                                                                                        | profile-guided work                                                                                          | per-item conflict analysis cache and fold's anchor exit (2026-11-05): steady observe p50 154/188 µs, p99 4.8/5.3 ms, 1.16/1.31 ms per event, against 166/166 µs, 14.1/14.8 ms, 3.01/3.08 ms before (two interleaved runs each, shared 4-core box at load 3); `assess` 50% → 13% of the CPU profile; the reader (1,190 ms) is about 10^3 times dearer                                                                         | `bun packages/engine/bench/pipeline.bench.ts`                                                                                                                                                                                                    |
 | Total task cost with a free Eden (agent + Eden, reader only)                                                                       | Eden at $0                                                                                                   | Pi 2.55x ($0.638 total, $0.388 Eden, haiku-phase3.md:138), Hermes 1.78x ($0.628, $0.276, :145)                                                                                                                                                                                                                                                                                                                               | docs/research/haiku-phase3.md held-out 13 table                                                                                                                                                                                                  |
@@ -305,6 +337,18 @@ What the table says:
   answers with bearings. Input-side changes are cost levers with about zero latency effect. The routes to 3x on
   Eden's critical path all move the read off it: not waiting for it (the answer gate), starting it on drafts, or no
   separate reader call (agent-as-reader, a distilled no-model scorer). None of those is measured at $0.
+- **Push off the start (D166, beside D118 and D156).** Not built. **Measured** (a python pass over
+  `.local/mkt/final-pi-4{1,2,3,4}/tasks.jsonl`, eden arm, 2026-11-06, $0): 66 of 75 hidden tasks with a push that
+  injected items made one agent request, so a push moved off the start has no later turn to land on; the first agent
+  request starts at a mean 921 ms (hidden) and 994 ms (control), so the saving is at most that, 1.30x and 1.23x on
+  wall (a ceiling). Request count is partly caused by the push, so D118's direct measurement decides: its off-path
+  variant took hidden from 81.3% to 75.0% (docs/DECISIONS.md, not re-run). Reopen only for harnesses whose agents
+  routinely make 3 or more model calls per task.
+- **Ask reader overlapped with its poll and live search (D167).** Not built. **Measured** (the same pass): the 239
+  `eden.sync.freshen` spans that start inside an `ask_context` call take a mean 17.5 ms, p90 0.1 ms, max 797 ms (D167's
+  other count, every freshen span overlapping an ask, gives about 13 ms). The reader's pool comes from the live search
+  (`partner.ts:1253`, `:1303-1309`), so starting it earlier reads a different pool; the overlap caps at 1.13-1.14x on
+  ask batches and about 1.01x on task wall (**estimates** from D167's scripts over the same traces, not re-run).
 - **Call count.** The earlier "an oracle gate caps at 2.2x" counted every needed fact, most of which are plain
   information (a meeting's time, an invoice's amount) the reader is not for. Counted over the facts the reader is for,
   an oracle gate cut NEW2's calls 5.4–8.9x on simulated sessions (history, NEW2 deleted by D112): a 3x on calls is not
@@ -339,7 +383,11 @@ request path (one call per acting request or ask that a candidate could constrai
 user's request, the ask its question). No judge is wired (the measured setup ran none). Each role has its own
 `Budget` (20 calls and $0.02 per session, $0.25 per user per day) and all of a tenant's roles share one
 `TenantSpend` cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25). Over any cap the role is skipped and the
-no-model path answers. Without a key nothing is called and the same default runs with no model.
+no-model path answers. Without a key nothing is called and the same default runs with no model. The HTTP server
+runs `EDEN_PROCESSES` processes, by default the core count (capped at 64, D178), and each child holds 1/N of the
+tenant cap (`tenantSpendFor`, D163): the $25 is a total only when a tenant's users spread over the children. A tenant
+whose spend comes from one user, or a few on one child, is capped at $25/N a day ($6.25 on 4 cores, $0.39 on 64);
+raise the cap or set `EDEN_PROCESSES=1` for it (docs/INTEGRATION.md, "Processes and per-tenant caps").
 
 Per task (live, Pi harness, Haiku 5.5 as agent, grader and Eden's roles, all lab provider, cached (D145), blind
 held-out 13, seeds 41–42, 64 hidden + 64 control tasks per condition, `--time-scale 1`; `.local/unify`, 2026-11-03, D112; the last row `.local/lc`,
@@ -378,6 +426,22 @@ at most one extra search per notification (not separately measured).
 - Per user, cold: the intent requests cost about $0.071 per user backfill (1,487.5 items at $0.0000510 an item,
   docs/research/new-minus-intent.md) on top of the cards (ALL3's card backfill was $0.106 per 1k Pi tasks on held-out
   13, docs/research/haiku-phase3.md). The per-user-day budget ($0.25) bounds a day's backfill.
+- `intentConstraintOnly` (D170, a trial; **ended by D177**, switch and code deleted under D112): an item the card
+  prefilter rejects was not read for its requests alone. It failed its own gate: a fresh-cache paired run on
+  train1–6 seeds 41–42 (Haiku 5.5 reader live in both arms; ledger runs `close-d170-fresh-base`, 652 calls,
+  $0.1864, and `close-d170-fresh-co`, 654 calls, $0.1866) gave hidden/decoys 286/140 (default) against 281/144
+  (paired hidden −1.30 points, CI −4.17..+1.56; decoys +1.04, CI −1.82..+3.91); a top-up of the committed cache
+  (`close-d170-co`, 269 calls, $0.0786) replayed 281/139 against 279/144. Decoys rose 4 and 5 tasks, beyond the
+  gate's ±3, and hidden flagged by the reader fell (238 to 228, 234 to 226). The saving below stays unclaimed.
+  (Those scores are the planning run's on 4503fabb6; the ledger rows are re-summed in this branch.) What it would
+  have saved, measured at $0 (`bun run funnel --jobs 4 -- --intent <gunzipped intent-v2>`, train1–6 seeds 41–42,
+  24 simulated users, 2026-11-06): items sent to the card model 13,604 to 2,113 (6.44x fewer; the 11,491
+  request-only items go), calls 822 to 300 (2.74x); held-out 10–11 (`--blind`, measurement only) 4,514 to 650
+  items and 266 to 98 calls.
+  Estimated $, not measured (the funnel replays cards and intent): the 522 calls saved at $0.000445 a call (above) are
+  $0.232 for the 24 users, and the 11,491 items at the intent figure of $0.0000501 an item are $0.576; so about
+  $0.010–$0.024 per cold user's backfill. Scaled onto the post-D125 Pi background of $0.387 per 1k tasks by calls
+  (300/822) or items (2,113/13,604), the background becomes about $0.141 or $0.060 per 1k tasks.
 - Per task, larger sample (haiku-phase3.md, held-out 13 seeds 41–44): NEWL agent + reader $0.638 per 1k hidden Pi
   tasks ($0.744 all-in); traffic-weighted at one task in ten carrying a fact, Eden's own calls $0.518 per 1k (Pi) and
   $0.290 (Hermes).

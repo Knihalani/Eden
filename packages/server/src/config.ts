@@ -23,9 +23,17 @@
  *                    read and checked at startup by `sourcesFromEnv`, not here.
  * EDEN_MAX_BODY_BYTES largest request body the HTTP API reads, default 8 MB (8,388,608, D100): above the ~6 MB worst
  *                    case of a valid event, far below Bun's 128 MB default. Larger bodies get 413.
+ * EDEN_PROCESSES     server processes behind the router (router.ts, D113, D163), 1-64; default the core count
+ *                    (`machineCores`: `os.availableParallelism()`, lowered to a cgroup v2 CPU quota, capped at 64;
+ *                    D172's gate passed, D178), which is 1, one process and no router, on a one-core machine. 1
+ *                    serves in this process with no router. Above 1, each tenant/user is pinned to one child, each
+ *                    child keeps its own source-map file (`childSourceMapPath`), and each divides the per-tenant
+ *                    caps (rate, burst, model spend) by N: a tenant concentrated on few users needs higher caps or 1.
+ * EDEN_ROUTER_CHILD  set by the router only ("i/N"): this process is child i of N.
  */
 import { createHash } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { edenHome, isId, scopeKey } from "@eden/protocol";
 
@@ -45,7 +53,20 @@ export interface ServerConfig {
   queryPlanner: "off" | "serve" | "shadow";
   /** Largest request body the HTTP API reads (EDEN_MAX_BODY_BYTES); 8 MB by default (D100). */
   maxBodyBytes: number;
+  /**
+   * Server processes behind the router (EDEN_PROCESSES, D163); the core count when unset (D178), capped at
+   * MAX_PROCESSES. 1 serves in this process with no router; a router child is always 1.
+   */
+  processes: number;
+  /**
+   * Set when the router started this process (EDEN_ROUTER_CHILD): it is child `index` of `count`. The tenant rate and
+   * burst above are already divided by `count`; `buildPartner`'s `processes` divides the model spend cap.
+   */
+  child: { index: number; count: number } | null;
 }
+
+/** Most server processes the router starts (EDEN_PROCESSES); far above any core count the router helps on. */
+export const MAX_PROCESSES = 64;
 
 /**
  * 8 MB (D100). The largest valid event holds one 1,000,000-unit text field; sent as `\uXXXX` escapes that is ~6 MB of
@@ -53,7 +74,11 @@ export interface ServerConfig {
  */
 export const DEFAULT_MAX_BODY_BYTES = 8_388_608;
 
-export function loadConfig(env = process.env): ServerConfig {
+/**
+ * `cores` is the machine's core count, a parameter so tests can pin it; the default reads it at call time
+ * (`machineCores`).
+ */
+export function loadConfig(env = process.env, cores = machineCores()): ServerConfig {
   const port = Number(env.PORT ?? 8790);
   if (!Number.isInteger(port) || port < 0 || port > 65_535)
     throw new Error(`PORT must be a port number, got ${env.PORT}`);
@@ -73,18 +98,105 @@ export function loadConfig(env = process.env): ServerConfig {
     keys.set(key, tenant);
   }
   if (!dev && keys.size === 0) throw new Error("set EDEN_API_KEYS (or EDEN_DEV=1 for local development)");
+  const child = routerChild(env.EDEN_ROUTER_CHILD);
+  // A child serves 1/N of each tenant's users (D163), so it holds 1/N of the tenant's caps: N processes with the
+  // whole cap each would raise a tenant's rate N-fold. Burst stays at least 1, the least a GCRA bucket can hold.
+  const share = child?.count ?? 1;
   return {
     port,
     host: env.HOST ?? "127.0.0.1",
     keys,
     dev,
     sourceMapPath: env.EDEN_SOURCE_MAP ?? join(edenHome(), "source-map.db"),
-    tenantRatePerSec: positive(env.EDEN_TENANT_RPS, 200, "EDEN_TENANT_RPS"),
-    tenantBurst: positive(env.EDEN_TENANT_BURST, 400, "EDEN_TENANT_BURST"),
+    tenantRatePerSec: positive(env.EDEN_TENANT_RPS, 200, "EDEN_TENANT_RPS") / share,
+    tenantBurst: Math.max(1, positive(env.EDEN_TENANT_BURST, 400, "EDEN_TENANT_BURST") / share),
     gateWorkers: workers(env.EDEN_GATE_WORKERS),
     queryPlanner: plannerMode(env.EDEN_QUERY_PLANNER),
     maxBodyBytes: bodyBytes(env.EDEN_MAX_BODY_BYTES),
+    // A child never starts a router of its own, whatever EDEN_PROCESSES it inherited.
+    processes: child ? 1 : processCount(env.EDEN_PROCESSES, cores),
+    child,
   };
+}
+
+/**
+ * Child `index`'s source-map file (D163): `source-map.db` becomes `source-map.<index>.db`, a path without `.db` gets
+ * `.<index>` appended. One SQLite file per process, as `SourceMap` assumes (graph/src/source-map.ts): N writers on
+ * one file would wait on its lock and drop outcome batches on SQLITE_BUSY. Safe to split because each user is pinned
+ * to one child and every row is keyed by scope. An in-memory map stays in memory.
+ */
+export function childSourceMapPath(base: string, index: number): string {
+  if (base === "" || base === ":memory:") return base;
+  return base.endsWith(".db") ? `${base.slice(0, -3)}.${index}.db` : `${base}.${index}`;
+}
+
+/**
+ * EDEN_PROCESSES as a whole number 1-64; the core count when unset or empty (D178: the router over N children
+ * measured 3.26x one process on 4 cores, D172's bar), at least 1 and at most MAX_PROCESSES.
+ */
+function processCount(raw: string | undefined, cores: number): number {
+  if (raw === undefined || raw === "") {
+    return Math.min(Math.max(1, Number.isInteger(cores) ? cores : 1), MAX_PROCESSES);
+  }
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_PROCESSES) {
+    throw new Error(`EDEN_PROCESSES must be a whole number 1-${MAX_PROCESSES}, got ${raw}`);
+  }
+  return n;
+}
+
+/**
+ * The cores this process may use, the default process count (D178). `availableParallelism()` already honours CPU
+ * affinity and a cgroup v1 CFS quota on Bun 1.4.4 (measured on 4 cores: `taskset -c 0` gave 1; a v1 quota of 1 CPU
+ * gave 1, 2.5 CPUs 2, 0.5 CPU 1), but a cgroup v2 `cpu.max` could not be checked on a v1 host, so it is read here too
+ * and the lower count wins: a container with a 1-CPU quota on a 32-core node must not start 32 children (~68 MB
+ * idle each).
+ */
+export function machineCores(read: (path: string) => string | null = readOrNull): number {
+  const quota = cgroupCpuQuota(read);
+  return quota === null ? availableParallelism() : Math.min(availableParallelism(), quota);
+}
+
+/**
+ * Whole CPUs allowed by a cgroup v2 `cpu.max` ("<quota> <period>", or "max <period>" for none) on this process's
+ * cgroup or any ancestor up to the mount root, floored and at least 1 (as Bun rounds a v1 quota); null when none is
+ * set or nothing can be read (cgroup v1, no /sys/fs/cgroup, another OS). Walking up covers a container whose
+ * /proc/self/cgroup names a host path while its own cgroup is mounted at /sys/fs/cgroup itself.
+ */
+export function cgroupCpuQuota(read: (path: string) => string | null): number | null {
+  const line = (read("/proc/self/cgroup") ?? "").split("\n").find((l) => l.startsWith("0::"));
+  if (line === undefined) return null;
+  const parts = line.slice(3).trim().split("/").filter(Boolean);
+  let least: number | null = null;
+  for (let depth = parts.length; depth >= 0; depth--) {
+    const dir = parts.slice(0, depth).join("/");
+    const raw = read(dir === "" ? "/sys/fs/cgroup/cpu.max" : `/sys/fs/cgroup/${dir}/cpu.max`);
+    const m = raw === null ? null : /^(\d+)\s+(\d+)$/.exec(raw.trim());
+    if (m === null || Number(m[2]) <= 0) continue;
+    const cpus = Math.max(1, Math.floor(Number(m[1]) / Number(m[2])));
+    least = least === null ? cpus : Math.min(least, cpus);
+  }
+  return least;
+}
+
+function readOrNull(path: string): string | null {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/** EDEN_ROUTER_CHILD ("i/N", set by the router) as this child's index and count; null when unset. */
+function routerChild(raw: string | undefined): ServerConfig["child"] {
+  if (raw === undefined || raw === "") return null;
+  const m = /^(\d+)\/(\d+)$/.exec(raw);
+  const index = m ? Number(m[1]) : NaN;
+  const count = m ? Number(m[2]) : NaN;
+  if (!(count >= 1 && count <= MAX_PROCESSES && index >= 0 && index < count)) {
+    throw new Error(`EDEN_ROUTER_CHILD must be i/N with 0 <= i < N <= ${MAX_PROCESSES}, got ${raw}`);
+  }
+  return { index, count };
 }
 
 /**

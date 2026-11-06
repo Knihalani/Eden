@@ -8,7 +8,15 @@ const env = { ...process.env, OPENAI_API_KEY: "", OPENAI_BASE_URL: "", AGENT_MOD
 
 const server = Bun.spawn([process.execPath, join(root, "packages/server/src/main.ts")], {
   cwd: root,
-  env: { ...env, EDEN_DEV: "1", PORT: "0", EDEN_SOURCES_FILE: join(import.meta.dir, "sources.json") },
+  // One process: a smoke test needs no router, and with EDEN_* cleared by scripts/test-preload.ts the default (the core
+  // count since D178) would start a child per core for every run of this file.
+  env: {
+    ...env,
+    EDEN_DEV: "1",
+    PORT: "0",
+    EDEN_PROCESSES: "1",
+    EDEN_SOURCES_FILE: join(import.meta.dir, "sources.json"),
+  },
   stdout: "pipe",
   stderr: "inherit",
 });

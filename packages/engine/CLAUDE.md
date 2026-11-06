@@ -11,9 +11,9 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 
 | File | Owns |
 |---|---|
-| `partner.ts` (5,081 lines) | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues |
+| `partner.ts` (about 5,130 lines) | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues |
 | `config.ts`, `parts.ts` | `EngineConfig`, `DEFAULT_CONFIG` (the unified default, D112: thresholds such as `confidentScore` 1.1, D6, and every part on); `PARTS` (each part's settings that take it out), `withoutParts`, `CORE_CONFIG` (every part out) |
-| `cache.ts` | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem` |
+| `cache.ts`, `packed-text.ts` | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem`; item text held deflated behind a `text` getter (D188) |
 | `text.ts`, `situation.ts` | Cues with no model (entities, content terms, chatter); a coarse situation label for routing |
 | `render.ts`, `fold.ts` | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52) |
 | `judge.ts` | The judge's prompt and parser (indexes only, D19) |
@@ -136,12 +136,21 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   ask's own answer), not when `deliver` builds it: a queued packet the agent has not taken was shown nothing, so an
   ask before `takePending` says its items in full. The ask then drops from `s.pending` a packet whose every item it
   cited; one cited in part stays queued (`review-regressions.test.ts`).
+- The reader's request gate (the push in `observe`, `readAsk`'s "acts") is `isImperative(raw, MORE_VERBS)`. D168's
+  verb-recognising widening (a trial switch with wider verbs and a chat-reply blocklist) was measured and deleted on
+  2026-11-06 (+17% reader calls, hidden 311 to 310, decoys 137 to 121; the code is in commit 3fa94529f): widening it
+  again needs a decision that accepts the extra calls.
 - `confident()` is one loop that stops at the cap, cheap tests first; every test in it must judge one item alone (no
   state across items), or stopping early would change its output.
 - **A re-read never revives a held-gone id (D126).** `recheck` checks `ItemCache.isHeldGone` after its fetch and
   before `revive`/`store`: a `sourceRemoved` can land while the fetch is on the wire, and reviving would lift the
   hold and deliver the deleted item. Any new path that stores a re-read or pushed copy must not `revive` an id a
-  removal holds unless that copy is itself newer than the removal (`sourceItems` is: the source sent it again).
+  removal holds unless that copy is itself newer than the removal. `sourceItems` is newer only than a removal that
+  was held before it began: one that lands during its redaction await wins, so it snapshots each id's
+  `ItemCache.heldGoneSeq` before the await and drops any whose sequence changed after it (D160, D176). A sequence, not
+  `isHeldGone` (a second removal of an id already held leaves that true) nor the hold's end (two removals in one
+  millisecond give the same end); every hold, a re-hold included, takes a new number. `sync.mark()` cannot tell
+  either: removals never bump it.
 - **`checkAhead` runs only once the reader will be called (D134):** after `readAsk`'s empty-pool and `readerGate`
   returns. Moving it back above the gate makes every gated ask pay up to `VERIFY_AHEAD` connector calls.
 - **One deadline per lookup (D140).** `searchLive` takes `deadlineAt` once, after resolving the sources and before
@@ -155,6 +164,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   instead of waiting on the same listing.
 - `fetchChecked`'s `gone` needs `Source.fetchReportsGone`: an MCP tool's null fetch proves nothing, so verification
   never deletes an MCP item on its own; deletions there come from `sourceRemoved` or the sweep.
+- **Cached items' `text` is a getter over deflated bytes (D188).** A stored copy is not the object `put` was given;
+  spreads and `JSON` see the text, but a memo that keeps `item.text` keeps a decoded copy. Decode Latin-1 bytes with
+  `latin1`, never `TextDecoder`: its output for an accented letter is a two-byte string, and every regex over it ran
+  1.17x slower (`pipeline.bench.ts`). Text a new path reads in a loop should be read once into a local.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

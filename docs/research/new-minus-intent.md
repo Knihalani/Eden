@@ -58,8 +58,30 @@ an 8-point loss into a 2-point one without tuning on what it reads.
 
 Cheaper ways to keep intent's recall stay open and unmeasured: intent requests only for items a user's sources
 actually hold over time (batching or the batch endpoint, audit finding 6 Stage 3, which waits on D98's provider
-decision), or a cheaper model for the request-only items. The audit's Stage 2 (intent only on items the strict
-prefilter passes) is in effect intent off and is not worth a run.
+decision), or a cheaper model for the request-only items. The audit's Stage 2 (intent only on items the
+prefilter passes) was skipped here as "in effect intent off"; that guess was wrong.
+
+**Correction, 2026-11-06 (D170, trial `intentConstraintOnly`).** The arm was run on the shipped default (with
+`cardsLean`), train1–6 seeds 41–42, intent requests replayed. At $0 (stub reader): items sent to the card model 13,604
+to 2,113 and calls 822 to 300, the same cost as intent off, yet the reader's pool keeps all of intent's gain: hidden
+257 to 257 and decoys 240 to 235 (intent off: 230/229). A fresh-cache paid pair (reader live on Claude Haiku 5.5,
+empty reader cache per arm; ledger runs `r2-intent-co-base`, 653 calls, $0.1874, and `r2-intent-co-on`, 656 calls,
+$0.1894): hidden surfaced 275 to 281, paired +1.56 points (95% CI −1.41..+4.54); decoys 136 to 139, +0.78 points
+(CI −1.87..+3.44). Intent's gain comes from the requests of constraint-worded items; the request-only reads bought
+nothing measurable here. The lab's planted facts are constraint-worded by design, so these screens cannot see an
+unworded item that bears on a request only through its requests; `cards.test.ts` shows the switch misses such an item.
+
+**Result, 2026-11-06 (D177: the trial ended, the switch deleted).** The pre-registered gate was a fresh-cache paid pair
+with hidden not lower and decoys not higher beyond ±3 tasks. Run again on the merged tree (4503fabb6, train1–6 seeds
+41–42, Claude Haiku 5.5 reader live in both arms, empty reader cache per arm): default 286/140 against
+`intentConstraintOnly` 281/144, paired hidden −1.30 points (95% CI −4.17..+1.56), decoys +1.04 points (CI
+−1.82..+3.91); ledger runs `close-d170-fresh-base` (652 calls, $0.1864) and `close-d170-fresh-co` (654 calls, $0.1866).
+A top-up of the committed reader cache (`close-d170-co`, 269 calls, $0.0786) replayed 281/139 against 279/144. Hidden
+flagged by the reader fell in both pairs (238 to 228, 234 to 226), and the reader pool at $0 went 262/246 to 258/241.
+Decoys rose 4 and 5 tasks, beyond ±3, and hidden fell: the request-only reads do buy something after all (the earlier
+pair's +1.56 was noise), so the switch, its stat and its tests are deleted under D112. `cardsLean`, `cardsLeanDays`,
+`readForIntent` and `automated` stay (they were to go only on promotion). The scores are the planning run's; the
+ledger rows were re-summed when the switch was deleted.
 
 ## Spend
 

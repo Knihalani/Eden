@@ -51,6 +51,19 @@ export interface BuildOptions {
    * first failure (`readerFailureLog`).
    */
   log?: (line: string) => void;
+  /**
+   * How many server processes share each tenant (`ServerConfig.child.count`, D163); default 1. The tenant's daily
+   * model-spend cap is divided by it, since each process holds its own `TenantSpend`.
+   */
+  processes?: number;
+}
+
+/**
+ * The tenant spend cap one process holds (D163): `usdPerTenantDay` divided by the processes sharing each tenant, so
+ * N router children together spend at most the configured cap per tenant per UTC day, as one process did.
+ */
+export function tenantSpendFor(usdPerTenantDay: number, processes = 1): TenantSpend {
+  return new TenantSpend(usdPerTenantDay / Math.max(1, processes));
 }
 
 /** How much of a provider's error message is logged: OpenRouterModel already cuts the body at 300 characters. */
@@ -81,7 +94,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
   const config = { ...DEFAULT_CONFIG, ...options.engine };
   const models = options.models ?? NO_MODELS;
   // One cap per tenant per UTC day shared by every role, besides each role's own per-session and per-user-day caps.
-  const tenants = new TenantSpend(models.usdPerTenantDay);
+  const tenants = tenantSpendFor(models.usdPerTenantDay, options.processes);
   const budget = () => new Budget(DEFAULT_LIMITS, undefined, tenants);
   const cards =
     models.cards && config.cards

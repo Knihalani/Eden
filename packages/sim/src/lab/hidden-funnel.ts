@@ -79,6 +79,10 @@ import {
   cpuNow,
   ItemCache,
   type CandidateDump,
+  type CardMaker,
+  worthCarding,
+  worthCardingStrict,
+  ECONOMY_CARD_LIMITS,
   type Trace,
   readerMessages,
 } from "@eden/engine";
@@ -86,6 +90,7 @@ import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner } from "@eden/sources";
+import { sanitizeForStore } from "@eden/redact";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
@@ -121,6 +126,16 @@ import {
 import { packetLine } from "./uptake";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
+import {
+  coverageLines,
+  intentPlace,
+  plantedCoverageLine,
+  surfacedBy,
+  surfacedLines,
+  type AskCoverage,
+  type SurfacedBy,
+  type SurfacedRow,
+} from "./ask-coverage";
 
 const args = process.argv.slice(2);
 const V = "value" as const;
@@ -264,7 +279,11 @@ const CARDS = opt("cards", "");
  */
 const INTENT_FILES = opt("intent", "").split(",").filter(Boolean);
 /** One replaying maker for every seed and suite: the disk cache is read once. */
-const cardMaker = CARDS ? new DiskCardMaker(CARDS, undefined, { requests: INTENT_FILES }) : null;
+// With no --intent, no requests are replayed at all (not a card file's `r` lines), so `--ask-diag`'s replay figure
+// (null with no --intent) says what the run replayed.
+const cardMaker = CARDS
+  ? new DiskCardMaker(CARDS, undefined, { requests: INTENT_FILES, cardRequests: INTENT_FILES.length > 0 })
+  : null;
 if (INTENT_FILES.length && !cardMaker) throw new Error("--intent needs --cards");
 /**
  * `--card-log out.jsonl`: every item the enrichment sent for a card (its content hash, title, the head of its text
@@ -305,6 +324,13 @@ if (cardMaker && RUN.intent) {
   };
 }
 const intentNow = () => intentState(RUN, intentUse);
+/**
+ * Whether the loaded intent replay has a line for an item's content (`cardKey`); null with no replay loaded. A
+ * planted item without one runs with no requests in every intent screen (D173: printed as planted coverage). Read on
+ * the cached item, whose content is what the card model would be sent.
+ */
+const inReplay = (item: Parameters<typeof cardKey>[0]): boolean | null =>
+  INTENT_FILES.length && cardMaker ? cardMaker.requests.has(cardKey(item)) : null;
 /** The inert mark for a line, read when the line is printed (the replay's hits so far). */
 const inertTag = () => (intentNow() === "inert" ? `  ${INTENT_INERT}` : "");
 /** Every lane's enrichment counters, summed (`CardStats`): items read by the model and calls, per simulated user. */
@@ -416,12 +442,28 @@ if (PACKETS) writeFileSync(PACKETS, "");
  */
 const CANDIDATES = opt("candidates", "");
 if (CANDIDATES) writeFileSync(CANDIDATES, "");
+/** partner.ts's `INTENT_QUERY_CHARS` (not exported): `--ask-diag` searches the intent index with as much. */
+const INTENT_QUERY_CHARS = 400;
 /**
  * `--ask-diag out.jsonl` (with `--ask`): each task's ask candidates with their facts (`CandidateDump`, path "ask"),
  * the planted item's id and rank among them, and whether it was cached, one line per task (docs/research/gen-ask.md).
+ * Each line's `coverage` (`ask-coverage.ts`, with cards and intent on) says whether the intent index could reach the
+ * planted item: requests in the replay and held at the ask, sent to the card model or not, and its hit for the
+ * question; the run splits the rank -1 items into not sent (prefilter rejects), not in replay,
+ * no intent requests, and no match (D173).
  */
 const ASK_DIAG = opt("ask-diag", "");
 if (ASK_DIAG) writeFileSync(ASK_DIAG, "");
+/**
+ * Each `--ask-diag` row's variant, rank, cached flag and coverage facts (`ask-coverage.ts`), for the run's split of
+ * the rank -1 items: not sent (prefilter rejects), not in replay, no intent requests, requests but no match.
+ */
+const askDiagRows: { variant: string; rank: number; cached: boolean; coverage: AskCoverage | null }[] = [];
+/** Expired cards the diagnostic's own intent search dropped (`intentFinds` drops what it passes); printed when any. */
+let diagDropped = 0;
+/** The enricher's prefilter as configured (`cardsEconomy` is strict unless `--card-limits` says otherwise). */
+const STRICT_PREFILTER =
+  typeof CARD_LIMITS.strict === "boolean" ? CARD_LIMITS.strict : RUN.cardsEconomy && !!ECONOMY_CARD_LIMITS.strict;
 const timeline = TIMELINE
   ? new Timeline(TIMELINE, { tool: "hidden-funnel", suites: SUITE_LIST, seeds: SEEDS, config: CONFIG, sync: SYNC })
   : null;
@@ -501,6 +543,10 @@ interface TaskRow {
   returned: boolean;
   cached: boolean;
   delivered: boolean;
+  /** When surfaced (delivered or ask-cited): reader-flagged, rule path or listed only (D173, ask-coverage.ts). */
+  surfacedBy?: SurfacedBy;
+  /** With an intent replay loaded and the item cached: whether the replay has a line for its content (D173). */
+  inReplay?: boolean;
   why: string;
   injected: number;
   /** Bytes of every packet the task delivered (the agent's input), and how many packets. */
@@ -605,8 +651,22 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       syncUse.demand += t.syncCalls ?? 0;
     }
   };
-  const cards = cardMaker
-    ? new CardEnricher({ maker: cardMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
+  // With `--ask-diag`, the lane's own record of the contents its card model was sent (by `cardKey`): the shared maker
+  // serves every lane, and hidden and control worlds of one seed share most items' content.
+  const sentToCards = new Set<string>();
+  const laneMaker: CardMaker | null =
+    cardMaker && ASK_DIAG
+      ? {
+          // Not `async`: the maker's own promise, so the drain batches as without `--ask-diag` (an async wrapper's
+          // microtask hops cut the cards-use calls from 822 to 766 and moved when requests were held).
+          make: (items, today, signal, retry, intent) => {
+            for (const it of items) sentToCards.add(cardKey(it));
+            return cardMaker.make(items, today, signal, retry, intent);
+          },
+        }
+      : cardMaker;
+  const cards = laneMaker
+    ? new CardEnricher({ maker: laneMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
     : null;
   if (cards) cardLanes.push(cards);
   // The lane's asks run one at a time: the model's latency for this task's call (as made, when replayed) is kept so a
@@ -701,6 +761,43 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     return !!(s?.inflight || s?.ant?.running || s?.behind);
   };
   const scope = { tenantId: "funnel", userId: `w${seed}` };
+  /**
+   * `--ask-diag`: whether the intent index could reach a planted item at its ask (`ask-coverage.ts`). Read after the
+   * ask, at no call: the replay's requests for its content, the requests the engine held, whether the card model was
+   * sent it and whether the prefilter rejects it, and its hit for the question (`intentPlace`) as the engine
+   * searches it (redacted, its first `INTENT_QUERY_CHARS`, requests made before `askAt`, the ask's arrival), against
+   * the thresholds. Null with cards or intent off.
+   */
+  const coverageOf = (item: ReturnType<ItemCache["get"]>, question: string, askAt: number): AskCoverage | null => {
+    if (!cards || !RUN.cards || !RUN.intent || !item) return null;
+    const hash = cardKey(item);
+    const cardRead = sentToCards.has(hash);
+    const prefilter = STRICT_PREFILTER ? worthCardingStrict(item) : worthCarding(item);
+    const replay = inReplay(item);
+    const held = cards.requestsOf(scope, item.id, askAt).length;
+    let intent: AskCoverage["intent"] = null;
+    if (held > 0) {
+      // The engine's call (partner.ts intentFinds: k = `intentHits`, before the ask's arrival, thresholds after), and
+      // an unbounded one (every hash the user holds) so a passing hit past the engine's cut is still known. Each
+      // call drops the expired cards it passes (counted, a side effect read after the ask).
+      const text = sanitizeForStore(question).slice(0, INTENT_QUERY_CHARS);
+      const accept = (x: string) => cache.get(scope, x, clock) !== null;
+      const size0 = cards.intentSize(scope);
+      const cut = cards.intentFinds(scope, text, askAt, RUN.intentHits, accept);
+      const all = cards.intentFinds(scope, text, askAt, cards.intentSize(scope), accept);
+      diagDropped += size0 - cards.intentSize(scope);
+      intent = intentPlace(cut, all, item.id, RUN.intentMinMatched, RUN.intentMinCoverage, RUN.intentHits);
+    }
+    return {
+      cardRead,
+      // Not `cardsLean` itself: an item still queued at the ask is here too (ask-coverage.ts says why).
+      notSentPrefilterRejects: !cardRead && !prefilter,
+      // -1: the replay has no line for its content ("not in replay", told apart from a line with no requests).
+      replayRequests: replay === null ? null : replay ? (cardMaker!.requests.get(hash)?.length ?? 0) : -1,
+      heldRequests: held,
+      intent,
+    };
+  };
   // The real sync: the backfill runs before the first task, from half an hour before it on the simulated clock (a
   // minute per tick), so the tasks see the same clock as without it.
   const sync = REAL_SYNC ? partner.sync! : null;
@@ -829,6 +926,8 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     const question = ASK_Q === "narrow" ? narrowQuestion(task.text) : task.text;
     readerMs = undefined;
     const a0 = performance.now();
+    // The ask's arrival, as its cue reads it (`cue.arrived`): the engine's intent search counts requests before it.
+    const askAt = clock;
     const answered = ASK ? await partner.ask({ ...scope, sessionId, question }) : null;
     const askMs = performance.now() - a0;
     const askCited = answered ? answered.citations.some((c) => c.itemId === id) : undefined;
@@ -858,6 +957,10 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     if (ASK_DIAG && answered) {
       const d = askDumps.get(sessionId);
       askDumps.delete(sessionId);
+      const cachedItem = cache.get(scope, id, clock);
+      const rank = d ? d.candidates.findIndex((c) => c.id === id) : -1;
+      const coverage = coverageOf(cachedItem, question, askAt);
+      askDiagRows.push({ variant, rank, cached: !!cachedItem, coverage });
       const line = {
         suite,
         seed,
@@ -866,10 +969,11 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
         request: task.text,
         question,
         planted: id,
-        cached: !!cache.get(scope, id, clock),
+        cached: !!cachedItem,
         delivered: got.includes(id),
         askCited,
-        rank: d ? d.candidates.findIndex((c) => c.id === id) : -1,
+        rank,
+        coverage,
         cited: answered.citations.map((c) => c.itemId),
         answer: answered.answer,
         detail: task.detail,
@@ -918,13 +1022,20 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     callCheck.received += taskCalls;
     callCheck.listed += taskListed;
     callCheck.traced += calls - callsBefore;
+    const cachedNow = cache.get(scope, id, clock);
+    const replayLine = cachedNow ? inReplay(cachedNow) : null;
+    const flagged = rr ? rr.flagged.some((f) => f.id === id) : undefined;
+    // D173's split, reporting only: reader-flagged, rule path (delivered unflagged) or listed only (ask-cited only).
+    const by = surfacedBy({ variant, delivered: got.includes(id), askCited, readerFlagged: flagged });
     perTask.push({
       seed,
       variant,
       template: task.template,
       returned: returned.has(id),
-      cached: !!cache.get(scope, id, clock),
+      cached: !!cachedNow,
       delivered: got.includes(id),
+      ...(by ? { surfacedBy: by } : {}),
+      ...(replayLine !== null ? { inReplay: replayLine } : {}),
       ...(askCited === undefined
         ? {}
         : {
@@ -1061,6 +1172,8 @@ for (const suite of SUITE_LIST) {
   }
   console.log(line(SUITE_LIST.length > 1 ? `total ${suite}` : "TOTAL", total) + inertTag());
   for (const l of screenLines(suite, perTask as unknown as ScreenRow[], PACKET_K)) console.log(l + TAG + inertTag());
+  // D173: surfaced split into reader-flagged, rule path and listed only (reporting only; the gates are unchanged).
+  for (const l of surfacedLines(suite, perTask as unknown as SurfacedRow[])) console.log(l + TAG + inertTag());
   add(grand, total);
   runs.push({ suite, rows, perTask, wall, total });
 }
@@ -1071,6 +1184,7 @@ if (SUITE_LIST.length > 1) {
   console.log(line("TOTAL", grand) + inertTag());
   const all = runs.flatMap((r) => r.perTask) as unknown as ScreenRow[];
   for (const l of screenLines("TOTAL", all, PACKET_K)) console.log(l + TAG + inertTag());
+  for (const l of surfacedLines("TOTAL", all as unknown as SurfacedRow[])) console.log(l + TAG + inertTag());
 }
 // What an agent that collects before its first model call would hold (`beforeModel`), against the wait it gave.
 {
@@ -1087,6 +1201,14 @@ if (RUN.intent && RUN.cards) {
   console.log(
     `intent: ${intentNow()} (replayed requests for ${intentUse.found} of ${intentUse.asked} items asked)` + inertTag(),
   );
+  // Planted items are a few percent of the items asked but can be most of the replay's holes (D173).
+  const planted = plantedCoverageLine(runs.flatMap((r) => r.perTask) as unknown as SurfacedRow[]);
+  if (planted) console.log(`intent: ${planted}`);
+}
+// `--ask-diag`: why the ask left planted items out of its candidates (rank -1), by intent coverage (ask-coverage.ts).
+if (ASK_DIAG) {
+  for (const l of coverageLines(askDiagRows)) console.log(l + inertTag());
+  if (diagDropped) console.log(`ask-diag: its intent searches dropped ${diagDropped} expired cards (a side effect)`);
 }
 // calls/task above are what the connectors received; the traces' sum is printed to catch accounting drift in the
 // engine. It also counts fetches (which `SimSource` counts apart), and a call still running when a task's window

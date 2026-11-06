@@ -73,14 +73,14 @@ export const SUITE_NAMES = Object.keys(SUITES);
 const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
 const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
 /**
- * Blind suites that have never been run: left out of `all`, so a tuning command with `--suite all` cannot spend them;
- * the blind run names them. A suite leaves this list once its blind run is recorded.
+ * Held-out suites kept out of `all` so a tuning command cannot spend them; held-out 9-13 have been read (D72, D80,
+ * D85, D98, D112) and a blind round needs a new suite. A run names them to measure on them (with `--blind`).
  */
 export const UNRUN_BLIND = ["heldout9", "heldout10", "heldout11", "heldout12", "heldout13"];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**
- * A `--suite` value: a comma list of suite names, `all` (every suite but the unrun blind ones), `heldout-all`, or
+ * A `--suite` value: a comma list of suite names, `all` (every suite but those in UNRUN_BLIND), `heldout-all`, or
  * `train` (the six broad tuning suites);
  * unknown names throw. Deduplicated.
  */

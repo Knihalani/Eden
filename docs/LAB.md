@@ -32,8 +32,9 @@ per suite for train1–6 and held-out 10–12.
 
 - **Never tune on `heldout*`.** `bun run funnel` refuses them without `--blind`. A new blind round needs a new suite
   written by an author who saw no engine code.
-- `UNRUN_BLIND` (heldout9–12) keeps them out of `--suite all`, but every one has been run since: treat the list as
-  "not in `all`", not as "fresh".
+- `UNRUN_BLIND` (held-out 9–13) keeps them out of `--suite all` so a tuning command cannot spend them, but all five
+  have been read (D72, D80, D85, D98, D112): treat the list as "not in `all`", not as "fresh". A blind round needs a
+  new suite.
 - Seeds: 41–44 for funnel work (41–42 on train), 41–48 for the Haiku benchmark. Same seed, same world, same tasks.
 
 ## Configurations (`presets.ts`)
@@ -86,9 +87,9 @@ Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too),
 | Cards (dev/held-out worlds) | `cards-enrich.ts` | `--cards packages/sim/lab/cards/cards-v2.jsonl` | yes |
 | Cards (train worlds, 746 items, 75 calls, $0.0233 on glm-5.3-flash; broad-set.md) | `cards-enrich.ts --funnel train --seeds 41,42` | `cards-train.jsonl` (merge with v2: `bun run funnel` does) | yes |
 | Cards, price-routed batch 20 | `cards-enrich.ts --sort price --batch 20` | `econ-price20-v2.jsonl` (econ-background.md) | yes |
-| Intent requests (D87) | `cards-enrich.ts --intent --dir D` | `--intent D/intent-v2.jsonl` (needs `--cards`) | the Haiku campaign's no (`.local/haiku/intent/`); the train worlds (seeds 41–44) and held-out 10–11, made for D110, yes: `packages/sim/lab/distilled/intent-v2.jsonl.gz` (gunzip it) |
+| Intent requests (D87) | `cards-enrich.ts --intent --dir D` | `--intent D/intent-v2.jsonl` (needs `--cards`) | the Haiku campaign's no (`.local/haiku/intent/`); the train worlds (seeds 41–44) and held-out 10–11 (seeds 41–42), made for D110, yes: `packages/sim/lab/distilled/intent-v2.jsonl.gz`, which `bun run funnel` unpacks and replays by default when it covers the run (D158; `--intent none` opts out) |
 | Bridge queries (D89) | `bridge-enrich.ts --out F` | `--bridge F` | no |
-| Reader calls (D95) | `--reader live --reader-model m --reader-cache F` | `--reader replay --reader-model m --reader-cache F` (the same `m`: the key hashes it; a prompt not cached fails open; misses exit 3, below) | the default on train, seeds 41–42, Haiku 5.5 (D141's paid run), yes: `packages/sim/lab/distilled/reader-haiku-train-4142.jsonl.gz` (gunzip it; recipe 2a); others no |
+| Reader calls (D95) | `--reader live --reader-model m --reader-cache F` | `--reader replay --reader-model m --reader-cache F` (the same `m`: the key hashes it; a prompt not cached fails open; misses exit 3, below) | the default on train, seeds 41–42, Haiku 5.5, cards and intent replayed (D158), yes: `packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz` (gunzip it; recipe 2a); D141's intent-inert `reader-haiku-train-4142.jsonl.gz` is history, replayed with `--intent none` (with intent on it misses most prompts); others no |
 
 `pi-ab.ts`/`hermes-ab.ts` read `--cards FILE` and write cards they had to make live to `--cards-out` (default
 `<out>.cards.jsonl`); name that file in later runs. Keep run outputs under `.local/` (git ignores it).
@@ -188,10 +189,16 @@ bun run funnel --json .local/base.json                       # default, train1-6
 bun run funnel --set '{"myFlag":true}' --baseline .local/base.json --json .local/new.json
 ```
 
-The default on train, seeds 41–42, `--jobs 4`, cards replayed, reader stub (nothing binds), intent inert: hidden
-214/384, decoys 211/384, as ALL3's (measured 2026-11-03, D112; with a real reader, use recipe 2). Before 2026-11-03
-this recipe ran ALL3, with the same numbers; `--suite train1 --seeds 41` takes 3 s; `--suite dev6a,dev6b --seeds 41,42,43,44`
-takes 22 s (122/240 hidden, 91/240 decoys). The `--baseline` diff lists every task that moved. A gain that is a
+The default on train, seeds 41–42, `--jobs 4`, cards and intent requests replayed (D158), reader stub (nothing binds),
+intent thresholds 0.2/1/12 (D159's arm, promoted by D179): hidden 281/384, decoys 256/384; reader pool hidden
+278/384, decoys 254/384 (measured 2026-11-06). The stub surfaces every pooled item as listed, so its decoys rise with
+the pool; the paid reader rejects them (recipe 2a: decoys 137). At the earlier thresholds, 0.35/2/6, the same screen
+read 259/235 and pool 262/246 (after intent-v2 was topped up for its missing planted items; before that 243/228 and
+pool 257/240). With a real reader, use recipe 2a.
+`--intent none` gives the pre-D158 intent-inert screen, hidden 214/384, decoys 211/384 (pool 230/229), as ALL3's
+(measured 2026-11-03, D112, and again 2026-11-06); every $0 stub number recorded before D158 is that inert shape.
+Before 2026-11-03 this recipe ran ALL3, with the same numbers; `--suite train1 --seeds 41` takes 3 s;
+`--suite dev6a,dev6b --seeds 41,42,43,44` takes 22 s (122/240 hidden, 91/240 decoys). The `--baseline` diff lists every task that moved. A gain that is a
 coin flip between hidden and decoys (broad-set.md: rules on unseen writing) is not a gain.
 
 **`--jobs N` at `--time 0` (default: one per core, D139)** runs N `hidden-funnel.ts` processes at once, each over a
@@ -212,11 +219,16 @@ cards, reader and sync counters (bar `warmMs`) equal; score 214/384 hidden, 211/
 for cores, so with N > 1 ms/task (and the sync's ms/user) is not a latency figure: the run says CONTENDED; **quote
 latency from `--jobs 1`**, and a `--baseline` that compares ms/task needs `--jobs 1` on both sides. A `--seeds` list
 that repeats a seed is refused (blocks would run it once where one process runs it twice).
-`--jobs` falls back to one process, and says so, with `--record` (the ledger books one entry per suite, and a seed
-shard would book a partial run), with any of `--packets`, `--card-log`, `--reader-log`, `--ask-diag`,
-`--candidates` or `--timeline` (each process clears and rewrites that one file), and with `--judge live` or
-`--reader live` (paid calls and rate limits in parallel). A replayed reader (`--reader replay`) and a replayed bridge
-shard; their reader misses are summed for the miss gate.
+The per-task output files shard (since audit 2026-11-06): with `--packets`, `--card-log`, `--reader-log`,
+`--ask-diag` or `--candidates`, process i writes `<file>.part-<i>`, and after the run the parts are merged into the
+named file in one canonical order (suite, seed, variant, template, then each line's own order) and deleted; the
+merged file is byte for byte what one process writes, except `--card-log`, whose lines carry no task and keep part
+order. The ask-diag bucket lines are printed once, from the merged file. The parts are also removed on SIGINT and
+SIGTERM (the launcher stops its processes first and exits 130 or 143), not on SIGKILL. `--jobs` still falls back to
+one process, and says why, with `--record` (the ledger books one entry per suite, and a seed shard would book a
+partial run), with `--timeline` (per-process CPU and RSS would be contended), and with `--judge live` or
+`--reader live` (one append-only cache file and one spend stream per run; a parallel live top-up is not built). A
+replayed reader (`--reader replay`) and a replayed bridge shard; their reader misses are summed for the miss gate.
 
 **`--time` shards too** (since audit 2026-11-03b round 2; it used to force one process), one process per suite × seed
 shard, N at a time (not blocks: the shards sleep rather than burn CPU, so start-up is cheap beside them). At `-- --time 1` a task's
@@ -299,10 +311,13 @@ Measured on train1–6, seeds 41–42, 4 cores, no key set:
 | ALL3 `--packet-k 10,15,20` | 18.6 s | top-10 237 (256 with delivered/cited), top-15 264 (272), top-20 279 (282) hidden of 384; decoys top-15 268 (275); top-15 packet 3,808 bytes |
 | NEWL stub `--lead-in clause` | 22.4 s | draft pool non-empty 640/768; Jaccard mean 0.688; final ⊆ draft 237/640; hidden in draft pool 213/384 (in final pool 228) |
 
-Limits: the intent index finds nothing without `-- --intent F` (not checked in), so NEW/NEWL pools here lack intent
-hits that the paid screens had; the prompt sizes are of the stub's reads only. Such a run says so: with `intent` on
-and no replayed request found for any item (no `--intent F`, or a file for other items), every TOTAL and pool line
-and the JSON `label` carry `[intent inert: no replay]`, the JSON has `intent: {state, asked, found}` (`off`, `inert`
+Limits: the rows of the table above ran before D158, intent inert (the intent index finds nothing without a replay
+file), so their pools lack the intent hits that the paid screens had; the prompt sizes are of the stub's reads only.
+Since D158 `bun run funnel` replays the checked-in `intent-v2.jsonl.gz` by default when it covers the run's suites and
+seeds (train seeds 41–44, held-out 10–11 seeds 41–42), and prints `intent: live|inert (why)` under the score header;
+`--intent none` gives the old inert shape. A run says when it is inert: with `intent` on and no replayed request
+found for any item (`--intent none`, an uncovered run, or a file for other items), every TOTAL and pool line and the
+JSON `label` carry `[intent inert: no replay]`, the JSON has `intent: {state, asked, found}` (`off`, `inert`
 or `live`), and `--reader stub|oracle` refuses a `--baseline` whose intent state differs (an inert NEWL screen reads
 the same prompts as `--set '{"intent":false}'`, so a comparison across states would read as "intent does nothing").
 A baseline written before the field existed, with intent configured, is `unknown` and refused. `--reader-log F` works
@@ -328,6 +343,54 @@ train1 seed 41 wrote 54 lines for its 54 reader calls.
   `bun run funnel --jobs 4` (ALL3, train, seeds 41–42) demand items 182,742 and background items 76,796; with
   `--set '{"syncPollPageSize":5}'` 10,080 and 77,996 (D101's 182,742 → 10,080), score 214/211 both.
 
+### 1d. The retrieval screen: half of train, every task agreeing with the funnel (audit 2026-11-06 F25)
+
+For a change to what reaches the reader (retrieval, ranking, intent, probes, the graph, sync), screen first on
+`retrieval-screen.ts`, then gate on recipe 1 or 2a. The screen is train1–6 at seed 41 only: the part of train every
+replay cache covers with no miss (cards and intent requests for seeds 41–42, every planted item with an intent line;
+the Haiku reader cache of recipe 2a replays seed 41 whole, 324 calls and 0 misses, its 2 misses are seed 42's). Each
+suite × seed is its own world and session, so the screen's rows are exactly the full funnel's rows for those tasks.
+
+```bash
+bun packages/sim/src/lab/retrieval-screen.ts run --json .local/screen-base.json          # the default, stub reader
+bun packages/sim/src/lab/retrieval-screen.ts run --set '{"myFlag":true}' --baseline .local/screen-base.json
+bun packages/sim/src/lab/retrieval-screen.ts run --json .local/screen-haiku.json -- --reader replay \
+  --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl   # the paid reading, $0
+bun packages/sim/src/lab/retrieval-screen.ts agree FULL_BASE FULL_NEXT SCREEN_BASE SCREEN_NEXT  # check it
+```
+
+It runs `bun run funnel --suite train1,…,train6 --seeds 41` (any funnel flag but the grid passes through; after `--`,
+hidden-funnel's), then prints `RETRIEVAL SCREEN`: per variant, planted items returned, cached, in the reader's pool
+(the retrieval figure) and surfaced, over the pairs `packages/sim/lab/retrieval-screen.json` lists (`select FULL.json`
+rewrites it; 192 of 192 covered), and with `--baseline` every task whose fields moved. It is a screen, not a result.
+
+Measured 2026-11-06 (4 cores, load average 3.4 at the start of the timing runs, stub reader unless named). Time, `bun
+run funnel` against the screen: 10.0–10.5 s against 6.0–6.4 s at the default jobs (3 runs each), 22.1 s against
+11.8–12.5 s at `--jobs 1` (both through `bun run funnel`; `run --jobs 1` gives the same grid); with the Haiku replay
+10.6 s (647 replayed, 2 missed) against 6.3 s (324 replayed, 0 missed). The default on the screen: hidden pool 130/192,
+surfaced 127; decoys pool 121, surfaced 118 (full: 262/246 and 259/235). With the Haiku
+replay, the screen's 384 rows equal the full replay's rows for the same tasks (0 moved). Agreement with the full
+funnel on four past changes (`agree`, each change run both ways against the default):
+
+| Change | Tasks agreeing | Moved (full on screen / screen) | Full Δ pool, surfaced (hidden; decoys) | Screen Δ | Signs |
+|---|---|---|---|---|---|
+| D159's looser intent `{"intentMinCoverage":0.2,"intentMinMatched":1,"intentHits":12}` | 384/384 | 42 / 42 | +16, +22; +8, +21 | +9, +10; +8, +14 | agree |
+| `--preset minus-probes` | 384/384 | 32 / 32 | −10, −11; −12, −9 | −4, −5; −5, −5 | agree |
+| `--preset minus-intent` | 384/384 | 42 / 42 | −32, −45; −17, −24 | −17, −20; −8, −12 | agree |
+| `--preset minus-graph` | 384/384 | 6 / 6 | −1, +3; −2, +1 | −1, +1; −1, 0 | differ |
+
+Every task agreed in every change, as it must (same worlds, same order): that is a determinism check, not evidence that
+the screen predicts. The evidence is the verdict, the sign of the totals, which agreed on the three changes that moved
+32 tasks or more and differed on minus-graph, which moves 6 of the screen's tasks and 15 of 768 in the full funnel (the
+others moved 67–88). So far the sign was wrong at 6 moved screen tasks and right at 32 or more, with nothing measured
+between: for a change that moves fewer than about 30 screen tasks, read the task list, not the totals. Prefixes were
+tried and dropped: `-- --limit 16` and `--limit 8` per suite (4.7–4.9 s and 4.2 s) moved one default task of their 192
+and 96 rows (each suite clears only its own tasks' calendar slots, `clearSlot`), so the screen's rows would no longer be
+the funnel's. A change that re-renders the reader's pool still misses the reader cache; its paid top-up on the screen is
+about half a full one (324 of 649 calls, about $0.09 at recipe 2a's $0.185 for 652 calls, an estimate). It does not
+answer what F25's unordered subset replay would: no recorded reading is reused for a pool it was not given (D117 is
+unchanged).
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash
@@ -344,38 +407,94 @@ reader cache at $0. The haiku-opt.md command sets `askReaderWaitMs: 60000` so la
 
 ### 2a. The default's paid Haiku reading, replayed at $0
 
-The reader cache of D141's first paid default run (docs/research/graph-ablation.md, "default (1st paid read)",
-committed in cea000ba6; it also holds that run's minus-graph calls) is checked in gzipped: 866 lines, all
-`claude-haiku-5-5`, plain md5 `9a492c00cf9724306e3e4743e2882982`. It covers the default (ALL3 with the reader) on
-train1–6, seeds 41–42, cards replayed, intent inert. The cache is plain JSONL that a live reader appends to, so it is
-unpacked under `.local/` (`--reader-cache` refuses a `.gz`):
+The reader cache of the shipped default (D158: cards and intent requests replayed; intent thresholds 0.2/1/12 since
+D179) on train1–6, seeds 41–42, is checked in gzipped:
+`packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz`, 1,416 lines, all `claude-haiku-5-5`, plain md5
+`47eb6393a75b49c14f0f7b802473fd59`. It was recorded on 2026-11-06 from an empty cache by one metered live run (ledger
+run `ib-reader-intent-cache-default`: 652 calls, $0.18548, 418 s, TOTAL hidden 274/384, decoys 137/384, 0 misses),
+then topped up the same day for the completed intent file (ledger run `r2-intent-reader-topup`: 73 calls, $0.02102;
+docs/research/edge-intent.md), and again for the D179 thresholds (ledger runs `close-d159-reader-topup`, 570 calls,
+$0.16293, and `close-d159-reader-topup2`, 4 calls, $0.00109, for the prompts the first left), and once more for the
+deleted verb-gate trial (D168's verb-recognising request gate; ledger run `close3-verbgate-topup`, 119 calls,
+$0.03306; its 119 lines, appended after the first 1,297, are inert for the default). The older thresholds' readings
+stay in the file, so a `--set` back to 0.35/2/6 still replays.
+The cache is plain JSONL that a live reader appends to, so it is unpacked under `.local/` (`--reader-cache` refuses a
+`.gz`):
 
 ```bash
-gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142.jsonl.gz > .local/reader-haiku-train-4142.jsonl
+gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz > .local/reader-haiku-train-4142-intent.jsonl
 bun run funnel --jobs 4 --allow-misses --json .local/haiku-default.json -- --reader replay \
-  --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142.jsonl
+  --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl
 ```
 
-Measured on 2026-11-05 (audit/2026-11-05-r1-s8-reader-replay-cache, 10 s wall, no key, no ledger flag, so no spend
-and no ledger rows): `merged reader replay {"replayed":648,"sent":0,"missed":5,"failed":0}`, TOTAL hidden 247/384,
-decoys 127/384, reader pool hidden 230/384 and decoy 229/384, the same as graph-ablation.md's paid row. The 5 misses
-(answered without the reader, fail open) are why the recipe needs `--allow-misses`; without it the run exits 3. A
-`--baseline .local/haiku-default.json` then screens a change against the paid reading at $0.
+Measured on 2026-11-06 after the D179 top-up, twice, identical, and again after the verb-gate top-up from the
+committed file (no ledger flag, so no spend; 11-20 s): `merged reader
+replay {"replayed":651,"sent":0,"missed":0,"failed":0}`, TOTAL hidden 311/384, decoys 137/384, reader pool hidden
+278/384 and decoy 254/384. At 0.35/2/6 it read 647 replayed, 2 missed, 281/139, pool 262/246 (and with the older
+intent file before that: 645 replayed, 5 missed, 273/137, pool 257/240). A change upstream of the reader can leave
+misses (answered without the reader, fail open), which is why the recipe keeps `--allow-misses`; without it a miss
+exits 3.
+A `--baseline .local/haiku-default.json` then screens a change against the paid reading at $0.
+
+**The older, intent-inert cache.** `reader-haiku-train-4142.jsonl.gz` (866 lines, plain md5
+`9a492c00cf9724306e3e4743e2882982`) is D141's first paid default run (docs/research/graph-ablation.md, committed in
+cea000ba6; it also holds that run's minus-graph calls), recorded with cards replayed and intent inert. It is kept for
+history and replays with `--intent none` (2026-11-06: replayed 648, missed 5, TOTAL 247/127, pool 230/229; the same as
+on 2026-11-05). With intent replayed it misses most prompts (the audit's run: 396 replayed, 489 missed). Every figure
+below and in D141–D157 that cites 247/127 is that intent-inert reading, not the shipped default.
 
 - **`--reader-model claude-haiku-5-5` is required.** The key hashes the model id (`promptKey`), and the default
-  model is `z-ai/glm-5.3-flash`: without the flag every one of the 1,250 prompts misses, the score falls to the stub
-  reader's 214/211, and the funnel prints `READER HINT` naming the cache's recorded model.
+  model is `z-ai/glm-5.3-flash`: without the flag every prompt misses, the score falls to the stub reader's, and the
+  funnel prints `READER HINT` naming the cache's recorded model.
 - **What it screens.** A change that only takes items out of the reader's pool (a veto, a gate, a smaller pool) at
   $0 with `--reader-subset` on a `--reader-log` made by replaying this cache (subset replay, above; approximate and
-  labelled). Measured the same day: replaying with `--reader-log .local/log.jsonl` (653 lines, 247/127 again), then
-  `--set '{"askReaderPool":10}' ... --reader-subset .local/log.jsonl` gave `{"replayed":17,"missed":3,"subset":602}`,
-  hidden 230/384, decoys 140/384, labelled APPROXIMATE, at $0. A change that adds or re-renders pool items misses
-  for those prompts.
-- **When it goes stale.** Any change upstream of the reader's input (sync, retrieval, ranking, rendering, the day or
-  request text), a `READER_VERSION` bump or another reader prompt misses: the miss count says how much. Top the
-  misses up with one metered live run into a copy (`--reader live --reader-model claude-haiku-5-5 --reader-cache
-  .local/reader-haiku-train-4142.jsonl --spend-ledger .local/mkt/ledger.jsonl --spend-cap 17 --spend-headroom 0.3`);
-  a fresh default reading cost $0.17–0.19 (ledger runs ga-default and ga-default2).
+  labelled). Measured on 2026-11-05 on the intent-inert cache: replaying with `--reader-log .local/log.jsonl` (653
+  lines, 247/127 again), then `--set '{"askReaderPool":10}' ... --reader-subset .local/log.jsonl` gave
+  `{"replayed":17,"missed":3,"subset":602}`, hidden 230/384, decoys 140/384, labelled APPROXIMATE, at $0. A change
+  that adds or re-renders pool items misses for those prompts.
+- **When it goes stale.** Any change upstream of the reader's input (sync, retrieval, ranking, rendering, the intent
+  requests or thresholds, the day or request text), a `READER_VERSION` bump or another reader prompt misses: the miss
+  count says how much. Top the misses up with one metered live run into a copy (`--reader live --reader-model
+  claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl --spend-ledger .local/mkt/ledger.jsonl
+  --spend-cap 18 --spend-headroom 0.3 --run-label NAME`); a fresh default reading cost $0.17–0.19 (ledger runs
+  ga-default, ga-default2, ib-reader-intent-cache and ib-reader-intent-cache-default).
+- **How the surfaced items were surfaced (D173, reporting only).** Every run (each process's block, then the merged
+  score) prints, after TOTAL, `hidden surfaced` and `decoys surfaced` split into **flagged** (the reader flagged the
+  item in the request's last reading, whatever injection carried it), **rule path** (delivered without the flag, by
+  the injection's `why`: grounded-conflict, fallback, sources, ...) and **listed only** (cited by the ask with no flag
+  and no delivery: `readAsk`'s `rest`, chosen minus explicit rejections), and `decoys flagged in pool` beside `decoys
+  in pool`; `--json` carries `surfacedBy` on each perTask row. The recipe above, 2026-11-06 (16 s, $0): TOTAL 273/137
+  and pool 257/240 unchanged; decoys surfaced 137 = flagged 23 + rule path 68 (grounded-conflict 28, fallback 19,
+  sources 9, anticipated-conflict 4, grounded-card 3, cache 2, grounded-clash 2, grounded-graph 1) + listed only 46;
+  decoys flagged in pool 23 of 240; hidden 273 = 227 + 22 + 24. **The O7 precision gates are unchanged**: decoys in
+  pool and total surfaced (D165, D173). Gating on flagged plus rule path would drop the 46 listed-only decoys and
+  loosen a precision guard, so it needs a new decision; the split says where a decoy came from, not that it is
+  harmless.
+- **Planted coverage of the intent replay (D173).** With an intent file loaded, every run prints `planted items with
+  an intent replay line: hidden H/N, decoys D/N` beside `replayed requests for X of Y items asked`, with a WARNING
+  below 100%. Planted items are a few percent of the items asked but most of the file's holes: on 2026-11-06
+  `intent-v2` covered 13,440 of 13,604 items asked and only 286/384 hidden and 341/384 decoys (98 and 43 not in
+  replay; 141 of the 164 misses), so the $0 screens run a quarter of planted hidden facts with no requests. A WARNING
+  means intent and bridge screens on that run under-read intent; top the file up (`cards-enrich.ts --intent`,
+  metered) before trusting a bucket split.
+- **`--ask-diag F` buckets** (printed from the merged file at any `--jobs`). A planted item the ask left unranked is split into not cached; not sent,
+  prefilter rejects; **not in replay** (the intent replay has no line for its content, a lab artefact, told apart
+  from a line with no requests since D173); no intent requests; and requests but no match: no shared term, under
+  thresholds, **passes but past the first intentHits raw hits** (it passes the thresholds but the engine never sees
+  it), over thresholds (inside the engine's cut and still not a candidate). The intent hit is read as the engine
+  reads it (`intentFinds` with k = `intentHits` and the ask's arrival, thresholds after; partner.ts `intentFinds`,
+  cards.ts `intentFinds`), plus an unbounded call for the past-the-cut bucket; expired cards either call drops are
+  counted on the `dropped` line. A last line counts every row not in replay, ranked or not. The recipe above with
+  `-- --ask-diag F` (run then as one process; `--jobs` gives the same lines), 2026-11-06: hidden rank -1 64/384 = not in replay 18, no intent requests 3,
+  requests but no match 43 (no shared term 8, under thresholds 35, past the cut 0, over 0); decoys 77/384 = not
+  sent 4, not in replay 14, no match 59 (21, 38, 0, 0); not in replay over every row: hidden 98/384, decoys 43/384.
+- **Changes to the ask's cue are screened with a paid reader, never the stub (D174).** The stub got the sign of an
+  ask-wording effect wrong: on train1–6 seeds 41–42 it put a narrow agent-worded ask at 191/188 against 243/228
+  request-worded, and a question-plus-request union back at 239/227; paid Haiku reads (ledger runs
+  `audit3r2-narrow` $0.1185, `audit3r2-union` $0.1851) gave narrow 279/129 against the replay's 273/137 (paired
+  hidden +1.6 points, CI -1.2..+4.4) and union 281/140 against narrow (hidden +0.5, CI -2.1..+3.1; decoys +2.9, CI
+  -0.7..+6.4). These are D174's figures, not re-run here. Screen ask-cue changes with a metered live top-up of this
+  cache.
 
 ### 3. Blind check (once, pre-registered)
 
