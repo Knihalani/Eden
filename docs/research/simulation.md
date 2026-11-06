@@ -284,6 +284,12 @@ to 0.2 requests/s per user (429s) for 30 s. Gmail returned 217 errors and the CR
 Faults cost recall while they last (windows hold 100–250 need turns, so read the column as indicative) and never
 latency or errors at the edge.
 
+Note (RealUse-1 part D, 2026-11-06): until commit 64eb720c the sim's token bucket held at most `rate` tokens and a
+call takes one, so any rate under 1/s refused every call. The "CRM 429 storm" row above was therefore a full CRM 429
+outage, not 0.2 requests/s per user (also true of `server.ts`'s 0.5/s fault default). Re-run on 2026-11-06, `bun run
+sim:perf faults`: the CRM answered 444 429s before the fix and 235 after, with no failed calls either way;
+docs/research/realuse-1/D-decisions-freshness-robustness-privacy.md has both runs.
+
 ## What to do next, by expected effect
 
 1. **Query construction per connector** (M2). With AND-search connectors only 21% of needed facts are reachable;

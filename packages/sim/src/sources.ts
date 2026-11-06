@@ -537,6 +537,7 @@ export class SimSource implements Source {
   /** A token bucket in simulated time: real elapsed time divided by the time scale. */
   private take(rate: number): boolean {
     if (this.timeScale === 0) return true; // Instant runs have no real time to rate-limit over.
+    if (rate <= 0) return false; // A rate of 0 is an outage of 429s, not a bucket of one.
     const now = performance.now();
     const simSeconds = (now - this.lastRefill) / 1_000 / this.timeScale;
     // The bucket holds at least one token: with `rate` as its size, a rate under 1/s never reached the one token a

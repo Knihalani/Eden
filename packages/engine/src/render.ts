@@ -83,7 +83,8 @@ export function renderPacket(
     if (room < 40) break;
     const note = options.note?.(item);
     const said = note ? `${READER_TAG}${inert(oneLine(note).replace(/\|/g, "/"))} | ` : "";
-    const title = said + (item.title ? `${inert(oneLine(item.title))}: ` : "");
+    const named = oneLine(item.title);
+    const title = said + (named ? `${inert(named)}: ` : "");
     // Collapse whitespace only in a prefix that can fill the room (a char is at least one byte once collapsed), not
     // across an 8 KB item that is then cut to a few hundred bytes (9% of end-to-end CPU; pipeline.bench.ts).
     const prefix = item.text.length > room * 2 + 64 ? item.text.slice(0, room * 2 + 64) : item.text;
@@ -147,7 +148,7 @@ export function citationsOf(items: ContextItem[]): Citation[] {
  * another item's `- [source]` line inside the envelope. `\s` covers U+2028/U+2029 but not NEL (U+0085), which some
  * readers treat as a line break, so NEL is added.
  */
-const oneLine = (s: string) => s.replace(/[\s\u0085]+/g, " ").trim();
+export const oneLine = (s: string) => s.replace(/[\s\u0085]+/g, " ").trim();
 
 // The parts of a message that carry nothing for the agent: recipients, greetings, stock pleasantries, sign-offs and
 // the signature after them.

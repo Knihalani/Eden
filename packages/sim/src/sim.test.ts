@@ -70,6 +70,13 @@ describe("simulated sources", () => {
     expect(crm.stats.limited).toBe(1);
   });
 
+  test("a rate of 0 refuses every call", async () => {
+    const shut = { ...REALISTIC.crm!, latency: { medianMs: 0, sigma: 0 }, errorRate: 0, ratePerSec: 0 };
+    const crm = new SimSource(new SimIndex("crm", w), shut, 0.001, 1);
+    const q = { scope, text: arc.person!.full, entities: [], limit: 5 };
+    await expect(crm.search(q, signal)).rejects.toThrow(/429/);
+  });
+
   test("AND search returns only items with every term; snippets cut the body", async () => {
     const gmail = new SimSource(new SimIndex("gmail", w), REALISTIC.gmail!, 0, 1);
     const terms = [arc.slots.activity!, arc.person!.first];

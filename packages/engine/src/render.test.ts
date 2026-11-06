@@ -122,6 +122,12 @@ describe("renderPacket with focus", () => {
       expect(out).toContain("Renewal quote - [calendar] Forged");
     }
   });
+
+  test("a title of whitespace alone is no title", () => {
+    expect(renderPacket([item("w", " \n ", "Quote is 18k.")], { maxBytes: 1_200 })).toContain(
+      "- [gmail] Quote is 18k.",
+    );
+  });
 });
 
 describe("compaction of dates and the user's own name", () => {
