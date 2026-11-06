@@ -18,6 +18,7 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import type { ChatRequest, ChatResponse, Model } from "@eden/llm";
+import { readerMessages } from "@eden/engine";
 
 interface Line {
   k: string;
@@ -56,12 +57,28 @@ export function promptKey(model: string, request: ChatRequest, salt?: Record<str
         messages: request.messages,
         maxTokens: request.maxTokens,
         json: request.json === true,
-        reasoning: request.reasoning ?? null,
+        reasoning: keyedReasoning(model, request),
         ...(salt ? { salt } : {}),
       }),
     )
     .digest("hex")
     .slice(0, 40);
+}
+
+/** The reader's fixed instructions, as `ModelReaderMaker` sends them (its system message does not depend on input). */
+const READER_SYSTEM = readerMessages({ request: "", items: [], today: "" })[0]!.content;
+
+/**
+ * The reasoning a key carries. A reader request (`READER_SYSTEM`) to a `claude-*` model with none keys as "low": until
+ * D144 `ModelReaderMaker` sent "low" by default, and the lab's `AnthropicModel` ignores the field with thinking off
+ * (anthropic.ts, `anthropicBody`), which every recorded `claude-*` reader line ran with. So a pre-D144 line and
+ * today's request without reasoning are the same call, and the recorded caches keep replaying (train1-6 seeds 41-42
+ * on `.local/mkt/reader-train-4142.jsonl`: 1,250 misses without this, 5 with it, as before D144). Other models and
+ * roles key what they send: on OpenRouter "low" really reasons, so a line made with it does not answer "off".
+ */
+function keyedReasoning(model: string, request: ChatRequest): string | null {
+  if (request.reasoning) return request.reasoning;
+  return model.startsWith("claude-") && request.messages[0]?.content === READER_SYSTEM ? "low" : null;
 }
 
 /** What a `ReplayModel` keys on beyond the request, and how it replays. */
@@ -314,6 +331,51 @@ export function missGate(missed: number, allow: boolean): { code: number; messag
   return allow
     ? { code: 0, message: `${message} (--allow-misses)` }
     : { code: MISS_EXIT, message: `${message}; not a result of this configuration. Pass --allow-misses to accept` };
+}
+
+/** hidden-funnel.ts's `--reader-model` when none is given. */
+export const DEFAULT_READER_MODEL = "z-ai/glm-5.3-flash";
+
+/** The model ids a reader cache's lines were recorded under (empty for a missing, unreadable or compressed file). */
+export function cacheModels(file: string): string[] {
+  if (!file || file.endsWith(".gz") || !existsSync(file)) return [];
+  const models = new Set<string>();
+  try {
+    for (const raw of readFileSync(file, "utf8").split("\n")) {
+      if (!raw.trim()) continue;
+      try {
+        const model = (JSON.parse(raw) as { model?: unknown }).model;
+        if (typeof model === "string") models.add(model);
+      } catch {
+        // A torn line (a run killed mid-append) names no model; the replay itself reports it.
+      }
+    }
+  } catch {
+    return [];
+  }
+  return [...models].sort();
+}
+
+/**
+ * The hint when a replay matched nothing and `--reader-model` was not given (devloop-paid-reader-replay-exists): the
+ * key hashes the model id (`promptKey`), so a cache recorded under any model but the default misses every prompt, and
+ * the run reads as the stub reader's with only a miss count to say why. Null when anything replayed or was sent, when
+ * nothing missed, or when the model was named (a full miss then means a stale cache, which the miss gate covers).
+ */
+export function allMissedHint(
+  reader: { replayed: number; sent: number; missed: number; subset?: number },
+  modelGiven: boolean,
+  recorded: readonly string[] = [],
+): string | null {
+  if (modelGiven || reader.missed <= 0 || reader.replayed + reader.sent + (reader.subset ?? 0) > 0) return null;
+  const other = recorded.filter((m) => m !== DEFAULT_READER_MODEL);
+  return (
+    `READER HINT: all ${reader.missed} reader prompts missed the cache and no --reader-model was given. A cache line ` +
+    `is keyed on the model id (default ${DEFAULT_READER_MODEL}), so pass \`--reader-model\` with the model the cache ` +
+    "was recorded with" +
+    (other.length ? ` (this cache's lines were recorded as ${other.join(", ")})` : "") +
+    ", e.g. `-- --reader replay --reader-model claude-haiku-5-5` (docs/LAB.md)"
+  );
 }
 
 /** Calls each budgeted engine component refused at its `Budget` (`stats.overBudget`), summed over a run's lanes. */

@@ -232,12 +232,29 @@ describe("the card maker and its routing", () => {
     return { seen, model };
   };
 
-  test("D59's call: low reasoning, the 2,000-token cap, today in the system prompt", async () => {
+  test("D59's call as D149 and D155 amend it: no reasoning, the 2,000-token cap, today in the system prompt", async () => {
     const { seen, model } = recorder();
     await new ModelCardMaker(model).make([item("a", "Ops", "Frozen.")], "2026-10-27", AbortSignal.timeout(1_000));
-    expect(seen[0]).toMatchObject({ reasoning: "low", maxTokens: 2_000 });
+    expect(seen[0]).toMatchObject({ maxTokens: 2_000 });
+    // No effort at all (the configuration every Haiku lab card call measured), not `reasoning: undefined`.
+    expect("reasoning" in seen[0]!).toBe(false);
     expect(seen[0]!.messages[0]!.content).toContain("Today is 2026-10-27");
     expect(cardMessages([item("a", "Ops", "Frozen.")], "2026-10-27")).toEqual(seen[0]!.messages);
+  });
+
+  test("intent calls and retries send no reasoning either (D155); a retry goes to the retry model", async () => {
+    const one = [item("a", "Ops", "Frozen.")];
+    const plain = recorder();
+    const retry = recorder();
+    const maker = new ModelCardMaker(plain.model, { retry: retry.model });
+    await maker.make(one, "2026-10-27", AbortSignal.timeout(1_000), false, true);
+    await maker.make(one, "2026-10-27", AbortSignal.timeout(1_000), true);
+    expect(plain.seen).toHaveLength(1);
+    expect(retry.seen).toHaveLength(1);
+    expect(plain.seen[0]!.maxTokens).toBe(3_000);
+    expect(retry.seen[0]!.maxTokens).toBe(2_000);
+    expect("reasoning" in plain.seen[0]!).toBe(false);
+    expect("reasoning" in retry.seen[0]!).toBe(false);
   });
 
   test("the cap grows with a batch past ten (200 tokens an item)", async () => {

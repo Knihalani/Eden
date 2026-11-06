@@ -26,7 +26,7 @@ import { dedupText, hamming64, SparseIndex, TextSketcher, Vocab } from "@eden/pr
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { ListReuse } from "@eden/sources";
-import { offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
+import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
 import { squash, UserGraph, type Seed, type Walked, type WalkOptions } from "./kg";
 import { head, termIds } from "./text";
 
@@ -997,15 +997,18 @@ export class ItemCache {
   /**
    * Fresh cached items that start on one of `days` (YYYY-MM-DD of their `meta.start`: events), soonest first, at most
    * `limit`: for requests that name a day rather than words the item holds (D44). A scan of the user's items (at most
-   * `maxItemsPerUser`), run only for such requests; the cap keeps what is scored after it small.
+   * `maxItemsPerUser`), run only for such requests; the cap keeps what is scored after it small. An item's day is
+   * `startDay`'s at `offset` (`dayOf`): the user's, or the one the request's days were resolved at (`Cue.offset`), so
+   * the engine's on-day checks agree with what this returns even if a sync moved the user's offset in between.
    */
-  timed(scope: Scope, days: ReadonlySet<string>, now = Date.now(), limit = 30): CacheHit[] {
+  timed(scope: Scope, days: ReadonlySet<string>, now = Date.now(), limit = 30, offset?: number): CacheHit[] {
     const u = this.peek(scope);
     if (!u || days.size === 0) return [];
+    offset ??= this.offsetOf(scope);
     const out: CacheHit[] = [];
     for (const e of u.items.values()) {
       const start = e.item.meta?.start;
-      if (!start || !days.has(start.slice(0, 10)) || !this.alive(e, now)) continue;
+      if (!start || !days.has(dayOf(start, offset)) || !this.alive(e, now)) continue;
       out.push({ item: e.item, sketch: null, doc: e.doc, score: 0, coverage: 0, matched: 0 });
     }
     // Zone-less starts read as UTC (`parseWhen`); one that does not parse sorts last (NaN compares false).

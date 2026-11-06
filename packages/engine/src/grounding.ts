@@ -12,8 +12,9 @@
  *   `meta.start` falls on one of them is in the window. "The next X" asks for the earliest upcoming one.
  *
  * Dates are compared as calendar days: an item's day is the date in its own start timestamp (its own offset), the
- * request's days are days at the user's offset (`userOffset`: the offset most of their events carry). An event stored
- * in another offset than the user's can be a day off.
+ * request's days are days at the user's offset (`userOffset`: the offset most of their events carry). A start in UTC
+ * at a user with another offset is read at the user's offset (`dayOf`: connectors that write instants in UTC); an
+ * event stored in another non-zero offset than the user's keeps its own day, so it can be a day off.
  */
 import type { ContextItem } from "@eden/protocol";
 
@@ -125,10 +126,28 @@ export function timeWindow(text: string, now: number, offsetMinutes = 0): TimeWi
   return { days, next: asksNext };
 }
 
-/** The day an item starts on (its own offset), or null when it has no `meta.start`. */
-export function startDay(item: ContextItem): string | null {
+/**
+ * The day an item starts on, or null when it has no `meta.start`: its own day, or for a start in UTC its day at the
+ * user's `offset` (minutes, `ItemCache.offsetOf`), as `dayOf` reads it.
+ */
+export function startDay(item: ContextItem, offset = 0): string | null {
   const s = item.meta?.start;
-  return s && /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null;
+  return s && /^\d{4}-\d{2}-\d{2}/.test(s) ? dayOf(s, offset) : null;
+}
+
+/**
+ * The YYYY-MM-DD a start is on for a user at `offset` (minutes). A start that carries a non-zero offset is on its own
+ * day (the date it was written with): the event's own zone says which day it is. A start in UTC ("Z", "+00:00") at a
+ * user whose calendar carries another offset is a connector writing instants, not the user's day: 23:30Z on the 6th
+ * is the 7th at +01:00, so its day is read at the user's offset. A zone-less start or a bare date is wall-clock and
+ * keeps its date. Otherwise its first ten characters (the caller checks they are a date).
+ */
+export function dayOf(start: string, offset: number): string {
+  if (offset !== 0 && offsetOf(start) === 0) {
+    const t = parseWhen(start);
+    if (!Number.isNaN(t)) return new Date(t + offset * 60_000).toISOString().slice(0, 10);
+  }
+  return start.slice(0, 10);
 }
 
 /** When an item starts (ms, `parseWhen`), or NaN. */

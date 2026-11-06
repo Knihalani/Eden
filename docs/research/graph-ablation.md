@@ -1,10 +1,12 @@
-# The knowledge graph against its cost: a paid-reader ablation (stage 1)
+# The knowledge graph against its cost: a paid-reader ablation (stage 1) and a lighter read (stage 2)
 
-Status: 2026-11-05. Deep audit 2026-11-05 round 2, work package `r2-graph-ablation` (findings
+Status: 2026-11-05. Stage 2 (D150, the section at the end) is done: the graph now reads 1,000 characters per item.
+Deep audit 2026-11-05 round 2, work package `r2-graph-ablation` (findings
 `devloop-ingest-bench-not-shipped-path` and `scale-graph-dominates-ingest`). Every number below comes from a command
 run in this session on the integration branch (`audit/2026-11-05-integration`, 463f6fdfc, plus this change), on a
-shared 4-core container with other agents running. Decision: D141 in docs/DECISIONS.md (graph stays in the default;
-deleting its code rejected; stage 2 is the `graphLite` trial still to build).
+shared 4-core container with other agents running. Decisions: D141 in docs/DECISIONS.md (graph stays in the default;
+deleting its code rejected) and D150 (stage 2 built with no switch: the graph reads 1,000 characters per item, which
+closes the planned `graphLite` trial).
 
 ## In plain words
 
@@ -153,3 +155,81 @@ with `--baseline`), and `graph-memory.ts`'s fingerprint is expected to change. A
 
 Limits: one suite family (train), two seeds, intent inert, one paid read of minus-graph. A live agent (Pi) run was not
 made: the gain is 4 tasks of 384 and the decision is to keep the default as it is, which needs no agent run.
+
+## Stage 2 (D150): the graph reads each item's first 1,000 characters
+
+Status: 2026-11-05, deep audit 2026-11-05 final round, work package `graph-read-chars-1000`. Measured on
+`audit/2026-11-05-integration` at c11b0289c (before) and the same tree with this change (after), on a shared 4-core
+container with other agents running. Decision: D150 (promoted into the default with no switch; `graphLite` closed).
+
+### In plain words
+
+The graph read the first 4,000 characters of every synced item's text. It now reads the first 1,000. The item's title
+and its `meta.people` field are read as before, and `meta.start` still places it on its day. On the ingest bench the
+graph's work per synced item is now 2.1–2.3 times cheaper and holds 37% less memory, and the shipped path's backfill
+fell from about 5x the cache's own work to about 3.6x. Every $0 screen and the replayed paid-reader screen gave the
+same result on every task. Nothing costs more, so D112 promotes it into the default directly, with no trial switch.
+
+### Ingest (`bun packages/engine/bench/ingest.bench.ts`, 200 users × 500 items, average text 1,599 chars)
+
+Two runs each way, alternated (before, after, before, after):
+
+| Mode or stage | Backfill µs/item, before | Backfill µs/item, after | Heap B/item raw held, before | after |
+|---|---|---|---|---|
+| core | 64.8 / 67.2 | 66.1 / 64.4 | 2,562 / 2,562 | 2,562 / 2,562 |
+| graph | 238.7 / 234.6 | 140.4 / 143.5 | 5,196 / 5,202 | 4,230 / 4,231 |
+| shipped | 335.2 / 334.4 | 235.1 / 239.4 | 5,188 / 5,187 | 4,222 / 4,219 |
+| stage: + graph's add | 173.9 / 167.4 | 74.3 / 79.1 | 2,634 / 2,640 | 1,668 / 1,669 |
+| stage: + `onStored` | 96.5 / 99.7 | 94.8 / 95.9 | −8 / −15 | −8 / −12 |
+| shipped / core | 5.17x / 4.97x | 3.56x / 3.72x | 2.02x / 2.02x | 1.65x / 1.65x |
+
+The `+graph` stage is 2.34x and 2.12x cheaper per item (173.9 → 74.3, 167.4 → 79.1), which clears D141's 2x gate on
+this command. The work package's planning run used `--quick` (40 users × 500) and saw 1.84x (156.9 → 85.1); the full
+bench is the gate's command. The sweep of an unchanged listing stays at 3.5–5.0 µs/item.
+
+`bun packages/sim/src/lab/graph-memory.ts` (20 users × 2,000 realistic items) prints fingerprint `24232465bfa96eee`
+and 0.63 KB of graph per item, as in stage 1: the sim's items fit in 1,000 characters, so its graph is unchanged. The
+bench's longer items are where the cut acts. The funnel's train worlds (`buildWorld({ seed: 41_000 })` and
+`42_000`, before planting, counted by a scratch script that filters `world.items` on `text.length`) hold 294 of 1,487 and 297 of 1,494 items
+longer than 1,000 characters, and 114 and 106 longer than 4,000, so the screens below do read long items.
+
+### Quality screens ($0)
+
+```bash
+S=<scratch dir>; gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142.jsonl.gz > $S/reader-haiku.jsonl
+# before (4,000), then after (1,000) with --baseline of the before run:
+bun run funnel --jobs 4 --json $S/base-stub.json
+bun run funnel --jobs 4 --baseline $S/base-stub.json --json $S/new-stub.json
+bun run funnel --jobs 4 --allow-misses --json $S/base-replay.json -- --reader replay \
+  --reader-model claude-haiku-5-5 --reader-cache $S/reader-haiku.jsonl
+bun run funnel --jobs 4 --allow-misses --baseline $S/base-replay.json --json $S/new-replay.json -- --reader replay \
+  --reader-model claude-haiku-5-5 --reader-cache $S/reader-haiku.jsonl
+bun run eval
+```
+
+| Screen | Before | After | Task by task (`--baseline`) |
+|---|---|---|---|
+| funnel, stub reader | hidden 214/384, decoys 211/384, pool 230/229 | the same | hidden +0 −0, decoys +0 −0 |
+| funnel, Haiku 5.5 reader replayed (D141's paid reading) | hidden 247/384, decoys 127/384, pool 230/229; 648 replayed, 5 missed | the same | hidden +0 −0, decoys +0 −0 |
+| eval (31 scenarios, no model) | precision 0.8276, recall 0.48, falseFireRate 0 | the same | |
+
+Every per-task field of the two funnels' `--json` outputs is equal before and after except the timing fields (`ms`,
+`askMs`, `readerWaitMs`, `deliveryMs`): the reader's pool, the reader's verdicts, deliveries and ask citations did not
+move on any of the 768 tasks. The five pool tasks D141 kept the graph for (train4 `supplier-bank-not-verified` 41,
+`msa-template-withdrawn` 41 and 42, train6 `rejection-before-feedback` 41 and 42) are in the pool after the change.
+The replay's 5 misses are prompts the recorded cache never held, answered without the reader (fail open), the same 5
+before and after. No paid call was made for this stage.
+
+### Decision (D150)
+
+Promote `READ_CHARS = 1_000` (`packages/engine/src/kg.ts`) into the default with no switch: measured neutral on every
+quality screen, and cheaper (D112). This closes D141's `graphLite`: its candidate "headers plus the first ~1,000
+characters" is this change (header lines at the head of the text are inside the 1,000 characters, so they are
+still read; a forwarded message's headers further down are not), and its other candidate (only
+lookup items in the graph) is not built. A name or address that first appears past an item's first 1,000
+characters adds no node now (`kg.test.ts`, "only the first 1,000 characters of an item's text are read"); the item is
+still cached, indexed and searchable whole, so only the graph's walk loses that tie.
+
+Limits: one suite family (train), two seeds, intent inert, the paid reader replayed rather than re-read (a pool that
+did not change replays the same verdicts, which is why it is a valid screen here). No live agent run: nothing the
+agent sees changed on any task.

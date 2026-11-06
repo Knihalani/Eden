@@ -16,9 +16,9 @@ import { SourceMap } from "@eden/graph";
 import { Budget, DEFAULT_LIMITS, OpenRouterModel, TenantSpend, type Model } from "@eden/llm";
 // The servers' own role construction (D128): the eval's live reader is built by the function main.ts calls, so the
 // model, its routing (D12's ZDR and no data collection, D95's throughput sort) and EDEN_MODEL cannot drift from what
-// ships. A relative import of that one file, which needs only @eden/llm, rather than a dependency on all of
-// @eden/server (its HTTP and MCP layers).
-import { modelRolesFromEnv, type MakeRoleModel } from "../../server/src/models";
+// ships. Imported through the declared @eden/server dependency, so test:changed reruns the eval's tests when the
+// server's wiring changes (scripts/test-select.ts follows package.json only).
+import { modelRolesFromEnv, type MakeRoleModel } from "@eden/server";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner, StaticSource } from "@eden/sources";
 import { OracleReader, readerFor, type ReaderKindOption } from "./reader-stub";

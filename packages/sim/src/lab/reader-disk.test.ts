@@ -4,7 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AskReader, type ReaderInput, type ReaderMaker } from "@eden/engine";
 import { Budget, type ChatRequest, type Model } from "@eden/llm";
-import { MISS_EXIT, missGate, overBudget, overBudgetLine, ReplayModel, SubsetReplay, systemHash } from "./reader-disk";
+import {
+  MISS_EXIT,
+  missGate,
+  overBudget,
+  overBudgetLine,
+  promptKey,
+  ReplayModel,
+  SubsetReplay,
+  systemHash,
+} from "./reader-disk";
 import { readerItem, readerMessages } from "@eden/engine";
 
 const request = (n: number): ChatRequest => ({
@@ -165,5 +174,25 @@ describe("SubsetReplay (--reader-subset)", () => {
     expect([m.subsetReplayed, m.missed, m.replayed]).toEqual([1, 0, 0]);
     await expect(m.chat(req([7]))).rejects.toThrow("no cached call");
     expect(m.missed).toBe(1);
+  });
+});
+
+describe("promptKey across D144 (the reader's reasoning default went from low to off)", () => {
+  const reader = (reasoning?: "low" | "high"): ChatRequest => ({
+    messages: readerMessages({ request: "Book the venue", items: [], today: "2026-11-05" }),
+    maxTokens: 2_000,
+    json: true,
+    ...(reasoning ? { reasoning } : {}),
+  });
+
+  test("a claude-* reader request with no reasoning keys as the pre-D144 'low' line: thinking off ignored it", () => {
+    expect(promptKey("claude-haiku-5-5", reader())).toBe(promptKey("claude-haiku-5-5", reader("low")));
+    expect(promptKey("claude-haiku-5-5", reader())).not.toBe(promptKey("claude-haiku-5-5", reader("high")));
+  });
+
+  test("on other models 'low' really reasons, and other roles key what they send: neither is aliased", () => {
+    expect(promptKey("z-ai/glm-5.3-flash", reader())).not.toBe(promptKey("z-ai/glm-5.3-flash", reader("low")));
+    const grader: ChatRequest = { ...request(1), reasoning: "low" };
+    expect(promptKey("claude-haiku-5-5", request(1))).not.toBe(promptKey("claude-haiku-5-5", grader));
   });
 });

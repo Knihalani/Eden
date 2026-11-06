@@ -50,7 +50,10 @@ as a tool or as injected context. Until the lab runs on Pi, label any agent resu
 `bun run format` fixes formatting except long comments. Engine changes that touch scoring, thresholds or
 delivery also run `bun run eval --live --usd-cap 0.05` (needs `OPENROUTER_API_KEY`; costs fractions of a cent) and
 report both runs. `--live` is the shipped wiring (live reader, no judge) and refuses to start without a hard dollar
-cap (D128); `--live --judge --usd-cap 0.05` re-runs the pre-D128 shape (judge on, reader stub).
+cap (D128); `--live --judge --usd-cap 0.05` re-runs the pre-D128 shape (judge on, reader stub). Where paid calls are
+limited to Anthropic, `bun packages/sim/src/lab/eval-live.ts --spend-ledger .local/mkt/ledger.jsonl --spend-cap 17`
+runs the same shipped wiring with the reader on `claude-haiku-5-5` (`HAIKU_API_KEY`, about $0.001): a lab transport
+(D97), not the shipped OpenRouter route, so label its numbers so.
 
 ## Engineering rules
 

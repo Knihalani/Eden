@@ -10,10 +10,16 @@ import { AskReader, type ReaderMaker } from "./reader";
 
 // D140: an explicit ask has one deadline for its whole lookup. The on-demand sync poll, the live search and the probes
 // share it, so a source whose listing and search both hang holds the reader back about `sourceTimeoutMs`, not twice
-// that (the poll's own 1.5 s, then a fresh 1.5 s for the search).
+// that (the poll's own deadline, then a fresh one for the search).
+//
+// TIMEOUT is short so the file does not idle for seconds, and the bound is proportional to it: one deadline must land
+// under 1.5x TIMEOUT (750 ms) while a regression to two lands at 2x (1,000 ms), 250 ms clear of the bound. Do not
+// shrink TIMEOUT without keeping that gap; at 300 ms with a fixed +250 ms the two cases sat 50 ms apart.
 
 const scope: Scope = { tenantId: "t", userId: "u" };
-const TIMEOUT = 1_500;
+const TIMEOUT = 500;
+/** One deadline plus setup and scheduling slack; two deadlines (2x TIMEOUT) must fail it. */
+const ONE_DEADLINE = TIMEOUT * 1.5;
 
 /** A notifying source that answers until `hang` is set; then its listing and its search never answer. */
 class Hanging implements Source {
@@ -110,7 +116,7 @@ describe("D140: one deadline for an ask's poll, live search and probes", () => {
     const { r, beforeReader } = await ask("s1");
     expect(src.lists).toBeGreaterThan(listsBefore); // The poll was made (and hung) ...
     expect(beforeReader).not.toBeNull(); // ... and the reader still read the held copy.
-    expect(beforeReader!).toBeLessThan(TIMEOUT + 250);
+    expect(beforeReader!).toBeLessThan(ONE_DEADLINE);
     // The source that did not answer is named: an empty or partial answer is not an all-clear (D127).
     expect(r.sources?.find((x) => x.sourceId === "notes")?.status).not.toBe("ok");
   }, 10_000);
@@ -123,7 +129,7 @@ describe("D140: one deadline for an ask's poll, live search and probes", () => {
     const { beforeReader } = await ask("s2");
     expect(src.lists).toBe(lists);
     expect(src.searches).toBeGreaterThan(searches);
-    expect(beforeReader!).toBeLessThan(TIMEOUT + 250);
+    expect(beforeReader!).toBeLessThan(ONE_DEADLINE);
   }, 10_000);
 
   test("once sourceTimeoutMs has passed since that poll gave up, the source is polled again", async () => {

@@ -43,8 +43,9 @@ export const READER_REQUEST_CHARS = 400;
 export const READER_WHY_WORDS = 15;
 const READER_WHY_CHARS = 120;
 /**
- * Output cap: the answer is a few short entries, but low-effort reasoning comes first and counts against it (D45).
- * A cut-off reply is unreadable, so the ask falls back to its usual answer.
+ * Output cap: the answer is a few short entries. The reader sends no reasoning effort (D155); the cap keeps D45's
+ * headroom for a model that reasons on its own whatever it is asked. A cut-off reply is unreadable, so the ask falls
+ * back to its usual answer.
  */
 const READER_MAX_TOKENS = 2_000;
 
@@ -464,33 +465,19 @@ export interface ReaderMaker {
   }>;
 }
 
-/** How hard the reader's model reasons before it answers; "off" sends no effort at all. */
-export type ReaderReasoning = "low" | "medium" | "high" | "off";
-
-export interface ModelReaderOptions {
-  /**
-   * Default "low", today's production value. Reasoning tokens are billed as output and add to latency, but
-   * OpenRouter excludes them from the reply, so only `usage.reasoningTokens` shows them. Changing the default needs a
-   * decision and a decoy measurement: D96 found that reasoning before the verdict is what keeps decoys out.
-   */
-  reasoning?: ReaderReasoning;
-}
-
+/**
+ * The reader's model call. It sends no reasoning effort (D144, D155): the request every lab quality figure measured
+ * (D96, D98, D125 ran it on Anthropic with thinking off). D96's decoy cut came from the prompt's own reasoning, `why`
+ * written before `binds` (READER_SYSTEM v4/v5), not from provider reasoning, and provider reasoning ("low") on Haiku
+ * 5.5 was 2.38-3.33x slower at p50 and about 1.5x dearer with quality neutral, so no option asks for it (D155).
+ */
 export class ModelReaderMaker implements ReaderMaker {
-  private readonly reasoning: ReaderReasoning;
-
-  constructor(
-    private readonly model: Model,
-    options: ModelReaderOptions = {},
-  ) {
-    this.reasoning = options.reasoning ?? "low";
-  }
+  constructor(private readonly model: Model) {}
 
   async read(input: ReaderInput, signal: AbortSignal) {
     const res = await this.model.chat({
       messages: readerMessages(input),
       maxTokens: READER_MAX_TOKENS,
-      ...(this.reasoning === "off" ? {} : { reasoning: this.reasoning }),
       json: true,
       ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),
       signal,
@@ -509,8 +496,8 @@ export interface ReaderLimits {
   /** A verdict older than this is read again, and dropped (ms): about a session's idle timeout. */
   ttlMs: number;
   /**
-   * The estimate a call is reserved at (docs/COST-MODEL.md): about 4,500 tokens in for 30 items, up to 2,000 out with
-   * reasoning, at the list price.
+   * The estimate a call is reserved at (docs/COST-MODEL.md): about 4,500 tokens in for 30 items, up to 2,000 out
+   * (READER_MAX_TOKENS), at the list price.
    */
   estimateUsd: number;
 }

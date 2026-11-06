@@ -188,3 +188,36 @@ Measured on a shared 4-core VM (Bun 1.4.4), runs back to back:
   eviction, and this workload misses and evicts on most operations).
 - Heap: grouping adds ~63 B per entry (200,000 empty entries with ~120-char keys: 345 → 408 B/entry, `bun:jsc`
   heapStats after a full GC).
+
+## Small sketcher arrays (2026-11-05, audit second pass)
+
+`TextSketcher` allocated its four per-id `Uint32Array`s, its `Uint8Array` of states and its unit pool at 1,024 slots
+in every constructor (17,408 B of payload), and the engine keeps one sketcher per user (`UserCache` in
+`packages/engine/src/cache.ts`, beside a `Vocab(256)`). They now start at 64 slots (1,088 B) and double as the
+vocabulary and the pool need (`growTerms` on load, `poolPush`); `compactPool`'s floor is 64 too, so a compaction no
+longer brings the 1,024-slot pool back. Sketches are unchanged: `dedup.test.ts` grows a sketcher past 64 and past
+1,024 ids and pool units (Latin, numeric, ideographic, accented and lone-surrogate terms) and through pool compaction
+under churn, comparing every fingerprint, SimHash, MinHash, number key and unit count with a sketcher laid out at
+1,024 slots.
+
+Measured on a shared 4-core VM (Bun 1.4.4); old and new `dedup.ts` swapped in turn on the same tree:
+
+| Benchmark | Before | After |
+|---|---|---|
+| Heap per one-item user, real `ItemCache`, 5,000 users, `heapStats` after a full GC (scratch script; 3 / 2 runs, identical to ±1 B): item of 10 / 100 distinct terms | 29,567 / 33,166 B | 13,248 / 16,845 B (2.23x / 1.97x) |
+| `ingest.bench.ts` core mode (200 users × 500 items), raw held / released memory per item | 2,595 / 2,790 B | 2,562 / 2,757 B |
+| Same, shipped mode, raw held / released | 5,191 / 5,450 B | 5,185 / 5,450 B |
+| Same, backfill µs per item: core / graph / shipped (one run each) | 67.5 / 235.6 / 356.1 | 73.0 / 279.9 / 374.1 |
+| `dedup.bench.ts` (3 runs each, alternating; median p50): load 300 B / 2 KB / 16 KB | 233 ns / 15.75 / 106.7 µs | 241 ns / 19.61 / 103.1 µs |
+| Same: load + minhash k=128, 300 B / 2 KB / 16 KB | 382 ns / 63.1 / 370.5 µs | 381 ns / 65.6 / 354.3 µs |
+| Same: load + simhash, 300 B / 2 KB / 16 KB | 236 ns / 33.5 / 204.0 µs | 220 ns / 34.5 / 207.0 µs |
+| Interleaved in one process (scratch, 5 runs of 6 rounds, both orders): steady load + simhash 2 KB, median | 26.3–27.5 µs | 26.1–27.1 µs |
+| Same: a new sketcher and its first 2 KB load (pays the growth), median | 89.5–131.8 µs | 87.1–140.2 µs |
+| `index-memory.bench.ts` cache mode, `ItemCache` heap per item, 1 user × 6,892 items | 1,149 B | 1,148 B |
+
+The per-load code is the same, so the timing rows are run-to-run noise (the 2 KB `dedup.bench.ts` medians are
+15.72–27.93 µs old and 15.89–22.04 µs new; the interleaved 300 B row follows run order, not the layout). The gain is
+memory: 16.3 KB less per light user (about 163 MB per 10,000 such users, an estimate: 16,319 B × 10,000), and nothing
+for a heavy user, whose arrays reach the same size by doubling (33 B per item in the ingest bench, whose users hold
+500 items). `sketch.bench.ts` (ExpiringSet, Bloom, count-min; no `TextSketcher`) was re-run as a control: its memory
+figures are identical before and after.

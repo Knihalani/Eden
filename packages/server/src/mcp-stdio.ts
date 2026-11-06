@@ -14,7 +14,7 @@ import { isId, newId } from "@eden/protocol";
 import { buildPartner, openSourceMap } from "./build";
 import { warmGate } from "@eden/redact";
 import { plannerMode, stdioSourceMapPath } from "./config";
-import { sourcesFromEnv } from "./connectors";
+import { sourcesOrExit } from "./connectors";
 import { engineConfig } from "./engine-config";
 import { createMcpServer } from "./mcp";
 import { modelRolesFromEnv } from "./models";
@@ -25,10 +25,12 @@ if (!isId(tenantId) || !isId(userId)) {
   console.error("set EDEN_USER (and EDEN_TENANT) to ids of [A-Za-z0-9._:@-]");
   process.exit(1);
 }
+// EDEN_USER_SOURCES_FILE (D108) works here too: only this process's user's entry is read and checked. A bad file
+// exits 2 with one line on stderr (stdout is the MCP channel).
+const sources = sourcesOrExit(process.env, { tenantId, userId });
 // The query planner as in the HTTP server (D33): on unless EDEN_QUERY_PLANNER=0, learning into this user's source map.
 const partner = buildPartner({
-  // EDEN_USER_SOURCES_FILE (D108) works here too: only this process's user's entry is read and checked.
-  sources: sourcesFromEnv(process.env, { tenantId, userId }).resolver,
+  sources: sources.resolver,
   // Fails open to an in-memory map (logged to stderr) when the file cannot be opened, rather than not starting.
   sourceMap: openSourceMap(() => stdioSourceMapPath(tenantId, userId)),
   queryPlanner: plannerMode(process.env.EDEN_QUERY_PLANNER),

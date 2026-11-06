@@ -25,7 +25,7 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
   D112) and the ask-time and push reader, `AskReader` over `ModelReaderMaker` on the servers' reader role
   (`modelRolesFromEnv(env).reader` from `server/src/models.ts`, imported by relative path so it cannot drift:
   EDEN_MODEL, default `anthropic/claude-haiku-5.5`, OpenRouter with D12's routing and D95's throughput sort,
-  reasoning "low") on the servers' default budget limits. Cards and intent stay inert (named under `inert`). The
+  no reasoning, D144) on the servers' default budget limits. Cards and intent stay inert (named under `inert`). The
   JSON adds `wiring`, `readerModel`, `usdCap`, `spentUsd`, `readerPool` (`reader: "live"`, with `failures`) and
   `readerFailure`: the first failed reader call as the server logs it (key removed, redacted). A reader that fails
   on every call (an OpenRouter 403 for the account) still scores, as the no-model path: read `readerPool.failures`

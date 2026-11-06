@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ReaderInput } from "@eden/engine";
 import { PRESETS } from "./presets";
+import { allMissedHint, cacheModels, DEFAULT_READER_MODEL } from "./reader-disk";
 import {
   beforeModelLine,
   CountingReader,
@@ -76,12 +77,27 @@ const funnelTimed = (jobs: string) => {
 // The end-to-end runs are single-threaded child processes (mostly sleeps, for the shards). They start together
 // here, before any test, and each test awaits its own: one after another they cost the sum of their wall times.
 // The default's stub run assertions are in reader-stub.test.ts, on the stub run that file makes anyway.
-let runs: { overlap: Promise<Run>; solo: Promise<Run>; sharded: Promise<Run> };
+let runs: {
+  overlap: Promise<Run>;
+  solo: Promise<Run>;
+  sharded: Promise<Run>;
+  missNoModel: Promise<Run>;
+  missModel: Promise<Run>;
+};
+// A reader cache with one line recorded under a model that is not the default: every prompt of a run misses it.
+let otherCache = "";
 beforeAll(() => {
+  otherCache = join(scratch(), "rc.jsonl");
+  const line = { k: "0".repeat(40), text: "{}", usage: {}, costUsd: 0, latencyMs: 0, model: "claude-haiku-5-5" };
+  writeFileSync(otherCache, `${JSON.stringify(line)}\n`);
+  const replay = (extra: string[]) =>
+    funnel(smallSync, ["--reader", "replay", "--reader-cache", otherCache, ...extra], 1);
   runs = {
     overlap: funnel({ ...PRESETS["minus-reader"], ...PRESETS["minus-intent"], ...smallSync }, ["--overlap"], 3),
     solo: funnelTimed("1"),
     sharded: funnelTimed("2"),
+    missNoModel: replay([]),
+    missModel: replay(["--reader-model", "claude-haiku-5-5"]),
   };
 });
 
@@ -131,6 +147,68 @@ describe("no-model readers write --reader-log lines", () => {
     expect(got.bears?.map((b) => b.i)).toEqual([0]);
     expect(lines[0]!.reply).toEqual(got);
     expect(o.calls).toBe(1);
+  });
+});
+
+describe("all reader prompts missed and no --reader-model (devloop-paid-reader-replay-exists)", () => {
+  const all = { replayed: 0, sent: 0, missed: 1250 };
+  test("names --reader-model and the models the cache was recorded as", () => {
+    const hint = allMissedHint(all, false, ["claude-haiku-5-5"]);
+    expect(hint).toContain("all 1250 reader prompts missed");
+    expect(hint).toContain("--reader-model");
+    expect(hint).toContain("recorded as claude-haiku-5-5");
+    expect(hint).toContain(DEFAULT_READER_MODEL);
+    // A cache made under the default model names no other model (its full miss is a stale cache).
+    expect(allMissedHint(all, false, [DEFAULT_READER_MODEL])).not.toContain("recorded as");
+    expect(allMissedHint(all, false)).not.toContain("recorded as");
+  });
+  test("silent when the model was named, nothing missed, or anything replayed, sent or subset-answered", () => {
+    expect(allMissedHint(all, true, ["claude-haiku-5-5"])).toBeNull();
+    expect(allMissedHint({ replayed: 0, sent: 0, missed: 0 }, false)).toBeNull();
+    expect(allMissedHint({ replayed: 648, sent: 0, missed: 5 }, false)).toBeNull();
+    expect(allMissedHint({ replayed: 0, sent: 1, missed: 5 }, false)).toBeNull();
+    expect(allMissedHint({ replayed: 0, sent: 0, missed: 5, subset: 3 }, false)).toBeNull();
+  });
+  test("cacheModels: distinct and sorted; empty for no file, a .gz or torn lines", () => {
+    const f = join(scratch(), "models.jsonl");
+    writeFileSync(
+      f,
+      `${JSON.stringify({ model: "b" })}\n{"model": "a"}\n{"model":\n\n${JSON.stringify({ model: "b" })}\n`,
+    );
+    expect(cacheModels(f)).toEqual(["a", "b"]);
+    expect(cacheModels("")).toEqual([]);
+    expect(cacheModels(join(scratch(), "none.jsonl"))).toEqual([]);
+    expect(cacheModels(`${f}.gz`)).toEqual([]);
+  });
+  test("end to end: hidden-funnel prints the hint without --reader-model, and not with it", async () => {
+    const [bare, named] = await Promise.all([runs.missNoModel, runs.missModel]);
+    // Both runs missed every prompt, so both exit 3 at the miss gate (no --allow-misses).
+    expect(bare.status).toBe(3);
+    expect(bare.stdout).toContain("READER MISSES");
+    expect(bare.stdout).toContain("READER HINT");
+    expect(bare.stdout).toContain("recorded as claude-haiku-5-5");
+    expect(named.status).toBe(3);
+    expect(named.stdout).toContain("READER MISSES");
+    expect(named.stdout).not.toContain("READER HINT");
+  }, 60_000);
+  test("a gzipped --reader-cache is refused with the gunzip step", () => {
+    const r = spawnSync(
+      "bun",
+      [
+        join(lab, "hidden-funnel.ts"),
+        "--suite",
+        "train1",
+        "--seeds",
+        "41",
+        "--limit",
+        "1",
+        "--ask",
+        "--no-record",
+      ].concat(["--reader", "replay", "--reader-cache", "x.jsonl.gz"]),
+      { encoding: "utf8", env: noKey },
+    );
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("is compressed: gunzip -c it into .local/");
   });
 });
 

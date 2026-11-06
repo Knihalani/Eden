@@ -45,6 +45,9 @@ let scratchSeq = new Uint32Array(0);
 let scratchShingles = new Uint32Array(0);
 let owner: TextSketcher | null = null;
 
+/** Starting length of a sketcher's per-id arrays and unit pool; a power of two, so doubling stays aligned. */
+const INITIAL_SLOTS = 64;
+
 /**
  * Tokenizes a text once and derives its fingerprint, MinHash signature and SimHash from the same terms. Share the
  * Vocab with the index that tokenizes the same texts.
@@ -61,11 +64,13 @@ export class TextSketcher {
   // Per vocabulary id: the term's hash, or, for a term in a script written without spaces, a run of unit hashes in
   // `pool` (expLen > 0). Filled on an id's first use, and again after the vocabulary releases the id (it may then
   // name another term): `state` is 0 until filled, else HASHED, plus NUMERIC when the term holds a digit.
-  private termHashes: Uint32Array = new Uint32Array(1_024);
-  private expStart: Uint32Array = new Uint32Array(1_024);
-  private expLen: Uint32Array = new Uint32Array(1_024);
-  private state: Uint8Array = new Uint8Array(1_024);
-  private pool: Uint32Array = new Uint32Array(1_024);
+  // All five start at INITIAL_SLOTS and double as ids and units need (`growTerms`, `poolPush`): the engine keeps one
+  // sketcher per user and most users hold few terms, so 1,024-slot arrays were ~17 KB of a one-item user's ~29.5 KB.
+  private termHashes: Uint32Array = new Uint32Array(INITIAL_SLOTS);
+  private expStart: Uint32Array = new Uint32Array(INITIAL_SLOTS);
+  private expLen: Uint32Array = new Uint32Array(INITIAL_SLOTS);
+  private state: Uint8Array = new Uint8Array(INITIAL_SLOTS);
+  private pool: Uint32Array = new Uint32Array(INITIAL_SLOTS);
   private poolUsed = 0;
   // Pool units that a live id's run holds; the rest belong to released ids, reclaimed by `compactPool`.
   private poolLive = 0;
@@ -302,7 +307,8 @@ export class TextSketcher {
 
   /** Copies the live ids' unit runs to the front of a fresh pool, dropping released ids' runs. */
   private compactPool(): void {
-    const pool = new Uint32Array(Math.max(1_024, this.poolLive * 2));
+    // The floor is the starting size, not 1,024: a larger floor would bring the big pool back after one compaction.
+    const pool = new Uint32Array(Math.max(INITIAL_SLOTS, this.poolLive * 2));
     let used = 0;
     for (let id = 0; id < this.state.length; id++) {
       const len = this.expLen[id]!;

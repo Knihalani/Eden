@@ -91,7 +91,16 @@ import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
-import { missGate, overBudgetLine, ReplayModel, SubsetReplay, systemHash } from "./reader-disk";
+import {
+  allMissedHint,
+  cacheModels,
+  DEFAULT_READER_MODEL,
+  missGate,
+  overBudgetLine,
+  ReplayModel,
+  SubsetReplay,
+  systemHash,
+} from "./reader-disk";
 import { flags, labConfig, parseJson } from "./flags";
 import { keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
@@ -335,9 +344,14 @@ const PACKET_K = opt("packet-k", "").split(",").filter(Boolean).map(Number);
 if (PACKET_K.some((k) => !Number.isInteger(k) || k < 1))
   throw new Error("--packet-k takes whole numbers of at least 1");
 if (PACKET_K.length && !ASK) throw new Error("--packet-k needs --ask");
-const READER_MODEL = opt("reader-model", "z-ai/glm-5.3-flash");
+const READER_MODEL = opt("reader-model", DEFAULT_READER_MODEL);
 const READER_SORT = opt("reader-sort", "") as "" | "price" | "throughput" | "latency";
 const READER_CACHE = opt("reader-cache", "");
+// The cache is plain JSONL, read whole and appended to by a live reader: a checked-in `.gz` (docs/LAB.md) is unpacked
+// under `.local/` first, or every line would fail to parse.
+if (READER_CACHE.endsWith(".gz")) {
+  throw new Error(`--reader-cache ${READER_CACHE} is compressed: gunzip -c it into .local/ and name that file`);
+}
 /** `--reader-thinking adaptive`: a `claude-*` reader thinks (at the reader's low effort); default off. */
 const READER_THINKING = opt("reader-thinking", "off") as "off" | "adaptive";
 const READER_KEY = READER === "live" ? keyFor(READER_MODEL) : undefined;
@@ -1150,6 +1164,14 @@ if (distillLanes.length) {
 const distillMissed = distillLanes.reduce((a, d) => a + d.missed, 0);
 const misses = missGate((readerModel?.missed ?? 0) + distillMissed, ALLOW_MISSES);
 if (misses.message) console.log(`\n${misses.message}\n`);
+const missHint = readerModel
+  ? allMissedHint(
+      { ...readerModel, subset: readerModel.subsetReplayed },
+      cli.has("reader-model"),
+      cacheModels(READER_CACHE),
+    )
+  : null;
+if (missHint) console.log(`${missHint}\n`);
 if (READER_SUBSET && readerModel) {
   console.log(
     `READER SUBSET-REPLAYED: ${readerModel.subsetReplayed} reader prompts were answered from a recorded superset pool ` +

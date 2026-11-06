@@ -1,6 +1,14 @@
 export { createHandler } from "./http";
 export { createMcpServer } from "./mcp";
-export { buildPartner, startGatePool, type BuildOptions } from "./build";
+export { buildPartner, readerFailureLog, startGatePool, type BuildOptions } from "./build";
+export {
+  DEFAULT_ROLE_MODEL,
+  DEFAULT_USD_PER_TENANT_DAY,
+  modelRolesFromEnv,
+  NO_MODELS,
+  type MakeRoleModel,
+  type ModelRoles,
+} from "./models";
 export { loadConfig, type ServerConfig } from "./config";
 export { staticResolver } from "./connectors";
 export { sourcesFromEnv, staticSources } from "./connectors";
