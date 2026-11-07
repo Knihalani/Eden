@@ -39,9 +39,15 @@ $0.05 cap).
   - false concerns after the Haiku + Sonnet regrade: +0.8 points (0.0..+1.8), 3 against 0 of 392; read by hand all
     three are grader errors (§4);
   - at $0: funnel 314/273 unchanged (11 planted items move from the packet to the ask's answer); `bun run eval`
-    precision **0.5909 → 0.65**, recall 0.52 and falseFireRate 0 unchanged.
-- **What the gap is after it:** +$0.046/1k short, +$0.047 over days on first-party prices (from +$0.054/+0.059 in the
-  same runs). It does not close the gap: the packet is still most of what Eden costs the agent, and the earlier cuts
+    precision **0.5909 → 0.65** (inbox 0.5 → 0.8, purchases 0.33 → 0.4; items delivered 44 → 40), recall 0.52,
+    falseFireRate 0 and secrets leaked 0 unchanged; injections 30 → 31 (one decision "silent" becomes "sources",
+    no false fire; the reviewer's count).
+  - not changed: `planConflict` (D301) still treats an item stored later as a would-be candidate by the first five of
+    the pool, not the cut list, so a settled request can still get a plan packet for its 3rd–5th item. Not measured
+    with the cut; left as it was.
+- **What the gap is after it:** the agent's own bill (`gap.py`) +$0.046/1k short, +$0.047 over days (from
+  +$0.054/+0.059 in the same runs); pi-cost-report's first-party row, which also books Eden's own per-task model
+  spend and its background, +0.046 short and +0.056 over days (from +0.054/+0.069). It does not close the gap: the packet is still most of what Eden costs the agent, and the earlier cuts
   that would shrink it further lose hidden facts (D258, D259, D273). On every per-call connector plan Eden's arm is
   still far cheaper (Composio −$0.60/1k short, −$0.23 over days; Zapier MCP −$55.6 and −$24.1, steady mix).
 

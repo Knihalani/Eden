@@ -143,3 +143,15 @@ export function settles(items: readonly ContextItem[], a: Anchors): boolean {
 export function anchored(item: ContextItem, a: Anchors): boolean {
   return namesEntity(item, a) || namesRequestDay(item, a);
 }
+
+/**
+ * `pushCandidatesSettled` (D400, D404): how many of `items` (in order) to hand when the request has an anchor and the
+ * items settle it: the first `fewer`, extended through the first item that settles it alone. Otherwise (no anchor,
+ * unsettled, `fewer` 0 or not below the count) all of them.
+ */
+export function settledCut(items: readonly ContextItem[], a: Anchors, fewer: number): number {
+  if (fewer <= 0 || fewer >= items.length) return items.length;
+  if (a.entities.length === 0 && !hasDay(a)) return items.length;
+  const first = items.findIndex((x) => settles([x], a));
+  return first < 0 ? items.length : Math.max(fewer, first + 1);
+}

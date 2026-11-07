@@ -9,7 +9,7 @@ import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { ASK_NUDGE, CANDIDATES_LEAD } from "./render";
-import { anchored, anchorsOf, namedDays, namesDay, settles } from "./settle";
+import { anchored, anchorsOf, namedDays, namesDay, settledCut, settles } from "./settle";
 
 // A12 (docs/research/a12-quality.md, D316): `askNudge`. When no candidate the push hands holds every kind of anchor the
 // request names (a person or thing, and a day when it names one), the packet's fixed line asks the agent to call
@@ -271,6 +271,9 @@ describe("pushCandidatesSettled (D400, D404): fewer candidates when they settle 
     expect(DEFAULT_CONFIG.pushCandidatesSettled).toBe(2);
     const all = await handed({}, UNDATED_REQUEST);
     expect(all.length).toBe(4);
+    expect(await handed({ pushCandidatesSettled: DEFAULT_CONFIG.pushCandidatesSettled }, UNDATED_REQUEST)).toEqual(
+      all.slice(0, 2),
+    );
     const few = await handed({ pushCandidatesSettled: 1 }, UNDATED_REQUEST);
     expect(few.length).toBeGreaterThanOrEqual(1);
     expect(few.length).toBeLessThan(4);
@@ -278,6 +281,25 @@ describe("pushCandidatesSettled (D400, D404): fewer candidates when they settle 
     // The last one kept settles the request (it names Harlow).
     const kept = [HOLD, PLAIN, DATED, OTHER].find((x) => x.id === few.at(-1));
     expect(kept!.title + kept!.text).toContain("Harlow");
+  });
+
+  test("settledCut: the first item that settles it is kept past the cut; no anchor or unsettled keeps all", () => {
+    const named = anchorsOf(["Harlow"], null, UNDATED_REQUEST, 0);
+    // Only items naming Harlow settle (HOLD, PLAIN); DATED and OTHER do not.
+    expect(settledCut([DATED, OTHER, HOLD, PLAIN], named, 1)).toBe(3);
+    expect(settledCut([DATED, OTHER, HOLD, PLAIN], named, 2)).toBe(3);
+    expect(settledCut([HOLD, DATED, OTHER, PLAIN], named, 2)).toBe(2);
+    expect(settledCut([DATED, OTHER], named, 1)).toBe(2);
+    expect(settledCut([HOLD, DATED, OTHER], named, 0)).toBe(3);
+    const none = anchorsOf([], null, "Pay the venue deposit invoice.", 0);
+    expect(settledCut([HOLD, DATED, OTHER, PLAIN], none, 1)).toBe(4);
+  });
+
+  test("a request with no anchor keeps every candidate", async () => {
+    const request = "Pay the venue deposit invoice.";
+    const all = await handed({}, request);
+    expect(all.length).toBe(4);
+    expect(await handed({ pushCandidatesSettled: 1 }, request)).toEqual(all);
   });
 
   test("unsettled: all the candidates (the nudge's case)", async () => {

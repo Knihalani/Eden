@@ -126,7 +126,7 @@ import { Ledger, type LedgerEntry } from "./ledger";
 import { ASK_NUDGE, CANDIDATES_LEAD, citationsOf, PLAN_LEAD, renderPacket, shownText } from "./render";
 import { quarantineTitle } from "./shield";
 import { safeLine } from "./line";
-import { anchored, anchorsOf, hasDay, settles, type Anchors } from "./settle";
+import { anchored, anchorsOf, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -2142,11 +2142,10 @@ export class ContextPartner {
       const handed = items.map((x) => x.item);
       if (!settles(handed, anchors)) {
         if (this.config.askNudge) unsettled = anchors;
-      } else if (fewer > 0 && fewer < items.length && (anchors.entities.length > 0 || hasDay(anchors))) {
+      } else if (fewer > 0) {
         // `pushCandidatesSettled` (D400, D404): a request its anchors settle gets fewer candidates, never losing the
         // first one that settles it.
-        const first = items.findIndex((x) => settles([x.item], anchors));
-        items = items.slice(0, Math.max(fewer, first + 1));
+        items = items.slice(0, settledCut(handed, anchors, fewer));
       }
     }
     this.deps.onPushPool?.({
