@@ -70,6 +70,8 @@ texts and the ids). `NEUTRAL_SUITES` gains train1–6 (and heldout16).
 - **Cards and intent:** `cards-enrich.ts --funnel train --seeds 41,42,43,44 --dry` reads 6,891 unique items with or
   without the neutral worlds (they add none), with the same 68 uncovered prefilter-passing items as before (not a
   neutral gap) and 0 items missing intent requests: the replays cover neutral as they cover hidden and control.
+  (The card files hold lines for the prefilter's passes; the live harnesses' enricher also sends other items, which
+  it then cards live: see §5.)
 - **The paid reader replay** (recipe 2a's cache) missed 608 neutral prompts. One metered live top-up (`bun run funnel
   -- --neutral --reader live`, ledger run `cl5-neutral-reader-topup`, $0.0765) added 306 lines, checked in as
   `packages/sim/lab/distilled/reader-haiku-train-4142-neutral.jsonl.gz` (plain md5 `aefb37aac34e826279f2e25db8d68b39`).
@@ -86,6 +88,9 @@ counts only. By the author's count: 32 templates, 4 per life area (work, family,
 social), none named as in heldout15; decoys 12 resolved, expired or superseded, 11 another entity or date, 9
 prerequisite met; overlap 11 no shared content word, 11 a name only, 10 one topic word.
 
+Its planted items' refs were changed after the review from `h16-<template>` (the pattern heldout13–15 use) to the
+base world's `<kind>-<index>`, since the tools arm sees refs and a template name or an `h16-` prefix would tell the
+agent; the wiring change reads no template and leaves the card and intent hashes (title and text) as they were.
 Registered in `SUITES`, `UNRUN_BLIND` and `NEUTRAL_SUITES` (`suites.test.ts`: 32/32/0 planted at seeds 41 and 44, the
 same texts across variants, out of `all`). Caches, `cards-enrich.ts --funnel heldout16 --seeds 41,42,43,44`, appended
 to the checked-in files (each old file an exact prefix of the new):
@@ -159,6 +164,13 @@ The four runs were concurrent (two long, two short) on the 4-core box. Reports: 
 | **All-in over the run, 1:1:8 mix** | 0.375 | 0.763 | 0.286 | 0.748 (116 tasks a user) |
 | Recap probes (total $, not tasks) | — | — | 0.0085 | 0.0102 |
 
+- **The in-run backfill is mostly live, even with cards replayed** (found by the review): the default's enricher sends
+  items the checked-in card files hold no line for (they hold the prefilter's passes; with intent on, more items are
+  sent), and those are carded live. `cl5-long-41.cards.jsonl` holds 447 live lines, 370 of them null cards and 410
+  with requests. So the in-run setup was $0.0180 and $0.0188 a long-horizon user, about 90% of the measured cold
+  start, and $0.0378 a seed on the short horizon; the long horizon's all-in uses the cold start. This is how every
+  earlier pi-ab run with `--cards` behaved (RealUse-2's "cards and intent backfill" column); a replay that covered
+  those items would cut harness spend, not what a real user costs.
 - The long run's tasks are already the 1:1:8 mix, so its mix and plain means agree. Short: the mix weighs per-kind
   means; `pi-ab-report.ts` gives the same 0.375 and 0.632 and the same backfill (its `bkfill` 0.131 = all-in less
   steady).
@@ -233,3 +245,8 @@ Paired differences (eden − tools, bootstrap 95% over tasks, pi-ab-report.ts):
   Not counted at run time (0 slot clashes at build time).
 - The short horizon's "one-time" in-run figure sums 18 worlds' backfills a seed that share one card cache: it is the
   harness's backfill, not one user's; the long horizon's measured cold start ($0.020) is the per-user figure.
+  `--lifetime` now refuses a run without `--days`, a cold start of another user shape, and two rows for one seed.
+- In day mode (`--day`, `--days`) every request of a day shares one Eden session, and the timeline's spans go to the
+  task running when they land: a late trace or reader call of request i is counted on request i+1 (or the recap).
+  The reader's dollars are charged to the task that started the call; its span count and other trace costs can move
+  one request later. Pre-existing in `--day`; it moves cost between requests of a day, not out of the run.

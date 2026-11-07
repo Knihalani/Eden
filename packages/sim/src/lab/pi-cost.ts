@@ -8,8 +8,10 @@
  * - Background while working (`run`): each stream's card and intent spend after its first request (new and changed
  *   items), spread over that stream's tasks.
  * - One-time per user (`setup`): the backfill's enrichment before the first request. With the cards replayed from disk
- *   the run itself spends almost none of it, so a measured cold start (`cold-start.ts`, `lifetime`) stands in for it
- *   when given, and the line says which.
+ *   the run still makes much of it live (CL5: $0.018–0.019 a long-horizon user against a $0.020 cold start, the
+ *   default's enricher sending items the replay files hold no line for), but what it replays it does not pay for,
+ *   so a measured cold start of the same user (`cold-start.ts --users user:SEED`, `lifetimeFor`) stands in for it when
+ *   given, and the line says which.
  *
  * Two totals: the steady state per task (per task + background while working) and all-in over the run (the steady
  * state plus each user's one-time backfill spread over that user's tasks in the run). The short horizon's
@@ -17,6 +19,49 @@
  */
 import type { Background, RunResult, Task } from "./ab-common";
 import { REALUSE_MIX } from "./pi-ab-weighted";
+
+/** The long-horizon user a run planned, or a cold start measured: what must match for one to stand for the other. */
+export interface UserShape {
+  suites: string[];
+  days: number;
+  daySize: [number, number];
+  mix: { hidden: number; control: number; neutral: number };
+}
+
+/**
+ * `--lifetime`'s rows checked against the runs: only `user:SEED` rows, for runs that are long-horizon users, of the
+ * same shape (suites, days, day size, mix), one row per seed. Throws with the reason otherwise, so a cold start of
+ * another world never stands for a run's backfill silently.
+ */
+export function lifetimeFor(
+  files: readonly { users: { user: string; seed?: number; usd: number }[]; userShape?: UserShape }[],
+  runs: readonly { file: string; shape?: UserShape }[],
+): Lifetime[] {
+  if (!files.length) return [];
+  const short = runs.filter((r) => !r.shape).map((r) => r.file);
+  if (short.length)
+    throw new Error(`--lifetime books a long-horizon user's backfill: ${short.join(", ")} has no --days`);
+  const same = (a: UserShape, b: UserShape) => JSON.stringify(a) === JSON.stringify(b);
+  const out: Lifetime[] = [];
+  for (const f of files) {
+    const rows = f.users.filter((u) => u.user.startsWith("user:"));
+    if (!rows.length) continue;
+    if (!f.userShape) throw new Error("--lifetime: a cold-start file without its user shape (rerun cold-start.ts)");
+    for (const r of runs) {
+      if (!same(f.userShape, r.shape!)) {
+        throw new Error(
+          `--lifetime: cold start ${JSON.stringify(f.userShape)} is not ${r.file}'s ${JSON.stringify(r.shape)}`,
+        );
+      }
+    }
+    for (const u of rows) {
+      const seed = u.seed ?? Number(u.user.split(":")[1]);
+      if (out.some((l) => l.seed === seed)) throw new Error(`--lifetime: two cold starts for seed ${seed}`);
+      out.push({ seed, usd: u.usd });
+    }
+  }
+  return out;
+}
 
 /** One task run as the report reads it. */
 export interface CostTask {

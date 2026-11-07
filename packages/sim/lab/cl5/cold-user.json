@@ -70,5 +70,25 @@
   ],
   "meanUsd": 0.02004,
   "meanCalls": 21,
-  "meanItems": 1498
+  "meanItems": 1498,
+  "userShape": {
+    "suites": [
+      "train1",
+      "train2",
+      "train3",
+      "train4",
+      "train5",
+      "train6"
+    ],
+    "days": 8,
+    "daySize": [
+      12,
+      20
+    ],
+    "mix": {
+      "hidden": 1,
+      "control": 1,
+      "neutral": 8
+    }
+  }
 }

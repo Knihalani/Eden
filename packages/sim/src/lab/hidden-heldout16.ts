@@ -1162,7 +1162,10 @@ export function plantHeldout16(world: World, seed: number, variant: "hidden" | "
     if (variant !== "neutral") {
       const p = variant === "hidden" ? spec.hidden : spec.decoy;
       // The same ref in hidden and control, so the item id does not tell a grader or a model which variant it is.
-      const ref = `h16-${t.name}`;
+      // A ref of the base world's shape (`<kind>-<index>`, as the train suites give): the tools arm sees refs, so one
+      // naming the template or marking the item as planted would tell the agent (CL5 review). The same index in
+      // hidden and control, since both plant one item per template in order.
+      const ref = `${p.kind}-${world.items.length}`;
       world.items.push({ ...p, id: itemId(p.sourceId, ref), ref, facts: [], noise: false });
     }
     tasks.push({ id: `w${seed}:${suite}:${t.name}`, template: t.name, text: spec.text, detail: spec.detail });

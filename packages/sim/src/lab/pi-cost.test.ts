@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Background, RunResult, Task } from "./ab-common";
 import { emptyResult } from "./ab-common";
-import { conditionCosts, costTasks, countSpans, dayRows, kindRows, p50, type CostTask } from "./pi-cost";
+import { conditionCosts, costTasks, countSpans, dayRows, kindRows, lifetimeFor, p50, type CostTask } from "./pi-cost";
 
 const t = (o: Partial<CostTask>): CostTask => ({
   seed: 41,
@@ -119,5 +119,27 @@ describe("pi-cost (H16)", () => {
         raised: true,
       },
     ]);
+  });
+
+  test("lifetimeFor: user rows of the runs' own shape, one per seed; anything else refused", () => {
+    const shape = {
+      suites: ["train1"],
+      days: 8,
+      daySize: [12, 20] as [number, number],
+      mix: { hidden: 1, control: 1, neutral: 8 },
+    };
+    const file = {
+      users: [
+        { user: "user:41", seed: 41, usd: 0.02 },
+        { user: "train1:41", seed: 41, usd: 0.5 },
+      ],
+      userShape: shape,
+    };
+    expect(lifetimeFor([file], [{ file: "a.json", shape }])).toEqual([{ seed: 41, usd: 0.02 }]);
+    expect(lifetimeFor([], [{ file: "short.json" }])).toEqual([]);
+    expect(() => lifetimeFor([file], [{ file: "short.json" }])).toThrow(/no --days/);
+    expect(() => lifetimeFor([file], [{ file: "a.json", shape: { ...shape, days: 4 } }])).toThrow(/is not/);
+    expect(() => lifetimeFor([file, file], [{ file: "a.json", shape }])).toThrow(/two cold starts/);
+    expect(() => lifetimeFor([{ users: file.users }], [{ file: "a.json", shape }])).toThrow(/user shape/);
   });
 });

@@ -8,12 +8,22 @@
  *   bun packages/sim/src/lab/pi-cost-report.ts run-41.json run-42.json [--lifetime cold.json[,cold2.json]] [--json F]
  *
  * `--lifetime`: `cold-start.ts --users user:41,user:42 --out cold.json` output (the measured one-time backfill of each
- * seed's long-horizon user); without it the one-time figure is what the run itself spent before the first request,
- * which is close to $0 when the cards are replayed from disk (the line says which).
+ * seed's long-horizon user, checked to be the same user shape as the runs, `lifetimeFor`); without it the one-time
+ * figure is what the run itself spent before the first request, less what the replayed cards saved (the line says
+ * which).
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type { Background, RunResult, Task } from "./ab-common";
-import { conditionCosts, costTasks, dayRows, kindRows, type CostTask, type Lifetime } from "./pi-cost";
+import {
+  conditionCosts,
+  costTasks,
+  dayRows,
+  kindRows,
+  lifetimeFor,
+  type CostTask,
+  type Lifetime,
+  type UserShape,
+} from "./pi-cost";
 import { dayOf } from "./pi-user";
 
 const argv = process.argv.slice(2);
@@ -31,9 +41,12 @@ interface RunFile {
   background?: Background[];
   timeline?: string;
   days?: { seed: number; condition: string; recapUsd?: number; recapEdenUsd?: number }[];
+  suites: string[];
   user?: {
     worlds: { seed: number; daySizes: number[]; clashes: number }[];
     days: number;
+    daySize: [number, number];
+    mix: UserShape["mix"];
     gapMin: number;
     nightH: number;
   };
@@ -43,8 +56,15 @@ const tasks: CostTask[] = [];
 const background: Background[] = [];
 const recaps: { seed: number; condition: string; usd: number }[] = [];
 const notes: string[] = [];
+const shapes: { file: string; shape?: UserShape }[] = [];
 for (const file of files) {
   const run = JSON.parse(readFileSync(file, "utf8")) as RunFile;
+  shapes.push({
+    file,
+    ...(run.user
+      ? { shape: { suites: run.suites, days: run.user.days, daySize: run.user.daySize, mix: run.user.mix } }
+      : {}),
+  });
   const records = new Map<string, { events: { ph: string; ev: string }[] }>();
   const lines = run.timeline && existsSync(`${run.timeline}/tasks.jsonl`) ? `${run.timeline}/tasks.jsonl` : "";
   if (!lines) notes.push(`${file}: no timeline found, reader and connector calls read 0`);
@@ -66,13 +86,13 @@ for (const file of files) {
     recaps.push({ seed: d.seed, condition: d.condition, usd: (d.recapUsd ?? 0) + (d.recapEdenUsd ?? 0) });
   }
 }
-const lifetime: Lifetime[] = (flag("lifetime") ?? "")
-  .split(",")
-  .filter(Boolean)
-  .flatMap(
-    (f) => (JSON.parse(readFileSync(f, "utf8")) as { users: { seed?: number; user: string; usd: number }[] }).users,
-  )
-  .map((u) => ({ seed: u.seed ?? Number(u.user.split(":")[1]), usd: u.usd }));
+const lifetime: Lifetime[] = lifetimeFor(
+  (flag("lifetime") ?? "")
+    .split(",")
+    .filter(Boolean)
+    .map((f) => JSON.parse(readFileSync(f, "utf8")) as Parameters<typeof lifetimeFor>[0][number]),
+  shapes,
+);
 
 const k = (x: number, d = 3) => (1_000 * x).toFixed(d);
 const pad = (s: string | number, n: number) => String(s).padStart(n);
