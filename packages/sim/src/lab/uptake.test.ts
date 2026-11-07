@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { packetLine, PACKETS_CHARS, QUESTION_CHARS, UptakeLog, uptakeWay } from "./uptake";
+import { ANSWER_CHARS, packetLine, PACKETS_CHARS, QUESTION_CHARS, UptakeLog, uptakeWay } from "./uptake";
 
 const cites = (...ids: string[]) => ids.map((itemId) => ({ itemId }));
 
@@ -22,9 +22,22 @@ describe("uptake recording", () => {
     const f = log.fields();
     expect(f.askCited).toEqual(["c", "a"]);
     expect(f.asks).toEqual([
-      { question: "Is Sam around on Friday?", cited: ["c"], bytes: 6 },
+      { question: "Is Sam around on Friday?", cited: ["c"], bytes: 6, text: "héllo" },
       { question: "q".repeat(QUESTION_CHARS), cited: [], bytes: 0 },
     ]);
+  });
+
+  test("a packet recorded with its reason keeps its way (the reason's kind) and ids; a long answer text is cut", () => {
+    const log = new UptakeLog();
+    log.packet({ text: "p1", citations: cites("a"), reason: "reader:c12" });
+    log.packet({ text: "p2", citations: cites("b", "c"), reason: "grounded-conflict:c13" });
+    log.answer({ citations: cites("d"), answer: "y".repeat(ANSWER_CHARS + 5) }, "q");
+    const f = log.fields();
+    expect(f.ways).toEqual([
+      { why: "reader", ids: ["a"] },
+      { why: "grounded-conflict", ids: ["b", "c"] },
+    ]);
+    expect(f.asks?.[0]?.text).toHaveLength(ANSWER_CHARS);
   });
 
   test("a firewall finding counts its ids with the packets' but places no packet", () => {

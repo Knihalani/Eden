@@ -177,6 +177,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   the push flagged must still have the content it read, or the ask reads anew (`freshness-push.test.ts`). The fix-S1
   trials that failed (D190 evidence gate, D191 no wait on a weak pool, D194 short schema) are deleted: rebuilding one
   needs a new decision.
+- **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
+  flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
+  and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read
+  (docs/research/fix-w2b-false-concerns.md); a fix belongs upstream (the reader's judgement, or what it reads).
 - **One deadline per lookup (D140).** `searchLive` takes `deadlineAt` once, after resolving the sources and before
   the on-demand poll; the poll's signal, the live search's `timeoutMs`, the planner and the probes
   (`ProbeOpts.deadlineAt`) get only what is left. Do not give a later stage a fresh `sourceTimeoutMs`: an ask waits

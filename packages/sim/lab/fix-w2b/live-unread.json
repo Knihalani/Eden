@@ -1,0 +1,304 @@
+{
+ "h10_13": {
+  "hidden/eden": {
+   "n": 256,
+   "rate": 0.7109,
+   "wallP50": 4.55,
+   "edenPer1k": 0.2324,
+   "agentPer1k": 0.3128,
+   "itemsPerTask": 1.277
+  },
+  "hidden/eden+askUnreadNote": {
+   "n": 256,
+   "rate": 0.7227,
+   "wallP50": 4.5,
+   "edenPer1k": 0.2335,
+   "agentPer1k": 0.3146,
+   "itemsPerTask": 1.285,
+   "paired": 256,
+   "d_rate": [
+    0.0117,
+    -0.0312,
+    0.0547
+   ],
+   "d_wall": [
+    -0.0194,
+    -0.1995,
+    0.154
+   ],
+   "d_eden": [
+    0.0012,
+    -0.0112,
+    0.014
+   ],
+   "d_agent": [
+    0.0017,
+    -0.0131,
+    0.0163
+   ]
+  },
+  "control/eden": {
+   "n": 256,
+   "rate": 0.0273,
+   "wallP50": 5.67,
+   "edenPer1k": 0.2548,
+   "agentPer1k": 0.3526,
+   "itemsPerTask": 0.746
+  },
+  "control/eden+askUnreadNote": {
+   "n": 256,
+   "rate": 0.0312,
+   "wallP50": 5.56,
+   "edenPer1k": 0.2531,
+   "agentPer1k": 0.3456,
+   "itemsPerTask": 0.762,
+   "paired": 256,
+   "d_rate": [
+    0.0039,
+    -0.0117,
+    0.0234
+   ],
+   "d_wall": [
+    -0.1626,
+    -0.3562,
+    0.032
+   ],
+   "d_eden": [
+    -0.0017,
+    -0.0163,
+    0.0133
+   ],
+   "d_agent": [
+    -0.007,
+    -0.0217,
+    0.0077
+   ]
+  }
+ },
+ "h14": {
+  "hidden/eden": {
+   "n": 64,
+   "rate": 0.7031,
+   "wallP50": 4.31,
+   "edenPer1k": 0.2113,
+   "agentPer1k": 0.3321,
+   "itemsPerTask": 1.266
+  },
+  "hidden/eden+askUnreadNote": {
+   "n": 64,
+   "rate": 0.6562,
+   "wallP50": 4.25,
+   "edenPer1k": 0.2157,
+   "agentPer1k": 0.3157,
+   "itemsPerTask": 1.297,
+   "paired": 64,
+   "d_rate": [
+    -0.0469,
+    -0.1562,
+    0.0625
+   ],
+   "d_wall": [
+    0.0762,
+    -0.3026,
+    0.4635
+   ],
+   "d_eden": [
+    0.0043,
+    -0.0046,
+    0.0154
+   ],
+   "d_agent": [
+    -0.0165,
+    -0.0517,
+    0.0174
+   ]
+  },
+  "control/eden": {
+   "n": 64,
+   "rate": 0.0156,
+   "wallP50": 5.23,
+   "edenPer1k": 0.2293,
+   "agentPer1k": 0.3253,
+   "itemsPerTask": 0.953
+  },
+  "control/eden+askUnreadNote": {
+   "n": 64,
+   "rate": 0.0156,
+   "wallP50": 5.04,
+   "edenPer1k": 0.2483,
+   "agentPer1k": 0.3537,
+   "itemsPerTask": 0.984,
+   "paired": 64,
+   "d_rate": [
+    0.0,
+    -0.0469,
+    0.0469
+   ],
+   "d_wall": [
+    -0.1184,
+    -0.4854,
+    0.2521
+   ],
+   "d_eden": [
+    0.019,
+    -0.0093,
+    0.0485
+   ],
+   "d_agent": [
+    0.0284,
+    0.0006,
+    0.0563
+   ]
+  },
+  "neutral/eden": {
+   "n": 64,
+   "rate": 0.0156,
+   "wallP50": 5.89,
+   "edenPer1k": 0.2279,
+   "agentPer1k": 0.3655,
+   "itemsPerTask": 0.641
+  },
+  "neutral/eden+askUnreadNote": {
+   "n": 64,
+   "rate": 0.0,
+   "wallP50": 5.96,
+   "edenPer1k": 0.2361,
+   "agentPer1k": 0.3648,
+   "itemsPerTask": 0.688,
+   "paired": 64,
+   "d_rate": [
+    -0.0156,
+    -0.0469,
+    0.0
+   ],
+   "d_wall": [
+    0.2179,
+    -0.1824,
+    0.6471
+   ],
+   "d_eden": [
+    0.0082,
+    -0.0154,
+    0.0327
+   ],
+   "d_agent": [
+    -0.0008,
+    -0.0309,
+    0.0304
+   ]
+  }
+ },
+ "all": {
+  "hidden/eden": {
+   "n": 320,
+   "rate": 0.7094,
+   "wallP50": 4.48,
+   "edenPer1k": 0.2282,
+   "agentPer1k": 0.3167,
+   "itemsPerTask": 1.275
+  },
+  "hidden/eden+askUnreadNote": {
+   "n": 320,
+   "rate": 0.7094,
+   "wallP50": 4.41,
+   "edenPer1k": 0.23,
+   "agentPer1k": 0.3148,
+   "itemsPerTask": 1.288,
+   "paired": 320,
+   "d_rate": [
+    0.0,
+    -0.0406,
+    0.0406
+   ],
+   "d_wall": [
+    -0.0003,
+    -0.1581,
+    0.1604
+   ],
+   "d_eden": [
+    0.0018,
+    -0.0084,
+    0.012
+   ],
+   "d_agent": [
+    -0.0019,
+    -0.0157,
+    0.0116
+   ]
+  },
+  "control/eden": {
+   "n": 320,
+   "rate": 0.025,
+   "wallP50": 5.58,
+   "edenPer1k": 0.2497,
+   "agentPer1k": 0.3472,
+   "itemsPerTask": 0.787
+  },
+  "control/eden+askUnreadNote": {
+   "n": 320,
+   "rate": 0.0281,
+   "wallP50": 5.53,
+   "edenPer1k": 0.2521,
+   "agentPer1k": 0.3472,
+   "itemsPerTask": 0.806,
+   "paired": 320,
+   "d_rate": [
+    0.0031,
+    -0.0125,
+    0.0187
+   ],
+   "d_wall": [
+    -0.1537,
+    -0.3223,
+    0.0179
+   ],
+   "d_eden": [
+    0.0024,
+    -0.0107,
+    0.0157
+   ],
+   "d_agent": [
+    0.0001,
+    -0.013,
+    0.0132
+   ]
+  },
+  "neutral/eden": {
+   "n": 64,
+   "rate": 0.0156,
+   "wallP50": 5.89,
+   "edenPer1k": 0.2279,
+   "agentPer1k": 0.3655,
+   "itemsPerTask": 0.641
+  },
+  "neutral/eden+askUnreadNote": {
+   "n": 64,
+   "rate": 0.0,
+   "wallP50": 5.96,
+   "edenPer1k": 0.2361,
+   "agentPer1k": 0.3648,
+   "itemsPerTask": 0.688,
+   "paired": 64,
+   "d_rate": [
+    -0.0156,
+    -0.0469,
+    0.0
+   ],
+   "d_wall": [
+    0.2179,
+    -0.1824,
+    0.6471
+   ],
+   "d_eden": [
+    0.0082,
+    -0.0154,
+    0.0327
+   ],
+   "d_agent": [
+    -0.0008,
+    -0.0309,
+    0.0304
+   ]
+  }
+ }
+}

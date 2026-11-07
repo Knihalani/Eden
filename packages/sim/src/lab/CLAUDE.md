@@ -134,6 +134,9 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
 --ledger ledger-summary.jsonl --run PREFIX` recomputes it from the spend ledger (docs/research/haiku-phase3.md)
   and exits 1 when the columns miss the header's Eden total by more than $0.01.
 - Funnel decoys surfaced overstate harm: live agents reject most decoys (docs/research/broad-set.md).
+- **Live false concerns overstate harm too** (fix-w2b): 15 of 39 Haiku-graded control and neutral concerns were the
+  grader's errors (a hedge, or an answer saying the opposite). Regrade the concerns (`regrade.ts --only-concerns`)
+  and read them before acting on a false-concern difference; `fix-w2b/attribute.py` says how each decoy arrived.
 - **`bun run funnel`'s ms/task is CONTENDED by default** (D139, since 2026-11-05): at `--time 0` it runs one process
   per core over blocks of suites × seeds. Quote latency, or diff ms/task against a `--baseline`, only from `--jobs 1`
   on both sides; the counts and the score do not depend on it (768 of 768 perTask rows identical).

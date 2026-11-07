@@ -17,6 +17,10 @@
  *
  *   env -u OPENROUTER_API_KEY bun packages/sim/src/lab/regrade.ts --results pi-ab.json --graders claude-sonnet-5-5
  *     --spend-ledger .local/ledger.jsonl --spend-cap 4 --spend-headroom 0.3 --run-label regrade [--out regrade.json]
+ *     [--only-concerns]
+ *
+ * `--only-concerns` (fix-w2b) regrades only the control and neutral answers the run's grader called a concern (any fact
+ * true): a check of the false concerns themselves, at a few cents rather than a whole run's worth.
  *
  * The summary also splits agreement with the run's grader by task kind (hidden, control, neutral), with the counts of
  * facts each grader alone called true, since a disagreement on a control or neutral task moves the false-concern rate.
@@ -27,7 +31,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import type { Model } from "@eden/llm";
 import { chat, gradeMessages, readVerdicts, type RunResult, type Task } from "./ab-common";
 import { isAnthropic, isCapError, labAccess, labModel } from "./free";
-import { byKind } from "./regrade-kinds";
+import { byKind, isConcern } from "./regrade-kinds";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -47,6 +51,7 @@ const access = labAccess(args, GRADERS);
 const run = JSON.parse(readFileSync(RESULTS, "utf8")) as { grader?: string; tasks: Task[]; results: RunResult[] };
 const byId = new Map(run.tasks.map((t) => [t.id, t]));
 let todo = run.results.filter((r) => !r.error && r.answer.trim() && byId.get(r.task)?.must.length);
+if (args.includes("--only-concerns")) todo = todo.filter((r) => isConcern(byId.get(r.task)!.kind, r.facts));
 if (LIMIT > 0) todo = todo.slice(0, LIMIT);
 
 interface Graded {

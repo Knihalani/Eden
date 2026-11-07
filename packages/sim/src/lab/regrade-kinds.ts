@@ -46,3 +46,8 @@ export function byKind(pairs: readonly KindPair[]): Record<string, KindRow> {
   }
   return out;
 }
+
+/** Whether the run's grader called a control or neutral answer a concern (any fact true): `--only-concerns`. */
+export function isConcern(kind: string, facts?: Record<string, boolean>): boolean {
+  return (kind === "control" || kind === "neutral") && Object.values(facts ?? {}).some(Boolean);
+}

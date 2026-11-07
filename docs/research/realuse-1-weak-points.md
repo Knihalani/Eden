@@ -33,6 +33,11 @@ files; each session's decision rows use its own block of numbers (below) so para
 - **Outcome (S2, 2026-11-07, [fix-s2-rules.md](fix-s2-rules.md)).** All three fixes measured live and deleted
   (D195–D197): none lowered false concerns (held-out 10–13 3.1% → 3.1% with the veto); the veto lost hidden facts on
   held-out 14 (−9.4). Rule-path decoy items are not what the agent raises; the cause is open.
+- **Outcome (W2b, 2026-11-07, [fix-w2b-false-concerns.md](fix-w2b-false-concerns.md)).** Attributed: of 39
+  Haiku-graded concerns 15 (+1 unclear) are grader errors, none is the agent's invention; the real ones are
+  reader-flagged look-alikes (13) and listed-only items of information asks the reader never reads (10). Framing the
+  ask answer (D230, D231) moved nothing live; both deleted. Next: the reader's look-alike judgements, and reading
+  information asks (a cost decision).
 
 ## 3. Recall: facts Eden never surfaces (S3a)
 
@@ -114,4 +119,5 @@ files; each session's decision rows use its own block of numbers (below) so para
 | S4 | 5, 8, 9 | `sync.ts`, `packages/client`, `sources/src/guarded.ts`, partner.ts's ask verification; INTEGRATION.md | D210–D214 | $1 |
 | S5 | 7 | `cache.ts`, `kg.ts`, a new ingest worker, partner.ts's `store` hook | D215–D219 | $0.5 |
 | S6 | 10 | `packages/redact`, a new shared line sanitiser and its callers outside reader.ts and render.ts | D220–D224 | $0.5 |
+| W2b | 2 | reader.ts's prompt and verdicts; partner.ts's ask-answer composition | D230–D234 | $4 |
 | Wave 2 | 11, final | ablations, deletions, `heldout15` blind confirmation (Pi, Hermes), RealUse-2 | D225+ | about $8 |
