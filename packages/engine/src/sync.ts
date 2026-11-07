@@ -454,8 +454,9 @@ export class SyncManager {
       this.notes(u.sources.get(x.id)!, x);
     }
     // A source the user no longer has (or that no longer lists) is not synced: its state and synced items go.
+    const listed = new Set(listable.map((x) => x.id));
     for (const [id, s] of [...u.sources]) {
-      if (listable.some((x) => x.id === id)) continue;
+      if (listed.has(id)) continue;
       u.sources.delete(id);
       this.stats.deleted += this.deps.cache.dropSynced(u.scope, s.ids);
     }
@@ -542,8 +543,9 @@ export class SyncManager {
    */
   private trim(u: UserSync, now: number): number {
     const all: { id: string; at: number; s: SourceSync }[] = [];
+    const at = this.deps.cache.updatedAtReader(u.scope, now);
     for (const s of u.sources.values()) {
-      for (const id of s.ids) all.push({ id, at: this.deps.cache.get(u.scope, id, now)?.updatedAt ?? -Infinity, s });
+      for (const id of s.ids) all.push({ id, at: at(id) ?? -Infinity, s });
     }
     all.sort((a, b) => b.at - a.at);
     const gone = all.slice(this.o.maxItems);
@@ -568,8 +570,9 @@ export class SyncManager {
     s.sweptAt = now;
     let recent = 0;
     let timed = 0;
+    const updatedAt = this.deps.cache.updatedAtReader(u.scope, now);
     for (const id of s.ids) {
-      const at = this.deps.cache.get(u.scope, id, now)?.updatedAt;
+      const at = updatedAt(id);
       if (at === undefined) continue;
       timed++;
       if (at <= now && at > now - PRIOR_HOURS * HOUR) recent++;

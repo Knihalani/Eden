@@ -2935,7 +2935,8 @@ export class ContextPartner {
       limit,
     });
     if (routing) this.spans!.close(routing, { sources: ranked.length, local: local?.size ?? 0, syncCalls });
-    const routed = ranked.map((r) => all.find((x) => x.id === r.sourceId)!).filter(Boolean);
+    const byId = sourcesById(all);
+    const routed = ranked.map((r) => byId.get(r.sourceId)!).filter(Boolean);
     // Only the sources not answered locally are searched live; the local ones answer the same query below.
     const found = local ? routed.filter((x) => !local.has(x.id)) : routed;
     // Serving through the planner only in "serve" mode; in "shadow" the lookup is served as without one.
@@ -3331,6 +3332,8 @@ export class ContextPartner {
     const listers = all.filter((x) => x.listsByTime === true);
     // A person or organisation goes to the sources most likely to hold them, by the source map's own record of which
     // sources mention which names (any source may, not only the lookup's): three per name, not every source.
+    const byId = sourcesById(all);
+    const allIds = all.map((x) => x.id);
     const routeFor = (name: string, limit = c.probePeopleSources) =>
       opts.offline
         ? all
@@ -3339,10 +3342,10 @@ export class ContextPartner {
               scope: s.scope,
               entities: [name],
               situation: s.situation,
-              sourceIds: all.map((x) => x.id),
+              sourceIds: allIds,
               limit,
             })
-            .map((r) => all.find((x) => x.id === r.sourceId)!)
+            .map((r) => byId.get(r.sourceId)!)
             .filter(Boolean);
     const people = off.has("people") ? [] : cue.entities.slice(0, 2);
     // `probeTopicAlone`: the topic only for a request that names no one (with people, their probes find what the topic
@@ -5053,4 +5056,14 @@ function localDay(at: number, offsetMin: number): string {
 function bulkMail(item: ContextItem): boolean {
   const category = item.meta?.category;
   return (category !== undefined && BULK_CATEGORY.test(category)) || BULK_TITLE.test(item.title);
+}
+
+/**
+ * A user's sources by id, the first of any repeated id (as `Array.find` gave): a lookup maps routed ids back to sources
+ * through it, which was a scan of every source per routed one (quadratic for a user with 1,000 connectors, D261).
+ */
+function sourcesById(all: readonly Source[]): Map<string, Source> {
+  const byId = new Map<string, Source>();
+  for (const x of all) if (!byId.has(x.id)) byId.set(x.id, x);
+  return byId;
 }
