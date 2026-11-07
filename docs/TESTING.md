@@ -408,3 +408,6 @@ they would contend for CPU and GC, and the stage differences are per-mode subtra
   work was done ahead of time, count the work (`warm.test.ts` counts pattern compilations and first runs through
   counting engines) rather than timing the call.
 - A test over 5 s gives its own timeout and says why.
+- A heap bound measures in a process of its own (`Bun.spawn` of a scenario script, as
+  `packages/sources/src/cache-heap.scenario.ts`): under `--parallel` a file shares its worker's heap with the files
+  run before it, whose leftovers moved one reading by 1.2 MB (docs/research/b2-deflake.md).
