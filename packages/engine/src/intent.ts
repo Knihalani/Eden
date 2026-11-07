@@ -22,8 +22,6 @@ import { isStopword } from "./text";
 
 /** The version of the requests' prompt (`cards.ts` `INTENT_INSTRUCTIONS`): a disk cache of requests is keyed by it. */
 export const INTENT_VERSION = 2;
-/** The version of `intentAgentPhrasing`'s prompt (`cards.ts` `INTENT_AGENT_INSTRUCTIONS`, D201): its own cache. */
-export const INTENT_AGENT_VERSION = 3;
 /** Requests kept per item, and characters per request: model output is bounded like any input. */
 export const MAX_REQUESTS = 4;
 export const MAX_REQUEST_CHARS = 120;

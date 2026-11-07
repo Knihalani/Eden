@@ -1,15 +1,14 @@
 /**
- * The S3a trials (docs/research/fix-s3a-intent.md): `intentByKind` (D200, constraint-carded intent hits get their own
- * threshold and places past the cut) and `intentAgentPhrasing` (D201, the requests asked for in the wording an
- * agent's user delegates in). Both off by default.
+ * `intentByKind` (D200, on in the default; docs/research/fix-s3a-intent.md): constraint-carded intent hits get their
+ * own coverage floor and places past the `intentHits` cut.
  */
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
-import { Budget, FakeModel } from "@eden/llm";
-import type { AgentEvent, ContextItem } from "@eden/protocol";
+import { Budget } from "@eden/llm";
+import type { ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
-import { CardEnricher, cardMessages, ModelCardMaker, type Card, type CardMaker, type IntentPrompt } from "./cards";
+import { CardEnricher, type Card, type CardMaker } from "./cards";
 import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { intentCut, intentReach, keepIntents, type IntentCut, type IntentRow } from "./intent";
@@ -54,10 +53,11 @@ describe("keepIntents (intentByKind, D200)", () => {
     expect(intentReach({ ...ON, byKind: { cardCoverage: 0.1, cardHits: 0 } })).toBe(3);
   });
 
-  test("intentCut reads the engine's keys; the default has the trial off", () => {
-    expect(DEFAULT_CONFIG.intentByKind).toBe(false);
-    expect(intentCut(DEFAULT_CONFIG).byKind).toBeNull();
-    const on = intentCut({ ...DEFAULT_CONFIG, intentByKind: true });
+  test("intentCut reads the engine's keys; the default has it on (D200), the core off", () => {
+    expect(DEFAULT_CONFIG.intentByKind).toBe(true);
+    expect(intentCut(CORE_CONFIG).byKind).toBeNull();
+    expect(intentCut({ ...DEFAULT_CONFIG, intentByKind: false }).byKind).toBeNull();
+    const on = intentCut(DEFAULT_CONFIG);
     expect(on.byKind).toEqual({ cardCoverage: DEFAULT_CONFIG.intentCardCoverage, cardHits: 4 });
     expect(on.hits).toBe(DEFAULT_CONFIG.intentHits);
   });
@@ -66,10 +66,9 @@ describe("keepIntents (intentByKind, D200)", () => {
     const deps = { deps: { cards: true } };
     const on = { intentByKind: true, intentCardCoverage: 0.05, intentCardHits: 2 };
     expect(checkEngineConfig(on, deps)).toMatchObject(on);
-    expect(checkEngineConfig({ intentAgentPhrasing: true }, deps)).toMatchObject({ intentAgentPhrasing: true });
     expect(() => checkEngineConfig({ intentCardCoverage: 1.5, intentByKind: true }, deps)).toThrow();
     // A child key with its parent switch off is refused.
-    expect(() => checkEngineConfig({ intentCardHits: 2 }, deps)).toThrow();
+    expect(() => checkEngineConfig({ intentByKind: false, intentCardHits: 2 }, deps)).toThrow();
   });
 });
 
@@ -92,15 +91,13 @@ const FREEZE: Card = {
   statement: "no spending on the hardware line until December",
 };
 
-/** A maker answering from tables by title, recording what wording each call asked for. */
+/** A maker answering from tables by title. */
 class TableMaker implements CardMaker {
-  asked: (boolean | IntentPrompt | undefined)[] = [];
   constructor(
     private readonly requests: Record<string, string[]>,
     private readonly cards: Record<string, Card> = {},
   ) {}
-  async make(items: ContextItem[], _t: string, _s: AbortSignal, _r?: boolean, intent?: boolean | IntentPrompt) {
-    this.asked.push(intent);
+  async make(items: ContextItem[], _t: string, _s: AbortSignal, _r?: boolean, intent?: boolean) {
     return {
       cards: items.map((i) => this.cards[i.title] ?? NONE),
       ...(intent ? { requests: items.map((i) => this.requests[i.title] ?? []) } : {}),
@@ -184,75 +181,11 @@ describe("intentByKind in the partner: a carded weak hit reaches the reader's po
   });
 
   test("off: neither weak hit is a candidate; on: the carded one is, the uncarded one is not", async () => {
-    const off = await run({});
+    const off = await run({ intentByKind: false });
     expect(off.pool).toContain(starter.id);
     expect(off.pool).not.toContain(frozen.id);
     const on = await run({ intentByKind: true, intentCardCoverage: 0 });
     expect(on.pool).toContain(frozen.id);
     expect(on.pool).not.toContain(plain.id);
-  });
-});
-
-describe("intentAgentPhrasing (D201): the requests' wording", () => {
-  const it1 = item("a", "Budget", "No hardware purchases until December.");
-
-  test("the agent prompt asks for delegations and questions; the user prompt is unchanged", () => {
-    const agent = cardMessages([it1], "2026-10-27", "agent")[0]!.content as string;
-    const user = cardMessages([it1], "2026-10-27", true)[0]!.content as string;
-    const none = cardMessages([it1], "2026-10-27")[0]!.content as string;
-    expect(agent).toContain("personal assistant");
-    expect(agent).toContain("imperative");
-    expect(agent).toContain('"requests"');
-    expect(user).toContain("in the user's everyday words, not the item's own");
-    expect(user).not.toContain("imperative");
-    expect(none).not.toContain('"requests"');
-  });
-
-  test("ModelCardMaker sends the agent prompt and reads its requests", async () => {
-    const model = new FakeModel(() => JSON.stringify({ cards: [], requests: [{ i: 0, q: ["Order a laptop"] }] }));
-    const got = await new ModelCardMaker(model).make([it1], "2026-10-27", new AbortController().signal, false, "agent");
-    expect(got.requests).toEqual([["Order a laptop"]]);
-    expect(JSON.stringify(model.calls[0])).toContain("imperative");
-  });
-
-  test("the enricher asks in the configured wording, and economy keeps it", async () => {
-    for (const [prompt, want] of [
-      ["user", true],
-      ["agent", "agent"],
-    ] as const) {
-      const maker = new TableMaker({ Budget: ["buy a laptop"] });
-      const cards = new CardEnricher({ maker, budget: new Budget(), now: () => NOW });
-      cards.intend(prompt);
-      cards.economize();
-      cards.enqueue({ tenantId: "t", userId: "u" }, [it1]);
-      await cards.idle();
-      expect(maker.asked).toEqual([want]);
-    }
-  });
-
-  test("the partner wires it: on, its card calls ask for agent wording; the default asks for the user's", async () => {
-    for (const [on, want] of [
-      [false, true],
-      [true, "agent"],
-    ] as const) {
-      const maker = new TableMaker({ Budget: ["buy a laptop"] });
-      const cards = new CardEnricher({ maker, budget: new Budget(), now: () => NOW });
-      const source: Source = { id: "chat", kind: "test", description: "Team chat", search: async () => [it1] };
-      const p = new ContextPartner({
-        sources: async () => [source],
-        sourceMap: new SourceMap(),
-        cache: new ItemCache(),
-        budget: new Budget(),
-        model: null,
-        now: () => NOW,
-        config: { ...CORE_CONFIG, cards: true, intent: true, intentAgentPhrasing: on },
-        cards,
-      });
-      const ev = { tenantId: "t", userId: "u", sessionId: "s", at: NOW, kind: "user_message", text: "budget news?" };
-      await p.observe(ev as AgentEvent, { waitMs: 1_000 });
-      await cards.idle();
-      expect(maker.asked.length).toBeGreaterThan(0);
-      expect(new Set(maker.asked)).toEqual(new Set([want]));
-    }
   });
 });

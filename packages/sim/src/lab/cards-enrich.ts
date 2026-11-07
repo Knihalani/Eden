@@ -5,7 +5,7 @@
  *
  *   bun packages/sim/src/lab/cards-enrich.ts --dir DIR [--funnel hidden,heldout] [--seeds 41,42,43,44]
  *     [--sim-seeds 41,42] [--sim-users 6] [--cap 2.80] [--rejected N] [--concurrency 4] [--dry]
- *     [--model m] [--sort price] [--batch 10] [--spend FILE] [--only N] [--strict] [--intent [--intent-prompt agent]]
+ *     [--model m] [--sort price] [--batch 10] [--spend FILE] [--only N] [--strict]
  *
  * Items are those a sync would read (every source's `listAll`, as the realistic connectors return them), redacted as
  * the cache redacts them. Only items the no-model prefilter passes are sent, in batches of ten, unless `--rejected N`
@@ -26,14 +26,11 @@
  * rejects too, with the prompt that also asks for the requests each item would change; each item's requests, the
  * model's card and whether the prefilter passed it go to DIR/intent-v<N>.jsonl (`{h, r, c, p}`), which the funnel
  * replays with `--intent` (its cards still come from `--cards`). Items already in that file are skipped.
- * `--intent-prompt agent` asks for the requests worded as an agent's user delegates (D201, a trial) and writes them to
- * DIR/intent-v<INTENT_AGENT_VERSION>.jsonl.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import {
   CARD_VERSION,
   cardKey,
-  INTENT_AGENT_VERSION,
   INTENT_VERSION,
   ItemCache,
   ModelCardMaker,
@@ -78,12 +75,7 @@ const ACCESS = labAccess(args, [MODEL]);
 const pass = args.includes("--strict") ? worthCardingStrict : worthCarding;
 const INTENT = args.includes("--intent");
 const FREE = ACCESS.free;
-/** `--intent-prompt agent`: the agent-worded requests (`intentAgentPhrasing`, D201), in their own versioned file. */
-const PROMPT = opt("intent-prompt", "user");
-if (PROMPT !== "user" && PROMPT !== "agent") throw new Error("--intent-prompt is user or agent");
-const VERSION = PROMPT === "agent" ? INTENT_AGENT_VERSION : INTENT_VERSION;
-const ASK: boolean | "agent" = INTENT && PROMPT === "agent" ? "agent" : INTENT;
-const INTENT_FILE = `${DIR}/intent-v${VERSION}.jsonl`;
+const INTENT_FILE = `${DIR}/intent-v${INTENT_VERSION}.jsonl`;
 
 /** Items a sync would read, redacted as the cache redacts them, deduplicated by content hash. */
 const items = new Map<string, ContextItem>();
@@ -173,7 +165,7 @@ const metered = (inner: Model, sort: string): Model => ({
       model: MODEL,
       sort,
       batch: BATCH,
-      ...(INTENT ? { intent: VERSION } : {}),
+      ...(INTENT ? { intent: INTENT_VERSION } : {}),
     };
     appendFileSync(SPEND, `${JSON.stringify(line)}\n`);
     return res;
@@ -207,10 +199,10 @@ const worker = async () => {
       const items = batch.map(([, it]) => it);
       // Long enough for a free model's backoff and retries (the pacer, `free.ts`).
       const signal = () => AbortSignal.timeout(FREE ? 600_000 : 150_000);
-      let got: CardBatch = await maker.make(items, "2026-10-27", signal(), false, ASK);
+      let got: CardBatch = await maker.make(items, "2026-10-27", signal(), false, INTENT);
       if (got.truncated && total < CAP) {
         retries++;
-        const again = await maker.make(items, "2026-10-27", signal(), true, ASK);
+        const again = await maker.make(items, "2026-10-27", signal(), true, INTENT);
         got = {
           ...again,
           cards: got.cards.map((c, i) => c ?? again.cards[i] ?? null),

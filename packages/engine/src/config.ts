@@ -412,24 +412,18 @@ export interface EngineConfig {
   /** ... and the least distinct request terms they must hold. */
   intentMinMatched: number;
   /**
-   * A trial (D200, owner the repo owner, ends 2026-12-07; docs/research/fix-s3a-intent.md): an intent hit whose item
-   * holds a constraint card (any kind but `none`) counts from `intentCardCoverage` of the request's idf instead of
-   * `intentMinCoverage`, and up to `intentCardHits` such hits left out by the `intentHits` cut are kept after the
-   * others (`keepIntents`, intent.ts). On train, the hits under the thresholds or past the cut that held a constraint
-   * card were mostly hidden facts; the uncarded ones mostly decoys.
+   * On in the default (D200; docs/research/fix-s3a-intent.md): an intent hit whose item holds a constraint card (any
+   * kind but `none`) counts from `intentCardCoverage` of the request's idf instead of `intentMinCoverage`, and up to
+   * `intentCardHits` such hits left out by the `intentHits` cut (read 3x `intentHits` deep) are kept after the others
+   * (`keepIntents`, intent.ts). On train, the hits under the thresholds or past the cut that held a constraint card
+   * were mostly hidden facts, the uncarded ones mostly decoys. Paid replay on train: hidden 311 to 316, decoys 137 to
+   * 132; Pi held-out 13+14: hidden raised +3.9 points, false concerns unchanged, Eden +$0.04 per 1k hidden tasks.
    */
   intentByKind: boolean;
   /** With `intentByKind`: the least share of the request's idf a constraint-carded item's requests must hold. */
   intentCardCoverage: number;
   /** With `intentByKind`: constraint-carded hits kept past the `intentHits` cut, at most. */
   intentCardHits: number;
-  /**
-   * A trial (D201, owner the repo owner, ends 2026-12-07; docs/research/fix-s3a-intent.md): the card call asks for
-   * the intent requests worded as a personal agent's user delegates (whole imperatives naming the people, amounts and
-   * days, and questions; `INTENT_AGENT_INSTRUCTIONS`, cards.ts) instead of short requests in everyday words. Same
-   * call, same output bound; the requests' cache is versioned apart (`INTENT_AGENT_VERSION`).
-   */
-  intentAgentPhrasing: boolean;
   /** The intent list's weight in an ask's reciprocal-rank fusion, against the lexical order's 1. */
   intentWeight: number;
   /** Judge seats kept for intent hits the lexical ranking did not seat (with a model). */
@@ -599,8 +593,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,
-  intentByKind: false,
-  intentAgentPhrasing: false,
+  intentByKind: true,
   intentCardCoverage: 0.1,
   intentCardHits: 4,
   intentWeight: 1,

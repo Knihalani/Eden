@@ -288,11 +288,7 @@ export function datedOf(item: ContextItem): string {
  * The enrichment prompt: the action vocabulary, the card schema, and the items fenced as data (`inert`: no item can
  * close its fence). Items are redacted again here: every model-bound text passes the gate, whatever its caller did.
  */
-export function cardMessages(
-  items: ContextItem[],
-  today: string,
-  intent: boolean | IntentPrompt = false,
-): ChatMessage[] {
+export function cardMessages(items: ContextItem[], today: string, intent = false): ChatMessage[] {
   const vocab = ACTION_NAMES.map((a) => `- ${a}: ${ACTIONS[a]}`).join("\n");
   const list = items.map((it, i) => {
     const title = inert(sanitizeForStore(it.title.slice(0, 160)));
@@ -324,7 +320,7 @@ export function cardMessages(
         'Reply with JSON only: {"cards":[{"i":0,"kind":"freeze","actions":["deploy"],"entities":["production"],' +
         '"start":"2026-11-04","end":"2026-11-09","limit":null,"unit":"","statement":"production change freeze 4-9 ' +
         'Nov"}]}. One card per item at most, for the most important constraint; leave out items whose kind is none.' +
-        (intent === "agent" ? INTENT_AGENT_INSTRUCTIONS : intent ? INTENT_INSTRUCTIONS : ""),
+        (intent ? INTENT_INSTRUCTIONS : ""),
     },
     { role: "user", content: `<items>\n${list.join("\n")}\n</items>` },
   ];
@@ -343,30 +339,6 @@ const INTENT_INSTRUCTIONS =
   "replies to them, a document on the work it describes. Write [] only for bulk mail, newsletters and marketing. " +
   'Put them in "requests", one entry per item: {"cards":[...],"requests":[{"i":0,"q":["deploy the migration on ' +
   'Thursday","ship the release this week"]},{"i":1,"q":["move my 1:1 with Sam","am I free Friday afternoon?"]}]}.';
-
-/**
- * Which wording the requests are asked for (`intentAgentPhrasing`, D201, a trial): `user`, the shipped prompt (short
- * requests in the user's everyday words, not the item's); `agent`, requests worded as a personal agent's user
- * delegates (whole imperatives naming the concrete people, amounts and days, and questions), the shape of the
- * requests an agent's ask carries (docs/research/fix-s3a-intent.md).
- */
-export type IntentPrompt = "user" | "agent";
-
-/** `intentAgentPhrasing`'s prompt (`INTENT_AGENT_VERSION`): the same task and output, other wording asked for. */
-const INTENT_AGENT_INSTRUCTIONS =
-  `\nSeparately, for EVERY item, whatever its kind and even when it states no constraint (kind none), write up to ` +
-  `${MAX_REQUESTS} requests the user might give their personal assistant (an AI agent that acts for them) where ` +
-  "this item would change what the assistant should do or say. Word them the way people delegate to an assistant: " +
-  "whole instructions in the imperative that name the concrete person, organisation, thing, amount or day involved " +
-  '(an item saying spending over £5,000 needs a second signature: "Order 12 new laptops for the design team from ' +
-  'Dell, about £14,000", "Approve Priya\'s purchase order for the new monitors"), and at least one as a question ' +
-  '("Can I book the offsite venue this week?"). Use everyday words for the action, which may differ from the ' +
-  "item's own. Most items qualify: an event bears on scheduling around it, a thread on decisions about its subject, " +
-  "a person's message on replies to them, a document on the work it describes. Write [] for bulk mail, " +
-  'newsletters, promotions and marketing (no "unsubscribe" requests). Put them in "requests", one entry per item: ' +
-  '{"cards":[...],"requests":[{"i":0,"q":' +
-  '["Deploy the billing migration to production on Thursday","Is it safe to ship the release this week?"]},' +
-  '{"i":1,"q":["Move my 1:1 with Sam to Friday","Am I free Friday afternoon?"]}]}.';
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 /** A real calendar day: "2026-11-31" parses in some engines (as 1 December), so the day must round-trip. */
@@ -512,16 +484,9 @@ export interface CardMaker {
   /**
    * `retry`: the batch was cut off at the output cap on a first call and is sent again (the maker may route it
    * elsewhere). `truncated`: this call was cut off. `intent`: the call also writes each item's requests
-   * (`requests`: index → requests, null where unread; absent when not asked for), in the wording it names (`true`:
-   * `user`).
+   * (`requests`: index → requests, null where unread; absent when not asked for).
    */
-  make(
-    items: ContextItem[],
-    today: string,
-    signal: AbortSignal,
-    retry?: boolean,
-    intent?: boolean | IntentPrompt,
-  ): Promise<CardBatch>;
+  make(items: ContextItem[], today: string, signal: AbortSignal, retry?: boolean, intent?: boolean): Promise<CardBatch>;
 }
 
 /** What a maker returns for a batch. */
@@ -569,13 +534,7 @@ export class ModelCardMaker implements CardMaker {
     private readonly options: CardMakerOptions = {},
   ) {}
 
-  async make(
-    items: ContextItem[],
-    today: string,
-    signal: AbortSignal,
-    retry = false,
-    intent: boolean | IntentPrompt = false,
-  ) {
+  async make(items: ContextItem[], today: string, signal: AbortSignal, retry = false, intent = false) {
     const model = retry ? (this.options.retry ?? this.model) : this.model;
     const res = await model.chat({
       messages: cardMessages(items, today, intent),
@@ -630,8 +589,6 @@ export interface CardLimits {
    * none, as the prefilter said).
    */
   intent: boolean;
-  /** With `intent`: the requests' wording (`intend(prompt)`; `agent` is `intentAgentPhrasing`, D201). */
-  intentPrompt: IntentPrompt;
   /**
    * With `intent` (`cardsLean`, `lean()` sets it; 0: off): an item the prefilter rejects is read for its requests only
    * when it is not automated and is dated within this many days or upcoming (`readForIntent`).
@@ -649,7 +606,6 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   strict: false,
   sentenceReuse: false,
   intent: false,
-  intentPrompt: "user",
   leanDays: 0,
 };
 
@@ -784,13 +740,13 @@ export class CardEnricher {
    */
   economize(): void {
     // `intend()` before or after: what it set stands.
-    const { intent, intentPrompt, maxQueue } = this.limits;
+    const { intent, maxQueue } = this.limits;
     this.limits = {
       ...DEFAULT_CARD_LIMITS,
       ...ECONOMY_CARD_LIMITS,
       ...this.given,
       intent,
-      ...(intent ? { maxQueue, intentPrompt } : {}),
+      ...(intent ? { maxQueue } : {}),
     };
   }
 
@@ -798,21 +754,10 @@ export class CardEnricher {
    * Turns on the intent index (`intent`, docs/research/edge-intent.md): from now on each enrichment call also writes
    * its items' requests, and items the prefilter rejects are queued for theirs.
    */
-  intend(prompt: IntentPrompt = "user"): void {
+  intend(): void {
     // Every item is read now, not the prefilter's 11–15%: a backfill's items would overrun the card queue's bound
     // (oldest dropped, uncovered). The queue holds references to cached items, so a longer one costs little.
-    this.limits = {
-      ...this.limits,
-      intent: true,
-      intentPrompt: prompt,
-      maxQueue: this.given.maxQueue ?? INTENT_MAX_QUEUE,
-    };
-  }
-
-  /** What a call asks the maker for: no requests, or requests in the configured wording (`user` as `true`). */
-  private asking(): boolean | IntentPrompt {
-    if (!this.limits.intent) return false;
-    return this.limits.intentPrompt === "agent" ? "agent" : true;
+    this.limits = { ...this.limits, intent: true, maxQueue: this.given.maxQueue ?? INTENT_MAX_QUEUE };
   }
 
   /**
@@ -990,7 +935,7 @@ export class CardEnricher {
       const sp = tracer?.open("cards.make", 0, { async: true, items: batch.length });
       try {
         const items = batch.map((b) => b.item);
-        const intent = this.asking();
+        const intent = this.limits.intent;
         let made = await this.deps.maker.make(items, today, u.abort.signal, false, intent);
         const { costUsd } = made;
         if (sp) tracer!.close(sp, { costUsd, cards: made.cards.length });
@@ -1084,7 +1029,7 @@ export class CardEnricher {
       return cut;
     }
     try {
-      const again = await this.deps.maker.make(items, today, u.abort.signal, true, this.asking());
+      const again = await this.deps.maker.make(items, today, u.abort.signal, true, this.limits.intent);
       this.deps.budget.settle(reservation, again.costUsd);
       this.stats.calls++;
       this.stats.retries++;

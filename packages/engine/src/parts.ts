@@ -61,9 +61,9 @@ export const PARTS = {
   /** The rule verdicts an ask gathers (D73). */
   askVerdicts: { askVerdicts: false },
   /** Implication cards (D59, D66), and with them the intent index, which their calls write. */
-  cards: { cards: false, cardsEconomy: false, intent: false, cardsLean: false },
-  /** The intent index (D87, D109), and what it reads (`cardsLean`, D125). */
-  intent: { intent: false, cardsLean: false },
+  cards: { cards: false, cardsEconomy: false, intent: false, cardsLean: false, intentByKind: false },
+  /** The intent index (D87, D109), what it reads (`cardsLean`, D125) and its carded cut (`intentByKind`, D200). */
+  intent: { intent: false, cardsLean: false, intentByKind: false },
   /** The ask-time reader and its push (D95, D96, D99). */
   reader: {
     askReader: false,

@@ -60,7 +60,6 @@ export {
   type Action,
   type Card,
   type CardBatch,
-  type IntentPrompt,
   type CardKind,
   type CardMaker,
 } from "./cards";
@@ -73,7 +72,6 @@ export {
   keepIntents,
   stemWord,
   INTENT_VERSION,
-  INTENT_AGENT_VERSION,
   type IntentCut,
   type IntentKept,
   type IntentRow,

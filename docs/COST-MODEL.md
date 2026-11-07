@@ -64,6 +64,13 @@ Pi held-out 13 seeds 41–44, intent replayed (ledger runs `close-d159-pi-41` to
 docs/research/edge-intent.md, "D179 result"), the paired cache-neutral agent+Eden cost moved −0.031 $/1k tasks (95%
 CI −0.080..+0.015), Eden's own −0.015 (−0.047..+0.018), and reader calls 450 to 433.
 
+The carded cut (`intentByKind`, D200) adds no call either; it changes which items fill the reader's pool and makes the
+reader prompt about 2.4% longer on train (mean 7,493 to 7,673 characters over 1,306 to 1,314 calls, seeds 41-44, stub).
+On a Pi pair, held-out 13 and 14 seeds 41-42 (ledger runs `s3a-kind-h13-41` to `s3a-kind-h14-42`, $0.606; Anthropic
+direct), Eden's own cost on hidden tasks rose +$0.040 per 1k (95% CI +0.003..+0.076), agent+Eden cache-neutral +0.053
+(−0.006..+0.106); on control tasks +$0.000 (−0.049..+0.049), on neutral tasks about +$0.011 (unpaired means).
+docs/research/fix-s3a-intent.md.
+
 **Card reasoning (D149): none by default.** Until D149 `ModelCardMaker` always sent reasoning "low" (D59), which the
 servers send to OpenRouter (`build.ts` wires `models.cards`), while every Haiku 5.5 card call in the lab ran on
 `AnthropicModel` with thinking off (`pi-ab.ts`, `hermes-ab.ts` and `cards-enrich.ts` pass no thinking option;

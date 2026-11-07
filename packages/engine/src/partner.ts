@@ -574,7 +574,7 @@ export class ContextPartner {
       cards.offsetOf = (scope) => deps.cache.offsetOf(scope);
       if (this.config.cardsEconomy) cards.economize();
       // `intent`: the same calls write each item's requests, and what the prefilter rejects is read for them.
-      if (this.config.intent) cards.intend(this.config.intentAgentPhrasing ? "agent" : "user");
+      if (this.config.intent) cards.intend();
       // `cardsLean`: what the prefilter rejects is read for requests only when a person wrote it recently.
       if (this.config.intent && this.config.cardsLean) cards.lean(this.config.cardsLeanDays);
     }
