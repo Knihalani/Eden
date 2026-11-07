@@ -288,7 +288,7 @@ bun run funnel --jobs 4 -- --reader oracle:0.9,0.1        # ground-truth proxy, 
 bun run funnel --jobs 4 -- --packet-k 10,15,20                          # planted item in the ask's top K
 bun run funnel --jobs 4 -- --reader stub --lead-in clause # draft pool against the request's
 bun run funnel --jobs 4 -- --pool-dump $PWD/.local/pool.jsonl         # the push's candidate pool per task (A2)
-bun run funnel --jobs 4 -- --corpus-dump $PWD/.local/corpus.jsonl     # each world's items, for offline retrieval screens
+bun run funnel --jobs 4 -- --corpus-dump $PWD/.local/corpus.jsonl     # each world's items and card keys (A15)
 ```
 
 - **The default's pool (A2, D269).** With `pushCandidates` each push pass reports its pool to the lab hook

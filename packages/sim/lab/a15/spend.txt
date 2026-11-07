@@ -1,0 +1,10 @@
+A15 spend, Anthropic direct (lab, D97), ledger .local/a15/ledger.jsonl (cap $2.5)
+  a15-long-pay-41                                 505 calls  $0.1079
+  a15-long-pay-42                                 514 calls  $0.1064
+  a15-short-pay-41                               1101 calls  $0.2165
+  a15-short-pay-42                               1108 calls  $0.2188
+  a15-tgt-pay-41                                  190 calls  $0.0332
+  a15-tgt-pay-42                                  198 calls  $0.0349
+  intent request samples (cards-enrich, 4 runs)  1104 calls  $0.6475
+  Sonnet regrades of concerns (6 runs)             19 calls  $0.0271
+  total                                          4739 calls  $1.3924

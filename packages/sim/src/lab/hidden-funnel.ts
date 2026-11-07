@@ -92,6 +92,7 @@ import {
   ECONOMY_CARD_LIMITS,
   type Trace,
   readerMessages,
+  sanitizeItem,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
@@ -498,7 +499,9 @@ const ASK_DIAG = opt("ask-diag", "");
 const POOL_DUMP = opt("pool-dump", "");
 /**
  * `--corpus-dump FILE` (a diagnostic, docs/research/a2-quality.md): per suite world, its items (title, text head) and
- * its tasks with their planted ids, for offline retrieval screens.
+ * its tasks with their planted ids, for offline retrieval screens. Since A15 (docs/research/a15-retrieval.md) each
+ * item is as its source lists it and the cache holds it (redacted), with `h`, its card key, which joins it to the
+ * replayed cards and intent requests (`packages/sim/lab/a15/run_screen.py`).
  */
 const CORPUS_DUMP = opt("corpus-dump", "");
 if (ASK_DIAG) writeFileSync(ASK_DIAG, "");
@@ -655,7 +658,13 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   for (const task of tasks) clearSlot(world, task.text, keep);
   if (CORPUS_DUMP) {
     // `--corpus-dump` (A2): the world's items as its sources hold them, with the tasks and their planted ids.
-    const items = world.items.map((it) => ({ id: it.id, title: it.title, text: it.text.slice(0, 1_200) }));
+    // Each item as its source lists it (a separate, unmetered set of sources), and `h`: the card key of the copy the
+    // cache holds (redacted), to join an item to its replayed cards and requests.
+    const rows = simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll());
+    const items = rows.map((raw) => {
+      const it = sanitizeItem(raw);
+      return { id: raw.id, h: cardKey(it), title: it.title, text: it.text.slice(0, 1_200) };
+    });
     const asks = tasks.map((t, i) => ({ template: t.template, request: t.text, planted: planted[i]?.id ?? "" }));
     appendFileSync(CORPUS_DUMP, `${JSON.stringify({ suite, seed, variant, tasks: asks, items })}\n`);
   }
