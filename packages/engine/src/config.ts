@@ -291,6 +291,14 @@ export interface EngineConfig {
   /** With `verifyDelivery`: each re-read's deadline (ms); past it the item is delivered as held. */
   verifyTimeoutMs: number;
   /**
+   * Trial (D346, A18; owner repo owner, ends 2026-12-07), with `verifyDelivery`: an explicit ask ranks what the index
+   * holds before its on-demand poll and live search, and starts re-reading the doubted ones among its first
+   * `maxItems` then, so the re-reads run beside the poll and search instead of after them. The answer is still ranked
+   * after them and waits on those reads (shared per session, `CHECK_REUSE_MS`); an item that drops out of it was read
+   * for nothing (a connector call). Off: the ask re-reads only what it cites, after its search.
+   */
+  askVerifyEarly: boolean;
+  /**
    * Implication cards (`cards.ts`; needs `PartnerDeps.cards`): items entering the cache are read in the background by a
    * cheap model into small structured cards (the constraint, the actions it affects, its span and limit); at request
    * time, with no model, a cached item whose card bears on the request's actions is a candidate, and, with
@@ -572,6 +580,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncPushMaxStaleMs: 24 * 3_600_000,
   verifyDelivery: true,
   verifyTimeoutMs: 1_500,
+  askVerifyEarly: false,
   cards: true,
   cardsEconomy: true,
   cardItems: 1,
