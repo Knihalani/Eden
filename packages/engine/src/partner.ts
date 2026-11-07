@@ -301,7 +301,7 @@ interface Session {
    */
   request?: Cue;
   /**
-   * `readerReuse` (trial, D193): the latest push's reading: the request it read (`requests` then), its pool's items
+   * `readerReuse` (D193): the latest push's reading: the request it read (`requests` then), its pool's items
    * with their content hashes, and its verdict (null when it gave none).
    */
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
@@ -1575,7 +1575,7 @@ export class ContextPartner {
       report("gated");
       return null;
     }
-    // `readerReuse` (trial, D193): an ask in the push's request reads the push's verdict, with no call of its own.
+    // `readerReuse` (D193): an ask in the push's request reads the push's verdict, with no call of its own.
     const reuseAt = performance.now();
     const reused = opts.push ? null : await this.reusePush(s, pool, main, waitMs);
     // The ask's own read, when there was nothing to reuse, waits only what is left of its wait.
@@ -1583,7 +1583,7 @@ export class ContextPartner {
     // The likely deliveries are re-read while the reader reads (`verifyDelivery`): the delivery then waits on no call.
     // Only once the reader will read (D134): an empty pool or a gated ask has no reading to overlap, and its delivery
     // re-reads what it actually cites (`verifyItems`), so a re-read started ahead there is a connector call wasted.
-    // `readerVerifyAfter` (trial, D192) starts none here: only what the reader names and a delivery cites is re-read.
+    // `readerVerifyAfter` (D192) starts none here: only what the reader names and a delivery cites is re-read.
     if (!this.config.readerVerifyAfter && !reused) this.checkAhead(s, pool);
     const input: ReaderInput = {
       request: main,
@@ -1723,7 +1723,7 @@ export class ContextPartner {
   }
 
   /**
-   * `readerReuse` (trial, D193): the push's verdict for an ask made in the same request (no newer user message), cut
+   * `readerReuse` (D193): the push's verdict for an ask made in the same request (no newer user message), cut
    * to the ask's pool: its bearings and rejections on items the push read with the same content. `all` says whether
    * the push read every candidate of this pool. "late" when the push's reading is not in within `waitMs`; null when
    * there is nothing to reuse (no push in this request, or it gave no verdict), and the ask reads as usual.

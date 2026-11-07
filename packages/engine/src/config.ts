@@ -470,12 +470,12 @@ export interface EngineConfig {
    */
   readerGateVisits: boolean;
   /**
-   * Trial (D192, S1, off): with `verifyDelivery`, no doubted candidate is re-read beside the reader's call
+   * D192 (on in the default; reopens D134): with `verifyDelivery`, no doubted candidate is re-read beside the reader's call
    * (`checkAhead`); a delivery re-reads only the items it cites, after the reader named them (`verifyItems`).
    */
   readerVerifyAfter: boolean;
   /**
-   * Trial (D193, S1, off): with `readerPush`, an ask in the same request as the push (no newer user message), read
+   * D193 (on in the default): with `readerPush`, an ask in the same request as the push (no newer user message), read
    * against that same request (not an action of its own), reuses the push's reading instead of a call of its own: the
    * push's verdicts on the items both pools hold, unchanged in content, lead the answer; an item the push did not read
    * keeps its rule order. A push that gave no verdict (gated, failed) leaves the ask to read as usual; one still out
@@ -606,6 +606,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerPushBehind: true,
   readerGate: true,
   readerGateVisits: true,
-  readerVerifyAfter: false,
-  readerReuse: false,
+  readerVerifyAfter: true,
+  readerReuse: true,
 };

@@ -55,9 +55,10 @@ export const PARTS = {
     readerPushBehind: false,
     syncPush: false,
     verifyDelivery: false,
+    readerVerifyAfter: false,
   },
   /** A delivered item its source signalled a change to since it was read is read again first (D126). */
-  freshness: { verifyDelivery: false },
+  freshness: { verifyDelivery: false, readerVerifyAfter: false },
   /** The rule verdicts an ask gathers (D73). */
   askVerdicts: { askVerdicts: false },
   /** Implication cards (D59, D66), and with them the intent index, which their calls write. */
@@ -72,6 +73,8 @@ export const PARTS = {
     readerGate: false,
     readerGateVisits: false,
     readerPushBehind: false,
+    readerVerifyAfter: false,
+    readerReuse: false,
     askReaderPool: 30,
     askReaderItemChars: 400,
   },
