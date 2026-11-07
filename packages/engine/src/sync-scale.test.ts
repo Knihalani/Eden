@@ -310,19 +310,30 @@ describe("review regressions (A1)", () => {
   });
 
   test("whether a copy is cut is each user's own", async () => {
-    const sources = many(4, 10);
-    const { partner, cache } = setup(sources, { syncMaxItems: 20 });
-    await warm(partner);
+    // u1 has 40 items for 20 places (cut); u2 has two sources of 3 items under the same ids (6 items: all fit).
+    const u1Sources = many(4, 10);
+    const u2Sources = many(2, 3);
     const other = { tenantId: "t1", userId: "u2" };
-    partner.sync!.track(other);
-    for (let i = 0; i < 200 && !partner.sync!.warm(other); i++) await partner.sync!.tick();
-    // Same sources, same cap: the same cut for each user, and forgetting one user leaves the other's.
-    const of = (sc: Scope) => sources.map((s) => partner.sync!.complete(sc, s.id));
-    expect(of(other)).toEqual(of(scope));
-    expect(of(scope).some((x) => !x)).toBe(true);
+    const cache = new ItemCache();
+    const partner = new ContextPartner({
+      sources: async (sc) => (sc.userId === "u2" ? u2Sources : u1Sources),
+      sourceMap: new SourceMap(":memory:", { seed: 1 }),
+      cache,
+      budget: new Budget(),
+      model: null,
+      now: () => T0,
+      config: { sync: true, syncPageSize: 10, syncPollPageSize: 2, syncCallsPerMin: 6_000, ...OFF, syncMaxItems: 20 },
+    });
+    for (const sc of [scope, other]) {
+      partner.sync!.track(sc);
+      for (let i = 0; i < 200 && !partner.sync!.warm(sc); i++) await partner.sync!.tick();
+    }
+    // Same source ids, different copies: u1's are cut, u2's whole.
+    expect(["src0", "src1"].some((id) => !partner.sync!.complete(scope, id))).toBe(true);
+    expect(["src0", "src1"].map((id) => partner.sync!.complete(other, id))).toEqual([true, true]);
     partner.forget(scope);
-    expect(of(scope).every((x) => !x)).toBe(true);
-    expect(of(other).some((x) => !x)).toBe(true);
-    expect(cache.syncedCount(other)).toBeGreaterThan(0);
+    expect(u1Sources.map((s) => partner.sync!.complete(scope, s.id)).every((x) => !x)).toBe(true);
+    expect(["src0", "src1"].map((id) => partner.sync!.complete(other, id))).toEqual([true, true]);
+    expect(cache.syncedCount(other)).toBe(6);
   });
 });

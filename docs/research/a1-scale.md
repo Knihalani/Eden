@@ -10,12 +10,12 @@ figure here is a no-model run). Machine: 4 vCPU Xeon @ 2.10 GHz, 15 GiB, Bun 1.4
 - **With ~1,000 connected sources, Eden stopped finding things.** On the $0 funnel (train1–6, seed 41, 16 tasks per
   suite), adding 995 unrelated connectors to each simulated user took hidden facts surfaced from **76/96 to
   26/96**. Two causes, both invisible with the lab's usual five sources:
-  1. *A cut copy answered as if whole.* The background sync keeps a user's newest 3,000 items across all sources.
+  1. _A cut copy answered as if whole._ The background sync keeps a user's newest 3,000 items across all sources.
      With 1,000 busy connectors the newest 3,000 are mostly theirs, so the mailbox keeps a handful of items; but
      the mailbox still counted as "synced and current", so lookups answered it from the local index and never
      searched it. Anything older than the cut was unreachable. (This also bites a single large mailbox past
      3,000 items.)
-  2. *Routing over 1,000 sources was close to random.* A lookup searches 3–6 sources. Routing ranks them by names the
+  2. _Routing over 1,000 sources was close to random._ A lookup searches 3–6 sources. Routing ranks them by names the
      source has mentioned and by learned usefulness; a request that names no one ("have I used my ISA allowance?")
      has no mention evidence, and 1,000 fresh sources share the same prior, so the picks were a lottery.
 - **It was also very expensive.** Each lookup polled every stale synced source before answering: **1,031 listing
@@ -31,15 +31,15 @@ figure here is a no-model run). Machine: 4 vCPU Xeon @ 2.10 GHz, 15 GiB, Bun 1.4
 What changed (four new behaviours, measured neutral on the usual funnel and eval and better at 1,000 sources, are
 promoted into the default; one was measured and deleted; the efficiency fixes change no output):
 
-| Fix | Decision | What it does | Effect at 1,000 sources |
-|---|---|---|---|
-| One query per route; ids mapped through a Map; trim reads item times with one user lookup | D261 | Pure efficiency | CPU per event 7.44 → 5.7 ms, ask p50 12.2 → 7.6 ms (identical calls and decisions) |
-| Sparse latency histograms | D261 | A histogram keeps up to 64 samples as bucket numbers before taking its 4 KB counters | 8,457 → 199–410 B per rolling histogram; per-source heap 12.0 → 4.2 KB |
-| `syncBackfillLanes` 8 | D262 | 8 sources' backfill pages read at once | Cold start at 50 ms a call: 55.4 → 9.3 s wall; card calls −37% |
-| ~~`syncBackfillShare`~~ (deleted) | D262 | First backfill page sized to the source's share of the cap | Cold-start CPU 3.7x lower, but more polls later (+40% listing at 100 items a source) and −3/96 hidden on one seed |
-| `syncPollWidth` 8 | D263 | A lookup polls at most its 8 best-routed stale sources | 1,028 → ~21 listing calls per task |
-| `syncLocalComplete` | D264 | A source whose synced copy the cap cut is searched live, not answered from the index | hidden 25 → 40 /96 (with D263) |
-| `routeLocalHits` | D265 | Routing adds log2(1 + the source's items among the request's best local matches) | hidden 40 → 53 /96 (seed 41; 50 on seed 42) (with D263, D264) |
+| Fix                                                                                       | Decision | What it does                                                                         | Effect at 1,000 sources                                                                                           |
+| ----------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| One query per route; ids mapped through a Map; trim reads item times with one user lookup | D261     | Pure efficiency                                                                      | CPU per event 7.44 → 5.7 ms, ask p50 12.2 → 7.6 ms (identical calls and decisions)                                |
+| Sparse latency histograms                                                                 | D261     | A histogram keeps up to 64 samples as bucket numbers before taking its 4 KB counters | 8,457 → 199–410 B per rolling histogram; per-source heap 12.0 → 4.2 KB                                            |
+| `syncBackfillLanes` 8                                                                     | D262     | 8 sources' backfill pages read at once                                               | Cold start at 50 ms a call: 55.4 → 9.3 s wall; card calls −37%                                                    |
+| ~~`syncBackfillShare`~~ (deleted)                                                         | D262     | First backfill page sized to the source's share of the cap                           | Cold-start CPU 3.7x lower, but more polls later (+40% listing at 100 items a source) and −3/96 hidden on one seed |
+| `syncPollWidth` 8                                                                         | D263     | A lookup polls at most its 8 best-routed stale sources                               | 1,028 → ~21 listing calls per task                                                                                |
+| `syncLocalComplete`                                                                       | D264     | A source whose synced copy the cap cut is searched live, not answered from the index | hidden 25 → 40 /96 (with D263)                                                                                    |
+| `routeLocalHits`                                                                          | D265     | Routing adds log2(1 + the source's items among the request's best local matches)     | hidden 40 → 53 /96 (seed 41; 50 on seed 42) (with D263, D264)                                                     |
 
 ## How it was measured
 
@@ -55,18 +55,18 @@ Two new instruments:
 
 ## Findings, ranked by impact
 
-| # | What breaks | Where | Impact at 1,000 sources | Fixed? |
-|---|---|---|---|---|
-| 1 | A source whose synced copy the user's cap cut still answers as current: older items unreachable | `partner.ts` `localOf`, `sync.ts` | hidden facts 76 → 26 /96 (with #2) | D264 |
-| 2 | Routing over many sources is a lottery when the request names no one | `source-map.ts` `route` | as #1 | D265 |
-| 3 | Every lookup polls every stale synced source | `sync.ts` `freshen`, `partner.ts` `searchLive` | 1,031 listing calls a task; ~4.5 GB RSS a funnel process | D263 |
-| 4 | Card enrichment (paid) follows what the sync stores, so it grows with the source count | `cards.ts`, `sync.ts` `store` | card calls 267 → 27,236 over the screen | D263, D262 (to 8,124); left: see below |
-| 5 | Cold start reads a whole page from every source, one at a time, and stores 3–30x what it keeps | `sync.ts` `backfill` | 55 s wall at 50 ms a call; 12 s CPU at 100 items a source | D262 (wall); CPU left |
-| 6 | 8 KB of empty latency counters per (user, source) pair | `@eden/primitives` `histogram.ts`, `guarded.ts` | 12 KB per source before items (8–16 MB a user) | D261 |
-| 7 | One SQLite query per source per route; `Array.find` per routed id; a cache lookup per item per trim | `source-map.ts`, `partner.ts`, `sync.ts` | 7.4 ms CPU an event, 18.6 ms an ask | D261 |
-| 8 | The backfill never trims after its last page (a user can hold up to a batch of pages over the cap) | `sync.ts` `backfill` | small; up to 8 pages with lanes | no (left) |
-| 9 | The daily sweep re-lists every source up to `syncMaxItems` and stores what it lists, past the user's cap; polls do too | `sync.ts` `sweep`, `poll`, `store` | at 1,000 sources, a sweep is ≥ 1,000 calls a user a day and churns the cache's synced cap | no (left) |
-| 10 | Live searches of cut sources cost calls and time where the copy used to (wrongly) answer: a single large mailbox now searches live on each lookup | D264 | 41–59 searches a task at 1,000 sources; 1–3 a lookup for one big mailbox (estimate) | accepted cost |
+| #   | What breaks                                                                                                                                       | Where                                           | Impact at 1,000 sources                                                                   | Fixed?                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------- |
+| 1   | A source whose synced copy the user's cap cut still answers as current: older items unreachable                                                   | `partner.ts` `localOf`, `sync.ts`               | hidden facts 76 → 26 /96 (with #2)                                                        | D264                                   |
+| 2   | Routing over many sources is a lottery when the request names no one                                                                              | `source-map.ts` `route`                         | as #1                                                                                     | D265                                   |
+| 3   | Every lookup polls every stale synced source                                                                                                      | `sync.ts` `freshen`, `partner.ts` `searchLive`  | 1,031 listing calls a task; ~4.5 GB RSS a funnel process                                  | D263                                   |
+| 4   | Card enrichment (paid) follows what the sync stores, so it grows with the source count                                                            | `cards.ts`, `sync.ts` `store`                   | card calls 267 → 27,236 over the screen                                                   | D263, D262 (to 8,124); left: see below |
+| 5   | Cold start reads a whole page from every source, one at a time, and stores 3–30x what it keeps                                                    | `sync.ts` `backfill`                            | 55 s wall at 50 ms a call; 12 s CPU at 100 items a source                                 | D262 (wall); CPU left                  |
+| 6   | 8 KB of empty latency counters per (user, source) pair                                                                                            | `@eden/primitives` `histogram.ts`, `guarded.ts` | 12 KB per source before items (8–16 MB a user)                                            | D261                                   |
+| 7   | One SQLite query per source per route; `Array.find` per routed id; a cache lookup per item per trim                                               | `source-map.ts`, `partner.ts`, `sync.ts`        | 7.4 ms CPU an event, 18.6 ms an ask                                                       | D261                                   |
+| 8   | The backfill never trims after its last page (a user can hold up to a batch of pages over the cap)                                                | `sync.ts` `backfill`                            | small; up to 8 pages with lanes                                                           | no (left)                              |
+| 9   | The daily sweep re-lists every source up to `syncMaxItems` and stores what it lists, past the user's cap; polls do too                            | `sync.ts` `sweep`, `poll`, `store`              | at 1,000 sources, a sweep is ≥ 1,000 calls a user a day and churns the cache's synced cap | no (left)                              |
+| 10  | Live searches of cut sources cost calls and time where the copy used to (wrongly) answer: a single large mailbox now searches live on each lookup | D264                                            | 41–59 searches a task at 1,000 sources; 1–3 a lookup for one big mailbox (estimate)       | accepted cost                          |
 
 ## Numbers
 
@@ -76,16 +76,16 @@ Two new instruments:
 stub reader, cards and intent replayed, 96 hidden and 96 control tasks a seed. "Calls" is what the connectors received
 per task (listings plus searches). ms/task is contended (2 processes) and only indicative.
 
-| Arm (seed 41) | Hidden | Decoys | Calls / task | Listing | Search | ms / task |
-|---|---|---|---|---|---|---|
-| Five world sources only (no noise), old default | 76/96 | 70/96 | 2.78 | 2.78 | 0 | 8.2 |
-| Old default, 995 noise sources | 26/96 | 23/96 | 1,031 | 1,031 | 0 | 2,855 |
-| + `syncPollWidth` 8 (D263) | 25/96 | 25/96 | 20.9 | 20.8 | 0.02 | 26 |
-| + `syncLocalComplete` (D264) | 40/96 | 40/96 | 79.6 | 20.5 | 59.1 | 55 |
-| + `routeLocalHits` (D265) | 53/96 | 48/96 | 55.5 | 14.3 | 41.2 | 73 |
-| + `syncBackfillLanes` 8 (D262) | 53/96 | 47/96 | 55.3 | 14.2 | 41.0 | 48 |
-| **The new default** (after the review fix to D263: one route, asks search unpolled stale copies live) | 53/96 | 50/96 | 54.5 | 13.7 | 40.8 | 48 |
-| (deleted) + `syncBackfillShare` | 50/96 | 46/96 | 56.3 | 14.6 | 41.7 | 63 |
+| Arm (seed 41)                                                                                         | Hidden | Decoys | Calls / task | Listing | Search | ms / task |
+| ----------------------------------------------------------------------------------------------------- | ------ | ------ | ------------ | ------- | ------ | --------- |
+| Five world sources only (no noise), old default                                                       | 76/96  | 70/96  | 2.78         | 2.78    | 0      | 8.2       |
+| Old default, 995 noise sources                                                                        | 26/96  | 23/96  | 1,031        | 1,031   | 0      | 2,855     |
+| + `syncPollWidth` 8 (D263)                                                                            | 25/96  | 25/96  | 20.9         | 20.8    | 0.02   | 26        |
+| + `syncLocalComplete` (D264)                                                                          | 40/96  | 40/96  | 79.6         | 20.5    | 59.1   | 55        |
+| + `routeLocalHits` (D265)                                                                             | 53/96  | 48/96  | 55.5         | 14.3    | 41.2   | 73        |
+| + `syncBackfillLanes` 8 (D262)                                                                        | 53/96  | 47/96  | 55.3         | 14.2    | 41.0   | 48        |
+| **The new default** (after the review fix to D263: one route, asks search unpolled stale copies live) | 53/96  | 50/96  | 54.5         | 13.7    | 40.8   | 48        |
+| (deleted) + `syncBackfillShare`                                                                       | 50/96  | 46/96  | 56.3         | 14.6    | 41.7   | 63        |
 
 Card calls (the paid background role, stub-counted here) over the same screen: five sources 267; old default at 1,000
 sources 27,236; + D263 12,773; + D264 12,948; + D265 12,807; + lanes 8,124 (the new default after the fix: 8,120); + share 4,929.
@@ -104,26 +104,26 @@ falseFireRate 0).
 
 ### One user, 1,000 in-memory sources (`many-sources.bench.ts`)
 
-| Run | Before | After |
-|---|---|---|
-| `1000 20 300 40`, 3 runs, D261 only: CPU an event | 7.44 (7.11–7.62) ms | 5.7 (4.9–6.08) ms |
-| same: ask p50 / CPU an ask | 12.16 (12.05–12.23) / 18.63 ms | 7.59 (6.81–8.05) / 12.61 ms |
-| same, D263 alone: listing calls an event / an ask | 3.29 / 7.08 | 0.85 / 3.75 |
-| `1000 20 20 5 50` (50 ms a call): cold start wall, calls | 55.4 s, 1,000 (one lane) | 9.3 s, 1,000 (8 lanes); 8.7 s, 1,163 (8 lanes and share) |
-| `1000 100 20 5 0`, 8 lanes, 2 runs: cold-start CPU, items stored, calls | 11.6–12.5 s, 99,685, 1,000 | 3.2–3.3 s, 22,095, 1,180 (share) |
-| `N 1 60 10`, 2 runs: heap per extra source | 12.0 KB (+14.44 MB at 1,000) | 4.2 KB (+6.70 MB) |
+| Run                                                                     | Before                         | After                                                    |
+| ----------------------------------------------------------------------- | ------------------------------ | -------------------------------------------------------- |
+| `1000 20 300 40`, 3 runs, D261 only: CPU an event                       | 7.44 (7.11–7.62) ms            | 5.7 (4.9–6.08) ms                                        |
+| same: ask p50 / CPU an ask                                              | 12.16 (12.05–12.23) / 18.63 ms | 7.59 (6.81–8.05) / 12.61 ms                              |
+| same, D263 alone: listing calls an event / an ask                       | 3.29 / 7.08                    | 0.85 / 3.75                                              |
+| `1000 20 20 5 50` (50 ms a call): cold start wall, calls                | 55.4 s, 1,000 (one lane)       | 9.3 s, 1,000 (8 lanes); 8.7 s, 1,163 (8 lanes and share) |
+| `1000 100 20 5 0`, 8 lanes, 2 runs: cold-start CPU, items stored, calls | 11.6–12.5 s, 99,685, 1,000     | 3.2–3.3 s, 22,095, 1,180 (share)                         |
+| `N 1 60 10`, 2 runs: heap per extra source                              | 12.0 KB (+14.44 MB at 1,000)   | 4.2 KB (+6.70 MB)                                        |
 
 The cold-start runs before D262 were one each (the 55.4 s arm and its 56.0 s twin from an earlier run agree).
 
 ### Histogram (`bun packages/primitives/bench/histogram.bench.ts`, before/after back to back, 2 pairs)
 
-| Measure | Before | After |
-|---|---|---|
+| Measure                                         | Before                  | After             |
+| ----------------------------------------------- | ----------------------- | ----------------- |
 | heap per `RollingHistogram`, 0 / 1 / 50 samples | 8,457 / 8,459 / 8,459 B | 199 / 267 / 410 B |
-| quantile p95, 1,000 samples (p50) | 2.86–4.67 µs | 2.90–2.92 µs |
-| quantile p95, 5 samples (p50) | 2.70–4.82 µs | 118–122 ns |
-| record (p50) | 26.7–48.5 ns | 31.5–34.7 ns |
-| rolling record+quantile (p50) | 4.67–4.97 µs | 5.47–5.63 µs |
+| quantile p95, 1,000 samples (p50)               | 2.86–4.67 µs            | 2.90–2.92 µs      |
+| quantile p95, 5 samples (p50)                   | 2.70–4.82 µs            | 118–122 ns        |
+| record (p50)                                    | 26.7–48.5 ns            | 31.5–34.7 ns      |
+| rolling record+quantile (p50)                   | 4.67–4.97 µs            | 5.47–5.63 µs      |
 
 The rolling bench is slower because its window resets to the few-samples form every simulated minute and then
 promotes again; it is microseconds beside a source call.
@@ -150,6 +150,9 @@ promotes again; it is microseconds beside a source call.
   that but was not neutral (D262), so a cheaper store for items the trim will drop is the open lever.
 - **The backfill overshoot (#8)** is small and left. With lanes the trim and the warm-up-by-frontier check run once a
   batch, so a batch can list a page one lane would have skipped (reviewer); the measured calls did not move.
+- **A cut copy stays cut** until its source or user is forgotten (reviewer): a source the cache once evicted from is
+  searched live from then on, the safe direction at a cost in calls. `complete`'s memo also misses time-based expiry
+  until the cache sweeps (narrow: sweeps refresh what they list).
 - **Live searches of cut copies (#10)** are the honest cost of D264; a large mailbox is searched live on lookups that
   route to it, as before sync.
 
