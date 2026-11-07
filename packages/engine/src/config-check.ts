@@ -80,6 +80,9 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncPollBehind: ["sync", "syncOnDemand"],
   syncPush: SYNC,
   syncPushMaxStaleMs: ["sync", "syncPush"],
+  syncCoalesceMs: SYNC,
+  syncMaxAgeDays: SYNC,
+  syncMaxAgeBySource: SYNC,
   verifyTimeoutMs: ["verifyDelivery"],
   syncCatchupPages: SYNC,
   syncMaxUsersPerTenant: SYNC,
@@ -267,6 +270,9 @@ function isCore(key: Key, given: unknown): boolean {
   return JSON.stringify(given) === JSON.stringify(CORE_CONFIG[key]);
 }
 
+/** `syncMaxAgeBySource`'s entries: a source id (`isId`'s characters), a colon, and days (D214). */
+const SOURCE_DAYS = /^[A-Za-z0-9._:@-]{1,128}:\d{1,5}(?:\.\d+)?$/;
+
 /** Throws unless `key` is a setting and `given` a legal value for it. */
 function checkKey(where: string, key: string, given: unknown): void {
   // `Object.hasOwn`, not `in`: "__proto__" and "constructor" are not settings.
@@ -275,6 +281,10 @@ function checkKey(where: string, key: string, given: unknown): void {
   if (Array.isArray(fallback)) {
     if (!Array.isArray(given) || !given.every((entry) => typeof entry === "string")) {
       throw new Error(`${where}: "${key}" must be an array of strings`);
+    }
+    if (key === "syncMaxAgeBySource") {
+      const bad = (given as string[]).find((entry) => !SOURCE_DAYS.test(entry));
+      if (bad !== undefined) throw new Error(`${where}: "${key}" entries are "<sourceId>:<days>", not "${bad}"`);
     }
     const names = NAMES[key as Key];
     const unknown = names ? (given as string[]).find((entry) => !names.includes(entry)) : undefined;

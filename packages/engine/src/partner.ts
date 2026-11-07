@@ -53,7 +53,7 @@ import {
 } from "@eden/sources";
 import { IntentPatterns, predict, PREDICT_NAMES } from "./anticipate";
 import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache, type Sketch } from "./cache";
-import { SyncManager } from "./sync";
+import { maxAgeMs, SyncManager } from "./sync";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import {
@@ -633,6 +633,8 @@ export class ContextPartner {
             demandTimeoutMs: c.sourceTimeoutMs,
             push: c.syncPush,
             pushMaxStaleMs: c.syncPushMaxStaleMs,
+            coalesceMs: c.syncCoalesceMs,
+            maxAgeMs: maxAgeMs(c.syncMaxAgeDays, c.syncMaxAgeBySource),
           },
         )
       : null;
@@ -3617,7 +3619,7 @@ export class ContextPartner {
       });
       if (got.status === "failed" || s.closed) {
         this.freshness.failed++;
-        if (s.closed) return "failed";
+        if (s.closed || got.status !== "failed") return "failed";
         // A null from a source whose null does not mean gone (an MCP tool) says nothing, and says it every time: like
         // a source with no fetch, its items are cited as held (D126). A plain error is worth one more read.
         return got.why === "null" ? "unverifiable" : got.why === "error" ? "flaked" : "failed";

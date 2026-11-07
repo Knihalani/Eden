@@ -785,7 +785,7 @@ function sizeOf(key: string, items: ContextItem[]): number {
   return n;
 }
 
-/** A call that reached the source and failed: "timeout", the connector's rate-limit refusal ("throttled"), or "error". */
+/** A call that reached the source and failed: "timeout", the connector's rate-limit refusal ("throttled"), "error". */
 function failure(timedOut: boolean, message: string): "timeout" | "throttled" | "error" {
   if (timedOut) return "timeout";
   return RATE_LIMITED.test(message) ? "throttled" : "error";

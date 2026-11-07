@@ -123,14 +123,20 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `deliver` (a bulk rename of `return this.deliver(` once made it call itself forever: the tests hung, not failed).
 - **An ask says "Nothing in the connected sources." only when its sources answered (D127).** `searchLive` returns
   each chosen source's status (`sources`: the fan-out's, or "local" for a synced source answered from the index);
-  `honestAnswer` names any that did not answer (error, timeout, circuit open, busy, limited) and says the empty answer
-  is not an all-clear, and `AskResponse.sources` carries the statuses. A new lookup path an ask answers from must
-  return statuses too, or an outage reads as "nothing". A failed on-demand sync poll (`freshen`) feeds the status
+  `honestAnswer` names any that did not answer (error, timeout, circuit open, busy, limited, throttled: the
+  connector's own 429, worded "rate-limited", D212) and says the empty answer is not an all-clear, and
+  `AskResponse.sources` carries the statuses. A new lookup path an ask answers from must return statuses too, or an
+  outage reads as "nothing". A failed on-demand sync poll (`freshen`) feeds the status
   through `localOf`, not a status of its own: it leaves the copy not current, so the source is searched live and that
   search's status stands. An ask never passes `behind`, so a warm-but-stale copy is not "local" there
   (`review-regressions.test.ts`); only the reader push's first reading answers from it. A session that ends before the
   search runs returns `closed`, and the answer says so rather than "nothing". Probes are extra queries
   beside a chosen source's own search, whose outcome gives the source's status.
+- **An ask cites no doubted copy that no re-read confirmed (D211).** The ask's `verifyItems` runs `strict`: a doubted
+  item whose re-read failed with a plain error ("flaked") is read once more, and one still not confirmed is left out
+  and named in the answer ("Left out items from mail (1) that changed at the source and could not be re-checked"),
+  never an all-clear. "unverifiable" (no fetch tool, or a null from a source without `fetchReportsGone`) is cited as
+  held, as D126 delivers it. Proactive deliveries keep D126's rule (a failed re-read is delivered as held).
 - **Shown means handed out.** With `askDedup`, what an injection showed is noted (`noteShown`) in `handOut`, which
   every path that gives the agent an injection calls (observe's reply, `takePending`, the firewall's finding, the
   ask's own answer), not when `deliver` builds it: a queued packet the agent has not taken was shown nothing, so an

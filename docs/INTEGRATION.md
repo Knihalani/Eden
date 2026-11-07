@@ -15,6 +15,8 @@ import { EdenClient, withContext } from "@eden/client";
 const eden = new EdenClient({ apiKey, userId, sessionId });
 const { injection } = await eden.observe({ kind: "user_message", text }); // report each event
 messages = withContext(messages, await eden.collect(injection)); // before each model call
+// From your sources' webhooks: forward what changed, with the items (see "Forward your sources' change notifications").
+await eden.sourceChanged(sourceId, { items, removed });
 ```
 
 - **One `userId` per end user, one `sessionId` per conversation.** Eden keys every piece of state by tenant, user and
@@ -190,28 +192,38 @@ user's connections as well as dropping what Eden holds; a user idle 15 minutes i
 (unless background sync keeps reading them), and each tenant holds at most 10,000 users' connections. Forget does not edit
 your configuration: to revoke a connection, remove it from the directory (and forget, to drop what was read).
 
-## Forward your sources' change notifications (`syncPush`, D125)
+## Forward your sources' change notifications, with their items (`syncPush`, D125, D210)
 
 Eden keeps a synced copy of each user's listable sources. Without help it guesses when a source has changed (a busy
 inbox goes stale in minutes) and polls it at the next lookup: 3.8 to 5.1 listing calls per agent task in the
 market-latency runs (docs/research/cost-fixes.md). On a connector platform that bills per call, those polls are most
-of Eden's connector bill. If you already receive the provider's change notifications, forward them:
+of Eden's connector bill (RealUse-1: agent + Eden $113–133 per 1,000 tasks on a $12/1k-calls plan, against $39–41 for
+the agent alone). If you receive the provider's change notifications, forward them, **with the changed items**:
 
-- **The changed items themselves** (a Slack Events API message, a Graph notification with resource data, a connector
-  platform's trigger payload): `POST /v1/sources/items {userId, sourceId, items}`, each item
-  `{ref, title?, text, url?, updatedAt?, meta?}`, at most 100 per call, or `client.sourceItems(sourceId, items)`.
-  They pass the secret gate and are held as synced, with no source call. Use the same `ref` the source's list tool
-  returns, so a pushed item and the same item listed later are one item. This is what cuts Eden's polls (to 0.6 to
-  0.8 calls per task in the lab: the daily sweep and a 24-hour safety poll).
-- **Only that the source changed** (a Gmail `watch` push, a Calendar or Drive channel, a HubSpot webhook):
-  `POST /v1/sources/changed {userId, sourceId}`, or `client.sourceChanged(sourceId)`. The source is polled once, at
-  its next use, however many notifications came first. For a busy inbox this saves little: it changes about every
-  hour, so it is polled about as often as before.
+```ts
+// The default integration: what changed, in full. Eden holds it with no call to the source.
+await eden.sourceChanged("gmail", {
+  items: [{ ref: msg.id, title: msg.subject, text: msg.body, updatedAt: msg.internalDate }],
+  removed: deletedIds, // refs the source no longer has (deleted, recalled)
+});
+```
 
-- **Items the source deleted** (a recalled or deleted message, a removed doc or event; Gmail history, Slack's
-  `message_deleted`, Graph and HubSpot deletions all report them): `POST /v1/sources/removed {userId, sourceId,
-  refs}`, at most 100 refs, or `client.sourceRemoved(sourceId, refs)`. Eden drops them at once (their cards and graph
-  entries too); without this a deleted item is only noticed by the daily sweep, two sweeps in a row.
+- **The changed items themselves (the default; D210).** A Slack Events API message, a Graph notification with
+  resource data, a connector platform's trigger payload, a Gmail push turned into messages with `history.list`:
+  `client.sourceChanged(sourceId, { items, removed })`. Each item is `{ref, title?, text, url?, updatedAt?, meta?}`
+  with the same `ref` the source's list tool returns, so a pushed item and the same item listed later are one item.
+  They pass the secret gate and are held as synced, deletions are dropped at once (their cards and graph entries
+  too), and **nothing is polled or re-read**: RealUse-1 part D measured 0.22 connector calls a lookup with payloads
+  against 0.91 with bare signals, with no more stale or deleted items delivered (1 of 38 updated items stale, 0
+  deleted). The client splits batches past 100 and never throws; if Eden does not take a part (unreachable, a refused
+  item), it also sends the bare signal, so the source is polled rather than the change missed, and resolves false.
+  The routes underneath are `POST /v1/sources/items {userId, sourceId, items}` and `POST /v1/sources/removed {userId,
+  sourceId, refs}` (at most 100 each), also exposed as `client.sourceItems` and `client.sourceRemoved`.
+- **Only that the source changed** (a Gmail `watch` push you do not expand, a Calendar or Drive channel, a HubSpot
+  webhook): `client.sourceChanged(sourceId)`, or `POST /v1/sources/changed {userId, sourceId}`. The source is polled
+  once, at its next use, however many notifications came first, and every item Eden read from it before the signal is
+  re-read by its id before it is delivered or cited (D126, D131, D211). For a busy inbox this saves little: it changes
+  about every hour, so it is polled about as often as before. Use it only where the provider gives no items.
 
 Declare the sources you forward: `"notifies": true` in the user's source spec (`EDEN_USER_SOURCES_FILE` or your
 `SourceDirectory`), or `notifies: true` on a `Source` you build. A source that notifies is polled only when told it
@@ -231,12 +243,7 @@ A signal that says only "this source changed" does not say what changed. Eden th
 that source before the signal as unconfirmed, and reads such an item again by its id before delivering it (D126: about
 0.5 re-reads per agent turn in the simulation, each one connector call; a source without a fetch tool is delivered as
 held). Notifications that carry their items or name their deletions need no re-reads, so prefer them where the
-provider offers them.
-
-If you know which items changed, send them: `sourceItems` for the new or changed items and `sourceRemoved` for the
-deleted refs, not a bare `sourceChanged`. That path re-reads nothing (0 re-reads in D126's simulation, with no more
-stale or deleted items delivered than the signal path), while a bare signal makes Eden doubt every earlier-read item
-of the source (D131). For a Gmail push, turn the history id into items and deletions with `history.list` first.
+provider offers them; for a Gmail push, turn the history id into items and deletions with `history.list` first.
 
 Receiving notifications has its own cost, which Eden does not see: a platform may bill trigger runs, and a Gmail push
 carries only a history id that your code turns into items with a `history.list` call.

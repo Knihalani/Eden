@@ -264,6 +264,24 @@ export interface EngineConfig {
    */
   syncPushMaxStaleMs: number;
   /**
+   * Trial (D213; owner repo owner, ends 2026-12-07; 0 is off). With `sync`: a source whose last complete poll began
+   * less than this long ago (ms) is current for a lookup whatever its learned rate or a notification since says, so
+   * a user's concurrent requests and a burst of signals just after a poll make no second listing call. A notice that
+   * lands inside the window is read by the first poll after it; meanwhile the copies it doubts are re-read before
+   * delivery (`verifyDelivery`, D126, D211). Concurrent lookups already share a poll in flight (`SourceSync.busy`).
+   */
+  syncCoalesceMs: number;
+  /**
+   * Trial (D214; owner repo owner, ends 2026-12-07; 0 is off). With `sync`: items whose `updatedAt` is more than
+   * this many days old are not synced, a source's backfill and sweep stop paging at that age (listings are read
+   * newest first), and a synced item that ages past it is dropped at its source's next sweep. Items with no time are
+   * kept. `syncMaxAgeBySource` overrides it per source. Older items stay reachable through a lookup's live search
+   * only where the source is searched live.
+   */
+  syncMaxAgeDays: number;
+  /** With `syncMaxAgeDays`'s trial: per-source caps, each `"<sourceId>:<days>"` (0 days: no cap for that source). */
+  syncMaxAgeBySource: string[];
+  /**
    * Every item about to be delivered (a packet or an `ask` answer, from the slow path, the reader's push, anticipation
    * or the action firewall) whose source signalled a change after the copy was read (`Sync.signalledSince`, with
    * `syncPush`) is fetched again by its ref first (`SourceFanout.fetchChecked`, within `verifyTimeoutMs`, in parallel;
@@ -561,6 +579,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncLocalAll: true,
   syncPush: true,
   syncPushMaxStaleMs: 24 * 3_600_000,
+  syncCoalesceMs: 0,
+  syncMaxAgeDays: 0,
+  syncMaxAgeBySource: [],
   verifyDelivery: true,
   verifyTimeoutMs: 1_500,
   cards: true,

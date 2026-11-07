@@ -75,6 +75,31 @@ export interface SyncOptions {
    * the bound on a lost notification (`syncPushMaxStaleMs`); 0 or absent: `maxStaleMs`.
    */
   pushMaxStaleMs?: number;
+  /**
+   * `syncCoalesceMs` (trial, D213): a warm source whose last complete poll began less than this long ago (ms) is
+   * current, whatever its learned rate or a notification since says. 0 or absent: off.
+   */
+  coalesceMs?: number;
+  /**
+   * `syncMaxAgeDays`/`syncMaxAgeBySource` (trial, D214): each source's recency cap (ms; Infinity or absent: none).
+   * Items older are not synced; a source's backfill and sweep stop paging at that age.
+   */
+  maxAgeMs?: (sourceId: string) => number;
+}
+
+/**
+ * The per-source recency caps (D214) from `syncMaxAgeDays` and `syncMaxAgeBySource` ("<sourceId>:<days>", the last
+ * entry for a source wins), in ms; undefined when no source has one. 0 days is no cap.
+ */
+export function maxAgeMs(days: number, bySource: readonly string[]): ((sourceId: string) => number) | undefined {
+  const per = new Map<string, number>();
+  for (const entry of bySource) {
+    const at = entry.lastIndexOf(":");
+    per.set(entry.slice(0, at), Number(entry.slice(at + 1)));
+  }
+  const cap = (d: number) => (d > 0 ? d * 86_400_000 : Infinity);
+  if (!(days > 0) && ![...per.values()].some((d) => d > 0)) return undefined;
+  return (sourceId) => cap(per.get(sourceId) ?? days);
 }
 
 export interface SyncDeps {
@@ -411,6 +436,8 @@ export class SyncManager {
   private isCurrent(s: SourceSync, now: number): boolean {
     if (s.phase !== "warm") return false;
     const age = now - s.polledAt;
+    // D213: polled just now (another request's poll, or one just before a burst of signals): no second call.
+    if (age >= 0 && age < (this.o.coalesceMs ?? 0)) return true;
     // A source that notifies changed only when it said so, or (a lost notification) after `pushMaxStaleMs`.
     if (s.notifies) return age <= (this.o.pushMaxStaleMs || this.o.maxStaleMs) && s.notices === s.noticesPolled;
     if (!(age <= this.o.maxStaleMs)) return false;
@@ -522,7 +549,8 @@ export class SyncManager {
         if (it.updatedAt !== undefined) next.frontier = Math.min(next.frontier, it.updatedAt);
       if (page.items.length > 0 && page.items.every((it) => it.updatedAt === undefined)) next.frontier = -Infinity;
       next.cursor = page.next ?? undefined;
-      if (page.next === null || page.items.length === 0) {
+      // D214: a listing past the source's recency cap holds nothing more that would be synced.
+      if (page.next === null || page.items.length === 0 || this.pastCap(next.id, next.frontier)) {
         next.exhausted = true;
         this.warmUp(u, next, this.deps.now());
       }
@@ -723,7 +751,20 @@ export class SyncManager {
       // The sweep's first page is the newest: it is also a poll.
       if (first) this.polled(s, started, fresh, notices, pushSeq);
       const full = sw.seen.size >= this.o.maxItems;
-      if (page.next === null || page.items.length === 0 || full) {
+      // D214: past the recency cap, what follows is older than anything kept.
+      const oldest = Math.min(...page.items.map((it) => it.updatedAt ?? Infinity));
+      const capped = this.pastCap(s.id, oldest);
+      if (page.next === null || page.items.length === 0 || full || capped) {
+        // Aged past the cap: dropped now, as the next store would refuse it.
+        const cut = this.deps.now() - (this.o.maxAgeMs?.(s.id) ?? Infinity);
+        const aged = [...s.ids].filter(
+          (id) => (this.deps.cache.get(u.scope, id, this.deps.now())?.updatedAt ?? Infinity) < cut,
+        );
+        for (const id of aged) {
+          s.ids.delete(id);
+          s.missed.delete(id);
+        }
+        this.stats.deleted += this.deps.cache.dropSynced(u.scope, aged);
         // Missed by this sweep and the one before: gone. Missed by this one only: perhaps skipped (an offset listing
         // shifted, a short page ended the listing early), so kept and checked again by the next sweep.
         const missed = [...s.ids].filter((id) => !sw.seen.has(id));
@@ -749,7 +790,14 @@ export class SyncManager {
     const now = this.deps.now();
     // An item its source said is gone (`ItemCache.isHeldGone`) was listed before the deletion: neither stored nor
     // counted as synced, or the listing would undo `removed`.
-    const own = items.filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now));
+    // D214: an item older than its source's recency cap is not synced (one with no time is).
+    const cut = now - (this.o.maxAgeMs?.(s.id) ?? Infinity);
+    const own = items.filter(
+      (it) =>
+        it.sourceId === s.id &&
+        !(it.updatedAt !== undefined && it.updatedAt < cut) &&
+        !this.deps.cache.isHeldGone(u.scope, it.id, now),
+    );
     const changed = this.deps.cache.put(u.scope, own, now, true, true, readMark);
     if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
@@ -768,6 +816,15 @@ export class SyncManager {
     );
     if (changed.length > 0) this.deps.onStored?.(u.scope, changed);
     return changed.length;
+  }
+
+  /**
+   * Whether a listing that has reached items as old as `oldest` is past the source's recency cap (D214): the rest of
+   * it is older (listings are read newest first, as polls assume), and would not be synced.
+   */
+  private pastCap(sourceId: string, oldest: number): boolean {
+    if (!this.o.maxAgeMs) return false;
+    return oldest < this.deps.now() - this.o.maxAgeMs(sourceId);
   }
 
   /** Whether a source's copy goes by its notifications (`push` and the source `notifies`). */
