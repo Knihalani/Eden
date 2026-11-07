@@ -122,6 +122,11 @@ A wider request gate (D168's verb-gate trial, measured and deleted 2026-11-06) r
 and added 113 reader calls (651 to 764, +17.4%; 0.91 a newly gated request) at $0.000278 a call (ledger run
 `close3-verbgate-topup`: 119 calls, $0.03306), so $0.041 per thousand train tasks and $0.25 per thousand newly gated
 requests; it gained no hidden item (311 to 310) and cut decoys 137 to 121 (recipe 2a replay, LAB.md).
+Since D193 (`readerReuse`) an agent's `ask_context` in the request's own turn reuses the push's reading instead of
+a call, and since D192 (`readerVerifyAfter`) no doubted item is re-read beside a reading. Pi on Anthropic Haiku
+(lab provider, cached), heldout13+14, seeds 41-42, both on against the old default: reader calls a neutral task
+1.78 → 0.88, Eden's per-task $ on neutral tasks $0.465 → $0.218 per 1,000, the 1:1:8 mix all-in $0.856 → $0.628
+per 1,000 tasks (−$0.228, CI −0.292..−0.165) and 2.45 fewer connector calls a task (docs/research/fix-s1-reader.md).
 
 **Reader reasoning (D144): the default sends none.** Until D144 `ModelReaderMaker` defaulted to reasoning "low", which
 the servers send to OpenRouter, while every lab figure above (and D96's, D98's and D125's quality) ran with thinking

@@ -66,7 +66,7 @@ import {
   type Frame,
   type Verdict,
 } from "./conflict";
-import { cardVerdict, requestActions, STANDING_KINDS, type CardEnricher } from "./cards";
+import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
 import { intentTerms, stemWord } from "./intent";
 import {
   READER_MAX_ITEMS,
@@ -77,6 +77,7 @@ import {
   type ReaderInput,
   type ReaderRead,
   type ReaderKind,
+  type ReaderVerdict,
 } from "./reader";
 import {
   accounts,
@@ -299,6 +300,11 @@ interface Session {
    * about it is read against what the user asked.
    */
   request?: Cue;
+  /**
+   * `readerReuse` (D193): the latest push's reading: the request it read (`requests` then), its pool's items
+   * with their content hashes, and its verdict (null when it gave none).
+   */
+  pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
 }
 
 /** Items whose shown words a session keeps (`askDedup`). */
@@ -1311,6 +1317,10 @@ export class ContextPartner {
             chosen,
             limit,
             internal.push ? Infinity : this.config.askReaderWaitMs,
+            {
+              push: internal.push === true,
+              ...(internal.request !== undefined ? { request: internal.request } : {}),
+            },
           )
         : null;
     if (reading) chosen = reading.chosen;
@@ -1518,6 +1528,7 @@ export class ContextPartner {
     chosen: Scored[],
     limit: number,
     waitMs: number,
+    opts: ReadOpts = {},
   ): Promise<{
     chosen: Scored[];
     notes: Map<string, string>;
@@ -1541,7 +1552,7 @@ export class ContextPartner {
     }
     // Whether the reader is shown every candidate the ask has (none cut by the pool's cap or the prompt's), so a
     // rejection of all of them is a reading of everything found (D114).
-    const readsAll =
+    let readsAll =
       pool.length <= READER_MAX_ITEMS &&
       ranked.every((x) => seen.has(x.item.id)) &&
       chosen.every((x) => seen.has(x.item.id));
@@ -1571,25 +1582,20 @@ export class ContextPartner {
         : new Map();
     // `readerGate`: no call when none of the request's own candidates could constrain it: no card of a constraint kind
     // (or a state change or a thing done) and no constraint wording. Bulk mail never counts.
-    if (this.config.readerGate) {
-      const constraintLike = (x: Scored) => {
-        if (bulkMail(x.item)) return false;
-        const card = cards.get(x.item.id);
-        if (card && (STANDING_KINDS.has(card.kind) || card.kind === "status-change" || card.kind === "already-done")) {
-          return true;
-        }
-        const text = `${x.item.title}. ${x.item.text}`.toLowerCase();
-        return mayConstrain(text) || (this.config.readerGateVisits && arrangedVisit(text));
-      };
-      if (!pool.some(constraintLike)) {
-        report("gated");
-        return null;
-      }
+    if (this.config.readerGate && !pool.some((x) => this.constraintLike(x, cards))) {
+      report("gated");
+      return null;
     }
+    // `readerReuse` (D193): an ask in the push's request reads the push's verdict, with no call of its own.
+    const reuseAt = performance.now();
+    const reused = opts.push ? null : await this.reusePush(s, pool, main, waitMs);
+    // The ask's own read, when there was nothing to reuse, waits only what is left of its wait.
+    const readWaitMs = Number.isFinite(waitMs) ? waitMs - (performance.now() - reuseAt) : waitMs;
     // The likely deliveries are re-read while the reader reads (`verifyDelivery`): the delivery then waits on no call.
     // Only once the reader will read (D134): an empty pool or a gated ask has no reading to overlap, and its delivery
     // re-reads what it actually cites (`verifyItems`), so a re-read started ahead there is a connector call wasted.
-    this.checkAhead(s, pool);
+    // `readerVerifyAfter` (D192) starts none here: only what the reader names and a delivery cites is re-read.
+    if (!this.config.readerVerifyAfter && !reused) this.checkAhead(s, pool);
     const input: ReaderInput = {
       request: main,
       ...(request && cue.raw !== request ? { question: cue.raw } : {}),
@@ -1600,21 +1606,40 @@ export class ContextPartner {
     };
     // Who makes the call, for the accounting: a read that finds a verdict cached, or a call another read started
     // (an ask joining its push), makes none. Known before the read, for when this ask's wait runs out first.
-    const starts = reader.peek(s.scope, s.key, input) === undefined && !reader.inFlight(s.scope, s.key, input);
+    const starts =
+      !reused && reader.peek(s.scope, s.key, input) === undefined && !reader.inFlight(s.scope, s.key, input);
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const reading = reader.read(s.scope, s.key, input, s.abort.signal);
+    const reading: Promise<ReaderRead> = reused
+      ? Promise.resolve(reused === "late" ? NO_READ : { ...NO_READ, verdict: reused.verdict })
+      : reader.read(s.scope, s.key, input, s.abort.signal);
+    // The push's reading, for a later ask in the same request (`readerReuse`): its pool's items and their content.
+    if (opts.push && this.config.readerReuse) {
+      s.pushRead = {
+        request: opts.request ?? s.requests,
+        main,
+        hashes: new Map(input.items.map((it) => [it.id, it.hash])),
+        verdict: reading.then(
+          (r) => r.verdict,
+          () => null,
+        ),
+      };
+    }
     let got: ReaderRead | "late";
     try {
       // An explicit ask stops waiting at `waitMs`; the push (Infinity) waits for the reading, with no timer left
       // pending, bounded by the reader's call and the session's close.
-      got = Number.isFinite(waitMs)
-        ? await Promise.race([
-            reading,
-            new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), Math.max(0, waitMs)))),
-          ])
-        : await reading;
+      got = reused
+        ? reused === "late"
+          ? "late"
+          : await reading
+        : Number.isFinite(waitMs)
+          ? await Promise.race([
+              reading,
+              new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), Math.max(0, readWaitMs)))),
+            ])
+          : await reading;
     } catch {
-      got = { verdict: null, costUsd: 0, called: false, overBudget: false };
+      got = NO_READ;
     } finally {
       clearTimeout(timer);
     }
@@ -1661,6 +1686,8 @@ export class ContextPartner {
       return unchanged;
     }
     const verdict = got.verdict;
+    // A reused verdict read the push's pool: it read every candidate here only if each was in that pool, unchanged.
+    if (reused && reused !== "late" && !reused.all) readsAll = false;
     const byId = new Map(pool.map((x) => [x.item.id, x]));
     const notes = new Map<string, string>();
     const kinds = new Map<string, ReaderKind>();
@@ -1689,6 +1716,58 @@ export class ContextPartner {
       read: true,
       called,
       costUsd,
+    };
+  }
+
+  /**
+   * `readerGate`'s test of one candidate: whether it could constrain a request (a card of a constraint kind, a state
+   * change or a thing done, or constraint wording; an arranged visit with `readerGateVisits`). Bulk mail never does.
+   */
+  private constraintLike(x: Scored, cards: ReadonlyMap<string, Card>): boolean {
+    if (bulkMail(x.item)) return false;
+    const card = cards.get(x.item.id);
+    if (card && (STANDING_KINDS.has(card.kind) || card.kind === "status-change" || card.kind === "already-done")) {
+      return true;
+    }
+    const text = `${x.item.title}. ${x.item.text}`.toLowerCase();
+    return mayConstrain(text) || (this.config.readerGateVisits && arrangedVisit(text));
+  }
+
+  /**
+   * `readerReuse` (D193): the push's verdict for an ask made in the same request (no newer user message), cut
+   * to the ask's pool: its bearings and rejections on items the push read with the same content. `all` says whether
+   * the push read every candidate of this pool. "late" when the push's reading is not in within `waitMs`; null when
+   * there is nothing to reuse (no push in this request, or it gave no verdict), and the ask reads as usual.
+   */
+  private async reusePush(
+    s: Session,
+    pool: readonly Scored[],
+    main: string,
+    waitMs: number,
+  ): Promise<{ verdict: ReaderVerdict; all: boolean } | "late" | null> {
+    if (!this.config.readerReuse || !this.config.readerPush) return null;
+    const prior = s.pushRead;
+    // Only an ask read against the push's own request: one that acts on its own is another request.
+    if (!prior || prior.request !== s.requests || prior.main !== main) return null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const v = await Promise.race([
+      prior.verdict,
+      new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), Math.max(0, waitMs)))),
+    ]).finally(() => clearTimeout(timer));
+    if (v === "late") return "late";
+    if (!v) return null;
+    // An item the push flagged whose copy changed since it read it (the push's own re-read, D192, or another): its
+    // bearing was of the old copy, so the ask reads the current one with a call of its own.
+    const now = new Map(pool.map((x) => [x.item.id, cardKey(x.item)]));
+    if (v.bears.some((b) => now.has(b.id) && now.get(b.id) !== prior.hashes.get(b.id))) return null;
+    const same = new Set(pool.filter((x) => prior.hashes.get(x.item.id) === cardKey(x.item)).map((x) => x.item.id));
+    return {
+      verdict: {
+        bears: v.bears.filter((b) => same.has(b.id)),
+        rejected: (v.rejected ?? []).filter((id) => same.has(id)),
+        checked: same.size,
+      },
+      all: same.size === pool.length,
     };
   }
 
@@ -5028,6 +5107,16 @@ interface AskInternal {
   /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
   again?: { searched: SearchedLive; prev: Injection | null };
 }
+
+/** `readAsk`'s options: whether it reads for the push, and the push's request. */
+interface ReadOpts {
+  push?: boolean;
+  /** The push's request (`AskInternal.request`), recorded with its reading for `readerReuse`. */
+  request?: number;
+}
+
+/** No reading: no verdict, no call, nothing spent. */
+const NO_READ: ReaderRead = { verdict: null, costUsd: 0, called: false, overBudget: false };
 
 const sessionKey = (e: Scope & { sessionId: string }) => `${scopeKey(e)}#${e.sessionId}`;
 

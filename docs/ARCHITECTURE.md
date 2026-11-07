@@ -205,8 +205,11 @@ change (`Sync.signalledSince`, a `syncPush` signal that does not say which item 
 first, in parallel. A read's start is a mark, not a time (D133): every lookup, probe, re-read and sync page takes
 `Sync.mark()` (a count of signals) before its call and stores it with its copies (`ItemCache.readMark`), so a signal
 that lands while a call is on the wire doubts what it brings, and items a notification carried, or a poll the signal
-started, do not; a reader's likely picks are re-read beside its call, so the delivery seldom waits (only once the
-reader will be called: an empty pool or a `readerGate`d ask starts none, D134). A changed copy is stored
+started, do not. Since D192 (`readerVerifyAfter`, on in the default; it reopens D134) nothing is re-read beside the
+reader's call: a delivery re-reads only the items it cites, after the reader named them, so a doubted delivery waits
+for its re-read, and the up-to-3 speculative fetches per reading (`checkAhead`, `VERIFY_AHEAD`) are gone (Pi: 1.6-2.6
+fewer fetches a task). With the switch off, `checkAhead` runs only once the reader will be called (D134). A changed
+copy is stored
 and delivered instead; one the source no longer has (`gone`, only from a source with `Source.fetchReportsGone`) is
 dropped from the cache and left out; one that cannot be checked is delivered as held, except in an ask's answer
 (D211): there a re-read that failed with a plain error, or that our own guard skipped, is tried once more, and a copy
@@ -351,6 +354,11 @@ with no new source call and read again (a reader cache hit when its pool is unch
 queued and the agent has not taken is replaced, its ledger entries restored. The push itself is not cut at
 `askReaderWaitMs`: it waits for
 the reading (bounded by the reader's model call and the session's close), and `observe` reports `pending` while it runs.
+With `readerReuse` (on in the default, D193), an `ask` made before the next user message and read against the push's
+own request (not an ask that acts on its own) takes the push's verdict on the items both pools hold unchanged, with no
+reader call of its own (`Session.pushRead`); it was read against the user's request, not the agent's question. A push
+with no verdict, or one that flagged an item changed since it read it, leaves the ask to read; one still out past the
+ask's wait leaves the ask answered without the reader.
 Its packet is queued only if the session is still open and no newer user message has arrived; the agent's own events in
 between (tool calls, its replies) do not make it stale.
 

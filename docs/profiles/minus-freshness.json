@@ -1,3 +1,4 @@
 {
-  "verifyDelivery": false
+  "verifyDelivery": false,
+  "readerVerifyAfter": false
 }
