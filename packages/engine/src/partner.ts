@@ -65,6 +65,7 @@ import {
   type Frame,
   type Verdict,
 } from "./conflict";
+import { applyVerdict, requestTerms, type ApplyMatch, type ApplyMaker } from "./applicability";
 import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
 import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
 import {
@@ -177,6 +178,17 @@ export interface PartnerDeps {
    */
   reader?: AskReader;
   /**
+   * `readAtIngest` (D233, `applicability.ts`): the background maker of applicability records, a model call through the
+   * card enricher's budget. Absent, or the flag off: no record is made and the reader reads as before.
+   */
+  applier?: ApplyMaker;
+  /** A lab hook: each pooled item's applicability match (`readAtIngest`), ids and numbers only, for the study. */
+  onApply?: (report: {
+    sessionId: string;
+    decided: boolean;
+    items: { id: string; match: ApplyMatch | null }[];
+  }) => void;
+  /**
    * A lab hook (`hidden-funnel.ts`): what the reader did for each ask, content-free (item ids, kinds, counts, timing).
    */
   onReader?: ReaderSink;
@@ -214,9 +226,10 @@ export interface ReaderReport {
   flagged: { id: string; kind: ReaderKind }[];
   /**
    * "read" (a verdict, from a call or the cache), "late" (the wait ran out), "budget" (the reader's `Budget` refused
-   * the call: a session or day cap), "none" (no pool, a failed or unreadable call), "gated" (`readerGate`).
+   * the call: a session or day cap), "none" (no pool, a failed or unreadable call), "gated" (`readerGate`), "ingest"
+   * (`readAtIngest`: every pooled item decided by its applicability record, no call).
    */
-  outcome: "read" | "late" | "budget" | "none" | "gated";
+  outcome: "read" | "late" | "budget" | "none" | "gated" | "ingest";
   waitedMs: number;
 }
 export type ReaderSink = (report: ReaderReport) => void;
@@ -556,6 +569,12 @@ export class ContextPartner {
       if (this.config.intent) cards.intend();
       // `cardsLean`: what the prefilter rejects is read for requests only when a person wrote it recently.
       if (this.config.intent && this.config.cardsLean) cards.lean(this.config.cardsLeanDays);
+      // `readAtIngest`: an item the reader could flag (the reader gate's own test) gets its applicability record.
+      if (this.config.readAtIngest && this.config.askReader && deps.applier) {
+        cards.applicable(deps.applier, (item, card, read) =>
+          read ? !bulkMail(item) : this.constraintLike(item, card),
+        );
+      }
     }
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
@@ -1681,9 +1700,20 @@ export class ContextPartner {
         : new Map();
     // `readerGate`: no call when none of the request's own candidates could constrain it: no card of a constraint kind
     // (or a state change or a thing done) and no constraint wording. Bulk mail never counts.
-    if (this.config.readerGate && !pool.some((x) => this.constraintLike(x, cards))) {
+    if (this.config.readerGate && !pool.some((x) => this.constraintLike(x.item, cards.get(x.item.id) ?? null))) {
       report("gated");
       return null;
+    }
+    // `readAtIngest` (D233): when every pooled item's applicability record decides it against the request, that is
+    // the reading, with no call; any item left ambiguous (or with no record) sends the pool to the reader as before.
+    const ingested = this.ingestVerdict(s, cue, pool, main, cards);
+    if (ingested) {
+      const out = this.applyVerdictTo(ingested, pool, chosen, limit, readsAll, 0, false);
+      report(
+        "ingest",
+        ingested.bears.filter((b) => out.notes.has(b.id)).map((b) => ({ id: b.id, kind: b.kind })),
+      );
+      return out;
     }
     // `readerReuse` (D193): an ask in the push's request reads the push's verdict, with no call of its own.
     const reuseAt = performance.now();
@@ -1795,6 +1825,31 @@ export class ContextPartner {
     const verdict = got.verdict;
     // A reused verdict read the push's pool: it read every candidate here only if each was in that pool, unchanged.
     if (reused && reused !== "late" && !reused.all) readsAll = false;
+    const out = this.applyVerdictTo(verdict, pool, chosen, limit, readsAll, costUsd, called);
+    report(
+      "read",
+      verdict.bears.filter((b) => out.notes.has(b.id)).map((b) => ({ id: b.id, kind: b.kind })),
+    );
+    return out;
+  }
+
+  /** A verdict (the reader's, or `readAtIngest`'s) applied to the ask's answer: what binds leads, rejections leave. */
+  private applyVerdictTo(
+    verdict: ReaderVerdict,
+    pool: readonly Scored[],
+    chosen: Scored[],
+    limit: number,
+    readsAll: boolean,
+    costUsd: number,
+    called: boolean,
+  ): {
+    chosen: Scored[];
+    notes: Map<string, string>;
+    kinds: Map<string, ReaderKind>;
+    read: boolean;
+    called: boolean;
+    costUsd: number;
+  } {
     const byId = new Map(pool.map((x) => [x.item.id, x]));
     const notes = new Map<string, string>();
     const kinds = new Map<string, ReaderKind>();
@@ -1806,10 +1861,6 @@ export class ContextPartner {
       notes.set(b.id, readerNote(b.kind, b.why));
       kinds.set(b.id, b.kind);
     }
-    report(
-      "read",
-      verdict.bears.filter((b) => notes.has(b.id)).map((b) => ({ id: b.id, kind: b.kind })),
-    );
     // `askReaderDrop`: what the reader read and rejected by name leaves the answer (never what it flagged).
     const rejected = this.config.askReaderDrop ? new Set(verdict.rejected ?? []) : new Set<string>();
     let rest = chosen.filter((x) => !lead.includes(x) && !rejected.has(x.item.id));
@@ -1830,14 +1881,58 @@ export class ContextPartner {
    * `readerGate`'s test of one candidate: whether it could constrain a request (a card of a constraint kind, a state
    * change or a thing done, or constraint wording; an arranged visit with `readerGateVisits`). Bulk mail never does.
    */
-  private constraintLike(x: Scored, cards: ReadonlyMap<string, Card>): boolean {
-    if (bulkMail(x.item)) return false;
-    const card = cards.get(x.item.id);
+  private constraintLike(item: ContextItem, card: Card | null): boolean {
+    if (bulkMail(item)) return false;
     if (card && (STANDING_KINDS.has(card.kind) || card.kind === "status-change" || card.kind === "already-done")) {
       return true;
     }
-    const text = `${x.item.title}. ${x.item.text}`.toLowerCase();
+    const text = `${item.title}. ${item.text}`.toLowerCase();
     return mayConstrain(text) || (this.config.readerGateVisits && arrangedVisit(text));
+  }
+
+  /**
+   * `readAtIngest` (D233): the pool's verdict from its items' applicability records, with no model, or null when any
+   * item is left to the reader. An item kept as inert (bulk mail; or unread by the card model and not constraint-like
+   * by the reader gate's test) needs no record. Each other item needs a record that decides it (`applyVerdict`): it
+   * binds nothing, or binds nothing this request names. The verdict then flags nothing, as the reader's would. A record
+   * made after the request arrived is not read (as cards).
+   */
+  private ingestVerdict(
+    s: Session,
+    cue: Cue,
+    pool: readonly Scored[],
+    main: string,
+    cards: ReadonlyMap<string, Card>,
+  ): ReaderVerdict | null {
+    if (!this.config.readAtIngest || !this.deps.applier || !this.config.cards || !this.deps.cards) return null;
+    const applies = this.deps.cards.appliesOf(
+      s.scope,
+      pool.map((x) => x.item.id),
+      cue.arrived ?? this.now(),
+    );
+    const terms = requestTerms(main);
+    const rejected: string[] = [];
+    const seen: { id: string; match: ApplyMatch | null }[] = [];
+    let decided = true;
+    for (const x of pool) {
+      const id = x.item.id;
+      const a = applies.get(id);
+      if (!a) {
+        seen.push({ id, match: null });
+        // Inert by the enricher's test (null), or no record yet: pending is the reader's to read.
+        if (a === undefined) decided = false;
+        continue;
+      }
+      const m = applyVerdict(a, terms);
+      seen.push({ id, match: m });
+      if (m.call === "ambiguous") decided = false;
+      // What binds nothing as it stands is rejected by name, as the reader names a lifted or resolved lookalike
+      // (D96); an unrelated item stays where the rules put it, as an item the reader does not name does.
+      else if (m.call === "binds-nothing") rejected.push(id);
+    }
+    this.deps.onApply?.({ sessionId: s.id, decided, items: seen });
+    if (!decided) return null;
+    return { bears: [], rejected, checked: pool.length };
   }
 
   /**

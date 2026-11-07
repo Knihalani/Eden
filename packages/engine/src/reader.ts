@@ -346,7 +346,7 @@ export const READER_SYSTEM =
   'binding items first, most decisive first, at most 4 entries. Reply {"bears":[]} when nothing looks relevant.';
 
 /** A bearing as the agent may read it: words of letters, digits and a few signs, bounded, redacted. */
-function cleanWhy(raw: unknown): string {
+export function cleanWhy(raw: unknown): string {
   if (typeof raw !== "string") return "";
   const words = sanitizeForStore(raw.slice(0, READER_WHY_CHARS * 2))
     .replace(/[^\p{L}\p{N}£$€%'.,:;/+-]+/gu, " ")

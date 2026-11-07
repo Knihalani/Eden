@@ -71,13 +71,15 @@
  * planted) and prints a NEUTRAL line per suite (any packet delivered, items, bytes, ask items, calls, ms per task); its
  * rows go to the JSON's `neutral` block, never to `rows`, `total` or `perTask`.
  */
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import {
   AskReader,
   CardEnricher,
   cardKey,
   intentCut,
   intentReach,
+  ModelApplyMaker,
+  ModelCardMaker,
   ModelReaderMaker,
   type ReaderReport,
   ContextPartner,
@@ -100,6 +102,7 @@ import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
+import { DiskApplyMaker } from "./apply-disk";
 import { DiskCardMaker } from "./cards-disk";
 import {
   allMissedHint,
@@ -199,6 +202,13 @@ const cli = flags(
         "spend-headroom",
         "run-label",
         "distill",
+        "apply",
+        "apply-out",
+        "apply-model",
+        "apply-log",
+        "apply-only",
+        "card-model",
+        "cards-out",
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
@@ -304,8 +314,32 @@ const INTENT_FILES = opt("intent", "").split(",").filter(Boolean);
 /** One replaying maker for every seed and suite: the disk cache is read once. */
 // With no --intent, no requests are replayed at all (not a card file's `r` lines), so `--ask-diag`'s replay figure
 // (null with no --intent) says what the run replayed.
+/**
+ * `--card-model M` (with `--cards-out F`): an item the card files do not cover is carded live (metered, with its intent
+ * requests when intent is on) and appended to F, as pi-ab's `--card-model` does. The model is built at the first call
+ * (the lab access below is made after this).
+ */
+const CARD_MODEL = opt("card-model", "");
+const CARDS_OUT = opt("cards-out", "");
+if (CARD_MODEL && !CARDS_OUT) throw new Error("--card-model needs --cards-out");
+let liveCardMaker: ModelCardMaker | null = null;
 const cardMaker = CARDS
-  ? new DiskCardMaker(CARDS, undefined, { requests: INTENT_FILES, cardRequests: INTENT_FILES.length > 0 })
+  ? new DiskCardMaker(
+      CARDS,
+      CARD_MODEL
+        ? {
+            make: (items, today, signal, retry, intent) =>
+              (liveCardMaker ??= new ModelCardMaker(
+                labModel(ACCESS, { apiKey: keyFor(CARD_MODEL), model: CARD_MODEL, timeoutMs: 60_000 }, "eden.cards"),
+              )).make(items, today, signal, retry, intent),
+          }
+        : undefined,
+      {
+        requests: INTENT_FILES,
+        cardRequests: INTENT_FILES.length > 0,
+        ...(CARDS_OUT ? { out: CARDS_OUT } : {}),
+      },
+    )
   : null;
 if (INTENT_FILES.length && !cardMaker) throw new Error("--intent needs --cards");
 /**
@@ -423,7 +457,35 @@ const READER_SYS = systemHash({ messages: readerMessages({ request: "", items: [
 const READER_SUBSET = opt("reader-subset", "");
 if (READER_SUBSET && READER !== "replay") throw new Error("--reader-subset needs --reader replay");
 /** The judge's and the reader's requests: paced, capped and retried, with the run's logging choice (free.ts). */
-const ACCESS = labAccess(args, [...(LIVE ? [MODEL] : []), ...(READER === "live" ? [READER_MODEL] : [])]);
+const APPLY_MODEL = opt("apply-model", "");
+const ACCESS = labAccess(args, [
+  ...(LIVE ? [MODEL] : []),
+  ...(READER === "live" ? [READER_MODEL] : []),
+  ...(APPLY_MODEL ? [APPLY_MODEL] : []),
+  ...(CARD_MODEL ? [CARD_MODEL] : []),
+]);
+/**
+ * `--apply F[,F]` (`readAtIngest`, D233): applicability records replayed from disk (`apply-disk.ts`); with
+ * `--apply-model M` a missed item is made live (metered) and appended to `--apply-out` (default the first file).
+ * `--apply-log F`: each pool's matches and the reader's reports, per task, ids and numbers only, for the study.
+ */
+const APPLY_FILES = opt("apply", "").split(",").filter(Boolean);
+const applyMaker = APPLY_FILES.length
+  ? new DiskApplyMaker(
+      APPLY_FILES,
+      APPLY_MODEL
+        ? new ModelApplyMaker(
+            labModel(ACCESS, { apiKey: keyFor(APPLY_MODEL), model: APPLY_MODEL, timeoutMs: 60_000 }, "eden.apply"),
+          )
+        : undefined,
+      opt("apply-out", "") || undefined,
+      opt("apply-only", "")
+        ? new Set(readFileSync(opt("apply-only", ""), "utf8").split("\n").filter(Boolean))
+        : undefined,
+    )
+  : null;
+const APPLY_LOG = opt("apply-log", "");
+if (APPLY_LOG) writeFileSync(APPLY_LOG, "");
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
 const readerModel =
   READER === "none" || NO_MODEL_READER
@@ -755,6 +817,18 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
+    ...(applyMaker ? { applier: applyMaker } : {}),
+    ...(APPLY_LOG
+      ? {
+          onApply: (r: { sessionId: string; decided: boolean; items: { id: string }[] }) => {
+            // Each pooled item's content hash too, so a top-up can be limited to items that reach a pool.
+            const got = r.items.map((x) => cache.get(scope, x.id, clock));
+            const hashes = got.map((it) => (it ? cardKey(it) : null));
+            const titles = got.map((it) => it?.title.slice(0, 80) ?? null);
+            appendFileSync(APPLY_LOG, `${JSON.stringify({ task: readerTask, at: "apply", ...r, hashes, titles })}\n`);
+          },
+        }
+      : {}),
     ...(reader
       ? {
           reader,
@@ -762,6 +836,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
             const list = readerReports.get(r.sessionId) ?? [];
             readerReports.set(r.sessionId, list);
             list.push(r);
+            if (APPLY_LOG) appendFileSync(APPLY_LOG, `${JSON.stringify({ task: readerTask, at: "reader", ...r })}\n`);
           },
         }
       : {}),

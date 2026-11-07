@@ -57,6 +57,21 @@ export {
   type CardMaker,
 } from "./cards";
 export {
+  APPLY_SYSTEM,
+  APPLY_VERSION,
+  applyKey,
+  applyMessages,
+  applyVerdict,
+  ModelApplyMaker,
+  parseApply,
+  requestTerms,
+  type Applicability,
+  type ApplyBatch,
+  type ApplyCall,
+  type ApplyMaker,
+  type ApplyMatch,
+} from "./applicability";
+export {
   cleanRequests,
   IntentIndex,
   intentCut,
