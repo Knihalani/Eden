@@ -97,7 +97,9 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
   }
   const noKey = allFlags.includes(NOKEY_FLAG);
   if (noKey && (base === "none" || base === "tools" || base.endsWith("-judge"))) {
-    throw new Error(`condition ${name}: +nokey takes Eden's model roles away, so only eden or both (no judge, which needs a model) takes it`);
+    throw new Error(
+      `condition ${name}: +nokey takes Eden's model roles away, so only eden or both (no judge, which needs a model) takes it`,
+    );
   }
   const flags = allFlags.filter((f) => f !== ASK_FLAG && f !== NOKEY_FLAG);
   let extra: Record<string, unknown> = {};

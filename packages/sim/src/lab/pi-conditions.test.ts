@@ -163,7 +163,8 @@ describe("pi-ab conditions", () => {
     expect(parseCondition("both+ask+nokey", { config: ALL, defaults }).noKey).toBe(true);
     expect(parseCondition("eden", { config: ALL }).noKey).toBe(false);
     // Without Eden there is no key to take away: refused rather than run tools under another name.
-    for (const n of ["tools+nokey", "none+nokey", "eden-judge+nokey"]) expect(() => parseCondition(n, { config: ALL })).toThrow(/nokey/);
+    for (const n of ["tools+nokey", "none+nokey", "eden-judge+nokey"])
+      expect(() => parseCondition(n, { config: ALL })).toThrow(/nokey/);
     expect(pairedWith("eden+nokey")).toBe("eden");
   });
 });

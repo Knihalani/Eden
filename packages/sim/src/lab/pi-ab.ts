@@ -274,7 +274,9 @@ if (CARDS_FILE && !existsSync(CARDS_FILE)) throw new Error(`--cards ${CARDS_FILE
 // The intent requests (D158): with cards replayed the card model writes requests only for the items it cards live,
 // so the checked-in requests are replayed by default where they cover the run, as the funnel does (`--intent none`
 // opts out; a list of files replays those). A run they do not cover is labelled intent inert in its header.
-const INTENT_WANTED = CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).intent && effective(c.config).cards);
+const INTENT_WANTED = CONDITIONS.some(
+  (c) => c.withPartner && !c.noKey && effective(c.config).intent && effective(c.config).cards,
+);
 const INTENT = harnessIntent(opt("intent", "default"), {
   wanted: INTENT_WANTED,
   cardsReplayed: !!CARDS_FILE,
@@ -591,7 +593,19 @@ async function runWorld(
       : baseTasks;
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
   const notify = pushNotifier(sources, CONNECTORS, seed);
-  const { name: condition, waitMs, useEden, withPartner, useTools, askTool, judge, act, firewall, config, noKey } = cond;
+  const {
+    name: condition,
+    waitMs,
+    useEden,
+    withPartner,
+    useTools,
+    askTool,
+    judge,
+    act,
+    firewall,
+    config,
+    noKey,
+  } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.

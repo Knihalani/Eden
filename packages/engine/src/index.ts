@@ -29,7 +29,7 @@ export {
   type SpanSink,
   type SpanStat,
 } from "./spans";
-export type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
+export type { ShadowRecord, ShadowSink, Trace, TraceSink, UsageRecord, UsageSink } from "./trace";
 export { explainTrace } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";

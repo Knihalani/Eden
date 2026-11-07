@@ -3,3 +3,5 @@ a7-nokey-42 0.3092
 a7-regrade-41 0.0008
 a7-regrade-42 0.0004
 total 0.6259
+demo agent (Anthropic OpenAI-compatible, off-ledger, pricing.ts rates): 2 runs 5219 in / 5654 out = 0.0033; debug calls upper bound 0.006
+demo agent run with --trace: 2773 in / 3486 out = 0.0020 (off-ledger)

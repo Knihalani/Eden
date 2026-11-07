@@ -54,6 +54,8 @@ async function serve(config: ServerConfig): Promise<void> {
     processes: config.child?.count ?? 1,
     onShadow: process.env.EDEN_TRACE === "1" ? (r) => console.log(JSON.stringify({ shadow: r })) : undefined,
     onTrace: process.env.EDEN_TRACE === "1" ? (t) => console.log(JSON.stringify(t)) : undefined,
+    // Whether the agent used each injection (D293), for `bun run digest`; content-free like the traces.
+    onUsage: process.env.EDEN_TRACE === "1" ? (u) => console.log(JSON.stringify({ usage: u })) : undefined,
   });
   // The secret gate compiles its rules on first use; doing it here keeps that stall off the first request.
   warmGate();
