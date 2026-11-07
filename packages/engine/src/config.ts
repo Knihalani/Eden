@@ -249,10 +249,12 @@ export interface EngineConfig {
   /** Sources whose backfill pages are read at once, newest unread first (1: one at a time; 8 in the default, D262). */
   syncBackfillLanes: number;
   /**
-   * Trial (D328, off): a page the background sync listed (backfill, sweep, the pages a poll reads in the background
-   * after a lookup stopped waiting; never what a lookup's on-demand poll waits for) is redacted and stored only at
-   * its turn: at most one such page per turn of the event loop, the others waiting (`SyncManager.turn`). A cold-start
-   * storm's pages otherwise arrive together and are stored back to back, and every request waits behind them all.
+   * On in the default (D328, promoted by D370): a page the background sync listed (backfill, sweep, the pages a poll
+   * reads in the background after a lookup stopped waiting; never what a lookup's on-demand poll waits for) is
+   * redacted and stored only at its turn: at most one such page per turn of the event loop, the others waiting
+   * (`SyncManager.turn`). A cold-start storm's pages otherwise arrive together and are stored back to back, and every
+   * request waits behind them all. The card drain gathers the pages still waiting before it calls (D370,
+   * `CardEnricher.gather`), so its batches do not shrink to one page.
    */
   syncIngestTurns: boolean;
   /**
@@ -670,7 +672,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncCatchupPages: 2,
   syncPollWidth: 8,
   syncBackfillLanes: 8,
-  syncIngestTurns: false,
+  syncIngestTurns: true,
   syncLocalComplete: true,
   routeLocalHits: true,
   syncKeepCut: true,

@@ -698,6 +698,9 @@ export class ContextPartner {
           },
         )
       : null;
+    // D370: with `syncIngestTurns`, the card drain gathers what waits for its turn, so its batches follow the items.
+    const sync = this.sync;
+    if (sync && c.syncIngestTurns && c.cards && deps.cards) deps.cards.gather = () => sync.pending();
   }
 
   /**
@@ -732,8 +735,11 @@ export class ContextPartner {
    * trial taught the source map that every source it would have cited went unused).
    */
   async observe(event: AgentEvent, options: { waitMs?: number; shadow?: boolean } = {}): Promise<ObserveResult> {
-    // A user frozen while idle (D325) is thawed in slices first, so other users' events do not wait behind it.
-    const thawing = this.deps.cache.ready(event);
+    // A user frozen while idle (D325) is thawed in slices first, so other users' events do not wait behind it. A
+    // session's end and a draft read no item (`observeEvent` returns before any): they start no thaw, but wait on one
+    // an earlier event of theirs waits on, or they would run before it (A24 and its review).
+    const reads = event.kind !== "session_end" && !(event.kind === "user_message" && event.draft === true);
+    const thawing = reads ? this.deps.cache.ready(event) : this.deps.cache.pendingThaw(event);
     if (thawing) await thawing;
     // `readerPush`: a request that acts is also read by the ask-time reader, as an ask of the engine's own; what it
     // flags is queued as a packet. The observe waits for it within its own wait, so an agent that never calls
@@ -2572,6 +2578,11 @@ export class ContextPartner {
               }
               this.freshness.refsRead++;
               if (got.status === "failed") return done(id, "failed");
+              // D325: the drop or store below reads the user's items; a user frozen while the read was on the wire
+              // is thawed in slices first, never inside the store (A24). The removal check below runs after it.
+              const thawing = this.deps.cache.ready(scope);
+              if (thawing) await thawing;
+              if (!live()) return done(id, "failed");
               if (got.status === "gone") {
                 this.dropGone(scope, sourceId, [id]);
                 return done(id, "gone");

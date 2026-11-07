@@ -22,7 +22,7 @@
  * the fast path (timers or a lookup's slow path), and stores only what the fan-out has already redacted. Users idle
  * longer than `syncDropMs` are no longer synced and their synced items are dropped (retention, D57).
  */
-import { Gcra } from "@eden/primitives";
+import { Gcra, IdSet } from "@eden/primitives";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import type { Source, SourceFanout, SourceResolver } from "@eden/sources";
 import type { ItemCache } from "./cache";
@@ -108,8 +108,8 @@ export interface SyncOptions {
    */
   pushMaxStaleMs?: number;
   /**
-   * `syncIngestTurns` (D328, trial): a background read's page (backfill, sweep, a poll's background pages) waits its
-   * `turn` before it is redacted and stored.
+   * `syncIngestTurns` (D328, on in the default since D370): a background read's page (backfill, sweep, a poll's
+   * background pages) waits its `turn` before it is redacted and stored.
    */
   ingestTurns?: boolean;
 }
@@ -157,8 +157,11 @@ const MAX_USED = 64;
 
 interface SourceSync {
   id: string;
-  /** Ids of the items synced from this source, oldest synced first (bounded: `trimIds`). */
-  ids: Set<string>;
+  /**
+   * Ids of the items synced from this source, oldest synced first (bounded: `trimIds`). An `IdSet` (D371): the ids'
+   * characters in typed arrays, since a frozen user (D325) keeps them when nothing else of theirs is live.
+   */
+  ids: IdSet;
   phase: "backfill" | "warm";
   /** The backfill's next page, and whether the listing has no more. */
   cursor: string | undefined;
@@ -1311,10 +1314,25 @@ export class SyncManager {
    * and I/O callback that came meanwhile run in between. A page is a few milliseconds to ~15 ms of work (100 items).
    */
   private readonly turn = (): Promise<void> => {
+    this.waiting++;
     const t = this.turns.then(() => new Promise<void>((resolve) => setImmediate(resolve)));
     this.turns = t;
+    void t.then(() => this.waiting--);
     return t;
   };
+
+  /** Pages handed a turn that has not come yet (`turn`). */
+  private waiting = 0;
+
+  /**
+   * D370: while pages wait their turn, resolves one loop turn after the last of them was let through (its store has
+   * run by then, unless redaction went to the worker pool); null when none waits. The card drain waits on it so its
+   * batches hold what arrived together (`CardEnricher.gather`).
+   */
+  pending(): Promise<void> | null {
+    if (this.waiting === 0) return null;
+    return this.turns.then(() => new Promise<void>((resolve) => setImmediate(resolve)));
+  }
 
   /** One listing call, a lookup's (`demand`, also counted in its freshen's `tally`) or the background's. */
   private count(demand: boolean): void {
@@ -1361,7 +1379,7 @@ export class SyncManager {
 function newSourceSync(id: string): SourceSync {
   return {
     id,
-    ids: new Set(),
+    ids: new IdSet(),
     phase: "backfill",
     cursor: undefined,
     exhausted: false,
@@ -1403,7 +1421,7 @@ const budgetKey = (u: UserSync, s: SourceSync) => `${u.key}|${s.id}`;
  * Keeps a source's id set at most `max * 1.5`, dropping the longest synced first (the cache bounds the items); returns
  * whether any went (the copy is then cut, D264).
  */
-function trimIds(ids: Set<string>, max: number): boolean {
+function trimIds(ids: IdSet, max: number): boolean {
   const cap = Math.ceil(max * 1.5);
   if (ids.size <= cap) return false;
   for (const id of ids) {
@@ -1414,7 +1432,7 @@ function trimIds(ids: Set<string>, max: number): boolean {
 }
 
 /** Whether every held id has been seen (an early exit, no copy of the set). */
-function seenAll(ids: ReadonlySet<string>, seen: ReadonlySet<string>): boolean {
+function seenAll(ids: IdSet, seen: ReadonlySet<string>): boolean {
   for (const id of ids) if (!seen.has(id)) return false;
   return true;
 }

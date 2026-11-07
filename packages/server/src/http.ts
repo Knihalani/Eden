@@ -74,7 +74,7 @@ const fail = (status: number, error: string) => json({ error }, status);
 export function createHandler(
   partner: ContextPartner,
   config: Pick<ServerConfig, "keys" | "dev"> &
-    Partial<Pick<ServerConfig, "tenantRatePerSec" | "tenantBurst" | "maxBodyBytes">>,
+    Partial<Pick<ServerConfig, "tenantRatePerSec" | "tenantBurst" | "maxBodyBytes" | "child">>,
   /** Per-user sources (D108): forget closes the user's connections, and `/v1/sources` reports their config. */
   userSources?: UserSources,
   /** The tenant spend cap the partner's model roles share, for `/v1/usage` (D326); omitted, spend reads 0. */
@@ -115,7 +115,15 @@ export function createHandler(
     const tenant = tenantOf(req);
     if (!tenant) return fail(401, "missing or unknown API key");
     if (foreignPage(req, tenant)) return fail(403, "dev mode serves no key-less request from another site's page");
-    const waitMs = limiter.take(tenant);
+    // A router's fan-out copy (forget, usage) to a child that does not own the user: the owner's copy spends the
+    // tenant's token and is counted; the copies do neither, or a usage read would spend N tokens and a limited child
+    // would read as down (A24). Honoured only in a router child and on the routes the router copies: in a single
+    // process, or on any other route, the header means nothing.
+    const copy =
+      config.child != null &&
+      (url.pathname === "/v1/forget" || url.pathname === "/v1/usage") &&
+      req.headers.get(FANOUT_COPY) === "1";
+    const waitMs = copy ? 0 : limiter.take(tenant);
     if (waitMs > 0) {
       return Response.json(
         { error: "rate limited" },
@@ -141,7 +149,7 @@ export function createHandler(
     if (body.tenantId !== tenant) return fail(403, "tenantId does not match the API key");
 
     // Known routes only (a bounded record), and not a router's fan-out copy (counted once, by the owning child).
-    if (ROUTES.has(url.pathname) && req.headers.get(FANOUT_COPY) !== "1") count(tenant, url.pathname.slice(4));
+    if (ROUTES.has(url.pathname) && !copy) count(tenant, url.pathname.slice(4));
     try {
       switch (url.pathname) {
         case "/v1/events": {
@@ -169,6 +177,8 @@ export function createHandler(
           if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
           const who = { tenantId: tenant, userId: body.userId as string, sessionId: body.sessionId as string };
           const shadow = url.searchParams.get("shadow") === "1";
+          // D325: the take checks new items against the session's plans (`checkPlans`), which reads the user's items.
+          await partner.ready(who);
           return json({ injections: partner.takePending(who, shadow ? { shadow } : {}) });
         }
         case "/v1/whoami": {
@@ -233,6 +243,9 @@ export function createHandler(
           if (badId(body, ["userId"])) return fail(400, "userId must be 1-128 characters of [A-Za-z0-9._:@-]");
           if (body.sourceId !== undefined && !isId(body.sourceId)) return fail(400, "sourceId is malformed");
           const scope = { tenantId: tenant, userId: body.userId as string };
+          // D325: one source's forget drops its items from the user's cache, a read; the whole user's forget reads
+          // nothing (a frozen user's record is simply dropped).
+          if (body.sourceId !== undefined) await partner.ready(scope);
           partner.forget(scope, body.sourceId as string | undefined);
           userSources?.forget(scope, body.sourceId as string | undefined);
           return json({ ok: true });
