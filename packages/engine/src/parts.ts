@@ -79,13 +79,12 @@ export const PARTS = {
     askReaderPool: 30,
     askReaderItemChars: 400,
     pushCandidates: 0,
-    pushReshow: false,
   },
   /**
    * The push's candidates for the agent to judge, in place of the reader's push and ask readings (D236, D237): out,
-   * the reader reads both again. With them, a candidate handed for an earlier request is handed again (D340).
+   * the reader reads both again.
    */
-  candidates: { pushCandidates: 0, pushReshow: false },
+  candidates: { pushCandidates: 0 },
   /** A lookup does not wait for its probes past its own search (D47's grace, 100 ms, taken out). */
   probeGrace: { probeGraceMs: 100 },
 } satisfies Record<string, Partial<EngineConfig>>;

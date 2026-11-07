@@ -28,6 +28,8 @@ const CONFIGS: Record<string, WorldOptions> = {
   "default-no-key": { config: DEFAULT_CONFIG, noReader: true, notTwice: true },
   // What ships, with one source call in ten failing: every path must fail open.
   "default-flaky": { config: DEFAULT_CONFIG, failRate: 0.1, notTwice: true },
+  // The `pushReshow` trial (D340) on, with failures: re-handed at a later request, never twice in one.
+  "reshow-flaky": { config: { ...DEFAULT_CONFIG, pushReshow: true }, failRate: 0.1, notTwice: true },
   // Every part out (no sync, no push: a removal does not act, so the deletes check has nothing to hold).
   core: { config: CORE_CONFIG, notTwice: true },
 };

@@ -489,14 +489,15 @@ export interface EngineConfig {
    */
   pushCandidates: number;
   /**
-   * D340 (A17, promoted under D112; on in the default, part `candidates`): with `pushCandidates`, a candidate handed
-   * out in this session for an earlier request is handed again when it ranks among this request's candidates and
+   * Trial (D340, A17; owner repo owner, ends 2026-12-07; off): with `pushCandidates`, a push candidate the agent took
+   * in this session for an earlier request is handed again when it ranks among this request's candidates and
    * passes `readerGate`'s constraint test (a plain item is not repeated: it stays in the transcript), rather than kept
    * back by the not-twice ledger. Over a user's day an item constraint-worded enough to rank for one request is often
    * pushed first for another (where the agent was told to ignore what does not fit); at its own request the ledger
-   * then kept it back, and the agent rarely went back to it. Never twice within one request. Off: the ledger's
-   * cooldown holds. Over a user's days: hidden facts raised +7.5 points pooled (+1.6..+14.0), concerns flat, agent
-   * tokens +$0.012-0.017 per 1k tasks (docs/research/a17-long-quality.md).
+   * then kept it back, and the agent rarely went back to it. Never twice within one request; an item that reached the
+   * agent only by an ask or another path is not re-shown. Measured over a user's days: hidden facts raised +6.8 points
+   * (−0.5..+14.1 with the shared baseline resampled as one), concerns flat, agent tokens +$0.013 per 1k tasks; not yet
+   * shown better, so off until a fresh paired run (docs/research/a17-long-quality.md).
    */
   pushReshow: boolean;
   /**
@@ -628,6 +629,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
-  pushReshow: true,
+  pushReshow: false,
   revisionDiff: true,
 };

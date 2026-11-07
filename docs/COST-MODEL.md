@@ -107,8 +107,8 @@ Haiku (lab provider), train seeds 41–42, 1:1:8 mix, steady state per 1,000 tas
 (payload, billed; cache hits vary between runs) against the old default's 0.631 and 0.665 and the agent alone's
 0.368; long 0.326 and 0.338 against 0.568 and 0.529 and the agent alone's 0.317 (docs/research/cl-cl6.md). The reader
 figures below hold for `pushCandidates: 0` (`--preset minus-candidates`).
-**Since D340 (A17)** a candidate handed for an earlier request of the session is handed again when it ranks for a
-later one: over a user's days the agent reads about 600-750 more input tokens a task (+$0.013 per 1,000 tasks on
+**With the D340 trial on (A17; off in the default)** a candidate handed for an earlier request of the session is
+handed again when it ranks for a later one: over a user's days the agent reads about 600-750 more input tokens a task (+$0.013 per 1,000 tasks on
 8-day days, +5% of the eden arm's $0.251 steady state; +$0.017 pooled with 40-request days), with no Eden model call;
 under signal-only notices a re-shown mail item is re-read (Eden connector calls 6.11 → 6.42 a task). One request a
 session it never acts (docs/research/a17-long-quality.md).

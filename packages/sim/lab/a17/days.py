@@ -1,18 +1,22 @@
 # A17 (docs/research/a17-long-quality.md): pi-ab `--days` runs by position in the day.
-# usage: python3 -I days.py [--buckets 0,4,8,12] [--pair A,B ...] STEM [STEM ...]
+# usage: python3 -I days.py [--buckets 0,4,8,12] [--pair A,B ...] [--alias SET=BASE,...] STEM [STEM ...]
 #   STEM.json and STEM.tl/tasks.jsonl of pi-ab (records are in stream order per condition; recaps are not tasks).
 # Per condition and position bucket: hidden raised, how the planted item reached the agent (in this turn's packet,
 # an ask answer, or only earlier in the day), control/neutral concerns, asks a task, agent $/1k, wall p50.
-# Pairs: per task (same set, seed and task id), B - A, bootstrap 95% over tasks.
+# Pairs: per task (same set, seed and task id), B - A, bootstrap 95%. `--alias pay2=pay` says set pay2's baseline is
+# a copy of set pay's: its pairs share a cluster with pay's (the same baseline answer), and the bootstrap resamples
+# clusters, not pairs (the A17 review: a baseline reused three times made an interval too narrow).
 import json, re, sys, random, statistics as st, collections
 
 args = sys.argv[1:]
 buckets = [0, 4, 8, 12]
 pairs = []
+alias = {}
 while args and args[0].startswith("--"):
     f = args.pop(0)
     if f == "--buckets": buckets = [int(x) for x in args.pop(0).split(",")]
     elif f == "--pair": pairs.append(tuple(args.pop(0).split(",")))
+    elif f == "--alias": alias.update(kv.split("=") for kv in args.pop(0).split(","))
 stems = args
 
 def bucket(pos):
@@ -82,14 +86,24 @@ for c in conds:
                 ("earlier-only", lambda r: r["earlier"] and not r["pk"] and not r["ask"]),
                 ("never", lambda r: not (r["pk"] or r["ask"] or r["earlier"]))]))
 
-def boot(diffs, n=4000):
+def boot(diffs, n=4000, clusters=None):
+    """Mean and bootstrap 95%; with `clusters` (one key per diff) whole clusters are resampled."""
     if not diffs: return (0, 0, 0)
     rnd = random.Random(7); m = st.mean(diffs)
-    bs = sorted(st.mean(rnd.choices(diffs, k=len(diffs))) for _ in range(n))
+    groups = collections.defaultdict(list)
+    for i, d in enumerate(diffs): groups[clusters[i] if clusters else i].append(d)
+    gs = list(groups.values())
+    bs = []
+    for _ in range(n):
+        draw = [d for g in rnd.choices(gs, k=len(gs)) for d in g]
+        bs.append(st.mean(draw))
+    bs.sort()
     return m, bs[int(0.025*n)], bs[int(0.975*n)]
 
 # Runs of one set (a17-<arm>-<set>-<seed>: the same user's days) pair task by task; sets never mix.
 key = lambda r: (re.sub(r"-\d+$", "", r["group"]), r["seed"], r["task"])
+# The baseline answer a pair rests on: sets aliased to one baseline share it.
+cluster = lambda k: (alias.get(k[0], k[0]), k[1], k[2])
 for a, b in pairs:
     A = {key(r): r for r in rows if r["cond"] == a}; B = {key(r): r for r in rows if r["cond"] == b}
     ks = [k for k in A if k in B]
@@ -97,10 +111,10 @@ for a, b in pairs:
     for kind in ["hidden", "control", "neutral"]:
         kk = [k for k in ks if A[k]["kind"] == kind]
         for lab, sel in [("all", kk), ("early(<4)", [k for k in kk if A[k]["pos"] < 4]), ("late(>=4)", [k for k in kk if A[k]["pos"] >= 4])]:
-            m, lo, hi = boot([B[k]["hit"] - A[k]["hit"] for k in sel])
+            m, lo, hi = boot([B[k]["hit"] - A[k]["hit"] for k in sel], clusters=[cluster(k) for k in sel])
             print(f"  {kind:8} {lab:10} n {len(sel):4}  rate {m:+.3f} ({lo:+.3f}..{hi:+.3f})")
     for lab, f in [("agent $/1k", lambda r: 1000*r["usd"]), ("eden $/1k", lambda r: 1000*r["eden"]), ("wall s", lambda r: r["wall"]/1000), ("asks", lambda r: r["asks"]), ("in tok", lambda r: r["tin"])]:
-        m, lo, hi = boot([f(B[k]) - f(A[k]) for k in ks])
+        m, lo, hi = boot([f(B[k]) - f(A[k]) for k in ks], clusters=[cluster(k) for k in ks])
         print(f"  {lab:12} {m:+.4f} ({lo:+.4f}..{hi:+.4f})")
 
 if recaps:

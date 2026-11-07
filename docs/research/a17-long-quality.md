@@ -18,12 +18,13 @@ the servers ship. Train only. **Spent: $2.352** of the $2.50 cap.
   ledger then kept it back, and the agent rarely went back to it in the transcript: raised 6 of 14 (payload), 5 of
   13 (signals) and 16 of 26 (40-request days), against 24 of 25 when it came in the request's own packet. On 8-day
   days this was 30% of hidden tasks; on 40-request days, 54%.
-- **Fix 1, promoted (D340, `pushReshow`):** a candidate handed for an earlier request is handed again when it ranks
-  for this one and passes the constraint test. Pooled over every sample (the final tree's included):
-  **+6.8 points of hidden facts raised (+0.9..+12.7, n 220)**, look-alike and nothing-to-add concerns flat, **+$0.013
-  per 1,000 tasks of agent tokens on 8-day days** (+5%; +$0.017 pooled with the 40-request stress days), no Eden model or connector call under payload notices
-  (+5% connector calls under signal-only notices, the strict re-reads of a re-shown mail item). On 8-day days alone the
-  gain is +5.2 (−1.2..+11.6): every sample moved the same way, and a re-shown planted item was raised 45 of 55 times.
+- **Fix 1, kept as an off trial (D340, `pushReshow`, ends 2026-12-07):** a push candidate the agent took for an
+  earlier request is handed again when it ranks for this one and passes the constraint test. Pooled over every sample
+  (the final rule's included): **+6.8 points of hidden facts raised (−0.5..+14.1, n 220**, the shared baseline
+  resampled as one), look-alike and nothing-to-add concerns flat, **+$0.013 per 1,000 tasks of agent tokens on 8-day
+  days** (+5%; +$0.017 with the 40-request stress days), no Eden model or connector call under payload notices (+5%
+  connector calls under signal-only notices). Every sample moved the same way and a re-shown planted item was raised
+  45 of 55 times, but the gain is not shown and the cost is: under D112 it stays off until a fresh paired run.
 - **Stale recaps: the update reached the agent, and it still named the old time.** With D205 on, recaps named a
   changed item's old time on 29 of 147 occasions (fresh 118). Of the stale ones, 18 of 28 had been sent an
   "updated:" packet after the change; Eden had done its part.
@@ -90,12 +91,12 @@ Where the planted item went before its own request (seed 41–42, payload): `pro
 for `wedding-no-plus-ones`, `nursery-collection-list` for `editor-seats-exhausted`, `cleaning-contract-tender` for
 `parking-permit-paused`. The request's own push then handed other items (2–4) and the ledger held the planted one.
 
-## 3. Fix 1: re-show a candidate at the request it ranks for (D340, promoted)
+## 3. Fix 1: re-show a candidate at the request it ranks for (D340, an off trial)
 
 `pushReshow` (config.ts, partner.ts `handedBefore`, `Session.handedIn`): in the push's candidates filter, an item the
-agent took for an earlier request (its hand-out request, `handedIn`, is older than the latest user message) is
-allowed again if it passes `readerGate`'s constraint test, and it is not still queued in a packet the agent has not
-taken. Never twice within one request. Part `candidates`.
+agent took in a candidates packet for an earlier request (its hand-out request, `handedIn`, is older than the latest
+user message) is allowed again if it passes `readerGate`'s constraint test. Never twice within one request; an item
+that reached the agent only by an ask or another path is not re-shown.
 
 Arms, all paired task by task with the baseline's eden arm (another process, the same users and tasks):
 
@@ -104,8 +105,12 @@ Arms, all paired task by task with the baseline's eden arm (another process, the
 | v1: any candidate (`a17-rs-*`) | pay, sig, long | 140 | +5.7 (−0.7..+12.9) | +1.4 | +0.2 | +0.024 (+0.021..+0.027) | +0.04 |
 | v2: constraint-like only (`a17-rs2-*`) | pay, sig, long | 140 | **+8.6 (+0.7..+16.4)** | −0.7 | +0.3 | +0.019 (+0.016..+0.022) | +0.04 |
 | v2 + D342 (`a17-both-pay-*`) | pay | 46 | +4.3 (−6.5..+17.4) | +2.2 | −1.0 | +0.013 (+0.008..+0.018) | +0.01 |
-| v2, pooled before the final tree | | **186** | **+7.5 (+1.6..+14.0)** | +0.0 (−2.2..+2.2) | −0.1 (−0.8..+0.5) | +0.017 (+0.015..+0.020) | +0.03 |
-| v2, 8-day days only | pay ×2, sig | 138 | +5.8 (−1.4..+13.0) | +0.0 | −0.3 | +0.012 (+0.009..+0.014) | |
+| v2, pooled before the final rule¹ | | 186 | +7.5 (+0.0..+14.8) | +0.0 (−2.8..+2.2) | −0.1 (−0.9..+0.7) | +0.017 (+0.014..+0.020) | +0.03 |
+| v2, 8-day days only¹ | pay ×2, sig | 138 | +5.8 (−2.8..+14.5) | +0.0 | −0.3 | +0.012 (+0.009..+0.015) | |
+
+¹ The combined arm's baseline is a copy of the v2 payload baseline: these pool with each baseline task resampled as
+one cluster (`days.py --alias pay2=pay`). The first version of this note bootstrapped the pairs as independent
+(+7.5, +1.6..+14.0), which the review found too narrow.
 
 v2 by set: payload +6.5 (−4.3..+17.4), $ +0.009; signals +6.5 (−8.7..+21.7), $ +0.014, Eden connector calls 6.11 →
 6.42 a task; 40-request days +12.5 (+0.0..+27.1), $ +0.050 (the transcript is long and re-shows add up).
@@ -113,8 +118,8 @@ v2 by set: payload +6.5 (−4.3..+17.4), $ +0.009; signals +6.5 (−8.7..+21.7),
 - **Mechanism.** In v2 runs the planted item reached this request's packet on 110 of 140 hidden tasks (baseline 70);
   a re-shown planted item was raised 30 of 38 times (and 10 of 11 in the confirming run), against 27 of 53 for a
   planted item left only earlier in the transcript in the baselines.
-- **Position.** The gain is in requests 5 onward: +8.6 (+1.3..+16.6, n 151) pooled; the first four requests +2.9
-  (−5.7..+11.4, n 35).
+- **Position.** The gain is in requests 5 onward: +8.6 (+0.0..+17.2, n 151) pooled (clustered); the first four
+  requests +2.9 (−6.1..+13.3, n 35).
 - **Repeats.** Items delivered again within a day rose from 202 (all revisions) to 1,037 of 5,315 (v2, all sets); v1
   re-showed plain items too and cost a quarter more for less.
 - **Per plan, steady state $/1k (payload, 4 users):** eden 0.251 → 0.258 first-party, 0.300 → 0.307 Composio, 0.373 →
@@ -128,10 +133,16 @@ v2 by set: payload +6.5 (−4.3..+17.4), $ +0.009; signals +6.5 (−8.7..+21.7),
   version (v1 on the tree before 06163e30; v2 at 06163e30, the combined arm at 4f64130e); section 6 re-ran the final
   tree.
 
-**Decision.** Promoted under D112 as measured better: the pooled hidden gain excludes 0 (+6.8, +0.9..+12.7, with the
-final tree's run, section 6), concerns did not rise, and the cost is the agent reading items again (+$0.013 per 1,000
-tasks on 8-day days, no Eden model call). The 8-day gain alone does not exclude 0. The owner may weigh the token and, for signal-only integrations, connector cost
-differently; `pushReshow: false` restores the ledger's cooldown.
+**Decision: a trial, off (D340).** It was first promoted on "+6.8 (+0.9..+12.7)". The review found that interval
+too narrow: two of the pooled arms were paired with copies of the same payload baseline, so 80 of the 220 pairs
+reused a baseline answer, and the bootstrap treated them as independent. Resampling each baseline task as one cluster
+(`days.py --alias pay2=pay,pay3=pay`) gives **+6.8 (−0.5..+14.1)**, and the 8-day days alone +5.2 (−3.1..+13.8). The
+independent v2 sample alone (n 140) is +8.6 (+0.7..+16.4), but it ran the earlier ledger-turn rule and leans on the
+40-request stress days; the shipped rule alone measured +2.9 (−8.8..+14.7, n 34). D340 costs agent tokens, so D112
+needs it measured better, and that is not shown. It stays as a trial switch (owner the repo owner, ends 2026-12-07):
+the decider is one fresh paired run of the final rule against its own re-run baseline, both push modes, users
+w41–w44 (about $0.6 at this session's prices), promoted if hidden rises with the interval above 0 and concerns do not
+rise, else deleted with its code and tests.
 
 ## 4. Stale recaps (D341 deleted, D342 promoted)
 
@@ -163,6 +174,13 @@ Payload 9 → 7 stale, 35 → 41 fresh; signals 7 → 5, 35 → 42. The confirmi
 9 → 8 stale, 35 → 42 fresh. Promoted under D112 as neutral at no extra paid cost, with a consistent direction on the
 recaps; part `freshness`.
 
+After the review, `timesOf` writes each time in one form before comparing (a 24-hour "HH:MM" with am/pm folded in, a
+date as "<day> <3-letter month>", ordinals dropped), so a time only reworded ("9:30" to "9:30am", "Oct 4" to "October
+4th") is no longer named as gone; month names are anchored, so "decision 2" or "marketing 5" is no date. Times are
+noted when the agent is handed a copy (an update superseded in the queue was never shown), and `timesOf` runs only
+with the switch on. The lab's changes move "HH:MM" times, which read the same before and after, so the measured
+behaviour is unchanged.
+
 ## 5. Not built, and why
 
 - **A "what changed since you last checked" packet at the start of a day.** Each day is a new Eden session with an
@@ -181,29 +199,47 @@ recaps; part `freshness`.
 
 ## 6. Final tree
 
-The final tree (commit 7d48c4d8: both changes in the default, the hand-out-request rule) as plain `eden`, payload,
-users w41–w43 (354 tasks, 34 hidden), paired with the baseline's eden arm (`a17-final-pay-*`):
+The tree as first promoted (commit 7d48c4d8: both changes in the default, the hand-out-request rule; the review then
+limited the re-show to candidates' packets and turned D340 off) as plain `eden`, payload, users w41–w43 (354 tasks,
+34 hidden), paired with the baseline's eden arm (`a17-final-pay-*`):
 
 - hidden +2.9 (−8.8..+14.7), control +0.0, neutral −0.3, agent $/1k +0.018 (+0.013..+0.022), wall +0.01 s;
 - a re-shown planted item raised 5 of 6; recaps naming an old time 7 → 6, the new time 25 → 31 (24 days).
 
-Every sample of the narrowed re-show pooled with it (v2, the combined arm, the final tree; n 220 hidden): **+6.8
-points (+0.9..+12.7)**, requests 5 onward +7.8 (+1.1..+14.4), control +0.0 (−1.8..+1.8), neutral −0.1 (−0.7..+0.5),
-agent $/1k +0.017 (+0.015..+0.019), wall +0.03 s. On 8-day days alone (n 172): +5.2 (−1.2..+11.6) at +$0.013 per
-1,000 tasks (+5% of the eden arm's $0.251 steady state). A re-shown planted item was raised 45 of 55 times in all.
+Every sample of the narrowed re-show pooled with it (v2, the combined arm, this run; n 220 hidden), each baseline task
+resampled as one cluster (`reshow-pooled.txt`): **+6.8 points (−0.5..+14.1)**, requests 5 onward +7.8
+(−0.6..+16.5), control +0.0 (−2.4..+2.0), neutral −0.1 (−0.9..+0.6), agent $/1k +0.017 (+0.015..+0.020). On 8-day
+days alone (n 172): +5.2 (−3.1..+13.8) at +$0.013 per 1,000 tasks (+5% of the eden arm's $0.251 steady state). A
+re-shown planted item was raised 45 of 55 times in all.
 
 ## Checks
 
-- `bun run check`: 2,072 pass, 0 fail (185 files).
-- `bun run eval`, against the base 598bd6ebe: precision 0.591 → 0.600, recall 0.52 → 0.52, falseFireRate 0 → 0;
-  delivered 44 → 45 and deliveredExpected 26 → 27 (a re-shown candidate in a multi-turn scenario), injections 30 → 31.
-  With both switches off (commit 06163e30) the eval was identical to the base apart from latency.
+- `bun run check`: 2,077 pass, 0 fail (185 files), on the final tree.
+- `bun run eval`, against the base 598bd6ebe, on the final tree (D342 on, D340 off): identical apart from latency
+  (precision 0.591, recall 0.52, falseFireRate 0). With D340 on as first promoted it read precision 0.600, delivered
+  45 against 44 (a re-shown candidate in a multi-turn scenario), the rest unchanged.
 - `bun run funnel --jobs 4` (train, stub reader): identical to the base task by task apart from timings (one request a
   session: neither switch can act).
-- Tests: `push-reshow.test.ts` (8), `revision-diff.test.ts` (8), `pi-day.test.ts` (the new fields), `fuzz.test.ts`
-  (the invariant), `default.test.ts` (50 switches on); mutations of each rule fail them, except the untaken-packet
-  guard, whose two tests pin the no-double behaviour but also pass without it (the hand-out request already covers
-  the cases they build).
+- Tests: `push-reshow.test.ts` (9), `revision-diff.test.ts` (11), `pi-day.test.ts` (the new fields), `fuzz.test.ts`
+  (the not-twice invariant, and a `reshow-flaky` variant with the trial on), `default.test.ts` (49 switches on);
+  a mutation of each rule fails them. The first version also kept back an item still queued in an untaken packet; no
+  test could reach that guard (an observe hands out a queued packet before the push ranks), so it was deleted.
+
+## Review
+
+The `reviewer` subagent returned REQUEST_CHANGES on 7635df1b. Each finding and what was done:
+
+1. **D340's pooled interval counted one baseline three times** (two arms paired with copies of the payload baseline).
+   `days.py --alias` now resamples a shared baseline task as one cluster; the interval touches 0, so D340 is an off
+   trial with a decider (section 3), not promoted.
+2. **D342 could call a reworded, unchanged time gone** ("9:30" against "9:30am"), and read "decision 2" as a date.
+   `timesOf` normalises and anchors month names; tests for both.
+3. **The untaken-packet guard had no test that reached it.** Deleted (an observe hands out a queued packet before the
+   push ranks); the fuzz runs the trial in a `reshow-flaky` variant.
+4. **Any hand-out counted as "handed", not only candidates.** `handedIn` is set for candidates' packets only; test.
+5. **Stale numbers and a doubled doc comment.** Fixed.
+6. **Times noted when an update was queued, not shown.** Noted at hand-out only.
+7. **`timesOf` ran with the switch off.** Gated on `revisionDiff`.
 
 ## Spend (ledger `.local/a17/ledger.jsonl`)
 

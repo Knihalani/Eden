@@ -108,7 +108,7 @@ describe("pushReshow (D340)", () => {
     expect(handed(p)).toEqual([]);
   });
 
-  test("on: a packet of the last request still untaken when the next arrives is not doubled by a re-show", async () => {
+  test("on: the last request's re-show, untaken when the next arrives, is not doubled", async () => {
     const p = setup({ pushReshow: true });
     await say(p, REQUEST);
     expect(handed(p)).toContain(HOLD.id);
@@ -137,6 +137,14 @@ describe("pushReshow (D340)", () => {
     const got = [...early, rest.injection, ...p.takePending(ref())].filter((x) => x !== null);
     const holds = got.flatMap((x) => x!.citations.map((c) => c.itemId)).filter((id) => id === HOLD.id);
     expect(holds.length).toBe(1);
+  });
+
+  test("on: an item that reached the agent only by an ask is not re-shown (review)", async () => {
+    const p = setup({ pushReshow: true });
+    const answer = await p.ask({ ...ref(), question: "Is anything holding up the Harlow venue deposit?" });
+    expect(answer.citations.map((c) => c.itemId)).toContain(HOLD.id);
+    await say(p, REQUEST);
+    expect(handed(p)).not.toContain(HOLD.id);
   });
 
   test("isolation: what one session was handed is not another's", async () => {

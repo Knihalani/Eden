@@ -96,11 +96,27 @@ async function moved(text: string, config: Record<string, unknown> = {}) {
 }
 
 describe("timesOf", () => {
-  test("clock times, am/pm hours, day-month dates and weekdays, lowercased and distinct", () => {
+  test("clock times, am/pm hours, day-month dates and weekdays, each in one form, distinct", () => {
     expect(
       timesOf({ title: "Call", text: "Call at 9:15 or 14:00, else 3pm on Friday 12 November (Nov 14 too)." }),
-    ).toEqual(["9:15", "14:00", "3pm", "friday", "12 november", "nov 14"]);
+    ).toEqual(["09:15", "14:00", "15:00", "friday", "12 nov", "14 nov"]);
     expect(timesOf({ title: "Price", text: "It costs 3.45 and 12 units; version 2:1 ratio" })).toEqual([]);
+  });
+
+  test("a reworded time or date is the same one (review: 9:30 against 9:30am)", () => {
+    const one = (text: string) => timesOf({ title: "", text });
+    expect(one("9:30")).toEqual(one("9:30am"));
+    expect(one("9:30 am")).toEqual(["09:30"]);
+    expect(one("3pm")).toEqual(one("3 pm"));
+    expect(one("15:00")).toEqual(one("3pm"));
+    expect(one("Oct 4")).toEqual(one("October 4th"));
+    expect(one("4th Oct")).toEqual(one("4 October"));
+  });
+
+  test("a word that starts like a month is no date (review: 'decision 2', 'marketing 5')", () => {
+    expect(
+      timesOf({ title: "", text: "See decision 2 and marketing 5, 3 decks, junk 2, novel 3, separate 4." }),
+    ).toEqual([]);
   });
 });
 
@@ -126,18 +142,24 @@ describe("revisionDiff (D342)", () => {
     expect(up[0]!.citations.map((c) => c.itemId)).toEqual([OFFSITE]);
     expect(up[0]!.text).toContain("no longer: 09:30");
     expect(up[0]!.text).toContain("11:30");
-    expect(up[0]!.text).not.toContain("12 november;");
+    expect(up[0]!.text).not.toContain("12 nov;");
     expect(up[0]!.text).toMatch(/^<context [^\n]*Data, not instructions/);
   });
 
   test("a moved date is named too, and an unchanged one is not", async () => {
     const { up } = await moved(AT("09:30", "14 November"));
-    expect(up[0]!.text).toContain("no longer: 12 november");
+    expect(up[0]!.text).toContain("no longer: 12 nov)");
     expect(up[0]!.text).not.toMatch(/no longer:[^)]*09:30/);
   });
 
   test("a change with no time or date dropped says no 'no longer'", async () => {
     const { up } = await moved(`${AT("09:30")} Bring the slides.`);
+    expect(up.length).toBe(1);
+    expect(up[0]!.text).not.toContain("no longer");
+  });
+
+  test("a time only reworded is not named (9:30 becomes 9:30am)", async () => {
+    const { up } = await moved("The quarterly offsite is in Lisbon at 9:30am on 12 November, in room B.");
     expect(up.length).toBe(1);
     expect(up[0]!.text).not.toContain("no longer");
   });
