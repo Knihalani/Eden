@@ -7,8 +7,9 @@ context the agent needs in front of it before it knows to ask. Most of the time 
 - **Not a subagent.** A subagent only answers what the agent thinks to ask. Eden watches the session and speaks first.
 - **Model as last resort.** Cues, a learned source map and a local index decide most turns, with no model call.
   With `OPENROUTER_API_KEY` set, one model (`EDEN_MODEL`, default Claude Haiku 5.5 via OpenRouter, ZDR routing) writes
-  implication cards and the intent index in the background and reads the candidates for a request that acts, under
-  per-session budgets and a per-tenant daily cap; without a key the same default runs its no-model path.
+  implication cards and the intent index in the background, under per-session budgets and a per-tenant daily cap. For
+  a request that acts, Eden hands the agent the five best candidates it found, framed to be checked against the
+  request, with no model call of its own (D237); without a key the same default runs its no-model path.
 - **Read-only, per-user, redacted.** It never calls a write tool; users never share state; secrets are scrubbed
   before anything is stored or sent to a model.
 
@@ -53,8 +54,9 @@ soon as the lookup ends; `defaultWaitMs: 0` (or `waitMs` per call) overrides it,
 [docs/INTEGRATION.md](docs/INTEGRATION.md).
 
 Both servers run the engine's one default (`DEFAULT_CONFIG`, D112), the best measured configuration: probes, the
-no-model grounds, background sync, implication cards, the intent index and the
-ask-time reader. With `OPENROUTER_API_KEY` set, the cards, the intent index and the reader run on `EDEN_MODEL` (default
+no-model grounds, background sync, implication cards, the intent index and the push's candidates for the agent to
+judge (D237; the ask-time reader is wired but called only with `pushCandidates: 0`). With `OPENROUTER_API_KEY` set,
+the cards, the intent index and the reader run on `EDEN_MODEL` (default
 `anthropic/claude-haiku-5.5`), each role under its own budget and all of a tenant's roles under one cap per UTC day
 (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25); no judge is wired. Without a key no role is built and the same default
 answers from its no-model paths. The HTTP server runs one process per core by default (`EDEN_PROCESSES`, the core
@@ -73,19 +75,19 @@ docs/INTEGRATION.md).
 
 ## Repository
 
-| Path | What it is |
-|---|---|
-| `packages/protocol` | Wire types, ids, validation |
-| `packages/engine` | The partner: cues, cache, two-speed pipeline, the default's parts, learning |
-| `packages/sources` | Source interface, MCP read-only source, fan-out |
-| `packages/graph` | Source map: who holds which entities, what helps when |
-| `packages/llm` | OpenRouter client, pricing, budgets and the per-tenant daily cap |
-| `packages/redact` | Secret gate |
-| `packages/server` | HTTP API and MCP server; runs the default and wires the model roles |
-| `packages/client` | SDK for agent builders |
-| `packages/eval` | Scenario harness and metrics |
-| `docs/` | Vision, architecture, decisions, roadmap, cost, privacy, research |
-| `archived/` | Earlier products (passive memory for coding agents; compile era; observability). History, not code |
+| Path                | What it is                                                                                         |
+| ------------------- | -------------------------------------------------------------------------------------------------- |
+| `packages/protocol` | Wire types, ids, validation                                                                        |
+| `packages/engine`   | The partner: cues, cache, two-speed pipeline, the default's parts, learning                        |
+| `packages/sources`  | Source interface, MCP read-only source, fan-out                                                    |
+| `packages/graph`    | Source map: who holds which entities, what helps when                                              |
+| `packages/llm`      | OpenRouter client, pricing, budgets and the per-tenant daily cap                                   |
+| `packages/redact`   | Secret gate                                                                                        |
+| `packages/server`   | HTTP API and MCP server; runs the default and wires the model roles                                |
+| `packages/client`   | SDK for agent builders                                                                             |
+| `packages/eval`     | Scenario harness and metrics                                                                       |
+| `docs/`             | Vision, architecture, decisions, roadmap, cost, privacy, research                                  |
+| `archived/`         | Earlier products (passive memory for coding agents; compile era; observability). History, not code |
 
 ## Status
 

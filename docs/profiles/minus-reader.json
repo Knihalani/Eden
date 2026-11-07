@@ -9,5 +9,6 @@
   "readerReuse": false,
   "readerStopEarly": false,
   "askReaderPool": 30,
-  "askReaderItemChars": 400
+  "askReaderItemChars": 400,
+  "pushCandidates": 0
 }

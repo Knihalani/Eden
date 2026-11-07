@@ -59,6 +59,7 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerVerifyAfter: "reader",
   readerReuse: "reader",
   readerStopEarly: "reader",
+  pushCandidates: "reader",
 };
 
 /**
@@ -116,6 +117,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerVerifyAfter: [...READER, "verifyDelivery"],
   readerReuse: PUSH,
   readerStopEarly: READER,
+  pushCandidates: PUSH,
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
@@ -171,6 +173,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   intentCardHits: COUNT,
   intentSeats: COUNT,
   askReaderPool: COUNT,
+  pushCandidates: { integer: true, max: 40 },
 };
 
 /** String-list keys whose entries must come from a known list. */

@@ -53,8 +53,9 @@ const serve = (key: string) => {
     sources: async () => [mail],
     models: roles,
     queryPlanner: "off",
-    // Cards would call the same refusing model in the background; this test is about the reader.
-    engine: { cards: false, intent: false, sync: false },
+    // Cards would call the same refusing model in the background; this test is about the reader, so it runs the
+    // reader's push and asks (`pushCandidates` 0; the default's push reads nothing, D237).
+    engine: { cards: false, intent: false, sync: false, pushCandidates: 0 },
     log: (line) => lines.push(line),
   });
   return { partner, lines, made, reader: models[0]! };

@@ -1,0 +1,40 @@
+== f-default
+merged NEUTRAL TOTAL: any packet 96/384; 0.28 items, 0.25 packets, 71 packet bytes/task; ask 4.84 items/task; reader flagged any 1/384; 2.59 calls/task; 5.7 ms/task
+  TOTAL      hidden 321/384  decoys 129/384
+  delivered before first model call (observe wait default ms): hidden 284 of 284 delivered (384 tasks), decoys 91 of 91 delivered (384 tasks)
+== f-k3-b320
+merged NEUTRAL TOTAL: any packet 324/384; 2.69 items, 1.05 packets, 678 packet bytes/task; ask 4.87 items/task; reader flagged any 0/384; 2.59 calls/task; 5.7 ms/task
+  TOTAL      hidden 311/384  decoys 271/384
+  delivered before first model call (observe wait default ms): hidden 216 of 216 delivered (384 tasks), decoys 159 of 159 delivered (384 tasks)
+== f-k5-b320
+merged NEUTRAL TOTAL: any packet 324/384; 4.30 items, 1.05 packets, 923 packet bytes/task; ask 4.87 items/task; reader flagged any 0/384; 2.59 calls/task; 5.2 ms/task
+  TOTAL      hidden 316/384  decoys 276/384
+  delivered before first model call (observe wait default ms): hidden 227 of 227 delivered (384 tasks), decoys 178 of 178 delivered (384 tasks)
+== f-k8-b320
+merged NEUTRAL TOTAL: any packet 324/384; 6.68 items, 1.05 packets, 1255 packet bytes/task; ask 4.87 items/task; reader flagged any 0/384; 2.59 calls/task; 5.4 ms/task
+  TOTAL      hidden 322/384  decoys 277/384
+  delivered before first model call (observe wait default ms): hidden 260 of 260 delivered (384 tasks), decoys 209 of 209 delivered (384 tasks)
+== f-k5-b120
+merged NEUTRAL TOTAL: any packet 324/384; 4.30 items, 1.05 packets, 725 packet bytes/task; ask 4.87 items/task; reader flagged any 0/384; 2.59 calls/task; 5.1 ms/task
+  TOTAL      hidden 316/384  decoys 276/384
+  delivered before first model call (observe wait default ms): hidden 227 of 227 delivered (384 tasks), decoys 178 of 178 delivered (384 tasks)
+== f-k8-b120
+merged NEUTRAL TOTAL: any packet 324/384; 6.68 items, 1.05 packets, 975 packet bytes/task; ask 4.87 items/task; reader flagged any 0/384; 2.59 calls/task; 5.3 ms/task
+  TOTAL      hidden 322/384  decoys 277/384
+  delivered before first model call (observe wait default ms): hidden 260 of 260 delivered (384 tasks), decoys 209 of 209 delivered (384 tasks)
+== f-plain-k3
+merged NEUTRAL TOTAL: any packet 324/384; 2.69 items, 1.05 packets, 630 packet bytes/task; ask 4.87 items/task; reader flagged any 0/384; 2.59 calls/task; 5.1 ms/task
+  TOTAL      hidden 305/384  decoys 267/384
+  delivered before first model call (observe wait default ms): hidden 254 of 254 delivered (384 tasks), decoys 215 of 215 delivered (384 tasks)
+== f-plain-k5
+merged NEUTRAL TOTAL: any packet 324/384; 4.29 items, 1.05 packets, 858 packet bytes/task; ask 4.87 items/task; reader flagged any 0/384; 2.59 calls/task; 5.3 ms/task
+  TOTAL      hidden 305/384  decoys 267/384
+  delivered before first model call (observe wait default ms): hidden 272 of 272 delivered (384 tasks), decoys 234 of 234 delivered (384 tasks)
+== f-newdefault
+merged NEUTRAL TOTAL: any packet 332/384; 4.29 items, 1.08 packets, 946 packet bytes/task; ask 4.87 items/task; reader flagged any 0/384; 2.59 calls/task; 6.0 ms/task
+  TOTAL      hidden 305/384  decoys 267/384
+  delivered before first model call (observe wait default ms): hidden 272 of 272 delivered (384 tasks), decoys 234 of 234 delivered (384 tasks)
+== f-minuscand
+merged NEUTRAL TOTAL: any packet 96/384; 0.28 items, 0.25 packets, 71 packet bytes/task; ask 4.84 items/task; reader flagged any 1/384; 2.59 calls/task; 6.3 ms/task
+  TOTAL      hidden 321/384  decoys 129/384
+  delivered before first model call (observe wait default ms): hidden 284 of 284 delivered (384 tasks), decoys 91 of 91 delivered (384 tasks)

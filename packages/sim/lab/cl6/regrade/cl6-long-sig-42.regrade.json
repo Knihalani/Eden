@@ -1,0 +1,75 @@
+{
+ "runGrader": "claude-haiku-5-5",
+ "summary": [
+  {
+   "grader": "claude-haiku-5-5",
+   "answers": 3,
+   "readable": 3,
+   "errors": 0,
+   "msMedian": 566,
+   "factsTrue": 3,
+   "agreeWithRun": {
+    "same": 3,
+    "of": 3
+   },
+   "agreeWith": {},
+   "usd": 0.0001985,
+   "byKind": {
+    "neutral": {
+     "answers": 3,
+     "facts": 3,
+     "same": 3,
+     "onlyMine": 0,
+     "onlyRun": 0,
+     "trueMine": 3,
+     "trueRun": 3
+    }
+   }
+  }
+ ],
+ "requests": {
+  "sent": 3,
+  "retried": 0,
+  "refused": 0,
+  "statuses": {},
+  "cap": 0
+ },
+ "graded": [
+  {
+   "task": "w42:train6-neutral:bank-change-impersonation",
+   "condition": "tools",
+   "grader": "claude-haiku-5-5",
+   "usd": 6.860000000000001e-05,
+   "facts": {
+    "bank-change-impersonation": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 566
+  },
+  {
+   "task": "w42:train2-neutral:maya-saturday-swim-clash",
+   "condition": "eden",
+   "grader": "claude-haiku-5-5",
+   "usd": 6.330000000000001e-05,
+   "facts": {
+    "maya-saturday-swim-clash": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 600
+  },
+  {
+   "task": "w42:train3-neutral:repo-app-needs-vendor-review",
+   "condition": "eden",
+   "grader": "claude-haiku-5-5",
+   "usd": 6.659999999999999e-05,
+   "facts": {
+    "repo-app-needs-vendor-review": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true, \"2\": false}",
+   "ms": 546
+  }
+ ]
+}

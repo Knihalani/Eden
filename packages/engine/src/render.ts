@@ -37,6 +37,11 @@ export function renderPacket(
      * the agent reads it as Eden's reading and not the item's words. Validated and bounded by `parseReader`.
      */
     note?: (item: ContextItem) => string | undefined;
+    /**
+     * `pushCandidates` (D236): a line of Eden's own (`EDEN_NOTE`, fixed words) after the header, framing the
+     * items as candidates the agent checks against the request. Never source or event text.
+     */
+    lead?: string;
   },
 ): string {
   const before = options.shownBefore;
@@ -76,7 +81,7 @@ export function renderPacket(
       return { ...item, text };
     });
   }
-  const lines = [HEADER];
+  const lines = options.lead ? [HEADER, options.lead] : [HEADER];
   const footer = "</context>";
   let bytes = utf8Length(lines.join("\n")) + utf8Length(footer) + 2;
   for (const item of items) {
@@ -109,10 +114,29 @@ export function renderPacket(
 export function shownText(rendered: string): string {
   return rendered
     .split("\n")
-    .filter((line) => line !== HEADER && line !== "</context>")
+    .filter((line) => line !== HEADER && line !== "</context>" && !line.startsWith(EDEN_NOTE))
     .map((line) => line.replace(/^- \[[^\]]*\] /, "").replace(READER_PREFIX, ""))
     .join("\n");
 }
+
+/**
+ * Eden's own lines, never an item's: fixed words with no source or event text in them, inside the data envelope (D11,
+ * D19). `shownText` drops them (they are no item's words), and no line starts `- [`, so they are counted as no item
+ * (`renderedCount`).
+ */
+export const EDEN_NOTE = "Eden: ";
+
+/**
+ * `pushCandidates` (D236, D237; CL6 H19): the push hands the agent the top of its pool with no reader call, after this
+ * line: the items may bear on the request, and the agent checks each against the request's who, what and when first
+ * (D96's why-before-binds moved into the agent's packet; without the check, look-alikes were raised 4 times in 48).
+ * Fixed words, inside the data envelope (D11, D19): an instruction of Eden's own to the agent about the items around
+ * it, never source text (a departure D237 records).
+ */
+export const CANDIDATES_LEAD =
+  `${EDEN_NOTE}items from the user's sources that may bear on this request; nothing has checked them against it. ` +
+  "Before using one, check it is about the same person, thing and date as the request and still current; if it is " +
+  "not, ignore it and do not mention it.";
 
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";

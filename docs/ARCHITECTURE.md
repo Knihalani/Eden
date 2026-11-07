@@ -325,7 +325,12 @@ index); otherwise its answer names the sources that failed (error, timeout, circ
 the connector's own 429, worded "rate-limited", D212) and says it
 is not an all-clear, and `AskResponse.sources` carries each chosen source's status. With `readerPush` (on in the default), a
 user request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
-flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. Its question
+flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. **Since D237 the default does not call the reader there or on an ask (`pushCandidates` 5, CL6):** the push hands
+the agent the first five items of the pool the reader would have read (the ask's order, bulk mail out), each a focused
+excerpt, after a fixed line of Eden's own saying they may bear on the request and must be checked against its who,
+what and when first; a pool with nothing constraint-like (`readerGate`'s test) gets a one-line "nothing looks like it
+constrains it" note instead, when every source answered. An ask answers in rule order with no reading.
+`pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search
 that joined another lookup's call in flight (the push and the slow path search the same words at once), was answered by

@@ -126,9 +126,10 @@ export interface EdenClientOptions {
   onError?: (error: unknown) => void;
   /**
    * `waitMs` sent on each sent `user_message` observe (not a draft) that passes none of its own (D105, D112).
-   * Default `DEFAULT_WAIT_MS` (3,000), the wait the default was measured with: the reader's reading of the request
-   * must land before the agent's first model call (D98: a 1 s wait lost 7.6–18.1 points). The server replies as soon
-   * as the lookup and reading are done, so the wait is a cap, not a delay. 0 sends none: the server answers at once
+   * Default `DEFAULT_WAIT_MS` (3,000), the wait the default was measured with: the push's packet (its candidates,
+   * D237, after the search and on-demand poll; with `pushCandidates: 0`, the reader's reading, D98: a 1 s wait lost
+   * 7.6–18.1 points) must land before the agent's first model call. The server replies as soon as the lookup is done,
+   * so the wait is a cap, not a delay. 0 sends none: the server answers at once
    * and what is still running lands in `pending`, which a one-turn answer never reads. Other events never wait. The
    * request's timeout grows by the wait, as for an explicit one.
    */

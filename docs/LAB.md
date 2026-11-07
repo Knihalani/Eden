@@ -423,6 +423,12 @@ reader cache at $0. The haiku-opt.md command sets `askReaderWaitMs: 60000` so la
 
 ### 2a. The default's paid Haiku reading, replayed at $0
 
+**Since D237 (CL6) the default makes no reader call** (`pushCandidates` 5): its funnel replays nothing from this cache
+(TOTAL hidden 305/384, decoys 267/384, 0 reader calls, train seeds 41–42 with `--neutral`). Every recipe below that
+screens the reader (2a, 2b, the `minus-<part>` replays) now runs `--preset minus-candidates`, which reproduces the
+pre-D237 default exactly (321/129, 643 replayed, 0 misses, 2026-11-07). The neutral top-up no longer covers that
+preset's neutral prompts at this tip (590 misses, answered without the reader).
+
 The reader cache of the shipped default (D158: cards and intent requests replayed; intent thresholds 0.2/1/12 since
 D179, `intentByKind` since D200) on train1–6, seeds 41–42, is checked in gzipped:
 `packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz`, 6,623 lines, all `claude-haiku-5-5`, plain md5
@@ -447,14 +453,14 @@ The cache is plain JSONL that a live reader appends to, so it is unpacked under 
 
 ```bash
 gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz > .local/reader-haiku-train-4142-intent.jsonl
-bun run funnel --jobs 4 --allow-misses --json .local/haiku-default.json -- --reader replay \
+bun run funnel --jobs 4 --allow-misses --preset minus-candidates --json .local/haiku-default.json -- --reader replay \
   --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl
 ```
 
 **Topped up for D244 (CL3, 2026-11-07; docs/research/cl-cl3.md):** the default's lean window became 7 days, which
 re-renders most reader pools, so the cache was topped up for it (ledger runs `cl3-topup-l7`, `cl3-topup-l7-42`, and
 the CL3 arms `cl3-topup-l7r2`, `cl3-topup-l7r2b`, `cl3-topup-nocards`; $0.303 in all). It now has 5,435 lines (plain
-md5 `087bd902247caa5fd883f45aa04d4018`; its first 4,377 lines are the file above, unchanged). The new default replays
+md5 `087bd902247caa5fd883f45aa04d4018`; its first 4,377 lines are the file above, unchanged). The D244 default (since D237, `--preset minus-candidates`) replays
 643 prompts with 0 misses: TOTAL hidden 321/384, decoys 129/384, reader pool hidden 287/384 and decoys 251/384
 (`--set '{"cardsLeanDays":30}'` replays the old default's 313/127 with 0 misses). The `--preset minus-<part>` runs of
 the new default were not topped up: expect misses (answered without the reader, `--allow-misses`).
@@ -489,7 +495,7 @@ main file it replays `-- --neutral` with 0 misses (without it, 608 neutral reade
 ```bash
 (gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz; \
  gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-neutral.jsonl.gz) > .local/reader-train.jsonl
-bun run funnel --jobs 4 --allow-misses --json .local/h18.json -- --neutral --reader replay \
+bun run funnel --jobs 4 --allow-misses --preset minus-candidates --json .local/h18.json -- --neutral --reader replay \
   --reader-model claude-haiku-5-5 --reader-cache .local/reader-train.jsonl
 ```
 

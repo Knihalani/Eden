@@ -59,12 +59,19 @@ Work still running when the wait ends arrives later through `pending`/`collect`,
   (partner.ts `observe`: `waitMs <= 0` queues the slow path and returns). With `waitMs` the reply comes as soon as the
   lookup ends, so a fast lookup costs no extra latency; only a slow one costs up to the wait. **Measured** (simulated
   connectors at their profiles' assumed latency, `bun run funnel --preset none --suite train1,train2 --seeds 41 --
-  --time 1`, production defaults): all 11 deliveries arrived 630 to 1,336 ms after the user message (the harness
+--time 1`, production defaults): all 11 deliveries arrived 630 to 1,336 ms after the user message (the harness
   waits 3,000 ms). By those timings (inferred, not a run at each wait) no wait or 600 ms would have delivered 0 of
   the 11 before the first model call, 800 ms 5, and 1,500 ms all 11. Warm in-process sources (the README's static
   file) answer in milliseconds, so there the wait is rarely spent. The client's default (3,000 ms on every sent user
   message and nothing else, D105, D112) covers both this and the reader below; `defaultWaitMs: 0` opts out.
-- **The reader (`readerPush` with `askReader`, on in the default with a model key, D98, D112) needs about 3,000 ms.**
+- **The push's candidates (D237, the default with a model key) need no reader time.** The push searches, then hands
+  the agent the five best candidates, framed to be checked against the request (about 950 bytes a request on the
+  lab's worlds), with no model call; on Pi with payload notices Eden's time on the agent's path was about 10 ms a
+  request (docs/research/cl-cl6.md). The candidates are not vetted: up to five items that may not bear on the request
+  reach your agent's model on most acting requests (in the lab, 86% of nothing-to-add requests got a packet), so the
+  agent must be able to ignore a look-alike when told to check who, what and when. The default wait still covers the
+  search and the on-demand sync poll. The reader below applies with `pushCandidates: 0` (`minus-candidates`).
+- **The reader (`readerPush` with `askReader`, with `pushCandidates: 0`, D98, D112) needs about 3,000 ms.**
   The reader reads the request on the critical path, and its call is paid for whatever wait you pass; with too short
   a wait its packet lands after the agent has answered. **Measured** in the lab (Haiku 5.5, simulated worlds), against
   the harnesses' 3,000 ms: a 1 s wait lost 7.6 points (Pi, Eden-only arm) and 18.1 points (Pi, tools-plus-Eden arm)
@@ -90,7 +97,7 @@ trip. Eden answers an ask in about 5 ms at p50 (D64), so the cost of asking is t
 ## Keep the provider's prompt cache warm
 
 - **Put Eden's packet after the stable prefix.** `withContext` inserts it as a system message just before the latest
-  user message, so the system prompt, tool definitions and earlier *turns* stay byte-identical between requests. It
+  user message, so the system prompt, tool definitions and earlier _turns_ stay byte-identical between requests. It
   does not keep the cache within a turn that calls tools: a packet injected before the turn's next model call lands
   before the user message, ahead of the assistant's tool call and the tool result, so the previous request is no
   longer a prefix and the cache misses from that point on. To keep it, append a mid-turn packet at the end of the
@@ -179,6 +186,7 @@ The server reads the end user's accounts with that user's credentials, never ano
   once loaded silently: an entry with no `description`, an id outside `[A-Za-z0-9._:@-]` (such as "My Notes"), a
   duplicate id, a document missing `ref`, `title` or `text`, or a file that is not a list (`{}`). Fix the named entry;
   the HTTP API could not address such a source anyway.
+
 - **Your own directory**, when you embed the server: `new UserSources({ directory: async (scope) => specs })` reads
   the user's connected accounts and tokens from your vault, then pass `userSources.resolver` to `buildPartner` and
   `userSources` to `createHandler`. Return specs with `url` and `headers` (or the same `transport` function while a
@@ -222,7 +230,7 @@ await eden.sourceChanged("gmail", {
   deleted). The client splits batches past 100 and never throws; if Eden does not take a part (unreachable, a refused
   item), it also sends the bare signal, so the source is polled rather than the change missed, and resolves false.
   The routes underneath are `POST /v1/sources/items {userId, sourceId, items}` and `POST /v1/sources/removed {userId,
-  sourceId, refs}` (at most 100 each), also exposed as `client.sourceItems` and `client.sourceRemoved`.
+sourceId, refs}` (at most 100 each), also exposed as `client.sourceItems` and `client.sourceRemoved`.
 - **Only that the source changed** (a Gmail `watch` push you do not expand, a Calendar or Drive channel, a HubSpot
   webhook): `client.sourceChanged(sourceId)`, or `POST /v1/sources/changed {userId, sourceId}`. The source is polled
   once, at its next use, however many notifications came first, and every item Eden read from it before the signal is
@@ -263,7 +271,8 @@ the poll, the slow-path queue, vocabulary release). Run it as shipped:
 
 - **With `OPENROUTER_API_KEY` set**, the server also runs the default's model roles on `EDEN_MODEL` (default
   `anthropic/claude-haiku-5.5` through OpenRouter, no data collection, ZDR): cards and intent requests in the
-  background, and the ask-time reader on an acting request or ask. Each role has its own per-session and per-user-day
+  background; the ask-time reader is built but called only with `pushCandidates: 0` (D237: by default the push hands
+  the agent its candidates with no model call). Each role has its own per-session and per-user-day
   budget, and one cap per tenant per day spans them all (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25). Cost per task
   and per user is in [COST-MODEL.md](COST-MODEL.md); disclose the model provider to your users
   ([PRIVACY.md](PRIVACY.md)).

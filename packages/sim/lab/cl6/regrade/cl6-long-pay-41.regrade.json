@@ -1,0 +1,51 @@
+{
+ "runGrader": "claude-haiku-5-5",
+ "summary": [
+  {
+   "grader": "claude-haiku-5-5",
+   "answers": 1,
+   "readable": 1,
+   "errors": 0,
+   "msMedian": 634,
+   "factsTrue": 1,
+   "agreeWithRun": {
+    "same": 1,
+    "of": 1
+   },
+   "agreeWith": {},
+   "usd": 7.53e-05,
+   "byKind": {
+    "neutral": {
+     "answers": 1,
+     "facts": 1,
+     "same": 1,
+     "onlyMine": 0,
+     "onlyRun": 0,
+     "trueMine": 1,
+     "trueRun": 1
+    }
+   }
+  }
+ ],
+ "requests": {
+  "sent": 1,
+  "retried": 0,
+  "refused": 0,
+  "statuses": {},
+  "cap": 0
+ },
+ "graded": [
+  {
+   "task": "w41:train4-neutral:extended-terms-credit-check",
+   "condition": "eden~cand",
+   "grader": "claude-haiku-5-5",
+   "usd": 7.53e-05,
+   "facts": {
+    "extended-terms-credit-check": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 634
+  }
+ ]
+}

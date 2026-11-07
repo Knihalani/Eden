@@ -9,23 +9,23 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 
 ## Files (src/)
 
-| File | Owns |
-|---|---|
-| `partner.ts` (about 5,130 lines) | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues |
-| `config.ts`, `parts.ts` | `EngineConfig`, `DEFAULT_CONFIG` (the unified default, D112: thresholds such as `confidentScore` 1.1, D6, and every part on); `PARTS` (each part's settings that take it out), `withoutParts`, `CORE_CONFIG` (every part out) |
-| `cache.ts`, `packed-text.ts` | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem`; item text held deflated behind a `text` getter (D188) |
-| `text.ts`, `situation.ts` | Cues with no model (entities, content terms, chatter); a coarse situation label for routing |
-| `render.ts`, `fold.ts` | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52) |
-| `judge.ts` | The judge's prompt and parser (indexes only, D19) |
-| `line.ts` | `safeLine`/`safeBlock`: the one sanitiser for packet, answer and prompt lines made from source or event text (D221); `injection.test.ts` is part D's probe as a standing test |
-| `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50) |
-| `cards.ts`, `intent.ts`, `sync.ts` | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync |
-| `reader.ts` | Ask-time reader (D95, D96): a budgeted model call wired by the embedder |
-| `firewall.ts` | The action firewall's cue and grounds (D69) |
-| `decide.ts` | Per-candidate facts for the lab's candidate dump (`onCandidates`) |
-| `ledger.ts`, `usage.ts` | Not-twice ledger; usage inference for learning (D13, D18) |
-| `spans.ts`, `trace.ts` | Span tracing (off by default, content-free, D56); decision traces |
-| `gate.ts` | Redaction off the event loop through the worker pool (D25, D26) |
+| File                                                                       | Owns                                                                                                                                                                                                                          |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `partner.ts` (about 5,130 lines)                                           | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues                                                                                       |
+| `config.ts`, `parts.ts`                                                    | `EngineConfig`, `DEFAULT_CONFIG` (the unified default, D112: thresholds such as `confidentScore` 1.1, D6, and every part on); `PARTS` (each part's settings that take it out), `withoutParts`, `CORE_CONFIG` (every part out) |
+| `cache.ts`, `packed-text.ts`                                               | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem`; item text held deflated behind a `text` getter (D188)                                                                  |
+| `text.ts`, `situation.ts`                                                  | Cues with no model (entities, content terms, chatter); a coarse situation label for routing                                                                                                                                   |
+| `render.ts`, `fold.ts`                                                     | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52)                                                                                               |
+| `judge.ts`                                                                 | The judge's prompt and parser (indexes only, D19)                                                                                                                                                                             |
+| `line.ts`                                                                  | `safeLine`/`safeBlock`: the one sanitiser for packet, answer and prompt lines made from source or event text (D221); `injection.test.ts` is part D's probe as a standing test                                                 |
+| `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
+| `cards.ts`, `intent.ts`, `sync.ts`                                         | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync                                                                                                                                              |
+| `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
+| `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
+| `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
+| `ledger.ts`, `usage.ts`                                                    | Not-twice ledger; usage inference for learning (D13, D18)                                                                                                                                                                     |
+| `spans.ts`, `trace.ts`                                                     | Span tracing (off by default, content-free, D56); decision traces                                                                                                                                                             |
+| `gate.ts`                                                                  | Redaction off the event loop through the worker pool (D25, D26)                                                                                                                                                               |
 
 `bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `ingest.bench.ts` (memory per synced
 user, ingest µs/item; the scale anchor, docs/TESTING.md), `index-memory` (the per-user index's heap per item and per
@@ -51,7 +51,7 @@ user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`.
   joins the default (and a part in `parts.ts`) or is deleted with its code and tests. A part whose model role is not
   wired (no `cards`, no `reader` dep) is inert: the default runs its no-model path (`default.test.ts`).
 - **Unit tests start from the core.** A test of one mechanism builds its partner on `{ ...CORE_CONFIG, ...what it
-  tests }`, so the other parts do not move its result; the default as a whole is `default.test.ts`, the eval and the
+tests }`, so the other parts do not move its result; the default as a whole is `default.test.ts`, the eval and the
   funnel.
 
 ## Test
@@ -105,7 +105,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **The enricher's drain timing is part of the default's behaviour.** In the funnel cards drain while tasks run, so a
   change that adds an `await` or an async helper to `CardEnricher.drain`'s live path moves which items land before
   which request (CL3 measured 822 calls becoming 732 and 86 reader replay misses from one extra async hop). Re-run the
-  default funnel after touching it (since D244: `cards use` 504 calls, recipe 2a 643 replayed, 0 misses). D242's
+  default funnel after touching it (since D244: `cards use` 504 calls; recipe 2a, now `--preset minus-candidates`
+  since D237, 643 replayed, 0 misses). D242's
   bulk round (Message Batches) and D243's request cap were deleted; their code is in commit 4e072585.
 - `ModelCardMaker` sends no reasoning field and has no option to send one (D149 made "off" the default, amending
   D59; D155 deleted the option): the request every lab card and intent figure measured (all 5,158 `eden.cards` ledger
@@ -197,6 +198,13 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   other path levers (speculation D248, re-reading ahead D249, `askFromPush` D247, a packet closing line D250) were
   measured and deleted too: an ask's time is its strict re-reads (D211) under signal-only notices, not its search or
   its reader.
+- **`pushCandidates` (D236, D237: 5 in the default) skips `readAsk` on the push and on every ask:** no reader call,
+  so no `pushRead` (D193 has nothing to reuse), no `onReader` report and no `checkAhead`. The push's candidates go
+  through `verifyItems` and `deliver` (reason `candidates:`), framed by `CANDIDATES_LEAD`, with no "nothing found"
+  note when there are none (D257). A `readerPushBehind` second pass replaces an untaken first packet only with
+  candidates of its own. It needs the reader dependency, though it makes no call (a no-key server runs no push). Tests
+  of the reader's own wiring set `pushCandidates: 0` (the core, the `reader` and `candidates` parts all do); the lab's
+  reader screens run `--preset minus-candidates`.
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read

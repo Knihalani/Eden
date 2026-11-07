@@ -455,6 +455,15 @@ export interface EngineConfig {
    * the first one, which it would only reject: half the output tokens, about 250 ms less per reading.
    */
   readerStopEarly: boolean;
+  /**
+   * `pushCandidates` (D236, promoted by D237; CL6 H19 "the agent is the reader"): with `readerPush`, the push makes no
+   * reader call, and neither does an `ask`. The push hands the agent the first `pushCandidates` items of the pool the
+   * reader would have read (the ask's order, `askReaderPool` deep, bulk mail out; none when no pooled item passes
+   * `readerGate`'s constraint test), each a focused excerpt of `compactItemBytes` (at most 2,000), after a fixed line
+   * of Eden's own framing them as items that may bear on the request, to be checked against its who, what and when
+   * first (`CANDIDATES_LEAD`). 0 is the reader's push and asks (D95–D99).
+   */
+  pushCandidates: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -571,4 +580,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerVerifyAfter: true,
   readerReuse: true,
   readerStopEarly: true,
+  pushCandidates: 5,
 };
