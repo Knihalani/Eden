@@ -127,6 +127,13 @@ describe("settle.ts: the no-model test of whether candidates settle a request", 
     const x = item("w", "Harlowe Lane", "Harlowe Lane's invoice.");
     expect(settles([x], a(["Harlow"], UNDATED_REQUEST))).toBe(false);
   });
+
+  test("an entity at a sentence's end or before a hyphen still matches (review)", () => {
+    const end = item("e", "Deposit", "The deposit invoice was sent by Harlow.");
+    const hyphen = item("h", "Venue", "A Harlow-based venue confirmed the booking.");
+    expect(settles([end], a(["Harlow"], UNDATED_REQUEST))).toBe(true);
+    expect(settles([hyphen], a(["Harlow"], UNDATED_REQUEST))).toBe(true);
+  });
 });
 
 describe("askNudge (D316): a nudge to ask when the candidates do not settle the request", () => {
@@ -170,6 +177,16 @@ describe("askNudge (D316): a nudge to ask when the candidates do not settle the 
     expect(ids).toContain(DATED.id);
     // Not anchored (names neither Harlow nor the day): not added.
     expect(ids).not.toContain(OTHER.id);
+  });
+
+  test("the answer still cites at most maxItems; the deeper items take at most half the seats (review)", async () => {
+    const p = setup({ askNudge: true, pushCandidates: 1 });
+    await say(p, DATED_REQUEST);
+    packet(p);
+    const one = await p.ask({ ...ref(), question: "Anything about the cleaning rota?", maxItems: 1 });
+    expect(one.citations.length).toBeLessThanOrEqual(1);
+    const two = await p.ask({ ...ref(), question: "Anything about the Harlow venue deposit?", maxItems: 2 });
+    expect(two.citations.length).toBeLessThanOrEqual(2);
   });
 
   test("off: the same ask does not add them", async () => {

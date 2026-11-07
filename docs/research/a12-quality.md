@@ -27,6 +27,10 @@ suite was run.
   artefact). The price: about one more ask every three tasks, **+$0.061 per 1,000 tasks on the 1:1:8 mix (about
   +16%)**, **+0.35 s** a task, and **no connector call** (the asks answer from the synced index). It is now in the
   default (D317); `minus-nudge` takes it out.
+- **After review** the deeper look takes at most half the answer's seats (an answer still cites at most `maxItems`),
+  and names next to "." or "-" count. A smaller live check of the fixed version (seeds 41–42) gave **+8.0 points
+  (+3.7..+12.4)**, level with the measured one; its cost and time deltas came out higher (+$0.05/1k, +0.6 s) against
+  a baseline run two hours earlier, so read the trade as +$0.04–0.07 per 1,000 tasks and +0.3–0.6 s.
 - **The third idea, more intent requests at card time, loses facts at $0** (D318): letting the intent index read more
   item kinds crowds the planted item's request out (316 → 303–313 hidden of 384). Not built.
 
@@ -108,6 +112,24 @@ on hidden: 3.52 connector calls a task, $0.389/1k in tokens, 1.445 on Composio, 
 
 Eval (no model): unchanged (precision 0.591, recall 0.52, falseFireRate 0; latency only).
 
+### After review
+
+The reviewer found the ask's deeper look could cite up to twice `maxItems` (the protocol's bound is `maxItems`), that
+an entity next to "." or "-" did not match, and that a settled second-pass packet left the deeper look on. Fixed: the
+deeper items take at most `ceil(maxItems / 2)` seats from the end; entities match on letter and number boundaries; a
+settled packet clears `Session.nudged`. At $0 (seeds 41–44) the nudge fires as often (421 of 636 hidden packets, 423
+control), the deeper look gains hidden +18 −0 and decoys +12 −0 (was +22, +13), ask answers +10% in bytes (was
++23%); seeds 41–42: 314/273. Live, `a12-n2-41/42` (the default after D317, hidden and control):
+
+| | n | Sonnet-corrected | paired, points | concerns (regraded) | asks | $/1k | wall s |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| fixed nudge, hidden | 182 | 0.783 (0.725..0.837) | +8.0 (+3.7..+12.4) vs eden; +0.6 (−3.8..+4.9) vs the measured nudge | | 0.79 (+0.29) | 0.491 (+0.059) | 3.52 (+0.62) |
+| fixed nudge, control | 182 | | | 1 | 0.93 (+0.22) | 0.477 (+0.046) | 3.40 (+0.52) |
+
+The asks a task match the measured version; the cost and time run higher than both it and the baseline at the same
+ask rate, which points at drift between runs made hours apart (prompt-cache hits, API latency), not the fix. Read the
+trade as a range: +$0.04–0.07 per 1,000 tasks a kind and +0.3–0.6 s.
+
 ## 3. More intent requests at card time (D318)
 
 A2 found 50 hidden facts in no pool, mostly sharing no word with the request, and 16 whose intent request was not yet
@@ -136,6 +158,7 @@ R=packages/sim/lab/a12/regrade.sh
 $R a12-m-41 miss-m-41 --only-misses; $R a12-m-41 raised-m-41 --only-raised --sample 30; $R a12-m-41 conc-m-41 --only-concerns
 $R a12-n-41 miss-n-41 --only-misses; $R a12-n-41 raised-n-41 --only-raised --sample 15; $R a12-n-41 conc-n-41 --only-concerns
 $R a12-t-41 raised-t-41 --only-raised; $R a12-t-41 miss-t-41 --only-misses --sample 15
+$L a12-n2-41 payload eden --seeds 41 --variants hidden,control --templates $T --budget 0.15  # after D317; 41, 42
 python3 -I packages/sim/lab/a12/hidden.py .local/a12/runs        # → packages/sim/lab/a12/hidden.txt
 bun run funnel --seeds 41,42,43,44 --jobs 4 --set '{"askNudge":false}' --json base.json  # then without, and:
 python3 -I packages/sim/lab/a12/nudge-screen.py nudge.json base.json
@@ -154,7 +177,8 @@ bun run funnel --jobs 4 --set '{"cardsLean":false}' --baseline default.json
 | nudge, seeds 41–44 (728 runs) | 0.391 |
 | neutral, eden and nudge, seeds 41–42 (364 runs) | 0.170 |
 | Sonnet regrades (misses, raised samples, concerns; 4 arms) | 0.823 |
-| **Total (ledger)** | **2.461** |
+| fixed nudge, seeds 41–42 (364 runs) and its Sonnet regrades | 0.316 |
+| **Total (ledger)** | **2.777** |
 
 ## Caveats
 

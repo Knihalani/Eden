@@ -312,7 +312,7 @@ interface Session {
    */
   shown?: Map<string, Set<string>>;
   /**
-   * `askNudge` (trial, D316): the request a nudged candidates packet was queued for (`requests` then), its anchors,
+   * `askNudge` (D316, D317): the request a nudged candidates packet was queued for (`requests` then), its anchors,
    * and the ids of the push pool's items past those handed, for the ask's deeper look in that request.
    */
   nudged?: { request: number; anchors: Anchors; deeper: string[] };
@@ -1540,20 +1540,22 @@ export class ContextPartner {
           )
         : null;
     if (reading) chosen = reading.chosen;
-    // `askNudge` (D316): an ask in the request a nudged packet went out for also lists the push pool's items past those
-    // handed that hold one of the request's anchors (its current copies), at most `limit` more.
+    // `askNudge` (D316, D317): an ask in the request a nudged packet went out for also lists the push pool's items past
+    // those handed that hold one of the request's anchors (its current copies). They take at most half the answer's
+    // seats (rounded up), from the end: the answer still cites at most `maxItems` (the protocol's bound).
     if (!internal.push && this.config.askNudge && s.nudged?.request === s.requests) {
       const { anchors, deeper } = s.nudged;
       const have = new Set(chosen.map((x) => x.item.id));
       const extra: Scored[] = [];
+      const seats = Math.ceil(limit / 2);
       for (const id of deeper) {
-        if (extra.length >= limit) break;
+        if (extra.length >= seats) break;
         if (have.has(id)) continue;
         const item = this.deps.cache.get(s.scope, id, this.now());
         if (item && !bulkMail(item) && anchored(item, anchors))
           extra.push({ item, score: 0, matched: 0, sketch: null });
       }
-      chosen = [...chosen, ...extra];
+      chosen = [...chosen.slice(0, Math.max(0, limit - extra.length)), ...extra];
     }
     // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
     // a proactive packet (queued, taken before its next model request); nothing else is answered or handed out.
@@ -1627,7 +1629,9 @@ export class ContextPartner {
           : null;
       if (injection && was) this.keepUndo(s, injection, checked, was);
       if (injection) s.pending.push(injection);
-      // `askNudge` (D316): the ask the nudge asks for, in this request, may look past what was handed.
+      // `askNudge` (D316, D317): the ask the nudge asks for, in this request, may look past what was handed. A settled
+      // packet (a `readerPushBehind` second pass replacing a nudged one) ends that look: the agent was not nudged.
+      if (injection && candidates && !candidates.unsettled) s.nudged = undefined;
       if (injection && candidates?.unsettled && internal.request !== undefined) {
         const handed = new Set(candidates.items.map((x) => x.item.id));
         s.nudged = {

@@ -2,7 +2,7 @@ import type { ContextItem } from "@eden/protocol";
 import { namesParticipant, startDay } from "./grounding";
 
 /**
- * `askNudge` (trial, D316; docs/research/a12-quality.md): whether the push's candidates settle what the request is
+ * `askNudge` (D316, D317; docs/research/a12-quality.md): whether the push's candidates settle what the request is
  * about, with no model. A request's anchors are the people and things it names (its entities) and the days it names
  * (its time window, and calendar dates written out). A candidate settles the request when it holds every kind of
  * anchor the request has: one of its entities, and (when the request names a day) one of its days. A request with no
@@ -109,14 +109,14 @@ function windowDays(a: Anchors): NamedDay[] {
 /** Whether `item` names one of the request's entities: as a participant, or its words in the item's title or text. */
 export function namesEntity(item: ContextItem, a: Anchors): boolean {
   if (a.entities.length === 0) return false;
-  const text = ` ${`${item.title} ${item.text}`.toLowerCase().replace(/[^\p{L}\p{N}@.+-]+/gu, " ")} `;
+  const text = `${item.title} ${item.text}`.toLowerCase().replace(/\s+/g, " ");
   return a.entities.some((e) => {
     if (namesParticipant(e, item)) return true;
-    const w = e
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}@.+-]+/gu, " ")
-      .trim();
-    return w.length > 1 && text.includes(` ${w} `);
+    const w = e.toLowerCase().replace(/\s+/g, " ").trim();
+    if (w.length < 2) return false;
+    // On letter and number boundaries: "Harlow." and "Harlow-based" name Harlow, "Harlowe" does not.
+    const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "u").test(text);
   });
 }
 

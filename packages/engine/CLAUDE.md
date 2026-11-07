@@ -210,8 +210,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **The candidates nudge an ask when they do not settle the request (`askNudge`, D316, D317: on in the default;
   `settle.ts`).** When no handed candidate holds one of the request's entities and (if it names a day) one of its
   days, the lead adds `ASK_NUDGE`, and `Session.nudged` keeps the push pool's ids past the handed ones for that
-  request (`internal.request`): an ask before the next user message adds up to `maxItems` of them that hold an anchor,
-  read from the cache as current copies. The nudge asks, never discourages (D257's lesson): hidden +9.2 points
+  request (`internal.request`): an ask before the next user message puts those that hold an anchor (current cached
+  copies) in at most half its `maxItems` seats, so it never cites more than `maxItems`; a settled packet later in the
+  request clears it. Entities match on letter boundaries (`namesEntity`). The nudge asks, never discourages (D257's lesson): hidden +9.2 points
   Sonnet-graded, the gain all through the agent's asks (A12, docs/research/a12-quality.md). A wording that tells the
   agent the candidates are wrong ("none of them matches") was not measured: it risks the agent dropping a planted fact
   already in the packet (it is there in 322 of 422 nudged hidden tasks at $0). Its unit tests are `ask-nudge.test.ts`.

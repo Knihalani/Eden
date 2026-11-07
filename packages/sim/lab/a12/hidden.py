@@ -14,15 +14,22 @@ D = sys.argv[1]
 runs = {}  # (task, arm) -> haiku verdict; kinds
 kind = {}
 cost = {}
-for f in sorted(glob.glob(os.path.join(D, "a12-[mnt]-4?.json")) + glob.glob(os.path.join(D, "a12-neu-4?.json"))):
+# `a12-n2-*` ran after D317, when `eden` itself had the nudge (fixed after review): its arm is renamed "nudge-fixed".
+def arm_of(name, condition):
+    return "nudge-fixed" if "n2-" in name else condition
+
+
+for f in sorted(glob.glob(os.path.join(D, "a12-[mnt]-4?.json")) + glob.glob(os.path.join(D, "a12-n*-4?.json"))):
     d = json.load(open(f))
+    name = os.path.basename(f)
     for t in d["tasks"]:
         kind[t["id"]] = t["kind"]
     for r in d["results"]:
         if r.get("facts") is None:
             continue
-        runs[(r["task"], r["condition"])] = any(r["facts"].values())
-        cost[(r["task"], r["condition"])] = (r["costUsd"] + r["edenCostUsd"], r["wallMs"], r["toolCalls"])
+        arm = arm_of(name, r["condition"])
+        runs[(r["task"], arm)] = any(r["facts"].values())
+        cost[(r["task"], arm)] = (r["costUsd"] + r["edenCostUsd"], r["wallMs"], r["toolCalls"])
 
 sonnet = {}  # (task, arm) -> verdict
 sampled = {}  # arm -> {"raised": [verdicts], "miss": [verdicts]} from the sample files only
@@ -34,15 +41,16 @@ for f in glob.glob(os.path.join(D, "rg-*.json")):
         if x.get("facts") is None:
             continue
         v = any(x["facts"].values())
-        key = (x["task"], x["condition"])
+        arm = arm_of(name, x["condition"])
+        key = (x["task"], arm)
         if name.startswith("rg-conc-"):
             conc[key] = v
             continue
         sonnet[key] = v
-        if name.startswith("rg-raised-m-") or name.startswith("rg-raised-n-"):
-            sampled.setdefault(x["condition"], {}).setdefault("raised", []).append(v)
+        if name.startswith(("rg-raised-m-", "rg-raised-n-", "rg-raised-n2-")):
+            sampled.setdefault(arm, {}).setdefault("raised", []).append(v)
         if name.startswith("rg-miss-t-"):
-            sampled.setdefault(x["condition"], {}).setdefault("miss", []).append(v)
+            sampled.setdefault(arm, {}).setdefault("miss", []).append(v)
 
 
 def expected(arm, haiku):
@@ -84,7 +92,9 @@ for arm in arms:
     print(f"{arm:12} n {len(ts):4}  Haiku {h:.3f}  Sonnet {m:.3f} ({lo:.3f}..{hi:.3f}){note}")
 
 print("== paired (a - b), points, Sonnet-corrected; Haiku in brackets")
-for a, b in [("eden", "tools"), ("eden~reader", "eden"), ("eden~nudge", "eden"), ("eden~nudge", "eden~reader")]:
+PAIRS = [("eden", "tools"), ("eden~reader", "eden"), ("eden~nudge", "eden"), ("eden~nudge", "eden~reader")]
+PAIRS += [("nudge-fixed", "eden"), ("nudge-fixed", "eden~nudge")]
+for a, b in PAIRS:
     ts = [t for (t, x) in runs if x == a and kind[t] == "hidden" and (t, b) in runs]
     if not ts:
         continue
@@ -105,7 +115,7 @@ for arm in arms:
         rg = sum(conc.get((t, arm), runs[(t, arm)]) for t in ts)
         print(f"{arm:12} {k:8} n {len(ts):4}  Haiku {hk}  regraded {rg}")
 
-print("== per task: $/1k (agent + Eden), wall s, ask/tool calls; paired nudge - eden")
+print("== per task: $/1k (agent + Eden), wall s, ask/tool calls; paired nudge arms - eden")
 for k in ("hidden", "control", "neutral"):
     for arm in arms:
         ts = [t for (t, a) in runs if a == arm and kind[t] == k]
@@ -116,8 +126,10 @@ for k in ("hidden", "control", "neutral"):
             f"{k:8} {arm:12} n {len(ts):4}  $/1k {1000 * sum(x[0] for x in c) / len(c):.3f}"
             f"  wall {sum(x[1] for x in c) / len(c) / 1000:.2f}  calls {sum(x[2] for x in c) / len(c):.2f}"
         )
-    ts = [t for (t, a) in runs if a == "eden~nudge" and kind[t] == k and (t, "eden") in runs]
-    if ts:
+    for arm in ("eden~nudge", "nudge-fixed"):
+        ts = [t for (t, a) in runs if a == arm and kind[t] == k and (t, "eden") in runs]
         for i, label, scale in ((0, "$/1k", 1000), (1, "wall s", 0.001), (2, "calls", 1)):
-            m, lo, hi = boot([scale * (cost[(t, "eden~nudge")][i] - cost[(t, "eden")][i]) for t in ts])
-            print(f"   nudge - eden {k:8} {label:6} {m:+.3f} ({lo:+.3f}..{hi:+.3f}) n {len(ts)}")
+            if not ts:
+                break
+            m, lo, hi = boot([scale * (cost[(t, arm)][i] - cost[(t, "eden")][i]) for t in ts])
+            print(f"   {arm} - eden {k:8} {label:6} {m:+.3f} ({lo:+.3f}..{hi:+.3f}) n {len(ts)}")
