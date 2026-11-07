@@ -213,7 +213,7 @@ consecutive `bun run test` runs then gave 1,112,544 `expect()` calls each, and t
 
 ## Sleep-free timing tests (2026-11-03b, 4-core container shared with other agents, Bun 1.4.4)
 
-Tests that slept past a delay now hold the call and release it: `slow-path-queue.test.ts` (a judge and a slow
+Tests that slept past a delay now hold the call and release it: `slow-path-queue.test.ts` (deleted by D228) (a judge and a slow
 search whose calls the test answers, in the order the interleaving needs), `source-calls.test.ts` (waits until no
 search is in flight and nothing changes for 50 event-loop turns, instead of 200 ms per request), and
 `reader.test.ts`'s "readerPushWaitMs 0" (a held reading). `QueryPlanner` takes an optional `now` (default
@@ -229,7 +229,7 @@ Each file alone (`bun test ./file`; CPU is user time):
 
 | File | Before | After |
 |---|---|---|
-| packages/engine/src/slow-path-queue.test.ts | 5,468 ms (CPU 0.35 s) | 214–286 ms (CPU 0.25–0.28 s) |
+| packages/engine/src/slow-path-queue.test.ts (deleted by D228) | 5,468 ms (CPU 0.35 s) | 214–286 ms (CPU 0.25–0.28 s) |
 | packages/engine/src/source-calls.test.ts | 1,782 ms (CPU 0.33 s) | 379–460 ms (CPU 0.27–0.33 s) |
 | packages/engine/src/reader.test.ts | 3,198 ms | 2,187–2,286 ms (the rest are wait-bound tests, real delays by design) |
 | packages/sim/src/lab/reader-stub.test.ts | 6,117 ms (CPU 8.6 s) | 2,896–5,280 ms (CPU 8.2–8.6 s) |
@@ -287,7 +287,7 @@ what each proves kept:
 
 - `review-regressions.test.ts`, "shown means handed out": the `SlowSource` (300 ms search) and the fixed
   `Bun.sleep(1_500)` gave way to a `HeldSource` whose search is held until the test releases it, as
-  `slow-path-queue.test.ts` does; the test then turns the event loop until the session's queue holds the packet
+  `slow-path-queue.test.ts` (deleted by D228) did; the test then turns the event loop until the session's queue holds the packet
   (a test-only read of the partner's private `sessions`, which `takePending` would empty).
 - `sources/src/regressions.test.ts`, the results cache's heap test: 50,000 pages one every 30 simulated ms (1,500 s,
   past the 600 s expiry) instead of 200,000 every 10 ms. With `guarded.ts` from 6911f514d (before the fix) put

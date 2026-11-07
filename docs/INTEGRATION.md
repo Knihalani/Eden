@@ -264,7 +264,9 @@ the poll, the slow-path queue, vocabulary release). Run it as shipped:
 - Pass the client's default wait (3,000 ms on a sent user message, `DEFAULT_WAIT_MS`); see the waitMs section above.
 - `EDEN_ENGINE_CONFIG` takes a JSON file of settings over the default, usually one of `docs/profiles/minus-*.json`
   ("default minus a part") for a comparison. New behaviour arrives as a trial switch with an owner and an end date
-  (DECISIONS.md, "Trial switches"); it becomes the default or is deleted.
+  (DECISIONS.md, "Trial switches"); it becomes the default or is deleted. A deleted setting stops a server whose
+  file still names it (`unknown key`): drop it from the file. D225–D228 deleted `graph`, `graphMerge` and the other
+  `graph*` keys, `askVerdicts`, `anticipate*` and `slowPathQueue`.
 
 ### Processes and per-tenant caps (`EDEN_PROCESSES`, D163, D178)
 
