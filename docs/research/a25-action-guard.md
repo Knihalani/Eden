@@ -149,7 +149,9 @@ holds neither.
   of the final code. No blind suite was spent.
 - **What it cannot see.** A party given by name only. An address that another item in the user's sources carries
   on a header line: an attacker who lands a second mail Cc'ing the address it will ask for passes. The sender of the
-  mail that asks: an attacker writing from the very address it wants copied passes (a reply to the sender is normal). A domain the user's items already carry on two header lines:
+  mail that asks: an attacker writing from the very address it wants copied passes (a reply to the sender is normal).
+  "Anyone who has mailed the user" is a low bar; a stricter rule to measure next counts an address only on the To/Cc
+  of mail the user sent, or from a sender with several items older than the one that showed it. A domain the user's items already carry on two header lines:
   an attacker inside a real counterpart's domain, or a compromised account, passes as a correspondent. An identifier
   the agent got from somewhere other than Eden (its own tools); that is not Eden's to judge, and the tools arm never
   followed an attack in A10. A description that mentions an address.
