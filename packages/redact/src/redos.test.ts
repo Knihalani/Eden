@@ -43,9 +43,13 @@ describe("no input makes the gate super-linear", () => {
     ["eden-url-userinfo", "a-"],
     // Every token a candidate (40 base64 characters, mixed case, an anchor beside it): one pass each (D86).
     ["eden-aws-secret", `secret ${"aB3dE5gH7jK9mN2pQ4sT"}+${"6vW8yZaB3dE5gH7jK9m"} `],
+    // D220's rules: every prefix a candidate, and runs that stop one short of the length or start the next match.
+    ["eden-new-relic", "NRAK-ABCDEFGHIJKLMNOPQRSTUVWXYZ "],
+    ["eden-presigned-url", "&X-Amz-Signature=0123456789abcde&"],
+    ["eden-presigned-url", "?x-goog-signature="],
   ];
   for (const [rule, unit] of attacks) {
-    test(`128 KB built against ${rule}`, () => {
+    test(`128 KB built against ${rule}: ${JSON.stringify(unit.slice(0, 20))}`, () => {
       const text = unit.repeat(Math.ceil(131_072 / unit.length)) + (rule === "eden-url-userinfo" ? "://" : "");
       const t0 = performance.now();
       sanitizeForStore(text);

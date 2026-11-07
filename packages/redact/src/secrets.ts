@@ -121,6 +121,13 @@ const PROVIDER_SHAPES: [string, RegExp][] = [
   // it. The token is 68 characters today; 60+ leaves room without matching a path that merely names a webhook. A
   // versioned path (`/api/v10/webhooks/`, what REST clients log) is the same capability, and hosts ignore case.
   ["eden-discord-webhook", /\bdiscord(?:app)?\.com\/api\/(?:v\d{1,2}\/)?webhooks\/\d{17,20}\/[A-Za-z0-9_-]{60,}/gi],
+  // A New Relic user API key (D220). gitleaks' rule wants "new relic" within reach of it, so a key pasted alone
+  // (a chat message, a runbook line) passed. The prefix and the exact length make the bare shape specific enough.
+  ["eden-new-relic", /\bNRAK-[A-Z0-9]{27}\b/gi],
+  // A presigned or signed object URL (S3 SigV4, GCS V4) is a bearer capability until it expires, up to 7 days: anyone
+  // holding it reads (or writes) the object. Only the value goes (group 1), so the URL still says which object it
+  // was; an STS session token in the URL goes too. `;` covers `&amp;` in HTML mail. D220 reverses D187's note.
+  ["eden-presigned-url", /[?&;](?:x-amz-signature|x-goog-signature|x-amz-security-token)=([^\s&#"'<>]{16,})/dgi],
 ];
 const ENTROPY_TOKEN = /\S{32,}/g;
 /** How far from a long token rule (d) looks for a secret keyword. */
@@ -549,6 +556,8 @@ const SHAPE_LITERALS: Record<string, string[]> = {
   "eden-telegram": [":aa"],
   "eden-aws-key-id": ["a3t", "akia", "asia", "abia", "acca"],
   "eden-discord-webhook": ["discord"],
+  "eden-new-relic": ["nrak-"],
+  "eden-presigned-url": ["x-amz-", "x-goog-"],
 };
 
 /**
