@@ -86,7 +86,7 @@ not strict yet.
 | Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][+ask][@w<ms>]`, graded by a second model; per-task timelines; `--day K`; `--days D` (a user's mixed days, recipe 4c) |
 | Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`); same tasks, grader and results format as Pi                                                                                   |
 | In-house loop       | `agent-ab.ts`                                  | The pre-Pi loop; label any result from it as such (CLAUDE.md)                                                                                                                                                              |
-| Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load; `sim:perf memory --synced` backfills its users first (the default never syncs them)                                                    |
+| Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load; `sim:perf memory --synced` and `steady --synced` (A3) backfill their users first (the scenarios otherwise never sync)                                                    |
 | Connector lab       | `bun run sim:lab:build && bun run sim:lab`     | Real MCP servers in Docker over seeded backends                                                                                                                                                                            |
 
 Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too), `agent-ab-report.ts` (shared tables,
@@ -702,6 +702,20 @@ input and output per arm and kind, from the timelines; `--prefix` adds the count
 labelled so) beside billed figures, and compare arms within one run: an arm sending a task's identical prompt after
 another arm reads it whole.
 
+**Why, and the fix (D271).** `cache-probe.ts` (a few calls, $0.0003 an arm) sends each arm's first request as pi-ai
+builds it, twice, the second with another task's user turn: the `eden` arm's tools-and-system prefix is about 500
+tokens on the wire, under Haiku 5.5's 512-token minimum, so it is never read; the tools arm's 867 is. `--tenant-prompt`
+adds a fixed ~550-token set of a tenant's house rules (`TENANT_GUIDE` in ab-common.ts) to every arm's system prompt,
+and both arms' prefixes cache. Cost comparisons against the agent alone quote a `--tenant-prompt` run (recipe:
+`packages/sim/lab/a3/run.sh`); the rules also change the agent alone (terser, fewer searches), so say the prompt is
+an assumption. Measured (docs/research/a3-cost-speed.md): short mix +$0.060/1k (+0.042..+0.078), long +$0.080/1k
+(+0.065..+0.095), Eden 0.96 s and 0.42 s faster.
+
+```bash
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cache-probe.ts --suite train1 --seed 41 \
+  --spend-ledger .local/a3/ledger.jsonl --spend-cap 2 --run-label a3-cache-probe
+```
+
 ### 4b. Regrade with another grader, and cold-start cost
 
 - `regrade.ts --results F --graders claude-sonnet-5-5 --spend-ledger … --spend-cap …`: a `claude-*` grader goes
@@ -744,7 +758,10 @@ minute on free models (hermes-lab.md, estimates).
 - `--push signals|payload`: every sim source `notifies` (the engine acts on it with `syncPush`). `signals` sends a
   change notification per source before each task with chance 1 − exp(−rate); the rates per hour come from
   `--push-rates` (default `gmail=4,slack=6,calendar=0.3,drive=0.3,crm=0.2`, assumed). `payload` models
-  notifications that carry their items, which in a static world means none and no poll.
+  notifications that carry their items, which in a static world means none and no poll. With `--days`, the change
+  before each day's recap is sent as the moved items (`sourceItems`) under `payload` and as a bare signal under
+  `signals` (D272; before it a bare signal in every mode, which put ~650 ms of re-reads on Eden's path in every long
+  payload run).
 - The results header records both (`sourceProfile`, `push`).
 
 `market.py` (in `packages/sim/lab/before-after/`) prices a run's `tools` and `eden` arms per agent model and
