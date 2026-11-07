@@ -1,0 +1,17 @@
+a2-long-pay-41                     claude-haiku-5-5   0.1040
+a2-long-pay-42                     claude-haiku-5-5   0.1064
+a2-regrade-concerns-long-41        claude-sonnet-5-5  0.0051
+a2-regrade-concerns-long-42        claude-sonnet-5-5  0.0065
+a2-regrade-concerns-short-41       claude-sonnet-5-5  0.0184
+a2-regrade-concerns-short-42       claude-sonnet-5-5  0.0066
+a2-regrade-concerns-tgt-41         claude-sonnet-5-5  0.0164
+a2-regrade-concerns-tgt-42         claude-sonnet-5-5  0.0132
+a2-regrade-misses-41               claude-sonnet-5-5  0.0234
+a2-regrade-misses-42               claude-sonnet-5-5  0.0302
+a2-short-pay-41                    claude-haiku-5-5   0.3952
+a2-short-pay-42                    claude-haiku-5-5   0.3883
+a2-sonnet-pay-41                   claude-haiku-5-5   0.0056
+a2-sonnet-pay-41                   claude-sonnet-5-5  0.3932
+a2-tgt-pay-41                      claude-haiku-5-5   0.3766
+a2-tgt-pay-42                      claude-haiku-5-5   0.3805
+total                                                 2.2695

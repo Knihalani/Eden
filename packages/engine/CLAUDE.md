@@ -215,6 +215,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   tokens on the wire, under Haiku 5.5's 512 minimum). With an agent prompt that caches in every arm (`--tenant-prompt`),
   the gap is the packet's own tokens written to the cache (+$0.060/1k short, +$0.080/1k over days, Eden faster), and
   no lexical cut of packet or ask bytes keeps the planted facts (D273).
+- **The candidates' order, a longer ask and constraint-first excerpts were measured and deleted (D266–D268, A2;
+  docs/research/a2-quality.md; code in commit d096b7ba).** A no-model re-rank (one item per title, the request's date
+  lifted) put the planted item in the packet more often (+11 of 384 at $0, +9 of 182 live) and raised no more facts
+  live (−0.6 points, −4.6..+3.4); an ask past held items cost +$0.021/1k for no gain. Each push pass reports its pool,
+  constraint test and handed ids to the lab hook `onPushPool` (ids and flags only, D269), not to `onReader`, whose
+  consumers count reader readings.
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read

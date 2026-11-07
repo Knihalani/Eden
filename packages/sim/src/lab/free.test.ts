@@ -2,7 +2,16 @@ import { describe, expect, test } from "bun:test";
 import type { Context } from "@earendil-works/pi-ai";
 import { RequestCapReached } from "@eden/llm";
 import { chat, parseGrade, type Task } from "./ab-common";
-import { isCapError, labAccess, labModel, openRouterModels, piModelFor, piRegistry, providerPrefs } from "./free";
+import {
+  anthropicThinkingOff,
+  isCapError,
+  labAccess,
+  labModel,
+  openRouterModels,
+  piModelFor,
+  piRegistry,
+  providerPrefs,
+} from "./free";
 
 const FREE = "nvidia/nemotron-3.5-super-vl:free";
 const task = {
@@ -184,5 +193,15 @@ describe("openRouterModels", () => {
     expect(openRouterModels(["claude-haiku-5-5", "z-ai/glm-5.3-flash", "z-ai/glm-5.3-flash", ""])).toEqual([
       "z-ai/glm-5.3-flash",
     ]);
+  });
+});
+
+describe("anthropicThinkingOff (A2: a Sonnet agent on Pi)", () => {
+  test("Sonnet 5.5 turns thinking off with between_tools; other models and payloads are left alone", () => {
+    const off = { model: "x", thinking: { type: "disabled" } };
+    expect(anthropicThinkingOff("claude-sonnet-5-5", off)).toEqual({ model: "x", thinking: { type: "between_tools" } });
+    expect(anthropicThinkingOff("claude-haiku-5-5", off)).toBe(off);
+    const none = { model: "x" };
+    expect(anthropicThinkingOff("claude-sonnet-5-5", none)).toBe(none);
   });
 });

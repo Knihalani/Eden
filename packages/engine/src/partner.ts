@@ -187,7 +187,24 @@ export interface PartnerDeps {
    * (`decide.ts`) and what was delivered. Ids and numbers only, no content. Absent: no facts are computed for it.
    */
   onCandidates?: CandidateSink;
+  /**
+   * A lab hook (`hidden-funnel.ts --pool-dump`, D269): each `pushCandidates` pass's pool and what it handed, ids and
+   * flags only. Apart from `onReader`, whose consumers count reader readings.
+   */
+  onPushPool?: PushPoolSink;
 }
+
+/** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
+export interface PushPoolReport {
+  sessionId: string;
+  /** The push's pool in order (the ids the reader would have read). */
+  pool: string[];
+  /** Per pool item, `readerGate`'s constraint test (cards included). */
+  constraintLike: boolean[];
+  /** The candidates handed (none when no pooled item is constraint-like). */
+  handed: string[];
+}
+export type PushPoolSink = (report: PushPoolReport) => void;
 
 /** One no-model decision's candidates, for `PartnerDeps.onCandidates`. */
 export interface CandidateDump {
@@ -1932,8 +1949,15 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    if (!pool.some((x) => this.constraintLike(x, cards))) return { items: [] };
-    return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) };
+    const like = pool.map((x) => this.constraintLike(x, cards));
+    const items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
+    this.deps.onPushPool?.({
+      sessionId: s.id,
+      pool: pool.map((x) => x.item.id),
+      constraintLike: like,
+      handed: items.map((x) => x.item.id),
+    });
+    return { items };
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
