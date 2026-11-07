@@ -1,0 +1,29 @@
+{
+ "results": ".local/cl6/runs/cl6-m-long-pay-42.json",
+ "runGrader": "claude-haiku-5-5",
+ "summary": [
+  {
+   "grader": "claude-haiku-5-5",
+   "answers": 0,
+   "readable": 0,
+   "errors": 0,
+   "msMedian": 0,
+   "factsTrue": 0,
+   "agreeWithRun": {
+    "same": 0,
+    "of": 0
+   },
+   "agreeWith": {},
+   "usd": 0,
+   "byKind": {}
+  }
+ ],
+ "requests": {
+  "sent": 0,
+  "retried": 0,
+  "refused": 0,
+  "statuses": {},
+  "cap": 0
+ },
+ "graded": []
+}

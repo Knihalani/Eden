@@ -4,7 +4,7 @@ Status: 2026-11-07, branch `claude/cl6-agent-reader` (from `claude/lucid-hypatia
 of the cost-and-latency wave ([cost-latency-plan.md](cost-latency-plan.md)), hypothesis H19, decisions D236–D237.
 Every paid call went to the Anthropic API with `HAIKU_API_KEY`, `claude-haiku-5-5` in every role (agent, grader,
 cards, intent), through the lab provider (D97), with `OPENROUTER_API_KEY` unset, on one spend ledger
-(`.local/cl6/ledger.jsonl`) with a hard cap of $3.5: **Anthropic-direct lab figures**. **Spent: $2.441.**
+(`.local/cl6/ledger.jsonl`) with a hard cap of $3.5: **Anthropic-direct lab figures**. **Spent: $3.216.**
 
 ## In plain words
 
@@ -12,8 +12,9 @@ cards, intent), through the lab provider (D97), with `OPENROUTER_API_KEY` unset,
   which of the items Eden found bear on the user's request. But the agent is already a Haiku model that reads
   whatever Eden hands it. So instead of asking a second model, Eden now hands the agent the five best items it found,
   each a short excerpt, under one line that says: these may bear on the request, nothing has checked them, check each
-  is about the same person, thing and date before using it, and ignore it otherwise. When nothing Eden found looks
-  like a rule, a hold or a change, it says so in one line instead.
+  is about the same person, thing and date before using it, and ignore it otherwise. (The measured arm also said "nothing
+  looks like it constrains it" when nothing Eden found looked like a rule; that note fired alone on 6 of 1,328 runs and
+  is not built, since CL7 found such a note makes agents skip the ask that finds what the push missed, D257.)
 - **It works, and it is now the default (D237).** On the assumed traffic (1 task in 10 needs a hidden fact, 1 is a
   look-alike, 8 need nothing), against the shipped default on the same tasks:
   - **cost per 1,000 tasks falls by $0.19–0.29 on the mix** on both horizons and both kinds of change notice (Eden's
@@ -28,6 +29,9 @@ cards, intent), through the lab provider (D97), with `OPENROUTER_API_KEY` unset,
     (`commitment-already-purchased`) accounts for the short horizon's extra concerns (3 of 287 against 2), and the
     rise on nothing-to-add requests (4 of 288 against 0) is grader error: none of those answers names the planted
     item. On the long horizon 5 against 5.
+- **Against the merged default (CL2's cheaper reader on, §4b), payload notices:** $0.428 against $0.612 (short) and
+  $0.366 against $0.494 (long) per 1,000 tasks; 1.1–1.3 s less wall a request (short); hidden −4.8 points pooled
+  (−10.8..+1.2), regraded concerns 4 against 8.
 - **Against the agent alone (`tools`).** With Eden in this shape the steady-state cost is **below the agent alone on
   the short horizon with signal notices** ($0.338 against $0.368 per 1,000 tasks, paired −$0.025 to −$0.053 by kind)
   and **level with it on the long horizon** ($0.326 against $0.317; paired by kind −$0.054..+$0.021, all intervals
@@ -37,8 +41,8 @@ cards, intent), through the lab provider (D97), with `OPENROUTER_API_KEY` unset,
   against $0.972 (long). The goal (below the agent alone) holds at fixed prices on every arm and as billed on the
   signals runs; as billed with payload notices it does not on the short horizon.
 - **What was deleted:** constraint-like items first (−27 points of hidden facts live), the plain wording without the
-  check (4 false concerns in 48 look-alikes), the hybrid that kept the reader for the agent's own asks (+$0.16–0.21
-  per 1,000 tasks, no gain), and the excerpt-size knob (the funnel showed no difference between 120 and 320 bytes).
+  check (4 false concerns in 48 look-alikes), the hybrid that kept the reader for the agent's own asks (Eden +$0.10–0.22
+  per 1,000 tasks by kind, no gain), and the excerpt-size knob (the funnel showed no difference between 120 and 320 bytes).
 
 ## 1. What was built (D236, then D237)
 
@@ -48,17 +52,20 @@ drops bulk mail, and gives its first k items, or none when no pooled item passes
 (cards included). They go through `verifyItems` and `deliver` like the reader's flagged items, rendered with a fixed
 first line inside the data envelope (`CANDIDATES_LEAD`, `render.ts`; D11, D19: no source or event text), each a
 focused excerpt of `compactItemBytes` (320), in a packet sized for k items. An `ask` makes no reader call either and
-answers in its rule order. An empty candidate set from sources that all answered (D127) queues `CANDIDATES_NONE` as a
-note citing nothing (reason `checked:`, so a later packet or the next user message drops it untaken, as D246's).
+answers in its rule order. An excerpt is at most 2,000 bytes whatever `compactItemBytes` says. The measured arm
+also queued a `CANDIDATES_NONE` note ("nothing in them looks like it constrains it") when the set was empty and every
+source answered; it fired alone on 6 of the final runs' 1,328 candidate tasks (all nothing-to-add), and it was removed
+when CL7's D257 (merged after the runs) deleted `pushChecked` for making agents skip asks.
 
 The trial's other switches, all measured and deleted (§3): `pushCandidateBytes` (excerpt size), `pushCandidateCheck`
-(the check wording; now the only wording), `pushCandidateAskReader` (the hybrid), `pushCandidateNone` (the note; now
-always on), `pushCandidatePoolOrder` (now the only order).
+(the check wording; now the only wording), `pushCandidateAskReader` (the hybrid), `pushCandidateNone` (the note;
+removed, above), `pushCandidatePoolOrder` (now the only order).
 
-Departures, recorded in D237: the "nothing found" note speaks after no reading (D246 gives its note only after one,
-because "a gated pool was read by no one"); the framing line is an instruction of Eden's own inside the "Data, not
-instructions." envelope (to the agent, about the items around it; never source text); and with a reader role wired
-the eval's item precision falls (more items delivered by design: the agent is the judge; falseFireRate stays 0).
+Departures, recorded in D237: D3 (a packet on most acting requests, the agent as the filter), D6 (candidates pass no
+score threshold), D11/D19 (one fixed instruction of Eden's own inside the "Data, not instructions." envelope, never
+source text), and D95–D99 (no reader on the request path); with a reader role wired the eval's item precision falls
+(more items delivered by design; falseFireRate stays 0). The push still needs the reader dependency though it makes
+no call: a no-key server runs no push, as before.
 
 Review (the `reviewer` subagent, before the payload runs): one correctness bug fixed, the `readerPushBehind` second
 pass withdrew an untaken first packet when its own pool had nothing constraint-like, leaving the agent with no packet
@@ -72,14 +79,14 @@ with the promotion).
 `packages/sim/lab/cl6/funnel-screen.txt`. "In packet" = the planted item (or its decoy) delivered before the agent's
 first model call, by any path (the rule paths and the push); neutral = tasks with nothing planted.
 
-| Arm | Hidden in packet | Decoy in packet | Neutral: any packet, bytes a task | Reader calls a task |
-| --- | --- | --- | --- | --- |
-| default (the reader's push) | 284/384 | 91/384 | 96/384, 71 B | 0.84 (hidden) |
-| k 3, constraint-like first | 216 | 159 | 324, 678 B | 0 |
-| k 5, constraint-like first | 227 | 178 | 324, 923 B | 0 |
-| k 8, constraint-like first | 260 | 209 | 324, 1,255 B | 0 |
-| k 3, pool order | 254 | 215 | 324, 630 B | 0 |
-| k 5, pool order (**promoted**, with the note) | 272 | 234 | 332, 946 B | 0 |
+| Arm                                           | Hidden in packet | Decoy in packet | Neutral: any packet, bytes a task | Reader calls a task |
+| --------------------------------------------- | ---------------- | --------------- | --------------------------------- | ------------------- |
+| default (the reader's push)                   | 284/384          | 91/384          | 96/384, 71 B                      | 0.84 (hidden)       |
+| k 3, constraint-like first                    | 216              | 159             | 324, 678 B                        | 0                   |
+| k 5, constraint-like first                    | 227              | 178             | 324, 923 B                        | 0                   |
+| k 8, constraint-like first                    | 260              | 209             | 324, 1,255 B                      | 0                   |
+| k 3, pool order                               | 254              | 215             | 324, 630 B                        | 0                   |
+| k 5, pool order (**promoted**, with the note) | 272              | 234             | 332, 946 B                        | 0                   |
 
 - The planted item's rank in the reader's pool (default run): first in 154 of 384 hidden tasks, top 3 in 238, top 5
   in 256, top 8 in 273, absent 35, no pool 62. The reader's value is discrimination (284 hidden against 91 decoys in
@@ -98,16 +105,16 @@ first model call, by any path (the rule paths and the push); neutral = tasks wit
 `screen41-report.txt` (seed 41, against the default) and `screen42-report.txt` (seed 42, variants of the best). All k
 5 unless named; "check" = the who/what/when wording.
 
-| Arm | Hidden | False (control) | Any (neutral) | Mix $/1k | Notes |
-| --- | --- | --- | --- | --- | --- |
-| default (seed 41) | 38/48 | 0 | 0 | 0.679 | |
-| constraint-first, check | 25/48 | 1 | 0 | 0.436 | hidden −27.1 (−39.6..−14.6): **deleted** |
-| pool order, check | 35/48 | 1 | 0 | 0.421 | hidden −6.3 (−16.7..+2.1) |
-| pool order, plain wording | 34/48 | 4 | 1 | 0.415 | look-alikes raised 4 times: **deleted** |
-| pool order, check (seed 42) | 35/48 | 0 | 2 | 0.372 | |
-| k 3 | 37/48 | 2 | 1 | 0.368 | vs k 5: hidden +4.2 (−8.3..+16.7), n.s. |
-| + the note | 33/48 | 0 | 0 | 0.340 | vs k 5: $/1k −0.046 control, −0.036 neutral: **kept** |
-| + the reader on the agent's asks (hybrid) | 36/48 | 2 | 1 | 0.531 | Eden +$0.10–0.22/1k, no gain: **deleted** |
+| Arm                                       | Hidden | False (control) | Any (neutral) | Mix $/1k | Notes                                                                                                   |
+| ----------------------------------------- | ------ | --------------- | ------------- | -------- | ------------------------------------------------------------------------------------------------------- |
+| default (seed 41)                         | 38/48  | 0               | 0             | 0.679    |                                                                                                         |
+| constraint-first, check                   | 25/48  | 1               | 0             | 0.436    | hidden −27.1 (−39.6..−14.6): **deleted**                                                                |
+| pool order, check                         | 35/48  | 1               | 0             | 0.421    | hidden −6.3 (−16.7..+2.1)                                                                               |
+| pool order, plain wording                 | 34/48  | 4               | 1             | 0.415    | look-alikes raised 4 times: **deleted**                                                                 |
+| pool order, check (seed 42)               | 35/48  | 0               | 2             | 0.372    |                                                                                                         |
+| k 3                                       | 37/48  | 2               | 1             | 0.368    | vs k 5: hidden +4.2 (−8.3..+16.7, `pair.py`), n.s.                                                      |
+| + the note                                | 33/48  | 0               | 0             | 0.340    | vs k 5 (`pair.py`): $/1k −0.046 control, −0.036 neutral; carried into the final arm, removed after D257 |
+| + the reader on the agent's asks (hybrid) | 36/48  | 2               | 1             | 0.531    | Eden +$0.10–0.22/1k, no gain: **deleted**                                                               |
 
 The regrade of seed 41's concerns (Haiku, `--only-concerns`): 6 of 6 control concerns kept, the 1 neutral one a
 grader error. The pool-order arm's one control concern is the agent reporting that an access ticket was already
@@ -132,47 +139,48 @@ python3 -I packages/sim/lab/cl6/pair.py R/cl6-short-pay-4{1,2}.json R/tools-shor
 
 ### Cost, $ per 1,000 tasks, steady state on the 1:1:8 mix (`pi-cost-report.ts`, billed)
 
-| | Short, signals | Short, payload | Long, signals | Long, payload |
-| --- | --- | --- | --- | --- |
-| tools | 0.368 | 0.366 (reused, seed 41) | 0.317 | (0.317, signals run) |
-| default | 0.631 (agent 0.325 + Eden 0.283) | 0.665 | 0.568 | 0.529 |
-| **cand** | **0.338** (agent 0.332, Eden 0) | **0.415** | **0.326** (bg cards 0.018) | **0.338** |
-| Agent alone, fixed prices (cache-neutral): tools / default / cand | 0.562 / 0.415 / 0.453 | 0.566 / 0.417 / 0.459 | 0.972 / 0.860 / 0.842 | — / 0.747 / 0.854 |
+|                                                                   | Short, signals                   | Short, payload          | Long, signals              | Long, payload        |
+| ----------------------------------------------------------------- | -------------------------------- | ----------------------- | -------------------------- | -------------------- |
+| tools                                                             | 0.368                            | 0.366 (reused, seed 41) | 0.317                      | (0.317, signals run) |
+| default                                                           | 0.631 (agent 0.325 + Eden 0.283) | 0.665                   | 0.568                      | 0.529                |
+| **cand**                                                          | **0.338** (agent 0.332, Eden 0)  | **0.415**               | **0.326** (bg cards 0.018) | **0.338**            |
+| Agent alone, fixed prices (cache-neutral): tools / default / cand | 0.562 / 0.415 / 0.453            | 0.566 / 0.417 / 0.459   | 0.972 / 0.860 / 0.842      | — / 0.747 / 0.854    |
 
 Paired, `cand − default` (bootstrap 95% over tasks; `pi-ab-report.ts`, `pair.py`):
 
-| | Hidden raised | $/1k hidden / control / neutral | Wall hidden / control / neutral (s) |
-| --- | --- | --- | --- |
-| Short, signals | −3.5 (−11.3..+4.2) | −0.236 / −0.289 / −0.301 | −0.60 / −0.62 / −0.90 (all n.s.) |
-| Short, payload | −2.8 (−10.4..+4.9) | −0.202 / −0.247 / −0.256 | −0.99 / −1.42 / −1.37 (all exclude 0) |
-| Long, signals | −4.3 (−21.7..+8.7) | −0.201 / −0.263 / −0.266 | −0.62 / −0.64 / −0.91 (all exclude 0) |
-| Long, payload | −8.7 (−21.7..+0.0) | −0.131 / −0.184 / −0.222 | −0.23 (n.s.) / −0.48 / −0.70 |
-| **Pooled, all four** | **−3.6 (−8.4..+1.2)**, n = 332 | | |
+|                      | Hidden raised                  | $/1k hidden / control / neutral | Wall hidden / control / neutral (s)   |
+| -------------------- | ------------------------------ | ------------------------------- | ------------------------------------- |
+| Short, signals       | −3.5 (−11.3..+4.2)             | −0.236 / −0.289 / −0.301        | −0.60 / −0.62 / −0.90 (all n.s.)      |
+| Short, payload       | −2.8 (−10.4..+4.9)             | −0.202 / −0.247 / −0.256        | −0.99 / −1.42 / −1.37 (all exclude 0) |
+| Long, signals        | −4.3 (−21.7..+8.7)             | −0.201 / −0.263 / −0.266        | −0.62 / −0.64 / −0.91 (all exclude 0) |
+| Long, payload        | −8.7 (−21.7..+0.0)             | −0.131 / −0.184 / −0.222        | −0.23 (n.s.) / −0.48 / −0.70          |
+| **Pooled, all four** | **−3.6 (−8.4..+1.2)**, n = 332 |                                 |                                       |
 
 Paired, `cand − tools`:
 
-| | Hidden raised | $/1k hidden / control / neutral |
-| --- | --- | --- |
-| Short, signals (same run) | +58.9 (+49.6..+67.4) | −0.053 (−0.082..−0.024) / −0.047 (−0.072..−0.020) / −0.025 (−0.052..+0.001) |
-| Short, payload (tools from the signals run) | +61.3 | +0.042 / +0.031 / +0.050 (all exclude 0; billed, cache varies across runs) |
-| Long, signals (same run) | +56.5 (+34.8..+78.3) | +0.021 / −0.054 / −0.008 (all n.s.) |
-| Long, payload (tools from the signals run) | +52.2 | +0.031 / −0.052 / +0.007 (all n.s.) |
+|                                             | Hidden raised        | $/1k hidden / control / neutral                                             |
+| ------------------------------------------- | -------------------- | --------------------------------------------------------------------------- |
+| Short, signals (same run)                   | +58.9 (+49.6..+67.4) | −0.053 (−0.082..−0.024) / −0.047 (−0.072..−0.020) / −0.025 (−0.052..+0.001) |
+| Short, payload (tools from the signals run) | +61.3                | +0.042 / +0.031 / +0.050 (all exclude 0; billed, cache varies across runs)  |
+| Long, signals (same run)                    | +56.5 (+34.8..+78.3) | +0.021 / −0.054 / −0.008 (all n.s.)                                         |
+| Long, payload (tools from the signals run)  | +52.2                | +0.031 / −0.052 / +0.007 (all n.s.)                                         |
 
 ### Facts, concerns, time
 
-| | Short sig: tools / default / cand | Short pay: default / cand | Long sig: tools / default / cand | Long pay: default / cand |
-| --- | --- | --- | --- | --- |
-| Hidden raised | 17/142 / 107/143 / 102/143 | 110/144 / 106/144 | 2/23 / 16/23 / 15/23 | 16/23 / 14/23 |
-| False concern (control, graded) | 0 / 1 / 3 | 3 / 3 | 0 / 0 / 1 | 0 / 1 |
-| Any concern (neutral, graded) | 2 / 0 / 2 | 0 / 2 | 4 / 5 / 1 | 2 / 3 |
-| Wall p50 / p90, mix (s) | 4.97 / 9.37, 6.20 / 9.98, 5.59 / 10.20 | 4.63 / 5.95, 3.33 / 4.59 | 2.74 / 4.70, 3.34 / 5.92, 2.78 / 3.81 | 2.92 / 5.21, 2.59 / 3.66 |
-| Eden on the path, mean ms a task | — / 3,032 / 1,689 | 1,080 / 11 | — / 1,505 / 956 | 1,269 / 677 |
-| Reader calls a task | — / 0.98 / 0 | 0.99 / 0 | — / 0.93 / 0 | 0.92 / 0 |
-| Agent input / output tokens (neutral) | 2,683 / 570, 1,950 / 525, 2,261 / 481 | 1,908 / 515, 2,283 / 478 | 7,736 / 355, 7,071 / 340, 6,818 / 296 | 6,055 / 319, 6,849 / 316 |
-| Agent `ask_context` and search calls a task | 3.41 / 0.99 / 0.81 | 1.00 / 0.80 | 1.65 / 0.37 / 0.08 | 0.27 / 0.08 |
-| Eden connector calls a task | — / 6.78 / 8.36 | 0 / 0 | — / 4.99 / 6.38 | 1.19 / 2.25 |
+|                                             | Short sig: tools / default / cand      | Short pay: default / cand | Long sig: tools / default / cand      | Long pay: default / cand |
+| ------------------------------------------- | -------------------------------------- | ------------------------- | ------------------------------------- | ------------------------ |
+| Hidden raised                               | 17/142 / 107/143 / 102/143             | 110/144 / 106/144         | 2/23 / 16/23 / 15/23                  | 16/23 / 14/23            |
+| False concern (control, graded)             | 0 / 1 / 3                              | 3 / 3                     | 0 / 0 / 1                             | 0 / 1                    |
+| Any concern (neutral, graded)               | 2 / 0 / 2                              | 0 / 2                     | 4 / 5 / 1                             | 2 / 3                    |
+| Wall p50 / p90, mix (s)                     | 4.97 / 9.37, 6.20 / 9.98, 5.59 / 10.20 | 4.63 / 5.95, 3.33 / 4.59  | 2.74 / 4.70, 3.34 / 5.92, 2.78 / 3.81 | 2.92 / 5.21, 2.59 / 3.66 |
+| Eden on the path, mean ms a task            | — / 3,032 / 1,689                      | 1,080 / 11                | — / 1,505 / 956                       | 1,269 / 677              |
+| Reader calls a task                         | — / 0.98 / 0                           | 0.99 / 0                  | — / 0.93 / 0                          | 0.92 / 0                 |
+| Agent input / output tokens (neutral)       | 2,683 / 570, 1,950 / 525, 2,261 / 481  | 1,908 / 515, 2,283 / 478  | 7,736 / 355, 7,071 / 340, 6,818 / 296 | 6,055 / 319, 6,849 / 316 |
+| Agent `ask_context` and search calls a task | 3.41 / 0.99 / 0.81                     | 1.00 / 0.80               | 1.65 / 0.37 / 0.08                    | 0.27 / 0.08              |
+| Eden connector calls a task                 | — / 6.78 / 8.36                        | 0 / 0                     | — / 4.99 / 6.38                       | 1.19 / 2.25              |
 
-- **Concerns regraded** (`regrade.ts --only-concerns`, Haiku, $0.003 for all eight files), then read. Kept, Eden
+- **Concerns regraded** (`regrade.ts --only-concerns`, Haiku, $0.003 for all eight files; summaries in
+  `packages/sim/lab/cl6/regrade/`), then read. Kept, Eden
   arms pooled over both push modes, against the default paired: short control 3/287 against 2/287 (+0.35 points,
   −0.70..+1.39); short neutral 4/288 against 0/288 (+1.39, +0.35..+2.78); long control 2/46 against 0/46 (+4.35,
   +0.00..+10.87); long neutral 3/372 against 5/372 (−0.54, −2.15..+0.81). Read: the short control concerns of `cand`
@@ -188,6 +196,34 @@ Paired, `cand − tools`:
 - The signals runs were four processes at once on the 4-core box, and the reader's p90 rose to 2.6 s (mean 2.3 s,
   short): the default's latency is overstated there; the payload runs (three processes) are cleaner (reader p50
   1,050 ms, p90 1,465 ms).
+
+### 4b. Re-run against the merged default (CL2's `readerStopEarly` on, CL7's D257), payload notices
+
+After CL2 (D240: the reader stops after its binding entries, $0.00024 and ~0.87 s a call) and CL7 (D257: no
+"nothing found" note) merged, the promoted shape (the note removed, the excerpt capped) was run against that default:
+`eden` (candidates) and `eden~rd` (`pushCandidates: 0`), payload notices, same plan as §4 (`m-short-pay-*`,
+`m-long-pay-*` in `packages/sim/lab/cl6/`; tools from the §4 signals runs, cross-run).
+
+|                                                   | Short: tools / reader default / cand    | Long: tools / reader default / cand     |
+| ------------------------------------------------- | --------------------------------------- | --------------------------------------- |
+| Steady $/1k, mix (billed)                         | 0.368 (signals run) / 0.612 / **0.428** | 0.317 (signals run) / 0.494 / **0.366** |
+| Split: agent + Eden + background                  | 0.374 / 0.383 + 0.228 / 0.431 + 0       | 0.316 / 0.288 + 0.207 / 0.346 + 0.020   |
+| Agent at fixed prices (cache-neutral)             | 0.562 / 0.428 / 0.456                   | 0.972 / 0.792 / 0.960                   |
+| Hidden raised                                     | 17/142 / 111/144 / 104/144              | 2/23 / 15/23 / 14/23                    |
+| False concern (control) / any (neutral), regraded | — / 2, 3 / 2, 0                         | — / 0, 3 / 0, 2                         |
+| Wall p50 / p90, mix (s)                           | 4.97 / 9.37, 4.36 / 5.80, 3.28 / 4.38   | 2.74 / 4.70, 2.90 / 5.63, 2.74 / 3.79   |
+| Eden on the path, mean ms                         | — / 984–1,027 / 10–11                   | — / 1,205–1,359 / 676–902               |
+| Reader calls a task (p50 ms)                      | — / 0.97 (956) / 0                      | — / 0.91 (931) / 0                      |
+
+Paired `cand − reader default`: short $/1k −0.185 / −0.171 / −0.185 (hidden, control, neutral; all exclude 0), wall
+−1.10 / −1.33 / −1.18 s (all exclude 0), hidden −4.9 points (−11.8..+2.1); long $/1k −0.129 / −0.150 / −0.150 (all
+exclude 0), wall −0.45 (−0.94..−0.01) / −0.20 (n.s.) / −0.61 s (−0.80..−0.42), hidden −4.3 (−21.7..+8.7). Pooled
+over both: hidden −4.8 points (−10.8..+1.2, n = 167), control concerns 2 against 2, neutral 2 against 6 (regraded).
+`cand − tools` (cross-run, billed): short +0.051 / +0.058 / +0.061 (all exclude 0), long +0.045 (n.s.) / +0.000 /
++0.032 (+0.010..+0.056). As billed with payload notices, Eden with candidates is still $0.03–0.06 per 1,000 tasks
+above the agent alone; the agent's billed cost with tools gains most from prompt caching (0.374 billed against 0.562
+at fixed prices), the agent with candidates least (0.431 against 0.456). Spend for §4b: $0.775 (ledger runs
+`cl6-m-*`).
 
 ### Eval
 
@@ -209,15 +245,16 @@ Paired, `cand − tools`:
 
 ## Spend (ledger `.local/cl6/ledger.jsonl`)
 
-| Ledger runs | What | $ |
-| --- | --- | --- |
-| cl6-smoke | wiring smoke (24 tasks × 2) | 0.036 |
-| cl6-scr41, cl6-scr42 | live screens | 0.596 |
-| cl6-short-sig-41/42, cl6-long-sig-41/42 | final, signals (tools, default, cand) | 1.022 |
-| cl6-short-pay-41/42, cl6-long-pay-41/42 | final, payload (default, cand) | 0.784 |
-| cl6-*-regrade | concern regrades | 0.003 |
-| cl6-eval-live | the shipped live eval (no reader call) | 0.000 |
-| **Total** | | **2.441** |
+| Ledger runs                                              | What                                   | $         |
+| -------------------------------------------------------- | -------------------------------------- | --------- |
+| cl6-smoke                                                | wiring smoke (24 tasks × 2)            | 0.036     |
+| cl6-scr41, cl6-scr42                                     | live screens                           | 0.596     |
+| cl6-short-sig-41/42, cl6-long-sig-41/42                  | final, signals (tools, default, cand)  | 1.022     |
+| cl6-short-pay-41/42, cl6-long-pay-41/42                  | final, payload (default, cand)         | 0.784     |
+| cl6-*-regrade                                            | concern regrades                       | 0.003     |
+| cl6-eval-live                                            | the shipped live eval (no reader call) | 0.000     |
+| cl6-m-short-pay-41/42, cl6-m-long-pay-41/42 (+ regrades) | §4b, against the merged default        | 0.775     |
+| **Total**                                                |                                        | **3.216** |
 
 ## Caveats
 
