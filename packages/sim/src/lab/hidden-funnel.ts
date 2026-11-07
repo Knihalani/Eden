@@ -77,6 +77,8 @@ import {
   AskReader,
   CardEnricher,
   cardKey,
+  intentCut,
+  intentReach,
   ModelReaderMaker,
   type ReaderReport,
   ContextPartner,
@@ -808,10 +810,11 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       const text = sanitizeForStore(question).slice(0, INTENT_QUERY_CHARS);
       const accept = (x: string) => cache.get(scope, x, clock) !== null;
       const size0 = cards.intentSize(scope);
-      const cut = cards.intentFinds(scope, text, askAt, RUN.intentHits, accept);
+      const rule = intentCut(RUN);
+      const cut = cards.intentFinds(scope, text, askAt, intentReach(rule), accept);
       const all = cards.intentFinds(scope, text, askAt, cards.intentSize(scope), accept);
       diagDropped += size0 - cards.intentSize(scope);
-      intent = intentPlace(cut, all, item.id, RUN.intentMinMatched, RUN.intentMinCoverage, RUN.intentHits);
+      intent = intentPlace(cut, all, item.id, rule.minMatched, rule.minCoverage, rule.hits, rule.byKind);
     }
     return {
       cardRead,
@@ -820,6 +823,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       // -1: the replay has no line for its content ("not in replay", told apart from a line with no requests).
       replayRequests: replay === null ? null : replay ? (cardMaker!.requests.get(hash)?.length ?? 0) : -1,
       heldRequests: held,
+      cardKind: cards.cardsOf(scope, [item.id], askAt).get(item.id)?.kind ?? "none",
       intent,
     };
   };

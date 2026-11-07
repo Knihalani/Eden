@@ -18,6 +18,8 @@
  * (cited by the ask with no flag and no delivery), and the planted items' coverage by the intent replay.
  */
 
+import { keepIntents, type IntentCut } from "@eden/engine";
+
 /** One planted item's coverage at its ask. */
 export interface AskCoverage {
   /** The lane's card model was sent this item's content (any enrichment call). */
@@ -34,6 +36,8 @@ export interface AskCoverage {
   replayRequests: number | null;
   /** Requests the engine held for it when the ask arrived (`CardEnricher.requestsOf`). */
   heldRequests: number;
+  /** The kind of the card the engine held for it at the ask (`none` with no constraint card); for per-kind splits. */
+  cardKind?: string;
   /**
    * Its hit for the ask's question in the user's intent index (`CardEnricher.intentFinds`, the question as the engine
    * reads it, requests made before the ask arrived): coverage, matched terms, whether both pass the thresholds, its
@@ -44,20 +48,20 @@ export interface AskCoverage {
   intent: { coverage: number; matched: number; passes: boolean; rank: number; pastCut: boolean } | null;
 }
 
-/** One hit of `CardEnricher.intentFinds`: the items holding a request, and how well it matches the question. */
+/** One hit of `CardEnricher.intentFinds`: the items holding a request, how well it matches, whether it is carded. */
 export interface IntentFindRow {
   ids: readonly string[];
   hit: { matched: number; coverage: number };
+  carded?: boolean;
 }
 
 /**
- * The planted item's intent hit for the question, as partner.ts's `intentFinds` (:4466-4486) reads
- * `CardEnricher.intentFinds` (cards.ts:1091-1116): the engine asks the store for `hits` raw hits (`cut`: the call
- * with k = `intentHits`), then keeps a hit with at least `minMatched` terms and `minCoverage` coverage, each kept
- * hit's ids not already placed taking the next places (0-based) until `hits` ids are placed. An item placed there has
- * its rank. Otherwise its first passing hit in `all` (an unbounded call: every hash the user holds) is returned with
- * rank -1 and `pastCut` true: it passes, but the engine never sees it. With none, its first hit in `all` is returned
- * with `passes` false. Null when no hit holds it. Pure.
+ * The planted item's intent hit for the question, as partner.ts's `intentFinds` reads `CardEnricher.intentFinds`
+ * (cards.ts): the engine asks the store for `intentReach` raw hits (`cut`) and keeps them by `keepIntents`
+ * (intent.ts, the engine's own function: thresholds, at most `hits` ids, and with `byKind` (D200) a constraint card's
+ * own threshold and extra places). An item placed there has its rank. Otherwise its first passing hit in `all` (an
+ * unbounded call: every hash the user holds) is returned with rank -1 and `pastCut` true: it passes, but the engine
+ * never sees it. With none, its first hit in `all` is returned with `passes` false. Null when no hit holds it. Pure.
  */
 export function intentPlace(
   cut: readonly IntentFindRow[],
@@ -66,26 +70,18 @@ export function intentPlace(
   minMatched: number,
   minCoverage: number,
   hits: number,
+  byKind: IntentCut["byKind"] = null,
 ): AskCoverage["intent"] {
-  const passes = (h: IntentFindRow["hit"]) => h.matched >= minMatched && h.coverage >= minCoverage;
-  const placed = new Set<string>();
-  // The engine's loop: at most `hits` raw hits (the store's own cut), thresholds after, at most `hits` ids.
-  for (const { ids, hit } of cut.slice(0, hits)) {
-    if (!passes(hit)) continue;
-    for (const id of ids) {
-      if (placed.size >= hits) break;
-      if (placed.has(id)) continue;
-      if (id === itemId) {
-        return { coverage: hit.coverage, matched: hit.matched, passes: true, rank: placed.size, pastCut: false };
-      }
-      placed.add(id);
-    }
-  }
+  const rule: IntentCut = { hits, minCoverage, minMatched, byKind };
+  const passes = (r: IntentFindRow) =>
+    r.hit.matched >= minMatched && r.hit.coverage >= (byKind && r.carded ? byKind.cardCoverage : minCoverage);
+  const kept = keepIntents(cut, rule).get(itemId);
+  if (kept) return { coverage: kept.coverage, matched: kept.matched, passes: true, rank: kept.rank, pastCut: false };
   let failing: AskCoverage["intent"] = null;
-  for (const { ids, hit } of all) {
-    if (!ids.includes(itemId)) continue;
-    if (passes(hit)) return { coverage: hit.coverage, matched: hit.matched, passes: true, rank: -1, pastCut: true };
-    failing ??= { coverage: hit.coverage, matched: hit.matched, passes: false, rank: -1, pastCut: false };
+  for (const r of all) {
+    if (!r.ids.includes(itemId)) continue;
+    if (passes(r)) return { coverage: r.hit.coverage, matched: r.hit.matched, passes: true, rank: -1, pastCut: true };
+    failing ??= { coverage: r.hit.coverage, matched: r.hit.matched, passes: false, rank: -1, pastCut: false };
   }
   return failing;
 }

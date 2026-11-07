@@ -12,7 +12,7 @@
 import { appendFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
-import { cardKey, ItemCache, type Card, type CardMaker } from "@eden/engine";
+import { cardKey, ItemCache, type Card, type CardMaker, type IntentPrompt } from "@eden/engine";
 import type { ContextItem } from "@eden/protocol";
 import { INTENT_INERT } from "./reader-stub";
 import { parseSuites } from "./suites";
@@ -215,7 +215,13 @@ export class DiskCardMaker implements CardMaker {
     if (!options.shared && options.out) for (const [h, c] of loadCards(options.out)) this.cards.set(h, c);
   }
 
-  async make(items: ContextItem[], today: string, signal: AbortSignal, retry = false, intent = false) {
+  async make(
+    items: ContextItem[],
+    today: string,
+    signal: AbortSignal,
+    retry = false,
+    intent: boolean | IntentPrompt = false,
+  ) {
     const got = await this.makeCards(items, today, signal, retry, intent);
     if (!intent) return got;
     const requests = items.map((it) => this.requests.get(cardKey(it)) ?? null);
@@ -224,7 +230,13 @@ export class DiskCardMaker implements CardMaker {
     return { ...got, cards, requests };
   }
 
-  private async makeCards(items: ContextItem[], today: string, signal: AbortSignal, retry: boolean, intent: boolean) {
+  private async makeCards(
+    items: ContextItem[],
+    today: string,
+    signal: AbortSignal,
+    retry: boolean,
+    intent: boolean | IntentPrompt,
+  ) {
     const out: (Card | null)[] = [];
     const missing: number[] = [];
     // Items whose card a call (this one's, or another stream's) is making: filled in when it settles.

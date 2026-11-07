@@ -60,10 +60,24 @@ export {
   type Action,
   type Card,
   type CardBatch,
+  type IntentPrompt,
   type CardKind,
   type CardMaker,
 } from "./cards";
-export { cleanRequests, IntentIndex, intentTerms, stemWord, INTENT_VERSION } from "./intent";
+export {
+  cleanRequests,
+  IntentIndex,
+  intentCut,
+  intentReach,
+  intentTerms,
+  keepIntents,
+  stemWord,
+  INTENT_VERSION,
+  INTENT_AGENT_VERSION,
+  type IntentCut,
+  type IntentKept,
+  type IntentRow,
+} from "./intent";
 export { predict } from "./anticipate";
 export {
   AskReader,

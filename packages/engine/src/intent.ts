@@ -17,10 +17,13 @@
  */
 import { SparseIndex, Vocab } from "@eden/primitives";
 import { sanitizeForStore } from "@eden/redact";
+import type { EngineConfig } from "./config";
 import { isStopword } from "./text";
 
 /** The version of the requests' prompt (`cards.ts` `INTENT_INSTRUCTIONS`): a disk cache of requests is keyed by it. */
 export const INTENT_VERSION = 2;
+/** The version of `intentAgentPhrasing`'s prompt (`cards.ts` `INTENT_AGENT_INSTRUCTIONS`, D201): its own cache. */
+export const INTENT_AGENT_VERSION = 3;
 /** Requests kept per item, and characters per request: model output is bounded like any input. */
 export const MAX_REQUESTS = 4;
 export const MAX_REQUEST_CHARS = 120;
@@ -159,4 +162,92 @@ export class IntentIndex {
     for (const [hash, text] of this.texts) this.add(hash, text);
     this.baseline = this.vocab.size;
   }
+}
+
+/** One raw hit as `CardEnricher.intentFinds` returns it: the cached items holding the requests, and the match. */
+export interface IntentRow {
+  ids: readonly string[];
+  hit: { coverage: number; matched: number };
+  /** The content holds a constraint card (any kind but `none`, made before the request). */
+  carded?: boolean;
+}
+
+/** The thresholds and cut `keepIntents` applies (`EngineConfig`'s `intent*` keys). */
+export interface IntentCut {
+  /** Raw hits read, and ids kept, at most (`intentHits`). */
+  hits: number;
+  minCoverage: number;
+  minMatched: number;
+  /**
+   * `intentByKind` (D200, a trial): a constraint-carded hit counts from `cardCoverage` of the request's idf rather than
+   * `minCoverage`, and up to `cardHits` such hits past the first `hits` raw hits (or past the `hits` ids) are kept
+   * after the others. Null: one threshold for every hit, as before.
+   */
+  byKind: { cardCoverage: number; cardHits: number } | null;
+}
+
+/** An item kept from the intent hits: its place (0-based) and its match. */
+export interface IntentKept {
+  rank: number;
+  coverage: number;
+  matched: number;
+}
+
+/** The cut an engine configuration applies (`intentByKind` off: one threshold, as before D200). */
+export function intentCut(
+  c: Pick<
+    EngineConfig,
+    "intentHits" | "intentMinCoverage" | "intentMinMatched" | "intentByKind" | "intentCardCoverage" | "intentCardHits"
+  >,
+): IntentCut {
+  return {
+    hits: c.intentHits,
+    minCoverage: c.intentMinCoverage,
+    minMatched: c.intentMinMatched,
+    byKind: c.intentByKind ? { cardCoverage: c.intentCardCoverage, cardHits: c.intentCardHits } : null,
+  };
+}
+
+/**
+ * With `intentByKind`, carded hits are looked for this many times `intentHits` deep: a carded item under the shared
+ * threshold ranks low by BM25, behind uncarded hits that fill the first `intentHits`. On train, 1x `intentHits` raw
+ * hits found 6 of the 9 hidden facts 3x found, at 2 decoys in pool more for 3x (fix-s3a-intent.md).
+ */
+const CARD_REACH = 3;
+
+/** How many raw hits to ask the store for under `cut`: a constraint card's extra seats read further down. */
+export function intentReach(cut: IntentCut): number {
+  return cut.byKind && cut.byKind.cardHits > 0 ? cut.hits * CARD_REACH : cut.hits;
+}
+
+/**
+ * The raw hits (best first) that count as intent hits, item id → place. A hit counts with at least `minMatched` of
+ * the request's terms and its threshold's share of their idf; its ids take the next places until `hits` ids are
+ * placed, over the first `hits` raw hits only. With `byKind`, a constraint-carded hit's threshold is `cardCoverage`,
+ * and carded hits left out by either cut take up to `cardHits` places after the others: a stated constraint is what
+ * the reader is there to judge, and on train the carded misses were mostly hidden facts, the uncarded mostly decoys
+ * (docs/research/fix-s3a-intent.md). Pure; no model, no call.
+ */
+export function keepIntents(rows: readonly IntentRow[], cut: IntentCut): Map<string, IntentKept> {
+  const out = new Map<string, IntentKept>();
+  const by = cut.byKind;
+  const passes = (r: IntentRow) =>
+    r.hit.matched >= cut.minMatched && r.hit.coverage >= (by && r.carded ? by.cardCoverage : cut.minCoverage);
+  const place = (r: IntentRow, until: number) => {
+    for (const id of r.ids) {
+      if (out.size >= until) return;
+      if (!out.has(id)) out.set(id, { rank: out.size, coverage: r.hit.coverage, matched: r.hit.matched });
+    }
+  };
+  for (const r of rows.slice(0, cut.hits)) {
+    if (out.size >= cut.hits) break;
+    if (passes(r)) place(r, cut.hits);
+  }
+  if (!by || by.cardHits <= 0) return out;
+  const until = out.size + by.cardHits;
+  for (const r of rows) {
+    if (out.size >= until) break;
+    if (r.carded && passes(r)) place(r, until);
+  }
+  return out;
 }
