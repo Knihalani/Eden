@@ -105,8 +105,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **The enricher's drain timing is part of the default's behaviour.** In the funnel cards drain while tasks run, so a
   change that adds an `await` or an async helper to `CardEnricher.drain`'s live path moves which items land before
   which request (CL3 measured 822 calls becoming 732 and 86 reader replay misses from one extra async hop). Re-run the
-  default funnel after touching it (since D244: `cards use` 504 calls, recipe 2a 643 replayed, 0 misses). D242's bulk round (Message Batches) and D243's
-  request cap were deleted; their code is in commit 4e072585.
+  default funnel after touching it (since D244: `cards use` 504 calls, recipe 2a 643 replayed, 0 misses). D242's
+  bulk round (Message Batches) and D243's request cap were deleted; their code is in commit 4e072585.
 - `ModelCardMaker` sends no reasoning field and has no option to send one (D149 made "off" the default, amending
   D59; D155 deleted the option): the request every lab card and intent figure measured (all 5,158 `eden.cards` ledger
   rows ran with thinking off). Effort "low" was 1.82x slower at p50 and 1.54x dearer on Haiku 5.5 (docs/COST-MODEL.md,
