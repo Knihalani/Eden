@@ -75,12 +75,6 @@ export interface SyncOptions {
    * the bound on a lost notification (`syncPushMaxStaleMs`); 0 or absent: `maxStaleMs`.
    */
   pushMaxStaleMs?: number;
-  /**
-   * Trial `syncCarriedSweepMs` (A8): with `push`, a notifying source whose notifications carry their changes (items
-   * through `ingest`, removals through `carried`) and that has had no bare notification since is swept this often (ms)
-   * instead of every `sweepMs`. 0 or absent: every source every `sweepMs`.
-   */
-  carriedSweepMs?: number;
 }
 
 export interface SyncDeps {
@@ -127,7 +121,7 @@ interface SourceSync {
    * The sweep under way, read across ticks: its next page and every id it (or any other read of the source since it
    * began: a poll, a lookup's on-demand poll) has seen listed.
    */
-  sweep: { cursor: string | undefined; seen: Set<string>; bareNotices: number } | null;
+  sweep: { cursor: string | undefined; seen: Set<string> } | null;
   /**
    * Ids the last complete sweep did not list. An item is dropped only when two sweeps in a row miss it: an offset
    * listing shifts under a delete or an update between pages, so one sweep can skip an item the source still has.
@@ -157,18 +151,6 @@ interface SourceSync {
    * until read again (`signalledSince`).
    */
   noticedMark: number;
-  /**
-   * Trial `syncCarriedSweepMs`: the source's notifications carry their changes (items were stored from one, or a
-   * removal came), so a deletion reaches Eden as a removal and the sweep is only the bound on a lost one.
-   */
-  carries: boolean;
-  /**
-   * Bare notifications so far, and whether one came after the last complete sweep began: a bare notice may stand for
-   * a deletion only a sweep finds, so the trial's longer cadence waits until a sweep begun after it has completed
-   * (items or removals arriving after it do not clear it, nor does a sweep already under way when it came).
-   */
-  bareNotices: number;
-  bareSinceSweep: boolean;
   /** `notices` when the last complete poll began: the copy is behind while they differ. */
   noticesPolled: number;
   /** `notices` when the backfill's latest page began: what the backfill has read when it ends (`warmUp`). */
@@ -282,9 +264,6 @@ export class SyncManager {
     if (!s || !s.notifies) return false;
     s.notices++;
     s.noticedMark = ++this.marks;
-    // A bare notification: this change, a deletion included, may reach Eden only through a poll or a sweep.
-    s.bareNotices++;
-    s.bareSinceSweep = true;
     return true;
   }
 
@@ -307,9 +286,6 @@ export class SyncManager {
     const u = this.users.get(scopeKey(scope));
     const s = u?.sources.get(sourceId);
     if (!u || !s || s.phase !== "warm") return 0;
-    // Stored as synced (below): the integrator forwards changes with their items. A notice during a backfill is
-    // dropped here, so it says nothing yet.
-    if (items.length > 0) s.carries = true;
     // Only what the push changed is marked: a replayed, unchanged item was synced before and is a true boundary.
     const changed = new Set<string>();
     // Read under the mark its signal set (`sourceChanged` comes first): no doubt of what it brought.
@@ -320,15 +296,6 @@ export class SyncManager {
     }
     while (s.pushed.size > MAX_PUSHED) s.pushed.delete(s.pushed.keys().next().value as string);
     return n;
-  }
-
-  /**
-   * A deletion notification for the source (`ContextPartner.sourceRemoved`): its notifications carry their changes
-   * (trial `syncCarriedSweepMs`). O(1), no I/O.
-   */
-  carried(scope: Scope, sourceId: string): void {
-    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
-    if (s) s.carries = true;
   }
 
   /**
@@ -441,15 +408,6 @@ export class SyncManager {
 
   // ── internals ──
 
-  /** How often a source is swept: `sweepMs`, or the trial's `carriedSweepMs` for one whose notices carry changes. */
-  private sweepEvery(s: SourceSync): number {
-    const carried = this.o.carriedSweepMs ?? 0;
-    // Daily while a bare notice is unswept, or while the last sweep missed an item: dropping it takes a second miss
-    // (D57), which should not wait the trial's cadence.
-    const longer = this.o.push && s.notifies && s.carries && !s.bareSinceSweep && s.missed.size === 0;
-    return longer && carried > 0 ? carried : this.o.sweepMs;
-  }
-
   private isCurrent(s: SourceSync, now: number): boolean {
     if (s.phase !== "warm") return false;
     const age = now - s.polledAt;
@@ -510,8 +468,7 @@ export class SyncManager {
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);
         if (!source || s.phase !== "warm" || s.busy || now < s.retryAt) return;
-        if (s.sweep !== null || now - s.sweptAt >= this.sweepEvery(s))
-          await this.run(s, () => this.sweep(u, s, source));
+        if (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs) await this.run(s, () => this.sweep(u, s, source));
       }),
     );
   }
@@ -741,7 +698,7 @@ export class SyncManager {
     const started = this.deps.now();
     const notices = s.notices;
     const pushSeq = s.pushSeq;
-    s.sweep ??= { cursor: undefined, seen: new Set(), bareNotices: s.bareNotices };
+    s.sweep ??= { cursor: undefined, seen: new Set() };
     const sw = s.sweep;
     for (let p = 0; p < MAX_POLL_PAGES; p++) {
       if (u.gone) return;
@@ -774,8 +731,6 @@ export class SyncManager {
         s.missed = new Set(missed.filter((id) => !s.missed.has(id)));
         for (const id of gone) s.ids.delete(id);
         this.stats.deleted += this.deps.cache.dropSynced(u.scope, gone);
-        // A sweep begun after the last bare notice has looked for what it may have deleted.
-        if (sw.bareNotices === s.bareNotices) s.bareSinceSweep = false;
         s.sweep = null;
         s.sweptAt = this.deps.now();
         return;
@@ -903,9 +858,6 @@ function newSourceSync(id: string): SourceSync {
     notifies: false,
     notices: 0,
     noticedMark: 0,
-    carries: false,
-    bareNotices: 0,
-    bareSinceSweep: false,
     noticesPolled: 0,
     noticesBackfill: 0,
     pushed: new Map(),

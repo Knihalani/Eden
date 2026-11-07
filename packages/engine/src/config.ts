@@ -255,18 +255,6 @@ export interface EngineConfig {
    */
   syncPushMaxStaleMs: number;
   /**
-   * Trial (A8, D297; owner: repo owner; ends 2026-12-07; off: 0). With `syncPush`, a notifying source whose
-   * notifications carry their changes (`sourceItems` or `sourceRemoved` came, and no bare `sourceChanged` since) is
-   * re-listed whole (the sweep) this often (ms) instead of every `syncSweepMs`: its deletions arrive as removals, so
-   * the sweep is only the bound on a lost one. On a sim user (`days-calls.ts`, 24-hour days) the sweeps and polls are
-   * 11.7 listing calls a user-day across five sources (gmail's 8.4), each billed on a per-call connector platform. The
-   * daily sweep stands while a bare notification has come since the last complete sweep began (it may be a deletion
-   * only a sweep finds; items or removals after it do not lift that) and while the last sweep missed an item (its
-   * second miss drops it, D57). Any removal notice counts as carrying, unknown refs included. A lost removal is found
-   * up to this much later: with 20% of notices lost, deleted items delivered/cited 3/7 off, 4/10 on (quality-cli).
-   */
-  syncCarriedSweepMs: number;
-  /**
    * Every item about to be delivered (a packet or an `ask` answer, from the slow path, the reader's push or the
    * action firewall) whose source signalled a change after the copy was read (`Sync.signalledSince`, with
    * `syncPush`) is fetched again by its ref first (`SourceFanout.fetchChecked`, within `verifyTimeoutMs`, in parallel;
@@ -554,7 +542,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncLocalAll: true,
   syncPush: true,
   syncPushMaxStaleMs: 24 * 3_600_000,
-  syncCarriedSweepMs: 0,
   verifyDelivery: true,
   verifyTimeoutMs: 1_500,
   cards: true,
