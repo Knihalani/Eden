@@ -1,8 +1,8 @@
 /**
- * A16 (D336): how an integration keeps Eden's packets across a session's requests, as the Pi harness (`--days`, `--day`)
- * emulates it on the wire. Pi's prompt cache writes an entry only at a breakpoint (pi-ai puts one on the last tool, the
- * system prompt and the last message), so a packet removed from the transcript changes every later request's prefix
- * from where it stood (`session-cache-probe.ts`):
+ * A16 (D336): how an integration keeps Eden's packets across a session's requests, as the Pi harness (`--days`,
+ * `--day`) emulates it on the wire. Anthropic's prompt cache writes an entry only at a breakpoint (pi-ai puts one on
+ * the last tool, the system prompt and the last message), so a packet removed from the transcript changes every later
+ * request's prefix from where it stood (`session-cache-probe.ts`):
  *
  * - `kept`: each request's packets stay in the transcript where the agent saw them (the harness's default);
  * - `ephemeral`: only the current request's packets (`@eden/client`'s `withContext`, `@eden/proxy`): every earlier

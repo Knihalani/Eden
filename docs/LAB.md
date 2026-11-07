@@ -739,6 +739,27 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cache-probe.ts --suite train1
   --spend-ledger .local/a3/ledger.jsonl --spend-cap 2 --run-label a3-cache-probe
 ```
 
+**How packets stay across a session's requests (D336).** Pi keeps every request's packet in the day's transcript
+(`kept`); `withContext` and an agent that does not store the message it returns send only the current packet
+(`ephemeral`). On Anthropic's cache (entries end at breakpoints; pi-ai marks the last tool, the system prompt and the
+last message) a dropped packet changes every later request's prefix, so the history is written again. `+ephemeral` and
+`+ephemeralBp` (harness flags on a base with Eden, `--days` or `--day` only; `packet-layout.ts`) run those layouts, the
+second with a breakpoint on the request's user turn. `session-cache-probe.ts` (about $0.003) shows the mechanism on
+the wire over one session (`--dump` prints the bodies: pi-ai sends a system message placed before a user turn after it).
+`packages/sim/lab/a16/earlier.py` says where each hidden task's planted item reached the agent (this packet, an ask, only
+an earlier packet that day, nowhere). Measured (docs/research/a16-loop.md): ephemeral +$0.057/1k against kept over
+days; with the breakpoint −$0.038/1k, but both lose the items first shown in an earlier packet, which Eden does not send
+twice.
+
+```bash
+packages/sim/lab/a16/run.sh a16-long-41 payload tools,eden,eden+ephemeral,eden+ephemeralBp --seeds 41 --days 8 \
+  --budget 0.35                                                                       # and 42
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/session-cache-probe.ts --requests 6 \
+  --spend-ledger .local/a16/ledger.jsonl --spend-cap 2.5 --run-label a16-session-probe
+python3 -I packages/sim/lab/a16/earlier.py .local/a16/runs/a16-long-4{1,2}
+python3 -I packages/sim/lab/a16/turns.py .local/a16/runs/a16-long-4{1,2}   # output per tool turn and per final turn
+```
+
 ### 4b. Regrade with another grader, and cold-start cost
 
 - `regrade.ts --results F --graders claude-sonnet-5-5 --spend-ledger … --spend-cap …`: a `claude-*` grader goes

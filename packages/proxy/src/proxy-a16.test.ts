@@ -3,9 +3,9 @@ import { buildPartner, createHandler } from "@eden/server";
 import { StaticSource } from "@eden/sources";
 import { createProxy } from "./proxy";
 
-// A16 (D336, `keepPackets`, on by default): a packet the agent saw stays where it was on every later request, so the request
-// the upstream gets is the previous one plus what is new and the provider's prompt cache reads the history instead of
-// writing it again (docs/research/a16-loop.md: dropping it rewrote the whole session on Anthropic's cache).
+// A16 (D336, `keepPackets`, on by default): a packet the agent saw stays where it was on every later request, so the
+// request the upstream gets is the previous one plus what is new and the provider's prompt cache reads the history
+// instead of writing it again (docs/research/a16-loop.md: dropping it rewrote the whole session on Anthropic's cache).
 
 const KEY = "k_proxy_a16_0123456789abcd";
 const sources = new StaticSource("calendar", "The user's calendar", [

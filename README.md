@@ -73,7 +73,7 @@ hard spend cap (D128).
 **One line: put Eden in front of your model.** `EDEN_PROXY_UPSTREAM=https://api.openai.com/v1 bun run proxy` serves
 an OpenAI-compatible endpoint on `http://127.0.0.1:8791/v1`; point your agent's `base_url` there and send
 `x-eden-user-id` (or the body's `user`). Each chat request's new messages are reported to Eden and its context is
-inserted before the latest user message; the answer streams back unchanged, and with Eden down the request goes
+inserted before the latest user message, and kept there on later turns (D336); the answer streams back unchanged, and with Eden down the request goes
 through as it came (D280). Any OpenAI-compatible upstream works (OpenAI, OpenRouter, Anthropic's
 `https://api.anthropic.com/v1`, a local server). For full control, use the SDK:
 

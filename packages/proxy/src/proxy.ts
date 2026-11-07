@@ -362,9 +362,9 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
 }
 
 /**
- * `keepPackets` (D336, the default): the messages with each user message preceded by the packet text placed before it on an earlier
- * request, and the latest by this turn's packets (`withContext`'s place and form), which are kept for later requests
- * while the conversation's kept text stays under `MAX_KEPT_BYTES`. Null when nothing is inserted.
+ * `keepPackets` (D336, the default): the messages with each user message preceded by the packet text placed before it
+ * on an earlier request, and the latest by this turn's packets (`withContext`'s place and form), which are kept for
+ * later requests while the conversation's kept text stays under `MAX_KEPT_BYTES`. Null when nothing is inserted.
  */
 function keptInPlace(conv: Conversation, messages: Message[], packets: Injection[]): Message[] | null {
   const placed = (conv.placed ??= new Map());
