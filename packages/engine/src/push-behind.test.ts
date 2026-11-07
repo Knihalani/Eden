@@ -1,3 +1,4 @@
+import { hashString } from "@eden/primitives";
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
@@ -488,7 +489,10 @@ describe("revisionNotice beside the push's second reading (wave-1 review)", () =
     p.takePending({ ...user, sessionId: "s1" });
     // The session watches for revisions (it was handed a copy of something else).
     const P = p as any;
-    P.watchCopies(P.sessions.get("t1/u1#s1"), [{ id: N0, sourceId: "mail", version: 1 }]);
+    const n0 = P.deps.cache.get(user, N0, now());
+    P.watchCopies(P.sessions.get("t1/u1#s1"), [
+      { id: N0, sourceId: "mail", version: hashString(`${n0.title}\n${n0.text}`, 0) },
+    ]);
     advance(5 * HOUR);
     src.items = src.items.filter((i) => i.ref !== "hold");
     src.add(
@@ -512,5 +516,6 @@ describe("revisionNotice beside the push's second reading (wave-1 review)", () =
     const got = p.takePending({ ...user, sessionId: "s1" });
     const updated = got.filter((g) => g.reason.startsWith("updated:"));
     expect(cited(updated)).not.toContain(HOLD);
+    expect(cited(updated)).not.toContain(N0);
   });
 });

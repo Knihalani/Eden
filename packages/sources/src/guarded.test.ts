@@ -575,3 +575,40 @@ describe("SharedCalls (one lookup's planner and probes)", () => {
     expect(sharedKey("s", windowed)).not.toBe(sharedKey("s", q("")));
   });
 });
+
+describe("a refusal the connector's 429 caused is pushedBack until the bucket refills (D232)", () => {
+  for (const [msg, label] of [
+    ["429 Too Many Requests, retry after 0", "Retry-After 0"],
+    ["429 Too Many Requests, retry after 2", "Retry-After 2 s"],
+  ] as const) {
+    test(label, async () => {
+      let clock = 1_000_000;
+      let fail = true;
+      const src = {
+        id: "mail",
+        kind: "test",
+        description: "mail",
+        search: async () => [],
+        fetch: async (ref: string): Promise<ContextItem | null> => {
+          if (fail) {
+            fail = false;
+            throw new Error(msg);
+          }
+          return { id: `mail:${ref}`, sourceId: "mail", ref, title: "t", text: "x" };
+        },
+      } as Source;
+      const f = new SourceFanout({ sanitize: (i) => i, now: () => clock });
+      const scope = { tenantId: "t", userId: "u" };
+      expect(await f.fetchChecked(src, scope, "a", { timeoutMs: 1_000 })).toMatchObject({ why: "throttled" });
+      const seen: string[] = [];
+      for (let t = 0; t < 4_000; t += 50) {
+        const r = await f.fetchChecked(src, scope, "a", { timeoutMs: 1_000 });
+        if (r.status === "ok") break;
+        seen.push(r.status === "failed" ? `${r.guard ?? r.why}${r.pushedBack ? "/pb" : ""}` : r.status);
+        clock += 50;
+      }
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen.filter((x) => x === "limited")).toEqual([]);
+    });
+  }
+});

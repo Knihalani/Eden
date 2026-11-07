@@ -931,7 +931,13 @@ export class ContextPartner {
   takePending(ref: Scope & { sessionId: string }): Injection[] {
     const s = this.sessions.get(sessionKey(ref));
     if (!s) return [];
-    const out = this.withoutCoveredUpdates(s.pending.splice(0));
+    // "updated:" packets last: an older packet queued behind its item's update would otherwise leave the agent's last
+    // word on the item the old one (and queue the same update again at its hand-out).
+    const batch = this.withoutCoveredUpdates(s.pending.splice(0));
+    const out = [
+      ...batch.filter((i) => !i.reason.startsWith(UPDATED)),
+      ...batch.filter((i) => i.reason.startsWith(UPDATED)),
+    ];
     for (const injection of out) this.handOut(s, injection);
     return out;
   }

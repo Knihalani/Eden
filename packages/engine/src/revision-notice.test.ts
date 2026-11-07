@@ -524,3 +524,58 @@ test("a session's first packet, queued untaken when its item is revised: the upd
   expect(all.some((i) => i.text.includes("09:30"))).toBe(true);
   expect(updates(all).filter((i) => i.text.includes("11:30"))).toHaveLength(1);
 });
+
+describe("one revision, one update, whichever is queued first (D232)", () => {
+  for (const order of ["packet-first", "update-first"] as const) {
+    test(order, async () => {
+      const t = await setup();
+      const P = t.partner as any;
+      const first = await say(t.partner, "Remind me where the quarterly offsite is", "s1", t.now());
+      expect(cites(first, OFFSITE)).toBe(true);
+      const s = P.sessions.get("t/u#s1");
+      const v1 = P.deps.cache.get(scope, OFFSITE, t.now());
+      const v1copy = { ...v1, text: v1.text, title: v1.title };
+      t.advance(MIN);
+      const cue = { raw: "offsite", terms: new Uint32Array(0), entities: [], span: 0 };
+      // A slow-path packet built from the copy read before the revision.
+      const stale = () => P.build(s, [{ item: v1copy, score: 1 }], "proactive", "probe", cue, 0);
+      if (order === "packet-first") s.pending.push(stale());
+      await t.partner.sourceItems(scope, "notes", [
+        {
+          id: OFFSITE,
+          sourceId: "notes",
+          ref: "q1",
+          title: "Quarterly offsite",
+          text: "The quarterly offsite is in Lisbon at 11:30 on 12 November.",
+        },
+      ]);
+      if (order === "update-first") s.pending.push(stale());
+      const a = t.partner.takePending({ ...scope, sessionId: "s1" });
+      const b = t.partner.takePending({ ...scope, sessionId: "s1" });
+      expect(updates([...a, ...b]).filter((i) => i.text.includes("11:30"))).toHaveLength(1);
+      // The agent's last word on the item is the new one.
+      const last = [...a, ...b].filter((i) => cites([i], OFFSITE)).at(-1)!;
+      expect(last.text).toContain("11:30");
+    });
+  }
+});
+
+test("stopSync: a notice starts no revision poll until startSync (D232)", async () => {
+  const t = await setup();
+  const first = await say(t.partner, "Remind me where the quarterly offsite is", "s1", t.now());
+  expect(cites(first, OFFSITE)).toBe(true);
+  const lists = () => t.src().lists;
+  t.partner.stopSync();
+  move(t.src());
+  t.advance(MIN);
+  const before = lists();
+  t.partner.sourceChanged(scope, "notes");
+  await t.partner.revisionsSettled(scope);
+  expect(lists()).toBe(before);
+  t.partner.startSync(3_600_000);
+  t.advance(MIN);
+  t.partner.sourceChanged(scope, "notes");
+  await t.partner.revisionsSettled(scope);
+  t.partner.stopSync();
+  expect(lists()).toBeGreaterThan(before);
+});

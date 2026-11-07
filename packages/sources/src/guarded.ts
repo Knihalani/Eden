@@ -627,8 +627,9 @@ export class SourceFanout {
 
   /** Pushes the rate limit back after the connector's own rate-limit error, and notes until when (`FetchFailed`). */
   private pushBack(key: string, s: PerSource | undefined, ms: number): void {
-    this.rate.penalize(key, ms);
-    if (s && ms >= 0) s.pushedBackUntil = Math.max(s.pushedBackUntil ?? 0, this.now() + ms);
+    // Until the bucket is full again, not until the Retry-After ends: the refusals in between are the penalty's too.
+    const until = this.rate.penalize(key, ms);
+    if (s && until >= 0) s.pushedBackUntil = Math.max(s.pushedBackUntil ?? 0, until);
   }
 
   /** The source's recent latency quantile in ms (NaN if no calls yet), for observability. */
