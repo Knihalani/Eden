@@ -122,8 +122,9 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import { CANDIDATES_LEAD, citationsOf, PLAN_LEAD, renderPacket, shownText } from "./render";
+import { ASK_NUDGE, CANDIDATES_LEAD, citationsOf, PLAN_LEAD, renderPacket, shownText } from "./render";
 import { safeLine } from "./line";
+import { anchored, anchorsOf, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -204,6 +205,8 @@ export interface PushPoolReport {
   constraintLike: boolean[];
   /** The candidates handed (none when no pooled item is constraint-like). */
   handed: string[];
+  /** `askNudge` (D316): whether the handed candidates leave the request unsettled (the packet then nudges an ask). */
+  unsettled?: boolean;
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -309,6 +312,11 @@ interface Session {
    * most `MAX_SHOWN` items (oldest dropped first), so an answer does not repeat them.
    */
   shown?: Map<string, Set<string>>;
+  /**
+   * `askNudge` (D316, D317): the request a nudged candidates packet was queued for (`requests` then), its anchors,
+   * and the ids of the push pool's items past those handed, for the ask's deeper look in that request.
+   */
+  nudged?: { request: number; anchors: Anchors; deeper: string[] };
   /**
    * With `askReader`: the cue of the session's latest user request (its redacted words, names and days), so an ask
    * about it is read against what the user asked.
@@ -1563,6 +1571,24 @@ export class ContextPartner {
           )
         : null;
     if (reading) chosen = reading.chosen;
+    // `askNudge` (D316, D317): an ask in the request a nudged packet went out for also lists the push pool's items past
+    // those handed that hold one of the request's anchors (its current copies). They take at most half the answer's
+    // seats (rounded up), from the end, and never the ask's own first: the answer still cites at most `maxItems` (the
+    // protocol's bound) and keeps its best match for the question (none are added at `maxItems` 1).
+    if (!internal.push && this.config.askNudge && s.nudged?.request === s.requests) {
+      const { anchors, deeper } = s.nudged;
+      const have = new Set(chosen.map((x) => x.item.id));
+      const extra: Scored[] = [];
+      const seats = Math.min(Math.ceil(limit / 2), limit - 1);
+      for (const id of deeper) {
+        if (extra.length >= seats) break;
+        if (have.has(id)) continue;
+        const item = this.deps.cache.get(s.scope, id, this.now());
+        if (item && !bulkMail(item) && anchored(item, anchors))
+          extra.push({ item, score: 0, matched: 0, sketch: null });
+      }
+      chosen = [...chosen.slice(0, Math.max(0, limit - extra.length)), ...extra];
+    }
     // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
     // a proactive packet (queued, taken before its next model request); nothing else is answered or handed out.
     if (internal.push) {
@@ -1623,11 +1649,30 @@ export class ContextPartner {
       const injection =
         delivering && checked.length > 0
           ? candidates
-            ? this.deliver(s, checked, "proactive", `candidates:${cue.id}`, cue, undefined, this.candidateFrame())
+            ? this.deliver(
+                s,
+                checked,
+                "proactive",
+                `candidates:${cue.id}`,
+                cue,
+                undefined,
+                this.candidateFrame(candidates.unsettled !== undefined),
+              )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
       if (injection && was) this.keepUndo(s, injection, checked, was);
       if (injection) s.pending.push(injection);
+      // `askNudge` (D316, D317): the ask the nudge asks for, in this request, may look past what was handed. A settled
+      // packet (a `readerPushBehind` second pass replacing a nudged one) ends that look: the agent was not nudged.
+      if (injection && candidates && !candidates.unsettled) s.nudged = undefined;
+      if (injection && candidates?.unsettled && internal.request !== undefined) {
+        const handed = new Set(candidates.items.map((x) => x.item.id));
+        s.nudged = {
+          request: internal.request,
+          anchors: candidates.unsettled,
+          deeper: candidates.pool.filter((x) => !handed.has(x.item.id)).map((x) => x.item.id),
+        };
+      }
       const latencyMs = Math.round(performance.now() - t0);
       // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
       // trace carries it, since this response goes to no caller.
@@ -1962,7 +2007,11 @@ export class ContextPartner {
    * `pushCandidates` of them. A pool with no constraint-like item (`readerGate`'s test, cards included) gives none, as
    * `readerGate` would read none. (Constraint-like items first lost 27 points of hidden facts live: D236.)
    */
-  private candidatesOf(s: Session, cue: Cue, ranked: readonly Scored[]): { items: Scored[] } {
+  private candidatesOf(
+    s: Session,
+    cue: Cue,
+    ranked: readonly Scored[],
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
@@ -1972,7 +2021,7 @@ export class ContextPartner {
       seen.add(x.item.id);
       pool.push(x);
     }
-    if (pool.length === 0) return { items: [] };
+    if (pool.length === 0) return { items: [], pool };
     const cards =
       this.config.cards && this.deps.cards
         ? this.deps.cards.cardsOf(
@@ -1983,13 +2032,21 @@ export class ContextPartner {
         : new Map<string, Card>();
     const like = pool.map((x) => this.constraintLike(x, cards));
     const items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
+    // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
+    let unsettled: Anchors | undefined;
+    if (this.config.askNudge && items.length > 0) {
+      const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+      const handed = items.map((x) => x.item);
+      if (!settles(handed, anchors)) unsettled = anchors;
+    }
     this.deps.onPushPool?.({
       sessionId: s.id,
       pool: pool.map((x) => x.item.id),
       constraintLike: like,
       handed: items.map((x) => x.item.id),
+      ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
     });
-    return { items };
+    return { items, pool, ...(unsettled ? { unsettled } : {}) };
   }
 
   /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */
@@ -2117,12 +2174,12 @@ export class ContextPartner {
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
-  private candidateFrame(): PacketFrame {
+  private candidateFrame(nudge = false): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      lead: CANDIDATES_LEAD,
+      lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),

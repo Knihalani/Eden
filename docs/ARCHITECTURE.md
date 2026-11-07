@@ -358,7 +358,10 @@ flags are queued as a proactive packet, so an agent that never calls `ask_contex
 the agent the first five items of the pool the reader would have read (the ask's order, bulk mail out), each a focused
 excerpt, after a fixed line of Eden's own saying they may bear on the request and must be checked against its who,
 what and when first; a pool with nothing constraint-like (`readerGate`'s test) gets nothing (no note: D237 did not
-build it, D257 deleted the push's other one). An ask answers in rule order with no reading. The candidates need no
+build it, D257 deleted the push's other one). When no handed item holds the request's named person or thing and,
+if it names one, its day (`settle.ts`, no model), the line adds a nudge to call `ask_context` with those specifics, and
+an ask in that request also lists the pool's deeper items that hold one of them (`askNudge`, D317: hidden +9.2 points
+on Pi, through the agent's asks). An ask answers in rule order with no reading. The candidates need no
 reader, so a server with no model key runs them too (D276). `ContextPartner.explain` returns a session's last 32
 traces for `POST /v1/explain` (D277), each with `explainTrace`'s sentence; content-free like every trace (D56).
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question

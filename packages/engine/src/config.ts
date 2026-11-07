@@ -497,6 +497,18 @@ export interface EngineConfig {
    * session; checked at the take, so its card can count; no source or model call.
    */
   planConflict: boolean;
+  /**
+   * `askNudge` (D316, promoted by D317; A12, `settle.ts`): with `pushCandidates`, when no candidate the
+   * push hands holds every kind of anchor the request names (one of its people or things, and one of its days when it
+   * names a day), the packet's fixed line adds `ASK_NUDGE`: the items may not settle who, what or when, so call
+   * `ask_context` before answering. An ask in the same request then also lists the push pool's items past those handed
+   * (its 6th to 15th) that hold one of the request's anchors, in at most half its `maxItems` seats (the answer still
+   * cites at most `maxItems`). Inert with `pushCandidates` 0 (the config check's parents are booleans only, so
+   * `{pushCandidates: 0, askNudge: true}` is accepted and does nothing; the `reader` and `candidates` parts set both).
+   * Pi, train, 91 templates × seeds 41–44, Sonnet-graded: hidden raised +9.2 points (+6.0..+12.6), concerns
+   * unchanged, +0.3 asks and +$0.04–0.07 per 1,000 tasks a kind, no connector call (docs/research/a12-quality.md).
+   */
+  askNudge: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -619,4 +631,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerStopEarly: true,
   pushCandidates: 5,
   planConflict: true,
+  askNudge: true,
 };

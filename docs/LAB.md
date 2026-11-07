@@ -772,6 +772,13 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cache-probe.ts --suite train1
   only the control and neutral answers the run's grader called a concern: W2b's check, 39 answers for $0.055
   (docs/research/fix-w2b-false-concerns.md). `--only-misses` regrades the hidden answers it called a miss and
   `--conditions a,b` keeps those arms (A2: Sonnet called 18 of 38 Haiku in-packet misses raised, $0.054).
+  `--kinds hidden`, `--only-raised` and `--sample N` (A12) keep a kind, the hidden answers called raised, and a fixed
+  pseudo-random N of what is left.
+- **The powered hidden measurement (A12, D315)**: the 91 targeted train templates × seeds 41–44 on Pi
+  (`packages/sim/lab/a12/run.sh`, about $0.11 an arm a seed for hidden and control), Sonnet regrading every Haiku miss
+  and a sample of its "raised" (`a12/regrade.sh`, about $0.0014 an answer), pooled by `a12/hidden.py` (an answer
+  Sonnet did not see counts at its arm's sampled agreement). Paired intervals about ±4 points over 364 tasks; recipe
+  and costs in docs/research/a12-quality.md ($2.46 for four arms, Sonnet regrades $0.82 of it).
 - **A Sonnet 5.5 agent on Pi** (`pi-ab --model claude-sonnet-5-5`): the lab sends `thinking: between_tools`
   (`anthropicThinkingOff`), as Sonnet 5.5 refuses "disabled". About 30× Haiku's agent cost a task (A2, D270).
 - **Where a false concern came from** (fix-w2b): each pi-ab task line keeps its packets' ways (`ways`: the reason's
