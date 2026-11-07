@@ -450,7 +450,15 @@ bun run funnel --jobs 4 --allow-misses --json .local/haiku-default.json -- --rea
   --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl
 ```
 
-Measured on 2026-11-07 after the deletions (D225–D228), from the committed file (no ledger flag, so no spend):
+**Topped up for D244 (CL3, 2026-11-07; docs/research/cl-cl3.md):** the default's lean window became 7 days, which
+re-renders most reader pools, so the cache was topped up for it (ledger runs `cl3-topup-l7`, `cl3-topup-l7-42`, and
+the CL3 arms `cl3-topup-l7r2`, `cl3-topup-l7r2b`, `cl3-topup-nocards`; $0.303 in all). It now has 5,435 lines (plain
+md5 `087bd902247caa5fd883f45aa04d4018`; its first 4,377 lines are the file above, unchanged). The new default replays
+643 prompts with 0 misses: TOTAL hidden 321/384, decoys 129/384, reader pool hidden 287/384 and decoys 251/384
+(`--set '{"cardsLeanDays":30}'` replays the old default's 313/127 with 0 misses). The `--preset minus-<part>` runs of
+the new default were not topped up: expect misses (answered without the reader, `--allow-misses`).
+
+Before D244 (the old cache and the 30-day window), measured on 2026-11-07 after the deletions (D225–D228), from the committed file (no ledger flag, so no spend):
 `merged reader replay {"replayed":643,"sent":0,"missed":0,"failed":0}`, TOTAL hidden 313/384, decoys 127/384, reader
 pool hidden 282/384 and decoys 249/384 (before the deletions, the same day: 314/132, pool 285/254). After D200's
 top-up (2026-11-07, about 10 s): 654 replayed, 0 missed, TOTAL hidden 315/384, decoys 133/384, reader pool hidden

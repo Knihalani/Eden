@@ -212,6 +212,46 @@ describe("samePath", () => {
     expect(asked).toEqual(["i5", "i6", "i7"]);
   });
 
+  test("an item read for requests only, its requests replayed, is not sent live (its card would be thrown away)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const reqFile = join(dir, "intent.jsonl");
+    const plain: ContextItem = { id: "p", sourceId: "gmail", ref: "p", title: "Lunch", text: "Lunch on Friday?" };
+    const worded: ContextItem = {
+      id: "w",
+      sourceId: "gmail",
+      ref: "w",
+      title: "Policy",
+      text: "Invoices must be approved by Dana before payment.",
+    };
+    const fresh: ContextItem = { id: "f", sourceId: "gmail", ref: "f", title: "Notes", text: "Notes from the call." };
+    writeFileSync(
+      reqFile,
+      [plain, worded].map((it) => JSON.stringify({ h: cardKey(it), r: [`about ${it.id}`] })).join("\n") + "\n",
+    );
+    const { maker, asked } = liveMaker();
+    const disk = new DiskCardMaker(join(dir, "cards.jsonl"), maker, {
+      out: join(dir, "out.jsonl"),
+      requests: [reqFile],
+    });
+    const got = await disk.make([plain, worded, fresh], "d", signal, false, true);
+    // The plain item has replayed requests and no constraint wording: covered with no call. The worded one may get a
+    // card; the third has no replayed requests: both live.
+    expect(asked).toEqual(["w", "f"]);
+    expect(disk.skipped).toBe(1);
+    expect(got.cards[0]?.kind).toBe("none");
+    expect(reqs(got)).toEqual([["about p"], ["about w"], null]);
+    // Without intent nothing is skipped: the card itself is what the call is for.
+    const { maker: m2, asked: a2 } = liveMaker();
+    await new DiskCardMaker(join(dir, "c2.jsonl"), m2, { out: join(dir, "o2.jsonl"), requests: [reqFile] }).make(
+      [plain],
+      "d",
+      signal,
+      false,
+      false,
+    );
+    expect(a2).toEqual(["p"]);
+  });
+
   test("an explicit requests file wins over requests in the card files, and a .gz one is read as is", async () => {
     const dir = mkdtempSync(join(tmpdir(), "cards-"));
     const replay = join(dir, "cards.jsonl");

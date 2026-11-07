@@ -1,0 +1,6 @@
+lean7 - base hidden n=192: 160 vs 157, +0.016 (-0.016..+0.047)
+lean7 - base control n=192: 69 vs 64, +0.026 (-0.005..+0.062)
+l7r2 - base hidden n=192: 150 vs 157, -0.036 (-0.078..+0.000)
+l7r2 - base control n=192: 66 vs 64, +0.010 (-0.016..+0.042)
+cardsWithheld - base hidden n=192: 113 vs 157, -0.229 (-0.292..-0.167)
+cardsWithheld - base control n=192: 66 vs 64, +0.010 (-0.047..+0.068)

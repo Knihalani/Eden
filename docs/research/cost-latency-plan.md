@@ -50,12 +50,16 @@ $ per 1,000 tasks on the 1:1:8 mix (assumed traffic), Haiku 5.5 at $0.10 / $0.50
 
 | Session | Hypotheses | Owns | Decisions | Paid cap |
 | --- | --- | --- | --- | --- |
-| CL1 | H1, H2, H15 | `cards.ts` (applicability), `reader.ts` cascade hook, partner.ts's reader gate | D233–D237 | $4 |
+| CL1 | H1, H2, H15 | `cards.ts` (applicability), `reader.ts` cascade hook, partner.ts's reader gate | D233–D235 (D236–D237 unused) | $4 |
 | CL2 | H3, H4, H5 | `reader.ts` input building and request, the reader's prompt layout | D238–D241 | $3 |
 | CL3 | H6, H7, H14 | `cards-enrich`/the card and intent makers' transport (batch), `sync.ts` | D242–D245 | $2 |
 | CL4 | H8–H13 | partner.ts's push and ask paths, `render.ts` wording, `packages/client` wait | D246–D250 | $3 |
 | CL5 | H16–H18 | `pi-ab`/`pi-day` long horizon, reports, `hidden-heldout16.ts` (blind author) | D251–D253 | $2 |
 | Combine | best stack of what survives; short and long on train, then blind on heldout16 (Pi and Hermes) | | D254+ | about $6 |
+
+**CL1 outcome (2026-11-07, [cl-cl1.md](cl-cl1.md)):** H1 built and deleted (D233: reader calls 643 → 615 on train, 4
+of 100 neutral reads decided; looser rules lost planted facts), H2 not built (D234: 1.08x safe ceiling), H15 not built
+(D235: local models AUC 0.44–0.61). H10 needs another no-model verdict: H1 does not provide one.
 
 Every lever enters as a trial switch (D112), is screened at $0 where possible (paid reader replay, `gate-traffic`),
 then measured live on Pi on train suites, **short and long horizon**, and is promoted or deleted with its code.

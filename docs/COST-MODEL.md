@@ -466,6 +466,24 @@ at most one extra search per notification (not separately measured).
 - Reader calls are about 2,800 input tokens ($0.00028 priced uncached) and 200 output tokens ($0.0001) each on Haiku
   5.5 (haiku-phase3.md, lab provider, thinking off; D144 made "off" the shipped default); the budget reserves $0.002 a call (`DEFAULT_READER_LIMITS.estimateUsd`).
 
+## Cards and intent over a user's lifetime (CL3, D242–D245)
+
+Anthropic-direct lab figures (Haiku 5.5, `cold-start.ts` through `buildPartner`; docs/research/cl-cl3.md §7). A
+user's background enrichment is a one-time backfill plus a daily trickle:
+
+| | Default before D244 (30-day lean window) | Default since D244 (7 days) |
+| --- | --- | --- |
+| One-time backfill, measured (3 users) | $0.0208, 21.7 calls, 103 s to idle | $0.0088, 8 calls, 41 s to idle |
+| Per day, estimate (≈ 36 new items a day, ≈ 10 sent to the card model) | ≈ $0.0005–0.0006 | the same (the window bounds only the backlog) |
+| 30 days of use, estimate | ≈ $0.038 | ≈ $0.026 |
+| Per 1,000 tasks at 12–20 requests a day for 30 days, estimate | ≈ $0.06–0.10 | ≈ $0.04–0.07 |
+
+Short-horizon benchmarks that spread one user's backfill over that user's run overstate it: one user over 128 Pi tasks
+is $0.162 per 1,000 tasks before D244 and $0.069 after. Not taken: the Message Batches API for the backlog (D242:
+−45% of what is left, about $0.004 per user, at a 17–22 minute wait without cards, the state that costs most recall)
+and two intent requests instead of four (D243: −7%, hidden facts lost). Prompt caching saves 10–28% of a card call
+and about 23% of a reader call on the Anthropic transport; on OpenRouter the cache is off until D145's probe.
+
 ## Budget defaults (`packages/llm/src/budget.ts`)
 
 20 calls and $0.02 per session; $0.25 per user per day; each call reserved before its real cost is known, at about its
