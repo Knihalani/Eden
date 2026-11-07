@@ -1,0 +1,56 @@
+{
+ "results": "s3b-ask-41 (heldout14 seed 41, tools/eden/both/both+ask, hidden/control/neutral; graded by claude-haiku-5-5)",
+ "runGrader": "claude-haiku-5-5",
+ "summary": [
+  {
+   "grader": "claude-sonnet-5-5",
+   "answers": 384,
+   "readable": 384,
+   "errors": 0,
+   "msMedian": 1051,
+   "factsTrue": 69,
+   "agreeWithRun": {
+    "same": 370,
+    "of": 384
+   },
+   "agreeWith": {},
+   "usd": 0.5425660000000003,
+   "byKind": {
+    "hidden": {
+     "answers": 128,
+     "facts": 128,
+     "same": 122,
+     "onlyMine": 5,
+     "onlyRun": 1,
+     "trueMine": 65,
+     "trueRun": 61
+    },
+    "control": {
+     "answers": 128,
+     "facts": 128,
+     "same": 126,
+     "onlyMine": 0,
+     "onlyRun": 2,
+     "trueMine": 0,
+     "trueRun": 2
+    },
+    "neutral": {
+     "answers": 128,
+     "facts": 128,
+     "same": 122,
+     "onlyMine": 4,
+     "onlyRun": 2,
+     "trueMine": 4,
+     "trueRun": 2
+    }
+   }
+  }
+ ],
+ "requests": {
+  "sent": 384,
+  "retried": 0,
+  "refused": 0,
+  "statuses": {},
+  "cap": 0
+ }
+}
