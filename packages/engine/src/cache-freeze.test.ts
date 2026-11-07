@@ -441,4 +441,49 @@ describe("idle users frozen (D325)", () => {
     expect(spy.queued).toBe(1);
     expect(cache.freezes.thawed).toBe(1);
   });
+
+  test("a session's events keep their order when a read or a forget ends a thaw an earlier event waits on", async () => {
+    // Review of A14: an event that found its user frozen waits for the queued thaw; a synchronous read (a background
+    // store, a pending take) or a forget then ended the frozen state, and a later event of the same session, finding
+    // nothing frozen, ran first. Later callers wait on a thaw still queued.
+    for (const end of ["read", "forget"] as const) {
+      const w = buildWorkload({ itemsPerSource: 120, events: 12, seed: 3 });
+      const clock = w.events[0]!.at;
+      const cache = manual({ freezeIdleMs: 1, expireEveryMs: 1 });
+      const partner = new ContextPartner({
+        sources: async () => w.sources,
+        sourceMap: new SourceMap(),
+        cache,
+        budget: new Budget(),
+        model: null,
+        now: () => clock,
+      });
+      // Enough items that the thaw takes several slices.
+      const r = rng(11);
+      cache.put(
+        w.scope,
+        Array.from({ length: 4_000 }, (_, i) => makeItem(r, i, w.scope.userId)),
+        clock,
+      );
+      cache.expireIdle(clock);
+      cache.expireIdle(clock);
+      expect(cache.frozenCount).toBe(1);
+      const order: string[] = [];
+      const inner = partner as unknown as { observeEvent: (e: { text?: string }, o: unknown) => Promise<unknown> };
+      const real = inner.observeEvent.bind(partner);
+      inner.observeEvent = (e, o) => {
+        order.push(e.text!);
+        return real(e, o);
+      };
+      const first = partner.observe({ ...w.scope, sessionId: "s", kind: "user_message", text: "first", at: clock });
+      await new Promise((res) => setImmediate(res)); // The next event arrives in a later turn, the thaw in slices.
+      expect(cache.frozenCount).toBe(1);
+      if (end === "read") cache.peekVocab(w.scope);
+      else partner.forget(w.scope);
+      const at = clock + 1;
+      const second = partner.observe({ ...w.scope, sessionId: "s", kind: "user_message", text: "second", at });
+      await Promise.all([first, second]);
+      expect(order).toEqual(["first", "second"]);
+    }
+  });
 });
