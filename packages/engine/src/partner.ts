@@ -1501,7 +1501,8 @@ export class ContextPartner {
       // the agent has taken stays taken: only what is new to it, or what the poll changed since, goes out again.
       const prev = internal.again?.prev;
       const withdrawn = new Set<string>();
-      if (prev && (reading?.read || candidates) && !s.closed && latest) {
+      // A candidates pass replaces the first packet only with candidates of its own (CL6 review).
+      if (prev && (reading?.read || (candidates?.items.length ?? 0) > 0) && !s.closed && latest) {
         const at = s.pending.indexOf(prev);
         if (at >= 0) {
           s.pending.splice(at, 1);
@@ -1919,7 +1920,8 @@ export class ContextPartner {
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
   private candidateFrame(): PacketFrame {
-    const k = this.config.pushCandidates;
+    // At most the pool's items (`candidatesOf`), each bounded (`RANGES`): the packet's size is bounded too.
+    const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = this.config.pushCandidateBytes;
     return {
       lead: this.config.pushCandidateCheck ? CANDIDATES_CHECK : CANDIDATES_LEAD,

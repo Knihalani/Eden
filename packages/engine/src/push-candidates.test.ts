@@ -164,20 +164,33 @@ describe("pushCandidates (D236): the push hands the agent candidates, with no re
   });
 
   test("a pool with nothing constraint-like gives no packet; pushCandidateNone says so", async () => {
-    const quiet = setup({ pushCandidates: 3 }, { items: PLAIN });
-    await say(quiet.p, REQUEST);
-    expect(quiet.p.takePending(ref()).filter((x) => x.reason.startsWith("candidates:"))).toEqual([]);
-    const noted = setup({ pushCandidates: 3, pushCandidateNone: true }, { items: PLAIN });
+    // The event's own lookup delivers nothing here, so what is queued is the push's.
+    const quiet = { confidentScore: 99, fallbackMatchedTerms: 99 };
+    const none = setup({ ...quiet, pushCandidates: 3 }, { items: PLAIN });
+    await say(none.p, REQUEST);
+    expect(none.p.takePending(ref())).toEqual([]);
+    const noted = setup({ ...quiet, pushCandidates: 3, pushCandidateNone: true }, { items: PLAIN });
     const o = await say(noted.p, REQUEST);
+    expect(o.injection).toBeNull();
     const got = noted.p.takePending(ref());
-    if (o.injection) {
-      // The observe's own lookup answered the request: no "nothing" note after a packet.
-      expect(got.some((x) => x.text.includes(CANDIDATES_NONE))).toBe(false);
-    } else {
-      expect(got.length).toBe(1);
-      expect(got[0]!.citations).toEqual([]);
-      expect(got[0]!.text).toContain(CANDIDATES_NONE);
-    }
+    expect(got.length).toBe(1);
+    expect(got[0]!.citations).toEqual([]);
+    expect(got[0]!.reason.startsWith("checked:")).toBe(true);
+    expect(got[0]!.text).toContain(CANDIDATES_NONE);
+    expect(shownText(got[0]!.text).trim()).toBe("");
+    // With candidates to send, no note.
+    const some = setup({ ...quiet, pushCandidates: 3, pushCandidateNone: true });
+    await say(some.p, REQUEST);
+    expect(some.p.takePending(ref()).some((x) => x.text.includes(CANDIDATES_NONE))).toBe(false);
+  });
+
+  test("a newer user message keeps an older push's packet and note out", async () => {
+    const quiet = { confidentScore: 99, fallbackMatchedTerms: 99 };
+    const { p } = setup({ ...quiet, pushCandidates: 3, pushCandidateNone: true });
+    const first = say(p, REQUEST);
+    await p.observe({ ...ref(), at: NOW, kind: "user_message", text: "thanks" } as AgentEvent);
+    await first;
+    expect(p.takePending(ref()).filter((x) => x.reason.startsWith("candidates:"))).toEqual([]);
   });
 
   test("a source that did not answer is no all-clear: no note", async () => {
@@ -221,6 +234,8 @@ describe("pushCandidates (D236): the push hands the agent candidates, with no re
     expect(() => checkEngineConfig({ pushCandidateCheck: true }, { deps })).toThrow(/pushCandidates/);
     expect(() => checkEngineConfig({ pushCandidates: 2.5 }, { deps })).toThrow();
     expect(() => checkEngineConfig({ pushCandidates: 3, pushCandidateBytes: 0 }, { deps })).toThrow();
+    expect(() => checkEngineConfig({ pushCandidates: 41 }, { deps })).toThrow();
+    expect(() => checkEngineConfig({ pushCandidates: 3, pushCandidateBytes: 100_000 }, { deps })).toThrow();
     expect(() => checkEngineConfig({ pushCandidates: 3, readerPush: false }, { deps })).toThrow(/readerPush/);
   });
 });

@@ -130,6 +130,9 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCandidatePoolOrder: [...PUSH, "pushCandidates"],
 };
 
+/** Parents that are counts, on above 0 (`pushCandidates`, D236); every other parent is a flag. */
+export const COUNT_PARENTS: ReadonlySet<Key> = new Set<Key>(["pushCandidates"]);
+
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
 type Range = { integer?: true; min?: number; max?: number };
 const COUNT: Range = { integer: true };
@@ -183,8 +186,8 @@ const RANGES: Partial<Record<Key, Range>> = {
   intentCardHits: COUNT,
   intentSeats: COUNT,
   askReaderPool: COUNT,
-  pushCandidates: COUNT,
-  pushCandidateBytes: SIZE,
+  pushCandidates: { integer: true, max: 40 },
+  pushCandidateBytes: { integer: true, min: 1, max: 2_000 },
 };
 
 /** String-list keys whose entries must come from a known list. */
@@ -242,8 +245,8 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
     for (const key of Object.keys(out) as Key[]) {
       const parents = PARENTS[key];
       if (!parents || isCore(key, merged[key])) continue;
-      // A count parent (`pushCandidates`) is on when above 0.
-      const off = parents.filter((p) => merged[p] !== true && !(typeof merged[p] === "number" && merged[p] > 0));
+      // A count parent (`COUNT_PARENTS`) is on when above 0.
+      const off = parents.filter((p) => !(merged[p] === true || (COUNT_PARENTS.has(p) && (merged[p] as number) > 0)));
       if (off.length) {
         throw new Error(
           `${where}: "${key}" acts only with ${parents.map((p) => `"${p}"`).join(" and ")} on, and this ` +
