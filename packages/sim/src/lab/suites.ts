@@ -21,6 +21,7 @@ import { plantHeldout11 } from "./hidden-heldout11";
 import { plantHeldout12 } from "./hidden-heldout12";
 import { plantHeldout13 } from "./hidden-heldout13";
 import { plantHeldout14 } from "./hidden-heldout14";
+import { plantHeldout15 } from "./hidden-heldout15";
 import { plantTrain1 } from "./hidden-train1";
 import { plantTrain2 } from "./hidden-train2";
 import { plantTrain3 } from "./hidden-train3";
@@ -74,6 +75,10 @@ export const SUITES: Record<string, Plant> = {
   // and the benchmark's design (docs/research/benchmark-realuse-1.md); the first suite with a `neutral` variant.
   // Measurement only: run once for RealUse-1, never tune on it.
   heldout14: plantHeldout14,
+  // The weak-points plan's blind suite (docs/research/realuse-1-weak-points.md, issue 12), written by an author who saw
+  // only heldout14's format, the HiddenTask interface, the sim world API and RealUse-1's design; with `neutral`.
+  // Reserved for wave 2's final blind confirmation: do not run it (funnel or agent) before then, never tune on it.
+  heldout15: plantHeldout15,
   // The broad tuning set: six suites written blind (each author saw only the world generator, the text helpers and
   // the HiddenTask interface), one life area each, so a change must generalise across authors to show up. Tune on them.
   train1: twoVariant("train1", plantTrain1),
@@ -88,10 +93,11 @@ const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
 const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
 /**
  * Held-out suites kept out of `all` so a tuning command cannot spend them; held-out 9-13 have been read (D72, D80,
- * D85, D98, D112) and a blind round needs a new suite. Held-out 14 is RealUse-1's blind suite (run once for it). A run
- * names them to measure on them (with `--blind`).
+ * D85, D98, D112) and a blind round needs a new suite. Held-out 14 is RealUse-1's blind suite (run once for it);
+ * held-out 15 is unrun, reserved for the weak-points plan's final check. A run names them to measure on them (with
+ * `--blind`).
  */
-export const UNRUN_BLIND = ["heldout9", "heldout10", "heldout11", "heldout12", "heldout13", "heldout14"];
+export const UNRUN_BLIND = ["heldout9", "heldout10", "heldout11", "heldout12", "heldout13", "heldout14", "heldout15"];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**

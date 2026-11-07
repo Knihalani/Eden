@@ -9,7 +9,7 @@
  */
 
 /** Suites whose planting function builds the `neutral` variant (plants nothing, same request text). */
-export const NEUTRAL_SUITES: readonly string[] = ["heldout14"];
+export const NEUTRAL_SUITES: readonly string[] = ["heldout14", "heldout15"];
 
 export const supportsNeutral = (suite: string) => NEUTRAL_SUITES.includes(suite);
 
