@@ -470,8 +470,8 @@ export interface EngineConfig {
    */
   readerGateVisits: boolean;
   /**
-   * D192 (on in the default; reopens D134): with `verifyDelivery`, no doubted candidate is re-read beside the reader's call
-   * (`checkAhead`); a delivery re-reads only the items it cites, after the reader named them (`verifyItems`).
+   * D192 (on in the default; reopens D134): with `verifyDelivery`, no doubted candidate is re-read beside the reader's
+   * call (`checkAhead`); a delivery re-reads only the items it cites, after the reader named them (`verifyItems`).
    */
   readerVerifyAfter: boolean;
   /**
