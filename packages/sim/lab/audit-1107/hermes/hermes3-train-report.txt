@@ -1,0 +1,149 @@
+harness hermes, model claude-haiku-5-5, grader claude-haiku-5-5, time scale 1, tools sequential
+spent $0.4651 (agent $0.3606, Eden $0.0608, grader $0.0437); 648 runs, errors 0, ungraded 0
+config {}
+cost columns, $ per 1k tasks: $/1k = agent + Eden's per-task calls; (Eden) = Eden's per-task calls (its reader and judge); bkfill = its background calls (cards, bridge), each seed's spread evenly over that seed's task runs with cards or bridge on (mostly a one-time backfill: an upper bound on the steady state); all-in = (Eden) + bkfill
+
+== hidden: hidden fact raised
+condition     n   rate   $/1k  (Eden) bkfill all-in  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+hermes        72  0.097  0.460   0.000  0.000  0.000   1.88   2.75     7757      491    5.29    8.20   11.68          479
+hermes-eden   72  0.819  0.590   0.000  0.141  0.141   1.71   1.11     7605      535    3.81    6.43    8.37          439
+hermes+eden   72  0.722  0.599   0.000  0.141  0.141   1.81   2.24     9023      578    5.40    8.57   11.84          456
+
+== control: false concern
+condition     n   rate   $/1k  (Eden) bkfill all-in  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+hermes        72  0.000  0.431   0.000  0.000  0.000   1.82   2.58     7467      459    4.97    9.13   15.54          494
+hermes-eden   72  0.000  0.644   0.000  0.141  0.141   1.96   1.46     8786      575    3.73    6.33    9.97          452
+hermes+eden   72  0.028  0.658   0.000  0.141  0.141   2.07   2.94    10462      620    5.98    8.96   17.26          475
+
+== neutral: any concern (nothing planted; counts as a false concern)
+condition     n   rate   $/1k  (Eden) bkfill all-in  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+hermes        72  0.000  0.428   0.000  0.000  0.000   1.88   2.78     7647      456    4.68    9.39   13.73          494
+hermes-eden   72  0.042  0.597   0.000  0.141  0.141   1.93   1.57     8466      516    3.77    5.84   12.26          449
+hermes+eden   72  0.014  0.601   0.000  0.141  0.141   2.04   2.90     9995      567    5.73   10.31   13.38          455
+
+== traffic-weighted: w × hidden + (1 − w) × control; means weighted, p50/p90 from the pooled per-task samples
+w     condition          n hid  n ctl   $/1k  (Eden)  tools   p50 s   p90 s
+0.10  hermes              72     72  0.434   0.000   2.60    5.05    9.13
+0.10  hermes-eden         72     72  0.638   0.000   1.42    3.81    6.33
+0.10  hermes+eden         72     72  0.652   0.000   2.87    5.98    8.96
+0.50  hermes              72     72  0.445   0.000   2.67    5.14    8.71
+0.50  hermes-eden         72     72  0.617   0.000   1.28    3.81    6.38
+0.50  hermes+eden         72     72  0.629   0.000   2.59    5.79    8.90
+
+== traffic mix (assumed): 1 hidden, 1 control, 8 neutral in 10; means weighted, p50/p90 pooled; raised = share of all tasks raising the hidden fact, false = share raising a wrong concern (control + neutral)
+condition        n hid  n ctl  n neu   $/1k  (Eden)  tools   p50 s   p90 s  raised   false
+hermes              72     72     72  0.431   0.000   2.76    4.90    9.39   0.010   0.000
+hermes-eden         72     72     72  0.601   0.000   1.51    3.79    6.04   0.082   0.033
+hermes+eden         72     72     72  0.607   0.000   2.84    5.74    9.87   0.072   0.014
+
+== critical path, mean ms per task (share of wall time); Eden beside the loop and grading after it
+condition     n             eden         model          tool         other    eden-bg  grading
+hermes       216           0 (0%)    2994 (58%)    1609 (31%)     595 (11%)          0      728
+hermes-eden  216          26 (1%)    3352 (83%)        0 (0%)     645 (16%)         25      713
+hermes+eden  216          19 (0%)    3482 (59%)    1721 (29%)     632 (11%)         18      708
+
+== Eden on the critical path by task kind, mean ms per task: observe (the push) and ask_context, the reader's share of Eden's path, and the wall-time multiple if Eden took no time
+condition    kind       n  wall ms   eden (% wall)  observe      ask  reader (% eden)  if-zero
+hermes-eden  hidden    72    3896      27 (0.7%)       15       11        0 (0.0%)     1.01x
+hermes-eden  control   72    4149      25 (0.6%)       15       11        0 (0.0%)     1.01x
+hermes-eden  neutral   72    4026      27 (0.7%)       13       14        0 (0.0%)     1.01x
+hermes+eden  hidden    72    5364      22 (0.4%)       18        4        0 (0.0%)     1.00x
+hermes+eden  control   72    6189      17 (0.3%)       13        4        0 (0.0%)     1.00x
+hermes+eden  neutral   72    6010      18 (0.3%)       13        4        0 (0.0%)     1.00x
+
+== paired differences (a − b), bootstrap 95% interval over tasks
+hermes-eden - hermes hidden   n= 72 rate +0.722 (+0.597..+0.833)  wall -1.42 s (-2.03..-0.82)  $/1k +0.130 (+0.072..+0.188)
+                      n= 72 $/1k cache-neutral agent+Eden +0.0070 (-0.1069..+0.1197)  agent billed +0.1298 (+0.0733..+0.1863) cache-neutral +0.0070 (-0.1128..+0.1229)  Eden +0.0000 (+0.0000..+0.0000)
+hermes-eden - hermes control  n= 72 rate +0.000 (+0.000..+0.000)  wall -0.99 s (-1.57..-0.44)  $/1k +0.213 (+0.161..+0.266)
+                      n= 72 $/1k cache-neutral agent+Eden +0.1898 (+0.0834..+0.2938)  agent billed +0.2128 (+0.1585..+0.2655) cache-neutral +0.1898 (+0.0896..+0.2860)  Eden +0.0000 (+0.0000..+0.0000)
+hermes-eden - hermes neutral  n= 72 rate +0.042 (+0.000..+0.083)  wall -1.11 s (-1.78..-0.47)  $/1k +0.170 (+0.121..+0.222)
+                      n= 72 $/1k cache-neutral agent+Eden +0.1116 (+0.0119..+0.2144)  agent billed +0.1696 (+0.1206..+0.2194) cache-neutral +0.1116 (+0.0137..+0.2097)  Eden +0.0000 (+0.0000..+0.0000)
+hermes-eden - hermes all      n=216 $/1k billed agent+Eden +0.1708 (+0.1394..+0.2023) cache-neutral agent+Eden +0.1028 (+0.0443..+0.1634)  agent billed +0.1708 (+0.1385..+0.2022) cache-neutral +0.1028 (+0.0409..+0.1636)  Eden +0.0000 (+0.0000..+0.0000)
+hermes-eden - hermes same-ask n= 47 $/1k billed agent+Eden -0.0001 (-0.0552..+0.0501) cache-neutral agent+Eden -0.2104 (-0.3161..-0.1035)  agent billed -0.0001 (-0.0584..+0.0521) cache-neutral -0.2104 (-0.3184..-0.1079)  Eden +0.0000 (+0.0000..+0.0000)
+hermes+eden - hermes-eden hidden   n= 72 rate -0.097 (-0.181..-0.028)  wall +1.47 s (+1.01..+1.98)  $/1k +0.009 (-0.034..+0.048)
+                      n= 72 $/1k cache-neutral agent+Eden +0.1631 (+0.0779..+0.2553)  agent billed +0.0092 (-0.0345..+0.0505) cache-neutral +0.1631 (+0.0779..+0.2583)  Eden +0.0000 (+0.0000..+0.0000)
+hermes+eden - hermes-eden control  n= 72 rate +0.028 (+0.000..+0.069)  wall +2.04 s (+1.45..+2.70)  $/1k +0.014 (-0.029..+0.056)
+                      n= 72 $/1k cache-neutral agent+Eden +0.1904 (+0.0948..+0.2831)  agent billed +0.0145 (-0.0299..+0.0606) cache-neutral +0.1904 (+0.0996..+0.2850)  Eden +0.0000 (+0.0000..+0.0000)
+hermes+eden - hermes-eden neutral  n= 72 rate -0.028 (-0.083..+0.028)  wall +1.98 s (+1.35..+2.63)  $/1k +0.004 (-0.040..+0.048)
+                      n= 72 $/1k cache-neutral agent+Eden +0.1783 (+0.0844..+0.2748)  agent billed +0.0037 (-0.0385..+0.0433) cache-neutral +0.1783 (+0.0868..+0.2679)  Eden +0.0000 (+0.0000..+0.0000)
+hermes+eden - hermes-eden all      n=216 $/1k billed agent+Eden +0.0091 (-0.0165..+0.0340) cache-neutral agent+Eden +0.1772 (+0.1232..+0.2317)  agent billed +0.0091 (-0.0154..+0.0331) cache-neutral +0.1772 (+0.1221..+0.2310)  Eden +0.0000 (+0.0000..+0.0000)
+hermes+eden - hermes-eden same-ask n= 45 $/1k billed agent+Eden +0.0111 (-0.0051..+0.0324) cache-neutral agent+Eden +0.0968 (+0.0638..+0.1399)  agent billed +0.0111 (-0.0062..+0.0325) cache-neutral +0.0968 (+0.0628..+0.1420)  Eden +0.0000 (+0.0000..+0.0000)
+hermes+eden - hermes hidden   n= 72 rate +0.625 (+0.500..+0.750)  wall +0.05 s (-0.58..+0.67)  $/1k +0.139 (+0.081..+0.196)
+                      n= 72 $/1k cache-neutral agent+Eden +0.1701 (+0.0481..+0.2860)  agent billed +0.1390 (+0.0831..+0.1930) cache-neutral +0.1701 (+0.0536..+0.2864)  Eden +0.0000 (+0.0000..+0.0000)
+hermes+eden - hermes control  n= 72 rate +0.028 (+0.000..+0.069)  wall +1.05 s (+0.40..+1.75)  $/1k +0.227 (+0.185..+0.272)
+                      n= 72 $/1k cache-neutral agent+Eden +0.3802 (+0.2889..+0.4742)  agent billed +0.2273 (+0.1832..+0.2694) cache-neutral +0.3802 (+0.2872..+0.4734)  Eden +0.0000 (+0.0000..+0.0000)
+hermes+eden - hermes neutral  n= 72 rate +0.014 (+0.000..+0.042)  wall +0.87 s (+0.31..+1.50)  $/1k +0.173 (+0.130..+0.218)
+                      n= 72 $/1k cache-neutral agent+Eden +0.2899 (+0.1989..+0.3877)  agent billed +0.1733 (+0.1304..+0.2183) cache-neutral +0.2899 (+0.1935..+0.3846)  Eden +0.0000 (+0.0000..+0.0000)
+hermes+eden - hermes all      n=216 $/1k billed agent+Eden +0.1799 (+0.1514..+0.2093) cache-neutral agent+Eden +0.2801 (+0.2194..+0.3415)  agent billed +0.1799 (+0.1512..+0.2089) cache-neutral +0.2801 (+0.2202..+0.3417)  Eden +0.0000 (+0.0000..+0.0000)
+hermes+eden - hermes same-ask n=100 $/1k billed agent+Eden +0.0547 (+0.0177..+0.0904) cache-neutral agent+Eden +0.0205 (-0.0568..+0.0999)  agent billed +0.0547 (+0.0202..+0.0904) cache-neutral +0.0205 (-0.0568..+0.0962)  Eden +0.0000 (+0.0000..+0.0000)
+
+== per-second profile: mean ms of each second of task time by phase, over tasks still running
+-- hermes (216 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%      0   760     0   240        0
+   1    100%      0   400   323   183        0
+   2     79%      0   283   567   120        0
+   3     76%      0   626   306    35        0
+   4     69%      0   539   315    34        0
+   5     51%      0   490   316    25        0
+   6     35%      0   562   284    11        0
+   7     25%      0   485   261    30        0
+   8     14%      0   597   210    10        0
+   9     10%      0   625   120     9        0
+  10      5%      0   530   182     8        0
+  11      2%      0   357   450    11        0
+  12      1%      0   500   500     0        0
+  13      1%      0   807    45    12        0
+  14      0%      0  1000     0     0        0
+  15      0%      0   530     0     8        0
+-- hermes-eden (216 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%     10   745     0   245        9
+   1    100%     11   772     0   198       10
+   2     93%      2   812     0   109        2
+   3     79%      3   721     0    60        3
+   4     40%      2   661     0    44        2
+   5     17%      2   808     0    52        1
+   6     12%      2   578     0    77        2
+   7      5%      2   452     0   109        2
+   8      2%      0   477     0   207        0
+   9      1%      0   397     0   353        0
+  10      0%      0   307     0   693        0
+  11      0%      0  1000     0     0        0
+  12      0%      0   217     0    47        0
+-- hermes+eden (216 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%      9   751     0   240        9
+   1    100%      3   491   303   181        3
+   2     93%      2   267   518   112        2
+   3     78%      2   515   407    53        1
+   4     73%      3   606   295    44        2
+   5     64%      1   594   233    26        1
+   6     44%      1   614   207    15        1
+   7     31%      1   684   181    11        0
+   8     23%      0   558   172    13        0
+   9     11%      0   523   258     6        0
+  10      7%      0   414   328    16        0
+  11      4%      0   669   175    14        0
+  12      3%      0   752   167     5        0
+  13      2%      0   324   250     6        0
+  14      0%      6   941    21    32        6
+  15      0%      0  1000     0     0        0
+  16      0%      0  1000     0     0        0
+  17      0%      0   255     0     9        0
+
+== agent $/1k tasks: billed, and re-priced at fixed claude-haiku-5-5 prices (neutral: cached and cache-write tokens as plain input)
+condition       n   billed       list   neutral  mix
+hermes        216     0.440     0.440     0.997
+hermes-eden   216     0.610     0.610     1.100
+hermes+eden   216     0.619     0.619     1.277
+
+== uptake (hidden): raised rate (n) when the planted item was in a packet, only in an ask answer, or neither
+hermes       packet   -   (0)   ask   -   (0)   neither 0.097 (72)
+hermes-eden  packet 0.923 (52)   ask 0.917 (12)   neither 0.000 (8)
+hermes+eden  packet 0.904 (52)   ask 1.000 (5)   neither 0.000 (15)
+
+== Eden per task: source calls, probe queries (calls), cache hits, judge calls, slow path and ask ms
+hermes       sources 0.00  probes 0.00 (0.00 calls)  cache hits 0.00  judge 0.00 (p50 0 ms)  injected 0.00  slow p50 0 p90 0  ask p50 0 ms
+hermes-eden  sources 0.00  probes 7.71 (0.00 calls)  cache hits 0.00  judge 0.00 (p50 0 ms)  injected 1.12  slow p50 9 p90 23  ask p50 8 ms
+hermes+eden  sources 0.00  probes 6.07 (0.00 calls)  cache hits 0.00  judge 0.00 (p50 0 ms)  injected 1.12  slow p50 9 p90 24  ask p50 9 ms

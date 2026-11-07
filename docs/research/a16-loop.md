@@ -223,3 +223,28 @@ says (the trial's code is in `166b622c`, where it had been promoted before the r
 | long, five arms, users 41–42 | 0.368 |
 | concern regrades (Sonnet) | 0.015 |
 | **Total** | **0.930** |
+
+## Hermes with Eden in place of its source tools (three arms, run after A16)
+
+Run by the coordinator on A16's `hermes-eden` condition: Hermes Agent (claude-haiku-5-5, Anthropic-direct lab
+provider), train1–6 × 6 templates, hidden/control/neutral, seeds 41–42, payload notices, direct profile, time scale 1,
+tip 9b0a… of 2026-11-07 15:27 UTC; recipe `packages/sim/lab/audit-1107/hermes/run3.sh`; reports
+`hermes3-train-report.txt` and `hermes3-train-cost.txt` beside it. Spend $0.465.
+
+| | hermes | hermes-eden | hermes+eden |
+| --- | --- | --- | --- |
+| Hidden raised | 7/72 (9.7%) | 59/72 (81.9%) | 52/72 (72.2%) |
+| False concern (control / neutral) | 0 / 0 | 0 / 3 of 72 | 2 / 1 of 72 |
+| Agent's own source calls a task | 2.70 | 0 | 2.16 |
+| Wall p50, 1:1:8 mix | 4.90 s | 3.79 s | 5.74 s |
+| $/1k steady (tokens), mix | 0.431 | 0.823 | 0.667 |
+| $/1k mix, Zapier MCP plan | 71.5 | 0.82 + Eden's calls | n/a |
+
+- **Eden as the agent's only context tool is the better Hermes shape:** +72 points hidden (+60..+83) and −1.4 s
+  (−2.0..−0.8) against Hermes alone; against Hermes keeping its tools beside Eden, +9.7 points (+2.8..+18.1) and −1.5 s.
+- **But Hermes pays more tokens with Eden than Pi does:** agent $/1k 0.610 against 0.440 at similar input counts (the
+  plugin's per-turn context sits in the user turn, so Hermes re-writes its cache on every model call), and the cards'
+  background spend in this run is $0.221/1k (cards not in the replay cache, paid live). Open item for the next session.
+- **Connector pricing is incomplete here:** the Hermes harness records the agent's own source calls but not Eden's
+  (`Eden conn/t` reads 0), so the per-plan rows for the Eden arms leave out Eden's connector calls. Pi measures them
+  (0.16 a task on long horizons, A3/A8).
