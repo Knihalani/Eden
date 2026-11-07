@@ -2951,7 +2951,7 @@ export class ContextPartner {
         const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(left())]);
         const freshening = this.spans?.open("sync.freshen", cue.span, { async: true });
         const tally = { fresh: 0 };
-        const polled = this.sync.freshen(s.scope, all, signal, tally).then((calls) => {
+        const polled = this.sync.freshen(s.scope, all, signal, tally, s.abort.signal).then((calls) => {
           if (freshening) this.spans!.close(freshening, { calls, fresh: tally.fresh, ...(behind ? { behind } : {}) });
           return calls;
         });

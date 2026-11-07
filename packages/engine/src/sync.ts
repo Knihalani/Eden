@@ -387,12 +387,19 @@ export class SyncManager {
   /**
    * A lookup's on-demand poll (`syncOnDemand`): every warm source of the user that is not current is polled now,
    * at most `catchupPages` pages each before the lookup goes on (the rest is read in the background), within the
-   * lookup's deadline. Returns the listing calls this freshen made (not another lookup's, made meanwhile); the
-   * sources it brought current answer the lookup locally. `tally.fresh` counts the items stored new or changed by its
-   * polls, and by any read it waited on instead (a sweep, a catch-up, another lookup's poll: `SourceSync.busy`
-   * resolves to what that read stored), or none for one it stopped waiting on (`signal`).
+   * lookup's deadline (`signal`: the poll itself goes on past it, unless `stop` aborts). Returns the listing calls
+   * this freshen made (not another lookup's, made meanwhile); the sources it brought current answer the lookup
+   * locally. `tally.fresh` counts the items stored new or changed by its polls, and by any read it waited on
+   * instead (a sweep, a catch-up, another lookup's poll: `SourceSync.busy` resolves to what that read stored), or
+   * none for one it stopped waiting on (`signal`).
    */
-  async freshen(scope: Scope, sources: Source[], signal: AbortSignal, tally?: { fresh: number }): Promise<number> {
+  async freshen(
+    scope: Scope,
+    sources: Source[],
+    signal: AbortSignal,
+    tally?: { fresh: number },
+    stop?: AbortSignal,
+  ): Promise<number> {
     const u = this.users.get(scopeKey(scope));
     if (!u) return 0;
     const now = this.deps.now();
@@ -404,12 +411,26 @@ export class SyncManager {
         if (!s || s.phase !== "warm" || this.isCurrent(s, now) || !source.list) return;
         // Its last on-demand poll just ran out of time (D140): not current, so the lookup searches it live.
         if (now - s.demandGaveUpAt < (this.o.demandTimeoutMs ?? 0)) return;
+        // Its listing failed twice running and is backing off (`failed`): every lookup listed it again regardless, a
+        // billed call on top of the live search it makes anyway (audit A5). Not current, so searched live, as D127 has
+        // it. After one failure it is polled as before: a listing that failed once is usually back, and one listing
+        // costs less than the live search and probes it replaces (the funnel: 2.69 request calls a task either way,
+        // 2.83 when one failure was enough to skip).
+        if (s.failures >= 2 && now < s.retryAt) return;
         if (s.busy) {
           // A read already running (a sweep, a catch-up, or another lookup's poll): its answer, not a second call.
           own.fresh += await Promise.race([s.busy, aborted(signal).then(() => 0)]);
           return;
         }
-        await this.run(s, () => this.poll(u, s, source, this.o.catchupPages, true, signal, own));
+        // The lookup stops waiting at its deadline; the listing does not stop with it (audit A5). Cut at the lookup's
+        // deadline, a listing slower than it was billed by every lookup and never stored anything, so the source never
+        // became current; it now finishes under the sync's own timeout, and the next lookup finds it current.
+        // `stop` (the session ending) still cuts it: then nothing waits for it, and its calls are traced as made.
+        const polling = this.run(s, () => this.poll(u, s, source, this.o.catchupPages, true, stop, own));
+        const done = await Promise.race([polling.then(() => true), aborted(signal).then(() => false)]);
+        // Ended with its session: the cut listing settles at once (as before), and its call is counted as made.
+        if (!done && stop?.aborted) await polling;
+        else if (!done) s.demandGaveUpAt = this.deps.now();
       }),
     );
     if (tally) tally.fresh += own.fresh;
@@ -537,6 +558,21 @@ export class SyncManager {
         this.warmUp(u, next, this.deps.now());
       }
     }
+  }
+
+  /**
+   * The oldest `updatedAt` among the items synced from `s`: -Infinity when one has none (it cannot be placed in the
+   * listing), Infinity when none is synced (the sweep's first page, a poll, is then enough).
+   */
+  private oldestSynced(u: UserSync, s: SourceSync): number {
+    const now = this.deps.now();
+    let oldest = Infinity;
+    for (const id of s.ids) {
+      const at = this.deps.cache.get(u.scope, id, now)?.updatedAt;
+      if (at === undefined) return -Infinity;
+      if (at < oldest) oldest = at;
+    }
+    return oldest;
   }
 
   private total(u: UserSync): number {
@@ -717,6 +753,10 @@ export class SyncManager {
     const pushSeq = s.pushSeq;
     s.sweep ??= { cursor: undefined, seen: new Set() };
     const sw = s.sweep;
+    // How far back this source's synced items reach: the sweep reads that far, not the user's whole cap (`maxItems`
+    // is across sources; a quiet source was paged to 3,000 items a day and its synced set grew past the backfill's
+    // cut, audit A5). Listings run newest first; a source with an undated item is read as before.
+    const cut = this.oldestSynced(u, s);
     for (let p = 0; p < MAX_POLL_PAGES; p++) {
       if (u.gone) return;
       if (this.budget.take(budgetKey(u, s)) > 0) return;
@@ -735,11 +775,17 @@ export class SyncManager {
       this.stats.backgroundCalls++;
       this.stats.backgroundItems += page.items.length;
       const first = sw.seen.size === 0;
-      const fresh = this.store(u, s, page.items, readMark);
+      const older = (it: ContextItem) => it.updatedAt !== undefined && it.updatedAt < cut;
+      const fresh = this.store(
+        u,
+        s,
+        page.items.filter((it) => !older(it)),
+        readMark,
+      );
       for (const it of page.items) sw.seen.add(it.id);
       // The sweep's first page is the newest: it is also a poll.
       if (first) this.polled(s, started, fresh, notices, pushSeq);
-      const full = sw.seen.size >= this.o.maxItems;
+      const full = sw.seen.size >= this.o.maxItems || page.items.some(older);
       if (page.next === null || page.items.length === 0 || full) {
         // Missed by this sweep and the one before: gone. Missed by this one only: perhaps skipped (an offset listing
         // shifted, a short page ended the listing early), so kept and checked again by the next sweep.
