@@ -7,12 +7,13 @@ fixes: [realuse-1/E-speed-scale.md](realuse-1/E-speed-scale.md).
 
 ## What this says, in plain words
 
-- **Ingest moved off the request thread works, but not enough to keep.** With the ingest worker (one Bun worker per process) each source page
-  is redacted and read for the cache in the worker; the event loop only applies the result. The main thread's cost
+- **Ingest moved off the request thread works, but not enough to keep.** With the ingest worker (one Bun worker
+  per process) each source page is redacted and read for the cache in the worker; the event loop only applies the
+  result. The main thread's cost
   of a synced item fell from about 202 to 58 µs (3.5x; 161 to 50 µs on sim-world text). Under the concurrent bench's
   cold-start load the one-second event-loop stall is gone (worst stall 1,259 to 106 ms at 400 events/s) and
-  `observe` p99 at 400 events/s fell from 489 to 29 ms. One process now holds about 500 events/s of that load inside
-  a 100 ms p99 instead of about 300-400. The stored state is the same, item for item (tests compare the vocabulary,
+  `observe` p99 at 400 events/s fell from 489 to 29 ms. Inside a 100 ms p99 one process held 475 events/s of that load
+  instead of 325 (1.46x). The stored state is the same, item for item (tests compare the vocabulary,
   index, graph, stored copies and mentions), and the eval and funnel were identical task by task.
 - **It costs CPU, and the shipped wiring does not gain.** The worker reads what the main thread used to, plus the copy
   between threads: the whole process spends 1.19x the CPU per backfilled item (224 to 266 µs, workload). On
@@ -36,8 +37,8 @@ fixes: [realuse-1/E-speed-scale.md](realuse-1/E-speed-scale.md).
 
 `BUN_OPTIONS` and `OPENROUTER_API_KEY` unset; one bench at a time; every bench three times, reported as **median
 (min-max)**. "Base" is 97d381ee in a worktree; "after" is this branch with the trial off (D215 only); "ingest" is commit
-b217ae1d with `ingestWorker` and one ingest worker (the trial's code, deleted after measuring). This machine is not the E note's (2.30 against 2.10 GHz), so compare
-only within a table.
+b217ae1d with `ingestWorker` and one ingest worker (the trial's code, deleted after measuring). This machine is not
+the E note's (2.30 against 2.10 GHz), so compare only within a table.
 
 ## 1. The ingest worker (D216, trial `ingestWorker`, rejected)
 
@@ -104,8 +105,19 @@ in flight are alive when the heap is read; released, it is the same.
 | 800, after | 17.2 (15.0-29.8) | 652 (644-673) | 1,846 (1,537-1,983) | 120% (119-123) |
 | 800, ingest | 0.30 (0.22-0.33) | 719 (591-1,038) | 1,025 (718-1,386) | 163% (162-166) |
 
-Inside a 100 ms p99, one process holds 300 events/s (not 400) on the loop and 400 (500 at the line) with the worker:
-1.33-1.67x on this ladder's steps. The decisions per run differ between runs of either arm (open-loop timing decides
+On these steps the loop holds 300 inside a 100 ms p99 and the worker 400 (500 is just past the line at 107 ms). A finer
+ladder, three runs each (`.local/s5/concurrent-3.txt`):
+
+| Events/s, arm | `observe` p50 ms | `observe` p99 ms | Lag max ms | Process CPU |
+|---|---|---|---|---|
+| 325, after | 0.60 (0.30-2.37) | 92.0 (64.2-518) | 1,103 (1,019-1,157) | 83% (82-91) |
+| 350, after | 1.57 (1.57-1.61) | 464 (445-482) | 1,179 (1,179-1,347) | 92% (89-92) |
+| 375, after | 1.61 (1.22-2.12) | 467 (453-519) | 1,180 (1,066-1,404) | 87% (83-88) |
+| 450, ingest | 0.10 (0.09-0.12) | 82.1 (22.9-106) | 153 (75-196) | 97% (95-110) |
+| 475, ingest | 0.11 (0.11-0.12) | 84.4 (71.3-161) | 149 (141-245) | 111% (108-116) |
+
+So one process holds 325 events/s on the loop and 475 with the worker inside a 100 ms p99 (medians): **1.46x**. The
+decisions per run differ between runs of either arm (open-loop timing decides
 whether a user's cache is warm when its next event lands), so quality is judged on the eval and funnel below.
 
 ### `pipeline.bench.ts` (one stream, instant sources)
@@ -180,6 +192,9 @@ confirms nor refutes the 1.06x. Memory still binds before CPU; the next real lev
 | Screen | Base (97d381ee) | After (D215) | Worker (b217ae1d, `ingestWorker` on) |
 |---|---|---|---|
 | `bun run eval` | precision 0.8276, recall 0.48, falseFireRate 0 | identical, every field but timings | identical, every field but timings |
+
+In the eval, `plannedLookups` also moves with timing between runs of one tree (121 or 122 in the reviewer's four
+runs of this branch); the three recorded runs above all read 122.
 | `bun run funnel --jobs 4` (train, replayed cards and intent, stub reader) | hidden delivered 98/384, decoys 72/384 | `--baseline` base: hidden +0 −0, decoys +0 −0 | `--baseline` base: hidden +0 −0, decoys +0 −0 |
 
 No paid call was made in this session.
