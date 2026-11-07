@@ -116,6 +116,11 @@ export const PARTS = {
    * first that settles it, not five (D400, promoted by D404).
    */
   fewer: { pushCandidatesSettled: 0 },
+  /**
+   * `checkAction` holds a call adding a recipient, guest or payee account only Eden's packets showed, not the user's
+   * request or correspondence (D375, D376).
+   */
+  parties: { partyCheck: false },
   /** A lookup does not wait for its probes past its own search (D47's grace, 100 ms, taken out). */
   probeGrace: { probeGraceMs: 100 },
 } satisfies Record<string, Partial<EngineConfig>>;

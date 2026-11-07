@@ -49,10 +49,10 @@ describe("HTTP API", () => {
     expect(body.injection?.citations[0]?.itemId).toBe("crm:d1");
   });
 
-  test("check: a tool call is checked (proceed with the firewall off); anything else is a 400", async () => {
+  test("check: a tool call is checked (proceed: the default's party check has nothing to hold); else a 400", async () => {
     const res = await post("/v1/check", { ...who, kind: "tool_call", tool: "send_payment", input: { amount: "10" } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ verdict: "proceed", finding: null, reason: "off" });
+    expect(await res.json()).toMatchObject({ verdict: "proceed", finding: null, reason: "clear" });
     expect((await post("/v1/check", { ...who, kind: "user_message", text: "hi" })).status).toBe(400);
     expect((await post("/v1/check", { ...who, kind: "tool_call" })).status).toBe(400);
   });
