@@ -6,5 +6,5 @@
   "main": "src/index.ts",
   "exports": { ".": "./src/index.ts" },
   "dependencies": { "@eden/client": "workspace:*", "@eden/protocol": "workspace:*" },
-  "devDependencies": { "@eden/server": "workspace:*", "@eden/sources": "workspace:*" }
+  "devDependencies": { "@eden/graph": "workspace:*", "@eden/server": "workspace:*", "@eden/sources": "workspace:*" }
 }

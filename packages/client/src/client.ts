@@ -126,6 +126,11 @@ export interface EdenClientOptions {
    */
   onError?: (error: unknown) => void;
   /**
+   * Shadow mode: what Eden returns is not given to the agent (a trial that only logs it). The server then learns
+   * nothing from it as if the agent had been shown it (`?shadow=1` on events and pending).
+   */
+  shadow?: boolean;
+  /**
    * `waitMs` sent on each sent `user_message` observe (not a draft) that passes none of its own (D105, D112).
    * Default `DEFAULT_WAIT_MS` (3,000), the wait the default was measured with: the push's packet (its candidates,
    * D237, after the search and on-demand poll; with `pushCandidates: 0`, the reader's reading, D98: a 1 s wait lost
@@ -243,7 +248,8 @@ export class EdenClient {
     // Clamped to the server's own range: an Infinity, a negative or a NaN would otherwise make the request's timeout
     // invalid, so every observe would fail before it was sent. NaN > 0 is false, so it waits 0 like a negative.
     const waitMs = asked > 0 ? Math.min(MAX_WAIT_MS, asked) : 0;
-    const wait = waitMs ? `?waitMs=${waitMs}` : "";
+    const query = [...(waitMs ? [`waitMs=${waitMs}`] : []), ...(this.options.shadow ? ["shadow=1"] : [])];
+    const wait = query.length ? `?${query.join("&")}` : "";
     const timeout = (this.options.timeoutMs ?? 800) + waitMs;
     const body = { ...this.who, at: Date.now(), ...event };
     const res = await this.post<ObserveResult>(`/v1/events${wait}`, body, timeout, undefined, (v) => {
@@ -254,7 +260,8 @@ export class EdenClient {
 
   /** Injections queued by slower lookups since the last call. */
   async pending(): Promise<Injection[]> {
-    const res = await this.post<{ injections: unknown[] }>("/v1/pending", this.who, undefined, undefined, (v) => {
+    const path = this.options.shadow ? "/v1/pending?shadow=1" : "/v1/pending";
+    const res = await this.post<{ injections: unknown[] }>(path, this.who, undefined, undefined, (v) => {
       return isRecord(v) && Array.isArray(v.injections);
     });
     // A malformed element is dropped, not the whole queue: the well-formed ones beside it are still context.

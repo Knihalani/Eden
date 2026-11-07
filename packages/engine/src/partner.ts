@@ -644,7 +644,12 @@ export class ContextPartner {
     }
   }
 
-  async observe(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
+  /**
+   * `shadow` (an integration trying Eden without injecting: the proxy's shadow mode, D280): what is returned is not
+   * handed out to an agent, so nothing is noted as shown and no usage outcome is learned from it (audit A5: a shadow
+   * trial taught the source map that every source it would have cited went unused).
+   */
+  async observe(event: AgentEvent, options: { waitMs?: number; shadow?: boolean } = {}): Promise<ObserveResult> {
     // `readerPush`: a request that acts is also read by the ask-time reader, as an ask of the engine's own; what it
     // flags is queued as a packet. The observe waits for it within its own wait, so an agent that never calls
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
@@ -685,7 +690,10 @@ export class ContextPartner {
     return { ...result, pending: result.pending || !settled || queued };
   }
 
-  private async observeEvent(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
+  private async observeEvent(
+    event: AgentEvent,
+    options: { waitMs?: number; shadow?: boolean } = {},
+  ): Promise<ObserveResult> {
     const t0 = performance.now();
     const spans = this.spans;
     const root = spans?.open("observe", 0, { kind: event.kind });
@@ -734,7 +742,7 @@ export class ContextPartner {
       });
     };
     const reply = (injection: Injection | null): ObserveResult => {
-      if (injection) this.handOut(s, injection);
+      if (injection && !options.shadow) this.handOut(s, injection);
       if (root) {
         spans!.close(root, {
           session: s.id,
@@ -940,15 +948,18 @@ export class ContextPartner {
     return (this.sessions.get(sessionKey(ref))?.traces ?? []).map((t) => ({ ...t, itemIds: [...t.itemIds] }));
   }
 
-  /** Injections the slow path queued for a session, oldest first. Integrations that poll call this. */
-  takePending(ref: Scope & { sessionId: string }): Injection[] {
+  /**
+   * Injections the slow path queued for a session, oldest first. Integrations that poll call this. `shadow`: taken but
+   * not handed to an agent (see `observe`).
+   */
+  takePending(ref: Scope & { sessionId: string }, options: { shadow?: boolean } = {}): Injection[] {
     const s = this.sessions.get(sessionKey(ref));
     if (!s) return [];
     // What the agent reads last about an item is its current copy (D232): a packet with a copy the cache has since
     // replaced goes before the packets that render current copies, and an update made stale by a packet of the batch
     // that renders the current copy is dropped. Queue order holds otherwise.
     const out = this.currentLast(s, this.withoutCoveredUpdates(s.pending.splice(0)));
-    for (const injection of out) this.handOut(s, injection);
+    if (!options.shadow) for (const injection of out) this.handOut(s, injection);
     return out;
   }
 

@@ -161,6 +161,25 @@ Plus two load-flaky tests made robust (below).
   `max_tokens`, `length`, `MAX_TOKENS`, `tool_use`, `tool_calls`), and unset for anything else, as for an unreported
   reason.
 
+## A4's new code (merged mid-session at a750f5f22)
+
+A fifth hunter read A4's merge (D276 candidates without a reader, D277 traces and `/v1/explain`, D278 the Python
+client, D279 trace-report, D280 the proxy). The engine and server parts held under every hypothesis tried (isolation of
+`explain`, the ring's bound, content-free explanations, 400s for bad ids, router forwarding, D276's push guards). Three
+proxy bugs were fixed (`proxy/src/proxy-a5.test.ts`, `with-messages.test.ts`):
+
+- **A repeated user message was never a new turn (medium).** New messages are told by content counts, so "yes" or
+  "continue" said again (an agent sending only its latest turn, or a window past the first copy) was not reported, and
+  the previous turn's packets were re-inserted into the new turn. Now a request ending with a user message is a new turn
+  unless its messages repeat the previous request's exactly (a retry; two identical requests in a row cannot be told
+  apart, and are reported once).
+- **Shadow mode trained the source map (medium; D282).** Shadow took packets like a live integration, so the engine
+  counted them shown, and usage tracking recorded every cited source as unused in the persistent source map. Shadow
+  requests now carry `?shadow=1`; the engine skips `handOut` for them.
+- **Injecting re-serialised the body (low).** `JSON.stringify` of the parsed body lost the digits of a 64-bit `seed`
+  and changed number formatting. `withMessages` now replaces only the top-level `messages` value in the raw text
+  (checked against `JSON.parse` over 300 generated bodies).
+
 ## Flaky tests
 
 - `probes.test.ts` "judgeItemBytes …": the engine helper ran with the default 1.5 s `sourceTimeoutMs`; under a loaded

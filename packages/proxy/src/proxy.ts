@@ -65,6 +65,8 @@ interface Conversation {
   turn: number;
   /** The packets Eden gave in the current turn, re-inserted on every call of the turn. */
   packets: Injection[];
+  /** The last request's messages, as one hash: the same messages again are a retry, not a new turn. */
+  last?: string;
 }
 
 /** Message hashes kept per conversation; the oldest go first (their messages may then be reported again). */
@@ -205,6 +207,18 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       }
     }
     while (conv.seen.size > MAX_SEEN) conv.seen.delete(conv.seen.keys().next().value!);
+    // A request that ends with a user message already seen ("yes", "continue" again, from an agent that sends only
+    // its latest turn or whose window slid past the first copy) is still a new turn unless it repeats the last
+    // request's messages exactly (a retry): counting copies alone dropped it, and re-inserted the previous turn's
+    // packets into it (audit A5).
+    const all = createHash("sha256")
+      .update((messages as Message[]).map(hashOf).join(","))
+      .digest("hex");
+    const end = (messages as Message[]).at(-1)!;
+    if (known && end.role === "user" && fresh.at(-1) !== end && conv.last !== undefined && conv.last !== all) {
+      fresh.push(end);
+    }
+    conv.last = all;
     const lastUser = fresh.map((m) => m.role).lastIndexOf("user");
     if (lastUser >= 0) {
       conv.turn++;
@@ -217,6 +231,8 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       userId,
       sessionId,
       onError: report,
+      // Shadow: Eden decides as it would, and learns nothing from packets the agent never sees (audit A5).
+      ...(options.shadow ? { shadow: true } : {}),
       ...(options.waitMs !== undefined ? { defaultWaitMs: options.waitMs } : {}),
     });
     const keep = (got: Injection[]) => {
@@ -290,7 +306,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     try {
       if (body && typeof body === "object" && !Array.isArray(body)) {
         const messages = await withEden(req, body as Record<string, unknown>);
-        if (messages) sent = JSON.stringify({ ...(body as object), messages });
+        if (messages) sent = withMessages(raw, messages) ?? JSON.stringify({ ...(body as object), messages });
       }
     } catch (e) {
       // Anything Eden-side that threw: the request goes upstream as it came (D14).
@@ -303,4 +319,63 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       return openAiError(502, "eden proxy: upstream unreachable");
     }
   };
+}
+
+/**
+ * `raw` (a JSON object's text) with its top-level `messages` value replaced, every other byte as it came: parsing and
+ * re-serialising the whole body changed fields the proxy never touches (an integer past 2^53, such as a 64-bit
+ * `seed`, lost its digits; audit A5). The last `messages` key wins, as in `JSON.parse`. Null when there is none.
+ */
+export function withMessages(raw: string, messages: unknown): string | null {
+  let depth = 0;
+  let at: [number, number] | null = null;
+  let i = 0;
+  const skipString = (k: number): number => {
+    for (k++; k < raw.length; k++) {
+      if (raw[k] === "\\") k++;
+      else if (raw[k] === '"') return k + 1;
+    }
+    return k;
+  };
+  while (i < raw.length) {
+    const c = raw[i]!;
+    if (c === '"') {
+      const end = skipString(i);
+      if (depth === 1 && raw.slice(i, end) === '"messages"') {
+        let k = end;
+        while (/\s/.test(raw[k] ?? "")) k++;
+        if (raw[k] === ":") {
+          k++;
+          while (/\s/.test(raw[k] ?? "")) k++;
+          const start = k;
+          // The value: a string, or a run up to the next comma or brace at this depth.
+          let d = 0;
+          while (k < raw.length) {
+            const v = raw[k]!;
+            if (v === '"') {
+              k = skipString(k);
+              continue;
+            }
+            if (v === "[" || v === "{") d++;
+            else if (v === "]" || v === "}") {
+              if (d === 0) break;
+              d--;
+            } else if (v === "," && d === 0) break;
+            k++;
+          }
+          let stop = k;
+          while (stop > start && /\s/.test(raw[stop - 1]!)) stop--;
+          at = [start, stop];
+          i = k;
+          continue;
+        }
+      }
+      i = end;
+      continue;
+    }
+    if (c === "{" || c === "[") depth++;
+    else if (c === "}" || c === "]") depth--;
+    i++;
+  }
+  return at ? raw.slice(0, at[0]) + JSON.stringify(messages) + raw.slice(at[1]) : null;
 }
