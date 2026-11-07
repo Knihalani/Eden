@@ -99,10 +99,11 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     });
   });
 
-  test("every PARENTS and NEEDS_DEP entry names real settings; every parent is a flag", () => {
+  test("every PARENTS and NEEDS_DEP entry names real settings; every parent is a flag (or a count, on above 0)", () => {
     for (const [key, parents] of Object.entries(PARENTS)) {
       expect(Object.hasOwn(DEFAULT_CONFIG, key)).toBe(true);
-      for (const p of parents!) expect(typeof DEFAULT_CONFIG[p as keyof EngineConfig]).toBe("boolean");
+      // `pushCandidates` (D236) is a count whose 0 is off.
+      for (const p of parents!) expect(["boolean", "number"]).toContain(typeof DEFAULT_CONFIG[p as keyof EngineConfig]);
       expect(parents).not.toContain(key);
     }
     for (const key of Object.keys(NEEDS_DEP)) expect(Object.hasOwn(DEFAULT_CONFIG, key)).toBe(true);

@@ -59,6 +59,12 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerVerifyAfter: "reader",
   readerReuse: "reader",
   pushChecked: "reader",
+  pushCandidates: "reader",
+  pushCandidateBytes: "reader",
+  pushCandidateCheck: "reader",
+  pushCandidateAskReader: "reader",
+  pushCandidateNone: "reader",
+  pushCandidatePoolOrder: "reader",
 };
 
 /**
@@ -116,6 +122,12 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerVerifyAfter: [...READER, "verifyDelivery"],
   readerReuse: PUSH,
   pushChecked: PUSH,
+  pushCandidates: PUSH,
+  pushCandidateBytes: [...PUSH, "pushCandidates"],
+  pushCandidateCheck: [...PUSH, "pushCandidates"],
+  pushCandidateAskReader: [...PUSH, "pushCandidates"],
+  pushCandidateNone: [...PUSH, "pushCandidates"],
+  pushCandidatePoolOrder: [...PUSH, "pushCandidates"],
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
@@ -171,6 +183,8 @@ const RANGES: Partial<Record<Key, Range>> = {
   intentCardHits: COUNT,
   intentSeats: COUNT,
   askReaderPool: COUNT,
+  pushCandidates: COUNT,
+  pushCandidateBytes: SIZE,
 };
 
 /** String-list keys whose entries must come from a known list. */
@@ -228,7 +242,8 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
     for (const key of Object.keys(out) as Key[]) {
       const parents = PARENTS[key];
       if (!parents || isCore(key, merged[key])) continue;
-      const off = parents.filter((p) => merged[p] !== true);
+      // A count parent (`pushCandidates`) is on when above 0.
+      const off = parents.filter((p) => merged[p] !== true && !(typeof merged[p] === "number" && merged[p] > 0));
       if (off.length) {
         throw new Error(
           `${where}: "${key}" acts only with ${parents.map((p) => `"${p}"`).join(" and ")} on, and this ` +

@@ -457,6 +457,27 @@ export interface EngineConfig {
    * `ask_context` call and a model turn on requests Eden has nothing for. Needs `readerPush`.
    */
   pushChecked: boolean;
+  /**
+   * `pushCandidates` (trial, D236, CL6 H19 "the agent is the reader"): with `readerPush`, the push makes no reader
+   * call. It hands the agent the first `pushCandidates` items of the pool the reader would have read (the ask's order,
+   * `askReaderPool` deep, `readerGate`'s constraint-like items first, bulk mail never), each a focused excerpt of at
+   * most `pushCandidateBytes`, after a line framing them as items that may bear on the request and must be checked
+   * against it. 0 is off (the reader reads the push).
+   */
+  pushCandidates: number;
+  /** `pushCandidates`: each candidate's excerpt, in bytes (focused on the request, `compactText`). */
+  pushCandidateBytes: number;
+  /** `pushCandidates`: the framing asks the agent to check each candidate's who, what and when first (`CANDIDATES_CHECK`). */
+  pushCandidateCheck: boolean;
+  /** `pushCandidates`: an explicit `ask` still reads with the reader (the hybrid); off, no ask calls it either. */
+  pushCandidateAskReader: boolean;
+  /**
+   * `pushCandidates`: when no pooled item could constrain the request (`readerGate`'s test) and every source searched
+   * answered (D127), a note says so (`CANDIDATES_NONE`), as `pushChecked` does after a reading.
+   */
+  pushCandidateNone: boolean;
+  /** `pushCandidates`: the pool's own order, not its constraint-like items first. */
+  pushCandidatePoolOrder: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -573,4 +594,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerVerifyAfter: true,
   readerReuse: true,
   pushChecked: false,
+  pushCandidates: 0,
+  pushCandidateBytes: 320,
+  pushCandidateCheck: false,
+  pushCandidateAskReader: false,
+  pushCandidateNone: false,
+  pushCandidatePoolOrder: false,
 };
