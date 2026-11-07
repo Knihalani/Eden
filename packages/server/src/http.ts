@@ -6,6 +6,8 @@
  *   POST /v1/check     a tool_call AgentEvent     → ActionCheck   (the action firewall, `actionCheck`)
  *   POST /v1/pending   {tenantId,userId,sessionId} → {injections}
  *   POST /v1/whoami    {tenantId,userId,sessionId?} → {ok}  (checks the key, tenant and ids; changes nothing)
+ *   POST /v1/explain   {tenantId,userId,sessionId} → {decisions}: the session's last decisions and why, no content
+ *                                                    (D277; reads only)
  *   POST /v1/feedback  a Feedback (used: boolean)  → {ok, applied}
  *   POST /v1/forget    {tenantId,userId,sourceId?} → {ok}  (also closes the user's source connections, D108)
  *   POST /v1/sources   {tenantId,userId}           → {sources:[{id,kind}]}; 422 {error} when the user's source
@@ -23,7 +25,7 @@
  * before the body is read; `main.ts` passes the same cap to Bun.serve, which also covers bodies sent without one.
  * Errors are `{error}` with a 4xx for the caller's mistakes; nothing the caller sends can produce a 500.
  */
-import type { ContextPartner } from "@eden/engine";
+import { explainTrace, type ContextPartner } from "@eden/engine";
 import { Gcra } from "@eden/primitives";
 import { checkAsk, checkEvent, checkSourceChanged, checkSourceItems, checkSourceRemoved, isId } from "@eden/protocol";
 import { DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
@@ -114,6 +116,25 @@ export function createHandler(
             return fail(400, "sessionId must be 1-128 characters of [A-Za-z0-9._:@-]");
           }
           return json({ ok: true });
+        }
+        case "/v1/explain": {
+          // Why Eden spoke or stayed silent in this session (D277): its traces, content-free (D56), a sentence each.
+          const bad = badId(body, ["userId", "sessionId"]);
+          if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
+          const who = { tenantId: tenant, userId: body.userId as string, sessionId: body.sessionId as string };
+          const decisions = partner.explain(who).map((t) => ({
+            turn: t.turn,
+            event: t.event,
+            decision: t.decision,
+            reason: t.reason,
+            why: explainTrace(t),
+            latencyMs: t.latencyMs,
+            sourceCalls: t.sourceCalls,
+            modelCalls: t.modelCalls,
+            costUsd: t.costUsd,
+            itemIds: t.itemIds,
+          }));
+          return json({ decisions });
         }
         case "/v1/feedback": {
           const bad = badId(body, ["userId", "sessionId", "injectionId"]);

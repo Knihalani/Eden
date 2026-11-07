@@ -17,6 +17,7 @@ import {
   type ActionCheck,
   type AgentEvent,
   type AskResponse,
+  type ExplainedDecision,
   type Injection,
   type ObserveResult,
   type SourceChangedReason,
@@ -308,6 +309,25 @@ export class EdenClient {
       error = e instanceof Error ? e.message : String(e);
     });
     return res === null ? { ok: false, error } : { ok: true };
+  }
+
+  /**
+   * Why Eden spoke or stayed silent in this session (D277): its last decisions, oldest first, each with a plain
+   * sentence (`why`), counts and the ids it delivered or cited; never content. For debugging and logs, not the agent's
+   * loop. Never throws: a failure, or an answer of another shape, is `[]` (reported to `onError`).
+   */
+  async explain(options: { timeoutMs?: number } = {}): Promise<ExplainedDecision[]> {
+    const res = await this.post<{ decisions: unknown[] }>(
+      "/v1/explain",
+      this.who,
+      options.timeoutMs,
+      undefined,
+      (v) => isRecord(v) && Array.isArray(v.decisions),
+    );
+    return (res?.decisions ?? []).filter(
+      (d): d is ExplainedDecision =>
+        isRecord(d) && typeof d.decision === "string" && typeof d.why === "string" && Array.isArray(d.itemIds),
+    );
   }
 
   /** Tells the partner whether the agent used an injection. Better than the partner's own inference. */

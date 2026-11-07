@@ -1,0 +1,14 @@
+**/node_modules
+archived
+.git
+.local
+.eden-local
+native
+bench
+docs
+!docs/profiles
+**/*.db
+**/*.db-wal
+**/*.db-shm
+.env
+.env.*
