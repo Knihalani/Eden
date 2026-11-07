@@ -147,7 +147,7 @@ agent's path), a guard's skip or a plain error tried again up to 4 times; an ite
 a found one is stored as synced under the read mark its call began with, unless a removal landed during the call.
 The first ref not read (no fetch tool, errors, a timeout, a null that proves nothing) raises the plain signal before
 its item's doubt is lifted. A signal after the notice makes a delivery read the item itself rather than reuse the ref
-read. A landed read is noted in the user's live sessions as a recent re-read (a pool built before it applies it).
+read. A landed read that changed the item is noted in the user's live sessions as a recent re-read (a pool built before it applies it).
 Reads stop when the user is forgotten or no longer synced. The stored ref is the gated one (D10). Stores announce
 revisions as any sync store does (D205). `freshness.refsRead` and `refsFallback` count them.
 

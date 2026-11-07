@@ -2231,7 +2231,8 @@ export class ContextPartner {
       let stored = 0;
       const done = (id: string, o: CheckOutcome, mark = noticeMark) => {
         if (o === "failed" || o === "flaked" || o === "skipped" || o === "unverifiable") fallback();
-        else if (o === "changed" || o === "confirmed") this.noteRefRead(scope, id, o, mark);
+        // Only a changed copy: a pool's copy of a confirmed item is the cached one already.
+        else if (o === "changed") this.noteRefReads(scope, [{ id, outcome: o, mark }]);
         settle.get(`${user}|${id}`)?.(o);
       };
       try {
@@ -3868,29 +3869,33 @@ export class ContextPartner {
   }
 
   /**
+   * Ref notices' reads that landed (D347), noted as recent re-reads in each live session of the user
+   * (`Session.checks`, as `check` keeps its own): a pool a session built before they landed holds the older copies, and
+   * `verifyItems` then applies these outcomes to them (a changed item goes out as the cache now holds it). Called for
+   * changed copies only, before their doubt is lifted: one walk of the process's sessions per changed ref.
+   */
+  private noteRefReads(scope: Scope, landed: readonly { id: string; outcome: CheckOutcome; mark: number }[]): void {
+    if (landed.length === 0) return;
+    const user = scopeKey(scope);
+    const now = this.now();
+    for (const s of this.sessions.values()) {
+      if (s.closed || scopeKey(s.scope) !== user) continue;
+      const checks = (s.checks ??= new Map());
+      for (const { id, outcome, mark } of landed) {
+        checks.delete(id);
+        checks.set(id, { at: now, mark, outcome: Promise.resolve(outcome), settled: outcome });
+      }
+      while (checks.size > MAX_CHECKS) checks.delete(checks.keys().next().value as string);
+    }
+  }
+
+  /**
    * Whether an item must be re-read before it is delivered (`verifyDelivery`): its source signalled a change since the
    * copy's read began (`Sync.signalledSince` on its `ItemCache.readMark`; D133: not since it was stored, which a
    * signal while the call was on the wire precedes) and no listing or notification has brought it again since. A
    * copy's age alone does not doubt it (D126: re-reading by age cost 4.6 connector calls and 0.33 s per task live, for
    * no measured gain; a silent source's changes reach Eden through the sync's polls and sweeps).
    */
-  /**
-   * A ref notice's read that landed (D347), noted as a recent re-read in each live session of the user
-   * (`Session.checks`, as `check` keeps its own): a pool a session built before it landed holds the older copy, and
-   * `verifyItems` then applies this outcome to it (a changed item goes out as the cache now holds it).
-   */
-  private noteRefRead(scope: Scope, id: string, outcome: CheckOutcome, mark: number): void {
-    const user = scopeKey(scope);
-    const now = this.now();
-    for (const s of this.sessions.values()) {
-      if (s.closed || scopeKey(s.scope) !== user) continue;
-      const checks = (s.checks ??= new Map());
-      checks.delete(id);
-      checks.set(id, { at: now, mark, outcome: Promise.resolve(outcome), settled: outcome });
-      while (checks.size > MAX_CHECKS) checks.delete(checks.keys().next().value as string);
-    }
-  }
-
   private doubted(s: Session, item: ContextItem): boolean {
     // A ref notice's re-read still on the wire (D347): the copy held is from before the change.
     if (this.refreshing.size > 0 && this.refreshing.has(`${scopeKey(s.scope)}|${item.id}`)) return true;

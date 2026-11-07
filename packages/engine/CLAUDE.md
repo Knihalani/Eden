@@ -239,7 +239,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   and `check` returns it (raced against `verifyTimeoutMs`) instead of a second call, unless a signal came after the
   notice. The read is stored through `Sync.ingest` under the read mark its call began with (D133), after the same
   removal check as `sourceItems` (`heldGoneSeq`, D160/D176), with the gated ref (never the raw one, D10), and noted in
-  the user's live sessions' `checks` (`noteRefRead`), so a pool built before it applies it. The first ref not read
+  the user's live sessions' `checks` (`noteRefReads`, changed copies only), so a pool built before it applies it. The first ref not read
   raises `sourceNotice`'s plain signal before its item's doubt is lifted; reads stop when the user is no longer synced
   (`Sync.notifying`). A new delivery path must keep going through `check`/`verifyItems`, or a named item's old copy
   goes out.
