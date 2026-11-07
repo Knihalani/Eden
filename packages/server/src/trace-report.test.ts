@@ -67,6 +67,21 @@ describe("trace-report (D279)", () => {
     expect(r.spoke).toBe(1); // a re-sent newer version is not a new event that spoke
   });
 
+  test("each ask is an event of its own: asks move no turn, so (session, turn) does not tell them apart (audit A11)", () => {
+    // An ask-only session (MCP) never observes, so every ask is turn 0; an agent also asks several times a request.
+    const ask = (itemIds: string[]) => t({ event: "ask", decision: "answer", reason: "cue:1", turn: 0, itemIds });
+    const r = traceReport([ask(["a"]), ask(["b"]), ask([]), ask(["c"])]);
+    expect(r.events).toBe(4);
+    expect(r.spoke).toBe(3);
+  });
+
+  test("a push and its second pass are their request's one event, whatever their order in the log (audit A11)", () => {
+    const push = (itemIds: string[]) => t({ decision: "reader-push", reason: "cue:1", itemIds, candidates: true });
+    const r = traceReport([push(["a"]), push(["a", "b"]), t({ decision: "silent", reason: "no candidates" })]);
+    expect(r.events).toBe(1);
+    expect(r.spoke).toBe(1);
+  });
+
   test("reads what a real partner's onTrace writes", async () => {
     const lines: string[] = [];
     const crm = new StaticSource("crm", "deals", [

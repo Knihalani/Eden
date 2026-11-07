@@ -98,8 +98,10 @@ export function traceReport(lines: Iterable<string>): TraceReport {
       // An update packet (a source changed items already shown) follows a source notice, not an agent event.
       t.reason.startsWith("updated:");
     if (!followUp) events++;
+    // An ask moves no turn (an ask-only session stays at turn 0), so each ask is its own event: keyed by (session,
+    // turn) every ask of a turn read as one that spoke (audit A11). A push keys to its request's user message.
     if (SPOKE.has(t.decision) && t.itemIds.length > 0 && !t.reason.startsWith("updated:"))
-      spokeAt.add(`${t.sessionId}#${t.turn}#${t.event}`);
+      spokeAt.add(t.event === "ask" ? `ask#${events}` : `${t.sessionId}#${t.turn}#${t.event}`);
     if (t.decision === "silent") silentReasons[t.reason] = (silentReasons[t.reason] ?? 0) + 1;
     if (t.decision !== "skipped") {
       const xs = latencies.get(t.decision) ?? [];
