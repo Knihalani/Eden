@@ -101,6 +101,7 @@ import { sanitizeForStore } from "@eden/redact";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
+import { noiseSources } from "./noise-sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
 import {
@@ -204,6 +205,8 @@ const cli = flags(
         "spend-headroom",
         "run-label",
         "distill",
+        "noise-sources",
+        "noise-items",
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
@@ -232,6 +235,12 @@ const SEEDS = opt("seeds", "41,42,43,44").split(",").map(Number);
  * is the delivery latency a user would see; 0 (the default) answers at once.
  */
 const TIME = Number(opt("time", "0"));
+/**
+ * `--noise-sources N` (A1 scale audit): N unrelated connectors beside the world's five, `--noise-items` items each
+ * (default 20; `noise-sources.ts`), so the screen runs a user with ~1,000 sources. 0 (the default): none.
+ */
+const NOISE_SOURCES = Number(opt("noise-sources", "0"));
+const NOISE_ITEMS = Number(opt("noise-items", "20"));
 /** `--config`: engine settings, checked whole (checkEngineConfig); a typo or a child whose parent is off exits 2. */
 const CONFIG = ((): Record<string, unknown> => {
   try {
@@ -650,7 +659,10 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     const asks = tasks.map((t, i) => ({ template: t.template, request: t.text, planted: planted[i]?.id ?? "" }));
     appendFileSync(CORPUS_DUMP, `${JSON.stringify({ suite, seed, variant, tasks: asks, items })}\n`);
   }
-  const sources = simSources(world, REALISTIC, TIME, seed);
+  const sources = [
+    ...simSources(world, REALISTIC, TIME, seed),
+    ...(NOISE_SOURCES > 0 ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed) : []),
+  ];
   const returned = new Set<string>();
   let served = 0;
   for (const s of sources) {

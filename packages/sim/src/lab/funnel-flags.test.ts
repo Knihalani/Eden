@@ -34,7 +34,10 @@ const noKey = { ...process.env, OPENROUTER_API_KEY: "" };
 // counts, but storing 3,000 items was 0.8 s of each run's 2.5 s CPU (bun --cpu-prof), and no check here needs them.
 // The reader's push (`pushCandidates` 0): these runs check the reader's outputs and its replay, which the default's
 // candidates push (D237) does not call.
-const smallSync = { syncMaxItems: 100, pushCandidates: 0 };
+// A small sync keeps the runs quick. At a cap of 100 every world source's copy is cut, and `syncLocalComplete` (D264)
+// would search them live: at `--time 0.05` a lookup's deadline is 75 ms, which a loaded machine's searches race, so a
+// task's finds would depend on timing. These tests check the sharding, not that, so cut copies answer locally here.
+const smallSync = { syncMaxItems: 100, pushCandidates: 0, syncLocalComplete: false };
 
 type Run = { status: number | null; stdout: string; stderr: string; out: string };
 /** `bun args…` in a child process without blocking this one, so the runs below can go out together. */
