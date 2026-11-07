@@ -134,6 +134,12 @@ describe("pushAhead (A9): the push carries the records the agent would look up f
     for (const id of ["mail:leon-new", "cal:early"]) expect([...cands, ...ahead]).toContain(id);
   });
 
+  test("a span of days (this week) sends no calendar ahead", async () => {
+    const p = setup({ pushAhead: true }, ALL);
+    await say(p, "Book a call about the venue quote this week.");
+    expect(packets(p, "ahead:").length).toBe(0);
+  });
+
   test("a request that names nobody and no day gets no ahead packet", async () => {
     const p = setup({ pushAhead: true }, ALL);
     await say(p, "Send the venue quote by email.");

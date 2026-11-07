@@ -1893,7 +1893,7 @@ export class ContextPartner {
    * `pushAhead` (A9): the answer-ahead packet, queued after the candidates', or null. From `ranked` (the push's pool:
    * lexical, probed and the named days' events, `rank`), bulk mail and the candidates' items out: the newest item
    * naming each of the first `AHEAD_NAMES` people or firms the request names (a participant, or every word of the
-   * name in the item), then the named days' events soonest first, at most `AHEAD_MAX`. Re-read as the candidates are
+   * name in the item), then the events of the day or two it names soonest first, at most `AHEAD_MAX`. Re-read as the candidates are
    * (`verifyItems`) and dropped if a newer user message arrived meanwhile. No source or model call of its own.
    */
   private async pushAheadOf(
@@ -1916,8 +1916,9 @@ export class ContextPartner {
       const about = pool.filter((x) => namesParticipant(name, x.item) || mentions(name, x.item));
       add(about.sort((a, b) => (b.item.updatedAt ?? 0) - (a.item.updatedAt ?? 0))[0]);
     }
+    // A named day or two ("tomorrow", "Friday"), not a span ("this week": seven days of calendar answer no lookup).
     const days = cue.time?.days;
-    if (days && days.size > 0) {
+    if (days && days.size > 0 && days.size <= AHEAD_DAYS) {
       const on = pool.filter((x) => days.has(startDay(x.item, cue.offset) ?? ""));
       for (const x of on.sort((a, b) => startMs(a.item) - startMs(b.item))) add(x);
     }
@@ -4712,6 +4713,8 @@ const MAX_CANDIDATE_BYTES = 2_000;
 /** `pushAhead` (A9): the most items the answer-ahead packet holds, and how many named people or firms it covers. */
 const AHEAD_MAX = 4;
 const AHEAD_NAMES = 2;
+/** `pushAhead` (A9): the most days a request may name for their calendar to be sent ahead. */
+const AHEAD_DAYS = 2;
 
 /**
  * `pushAhead` (A9): a name the request gives that a record can be about: an address, a name of two or more words
