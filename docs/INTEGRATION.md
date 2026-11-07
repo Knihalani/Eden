@@ -107,11 +107,14 @@ trip. Eden answers an ask in about 5 ms at p50 (D64), so the cost of asking is t
   so an item first shown in an earlier turn's packet is only in that packet (5 of 23 hidden facts over a user's days;
   the agent raised 2 of the 5 with the packets kept, 0 without). So append the message `withContext` placed to your
   stored transcript, or keep Eden's packets beside it and place them again before the same user messages.
-  `@eden/proxy` does this for you (`keepPackets`, on by default). Agent frameworks that inject plugin context per turn
-  only have the same gap: Hermes Agent's `pre_llm_call` context is ephemeral (its `agent/turn_context.py` builds it
-  per turn and does not store it in the session history), so a multi-request Hermes session drops earlier packets.
-  Until Hermes can persist it, have the plugin keep the session's earlier packets and return them again in the same
-  order with the new one (unmeasured: the lab's Hermes harness runs one request per session).
+  `@eden/proxy` does this for you (`keepPackets`, on by default). Check how your framework treats plugin context
+  before working around it. **Hermes Agent already keeps it** (read in its source at the lab's pin, 06433066, A27,
+  D385): `agent/turn_context.py` appends the `pre_llm_call` context to the turn's user message, stores the exact
+  bytes it sent on that message (the `api_content` sidecar) and sends those bytes again on every later call of the
+  turn and every later turn. So a Hermes plugin returns only the new packet; returning earlier packets again would
+  repeat them. The same holds for `transform_tool_result`: what it returns becomes the stored tool result. Measured on
+  the lab's Hermes requests (`hermes-cache-probe.ts`): the second call of a turn reads the first call's whole prompt,
+  packet included, from Anthropic's cache.
 - **Within a turn that calls tools**, a packet that arrives between the turn's model calls lands before the user
   message, ahead of the assistant's tool call and the tool result, so the previous request is no longer a prefix and
   the cache misses from that point on. To keep it, append a mid-turn packet at the end of the messages (after the tool

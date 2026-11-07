@@ -380,10 +380,15 @@ async function runWorld(
   let clock = world.now;
   let current: Timeline | null = null;
   const bySession = new Map<string, { r: RunResult; tl: Timeline }>();
+  // Every connector call Eden makes in this stream, in a task's window or not (the backfill, the sync's ticks between
+  // tasks): `Background.sourceCalls`, priced per connector plan by pi-cost-report.ts, as pi-ab records it (A27).
+  let edenCalls = 0;
   const edenSources = sources.map((s) =>
-    watched(s, (op, start, end, status) =>
-      current?.span("eden.source", "eden", "bg", start, end, { source: s.id, op, status }),
-    ),
+    watched(s, (op, start, end, status) => {
+      edenCalls++;
+      bg.sourceCalls = edenCalls;
+      current?.span("eden.source", "eden", "bg", start, end, { source: s.id, op, status });
+    }),
   );
   // What this stream's background calls (cards) cost: booked to Eden's total, charged to no task (Background).
   // Recorded in the results as the calls happen (below), so a stream that stops early (OverBudget, the request cap)
@@ -488,6 +493,13 @@ async function runWorld(
       throw new Error(`sync never warmed for ${scope.userId}: a run without it is not this config`);
   }
   if (cards) await cards.idle();
+  // What the backfill (the sync's warm-up and its cards) cost before the first request: the user's one-time spend
+  // (H16), split from what the cards spend while the user works, as pi-ab does. Before A27 Hermes results lacked it,
+  // so the report put the whole backfill in the in-run background column.
+  bg.setupUsd = bg.cardsUsd;
+  bg.setupCalls = bg.calls;
+  bg.setupSourceCalls = edenCalls;
+  bg.sourceCalls = edenCalls;
 
   // The stream's state the routes read: the running task's binding, timeline, record and result.
   let task: {
