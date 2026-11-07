@@ -41,7 +41,8 @@ import { existsSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SourceMap } from "@eden/graph";
 import { fnv1a, Gcra, mix32 } from "@eden/primitives";
-import { bodyShapeUnder } from "@eden/protocol";
+import { bodyShapeUnder, keylessOriginAllowed } from "@eden/protocol";
+import { keyOf } from "./auth";
 import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, MAX_PROCESSES, type ServerConfig } from "./config";
 
 /** The child a tenant/user is served by: stable across restarts and router instances, spread by a mixed FNV-1a. */
@@ -344,7 +345,7 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   }
 
   const tenantOf = (req: Request): string | null => {
-    const key = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    const key = keyOf(req);
     if (key && config.keys.has(key)) return config.keys.get(key)!;
     return config.dev && !key ? "dev" : null;
   };
@@ -424,6 +425,10 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         // Only an authenticated POST is read for its user; anything else gets the child's own answer (405, 401).
         if (req.method !== "POST" || tenant === null)
           return forward(children[childFor(tenant ?? "", "", n)]!, req, url, undefined);
+        // The child never sees the Origin header (only the key and content type are forwarded): a keyless request from
+        // another site's page is refused here, as one process refuses it (http.ts, audit A20).
+        if (tenant === "dev" && !keyOf(req) && !keylessOriginAllowed(req.headers.get("origin")))
+          return fail(403, "dev mode serves no key-less request from another site's page");
         const waitMs = limiter.take(tenant);
         if (waitMs > 0) {
           return Response.json(

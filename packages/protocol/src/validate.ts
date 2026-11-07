@@ -267,3 +267,21 @@ export function checkSourceRemoved(
     return { ok: false, error: "each ref must be 1-512 characters" };
   return { ok: true, value: { ...head.value, refs: refs as string[] } };
 }
+
+/**
+ * Whether a request with this `Origin` header may be served without a key (the server's dev mode, the proxy with no
+ * `proxyKey`; audit A20). Every browser POST carries an Origin and no agent's HTTP client sends one, so a page on
+ * another site, which can reach 127.0.0.1 by a blind cross-site POST or read the answer by DNS rebinding, is refused;
+ * a page served from this machine (localhost, 127.0.0.1, [::1], any port) is not. A keyed request needs no such check.
+ */
+export function keylessOriginAllowed(origin: string | null): boolean {
+  if (origin === null) return true;
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false; // "null" (a sandboxed frame, a file:// page) and anything unparseable.
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  return url.hostname === "localhost" || url.hostname === "[::1]" || /^127(?:\.\d{1,3}){3}$/.test(url.hostname);
+}

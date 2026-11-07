@@ -9,6 +9,7 @@ export {
   checkSourceItems,
   checkSourceRemoved,
   isId,
+  keylessOriginAllowed,
   MAX_PUSHED_ITEMS,
   MAX_QUESTION_CHARS,
   MAX_TEXT_CHARS,

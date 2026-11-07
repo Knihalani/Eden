@@ -83,11 +83,12 @@ export interface SecretRule {
 
 /**
  * D13's keyword rule, case-insensitive (env lines spell it `PASSWORD=`), with `is` read as a word and the value in
- * group 1. A value already redacted is no secret. A double-quoted value is taken whole, up to 256 characters (audit
- * A5: `\S{6,}` took `"correct` of `my password is "correct horse battery staple"` and left the rest).
+ * group 1. A value already redacted is no secret. A quoted value is taken whole, up to 256 characters (audit A5:
+ * `\S{6,}` took `"correct` of `my password is "correct horse battery staple"` and left the rest), in double, single or
+ * typographic quotes (audit A20: prose quotes a passphrase in any of them).
  */
 const KEYWORD_RULE = new RegExp(
-  String.raw`(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*(?!\[REDACTED\])("[^"\n]{4,256}"|\S{6,})`,
+  String.raw`(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*(?!\[REDACTED\])("[^"\n]{4,256}"|'[^'\n]{4,256}'|“[^”\n]{4,256}”|‘[^’\n]{4,256}’|\S{6,})`,
   "dgi",
 );
 const SECRET_WORD = /(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)/i;

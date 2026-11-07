@@ -17,7 +17,7 @@
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import { DEFAULT_WAIT_MS, EdenClient, edenId, withContext } from "@eden/client";
-import { MAX_TEXT_CHARS, type Injection } from "@eden/protocol";
+import { keylessOriginAllowed, MAX_TEXT_CHARS, type Injection } from "@eden/protocol";
 
 export interface ProxyOptions {
   /** The model's OpenAI-compatible base URL, with its version path (`https://api.openai.com/v1`). */
@@ -370,6 +370,11 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     // The proxy holds the tenant's Eden key: with `proxyKey` set, only callers who know it may name a user (D9).
     if (options.proxyKey !== undefined && !sameSecret(req.headers.get("x-eden-proxy-key"), options.proxyKey)) {
       return openAiError(401, "eden proxy: missing or wrong x-eden-proxy-key");
+    }
+    // With no key, whoever reaches the proxy names a user: a page on another site reaches 127.0.0.1 too (a blind
+    // cross-site POST, or DNS rebinding to read the answer), so a browser request from another origin is refused.
+    if (options.proxyKey === undefined && !keylessOriginAllowed(req.headers.get("origin"))) {
+      return openAiError(403, "eden proxy: no key-less request from another site's page (set EDEN_PROXY_KEY)");
     }
     const url = new URL(req.url);
     const path = url.pathname.replace(/^\/v1(?=\/|$)/, "") + url.search;

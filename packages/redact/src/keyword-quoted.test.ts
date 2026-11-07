@@ -26,3 +26,20 @@ describe("audit A5: a quoted multi-word credential is redacted whole", () => {
     expect(out).not.toContain("battery");
   });
 });
+
+// Audit A20. The A5 fix took a double-quoted value whole, but prose quotes a passphrase in single or typographic
+// quotes as often ("my password is 'correct horse battery staple'"), and there the keyword rule still took only
+// `'correct`: the rest was stored, indexed and could be quoted back to an agent.
+describe("audit A20: a passphrase in single or typographic quotes is redacted whole", () => {
+  test.each([
+    `my password is '${phrase}' for the router`,
+    `the password is “${phrase}” now`,
+    `the password is ‘${phrase}’ now`,
+    `Wi-Fi password: '${phrase}'`,
+  ])("no word of the passphrase survives: %s", (text) => {
+    expect(sanitizeForStore(text)).not.toContain("battery");
+  });
+  test("an apostrophe after the keyword is not read as a quote", () => {
+    expect(sanitizeForStore("the password isn't what Dana's team uses")).toContain("Dana's team");
+  });
+});
