@@ -111,7 +111,8 @@ trip. Eden answers an ask in about 5 ms at p50 (D64), so the cost of asking is t
   before working around it. **Hermes Agent already keeps it** (read in its source at the lab's pin, 06433066, A27,
   D385): `agent/turn_context.py` appends the `pre_llm_call` context to the turn's user message, stores the exact
   bytes it sent on that message (the `api_content` sidecar) and sends those bytes again on every later call of the
-  turn and every later turn. So a Hermes plugin returns only the new packet; returning earlier packets again would
+  turn and every later turn (except in its MoA and `codex_app_server` modes, which skip that sidecar and so drop
+  earlier turns' context). So a Hermes plugin returns only the new packet; returning earlier packets again would
   repeat them. The same holds for `transform_tool_result`: what it returns becomes the stored tool result. Measured on
   the lab's Hermes requests (`hermes-cache-probe.ts`): the second call of a turn reads the first call's whole prompt,
   packet included, from Anthropic's cache.

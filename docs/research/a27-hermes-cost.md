@@ -1,7 +1,8 @@
 # A27: Hermes' cost with Eden (2026-11-07)
 
 Decisions: D385, D386, D387. Base: `claude/lucid-hypatia-v9wqk5` at 2352dfa4. Paid calls: Anthropic only
-(`claude-haiku-5-5`, `HAIKU_API_KEY`, ledger `.local/a27/ledger.jsonl`), $0.0124 of a $0.80 cap (three probe runs).
+(`claude-haiku-5-5`, `HAIKU_API_KEY`, ledger `.local/a27/ledger.jsonl`), $0.0124 of a $0.80 cap over three probe runs (summed from that
+ledger, which is not committed; `probe.txt` holds the third run, ~$0.005).
 
 ## In plain words
 
@@ -10,16 +11,18 @@ Decisions: D385, D386, D387. Base: `claude/lucid-hypatia-v9wqk5` at 2352dfa4. Pa
   call. **It does not.** Hermes (at the commit the lab pins) appends the plugin's context to the user's message once a
   turn, stores the exact text it sent, and sends that same text again on every later call. We rebuilt Hermes'
   requests from its source and sent them to Anthropic: the second call of each task reads the whole first call,
-  Eden's packet included, from the cache. Per task, the Eden arm writes and reads about as many cached tokens as
-  Hermes alone.
+  Eden's packet included, from the cache. There is no per-call break. The cache still costs Eden's arms more,
+  because the packet is new text every task and is written to the cache at 1.25 times the input price: in the run,
+  Eden's arms wrote a larger share of their input to the cache, and that accounts for about 40% of the billed gap.
 - So the plugin keeps its placement. One piece of our own advice was wrong: INTEGRATION.md told Hermes integrators to
   have the plugin return earlier packets again, because it thought Hermes dropped them. Hermes keeps them; returning
   them again would repeat them. The advice is corrected.
-- The Hermes harness also mis-booked two things, now fixed (lab only). It never recorded Eden's own connector calls,
-  so the per-plan connector prices left them out (`Eden conn/t` read 0). And it never split the one-time backfill
+- The Hermes harness also mis-booked two things, now fixed (lab only). It never recorded the connector calls Eden
+  makes outside a task's window (the backfill, the sync between tasks), so the report's "background" and "backfill"
+  connector rows read 0 and the per-plan prices left them out. And it never split the one-time backfill
   (the cards Eden makes for a new user before the first request) from what Eden spends while the user works, so the
   whole backfill showed as running cost (it is in the $0.221 per 1,000 tasks of one arm and the $0.060 of the other;
-  which arm pays depends on which carded an item first). Pi's harness has always split both.
+  that the difference is which arm carded an item first is our inference, not measured). Pi's harness has always split both.
 - What remains open: the cost gap itself. It is not the cache layout, so it is in what the arms send (Eden's arms
   send more input and output tokens) and in how much of that is new each task. The next Hermes run splits each arm's
   bill by token class before anything is changed for it.
@@ -45,8 +48,8 @@ The probe sends three tasks of two calls each per arm (one Hermes session a task
 them), `max_tokens` 1. The stable tier is a reconstruction (Hermes' identity, help and guidance constants read from its
 source with Python's `ast`, not executed), so the prompt is shorter than Hermes' real one (1,542-1,892 tokens of prefix
 against roughly 4,000 input tokens a request in the run): the layout is what is measured, not the run's absolute
-sizes. Packets, tool results and ask answers are rendered from the world's items at the run's sizes (3, 5 and 2
-items). Output `packages/sim/lab/a27/probe.txt`:
+sizes. Packets, tool results and ask answers are rendered from the world's items, 3, 5 and 2 items (assumed sizes;
+the 5 is the search tool's cap, `TOOL_ITEMS`). Output `packages/sim/lab/a27/probe.txt`:
 
 | arm (layout `lab`) | task 2, call 1: write / read | task 2, call 2: write / read | task 3, call 1 | task 3, call 2 |
 | --- | --- | --- | --- | --- |
@@ -61,9 +64,10 @@ Uncached input is 2-4 tokens on every call. Reading it:
 - **Across tasks** every arm reads the shared prefix (tools and system prompt) and writes only the new turn: the
   user's message (94-109 tokens alone; ~860 with Eden's packet in it).
 - **Per task** hermes writes 1,069-1,207 and reads 3,878-3,893 tokens; hermes-eden writes 1,051-1,054 and reads
-  3,941-3,953. The layouts cost the same; what differs is which tokens are new: Eden's packet is written at call 1
-  and read at call 2, Hermes' tool results are written at its last call and never read (the lab marks the last block
-  of every request).
+  3,941-3,953; hermes+eden writes 1,832-1,967 (its packet on top of the tool results) and reads 4,929-4,941. The
+  hermes-eden parity depends on the stand-in sizes (a 2-item ask answer against a 5-item search result), so it is not
+  a claim about the run. What the probe does show: Eden's packet is written once, at call 1, and read at call 2;
+  Hermes' tool results are written at its last call and never read (the lab marks the last block of every request).
 - `--layout split` (a breakpoint at the end of Hermes' stable tier, as Hermes' own `prompt_caching.py` marks it on a
   native Anthropic route) reads the same within one sim day (`probe.txt`); it would only matter on tasks where the
   date line changes (the sim clock moves an hour a task, so at most once or twice a stream). Not adopted.
@@ -78,7 +82,8 @@ The plugin (`packages/sim/lab/hermes/eden/__init__.py`) already does what the so
 the packet appended once, mid-task packets appended to a tool result. It is unchanged. INTEGRATION.md said Hermes'
 `pre_llm_call` context is ephemeral and dropped, and told integrators to return the session's earlier packets again;
 at 06433066 that is false and would repeat packets. The paragraph now says Hermes keeps the context and the plugin
-returns only the new packet. (A16's D336 lesson still holds for integrations that do drop packets: the proxy keeps
+returns only the new packet, except in Hermes' MoA and `codex_app_server` modes, which skip the sidecar
+(`turn_context.py` 1276-1283) and drop earlier turns' context. (A16's D336 lesson still holds for integrations that do drop packets: the proxy keeps
 them.)
 
 ## 3. Booking Eden's connector calls and the backfill (D386)
@@ -89,8 +94,9 @@ them `pi-cost-report.ts` books the backfill as one-time per user and prices Eden
 this, a Hermes report's `bg run` column held the whole backfill (hermes3: $0.221/1k hermes-eden, $0.060/1k
 hermes+eden: the seed's streams share live cards, so the arm that cards an item first pays for it), `one-time` read
 $0 "(in-run)", and `Eden conn/t` and Eden's background calls read 0. Calls inside a task's window were already
-spanned (`eden.source`), so `Eden conn/t` 0 in hermes3 may be real for warm, payload-pushed tasks; the stream totals
-were not recorded at all.
+spanned (`eden.source`) and are what `Eden conn/t` counts, so that column is unchanged by D386 and its 0 in hermes3
+may be real for warm, payload-pushed tasks; the stream totals were not recorded at all. Eden streams with cards off
+are now booked too (`noModels`, as pi-ab), so their connector calls reach the report.
 
 To stop the next run paying for cards the last one made, pass the last run's cards file back in: `--cards-out` names
 a file that is replayed as well as appended to (cards-disk.ts), so pointing it at `.local/hx/h-<seed>.cards.jsonl`
@@ -103,8 +109,9 @@ Not run live here: hermes-agent could not be installed in this container. The co
 The agent-cost gap is not explained by the layout. hermes3's report: cache-neutral (all input at the plain price)
 hermes-eden − hermes is +0.103 $/1k (+0.044..+0.163) of the +0.171 billed; neutral tasks send +819 input and +60
 output tokens a task. A rough split from the report's own means (input at 0.1×/1.25×/1× for read/write/plain,
-assuming no plain input as in the probe) puts hermes' writes at ~15% of its input and hermes-eden's at ~27%: about
-1,200 more tokens written a task, the size of a packet plus its ask answer. Check this on the run's own requests
+assuming no plain input as in the probe) on neutral tasks puts hermes' writes at 14% of its input and hermes-eden's
+at 26%: 2,212 against 1,074 tokens written a task, about 1,100 more, about a packet plus its ask answer. The billed gap less the
+cache-neutral gap, +0.068 of +0.171 $/1k, is what the cache layout of the new tokens costs. Check this on the run's own requests
 (each request's `cached` and `cacheWrite` are in the timeline) before changing anything:
 
 ```bash
@@ -123,8 +130,11 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/hermes-cache-probe.ts --suite
 `pull_consts.py` (beside probe.txt) writes the named top-level string constants as JSON (`ast.literal_eval`); without
 `--hermes-consts` the probe uses a same-length stand-in.
 
-The paired check (the coordinator runs Hermes locally; old plugin = base tip, new = this branch; the plugin is
-unchanged, so the pair checks the harness's booking: one-time backfill, Eden's connector calls):
+The paired check (the coordinator runs Hermes locally; old = base tip, new = this branch; the plugin is unchanged, so
+the pair checks the harness's booking). With hermes3's cards replayed (`--cards-out` below) the backfill makes almost
+no live card, so `setupUsd` is about $0 on both sides and this pair checks only the connector-call booking. To see the
+backfill split, run the new side once more without `--cards-out` (it pays the cards live, ~$0.2-0.3, assumed from
+hermes3):
 
 ```bash
 # in each worktree (base 2352dfa4, then claude/a27-hermes-cost), H and P as in audit-1107/hermes/run3.sh:
@@ -139,5 +149,6 @@ bun packages/sim/src/lab/pi-cost-report.ts .local/a27/<old|new>-4{1,2}.json
 python3 -I packages/sim/lab/cl8/cache.py .local/a27/<old|new>-4{1,2}.timeline/tasks.jsonl
 ```
 
-Expect: agent $/1k the same in both (the plugin did not change); on the new side `one-time $/user` from the
-backfill and Eden's connector calls a task above 0; with the cards replayed, `bg run` near $0 in both arms.
+Expect: agent $/1k the same in both (the plugin did not change); with the cards replayed, `bg run` and `one-time`
+near $0 in both; on the new side the background and backfill connector calls above 0 (old: 0). The extra run without
+`--cards-out`: the card spend under `one-time $/user`, not `bg run`.

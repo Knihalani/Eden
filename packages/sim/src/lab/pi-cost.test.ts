@@ -53,6 +53,30 @@ describe("pi-cost (H16)", () => {
     expect(c!.mixSteady).toBeNull();
   });
 
+  test("a hermes-ab stream's background (A27, D386): backfill one-time, connector calls split three ways", () => {
+    // Two Eden streams of one seed as hermes-ab now books them: one with cards, one with cards off (`noModels`).
+    const tasks = [t({ edenSourceCalls: 1 }), t({ edenSourceCalls: 0 }), t({ edenSourceCalls: 1 }), t({})];
+    const bgs = [
+      bg({ cardsUsd: 0.03, setupUsd: 0.03, calls: 40, setupCalls: 40, sourceCalls: 30, setupSourceCalls: 20 }),
+      bg({ noModels: true, sourceCalls: 12, setupSourceCalls: 10 }),
+    ];
+    const [c] = conditionCosts(tasks, bgs, []);
+    // The whole card spend was before the first request: one-time, nothing in-run.
+    expect(c!.backgroundRun).toBe(0);
+    expect(c!.oneTimeFrom).toBe("in-run");
+    expect(c!.oneTimePerUser).toBeCloseTo(0.03, 9);
+    // 42 calls: 30 backfill, 4 in the tasks' windows (`eden.source` spans), 8 in the background.
+    expect(c!.connectorPerTask.eden).toBeCloseTo(1, 9);
+    expect(c!.connectorPerTask.background).toBeCloseTo(8 / 4, 9);
+    expect(c!.backfillCallsPerUser).toBeCloseTo(15, 9);
+    expect(c!.backfillUsers).toBe(2);
+    // Before A27 hermes-ab set none of these: the card spend read as in-run and no connector call outside a task.
+    const [before] = conditionCosts(tasks, [bg({ cardsUsd: 0.03, calls: 40 })], []);
+    expect(before!.backgroundRun).toBeCloseTo(0.03 / 4, 9);
+    expect(before!.oneTimePerUser).toBe(0);
+    expect(before!.connectorPerTask.background).toBe(0);
+  });
+
   test("a measured cold start replaces the in-run setup when every user has one; tools books none", () => {
     const tasks = [t({ seed: 41 }), t({ seed: 42 }), t({ seed: 41, condition: "tools", edenUsd: 0 })];
     const bgs = [bg({ seed: 41, setupUsd: 0, cardsUsd: 0 }), bg({ seed: 42, setupUsd: 0, cardsUsd: 0 })];
