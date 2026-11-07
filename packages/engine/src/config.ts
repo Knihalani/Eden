@@ -455,14 +455,6 @@ export interface EngineConfig {
    * the first one, which it would only reject: half the output tokens, about 250 ms less per reading.
    */
   readerStopEarly: boolean;
-  /**
-   * `pushChecked` (trial, D246, CL4 H8): when the push read the user's request and flagged nothing, a short note goes
-   * to the agent in the data envelope: Eden read the user's connected sources for this request and nothing in them
-   * bears on it (after a packet for the same request: nothing beyond it). Only when every source the push searched
-   * answered (D127) and its reading gave a verdict, or found no candidate to read. Meant to spare the agent an
-   * `ask_context` call and a model turn on requests Eden has nothing for. Needs `readerPush`.
-   */
-  pushChecked: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -579,5 +571,4 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerVerifyAfter: true,
   readerReuse: true,
   readerStopEarly: true,
-  pushChecked: false,
 };
