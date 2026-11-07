@@ -10,9 +10,8 @@ import { AskReader, type ReaderInput, type ReaderKind, type ReaderMaker } from "
 import { CHECKED_MORE, CHECKED_NONE, COVERED, shownText } from "./render";
 
 // CL4's path-latency trials (docs/research/cl-cl4.md): the push saying it found nothing (`pushChecked`, D246), its
-// packet saying it is what the reading found (`pushCovered`, D250), and what a speculating integration waits on
-// (`requestSettled`, `pendingItems`, D248). `askFromPush` (D247) and `pushVerifyAhead` (D249) were measured and
-// deleted.
+// packet saying it is what the reading found (`pushCovered`, D250). `askFromPush` (D247), `pushVerifyAhead` (D249)
+// and speculation on the first model request (D248) were measured and deleted.
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -170,34 +169,5 @@ describe("pushCovered (D250): the push's packet says it is what the reading foun
     const { p } = setup({}, { items: [...PLAIN, HOLD] });
     await say(p, REQUEST);
     expect(p.takePending(ref())[0]!.text).not.toContain(COVERED);
-  });
-});
-
-describe("requestSettled and pendingItems (D248): what a speculating integration waits on", () => {
-  test("settles once the push has read, with its packet's items counted and left queued", async () => {
-    const { p } = setup({}, { items: [...PLAIN, HOLD] });
-    await p.observe({ ...ref(), at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 0 });
-    await p.requestSettled(ref());
-    const n = p.pendingItems(ref());
-    expect(n).toBeGreaterThan(0);
-    expect(p.pendingItems(ref())).toBe(n);
-    const taken = p.takePending(ref());
-    expect(taken.reduce((k, i) => k + i.citations.length, 0)).toBe(n);
-    expect(taken.flatMap((i) => i.citations.map((c) => c.itemId))).toContain("mail:hold");
-    expect(p.pendingItems(ref())).toBe(0);
-    // Another session, or one never seen, has nothing and settles at once.
-    expect(p.pendingItems(ref("s2"))).toBe(0);
-    await p.requestSettled(ref("none"));
-  });
-
-  test("a note cites nothing, so it is no reason to restart", async () => {
-    const { p } = setup({ pushChecked: true });
-    await p.observe({ ...ref(), at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 0 });
-    await p.requestSettled(ref());
-    // What the observe's own lookup queued may cite items; the note adds none to the count.
-    const n = p.pendingItems(ref());
-    const taken = p.takePending(ref());
-    expect(taken.filter((i) => i.citations.length === 0).length).toBe(1);
-    expect(taken.reduce((k, i) => k + i.citations.length, 0)).toBe(n);
   });
 });

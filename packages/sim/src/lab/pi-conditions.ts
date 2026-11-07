@@ -16,11 +16,6 @@
  * - `+ask` (fix-s3b, weak point 4): not an engine flag but the harness's, and only on a `both` base: the agent also
  *   gets `ask_context` beside its own source tools and Eden's injected context, the shape integrators ship
  *   (`both+ask`). `eden` has the tool already, so `eden+ask` throws rather than run `eden` under another name;
- * - `+spec` (CL4, D248): the harness's too, on any Eden base: the first observe does not wait; the agent's first model
- *   request goes out at once, and if a packet citing items lands before it is done (or within the wait after it), it
- *   is dropped and sent again with the packet. What the dropped call cost is booked to the agent. `+specend`: the
- *   same, but the first request always runs to its end and is sent again only when it ended with an answer (no tool
- *   call) and a packet citing items has landed: a turn that calls a tool gets the packet on its next request anyway;
  * - `@w<ms>`: how long the first observe waits for Eden's slow path (default 3000, the client's `withContext`).
  *
  * An unknown base throws: a typo must not run Eden under another condition's name.
@@ -47,15 +42,10 @@ export interface Condition {
   /** The agent gets `ask_context`: `eden` bases, and `both` bases with `+ask`. */
   askTool: boolean;
   judge: boolean;
-  /** `+spec`/`+specend` (D248): the first model request is sent at once and restarted when a packet lands. */
-  speculate: false | "eager" | "end";
 }
 
 /** The harness flag `+ask`: `ask_context` beside the tools, never sent to the engine as a setting. */
 const ASK_FLAG = "ask";
-/** The harness flag `+spec` (D248): speculation on the first model request. */
-const SPEC_FLAG = "spec";
-const SPEC_END_FLAG = "specend";
 
 const BASES = ["none", "tools", "eden", "both", "eden-judge", "both-judge"] as const;
 const SHAPE = /^([a-z-]+?)(-act(?:-firewall)?)?(?:~([A-Za-z0-9_.-]+))?((?:\+[^+@~]+)*)(?:@(.*))?$/;
@@ -98,14 +88,7 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
   if (askFlag && !base.startsWith("both")) {
     throw new Error(`condition ${name}: +ask adds ask_context beside the tools, so only a both base takes it`);
   }
-  const speculate = allFlags.includes(SPEC_END_FLAG) ? "end" : allFlags.includes(SPEC_FLAG) ? "eager" : false;
-  if (allFlags.includes(SPEC_FLAG) && allFlags.includes(SPEC_END_FLAG)) {
-    throw new Error(`condition ${name}: +spec and +specend are two ways to speculate; give one`);
-  }
-  if (speculate && (base === "none" || base === "tools")) {
-    throw new Error(`condition ${name}: +spec speculates on Eden's first packet, so only an Eden base takes it`);
-  }
-  const flags = allFlags.filter((f) => f !== ASK_FLAG && f !== SPEC_FLAG && f !== SPEC_END_FLAG);
+  const flags = allFlags.filter((f) => f !== ASK_FLAG);
   let extra: Record<string, unknown> = {};
   if (variant !== undefined) {
     const v = options.variants?.[variant];
@@ -148,7 +131,6 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
     useTools: base === "tools" || base.startsWith("both"),
     askTool: base.startsWith("eden") || askFlag,
     judge: base.endsWith("-judge"),
-    speculate,
   };
 }
 

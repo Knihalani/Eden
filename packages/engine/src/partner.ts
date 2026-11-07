@@ -304,8 +304,6 @@ interface Session {
    * with their content hashes, and its verdict (null when it gave none).
    */
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
-  /** The push the latest request started (`readerPush`), settled or not: `requestSettled` waits on it. */
-  pushing?: Promise<void>;
   /** The request count (`requests`) when a packet or answer was last built (`pushChecked`'s wording). */
   builtRequest?: number;
 }
@@ -678,11 +676,7 @@ export class ContextPartner {
     const t0 = performance.now();
     const observing = this.observeEvent(event, options);
     // `observeEvent` counts the request before its first await, so the session's count now names this request.
-    if (push) {
-      const live = this.sessions.get(sessionKey(event));
-      internal.request = live?.requests;
-      if (live) live.pushing = push.then(() => undefined);
-    }
+    if (push) internal.request = this.sessions.get(sessionKey(event))?.requests;
     const result = await observing;
     if (!push) return result;
     let settled = false;
@@ -942,24 +936,6 @@ export class ContextPartner {
       if (s.behind === tracked) s.behind = null;
     });
     s.behind = tracked;
-  }
-
-  /**
-   * Resolves once what the session's latest request started, and could still queue a packet from, has settled: its
-   * lookup in flight and its push's reading (`readerPush`). Not the work a lookup leaves behind it (`behind`). For an
-   * integration that sends the agent's first model request without waiting and restarts it when a packet comes
-   * (speculation, D248). At once for an unknown session; never rejects.
-   */
-  async requestSettled(ref: Scope & { sessionId: string }): Promise<void> {
-    const s = this.sessions.get(sessionKey(ref));
-    if (!s) return;
-    await Promise.all([s.inflight?.catch(() => null), s.pushing]);
-  }
-
-  /** The items the session's queued packets cite, counted without taking them (0 for notes alone, D246). */
-  pendingItems(ref: Scope & { sessionId: string }): number {
-    const s = this.sessions.get(sessionKey(ref));
-    return s ? s.pending.reduce((n, p) => n + p.citations.length, 0) : 0;
   }
 
   /** Injections the slow path queued for a session, oldest first. Integrations that poll call this. */
