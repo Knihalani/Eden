@@ -635,7 +635,9 @@ same (docs/research/a6-moonshots.md §4). Use it for levers on what the agent lo
 - `--day K`: one agent transcript and one Eden session per K requests of a stream (template order), and a recap turn
   closing each day ("anything to watch out for, with the times"; measured, never graded). Just before the recap the
   day's planted items change (`shiftClocks` moves their clock times, `shiftMeta` their structured start; the sources
-  reindexed and, with `--push`, signalled): only then, so a moved item cannot land in a later graded request's slot.
+  reindexed and, with `--push`, announced: `signals` a bare `sourceChanged` per touched source, `payload` the moved
+  items through `sourceItems`, as the client sends them (D210); `--recap-notice signal` keeps the bare signals every
+  run sent before A8, D296): only then, so a moved item cannot land in a later graded request's slot.
   A changed item misses the replay caches (its content hash changed) and is carded live; `lateItems` is not measured
   (a late packet goes to the day's next request). The
   results gain `days` and `daysPooled` (`pi-day.ts`): repeat deliveries (and those of a changed item), `(shown
@@ -744,7 +746,14 @@ minute on free models (hermes-lab.md, estimates).
 - `--push signals|payload`: every sim source `notifies` (the engine acts on it with `syncPush`). `signals` sends a
   change notification per source before each task with chance 1 − exp(−rate); the rates per hour come from
   `--push-rates` (default `gmail=4,slack=6,calendar=0.3,drive=0.3,crm=0.2`, assumed). `payload` models
-  notifications that carry their items, which in a static world means none and no poll.
+  notifications that carry their items, which in a static world means none and no poll (but `--day`/`--days` recaps
+  send their moved items, D296).
+- **Connector calls over a user's days at $0 (A8, `days-calls.ts`):** the `--days` user through Eden alone (no agent,
+  no model, time scale 0), every connector call counted by source, operation and phase (request, notice, the sync's
+  tick, the one-time backfill): `bun packages/sim/src/lab/days-calls.ts --seeds 41,42 --days 8 --push payload --ask
+  --cards .local/a8/cards-all.jsonl [--night-h 20] [--recap-notice signal] [--set JSON]`, about 10 s. pi-ab's 2 h
+  nights put eight days in about 36 hours of Eden's clock (the daily sweep runs about once a user); `--night-h 20`
+  gives 24-hour days for per-user-day figures (docs/research/a8-connector-calls.md).
 - The results header records both (`sourceProfile`, `push`).
 
 `market.py` (in `packages/sim/lab/before-after/`) prices a run's `tools` and `eden` arms per agent model and
@@ -759,7 +768,8 @@ The quality runner (`quality-cli.ts`) changes the world during a run and counts 
 - `--deletes RATE`: fact-stating items are deleted at the source before a later session (`planDeletes`); a packet
   item or an ask citation of one is `deletes.deletedDelivered` / `deletedCited`.
 - `--push none|signals|payload`: how changes reach Eden (signals call `sourceChanged`; payload calls `sourceItems` and
-  `sourceRemoved`). `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed, changed, gone, failed, calls).
+  `sourceRemoved`). `--lost-notices P` (A8) loses each source's notice for a change with chance P (its own random
+  stream; `lostNotices` counts them), for what a backstop such as the sweep must catch. `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed, changed, gone, failed, calls).
 
 D126's matrix: `bun packages/sim/src/quality-cli.ts --users 8 --sessions 20 --updates 0.6 --deletes 0.05
 [--push signals|payload] [--config '{"verifyDelivery":false}'] [--jobs 4]`, $0 (`verifyDelivery` is in the
