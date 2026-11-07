@@ -50,11 +50,13 @@ const NOISE_WORDS = (
   "standup retro epic story bug triage design mockup component release branch merge build artifact queue alert"
 ).split(" ");
 
-const calls = { search: 0, list: 0 };
+const calls = { search: 0, list: 0, fetch: 0 };
 
 /** An in-memory source whose rows can grow; lists newest first with an offset cursor, searches by name and word. */
 class DaySource implements Source {
   readonly kind = "mcp" as const;
+  /** An MCP connector with its get tool wired: finds by ref, and its null proves nothing (D356). */
+  readonly fetchesById = true;
   readonly description: string;
   rows: ContextItem[];
   private made = 0;
@@ -91,6 +93,11 @@ class DaySource implements Source {
         out.push(it);
     }
     return out;
+  }
+  /** By ref, as an MCP connector's get tool: what a re-read before delivery calls (D126, D356). */
+  async fetch(ref: string): Promise<ContextItem | null> {
+    calls.fetch++;
+    return this.rows.find((it) => it.ref === ref) ?? null;
   }
   async list(_scope: unknown, cursor: string | undefined, limit: number): Promise<ListPage> {
     calls.list++;
@@ -167,7 +174,7 @@ async function settle(): Promise<void> {
   let last = -1;
   while (quiet < 3) {
     await Bun.sleep(0);
-    const n = calls.search + calls.list + card.calls;
+    const n = calls.search + calls.list + calls.fetch + card.calls;
     quiet = n === last ? quiet + 1 : 0;
     last = n;
   }
@@ -177,6 +184,8 @@ type Tally = {
   listBackground: number;
   listDemand: number;
   search: number;
+  /** Re-reads by ref (`verifyDelivery`). */
+  fetch: number;
   cardCalls: number;
   cardItems: number;
   cardUsd: number;
@@ -189,6 +198,7 @@ const snap = () => ({
   bg: sync.stats.backgroundCalls,
   demand: sync.stats.demandCalls,
   search: calls.search,
+  fetch: calls.fetch,
   cardCalls: card.calls,
   cardItems: card.items,
   deferred: cards.stats.deferred,
@@ -201,6 +211,7 @@ const since = (a: ReturnType<typeof snap>): Tally => {
     listBackground: b.bg - a.bg,
     listDemand: b.demand - a.demand,
     search: b.search - a.search,
+    fetch: b.fetch - a.fetch,
     cardCalls: b.cardCalls - a.cardCalls,
     cardItems: b.cardItems - a.cardItems,
     cardUsd: Math.round((b.cardCalls - a.cardCalls) * 0.000181 * 1e4) / 1e4,
@@ -258,7 +269,7 @@ for (let d = 0; d < days; d++) {
 
 const out = { sources: N, itemsPerSource, churn, mailPerDay, config, cold, perDay };
 const line = (t: Tally) =>
-  `list ${t.listBackground} bg + ${t.listDemand} demand, search ${t.search}, cards ${t.cardCalls} calls ` +
+  `list ${t.listBackground} bg + ${t.listDemand} demand, search ${t.search}, fetch ${t.fetch}, cards ${t.cardCalls} calls ` +
   `($${t.cardUsd}, ${t.cardItems} items, ${t.deferred} deferred), listed ${t.itemsListed}, held ${t.syncedHeld}, ` +
   `${t.ms} ms`;
 console.error(`${N} sources × ${itemsPerSource} items, churn ${churn}/day\ncold: ${line(cold)}`);

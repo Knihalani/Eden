@@ -333,6 +333,16 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **`syncIngestTurns` (D328, trial, off).** A background sync page waits its turn (one per event-loop turn) before it
   is redacted and stored: a cold-start storm no longer stalls every request (`bench/storm.bench.ts`), but the card
   drain then runs on smaller batches (funnel card calls 428 to 549, the same items carded), so it is not promoted.
+- **Unused sources are swept weekly (D356, `syncUnusedSweepMs`, docs/research/a21-scale.md).** Safe only because a
+  skipped sweep's copies are re-read at delivery: `doubted` is true for a copy older than `syncSweepMs` whose source's
+  daily sweep the trial skipped (`Sync.sweepLapsed`, which reads `SourceSync.skipped`, not the sweep's age: an idle
+  user's late sweep must doubt nothing) and for any copy the last sweep missed (`Sync.sweepMissed`). Not "is the source
+  used now": a lookup engages its sources before its delivery is verified. An unswept copy no re-read confirms is left
+  out (never delivered as held, unlike D126's other doubts); after a null re-read it calls `Sync.sweepSoon` (an error or
+  a guard's skip does not). A new delivery path that skips
+  `doubted`/`verifyItems` would hand over items the weekly sweep has not checked; a source that cannot find an item by
+  ref (`Source.fetchesById` false: an `McpSource` with no `fetchTool` still has a `fetch` that answers null) must stay
+  on the daily sweep (`onLongSweep`); a wrapper around a `Source` must copy `fetchesById` (as `notifies`).
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

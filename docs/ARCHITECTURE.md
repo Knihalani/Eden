@@ -220,6 +220,15 @@ no dated item older than the user's cut (the copy is then cut), the user's items
 and a sweep stops once it has listed every id it holds for the source (`syncKeepCut`, D321). The daily sweep still lists
 every source once a day (deletes need it): about 1,000 listing calls a user a day at 1,000 sources (D324).
 
+A21 (D356, in the default; docs/research/a21-scale.md) sweeps a source the user does not use, and whose connector can
+find an item by id (`Source.fetchesById`: an MCP connector with a get tool), once a week instead
+(`syncUnusedSweepMs`); any other keeps the daily sweep. What
+the skipped sweeps would have vouched for is checked at delivery instead: a copy older than `syncSweepMs` of a source
+whose daily sweep was skipped, or such a source's copy the last sweep did not list, is `doubted`, so every delivery and citation
+re-reads it by id first (D126, D211). A copy no re-read confirms is not delivered and makes its source's sweep due at
+the next tick. At 1,000 sources the sweep falls from ~1,114 to ~282 listing calls a user a day; a five-source user uses
+all their sources and keeps the daily sweep.
+
 **Change notifications** (D125, `syncPush`; `Source.notifies`, `ContextPartner.sourceChanged` and `sourceItems`,
 `POST /v1/sources/changed` and `/v1/sources/items`, the client's `sourceChanged`/`sourceItems`): a source whose
 integrator forwards the provider's change notifications is not polled on its learned change rate. A notification marks

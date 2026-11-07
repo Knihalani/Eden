@@ -369,6 +369,8 @@ export class SimSource implements Source {
    * an MCP connector is (a null fetch proves nothing), for the re-read paths that depend on it (D126, D345).
    */
   fetchReportsGone = true;
+  /** Fetches by ref (`--null-proves-nothing` makes its null prove nothing; it still finds what exists, D356). */
+  readonly fetchesById = true;
   /** The calendar lists by time, as its list call does (D44). */
   get listsByTime(): boolean {
     return this.id === "calendar";

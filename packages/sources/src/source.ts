@@ -52,6 +52,12 @@ export interface Source {
    * other reasons): a null fetch proves nothing, and a freshness check keeps the item (labelled with its age).
    */
   readonly fetchReportsGone?: boolean;
+  /**
+   * Whether `fetch` can find an item by its ref at all (an MCP connector with a get tool wired; static and sim
+   * sources). An MCP source without a fetch tool still has a `fetch` that answers null to everything, with no call.
+   * Absent: read as `fetchReportsGone`. Only a source that can confirm an item by ref may be swept less often (D356).
+   */
+  readonly fetchesById?: boolean;
   /** One item by its source ref, for refreshing a cached item. */
   fetch?(ref: string, scope: Scope, signal: AbortSignal): Promise<ContextItem | null>;
   /**

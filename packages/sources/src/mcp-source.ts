@@ -115,11 +115,14 @@ export class McpSource implements Source {
   /** `list`, when a list tool is configured (D57); undefined otherwise, so the source is never synced. */
   readonly list?: Source["list"];
   readonly notifies: boolean;
+  /** A get tool is wired (`fetchTool`): without one `fetch` answers null to every ref (D356). */
+  readonly fetchesById: boolean;
 
   constructor(private readonly options: McpSourceOptions) {
     this.id = options.id;
     this.description = options.description;
     this.notifies = options.notifies === true;
+    this.fetchesById = options.fetchTool !== undefined;
     if (options.listTool) this.list = (scope, cursor, limit, signal) => this.listPage(scope, cursor, limit, signal);
   }
 

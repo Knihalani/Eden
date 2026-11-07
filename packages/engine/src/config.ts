@@ -295,6 +295,16 @@ export interface EngineConfig {
    * user's own mailbox kept a handful.
    */
   syncEngagedDeep: boolean;
+  /**
+   * On in the default, a week (D356; 0: off, every source swept daily). With `sync` and `verifyDelivery`: a source
+   * the user does not use (not `Sync.engage`d, D320) whose connector can fetch an item by ref is swept (re-listed whole
+   * for deletes) this often (ms) instead of every `syncSweepMs`. In return, a copy of a source's items that a sweep the
+   * trial skipped left unvouched for longer than `syncSweepMs`, or that the last sweep did not list, is in doubt
+   * (`doubted`): every delivery or citation re-reads it first (D126; strict for asks, D211), and one the re-read does
+   * not confirm (a null that proves nothing, an error) is not delivered and makes the source's sweep due at the next
+   * tick. At 1,000 sources the daily sweep was ~1,100 listing calls a user a day (D324).
+   */
+  syncUnusedSweepMs: number;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
   syncMaxUsersPerTenant: number;
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
@@ -666,6 +676,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncKeepCut: true,
   routeSketch: true,
   syncEngagedDeep: true,
+  syncUnusedSweepMs: 7 * 24 * 3_600_000,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncPush: true,
