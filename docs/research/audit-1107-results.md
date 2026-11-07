@@ -42,7 +42,10 @@ the OpenRouter route the servers ship.
   for config errors) with a smoke test each (A23).
 - **Safety.** A live prompt-injection suite (A10): Eden adds a small real risk (4 of 432 attacks succeeded against 0
   with tools alone, all ordinary-worded asks folded into a requested action). Text filters did not reduce it (kept
-  as off trials); an action check on recipients only a packet named is the fitting control (A25). A security review
+  as off trials). **The fitting control, an action check, is now in the default (A25, D376):** a tool call adding an
+  address, guest or payee account that only Eden's packets showed (not the user's request, not their correspondents)
+  gets a finding asking to confirm; live, attacks followed 12 of 576 → **0**, with 0 findings on 576 legitimate tasks
+  and hidden facts not lower. It acts only where the integrator calls `check` on acting tools. A security review
   fixed a browser-origin bypass of the no-key mode and a redaction gap (A20).
 - **Bugs.** Two bug hunts, a seeded state-machine fuzz with hostile worlds, and reviewer passes on every merge; the
   final interaction review approved the merged tree and its five low findings were fixed with tests.
@@ -53,15 +56,14 @@ Promoted (each measured better or neutral at no extra paid cost, D112): `planCon
 `revisionDiff` (D342), `pushCandidatesSettled` 2 (D404), the no-key push (D276), `syncBackfillLanes`/`syncPollWidth`
 (D262–D263), `syncLocalComplete`/`routeLocalHits` (D264–D265), `cardsSourceAware`, `syncKeepCut`, `routeSketch`,
 `syncEngagedDeep` (D320–D323), `syncUnusedSweepMs` one week (D356), idle-user freezing (D325), `syncIngestTurns` with
-its card drain (D370), compact id sets (D371). New routes: `/v1/sources/refs` (D347), `/v1/usage` (D326),
+its card drain (D370), compact id sets (D371), `partyCheck` (D376). New routes: `/v1/sources/refs` (D347), `/v1/usage` (D326),
 `/v1/explain` (D277).
 
-Left as off trials: `guardLine`, `quarantineInstructions` (D306–D307), spend leases (D327), `actionCheck` (D69), and
-A25's recipient check if merged as a trial.
+Left as off trials: `guardLine`, `quarantineInstructions` (D306–D307), spend leases (D327), `actionCheck` (D69).
 
 ## Numbers that moved (gates on the final tree)
 
-- `bun run check`: all green (2,360 tests before A25).
+- `bun run check`: all green, 2,377 tests.
 - `bun run eval` (no model): precision 0.5909 → **0.65** (A30's two-candidate cut: fewer items delivered, 44 → 40),
   recall 0.52, falseFireRate 0.
 - `bun run funnel` (no model, train1–6 seeds 41–42): hidden 314/384, decoys 273/384, unchanged since the morning's
