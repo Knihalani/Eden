@@ -187,7 +187,7 @@ a stub reader, the default with no reader (D276), the default with one source ca
   between the candidates push and the rule paths is documented and kept (D258, cl-cl8.md "Repeats"); the harness exempts
   that form and reports this one when scaled.
 - **Scale runs**: about 11,500 seed-runs while it was built (2,000 × 60 and 500 × 200 operations on three
-  configurations, 1,000 × 60 on four), then 1,000 × 60 on all four on the fixed tree: no violation but core 704.
+  configurations, 1,000 × 60 on four), then 1,000 × 60 on all four on the fixed tree: no violation but core 704; 300 × 60 on all four after the connector-call fixes: none.
 
 ## Wasted connector calls
 
@@ -296,7 +296,7 @@ The first comparisons in this session (eval and funnel "unchanged") ran the base
 symlinked into this checkout, so `@eden/*` resolved to the branch's code on both sides: they compared the branch with
 itself. The base was then given its own install and everything re-measured against the parent tip:
 
-- `bun run check`: green, 2,005 pass, 0 fail (base c7cfc8fc9: 1,926; the tip's merges add their own tests).
+- `bun run check`: green, 2,014 pass, 0 fail (base c7cfc8fc9: 1,926; the tip's merges add their own tests).
 - `bun run eval` (parent tip ae5757b75, after D276's by-design change): precision 0.5909, recall 0.52, falseFireRate
   0, `plannedLookups` 87 on the tip and on this branch, two runs each.
 - `bun run funnel --jobs 4 --baseline <tip>`: hidden 305/384, decoys 267/384 on both; task by task +0 −0; request
