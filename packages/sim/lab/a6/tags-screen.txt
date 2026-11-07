@@ -1,0 +1,3 @@
+hidden   packets  317  items/packet 4.99  tagged/packet 1.75  bytes/packet 1509 -> 1761  planted in packet 253, tagged 93
+control  packets  318  items/packet 4.98  tagged/packet 1.62  bytes/packet 1439 -> 1696  planted in packet 217, tagged 63
+neutral  packets  309  items/packet 4.98  tagged/packet 0.92  bytes/packet 1084 -> 1282  planted in packet 0, tagged 0
