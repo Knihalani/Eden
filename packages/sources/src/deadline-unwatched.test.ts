@@ -37,15 +37,9 @@ describe("audit A5: fan-out deadlines on list and fetch", () => {
     expect(performance.now() - t0).toBeLessThan(300);
   });
 
-  test("list returns within its timeoutMs when the source ignores the signal", async () => {
-    const f = new SourceFanout({ sanitize: (x) => x });
-    const t0 = performance.now();
-    const page = await f.list(slow(800), scope, undefined, 10, { timeoutMs: 50 });
-    const ms = performance.now() - t0;
-    expect(ms).toBeLessThan(300);
-    expect(page).toBe("timeout");
-  });
-
+  // `list` is not raced (audit A5): the extra await moved the funnel's card batching (504 calls to 546); a listing that
+  // ignores its signal is bounded where a lookup waits for it (partner.ts, `freshen-deadline.test.ts`), and McpSource,
+  // the one real case, gives up its connect at the signal (below).
   test("fetchChecked returns within its timeoutMs when the source ignores the signal", async () => {
     const f = new SourceFanout({ sanitize: (x) => x });
     const t0 = performance.now();

@@ -70,11 +70,17 @@ Plus two load-flaky tests made robust (below).
   "timeout"). The real trigger is `McpSource`: its `connect` and `tools/list` take no signal (the SDK's own 60 s request
   timeout), and `listPage`/`fetch` connect first. An ask with a stale warm source and `sourceTimeoutMs` 100 waited 1.5 s
   on its on-demand poll, breaking D140's one deadline; the strict re-reads (D211) wait on `fetchChecked` too.
-- **Fix.** `untilAborted` (new `sources/src/abort.ts`) races the call against its signal in `list` and `fetchChecked`
-  (a search was already bounded by `Singleflight`); `McpSource` gives up its `connect` at the call's signal
-  (`connectFor`), the connect itself going on for the next call. A late answer is ignored; the permit and breaker are
-  settled as for a timeout (the caller's own abort settles it as "ignored"), so a source that ignores its signal can
-  briefly hold more calls than its concurrency cap, as an abandoned search already could.
+- **Fix.** `untilAborted` (new `sources/src/abort.ts`) races the call against its signal in `fetchChecked` (a search
+  was already bounded by `Singleflight`); `McpSource` gives up its `connect` at the call's signal (`connectFor`), the
+  connect itself going on for the next call; and a lookup waits for its on-demand poll (`freshen`) only until its
+  deadline (`searchLive`), after which the source, not current, is searched with no time left ("timeout", D148). A
+  late answer is ignored; the permit and breaker are settled as for a timeout (the caller's own abort settles it as
+  "ignored"), so a source that ignores its signal can briefly hold more calls than its concurrency cap, as an
+  abandoned search already could.
+- **Not raced: `SourceFanout.list`.** Racing it too (the first version of this fix) added one await to every listing,
+  and that moved the funnel's card batching: the same 6,582 items sent in 546 calls instead of 504, hidden and decoys
+  unchanged (the drain-timing pitfall in packages/engine/CLAUDE.md). The engine's bound on the poll covers the
+  lookup; a background listing that ignores its signal only holds its own sync slot.
 
 ## 4. Strict ask: a re-read item deleted meanwhile (medium)
 

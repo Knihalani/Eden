@@ -2954,7 +2954,15 @@ export class ContextPartner {
               return tally.fresh > 0;
             })
             .catch(() => false);
-        } else syncCalls = await polled;
+        } else {
+          // The poll ends at its signal, but a listing that ignores it (a connector that never answers) would hold the
+          // lookup past its one deadline (D140, audit A5): it is waited for only until then, and the source, left not
+          // current, is searched with what time is left (none: "timeout", D148).
+          const gaveUp = new Promise<number>((r) =>
+            signal.aborted ? r(0) : signal.addEventListener("abort", () => r(0), { once: true }),
+          );
+          syncCalls = await Promise.race([polled, gaveUp]);
+        }
         if (s.closed) return { calls: syncCalls, syncCalls, sources: [], closed: true };
       }
       local = this.localOf(s, all, behind);

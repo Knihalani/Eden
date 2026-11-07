@@ -390,7 +390,7 @@ export class SourceFanout {
     const started = performance.now();
     let page: ListPage;
     try {
-      page = await untilAborted(source.list(scope, cursor, limit, signal), signal);
+      page = await source.list(scope, cursor, limit, signal);
     } catch (e) {
       const message = String(e);
       if (signal.aborted && !timeout.aborted) {
