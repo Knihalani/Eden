@@ -217,13 +217,7 @@ export class DiskCardMaker implements CardMaker {
     if (!options.shared && options.out) for (const [h, c] of loadCards(options.out)) this.cards.set(h, c);
   }
 
-  async make(
-    items: ContextItem[],
-    today: string,
-    signal: AbortSignal,
-    retry = false,
-    intent: boolean | number = false,
-  ) {
+  async make(items: ContextItem[], today: string, signal: AbortSignal, retry = false, intent = false) {
     const got = await this.makeCards(items, today, signal, retry, intent);
     if (!intent) return got;
     const requests = items.map((it) => this.requests.get(cardKey(it)) ?? null);
@@ -232,13 +226,7 @@ export class DiskCardMaker implements CardMaker {
     return { ...got, cards, requests };
   }
 
-  private async makeCards(
-    items: ContextItem[],
-    today: string,
-    signal: AbortSignal,
-    retry: boolean,
-    intent: boolean | number,
-  ) {
+  private async makeCards(items: ContextItem[], today: string, signal: AbortSignal, retry: boolean, intent: boolean) {
     const out: (Card | null)[] = [];
     const missing: number[] = [];
     // Items whose card a call (this one's, or another stream's) is making: filled in when it settles.

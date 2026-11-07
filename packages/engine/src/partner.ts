@@ -556,10 +556,6 @@ export class ContextPartner {
       if (this.config.intent) cards.intend();
       // `cardsLean`: what the prefilter rejects is read for requests only when a person wrote it recently.
       if (this.config.intent && this.config.cardsLean) cards.lean(this.config.cardsLeanDays);
-      // Trial `intentRequests` (D243): fewer requests asked for and kept per item.
-      if (this.config.intent) cards.requests(this.config.intentRequests);
-      // Trial `cardsBatch` (D242): a backlog goes to the embedder's bulk maker, if it wired one.
-      if (this.config.cardsBatch) cards.bulk(this.config.cardsBatchFrom);
     }
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).

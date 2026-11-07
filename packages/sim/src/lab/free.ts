@@ -15,15 +15,7 @@
  *
  * 429 and 5xx answers are retried with jittered backoff, honouring Retry-After (`Pacer` in @eden/llm).
  */
-import {
-  AnthropicBatchModel,
-  AnthropicModel,
-  Pacer,
-  priceFor,
-  OpenRouterModel,
-  type Model,
-  type OpenRouterOptions,
-} from "@eden/llm";
+import { AnthropicModel, Pacer, priceFor, OpenRouterModel, type Model, type OpenRouterOptions } from "@eden/llm";
 import { SpendLedger } from "./spend";
 import { createModels, createProvider, envApiKeyAuth, type Model as PiModel } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
@@ -125,28 +117,6 @@ export function labModel(
     ...options,
     fetch: access.fetch,
     ...(access.allowLogging ? { allowLogging: true } : {}),
-  });
-}
-
-/**
- * The card maker's bulk transport (trial `cardsBatch`, D242): Anthropic's Message Batches API at half price, metered
- * against the run's ledger under `role` like `labModel`. LAB ONLY (D97). Batches are polled every `pollMs`.
- */
-export function labBatchModel(
-  access: LabAccess,
-  model: string,
-  role = "eden.cards",
-  options: { windowMs?: number; pollMs?: number } = {},
-): AnthropicBatchModel {
-  if (!isAnthropic(model)) throw new Error(`${model}: the batch transport is Anthropic's (claude-* models only)`);
-  if (!access.ledger) throw new Error(`${model}: no spend ledger (pass it among labAccess's models)`);
-  return new AnthropicBatchModel({
-    apiKey: keyFor(model),
-    model,
-    fetch: access.fetch,
-    meter: access.ledger.meter(role),
-    windowMs: options.windowMs ?? 3_000,
-    pollMs: options.pollMs ?? 15_000,
   });
 }
 

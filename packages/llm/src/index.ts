@@ -19,10 +19,3 @@ export {
   type AnthropicPrice,
   type AnthropicUsage,
 } from "./anthropic";
-export {
-  AnthropicBatchModel,
-  BATCH_DISCOUNT,
-  batchCost,
-  type AnthropicBatchOptions,
-  type BatchRecord,
-} from "./anthropic-batch";

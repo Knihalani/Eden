@@ -102,8 +102,6 @@ export function buildPartner(options: BuildOptions): ContextPartner {
           maker: new ModelCardMaker(models.cards, models.cardsRetry ? { retry: models.cardsRetry } : {}),
           budget: budget(),
           now: () => Date.now(),
-          // Trial `cardsBatch` (D242): used only when the configuration turns it on.
-          ...(models.cardsBulk ? { bulk: new ModelCardMaker(models.cardsBulk) } : {}),
         })
       : undefined;
   const reader =

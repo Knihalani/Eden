@@ -2,16 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Context } from "@earendil-works/pi-ai";
 import { RequestCapReached } from "@eden/llm";
 import { chat, parseGrade, type Task } from "./ab-common";
-import {
-  isCapError,
-  labAccess,
-  labBatchModel,
-  labModel,
-  openRouterModels,
-  piModelFor,
-  piRegistry,
-  providerPrefs,
-} from "./free";
+import { isCapError, labAccess, labModel, openRouterModels, piModelFor, piRegistry, providerPrefs } from "./free";
 
 const FREE = "nvidia/nemotron-3.5-super-vl:free";
 const task = {
@@ -62,12 +53,6 @@ describe("labAccess", () => {
     } finally {
       globalThis.fetch = real;
     }
-  });
-
-  test("the batch transport (D242) is Anthropic's only, and needs the run's spend ledger", () => {
-    const paid = labAccess([], ["z-ai/glm-5.3-flash"]);
-    expect(() => labBatchModel(paid, "z-ai/glm-5.3-flash")).toThrow("claude-* models only");
-    expect(() => labBatchModel(paid, "claude-haiku-5-5")).toThrow("no spend ledger");
   });
 
   test("isCapError sees the cap through a library's wrapping", () => {

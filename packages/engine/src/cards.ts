@@ -288,7 +288,7 @@ export function datedOf(item: ContextItem): string {
  * The enrichment prompt: the action vocabulary, the card schema, and the items fenced as data (`inert`: no item can
  * close its fence). Items are redacted again here: every model-bound text passes the gate, whatever its caller did.
  */
-export function cardMessages(items: ContextItem[], today: string, intent: boolean | number = false): ChatMessage[] {
+export function cardMessages(items: ContextItem[], today: string, intent = false): ChatMessage[] {
   const vocab = ACTION_NAMES.map((a) => `- ${a}: ${ACTIONS[a]}`).join("\n");
   const list = items.map((it, i) => {
     const title = inert(sanitizeForStore(it.title.slice(0, 160)));
@@ -320,7 +320,7 @@ export function cardMessages(items: ContextItem[], today: string, intent: boolea
         'Reply with JSON only: {"cards":[{"i":0,"kind":"freeze","actions":["deploy"],"entities":["production"],' +
         '"start":"2026-11-04","end":"2026-11-09","limit":null,"unit":"","statement":"production change freeze 4-9 ' +
         'Nov"}]}. One card per item at most, for the most important constraint; leave out items whose kind is none.' +
-        (intent ? intentInstructions(intent === true ? MAX_REQUESTS : intent) : ""),
+        (intent ? INTENT_INSTRUCTIONS : ""),
     },
     { role: "user", content: `<items>\n${list.join("\n")}\n</items>` },
   ];
@@ -330,24 +330,15 @@ export function cardMessages(items: ContextItem[], today: string, intent: boolea
  * With `intent` (docs/research/edge-intent.md): the same call also writes, for every item whatever its kind, the
  * requests it would change, in a user's words rather than the item's, for the intent index (`intent.ts`).
  */
-function intentInstructions(n: number): string {
-  // Below `MAX_REQUESTS` (trial `intentRequests`, D243) the requests are also asked to be short: most of a call's
-  // output is requests (docs/research/cl-cl3.md). At `MAX_REQUESTS` the text is the measured default's, unchanged.
-  const what =
-    n < MAX_REQUESTS
-      ? `${n} short requests or questions (eight words at most each)`
-      : `${n} short requests or questions`;
-  return (
-    `\nSeparately, for EVERY item, whatever its kind and even when it states no constraint (kind none), write up to ` +
-    `${what} the user might give the assistant where this item would change what ` +
-    "the assistant should do or say, in the user's everyday words, not the item's own (an item saying spending over " +
-    '£5,000 needs a second signature: "approve the laptop order", "buy new monitors for the team"). Most items ' +
-    "qualify: an event bears on scheduling around it, a thread on decisions about its subject, a person's message on " +
-    "replies to them, a document on the work it describes. Write [] only for bulk mail, newsletters and marketing. " +
-    'Put them in "requests", one entry per item: {"cards":[...],"requests":[{"i":0,"q":["deploy the migration on ' +
-    'Thursday","ship the release this week"]},{"i":1,"q":["move my 1:1 with Sam","am I free Friday afternoon?"]}]}.'
-  );
-}
+const INTENT_INSTRUCTIONS =
+  `\nSeparately, for EVERY item, whatever its kind and even when it states no constraint (kind none), write up to ` +
+  `${MAX_REQUESTS} short requests or questions the user might give the assistant where this item would change what ` +
+  "the assistant should do or say, in the user's everyday words, not the item's own (an item saying spending over " +
+  '£5,000 needs a second signature: "approve the laptop order", "buy new monitors for the team"). Most items ' +
+  "qualify: an event bears on scheduling around it, a thread on decisions about its subject, a person's message on " +
+  "replies to them, a document on the work it describes. Write [] only for bulk mail, newsletters and marketing. " +
+  'Put them in "requests", one entry per item: {"cards":[...],"requests":[{"i":0,"q":["deploy the migration on ' +
+  'Thursday","ship the release this week"]},{"i":1,"q":["move my 1:1 with Sam","am I free Friday afternoon?"]}]}.';
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 /** A real calendar day: "2026-11-31" parses in some engines (as 1 December), so the day must round-trip. */
@@ -493,16 +484,9 @@ export interface CardMaker {
   /**
    * `retry`: the batch was cut off at the output cap on a first call and is sent again (the maker may route it
    * elsewhere). `truncated`: this call was cut off. `intent`: the call also writes each item's requests
-   * (`requests`: index → requests, null where unread; absent when not asked for); a number asks for at most that
-   * many requests per item (trial `intentRequests`, D243), `true` for `MAX_REQUESTS`.
+   * (`requests`: index → requests, null where unread; absent when not asked for).
    */
-  make(
-    items: ContextItem[],
-    today: string,
-    signal: AbortSignal,
-    retry?: boolean,
-    intent?: boolean | number,
-  ): Promise<CardBatch>;
+  make(items: ContextItem[], today: string, signal: AbortSignal, retry?: boolean, intent?: boolean): Promise<CardBatch>;
 }
 
 /** What a maker returns for a batch. */
@@ -550,13 +534,7 @@ export class ModelCardMaker implements CardMaker {
     private readonly options: CardMakerOptions = {},
   ) {}
 
-  async make(
-    items: ContextItem[],
-    today: string,
-    signal: AbortSignal,
-    retry = false,
-    intent: boolean | number = false,
-  ) {
+  async make(items: ContextItem[], today: string, signal: AbortSignal, retry = false, intent = false) {
     const model = retry ? (this.options.retry ?? this.model) : this.model;
     const res = await model.chat({
       messages: cardMessages(items, today, intent),
@@ -616,14 +594,6 @@ export interface CardLimits {
    * when it is not automated and is dated within this many days or upcoming (`readForIntent`).
    */
   leanDays: number;
-  /**
-   * Trial `cardsBatch` (D242; `bulk()` sets it; 0: off): a user's queue of at least this many items (a backfill, a
-   * sweep) is sent whole to the bulk maker (`deps.bulk`, a batch API at half price, hours late), every batch at once;
-   * a shorter queue (new items arriving) goes to the live maker as before. Without a bulk maker it does nothing.
-   */
-  bulkFrom: number;
-  /** With `intent`: requests asked for and kept per item (`requests()`; trial `intentRequests`, D243). */
-  requests: number;
 }
 
 export const DEFAULT_CARD_LIMITS: CardLimits = {
@@ -637,8 +607,6 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   sentenceReuse: false,
   intent: false,
   leanDays: 0,
-  bulkFrom: 0,
-  requests: MAX_REQUESTS,
 };
 
 /** The queue bound with `intent` (`CardEnricher.intend`), unless one was given. */
@@ -760,13 +728,7 @@ export class CardEnricher {
   offsetOf: ((scope: Scope) => number) | null = null;
 
   constructor(
-    private readonly deps: {
-      maker: CardMaker;
-      budget: Budget;
-      now: () => number;
-      /** Trial `cardsBatch` (D242): the maker a backlog goes to (`bulkFrom`); absent, every batch is live. */
-      bulk?: CardMaker;
-    },
+    private readonly deps: { maker: CardMaker; budget: Budget; now: () => number },
     private readonly given: Partial<CardLimits> = {},
   ) {
     this.limits = { ...DEFAULT_CARD_LIMITS, ...given };
@@ -804,19 +766,6 @@ export class CardEnricher {
    */
   lean(days: number): void {
     this.limits = { ...this.limits, leanDays: Math.max(0, days) };
-  }
-
-  /**
-   * Turns on the trial `cardsBatch` (D242): a queue of at least `from` items goes to the bulk maker whole (`bulkFrom`).
-   * A limit given at construction wins.
-   */
-  bulk(from: number): void {
-    this.limits = { ...this.limits, bulkFrom: this.given.bulkFrom ?? Math.max(0, from) };
-  }
-
-  /** Trial `intentRequests` (D243): at most `n` requests asked for and kept per item (1 to `MAX_REQUESTS`). */
-  requests(n: number): void {
-    this.limits = { ...this.limits, requests: this.given.requests ?? Math.min(MAX_REQUESTS, Math.max(1, n)) };
   }
 
   private user(scope: Scope): UserCards {
@@ -948,12 +897,29 @@ export class CardEnricher {
     // Background work: let the caller's turn finish first.
     await Promise.resolve();
     while (u.queue.length > 0 && !u.abort.signal.aborted) {
-      // Trial `cardsBatch` (D242): a backlog goes to the bulk maker whole, in one round (`bulkRound`).
-      if (this.deps.bulk && this.limits.bulkFrom > 0 && u.queue.length >= this.limits.bulkFrom) {
-        if (!(await this.bulkRound(scope, u, session))) return;
-        continue;
+      // With `sentenceReuse`: an item whose constraint sentences a card already says takes that card; one whose
+      // sentences another item of this batch says waits for that item's card (`followers`), with no call of its own.
+      const batch: Queued[] = [];
+      const followers: (Queued & { skey: string })[] = [];
+      const inBatch = new Set<string>();
+      while (u.queue.length > 0 && batch.length < this.limits.batch) {
+        const q = u.queue.shift()!;
+        if (q.skey !== undefined) {
+          const twin = u.bySentence.get(q.skey);
+          const made = twin !== undefined ? u.byHash.get(twin) : undefined;
+          if (made) {
+            this.stats.sentenceReused++;
+            if (u.holders.has(q.hash)) this.keep(u, q.hash, reused(made, this.deps.now()));
+            continue;
+          }
+          if (inBatch.has(q.skey)) {
+            followers.push(q as Queued & { skey: string });
+            continue;
+          }
+          inBatch.add(q.skey);
+        }
+        batch.push(q);
       }
-      const { batch, followers } = this.take(u, new Set());
       if (batch.length === 0) continue;
       const reservation = this.deps.budget.reserve(key, session, this.limits.estimatedCallUsd);
       // The per-session tally is the enricher's own and never ends otherwise: only the user's day is a cap.
@@ -964,209 +930,81 @@ export class CardEnricher {
         u.queue.length = 0;
         return;
       }
-      const today = this.today(scope);
+      const today = new Date(this.deps.now() + (this.offsetOf?.(scope) ?? 0) * 60_000).toISOString().slice(0, 10);
       const tracer = this.tracer;
       const sp = tracer?.open("cards.make", 0, { async: true, items: batch.length });
       try {
         const items = batch.map((b) => b.item);
-        let made = await this.deps.maker.make(items, today, u.abort.signal, false, this.asked());
+        const intent = this.limits.intent;
+        let made = await this.deps.maker.make(items, today, u.abort.signal, false, intent);
         const { costUsd } = made;
         if (sp) tracer!.close(sp, { costUsd, cards: made.cards.length });
         this.deps.budget.settle(reservation, costUsd);
-        this.counted(batch, costUsd);
+        this.stats.calls++;
+        this.stats.sent += batch.length;
+        this.stats.requestOnly += batch.filter((b) => b.only).length;
+        this.stats.costUsd += costUsd;
         // Forgotten or dropped while the call ran: keep nothing.
         if (u.abort.signal.aborted || this.users.get(key) !== u) return;
         if (made.truncated) {
-          made = await this.retry(key, session, items, today, u, made, this.deps.maker);
+          made = await this.retry(key, session, items, today, u, made);
           if (u.abort.signal.aborted || this.users.get(key) !== u) return;
         }
-        this.apply(u, batch, followers, made, today);
+        const { cards, requests } = made;
+        const at = this.deps.now();
+        batch.forEach((b, i) => {
+          const asked = intent ? (requests?.[i] ?? null) : null;
+          // An item read for its requests only keeps the card the prefilter gave it (none), whatever the model wrote;
+          // with its requests unread it is uncovered.
+          const card = b.only ? (asked ? NONE_CARD : null) : cards[i];
+          if (card === undefined || card === null) return; // Unreadable: uncovered, may be read again later.
+          // A card that shares no word with its item was written for another one (a batch's indexes crossed):
+          // uncovered rather than wrong, and so are the requests written beside it.
+          if (card.kind !== "none" && !anchored(card, b.item)) {
+            this.stats.unanchored++;
+            return;
+          }
+          // Too wide to be a reading of one constraint (many actions, a span over every day): uncovered.
+          if (!plausible(card, today)) {
+            this.stats.implausible++;
+            return;
+          }
+          // The item left the cache (or its source was forgotten) while the call ran: its content is not held, nor
+          // is what the model read from it.
+          if (!u.holders.has(b.hash)) return;
+          if (!b.only) this.stats.carded++;
+          if (asked?.length) this.stats.requested++;
+          this.keep(u, b.hash, {
+            card: card.kind === "none" ? null : card,
+            at,
+            seenAt: at,
+            ...(asked?.length ? { requests: asked } : {}),
+          });
+          if (b.skey !== undefined) {
+            u.bySentence.set(b.skey, b.hash);
+            u.sentenceOf.set(b.hash, b.skey);
+            while (u.bySentence.size > this.limits.maxCardsPerUser) {
+              const [k, h] = u.bySentence.entries().next().value as [string, string];
+              u.bySentence.delete(k);
+              if (u.sentenceOf.get(h) === k) u.sentenceOf.delete(h);
+            }
+          }
+        });
+        // Items saying what a carded item of this batch said take its card; the rest go back to the queue.
+        for (const f of followers) {
+          const twin = u.bySentence.get(f.skey);
+          const made = twin !== undefined ? u.byHash.get(twin) : undefined;
+          if (made) {
+            this.stats.sentenceReused++;
+            if (u.holders.has(f.hash)) this.keep(u, f.hash, reused(made, at));
+          } else u.queue.push(f);
+        }
       } catch {
         if (sp && sp.endMs === 0) tracer!.close(sp, { error: true });
         this.deps.budget.settle(reservation, 0);
         this.stats.failures++;
         if (u.abort.signal.aborted) return;
       }
-    }
-  }
-
-  /** "Today" in the user's zone (D44, D55), for the prompt. */
-  private today(scope: Scope): string {
-    return new Date(this.deps.now() + (this.offsetOf?.(scope) ?? 0) * 60_000).toISOString().slice(0, 10);
-  }
-
-  /** What a call asks of the maker for intent: nothing, `true` (the default's `MAX_REQUESTS`) or a smaller cap. */
-  private asked(): boolean | number {
-    if (!this.limits.intent) return false;
-    return this.limits.requests < MAX_REQUESTS ? this.limits.requests : true;
-  }
-
-  private counted(batch: Queued[], costUsd: number): void {
-    this.stats.calls++;
-    this.stats.sent += batch.length;
-    this.stats.requestOnly += batch.filter((b) => b.only).length;
-    this.stats.costUsd += costUsd;
-  }
-
-  /**
-   * The next batch off the user's queue. With `sentenceReuse`: an item whose constraint sentences a card already says
-   * takes that card; one whose sentences an item already taken says (`taken`: this batch's, or with `cardsBatch` this
-   * round's) waits for that item's card (`followers`), with no call of its own.
-   */
-  private take(u: UserCards, taken: Set<string>): { batch: Queued[]; followers: (Queued & { skey: string })[] } {
-    const batch: Queued[] = [];
-    const followers: (Queued & { skey: string })[] = [];
-    while (u.queue.length > 0 && batch.length < this.limits.batch) {
-      const q = u.queue.shift()!;
-      if (q.skey !== undefined) {
-        const twin = u.bySentence.get(q.skey);
-        const made = twin !== undefined ? u.byHash.get(twin) : undefined;
-        if (made) {
-          this.stats.sentenceReused++;
-          if (u.holders.has(q.hash)) this.keep(u, q.hash, reused(made, this.deps.now()));
-          continue;
-        }
-        if (taken.has(q.skey)) {
-          followers.push(q as Queued & { skey: string });
-          continue;
-        }
-        taken.add(q.skey);
-      }
-      batch.push(q);
-    }
-    return { batch, followers };
-  }
-
-  /**
-   * Trial `cardsBatch` (D242): every batch of the user's queue sent to the bulk maker at once (a batch API answers
-   * within hours, so one batch at a time would take hours per batch), each under its own reservation. Followers whose
-   * twin is in another batch of the round go back to the queue once the round has landed. False: stop draining (over
-   * budget, or the user was forgotten or dropped).
-   */
-  private async bulkRound(scope: Scope, u: UserCards, session: string): Promise<boolean> {
-    const key = scopeKey(scope);
-    const taken = new Set<string>();
-    const round: Promise<void>[] = [];
-    const orphans: (Queued & { skey: string })[] = [];
-    while (u.queue.length > 0 && !u.abort.signal.aborted) {
-      const { batch, followers } = this.take(u, taken);
-      if (batch.length === 0) {
-        orphans.push(...followers);
-        continue;
-      }
-      const reservation = this.deps.budget.reserve(key, session, this.limits.estimatedCallUsd);
-      this.deps.budget.endSession(session);
-      if (!reservation) {
-        this.stats.overBudget += batch.length + u.queue.length + orphans.length + followers.length;
-        u.queue.length = 0;
-        await Promise.all(round);
-        return false;
-      }
-      round.push(this.sendBulk(scope, u, batch, followers, reservation, session));
-    }
-    await Promise.all(round);
-    if (u.abort.signal.aborted || this.users.get(key) !== u) return false;
-    this.requeue(u, orphans, this.deps.now());
-    return true;
-  }
-
-  /** One bulk call (`bulkRound`), its cards kept; never throws (a failure leaves the batch uncovered). */
-  private async sendBulk(
-    scope: Scope,
-    u: UserCards,
-    batch: Queued[],
-    followers: (Queued & { skey: string })[],
-    reservation: NonNullable<ReturnType<Budget["reserve"]>>,
-    session: string,
-  ): Promise<void> {
-    const key = scopeKey(scope);
-    const maker = this.deps.bulk!;
-    const today = this.today(scope);
-    const tracer = this.tracer;
-    const sp = tracer?.open("cards.make", 0, { async: true, items: batch.length, bulk: true });
-    try {
-      const items = batch.map((b) => b.item);
-      let made = await maker.make(items, today, u.abort.signal, false, this.asked());
-      if (sp) tracer!.close(sp, { costUsd: made.costUsd, cards: made.cards.length });
-      this.deps.budget.settle(reservation, made.costUsd);
-      this.counted(batch, made.costUsd);
-      if (u.abort.signal.aborted || this.users.get(key) !== u) return;
-      if (made.truncated) {
-        made = await this.retry(key, session, items, today, u, made, maker);
-        if (u.abort.signal.aborted || this.users.get(key) !== u) return;
-      }
-      this.apply(u, batch, followers, made, today);
-    } catch {
-      if (sp && sp.endMs === 0) tracer!.close(sp, { error: true });
-      this.deps.budget.settle(reservation, 0);
-      this.stats.failures++;
-    }
-  }
-
-  /** Keeps a call's cards and requests for its batch, then settles the batch's followers. Synchronous. */
-  private apply(
-    u: UserCards,
-    batch: Queued[],
-    followers: (Queued & { skey: string })[],
-    made: CardBatch,
-    today: string,
-  ): void {
-    const intent = this.limits.intent;
-    const kept = this.limits.requests;
-    const { cards, requests } = made;
-    const at = this.deps.now();
-    batch.forEach((b, i) => {
-      // Requests past the cap (a replay, or a model writing more than asked) are cut (trial `intentRequests`, D243).
-      const asked = intent ? (requests?.[i]?.slice(0, kept) ?? null) : null;
-      // An item read for its requests only keeps the card the prefilter gave it (none), whatever the model wrote;
-      // with its requests unread it is uncovered.
-      const card = b.only ? (asked ? NONE_CARD : null) : cards[i];
-      if (card === undefined || card === null) return; // Unreadable: uncovered, may be read again later.
-      // A card that shares no word with its item was written for another one (a batch's indexes crossed):
-      // uncovered rather than wrong, and so are the requests written beside it.
-      if (card.kind !== "none" && !anchored(card, b.item)) {
-        this.stats.unanchored++;
-        return;
-      }
-      // Too wide to be a reading of one constraint (many actions, a span over every day): uncovered.
-      if (!plausible(card, today)) {
-        this.stats.implausible++;
-        return;
-      }
-      // The item left the cache (or its source was forgotten) while the call ran: its content is not held, nor
-      // is what the model read from it.
-      if (!u.holders.has(b.hash)) return;
-      if (!b.only) this.stats.carded++;
-      if (asked?.length) this.stats.requested++;
-      this.keep(u, b.hash, {
-        card: card.kind === "none" ? null : card,
-        at,
-        seenAt: at,
-        ...(asked?.length ? { requests: asked } : {}),
-      });
-      if (b.skey !== undefined) {
-        u.bySentence.set(b.skey, b.hash);
-        u.sentenceOf.set(b.hash, b.skey);
-        while (u.bySentence.size > this.limits.maxCardsPerUser) {
-          const [k, h] = u.bySentence.entries().next().value as [string, string];
-          u.bySentence.delete(k);
-          if (u.sentenceOf.get(h) === k) u.sentenceOf.delete(h);
-        }
-      }
-    });
-    // Items saying what a carded item of this batch said take its card; the rest go back to the queue.
-    this.requeue(u, followers, at);
-  }
-
-  /** Followers take their twin's card if it was made; the rest go back to the queue. */
-  private requeue(u: UserCards, followers: (Queued & { skey: string })[], at: number): void {
-    for (const f of followers) {
-      const twin = u.bySentence.get(f.skey);
-      const made = twin !== undefined ? u.byHash.get(twin) : undefined;
-      if (made) {
-        this.stats.sentenceReused++;
-        if (u.holders.has(f.hash)) this.keep(u, f.hash, reused(made, at));
-      } else u.queue.push(f);
     }
   }
 
@@ -1182,7 +1020,6 @@ export class CardEnricher {
     today: string,
     u: UserCards,
     cut: CardBatch,
-    maker: CardMaker,
   ): Promise<CardBatch> {
     const reservation = this.deps.budget.reserve(key, session, this.limits.estimatedCallUsd);
     this.deps.budget.endSession(session);
@@ -1192,7 +1029,7 @@ export class CardEnricher {
       return cut;
     }
     try {
-      const again = await maker.make(items, today, u.abort.signal, true, this.asked());
+      const again = await this.deps.maker.make(items, today, u.abort.signal, true, this.limits.intent);
       this.deps.budget.settle(reservation, again.costUsd);
       this.stats.calls++;
       this.stats.retries++;
