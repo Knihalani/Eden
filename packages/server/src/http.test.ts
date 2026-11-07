@@ -517,6 +517,53 @@ describe("change notifications: why one did nothing (still 200)", () => {
   });
 });
 
+describe("ref notices (D347): the refs a source changed, read by Eden", () => {
+  test("sources/refs: checked input; not-synced before a sync, synced once the source is warm and notifying", async () => {
+    expect((await post("/v1/sources/refs", { userId: "u1", sourceId: "crm", refs: [] })).status).toBe(400);
+    expect((await post("/v1/sources/refs", { userId: "u1", sourceId: "crm", refs: [7] })).status).toBe(400);
+    const many = Array.from({ length: 101 }, (_, i) => `r${i}`);
+    expect((await post("/v1/sources/refs", { userId: "u1", sourceId: "crm", refs: many })).status).toBe(400);
+    let fetched = 0;
+    const mail = {
+      id: "mail",
+      kind: "test",
+      description: "mail",
+      notifies: true,
+      search: async () => [],
+      list: async () => ({ items: [], next: null }),
+      fetch: async (ref: string) => {
+        fetched++;
+        return { id: `mail:${ref}`, sourceId: "mail", ref, title: "Changed", text: "A changed message" };
+      },
+    };
+    const p = buildPartner({ sources: async () => [mail], model: null, engine: {} });
+    p.stopSync();
+    const h = createHandler(p, { keys: new Map([[key, "acme"]]), dev: false });
+    const send = (body: unknown) =>
+      h(
+        new Request("http://x/v1/sources/refs", {
+          method: "POST",
+          headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    expect(await (await send({ userId: "u1", sourceId: "mail", refs: ["m1"] })).json()).toEqual({
+      ok: true,
+      synced: false,
+      reason: "not-synced",
+    });
+    const scope = { tenantId: "acme", userId: "u1" };
+    p.sync!.track(scope, Date.now());
+    while (!p.sync!.warm(scope)) await p.sync!.tick();
+    expect(await (await send({ userId: "u1", sourceId: "mail", refs: ["m1"] })).json()).toEqual({
+      ok: true,
+      synced: true,
+    });
+    for (let i = 0; i < 50 && fetched === 0; i++) await Bun.sleep(2);
+    expect(fetched).toBe(1);
+  });
+});
+
 describe("deletion notifications (syncPush)", () => {
   test("sources/removed: checked input, 200 with how many were held", async () => {
     expect(await (await post("/v1/sources/removed", { userId: "u1", sourceId: "crm", refs: ["d9"] })).json()).toEqual({

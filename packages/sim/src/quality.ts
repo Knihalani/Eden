@@ -64,7 +64,7 @@ export interface QualityOptions {
    * deletion, `payload` forwards the changed items themselves and the deleted refs; `none` (the default) forwards
    * nothing. Any mode but `none` marks every sim source as notifying.
    */
-  push?: "none" | "signals" | "payload";
+  push?: "none" | "signals" | "payload" | "refs";
   /**
    * False (A18): every sim source's fetch null proves nothing, as an MCP connector's (`fetchReportsGone` false), so a
    * deleted item's re-read is "unverifiable". Default true (the sim holds its items).
@@ -619,6 +619,18 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
         if (!touched.has(s.id)) continue;
         if (mode === "signals") {
           partner.sourceChanged(who, s.id);
+          continue;
+        }
+        if (mode === "refs") {
+          // A notice that names what changed and carries no content (D347): Eden reads those refs itself. Awaited, as
+          // the notice lands well before the next session's first request; deletions are named as payload's are.
+          const named = s
+            .listAll()
+            .filter((i) => changed.includes(i.id))
+            .map((i) => i.ref);
+          if (named.length > 0) await partner.sourceRefs(who, s.id, named).settled;
+          const refs = gone.filter((i) => i.sourceId === s.id).map((i) => i.ref);
+          if (refs.length > 0) partner.sourceRemoved(who, s.id, refs);
           continue;
         }
         const items = s.listAll().filter((i) => changed.includes(i.id));

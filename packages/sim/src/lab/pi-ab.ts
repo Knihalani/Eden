@@ -604,7 +604,7 @@ async function runWorld(
       ? withRecaps(baseTasks, DAY)
       : baseTasks;
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
-  const notify = pushNotifier(sources, CONNECTORS, seed);
+  const notify = pushNotifier(sources, CONNECTORS, seed, world.now);
   const {
     name: condition,
     waitMs,

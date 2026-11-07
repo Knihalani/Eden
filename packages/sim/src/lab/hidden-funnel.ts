@@ -675,7 +675,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     appendFileSync(CORPUS_DUMP, `${JSON.stringify({ suite, seed, variant, tasks: asks, items })}\n`);
   }
   const own = simSources(world, CONNECTORS.profiles, TIME, seed);
-  const notify = pushNotifier(own, CONNECTORS, seed);
+  const notify = pushNotifier(own, CONNECTORS, seed, world.now);
   if (!FETCH_GONE) for (const s of own) s.fetchReportsGone = false;
   const sources = [...own, ...(NOISE_SOURCES > 0 ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed) : [])];
   const returned = new Set<string>();

@@ -169,8 +169,8 @@ const opts: QualityOptions = {
   fetchGone: arg("fetch-gone", "true") !== "false",
   push: (() => {
     const m = arg("push", "none");
-    if (m !== "none" && m !== "signals" && m !== "payload") {
-      console.error("quality-cli: --push must be none, signals or payload");
+    if (m !== "none" && m !== "signals" && m !== "payload" && m !== "refs") {
+      console.error("quality-cli: --push must be none, signals, payload or refs");
       process.exit(2);
     }
     return m;

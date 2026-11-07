@@ -522,6 +522,11 @@ export class ContextPartner {
   /** `stopSync` was called (and no `startSync` since): notices start no revision poll. */
   private revisionsStopped = false;
   /**
+   * `sourceRefs` (D347): by user and item, the re-read a ref notice started and has not finished. The item is in doubt
+   * until it lands (`doubted`), and a delivery's re-read waits on it rather than make a second call (`check`).
+   */
+  private readonly refreshing = new Map<string, Promise<CheckOutcome>>();
+  /**
    * `readerPushBehind`: what a push packet's delivery changed in its own session, so a second reading that withdraws
    * the packet untaken can undo it (`withdraw`). Keyed by the packet, so it goes with it.
    */
@@ -534,7 +539,18 @@ export class ContextPartner {
    * `verifyDelivery`'s outcomes since start: items checked, confirmed, changed, gone, unverifiable, calls made; and
    * gone-holds the cache's caps dropped while still live (`ItemCache.holdsEvicted`), which reopen D126's race.
    */
-  readonly freshness = { checked: 0, confirmed: 0, changed: 0, gone: 0, failed: 0, calls: 0, holdsEvicted: 0 };
+  readonly freshness = {
+    checked: 0,
+    confirmed: 0,
+    changed: 0,
+    gone: 0,
+    failed: 0,
+    calls: 0,
+    holdsEvicted: 0,
+    /** `sourceRefs` (D347): refs read, and notices that fell back to the plain signal. */
+    refsRead: 0,
+    refsFallback: 0,
+  };
   /** The secret gate every item passes before it is held (D10): the fanout's, and `sourceItems`'. */
   private readonly redact: (items: ContextItem[]) => ContextItem[] | Promise<ContextItem[]>;
   /** What each user's probes bring back (`probeFresh`, `probeYield`). */
@@ -2162,6 +2178,100 @@ export class ContextPartner {
   }
 
   /**
+   * A change notification that names what changed but carries no content (D347, A18): the refs the source changed or
+   * added (a Gmail history's message ids, a Graph or HubSpot webhook's resource id, a Drive changes list). Each ref is
+   * re-read by its fetch in the background (within `REF_TIMEOUT_MS`; a guard's skip or a plain error goes again), a
+   * lane of two at a time, and stored as synced under the read mark its call
+   * began with; one the source no longer has (`gone`) is dropped. No other item of the source is put in doubt, so no
+   * delivery re-reads them and no lookup polls the source for it: the same effect as a payload notice
+   * (`sourceItems`), with the connector call made here instead of by the integrator. Until its re-read lands a named
+   * cached item is in doubt (`doubted`), and a delivery waits on that read (`check`). A ref that could not be read
+   * (no fetch tool, an error, a timeout, a guard's skip, a null that proves nothing) turns the notice into a plain
+   * signal (`sourceNotice`): the source's copy is polled and its items re-read before delivery, as before (D126).
+   * A source that is not synced and notifying takes the plain signal at once, with its reason. `settled` resolves to
+   * how many items were stored new or changed.
+   */
+  sourceRefs(scope: Scope, sourceId: string, refs: string[]): SourceChangedResult & { settled: Promise<number> } {
+    const sync = this.sync;
+    if (!this.config.syncPush || !sync) return { synced: false, reason: "push-off", settled: Promise.resolve(0) };
+    if (refs.length === 0 || !sync.notifying(scope, sourceId))
+      return { ...this.sourceNotice(scope, sourceId), settled: Promise.resolve(0) };
+    // A held search page predates the change: the next lookup asks the source again.
+    this.fanout.dropResults(scope, sourceId);
+    const user = scopeKey(scope);
+    const named = [...new Set(refs)].slice(0, MAX_PUSHED_ITEMS).map((ref) => ({
+      ref,
+      id: sanitizedId({ id: itemId(sourceId, ref), sourceId, ref, title: "", text: "" }),
+    }));
+    const settle = new Map<string, (o: CheckOutcome) => void>();
+    for (const { id } of named) {
+      const key = `${user}|${id}`;
+      const outcome = new Promise<CheckOutcome>((r) => settle.set(key, r));
+      this.refreshing.set(key, outcome);
+      void outcome.then(() => {
+        if (this.refreshing.get(key) === outcome) this.refreshing.delete(key);
+      });
+    }
+    const settled = (async (): Promise<number> => {
+      let stored = 0;
+      let unread = false;
+      const done = (id: string, o: CheckOutcome) => {
+        if (o === "failed" || o === "flaked" || o === "skipped" || o === "unverifiable") unread = true;
+        settle.get(`${user}|${id}`)?.(o);
+      };
+      try {
+        const source = (await this.deps.sources(scope).catch((): Source[] => [])).find((x) => x.id === sourceId);
+        for (let k = 0; k < named.length; k += REF_LANES) {
+          const lane = named.slice(k, k + REF_LANES);
+          await Promise.all(
+            lane.map(async ({ ref, id }) => {
+              if (!source?.fetch) return done(id, "unverifiable");
+              let mark = sync.mark();
+              let seq = this.deps.cache.heldGoneSeq(scope, id, this.now());
+              let got = await this.fanout.fetchChecked(source, scope, ref, { timeoutMs: REF_TIMEOUT_MS });
+              // Off the agent's path, a read our own guard skipped (the source's slots or rate tokens in use by a
+              // lookup) waits and goes again, as does one plain error; an open breaker or a 429 does not.
+              for (let k = 0; k < REF_TRIES && got.status === "failed" && refTryAgain(got); k++) {
+                await Bun.sleep(REF_RETRY_MS * (k + 1));
+                mark = sync.mark();
+                seq = this.deps.cache.heldGoneSeq(scope, id, this.now());
+                got = await this.fanout.fetchChecked(source, scope, ref, { timeoutMs: REF_TIMEOUT_MS });
+              }
+              this.freshness.refsRead++;
+              if (got.status === "failed") return done(id, "failed");
+              if (got.status === "gone") {
+                this.dropGone(scope, sourceId, [id]);
+                return done(id, "gone");
+              }
+              // A removal that landed while the fetch was on the wire wins (D160, D176): not revived, not stored.
+              const now = this.now();
+              const held = this.deps.cache.heldGoneSeq(scope, id, now);
+              if (held !== 0 && held !== seq) return done(id, "gone");
+              const copy = { ...got.item, id, sourceId, ref };
+              this.deps.cache.revive(scope, [id]);
+              const n = sync.ingest(scope, sourceId, [copy], mark);
+              stored += n;
+              return done(id, n > 0 ? "changed" : "confirmed");
+            }),
+          );
+        }
+      } catch {
+        unread = true;
+      } finally {
+        // Anything not settled above (a throw) reads as not re-read.
+        for (const { id } of named) settle.get(`${user}|${id}`)?.("failed");
+      }
+      // What could not be read is left to the plain signal: the source is polled, and its copies re-read on delivery.
+      if (unread) {
+        this.freshness.refsFallback++;
+        this.sourceNotice(scope, sourceId);
+      }
+      return stored;
+    })();
+    return { synced: true, settled };
+  }
+
+  /**
    * Drops everything held for a user, or for one of their sources (a revoked connector): cached items, source-map
    * rows, and the user's live sessions (their windows and queued injections hold content). In-flight lookups are
    * aborted, and their results discarded.
@@ -3752,6 +3862,8 @@ export class ContextPartner {
    * no measured gain; a silent source's changes reach Eden through the sync's polls and sweeps).
    */
   private doubted(s: Session, item: ContextItem): boolean {
+    // A ref notice's re-read still on the wire (D347): the copy held is from before the change.
+    if (this.refreshing.size > 0 && this.refreshing.has(`${scopeKey(s.scope)}|${item.id}`)) return true;
     const mark = this.deps.cache.readMark(s.scope, item.id);
     return mark !== undefined && this.sync?.signalledSince(s.scope, item.sourceId, mark) === true;
   }
@@ -3850,6 +3962,16 @@ export class ContextPartner {
    * is stored, a gone item dropped from the cache and the sync's bookkeeping. Never throws.
    */
   private check(s: Session, item: ContextItem): Promise<CheckOutcome> {
+    // A ref notice is re-reading this item now (D347): its outcome, with no second call.
+    const refreshing = this.refreshing.size > 0 ? this.refreshing.get(`${scopeKey(s.scope)}|${item.id}`) : undefined;
+    if (refreshing) {
+      // Waited on no longer than a re-read of its own would be (`verifyTimeoutMs`): past it, not confirmed.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<CheckOutcome>(
+        (r) => (timer = setTimeout(() => r("failed"), this.config.verifyTimeoutMs)),
+      );
+      return Promise.race([refreshing, late]).finally(() => clearTimeout(timer));
+    }
     const checks = (s.checks ??= new Map());
     const now = this.now();
     const held = checks.get(item.id);
@@ -5231,6 +5353,21 @@ const ASKS_BLOCKERS =
 
 /** Items one `sourceItems` call stores at most (a notification carries a few; a bigger batch is a listing's job). */
 const MAX_PUSHED_ITEMS = 100;
+/** A ref notice's re-reads run this many at a time (D347): the fan-out's starting concurrency per source. */
+const REF_LANES = 2;
+/** A ref read the guard skipped or that hit one plain error goes again up to this many times, this far apart (×k). */
+const REF_TRIES = 4;
+const REF_RETRY_MS = 150;
+/**
+ * A ref read's deadline: it runs off the agent's path, so it may wait out a connector's slow tail (a hosted
+ * connector passed 1.5 s on about one fetch in five, D347) rather than fall back to the source-wide signal.
+ */
+const REF_TIMEOUT_MS = 5_000;
+/** Whether a failed ref read is worth another: our own guard's skip that clears in moments, or a plain error. */
+function refTryAgain(got: { why: string; guard?: string; pushedBack?: boolean }): boolean {
+  if (got.why === "error") return true;
+  return got.why === "refused" && got.guard !== "open" && got.pushedBack !== true;
+}
 
 /** The most candidates an ask's reader reads, whatever `askReaderPool` says. */
 const READER_POOL_CAP = READER_MAX_ITEMS;

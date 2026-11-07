@@ -63,7 +63,8 @@ describe("connector options (--source-profile, --push)", () => {
 });
 
 describe("recapNotice (D272): the notice for a recap's moved items", () => {
-  const item = (id: string) => ({ id, sourceId: id.split(":")[0]!, title: id, text: id }) as ContextItem;
+  const item = (id: string) =>
+    ({ id, sourceId: id.split(":")[0]!, ref: id.split(":")[1]!, title: id, text: id }) as ContextItem;
   const sources = [
     { id: "gmail", listAll: () => [item("gmail:a"), item("gmail:b")] },
     { id: "slack", listAll: () => [item("slack:c")] },
@@ -77,6 +78,10 @@ describe("recapNotice (D272): the notice for a recap's moved items", () => {
         calls.push(`items ${id} ${items.map((x) => x.id).join(",")}`),
         items.length
       ),
+      sourceRefs: (_s: unknown, id: string, refs: string[]) => (
+        calls.push(`refs ${id} ${refs.join(",")}`),
+        { settled: Promise.resolve(refs.length) }
+      ),
     };
   };
   const scope = { tenantId: "t", userId: "u" };
@@ -85,6 +90,12 @@ describe("recapNotice (D272): the notice for a recap's moved items", () => {
     const p = fake();
     expect(await recapNotice(p, scope, sources, new Set(["gmail:b"]), "payload")).toBe(1);
     expect(p.calls).toEqual(["items gmail gmail:b"]);
+  });
+
+  test("refs (D347): the moved items named by ref, no signal", async () => {
+    const p = fake();
+    expect(await recapNotice(p, scope, sources, new Set(["gmail:b"]), "refs")).toBe(1);
+    expect(p.calls).toEqual(["refs gmail b"]);
   });
 
   test("signals: a bare signal per source with a moved item; none: nothing", async () => {

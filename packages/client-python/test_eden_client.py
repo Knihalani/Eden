@@ -62,6 +62,7 @@ class FailOpen(unittest.TestCase):
         self.assertEqual(c.explain(), [])
         self.assertFalse(c.source_changed("mail"))
         self.assertFalse(c.source_changed("mail", items=[{"ref": "1", "text": "x"}]))
+        self.assertFalse(c.source_changed("mail", refs=["1"]))
 
     def test_unreachable(self):
         c, errors = client()
@@ -87,9 +88,19 @@ class FailOpen(unittest.TestCase):
                 self.assertIsNone(c.ask("q"))
                 self.assertEqual(c.check("send", {})["verdict"], "proceed")
                 self.assertEqual(c.explain(), [])
+                self.assertFalse(c.source_changed("mail", refs=["1"]))
                 self.assertTrue(errors)
             finally:
                 stub.close()
+
+    def test_refs_not_taken_send_the_signal(self):
+        stub = Stub(lambda p, b: (200, {"ok": True, "synced": False, "reason": "not-synced"}))
+        try:
+            c, _ = client(stub.url)
+            self.assertFalse(c.source_changed("mail", refs=["1"]))
+            self.assertEqual([p for p, _, _ in stub.seen], ["/v1/sources/refs", "/v1/sources/changed"])
+        finally:
+            stub.close()
 
     def test_unserialisable_bodies_and_odd_counts_never_throw(self):
         import datetime
@@ -133,6 +144,7 @@ class Calls(unittest.TestCase):
                 "/v1/explain": {"decisions": [{"decision": "silent", "why": "w", "itemIds": []}, {"why": 1},
                                               {"decision": "silent", "why": "w"}]},
                 "/v1/sources/items": {"ok": True, "stored": 2},
+                "/v1/sources/refs": {"ok": True, "synced": True},
                 "/v1/sources/changed": {"ok": True, "synced": False, "reason": "not-synced"},
             }.get(route, {"ok": True})
 
@@ -158,6 +170,11 @@ class Calls(unittest.TestCase):
             self.assertTrue(c.source_changed("mail", items=[{"ref": str(i), "text": "t"} for i in range(150)]))
             sent = [b for p, b, _ in stub.seen if p == "/v1/sources/items"]
             self.assertEqual([len(b["items"]) for b in sent], [100, 50])
+            seen = len(stub.seen)
+            self.assertTrue(c.source_changed("mail", refs=[str(i) for i in range(101)]))
+            routes = [p for p, _, _ in stub.seen[seen:]]
+            self.assertEqual(routes, ["/v1/sources/refs", "/v1/sources/refs"])
+            self.assertEqual(stub.seen[-1][1]["refs"], ["100"])
             self.assertNotIn("sessionId", sent[0])
             self.assertEqual(errors, [])
         finally:

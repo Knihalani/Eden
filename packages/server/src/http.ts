@@ -16,6 +16,8 @@
  *   POST /v1/sources/items   {tenantId,userId,sourceId,items:[{ref,title?,text,url?,updatedAt?,meta?}]}
  *                                                    → {ok, stored}: the items a notification carried (`syncPush`)
  *   POST /v1/sources/removed {tenantId,userId,sourceId,refs:[…]} → {ok, removed}: refs the source deleted (`syncPush`)
+ *   POST /v1/sources/refs    {tenantId,userId,sourceId,refs:[…]} → {ok, synced, reason?}: refs the source changed or
+ *                            added, read by Eden in the background (`syncPush`, D347)
  *   GET  /healthz
  *
  * Auth: `Authorization: Bearer <key>`; the key fixes the tenant, and a body naming another tenant is refused.
@@ -27,7 +29,15 @@
  */
 import { explainTrace, type ContextPartner } from "@eden/engine";
 import { Gcra } from "@eden/primitives";
-import { checkAsk, checkEvent, checkSourceChanged, checkSourceItems, checkSourceRemoved, isId } from "@eden/protocol";
+import {
+  checkAsk,
+  checkEvent,
+  checkSourceChanged,
+  checkSourceItems,
+  checkSourceRefs,
+  checkSourceRemoved,
+  isId,
+} from "@eden/protocol";
 import { DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
 import type { UserSources } from "./user-sources";
 
@@ -175,6 +185,16 @@ export function createHandler(
           if (!checked.ok) return fail(400, checked.error);
           const { userId, sourceId, items } = checked.value;
           return json({ ok: true, stored: await partner.sourceItems({ tenantId: tenant, userId }, sourceId, items) });
+        }
+        case "/v1/sources/refs": {
+          // What changed, named but not carried (a Gmail history's ids, a webhook's resource id): Eden reads those
+          // refs itself in the background (D347). 200 at once; `reason` when it acts as a plain signal could not.
+          const checked = checkSourceRefs(body);
+          if (!checked.ok) return fail(400, checked.error);
+          const { userId, sourceId, refs } = checked.value;
+          const { settled, ...result } = partner.sourceRefs({ tenantId: tenant, userId }, sourceId, refs);
+          void settled.catch(() => 0);
+          return json({ ok: true, ...result });
         }
         case "/v1/sources/removed": {
           // A deletion the integrator was told of (a recalled message, a deleted doc or event): dropped at once.

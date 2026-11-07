@@ -38,7 +38,7 @@ __all__ = [
 DEFAULT_WAIT_MS = 3_000
 #: The server's cap on an observe's wait; the client clamps to the same range.
 MAX_WAIT_MS = 5_000
-#: Items or refs per ``/v1/sources/items`` or ``/removed`` call (``MAX_PUSHED_ITEMS`` in @eden/protocol).
+#: Items or refs per ``/v1/sources/items``, ``/removed`` or ``/refs`` call (``MAX_PUSHED_ITEMS`` in @eden/protocol).
 MAX_PUSHED_ITEMS = 100
 #: The description Eden recommends for its ask tool (``ASK_CONTEXT_DESCRIPTION`` in @eden/protocol; keep it, D70).
 ASK_CONTEXT_DESCRIPTION = (
@@ -258,18 +258,27 @@ class EdenClient:
                 and isinstance(d.get("itemIds"), list)]
 
     def source_changed(self, source_id: str, items: Optional[List[Dict[str, Any]]] = None,
-                       removed: Optional[List[str]] = None) -> bool:
+                       removed: Optional[List[str]] = None, refs: Optional[List[str]] = None) -> bool:
         """Forwards a source's change notification, with its items when you have them (the recommended form, D210).
 
-        True when every part reached the server and was taken. A part that did not is followed by the bare signal,
-        so Eden polls the source rather than miss the change. With no items and no refs, it is the bare signal.
+        ``refs``: the refs it changed or added, when the notice names them but carries no content (D347); Eden reads
+        them itself and puts nothing else of the source in doubt. True when every part reached the server and was
+        taken. A part that did not is followed by the bare signal, so Eden polls the source rather than miss the
+        change. With no items and no refs, it is the bare signal.
         """
         items = items if isinstance(items, list) else []
         removed = removed if isinstance(removed, list) else []
-        if not items and not removed:
+        refs = refs if isinstance(refs, list) else []
+        if not items and not removed and not refs:
             notice = self.source_notice(source_id)
             return bool(notice and notice["synced"])
         delivered = True
+        for i in range(0, len(refs), MAX_PUSHED_ITEMS):
+            res = self._post("/v1/sources/refs",
+                             {**self._who(session=False), "sourceId": source_id, "refs": refs[i:i + MAX_PUSHED_ITEMS]},
+                             valid=lambda v: isinstance(v, dict) and isinstance(v.get("synced"), bool))
+            if res is None or res["synced"] is not True:
+                delivered = False
         for i in range(0, len(items), MAX_PUSHED_ITEMS):
             if self._pushed("/v1/sources/items", "items", "stored", source_id, items[i:i + MAX_PUSHED_ITEMS]) is None:
                 delivered = False
