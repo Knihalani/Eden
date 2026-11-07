@@ -1,0 +1,20 @@
+arm              kind      n  rate   wall p50/p90/mean s  all-in $/1k (agent, Eden)  Eden path ms (obs, ask)  turns  asks  reader  conn  restarts
+eden             hidden   144 0.688   1.86/ 3.29/ 2.14   0.274 (0.266, 0.000)        18 (  14,    3)   1.38  0.51  0.00   0.00  0.00
+eden             control  144 0.007   2.44/ 3.41/ 2.33   0.294 (0.285, 0.000)        16 (  11,    5)   1.55  0.73  0.00   0.00  0.00
+eden             neutral  144 0.000   2.47/ 3.28/ 2.36   0.299 (0.290, 0.000)        18 (  11,    7)   1.72  0.94  0.00   0.00  0.00
+eden+linkLine    hidden   144 0.667   1.89/ 3.23/ 2.12   0.271 (0.263, 0.000)        16 (  13,    3)   1.34  0.45  0.00   0.00  0.00
+eden+linkLine    control  144 0.007   2.19/ 3.37/ 2.25   0.294 (0.285, 0.000)        18 (  14,    4)   1.51  0.68  0.00   0.00  0.00
+eden+linkLine    neutral  144 0.007   2.45/ 3.13/ 2.29   0.304 (0.296, 0.000)        17 (  11,    6)   1.69  0.96  0.00   0.00  0.00
+
+== paired differences per kind (a − b), bootstrap 95%; * the interval excludes zero
+eden+linkLine    − eden   hidden   rate -0.021 (-0.090..+0.049)  wall s -0.021 (-0.145..+0.102)  $/1k -0.003 (-0.024..+0.017)  Eden ms -2 (-5..+0) turns -0.035 (-0.111..+0.042) 
+eden+linkLine    − eden   control  rate +0.000 (-0.021..+0.021)  wall s -0.080 (-0.204..+0.044)  $/1k -0.000 (-0.019..+0.019)  Eden ms +3 (-0..+7) turns -0.042 (-0.111..+0.028) 
+eden+linkLine    − eden   neutral  rate +0.007 (+0.000..+0.021)  wall s -0.070 (-0.199..+0.061)  $/1k +0.006 (-0.014..+0.025)  Eden ms -1 (-3..+1) turns -0.035 (-0.111..+0.042) 
+
+== traffic mix (assumed 1 hidden : 1 control : 8 neutral)
+arm               raised    wrong      usd    agent  edenusd     wall   edenms    turns     asks   reader     conn
+eden               0.069    0.001    0.296    0.287    0.000    2.337   17.682    1.670    0.880    0.000    0.000
+eden+linkLine      0.067    0.006    0.300    0.292    0.000    2.271   17.146    1.635    0.880    0.000    0.000
+
+== mix pairs (a − b), bootstrap 95%; * excludes zero
+eden+linkLine    − eden   raised -0.002 (-0.009..+0.005)   wrong +0.006 (-0.001..+0.018)   usd +0.004 (-0.012..+0.020)   wall -0.066 (-0.169..+0.040)   edenms -0.536 (-2.532..+1.243)   conn +0.000 (+0.000..+0.000) 
