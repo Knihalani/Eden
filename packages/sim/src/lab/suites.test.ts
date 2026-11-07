@@ -85,4 +85,47 @@ describe("suite registry", () => {
     expect(supportsNeutral("heldout15")).toBe(true);
     expect(parseSuites("all")).not.toContain("heldout15");
   });
+
+  test("train suites build neutral: the control's tasks under -neutral ids, the world left unplanted (CL5)", () => {
+    for (const name of parseSuites("train")) {
+      const plain = buildWorld({ seed: 42_000 });
+      const world = buildWorld({ seed: 42_000 });
+      const neutral = SUITES[name]!(world, 42, "neutral");
+      const control = SUITES[name]!(buildWorld({ seed: 42_000 }), 42, "control");
+      const hidden = SUITES[name]!(buildWorld({ seed: 42_000 }), 42, "hidden");
+      expect(world.items).toEqual(plain.items);
+      expect(world.people).toEqual(plain.people);
+      expect(neutral.length).toBe(32);
+      expect(neutral.map((t) => [t.text, t.detail, t.template])).toEqual(
+        control.map((t) => [t.text, t.detail, t.template]),
+      );
+      expect(neutral.map((t) => t.text)).toEqual(hidden.map((t) => t.text));
+      expect(neutral.every((t) => t.id.startsWith(`w42:${name}-neutral:`))).toBe(true);
+      expect(supportsNeutral(name)).toBe(true);
+    }
+  });
+
+  test("heldout16 builds 32 tasks per variant with neutral, unrun and out of `all` (counts and ids only)", () => {
+    for (const seed of [41, 44]) {
+      const by = Object.fromEntries(
+        (["hidden", "control", "neutral"] as const).map((v) => {
+          const world = buildWorld({ seed: seed * 1_000 });
+          const before = world.items.length;
+          const tasks = SUITES.heldout16!(world, seed, v);
+          return [v, { tasks, planted: world.items.length - before }];
+        }),
+      );
+      expect([by.hidden!.planted, by.control!.planted, by.neutral!.planted]).toEqual([32, 32, 0]);
+      for (const v of ["control", "neutral"]) {
+        expect(by[v]!.tasks.map((t: { text: string }) => t.text)).toEqual(
+          by.hidden!.tasks.map((t: { text: string }) => t.text),
+        );
+        expect(by[v]!.tasks.every((t: { id: string }) => t.id.startsWith(`w${seed}:heldout16-${v}:`))).toBe(true);
+      }
+      expect(by.hidden!.tasks.every((t: { id: string }) => t.id.startsWith(`w${seed}:heldout16:`))).toBe(true);
+    }
+    expect(UNRUN_BLIND).toContain("heldout16");
+    expect(supportsNeutral("heldout16")).toBe(true);
+    expect(parseSuites("all")).not.toContain("heldout16");
+  });
 });

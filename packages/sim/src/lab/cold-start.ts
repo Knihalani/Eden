@@ -11,13 +11,17 @@
  *     --spend-ledger .local/ledger.jsonl --spend-cap 4 --spend-headroom 0.3 --run-label cold [--out cold.json]
  *
  * Each user is a hidden-variant world of a train suite (`worldOf`, as pi-ab builds it), its connectors the realistic
- * profile at time scale 0. One user at a time, so each user's calls and dollars are its own.
+ * profile at time scale 0. One user at a time, so each user's calls and dollars are its own. `user:SEED` is instead
+ * the long-horizon user `pi-ab --days` builds for that seed (pi-user.ts, over `--suite`, default train, with `--days`,
+ * `--day-size` and `--mix` as pi-ab takes them): the one-time backfill `pi-cost-report.ts --lifetime` books for it.
  */
 import { writeFileSync } from "node:fs";
 import type { CardEnricher } from "@eden/engine";
 import { buildPartner } from "@eden/server";
 import { REALISTIC, simSources } from "../sources";
 import { worldOf } from "./ab-common";
+import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf } from "./pi-user";
+import { parseSuites } from "./suites";
 import { labAccess, labModel } from "./free";
 import { warmAll } from "../server";
 
@@ -35,6 +39,16 @@ const USERS = opt("users", "train1:41")
     return { suite, seed: Number(seed) };
   });
 const OUT = opt("out", "");
+/** `user:SEED`'s world, as `pi-ab --days` plans it. */
+const userWorld = (seed: number) => {
+  const suites = parseSuites(opt("suite", "train"));
+  const plan = planUser(seed, suiteTemplates(seed, suites), {
+    days: Number(opt("days", "8")),
+    size: parseDaySize(opt("day-size", "12-20")),
+    mix: parseMix(opt("mix", "1:1:8")),
+  });
+  return userWorldOf(seed, plan).world;
+};
 const ACCESS = labAccess(args, [MODEL]);
 
 interface Row {
@@ -46,7 +60,8 @@ interface Row {
 }
 const rows: Row[] = [];
 for (const { suite, seed } of USERS) {
-  const { world } = worldOf(seed, suite, "hidden", { maxTasks: 30, maxOffworld: 5 });
+  const world =
+    suite === "user" ? userWorld(seed) : worldOf(seed, suite, "hidden", { maxTasks: 30, maxOffworld: 5 }).world;
   const sources = simSources(world, REALISTIC, 0, seed);
   let calls = 0;
   let usd = 0;
@@ -86,6 +101,7 @@ for (const { suite, seed } of USERS) {
   const synced = sources.reduce((n, s) => n + s.listAll().length, 0);
   const row = {
     user: `${suite}:${seed}`,
+    seed,
     itemsAtSources: synced,
     syncTicks: warm.ticks,
     syncCalls: warm.calls,
