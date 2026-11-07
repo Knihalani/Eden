@@ -460,3 +460,41 @@ describe("Ledger: shown copies", () => {
     expect(l.shownCount).toBeLessThanOrEqual(256);
   });
 });
+
+describe("a revision stored while a packet with the old copy waits in the queue (wave-1 review)", () => {
+  test("the agent takes the old copy, then is told of the new one", async () => {
+    const t = await setup();
+    // White-box: a session, then a packet built the way the slow path or the reader push builds one, queued untaken.
+    const P = t.partner as any;
+    await say(t.partner, "What should I bring to the canteen lunch", "s1", t.now());
+    const s = P.sessions.get("t/u#s1");
+    const v1 = P.deps.cache.get(scope, OFFSITE, t.now());
+    expect(v1.text).toContain("09:30");
+    const cue = { raw: "offsite", terms: new Uint32Array(0), entities: [], span: 0 };
+    s.pending.push(P.build(s, [{ item: v1, score: 1 }], "proactive", "probe", cue, 0));
+    t.advance(MIN);
+    const moved = "The quarterly offsite is in Lisbon at 11:30 on 12 November.";
+    const stored = await t.partner.sourceItems(scope, "notes", [
+      { id: OFFSITE, sourceId: "notes", ref: "q1", title: "Quarterly offsite", text: moved },
+    ]);
+    expect(stored).toBe(1);
+    const taken = t.partner.takePending({ ...scope, sessionId: "s1" });
+    t.advance(5 * MIN);
+    const next = await say(t.partner, "Anything for the budget review with finance", "s1", t.now());
+    const all = [...taken, ...next];
+    expect(all.some((i) => i.text.includes("09:30"))).toBe(true);
+    expect(updates(all).some((i) => i.text.includes("11:30"))).toBe(true);
+  });
+});
+
+test("stopSync clears a revision poll held back by its gap (wave-1 review)", async () => {
+  const t = await setup();
+  const P = t.partner as any;
+  let fired = false;
+  const st = { running: false, again: false, at: t.now(), timer: setTimeout(() => (fired = true), 5) };
+  P.revisionSources.set("t/u\u0000notes", st);
+  t.partner.stopSync();
+  expect(st.timer).toBeNull();
+  await new Promise((r) => setTimeout(r, 20));
+  expect(fired).toBe(false);
+});

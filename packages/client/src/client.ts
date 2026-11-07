@@ -331,8 +331,9 @@ export class EdenClient {
    *   why).
    */
   async sourceChanged(sourceId: string, change?: SourceChange): Promise<boolean> {
-    const items = change?.items ?? [];
-    const removed = change?.removed ?? [];
+    // A JS caller can pass anything: what is not an array sends nothing, so it is read as none (a plain signal).
+    const items = Array.isArray(change?.items) ? change.items : [];
+    const removed = Array.isArray(change?.removed) ? change.removed : [];
     if (items.length === 0 && removed.length === 0) return (await this.sourceNotice(sourceId))?.synced === true;
     let delivered = true;
     for (let i = 0; i < items.length; i += MAX_PUSHED_ITEMS) {

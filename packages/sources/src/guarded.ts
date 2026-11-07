@@ -64,10 +64,13 @@ export interface FanoutOutcome {
  * ("refused"), the caller gave up ("aborted"), the call failed ("error", "timeout") or the connector refused it as
  * rate-limited ("throttled"), the source answered null without `fetchReportsGone` ("null"), or our gate failed
  * ("gate"). Only "error" is worth one immediate retry: the others would be refused or answered the same way again.
+ * A refusal names its guard (`guard`): "busy" (no free permit, which clears in moments) differs from "open" (the
+ * breaker) and "limited" (the rate limit, pushed back by a 429), which say the source is in trouble right now.
  */
 export interface FetchFailed {
   status: "failed";
   why: "no-fetch" | "refused" | "aborted" | "error" | "timeout" | "throttled" | "null" | "gate";
+  guard?: "open" | "limited" | "busy";
 }
 
 /** Statuses of a call a guard refused before it went out (no rate token, no call). */
@@ -317,7 +320,7 @@ export class SourceFanout {
     const key = `${scopeKey(scope)}|${source.id}`;
     const s = this.state(key);
     const epoch = this.admit(key, s);
-    if (typeof epoch !== "number") return failed("refused");
+    if (typeof epoch !== "number") return { status: "failed", why: "refused", guard: epoch };
     const started = performance.now();
     let raw: ContextItem | null;
     try {

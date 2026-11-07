@@ -411,6 +411,21 @@ describe("change notifications", () => {
     expect(await ok.sourceChanged("mail")).toBe(true);
   });
 
+  test("items or removed that are not arrays are read as none: a plain signal, not a silent true", async () => {
+    const paths: string[] = [];
+    const eden = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      fetch: (async (url: string) => {
+        paths.push(new URL(url).pathname);
+        return Response.json({ ok: true, synced: false, reason: "not-synced" });
+      }) as unknown as typeof fetch,
+    });
+    const odd = { items: { length: 2 }, removed: "r1" } as unknown as Parameters<EdenClient["sourceChanged"]>[1];
+    expect(await eden.sourceChanged("mail", odd)).toBe(false);
+    expect(paths).toEqual(["/v1/sources/changed"]);
+  });
+
   test("an older server (no reason) or an unknown reason: no reason, never a throw", async () => {
     const old = new EdenClient({ userId: "u", sessionId: "s", fetch: replying(() => ({ ok: true, synced: false })) });
     expect(await old.sourceNotice("mail")).toEqual({ synced: false });

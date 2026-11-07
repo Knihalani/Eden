@@ -208,3 +208,20 @@ describe("an upstream 429 reads rate-limited, not failed (D212)", () => {
     expect(r.answer).toContain("mail (failed)");
   });
 });
+
+describe("D211 under our own guards (wave-1 review)", () => {
+  test("a 429 then a second ask: our rate limit refuses the re-read, and the deleted item is still left out", async () => {
+    const { src, ask, deleteBySignal } = await setup();
+    deleteBySignal();
+    src.script = ["429 Too Many Requests"];
+    expect(citedIds(await ask())).not.toContain(HOLD);
+    expect(citedIds(await ask())).not.toContain(HOLD);
+  });
+
+  test("repeated errors open the breaker: the deleted item is never cited as held", async () => {
+    const { src, ask, deleteBySignal } = await setup();
+    deleteBySignal();
+    src.script = Array(20).fill("upstream 503");
+    for (let i = 0; i < 6; i++) expect(citedIds(await ask())).not.toContain(HOLD);
+  });
+});

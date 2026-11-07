@@ -670,6 +670,12 @@ export class ContextPartner {
   stopSync(): void {
     if (this.syncTimer) clearInterval(this.syncTimer);
     this.syncTimer = null;
+    // A revision poll held back by its gap would still list a source after the stop (wave-1 review). Its entry stays:
+    // its `at` keeps the gap for a later notice, and the map is bounded (`MAX_REVISION_SOURCES`).
+    for (const st of this.revisionSources.values()) {
+      if (st.timer) clearTimeout(st.timer);
+      st.timer = null;
+    }
   }
 
   async observe(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
@@ -1162,7 +1168,15 @@ export class ContextPartner {
     if (!sessions) return;
     for (const s of sessions) {
       if (s.closed) continue;
-      const changed = items.filter((it) => s.ledger.superseded(it.id, versionOf(it)));
+      // A packet still queued with another version counts as handed: taking it later notes the old copy, and no
+      // later store would announce the one stored now (wave-1 review).
+      const queued = new Map<string, number>();
+      for (const p of s.pending) for (const c of this.built.get(p)?.copies ?? []) queued.set(c.id, c.version);
+      const changed = items.filter((it) => {
+        const v = versionOf(it);
+        const held = queued.get(it.id);
+        return s.ledger.superseded(it.id, v) || (held !== undefined && held !== v);
+      });
       if (changed.length === 0) continue;
       const ids = new Set(changed.map((it) => it.id));
       for (let k = s.pending.length - 1; k >= 0; k--) {
@@ -1856,12 +1870,18 @@ export class ContextPartner {
     };
     // Who makes the call, for the accounting: a read that finds a verdict cached, or a call another read started
     // (an ask joining its push), makes none. Known before the read, for when this ask's wait runs out first.
-    const starts =
+    const fresh =
       !reused && reader.peek(s.scope, s.key, input) === undefined && !reader.inFlight(s.scope, s.key, input);
+    // A paid call this ask could not wait for (the push's verdict came null with almost none of the wait left) is not
+    // started: it would only buy a cached verdict (wave-1 review). A cached or joined verdict is still read.
+    const tooLate = fresh && Number.isFinite(waitMs) && readWaitMs < Math.min(MIN_OWN_READ_MS, waitMs / 4);
+    const starts = fresh && !tooLate;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const reading: Promise<ReaderRead> = reused
       ? Promise.resolve(reused === "late" ? NO_READ : { ...NO_READ, verdict: reused.verdict })
-      : reader.read(s.scope, s.key, input, s.abort.signal);
+      : tooLate
+        ? Promise.resolve(NO_READ)
+        : reader.read(s.scope, s.key, input, s.abort.signal);
     // The push's reading, for a later ask in the same request (`readerReuse`): its pool's items and their content.
     if (opts.push && this.config.readerReuse) {
       s.pushRead = {
@@ -1878,16 +1898,18 @@ export class ContextPartner {
     try {
       // An explicit ask stops waiting at `waitMs`; the push (Infinity) waits for the reading, with no timer left
       // pending, bounded by the reader's call and the session's close.
-      got = reused
-        ? reused === "late"
-          ? "late"
-          : await reading
-        : Number.isFinite(waitMs)
-          ? await Promise.race([
-              reading,
-              new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), Math.max(0, readWaitMs)))),
-            ])
-          : await reading;
+      got = tooLate
+        ? "late"
+        : reused
+          ? reused === "late"
+            ? "late"
+            : await reading
+          : Number.isFinite(waitMs)
+            ? await Promise.race([
+                reading,
+                new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), Math.max(0, readWaitMs)))),
+              ])
+            : await reading;
     } catch {
       got = NO_READ;
     } finally {
@@ -3960,10 +3982,12 @@ export class ContextPartner {
       if (got.status === "failed" || s.closed) {
         this.freshness.failed++;
         if (s.closed || got.status !== "failed") return "failed";
-        // A guard's skip made no call: not one the connector received, and no evidence against the item.
+        // A guard's skip made no call: not one the connector received. A busy permit is no evidence against the item
+        // and clears in moments (one retry). An open breaker or a rate limit pushed back by a 429 says the source is in
+        // trouble now: the item could not be checked ("failed"), so a strict ask leaves it out and says so (D211).
         if (got.why === "refused") {
           this.freshness.calls--;
-          return "skipped";
+          return got.guard === "busy" ? "skipped" : "failed";
         }
         // A null from a source whose null does not mean gone (an MCP tool) says nothing, and says it every time: like
         // a source with no fetch, its items are cited as held (D126). A plain error is worth one more read.
@@ -5572,6 +5596,9 @@ type CheckOutcome = "confirmed" | "changed" | "gone" | "failed" | "flaked" | "sk
 /** Re-reads a session keeps (`Session.checks`), and how long one is reused before an item is read again (ms). */
 const MAX_CHECKS = 64;
 /** A strict (ask) verification's outcomes worth one more read, and how many such reads run at once (D211). */
+/** Below this much of an ask's wait left (or a quarter of it, if less), the ask starts no reader call of its own. */
+const MIN_OWN_READ_MS = 250;
+
 const RETRIED: ReadonlySet<CheckOutcome> = new Set<CheckOutcome>(["flaked", "skipped"]);
 const STRICT_RETRY_LANES = 2;
 const CHECK_REUSE_MS = 30_000;
