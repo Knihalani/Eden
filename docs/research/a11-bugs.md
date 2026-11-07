@@ -72,7 +72,7 @@ connector id with a colon (`work:gmail`, allowed by `isId`) is named whole.
 **4. A repeat across the fast and slow paths (D314).** `deliverChecked` ranked against the ledger, awaited
 `verifyItems`' re-reads, then delivered all it had ranked; the next request's fast path could hand one of those items
 out from the cache in that wait. Each item's ledger entry is now taken before the wait and an item whose entry changed
-is left out. This is a5-bugs.md's documented core 704 (left there as a known race); the 20,000-seed runs found it
+is left out (one swept meanwhile, past the cooldown or `MAX_LEDGER_ITEMS`, is kept: nothing handed it out; the review). This is a5-bugs.md's documented core 704 (left there as a known race); the 20,000-seed runs found it
 in the default too (2577, flaky 18959).
 
 **5-6.** `source_changed` checked `isinstance(x, list)`, so a set of removed refs sent the bare signal and returned
@@ -83,7 +83,7 @@ record is still no match, a test). A null there was a failed re-read, never a de
 
 **7. Long text through the proxy.** The API refuses event text past 1,000,000 characters (400, swallowed by the
 client), so a large file read or pasted document reached Eden as nothing. The proxy reports its head
-(`MAX_TEXT_CHARS`, now exported), which is all the engine reads, with no lone high surrogate at the cut. The SDKs do
+(`MAX_TEXT_CHARS`, now exported), which is all the engine reads, with no lone high surrogate at the cut; a tool call whose input's JSON is past the cap (a write of a large file) goes as the head of its arguments' text (the review). The SDKs do
 not cut: an integration passing such text directly still loses the event (left; the SDK's `observe` contract is the
 caller's text).
 

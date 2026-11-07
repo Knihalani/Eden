@@ -4042,10 +4042,14 @@ export class ContextPartner {
   ): Promise<Injection | null> {
     // The items were ranked against the ledger before the re-reads' await; a delivery during it (the next request's
     // fast path from the cache) may have handed some out since, and `build` marks without testing again: an item
-    // whose ledger entry changed over the await is left out (audit A11's fuzz, default seed 2577; core seed 704).
+    // whose ledger entry changed over the await is left out (audit A11's fuzz, default seed 2577; core seed 704). An
+    // entry gone meanwhile was swept (past the cooldown, or past `MAX_LEDGER_ITEMS`), not handed out: kept (review).
     const was = new Map(scored.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
     const verified = await this.verifyItems(s, scored, cue);
-    const kept = verified.filter((x) => sameEntry(was.get(x.item.id), s.ledger.entry(x.item.id)));
+    const kept = verified.filter((x) => {
+      const now = s.ledger.entry(x.item.id);
+      return now === undefined || sameEntry(was.get(x.item.id), now);
+    });
     if (kept.length === 0 || s.closed) return null;
     return this.deliver(s, kept, mode, reason, cue);
   }

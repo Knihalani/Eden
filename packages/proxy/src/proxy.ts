@@ -111,6 +111,26 @@ function capped(text: string): string {
   return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
 }
 
+/**
+ * A tool call's input as Eden's API takes it: past `MAX_TEXT_CHARS` of JSON the event was refused whole, as long text
+ * was (a write of a large file); such input goes as the head of its arguments' text, cut until its JSON fits (escapes
+ * can make it longer than the text). The engine reads only an input's head (the review of audit A11).
+ */
+function cappedInput(input: unknown, args: unknown): unknown {
+  let json: string;
+  try {
+    json = JSON.stringify(input) ?? "";
+  } catch {
+    return {};
+  }
+  if (json.length <= MAX_TEXT_CHARS) return input;
+  let text = capped(typeof args === "string" ? args : json);
+  while (text.length > 0 && JSON.stringify(text).length > MAX_TEXT_CHARS) {
+    text = text.slice(0, Math.floor(text.length * 0.9)).replace(/[\uD800-\uDBFF]$/, "");
+  }
+  return text;
+}
+
 /** A message's identity for "already reported": role, text, tool call ids and calls. */
 function hashOf(m: Message): string {
   const calls = Array.isArray(m.tool_calls) ? JSON.stringify(m.tool_calls) : "";
@@ -139,7 +159,7 @@ export function eventsOf(m: Message, tools: Map<string, string>): EventInput[] {
       } catch {
         // Arguments that are not JSON go as their text.
       }
-      out.push({ kind: "tool_call", tool: fn.name, input: input ?? {} });
+      out.push({ kind: "tool_call", tool: fn.name, input: cappedInput(input ?? {}, fn.arguments) });
     }
     return out;
   }

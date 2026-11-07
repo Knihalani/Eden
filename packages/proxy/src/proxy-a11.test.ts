@@ -65,7 +65,11 @@ describe("audit A11: proxy (D280)", () => {
       async fetch(req) {
         const url = new URL(req.url);
         if (url.pathname === "/v1/events") {
-          const e = (await req.json()) as { kind: string; text?: string; output?: string };
+          const raw = await req.text();
+          const e = JSON.parse(raw) as { kind: string; text?: string; output?: string; input?: unknown };
+          if (e.kind === "tool_call" && JSON.stringify(e.input).length > 1_000_000) {
+            return Response.json({ error: "too long" }, { status: 400 });
+          }
           if ((e.text ?? e.output ?? "").length > 1_000_000)
             return Response.json({ error: "too long" }, { status: 400 });
           events.push({ kind: e.kind, length: (e.text ?? e.output ?? "").length });
@@ -90,11 +94,19 @@ describe("audit A11: proxy (D280)", () => {
               tool_calls: [{ id: "c1", function: { name: "read", arguments: "{}" } }],
             },
             { role: "tool", tool_call_id: "c1", content: big },
+            // A write whose arguments are past the API's 1,000,000-character input cap (the review).
+            {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                { id: "c2", function: { name: "write", arguments: JSON.stringify({ path: "a", text: `"\n${big}` }) } },
+              ],
+            },
           ],
         }),
       }),
     );
-    expect(events.map((e) => e.kind)).toEqual(["user_message", "tool_call", "tool_result"]);
+    expect(events.map((e) => e.kind)).toEqual(["user_message", "tool_call", "tool_result", "tool_call"]);
     expect(events.every((e) => e.length <= 1_000_000)).toBe(true);
   }, 15_000);
 });
