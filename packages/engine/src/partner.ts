@@ -3742,19 +3742,20 @@ export class ContextPartner {
         : // What the poll left of the lookup's deadline (D140).
           this.fanout.search(chosen, query, { timeoutMs: left(), signal: s.abort.signal });
     const settled = searching.catch(() => null);
-    if (cutBehind && cutBehind.size > 0 && !cue.followUp) {
+    // As the lookup's own search (D140, D148): with under `MIN_SEARCH_MS` left, no call that could not answer is sent.
+    if (cutBehind && cutBehind.size > 0 && !cue.followUp && left() >= MIN_SEARCH_MS) {
       const behindOf = (listing ? listers : routed).filter((x) => cutBehind!.has(x.id));
       // Sent as the lookup's own search would be: through the planner's cascade (its shapes find what the request's
       // words alone miss), its calls counted where they reach the connector.
       const via: (CountedPlanCalls | undefined)[] = [];
       const behindChosen =
         planner && !listing
-          ? behindOf.map((x) => {
+          ? sendTo(behindOf).map((x) => {
               const calls = this.fanout.planCalls(x, shared);
               via.push(calls);
               return new PlannedSource(x, planner, () => this.fanout.permit(s.scope, x.id), calls, deadlineAt);
             })
-          : behindOf;
+          : sendTo(behindOf);
       if (behindOf.length > 0) this.searchCutBehind(s, cue, behindChosen, via, query, deadlineAt, readMark);
     }
     const probed: ProbeOut = { calls: 0, kept: [] };

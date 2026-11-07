@@ -144,6 +144,7 @@ describe("pushCutBehind (D405)", () => {
     expect(off.behindTraces).toHaveLength(0);
     // An explicit ask keeps D264 (a cut copy is searched live; it finds the fact either way).
     expect(on.asked).toBe(true);
+    expect(on.askSearches).toBeGreaterThan(0);
     expect(off.asked).toBe(true);
   });
 });

@@ -115,6 +115,13 @@ own column for seed 41's first half reads 2,241 → 1,242 ms. The agent's wall p
 
 ## 4. What is left
 
+- **Trace sums (review).** With `probeGraceMs` 0 a lookup's trace counts its probes' calls before they settle, so a
+  probe that joins another call in flight is counted by both lookups (on main too; with the switch on, the cut
+  sources' probes now overlap the background search more often): in a 4-source unit probe traces summed 16 against 12
+  connector calls off, 20 against 8–12 on. Every call figure above counts calls at the connectors (the funnel's
+  "connectors received", Pi's `eden.source` spans), not traces; the funnel's cross-check matched exactly in both arms
+  at time 0. Counting probe calls as they settle is a follow-up.
+
 - **The ask.** The agent's `ask_context` still waits on D264's live searches and its poll (~1.5 s a task here). An ask
   that waited on the push's own background search instead of searching again would need D127's "local" status to
   stay honest for a copy searched with another query; not built.

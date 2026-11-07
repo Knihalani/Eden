@@ -266,7 +266,7 @@ export interface EngineConfig {
   syncLocalComplete: boolean;
   /**
    * On in the default (D405, D406, B1; docs/research/b1-scale-path.md). With `syncLocalComplete`, on a lookup that
-   * does not wait for its poll (the push's lookup and its reader pass, `syncPollBehind`): a warm copy the user's cap
+   * does not wait for its poll (`syncPollBehind`: observe's slow-path lookup and the push's pass): a warm copy the cap
    * cut answers from the index as it stands, and the live search D264 would wait for runs behind, with the same query,
    * planner and deadline; the probes keep D264 (they are not waited for). What it stores reaches the agent as a
    * poll's does: the lookup's follow-up (`afterPoll`) and the push's second reading (`readerPushBehind`), re-checked
