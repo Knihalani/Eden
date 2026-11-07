@@ -87,6 +87,7 @@ for (const seed of SEEDS) {
   let afterPlan = 0;
   let arrived = 0;
   let k = 0;
+  const takeMs: number[] = [];
   for (const [d, size] of u.daySizes.entries()) {
     const sessionId = `w${seed}:user:day${d}`;
     if (d > 0) clock += NIGHT_MS;
@@ -105,8 +106,13 @@ for (const seed of SEEDS) {
       }
       await cards.idle();
       const ev = { ...scope, sessionId, at: clock, kind: "user_message", text: task.text } as AgentEvent;
+      // A take before the request (the agent's loop takes before each model call) checks what arrived (`checkPlans`,
+      // synchronous, on the agent's path): timed when something did.
+      const t0 = performance.now();
+      const before = k > 0 ? partner.takePending({ ...scope, sessionId }) : [];
+      if ((slots.get(k) ?? []).length > 0) takeMs.push(performance.now() - t0);
       const r = await partner.observe(ev, { waitMs: 3_000 });
-      const got = [...(r.injection ? [r.injection] : []), ...partner.takePending({ ...scope, sessionId })];
+      const got = [...before, ...(r.injection ? [r.injection] : []), ...partner.takePending({ ...scope, sessionId })];
       let plans = 0;
       for (const p of got) {
         const why = p.reason.split(":")[0]!;
@@ -125,7 +131,9 @@ for (const seed of SEEDS) {
     `w${seed}: ${n} requests over ${u.daySizes.length} days; ${arrivals.length} background items held back, ` +
       `${arrived} stored new on arrival; requests with a plan packet ${afterPlan} (${((100 * afterPlan) / n).toFixed(1)}%), ` +
       `plan packets ${reasons.get("plan") ?? 0}, plan items ${planItems} (${(planItems / u.daySizes.length).toFixed(2)} a day); ` +
-      `all packets by reason ${JSON.stringify(Object.fromEntries([...reasons].sort()))}`,
+      `all packets by reason ${JSON.stringify(Object.fromEntries([...reasons].sort()))}; take after arrivals ` +
+      `${takeMs.length}x, mean ${(takeMs.reduce((a, b) => a + b, 0) / Math.max(1, takeMs.length)).toFixed(2)} ms, ` +
+      `max ${Math.max(0, ...takeMs).toFixed(2)} ms`,
   );
 }
 process.exit(0);

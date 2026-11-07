@@ -302,6 +302,8 @@ interface Session {
   acted?: Cue[];
   /** `planConflict` (D301): ids the sync stored since the last take, at most `PLAN_WAITING`, oldest first. */
   planNew?: Set<string>;
+  /** `planConflict` (D301): ids a plan packet has sent, at most `PLAN_SENT`: each is said once per session. */
+  planSent?: Set<string>;
 }
 
 /** Items whose shown words a session keeps (`askDedup`). */
@@ -1947,17 +1949,27 @@ export class ContextPartner {
    * first `pushCandidates` of its pool, `rank`'s first `askReaderPool` distinct items, bulk mail out, a pool with an
    * item that passes `readerGate`'s constraint test, its card included: `candidatesOf`'s rule) is queued, one packet
    * per request. Built at once from the cached copy, the one the source just gave
-   * (nothing to re-read). Marked delivered, so each item is said once per session. Index lookups only: at most
+   * (nothing to re-read), except a copy a change signal has put in doubt, which waits for a later take. Said once per
+   * session (`planSent`). Index lookups only: at most
    * `PLAN_REQUESTS` a take, and only when something new was stored.
    */
   private checkPlans(s: Session): void {
     const waiting = s.planNew;
     if (!this.config.planConflict || s.closed || !s.acted || !waiting || waiting.size === 0) return;
     const now = this.now();
-    const fresh = new Set(
-      [...waiting].filter((id) => s.ledger.isFresh(id, s.turn) && this.deps.cache.get(s.scope, id, now)),
-    );
+    const sent = (s.planSent ??= new Set());
+    // A copy a change signal has put in doubt since it was read (D126's `doubted`) waits for a later take, when the poll
+    // the signal starts has stored the current one; a held-gone id is not in the cache. Once sent, never again.
+    const fresh = new Set<string>();
+    const later: string[] = [];
+    for (const id of waiting) {
+      const it = this.deps.cache.get(s.scope, id, now);
+      if (!it || sent.has(id) || !s.ledger.isFresh(id, s.turn)) continue;
+      if (this.config.verifyDelivery && this.doubted(s, it)) later.push(id);
+      else fresh.add(id);
+    }
     waiting.clear();
+    for (const id of later) waiting.add(id);
     if (fresh.size === 0) return;
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
     const said = new Set<string>();
@@ -1985,8 +1997,14 @@ export class ContextPartner {
           : new Map<string, Card>();
       if (!pool.some((x) => this.constraintLike(x, cards))) continue;
       const bearing = hits;
-      for (const x of bearing) said.add(x.item.id);
-      const lead = `${PLAN_LEAD} "${safeLine(head(cue.raw, PLAN_QUOTE_CHARS))}"`;
+      for (const x of bearing) {
+        said.add(x.item.id);
+        sent.add(x.item.id);
+        if (sent.size > PLAN_SENT) sent.delete(sent.values().next().value as string);
+      }
+      // The user's own (redacted) words, on one line, their double quotes made single so the quote cannot be closed
+      // and the rest read as Eden's voice.
+      const lead = `${PLAN_LEAD} "${safeLine(head(cue.raw, PLAN_QUOTE_CHARS)).replace(/["“”]/g, "'")}"`;
       const packet = this.deliver(s, bearing, "proactive", `plan:${cue.id}`, cue, undefined, {
         lead,
         itemBytes: Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES),
@@ -4789,6 +4807,7 @@ const MAX_CANDIDATE_BYTES = 2_000;
 const PLAN_REQUESTS = 12;
 const PLAN_QUOTE_CHARS = 200;
 const PLAN_WAITING = 64;
+const PLAN_SENT = 256;
 
 /** `pushCandidates` (D236): a candidates' packet's framing line and cut. */
 interface PacketFrame {
