@@ -703,7 +703,11 @@ export class ContextPartner {
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
     this.sync?.track(s.scope, this.now());
     s.turn++;
-    if (event.kind === "user_message") s.requests++;
+    if (event.kind === "user_message") {
+      s.requests++;
+      // `pushChecked` (D246): a note speaks for the request it read; one the agent never took says nothing of this one.
+      dropChecked(s);
+    }
     const prep = spans?.open("observe.prep", root!.id);
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
@@ -1447,6 +1451,10 @@ export class ContextPartner {
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
     // it stops waiting at `readerPushWaitMs`), bounded by the reader's call and the session's close.
+    const readOpts: ReadOpts = {
+      push: internal.push === true,
+      ...(internal.request !== undefined ? { request: internal.request } : {}),
+    };
     const reading =
       this.config.askReader && this.deps.reader
         ? await this.readAsk(
@@ -1456,10 +1464,7 @@ export class ContextPartner {
             chosen,
             limit,
             internal.push ? Infinity : this.config.askReaderWaitMs,
-            {
-              push: internal.push === true,
-              ...(internal.request !== undefined ? { request: internal.request } : {}),
-            },
+            readOpts,
           )
         : null;
     if (reading) chosen = reading.chosen;
@@ -1504,19 +1509,16 @@ export class ContextPartner {
           ? this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
       if (injection && was) this.keepUndo(s, injection, checked, was);
-      if (injection) {
-        // A later reading that delivers (`readerPushBehind`'s second) takes back an untaken "nothing found" note.
-        for (let k = s.pending.length - 1; k >= 0; k--) {
-          if (s.pending[k]!.reason.startsWith(CHECKED)) s.pending.splice(k, 1);
-        }
-        s.pending.push(injection);
-      } else if (
+      // A delivery takes back an untaken "nothing found" note itself (`build`, D246).
+      if (injection) s.pending.push(injection);
+      else if (
         this.config.pushChecked &&
         internal.again === undefined &&
         (flagged.length === 0 || fresh.length === 0) &&
         !s.closed &&
         still &&
-        (reading === null || reading.read) &&
+        // A verdict, or no candidate at all: a gated pool was read by no one, so it is no all-clear (D127).
+        (reading === null ? readOpts.outcome === "empty" : reading.read) &&
         answeredAll(searched)
       ) {
         // `pushChecked` (D246): the reading found nothing to add, from sources that all answered: the agent is told so.
@@ -1687,6 +1689,7 @@ export class ContextPartner {
       });
     if (pool.length === 0) {
       report("none");
+      opts.outcome = "empty";
       return null;
     }
     const main = request ?? cue.raw;
@@ -1703,6 +1706,7 @@ export class ContextPartner {
     // (or a state change or a thing done) and no constraint wording. Bulk mail never counts.
     if (this.config.readerGate && !pool.some((x) => this.constraintLike(x, cards))) {
       report("gated");
+      opts.outcome = "gated";
       return null;
     }
     // `readerReuse` (D193): an ask in the push's request reads the push's verdict, with no call of its own.
@@ -4413,10 +4417,6 @@ export class ContextPartner {
     while (shown.size > MAX_SHOWN) shown.delete(shown.keys().next().value!);
   }
 
-  /**
-   * `shown` is what the agent receives when it is not the injection's own text (an ask's answer). With
-   * `compactInjection`, each item is cut to what bears on `cue` (`compactText`) rather than to its first bytes.
-   */
   /** An injection of Eden's own words, citing nothing (`pushChecked`). Not built: no usage, ledger or copies. */
   private note(s: Session, line: string, reason: string): Injection {
     return {
@@ -4432,6 +4432,10 @@ export class ContextPartner {
     };
   }
 
+  /**
+   * `shown` is what the agent receives when it is not the injection's own text (an ask's answer). With
+   * `compactInjection`, each item is cut to what bears on `cue` (`compactText`) rather than to its first bytes.
+   */
   private deliver(
     s: Session,
     scored: Scored[],
@@ -4465,6 +4469,8 @@ export class ContextPartner {
       );
     }
     s.builtRequest = s.requests;
+    // `pushChecked` (D246): a packet or answer built for the session supersedes an untaken "nothing found" note.
+    dropChecked(s);
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
     // Every item counts as delivered, an echo folded out of the packet too: the agent has its occurrence.
@@ -4615,13 +4621,25 @@ function pendingOf(s: Session): boolean {
 /** `pushChecked` (D246): a "nothing found" note's reason prefix. */
 const CHECKED = "checked:";
 
-/** Every source a search chose answered (D127): no failure, no unresolved list, no closed session. */
+/**
+ * Every source a search chose answered (D127): at least one source, no failure, no unresolved list, no closed session.
+ * A user with no sources connected has nothing read, so no note says it was.
+ */
 function answeredAll(searched: SearchedLive): boolean {
+  const sources = searched.sources ?? [];
   return (
     searched.unresolved !== true &&
     searched.closed !== true &&
-    (searched.sources ?? []).every((x) => ANSWERED.has(x.status))
+    sources.length > 0 &&
+    sources.every((x) => ANSWERED.has(x.status))
   );
+}
+
+/** `pushChecked` (D246): untaken "nothing found" notes leave the session's queue. */
+function dropChecked(s: Session): void {
+  for (let k = s.pending.length - 1; k >= 0; k--) {
+    if (s.pending[k]!.reason.startsWith(CHECKED)) s.pending.splice(k, 1);
+  }
 }
 
 /** `revisionNotice`: an "updated:" packet's reason prefix, and what each of its items' titles starts with. */
@@ -4849,6 +4867,8 @@ interface AskInternal {
 /** `readAsk`'s options: whether it reads for the push, and the push's request. */
 interface ReadOpts {
   push?: boolean;
+  /** Set by `readAsk` when it returns null without reading: no candidate, or `readerGate` read none (D246). */
+  outcome?: "empty" | "gated";
   /** The push's request (`AskInternal.request`), recorded with its reading for `readerReuse`. */
   request?: number;
 }

@@ -55,7 +55,10 @@ const HOLD = item(
   200,
 );
 
-function setup(config: Record<string, unknown>, opts: { items?: ContextItem[]; fail?: boolean } = {}) {
+function setup(
+  config: Record<string, unknown>,
+  opts: { items?: ContextItem[]; fail?: boolean; noSources?: boolean } = {},
+) {
   const maker = new Reader();
   const calls = { search: 0 };
   const source: Source = {
@@ -69,7 +72,7 @@ function setup(config: Record<string, unknown>, opts: { items?: ContextItem[]; f
     },
   };
   const p = new ContextPartner({
-    sources: async () => [source],
+    sources: async () => (opts.noSources ? [] : [source]),
     sourceMap: new SourceMap(),
     cache: new ItemCache(),
     budget: new Budget(),
@@ -149,6 +152,49 @@ describe("pushChecked (D246): the push says when its reading found nothing", () 
     const { p, maker } = setup({ pushChecked: true });
     await say(p, "thanks, that is all for now");
     expect(maker.calls.length).toBe(0);
+    expect(p.takePending(ref())).toEqual([]);
+  });
+
+  test("an untaken note leaves with the next user message: it never answers another request", async () => {
+    const { p } = setup({ pushChecked: true });
+    await say(p, REQUEST);
+    const o = await p.observe(
+      { ...ref(), at: NOW, kind: "user_message", text: "thanks, that is all for now" } as AgentEvent,
+      { waitMs: 2_000 },
+    );
+    expect(o.injection?.reason.startsWith("checked:") ?? false).toBe(false);
+    expect(p.takePending(ref()).filter((i) => i.reason.startsWith("checked:"))).toEqual([]);
+  });
+
+  test("a pool the reader's gate let no one read is no all-clear: no note, no call", async () => {
+    const chat = [
+      item("c0", "Harlow lunch", "Lunch with the Harlow venue team went well, thanks for the photos.", 2),
+      item("c1", "Harlow photos", "Here are the photos from the Harlow venue visit last week.", 3),
+    ];
+    const { p, maker } = setup({ pushChecked: true, readerGate: true }, { items: chat });
+    await say(p, REQUEST);
+    expect(maker.calls.length).toBe(0);
+    expect(p.takePending(ref()).filter((i) => i.reason.startsWith("checked:"))).toEqual([]);
+  });
+
+  test("with no sources connected nothing was read, so nothing is said", async () => {
+    const { p } = setup({ pushChecked: true }, { noSources: true });
+    await say(p, REQUEST);
+    expect(p.takePending(ref()).filter((i) => i.reason.startsWith("checked:"))).toEqual([]);
+  });
+
+  test("an answer built after it supersedes an untaken note", async () => {
+    const { p } = setup({ pushChecked: true });
+    await say(p, REQUEST);
+    const a = await p.ask({ ...ref(), question: "What did Harlow send about the venue deposit invoice?", maxItems: 3 });
+    expect(a.citations.length).toBeGreaterThan(0);
+    expect(p.takePending(ref()).filter((i) => i.reason.startsWith("checked:"))).toEqual([]);
+  });
+
+  test("a closed session keeps no note", async () => {
+    const { p } = setup({ pushChecked: true });
+    await say(p, REQUEST);
+    await p.observe({ ...ref(), at: NOW, kind: "session_end" } as AgentEvent);
     expect(p.takePending(ref())).toEqual([]);
   });
 });
