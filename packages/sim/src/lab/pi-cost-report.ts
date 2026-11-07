@@ -13,14 +13,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type { Background, RunResult, Task } from "./ab-common";
-import {
-  conditionCosts,
-  costTasks,
-  dayRows,
-  kindRows,
-  type CostTask,
-  type Lifetime,
-} from "./pi-cost";
+import { conditionCosts, costTasks, dayRows, kindRows, type CostTask, type Lifetime } from "./pi-cost";
 import { dayOf } from "./pi-user";
 
 const argv = process.argv.slice(2);
@@ -38,7 +31,12 @@ interface RunFile {
   background?: Background[];
   timeline?: string;
   days?: { seed: number; condition: string; recapUsd?: number; recapEdenUsd?: number }[];
-  user?: { worlds: { seed: number; daySizes: number[]; clashes: number }[]; days: number; gapMin: number; nightH: number };
+  user?: {
+    worlds: { seed: number; daySizes: number[]; clashes: number }[];
+    days: number;
+    gapMin: number;
+    nightH: number;
+  };
 }
 
 const tasks: CostTask[] = [];
@@ -71,7 +69,9 @@ for (const file of files) {
 const lifetime: Lifetime[] = (flag("lifetime") ?? "")
   .split(",")
   .filter(Boolean)
-  .flatMap((f) => (JSON.parse(readFileSync(f, "utf8")) as { users: { seed?: number; user: string; usd: number }[] }).users)
+  .flatMap(
+    (f) => (JSON.parse(readFileSync(f, "utf8")) as { users: { seed?: number; user: string; usd: number }[] }).users,
+  )
   .map((u) => ({ seed: u.seed ?? Number(u.user.split(":")[1]), usd: u.usd }));
 
 const k = (x: number, d = 3) => (1_000 * x).toFixed(d);
@@ -114,4 +114,5 @@ if (byDay.some((r) => r.day > 0)) {
     );
   }
 }
-if (flag("json")) writeFileSync(flag("json")!, JSON.stringify({ files, costs, kinds: kindRows(tasks), byDay }, null, 2));
+if (flag("json"))
+  writeFileSync(flag("json")!, JSON.stringify({ files, costs, kinds: kindRows(tasks), byDay }, null, 2));

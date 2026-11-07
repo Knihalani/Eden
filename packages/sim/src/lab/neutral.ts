@@ -10,7 +10,8 @@
 
 /**
  * Suites whose planting function builds the `neutral` variant (plants nothing, same request text). The train suites
- * build it through suites.ts's `withNeutral` (CL5), so tuning can measure nothing-to-add turns without a held-out suite.
+ * build it through suites.ts's `withNeutral` (CL5), so tuning can measure nothing-to-add turns without a held-out
+ * suite.
  */
 export const NEUTRAL_SUITES: readonly string[] = [
   "heldout14",
