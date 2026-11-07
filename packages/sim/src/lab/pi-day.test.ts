@@ -86,6 +86,10 @@ describe("pi-ab --day (fix-s3b)", () => {
       staleRecap: 1,
       freshRecap: 0,
       recapAnswered: true,
+      // A17: A named stale in the recap, handed that day and updated after its change.
+      staleIds: ["A"],
+      staleHanded: 1,
+      staleUpdated: 1,
     });
     const other = new DayLog("e", "eden");
     other.turn();
@@ -94,6 +98,7 @@ describe("pi-ab --day (fix-s3b)", () => {
     other.recap("C moved to 11:00");
     const pooled = poolDays([log.summary(), other.summary()]).eden!;
     expect([pooled.changed, pooled.freshRecap, pooled.staleRecap, pooled.turns]).toEqual([2, 1, 1, 4]);
+    expect([pooled.staleHanded, pooled.staleUpdated, "staleIds" in pooled]).toEqual([1, 1, false]);
   });
 
   test("placePackets puts each earlier turn's packets before its own user turn and today's before the last", () => {

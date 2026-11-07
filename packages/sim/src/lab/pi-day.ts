@@ -135,6 +135,13 @@ export interface DaySummary {
   staleRecap: number;
   freshRecap: number;
   recapAnswered: boolean;
+  /**
+   * A17: the changed items the recap named stale, and of those the ones some packet or answer cited that day (handed)
+   * and the ones an "updated:" packet cited after the change (updated): why a stale recap happened.
+   */
+  staleIds?: string[];
+  staleHanded?: number;
+  staleUpdated?: number;
 }
 
 interface Delivery {
@@ -213,10 +220,19 @@ export class DayLog {
     let staleRecap = 0;
     let freshRecap = 0;
     const recap = this.recapText ?? "";
-    for (const { moves } of this.changes.values()) {
+    const staleIds: string[] = [];
+    for (const [id, { moves }] of this.changes) {
       if (moves.some((m) => recap.includes(m.to))) freshRecap++;
-      else if (moves.some((m) => recap.includes(m.from))) staleRecap++;
+      else if (moves.some((m) => recap.includes(m.from))) {
+        staleRecap++;
+        staleIds.push(id);
+      }
     }
+    const handed = (id: string) => this.deliveries.some((d) => d.ids.includes(id));
+    const updated = (id: string) =>
+      this.deliveries.some(
+        (d) => !d.ask && d.text.includes(UPDATED_MARK) && d.ids.includes(id) && d.turn >= this.changes.get(id)!.turn,
+      );
     return {
       day: this.day,
       condition: this.condition,
@@ -232,6 +248,9 @@ export class DayLog {
       staleRecap,
       freshRecap,
       recapAnswered: this.recapText !== null && this.recapText.trim() !== "",
+      staleIds,
+      staleHanded: staleIds.filter(handed).length,
+      staleUpdated: staleIds.filter(updated).length,
     };
   }
 }
@@ -253,10 +272,13 @@ export function poolDays(days: readonly DaySummary[]): Record<string, Omit<DaySu
       staleRecap: 0,
       freshRecap: 0,
       recapAnswered: true,
+      staleHanded: 0,
+      staleUpdated: 0,
     });
     for (const k of Object.keys(p) as (keyof typeof p)[]) {
       if (k === "recapAnswered") p.recapAnswered = p.recapAnswered && d.recapAnswered;
-      else p[k] += d[k];
+      else if (k === "staleIds") continue;
+      else p[k] = (p[k] ?? 0) + (d[k] ?? 0);
     }
   }
   return out;

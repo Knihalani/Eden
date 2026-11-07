@@ -753,6 +753,15 @@ bun packages/sim/src/lab/pi-cost-report.ts .local/long-41.json .local/long-42.js
 as `bun run funnel --cards default` merges them. The CL baseline's figures and command lines are in
 docs/research/cl-cl5.md.
 
+**By position in the day (A17).** `python3 -I packages/sim/lab/a17/days.py [--buckets 0,4,8,12] [--pair A,B] STEM...`
+reads `--days` runs (`STEM.json` and `STEM.tl/tasks.jsonl`, so run with `--timeline`) by position in the day: hidden
+raised, how the planted item reached the agent (this request's packet, an ask, or only earlier that day), concerns,
+asks, agent $/1k, input tokens and wall per bucket; `--pair` pairs task by task within a set (stems
+`a17-<arm>-<set>-<seed>`) and recaps by day. `reshown.py` splits in-packet hidden tasks into first showings and
+re-shows (D340). Recaps that name an old time carry `staleHanded` and `staleUpdated` in the day summaries (was the item
+handed that day, did an update reach the agent). Wrapper and runs: `packages/sim/lab/a17/run.sh`,
+docs/research/a17-long-quality.md (about $0.04 per user-arm for 8 days of Haiku).
+
 **The agent's prompt cache (D260).** Billed agent cost on Anthropic depends on what the cache holds: Pi's agent with
 Eden has a ~565-token fixed prefix that was not cached across tasks in CL8's runs (cause not established), the tools
 agent an 867-token one that was, so one request at a time Eden's first prompt is written at 1.25x while the tools

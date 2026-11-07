@@ -143,6 +143,8 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCandidates: PUSH,
   planConflict: [...PUSH, "sync"],
   askNudge: PUSH,
+  pushReshow: PUSH,
+  revisionDiff: ["revisionNotice"],
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */

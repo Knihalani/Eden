@@ -265,6 +265,8 @@ interface Session {
    * the latest: the agent's own events move `turn` within one request, a new user message moves this.
    */
   requests: number;
+  /** `pushReshow` (D340): by item, the request (`requests`) it was last handed out in; at most `MAX_HANDED_IN`. */
+  handedIn: Map<string, number>;
   /** The session's last `EXPLAIN_TRACES` traces, oldest first (`explain`, D277). */
   traces: Trace[];
   lastActive: number;
@@ -336,6 +338,8 @@ interface Session {
   planSent?: Set<string>;
 }
 
+/** Items whose hand-out request a session keeps (`pushReshow`, D340): far above what a day's packets cite. */
+const MAX_HANDED_IN = 512;
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
 
@@ -1080,9 +1084,9 @@ export class ContextPartner {
   }
 
   /** The agent now holds these versions: noted in the session's ledger, and the session watched for revisions. */
-  private watchCopies(s: Session, copies: readonly { id: string; sourceId: string; version: number }[]): void {
+  private watchCopies(s: Session, copies: readonly Copy[]): void {
     if (s.closed || copies.length === 0) return;
-    for (const c of copies) s.ledger.noteShown(c.id, c.version, c.sourceId);
+    for (const c of copies) s.ledger.noteShown(c.id, c.version, c.sourceId, c.times);
     // An update still queued whose every copy this hand-out rendered in the same version says nothing new.
     const held = new Map(copies.map((c) => [c.id, c.version]));
     for (let k = s.pending.length - 1; k >= 0; k--) {
@@ -1214,6 +1218,7 @@ export class ContextPartner {
       const { injection, items: said } = this.buildUpdate(s, rest);
       rest = rest.slice(said.length);
       // Promised now: a second store of the same version, before the agent takes this, queues nothing more.
+      // Its times are noted when it is handed out (`watchCopies`): one superseded in the queue was never shown.
       for (const it of said) s.ledger.noteShown(it.id, versionOf(it), it.sourceId);
       s.pending.push(injection);
       this.trace(s, {
@@ -1239,7 +1244,7 @@ export class ContextPartner {
    * handing out an older packet queued before it cannot leave the ledger at the older version.
    */
   private buildUpdate(s: Session, items: readonly ContextItem[]): { injection: Injection; items: ContextItem[] } {
-    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${UPDATED_NOTE}` }));
+    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${this.updatedNote(s, it)}` }));
     let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes });
     let n = renderedCount(items, text);
     if (n === 0) {
@@ -1270,9 +1275,20 @@ export class ContextPartner {
       items: said.map((i) => ({ sourceId: i.sourceId, id: i.id })),
       text: shownText(text),
       ...(this.config.askDedup ? { shown: { items: said, text } } : {}),
-      copies: copiesOf(said),
+      copies: copiesOf(said, this.config.revisionDiff),
     });
     return { injection, items: said };
+  }
+
+  /**
+   * How an update's title ends: `UPDATED_NOTE`, and with `revisionDiff` (D342) the times and dates the agent was shown
+   * for the item that this version no longer has ("no longer: 09:30"), read before the ledger notes the new copy.
+   */
+  private updatedNote(s: Session, item: ContextItem): string {
+    if (!this.config.revisionDiff) return UPDATED_NOTE;
+    const now = new Set(timesOf(item));
+    const gone = s.ledger.seenTimes(item.id).filter((t) => !now.has(t));
+    return gone.length ? `${UPDATED_NOTE.slice(0, -1)}; no longer: ${gone.join(", ")})` : UPDATED_NOTE;
   }
 
   /**
@@ -1676,7 +1692,11 @@ export class ContextPartner {
         (x) =>
           withdrawn.has(x.item.id) ||
           s.ledger.isFresh(x.item.id, s.turn) ||
-          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
+          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)) ||
+          (candidates !== null &&
+            this.config.pushReshow &&
+            candidates.like.has(x.item.id) &&
+            this.handedBefore(s, x.item.id)),
       );
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
@@ -2067,7 +2087,7 @@ export class ContextPartner {
     s: Session,
     cue: Cue,
     ranked: readonly Scored[],
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
+  ): { items: Scored[]; pool: Scored[]; like: Set<string>; unsettled?: Anchors } {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
@@ -2077,7 +2097,7 @@ export class ContextPartner {
       seen.add(x.item.id);
       pool.push(x);
     }
-    if (pool.length === 0) return { items: [], pool };
+    if (pool.length === 0) return { items: [], pool, like: new Set() };
     const cards =
       this.config.cards && this.deps.cards
         ? this.deps.cards.cardsOf(
@@ -2102,7 +2122,9 @@ export class ContextPartner {
       handed: items.map((x) => x.item.id),
       ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
     });
-    return { items, pool, ...(unsettled ? { unsettled } : {}) };
+    // `pushReshow` (D340) hands again only what passes the constraint test: plain context stays in the transcript.
+    const likeIds = new Set(pool.filter((_, k) => like[k]).map((x) => x.item.id));
+    return { items, pool, like: likeIds, ...(unsettled ? { unsettled } : {}) };
   }
 
   /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */
@@ -2227,6 +2249,19 @@ export class ContextPartner {
         itemIds: packet.citations.map((c) => c.itemId),
       });
     }
+  }
+
+  /**
+   * `pushReshow` (D340): the item was handed out as a push candidate in this session for an earlier request
+   * (`handedIn`: the agent took it before the latest user message), so this request's candidates may hand it again if
+   * it passes the constraint test (the caller checks). Never one handed for this request: a packet of the last request
+   * taken with this one's observe counts as this request's.
+   */
+  private handedBefore(s: Session, id: string): boolean {
+    // Handed out (taken by the agent) for an earlier request: a packet of the last request taken with this one's
+    // observe counts as this request's.
+    const handed = s.handedIn.get(id);
+    return handed !== undefined && handed < s.requests;
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
@@ -2488,6 +2523,7 @@ export class ContextPartner {
       key,
       turn: 0,
       requests: 0,
+      handedIn: new Map(),
       traces: [],
       lastActive: now,
       window: [],
@@ -2573,6 +2609,15 @@ export class ContextPartner {
     if (built?.copies) {
       this.watchCopies(s, built.copies);
       built.copies = undefined;
+    }
+    // `pushReshow` (D340): the request each push candidate was last handed out in (what the agent took, not what was
+    // queued). Only candidates' packets: an item that reached the agent by an ask or another path is not re-shown.
+    if (this.config.pushReshow && injection.reason.startsWith("candidates:")) {
+      for (const c of injection.citations) {
+        s.handedIn.delete(c.itemId);
+        s.handedIn.set(c.itemId, s.requests);
+      }
+      while (s.handedIn.size > MAX_HANDED_IN) s.handedIn.delete(s.handedIn.keys().next().value!);
     }
     if (!built || s.outstanding.has(injection.id)) return;
     if (this.recordedOf(s.scope)?.has(injection.id)) return;
@@ -5123,7 +5168,13 @@ export class ContextPartner {
         ? { shown: { items: shown === undefined ? items : scored.map((x) => x.item), text: shown ?? injection.text } }
         : {}),
       ...(this.config.revisionNotice
-        ? { copies: renderedCopies(shown === undefined ? items : scored.map((x) => x.item), shown ?? injection.text) }
+        ? {
+            copies: renderedCopies(
+              shown === undefined ? items : scored.map((x) => x.item),
+              shown ?? injection.text,
+              this.config.revisionDiff,
+            ),
+          }
         : {}),
     });
     return injection;
@@ -5264,9 +5315,61 @@ function whenAborted(signal: AbortSignal): Promise<void> {
   return new Promise((r) => (signal.aborted ? r() : signal.addEventListener("abort", () => r(), { once: true })));
 }
 
-/** The version of each item a packet or answer hands the agent (`revisionNotice`). */
-function copiesOf(items: readonly ContextItem[]): { id: string; sourceId: string; version: number }[] {
-  return items.map((it) => ({ id: it.id, sourceId: it.sourceId, version: versionOf(it) }));
+/** What a packet hands the agent of an item (`revisionNotice`): its version and, for `revisionDiff`, its times. */
+interface Copy {
+  id: string;
+  sourceId: string;
+  version: number;
+  times?: string[];
+}
+
+/** Each item's copy; its times only with `revisionDiff` (`withTimes`), so the switch off reads no text for them. */
+function copiesOf(items: readonly ContextItem[], withTimes: boolean): Copy[] {
+  return items.map((it) =>
+    withTimes
+      ? { id: it.id, sourceId: it.sourceId, version: versionOf(it), times: timesOf(it) }
+      : { id: it.id, sourceId: it.sourceId, version: versionOf(it) },
+  );
+}
+
+/** A clock time ("9:15", "14:00", "3pm"), a day and month either way round, or a weekday (`revisionDiff`). */
+const MONTH =
+  "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|" +
+  "nov(?:ember)?|dec(?:ember)?)";
+const TIME_OR_DATE = new RegExp(
+  "\\b(?:([01]?\\d|2[0-3]):([0-5]\\d)(?:\\s?([ap]m))?|(1[0-2]|0?[1-9])\\s?([ap]m)|" +
+    `(\\d{1,2})(?:st|nd|rd|th)?\\s${MONTH}|${MONTH}\\s(\\d{1,2})(?:st|nd|rd|th)?|` +
+    "((?:mon|tues|wednes|thurs|fri|satur|sun)day))\\b",
+  "gi",
+);
+/** At most this many times are read from one item (`revisionDiff`). */
+const MAX_ITEM_TIMES = 16;
+
+/** A 12-hour clock's hour in 24-hour form. */
+const hour24 = (h: number, ampm: string | undefined) =>
+  ampm === undefined ? h : (h % 12) + (ampm.toLowerCase() === "pm" ? 12 : 0);
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * `revisionDiff` (D342): the distinct times and dates in an item's title and text, in order, each in one form so a
+ * reworded time is the same time: a clock as 24-hour "HH:MM" ("9:30am", "09:30" and "9:30" are "09:30"; "3pm" is
+ * "15:00"), a date as "<day> <3-letter month>" ("Oct 4th" and "4 October" are "4 oct"), a weekday lowercased. No
+ * model: a pattern over the words, so "3.45" (a price) is no time and "decision 2" no date. An unmarked clock is read
+ * as 24-hour: "9:30" then "9:30pm" says 09:30 is gone, the honest reading of an ambiguous edit. Exported for tests.
+ */
+export function timesOf(item: Pick<ContextItem, "title" | "text">): string[] {
+  const out: string[] = [];
+  for (const m of `${item.title}\n${item.text}`.matchAll(TIME_OR_DATE)) {
+    let t: string;
+    if (m[1] !== undefined) t = `${pad(hour24(Number(m[1]), m[3]))}:${m[2]}`;
+    else if (m[4] !== undefined) t = `${pad(hour24(Number(m[4]), m[5]))}:00`;
+    else if (m[6] !== undefined) t = `${Number(m[6])} ${m[7]!.slice(0, 3).toLowerCase()}`;
+    else if (m[8] !== undefined) t = `${Number(m[9])} ${m[8].slice(0, 3).toLowerCase()}`;
+    else t = m[10]!.toLowerCase();
+    if (!out.includes(t)) out.push(t);
+    if (out.length >= MAX_ITEM_TIMES) break;
+  }
+  return out;
 }
 
 /**
@@ -5281,8 +5384,8 @@ function renderedCount(items: readonly ContextItem[], text: string): number {
 }
 
 /** The copies of the items whose lines the agent receives: one cut from the text was not shown. */
-function renderedCopies(items: readonly ContextItem[], text: string) {
-  return copiesOf(items.slice(0, renderedCount(items, text)));
+function renderedCopies(items: readonly ContextItem[], text: string, withTimes: boolean) {
+  return copiesOf(items.slice(0, renderedCount(items, text)), withTimes);
 }
 
 /** An item's words as the ledger records them (`Ledger.revised`): a copy edited at its source hashes otherwise. */
