@@ -1101,7 +1101,7 @@ describe("UserGraph against the storage before D169", () => {
       b.add(it, at);
     }
     same(a, b, keysOf(pool.values()), r);
-  });
+  }, 30_000); // About 3-5.5 s under the full parallel check (a large graph built and churned); bun's default is 5 s.
 
   /** `a` and `b` hold the same graph after `items`, and every key the items name is in `a` exactly as in `b`. */
   function sameAfter(a: UserGraph, b: PreviousGraph, items: ContextItem[]): string[] {

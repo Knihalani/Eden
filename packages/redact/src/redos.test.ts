@@ -28,7 +28,9 @@ describe("rules left on JavaScript's engine stay cheap on crafted input", () => 
     const js = rulesWith({ rule: () => backtrackingEngine, allowlist: linearEngine });
     const rule = js.find((r) => r.id === "curl-auth-header")!;
     expect(RE2_RULES.has(rule.id)).toBe(true);
-    const text = [...craftedInputs(rule)].find((t) => t.startsWith("curl:curl:"))!;
+    // Twice the crafted run: backtracking is super-linear, so on a fast CPU the single run read 35-39 ms, under the
+    // ceiling (RealUse-1 fix sessions); doubled it stays well above it while the linear engine stays far below.
+    const text = [...craftedInputs(rule)].find((t) => t.startsWith("curl:curl:"))!.repeat(2);
     expect(costMs(() => rule.spans(text))).toBeGreaterThan(CEILING_MS);
   });
 });
