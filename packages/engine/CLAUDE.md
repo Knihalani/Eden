@@ -322,6 +322,11 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   lost 2 of 96 hidden facts: what it stores is routing evidence), and the trim waits for 1.5x the cap (trimming the
   backfill's overshoot back to the cap also lost 2). The sketch (`sketch.ts`) is per (user, source) in `SourceSync`,
   filled from every listed item in `store`, folded at `warmUp`.
+- **A budget for live searches of cut copies was measured and deleted (D390, D391, docs/research/a28-scale.md).**
+  Searching live only the 4 cut copies with the most routing evidence halved Eden's calls at 1,000 sources live, but
+  left its path time unchanged (one live search of a cut copy that matters costs a connector's latency) and hidden
+  50 → 46 of 72; the code is in commit def8c153. A fixed evidence threshold lost a planted fact behind a world source
+  whose only evidence was its sketch. A lever for path time must take every live search off the push.
 - **Idle users are frozen (D325, docs/research/a14-scale-users.md).** `ItemCache` holds a user idle for
   `freezeIdleMs` (30 min) as one zstd blob (`FrozenUser`) and thaws them exactly on next use. Every reader of a
   user's state goes through `peek`/`touch` (which thaw and mark the user seen); only `revision` and `syncedCount`

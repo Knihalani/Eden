@@ -3458,8 +3458,6 @@ export class ContextPartner {
     let syncCalls = 0;
     let preRanked: ReturnType<SourceMap["route"]> | null = null;
     let pollable: Set<string> | null = null;
-    /** `syncCutLive` (D390): warm cut copies past the lookup's live budget, answered from what they hold. */
-    let unproven: Set<string> | undefined;
     if (this.sync) {
       // `syncPollWidth` (D263): over that many sources, only the best routed are polled. The lookup is routed once,
       // here, before its poll, and searches the head of the same ranking, so every source it searches was polled
@@ -3467,40 +3465,15 @@ export class ContextPartner {
       // the width nothing changes: the route runs after the poll, as before, and draws as before.
       const width = this.config.syncOnDemand ? this.config.syncPollWidth : 0;
       if (width > 0 && all.length > width) {
-        const head = Math.max(width, limit);
-        const gate = this.config.syncCutLive;
-        // `syncCutLive` (D390): ranked whole (the draws are the same whatever the limit), so every source's evidence
-        // is known; past the few cut copies with the most of it, a warm cut copy answers from what it holds.
         preRanked = this.deps.sourceMap.route({
           scope: s.scope,
           entities: cue.entities,
           situation: s.situation,
           sourceIds: all.map((x) => x.id),
-          limit: gate > 0 ? all.length : head,
+          limit: Math.max(width, limit),
           ...(boost ? { boost } : {}),
         });
-        if (gate > 0) {
-          // The warm cut copies of sources the user does not use, most evidence first (the route's order breaks ties).
-          const sync = this.sync;
-          const evidence = (r: { sourceId: string; entityHits: number }) =>
-            r.entityHits + (boost?.get(r.sourceId) ?? 0);
-          const cut = preRanked.filter(
-            (r) =>
-              sync.isWarm(s.scope, r.sourceId) &&
-              !sync.complete(s.scope, r.sourceId) &&
-              // A source the user uses (D320) keeps D264 whatever this request's words: its cut copy is being read
-              // whole (D323), and until then what is older than its cut is the user's own.
-              !sync.engaged(s.scope, r.sourceId),
-          );
-          const kept = cut
-            .filter((r) => evidence(r) > 0)
-            .sort((x, y) => evidence(y) - evidence(x))
-            .slice(0, gate);
-          const live = new Set(kept.map((r) => r.sourceId));
-          for (const r of cut) if (!live.has(r.sourceId)) (unproven ??= new Set()).add(r.sourceId);
-          preRanked = preRanked.slice(0, head);
-        }
-        pollable = new Set(preRanked.map((r) => r.sourceId).filter((id) => !unproven?.has(id)));
+        pollable = new Set(preRanked.map((r) => r.sourceId));
       }
       if (this.config.syncOnDemand) {
         const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(left())]);
@@ -3545,7 +3518,6 @@ export class ContextPartner {
         if (s.closed) return { calls: syncCalls, syncCalls, sources: [], closed: true };
       }
       local = this.localOf(s, all, behind);
-      if (unproven) for (const id of unproven) (local ??= new Set()).add(id);
     }
     const routing = this.spans?.open("route", cue.span);
     const ranked =
