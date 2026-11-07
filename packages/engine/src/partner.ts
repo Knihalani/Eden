@@ -136,7 +136,7 @@ import {
   termIds,
 } from "./text";
 import { SpanStats, Tracer, type SpanSink, type SpanStat } from "./spans";
-import type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
+import type { ShadowRecord, ShadowSink, Trace, TraceSink, UsageRecord, UsageSink } from "./trace";
 import { distinctiveTokens, showsUse, type Outstanding } from "./usage";
 
 export interface PartnerDeps {
@@ -148,6 +148,8 @@ export interface PartnerDeps {
   model: Model | null;
   config?: Partial<EngineConfig>;
   onTrace?: TraceSink;
+  /** Whether the agent used each injection, once known (D293): content-free, for an integrator's digest. */
+  onUsage?: UsageSink;
   now?: () => number;
   /**
    * A worker pool (`WorkerPool` started on `GATE_MODULE`) that redacts lookup results off the event loop (D26). The
@@ -226,6 +228,8 @@ interface Recorded {
   sourceIds: string[];
   situation: string;
   used: boolean;
+  /** The session the injection was delivered in: a later correction's usage record names it (D293). */
+  sessionId: string;
 }
 
 interface Session {
@@ -1981,7 +1985,7 @@ export class ContextPartner {
     const o = s?.outstanding.get(f.injectionId);
     if (s && o) {
       s.outstanding.delete(f.injectionId);
-      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used);
+      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used, { sessionId: f.sessionId, how: "explicit" });
       return true;
     }
     // The session may have ended (and counted the injection unused): the user's record outlives it.
@@ -1990,6 +1994,13 @@ export class ContextPartner {
     if (r.used !== f.used) {
       for (const sourceId of r.sourceIds) this.deps.sourceMap.correctOutcome(scope, r.situation, sourceId, f.used);
       r.used = f.used;
+      this.usage({
+        sessionId: r.sessionId,
+        injectionId: f.injectionId,
+        used: f.used,
+        how: "explicit",
+        sourceIds: r.sourceIds,
+      });
     }
     return true;
   }
@@ -2161,7 +2172,9 @@ export class ContextPartner {
     s.closed = true;
     s.abort.abort();
     if (learn) {
-      for (const [id, o] of s.outstanding) this.record(s.scope, id, o.sourceIds, o.situation, false);
+      for (const [id, o] of s.outstanding) {
+        this.record(s.scope, id, o.sourceIds, o.situation, false, { sessionId: s.id, how: "ended" });
+      }
     }
     s.outstanding.clear();
     s.pending.length = 0;
@@ -2240,11 +2253,20 @@ export class ContextPartner {
       const expired = s.turn - o.deliveredTurn > this.config.usageWindowTurns;
       if (!used && !expired) continue;
       s.outstanding.delete(id);
-      this.record(s.scope, id, o.sourceIds, o.situation, used);
+      const how = used ? "inferred" : "expired";
+      this.record(s.scope, id, o.sourceIds, o.situation, used, { sessionId: s.id, how });
     }
   }
 
-  private record(scope: Scope, injectionId: string, sourceIds: string[], situation: string, used: boolean): void {
+  private record(
+    scope: Scope,
+    injectionId: string,
+    sourceIds: string[],
+    situation: string,
+    used: boolean,
+    report: { sessionId: string; how: UsageRecord["how"] },
+  ): void {
+    this.usage({ sessionId: report.sessionId, injectionId, used, how: report.how, sourceIds });
     for (const sourceId of sourceIds) this.deps.sourceMap.recordOutcome(scope, situation, sourceId, used);
     const key = scopeKey(scope);
     const tenant = this.recorded.get(scope.tenantId) ?? new Map<string, Map<string, Recorded>>();
@@ -2252,7 +2274,7 @@ export class ContextPartner {
     const mine = tenant.get(key) ?? new Map<string, Recorded>();
     tenant.delete(key); // Re-insert: Map order is least recently recorded user first.
     tenant.set(key, mine);
-    mine.set(injectionId, { sourceIds, situation, used });
+    mine.set(injectionId, { sourceIds, situation, used, sessionId: report.sessionId });
     while (mine.size > MAX_RECORDED) mine.delete(mine.keys().next().value as string);
     while (tenant.size > MAX_RECORDED_USERS) tenant.delete(tenant.keys().next().value as string);
   }
@@ -4628,6 +4650,14 @@ export class ContextPartner {
           }
         : {}),
     };
+  }
+
+  private usage(u: UsageRecord): void {
+    try {
+      this.deps.onUsage?.({ ...u, sourceIds: [...u.sourceIds] });
+    } catch {
+      // A broken sink never breaks learning or feedback.
+    }
   }
 
   private trace(s: Session, t: Trace): void {
