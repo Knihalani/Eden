@@ -1,0 +1,9 @@
+arm        kind      n  rate   wall p50/p90/mean s  $/1k all-in = agent + eden + backfill  reader/t conn/t
+tools      neutral   32 0.000  4.53/6.34/4.57       0.343 = 0.343 + 0.000 + 0.000      0.00    3.03
+eden       neutral   32 0.000  5.94/8.13/5.77       0.812 = 0.337 + 0.234 + 0.241      0.88    8.44
+eden~diet  neutral   32 0.031  5.81/7.62/5.66       0.842 = 0.425 + 0.131 + 0.286      0.91    8.50
+
+== paired differences a - b, bootstrap 95% (5000 draws)
+eden~diet - eden neutral n=32: raised +0.031 (+0.000..+0.094)  wall -0.118 (-0.576..+0.370)  usd +0.030 (-0.034..+0.097)  eden -0.102 (-0.156..-0.049)  reader +0.031 (-0.125..+0.219)
+eden~diet - tools neutral n=32: raised +0.031 (+0.000..+0.094)  wall +1.082 (+0.346..+1.799)  usd +0.499 (+0.437..+0.561)  eden +0.131 (+0.097..+0.167)  reader +0.906 (+0.688..+1.125)
+eden - tools neutral n=32: raised +0.000 (+0.000..+0.000)  wall +1.200 (+0.306..+2.078)  usd +0.469 (+0.382..+0.552)  eden +0.234 (+0.171..+0.300)  reader +0.875 (+0.688..+1.094)

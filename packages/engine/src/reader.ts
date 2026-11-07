@@ -18,6 +18,8 @@
  * - Verdicts are cached per user and session by a hash of the request and of the pool (ids and content), bounded per
  *   user and per tenant, kept at most `ttlMs`, and dropped on any `forget` of the user or one of their sources
  *   (a bearing is made from the items' text).
+ * - The reply stops at the first entry the model says is not about the request's thing (`READER_STOP`, D240): binding
+ *   entries come first, so the cut is the later look-alikes' rejections, never a bearing the model wrote before it.
  * - Fail open: on a budget refusal, a model error, unreadable output, or no answer within the ask's wait, the ask is
  *   answered as without the flag. A call that outlives the wait still fills the cache for the next ask.
  */
@@ -49,9 +51,9 @@ const READER_WHY_CHARS = 120;
  */
 const READER_MAX_TOKENS = 2_000;
 /**
- * `readerStopEarly` (D240, trial): the reply stops where the model first writes that an entry is not about the
- * request's own thing. The prompt asks for binding entries first, so what follows is lookalikes the reader would
- * only reject: output the agent never sees, paid for and waited on. The stopped entry keeps its `why` (written
+ * `readerStopEarly` (D240, on in the default): the reply stops where the model first writes that an entry is not
+ * about the request's own thing. The prompt asks for binding entries first, so what follows is lookalikes the reader
+ * would only reject: output the agent never sees, paid for and waited on. The stopped entry keeps its `why` (written
  * before `same`, D96), so its index still counts as rejected.
  */
 export const READER_STOP = '"same":false';
@@ -109,11 +111,6 @@ export interface ReaderInput {
   cacheKey?: string;
   /** `readerStopEarly` (D240): the call stops at the first entry the model says is not the request's thing. */
   stopEarly?: boolean;
-  /**
-   * `readerCompactItems` (D239): each item's source, date and sender lead its text inside a bare `<item i="n">`
-   * fence, instead of three named, quoted attributes: the same facts in fewer tokens.
-   */
-  compact?: boolean;
 }
 
 /**
@@ -283,7 +280,6 @@ export function readerKey(input: ReaderInput): string {
   h.update(`standing ${input.standing ?? 0}\n`);
   // A stopped reading names fewer rejections: another verdict. Only when on, so other keys stay as they were.
   if (input.stopEarly) h.update("stop\n");
-  if (input.compact) h.update("compact\n");
   for (const it of input.items.slice(0, READER_MAX_ITEMS)) h.update(`${it.id}\t${it.hash}\t${it.text}\n`);
   return h.digest("hex").slice(0, 32);
 }
@@ -292,10 +288,6 @@ export function readerKey(input: ReaderInput): string {
 export function readerMessages(input: ReaderInput): ChatMessage[] {
   const items = input.items.slice(0, READER_MAX_ITEMS).map((it, i) => {
     const card = it.card ? ` | card: ${inert(it.card)}` : "";
-    if (input.compact) {
-      const from = it.from ? `; from ${inert(it.from)}` : "";
-      return `<item i="${i}">${inert(it.source)}; ${inert(it.date)}${from}; ${inert(it.title)}: ${inert(it.text)}${card}</item>`;
-    }
     return (
       `<item i="${i}" source="${inert(it.source).replace(/"/g, "")}" date="${inert(it.date).replace(/"/g, "")}"` +
       `${it.from ? ` from="${inert(it.from).replace(/["\r\n\u0085\u2028\u2029]/g, "")}"` : ""}>` +

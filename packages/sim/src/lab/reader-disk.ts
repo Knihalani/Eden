@@ -258,8 +258,8 @@ export class ReplayModel implements Model {
     const k = promptKey(this.id, request, this.options.salt);
     const held = this.lines.get(k);
     if (held) return this.replay(held, request.signal);
-    if (request.stop?.length) {
-      // A line recorded without the stop: what the model wrote, cut where the stop would have ended it.
+    if (request.stop?.length && !this.inner) {
+      // Replay only (a live run makes the real call): a line recorded without the stop, cut where it would end.
       const full = this.lines.get(promptKey(this.id, { ...request, stop: undefined }, this.options.salt));
       if (full) {
         this.stopSimulated++;

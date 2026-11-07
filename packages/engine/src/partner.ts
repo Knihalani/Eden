@@ -1640,7 +1640,7 @@ export class ContextPartner {
     const acts = (raw: string) => isImperative(raw, MORE_VERBS);
     const request = acts(cue.raw) ? cue.raw : s.request && acts(s.request.raw) ? s.request.raw : undefined;
     if (!request && !ASKS_BLOCKERS.test(cue.raw)) return null;
-    let pool: Scored[] = [];
+    const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
     for (const x of ranked) {
@@ -1685,25 +1685,6 @@ export class ContextPartner {
       report("gated");
       return null;
     }
-    // `readerPoolTrim` (D238): a candidate that could not constrain the request by `readerGate`'s own test is not
-    // sent to the reader. It was not read, so a rejection of everything read is no longer a reading of all (D114).
-    if (this.config.readerPoolTrim) {
-      const none =
-        this.config.cards && this.deps.cards
-          ? this.deps.cards.noneOf(
-              s.scope,
-              pool.map((x) => x.item.id),
-              cue.arrived ?? this.now(),
-            )
-          : new Set<string>();
-      const kept = pool.filter((x) => !none.has(x.item.id));
-      if (kept.length < pool.length) readsAll = false;
-      if (kept.length === 0) {
-        report("none");
-        return null;
-      }
-      pool = kept;
-    }
     // `readerReuse` (D193): an ask in the push's request reads the push's verdict, with no call of its own.
     const reuseAt = performance.now();
     const reused = opts.push ? null : await this.reusePush(s, pool, main, waitMs);
@@ -1722,7 +1703,6 @@ export class ContextPartner {
       // Sticky routing to the provider that holds the user's cached prefix, as the judge, answer and cards calls do.
       cacheKey: userCacheKey(s.scope),
       ...(this.config.readerStopEarly ? { stopEarly: true } : {}),
-      ...(this.config.readerCompactItems ? { compact: true } : {}),
     };
     // Who makes the call, for the accounting: a read that finds a verdict cached, or a call another read started
     // (an ask joining its push), makes none. Known before the read, for when this ask's wait runs out first.
