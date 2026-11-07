@@ -206,6 +206,14 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   push still runs when `pushCandidates` > 0; only the reader's own push (`pushCandidates: 0`) needs one. Tests
   of the reader's own wiring set `pushCandidates: 0` (the core, the `reader` and `candidates` parts all do); the lab's
   reader screens run `--preset minus-candidates`.
+- **`planConflict` (D301, on in the default, part `plans`) is checked at the take, not at the store.** The sync's
+  `onStored` only records the ids per session with acting requests (`queuePlanConflicts`); `takePending` and an
+  observe that starts no push run `checkPlans`, so a new item's card (made in the background as it was stored) can
+  count; at the store it has none yet. The rule is
+  `candidatesOf`'s (first `pushCandidates` of the ranked pool, a constraint-like pool), not "the item itself is a
+  constraint": most planted facts carry no constraint card or wording. Built from the cached copy, with no
+  `verifyItems` (the source just gave it). Answer-ahead (records about the request's names and day in the push, A9)
+  was measured and deleted (D300): it cut asks only on the quarter of requests it reached and moved no mix figure.
 - **The candidates' packet is not smaller (D258, D259; docs/research/cl-cl8.md).** 200-byte excerpts lost hidden facts
   (−12.8 points, with the no-repeat switch on: shorter excerpts keep the items but not the fact), k 3 saved only over a
   user's days and made the agent ask more one request at a time, k 3 after a session's first request lost hidden facts,

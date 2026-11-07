@@ -248,6 +248,15 @@ from is polled at once in the background (one listing call, at most one at a tim
 source), so the packet is usually queued before the agent's next request; nothing on the observe path waits for it.
 Without it, a fact the agent already holds stays in its transcript in the old version (docs/research/fix-s7-revisions.md).
 
+**New items against what the agent already acted on** (D301, `planConflict`, on in the default, part `plans`): each
+session keeps the cues of its last 12 requests the push ran for (the acting requests). Items the sync stores after
+that (a poll, a notice's payload) wait, per session, for its next take (`takePending`, or an observe that starts no
+push): there each is checked against those requests by `candidatesOf`'s rule (among the first `pushCandidates` of the
+request's ranked pool, bulk mail out, the pool holding something constraint-like, cards included, which by then have
+been made), and one that qualifies, and that no packet has handed the session, is queued as a packet naming the
+earlier request (`PLAN_LEAD` and the request's own words, quoted on one line), whatever the agent asks now. Index
+lookups only, no source or model call; once per item per session (docs/research/a9-ahead.md).
+
 **Deleted by D112:** `decideConflict` (D67), `judgeBehind`, push relaying (`syncPush`, `sourcePushes`,
 `sourceChanged`, D66) and the other switches D112 lists. The candidates' facts (`decide.ts`) still reach the lab only
 through the content-free `PartnerDeps.onCandidates` hook; the engine decides nothing from them.
