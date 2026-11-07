@@ -746,16 +746,21 @@ export class SyncManager {
     }
     // A source the user no longer has (or that no longer lists) is not synced: its state and synced items go.
     const listed = new Set(listable.map((x) => x.id));
+    const unlisted: SourceSync[] = [];
     for (const [id, s] of [...u.sources]) {
       if (listed.has(id)) continue;
       u.sources.delete(id);
-      this.stats.deleted += this.deps.cache.dropSynced(u.scope, s.ids);
+      unlisted.push(s);
     }
     const byId = new Map(listable.map((x) => [x.id, x]));
-    // D325: a frozen user is thawed in slices before a read that touches their items, not all at once inside it.
-    // Only when a thaw is pending: one more await on every step would move when pages land (the funnel's cards).
-    let thawing = [...u.sources.values()].some((s) => s.phase === "backfill") ? this.deps.cache.ready(u.scope) : null;
+    // D325: a frozen user is thawed in slices before a read that touches their items (the unlisted sources' drop, the
+    // backfill), not all at once inside it. Only when a thaw is pending: one more await on every step would move when
+    // pages land (the funnel's cards).
+    const reads = unlisted.some((s) => s.ids.size > 0) || [...u.sources.values()].some((s) => s.phase === "backfill");
+    let thawing = reads ? this.deps.cache.ready(u.scope) : null;
     if (thawing) await thawing;
+    // Dropped even when the user went meanwhile: their sources' drop (`drop`) no longer holds these.
+    for (const s of unlisted) this.stats.deleted += this.deps.cache.dropSynced(u.scope, s.ids);
     if (u.gone) return;
     await this.backfill(u, byId);
     if (this.o.engagedDeep) {
@@ -766,13 +771,17 @@ export class SyncManager {
           await this.run(s, () => this.deepen(u, s, source));
         }),
       );
-      if (!u.gone && this.total(u) > this.o.maxItems + this.o.pageSize) this.trim(u, this.deps.now());
+      if (!u.gone && this.total(u) > this.o.maxItems + this.o.pageSize && (await this.thawed(u))) {
+        this.trim(u, this.deps.now());
+      }
     }
     // `keepCut`: polls and sweeps add the sources' new items; half the cap past it, the oldest go, back to the cap,
     // before the cache's own synced cap would evict by sync order instead. Not sooner: trimming the backfill's last
     // pages back to the cap took evidence routing reads (`routeLocalHits`) and lost 2 of 96 hidden facts at 1,000
     // sources (a13-scale.md).
-    if (this.o.keepCut && !u.gone && this.total(u) > this.o.maxItems * 1.5) this.trim(u, this.deps.now());
+    if (this.o.keepCut && !u.gone && this.total(u) > this.o.maxItems * 1.5 && (await this.thawed(u))) {
+      this.trim(u, this.deps.now());
+    }
     const now = this.deps.now();
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
@@ -886,6 +895,16 @@ export class SyncManager {
       if (at < oldest) oldest = at;
     }
     return oldest;
+  }
+
+  /**
+   * D325: before a trim reads a user's items, a frozen user is thawed in slices (`ItemCache.ready`), not at once inside
+   * the read. No await when nothing is frozen or queued. False when the user stopped being synced meanwhile.
+   */
+  private async thawed(u: UserSync): Promise<boolean> {
+    const thawing = this.deps.cache.ready(u.scope);
+    if (thawing) await thawing;
+    return !u.gone;
   }
 
   private total(u: UserSync): number {

@@ -442,6 +442,84 @@ describe("idle users frozen (D325)", () => {
     expect(cache.freezes.thawed).toBe(1);
   });
 
+  /** Alice synced from two 20-item sources (the user's cap at `maxItems`), with the source set the test can change. */
+  async function syncedAlice(maxItems: number) {
+    let clock = T0;
+    const listed = (id: string): Source => {
+      const items = Array.from({ length: 20 }, (_, i) => makeItem(rng(i), i, "alice")).map((it) => ({
+        ...it,
+        sourceId: id,
+        id: `${id}:alice-${it.ref}`,
+      }));
+      return {
+        id,
+        kind: "test",
+        description: id,
+        search: async () => [],
+        list: async (_s: Scope, cursor: string | undefined, limit: number): Promise<ListPage> => {
+          const at = cursor ? Number(cursor) : 0;
+          return { items: items.slice(at, at + limit), next: at + limit < items.length ? String(at + limit) : null };
+        },
+      };
+    };
+    const state = { sources: [listed("mail"), listed("docs")] };
+    const cache = manual({ freezeIdleMs: 1, expireEveryMs: 1 });
+    const partner = new ContextPartner({
+      sources: async () => state.sources,
+      sourceMap: new SourceMap(),
+      cache,
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { syncCallsPerMin: 1e6, syncMaxItems: maxItems, syncPageSize: 5, syncKeepCut: true },
+    });
+    const sync = partner.sync!;
+    sync.track(alice, clock);
+    for (let i = 0; i < 20 && !sync.warm(alice); i++) await sync.tick();
+    expect(sync.warm(alice)).toBe(true);
+    const freeze = () => {
+      clock += MIN;
+      cache.expireIdle(clock);
+      cache.expireIdle(clock);
+      expect(cache.frozenCount).toBe(1);
+    };
+    return { cache, sync, state, freeze, at: () => clock };
+  }
+
+  test("a source no longer listed: its synced items are dropped after a thaw through `ready`, not inside the drop", async () => {
+    const { cache, sync, state, freeze } = await syncedAlice(3_000);
+    expect(cache.syncedCount(alice)).toBe(40);
+    freeze();
+    const spy = spyReady(cache);
+    state.sources = state.sources.filter((x) => x.id !== "docs");
+    await sync.tick();
+    expect(spy.queued).toBe(1);
+    expect(cache.freezes.thawed).toBe(1);
+    expect(cache.syncedCount(alice)).toBe(20);
+  });
+
+  test("the keep-cut trim thaws a frozen user through `ready` before it reads their items", async () => {
+    const { cache, sync, freeze, at } = await syncedAlice(10);
+    // Notices' items past half the cap again (a push does not trim), then the user goes idle before the next step.
+    for (const id of ["mail", "docs"]) {
+      const pushed = Array.from({ length: 8 }, (_, i) => makeItem(rng(100 + i), 100 + i, "alice")).map((it, i) => ({
+        ...it,
+        sourceId: id,
+        id: `${id}:alice-new-${it.ref}`,
+        updatedAt: at() + i,
+      }));
+      expect(sync.ingest(alice, id, pushed)).toBe(8);
+    }
+    const before = cache.syncedCount(alice);
+    expect(before).toBeGreaterThan(15);
+    freeze();
+    const spy = spyReady(cache);
+    await sync.tick();
+    expect(spy.queued).toBe(1);
+    expect(cache.freezes.thawed).toBe(1);
+    expect(cache.syncedCount(alice)).toBeLessThan(before);
+  });
+
   test("a session's events keep their order when a read or a forget ends a thaw an earlier event waits on", async () => {
     // Review of A14: an event that found its user frozen waits for the queued thaw; a synchronous read (a background
     // store, a pending take) or a forget then ended the frozen state, and a later event of the same session, finding

@@ -526,6 +526,8 @@ const MAX_OUTSTANDING = 64;
 export class ContextPartner {
   readonly config: EngineConfig;
   private readonly sessions = new Map<string, Session>();
+  /** By user scope key, that user's live sessions (no larger than `sessions`); a session leaves on close. */
+  private readonly userSessions = new Map<string, Set<Session>>();
   private readonly perTenant = new Map<string, number>();
   private readonly built = new WeakMap<Injection, Built>();
   /**
@@ -1724,7 +1726,15 @@ export class ContextPartner {
       );
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
+      // As `deliverChecked` (audit A11): an item whose ledger entry changed over the re-reads' await was handed out
+      // meanwhile (this event's slow path, a fast path), and `deliver` marks without testing again; it is left out. An
+      // entry gone meanwhile was swept, not handed out: kept.
+      const was = new Map(fresh.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
       let checked = fresh.length > 0 && !s.closed && latest ? await this.verifyItems(s, fresh, cue) : [];
+      checked = checked.filter((x) => {
+        const now = s.ledger.entry(x.item.id);
+        return now === undefined || sameEntry(was.get(x.item.id), now);
+      });
       const still = internal.request === undefined || internal.request === s.requests;
       const delivering = checked.length > 0 && !s.closed && still;
       if (replacing && (delivering || !candidates)) {
@@ -1744,7 +1754,7 @@ export class ContextPartner {
         }
       }
       // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
-      const was = behind ? new Map(checked.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
+      const undo = behind ? new Map(checked.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       const injection =
         delivering && checked.length > 0
           ? candidates
@@ -1759,7 +1769,7 @@ export class ContextPartner {
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
-      if (injection && was) this.keepUndo(s, injection, checked, was);
+      if (injection && undo) this.keepUndo(s, injection, checked, undo);
       if (injection) s.pending.push(injection);
       // `askNudge` (D316, D317): the ask the nudge asks for, in this request, may look past what was handed. A settled
       // packet (a `readerPushBehind` second pass replacing a nudged one) ends that look: the agent was not nudged.
@@ -2664,6 +2674,10 @@ export class ContextPartner {
       closed: false,
     };
     this.sessions.set(key, s);
+    const user = scopeKey(s.scope);
+    let mine = this.userSessions.get(user);
+    if (!mine) this.userSessions.set(user, (mine = new Set()));
+    mine.add(s);
     this.perTenant.set(e.tenantId, (this.perTenant.get(e.tenantId) ?? 0) + 1);
     return s;
   }
@@ -2689,6 +2703,9 @@ export class ContextPartner {
     // The reader reserves on a Budget of its own, by the same session key.
     this.deps.reader?.endSession(s.key);
     this.sessions.delete(s.key);
+    const user = scopeKey(s.scope);
+    const mine = this.userSessions.get(user);
+    if (mine?.delete(s) && mine.size === 0) this.userSessions.delete(user);
     this.unwatch(s);
     this.unact(s);
     const n = (this.perTenant.get(s.scope.tenantId) ?? 1) - 1;
@@ -4240,14 +4257,16 @@ export class ContextPartner {
    * Ref notices' reads that landed (D347), noted as recent re-reads in each live session of the user
    * (`Session.checks`, as `check` keeps its own): a pool a session built before they landed holds the older copies, and
    * `verifyItems` then applies these outcomes to them (a changed item goes out as the cache now holds it). Called for
-   * changed copies only, before their doubt is lifted: one walk of the process's sessions per changed ref.
+   * changed copies only, before their doubt is lifted: one walk of that user's sessions per changed ref
+   * (`userSessions`; a walk of the whole process's sessions was refs × sessions on a busy process).
    */
   private noteRefReads(scope: Scope, landed: readonly { id: string; outcome: CheckOutcome; mark: number }[]): void {
     if (landed.length === 0) return;
-    const user = scopeKey(scope);
+    const sessions = this.userSessions.get(scopeKey(scope));
+    if (!sessions) return;
     const now = this.now();
-    for (const s of this.sessions.values()) {
-      if (s.closed || scopeKey(s.scope) !== user) continue;
+    for (const s of sessions) {
+      if (s.closed) continue;
       const checks = (s.checks ??= new Map());
       for (const { id, outcome, mark } of landed) {
         checks.delete(id);
