@@ -10,25 +10,43 @@
 import { extractTypedEntities } from "@eden/engine";
 import type { World, WorldItem } from "../world";
 
-/** The name a request means: a leading imperative verb and a possessive taken off ("Send Priya Raman", "Ethan's"). */
+/**
+ * The people and firms a request names, as dressing reads them. The first version dressed every capitalised run and
+ * id, so invoice ids, acronyms, places, holidays and products got messages too (the review of D287). Now only the
+ * extractor's `name` entities, with a leading imperative verb and a possessive taken off, and of those only: two or
+ * more capitalised words ending in a firm word ("Vandelay Industries", "Kwik Lane Garage"); one word with a capital
+ * inside it ("FreshCart"); two capitalised words of letters ("Priya Raman", "Calder Mutual") that are not a place,
+ * season, event or product word. Anything else (one plain word, an acronym, an id, a place or holiday the word list
+ * knows, a product) is left undressed. Telling a person from a firm by its name failed on the suites' invented firms
+ * ("Calder Mutual", "Skyline Broadband"), so one message template serves both.
+ */
 export function requestNames(text: string): string[] {
   const out: string[] = [];
   for (const e of extractTypedEntities(text)) {
-    if (e.kind === "url" || e.kind === "email") continue;
+    if (e.kind !== "name") continue;
     let words = e.text.replace(/['’]s$/, "").split(/\s+/);
     if (words.length > 1 && text.trimStart().startsWith(words[0]!)) words = words.slice(1);
     const name = words.join(" ");
-    if (name.length > 2 && !out.includes(name)) out.push(name);
+    if (out.includes(name)) continue;
+    const capitalised = words.every((w) => /^\p{Lu}[\p{L}&-]*$/u.test(w));
+    if (
+      (words.length >= 2 && capitalised && FIRM.test(name)) ||
+      (words.length === 1 && /^\p{Lu}\p{Ll}+\p{Lu}\p{Ll}+$/u.test(name)) ||
+      (words.length === 2 && words.every((w) => /^\p{Lu}\p{Ll}+$/u.test(w)) && !NOT_NAMED.test(name))
+    ) {
+      out.push(name);
+    }
   }
   return out;
 }
 
-/** Words that make a name a firm, a place or a thing rather than a person. */
-const NOT_PERSON =
-  /\b(ltd|inc|llc|plc|group|bank|health|industries|insights|foods|garage|supply|marine|labs?|systems|studio|school|nursery|clinic|hotel|airways?|rail|council|hmrc|isa|account|team|project|conference|club|gym|cafe|restaurant)\b/i;
+/** The last word of a firm's name. */
+const FIRM =
+  /\b(ltd|inc|llc|plc|group|bank|health|industries|insights|foods|garage|supply|supplies|marine|labs?|systems|logistics|print|studio|partners|consulting|solutions|holdings|services|clinic|surgery|dental|motors|electrical|plumbing|builders|insurance|energy|media|software|technologies|capital|ventures|associates|agency)$/i;
 
-/** A person: two or three capitalised words, letters only, none a firm word. */
-const isPerson = (name: string) => /^\p{Lu}[\p{L}'-]+(?: \p{Lu}[\p{L}'-]+){1,2}$/u.test(name) && !NOT_PERSON.test(name);
+/** Words that make a two-word name a place, a season, an event or a product: not someone to hear from. */
+const NOT_NAMED =
+  /\b(valley|cross|street|road|lane|park|square|station|airport|bridge|hill|green|common|heath|night|day|eve|week|weekend|christmas|easter|pro|max|mini|air|plus|cup|festival|conference|summit|fair|marathon|north|south|east|west|city|town|county|island|bay|beach|centre|center|hall|house|tower|court|place|gardens?|school|nursery|college|university|hotel|club|gym|team|project|street|account|review|report|plan|policy|new|meads|exchange|bonds)\b/i;
 
 const slug = (s: string) =>
   s
@@ -63,14 +81,11 @@ export function dressEntities(
       const date = new Date(at).toUTCString().replace(":00 GMT", "");
       const digits = String(100 + ((seed * 31 + n * 97) % 900));
       const id = `dress-${n}`;
-      const person = isPerson(name);
-      const email = person ? `${slug(name)}@mail.example` : `accounts@${slug(name).replace(/\./g, "")}.example`;
-      const title = person ? "Good to catch up" : `${name}: your account`;
-      const body = person
-        ? `Hi ${first}, good to speak last week. My direct line is 07700 900${digits} if that is easier than ` +
-          `email. Speak soon, ${name.split(" ")[0]}`
-        : `Hello ${first}, thanks for being in touch with ${name}. Your customer reference is ` +
-          `REF-${digits}${n}. You can see your details online at any time.`;
+      const email = `hello@${slug(name).replace(/\./g, "")}.example`;
+      const title = "Thanks for your message";
+      const body =
+        `Hello ${first}, thanks for your message. You can reach ${name} on 020 7946 0${digits} or at this ` +
+        `address. Kind regards, ${name}`;
       world.items.push({
         id: `gmail:${id}`,
         sourceId: "gmail",
