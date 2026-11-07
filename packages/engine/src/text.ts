@@ -191,3 +191,20 @@ const isCutPoint = (c: number) => c <= 32 || c === 34 || c === 44 || c === 91 ||
 
 const PEM_BEGIN = /-----BEGIN [A-Z ]*PRIVATE KEY-----/gi;
 const PEM_END = /-----END [A-Z ]*PRIVATE KEY-----/i;
+
+/** A word asking for a recap or summary (`recapRefresh`, D341). */
+const RECAP_WORD =
+  /\b(recap|summar(?:y|ies|ise|ize)|wrap(?:[- ]?up)?|run[- ]?down|round[- ]?up|overview|go over|run through|catch me up)\b/i;
+/** What makes such a word about the conversation or the day, not a document ("summarize this PDF"). */
+const RECAP_SCOPE =
+  /\b(today|tonight|this (?:morning|afternoon|evening|week)|my day|the day|so far|we (?:discussed|covered|talked about|went over|planned)|everything|plans)\b/i;
+
+/**
+ * Whether a user's request asks for a recap of the conversation or the day (`recapRefresh`, D341): "recap" or "catch
+ * me up" alone, or a summary word with a word that scopes it to the day or what was discussed. No model; a summary of
+ * a named document or a report to write is not one.
+ */
+export function isRecapRequest(text: string): boolean {
+  if (/\b(recap|catch me up)\b/i.test(text)) return true;
+  return RECAP_WORD.test(text) && RECAP_SCOPE.test(text);
+}

@@ -488,6 +488,23 @@ export interface EngineConfig {
    * first (`CANDIDATES_LEAD`). 0 is the reader's push and asks (D95–D99).
    */
   pushCandidates: number;
+  /**
+   * Trial (D340, A17; owner repo owner, ends 2026-12-07): with `pushCandidates`, a candidate handed out in this
+   * session for an earlier request is handed again when it ranks among this request's candidates and passes
+   * `readerGate`'s constraint test (a plain item is not repeated: it stays in the transcript), rather than kept back by
+   * the not-twice ledger. Over a user's day an item constraint-worded enough to rank for one request is often
+   * pushed first for another (where the agent was told to ignore what does not fit); at its own request the ledger then
+   * kept it back, and the agent rarely went back to it (docs/research/a17-long-quality.md). Never twice within one
+   * request. Off: the ledger's cooldown holds, as before.
+   */
+  pushReshow: boolean;
+  /**
+   * Trial (D341, A17; owner repo owner, ends 2026-12-07): with `revisionNotice`, a recap- or summary-shaped user
+   * request (`isRecapRequest`, no model) re-sends, as "updated:" packets in their current version, every item this
+   * session was sent an update for. D205's update reaches the agent once, many turns before a recap written from a
+   * transcript that still holds the old version; this puts the current one last. No source call (the cached copy).
+   */
+  recapRefresh: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -609,4 +626,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
+  pushReshow: false,
+  recapRefresh: false,
 };

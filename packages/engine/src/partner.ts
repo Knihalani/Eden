@@ -131,6 +131,7 @@ import {
   extractTypedEntities,
   head,
   isChatterTerms,
+  isRecapRequest,
   isStopword,
   PERSISTABLE_KINDS,
   termIds,
@@ -260,6 +261,10 @@ interface Session {
    * the latest: the agent's own events move `turn` within one request, a new user message moves this.
    */
   requests: number;
+  /** The session's turn when its latest user message arrived (`pushReshow`: what was handed before it is another request's). */
+  requestTurn: number;
+  /** `recapRefresh` (D341): items this session was sent an "updated:" packet for, oldest first, at most 128. */
+  revisedIds: Set<string>;
   /** The session's last `EXPLAIN_TRACES` traces, oldest first (`explain`, D277). */
   traces: Trace[];
   lastActive: number;
@@ -320,6 +325,8 @@ interface Session {
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
 }
 
+/** Items a session remembers it was sent updates for (`recapRefresh`). */
+const MAX_REVISED_IDS = 128;
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
 
@@ -737,10 +744,17 @@ export class ContextPartner {
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
     this.sync?.track(s.scope, this.now());
     s.turn++;
-    if (event.kind === "user_message") s.requests++;
+    if (event.kind === "user_message") {
+      s.requests++;
+      s.requestTurn = s.turn;
+    }
     const prep = spans?.open("observe.prep", root!.id);
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
+    // `recapRefresh` (D341): before anything else this request queues, so the current versions come last but one.
+    if (event.kind === "user_message" && this.config.recapRefresh && s.revisedIds.size > 0 && isRecapRequest(text)) {
+      this.refreshRevised(s);
+    }
     const terms = text ? distinctTermIds(text, s.vocab) : NO_TERMS;
     this.checkUsage(s, event, terms);
     this.remember(s, event, text, terms);
@@ -1139,6 +1153,20 @@ export class ContextPartner {
   }
 
   /**
+   * `recapRefresh` (D341): every item this session was sent an update for, queued again as "updated:" packets in its
+   * current cached version (no source call). An item gone from the cache (removed, expired, evicted) is skipped.
+   */
+  private refreshRevised(s: Session): void {
+    if (!this.config.revisionNotice) return;
+    const now = this.now();
+    const items = [...s.revisedIds].flatMap((id) => {
+      const cur = this.deps.cache.get(s.scope, id, now);
+      return cur ? [cur] : [];
+    });
+    this.queueUpdates(s, items);
+  }
+
+  /**
    * Queues "updated:" packets for these stored copies in one session: as many as the size cut needs, an earlier
    * update still queued for the same items replaced, each copy noted as promised.
    */
@@ -1154,7 +1182,14 @@ export class ContextPartner {
       const { injection, items: said } = this.buildUpdate(s, rest);
       rest = rest.slice(said.length);
       // Promised now: a second store of the same version, before the agent takes this, queues nothing more.
-      for (const it of said) s.ledger.noteShown(it.id, versionOf(it), it.sourceId);
+      for (const it of said) {
+        s.ledger.noteShown(it.id, versionOf(it), it.sourceId);
+        if (this.config.recapRefresh) {
+          s.revisedIds.delete(it.id);
+          s.revisedIds.add(it.id);
+          if (s.revisedIds.size > MAX_REVISED_IDS) s.revisedIds.delete(s.revisedIds.values().next().value!);
+        }
+      }
       s.pending.push(injection);
       this.trace(s, {
         sessionId: s.id,
@@ -1566,7 +1601,11 @@ export class ContextPartner {
         (x) =>
           withdrawn.has(x.item.id) ||
           s.ledger.isFresh(x.item.id, s.turn) ||
-          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
+          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)) ||
+          (candidates !== null &&
+            this.config.pushReshow &&
+            candidates.like.has(x.item.id) &&
+            this.handedBefore(s, x.item.id)),
       );
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
@@ -1933,7 +1972,7 @@ export class ContextPartner {
    * `pushCandidates` of them. A pool with no constraint-like item (`readerGate`'s test, cards included) gives none, as
    * `readerGate` would read none. (Constraint-like items first lost 27 points of hidden facts live: D236.)
    */
-  private candidatesOf(s: Session, cue: Cue, ranked: readonly Scored[]): { items: Scored[] } {
+  private candidatesOf(s: Session, cue: Cue, ranked: readonly Scored[]): { items: Scored[]; like: Set<string> } {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
@@ -1943,7 +1982,7 @@ export class ContextPartner {
       seen.add(x.item.id);
       pool.push(x);
     }
-    if (pool.length === 0) return { items: [] };
+    if (pool.length === 0) return { items: [], like: new Set() };
     const cards =
       this.config.cards && this.deps.cards
         ? this.deps.cards.cardsOf(
@@ -1960,7 +1999,18 @@ export class ContextPartner {
       constraintLike: like,
       handed: items.map((x) => x.item.id),
     });
-    return { items };
+    // `pushReshow` (D340) hands again only what passes the constraint test: plain context stays in the transcript.
+    return { items, like: new Set(pool.filter((_, k) => like[k]).map((x) => x.item.id)) };
+  }
+
+  /**
+   * `pushReshow` (D340): the item was handed out in this session for an earlier request (its ledger entry is older than
+   * the latest user message), so this request's candidates may hand it again if it passes the constraint test (the
+   * caller checks). Never one handed for this request.
+   */
+  private handedBefore(s: Session, id: string): boolean {
+    const at = s.ledger.entry(id)?.turn;
+    return at !== undefined && at < s.requestTurn;
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
@@ -2218,6 +2268,8 @@ export class ContextPartner {
       key,
       turn: 0,
       requests: 0,
+      requestTurn: 0,
+      revisedIds: new Set(),
       traces: [],
       lastActive: now,
       window: [],
