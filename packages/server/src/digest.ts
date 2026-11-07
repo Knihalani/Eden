@@ -344,10 +344,18 @@ export function formatDigest(d: Digest): string {
     d.connectors.edenBackground === null
       ? "not in this log (no sync counter lines)."
       : `${c.edenBackground.toFixed(0)} (backfill and sweeps; a new user's backfill is one-time).`;
+  // With no user request to spread them over (an ask-only MCP integration reports no `user_message`), a rate per
+  // request is unknown, not zero: the calls are said as counts and every price is n/a (audit A11).
+  const perRequest = d.connectors.requests > 0;
   out.push(
-    `Per 1,000 user requests (${d.connectors.requests} in this log): the agent's own tool calls ${c.agent.toFixed(0)} ` +
-      "(every reported `tool_call`, an upper bound on its connector calls), Eden's at request time " +
-      `${c.edenRequest.toFixed(0)}, Eden's background sync ${bg}`,
+    perRequest
+      ? `Per 1,000 user requests (${d.connectors.requests} in this log): the agent's own tool calls ` +
+          `${c.agent.toFixed(0)} (every reported \`tool_call\`, an upper bound on its connector calls), Eden's at ` +
+          `request time ${c.edenRequest.toFixed(0)}, Eden's background sync ${bg}`
+      : "Per 1,000 user requests: n/a, no user requests in this log (an integration that only asks reports no " +
+          `\`user_message\` events). In all: the agent's own tool calls ${d.connectors.agent}, Eden's at request ` +
+          `time ${d.connectors.edenRequest}, Eden's background sync ` +
+          `${d.connectors.edenBackground === null ? "not in this log" : d.connectors.edenBackground}.`,
   );
   const b = d.baseline ? callsPer1k(d.baseline) : null;
   if (b) {
@@ -363,10 +371,12 @@ export function formatDigest(d: Digest): string {
   );
   for (const [plan, price] of Object.entries(CONNECTOR_PLANS)) {
     const usd = (calls: number) => `$${((calls * price) / 1_000).toFixed(2)}`;
-    const request = c.agent + c.edenRequest;
+    const request = perRequest ? usd(c.agent + c.edenRequest) : "n/a";
     // Unknown background is n/a, not the request-time figure again (which would read as no background calls).
-    const all = d.connectors.edenBackground === null ? "n/a" : usd(request + c.edenBackground);
-    out.push(`| ${plan} (${price}) | ${b ? `${usd(b.agent)} | ` : ""}${usd(request)} | ${all} |`);
+    const all =
+      !perRequest || d.connectors.edenBackground === null ? "n/a" : usd(c.agent + c.edenRequest + c.edenBackground);
+    const without = b ? `${d.baseline!.requests > 0 ? usd(b.agent) : "n/a"} | ` : "";
+    out.push(`| ${plan} (${price}) | ${without}${request} | ${all} |`);
   }
   out.push(
     "",

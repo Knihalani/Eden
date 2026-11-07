@@ -161,6 +161,17 @@ describe("digest (D293)", () => {
     expect(Object.keys(d.used.bySource)).toEqual([]);
   });
 
+  test("no user requests in the log (an ask-only MCP integration): no per-request price, never $0.00 (audit A11)", () => {
+    const ask = (turn: number) =>
+      t({ event: "ask", decision: "answer", reason: "cue:1", turn, sourceCalls: 3, itemIds: ["crm:d1"] });
+    const d = digest([ask(0), ask(0), ask(0)]);
+    expect(d.connectors).toMatchObject({ requests: 0, edenRequest: 9 });
+    const md = formatDigest(d);
+    expect(md).not.toMatch(/\| \$0\.00 \|/);
+    expect(md).toContain("| Zapier MCP (10k tasks) (25.8) | n/a | n/a |");
+    expect(md).toContain("no user requests in this log");
+  });
+
   test("a connector id with a colon is named whole when the log names it (audit A11)", () => {
     const d = digest([
       t({ decision: "sources", reason: "cue:1", itemIds: ["work:gmail:m1", "crm:d1"] }),
