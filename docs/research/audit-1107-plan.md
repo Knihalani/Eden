@@ -44,3 +44,4 @@ Later waves start from what wave A finds.
 | A25 | Injection residual: a check on actions that add a recipient, guest or payee only a packet named |
 | A26 | Decide the `pushReshow` trial (D340) with a fresh paired run |
 | A27 | Hermes cost with Eden: plugin context and the prompt cache, cards spend, Eden's connector calls |
+| A28 | Scale part 5: live searches of cut copies and noise cards at 1,000 sources |
