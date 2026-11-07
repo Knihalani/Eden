@@ -245,6 +245,10 @@ tip b615c7b28 (worktree, started 15:27 UTC); recipe `packages/sim/lab/audit-1107
 - **But Hermes pays more tokens with Eden than Pi does:** agent $/1k 0.610 against 0.440 at similar input counts (the
   plugin's per-turn context sits in the user turn, so Hermes re-writes its cache on every model call), and the cards'
   background spend in this run is $0.221/1k (cards not in the replay cache, paid live). Open item for the next session.
+  **A27 (a27-hermes-cost.md, D385-D387) withdraws the per-call cache break**: Hermes keeps the plugin's context
+  byte for byte and the second call of a task reads it from the cache; the packet is still new text written to the
+  cache each task (about 40% of the billed gap). The $0.221 includes the one-time backfill, which
+  hermes-ab did not split off until D386. The agent-cost gap itself is still open.
 - **Connector pricing is incomplete here:** the Hermes harness records the agent's own source calls but not Eden's
   (`Eden conn/t` reads 0), so the per-plan rows for the Eden arms leave out Eden's connector calls. Pi measures them
   (0.16 a task on long horizons, A3/A8).
