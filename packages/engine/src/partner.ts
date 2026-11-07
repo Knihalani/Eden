@@ -523,6 +523,8 @@ export class ContextPartner {
    */
   private readonly watching = new Map<string, Set<Session>>();
   private readonly revisionPolls = new Map<string, Promise<void>>();
+  /** By user and source: the notice poll's state (`pollRevised`), at most `MAX_REVISION_SOURCES`, idle ones dropped. */
+  private readonly revisionSources = new Map<string, RevisionSource>();
   /**
    * `readerPushBehind`: what a push packet's delivery changed in its own session, so a second reading that withdraws
    * the packet untaken can undo it (`withdraw`). Keyed by the packet, so it goes with it.
@@ -1085,8 +1087,9 @@ export class ContextPartner {
 
   /**
    * Resolves once the polls change notices started for this user's handed copies (`pollRevised`) have settled, with
-   * whatever "updated:" packets they queued. For harnesses that stand in for the time between a change and the next
-   * request; an integration need not call it (the packet waits in the queue).
+   * whatever "updated:" packets they queued. A poll held back by `REVISION_POLL_GAP_MS` is not waited for. For
+   * harnesses that stand in for the time between a change and the next request; an integration need not call it (the
+   * packet waits in the queue).
    */
   async revisionsSettled(scope: Scope): Promise<void> {
     await this.revisionPolls.get(scopeKey(scope));
@@ -1095,9 +1098,7 @@ export class ContextPartner {
   /** The agent now holds these versions: noted in the session's ledger, and the session watched for revisions. */
   private watchCopies(s: Session, copies: readonly { id: string; sourceId: string; version: number }[]): void {
     if (s.closed || copies.length === 0) return;
-    for (const c of copies) {
-      s.ledger.noteShown(c.id, c.version, c.sourceId);
-    }
+    for (const c of copies) s.ledger.noteShown(c.id, c.version, c.sourceId);
     const key = scopeKey(s.scope);
     let set = this.watching.get(key);
     if (!set) this.watching.set(key, (set = new Set()));
@@ -1114,51 +1115,60 @@ export class ContextPartner {
 
   /**
    * Items just stored with new or changed words (a sync poll or backfill page, a notice's items, a re-read): every
-   * live session of the user that was handed another version of one gets one "updated:" packet with the stored
-   * copies, queued for its next take. The ledger then holds the new version, so each revision is sent once per
-   * session; an earlier update still queued for the same items is replaced. Only real words count (`versionOf`: title
-   * and text, not metadata). A copy whose source has signalled since it was read is left for the read that follows.
+   * live session of the user that was handed another version of one gets "updated:" packets with the stored copies,
+   * queued for its next take. The ledger then holds the new version, so each revision is sent once per session; an
+   * earlier update still queued for the same items is replaced. Only real words count (`versionOf`: title and text,
+   * not metadata). A copy stored under a later signal is sent all the same: it is newer than what the agent holds, and
+   * a newer one still is sent when stored. `except`: the session whose own delivery carries these copies (a re-read
+   * before it delivers), which needs no update.
    */
-  private queueRevised(scope: Scope, items: readonly ContextItem[]): void {
+  private queueRevised(scope: Scope, items: readonly ContextItem[], except?: Session): void {
     if (!this.config.revisionNotice || items.length === 0) return;
     const sessions = this.watching.get(scopeKey(scope));
     if (!sessions) return;
     for (const s of sessions) {
-      if (s.closed) continue;
-      const changed = items.filter((it) => s.ledger.superseded(it.id, versionOf(it)) && !this.doubted(s, it));
+      if (s.closed || s === except) continue;
+      const changed = items.filter((it) => s.ledger.superseded(it.id, versionOf(it)));
       if (changed.length === 0) continue;
       const ids = new Set(changed.map((it) => it.id));
       for (let k = s.pending.length - 1; k >= 0; k--) {
         const p = s.pending[k]!;
         if (p.reason.startsWith(UPDATED) && p.citations.every((c) => ids.has(c.itemId))) s.pending.splice(k, 1);
       }
-      const injection = this.buildUpdate(s, changed);
-      // Promised now: a second store of the same version, before the agent takes this one, queues nothing more.
-      for (const it of changed) s.ledger.noteShown(it.id, versionOf(it), it.sourceId);
-      s.pending.push(injection);
-      this.trace({
-        sessionId: s.id,
-        turn: s.turn,
-        event: "source_change",
-        decision: "sources",
-        reason: injection.reason,
-        latencyMs: 0,
-        sourceCalls: 0,
-        modelCalls: 0,
-        costUsd: 0,
-        itemIds: changed.map((it) => it.id),
-      });
+      // As many packets as the size cut needs: an item cut from one is said in the next, never promised unsaid.
+      for (let rest = changed; rest.length > 0;) {
+        const { injection, items: said } = this.buildUpdate(s, rest);
+        rest = rest.slice(said.length);
+        // Promised now: a second store of the same version, before the agent takes this, queues nothing more.
+        for (const it of said) s.ledger.noteShown(it.id, versionOf(it), it.sourceId);
+        s.pending.push(injection);
+        this.trace({
+          sessionId: s.id,
+          turn: s.turn,
+          event: "source_change",
+          decision: "sources",
+          reason: injection.reason,
+          latencyMs: 0,
+          sourceCalls: 0,
+          modelCalls: 0,
+          costUsd: 0,
+          itemIds: said.map((it) => it.id),
+        });
+      }
     }
   }
 
   /**
-   * The "updated:" packet: each changed item under its title, prefixed so the agent reads it as a newer version of
-   * something it was shown, in the same data envelope as any packet (D11, D19). Marked delivered in the ledger (the
-   * normal paths do not send it again within the cooldown) and registered for usage tracking like any packet.
+   * One "updated:" packet: changed items under their titles, prefixed so the agent reads each as a newer version of
+   * something it was shown, in the same data envelope as any packet (D11, D19). Only the items the size cut left in
+   * are cited, marked delivered in the ledger (the normal paths do not send them again within the cooldown) and
+   * returned; at least the first always is. Registered for usage tracking like any packet, with its own copies, so
+   * handing out an older packet queued before it cannot leave the ledger at the older version.
    */
-  private buildUpdate(s: Session, items: readonly ContextItem[]): Injection {
+  private buildUpdate(s: Session, items: readonly ContextItem[]): { injection: Injection; items: ContextItem[] } {
     const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${UPDATED_NOTE}` }));
     const text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes });
+    const said = items.slice(0, Math.max(1, renderedCount(items, text)));
     const id = newId("inj", this.now());
     const injection: Injection = {
       ...s.scope,
@@ -1166,62 +1176,109 @@ export class ContextPartner {
       sessionId: s.id,
       mode: "proactive",
       text,
-      citations: citationsOf(items as ContextItem[]),
+      citations: citationsOf(said),
       reason: `${UPDATED}${id}`,
       score: 1,
       createdAt: this.now(),
     };
     s.ledger.mark(
-      items.map((it) => it.id),
+      said.map((it) => it.id),
       s.turn,
-      items.map((it) => versionOf(it)),
+      said.map((it) => versionOf(it)),
     );
     this.built.set(injection, {
       graphMask: 0,
-      sourceIds: [...new Set(items.map((i) => i.sourceId))],
-      items: items.map((i) => ({ sourceId: i.sourceId, id: i.id })),
+      sourceIds: [...new Set(said.map((i) => i.sourceId))],
+      items: said.map((i) => ({ sourceId: i.sourceId, id: i.id })),
       text: shownText(text),
-      ...(this.config.askDedup ? { shown: { items, text } } : {}),
+      ...(this.config.askDedup ? { shown: { items: said, text } } : {}),
+      copies: copiesOf(said),
     });
-    return injection;
+    return { injection, items: said };
   }
 
   /**
-   * A change notice for a source some live session of the user was handed a copy from: that source is polled now, in
-   * the background (no caller waits on it), so the "updated:" packet is queued before the next request rather than
-   * found by the lookup that request makes. The poll is the one the next lookup would make (`syncOnDemand`); it leaves
-   * the copy current, so that lookup makes no call of its own. Never throws.
+   * A change notice for a source some live session of the user was handed a copy from: that source is polled in the
+   * background (no caller waits on it), so the "updated:" packet is queued before the next request rather than found
+   * by the lookup that request makes. The poll is the one the next lookup would make (`syncOnDemand`); it leaves the
+   * copy current, so that lookup makes no call of its own. A burst of notices costs at most one poll at a time per
+   * user and source, starts at least `REVISION_POLL_GAP_MS` apart (a notice during a poll, or too soon after one, gets
+   * one trailing poll), each bounded by its timeout as a whole. Never throws.
    */
   private pollRevised(scope: Scope, sourceId: string): void {
     if (!this.config.revisionNotice || !this.sync) return;
-    const key = scopeKey(scope);
-    const sessions = this.watching.get(key);
-    if (!sessions) return;
-    let held = false;
-    for (const s of sessions) {
-      if (s.closed) continue;
-      for (const [, c] of s.ledger.shownCopies()) {
-        if (c.sourceId === sourceId) {
-          held = true;
-          break;
-        }
+    const user = scopeKey(scope);
+    if (!this.holdsCopyFrom(user, sourceId)) return;
+    const key = `${user}\u0000${sourceId}`;
+    let st = this.revisionSources.get(key);
+    if (!st) {
+      st = { running: false, again: false, at: -Infinity, timer: null };
+      this.revisionSources.set(key, st);
+      for (const [k, v] of this.revisionSources) {
+        if (this.revisionSources.size <= MAX_REVISION_SOURCES) break;
+        if (!v.running && !v.timer) this.revisionSources.delete(k);
       }
-      if (held) break;
     }
-    if (!held) return;
+    if (st.running) {
+      st.again = true;
+      return;
+    }
+    const wait = st.at + REVISION_POLL_GAP_MS - this.now();
+    if (st.timer) {
+      if (wait > 0) return;
+      // The engine's clock has passed the gap before the timer (a harness clock runs ahead of real time).
+      clearTimeout(st.timer);
+      st.timer = null;
+    }
+    if (wait > 0) {
+      const held = st;
+      held.timer = setTimeout(() => {
+        held.timer = null;
+        this.startRevisionPoll(scope, sourceId, held);
+      }, wait);
+      (held.timer as { unref?: () => void }).unref?.();
+      return;
+    }
+    this.startRevisionPoll(scope, sourceId, st);
+  }
+
+  private startRevisionPoll(scope: Scope, sourceId: string, st: RevisionSource): void {
     const sync = this.sync;
-    const poll = (async () => {
+    const user = scopeKey(scope);
+    if (!sync || !this.holdsCopyFrom(user, sourceId)) return;
+    st.running = true;
+    st.at = this.now();
+    const ms = Math.max(this.config.sourceTimeoutMs, 5_000);
+    const signal = AbortSignal.timeout(ms);
+    const run = (async () => {
       const all = await this.deps.sources(scope).catch((): Source[] => []);
       const source = all.find((x) => x.id === sourceId);
-      if (!source) return;
-      await sync.freshen(scope, [source], AbortSignal.timeout(Math.max(this.config.sourceTimeoutMs, 5_000)));
+      if (!source || signal.aborted) return;
+      await sync.freshen(scope, [source], signal);
     })().catch(() => {});
-    const before = this.revisionPolls.get(key);
-    const all = before ? Promise.all([before, poll]).then(() => {}) : poll;
-    const tracked: Promise<void> = all.finally(() => {
-      if (this.revisionPolls.get(key) === tracked) this.revisionPolls.delete(key);
+    // The whole poll, its sources' resolution too, is bounded: a hung resolver cannot hold `revisionsSettled`.
+    const poll = Promise.race([run, whenAborted(signal)]).then(() => {
+      st.running = false;
+      if (st.again) {
+        st.again = false;
+        this.pollRevised(scope, sourceId);
+      }
     });
-    this.revisionPolls.set(key, tracked);
+    const before = this.revisionPolls.get(user);
+    const both = before ? Promise.all([before, poll]).then(() => {}) : poll;
+    const tracked: Promise<void> = both.finally(() => {
+      if (this.revisionPolls.get(user) === tracked) this.revisionPolls.delete(user);
+    });
+    this.revisionPolls.set(user, tracked);
+  }
+
+  /** Whether a live session of the user was handed a copy of an item from this source. */
+  private holdsCopyFrom(user: string, sourceId: string): boolean {
+    for (const s of this.watching.get(user) ?? []) {
+      if (s.closed) continue;
+      for (const [, c] of s.ledger.shownCopies()) if (c.sourceId === sourceId) return true;
+    }
+    return false;
   }
 
   /**
@@ -1891,7 +1948,8 @@ export class ContextPartner {
    * A change notification for one of the user's sources (`syncPush`; the source says it `notifies`): the integrator
    * forwards a Gmail watch, a Calendar or Drive channel, a Slack event, a Graph subscription, a connector platform's
    * trigger. The source's synced copy is behind until the next lookup that reads it polls it; until then, and between
-   * notifications, nothing polls it (at most `syncPushMaxStaleMs` apart). No I/O; false when push is off, or the source
+   * notifications, nothing polls it (at most `syncPushMaxStaleMs` apart). No I/O (but see `sourceNotice` for the
+   * `revisionNotice` trial's background poll); false when push is off, or the source
    * is not synced for the user or does not say it notifies (`sourceNotice` says which).
    */
   sourceChanged(scope: Scope, sourceId: string): boolean {
@@ -1902,7 +1960,9 @@ export class ContextPartner {
    * `sourceChanged` with the reason a notification did not act (`SourceChangedResult`). With push on, the source's held
    * search pages are dropped whatever the sync says: a search-only notifying source, or one no lookup has synced yet,
    * has no sync state, and its held page would otherwise keep answering with the copy from before the change. Costs
-   * at most one search on the next lookup that would have used the page. No I/O, O(1) beyond the drop.
+   * at most one search on the next lookup that would have used the page. No I/O, O(1) beyond the drop, except with
+   * `revisionNotice` (trial, D205): a source a live session holds a handed copy from is polled in the background
+   * (`pollRevised`: one listing call, at most one at a time per user and source, 30 s apart).
    */
   sourceNotice(scope: Scope, sourceId: string): SourceChangedResult {
     if (!this.config.syncPush || !this.sync) return { synced: false, reason: "push-off" };
@@ -3763,7 +3823,7 @@ export class ContextPartner {
       if (changed) this.fanout.dropResults(s.scope, item.sourceId);
       if (changed) {
         const stored = this.deps.cache.get(s.scope, item.id, this.now());
-        if (stored) this.queueRevised(s.scope, [stored]);
+        if (stored) this.queueRevised(s.scope, [stored], s);
       }
       if (changed) this.freshness.changed++;
       else this.freshness.confirmed++;
@@ -4880,7 +4940,7 @@ export class ContextPartner {
         ? { shown: { items: shown === undefined ? items : scored.map((x) => x.item), text: shown ?? injection.text } }
         : {}),
       ...(this.config.revisionNotice
-        ? { copies: copiesOf(shown === undefined ? items : scored.map((x) => x.item)) }
+        ? { copies: renderedCopies(shown === undefined ? items : scored.map((x) => x.item), shown ?? injection.text) }
         : {}),
     });
     return injection;
@@ -4973,9 +5033,43 @@ const UPDATED = "updated:";
 const UPDATED_TAG = "updated: ";
 const UPDATED_NOTE = " (changed at its source since shown earlier; this version replaces it)";
 
+/** `pollRevised`: the least time between two notice polls of one user's source, and how many sources it tracks. */
+const REVISION_POLL_GAP_MS = 30_000;
+const MAX_REVISION_SOURCES = 10_000;
+
+interface RevisionSource {
+  running: boolean;
+  /** A notice came while the poll ran: one more poll once it settles. */
+  again: boolean;
+  /** When the last poll started (engine clock). */
+  at: number;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+/** Resolves when `signal` aborts (at once if it has). */
+function whenAborted(signal: AbortSignal): Promise<void> {
+  return new Promise((r) => (signal.aborted ? r() : signal.addEventListener("abort", () => r(), { once: true })));
+}
+
 /** The version of each item a packet or answer hands the agent (`revisionNotice`). */
 function copiesOf(items: readonly ContextItem[]): { id: string; sourceId: string; version: number }[] {
   return items.map((it) => ({ id: it.id, sourceId: it.sourceId, version: versionOf(it) }));
+}
+
+/**
+ * How many of `items`, in order, have their line in `text` (a packet or answer: one `- [source] …` line each, in
+ * the items' order, until the size cut), as `noteShown` reads them.
+ */
+function renderedCount(items: readonly ContextItem[], text: string): number {
+  const lines = text.split("\n").filter((line) => line.startsWith("- ["));
+  let n = 0;
+  while (n < items.length && n < lines.length && lines[n]!.startsWith(`- [${items[n]!.sourceId}] `)) n++;
+  return n;
+}
+
+/** The copies of the items whose lines the agent receives: one cut from the text was not shown. */
+function renderedCopies(items: readonly ContextItem[], text: string) {
+  return copiesOf(items.slice(0, renderedCount(items, text)));
 }
 
 /** An item's words as the ledger records them (`Ledger.revised`): a copy edited at its source hashes otherwise. */

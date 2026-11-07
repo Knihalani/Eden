@@ -366,9 +366,10 @@ export interface EngineConfig {
   /**
    * Trial (D205, owner repo owner, ends 2026-12-07): an item this session was handed (a packet taken, an ask's answer)
    * that is stored again with other words (a sync poll, a notice carrying items, a re-read) is sent once more as an
-   * "updated:" packet, once per revision, queued for the agent's next take. A request waits (within its `waitMs`) for
-   * the poll of a notifying source that signalled since a handed copy was read, so the packet is ready before the
-   * model call. Off: the agent keeps the version it was handed until a lookup happens to deliver the new one.
+   * "updated:" packet, once per revision, queued for the agent's next take. A change notice for a source a session
+   * holds a handed copy from polls it at once in the background (no request waits on it), so the packet is usually
+   * queued before the next request. Off: the agent keeps the version it was handed until a lookup happens to deliver
+   * the new one.
    */
   revisionNotice: boolean;
   /**

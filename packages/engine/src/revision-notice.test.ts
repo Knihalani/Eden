@@ -21,6 +21,11 @@ class Listed implements Source {
   readonly notifies = true;
   searches = 0;
   lists = 0;
+  fetches = 0;
+  /** Listing answers with nothing (an index that has not caught up): no failure, no breaker. */
+  blind = false;
+  /** When set, a listing waits for it (a call still on the wire). */
+  gate: Promise<void> | null = null;
   docs = new Map<string, { title: string; text: string; meta?: Record<string, string> }>();
   constructor(readonly id: string) {}
   item(ref: string): ContextItem | null {
@@ -46,10 +51,13 @@ class Listed implements Source {
       .filter((i) => words.some((w) => `${i.title} ${i.text}`.toLowerCase().includes(w)));
   }
   async fetch(ref: string): Promise<ContextItem | null> {
+    this.fetches++;
     return this.item(ref);
   }
   async list(_s: Scope, cursor: string | undefined, limit: number) {
     this.lists++;
+    if (this.gate) await this.gate;
+    if (this.blind) return { items: [], next: null };
     const all = [...this.docs.keys()].map((r) => this.item(r)!);
     const at = cursor ? Number(cursor) : 0;
     return { items: all.slice(at, at + limit), next: at + limit < all.length ? String(at + limit) : null };
@@ -66,7 +74,9 @@ const seed = (src: Listed) => {
     text: "The quarterly offsite is in Lisbon at 09:30 on 12 November.",
   });
   src.docs.set("l1", { title: "Lunch", text: "Lunch with Sam at the canteen." });
+  src.docs.set("r1", { title: "Budget review", text: "The budget review with finance is at 14:00 on Friday." });
 };
+const REVIEW = itemId("notes", "r1");
 const move = (src: Listed, text = "The quarterly offsite is in Lisbon at 11:30 on 12 November.") =>
   src.docs.set("q1", { title: "Quarterly offsite", text });
 
@@ -253,6 +263,112 @@ describe("revisionNotice: a changed item the session was handed is sent again be
     t.partner.sourceChanged(scope, "notes");
     await t.partner.sourceItems(scope, "notes", [t.src().item("q1")!]);
     expect(t.partner.takePending({ ...scope, sessionId: "s1" }).length).toBe(0);
+  });
+});
+
+describe("revisionNotice: review regressions", () => {
+  test("a second notice while the notice poll is on the wire does not lose the update (reviewer finding 1)", async () => {
+    const t = await setup();
+    await say(t.partner, "Remind me where the quarterly offsite is", "s1", t.now());
+    t.advance(5 * MIN);
+    move(t.src());
+    let open!: () => void;
+    t.src().gate = new Promise<void>((r) => (open = r));
+    t.partner.sourceChanged(scope, "notes");
+    await Bun.sleep(5);
+    t.partner.sourceChanged(scope, "notes"); // Lands while the listing is held: the copy it brings is doubted.
+    open();
+    t.src().gate = null;
+    await t.partner.revisionsSettled(scope);
+    const got = updates(await say(t.partner, "What should I bring to the canteen lunch", "s1", t.now()));
+    expect(got.length).toBe(1);
+    expect(got[0]!.text).toContain("11:30");
+  });
+
+  test("a burst of notices polls at most once at a time and 30 s apart (reviewer finding 3)", async () => {
+    const t = await setup();
+    await say(t.partner, "Remind me where the quarterly offsite is", "s1", t.now());
+    t.advance(5 * MIN);
+    const before = t.src().lists;
+    for (let i = 0; i < 20; i++) {
+      t.partner.sourceChanged(scope, "notes");
+      await Bun.sleep(1);
+    }
+    await t.partner.revisionsSettled(scope);
+    expect(t.src().lists - before).toBe(1);
+    t.advance(31_000);
+    t.partner.sourceChanged(scope, "notes");
+    await t.partner.revisionsSettled(scope);
+    expect(t.src().lists - before).toBe(2);
+  });
+
+  test("a re-read before an answer: no update for the answering session, one for another (reviewer finding 2)", async () => {
+    const t = await setup({ verifyDelivery: true });
+    await say(t.partner, "Remind me where the quarterly offsite is", "s1", t.now());
+    await say(t.partner, "Remind me where the quarterly offsite is", "s2", t.now());
+    t.advance(5 * MIN);
+    move(t.src());
+    t.src().blind = true; // The notice's poll brings nothing: only the answer's re-read finds the change.
+    t.partner.sourceChanged(scope, "notes");
+    await t.partner.revisionsSettled(scope);
+    t.advance(5 * MIN);
+    const answer = await t.partner.ask({ ...scope, sessionId: "s1", question: "Where is the quarterly offsite" });
+    expect(t.src().fetches).toBeGreaterThanOrEqual(1);
+    expect(answer.citations.map((c) => c.itemId)).toContain(OFFSITE);
+    expect(answer.answer).toContain("11:30");
+    expect(updates(t.partner.takePending({ ...scope, sessionId: "s1" })).length).toBe(0);
+    const other = updates(t.partner.takePending({ ...scope, sessionId: "s2" }));
+    expect(other.length).toBe(1);
+    expect(other[0]!.text).toContain("11:30");
+  });
+
+  test("an item the size cut left out of a packet was not shown: no update for it (reviewer finding 4)", async () => {
+    const t = await setup({ maxInjectionBytes: 165 });
+    const first = await say(t.partner, "When are the quarterly offsite and the budget review", "s1", t.now());
+    const text = first.map((i) => i.text).join("\n");
+    const cited = first.flatMap((i) => i.citations.map((c) => c.itemId));
+    expect(cited).toContain(OFFSITE);
+    expect(cited).toContain(REVIEW);
+    const offsiteShown = text.includes("Quarterly offsite");
+    expect(offsiteShown).not.toBe(text.includes("Budget review")); // One line fits, the other is cut.
+    t.advance(5 * MIN);
+    move(t.src());
+    t.src().docs.set("r1", { title: "Budget review", text: "The budget review with finance is at 16:00 on Friday." });
+    t.partner.sourceChanged(scope, "notes");
+    await t.partner.revisionsSettled(scope);
+    const up = updates(t.partner.takePending({ ...scope, sessionId: "s1" }));
+    expect(up.flatMap((i) => i.citations.map((c) => c.itemId))).toEqual([offsiteShown ? OFFSITE : REVIEW]);
+  });
+
+  test("changes too big for one update packet are split, every item said (reviewer finding 4)", async () => {
+    const t = await setup({ maxInjectionBytes: 200 });
+    await say(t.partner, "Remind me where the quarterly offsite is", "s1", t.now());
+    await say(t.partner, "When is the budget review with finance", "s1", t.now());
+    t.advance(5 * MIN);
+    move(t.src());
+    t.src().docs.set("r1", { title: "Budget review", text: "The budget review with finance is at 16:00 on Friday." });
+    t.partner.sourceChanged(scope, "notes");
+    await t.partner.sourceItems(scope, "notes", [t.src().item("q1")!, t.src().item("r1")!]);
+    const up = updates(t.partner.takePending({ ...scope, sessionId: "s1" }));
+    expect(up.length).toBe(2);
+    for (const i of up) {
+      expect(i.citations.length).toBe(1);
+      expect(i.text).toContain("updated:");
+    }
+    expect(up.flatMap((i) => i.citations.map((c) => c.itemId)).sort()).toEqual([OFFSITE, REVIEW].sort());
+  });
+
+  test("an ask's answer counts as handed: its items get updates", async () => {
+    const t = await setup();
+    const answer = await t.partner.ask({ ...scope, sessionId: "s1", question: "Where is the quarterly offsite" });
+    expect(answer.citations.map((c) => c.itemId)).toContain(OFFSITE);
+    t.advance(5 * MIN);
+    move(t.src());
+    t.partner.sourceChanged(scope, "notes");
+    await t.partner.revisionsSettled(scope);
+    const up = updates(t.partner.takePending({ ...scope, sessionId: "s1" }));
+    expect(up.length).toBe(1);
+    expect(up[0]!.text).toContain("11:30");
   });
 });
 
