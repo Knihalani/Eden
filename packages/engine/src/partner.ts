@@ -659,7 +659,7 @@ export class ContextPartner {
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
     // not cut at `askReaderWaitMs` (that bounds an explicit ask): a reading that lands later is still queued, while its
     // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
-    const internal: { push: true; request?: number } = { push: true };
+    const internal: { push: true; request?: number; turn?: number } = { push: true };
     const push =
       this.config.readerPush &&
       this.config.askReader &&
@@ -678,7 +678,12 @@ export class ContextPartner {
     const t0 = performance.now();
     const observing = this.observeEvent(event, options);
     // `observeEvent` counts the request before its first await, so the session's count now names this request.
-    if (push) internal.request = this.sessions.get(sessionKey(event))?.requests;
+    // Its turn too: the push's trace names its request's turn, as a lookup's does, not the one current when it settles.
+    if (push) {
+      const s = this.sessions.get(sessionKey(event));
+      internal.request = s?.requests;
+      internal.turn = s?.turn;
+    }
     const result = await observing;
     if (!push) return result;
     let settled = false;
@@ -891,7 +896,12 @@ export class ContextPartner {
         // The calls were the first reading's; the second makes none (nor any plan) of its own.
         const { plans: _plans, ...rest } = searched;
         const again = { ...rest, calls: 0, ...(rest.syncCalls !== undefined ? { syncCalls: 0 } : {}) };
-        await this.ask(request, { push: true, request: internal.request, again: { searched: again, prev } });
+        await this.ask(request, {
+          push: true,
+          request: internal.request,
+          turn: internal.turn,
+          again: { searched: again, prev },
+        });
       })
       .catch(() => {});
     this.addBehind(s, work);
@@ -1585,7 +1595,7 @@ export class ContextPartner {
       const costUsd = reading?.costUsd ?? 0;
       this.trace(s, {
         sessionId: s.id,
-        turn: s.turn,
+        turn: internal.turn ?? s.turn,
         event: "user_message",
         decision: "reader-push",
         reason: cue.id,
@@ -1601,7 +1611,8 @@ export class ContextPartner {
         ...(candidates ? { candidates: true } : {}),
         itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
       });
-      if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
+      const turn = internal.turn ?? s.turn;
+      if (root) spans!.close(root, { session: s.id, turn, decision: "reader-push", delivered: !!injection });
       if (behind && cue.polled) this.pushAgain(s, request, internal, cue.polled, searched, injection);
       return { answer: "", citations: [], usedModel: reading?.called === true, costUsd, latencyMs };
     }
@@ -4983,6 +4994,8 @@ interface AskInternal {
   push?: boolean;
   /** The session's request count when the push's request was counted: a later request makes it stale. */
   request?: number;
+  /** The session's turn when the push's request was counted: the push's trace reports it (audit A11). */
+  turn?: number;
   /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
   again?: { searched: SearchedLive; prev: Injection | null };
 }
