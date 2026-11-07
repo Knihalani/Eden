@@ -108,7 +108,8 @@ Haiku (lab provider), train seeds 41–42, 1:1:8 mix, steady state per 1,000 tas
 0.368; long 0.326 and 0.338 against 0.568 and 0.529 and the agent alone's 0.317 (docs/research/cl-cl6.md). The reader
 figures below hold for `pushCandidates: 0` (`--preset minus-candidates`). **D317 (A12) adds no model call of Eden's
 and no connector call** but makes the agent ask more (`askNudge`: +0.20–0.38 asks a task): +$0.061 per 1,000 tasks
-on the 1:1:8 mix (0.374 → 0.435, Pi, Anthropic Haiku, the 91 targeted train templates, seeds 41–44 and 41–42 for
+on the 1:1:8 mix as measured (a later check of the version after review came out at +$0.046–0.059 a kind against an
+earlier baseline: read +$0.04–0.07 a kind, +0.3–0.6 s; D317) (0.374 → 0.435, Pi, Anthropic Haiku, the 91 targeted train templates, seeds 41–44 and 41–42 for
 neutral; docs/research/a12-quality.md).
 
 Ask-time reader (D95, `askReader`, in the default since D112; `reader.ts`). One call per `ask` about an action (an

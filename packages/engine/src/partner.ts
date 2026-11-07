@@ -1542,12 +1542,13 @@ export class ContextPartner {
     if (reading) chosen = reading.chosen;
     // `askNudge` (D316, D317): an ask in the request a nudged packet went out for also lists the push pool's items past
     // those handed that hold one of the request's anchors (its current copies). They take at most half the answer's
-    // seats (rounded up), from the end: the answer still cites at most `maxItems` (the protocol's bound).
+    // seats (rounded up), from the end, and never the ask's own first: the answer still cites at most `maxItems` (the
+    // protocol's bound) and keeps its best match for the question (none are added at `maxItems` 1).
     if (!internal.push && this.config.askNudge && s.nudged?.request === s.requests) {
       const { anchors, deeper } = s.nudged;
       const have = new Set(chosen.map((x) => x.item.id));
       const extra: Scored[] = [];
-      const seats = Math.ceil(limit / 2);
+      const seats = Math.min(Math.ceil(limit / 2), limit - 1);
       for (const id of deeper) {
         if (extra.length >= seats) break;
         if (have.has(id)) continue;

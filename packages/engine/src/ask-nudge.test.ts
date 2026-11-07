@@ -37,19 +37,28 @@ const DATED = item(
   "The caretaker is away on Friday 30th October, so the venue deposit",
   400,
 );
+const ROTA = item("rota", "Cleaning rota", "Cleaning rota this week: Sam on Monday, Priya on Thursday.", 600);
+const HARLOW_DAY = item("hday", "Harlow on 30 October", "Harlow venue deposit must be paid by 30 October.", 1);
 const OTHER = item("other", "Invoice archive", "Older invoice for a venue deposit, paid last year.", 500);
 
+/** What the test source returns; a test may change it between passes. */
+let ITEMS: ContextItem[] = [];
+/** The partner's item cache, for a test that adds an item between passes (the source's page is held). */
+let CACHE = new ItemCache();
+
 function setup(config: Record<string, unknown>, onPushPool?: (r: PushPoolReport) => void) {
+  ITEMS = [HOLD, PLAIN, DATED, OTHER];
+  CACHE = new ItemCache();
   const source: Source = {
     id: "mail",
     kind: "test",
     description: "Mail",
-    search: async () => [HOLD, PLAIN, DATED, OTHER],
+    search: async () => ITEMS,
   };
   return new ContextPartner({
     sources: async () => [source],
     sourceMap: new SourceMap(),
-    cache: new ItemCache(),
+    cache: CACHE,
     budget: new Budget(),
     model: null,
     now: () => NOW,
@@ -187,6 +196,35 @@ describe("askNudge (D316): a nudge to ask when the candidates do not settle the 
     expect(one.citations.length).toBeLessThanOrEqual(1);
     const two = await p.ask({ ...ref(), question: "Anything about the Harlow venue deposit?", maxItems: 2 });
     expect(two.citations.length).toBeLessThanOrEqual(2);
+  });
+
+  test("maxItems 1 keeps the ask's own best match: no deeper item takes its seat (review)", async () => {
+    const p = setup({ askNudge: true, pushCandidates: 1 });
+    await say(p, DATED_REQUEST);
+    packet(p);
+    CACHE.put({ tenantId: "t", userId: "u1" }, [ROTA], NOW);
+    const one = await p.ask({ ...ref(), question: "Who is on the cleaning rota this week?", maxItems: 1 });
+    expect(one.citations.map((c) => c.itemId)).toEqual([ROTA.id]);
+    const two = await p.ask({ ...ref(), question: "Who is on the cleaning rota this week?", maxItems: 2 });
+    expect(two.citations.map((c) => c.itemId)).toContain(ROTA.id);
+    expect(two.citations.length).toBe(2);
+  });
+
+  test("a settled packet later in the same request ends the deeper look (review)", async () => {
+    const pools: PushPoolReport[] = [];
+    const p = setup({ askNudge: true, pushCandidates: 1 }, (r) => pools.push(r));
+    await say(p, DATED_REQUEST);
+    packet(p);
+    expect(pools.at(-1)!.unsettled).toBe(true);
+    // A second pass in the same request (as `readerPushBehind`'s) whose first candidate holds Harlow and the day.
+    CACHE.put({ tenantId: "t", userId: "u1" }, [HARLOW_DAY], NOW);
+    const sessions = (p as unknown as { sessions: Map<string, { requests: number }> }).sessions;
+    const request = sessions.get("t/u1#s1")!.requests;
+    await p.ask({ ...ref(), question: DATED_REQUEST }, { push: true, request });
+    expect(pools.at(-1)!.unsettled).toBe(false);
+    expect(pools.at(-1)!.handed).toEqual([HARLOW_DAY.id]);
+    const answer = await p.ask({ ...ref(), question: "Anything about the cleaning rota?" });
+    expect(answer.citations.map((c) => c.itemId)).not.toContain(DATED.id);
   });
 
   test("off: the same ask does not add them", async () => {
