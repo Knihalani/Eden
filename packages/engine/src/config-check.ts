@@ -59,7 +59,7 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerVerifyAfter: "reader",
   readerReuse: "reader",
   readerStopEarly: "reader",
-  pushCandidates: "reader",
+  // `pushCandidates` is not here: the candidates make no reader call and act without one (D276).
 };
 
 /**

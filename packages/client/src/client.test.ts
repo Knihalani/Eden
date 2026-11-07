@@ -331,6 +331,50 @@ describe("misconfiguration is visible through onError", () => {
   });
 });
 
+describe("explain (D277)", () => {
+  const answering = (res: () => Response) => (async () => res()) as unknown as typeof fetch;
+  test("returns the decisions; drops malformed ones; posts the user's ids to /v1/explain", async () => {
+    let path = "";
+    let sent: unknown;
+    const good = { turn: 1, event: "user_message", decision: "silent", reason: "no candidates", why: "Silent: x" };
+    const eden = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      fetch: (async (u: string, init: RequestInit) => {
+        path = new URL(u).pathname;
+        sent = JSON.parse(String(init.body));
+        return Response.json({ decisions: [good, { decision: 3 }, null] });
+      }) as unknown as typeof fetch,
+    });
+    expect(await eden.explain()).toEqual([good] as never);
+    expect(path).toBe("/v1/explain");
+    expect(sent).toEqual({ userId: "u", sessionId: "s" });
+  });
+
+  test("never throws: unreachable, a non-2xx and a wrong shape are [] and reach onError", async () => {
+    const errors: unknown[] = [];
+    const onError = (e: unknown) => errors.push(e);
+    const down = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      baseUrl: "http://127.0.0.1:9",
+      timeoutMs: 200,
+      onError,
+    });
+    expect(await down.explain()).toEqual([]);
+    const refused = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      onError,
+      fetch: answering(() => Response.json({ error: "no" }, { status: 401 })),
+    });
+    expect(await refused.explain()).toEqual([]);
+    const odd = new EdenClient({ userId: "u", sessionId: "s", onError, fetch: answering(() => Response.json([1])) });
+    expect(await odd.explain()).toEqual([]);
+    expect(errors.length).toBe(3);
+  });
+});
+
 describe("edenId", () => {
   const raws = [
     "alice+work@x.com",

@@ -235,6 +235,8 @@ describe("conflictVocab through the engine", () => {
         groundConflict: true,
         quietNameOnly: true,
         conflictVocab,
+        // The candidates push (D237, with no reader since D276) would deliver the item whatever the vocabulary.
+        pushCandidates: 0,
       },
     });
     const scope = { tenantId: "t", userId, sessionId: "s" };
