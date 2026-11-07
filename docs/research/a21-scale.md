@@ -194,6 +194,9 @@ workload, so they are not added.
   per delivered item a day (2,301 for 1,096 listings saved over 16 users); the 1,000-source bench never delivers from
   an unused source, so its figures carry no re-reads. The "used" set (64 most recent, on evidence)
   makes that rare at 1,000 sources; it is not measured on real users.
+- **A get tool that keeps failing** (timeouts, an open breaker) leaves an unused source's older copies withheld from
+  proactive deliveries until the weekly sweep: fail-closed (recall, never a stale copy), not measured. Calling
+  `sweepSoon` on "failed" too would bound it at a day (the second review's low finding).
 - **MCP connectors without a get tool** (every shipped preset today) keep the daily sweep: the saving needs the
   integrator to wire a fetch tool (`fetchTool`), which D126's re-reads want anyway.
 - **One-day live check.** The weekly sweep never acted in the Pi run (one request at a time); its safety rests on
