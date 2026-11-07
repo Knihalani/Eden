@@ -1256,7 +1256,9 @@ async function runWorld(
     if (LATE && isRecap(task)) {
       for (const l of dayLate) {
         l.r.lateTurns = l.entry.after.length;
-        gradeInto(l.entry.task, laterText(l.entry), tl, (f) => (l.r.lateFacts = f));
+        // Kept with the verdicts, so a regrade (or a reader) sees what was graded.
+        l.r.lateText = laterText(l.entry);
+        gradeInto(l.entry.task, l.r.lateText, tl, (f) => (l.r.lateFacts = f));
       }
       dayLate = [];
     }

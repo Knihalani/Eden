@@ -404,6 +404,7 @@ export interface RunResult {
    */
   lateFacts?: Record<string, boolean>;
   lateTurns?: number;
+  lateText?: string;
   error?: string;
   facts?: Record<string, boolean>;
   leaked?: boolean;

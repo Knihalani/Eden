@@ -1,0 +1,18 @@
+arm          kind        n   own  later  turns
+eden         hidden    144     2      8   2.50
+eden         control   144     1      1   2.50
+eden~plan    hidden    144     0     59   2.50
+eden~plan    control   144     0      5   2.50
+tools        hidden    144     0      3   2.50
+tools        control   144     0      1   2.50
+
+eden         plan packets taken    0  agent $ per day 1.803/1k-days (72 days; $ 0.1298)
+eden~plan    plan packets taken   84  agent $ per day 1.931/1k-days (72 days; $ 0.1390)
+tools        plan packets taken    0  agent $ per day 1.683/1k-days (72 days; $ 0.1212)
+
+eden~plan − eden   hidden   corrected (later replies raise the fact)   n  144  +35.4 points (+27.1..+43.8)
+eden~plan − eden   control  false alarm (look-alike raised)            n  144  +2.8 points (+0.0..+6.2)
+eden~plan − eden   agent $/1k tasks (recaps excluded) n 288  +0.0203 (+0.0071..+0.0334)
+eden~plan − tools  hidden   corrected (later replies raise the fact)   n  144  +38.9 points (+30.6..+47.2)
+eden~plan − tools  control  false alarm (look-alike raised)            n  144  +2.8 points (+0.0..+6.2)
+eden~plan − tools  agent $/1k tasks (recaps excluded) n 288  +0.0278 (+0.0100..+0.0461)
