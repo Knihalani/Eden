@@ -117,17 +117,11 @@ holds three or more query terms and scores at least 0.8 (coverage plus the entit
 directly if the caller passed `waitMs` and it landed in time; otherwise it is queued and delivered with the next event
 (or via `/v1/pending`).
 
-**A request made while the slow path is busy** (D102, `slowPathQueue`, on in the default, D112): one slow path runs per
-session, so without the queue a request the fast path did not answer while another lookup (a judge call, a slow source)
-is still running is traced `silent` / `slow path busy` and not looked up; its cue stays out of cooldown, so only the
-same request made again finds it. With the queue the request is kept in a one-slot per-session queue (the latest wins),
-traced `silent` / `slow path busy: queued`, and the event's `ObserveResult.pending` is true: once nothing is in flight
-(after the running lookup and any `afterPoll` follow-up, one at a time), the request is looked up with the slow path
-alone, its cue then put in cooldown, and what it delivers is queued as pending. It is dropped, traced `queued cue:
-repeat` or `queued cue: stale`, if its cue went into cooldown meanwhile or it waited over 10 s, and never run if the
-session closed. It skips `anticipate`'s early answer (nobody is waiting on it); with `syncPollBehind` it gets the
-follow-up on the fresh index as any lookup does. At most one extra slow path, so at most one judge call under the
-session's `Budget`, per busy window (docs/COST-MODEL.md).
+**A request made while the slow path is busy**: one slow path runs per session, so a request the fast path did not
+answer while another lookup (a slow source, the reader) is still running is traced `silent` / `slow path busy` and not
+looked up; its cue stays out of cooldown, so the same request made again finds it. The one-slot queue that looked it up
+later (`slowPathQueue`, D102) was deleted by D228 (2026-11-07; docs/research/fix-w2a-parts.md): on the `--overlap`
+funnel it found 6 more hidden facts for 48 more decoys.
 
 **Probes** (`config.probes`, on in the default, D112; D46, `probes.ts`): besides the request itself, a lookup sends
 a few short queries, at most `probeCalls` source calls: each person it names (the sentence's leading verb removed) to
@@ -199,16 +193,23 @@ Such a source is otherwise polled only by the daily sweep and after `syncPushMax
 the bound on a lost one. Sources that do not notify are polled as before.
 
 **Freshness at delivery** (D126, `verifyDelivery`, in the default, with `verifyTimeoutMs` 1.5 s; `partner.ts`
-`verifyItems`, `checkAhead`, `deliverChecked`; `SourceFanout.fetchChecked`). Every slow-path, reader, anticipation,
+`verifyItems`, `checkAhead`, `deliverChecked`; `SourceFanout.fetchChecked`). Every slow-path, reader,
 firewall and `ask` delivery goes through `deliverChecked`: an item whose read began before its source last signalled a
 change (`Sync.signalledSince`, a `syncPush` signal that does not say which item changed) is fetched again by its ref
 first, in parallel. A read's start is a mark, not a time (D133): every lookup, probe, re-read and sync page takes
 `Sync.mark()` (a count of signals) before its call and stores it with its copies (`ItemCache.readMark`), so a signal
 that lands while a call is on the wire doubts what it brings, and items a notification carried, or a poll the signal
-started, do not; a reader's likely picks are re-read beside its call, so the delivery seldom waits (only once the
-reader will be called: an empty pool or a `readerGate`d ask starts none, D134). A changed copy is stored
+started, do not. Since D192 (`readerVerifyAfter`, on in the default; it reopens D134) nothing is re-read beside the
+reader's call: a delivery re-reads only the items it cites, after the reader named them, so a doubted delivery waits
+for its re-read, and the up-to-3 speculative fetches per reading (`checkAhead`, `VERIFY_AHEAD`) are gone (Pi: 1.6-2.6
+fewer fetches a task). With the switch off, `checkAhead` runs only once the reader will be called (D134). A changed
+copy is stored
 and delivered instead; one the source no longer has (`gone`, only from a source with `Source.fetchReportsGone`) is
-dropped from the cache and left out; one that cannot be checked is delivered as held. With no signal nothing is
+dropped from the cache and left out; one that cannot be checked is delivered as held, except in an ask's answer
+(D211): there a re-read that failed with a plain error, or that our own guard skipped in ordinary use (a busy permit,
+the rate limit's normal spend), is tried once more, and a copy still not confirmed is left out and named in the answer;
+a re-read refused by an open breaker or by a rate limit the connector's 429 pushed back is not tried again and is left
+out at once (D232). A source with no fetch tool, or whose null proves nothing, is still cited as held. With no signal nothing is
 re-read: a copy's age alone is no doubt (re-reading by age was measured live and deleted, D126), and a silent source's
 changes arrive through polls and the daily sweep. The fast path, which may not call a source, sends a doubted item to
 the slow path. Deletion notifications (`ContextPartner.sourceRemoved`, `POST /v1/sources/removed`) drop items at once;
@@ -236,34 +237,28 @@ it, so a listing that hangs and the search after it hold an ask back about 1.5 s
 With under 50 ms left, the live search is skipped and each chosen source reports "timeout" (no call). A source whose
 on-demand poll ran out of time is not polled again by a lookup for the next `sourceTimeoutMs`: it is searched live.
 
+**Revisions of what the agent was handed** (D205, `revisionNotice`, on in the default, part `freshness`): every packet
+the agent takes and every ask answer records in the session's ledger the version of each item whose line it rendered
+(`Ledger.noteShown`, past the not-twice cooldown). When a sync poll, a notice's items or a re-read stores one of those
+items with other words, each live session of that user that holds an older version gets an "updated:" packet with
+the new copy, once per revision, queued for its next take. A packet still queued when its item is revised is checked
+when the agent takes it: a copy the cache has since replaced is followed by an update (D232); a packet withdrawn
+untaken (the push's second reading) announces nothing. A change notice for a source a live session holds a copy
+from is polled at once in the background (one listing call, at most one at a time and 30 s apart per user and
+source), so the packet is usually queued before the agent's next request; nothing on the observe path waits for it.
+Without it, a fact the agent already holds stays in its transcript in the old version (docs/research/fix-s7-revisions.md).
+
 **Deleted by D112:** `decideConflict` (D67), `judgeBehind`, push relaying (`syncPush`, `sourcePushes`,
 `sourceChanged`, D66) and the other switches D112 lists. The candidates' facts (`decide.ts`) still reach the lab only
 through the content-free `PartnerDeps.onCandidates` hook; the engine decides nothing from them.
 
-**Knowledge graph** (D58, `graph` and `graphMerge`, on in the default, D107, D112; `kg.ts`,
-docs/research/moon-graph.md): the
-item cache keeps a per-user graph over what it holds, built as items are cached and dropped with them: people (names,
-addresses, first names), organisations (an address's domain is the same node as the name "Umbrella Health"), projects
-and systems (capitalised runs), identifiers, channels, roles and days, with typed edges (about, authored, attended,
-mentions, ref, channel, role, on, constrains; alias and member between nodes). A slow-path lookup walks it from the
-request's names, ids, roles and days (spreading activation, two link hops, degree-normalised, the user's own name and
-organisation left out, 2 ms bound, no model, no source call). What it reaches gets judge seats, ties the judge, and
-with `groundConflict` is set against the request by `conflict.ts` with the names it was reached through as ties
-(grounded "graph"), only when the request acts or asks and only for an item that blocks, moves or settles something.
+**Knowledge graph** (D58, `graph`, `graphMerge`, `kg.ts`): deleted by D225 (2026-11-07;
+docs/research/fix-w2a-parts.md): no measured value on train with the paid reader replayed, while it cost ingest CPU and
+memory per synced item. The source map (`packages/graph`) is a different thing and stays.
 
-**Anticipation** (`anticipate`, on in the default, D112; D60, `anticipate.ts`,
-[research/moon-anticipate.md](research/moon-anticipate.md)): every event with words (a user message, a draft the user
-is still typing, `user_message` with `draft: true`, a tool call or result, an arriving message) is read, with no model
-and in linear time over its first 600 characters, for what the agent will need next: the names it mentions (from a
-tool's output only people the user's items have as parties, never the user), the days it schedules, its action class
-(`consequence.ts`), and the names that followed that intent before for this user (`IntentPatterns`, per user,
-bounded). A background prefetch, one per session at a time and bounded per event and per session, sends them as the
-request's own probes would (person, organisation, day and the class's constraint vocabulary), so their answers land in
-the user's probe memo and economy. The request's probes then reuse any answer a source gave the same query within
-`probeMemoMs`, at no call; with no model, the request is first decided from what is held (what is sure, or what its
-structure grounds, never the fallback), returned on the observe call itself, and the live search runs behind it and
-adds only what is sure or grounded. With a judge, the request always goes to the slow path (a warm cache would
-otherwise end lookups before the judge sees the second candidate). A draft is ignored when the flag is off.
+**Anticipation** (D60, `anticipate`, `anticipate.ts`, `IntentPatterns`): deleted by D227 (2026-11-07;
+docs/research/fix-w2a-parts.md): no measured value on train with the paid reader replayed. A draft the user is still
+typing (`user_message` with `draft: true`) is ignored: no session is opened for it.
 
 **Implication cards** (`cards`, on in the default, D112; D59, `cards.ts`,
 [research/moon-cards.md](research/moon-cards.md)): items new to a user's cache, looked up or synced, that pass a
@@ -287,12 +282,11 @@ reservation.
 
 **The moonshots together** (D62, [research/moonshots.md](research/moonshots.md); all in the default since D112): the
 parts compose. With
-the sync, synced sources answer the lookup's search, every probe and the prefetch locally, and the graph and the
-cards cover every synced item; the graph walk and card matching run on the slow path after the lookup's items are
-cached; the
-anticipation's early decision reads what the prefetch, the sync and the cache hold. Every subsystem reports into the
-engine's spans (`sync.freshen`, `sync.list`, `graph.walk`, `cards.match`, `cards.make`, `anticipate.prefetch`,
-`anticipate.early`), and the Pi harness's timeline reads the same spans.
+the sync, synced sources answer the lookup's search and every probe locally, and the cards cover every synced item;
+card matching runs on the slow path after the lookup's items are cached. Every subsystem reports into the engine's
+spans (`sync.freshen`, `sync.list`, `cards.match`, `cards.make`), and the Pi harness's timeline reads the same spans.
+The knowledge graph (D58) and anticipation (D60) were deleted by D225 and D227 (2026-11-07;
+docs/research/fix-w2a-parts.md).
 
 **Deleted by D112:** the bridging query (`bridgeQuery`, `bridgeQuestions`, D89) and the constraints digest
 (`constraintDigest`, D90) with its route `/v1/digest`; the client's `health()` calls `/v1/whoami`, which checks the
@@ -327,7 +321,8 @@ made only when the reader was shown every candidate the ask had (none cut by `as
 cap; D114): otherwise "Nothing in the connected sources" would be a false all-clear over items it never read (D93's
 guard). A source outage is the other false all-clear (D127, audit 2026-11-05 `ask-false-all-clear`): an ask says
 "Nothing in the connected sources." only when every source it chose answered (ok, cached, stale, or from the synced
-index); otherwise its answer names the sources that failed (error, timeout, circuit open, busy, limited) and says it
+index); otherwise its answer names the sources that failed (error, timeout, circuit open, busy, limited, throttled:
+the connector's own 429, worded "rate-limited", D212) and says it
 is not an all-clear, and `AskResponse.sources` carries each chosen source's status. With `readerPush` (on in the default), a
 user request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
 flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. Its question
@@ -347,6 +342,11 @@ with no new source call and read again (a reader cache hit when its pool is unch
 queued and the agent has not taken is replaced, its ledger entries restored. The push itself is not cut at
 `askReaderWaitMs`: it waits for
 the reading (bounded by the reader's model call and the session's close), and `observe` reports `pending` while it runs.
+With `readerReuse` (on in the default, D193), an `ask` made before the next user message and read against the push's
+own request (not an ask that acts on its own) takes the push's verdict on the items both pools hold unchanged, with no
+reader call of its own (`Session.pushRead`); it was read against the user's request, not the agent's question. A push
+with no verdict, or one that flagged an item changed since it read it, leaves the ask to read; one still out past the
+ask's wait leaves the ask answered without the reader.
 Its packet is queued only if the session is still open and no newer user message has arrived; the agent's own events in
 between (tool calls, its replies) do not make it stale.
 
@@ -358,7 +358,10 @@ automated mail (`automated`: a no-reply or list sender, a bulk category or foote
 or upcoming; constraint-worded items are read whatever their sender or age. They live in a per-user BM25 index apart
 from the item text, keyed by content hash and dropped with the card. At request time, with no model, the request's words
 are searched in it: the best hits join the lookup's candidates and one judge seat, and are fused into an `ask` by
-reciprocal rank after the verdict hits. An intent hit alone is never a no-model delivery.
+reciprocal rank after the verdict hits. An intent hit alone is never a no-model delivery. A hit whose item holds a
+constraint card (any kind but `none`) counts from a lower coverage floor (`intentCardCoverage`, 0.1, against 0.2), and
+up to `intentCardHits` (4) such hits the `intentHits` cut left out (read 3x as deep) are kept after the others
+(`intentByKind`, D200, `keepIntents`).
 
 **Deleted by D112:** guarded asks and answer-shaped packets (`askGuard`, `packetBearing`, D88)
 and the ALL5 preset (D92) with every other named preset; the lab's presets are only `default`,
@@ -368,12 +371,11 @@ and the ALL5 preset (D92) with every other named preset; the lab's presets are o
 [research/econ-firewall.md](research/econ-firewall.md)): `checkAction` (HTTP `POST /v1/check`, client `check`) takes
 the agent's tool call before it runs. The session's request and the call's structured arguments (dates written out,
 amounts, names, references; free-text fields such as an email's body left out) make one cue, decided from what is held
-with no model and no source call: the probes' memo and the class's cached finds offline, the graph walk, the cards and
-the cache, through `grounded` (whose conflicts come from the conflict ground's `conflicts()` helper). The
+with no model and no source call: the probes' memo and the class's cached finds offline, the cards and the cache, through `grounded` (whose conflicts come from the conflict ground's `conflicts()` helper). The
 arguments pass the secret gate before they make the cue, each first as `"key": value` so a secret known only by its
 key's name (a password, an api_key) is caught before the call becomes words, and a session keeps only a digest of each
 call it answered with a finding, taken after the gate. Only its action grounds count (a calendar clash for a call with a
-start, a conflict, the graph's or a card's, someone away), and a conflict read from shared words must also be tied by
+start, a conflict, a card's, someone away), and a conflict read from shared words must also be tied by
 structure (a span over the call's day, an expiry before it, a limit on its amount, a standing constraint on someone it
 names, an identifier it names, or the action class's find). A finding the call's own words already account for ("one
 guest has coeliac disease" in the notes) is dropped. The answer is `proceed` or a `finding` in the usual data envelope;
@@ -390,9 +392,9 @@ an ask may make is the reader's (above). The ask is part of the design, not a fa
 that also carried the candidates the gate held back, so the agent could answer without asking, was measured and
 rejected (D70, [research/econ-oneturn.md](research/econ-oneturn.md)). The agent's own question reaches items the
 request's words did not, and the agent raised a delivered fact more often when it could still ask.
-With `askVerdicts` (D73, on in the default) an ask also gathers what a lookup gathers (the consequence probe's finds,
-the graph walk and the card finds) and answers first with the candidates a rule path found in conflict; no model call
-and no extra source call. With `askDedup` (D77, on in the default) each session keeps `Session.shown`: the words its
+`askVerdicts` (D73: an ask that gathered the lookup's rule-path candidates and led with their verdicts) was deleted
+by D226 (2026-11-07; docs/research/fix-w2a-parts.md): with the paid reader replayed it read 2 hidden more for 4 decoys
+more, no benefit under D3. With `askDedup` (D77, on in the default) each session keeps `Session.shown`: the words its
 packets and answers showed the agent, per item id and version (at most 64 items, never shared across sessions or
 users), so a later answer says an unchanged item by its new parts only, or "(shown above)"; an item whose words
 changed at its source counts as not shown. Shown is recorded when an injection is handed out (`handOut`: observe's
@@ -430,7 +432,7 @@ A user's vocabulary releases each term no live item holds once the index compact
 default, D112), so its term ids follow the live items without a rebuild.
 Each cached item's text is held deflated (`CacheLimits.packText`, on by default, D188; `packed-text.ts`): the stored
 copy's `text` is a getter that decodes it, with a 256-entry memo of recent decodes that `forget` and `removeItems`
-clear. Index, tallies and graph are built from the plain text before it is packed; a refresh with the same words
+clear. Index and tallies are built from the plain text before it is packed; a refresh with the same words
 keeps the held bytes. Sim-world text, where one arrow or dash makes a whole JS string two bytes a character, costs
 about 1.6x less heap per synced user, for 1.2-1.3x the backfill CPU.
 

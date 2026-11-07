@@ -1,7 +1,6 @@
 /**
  * Regressions for the review of the combined moonshot tree (`moon/combined`): each test reproduced a finding before
- * its fix. Sync's sweep, the graph walk's time to live, a prefetch after its session ended, the early decision's wait
- * on the source resolver, the cards' reach, anchoring, retention and day, and the spans of a draft.
+ * its fix. Sync's sweep, the cards' reach, anchoring, retention and day, and the spans of a draft.
  */
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
@@ -18,7 +17,6 @@ import {
   type Card,
   type CardMaker,
 } from "./cards";
-import { seedsOf } from "./kg";
 import { ContextPartner } from "./partner";
 import type { Span } from "./spans";
 import { CORE_CONFIG } from "./parts";
@@ -122,125 +120,10 @@ describe("sync sweeps (D57)", () => {
   });
 });
 
-test("the graph walk reaches a synced item past the lookup time to live but within its own", () => {
-  const cache = new ItemCache();
-  cache.enableGraph();
-  const it: ContextItem = {
-    id: "mail:x",
-    sourceId: "mail",
-    ref: "x",
-    title: "Pricing",
-    text: "From: Ahmed Hassan <ahmed.hassan@umbrellahealth.com>\n\nDo not commit dates to Umbrella Health yet.",
-  };
-  cache.put(scope, [it], T0, false, true);
-  const seeds = seedsOf("Reply to Ahmed Hassan", ["Ahmed Hassan"], []);
-  const later = T0 + 30 * HOUR;
-  expect(cache.get(scope, it.id, later)).not.toBeNull(); // Synced: alive for 7 days.
-  expect(cache.walk(scope, seeds, { budgetMs: 50, limit: 10, floor: 0 }, later).map((w) => w.id)).toContain(it.id);
-  expect(cache.walk(scope, seeds, { budgetMs: 50, limit: 10, floor: 0 }, T0 + 8 * DAY)).toEqual([]);
-});
-
 const ev = { tenantId: "t1", userId: "u1", sessionId: "s", at: T0 };
 
-test("D17: a prefetch in flight at session_end caches and traces nothing", async () => {
-  let release!: () => void;
-  const gate = new Promise<void>((r) => (release = r));
-  const away: ContextItem = {
-    id: "chat:a1",
-    sourceId: "chat",
-    ref: "a1",
-    title: "Out of office",
-    text: "Jamie Fox is away 2-6 Nov, back Monday 9th.",
-  };
-  let calls = 0;
-  const src: Source = {
-    id: "chat",
-    kind: "test",
-    description: "test",
-    search: async () => {
-      calls++;
-      await gate; // Ignores the abort signal, as a slow connector may.
-      return [away];
-    },
-  };
-  const cache = new ItemCache();
-  const traces: string[] = [];
-  const p = new ContextPartner({
-    sources: async () => [src],
-    sourceMap: new SourceMap(":memory:", { seed: 1 }),
-    cache,
-    budget: new Budget(),
-    model: null,
-    now: () => T0,
-    onTrace: (t) => traces.push(t.reason),
-    config: { ...CORE_CONFIG, probes: true, anticipate: true },
-  });
-  const draft = { ...ev, kind: "user_message", text: "Ask Jamie Fox to review the board deck", draft: true };
-  await p.observe(draft as AgentEvent);
-  for (let i = 0; i < 50 && calls === 0; i++) await Bun.sleep(1);
-  expect(calls).toBeGreaterThan(0);
-  await p.observe({ ...ev, kind: "session_end" } as AgentEvent);
-  release();
-  await Bun.sleep(30);
-  expect(cache.get(scope, away.id, T0)).toBeNull();
-  expect(traces.filter((r) => r === "anticipate")).toEqual([]);
-});
-
-test("anticipation's early decision does not hold observe on a slow source resolver", async () => {
-  const src: Source = { id: "chat", kind: "test", description: "test", search: async () => [] };
-  let slow = false;
-  const p = new ContextPartner({
-    // An MCP connect or a token refresh on the first resolve of a session.
-    sources: async () => {
-      if (slow) await Bun.sleep(400);
-      return [src];
-    },
-    sourceMap: new SourceMap(":memory:", { seed: 1 }),
-    cache: new ItemCache(),
-    budget: new Budget(),
-    model: null,
-    now: () => T0,
-    config: { ...CORE_CONFIG, probes: true, anticipate: true },
-  });
-  await p.observe({ ...ev, sessionId: "warm", kind: "user_message", text: "Warm up the engine" } as AgentEvent);
-  slow = true;
-  const t0 = performance.now();
-  const r = await p.observe({ ...ev, kind: "user_message", text: "Ask Jamie Fox about the board deck" } as AgentEvent, {
-    waitMs: 0,
-  });
-  expect(performance.now() - t0).toBeLessThan(100);
-  expect(r.injection).toBeNull();
-});
-
 describe("spans of a draft (D56)", () => {
-  test("the draft's observe root closes, and its prefetch's probes are children of the prefetch span", async () => {
-    const src: Source = { id: "chat", kind: "test", description: "test", search: async () => [] };
-    const spans: Span[] = [];
-    const p = new ContextPartner({
-      sources: async () => [src],
-      sourceMap: new SourceMap(":memory:", { seed: 1 }),
-      cache: new ItemCache(),
-      budget: new Budget(),
-      model: null,
-      now: () => T0,
-      onSpan: (x) => spans.push(x),
-      config: { ...CORE_CONFIG, probes: true, anticipate: true, spans: true },
-    });
-    const draft = { ...ev, kind: "user_message", text: "Ask Jamie Fox to review the board deck", draft: true };
-    await p.observe(draft as AgentEvent);
-    for (let i = 0; i < 100 && !spans.some((x) => x.name === "anticipate.prefetch"); i++) await Bun.sleep(1);
-    const roots = spans.filter((x) => x.parent === 0);
-    expect(roots.map((x) => x.name).sort()).toEqual(["anticipate.prefetch", "observe"]);
-    const byId = new Map(spans.map((x) => [x.id, x]));
-    const rootOf = (x: Span): Span => (x.parent === 0 ? x : rootOf(byId.get(x.parent)!));
-    for (const x of spans) expect(byId.has(x.parent) || x.parent === 0).toBe(true);
-    expect(spans.filter((x) => x.name.startsWith("probe")).every((x) => rootOf(x).name === "anticipate.prefetch")).toBe(
-      true,
-    );
-    expect(spans.filter((x) => x.name.startsWith("probe")).length).toBeGreaterThan(0);
-  });
-
-  test("with anticipation off, a draft's root span still closes", async () => {
+  test("a draft's root span closes", async () => {
     const spans: Span[] = [];
     const p = new ContextPartner({
       sources: async () => [],

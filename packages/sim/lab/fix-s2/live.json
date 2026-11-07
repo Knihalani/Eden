@@ -1,0 +1,286 @@
+{
+ "h10_13": {
+  "hidden/eden": {
+   "n": 320,
+   "rate": 0.7312,
+   "wallP50": 4.55,
+   "edenPer1k": 0.3277,
+   "agentPer1k": 0.308,
+   "itemsPerTask": 1.344
+  },
+  "hidden/eden+ruleLabel": {
+   "n": 320,
+   "rate": 0.7188,
+   "wallP50": 4.51,
+   "edenPer1k": 0.3178,
+   "agentPer1k": 0.3186,
+   "itemsPerTask": 1.328,
+   "d_rate": [
+    -0.0125,
+    -0.0531,
+    0.0281
+   ],
+   "d_wall": [
+    0.1236,
+    -0.0756,
+    0.3184
+   ],
+   "d_eden": [
+    -0.0099,
+    -0.0305,
+    0.0102
+   ],
+   "paired": 320
+  },
+  "hidden/eden+ruleVeto+ruleVetoNamed": {
+   "n": 320,
+   "rate": 0.7156,
+   "wallP50": 4.54,
+   "edenPer1k": 0.3255,
+   "agentPer1k": 0.2915,
+   "itemsPerTask": 1.188,
+   "d_rate": [
+    -0.0156,
+    -0.0563,
+    0.025
+   ],
+   "d_wall": [
+    0.0688,
+    -0.1142,
+    0.246
+   ],
+   "d_eden": [
+    -0.0023,
+    -0.0231,
+    0.0179
+   ],
+   "paired": 320
+  },
+  "control/eden": {
+   "n": 320,
+   "rate": 0.0312,
+   "wallP50": 5.95,
+   "edenPer1k": 0.4305,
+   "agentPer1k": 0.339,
+   "itemsPerTask": 0.766
+  },
+  "control/eden+ruleLabel": {
+   "n": 320,
+   "rate": 0.025,
+   "wallP50": 5.89,
+   "edenPer1k": 0.4204,
+   "agentPer1k": 0.3385,
+   "itemsPerTask": 0.734,
+   "d_rate": [
+    -0.0063,
+    -0.0219,
+    0.0094
+   ],
+   "d_wall": [
+    -0.1079,
+    -0.3049,
+    0.093
+   ],
+   "d_eden": [
+    -0.0101,
+    -0.0325,
+    0.0127
+   ],
+   "paired": 320
+  },
+  "control/eden+ruleVeto+ruleVetoNamed": {
+   "n": 320,
+   "rate": 0.0312,
+   "wallP50": 6.0,
+   "edenPer1k": 0.4408,
+   "agentPer1k": 0.3404,
+   "itemsPerTask": 0.6,
+   "d_rate": [
+    0.0,
+    -0.0156,
+    0.0156
+   ],
+   "d_wall": [
+    0.0847,
+    -0.1264,
+    0.2985
+   ],
+   "d_eden": [
+    0.0104,
+    -0.0139,
+    0.0339
+   ],
+   "paired": 320
+  }
+ },
+ "h14": {
+  "hidden/eden": {
+   "n": 128,
+   "rate": 0.75,
+   "wallP50": 3.92,
+   "edenPer1k": 0.2978,
+   "agentPer1k": 0.2727,
+   "itemsPerTask": 1.32
+  },
+  "hidden/eden+ruleLabel": {
+   "n": 128,
+   "rate": 0.7109,
+   "wallP50": 4.15,
+   "edenPer1k": 0.2804,
+   "agentPer1k": 0.2912,
+   "itemsPerTask": 1.305,
+   "d_rate": [
+    -0.0391,
+    -0.1094,
+    0.0312
+   ],
+   "d_wall": [
+    0.0412,
+    -0.2687,
+    0.3685
+   ],
+   "d_eden": [
+    -0.0174,
+    -0.0464,
+    0.0109
+   ],
+   "paired": 128
+  },
+  "hidden/eden+ruleVeto+ruleVetoNamed": {
+   "n": 128,
+   "rate": 0.6562,
+   "wallP50": 4.07,
+   "edenPer1k": 0.3244,
+   "agentPer1k": 0.2835,
+   "itemsPerTask": 1.086,
+   "d_rate": [
+    -0.0938,
+    -0.1719,
+    -0.0156
+   ],
+   "d_wall": [
+    0.1776,
+    -0.1059,
+    0.4773
+   ],
+   "d_eden": [
+    0.0266,
+    -0.0042,
+    0.0583
+   ],
+   "paired": 128
+  },
+  "control/eden": {
+   "n": 128,
+   "rate": 0.0078,
+   "wallP50": 4.9,
+   "edenPer1k": 0.3659,
+   "agentPer1k": 0.3035,
+   "itemsPerTask": 0.969
+  },
+  "control/eden+ruleLabel": {
+   "n": 128,
+   "rate": 0.0,
+   "wallP50": 5.11,
+   "edenPer1k": 0.3707,
+   "agentPer1k": 0.3221,
+   "itemsPerTask": 0.977,
+   "d_rate": [
+    -0.0078,
+    -0.0234,
+    0.0
+   ],
+   "d_wall": [
+    0.1286,
+    -0.1901,
+    0.4364
+   ],
+   "d_eden": [
+    0.0048,
+    -0.0323,
+    0.0408
+   ],
+   "paired": 128
+  },
+  "control/eden+ruleVeto+ruleVetoNamed": {
+   "n": 128,
+   "rate": 0.0078,
+   "wallP50": 5.38,
+   "edenPer1k": 0.401,
+   "agentPer1k": 0.3266,
+   "itemsPerTask": 0.734,
+   "d_rate": [
+    0.0,
+    -0.0234,
+    0.0234
+   ],
+   "d_wall": [
+    0.2835,
+    -0.0746,
+    0.6364
+   ],
+   "d_eden": [
+    0.0351,
+    -0.0093,
+    0.0793
+   ],
+   "paired": 128
+  },
+  "neutral/eden": {
+   "n": 128,
+   "rate": 0.0234,
+   "wallP50": 5.89,
+   "edenPer1k": 0.4225,
+   "agentPer1k": 0.3477,
+   "itemsPerTask": 0.617
+  },
+  "neutral/eden+ruleLabel": {
+   "n": 128,
+   "rate": 0.0156,
+   "wallP50": 5.77,
+   "edenPer1k": 0.4055,
+   "agentPer1k": 0.3431,
+   "itemsPerTask": 0.641,
+   "d_rate": [
+    -0.0078,
+    -0.0312,
+    0.0156
+   ],
+   "d_wall": [
+    -0.0515,
+    -0.4184,
+    0.2952
+   ],
+   "d_eden": [
+    -0.017,
+    -0.0599,
+    0.0251
+   ],
+   "paired": 128
+  },
+  "neutral/eden+ruleVeto+ruleVetoNamed": {
+   "n": 128,
+   "rate": 0.0156,
+   "wallP50": 6.38,
+   "edenPer1k": 0.4542,
+   "agentPer1k": 0.3655,
+   "itemsPerTask": 0.445,
+   "d_rate": [
+    -0.0078,
+    -0.0391,
+    0.0156
+   ],
+   "d_wall": [
+    0.3643,
+    0.0262,
+    0.7061
+   ],
+   "d_eden": [
+    0.0317,
+    -0.0065,
+    0.0718
+   ],
+   "paired": 128
+  }
+ }
+}

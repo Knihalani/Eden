@@ -5,7 +5,16 @@ import type { Vocab } from "@eden/primitives";
 import type { AgentEvent } from "@eden/protocol";
 import { StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
-import { accounts, actionKey, actionText, domainsOf, setsTime, structuralTie, writtenDates } from "./firewall";
+import {
+  accounts,
+  actionKey,
+  actionText,
+  domainsOf,
+  orgLabel,
+  setsTime,
+  structuralTie,
+  writtenDates,
+} from "./firewall";
 import { ContextPartner } from "./partner";
 import type { Trace } from "./trace";
 
@@ -13,6 +22,12 @@ import type { Trace } from "./trace";
 const NOW = Date.UTC(2026, 9, 27, 9);
 
 describe("firewall: reading a tool call", () => {
+  test("free mail names no organisation; a country suffix is not the name", () => {
+    expect(orgLabel("gmail.com")).toBeNull();
+    expect(orgLabel("mail.globex.co.uk")).toBe("globex");
+    expect(orgLabel("umbrellahealth.com")).toBe("umbrellahealth");
+  });
+
   test("ISO dates are written out as the engine's day readers read them", () => {
     expect(writtenDates("on 2026-10-29T19:00")).toBe("on Thursday 29 October 2026 at 19:00");
     expect(writtenDates("2026-10-31")).toBe("Saturday 31 October 2026");

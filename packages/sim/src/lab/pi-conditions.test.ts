@@ -27,8 +27,8 @@ describe("pi-ab conditions", () => {
   test("+flag is shorthand for a variant that turns one flag on, and stacks on a named variant", () => {
     expect(parseCondition("eden+askDedup", { config: ALL }).config).toEqual({ ...ALL, askDedup: true });
     const variants = parseVariants('{"ALL2":{"cardsEconomy":true}}');
-    const c = parseCondition("eden~ALL2+slowPathQueue@w0", { config: ALL, variants });
-    expect(c.config).toEqual({ ...ALL, cardsEconomy: true, slowPathQueue: true });
+    const c = parseCondition("eden~ALL2+readerReuse@w0", { config: ALL, variants });
+    expect(c.config).toEqual({ ...ALL, cardsEconomy: true, readerReuse: true });
     expect(c.waitMs).toBe(0);
     expect(() => parseCondition("eden+bad-flag", { config: ALL })).toThrow(/bad flag/);
     // The run's own configuration object is never written through.
@@ -126,9 +126,31 @@ describe("pi-ab conditions", () => {
   test("a variant or flag condition pairs with the condition it modifies, in the report", () => {
     expect(pairedWith("eden~ALL2")).toBe("eden");
     expect(pairedWith("eden+askDedup")).toBe("eden");
-    expect(pairedWith("eden-act~ALL2+slowPathQueue")).toBe("eden-act");
+    expect(pairedWith("eden-act~ALL2+readerReuse")).toBe("eden-act");
     expect(pairedWith("eden~ALL2@w0")).toBe("eden@w0");
     expect(pairedWith("both@w0")).toBe("both");
     expect(pairedWith("eden")).toBeNull();
+  });
+
+  test("both+ask: own tools, Eden's context and ask_context; +ask is the harness's, never an engine setting", () => {
+    const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+    const c = parseCondition("both+ask", { config: ALL, defaults });
+    expect([c.useTools, c.useEden, c.askTool, c.judge]).toEqual([true, true, true, false]);
+    expect(c.config).toEqual(ALL);
+    expect(c.base).toBe("both");
+    // Stacks with an engine flag and a wait; the engine flag still goes to the config.
+    const d = parseCondition("both+ask+judgeTied@w0", { config: ALL, defaults });
+    expect([d.askTool, d.config.judgeTied, "ask" in d.config, d.waitMs]).toEqual([true, true, false, 0]);
+    expect(parseCondition("both-judge+ask", { config: ALL }).askTool).toBe(true);
+    // The plain arms keep their tool sets: both has no ask, eden has it, tools and none neither.
+    expect(parseCondition("both", { config: ALL }).askTool).toBe(false);
+    expect(parseCondition("eden", { config: ALL }).askTool).toBe(true);
+    expect(parseCondition("tools", { config: ALL }).askTool).toBe(false);
+    expect(parseCondition("none", { config: ALL }).askTool).toBe(false);
+    // eden already asks, and tools has no Eden: +ask there would run another arm under a new name.
+    for (const n of ["eden+ask", "tools+ask", "none+ask"]) {
+      expect(() => parseCondition(n, { config: ALL })).toThrow(/\+ask/);
+    }
+    expect(pairedWith("both+ask")).toBe("both");
   });
 });

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * The retrieval screen (audit 2026-11-06 F25): the inner loop for changes to what reaches the reader (retrieval,
- * ranking, intent, probes, the graph, sync), at $0. `bun run funnel` screens all of train (train1-6 x seeds 41-42,
+ * ranking, intent, probes, sync), at $0. `bun run funnel` screens all of train (train1-6 x seeds 41-42,
  * 768 tasks) and stays the gate; this screen runs half of it, in about 0.6x the wall time, and agrees with it task by
  * task on every task it runs (docs/LAB.md recipe 1d has the measurements).
  *

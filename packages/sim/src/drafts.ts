@@ -1,7 +1,7 @@
 /**
- * The "user is typing" lead-in the anticipation experiments give a request (docs/research/moon-anticipate.md). Neither
- * the hidden-context suites nor the generated sessions carry what a user typed before sending, so a draft is made
- * from the request itself. A simulation assumption, labelled as such in every report:
+ * The "user is typing" lead-in the lab gives a request (hidden-funnel.ts `--lead-in`). Neither the hidden-context
+ * suites nor the generated sessions carry what a user typed before sending, so a draft is made from the request
+ * itself. A simulation assumption, labelled as such in every report:
  *
  * - "clause": the request's first clause (to its first comma, semicolon, sentence end or dash, or its first "and",
  *   "but" or "so"): what a chat box holds a moment before a one-clause request is sent, and most of one that has more;

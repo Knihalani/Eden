@@ -14,7 +14,6 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     expect(() => checkEngineConfig({ askItemBytes: -1 })).toThrow(/"askItemBytes" must be a number ≥ 0/);
     expect(() => checkEngineConfig({ syncStaleChance: 2, sync: true })).toThrow(/"syncStaleChance" must be at most 1/);
     expect(() => checkEngineConfig({ maxItemsPerInjection: 1.5 })).toThrow(/whole number/);
-    expect(() => checkEngineConfig({ anticipate: true, anticipateOff: ["srve"] })).toThrow(/"anticipateOff" has/);
     expect(() =>
       checkEngineConfig(
         { askReader: true, readerPush: true, readerPushKinds: ["block"] },
@@ -56,15 +55,17 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
       /"intentHits" acts only with "cards" and "intent" on, and this configuration has "intent" off/,
     );
     expect(() => checkEngineConfig({ cards: false, intentHits: 3 }, { deps: ALL_DEPS })).toThrow(/has "cards" off/);
-    expect(() => checkEngineConfig({ graph: false, graphItems: 8 })).toThrow(/"graphItems" acts only with "graph" on/);
-    // At its default a child is harmless whatever its parents say.
-    expect(checkEngineConfig({ graphMerge: false, syncOnDemand: true })).toEqual({
-      graphMerge: false,
+    expect(() => checkEngineConfig({ cards: false, cardItems: 2 }, { deps: ALL_DEPS })).toThrow(
+      /"cardItems" acts only with "cards" on/,
+    );
+    // At its core value (its part taken out) a child is harmless whatever its parents say.
+    expect(checkEngineConfig({ cardsEconomy: false, syncOnDemand: true })).toEqual({
+      cardsEconomy: false,
       syncOnDemand: true,
     });
-    expect(checkEngineConfig({ graph: false, graphItems: DEFAULT_CONFIG.graphItems })).toEqual({
-      graph: false,
-      graphItems: DEFAULT_CONFIG.graphItems,
+    expect(checkEngineConfig({ cards: false, cardItems: DEFAULT_CONFIG.cardItems })).toEqual({
+      cards: false,
+      cardItems: DEFAULT_CONFIG.cardItems,
     });
     // A numeric child too; its core value (the part taken out) is accepted under the parent off.
     expect(() => checkEngineConfig({ askReader: false, askReaderPool: 20 }, { deps: ALL_DEPS })).toThrow(
@@ -76,7 +77,9 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     });
     // A flag child turned on under its parent off is refused (the checks the old default's tests made).
     expect(() => checkEngineConfig({ sync: false, syncPollBehind: true })).toThrow(/"syncPollBehind" acts only/);
-    expect(() => checkEngineConfig({ graph: false, graphMerge: true })).toThrow(/"graphMerge" acts only/);
+    expect(() => checkEngineConfig({ cards: false, cardsEconomy: true }, { deps: ALL_DEPS })).toThrow(
+      /"cardsEconomy" acts only/,
+    );
     expect(() => checkEngineConfig({ ...CORE_CONFIG, readerPushBehind: true }, { deps: ALL_DEPS })).toThrow(
       /"readerPushBehind" acts only/,
     );
@@ -90,9 +93,9 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
       checkEngineConfig({ ...push, readerPush: false, readerPushWaitMs: 5_000 }, { deps: ALL_DEPS }),
     ).toThrow(/"readerPushWaitMs" acts only/);
     // `parents: false` (the server's file, merged over the defaults as it always was) skips it.
-    expect(checkEngineConfig({ graph: false, graphItems: 8 }, { parents: false })).toEqual({
-      graph: false,
-      graphItems: 8,
+    expect(checkEngineConfig({ cards: false, cardItems: 2 }, { parents: false, deps: ALL_DEPS })).toEqual({
+      cards: false,
+      cardItems: 2,
     });
   });
 

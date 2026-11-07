@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isId, type ActionCheck, type Injection } from "@eden/protocol";
+import { MAX_PUSHED_ITEMS, isId, type ActionCheck, type Injection } from "@eden/protocol";
 import { DEFAULT_WAIT_MS, EdenClient, edenId } from "./client";
 import { heldResult, withContext } from "./messages";
 
@@ -411,6 +411,21 @@ describe("change notifications", () => {
     expect(await ok.sourceChanged("mail")).toBe(true);
   });
 
+  test("items or removed that are not arrays are read as none: a plain signal, not a silent true", async () => {
+    const paths: string[] = [];
+    const eden = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      fetch: (async (url: string) => {
+        paths.push(new URL(url).pathname);
+        return Response.json({ ok: true, synced: false, reason: "not-synced" });
+      }) as unknown as typeof fetch,
+    });
+    const odd = { items: { length: 2 }, removed: "r1" } as unknown as Parameters<EdenClient["sourceChanged"]>[1];
+    expect(await eden.sourceChanged("mail", odd)).toBe(false);
+    expect(paths).toEqual(["/v1/sources/changed"]);
+  });
+
   test("an older server (no reason) or an unknown reason: no reason, never a throw", async () => {
     const old = new EdenClient({ userId: "u", sessionId: "s", fetch: replying(() => ({ ok: true, synced: false })) });
     expect(await old.sourceNotice("mail")).toEqual({ synced: false });
@@ -442,6 +457,101 @@ describe("change notifications", () => {
     });
     expect(await bad.sourceNotice("a/b")).toBeNull();
     expect(errors.length).toBe(3);
+  });
+});
+
+describe("sourceChanged with the changed items (payload notices, D210)", () => {
+  /** A fake server that records each call's route and body and answers per route. */
+  const recording = (answer: (route: string, body: Record<string, unknown>) => Response) => {
+    const calls: { route: string; body: Record<string, unknown> }[] = [];
+    const fetch = (async (url: string, init: { body: string }) => {
+      const route = new URL(url).pathname;
+      const body = JSON.parse(init.body) as Record<string, unknown>;
+      calls.push({ route, body });
+      return answer(route, body);
+    }) as unknown as typeof globalThis.fetch;
+    return { calls, fetch };
+  };
+  const ok = (route: string, body: Record<string, unknown>) =>
+    route === "/v1/sources/items"
+      ? Response.json({ ok: true, stored: (body.items as unknown[]).length })
+      : route === "/v1/sources/removed"
+        ? Response.json({ ok: true, removed: (body.refs as unknown[]).length })
+        : Response.json({ ok: true, synced: true });
+  const item = (n: number) => ({ ref: `m${n}`, title: `Mail ${n}`, text: `Body ${n}`, updatedAt: 1_000 + n });
+
+  test("items and removed refs go to /v1/sources/items and /removed, no signal, so Eden makes no source call", async () => {
+    const { calls, fetch } = recording(ok);
+    const eden = new EdenClient({ tenantId: "t", userId: "u", sessionId: "s", fetch });
+    expect(await eden.sourceChanged("mail", { items: [item(1), item(2)], removed: ["m0"] })).toBe(true);
+    expect(calls.map((c) => c.route)).toEqual(["/v1/sources/items", "/v1/sources/removed"]);
+    expect(calls[0]!.body).toEqual({ tenantId: "t", userId: "u", sourceId: "mail", items: [item(1), item(2)] });
+    expect(calls[1]!.body).toEqual({ tenantId: "t", userId: "u", sourceId: "mail", refs: ["m0"] });
+  });
+
+  test("more than one call's worth is split at MAX_PUSHED_ITEMS", async () => {
+    const { calls, fetch } = recording(ok);
+    const eden = new EdenClient({ userId: "u", sessionId: "s", fetch });
+    const items = Array.from({ length: MAX_PUSHED_ITEMS * 2 + 5 }, (_, i) => item(i));
+    const refs = Array.from({ length: MAX_PUSHED_ITEMS + 1 }, (_, i) => `r${i}`);
+    expect(await eden.sourceChanged("mail", { items, removed: refs })).toBe(true);
+    const sizes = calls.map((c) => ((c.body.items ?? c.body.refs) as unknown[]).length);
+    expect(sizes).toEqual([MAX_PUSHED_ITEMS, MAX_PUSHED_ITEMS, 5, MAX_PUSHED_ITEMS, 1]);
+  });
+
+  test("no items and no refs is the plain signal", async () => {
+    const { calls, fetch } = recording(ok);
+    const eden = new EdenClient({ userId: "u", sessionId: "s", fetch });
+    expect(await eden.sourceChanged("mail", { items: [], removed: [] })).toBe(true);
+    expect(await eden.sourceChanged("mail", {})).toBe(true);
+    expect(calls.map((c) => c.route)).toEqual(["/v1/sources/changed", "/v1/sources/changed"]);
+  });
+
+  test("a refused payload falls back to the signal and resolves false, reported to onError, never a throw", async () => {
+    const errors: unknown[] = [];
+    const { calls, fetch } = recording((route, body) =>
+      route === "/v1/sources/items"
+        ? Response.json({ error: "items[0].text is too long" }, { status: 400 })
+        : ok(route, body),
+    );
+    const eden = new EdenClient({ userId: "u", sessionId: "s", fetch, onError: (e) => errors.push(e) });
+    expect(await eden.sourceChanged("mail", { items: [item(1)], removed: ["m0"] })).toBe(false);
+    // The removal still lands, and the signal makes Eden poll the source instead of missing the change.
+    expect(calls.map((c) => c.route)).toEqual(["/v1/sources/items", "/v1/sources/removed", "/v1/sources/changed"]);
+    expect(String(errors[0])).toContain("items[0].text is too long");
+  });
+
+  test("an answer of the wrong shape counts as not delivered", async () => {
+    const { calls, fetch } = recording((route, body) =>
+      route === "/v1/sources/items" ? Response.json({ ok: true, stored: "3" }) : ok(route, body),
+    );
+    const eden = new EdenClient({ userId: "u", sessionId: "s", fetch, onError: () => {} });
+    expect(await eden.sourceChanged("mail", { items: [item(1)] })).toBe(false);
+    expect(calls.at(-1)!.route).toBe("/v1/sources/changed");
+  });
+
+  test("unreachable: false, no throw", async () => {
+    const errors: unknown[] = [];
+    const eden = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      baseUrl: "http://127.0.0.1:9",
+      timeoutMs: 200,
+      onError: (e) => errors.push(e),
+    });
+    expect(await eden.sourceChanged("mail", { items: [item(1)], removed: ["m0"] })).toBe(false);
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  test("a fetch that throws synchronously or returns garbage never escapes", async () => {
+    const throwing = (() => {
+      throw new Error("boom");
+    }) as unknown as typeof fetch;
+    const eden = new EdenClient({ userId: "u", sessionId: "s", fetch: throwing, onError: () => {} });
+    expect(await eden.sourceChanged("mail", { items: [item(1)] })).toBe(false);
+    const junk = (async () => new Response("<html>", { status: 200 })) as unknown as typeof fetch;
+    const eden2 = new EdenClient({ userId: "u", sessionId: "s", fetch: junk, onError: () => {} });
+    expect(await eden2.sourceChanged("mail", { items: [item(1)] })).toBe(false);
   });
 });
 

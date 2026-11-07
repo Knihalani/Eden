@@ -17,8 +17,9 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `text.ts`, `situation.ts` | Cues with no model (entities, content terms, chatter); a coarse situation label for routing |
 | `render.ts`, `fold.ts` | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52) |
 | `judge.ts` | The judge's prompt and parser (indexes only, D19) |
+| `line.ts` | `safeLine`/`safeBlock`: the one sanitiser for packet, answer and prompt lines made from source or event text (D221); `injection.test.ts` is part D's probe as a standing test |
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50) |
-| `kg.ts`, `cards.ts`, `intent.ts`, `anticipate.ts`, `sync.ts` | Moonshot tracks (D56–D63, D87): graph walk, implication cards, intent index, anticipation, background sync |
+| `cards.ts`, `intent.ts`, `sync.ts` | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync |
 | `reader.ts` | Ask-time reader (D95, D96): a budgeted model call wired by the embedder |
 | `firewall.ts` | The action firewall's cue and grounds (D69) |
 | `decide.ts` | Per-candidate facts for the lab's candidate dump (`onCandidates`) |
@@ -37,7 +38,7 @@ user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`.
   (D41). A new per-event call needs a decision and a cost estimate in docs/COST-MODEL.md.
 - **Silence by default; precision over recall (D3, D6).** A change that raises recall by raising false fires needs a
   decision. Check `bun run eval` (falseFireRate 0 on main) and the lab's decoy counts.
-- **Isolation (D9, D17).** Cache, ledger, budgets, memos, graph, cards, intent and reader caches are keyed by
+- **Isolation (D9, D17).** Cache, ledger, budgets, memos, cards, intent and reader caches are keyed by
   tenant/user, session state by `tenant/user#session`. After any await, check the session is still live: nothing is
   cached, learned, charged or queued for a closed session. A new piece of state gets an isolation test.
 - **Redact (D10).** Item text is redacted before it is cached, indexed, rendered or sent to a model
@@ -106,10 +107,6 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   rows ran with thinking off). Effort "low" was 1.82x slower at p50 and 1.54x dearer on Haiku 5.5 (docs/COST-MODEL.md,
   run `close-cards-reasoning`). Sending it again needs a decision, as for the reader. The judge (`partner.ts`, lab-only:
   the servers wire none) still sends "low"; changing that needs a judge measurement (D155).
-- The graph reads an item's first `READ_CHARS` = 1,000 characters of text (D150; its title and `meta.people` are read
-  on their own). That cut D141's `+graph` ingest stage 2.1-2.3x with every train screen identical; a name past
-  character 1,000 is not a graph node (`kg.test.ts`). Raising it again re-runs `ingest.bench.ts` and the funnel
-  screens, and there is no `graphLite` switch: D150 closed it.
 - `cardsLean` (D125) only narrows what the intent index reads (`readForIntent`): constraint-worded items are carded
   whatever their sender or age. `automated` reads a `From:` line in the text or a `meta.from`/`meta.sender` field
   (connectors differ: `toItems` keeps whatever text the tool returned) and bulk footers; a connector giving neither
@@ -121,16 +118,37 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   cached copy current, so `verifyItems` also applies a session's recent re-reads, not only doubted items. A new
   delivery path uses `deliverChecked`, never `deliver`, or it can send a stale copy. `deliverChecked` itself calls
   `deliver` (a bulk rename of `return this.deliver(` once made it call itself forever: the tests hung, not failed).
+- **`revisionNotice` (D205) notes copies in `handOut`, from what the text rendered** (`renderedCount`, as `noteShown`
+  reads lines): an item the size cut left out was not shown and gets no update. Stores that announce a changed copy call
+  `queueRevised`: the sync's `onStored` and `recheck`, for every watching session, the re-reading one too (its delivery
+  may cut or fold the item). A packet queued untaken when its item is revised is checked at hand-out (`watchCopies`,
+  D232): a copy the cache has since replaced is followed by an update; a withdrawn packet announces nothing;
+  `takePending` orders its batch by which copy is current (`currentLast`), so the last word on an item is current. A
+  queued update is dropped only when a handed packet renders the same version (`watchCopies`, `withoutCoveredUpdates`);
+  never by citation alone (an ask's removal of covered packets skips updates). A live search page's store (`store`) does
+  not announce yet: a handed item a lookup's search finds changed is delivered only if it ranks. Do not filter doubted
+  copies in `queueRevised`: a later signal during the poll would leave the stored copy unannounced forever
+  (`revision-notice.test.ts`). `pollRevised` is the only I/O a notice starts; keep it off the observe path.
 - **An ask says "Nothing in the connected sources." only when its sources answered (D127).** `searchLive` returns
   each chosen source's status (`sources`: the fan-out's, or "local" for a synced source answered from the index);
-  `honestAnswer` names any that did not answer (error, timeout, circuit open, busy, limited) and says the empty answer
-  is not an all-clear, and `AskResponse.sources` carries the statuses. A new lookup path an ask answers from must
-  return statuses too, or an outage reads as "nothing". A failed on-demand sync poll (`freshen`) feeds the status
+  `honestAnswer` names any that did not answer (error, timeout, circuit open, busy, limited, throttled: the
+  connector's own 429, worded "rate-limited", D212) and says the empty answer is not an all-clear, and
+  `AskResponse.sources` carries the statuses. A new lookup path an ask answers from must return statuses too, or an
+  outage reads as "nothing". A failed on-demand sync poll (`freshen`) feeds the status
   through `localOf`, not a status of its own: it leaves the copy not current, so the source is searched live and that
   search's status stands. An ask never passes `behind`, so a warm-but-stale copy is not "local" there
   (`review-regressions.test.ts`); only the reader push's first reading answers from it. A session that ends before the
   search runs returns `closed`, and the answer says so rather than "nothing". Probes are extra queries
   beside a chosen source's own search, whose outcome gives the source's status.
+- **An ask cites no doubted copy that no re-read confirmed (D211).** The ask's `verifyItems` runs `strict`: a doubted
+  item whose re-read failed with a plain error ("flaked") is read once more, and one still not confirmed is left out and
+  named in the answer ("Left out items from mail (1): their source reported changes and they could not be re-checked"),
+  never an all-clear. A re-read our own guard skipped ("skipped": the per-source concurrency limit while the other re-
+  reads hold its slots) is retried too, two at a time, and cited as held if still skipped. A refusal by an open breaker
+  or by a rate limit the connector's 429 pushed back is "failed", not "skipped" (`FetchFailed.guard`, `pushedBack`,
+  D232): the item is left out and named. The rate limit's ordinary spend stays "skipped". "unverifiable" (no fetch tool,
+  or a null from a source without `fetchReportsGone`) is cited as held, as D126 delivers it. Proactive deliveries keep
+  D126's rule (a failed re-read is delivered as held).
 - **Shown means handed out.** With `askDedup`, what an injection showed is noted (`noteShown`) in `handOut`, which
   every path that gives the agent an injection calls (observe's reply, `takePending`, the firewall's finding, the
   ask's own answer), not when `deliver` builds it: a queued packet the agent has not taken was shown nothing, so an
@@ -151,8 +169,19 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `isHeldGone` (a second removal of an id already held leaves that true) nor the hold's end (two removals in one
   millisecond give the same end); every hold, a re-hold included, takes a new number. `sync.mark()` cannot tell
   either: removals never bump it.
-- **`checkAhead` runs only once the reader will be called (D134):** after `readAsk`'s empty-pool and `readerGate`
-  returns. Moving it back above the gate makes every gated ask pay up to `VERIFY_AHEAD` connector calls.
+- **`checkAhead` is off in the default (D192, `readerVerifyAfter`)**: re-reads start only for what a delivery cites,
+  after the reader named it (Pi: 1.6-2.6 fewer fetches a task). With the switch off it runs only once the reader will
+  be called (D134), after `readAsk`'s empty-pool and `readerGate` returns, and never for an ask that reuses the push.
+- **`readerReuse` (D193, on in the default):** an ask in the push's request reads `Session.pushRead` (the push's
+  request text, its pool's content hashes, its verdict) with no call; it must match the push's own request (`main`),
+  or an ask that acts on its own would get the push's verdict on another request (`reader-s1.test.ts`); and an item
+  the push flagged must still have the content it read, or the ask reads anew (`freshness-push.test.ts`). The fix-S1
+  trials that failed (D190 evidence gate, D191 no wait on a weak pool, D194 short schema) are deleted: rebuilding one
+  needs a new decision.
+- **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
+  flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
+  and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read
+  (docs/research/fix-w2b-false-concerns.md); a fix belongs upstream (the reader's judgement, or what it reads).
 - **One deadline per lookup (D140).** `searchLive` takes `deadlineAt` once, after resolving the sources and before
   the on-demand poll; the poll's signal, the live search's `timeoutMs`, the planner and the probes
   (`ProbeOpts.deadlineAt`) get only what is left. Do not give a later stage a fresh `sourceTimeoutMs`: an ask waits
@@ -168,6 +197,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   spreads and `JSON` see the text, but a memo that keeps `item.text` keeps a decoded copy. Decode Latin-1 bytes with
   `latin1`, never `TextDecoder`: its output for an accented letter is a two-byte string, and every regex over it ran
   1.17x slower (`pipeline.bench.ts`). Text a new path reads in a loop should be read once into a local.
+- **Ingest off the event loop was built and rejected (D216).** A worker that redacted each source page and read it for
+  the cache (terms with hash lanes, graph reading, mentions, deflated text; the cache applying the reading with the
+  same stored state) cut a synced item's main-thread cost 3.5x and the concurrent bench's cold-start stall from about
+  1.2 s to 0.1-0.2 s, but one process's capacity inside a 100 ms p99 rose only 1.46x there and fell 3-15% on
+  router-sim realistic, for 1.19x the CPU per item. The code is in commit b217ae1d (`ingest.ts`, `prepared.ts`,
+  `ingest.test.ts`); building it again needs a decision that accepts those numbers.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

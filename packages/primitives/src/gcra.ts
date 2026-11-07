@@ -53,12 +53,17 @@ export class Gcra<K = string> {
     return Math.max(0, Math.floor((now - tat + this.tolerance) / this.interval) + 1);
   }
 
-  /** Blocks `key` for at least `ms` (e.g. an upstream's Retry-After). */
-  penalize(key: K, ms: number): void {
-    if (!(ms >= 0)) return; // NaN or negative (an unparsable Retry-After): no penalty, rather than a TAT of NaN
+  /**
+   * Blocks `key` for at least `ms` (e.g. an upstream's Retry-After). Returns when the key's bucket is full again (its
+   * TAT), the end of every refusal the penalty causes; NaN for an ignored penalty.
+   */
+  penalize(key: K, ms: number): number {
+    if (!(ms >= 0)) return NaN; // NaN or negative (an unparsable Retry-After): no penalty, rather than a TAT of NaN
     const now = this.now();
     const blockedUntil = now + ms + this.interval + this.tolerance;
-    this.tat.set(key, Math.max(this.tat.get(key) ?? now, blockedUntil));
+    const tat = Math.max(this.tat.get(key) ?? now, blockedUntil);
+    this.tat.set(key, tat);
+    return tat;
   }
 
   get trackedKeys(): number {

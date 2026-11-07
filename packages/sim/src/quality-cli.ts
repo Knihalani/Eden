@@ -8,7 +8,6 @@
  *   [--judge none|perfect|noisy] [--live] [--brief] [--config '{"probes":true}']
  *   [--timeline out.jsonl] [--sync]
  *   [--cards DIR/cards-v2.jsonl]
- *   [--drafts clause|half [--typing-ms 1500]]
  *   [--jobs N] [--user-range A:B] [--tally] [--source-profile JSON|FILE]
  *
  * `--source-profile` overrides fields of the chosen `--profile` per source (`withOverrides`, as pi-ab.ts's flag does
@@ -74,8 +73,6 @@ const cli = flags(
         "config",
         "timeline",
         "cards",
-        "drafts",
-        "typing-ms",
         "jobs",
         "user-range",
         "source-profile",
@@ -92,7 +89,7 @@ const cli = flags(
 bun packages/sim/src/quality-cli.ts [--users 6] [--sessions 15] [--seed 1] [--profile realistic|ideal|entities|
   zoo-tune|zoo-a|zoo-b] [--planner ...] [--time 0] [--wait 0] [--noise 1] [--updates 0] [--tool-rate 0.4]
   [--judge none|perfect|noisy] [--live] [--brief] [--config '{"probes":true}'] [--timeline F] [--sync]
-  [--cards F] [--drafts clause|half [--typing-ms 1500]] [--jobs N] [--user-range A:B] [--tally]
+  [--cards F] [--jobs N] [--user-range A:B] [--tally]
   [--source-profile JSON|FILE]
   (bun run sim; the header of quality-cli.ts has every flag)`,
 );
@@ -181,9 +178,6 @@ const opts: QualityOptions = {
     ...engineConfig,
   },
   agentToolRate: Number(arg("tool-rate", "0.4")),
-  ...(has("drafts")
-    ? { drafts: arg("drafts", "clause") as "clause" | "half", typingMs: Number(arg("typing-ms", "1500")) }
-    : {}),
   model,
   judge: arg("judge", "none") as "none" | "perfect" | "noisy",
   promoteAfter: has("promote-after") ? Number(arg("promote-after", "0")) : undefined,

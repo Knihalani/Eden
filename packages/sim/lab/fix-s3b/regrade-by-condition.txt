@@ -1,0 +1,12 @@
+tools     hidden   n=32 haiku 7 sonnet 8 differ 1
+tools     control  n=32 haiku 0 sonnet 0 differ 0
+tools     neutral  n=32 haiku 1 sonnet 0 differ 1
+eden      hidden   n=32 haiku 19 sonnet 20 differ 1
+eden      control  n=32 haiku 1 sonnet 0 differ 1
+eden      neutral  n=32 haiku 0 sonnet 3 differ 3
+both      hidden   n=32 haiku 15 sonnet 18 differ 3
+both      control  n=32 haiku 0 sonnet 0 differ 0
+both      neutral  n=32 haiku 1 sonnet 0 differ 1
+both+ask  hidden   n=32 haiku 20 sonnet 19 differ 1
+both+ask  control  n=32 haiku 1 sonnet 0 differ 1
+both+ask  neutral  n=32 haiku 0 sonnet 1 differ 1

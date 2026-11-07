@@ -1,0 +1,175 @@
+[
+ {
+  "profile": "healthy",
+  "timeScale": 0,
+  "asks": 360,
+  "recallAt5": 0.869,
+  "withUnreached": 6,
+  "honest": 6,
+  "falseAllClear": 0,
+  "silentAboutFailure": 0,
+  "allClearWhenHealthy": 7,
+  "statuses": {
+   "ok": 1794,
+   "error": 6
+  },
+  "rateLimitedAsks": 0,
+  "saidRateLimited": 0,
+  "example": "Could not reach drive (failed): this answer may be missing what they hold."
+ },
+ {
+  "profile": "errors-10pct",
+  "timeScale": 0,
+  "asks": 360,
+  "recallAt5": 0.847,
+  "withUnreached": 154,
+  "honest": 154,
+  "falseAllClear": 0,
+  "silentAboutFailure": 0,
+  "allClearWhenHealthy": 4,
+  "statuses": {
+   "ok": 1612,
+   "error": 188
+  },
+  "rateLimitedAsks": 0,
+  "saidRateLimited": 0,
+  "example": "Could not reach calendar (failed): this answer may be missing what they hold."
+ },
+ {
+  "profile": "errors-30pct",
+  "timeScale": 0,
+  "asks": 360,
+  "recallAt5": 0.789,
+  "withUnreached": 308,
+  "honest": 308,
+  "falseAllClear": 0,
+  "silentAboutFailure": 0,
+  "allClearWhenHealthy": 3,
+  "statuses": {
+   "error": 553,
+   "ok": 1247
+  },
+  "rateLimitedAsks": 0,
+  "saidRateLimited": 0,
+  "example": "Could not reach crm (failed), calendar (failed), gmail (failed): this answer may be missing what they hold."
+ },
+ {
+  "profile": "gmail-down",
+  "timeScale": 0,
+  "asks": 360,
+  "recallAt5": 0.511,
+  "withUnreached": 360,
+  "honest": 360,
+  "falseAllClear": 0,
+  "silentAboutFailure": 0,
+  "allClearWhenHealthy": 0,
+  "statuses": {
+   "ok": 1433,
+   "error": 367
+  },
+  "rateLimitedAsks": 0,
+  "saidRateLimited": 0,
+  "example": "Could not reach gmail (failed): this answer may be missing what they hold."
+ },
+ {
+  "profile": "gmail+calendar-down",
+  "timeScale": 0,
+  "asks": 360,
+  "recallAt5": 0.303,
+  "withUnreached": 360,
+  "honest": 360,
+  "falseAllClear": 0,
+  "silentAboutFailure": 0,
+  "allClearWhenHealthy": 0,
+  "statuses": {
+   "ok": 1076,
+   "error": 724
+  },
+  "rateLimitedAsks": 0,
+  "saidRateLimited": 0,
+  "example": "Could not reach calendar (failed), gmail (failed): this answer may be missing what they hold."
+ },
+ {
+  "profile": "all-down",
+  "timeScale": 0,
+  "asks": 360,
+  "recallAt5": 0,
+  "withUnreached": 360,
+  "honest": 360,
+  "falseAllClear": 0,
+  "silentAboutFailure": 0,
+  "allClearWhenHealthy": 0,
+  "statuses": {
+   "error": 1800
+  },
+  "rateLimitedAsks": 0,
+  "saidRateLimited": 0,
+  "example": "Could not reach crm (failed), slack (failed), calendar (failed), gmail (failed), drive (failed), so this is not an all-clear: nothing was checked."
+ },
+ {
+  "profile": "rate-1-per-s",
+  "timeScale": 0.05,
+  "asks": 360,
+  "recallAt5": 0.506,
+  "withUnreached": 352,
+  "honest": 352,
+  "falseAllClear": 0,
+  "silentAboutFailure": 0,
+  "allClearWhenHealthy": 1,
+  "statuses": {
+   "throttled": 1048,
+   "ok": 731,
+   "error": 1,
+   "busy": 8,
+   "timeout": 12
+  },
+  "rateLimitedAsks": 349,
+  "saidRateLimited": 349,
+  "example": "Could not reach crm (rate-limited), calendar (rate-limited), drive (rate-limited): this answer may be missing what they hold.",
+  "rateExample": "Could not reach crm (rate-limited), calendar (rate-limited), drive (rate-limited): this answer may be missing what they hold."
+ },
+ {
+  "profile": "rate-0.2-per-s",
+  "timeScale": 0.05,
+  "asks": 360,
+  "recallAt5": 0.156,
+  "withUnreached": 358,
+  "honest": 358,
+  "falseAllClear": 0,
+  "silentAboutFailure": 0,
+  "allClearWhenHealthy": 0,
+  "statuses": {
+   "throttled": 1527,
+   "ok": 227,
+   "busy": 36,
+   "timeout": 9,
+   "error": 1
+  },
+  "rateLimitedAsks": 358,
+  "saidRateLimited": 358,
+  "example": "Could not reach crm (rate-limited), calendar (rate-limited), drive (rate-limited): this answer may be missing what they hold.",
+  "rateExample": "Could not reach crm (rate-limited), calendar (rate-limited), drive (rate-limited): this answer may be missing what they hold."
+ },
+ {
+  "profile": "rate-0.2-per-s+errors-10pct",
+  "timeScale": 0.05,
+  "asks": 360,
+  "recallAt5": 0.139,
+  "withUnreached": 359,
+  "honest": 359,
+  "falseAllClear": 0,
+  "silentAboutFailure": 0,
+  "allClearWhenHealthy": 0,
+  "statuses": {
+   "throttled": 1535,
+   "ok": 196,
+   "error": 29,
+   "busy": 32,
+   "timeout": 8
+  },
+  "rateLimitedAsks": 357,
+  "saidRateLimited": 357,
+  "example": "Could not reach crm (rate-limited), calendar (rate-limited), drive (rate-limited): this answer may be missing what they hold.",
+  "rateExample": "Could not reach crm (rate-limited), calendar (rate-limited), drive (rate-limited): this answer may be missing what they hold."
+ }
+]

@@ -1,0 +1,202 @@
+import { describe, expect, test } from "bun:test";
+import { SourceMap } from "@eden/graph";
+import { Budget } from "@eden/llm";
+import type { AgentEvent, ContextItem } from "@eden/protocol";
+import type { Source } from "@eden/sources";
+import { ItemCache } from "./cache";
+import { ContextPartner, type ReaderReport } from "./partner";
+import { CORE_CONFIG } from "./parts";
+import { AskReader, type ReaderInput, type ReaderKind, type ReaderMaker } from "./reader";
+import type { Trace } from "./trace";
+
+// The S1 reader trials (docs/research/fix-s1-reader.md): the ask reusing the push's reading (D193); re-reads after the
+// reader names an item (D192) are tested in freshness-push.test.ts. The evidence gate (D190), the observe not waiting
+// on a weak pool (D191) and the short output schema (D194) were measured and deleted.
+
+/** Tuesday 27 October 2026, 09:00 UTC. */
+const NOW = Date.parse("2026-10-27T09:00:00Z");
+const HOUR = 3_600_000;
+
+const item = (id: string, title: string, text: string, ageH = 24): ContextItem => ({
+  id: `mail:${id}`,
+  sourceId: "mail",
+  ref: id,
+  title,
+  text,
+  updatedAt: NOW - ageH * HOUR,
+});
+
+const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+const until = async (cond: () => boolean, turns = 1_000) => {
+  for (let n = 0; !cond(); n++) {
+    if (n >= turns) throw new Error("condition never held");
+    await tick();
+  }
+};
+
+/** Flags `mail:hold` whenever its pool holds it; counts calls; can be held until released. */
+class Reader implements ReaderMaker {
+  calls: ReaderInput[] = [];
+  /** The first call fails (a provider error): its read gives no verdict. */
+  failFirst = false;
+  release!: () => void;
+  private readonly gate: Promise<void> | null;
+  constructor(held = false) {
+    this.gate = held ? new Promise<void>((resolve) => (this.release = resolve)) : null;
+  }
+  async read(input: ReaderInput) {
+    this.calls.push(input);
+    if (this.gate) await this.gate;
+    if (this.failFirst && this.calls.length === 1) throw new Error("model down");
+    const i = input.items.findIndex((x) => x.id === "mail:hold");
+    const bears: { i: number; kind: ReaderKind; why: string }[] =
+      i >= 0 ? [{ i, kind: "blocks", why: "payments to Harlow are on hold" }] : [];
+    // Every other item it read is a lookalike.
+    const rejected = input.items.map((_, k) => k).filter((k) => k !== i);
+    return { bears, rejected, costUsd: 0.0002, usage: { inputTokens: 100, outputTokens: 10, cachedInputTokens: 0 } };
+  }
+}
+
+const REQUEST = "Pay the Harlow invoice for the venue deposit today.";
+const ITEMS = [
+  item("n0", "Harlow invoice one", "Harlow invoice for the venue deposit: the PDF is attached, reference HV-1042.", 2),
+  item("n1", "Harlow invoice two", "Venue deposit at Harlow: the invoice covers the hall and the bar.", 3),
+  item("n2", "Harlow invoice three", "The Harlow venue sent a revised invoice with the deposit in two parts.", 4),
+  item("hold", "Harlow venue", "Payments to Harlow are on hold until the dispute over their numbers ends.", 200),
+];
+
+const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
+
+function partner(config: Record<string, unknown>, maker: Reader) {
+  const reports: ReaderReport[] = [];
+  const traces: Trace[] = [];
+  const reader = new AskReader({ maker, budget: new Budget(), now: () => NOW });
+  const p = new ContextPartner({
+    sources: async () => [source],
+    sourceMap: new SourceMap(),
+    cache: new ItemCache(),
+    budget: new Budget(),
+    model: null,
+    now: () => NOW,
+    config: { ...CORE_CONFIG, askReader: true, askReaderWaitMs: 2_000, ...config },
+    reader,
+    onReader: (r) => reports.push(r),
+    onTrace: (t) => traces.push(t),
+  });
+  return { p, reports, traces, reader };
+}
+
+const ref = (sessionId = "s1", userId = "u1") => ({ tenantId: "t", userId, sessionId });
+const say = (p: ContextPartner, text: string, waitMs = 2_000, sessionId = "s1") =>
+  p.observe({ ...ref(sessionId), at: NOW, kind: "user_message", text } as AgentEvent, { waitMs });
+
+describe("readerReuse (D193): an ask in the push's request reads the push's verdict", () => {
+  const QUESTION = "Anything about Harlow I should know before paying?";
+  /** An ask that acts on its own, so it is read whatever the session's latest request was. */
+  const ACTS = "Pay Harlow's venue deposit invoice now.";
+
+  test("one reader call for the turn: the ask's answer leads with what the push flagged, at no cost", async () => {
+    const maker = new Reader();
+    const { p, traces } = partner({ readerPush: true, readerReuse: true }, maker);
+    await say(p, REQUEST);
+    expect(maker.calls.length).toBe(1);
+    const a = await p.ask({ ...ref(), question: QUESTION, maxItems: 3 });
+    expect(maker.calls.length).toBe(1);
+    expect(a.citations[0]!.itemId).toBe("mail:hold");
+    expect(a.answer).toContain("Eden's reader: blocks");
+    expect(a.usedModel).toBe(false);
+    expect(a.costUsd).toBe(0);
+    const total = traces.reduce((n, t) => n + (t.readerCalls ?? 0), 0);
+    expect(total).toBe(1);
+  });
+
+  test("without the flag the same ask makes a call of its own", async () => {
+    const maker = new Reader();
+    const { p } = partner({ readerPush: true }, maker);
+    await say(p, REQUEST);
+    await p.ask({ ...ref(), question: QUESTION, maxItems: 3 });
+    expect(maker.calls.length).toBe(2);
+  });
+
+  test("a newer user message, or another session, reads anew", async () => {
+    const maker = new Reader();
+    const { p } = partner({ readerPush: true, readerReuse: true }, maker);
+    await say(p, REQUEST);
+    // Another session of the same user: its own push, nothing shared.
+    await p.ask({ ...ref("s2"), question: ACTS, maxItems: 3 });
+    expect(maker.calls.length).toBe(2);
+    // A newer message in s1 that starts no push of its own (not an action): the ask is not the push's request.
+    await say(p, "thanks, what time is it there?");
+    await p.ask({ ...ref(), question: ACTS, maxItems: 3 });
+    expect(maker.calls.length).toBe(3);
+  });
+
+  test("an ask that acts on its own, in the push's request, is another request: it reads anew", async () => {
+    const maker = new Reader();
+    const { p } = partner({ readerPush: true, readerReuse: true }, maker);
+    await say(p, REQUEST);
+    await p.ask({ ...ref(), question: "Book the Harlow venue hall for the bar party on Friday.", maxItems: 3 });
+    expect(maker.calls.length).toBe(2);
+    // A question about the request itself (no action of its own) is read against the push's request: reused.
+    await p.ask({ ...ref(), question: QUESTION, maxItems: 3 });
+    expect(maker.calls.length).toBe(2);
+  });
+
+  test("a push that gave no verdict (its call failed) leaves the ask to read as usual", async () => {
+    const maker = new Reader();
+    maker.failFirst = true;
+    const { p } = partner({ readerPush: true, readerReuse: true }, maker);
+    await say(p, REQUEST);
+    const a = await p.ask({ ...ref(), question: QUESTION, maxItems: 3 });
+    expect(maker.calls.length).toBe(2);
+    expect(a.citations[0]!.itemId).toBe("mail:hold");
+  });
+
+  test("the push still in flight: the ask waits for its verdict within its own wait, and makes no call", async () => {
+    const maker = new Reader(true);
+    const { p } = partner({ readerPush: true, readerReuse: true, readerPushWaitMs: 0 }, maker);
+    await say(p, REQUEST, 0);
+    await until(() => maker.calls.length === 1);
+    const asking = p.ask({ ...ref(), question: QUESTION, maxItems: 3 });
+    for (let k = 0; k < 5; k++) await tick();
+    maker.release();
+    const a = await asking;
+    expect(maker.calls.length).toBe(1);
+    expect(a.citations[0]!.itemId).toBe("mail:hold");
+  });
+
+  test("the push's reading fails near the end of the ask's wait: no paid call the ask could not wait for", async () => {
+    const maker = new Reader(true);
+    maker.failFirst = true;
+    const { p, traces } = partner(
+      { readerPush: true, readerReuse: true, readerPushWaitMs: 0, askReaderWaitMs: 400 },
+      maker,
+    );
+    await say(p, REQUEST, 0);
+    await until(() => maker.calls.length === 1);
+    // The push's call fails with about 50 ms of the ask's 400 ms left: under min(250, 400 / 4) = 100 ms.
+    const release = setTimeout(() => maker.release(), 350);
+    const a = await p.ask({ ...ref(), question: QUESTION, maxItems: 3 });
+    clearTimeout(release);
+    maker.release();
+    await Bun.sleep(20);
+    expect(maker.calls.length).toBe(1);
+    expect(a.usedModel).toBe(false);
+    expect(traces.filter((t) => t.decision === "reader-late")).toHaveLength(0);
+  });
+
+  test("a push still out past the ask's wait: the ask answers without the reader, and makes no call", async () => {
+    const maker = new Reader(true);
+    const { p, reports } = partner(
+      { readerPush: true, readerReuse: true, readerPushWaitMs: 0, askReaderWaitMs: 20 },
+      maker,
+    );
+    await say(p, REQUEST, 0);
+    await until(() => maker.calls.length === 1);
+    const a = await p.ask({ ...ref(), question: QUESTION, maxItems: 3 });
+    expect(maker.calls.length).toBe(1);
+    expect(reports.at(-1)!.outcome).toBe("late");
+    expect(a.usedModel).toBe(false);
+    maker.release();
+  });
+});

@@ -1,6 +1,6 @@
 /**
  * What the engine knows about each candidate of a no-model decision (docs/research/econ-decide.md): the facts its rule
- * paths already compute (lexical score, matched terms, the conflict test's verdict, the graph's and the cards' reads,
+ * paths already compute (lexical score, matched terms, the conflict test's verdict, the cards' reads,
  * the day the request names, a party it names). A lab instrument (D67): the engine reports them through
  * `PartnerDeps.onCandidates` when a harness wires it, and decides nothing from them. The logistic model fitted on them
  * (`packages/sim/src/lab/decide-fit.ts`) added one fact of 268 in-sample and stays in the lab.
@@ -32,8 +32,6 @@ export interface Facts {
    * and none of bulk, settled or an unmeasured limit.
    */
   conflictHit: number;
-  /** The graph's conflict ground's test: a binding walked item in conflict, tied beyond a name, not bulk or a bot's. */
-  graphHit: number;
   /** Bulk mail, a settled update, an absence on other days, a clearance (the rule paths' vetoes). */
   bulk: number;
   settled: number;
@@ -48,14 +46,6 @@ export interface Facts {
   /** Found by a probe for the request's people, organisations or day; a conflicting consequence find. */
   probed: number;
   bridged: number;
-  /** Reached by the knowledge graph; its walk score; it constrains a node the walk reached; reached by name. */
-  walked: number;
-  walkScore: number;
-  binds: number;
-  walkNamed: number;
-  automated: number;
-  /** The graph's conflict read (a binding walked item, tied by the nodes it was reached through). */
-  graphConflict: number;
   /** An implication card bears on the request; the request violates it; tied by name. */
   carded: number;
   cardViolated: number;
@@ -89,7 +79,6 @@ export const FACT_NAMES: readonly (keyof Facts)[] = [
   "conflict",
   "clear",
   "conflictHit",
-  "graphHit",
   "bulk",
   "settled",
   "awayElsewhere",
@@ -100,12 +89,6 @@ export const FACT_NAMES: readonly (keyof Facts)[] = [
   "awayOnDay",
   "probed",
   "bridged",
-  "walked",
-  "walkScore",
-  "binds",
-  "walkNamed",
-  "automated",
-  "graphConflict",
   "carded",
   "cardViolated",
   "cardByName",

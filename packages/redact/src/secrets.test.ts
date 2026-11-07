@@ -31,7 +31,9 @@ describe("the vendored gitleaks rules", () => {
       "eden-legacy-keyword",
       "eden-legacy-token",
       "eden-mailgun",
+      "eden-new-relic",
       "eden-openai",
+      "eden-presigned-url",
       "eden-telegram",
       "eden-url-userinfo",
     ]);
@@ -96,6 +98,37 @@ describe("what hits", () => {
       `log: POST https://${"Discord" + ".com/api/v10/webhooks/"}123456789012345678/${alnum(68)} 204`,
       "eden-discord-webhook",
     ],
+    // D220: gitleaks' New Relic rules need the vendor's name in reach; a bare user key is caught by its prefix.
+    [
+      "New Relic user key with no vendor name",
+      `use ${"NR" + "AK-"}${alnum(27).toUpperCase()} for the query`,
+      "eden-new-relic",
+    ],
+    [
+      "S3 presigned URL's signature (D220)",
+      `get it at https://b.s3.amazonaws.com/q.pdf?X-Amz-Expires=3600&${"X-Amz-" + "Signature="}${"0a1b2c3d".repeat(8)}`,
+      "eden-presigned-url",
+    ],
+    [
+      "GCS signed URL's signature, lower case (D220)",
+      `https://storage.googleapis.com/b/o?x-goog-expires=900&${"x-goog-" + "signature="}${"9f8e7d6c".repeat(64)}`,
+      "eden-presigned-url",
+    ],
+    [
+      "a presigned URL in JSON from a Go server, & escaped as \\u0026 (D220)",
+      `{"url":"https://b.s3.amazonaws.com/q?X-Amz-Expires=60\\u0026${"X-Amz-" + "Signature="}${"0a1b2c3d".repeat(8)}"}`,
+      "eden-presigned-url",
+    ],
+    [
+      "a presigned URL percent-encoded inside another URL's parameter (D220)",
+      `https://app.example/r?next=https%3A%2F%2Fb.s3.amazonaws.com%2Fq%3FX-Amz-Expires%3D60%26${"X-Amz-" + "Signature%3D"}${"0a1b2c3d".repeat(8)}%26x%3D1`,
+      "eden-presigned-url",
+    ],
+    [
+      "an STS session token in a presigned URL (D220)",
+      `?X-Amz-Date=20261107T000000Z&${"X-Amz-" + "Security-Token="}${alnum(40)}%2F${alnum(60, 5)}&X-Amz-Expires=60`,
+      "eden-presigned-url",
+    ],
     ["AWS key id below the entropy floor", `id ${"AK" + "IA"}${"Q".repeat(16)} is set`, "eden-aws-key-id"],
     ["entropy + keyword", `deploy secret ${alnum(40, 5)}3 rotates monthly`, "eden-entropy-keyword"],
   ];
@@ -118,6 +151,11 @@ const BENIGN = [
   "set the session timeout to 30 minutes",
   // D13's keyword rule reads "is" as a word: "secrets" … "this" is no assignment (the P0.0d follow-up).
   "keep the secrets in this pre-registration file",
+  // D220: the shapes stay narrow. A New Relic key needs all 27 characters after its prefix; a presigned URL's other
+  // parameters and a page that only names the parameter are not secret.
+  `the ${"NR" + "AK-"}${"ABC123"} prefix marks a New Relic user key`,
+  "https://b.s3.amazonaws.com/q.pdf?X-Amz-Expires=3600&X-Amz-Date=20261107T000000Z&X-Amz-SignedHeaders=host",
+  "the X-Amz-Signature query parameter carries the request's signature",
 ];
 
 describe("what does not hit", () => {
@@ -153,6 +191,36 @@ describe("sanitizeForStore (D13, A6 §2.2): the value goes, what it is stays", (
       `deploy secret ${alnum(40, 5)}3 rotates monthly`,
       `${alnum(40, 5)}3`,
       "deploy secret [REDACTED] rotates monthly",
+    ],
+    [
+      "a bare New Relic key (D220)",
+      `NR key ${"NR" + "AK-"}${alnum(27).toUpperCase()} rotates monthly`,
+      `${"NR" + "AK-"}${alnum(27).toUpperCase()}`,
+      "NR key [REDACTED] rotates monthly",
+    ],
+    [
+      "a presigned URL keeps everything but its signature (D220)",
+      `https://b.s3.amazonaws.com/q.pdf?X-Amz-Expires=3600&${"X-Amz-" + "Signature="}${"0a1b2c3d".repeat(8)}&x=1`,
+      "0a1b2c3d".repeat(8),
+      "https://b.s3.amazonaws.com/q.pdf?X-Amz-Expires=3600&X-Amz-Signature=[REDACTED]&x=1",
+    ],
+    [
+      "a JSON-escaped presigned URL keeps the next parameter (D220)",
+      `"https://b/q?a=1\\u0026${"X-Amz-" + "Signature="}${"0a1b2c3d".repeat(8)}\\u0026x=1"`,
+      "0a1b2c3d".repeat(8),
+      "Signature=[REDACTED]\\u0026x=1",
+    ],
+    [
+      "a percent-encoded presigned URL keeps the next parameter (D220)",
+      `next=https%3A%2F%2Fb%2Fq%3Fa%3D1%26${"X-Amz-" + "Signature%3D"}${"0a1b2c3d".repeat(8)}%26x%3D1`,
+      "0a1b2c3d".repeat(8),
+      "Signature%3D[REDACTED]%26x%3D1",
+    ],
+    [
+      "a percent-encoded value cut at %26 still lets the next parameter be found (D220)",
+      `next=b%3F${"X-Amz-" + "Signature%3D"}${"0a1b2c3d".repeat(8)}%26${"X-Amz-" + "Security-Token%3D"}${alnum(40)}%26x%3D1`,
+      alnum(40),
+      "Signature%3D[REDACTED]%26X-Amz-Security-Token%3D[REDACTED]%26x%3D1",
     ],
     [
       "a private key block, whole",

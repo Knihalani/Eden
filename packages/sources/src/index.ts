@@ -32,6 +32,7 @@ export {
   type FanoutOptions,
   type FanoutOutcome,
   type FanoutStatus,
+  type FetchFailed,
   type ListReuse,
   type SharedCalls,
 } from "./guarded";

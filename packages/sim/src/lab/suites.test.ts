@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildWorld } from "../world";
-import { parseSuites, SUITE_NAMES, SUITES } from "./suites";
+import { supportsNeutral } from "./neutral";
+import { parseSuites, SUITE_NAMES, SUITES, UNRUN_BLIND } from "./suites";
 
 describe("suite registry", () => {
   test("task ids are unique across a suite's hidden and control variants (runners key results by id)", () => {
@@ -62,5 +63,26 @@ describe("suite registry", () => {
       expect(tasks.length).toBeGreaterThan(0);
       expect(tasks.every((t) => t.id.includes("heldout9"))).toBe(true);
     }
+  });
+
+  test("heldout15 builds 32 tasks per variant with neutral, unrun and out of `all` (counts and ids only)", () => {
+    const by = Object.fromEntries(
+      (["hidden", "control", "neutral"] as const).map((v) => {
+        const world = buildWorld({ seed: 41_000 });
+        const before = world.items.length;
+        const tasks = SUITES.heldout15!(world, 41, v);
+        return [v, { tasks, planted: world.items.length - before }];
+      }),
+    );
+    for (const v of ["hidden", "control", "neutral"]) expect(by[v]!.tasks.length).toBe(32);
+    expect([by.hidden!.planted, by.control!.planted, by.neutral!.planted]).toEqual([32, 32, 0]);
+    expect(by.neutral!.tasks.map((t: { text: string }) => t.text)).toEqual(
+      by.hidden!.tasks.map((t: { text: string }) => t.text),
+    );
+    expect(by.hidden!.tasks.every((t: { id: string }) => t.id.startsWith("w41:heldout15:"))).toBe(true);
+    expect(by.neutral!.tasks.every((t: { id: string }) => t.id.startsWith("w41:heldout15-neutral:"))).toBe(true);
+    expect(UNRUN_BLIND).toContain("heldout15");
+    expect(supportsNeutral("heldout15")).toBe(true);
+    expect(parseSuites("all")).not.toContain("heldout15");
   });
 });

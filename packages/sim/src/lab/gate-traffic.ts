@@ -218,11 +218,10 @@ const tally = (): Tally => ({
 
 /** Waits for the session's background work (as `quality.ts` `settle`; harness only). */
 async function settle(partner: ContextPartner, key: string): Promise<void> {
-  const sessions = (partner as unknown as { sessions: Map<string, { inflight: unknown; ant?: { running: unknown } }> })
-    .sessions;
+  const sessions = (partner as unknown as { sessions: Map<string, { inflight: unknown }> }).sessions;
   const busy = () => {
     const s = sessions.get(key);
-    return !!(s?.inflight || s?.ant?.running);
+    return !!s?.inflight;
   };
   for (let i = 0; i < 2_000 && busy(); i++) await Bun.sleep(1);
 }

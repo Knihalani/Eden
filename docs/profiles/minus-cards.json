@@ -2,5 +2,6 @@
   "cards": false,
   "cardsEconomy": false,
   "intent": false,
-  "cardsLean": false
+  "cardsLean": false,
+  "intentByKind": false
 }

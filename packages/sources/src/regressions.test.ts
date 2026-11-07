@@ -107,7 +107,8 @@ describe("halfopen probe leak", () => {
     };
     const q = (text: string) => ({ scope, text, entities: [], limit: 5 });
     const [a] = await f.search([src], q("a"), { timeoutMs: 1_000 }); // trips breaker, rate penalised 35 s
-    expect(a!.status).toBe("error");
+    // The connector's own 429: "throttled" since D212 (it was "error"); the breaker still counts it as a failure.
+    expect(a!.status).toBe("throttled");
     now = 30_000; // breaker half-open, rate limit still held
     const [b] = await f.search([src], q("b"), { timeoutMs: 1_000 });
     expect(b!.status).toBe("limited"); // the breaker's single probe was consumed here, with no call made

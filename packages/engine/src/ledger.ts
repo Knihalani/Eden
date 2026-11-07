@@ -7,6 +7,15 @@
  * within the cooldown whose words have changed since: what the agent holds is a superseded copy (`syncPollBehind`,
  * D65), and the corrected one is news.
  */
+/** What a session was handed of an item (`revisionNotice`): its words' version and its source. */
+export interface ShownCopy {
+  version: number;
+  sourceId: string;
+}
+
+/** Items whose handed-out version a session keeps (`revisionNotice`), most recently shown kept longest. */
+const MAX_SHOWN_COPIES = 256;
+
 export interface LedgerEntry {
   turn: number;
   version?: number;
@@ -15,6 +24,11 @@ export interface LedgerEntry {
 export class Ledger {
   private readonly delivered = new Map<string, number>();
   private readonly versions = new Map<string, number>();
+  /**
+   * `revisionNotice`: the version of each item the agent was handed in this session (a packet taken, an answer
+   * returned), kept past the cooldown and bounded by count: the agent's transcript holds it whatever the turn.
+   */
+  private readonly shown = new Map<string, ShownCopy>();
 
   constructor(private readonly cooldownTurns = 40) {}
 
@@ -66,6 +80,28 @@ export class Ledger {
     if (!was) return;
     this.delivered.set(itemId, was.turn);
     if (was.version !== undefined) this.versions.set(itemId, was.version);
+  }
+
+  /** The agent now holds `version` of the item (handed out, or an update for it queued). */
+  noteShown(itemId: string, version: number, sourceId: string): void {
+    this.shown.delete(itemId); // Re-insert so Map order stays least recently shown first.
+    this.shown.set(itemId, { version, sourceId });
+    while (this.shown.size > MAX_SHOWN_COPIES) this.shown.delete(this.shown.keys().next().value as string);
+  }
+
+  /** The agent was handed another version of the item than `version`: what it holds is superseded. */
+  superseded(itemId: string, version: number): boolean {
+    const was = this.shown.get(itemId);
+    return was !== undefined && was.version !== version;
+  }
+
+  /** The copies the agent was handed, least recently shown first. */
+  shownCopies(): IterableIterator<[string, ShownCopy]> {
+    return this.shown.entries();
+  }
+
+  get shownCount(): number {
+    return this.shown.size;
   }
 
   get size(): number {

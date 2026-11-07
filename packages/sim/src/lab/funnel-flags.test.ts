@@ -296,16 +296,15 @@ describe("delivered before the first model call", () => {
 });
 
 describe("hidden-funnel flags (end to end, small, no model)", () => {
-  test("--overlap with slowPathQueue: a request arrives while the slow path is busy, and is queued", async () => {
+  test("--overlap: a request arrives while the slow path is busy, and the busy count is reported", async () => {
     const r = await runs.overlap;
     expect(r.stderr).not.toContain("error:");
     expect(r.status).toBe(0);
     const stdout = r.stdout;
     const json = JSON.parse(readFileSync(r.out, "utf8")) as Record<string, unknown>;
-    const m = /overlap: slow path busy (\d+) times \((\d+) queued/.exec(stdout);
+    const m = /overlap: slow path busy (\d+) times;/.exec(stdout);
     expect(m).not.toBeNull();
     expect(Number(m![1])).toBeGreaterThanOrEqual(1);
-    expect(Number(m![2])).toBeGreaterThanOrEqual(1);
     // ALL3 has no intent: no stamp.
     expect(stdout).not.toContain(INTENT_INERT);
     expect((json.intent as { state: string }).state).toBe("off");

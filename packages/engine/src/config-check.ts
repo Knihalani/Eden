@@ -40,6 +40,9 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   intentHits: "cards",
   intentMinCoverage: "cards",
   intentMinMatched: "cards",
+  intentByKind: "cards",
+  intentCardCoverage: "cards",
+  intentCardHits: "cards",
   intentWeight: "cards",
   intentSeats: "cards",
   askReader: "reader",
@@ -53,12 +56,14 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerPushBehind: "reader",
   readerGate: "reader",
   readerGateVisits: "reader",
+  readerVerifyAfter: "reader",
+  readerReuse: "reader",
 };
 
 /**
  * Keys that act only while every flag listed is on (config.ts's "with X", "applies only with it on", and the gates in
- * partner.ts). Set off their default with a parent off, they would do nothing: `syncPollBehind` alone, or `graphMerge`
- * without `graph`, runs byte-identical to the defaults in `bun run eval`. Several parents per key: `syncPollBehind`
+ * partner.ts). Set off their default with a parent off, they would do nothing: `syncPollBehind` alone, or `cardItems`
+ * without `cards`, runs byte-identical to the defaults in `bun run eval`. Several parents per key: `syncPollBehind`
  * acts only with the sync running and polling on demand (partner.ts `if (this.config.syncPollBehind && this.sync &&
  * this.config.syncOnDemand)`), `readerPushBehind` only on a push that waits for such a poll.
  */
@@ -84,14 +89,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncCatchupPages: SYNC,
   syncMaxUsersPerTenant: SYNC,
   syncLocalAll: SYNC,
-  graphItems: ["graph"],
-  graphSeats: ["graph"],
-  graphGround: ["graph"],
-  graphMerge: ["graph"],
-  graphLearn: ["graph"],
-  graphBudgetMs: ["graph"],
-  graphFloor: ["graph"],
-  graphDays: ["graph"],
   cardItems: ["cards"],
   cardsEconomy: ["cards"],
   intent: ["cards"],
@@ -100,6 +97,9 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   intentHits: ["cards", "intent"],
   intentMinCoverage: ["cards", "intent"],
   intentMinMatched: ["cards", "intent"],
+  intentByKind: ["cards", "intent"],
+  intentCardCoverage: ["cards", "intent", "intentByKind"],
+  intentCardHits: ["cards", "intent", "intentByKind"],
   intentWeight: ["cards", "intent"],
   intentSeats: ["cards", "intent"],
   askReaderPool: READER,
@@ -112,9 +112,8 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerPushKinds: PUSH,
   readerPushWaitMs: PUSH,
   readerPushBehind: [...PUSH, ...POLL_BEHIND],
-  anticipateCalls: ["anticipate"],
-  anticipateSessionCalls: ["anticipate"],
-  anticipateOff: ["anticipate"],
+  readerVerifyAfter: [...READER, "verifyDelivery"],
+  readerReuse: PUSH,
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
@@ -152,10 +151,6 @@ const RANGES: Partial<Record<Key, Range>> = {
   probeYieldFloor: SHARE,
   consequenceSources: COUNT,
   probeSecondSources: COUNT,
-  graphItems: COUNT,
-  graphSeats: COUNT,
-  anticipateCalls: COUNT,
-  anticipateSessionCalls: COUNT,
   judgeTiedShare: SHARE,
   confidentItems: COUNT,
   syncMaxItems: SIZE,
@@ -170,20 +165,14 @@ const RANGES: Partial<Record<Key, Range>> = {
   intentHits: COUNT,
   intentMinCoverage: SHARE,
   intentMinMatched: COUNT,
+  intentCardCoverage: SHARE,
+  intentCardHits: COUNT,
   intentSeats: COUNT,
   askReaderPool: COUNT,
 };
 
-/**
- * The parts `anticipateOff` can switch off: every `anticipateOff.includes(…)` (and `off.includes(…)` on it) in
- * partner.ts. The server's engine-config.test.ts reads them there, so a part added to the engine fails the test until
- * it is listed here. A typo would switch nothing off.
- */
-export const ANTICIPATE_PARTS: readonly string[] = ["tools", "serve", "names", "learn", "days", "class"];
-
 /** String-list keys whose entries must come from a known list. */
 const NAMES: Partial<Record<Key, readonly string[]>> = {
-  anticipateOff: ANTICIPATE_PARTS,
   readerPushKinds: READER_KINDS,
 };
 

@@ -41,12 +41,6 @@ export const PARTS = {
     askDedup: false,
     compactParts: false,
   },
-  /** The judge's settings, used only when an embedding wires a judge model (D54, D55). */
-  judge: { judgeContested: false, judgeTied: false, judgeItemBytes: 280 },
-  /** The knowledge graph (D58, D107). */
-  graph: { graph: false, graphMerge: false },
-  /** Anticipation (D60). */
-  anticipate: { anticipate: false },
   /** Background sync (D57) and its request-path switches (D65, D101). */
   sync: {
     sync: false,
@@ -55,15 +49,17 @@ export const PARTS = {
     readerPushBehind: false,
     syncPush: false,
     verifyDelivery: false,
+    readerVerifyAfter: false,
   },
-  /** A delivered item its source signalled a change to since it was read is read again first (D126). */
-  freshness: { verifyDelivery: false },
-  /** The rule verdicts an ask gathers (D73). */
-  askVerdicts: { askVerdicts: false },
+  /**
+   * A delivered item its source signalled a change to since it was read is read again first (D126); a handed item
+   * changed at its source is sent again as an "updated:" packet (D205).
+   */
+  freshness: { verifyDelivery: false, readerVerifyAfter: false, revisionNotice: false },
   /** Implication cards (D59, D66), and with them the intent index, which their calls write. */
-  cards: { cards: false, cardsEconomy: false, intent: false, cardsLean: false },
-  /** The intent index (D87, D109), and what it reads (`cardsLean`, D125). */
-  intent: { intent: false, cardsLean: false },
+  cards: { cards: false, cardsEconomy: false, intent: false, cardsLean: false, intentByKind: false },
+  /** The intent index (D87, D109), what it reads (`cardsLean`, D125) and its carded cut (`intentByKind`, D200). */
+  intent: { intent: false, cardsLean: false, intentByKind: false },
   /** The ask-time reader and its push (D95, D96, D99). */
   reader: {
     askReader: false,
@@ -72,11 +68,11 @@ export const PARTS = {
     readerGate: false,
     readerGateVisits: false,
     readerPushBehind: false,
+    readerVerifyAfter: false,
+    readerReuse: false,
     askReaderPool: 30,
     askReaderItemChars: 400,
   },
-  /** A request arriving while the slow path is busy waits in a one-slot queue (D102). */
-  slowPathQueue: { slowPathQueue: false },
   /** A lookup does not wait for its probes past its own search (D47's grace, 100 ms, taken out). */
   probeGrace: { probeGraceMs: 100 },
 } satisfies Record<string, Partial<EngineConfig>>;
