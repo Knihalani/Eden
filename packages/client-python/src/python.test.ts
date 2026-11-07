@@ -91,6 +91,8 @@ print(json.dumps({
       "y".repeat(129),
       "+".repeat(40),
       "Ünïcödé user 42",
+      "abc\n",
+      "\n",
     ];
     const { out, code } = await run([
       "-c",

@@ -263,6 +263,36 @@ provider offers them; for a Gmail push, turn the history id into items and delet
 Receiving notifications has its own cost, which Eden does not see: a platform may bill trigger runs, and a Gmail push
 carries only a history id that your code turns into items with a `history.list` call.
 
+## The one-line integration: Eden in front of your model (`bun run proxy`, D280)
+
+If your agent calls an OpenAI-compatible chat API, you can add Eden without touching its loop:
+
+```bash
+EDEN_PROXY_UPSTREAM=https://api.openai.com/v1 EDEN_URL=http://127.0.0.1:8790 EDEN_API_KEY=… bun run proxy
+# the agent: base_url="http://127.0.0.1:8791/v1", plus a header x-eden-user-id: <your user's id>
+```
+
+- On each `POST /v1/chat/completions` the proxy reports the conversation's new messages (user text, the assistant's
+  text and tool calls, tool results) to Eden once each, waits for the user message's lookup as the SDK does (up to
+  3 s), inserts Eden's packets as a system message just before the latest user message, keeps the turn's packets on
+  the turn's later model calls (tool loops), and streams the upstream's answer back unchanged. Other routes
+  (`/v1/models`, embeddings) pass through.
+- **Identity.** `x-eden-user-id` (else the body's `user`) names the end user; without either, Eden is skipped.
+  `x-eden-session-id` names the conversation; without it the proxy keys it by a hash of its first two messages, so
+  send it if many conversations open identically. Ids pass through `edenId`.
+- **Fails open.** Eden down, slow or refusing: the request goes upstream unchanged. Only an unreachable upstream is an
+  error (502). The upstream key is forwarded and never logged; only message text goes to Eden, as with the SDK.
+- **Shadow mode, a trial with no risk** (`EDEN_PROXY_SHADOW=1`): the proxy reports every conversation to Eden and
+  lets it decide, but forwards each request unchanged and prints one JSON line (user, session, packet count, item ids;
+  no text) per request Eden would have changed. Run it on real traffic for a week, then read `bun run trace-report`
+  on the Eden server's `EDEN_TRACE=1` log and `/v1/explain` on the sessions that matter, before letting it inject.
+- **What it does not do.** It adds no `ask_context` tool (give the agent the MCP server for that, D70 says keep it),
+  and it cannot report events that never reach the model (a webhook's new mail: forward those with `sourceChanged`).
+- **Checked live** (2026-11-07): a plain Python `urllib` call to Anthropic's OpenAI-compatible endpoint
+  (`claude-haiku-5-5`) through the proxy and a no-key Eden on the example sources, asking "Can you move my lunch with
+  Priya Raman to 11:30 on Thursday?", got back "Priya emailed that she can't do anything before 12:15, so 11:30 may
+  not work for her": the candidate packet carried the mail the agent had no tool to read. One run, not a measurement.
+
 ## Why did Eden say this, or stay silent? (`explain`, D277)
 
 Every decision Eden makes is traced with no content (D56): its kind, fixed reason words or a cue id (a hash), its

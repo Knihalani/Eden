@@ -6,6 +6,7 @@ archived
 native
 bench
 docs
+!docs/profiles
 **/*.db
 **/*.db-wal
 **/*.db-shm

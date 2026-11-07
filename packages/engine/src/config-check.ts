@@ -63,6 +63,20 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
 };
 
 /**
+ * Reader keys the push's candidates read with no reader wired (D276: partner.ts `observe` starts the push,
+ * `candidatesOf` cuts the pool by `askReaderPool` and tests it with the constraint test, `readerGateVisits`
+ * included). Accepted off their default without a reader while `pushCandidates` > 0.
+ */
+const CANDIDATES_WITHOUT_READER: ReadonlySet<Key> = new Set<Key>([
+  "askReader",
+  "readerPush",
+  "readerPushWaitMs",
+  "readerPushBehind",
+  "askReaderPool",
+  "readerGateVisits",
+]);
+
+/**
  * Keys that act only while every flag listed is on (config.ts's "with X", "applies only with it on", and the gates in
  * partner.ts). Set off their default with a parent off, they would do nothing: `syncPollBehind` alone, or `cardItems`
  * without `cards`, runs byte-identical to the defaults in `bun run eval`. Several parents per key: `syncPollBehind`
@@ -211,7 +225,10 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
   for (const [key, given] of Object.entries(value)) {
     checkKey(where, key, given);
     const dep = NEEDS_DEP[key as Key];
-    if (dep !== undefined && options.deps?.[dep] !== true && !isInert(key as Key, given)) {
+    // With the push's candidates on (the default), the push and its pool act with no reader (D276).
+    const candidates = Number((value as Record<string, unknown>).pushCandidates ?? DEFAULT_CONFIG.pushCandidates) > 0;
+    const actsWithout = dep === "reader" && candidates && CANDIDATES_WITHOUT_READER.has(key as Key);
+    if (dep !== undefined && !actsWithout && options.deps?.[dep] !== true && !isInert(key as Key, given)) {
       throw new Error(
         `${where}: "${key}" needs the partner's ${dep} dependency, ` +
           `${options.depNote ?? "which this caller does not wire"}, so only its default ` +

@@ -931,15 +931,16 @@ export class ContextPartner {
     s.behind = tracked;
   }
 
-  /** Injections the slow path queued for a session, oldest first. Integrations that poll call this. */
   /**
    * The session's last decisions (at most `EXPLAIN_TRACES`, oldest first), the traces `onTrace` receives: why Eden
    * spoke or stayed silent, with no content (D56, D277). Reads only; a session that ended or was forgotten has none.
+   * Copies: changing one changes nothing held.
    */
   explain(ref: Scope & { sessionId: string }): Trace[] {
-    return [...(this.sessions.get(sessionKey(ref))?.traces ?? [])];
+    return (this.sessions.get(sessionKey(ref))?.traces ?? []).map((t) => ({ ...t, itemIds: [...t.itemIds] }));
   }
 
+  /** Injections the slow path queued for a session, oldest first. Integrations that poll call this. */
   takePending(ref: Scope & { sessionId: string }): Injection[] {
     const s = this.sessions.get(sessionKey(ref));
     if (!s) return [];
@@ -1547,6 +1548,7 @@ export class ContextPartner {
         modelCalls: reading?.called ? 1 : 0,
         costUsd,
         ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
+        ...(candidates ? { candidates: true } : {}),
         itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
       });
       if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });

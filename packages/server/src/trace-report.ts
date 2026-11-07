@@ -24,11 +24,12 @@ export interface Percentiles {
 
 export interface TraceReport {
   traces: number;
-  sessions: number;
+  /** Distinct session ids: traces carry no tenant or user, so two users' "s1" count once. */
+  sessionIds: number;
   /** Events the engine saw (every trace but its own follow-ups: "verify", "reader-late", a sync poll's "skipped"). */
   events: number;
   decisions: Record<string, number>;
-  /** Decisions that handed the agent items (a packet, candidates or an answer with citations). */
+  /** Events after which Eden handed the agent items (a packet, candidates or an answer with citations), each once. */
   spoke: number;
   /** Lookups that ended with nothing (`silent`), with their reasons. */
   silentReasons: Record<string, number>;
@@ -75,7 +76,8 @@ export function traceReport(lines: Iterable<string>): TraceReport {
   const decisions: Record<string, number> = {};
   const silentReasons: Record<string, number> = {};
   const latencies = new Map<string, number[]>();
-  let spoke = 0;
+  // An event is (session, turn): its own decision and its push's follow-up are one event that spoke once.
+  const spokeAt = new Set<string>();
   let sourceCalls = 0;
   let modelCalls = 0;
   let costUsd = 0;
@@ -88,9 +90,12 @@ export function traceReport(lines: Iterable<string>): TraceReport {
       t.decision === "verify" ||
       t.decision === "reader-late" ||
       t.decision === "reader-push" ||
-      (t.decision === "skipped" && t.reason === "sync poll behind");
+      (t.decision === "skipped" && t.reason === "sync poll behind") ||
+      // An update packet (a source changed items already shown) follows a source notice, not an agent event.
+      t.reason.startsWith("updated:");
     if (!followUp) events++;
-    if (SPOKE.has(t.decision) && t.itemIds.length > 0) spoke++;
+    if (SPOKE.has(t.decision) && t.itemIds.length > 0 && !t.reason.startsWith("updated:"))
+      spokeAt.add(`${t.sessionId}#${t.turn}#${t.event}`);
     if (t.decision === "silent") silentReasons[t.reason] = (silentReasons[t.reason] ?? 0) + 1;
     if (t.decision !== "skipped") {
       const xs = latencies.get(t.decision) ?? [];
@@ -104,10 +109,10 @@ export function traceReport(lines: Iterable<string>): TraceReport {
   const per = (x: number) => (events > 0 ? x / events : 0);
   return {
     traces: traces.length,
-    sessions: sessions.size,
+    sessionIds: sessions.size,
     events,
     decisions,
-    spoke,
+    spoke: spokeAt.size,
     silentReasons,
     latencyMs: Object.fromEntries([...latencies].map(([d, xs]) => [d, percentiles(xs)])),
     sourceCallsPerEvent: round(per(sourceCalls), 3),
@@ -122,7 +127,7 @@ export function formatReport(r: TraceReport): string {
   if (r.traces === 0) return "no traces found: start the server with EDEN_TRACE=1 and pass its log";
   const pct = (n: number, of: number) => (of > 0 ? `${((100 * n) / of).toFixed(1)}%` : "-");
   const lines = [
-    `${r.traces} traces, ${r.events} events, ${r.sessions} sessions`,
+    `${r.traces} traces, ${r.events} events, ${r.sessionIds} session ids`,
     `spoke (items handed to the agent): ${r.spoke} (${pct(r.spoke, r.events)} of events)`,
     `decisions: ${Object.entries(r.decisions)
       .sort((a, b) => b[1] - a[1])

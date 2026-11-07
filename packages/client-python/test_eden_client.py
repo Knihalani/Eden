@@ -91,6 +91,21 @@ class FailOpen(unittest.TestCase):
             finally:
                 stub.close()
 
+    def test_unserialisable_bodies_and_odd_counts_never_throw(self):
+        import datetime
+
+        odd = b'{"stored": Infinity, "removed": NaN, "decisions": [{"decision": "s", "why": "w", "itemIds": 3}]}'
+        stub = Stub(lambda p, b: (200, odd))
+        try:
+            c, errors = client(stub.url)
+            self.assertEqual(c.check("t", {"d": datetime.datetime.now()})["verdict"], "proceed")
+            self.assertEqual(c.observe({"kind": "tool_result", "tool": "t", "output": b"x"})["injection"], None)
+            self.assertFalse(c.source_changed("mail", items=[{"ref": "1", "text": "x"}], removed=["2"]))
+            self.assertEqual(c.explain(), [])
+            self.assertTrue(errors)
+        finally:
+            stub.close()
+
     def test_a_throwing_on_error_never_throws(self):
         def boom(e):
             raise RuntimeError("logger down")
@@ -167,6 +182,7 @@ class Helpers(unittest.TestCase):
         self.assertNotEqual(eden_id("\ud800"), eden_id("�"))
         self.assertTrue(eden_id("x" * 200).startswith("h:"))
         self.assertEqual(eden_id("e:a"), "e:e:a")
+        self.assertEqual(eden_id("abc\n"), "e:abc_0a")
 
 
 if __name__ == "__main__":

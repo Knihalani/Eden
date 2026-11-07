@@ -27,7 +27,7 @@ no-model path, and for a request that acts it hands the agent candidates to chec
 bun install
 
 # Terminal 1: the API with two example sources (a calendar and a mailbox) and no auth.
-EDEN_DEV=1 EDEN_PROCESSES=1 EDEN_SOURCES_FILE=examples/personal-agent/sources.json EDEN_TRACE=1 bun run dev
+EDEN_DEV=1 EDEN_PROCESSES=1 EDEN_SOURCES_FILE=examples/personal-agent/sources.json EDEN_TRACE=1 bun run dev | tee server.log
 
 # Terminal 2: a question, a request that acts, and why Eden spoke or stayed silent.
 curl -s -X POST 'localhost:8790/v1/events?waitMs=3000' \
@@ -43,7 +43,7 @@ bun examples/personal-agent/agent.ts "move lunch with Priya Raman to Friday"
 EDEN_USER=u EDEN_TENANT=t EDEN_SOURCES_FILE=examples/personal-agent/sources.json bun packages/server/src/mcp-stdio.ts
 
 # Stop terminal 1, then: what Eden did and cost on that traffic (D279).
-bun run trace-report server.log    # the server's output, saved with `bun run dev > server.log`
+bun run trace-report server.log    # the server's output, saved by `tee` above
 ```
 
 Then point Eden at your users' real connectors (`EDEN_USER_SOURCES_FILE`, docs/INTEGRATION.md "Connect each user's
@@ -53,6 +53,13 @@ no-model scenario metrics); `OPENROUTER_API_KEY=… bun run eval --live --usd-ca
 hard spend cap (D128).
 
 ## Integrating an agent
+
+**One line: put Eden in front of your model.** `EDEN_PROXY_UPSTREAM=https://api.openai.com/v1 bun run proxy` serves
+an OpenAI-compatible endpoint on `http://127.0.0.1:8791/v1`; point your agent's `base_url` there and send
+`x-eden-user-id` (or the body's `user`). Each chat request's new messages are reported to Eden and its context is
+inserted before the latest user message; the answer streams back unchanged, and with Eden down the request goes
+through as it came (D280). Any OpenAI-compatible upstream works (OpenAI, OpenRouter, Anthropic's
+`https://api.anthropic.com/v1`, a local server). For full control, use the SDK:
 
 ```ts
 import { EdenClient, withContext } from "@eden/client";
@@ -110,6 +117,7 @@ docs/INTEGRATION.md).
 | `packages/redact`   | Secret gate                                                                                        |
 | `packages/server`   | HTTP API and MCP server; runs the default and wires the model roles                                |
 | `packages/client`   | SDK for agent builders (TypeScript)                                                                |
+| `packages/proxy`    | OpenAI-compatible proxy in front of the agent's model (`bun run proxy`)                            |
 | `packages/client-python` | The Python client (`eden_client`, standard library only)                                      |
 | `packages/eval`     | Scenario harness and metrics                                                                       |
 | `docs/`             | Vision, architecture, decisions, roadmap, cost, privacy, research                                  |

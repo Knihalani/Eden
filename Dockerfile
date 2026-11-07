@@ -10,8 +10,10 @@ WORKDIR /app
 COPY package.json bun.lock bunfig.toml tsconfig.json tsconfig.base.json ./
 COPY packages ./packages
 COPY examples ./examples
+# The "default minus a part" profiles, for EDEN_ENGINE_CONFIG=docs/profiles/minus-<part>.json.
+COPY docs/profiles ./docs/profiles
 # Only the server's runtime dependencies (the MCP SDK, zod, re2js); no lab, no dev tools.
-RUN bun install --frozen-lockfile --production && rm -rf packages/sim/lab
+RUN bun install --frozen-lockfile --production
 # The source map (entity names and counts, never content, D8) persists in EDEN_HOME; item text stays in memory.
 ENV HOST=0.0.0.0 PORT=8790 EDEN_HOME=/data NODE_ENV=production
 RUN mkdir -p /data && chown bun:bun /data

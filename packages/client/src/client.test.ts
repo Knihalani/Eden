@@ -336,14 +336,21 @@ describe("explain (D277)", () => {
   test("returns the decisions; drops malformed ones; posts the user's ids to /v1/explain", async () => {
     let path = "";
     let sent: unknown;
-    const good = { turn: 1, event: "user_message", decision: "silent", reason: "no candidates", why: "Silent: x" };
+    const good = {
+      turn: 1,
+      event: "user_message",
+      decision: "silent",
+      reason: "no candidates",
+      why: "Silent: x",
+      itemIds: [],
+    };
     const eden = new EdenClient({
       userId: "u",
       sessionId: "s",
       fetch: (async (u: string, init: RequestInit) => {
         path = new URL(u).pathname;
         sent = JSON.parse(String(init.body));
-        return Response.json({ decisions: [good, { decision: 3 }, null] });
+        return Response.json({ decisions: [good, { decision: 3 }, null, { ...good, itemIds: 7 }] });
       }) as unknown as typeof fetch,
     });
     expect(await eden.explain()).toEqual([good] as never);

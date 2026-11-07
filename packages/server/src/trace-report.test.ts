@@ -43,9 +43,9 @@ describe("trace-report (D279)", () => {
     ];
     const r = traceReport(lines);
     expect(r.traces).toBe(5);
-    expect(r.sessions).toBe(2);
+    expect(r.sessionIds).toBe(2);
     expect(r.events).toBe(4); // the push is the user message's follow-up, not an event of its own
-    expect(r.spoke).toBe(2);
+    expect(r.spoke).toBe(1); // the push is the same user message's: one event that spoke
     expect(r.silentReasons).toEqual({ "no candidates": 1, "no model": 1 });
     expect(r.latencyMs.silent).toEqual({ n: 2, p50: 10, p95: 20, p99: 20, max: 20 });
     expect(r.latencyMs.skipped).toBeUndefined();
@@ -53,8 +53,17 @@ describe("trace-report (D279)", () => {
     expect(r.modelCalls).toBe(1);
     expect(r.costUsd).toBe(0.0003);
     expect(r.costUsdPer1kEvents).toBe(0.075);
-    expect(formatReport(r)).toContain("spoke (items handed to the agent): 2 (50.0% of events)");
+    expect(formatReport(r)).toContain("spoke (items handed to the agent): 1 (25.0% of events)");
     expect(formatReport(traceReport([]))).toContain("EDEN_TRACE=1");
+  });
+
+  test("an update packet after a source notice is a follow-up, not an event (review of D279)", () => {
+    const r = traceReport([
+      t({ decision: "sources", reason: "cue:1", itemIds: ["a"] }),
+      t({ decision: "sources", reason: "updated:inj_1", event: "source_change", turn: 1, itemIds: ["a"] }),
+    ]);
+    expect(r.events).toBe(1);
+    expect(r.spoke).toBe(1); // a re-sent newer version is not a new event that spoke
   });
 
   test("reads what a real partner's onTrace writes", async () => {

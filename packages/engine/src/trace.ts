@@ -46,6 +46,8 @@ export interface Trace {
    */
   readerCalls?: number;
   readerCostUsd?: number;
+  /** On a "reader-push" trace: the push handed out candidates (`pushCandidates`, D237), not a reading. */
+  candidates?: boolean;
   itemIds: string[];
   /**
    * With the query planner on: per connector searched, the shapes it sent, its calls and how many items came back.
@@ -96,8 +98,14 @@ export function explainTrace(t: Trace): string {
     case "repeat":
       return "Not looked up again: the same cue was looked up a few turns ago (cueCooldownTurns).";
     case "fast":
+      if (t.reason.startsWith("action-")) {
+        return `The action firewall found ${items} bearing on the tool call about to run (no model call).`;
+      }
       return `Spoke from the user's cached items with no source call: ${items} matched surely enough.`;
     case "sources":
+      if (t.reason.startsWith("updated:")) {
+        return `Sent a newer version of ${items} already shown in this session: the source changed them.`;
+      }
       if (t.reason.startsWith("grounded-")) {
         return `Spoke after a source search: ${items} grounded by the request's people, days or a conflict (no model).`;
       }
@@ -110,10 +118,13 @@ export function explainTrace(t: Trace): string {
     case "answer":
       return `Answered an ask_context question with ${items}${t.modelCalls > 0 ? " (with a model call)" : " (no model call)"}.`;
     case "reader-push":
-      if (t.readerCalls === undefined) {
+      if (t.candidates) {
         return n > 0
           ? `The request acts: handed the agent ${items} as candidates to check against it, with no model call (D237).`
           : "The request acts, but nothing found looked able to constrain it (no constraint wording or card), so no candidates were sent.";
+      }
+      if (t.readerCalls === undefined) {
+        return "The request acts, but the reader made no reading (nothing to read, gated, over budget or unavailable), so nothing was pushed.";
       }
       return n > 0
         ? `The request acts: the reader read it and flagged ${items}.`

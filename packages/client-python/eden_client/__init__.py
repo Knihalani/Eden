@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import time
 import urllib.error
@@ -55,7 +56,8 @@ _REASONS = {"push-off", "not-synced", "not-notifying"}
 
 
 def _is_id(v: Any) -> bool:
-    return isinstance(v, str) and _ID.match(v) is not None
+    # fullmatch: `$` would also match before a final newline, and "abc\n" is no id (TypeScript's `isId` agrees).
+    return isinstance(v, str) and _ID.fullmatch(v) is not None
 
 
 def eden_id(raw: str) -> str:
@@ -72,7 +74,7 @@ def eden_id(raw: str) -> str:
     for i in range(0, len(units), 2):
         unit = units[i] | (units[i + 1] << 8)
         c = chr(unit)
-        if unit < 0x80 and _KEPT.match(c):
+        if unit < 0x80 and _KEPT.fullmatch(c):
             out.append(c)
         elif unit < 0x100:
             out.append(f"_{unit:02x}")
@@ -157,14 +159,21 @@ class EdenClient:
             pass  # The integrator's logger failing is no reason to throw into the agent's loop.
 
     def _post(self, path: str, body: Dict[str, Any], timeout_s: Optional[float] = None,
-              valid: Optional[Callable[[Any], bool]] = None) -> Any:
-        """POSTs JSON; the parsed answer, or None on any failure (reported to ``on_error``)."""
+              valid: Optional[Callable[[Any], bool]] = None,
+              failed: Optional[Callable[[Exception], Any]] = None) -> Any:
+        """POSTs JSON; the parsed answer, or None on any failure (reported to ``failed`` and ``on_error``).
+
+        ``timeout_s`` bounds each socket operation (``urllib``'s timeout), not the whole request as the TypeScript
+        client's ``AbortSignal.timeout`` does: a server that trickles bytes can hold a call longer.
+        """
         route = path.split("?")[0]
         headers = {"content-type": "application/json"}
         if self._key:
             headers["authorization"] = f"Bearer {self._key}"
-        req = urllib.request.Request(self._base + path, data=json.dumps(body).encode(), method="POST", headers=headers)
         try:
+            # Inside the try: a body that cannot be serialised (a datetime in a tool's input) is no context.
+            data = json.dumps(body).encode()
+            req = urllib.request.Request(self._base + path, data=data, method="POST", headers=headers)
             with urllib.request.urlopen(req, timeout=self._timeout if timeout_s is None else timeout_s) as res:
                 answer = json.loads(res.read().decode())
             if valid is not None and not valid(answer):
@@ -172,9 +181,12 @@ class EdenClient:
                 raise EdenError(f"eden {route}: not {'an' if name[:1] in 'aeiou' else 'a'} {name} answer")
             return answer
         except urllib.error.HTTPError as e:
-            self._report(EdenError(f"eden {route}: {e.code}{_server_error(e)}"))
+            err: Exception = EdenError(f"eden {route}: {e.code}{_server_error(e)}")
         except Exception as e:  # noqa: BLE001 - fail open on anything (D14)
-            self._report(e if isinstance(e, EdenError) else EdenError(f"eden {route}: {type(e).__name__}: {e}"))
+            err = e if isinstance(e, EdenError) else EdenError(f"eden {route}: {type(e).__name__}: {e}")
+        if failed is not None:
+            failed(err)
+        self._report(err)
         return None
 
     # -- the calls ------------------------------------------------------------------------------------------------
@@ -234,12 +246,7 @@ class EdenClient:
     def health(self, timeout_s: Optional[float] = None) -> Dict[str, Any]:
         """Whether the server answers and accepts the key, tenant and ids (``/v1/whoami``, changes nothing)."""
         errors: List[Exception] = []
-        on_error = self._on_error
-        self._on_error = lambda e: (errors.append(e), on_error and on_error(e))
-        try:
-            res = self._post("/v1/whoami", self._who(), timeout_s)
-        finally:
-            self._on_error = on_error
+        res = self._post("/v1/whoami", self._who(), timeout_s, failed=errors.append)
         return {"ok": True} if res is not None else {"ok": False, "error": str(errors[0]) if errors else "unavailable"}
 
     def explain(self, timeout_s: Optional[float] = None) -> List[Dict[str, Any]]:
@@ -247,7 +254,8 @@ class EdenClient:
         res = self._post("/v1/explain", self._who(), timeout_s,
                          lambda v: isinstance(v, dict) and isinstance(v.get("decisions"), list))
         return [d for d in (res or {}).get("decisions", [])
-                if isinstance(d, dict) and isinstance(d.get("decision"), str) and isinstance(d.get("why"), str)]
+                if isinstance(d, dict) and isinstance(d.get("decision"), str) and isinstance(d.get("why"), str)
+                and isinstance(d.get("itemIds", []), list)]
 
     def source_changed(self, source_id: str, items: Optional[List[Dict[str, Any]]] = None,
                        removed: Optional[List[str]] = None) -> bool:
@@ -285,8 +293,13 @@ class EdenClient:
 
     def _pushed(self, path: str, field: str, count: str, source_id: str, part: List[Any]) -> Optional[int]:
         res = self._post(path, {**self._who(session=False), "sourceId": source_id, field: part},
-                         valid=lambda v: isinstance(v, dict) and isinstance(v.get(count), (int, float)))
+                         valid=lambda v: isinstance(v, dict) and _count(v.get(count)))
         return None if res is None else int(res[count])
+
+
+def _count(v: Any) -> bool:
+    """A count a server may send: a finite number, not a bool (``json.loads`` accepts ``Infinity`` and ``NaN``)."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 def _server_error(e: urllib.error.HTTPError) -> str:

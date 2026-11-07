@@ -1,7 +1,7 @@
 # A4: why a team would not adopt Eden, and what was fixed (2026-11-07)
 
 Session A4 of the afternoon audit ([audit-1107-plan.md](audit-1107-plan.md)), decisions D276–D280. Branch
-`claude/a4-adoption` from `claude/lucid-hypatia-v9wqk5` (c7cfc8fc9). Spend: $0 (no paid call was needed).
+`claude/a4-adoption` from `claude/lucid-hypatia-v9wqk5` (c7cfc8fc9). Spend: about $0.0003 (one live check of the proxy on Anthropic Haiku; everything else $0).
 
 ## In plain words
 
@@ -10,7 +10,9 @@ README and INTEGRATION.md, started the server with and without a model key, call
 client, the example agent, MCP over stdio, and a container. The biggest reasons to say no were: the free path (no
 model key) was a different, weaker product than the one the docs describe; when Eden stayed silent there was no way to
 ask why; only TypeScript had a client; there was no way to measure Eden's cost and latency on your own traffic; and
-there was no supported way to host it. Those five are fixed. What is left is mostly trust work (a security review,
+there was no supported way to host it. Those five are fixed. Beyond the blockers I asked what would make a team *want* Eden, and built the strongest idea:
+an OpenAI-compatible proxy, so adding Eden is changing the model's base URL, with a shadow mode that lets a team try
+it on real traffic without changing a single answer. What is left is mostly trust work (a security review,
 verifying the model provider's data terms, real-user quality numbers) and connectors (Eden reads MCP servers you
 bring; it ships none of its own).
 
@@ -33,6 +35,20 @@ Status: **fixed** here, **partly** fixed, or **open**.
 | 11 | **MCP-only agents get no push.** `ask_context` is the only MCP tool; Eden's unasked context (its main value) needs the HTTP `observe` events. | An MCP-only integration sees a search tool, not a context partner. | **Open** (documented in INTEGRATION.md "Other languages"). |
 | 12 | **The docs are dense with decision numbers.** README and INTEGRATION.md are accurate but read as a lab notebook. | Slows evaluation; not a blocker on its own. | **Partly fixed:** the quickstart and the new INTEGRATION sections are plain; the rest is unchanged. |
 
+## What would make a team want Eden (ideas, with estimated impact)
+
+Estimates are judgement, not measurements.
+
+| Idea | What it is | Why it pulls a team in | Effort | Status |
+|---|---|---|---|---|
+| **A. Eden in front of the model** | An OpenAI-compatible proxy: the agent changes its `base_url`, Eden sees the conversation and injects context; any language, any agent framework, no SDK | Integration drops from "learn our event model and wire five calls" to one config line. Covers the large majority of agents, which speak the OpenAI chat API. Highest impact | 1 day | **Built (D280)**: `bun run proxy`, 8 tests, one live run on Anthropic's OpenAI-compatible endpoint where a plain stdlib call with no Eden code got the hidden constraint |
+| **B. Shadow mode** | The proxy reports and decides but injects nothing; `explain` and `trace-report` show what Eden would have added | Removes the risk objection: try it on production traffic for a week, read what it would have said, then switch injection on. Pairs with A | hours | **Built (D280)**: `EDEN_PROXY_SHADOW=1`, tested |
+| **C. "Eden caught this" report** | Per tenant, the deliveries the agent then used (feedback and usage inference exist, D13, D18) with the turns they changed, as a weekly digest; built on `explain`'s traces | Turns "trust us, it helps" into evidence on their own users, which is what a buyer needs | 2–3 days | Not built. `trace-report` and `explain` are the base |
+| **D. A five-minute demo world** | `bun run demo`: the sim's generated user (about 1,500 items over mail, calendar, docs, CRM, chat, `@eden/sim`) as sources, a scripted day of requests, and a side-by-side of the agent with and without Eden | Shows the value before any connector work; today the example has three documents | 1 day | Not built (the sim and the funnel already hold every piece) |
+| **E. Connector presets** | One-line entries for standard MCP servers (`{"preset": "google-calendar", "token": {"env": …}}`) with tested search, list and fetch tool mappings, and an OAuth-backed `SourceDirectory` example | Blocker 8: most teams have no MCP servers for their users' accounts yet | 3–5 days | Not built |
+
+Recommended next: D, then C (D shows value in five minutes; C proves it on their traffic), then E.
+
 ## What was done, and how it was checked
 
 - **D276** (`partner.ts` `observe`, `config-check.ts`): the push starts when `askReader`, `readerPush` and either a
@@ -48,13 +64,16 @@ Status: **fixed** here, **partly** fixed, or **open**.
 - **D278** (`packages/client-python`): 9 Python unit tests, an end-to-end run against `createHandler`, and id parity.
 - **D279** (`packages/server/src/trace-report.ts`, `bun run trace-report`): tests on synthetic and real traces.
 - **D280** (`Dockerfile`, `.dockerignore`, README, `package.json`, `main.ts` warning): built and run in Docker here.
+  `packages/proxy` (`createProxy`, `bun run proxy`, shadow mode): 8 tests with a fake upstream and the real handler;
+  one live run through Anthropic's OpenAI-compatible endpoint (Haiku 5.5, about $0.0003).
 - Walked as a newcomer: README block run as written; `examples/personal-agent/agent.ts` offline; MCP stdio
   `initialize`, `tools/list`, `tools/call`; the server with and without `OPENROUTER_API_KEY` (no paid call was made:
   no request was sent while a key was set).
 
 ## What is left (next steps, in order)
 
-1. A threat model page and the OpenRouter ZDR verification (blocker 7).
-2. A per-user Gmail/Calendar MCP worked example with an OAuth-backed `SourceDirectory` (blocker 8).
-3. A per-tenant usage and spend endpoint covering the background roles, so `trace-report`'s gap closes (blocker 4).
-4. Key reload without restart (blocker 10); an asyncio Python client if teams ask (blocker 3).
+1. The demo world (idea D) and the "Eden caught this" report (idea C).
+2. A threat model page and the OpenRouter ZDR verification (blocker 7).
+3. A per-user Gmail/Calendar MCP worked example with an OAuth-backed `SourceDirectory` (blocker 8).
+4. A per-tenant usage and spend endpoint covering the background roles, so `trace-report`'s gap closes (blocker 4).
+5. Key reload without restart (blocker 10); an asyncio Python client if teams ask (blocker 3).

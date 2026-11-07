@@ -37,6 +37,11 @@ describe("explain (D277)", () => {
   test("a copy: changing it changes nothing held; forget and session_end drop it", async () => {
     const p = partner();
     await p.observe(ev({ kind: "user_message", text: "Globex renewal with Dana Lee" }), { waitMs: 1_000 });
+    const before = JSON.stringify(p.explain(ref));
+    const copy = p.explain(ref);
+    copy[0]!.reason = "changed";
+    copy[0]!.itemIds.push("x");
+    expect(JSON.stringify(p.explain(ref))).toBe(before);
     p.explain(ref).length = 0;
     expect(p.explain(ref).length).toBeGreaterThan(0);
     expect(p.explain({ ...ref, userId: "other" })).toEqual([]);
@@ -77,7 +82,17 @@ describe("explain (D277)", () => {
       ...silent.map((reason) => explainTrace({ ...base, reason })),
     ];
     expect(new Set(all).size).toBe(all.length);
-    expect(explainTrace({ ...base, decision: "reader-push", itemIds: ["a", "b"] })).toContain("2 items as candidates");
+    // The paths whose sentence would otherwise mislead (review of D277).
+    expect(explainTrace({ ...base, decision: "reader-push", candidates: true, itemIds: ["a", "b"] })).toContain(
+      "2 items as candidates",
+    );
+    expect(explainTrace({ ...base, decision: "reader-push" })).toContain("made no reading");
+    expect(explainTrace({ ...base, decision: "sources", reason: "updated:inj_1", itemIds: ["a"] })).toContain(
+      "newer version",
+    );
+    expect(explainTrace({ ...base, decision: "fast", reason: "action-conflict", itemIds: ["a"] })).toContain(
+      "action firewall",
+    );
     expect(explainTrace({ ...base, decision: "reader-push", readerCalls: 1 })).toContain("reader read it");
   });
 });

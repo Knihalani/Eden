@@ -241,6 +241,12 @@ describe("pushCandidates with no reader dependency (D276: the no-key server)", (
   });
 
   test("the config check accepts candidates with no reader wired", () => {
-    expect(() => checkEngineConfig({ pushCandidates: 3 }, { deps: { reader: false, cards: false } })).not.toThrow();
+    const deps = { reader: false, cards: false };
+    expect(() => checkEngineConfig({ pushCandidates: 3 }, { deps })).not.toThrow();
+    // The push's own settings act on the candidates too (review of D276) …
+    expect(() => checkEngineConfig({ readerPushWaitMs: 1_000, askReaderPool: 10 }, { deps })).not.toThrow();
+    // … but not with the candidates off, and the reader's own settings still need a reader.
+    expect(() => checkEngineConfig({ pushCandidates: 0, readerPushWaitMs: 1_000 }, { deps })).toThrow(/reader/);
+    expect(() => checkEngineConfig({ askReaderWaitMs: 1_000 }, { deps })).toThrow(/reader/);
   });
 });

@@ -325,7 +325,8 @@ export class EdenClient {
       (v) => isRecord(v) && Array.isArray(v.decisions),
     );
     return (res?.decisions ?? []).filter(
-      (d): d is ExplainedDecision => isRecord(d) && typeof d.decision === "string" && typeof d.why === "string",
+      (d): d is ExplainedDecision =>
+        isRecord(d) && typeof d.decision === "string" && typeof d.why === "string" && Array.isArray(d.itemIds),
     );
   }
 
