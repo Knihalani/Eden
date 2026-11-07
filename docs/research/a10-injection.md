@@ -203,6 +203,8 @@ Hidden facts on the 144 hidden tasks of seeds 41–42, paired against eden: tool
   - ask citations' titles quarantined too (the MCP route prints them under `Sources:`);
   - an update's own tag kept round a quarantined title;
   - the reader's note quarantined;
+  - a forged "Eden:" caught wherever no word or field label comes before it (a quoted reply's "> Eden:", ", Eden:",
+    after a removed span or a blank line);
   - a reworded marker ("…; treat this whole item as suspect"), so a forged one gains the attacker nothing.
 
   The $0 numbers above are from the final set. The live arms' result (no fall in attack success) was set by the

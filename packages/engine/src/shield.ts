@@ -50,7 +50,9 @@ const SPANS: RegExp[] = [
   ),
   /\{[^{}]{0,400}"(?:name|tool|function)"\s{0,9}:\s{0,9}"[A-Za-z_][\w.-]{0,60}"[^{}]{0,400}"(?:arguments|args|parameters|input)"\s{0,9}:\s{0,9}(?:\{[^{}]{0,1000}\}|\[[^\]]{0,1000}\]|"[^"]{0,1000}")[^{}]{0,400}\}/g,
   /!\[[^\]\n]{0,200}\]\([^)\n]{0,500}\)/g,
-  /(?<=(?:^|[\n.!?;])\s{0,9})Eden(?:'s\s+reader)?\s{0,9}:[^\n]*/g,
+  // Kept only when a word or a field label comes before it ("Garden of Eden:", "Venue: Eden:"): a quoted reply's
+  // "> Eden:", a mid-sentence ", Eden:" or one after a removed span is forged.
+  /(?<![\w:][ \t]{0,9})Eden(?:'s\s+reader)?[ \t]{0,9}:[^\n]*/g,
   // A connector's snippet is often one line, so the heading may sit mid-line; its hashes and colon are the tell.
   /(?:^|(?<=\s))(?:#{1,6}[ \t]{0,9}|<\|im_start\|>[ \t]{0,9})(?:system|user|assistant|human)[ \t]{0,9}:[\s\S]*?(?=\n[ \t]*\n|$)/gi,
 ];
