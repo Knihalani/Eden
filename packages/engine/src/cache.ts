@@ -61,6 +61,12 @@ interface Entry {
    * (`reuseFor`): a later listing of the same raw item reuses `item` instead of redacting it again.
    */
   raw?: number;
+  /**
+   * When the item's doc entered the index, cache-wide and increasing (`ItemCache.seqs`): a frozen user is indexed again
+   * in this order on thaw (`thaw`), so equal scores reach the top-k in the order they did before (`SparseIndex`
+   * feeds candidates in insertion order), and the thawed user answers exactly as before.
+   */
+  seq: number;
 }
 
 /**
@@ -140,6 +146,8 @@ class UserCache {
   }
   /** Vocabulary size after the last rebuild. */
   baseline = 0;
+  /** The expiry tick (`ItemCache.epoch`) at which the user was last read or written: idle ones freeze (D325). */
+  seen = 0;
   /** Changes whenever an item is added, changed or dropped (`ItemCache.revision`); unique across rebuilds. */
   revision = 0;
   readonly items = new Map<string, Entry>();
@@ -157,7 +165,7 @@ class UserCache {
   /** How many items' `meta.start` carry each UTC offset (`offsetOf`): kept as items come and go. */
   offsets = new Map<number, number>();
   /** Recent probes (`probes.ts`): a query → the ids it found and when, shared by the user's sessions. */
-  readonly probes = new Map<string, { ids: string[]; at: number }>();
+  probes = new Map<string, { ids: string[]; at: number }>();
   /** The user's own name as their items list it (`selfOf`), computed on demand; null when none stands out. */
   self: string | null | undefined;
   /** How many cached items name each person (`partiesOf`), and how many name anyone: kept as items come and go. */
@@ -166,6 +174,68 @@ class UserCache {
   /** The parties' names and first names, lowercased (`isPerson`), computed on demand; reset as the tally changes. */
   personNames: Set<string> | undefined;
 }
+
+/**
+ * A user's cache while idle (`CacheLimits.freezeIdleMs`, D325): every entry, with the tallies kept beside them, as one
+ * deflated JSON blob in memory, and no vocabulary, index, sketcher or entry objects. Content stays in memory (D8):
+ * nothing is written to disk. The next read or write of the user thaws it (`ItemCache.thaw`) into the same state:
+ * the same items in the same order, fetch times, read marks, raw hashes and sketches, the same revision and probes,
+ * and an index whose docs were added in the same order, so every answer is the same (`cache-freeze.test.ts`).
+ */
+class FrozenUser {
+  constructor(
+    readonly scope: Scope,
+    readonly revision: number,
+    readonly synced: number,
+    readonly size: number,
+    readonly probes: Map<string, { ids: string[]; at: number }>,
+    readonly blob: Uint8Array,
+    /** Per class (`LOOSE`, `SYNCED`): the fetch time of its oldest and newest entry, NaN for none (expiry). */
+    readonly oldest: [number, number],
+    readonly newest: [number, number],
+    /** The user's `seen` when frozen. */
+    readonly seen: number,
+  ) {}
+}
+
+/** One frozen entry: the item as JSON sees it (text decoded), and the entry's own fields. */
+interface FrozenEntry {
+  i: ContextItem;
+  f: number;
+  m: number;
+  /** Synced (1) or a lookup's (0). */
+  s: 0 | 1;
+  r?: number;
+  /** The sketch: [lo, hi, numbers], null (no own words), or absent (not computed yet). */
+  k?: [number, number, number] | null;
+  q: number;
+}
+
+interface FrozenBody {
+  entries: FrozenEntry[];
+  parties: [string, number][];
+  partied: number;
+  offsets: [number, number][];
+}
+
+/** Entries per step of a freeze or thaw (`freezeSteps`, `thawSteps`): a few milliseconds of work at most. */
+const STEP_ITEMS = 64;
+/** A sliced freeze or thaw gives the event loop back at least this often (ms, D325). */
+const SLICE_MS = 5;
+
+/** A unit of sliced work (`ItemCache.pump`): its steps, and what to call when they end. */
+interface SlicedJob {
+  steps: Generator<undefined, void>;
+  done: () => void;
+}
+
+/** Lets every queued callback (other users' requests, timers, I/O) run before the slice that follows. */
+function yieldLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+const utf8 = new TextEncoder();
+const fromUtf8 = new TextDecoder();
 
 /** Header lines naming who takes part in an item: a mail's From, To and Cc, an event's attendees, an owner. */
 const PARTY_LINES = /^(from|to|cc|attendees|owner|organi[sz]er):[^\n]*$/gim;
@@ -286,6 +356,12 @@ export interface CacheLimits {
    * plain strings (the benches' `--plain`, for before/after figures).
    */
   packText: boolean;
+  /**
+   * A user neither read nor written for this long (ms) is frozen at the next expiry tick (`FrozenUser`, D325): held as
+   * one compressed blob and thawed, exactly, on next use. Measured in expiry ticks (`expireEveryMs`), at least two, so a
+   * lookup that read the user's vocabulary before an await never finds it rebuilt after. 0: never.
+   */
+  freezeIdleMs: number;
 }
 
 export const DEFAULT_CACHE_LIMITS: CacheLimits = {
@@ -298,6 +374,7 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   expireEveryMs: 10 * 60_000,
   releaseTerms: true,
   packText: true,
+  freezeIdleMs: 30 * 60_000,
 };
 
 /**
@@ -477,7 +554,21 @@ let titleIds = new Uint32Array(256);
 let bodyIds = new Uint32Array(4_096);
 
 export class ItemCache {
-  private readonly users = new Map<string, UserCache>();
+  private readonly users = new Map<string, UserCache | FrozenUser>();
+  /** Expiry ticks so far (`expireIdle`): a user's `seen` against it says how long they have been idle (D325). */
+  private epoch = 0;
+  /** The last `Entry.seq` handed out. */
+  private seqs = 0;
+  /** Users the timer's sliced work will look at again (`drainLater`): to freeze, or frozen with an item expired. */
+  private readonly later = new Set<string>();
+  /** The slice scheduler's queues (`pump`): thaws a request waits on, then the timer's freezes and expiries. */
+  private readonly urgent: SlicedJob[] = [];
+  private readonly background: SlicedJob[] = [];
+  private pumping = false;
+  /** Thaws under way in slices (`ready`): the frozen user each started from, and when it is done. */
+  private readonly thawing = new Map<string, { from: FrozenUser; done: Promise<void> }>();
+  /** Users frozen and thawed since the cache was built (D325): for the benches and stats. */
+  readonly freezes = { frozen: 0, thawed: 0, thawMs: 0 };
   private readonly perTenant = new Map<string, number>();
   /**
    * Gone-holds per tenant (`removeItems` with a hold; `TenantHolds`), bounded per user and per tenant. Apart from the
@@ -514,13 +605,20 @@ export class ItemCache {
 
   /** A user's cache, without creating one: reads never allocate state for a user who has none. */
   private peek(scope: Scope): UserCache | undefined {
-    return this.users.get(scopeKey(scope));
+    const key = scopeKey(scope);
+    const x = this.users.get(key);
+    if (x === undefined) return undefined;
+    const u = x instanceof UserCache ? x : this.thaw(key, x);
+    u.seen = this.epoch;
+    return u;
   }
 
   private touch(scope: Scope): UserCache {
     const key = scopeKey(scope);
-    const existing = this.users.get(key);
-    if (existing) {
+    const found = this.users.get(key);
+    if (found) {
+      const existing = found instanceof UserCache ? found : this.thaw(key, found);
+      existing.seen = this.epoch;
       this.users.delete(key); // Re-insert: Map order is least recently written first.
       this.users.set(key, existing);
       return existing;
@@ -535,6 +633,7 @@ export class ItemCache {
     }
     const u = new UserCache({ tenantId: scope.tenantId, userId: scope.userId }, this.limits.releaseTerms);
     u.revision = ++this.revisions;
+    u.seen = this.epoch;
     this.users.set(key, u);
     this.perTenant.set(scope.tenantId, (this.perTenant.get(scope.tenantId) ?? 0) + 1);
     return u;
@@ -684,6 +783,7 @@ export class ItemCache {
         prev: null,
         next: null,
         raw: from,
+        seq: ++this.seqs,
       };
       if (isSynced) {
         entry.synced = true;
@@ -734,7 +834,7 @@ export class ItemCache {
    * changes. 0 for a user with no cache.
    */
   revision(scope: Scope): number {
-    return this.peek(scope)?.revision ?? 0;
+    return this.users.get(scopeKey(scope))?.revision ?? 0; // A frozen user's too, without thawing it.
   }
 
   /** Whether the cached item is held by the user's sync (D57). */
@@ -827,7 +927,7 @@ export class ItemCache {
 
   /** Synced items the user's cache holds (D57). */
   syncedCount(scope: Scope): number {
-    return this.peek(scope)?.synced ?? 0;
+    return this.users.get(scopeKey(scope))?.synced ?? 0; // A frozen user's too, without thawing it.
   }
 
   /** Whether an entry is still within its time to live: a synced item's is `syncTtlMs` (D57). */
@@ -842,10 +942,12 @@ export class ItemCache {
   private rebuild(scope: Scope, old: UserCache): void {
     const u = new UserCache(old.scope, this.limits.releaseTerms);
     u.revision = ++this.revisions;
+    u.seen = old.seen;
     for (const e of old.items.values()) {
       const doc = this.index(u, e.item);
       const { item, fetchedAt, readMark, sketch, raw } = e;
-      const entry: Entry = { item, fetchedAt, readMark, doc, sketch, prev: null, next: null, raw };
+      const seq = ++this.seqs; // The new index's insertion order.
+      const entry: Entry = { item, fetchedAt, readMark, doc, sketch, prev: null, next: null, raw, seq };
       if (e.synced) entry.synced = true;
       u.items.set(e.item.id, entry);
       link(u, entry); // In `items` order, so each class's list keeps its order.
@@ -1174,39 +1276,329 @@ export class ItemCache {
    * (`expireEveryMs`), so never inside a caller's synchronous use of a user's vocabulary ids; callable directly
    * (tests, a simulation on its own clock).
    */
-  expireIdle(now = Date.now()): number {
+  expireIdle(now = Date.now(), sliced = false): number {
     let n = 0;
+    this.epoch++;
     // Expired gone-holds go too, and a tenant left with none: holds outlive no one's interest in them.
     for (const [tenant, held] of this.holds) {
       held.trim(now);
       if (held.size === 0 && held.evicted === 0) this.holds.delete(tenant);
     }
+    const freezeTicks = this.freezeTicks();
     // Deleting the entry being visited is safe in a Map walk: no copy of 10k+ users per tick.
-    for (const [key, u] of this.users) {
-      // Holds items, none expired: nothing to sweep, and alive. (A user with none may be dropped below.) A merge left
-      // under way by a user who stopped writing holds two copies of the index's arrays: end it (D120).
-      if (u.items.size > 0 && !this.anyExpired(u, now)) {
-        u.index.settle();
-        continue;
-      }
-      // A probe made within the time to live is kept with its user, even one that found nothing: forgetting it would
-      // cost the source call it saves (D46).
-      const idle = !this.probedSince(u, now - this.limits.ttlMs);
-      // A user with nothing alive goes whole, without unindexing item by item (2.2 s for 100k items when swept one
-      // by one, scratch measurement): the drop hook hears (scope, null), as for `forget`.
-      if (idle && !this.anyAlive(u, now)) {
-        this.dropUser(key, u.scope.tenantId);
+    for (const [key, x] of this.users) {
+      let u: UserCache;
+      if (x instanceof FrozenUser) {
+        // A frozen user is thawed here only when something of theirs expired (and frozen again below if still idle).
+        if (!this.frozenExpired(x, now)) continue;
+        if (sliced) {
+          this.later.add(key);
+          continue;
+        }
+        u = this.thaw(key, x);
+      } else u = x;
+      if (this.expireUser(key, u, now)) {
         n++;
         continue;
       }
-      this.sweep(u, now);
-      // After the sweep: its removes may purge, and a purge may start a merge.
+      if (!this.freezable(u, freezeTicks)) continue;
+      if (sliced) this.later.add(key);
+      else this.freeze(key, u);
+    }
+    if (sliced && this.later.size > 0) this.drainLater();
+    return n;
+  }
+
+  /** `freezeIdleMs` in expiry ticks (at least two: see `CacheLimits.freezeIdleMs`); 0 when users never freeze. */
+  private freezeTicks(): number {
+    const { freezeIdleMs, expireEveryMs } = this.limits;
+    if (!(freezeIdleMs > 0) || !(expireEveryMs > 0)) return 0;
+    return Math.max(2, Math.ceil(freezeIdleMs / expireEveryMs));
+  }
+
+  /** Whether a user has been idle long enough to freeze (`freezeIdleMs`). */
+  private freezable(u: UserCache, freezeTicks: number): boolean {
+    return freezeTicks > 0 && u.items.size > 0 && this.epoch - u.seen >= freezeTicks;
+  }
+
+  /**
+   * The timer's freezing, and its expiry of frozen users, as background jobs of the slice scheduler (`pump`, D325):
+   * one user at a time, a few milliseconds a turn of the event loop, after any thaw a request waits on. A user read
+   * or written meanwhile is left as they are (a freeze in progress is dropped: `freezeJob`).
+   */
+  private drainLater(): void {
+    for (const key of this.later) this.background.push({ steps: this.laterJob(key), done: () => {} });
+    this.later.clear();
+    void this.pump();
+  }
+
+  /** What `drainLater` does for one user, looked at again when the job starts (things may have moved since). */
+  private *laterJob(key: string): Generator<undefined, void> {
+    const now = this.lastNow + (Date.now() - this.lastWall);
+    let x = this.users.get(key);
+    if (x instanceof FrozenUser) {
+      if (!this.frozenExpired(x, now)) return;
+      yield* this.thawJob(key, x);
+      x = this.users.get(key);
+      if (!(x instanceof UserCache) || this.expireUser(key, x, now)) return;
+    }
+    if (x instanceof UserCache && this.freezable(x, this.freezeTicks())) yield* this.freezeJob(key, x);
+  }
+
+  /**
+   * Runs the sliced jobs (D325): thaws a request waits on (`urgent`) first, then the timer's (`background`), each
+   * job to its end in steps, giving the event loop back every `SLICE_MS`. One job at a time, first come first served,
+   * so however many users return at once, other work waits at most one slice per turn: a burst of thaws queues
+   * (admission), it does not spread across the loop.
+   */
+  private async pump(): Promise<void> {
+    if (this.pumping) return;
+    this.pumping = true;
+    try {
+      let t = performance.now();
+      for (;;) {
+        const job = this.urgent[0] ?? this.background[0];
+        if (job === undefined) return;
+        let r: IteratorResult<undefined, void>;
+        try {
+          r = job.steps.next();
+        } catch {
+          r = { done: true, value: undefined }; // A job that throws ends; its user stays as it was.
+        }
+        if (r.done) {
+          (this.urgent[0] === job ? this.urgent : this.background).shift();
+          job.done();
+        }
+        if (performance.now() - t >= SLICE_MS) {
+          await yieldLoop();
+          t = performance.now();
+        }
+      }
+    } finally {
+      this.pumping = false;
+    }
+  }
+
+  /** `expireIdle`'s work on one user: their expired items swept; true when the user was dropped whole. */
+  private expireUser(key: string, u: UserCache, now: number): boolean {
+    // Holds items, none expired: nothing to sweep, and alive. (A user with none may be dropped below.) A merge left
+    // under way by a user who stopped writing holds two copies of the index's arrays: end it (D120).
+    if (u.items.size > 0 && !this.anyExpired(u, now)) {
       u.index.settle();
-      if (idle && u.items.size === 0) {
-        this.dropUser(key, u.scope.tenantId);
-        n++;
+      return false;
+    }
+    // A probe made within the time to live is kept with its user, even one that found nothing: forgetting it would
+    // cost the source call it saves (D46).
+    const idle = !probedSince(u.probes, now - this.limits.ttlMs);
+    // A user with nothing alive goes whole, without unindexing item by item (2.2 s for 100k items when swept one
+    // by one, scratch measurement): the drop hook hears (scope, null), as for `forget`.
+    if (idle && !this.anyAlive(u, now)) {
+      this.dropUser(key, u.scope.tenantId);
+      return true;
+    }
+    this.sweep(u, now);
+    // After the sweep: its removes may purge, and a purge may start a merge.
+    u.index.settle();
+    if (idle && u.items.size === 0) {
+      this.dropUser(key, u.scope.tenantId);
+      return true;
+    }
+    return false;
+  }
+
+  /** Whether a frozen user holds an expired item (`anyExpired` on the oldest of each class) or holds none. */
+  private frozenExpired(f: FrozenUser, now: number): boolean {
+    if (f.size === 0) return true;
+    const [loose, synced] = f.oldest;
+    return now - loose > this.limits.ttlMs || now - synced > this.limits.syncTtlMs; // NaN (none) compares false.
+  }
+
+  /**
+   * Freezes an idle user (D325): their entries and tallies serialized in `items` order, each with its insertion
+   * sequence, compressed into one blob; the user's vocabulary, index, sketcher and entries are let go.
+   */
+  private freeze(key: string, u: UserCache): void {
+    const steps = this.freezeSteps(u);
+    let r = steps.next();
+    while (!r.done) r = steps.next();
+    this.install(key, r.value);
+  }
+
+  /** `freeze` as a sliced job: given up if the user is read, written or replaced before it is done. */
+  private *freezeJob(key: string, u: UserCache): Generator<undefined, void> {
+    const { seen, revision } = u;
+    const steps = this.freezeSteps(u);
+    for (let r = steps.next(); ; r = steps.next()) {
+      if (this.users.get(key) !== u || u.seen !== seen || u.revision !== revision) return;
+      if (r.done) return this.install(key, r.value);
+      yield;
+    }
+  }
+
+  private install(key: string, f: FrozenUser): void {
+    this.users.set(key, f); // Same key: the user's place in the eviction order is unchanged.
+    clearDecoded(); // Decoded texts of this user's items do not stay in the memo.
+    this.freezes.frozen++;
+  }
+
+  /** The work of a freeze, a step per `STEP_ITEMS` entries (reading each item's text inflates it). */
+  private *freezeSteps(u: UserCache): Generator<undefined, FrozenUser> {
+    const parts: string[] = [];
+    let chunk: FrozenEntry[] = [];
+    const oldest: [number, number] = [Number.NaN, Number.NaN];
+    const newest: [number, number] = [Number.NaN, Number.NaN];
+    for (const e of u.items.values()) {
+      const s = e.synced ? SYNCED : LOOSE;
+      if (Number.isNaN(oldest[s])) oldest[s] = e.fetchedAt;
+      newest[s] = e.fetchedAt;
+      const rec: FrozenEntry = { i: e.item, f: e.fetchedAt, m: e.readMark, s: e.synced ? 1 : 0, q: e.seq };
+      if (e.raw !== undefined) rec.r = e.raw;
+      if (e.sketch !== undefined) rec.k = e.sketch && [e.sketch.lo, e.sketch.hi, e.sketch.numbers];
+      chunk.push(rec);
+      if (chunk.length >= STEP_ITEMS) {
+        parts.push(JSON.stringify(chunk).slice(1, -1));
+        chunk = [];
+        yield;
       }
     }
+    if (chunk.length > 0) parts.push(JSON.stringify(chunk).slice(1, -1));
+    // Class lists are `items` order restricted (`link`), so their heads and tails are the first and last seen above.
+    const rest = JSON.stringify({ parties: [...u.parties], partied: u.partied, offsets: [...u.offsets] });
+    const json = `{"entries":[${parts.join(",")}],${rest.slice(1)}`;
+    // zstd at level 3 over the whole user: 270 B an item against 464 for deflate at its default level, at 3.3 against
+    // 42.7 µs an item (500 workload items, `.local` scratch measurement; docs/research/a14-scale-users.md).
+    const blob = Bun.zstdCompressSync(utf8.encode(json), { level: 3 });
+    return new FrozenUser(u.scope, u.revision, u.synced, u.items.size, u.probes, blob, oldest, newest, u.seen);
+  }
+
+  /**
+   * Null when the user is not frozen; else a promise that resolves once they are thawed (D325), as an urgent job of
+   * the slice scheduler (`pump`): other users' events do not wait behind this one's thaw. A read before it resolves
+   * thaws the rest at once (`peek`): the answer is the same, only the wait moves.
+   */
+  ready(scope: Scope): Promise<void> | null {
+    const key = scopeKey(scope);
+    const x = this.users.get(key);
+    if (!(x instanceof FrozenUser)) return null;
+    const running = this.thawing.get(key);
+    if (running?.from === x) return running.done;
+    const done = new Promise<void>((resolve) => {
+      this.urgent.push({
+        steps: this.thawJob(key, x),
+        done: () => {
+          if (this.thawing.get(key)?.from === x) this.thawing.delete(key);
+          resolve();
+        },
+      });
+    });
+    this.thawing.set(key, { from: x, done });
+    void this.pump();
+    return done;
+  }
+
+  /** A thaw as a sliced job: given up if the user is thawed (`peek`) or dropped meanwhile. */
+  private *thawJob(key: string, f: FrozenUser): Generator<undefined, void> {
+    const t0 = performance.now();
+    const steps = this.thawSteps(f);
+    for (let r = steps.next(); ; r = steps.next()) {
+      if (this.users.get(key) !== f) return;
+      if (r.done) {
+        this.thawed(key, r.value, t0);
+        return;
+      }
+      yield;
+    }
+  }
+
+  /**
+   * Thaws a frozen user into the state they were frozen in (D325): entries in `items` order (so both class lists and
+   * the eviction order are as before), docs indexed in their old insertion order (`Entry.seq`), the same revision
+   * (what is derived from the items stays valid), tallies, probes and sketches. Vocabulary ids and doc numbers are new,
+   * as after `rebuild`: nothing outside holds them across calls. Does not mark the user seen (the caller does).
+   */
+  private thaw(key: string, f: FrozenUser): UserCache {
+    const t0 = performance.now();
+    const steps = this.thawSteps(f);
+    let r = steps.next();
+    while (!r.done) r = steps.next();
+    return this.thawed(key, r.value, t0);
+  }
+
+  private thawed(key: string, u: UserCache, t0: number): UserCache {
+    this.users.set(key, u); // Same key: the user's place in the eviction order is unchanged.
+    this.freezes.thawed++;
+    this.freezes.thawMs += performance.now() - t0;
+    return u;
+  }
+
+  /** The work of a thaw, a step per `STEP_ITEMS` entries; returns the thawed user, not yet in `users`. */
+  private *thawSteps(f: FrozenUser): Generator<undefined, UserCache> {
+    const body = JSON.parse(fromUtf8.decode(Bun.zstdDecompressSync(f.blob))) as FrozenBody;
+    yield;
+    const u = new UserCache(f.scope, this.limits.releaseTerms);
+    u.revision = f.revision;
+    u.seen = f.seen;
+    u.probes = f.probes;
+    u.parties = new Map(body.parties);
+    u.partied = body.partied;
+    u.offsets = new Map(body.offsets);
+    const plain: ContextItem[] = new Array(body.entries.length);
+    const entries: Entry[] = new Array(body.entries.length);
+    for (let j = 0; j < body.entries.length; j++) {
+      const r = body.entries[j]!;
+      const item = r.i;
+      plain[j] = item;
+      const sketch = r.k === undefined ? undefined : r.k && { lo: r.k[0], hi: r.k[1], numbers: r.k[2] };
+      const entry: Entry = {
+        item: this.limits.packText ? packItem(item) : item,
+        fetchedAt: r.f,
+        readMark: r.m,
+        doc: -1,
+        sketch,
+        prev: null,
+        next: null,
+        raw: r.r,
+        seq: r.q,
+      };
+      if (r.s === 1) {
+        entry.synced = true;
+        u.synced++;
+      }
+      u.items.set(item.id, entry);
+      link(u, entry);
+      entries[j] = entry;
+      if (j % STEP_ITEMS === STEP_ITEMS - 1) yield;
+    }
+    // Indexed in their old insertion order, from the plain text (no inflate of what was just packed).
+    const order = entries.map((_, j) => j).sort((a, b) => entries[a]!.seq - entries[b]!.seq);
+    for (let k = 0; k < order.length; k++) {
+      const j = order[k]!;
+      const doc = this.index(u, plain[j]!);
+      entries[j]!.doc = doc;
+      u.byDoc[doc] = entries[j]!;
+      if (k % STEP_ITEMS === STEP_ITEMS - 1) yield;
+    }
+    u.index.settle();
+    u.baseline = u.vocab.size;
+    return u;
+  }
+
+  /** Users held frozen (D325). */
+  get frozenCount(): number {
+    let n = 0;
+    for (const x of this.users.values()) if (x instanceof FrozenUser) n++;
+    return n;
+  }
+
+  /** Sliced jobs queued or running (D325; `pump`): 0 once the timer's freezes and every waited-on thaw are done. */
+  get slicedPending(): number {
+    return this.urgent.length + this.background.length;
+  }
+
+  /** Bytes of every frozen user's blob (D325): for the benches. */
+  get frozenBytes(): number {
+    let n = 0;
+    for (const x of this.users.values()) if (x instanceof FrozenUser) n += x.blob.byteLength;
     return n;
   }
 
@@ -1217,16 +1609,9 @@ export class ItemCache {
     return (loose !== null && this.alive(loose, now)) || (synced !== null && this.alive(synced, now));
   }
 
-  /** Whether the user made a probe at or after `since` (the probes map is least recently made first). */
-  private probedSince(u: UserCache, since: number): boolean {
-    let last: { at: number } | undefined;
-    for (const p of u.probes.values()) last = p;
-    return last !== undefined && last.at >= since;
-  }
-
   /** Runs `expireIdle` on the cache's own clock (the last `put`'s `now` moved on by wall time since). */
   tick(): void {
-    this.expireIdle(this.lastNow + (Date.now() - this.lastWall));
+    this.expireIdle(this.lastNow + (Date.now() - this.lastWall), true);
   }
 
   /** Stops the expiry timer for good (a closing server, a test). The cache still answers; nothing expires on time. */
@@ -1263,6 +1648,13 @@ export class ItemCache {
   get userCount(): number {
     return this.users.size;
   }
+}
+
+/** Whether the user made a probe at or after `since` (the probes map is least recently made first). */
+function probedSince(probes: Map<string, { at: number }>, since: number): boolean {
+  let last: { at: number } | undefined;
+  for (const p of probes.values()) last = p;
+  return last !== undefined && last.at >= since;
 }
 
 /** Whether a refreshed copy carries the same details as the one held (its link, its source's time, its metadata). */

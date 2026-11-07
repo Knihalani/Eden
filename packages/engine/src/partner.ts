@@ -674,6 +674,9 @@ export class ContextPartner {
    * trial taught the source map that every source it would have cited went unused).
    */
   async observe(event: AgentEvent, options: { waitMs?: number; shadow?: boolean } = {}): Promise<ObserveResult> {
+    // A user frozen while idle (D325) is thawed in slices first, so other users' events do not wait behind it.
+    const thawing = this.deps.cache.ready(event);
+    if (thawing) await thawing;
     // `readerPush`: a request that acts is also read by the ask-time reader, as an ask of the engine's own; what it
     // flags is queued as a packet. The observe waits for it within its own wait, so an agent that never calls
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
@@ -1316,6 +1319,8 @@ export class ContextPartner {
    */
   async checkAction(event: AgentEvent): Promise<ActionCheck> {
     const t0 = performance.now();
+    const thawing = this.deps.cache.ready(event); // D325, as in `observe`.
+    if (thawing) await thawing;
     const proceed = (reason: string): ActionCheck => ({
       verdict: "proceed",
       finding: null,
@@ -1452,6 +1457,8 @@ export class ContextPartner {
 
   async ask(request: AskRequest, internal: AskInternal = {}): Promise<AskResponse> {
     const t0 = performance.now();
+    const thawing = this.deps.cache.ready(request); // D325, as in `observe`.
+    if (thawing) await thawing;
     const spans = this.spans;
     const root = spans?.open("ask", 0, { async: true });
     const s = this.session(request);
