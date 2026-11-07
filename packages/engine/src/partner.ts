@@ -304,7 +304,7 @@ interface Session {
    * `readerReuse` (trial, D193): the latest push's reading: the request it read (`requests` then), its pool's items
    * with their content hashes, and its verdict (null when it gave none).
    */
-  pushRead?: { request: number; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
+  pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
 }
 
 /** Items whose shown words a session keeps (`askDedup`). */
@@ -1592,7 +1592,10 @@ export class ContextPartner {
       }
     }
     // `readerReuse` (trial, D193): an ask in the push's request reads the push's verdict, with no call of its own.
-    const reused = opts.push ? null : await this.reusePush(s, pool, waitMs);
+    const reuseAt = performance.now();
+    const reused = opts.push ? null : await this.reusePush(s, pool, main, waitMs);
+    // The ask's own read, when there was nothing to reuse, waits only what is left of its wait.
+    const readWaitMs = Number.isFinite(waitMs) ? waitMs - (performance.now() - reuseAt) : waitMs;
     // The likely deliveries are re-read while the reader reads (`verifyDelivery`): the delivery then waits on no call.
     // Only once the reader will read (D134): an empty pool or a gated ask has no reading to overlap, and its delivery
     // re-reads what it actually cites (`verifyItems`), so a re-read started ahead there is a connector call wasted.
@@ -1619,6 +1622,7 @@ export class ContextPartner {
     if (opts.push && this.config.readerReuse) {
       s.pushRead = {
         request: opts.request ?? s.requests,
+        main,
         hashes: new Map(input.items.map((it) => [it.id, it.hash])),
         verdict: reading.then(
           (r) => r.verdict,
@@ -1637,7 +1641,7 @@ export class ContextPartner {
         : Number.isFinite(waitMs)
           ? await Promise.race([
               reading,
-              new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), Math.max(0, waitMs)))),
+              new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), Math.max(0, readWaitMs)))),
             ])
           : await reading;
     } catch {
@@ -1764,11 +1768,13 @@ export class ContextPartner {
   private async reusePush(
     s: Session,
     pool: readonly Scored[],
+    main: string,
     waitMs: number,
   ): Promise<{ verdict: ReaderVerdict; all: boolean } | "late" | null> {
     if (!this.config.readerReuse || !this.config.readerPush) return null;
     const prior = s.pushRead;
-    if (!prior || prior.request !== s.requests) return null;
+    // Only an ask read against the push's own request: one that acts on its own is another request.
+    if (!prior || prior.request !== s.requests || prior.main !== main) return null;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const v = await Promise.race([
       prior.verdict,

@@ -425,6 +425,7 @@ export function parseReader(text: string, count: number): { i: number; kind: Rea
 export function parseReaderFull(
   text: string,
   count: number,
+  short = false,
 ): { bears: { i: number; kind: ReaderKind; why: string }[]; rejected: number[] } | null {
   let v: Record<string, unknown>;
   try {
@@ -435,8 +436,8 @@ export function parseReaderFull(
     return null;
   }
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
-  // `readerShort`'s schema: `b`, with `r` or alone, and no other key (an object with other lists is the usual one's).
-  if (Array.isArray(v.b) && Object.keys(v).every((k) => k === "b" || k === "r")) return parseShort(v, count);
+  // `readerShort`'s schema, only for a short prompt's reply: a usual reply shaped otherwise stays unreadable.
+  if (short) return parseShort(v, count);
   // The list asked for is "bears"; a model sometimes names it otherwise ("items", or a kind: {"blocks": [...]}). The
   // one array the object holds is read as the list, and a kind its key names is the entries' default kind.
   let key = "bears";
@@ -542,7 +543,7 @@ export class ModelReaderMaker implements ReaderMaker {
       signal,
     });
     const n = Math.min(input.items.length, READER_MAX_ITEMS);
-    const parsed = res.truncated ? null : parseReaderFull(res.text, n);
+    const parsed = res.truncated ? null : parseReaderFull(res.text, n, input.short === true);
     return { bears: parsed?.bears ?? null, rejected: parsed?.rejected ?? [], costUsd: res.costUsd, usage: res.usage };
   }
 }

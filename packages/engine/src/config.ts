@@ -493,15 +493,16 @@ export interface EngineConfig {
    */
   readerVerifyAfter: boolean;
   /**
-   * Trial (D193, S1, off): with `readerPush`, an ask in the same request as the push (no newer user message) reuses the
-   * push's reading instead of a call of its own: the push's verdicts on the items both pools hold, unchanged in content,
-   * lead the answer; an item the push did not read keeps its rule order. A push gated, failed or late leaves the ask
-   * to read as usual.
+   * Trial (D193, S1, off): with `readerPush`, an ask in the same request as the push (no newer user message), read
+   * against that same request (not an action of its own), reuses the push's reading instead of a call of its own: the
+   * push's verdicts on the items both pools hold, unchanged in content, lead the answer; an item the push did not read
+   * keeps its rule order. A push that gave no verdict (gated, failed) leaves the ask to read as usual; one still out
+   * past the ask's wait leaves the ask answered without the reader, with no call.
    */
   readerReuse: boolean;
   /**
-   * Trial (D194, S1, off): with `askReader`, the reader replies in a shorter schema (item indexes with a one-letter kind
-   * code, and the lookalikes' indexes; no bearing words), `READER_SYSTEM_SHORT`.
+   * Trial (D194, S1, off): with `askReader`, the reader replies in a shorter schema (item indexes with a one-letter
+   * kind code, and the lookalikes' indexes; no bearing words), `READER_SYSTEM_SHORT`.
    */
   readerShort: boolean;
 }

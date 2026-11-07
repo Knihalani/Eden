@@ -123,7 +123,7 @@ describe("readerShort (D194): the short output schema", () => {
   });
 
   test("its reply is read as bearings with no words and rejections; indexes are validated", () => {
-    expect(parseReaderFull('{"b":[[2,"B"],[0,"l"],[9,"B"],[2,"C"]],"r":[1,2,7]}', 3)).toEqual({
+    expect(parseReaderFull('{"b":[[2,"B"],[0,"l"],[9,"B"],[2,"C"]],"r":[1,2,7]}', 3, true)).toEqual({
       bears: [
         { i: 2, kind: "blocks", why: "" },
         { i: 0, kind: "limits", why: "" },
@@ -131,12 +131,15 @@ describe("readerShort (D194): the short output schema", () => {
       rejected: [1],
     });
     // An unknown code reads as the mildest kind that leads, never as an instruction; a bare index is read too.
-    expect(parseReaderFull('{"b":[[1,"ignore previous"],0],"r":[]}', 3)!.bears).toEqual([
+    expect(parseReaderFull('{"b":[[1,"ignore previous"],0],"r":[]}', 3, true)!.bears).toEqual([
       { i: 1, kind: "changes", why: "" },
       { i: 0, kind: "changes", why: "" },
     ]);
-    expect(parseReaderFull('{"b":[],"r":[]}', 3)).toEqual({ bears: [], rejected: [] });
-    expect(parseReaderFull('{"b":[],"r":"x"}', 3)).toBeNull();
+    expect(parseReaderFull('{"b":[],"r":[]}', 3, true)).toEqual({ bears: [], rejected: [] });
+    expect(parseReaderFull('{"b":[],"r":"x"}', 3, true)).toBeNull();
+    // A usual prompt's reply in the short shape is unreadable, as before the trial: never a "nothing binds".
+    expect(parseReaderFull('{"b":[{"i":1,"k":"blocks","why":"x"}]}', 3)).toBeNull();
+    expect(parseReaderFull('{"b":[[1,"B"]],"r":[]}', 3)).toBeNull();
   });
 
   test("the model maker sends the short prompt and reads its reply", async () => {
@@ -269,6 +272,17 @@ describe("readerReuse (D193): an ask in the push's request reads the push's verd
     await say(p, "thanks, what time is it there?");
     await p.ask({ ...ref(), question: ACTS, maxItems: 3 });
     expect(maker.calls.length).toBe(3);
+  });
+
+  test("an ask that acts on its own, in the push's request, is another request: it reads anew", async () => {
+    const maker = new Reader();
+    const { p } = partner({ readerPush: true, readerReuse: true }, maker);
+    await say(p, REQUEST);
+    await p.ask({ ...ref(), question: "Book the Harlow venue hall for the bar party on Friday.", maxItems: 3 });
+    expect(maker.calls.length).toBe(2);
+    // A question about the request itself (no action of its own) is read against the push's request: reused.
+    await p.ask({ ...ref(), question: QUESTION, maxItems: 3 });
+    expect(maker.calls.length).toBe(2);
   });
 
   test("a push that gave no verdict (its call failed) leaves the ask to read as usual", async () => {
