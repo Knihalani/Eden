@@ -48,6 +48,10 @@ the run back and releases it after its request is answered, so any template can 
 the ones whose item reads naturally as a later arrival. Run only those with
 `--templates $(the HELDOUT17_LATE names, comma-separated)`.
 
+`--templates` filters the tasks, not the world: the other 24 templates' items (hidden or decoy) are still planted
+from the start, and only the eight selected are held back. A late day can therefore surface an unrelated planted
+item; read a false concern on such a day with that in mind (existing pi-ab behaviour, not changed here).
+
 `--days` (a user's mixed days) has no late mode: `--late` needs `--day K`. In `--days` the eight templates are
 planted up front like the rest. Adding a late mode to `--days` is not part of this change.
 
@@ -59,10 +63,11 @@ planted up front like the rest. Adding a late mode to `--days` is not part of th
   - the same text, detail and template across the three variants;
   - ids `w<seed>:heldout17[-variant]:`;
   - the suite stays out of `all`;
-  - `HELDOUT17_LATE` holds 8 of the suite's templates.
+  - `HELDOUT17_LATE` holds 8 of the suite's templates;
+  - `UNREAD_BLIND` is `["heldout17"]`.
 - **No leak to the tools arm** (the A5/CL5 review's lesson, the agent sees refs): each planted item's ref has the
-  base world's `<kind>-<index>` shape and is the same in hidden and control. The test checks that no item's ref, id
-  or title contains a template name, `heldout`, `h17`, `planted` or `decoy`.
+  base world's `<kind>-<index>` shape and is the same in hidden and control. The test checks that no item's ref, id,
+  title or meta contains a template name, `heldout`, `h17`, `planted` or `decoy`.
 
 ## 4. Caches
 
@@ -106,3 +111,6 @@ gzip -9 -n -c $D/intent-v2.jsonl > packages/sim/lab/distilled/intent-v2.jsonl.gz
   merge by concatenating the new lines: unzip the intent file, take both sets of new lines after the common prefix,
   then gzip again. Do not take one side's file.
 - `cards-disk.test.ts`'s coverage test now builds 20 worlds; its timeout went from 120 s to 150 s.
+- D350 was the number this session was given (the A-wave's block); renumber on merge if it clashes.
+- `UNREAD_BLIND` (suites.ts, `["heldout17"]`) stops the funnel calling heldout17 "read before"; the funnel says the
+  run is its blind read instead. Move heldout17 out of it once the end-of-day confirmation has run.

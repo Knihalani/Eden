@@ -140,6 +140,8 @@ export const UNRUN_BLIND = [
   "heldout16",
   "heldout17",
 ];
+/** The UNRUN_BLIND suites nobody has read yet: the funnel's "read before" warning skips them (D350). */
+export const UNREAD_BLIND = ["heldout17"];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**

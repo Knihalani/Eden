@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { buildWorld } from "../world";
 import { HELDOUT17_LATE } from "./hidden-heldout17";
 import { supportsNeutral } from "./neutral";
-import { parseSuites, SUITE_NAMES, SUITES, UNRUN_BLIND } from "./suites";
+import { parseSuites, SUITE_NAMES, SUITES, UNREAD_BLIND, UNRUN_BLIND } from "./suites";
 
 describe("suite registry", () => {
   test("task ids are unique across a suite's hidden and control variants (runners key results by id)", () => {
@@ -149,14 +149,15 @@ describe("suite registry", () => {
       }
       expect(by.hidden!.tasks.every((t: { id: string }) => t.id.startsWith(`w${seed}:heldout17:`))).toBe(true);
       // The tools arm sees refs and ids (A5/CL5 review): the base world's `<kind>-<index>` shape, the same in hidden
-      // and control, and no template name, suite name or "planted" marker anywhere in an item's ref, id or title.
+      // and control, and no template name, suite name or "planted" marker in an item's ref, id, title or meta.
       const names: string[] = by.hidden!.tasks.map((t: { template: string }) => t.template);
       const refs = (v: string) => by[v]!.items.map((it: { ref: string }) => it.ref);
       expect(refs("control")).toEqual(refs("hidden"));
       for (const v of ["hidden", "control"]) {
         for (const it of by[v]!.items as { ref: string; id: string; title: string }[]) {
           expect(it.ref).toMatch(/^[a-z]+-\d+$/);
-          const seen = `${it.ref} ${it.id} ${it.title}`.toLowerCase();
+          const meta = Object.values((it as { meta?: Record<string, string> }).meta ?? {}).join(" ");
+          const seen = `${it.ref} ${it.id} ${it.title} ${meta}`.toLowerCase();
           expect(names.filter((n) => seen.includes(n))).toEqual([]);
           expect(/heldout|h17|planted|decoy/.test(seen)).toBe(false);
         }
@@ -166,6 +167,7 @@ describe("suite registry", () => {
       expect(HELDOUT17_LATE.every((n) => names.includes(n))).toBe(true);
     }
     expect(UNRUN_BLIND).toContain("heldout17");
+    expect(UNREAD_BLIND).toEqual(["heldout17"]);
     expect(supportsNeutral("heldout17")).toBe(true);
     expect(parseSuites("all")).not.toContain("heldout17");
   });
