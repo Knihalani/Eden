@@ -17,11 +17,12 @@
  * deleted trial `cardsBatch` (D242) added `--bulk` here: commit 4e072585.
  */
 import { writeFileSync } from "node:fs";
-import type { CardEnricher } from "@eden/engine";
+import { checkEngineConfig, type CardEnricher } from "@eden/engine";
 import type { Model } from "@eden/llm";
 import { buildPartner } from "@eden/server";
 import { REALISTIC, simSources } from "../sources";
 import { worldOf } from "./ab-common";
+import { parseJson } from "./flags";
 import { labAccess, labModel } from "./free";
 import { warmAll } from "../server";
 
@@ -39,7 +40,9 @@ const USERS = opt("users", "train1:41")
     return { suite, seed: Number(seed) };
   });
 const OUT = opt("out", "");
-const SET = JSON.parse(opt("set", "{}")) as Record<string, unknown>;
+// Checked as the servers check EDEN_ENGINE_CONFIG: an unknown key (a deleted trial's), a wrong type or an out-of-range
+// value stops the run, rather than running the default under the setting's name. Cards are wired, the reader is not.
+const SET = checkEngineConfig(parseJson(opt("set", "{}"), "--set"), { where: "--set", deps: { cards: true } });
 const ACCESS = labAccess(args, [MODEL]);
 
 interface Row {

@@ -354,8 +354,8 @@ between (tool calls, its replies) do not make it stale.
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four requests
 the item would change, in a user's words (validated, at most 120 characters each, redacted); items the card prefilter
 rejects are read for their requests only, and with `cardsLean` (D125) only when a person wrote them recently: not
-automated mail (`automated`: a no-reply or list sender, a bulk category or footer) and dated within `cardsLeanDays` (7 since D244; 30 before)
-or upcoming; constraint-worded items are read whatever their sender or age. They live in a per-user BM25 index apart
+automated mail (`automated`: a no-reply or list sender, a bulk category or footer) and dated within `cardsLeanDays`
+(7 since D244; 30 before) or upcoming; constraint-worded items are read whatever their sender or age. They live in a per-user BM25 index apart
 from the item text, keyed by content hash and dropped with the card. At request time, with no model, the request's words
 are searched in it: the best hits join the lookup's candidates and one judge seat, and are fused into an `ask` by
 reciprocal rank after the verdict hits. An intent hit alone is never a no-model delivery. A hit whose item holds a
