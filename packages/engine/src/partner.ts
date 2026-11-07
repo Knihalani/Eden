@@ -228,6 +228,8 @@ interface Recorded {
   sourceIds: string[];
   situation: string;
   used: boolean;
+  /** The session the injection was delivered in: a later correction's usage record names it (D293). */
+  sessionId: string;
 }
 
 interface Session {
@@ -1993,7 +1995,7 @@ export class ContextPartner {
       for (const sourceId of r.sourceIds) this.deps.sourceMap.correctOutcome(scope, r.situation, sourceId, f.used);
       r.used = f.used;
       this.usage({
-        sessionId: f.sessionId,
+        sessionId: r.sessionId,
         injectionId: f.injectionId,
         used: f.used,
         how: "explicit",
@@ -2272,7 +2274,7 @@ export class ContextPartner {
     const mine = tenant.get(key) ?? new Map<string, Recorded>();
     tenant.delete(key); // Re-insert: Map order is least recently recorded user first.
     tenant.set(key, mine);
-    mine.set(injectionId, { sourceIds, situation, used });
+    mine.set(injectionId, { sourceIds, situation, used, sessionId: report.sessionId });
     while (mine.size > MAX_RECORDED) mine.delete(mine.keys().next().value as string);
     while (tenant.size > MAX_RECORDED_USERS) tenant.delete(tenant.keys().next().value as string);
   }

@@ -48,8 +48,6 @@ describe("connector presets (D294)", () => {
         }
       }
     }
-    expect(mapFetchArgs(SCHEMAS.get_thread!).ref?.name).toBe("threadId");
-    expect(mapFetchArgs(SCHEMAS.get_event!).ref?.name).toBe("eventId");
     expect(mapListArgs(SCHEMAS.search_threads!).cursor).toEqual({ name: "pageToken", kind: "token" });
   });
 
@@ -60,10 +58,11 @@ describe("connector presets (D294)", () => {
       id: "mail",
       description: PRESETS.gmail!.description,
       searchTool: { name: "search_threads" },
-      fetchTool: { name: "get_thread" },
       listTool: { name: "search_threads" },
     });
     expect("preset" in spec!).toBe(false);
+    // No fetch for Gmail: a full thread would differ from the newest-message copy and read as a change.
+    expect("fetchTool" in spec!).toBe(false);
     expect("trustedReadTools" in spec!).toBe(false);
     const own = expandPreset({ preset: "gmail", id: "m", description: "work mail", url: "https://x", notifies: true });
     expect([own.description, own.notifies]).toEqual(["work mail", true]);
@@ -117,7 +116,7 @@ describe("connector presets (D294)", () => {
     return { calls, transport };
   }
 
-  test("end to end through UserSources: search, fetch and the sync's listing call only the preset's read tools", async () => {
+  test("end to end through UserSources: search and the sync's listing call only the preset's read tools", async () => {
     const g = gmailServer();
     const users = new UserSources({
       directory: () => [{ kind: "mcp", preset: "gmail", id: "mail", transport: g.transport }],
@@ -128,14 +127,13 @@ describe("connector presets (D294)", () => {
     const signal = AbortSignal.timeout(2_000);
     const found = await src!.search({ scope, text: "invoice bank details", entities: [], limit: 5 }, signal);
     expect(found.map((i) => i.ref)).toEqual(["t1", "t2"]);
-    expect((await src!.fetch!("t1", scope, signal))?.ref).toBe("t1");
+    expect(src!.fetch ? await src!.fetch("t1", scope, signal) : null).toBeNull();
     const page = await src!.list!(scope, undefined, 50, signal);
     expect(page.next).toBe("p2");
     expect((await src!.list!(scope, "p2", 50, signal)).items.map((i) => i.ref)).toEqual(["t3"]);
-    expect(g.calls.map((c) => c.name)).toEqual(["search_threads", "get_thread", "search_threads", "search_threads"]);
+    expect(g.calls.map((c) => c.name)).toEqual(["search_threads", "search_threads", "search_threads"]);
     expect(g.calls[0]!.args).toMatchObject({ query: expect.any(String), view: "THREAD_VIEW_SUMMARY" });
-    expect(g.calls[1]!.args).toEqual({ threadId: "t1", messageFormat: "PLAIN_TEXT" });
-    expect(g.calls[3]!.args).toMatchObject({ pageToken: "p2" });
+    expect(g.calls[2]!.args).toMatchObject({ pageToken: "p2", view: "THREAD_VIEW_SUMMARY" });
     await users.close();
   });
 

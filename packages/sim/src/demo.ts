@@ -113,7 +113,7 @@ export async function runDemo(options: DemoOptions = {}): Promise<{ world: World
     let turn = 0;
     const client = (sessionId: string) => new EdenClient({ baseUrl, userId, sessionId, tenantId: "dev" });
     for (const t of chosen) rows.push(await actingRow(client(`s${++turn}`), t, options.agent));
-    // Chatter: nothing to look up, so Eden should say nothing.
+    // Chatter: nothing in it needs the user's sources; Eden may search, but should hand the agent nothing.
     const chat = client(`s${++turn}`);
     const said = await chat.collect((await chat.observe({ kind: "user_message", text: CHATTER })).injection);
     rows.push({

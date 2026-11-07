@@ -215,15 +215,18 @@ For common servers you can name a preset instead of working out which tools read
 
 | Preset | Area | Read tools it names | Checked against |
 | --- | --- | --- | --- |
-| `gmail` | mail | `search_threads` (newest message of each thread), `get_thread` (plain text), `search_threads` as the sync's listing | Google's hosted Gmail MCP server's schemas, 2026-11-07 |
-| `google-calendar` | calendar | `search_events`, `get_event` (no listing: `list_events` pages by start time, not by change) | Google's hosted Calendar MCP server's schemas, 2026-11-07 |
+| `gmail` | mail | `search_threads` (newest message of each thread), and as the sync's listing | Google's hosted Gmail MCP server's input schema, 2026-11-07 |
+| `google-calendar` | calendar | `search_events` (no listing: `list_events` pages by start time, not by change) | Google's hosted Calendar MCP server's input schema, 2026-11-07 |
 | `caldav` | calendar | `caldav_search_events` (unannotated: list it in `trustedReadTools` after checking) | madbonez/caldav-mcp at 6db4975 (connector lab) |
 | `obsidian` | notes | `search_notes` (unannotated: list it in `trustedReadTools`; run the server `--read-only`) | bitbonsai/mcpvault at adda860 (connector lab) |
 
 A preset fills in only read tools and their fixed arguments; anything you write in the entry wins. It never adds
 `trustedReadTools`, so the read-only check (D7) runs as for a hand-written entry: a server that does not annotate a
 tool `readOnlyHint: true` is refused until you have checked the tool and listed it. Ask for read-only OAuth scopes
-(`gmail.readonly`, `calendar.readonly`) as well, so the provider refuses a write beneath Eden's check. There is no CRM
+(`gmail.readonly`, `calendar.readonly`) as well, so the provider refuses a write beneath Eden's check. No preset names a fetch tool yet: a
+fetched Gmail thread holds every message where search holds the newest, so it would look changed (add one by hand
+only where both tools return the same copy). Google's read-only annotations were not captured: if the server does not
+set them, the connect is refused until you list the tool. There is no CRM
 preset yet: no CRM server's tools could be verified, so write a CRM entry by hand (`searchTool` with its name, Eden
 maps the query from its schema). A worked per-user OAuth directory, which keeps refresh tokens in your app and hands
 Eden short-lived access tokens on preset entries, is [examples/oauth-directory](../examples/oauth-directory/directory.ts).
@@ -370,6 +373,13 @@ own `agent_message` and `tool_call` events, or send feedback: without either the
 than 0%. "Used" is coarse: it is per injection, and a packet of candidates counts as used when any one of them is.
 The log and the digest hold counts, ids and connector names only, never request or item text (D56). Traces carry no
 user and no clock: pass one deployment's log for the period you want.
+
+Its last section prices connector calls per 1,000 user requests on six market plans (first-party APIs, Composio,
+Unified.to, Arcade.dev, Pipedream Connect, Zapier MCP): the agent's reported tool calls, Eden's calls inside lookups,
+and the background sync's listings (the server logs the sync's counters once a minute with `EDEN_TRACE=1`). For the
+without-Eden column, pass a log of the agent without Eden's context: `--baseline shadow.log`, from the proxy in shadow
+mode (it reports events but injects nothing) or from before Eden. On the lab's train worlds (D291) the agent alone
+made 3.38 connector calls a request; with Eden 0 at request time, plus a one-time backfill of 18 listings a user.
 
 ## Other languages
 

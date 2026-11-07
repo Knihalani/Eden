@@ -3,7 +3,7 @@ import type { Trace } from "@eden/engine";
 import type { AgentEvent } from "@eden/protocol";
 import { StaticSource } from "@eden/sources";
 import { buildPartner } from "./build";
-import { digest, formatDigest } from "./digest";
+import { callsPer1k, digest, formatDigest } from "./digest";
 
 // D293: "Eden caught this", over an EDEN_TRACE=1 log: traces and usage records, counts and connector ids only.
 
@@ -79,5 +79,38 @@ describe("digest (D293)", () => {
     expect(d.used.measured).toBe(true);
     expect(d.used.used).toBeGreaterThan(0);
     for (const text of [lines.join("\n"), formatDigest(d)]) expect(text).not.toContain("Dana");
+  });
+  test("connector calls per request: the agent's tool calls, Eden's lookups' and its sync's last count per process", () => {
+    const sync = (pid: number, backgroundCalls: number) =>
+      JSON.stringify({
+        sync: { pid, backgroundCalls, demandCalls: 0, backgroundItems: 0, demandItems: 0, deleted: 0 },
+      });
+    const lines = [
+      t({ sourceCalls: 2 }),
+      t({ turn: 2, sourceCalls: 1, decision: "sources", reason: "cue:1", itemIds: ["gmail:a"] }),
+      t({ turn: 3, event: "tool_call", decision: "skipped", reason: "tool_call", sourceCalls: 0 }),
+      t({ turn: 4, event: "tool_call", decision: "skipped", reason: "tool_call", sourceCalls: 0 }),
+      t({ decision: "reader-push", reason: "candidates:1", candidates: true, sourceCalls: 1 }), // a follow-up
+      sync(7, 10),
+      sync(7, 30), // cumulative: the last word is 30
+      sync(8, 12),
+    ];
+    const d = digest(lines);
+    expect(d.connectors).toEqual({ requests: 2, agent: 2, edenRequest: 4, edenBackground: 42 });
+    expect(callsPer1k(d.connectors)).toEqual({ agent: 1_000, edenRequest: 2_000, edenBackground: 21_000 });
+    const md = formatDigest(d);
+    // Zapier MCP at $25.8 per 1,000 calls: (1,000 + 2,000) calls per 1,000 requests at request time, + 21,000 sync.
+    expect(md).toContain("| Zapier MCP (10k tasks) (25.8) | $77.40 | $619.20 |");
+    expect(md).not.toContain("Without Eden |");
+    // A baseline log (the agent without Eden's context) adds the without column.
+    d.baseline = digest([
+      t({}),
+      t({ turn: 2 }),
+      ...[3, 4, 5, 6].map((n) => t({ turn: n, event: "tool_call" })),
+    ]).connectors;
+    expect(formatDigest(d)).toContain("| Zapier MCP (10k tasks) (25.8) | $51.60 | $77.40 | $619.20 |");
+    // No sync lines: background is unknown, not zero.
+    expect(digest([t({})]).connectors.edenBackground).toBeNull();
+    expect(formatDigest(digest([t({})]))).toContain("not in this log");
   });
 });

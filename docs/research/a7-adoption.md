@@ -65,6 +65,29 @@ item whose words do not match the request but whose card says it constrains it).
 cheaper on the mix (billed; the cache-neutral difference is not significant) and its neutral tasks are 0.3 s slower
 (the agent called `ask_context` a little more often: 1.24 tool calls a neutral task against 1.05).
 
+**Connector calls and their price (the parent's ask).** Counted per task: the agent's own connector calls (its tool
+calls less `ask_context`), Eden's at request time (the traces' `sourceCalls` in each task's timeline: 0 in both Eden
+arms, since every lookup answered from the synced index and payload notices carry their items), and Eden's
+background calls, which no timeline holds (no task is current during the backfill or the tick between tasks).
+`packages/sim/lab/a7/connector-calls.ts` replays exactly that part of each stream at $0: 18 listing calls per
+simulated user to backfill, 0 between tasks; `connectors.py` prices them on market.py's plans
+(`packages/sim/lab/a7/connectors.txt`; the backfill is spread over this run's 12-task streams, an upper bound for a
+real user whose backfill is spread over far more requests).
+
+| Plan ($ per 1,000 calls) | tools: model + connectors, $/1k tasks | eden, steady / all-in | eden+nokey, steady / all-in |
+| --- | --- | --- | --- |
+| First-party APIs (0) | 0.375 | 0.426 / 0.426 | 0.416 / 0.416 |
+| Composio (0.30) | 1.389 | 0.426 / 0.876 | 0.416 / 0.866 |
+| Unified.to (0.75) | 2.910 | 0.426 / 1.551 | 0.416 / 1.541 |
+| Arcade.dev (10) | 34.167 | 0.426 / 15.426 | 0.416 / 15.416 |
+| Pipedream Connect (12) | 40.925 | 0.426 / 18.426 | 0.416 / 18.416 |
+| Zapier MCP (25.8) | 87.558 | 0.426 / 39.126 | 0.416 / 39.116 |
+
+The agent alone made 3.38 connector calls a task on the mix; with Eden (the `eden` arm has no search tools of its
+own, only `ask_context`) it made none. That is the arm's shape, not a saving every integration will see: an agent that
+keeps its own tools beside Eden (`both+ask`) still calls them. On a paid connector plan the calls dwarf the model:
+on Zapier MCP the agent alone costs $87.56 per 1,000 tasks, of which $0.375 is the model.
+
 ## 2. `bun run demo` (D292)
 
 `packages/sim/src/demo.ts`. It builds seed 41's world (1,517 items) with train1's planted items (personal finance),
@@ -76,9 +99,9 @@ sentences, Eden's time, model calls and cost.
 
 - **Picks are picks.** The three requests (a payment to bank details changed by email, repaying a debt already
   settled, paying with a blocked card) were chosen. To say what a newcomer should expect elsewhere, the same path
-  ran over every template of train1–6 on seeds 41 and 42: the deciding item reached the agent for 208 of 384
-  requests (before backfilling the sync, 131: the backfill is part of what a server does, so the demo does it).
-  That matches the no-key funnel A4 measured (202 of 384, D276).
+  ran over every template of train1–6 on seeds 41 and 42 (`packages/sim/lab/a7/demo-sweep.ts`, output in
+  `demo-sweep.txt`): the deciding item reached the agent for 208 of 384 requests, close to the no-key funnel A4
+  measured (202 of 384, D276).
 - **With an agent.** `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `AGENT_MODEL` as in examples/personal-agent. Run with Haiku
   5.5 through Anthropic's OpenAI-compatible endpoint (`packages/sim/lab/a7/demo-agent.txt`, read by hand, not
   graded): without Eden none of the three answers named the deciding fact (the first advised confirming changed bank
@@ -98,7 +121,9 @@ beside the traces with `EDEN_TRACE=1`.
 
 `packages/server/src/digest.ts` reads such a log and prints Markdown: a headline (context added after N of M events;
 the agent visibly used X of Y injections), kinds in words, connectors, silence with explain's sentences, time and
-spend. It refuses to say 0% when use cannot be known: with no `agent_message` or `tool_call` events and no feedback in
+spend, and connector calls per 1,000 requests priced on the same six plans (the agent's reported tool calls, Eden's
+lookups', and its background sync's from `{"sync": …}` counter lines the server now logs once a minute), with a
+without-Eden column from a `--baseline` log (the proxy's shadow mode). It refuses to say 0% when use cannot be known: with no `agent_message` or `tool_call` events and no feedback in
 the log, it says "not measured" and how to measure it. On the demo with an agent (`packages/sim/lab/a7/
 digest-demo-agent.md`): 4 of 8 events added context; 6 of 6 injections used. That 100% shows the measure's limit,
 written into the report: use is per injection, so a five-item candidates packet counts as used when any one item is.
@@ -118,29 +143,39 @@ entry meets the same rules as one written by hand; explicit fields win; it never
 
 | Preset | Tools | Checked against |
 | --- | --- | --- |
-| `gmail` | search `search_threads` (view: newest message of each thread), fetch `get_thread` (plain text), list `search_threads` paged by `pageToken` | Google's hosted Gmail server's schemas as served to this session |
-| `google-calendar` | search `search_events`, fetch `get_event`; no listing (`list_events` pages by start time) | Google's hosted Calendar server's schemas |
+| `gmail` | search `search_threads` (view: newest message of each thread), list `search_threads` paged by `pageToken` | Google's hosted Gmail server's input schema as served to this session |
+| `google-calendar` | search `search_events`; no listing (`list_events` pages by start time) | Google's hosted Calendar server's input schema |
 | `caldav` | `caldav_search_events` (unannotated) | the connector lab's pinned server and captured schema |
 | `obsidian` | `search_notes` (unannotated) | the connector lab's pinned mcpvault |
 
 No CRM preset: no CRM server's tools could be verified from here, and a guessed tool name is worse than none.
 
-**A bug found.** Testing `gmail` end to end against a server with Gmail's real schemas and two write tools showed
-every fetch returning null: `get_thread` answers `{id, messages: [...]}`, `McpSource.fetch` looked only among the
-rows (`messages`, each with a message id), and never matched the thread id. So a Gmail source could never confirm a
-copy a change notice put in doubt (D126). `fetch` now takes the top-level record when its own id is the ref, and still
-refuses another record's id; the new test fails without the fix.
+**A fetch gap, and why no preset fetches yet.** A thread fetch shaped as `get_thread` describes itself (`{id,
+messages: [...]}`) always came back null: `McpSource.fetch` looked only among the rows (`messages`, each with a
+message id) and never matched the thread id. `fetch` now takes the top-level record when its own id is the ref, and
+still refuses another record's id; the new test fails without the fix. But the reviewer found the next problem: a
+fetched thread holds every message where `search_threads` (summary view) holds the newest, so re-reading an unchanged
+thread would look like a change and send the agent an update for nothing (D126, D205). With no captured reply of
+Google's tools to show that any search and fetch copies match, the `gmail` and `google-calendar` presets name no fetch
+tool; doubted copies are delivered as held, labelled by age, as for any source without one. Google's read-only
+annotations were not captured either: if they are absent, the connect is refused (fails closed).
 
 `examples/oauth-directory/directory.ts` is the `SourceDirectory` a team with per-user Google accounts would write:
 refresh tokens stay in the app's vault, Eden is handed short-lived access tokens on preset entries, refreshed a minute
-before expiry with one refresh shared by concurrent asks, and a revoked grant becomes that user's configuration error
-only. It recommends read-only OAuth scopes so the provider refuses a write beneath Eden's own check.
+before expiry with one refresh shared by concurrent asks, dropped on expiry, a failed refresh or `forget`, and a
+revoked grant becomes that user's configuration error only. It recommends read-only OAuth scopes so the provider refuses a write beneath Eden's own check.
 
 ## Checks
 
 - `bun run eval`: identical to the base tree on every field but latency (precision 0.5909, recall 0.52,
   falseFireRate 0); the engine change is a sink that is off unless wired, and the fetch fix is not on the eval's path.
-- `bun run check`: see the commit; reviewer subagent on the diff (findings and fixes below).
+- `bun run check` green (1,980 tests after the review fixes).
+- Reviewer subagent on the diff: REQUEST_CHANGES with six findings, all fixed: (1) the Gmail preset's fetch would
+  report unchanged threads as changed: no preset names a fetch tool now; (2) the 208 of 384 had no file behind it:
+  `demo-sweep.ts` and its output are checked in; (3) Google's annotations were not captured: said so in the presets and
+  docs; (4) the OAuth example kept tokens forever: dropped on expiry, a failed refresh or `forget`, and THREAT-MODEL T7
+  says what it holds; (5) a correction's usage record named the feedback's session, not the delivery's: `Recorded`
+  keeps it; (6) the demo's chatter comment.
 
 ## What is left (next steps, in order)
 

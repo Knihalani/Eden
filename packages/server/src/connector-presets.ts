@@ -11,7 +11,8 @@
  * win over the preset's.
  *
  * Where each preset's tool names and argument shapes come from is in `PRESETS[name].verified`: the input schemas the
- * server served (Google's hosted Gmail and Calendar servers, read on 2026-11-07), or the connector lab's pinned
+ * server served (Google's hosted Gmail and Calendar servers, read on 2026-11-07; their annotations and replies were
+ * not captured, `annotations`), or the connector lab's pinned
  * servers (`packages/sim/lab/servers.json`, captured in `@eden/sources`' fixtures). `connector-presets.test.ts` maps
  * every preset's tools against those schemas with the same `schema-args` code a connect runs.
  */
@@ -28,6 +29,11 @@ export interface ConnectorPreset {
   /** Where the tool names and schemas were checked. */
   verified: string;
   /**
+   * What is known of the server's read-only annotations, when they were not captured with its schemas. Either way
+   * the check runs on connect (D7): a tool not marked read-only fails it until the operator lists it by hand.
+   */
+  annotations?: string;
+  /**
    * The preset's tools the server is known not to annotate read-only: the connect fails on them until the operator
    * checks the tool by hand and lists it in `trustedReadTools` (D7). The lab's note on why each only reads is here.
    */
@@ -41,18 +47,22 @@ export const PRESETS: Readonly<Record<string, ConnectorPreset>> = {
     // THREAD_VIEW_SUMMARY: each thread's most recent message, since the latest word on a thread is what changes an
     // action (the default view shows its five oldest).
     searchTool: { name: "search_threads", fixed: { view: "THREAD_VIEW_SUMMARY" } },
-    fetchTool: { name: "get_thread", fixed: { messageFormat: "PLAIN_TEXT" } },
+    // No fetch: `get_thread` returns every message where search and listing hold the newest one, so a re-read of an
+    // unchanged thread would differ from the held copy and be sent as an update (D126, D205; the A7 review). Doubted
+    // copies are delivered as held, labelled by age, as for any source without a fetch tool.
     // search_threads with no query lists every thread, newest first, paged by pageToken: the sync's listing.
     listTool: { name: "search_threads", fixed: { view: "THREAD_VIEW_SUMMARY" } },
-    verified: "Google's hosted Gmail MCP server: tools/list schemas of search_threads and get_thread, 2026-11-07",
+    verified: "Google's hosted Gmail MCP server: tools/list input schema of search_threads, 2026-11-07",
+    annotations: "not captured: if the server does not mark search_threads readOnlyHint, the connect is refused",
   },
   "google-calendar": {
     description: "The user's Google Calendar: events on their primary calendar",
     area: "calendar",
     searchTool: { name: "search_events" },
-    fetchTool: { name: "get_event" },
-    // No listing: list_events pages by start time, not by what changed most recently, which a sync needs (D57).
-    verified: "Google's hosted Calendar MCP server: tools/list schemas of search_events and get_event, 2026-11-07",
+    // No fetch (as for Gmail): without a captured reply of both tools, a get_event copy that differs from the search
+    // copy in any field would read as a change. No listing: list_events pages by start time, not by change (D57).
+    verified: "Google's hosted Calendar MCP server: tools/list input schema of search_events, 2026-11-07",
+    annotations: "not captured: if the server does not mark search_events readOnlyHint, the connect is refused",
   },
   caldav: {
     description: "The user's CalDAV calendar (iCloud, Fastmail, Nextcloud, Radicale)",

@@ -8,6 +8,8 @@
  * a preset spec (`connector-presets.ts`). Per user, never shared (D9):
  *
  * - An access token is reused until a minute before it expires, then refreshed; concurrent asks share one refresh.
+ *   The cache holds at most one live access token per user and drops it on expiry or a failed refresh; call
+ *   `forget` from your own account-removal path too.
  * - A refresh that fails (`invalid_grant`: the user revoked access) throws: `UserSources` takes that as the user's
  *   configuration error, closes their connections and serves them only the shared sources until it succeeds again.
  * - A rotated access token changes the spec's headers, so `UserSources` reconnects with it (its fingerprint changed).
@@ -41,7 +43,7 @@ export interface OAuthDirectoryOptions {
 /** Refresh this long before the provider's expiry, so a token never expires mid-lookup. */
 const EARLY_MS = 60_000;
 
-export function oauthDirectory(options: OAuthDirectoryOptions): SourceDirectory {
+export function oauthDirectory(options: OAuthDirectoryOptions): SourceDirectory & { forget(scope: Scope): void } {
   const doFetch = options.fetch ?? fetch;
   const now = options.now ?? Date.now;
   // Per user: the current access token and when it expires, and a refresh in flight. Keyed by tenant and user (D9).
@@ -72,6 +74,8 @@ export function oauthDirectory(options: OAuthDirectoryOptions): SourceDirectory 
   async function accessToken(scope: Scope, refreshToken: string): Promise<string> {
     const held = tokens.get(key(scope));
     if (held && held.expiresAt - EARLY_MS > now()) return held.token;
+    // An expiring token is not kept while a new one is fetched, nor after a refresh fails (a revoked grant).
+    tokens.delete(key(scope));
     let p = inflight.get(key(scope));
     if (!p) {
       p = refresh(scope, refreshToken).finally(() => inflight.delete(key(scope)));
@@ -80,7 +84,7 @@ export function oauthDirectory(options: OAuthDirectoryOptions): SourceDirectory 
     return p;
   }
 
-  return async (scope) => {
+  const directory: SourceDirectory = async (scope) => {
     const grant = await options.vault.grant(scope);
     if (!grant) {
       tokens.delete(key(scope));
@@ -101,4 +105,5 @@ export function oauthDirectory(options: OAuthDirectoryOptions): SourceDirectory 
     }
     return specs;
   };
+  return Object.assign(directory, { forget: (scope: Scope) => void tokens.delete(key(scope)) });
 }

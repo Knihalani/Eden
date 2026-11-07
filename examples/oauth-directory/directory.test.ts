@@ -67,11 +67,19 @@ describe("oauthDirectory (D294)", () => {
     tick(2_000);
     await dir(s);
     expect(p.calls.length).toBe(2);
+    // forget drops the user's token: the next ask refreshes.
+    dir.forget(s);
+    await dir(s);
+    expect(p.calls.length).toBe(3);
   });
 
   test("a revoked grant is that user's configuration error; the other user is served", async () => {
-    const { p, dir } = setup();
+    const { p, dir, tick } = setup();
+    // A held token is dropped once it expires and the refresh fails: nothing of a revoked grant stays in use.
+    await dir({ tenantId: "t", userId: "a" });
+    tick(3_600_000);
     p.revoked.add("rt-a");
+    await expect(dir({ tenantId: "t", userId: "a" })).rejects.toThrow(/HTTP 400/);
     const users = new UserSources({ directory: dir, log: () => {} });
     await expect(users.status({ tenantId: "t", userId: "a" })).resolves.toMatchObject({
       error: expect.stringContaining("HTTP 400"),

@@ -57,6 +57,12 @@ async function serve(config: ServerConfig): Promise<void> {
     // Whether the agent used each injection (D293), for `bun run digest`; content-free like the traces.
     onUsage: process.env.EDEN_TRACE === "1" ? (u) => console.log(JSON.stringify({ usage: u })) : undefined,
   });
+  // The background sync's own connector calls (backfill, sweeps) are made outside any request, so no trace has them:
+  // with EDEN_TRACE=1 its cumulative counters are logged once a minute, per process, for `bun run digest` (D293).
+  const sync = partner.sync;
+  if (process.env.EDEN_TRACE === "1" && sync) {
+    setInterval(() => console.log(JSON.stringify({ sync: { pid: process.pid, ...sync.stats } })), 60_000).unref();
+  }
   // The secret gate compiles its rules on first use; doing it here keeps that stall off the first request.
   warmGate();
   const server = Bun.serve({

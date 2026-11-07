@@ -54,11 +54,13 @@ describe("onUsage (D293)", () => {
     const id = await delivered(p);
     await p.observe(ev({ kind: "session_end" }));
     expect(got.map((g) => [g.used, g.how])).toEqual([[false, "ended"]]);
-    expect(p.feedback({ ...ref, injectionId: id, used: true, how: "explicit" })).toBe(true);
+    expect(p.feedback({ ...ref, sessionId: "s2", injectionId: id, used: true, how: "explicit" })).toBe(true);
     expect(got.map((g) => [g.used, g.how])).toEqual([
       [false, "ended"],
       [true, "explicit"],
     ]);
+    // Feedback sent from another session names the session the injection was delivered in.
+    expect(got[1]!.sessionId).toBe("s");
     // The same answer again changes nothing and reports nothing.
     p.feedback({ ...ref, injectionId: id, used: true, how: "explicit" });
     expect(got.length).toBe(2);
