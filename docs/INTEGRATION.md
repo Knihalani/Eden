@@ -325,12 +325,20 @@ EDEN_PROXY_UPSTREAM=https://api.openai.com/v1 EDEN_URL=http://127.0.0.1:8790 EDE
 # the agent: base_url="http://127.0.0.1:8791/v1", plus a header x-eden-user-id: <your user's id>
 ```
 
+`EDEN_PROXY_UPSTREAM` keeps the provider's version path (`/v1`, `/api/v1`; the proxy warns at startup when it has no
+path). `EDEN_URL` defaults to `http://127.0.0.1:8790`; `EDEN_API_KEY` is one of the server's `EDEN_API_KEYS` keys
+(omit it against `EDEN_DEV=1`). `PROXY_PORT` and `PROXY_HOST` move the proxy (default `127.0.0.1:8791`), and
+`GET /healthz` answers `{"ok":true}` from the proxy itself, for a container check. At startup the proxy asks Eden once
+and prints whether it is reachable and accepts the key (D365), so a server that is down or a refused key shows there,
+not as a line per request.
+
 - On each `POST /v1/chat/completions` the proxy reports the conversation's new messages (user text, the assistant's
   text and tool calls, tool results) to Eden once each, waits for the user message's lookup as the SDK does (up to
   3 s), inserts Eden's packets as a system message just before the latest user message, keeps the turn's packets on
   the turn's later model calls (tool loops), and streams the upstream's answer back unchanged. Other routes
   (`/v1/models`, embeddings) pass through.
-- **Identity.** `x-eden-user-id` (else the body's `user`) names the end user; without either, Eden is skipped.
+- **Identity.** `x-eden-user-id` (else the body's `user`) names the end user; without either, Eden is skipped (the
+  proxy says so once on stderr, D365).
   `x-eden-session-id` names the conversation; without it the proxy keys it by a hash of its first non-system
   message (system prompts may change per request), so send it if many conversations open identically. Ids pass
   through `edenId`. New messages are found by content, so compacted or sliding histories work; on first sight of a
@@ -409,7 +417,11 @@ made 3.38 connector calls a request; with Eden 0 at request time, plus a one-tim
 
 ## Other languages
 
-- **Python:** `packages/client-python` (`pip install ./packages/client-python`, import `eden_client`), the same calls
+- **TypeScript or JavaScript outside this repository:** the workspace package exports TypeScript and depends on
+  `@eden/protocol` through `workspace:*`, which `npm install` cannot resolve. `bun run pack:client` writes a
+  standalone package to `dist/eden-client` (one ESM file, the protocol inlined, with declarations); install it with
+  `npm install /path/to/Eden/dist/eden-client` (or `bun add`). Node 18+, Bun and Deno load it (D365).
+- **Python:** `packages/client-python` (`pip install /path/to/Eden/packages/client-python`, import `eden_client`), the same calls
   as `@eden/client` (`observe`, `pending`, `collect`, `ask`, `check`, `feedback`, `health`, `explain`,
   `source_changed`) and `with_context`, standard library only, fail-open (D278). `eden_id` maps ids exactly as the
   TypeScript `edenId` does, so a mixed stack finds one user's state. Synchronous: from asyncio, call it through
@@ -428,7 +440,12 @@ made 3.38 connector calls a request; with Eden 0 at request time, plus a one-tim
 volume, and reports health on `/healthz`. Item text, sessions and the explain traces live in memory: a restart starts
 users' caches over (the background sync refills them) and loses nothing a user wrote. Set `EDEN_PROCESSES` to the
 container's CPU quota and read "Processes and per-tenant caps" below. Never run `EDEN_DEV=1` on a reachable port (the
-server warns when it listens beyond loopback).
+server warns when it listens beyond loopback). Generate each tenant's key with `openssl rand -hex 24`; requests send
+it as `Authorization: Bearer <key>` (no other header is read). A configuration mistake (a short key, a missing
+sources file, a busy port, an unwritable `EDEN_HOME`) stops the server with an `eden:` line naming it and exit code 2
+(D365); with several processes a child's own line and the router's retry note come first. Per-user connectors: mount the file and name its path inside the container
+(`-v ./sources:/sources:ro -e EDEN_USER_SOURCES_FILE=/sources/users.json`), plus `-e` for each token variable the file
+names; the file is re-read when it changes, so adding a user needs no restart.
 
 ## Configuration
 

@@ -24,6 +24,7 @@
     "sim:lab:build": "bun run packages/sim/src/lab/build.ts",
     "sim:lab": "bun run packages/sim/src/lab/lab-cli.ts",
     "proxy": "bun packages/proxy/src/main.ts",
+    "pack:client": "bun packages/client/pack.ts",
     "trace-report": "bun packages/server/src/trace-report.ts",
     "demo": "bun packages/sim/src/demo.ts",
     "digest": "bun packages/server/src/digest.ts",

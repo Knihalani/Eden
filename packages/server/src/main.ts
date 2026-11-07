@@ -3,6 +3,7 @@
  * Starts the partner's HTTP API. `bun run dev` from the repo root. With EDEN_PROCESSES above 1 this process is the
  * router (router.ts, D163) and each of its children runs this file again as one server process (EDEN_ROUTER_CHILD).
  */
+import { dirname } from "node:path";
 import { SourceMap } from "@eden/graph";
 import { warmGate } from "@eden/redact";
 import { loadConfig, type ServerConfig } from "./config";
@@ -15,16 +16,55 @@ import { rehomeSourceMaps, runRouter } from "./router";
 import { isLeaseGrant, LeasedSpend } from "./spend-lease";
 
 const started = performance.now();
-const config = loadConfig();
+const config = configOrExit();
 // Dev mode takes requests with no key as tenant "dev": say so loudly when anything but this machine can reach it (a
 // container listens on 0.0.0.0; publish its port on 127.0.0.1 for local use).
 if (config.dev && !config.child && !["127.0.0.1", "localhost", "::1"].includes(config.host)) {
   console.error(`eden: EDEN_DEV=1 on ${config.host}: anyone who can reach this port is served without a key`);
 }
-if (config.processes > 1) {
-  await runRouter(config);
-} else {
-  await serve(config);
+try {
+  if (config.processes > 1) {
+    await runRouter(config);
+  } else {
+    await serve(config);
+  }
+} catch (e) {
+  startupFailed(e, config);
+}
+
+/**
+ * A configuration mistake as one line naming the setting, exit 2 (D365). Uncaught, Bun printed ten lines of
+ * config.ts's source and a stack with the message buried in them, the first thing an operator saw for a short key.
+ */
+function configOrExit(): ServerConfig {
+  try {
+    return loadConfig();
+  } catch (e) {
+    const code = (e as { code?: unknown } | null)?.code;
+    const home =
+      code === "ENOENT" || code === "EACCES" || code === "EROFS" ? " (EDEN_HOME must be a writable directory)" : "";
+    console.error(`eden: ${e instanceof Error ? e.message : String(e)}${home}`);
+    process.exit(2);
+  }
+}
+
+/** A startup failure after the configuration parsed (a busy port, an unwritable EDEN_HOME) as one line, exit 2. */
+function startupFailed(e: unknown, config: ServerConfig): never {
+  const code = (e as { code?: unknown } | null)?.code;
+  const message = e instanceof Error ? e.message : String(e);
+  if (code === "EADDRINUSE") {
+    console.error(`eden: ${config.host}:${config.port} is in use: stop the other server, or set PORT to a free port`);
+  } else if (code === "ENOENT" || code === "EACCES" || code === "EROFS") {
+    const path = (e as { path?: unknown }).path;
+    console.error(
+      `eden: cannot start: ${message}${typeof path === "string" ? ` (${path})` : ""}: a file a setting names` +
+        ` (EDEN_SOURCES_FILE, EDEN_USER_SOURCES_FILE, EDEN_ENGINE_CONFIG) is missing or unreadable, or EDEN_HOME` +
+        ` (${dirname(config.sourceMapPath)}) is not writable`,
+    );
+  } else {
+    console.error(`eden: cannot start: ${message}`);
+  }
+  process.exit(2);
 }
 
 async function serve(config: ServerConfig): Promise<void> {

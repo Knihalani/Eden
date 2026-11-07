@@ -24,6 +24,29 @@ import {
   type SourceChangedResult,
 } from "@eden/protocol";
 
+/**
+ * A failure before any answer (refused connection, DNS, timeout) as an error that says where the client was sending
+ * (D365): a runtime's own message ("Unable to connect. Is the computer able to access the url?") names neither the
+ * URL nor the route, so a first-time integrator with the server down or on another port could not tell what failed.
+ * The base URL is configuration, never the request or the key; no `cause` is kept, since a runtime's error may quote
+ * the full URL.
+ */
+function transportError(path: string, baseUrl: string, timeoutMs: number, e: unknown): Error {
+  const route = path.split("?")[0]!;
+  const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+  const why = timedOut ? `no answer within ${timeoutMs} ms` : e instanceof Error ? e.message : String(e);
+  return new Error(`eden ${route}: cannot reach ${redactUrls(baseUrl)} (${redactUrls(why)})`);
+}
+
+/**
+ * Text with every URL's credentials and query removed (`user:password@`, `?token=…`, `#…`), so neither the
+ * configured base URL nor a runtime message quoting it (Node's fetch quotes a URL that carries credentials) puts a
+ * secret in a log.
+ */
+export function redactUrls(text: string): string {
+  return text.replace(/\b([a-z][a-z0-9+.-]*:\/\/)(?:[^\s/]*@)?([^\s?#)]*)(?:[?#][^\s)]*)?/gi, "$1$2");
+}
+
 /** The reasons `/v1/sources/changed` gives (`SourceChangedReason`); anything else from a server is dropped. */
 const REASONS: ReadonlySet<string> = new Set<SourceChangedReason>(["push-off", "not-synced", "not-notifying"]);
 
@@ -211,6 +234,7 @@ export class EdenClient {
     /** The 2xx answer's expected shape; another is reported and treated as a failure, so callers never see it. */
     valid?: (v: unknown) => boolean,
   ): Promise<T | null> {
+    let answered = false;
     try {
       const res = await (this.options.fetch ?? fetch)(`${this.baseUrl}${path}`, {
         method: "POST",
@@ -221,6 +245,7 @@ export class EdenClient {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(timeoutMs),
       });
+      answered = true;
       if (!res.ok) throw new Error(`eden ${path}: ${res.status}${await serverError(res)}`);
       const answer: unknown = await res.json();
       if (valid && !valid(answer)) {
@@ -230,8 +255,16 @@ export class EdenClient {
       }
       return answer as T;
     } catch (e) {
-      failed?.(e);
-      this.report(e);
+      // An answer that arrived but could not be read is not "cannot reach" (D365).
+      const unreadable = () => new Error(`eden ${path.split("?")[0]!}: an unreadable answer`);
+      const err =
+        e instanceof Error && e.message.startsWith("eden ")
+          ? e
+          : answered
+            ? unreadable()
+            : transportError(path, this.baseUrl, timeoutMs, e);
+      failed?.(err);
+      this.report(err);
       return null;
     }
   }
