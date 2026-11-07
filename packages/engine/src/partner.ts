@@ -1476,17 +1476,39 @@ export class ContextPartner {
       this.config.readerPushBehind &&
       this.config.syncPollBehind &&
       this.config.syncOnDemand;
-    // `askVerifyEarly` (D346): an explicit ask's likely citations, ranked from what the index holds now, are re-read
-    // while its poll and live search run, not after them; `verifyItems` below waits on those reads (`s.checks`).
-    if (this.config.askVerifyEarly && this.config.verifyDelivery && !internal.push && internal.again === undefined)
-      this.checkEarly(s, cue, limit);
     const searched = internal.again?.searched ?? (await this.searchLive(s, cue, this.config.askSources, behind));
     const { calls: sourceCalls, plans, probed, local, syncCalls } = searched;
-    const { scored, order } = this.askOrder(s, cue, probed, true);
+    // `intent`: what the question would change, by the requests written for each item (no model, no call).
+    const intentFound = this.intentFinds(s, cue);
+    const extra = [...intentFound.keys()];
+    const ranking = spans?.open("rank", cue.span);
+    const scored = this.rank(s, cue, {
+      ignoreLedger: true,
+      probed: extra.length > 0 ? [...(probed ?? []), ...extra] : probed,
+    });
+    if (ranking) spans!.close(ranking, { candidates: scored.length });
+    // Only anchored intent hits are fused in (`anchoredIntents`); every hit still withholds the guard's line.
+    const intents = this.anchoredIntents(s, cue, intentFound);
     // The candidates' facts (`decide.ts`), for the lab's dump.
     const facts = this.deps.onCandidates
       ? this.factsOf(s, cue, scored, "ask", { probed: new Set(probed ?? []), bridged: new Set(), carded: new Map() })
       : [];
+    const grounding = spans?.open("ground", cue.span);
+    // What the question's people and days ground comes first (D44); a named day's other events only through it, so
+    // a question about a topic is not padded with that day's calendar.
+    const onDay = (x: Scored) => cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true;
+    const grounded = this.grounded(
+      s,
+      cue,
+      scored.filter((x) => x.score >= this.config.candidateScore || onDay(x)),
+      "ask",
+    ).items;
+    if (grounding) spans!.close(grounding, { grounded: grounded.length });
+    const lexical = [
+      ...grounded,
+      ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x)),
+    ];
+    const order = intents.size > 0 ? this.fuseIntent(lexical, scored, intents) : lexical;
     let chosen = order.slice(0, limit);
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
@@ -1686,58 +1708,6 @@ export class ContextPartner {
       latencyMs,
       ...(searched.sources ? { sources: searched.sources } : {}),
     };
-  }
-
-  /**
-   * An ask's ranking of what the cache holds: the scored candidates and the answer's order (grounded people and days
-   * first, D44; anchored intent hits fused in). Read-only but for the spans it opens when `traced`; no I/O.
-   */
-  private askOrder(
-    s: Session,
-    cue: Cue,
-    probed: string[] | undefined,
-    traced: boolean,
-  ): { scored: Scored[]; order: Scored[] } {
-    const spans = traced ? this.spans : null;
-    // `intent`: what the question would change, by the requests written for each item (no model, no call).
-    const intentFound = this.intentFinds(s, cue);
-    const extra = [...intentFound.keys()];
-    const ranking = spans?.open("rank", cue.span);
-    const scored = this.rank(s, cue, {
-      ignoreLedger: true,
-      probed: extra.length > 0 ? [...(probed ?? []), ...extra] : probed,
-    });
-    if (ranking) spans!.close(ranking, { candidates: scored.length });
-    // Only anchored intent hits are fused in (`anchoredIntents`); every hit still withholds the guard's line.
-    const intents = this.anchoredIntents(s, cue, intentFound);
-    const grounding = spans?.open("ground", cue.span);
-    // What the question's people and days ground comes first (D44); a named day's other events only through it, so
-    // a question about a topic is not padded with that day's calendar.
-    const onDay = (x: Scored) => cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true;
-    const grounded = this.grounded(
-      s,
-      cue,
-      scored.filter((x) => x.score >= this.config.candidateScore || onDay(x)),
-      "ask",
-    ).items;
-    if (grounding) spans!.close(grounding, { grounded: grounded.length });
-    const lexical = [
-      ...grounded,
-      ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x)),
-    ];
-    return { scored, order: intents.size > 0 ? this.fuseIntent(lexical, scored, intents) : lexical };
-  }
-
-  /**
-   * `askVerifyEarly` (D346): the ask's first `limit` candidates as the index holds them before its poll and search,
-   * those a signal put in doubt re-read now (`check`, shared with the delivery's `verifyItems` for `CHECK_REUSE_MS`).
-   * What the poll or search then changes in the ranking is read after them as before, so an early read of an item that
-   * drops out of the answer is a call the ask would not have made.
-   */
-  private checkEarly(s: Session, cue: Cue, limit: number): void {
-    if (!this.sync) return;
-    for (const x of this.askOrder(s, cue, undefined, false).order.slice(0, limit))
-      if (this.doubted(s, x.item)) void this.check(s, x.item);
   }
 
   /**
