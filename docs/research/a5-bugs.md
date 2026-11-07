@@ -188,6 +188,25 @@ a stub reader, the default with no reader (D276), the default with one source ca
   that form and reports this one when scaled.
 - **Scale runs**: about 11,500 seed-runs while it was built (2,000 × 60 and 500 × 200 operations on three
   configurations, 1,000 × 60 on four), then 1,000 × 60 on all four on the fixed tree: no violation but core 704; 300 × 60 on all four after the connector-call fixes: none.
+- **Extended in audit A11.** After every op the harness calls `explain` for a random session, often another user's ids
+  (every user has s0 and s1; u0 and u1 are in both tenants) or one never opened, and checks isolation, the ring's
+  bound, none for a closed session, and no item, title, secret or question words. A fifth configuration,
+  `default-shadow`, runs tenant t1 as the proxy's shadow mode (D282): nothing a shadow call returned may be tracked for
+  usage or reported to `onUsage`. A packet handed out twice is a violation too. 20,000 seeds × 60 ops on each of the
+  five (969 s wall, 10 processes on 4 cores) found, all fixed or explained:
+  - **A verify trace counted other sessions' re-reads** (default seeds 1539, 10316; `sourceCalls` -1). `verifyItems`
+    took the change of the engine-wide `freshness.calls` over its awaits; each delivery now counts the calls of the
+    re-reads it starts (`freshness.test.ts`, "two sessions re-reading at once").
+  - **The rule-path repeat above, in the default** (default 2577, default-flaky 18959, core 704 and 7797). The window
+    is `deliverChecked`'s re-read await: the slow path had ranked against the ledger before it. An item whose ledger
+    entry changed over the await is now left out (`freshness.test.ts`, "fast path hands out during a delivery's
+    re-read"); `bun run eval` gave identical output.
+  - **Not an engine bug: a removed item cited after the harness's clock jumped past its gone-hold** (default 9648,
+    19657). A page read before `sourceRemoved` was stored after a 4-17 hour clock jump; the engine bounds that race by
+    time (seconds-long call timeouts against the ten-minute hold), so the harness no longer checks a removal whose hold
+    the clock passed before it settled.
+
+  The fixed tree: 20,000 × 60 on all five, no violation (920 s wall).
 
 ## Wasted connector calls
 
