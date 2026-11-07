@@ -60,6 +60,8 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerReuse: "reader",
   readerStopEarly: "reader",
   pushCandidates: "reader",
+  pushCandidateBytes: "reader",
+  pushCandidateDedup: "reader",
 };
 
 /**
@@ -118,6 +120,8 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerReuse: PUSH,
   readerStopEarly: READER,
   pushCandidates: PUSH,
+  pushCandidateBytes: PUSH,
+  pushCandidateDedup: PUSH,
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
@@ -174,6 +178,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   intentSeats: COUNT,
   askReaderPool: COUNT,
   pushCandidates: { integer: true, max: 40 },
+  pushCandidateBytes: COUNT,
 };
 
 /** String-list keys whose entries must come from a known list. */
