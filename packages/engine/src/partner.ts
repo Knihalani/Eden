@@ -736,9 +736,10 @@ export class ContextPartner {
    */
   async observe(event: AgentEvent, options: { waitMs?: number; shadow?: boolean } = {}): Promise<ObserveResult> {
     // A user frozen while idle (D325) is thawed in slices first, so other users' events do not wait behind it. A
-    // session's end and a draft read no item (`observeEvent` returns before any): they leave the user frozen (A24).
+    // session's end and a draft read no item (`observeEvent` returns before any): they start no thaw, but wait on one
+    // an earlier event of theirs waits on, or they would run before it (A24 and its review).
     const reads = event.kind !== "session_end" && !(event.kind === "user_message" && event.draft === true);
-    const thawing = reads ? this.deps.cache.ready(event) : null;
+    const thawing = reads ? this.deps.cache.ready(event) : this.deps.cache.pendingThaw(event);
     if (thawing) await thawing;
     // `readerPush`: a request that acts is also read by the ask-time reader, as an ask of the engine's own; what it
     // flags is queued as a packet. The observe waits for it within its own wait, so an agent that never calls

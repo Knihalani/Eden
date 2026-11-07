@@ -1500,6 +1500,15 @@ export class ItemCache {
     return done;
   }
 
+  /**
+   * The thaw some caller already waits on (queued or running), or null; never starts one. For an event that reads
+   * no item (a session's end, a draft): it leaves a frozen user frozen, yet still runs after an earlier event of its
+   * session that waits on that thaw (review of A24).
+   */
+  pendingThaw(scope: Scope): Promise<void> | null {
+    return this.thawing.get(scopeKey(scope))?.done ?? null;
+  }
+
   /** A thaw as a sliced job: given up if the user is thawed (`peek`) or dropped meanwhile. */
   private *thawJob(key: string, f: FrozenUser): Generator<undefined, void> {
     const t0 = performance.now();

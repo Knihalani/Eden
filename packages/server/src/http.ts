@@ -117,8 +117,12 @@ export function createHandler(
     if (foreignPage(req, tenant)) return fail(403, "dev mode serves no key-less request from another site's page");
     // A router's fan-out copy (forget, usage) to a child that does not own the user: the owner's copy spends the
     // tenant's token and is counted; the copies do neither, or a usage read would spend N tokens and a limited child
-    // would read as down (A24). Honoured only in a router child: in a single process the header means nothing.
-    const copy = config.child != null && req.headers.get(FANOUT_COPY) === "1";
+    // would read as down (A24). Honoured only in a router child and on the routes the router copies: in a single
+    // process, or on any other route, the header means nothing.
+    const copy =
+      config.child != null &&
+      (url.pathname === "/v1/forget" || url.pathname === "/v1/usage") &&
+      req.headers.get(FANOUT_COPY) === "1";
     const waitMs = copy ? 0 : limiter.take(tenant);
     if (waitMs > 0) {
       return Response.json(

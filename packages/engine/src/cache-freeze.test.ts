@@ -486,4 +486,52 @@ describe("idle users frozen (D325)", () => {
       expect(order).toEqual(["first", "second"]);
     }
   });
+
+  test("a session's end or a draft waits on a thaw an earlier event of its session waits on, and starts none", async () => {
+    // Review of A24: they read no item, so they no longer start a thaw (a lone one leaves the user frozen), but one
+    // that skipped the queue altogether ran before the earlier message and closed the session under it.
+    for (const kind of ["session_end", "draft"] as const) {
+      const w = buildWorkload({ itemsPerSource: 120, events: 12, seed: 3 });
+      const clock = w.events[0]!.at;
+      const cache = manual({ freezeIdleMs: 1, expireEveryMs: 1 });
+      const partner = new ContextPartner({
+        sources: async () => w.sources,
+        sourceMap: new SourceMap(),
+        cache,
+        budget: new Budget(),
+        model: null,
+        now: () => clock,
+      });
+      const r = rng(11);
+      cache.put(
+        w.scope,
+        Array.from({ length: 4_000 }, (_, i) => makeItem(r, i, w.scope.userId)),
+        clock,
+      );
+      cache.expireIdle(clock);
+      cache.expireIdle(clock);
+      expect(cache.frozenCount).toBe(1);
+      const later = (at: number) =>
+        kind === "session_end"
+          ? { ...w.scope, sessionId: "s", kind: "session_end" as const, text: "later", at }
+          : { ...w.scope, sessionId: "s", kind: "user_message" as const, text: "later", draft: true, at };
+      // Alone, it reads nothing and leaves the user frozen.
+      await partner.observe(later(clock));
+      expect(cache.frozenCount).toBe(1);
+      const order: string[] = [];
+      const inner = partner as unknown as { observeEvent: (e: { text?: string }, o: unknown) => Promise<unknown> };
+      const real = inner.observeEvent.bind(partner);
+      inner.observeEvent = (e, o) => {
+        order.push(e.text!);
+        return real(e, o);
+      };
+      const first = partner.observe({ ...w.scope, sessionId: "s", kind: "user_message", text: "first", at: clock });
+      await new Promise((res) => setImmediate(res)); // The later event arrives in a later turn, the thaw in slices.
+      expect(cache.frozenCount).toBe(1);
+      const second = partner.observe(later(clock + 1));
+      await Promise.all([first, second]);
+      expect(order).toEqual(["first", "later"]);
+      if (kind === "session_end") expect(partner.sessionCount).toBe(0);
+    }
+  });
 });

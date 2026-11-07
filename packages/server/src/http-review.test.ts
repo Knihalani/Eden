@@ -110,6 +110,15 @@ test("a router's fan-out copy spends no rate token and is not counted, in a rout
   const counted = (await (await usage(child, true)).json()) as { requests: Record<string, number> };
   expect(counted.requests.usage).toBe(1);
   expect((await usage(child, false)).status).toBe(429);
+  // On a route the router never copies, the header is a caller's own: limited like any request.
+  const ask = await child(
+    new Request("http://x/v1/ask", {
+      method: "POST",
+      headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "x-eden-fanout-copy": "1" },
+      body: JSON.stringify({ userId: "u1", sessionId: "s1", question: "Globex?" }),
+    }),
+  );
+  expect(ask.status).toBe(429);
   // In a single process the header is a caller's own and means nothing.
   const single = createHandler(partner, limits);
   expect((await usage(single, false)).status).toBe(200);

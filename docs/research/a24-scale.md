@@ -183,7 +183,10 @@ The coordinator passed on an independent review of A14 and asked for the small f
 without it:
 
 - **Thaws only where items are read.** `observe` thawed a frozen user before looking at the event's kind, so a
-  `session_end` or a draft (which read nothing) unpacked a whole user; they now leave the user frozen. `/v1/pending`
+  `session_end` or a draft (which read nothing) unpacked a whole user; they now start no thaw, but wait on one an
+  earlier event of the user already waits on (`ItemCache.pendingThaw`): the first version skipped the wait, and the
+  branch's reviewer showed a `session_end` then ran before its session's earlier message and closed the session under
+  it (`cache-freeze.test.ts` now holds that case). `/v1/pending`
   (the take checks new items against the session's plans) and `/v1/forget` for one source (it drops that source's
   items from the cache) read items synchronously, which thawed in one ~110-190 ms block at the cap; they now await
   `partner.ready`, as `/v1/sources/removed` did. A18's `/v1/sources/refs` (D347) answers at once and reads the named
@@ -191,7 +194,8 @@ without it:
   that landed meanwhile after that wait, so a user frozen while a fetch was on the wire thaws in slices.
 - **Fan-out copies.** The router sends `/v1/usage` and `/v1/forget` to every child; each child's copy spent a token
   of that child's divided rate limit, and a child that answered 429 was counted as down. A copy (the router's header,
-  honoured only in a router child) now spends no token and is not counted.
+  honoured only in a router child and only on the two routes the router copies) now spends no token and is not
+  counted.
 - **Spend leases (D327, trial).** A child whose lease came back 0 asked the router again at every tally and every
   `/v1/usage` read (94 asks in the test's run); it now remembers the day is all granted until the next UTC day.
 - **The reviewer of this branch** found three low issues, fixed: a forgotten user's drain waited out its 250 ms
