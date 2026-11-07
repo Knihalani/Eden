@@ -89,7 +89,6 @@ import {
   ECONOMY_CARD_LIMITS,
   type Trace,
   readerMessages,
-  startIngestWorkers,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
@@ -238,8 +237,6 @@ const CONFIG = ((): Record<string, unknown> => {
 })();
 /** What runs: `--config` over the default (D112). */
 const RUN = effective(CONFIG);
-/** With the trial `ingestWorker` in `--config` (D216): one ingest worker for the shard, as a server process runs. */
-const INGEST_POOL = RUN.ingestWorker ? await startIngestWorkers(1, 60_000) : undefined;
 const LIVE = opt("judge", "none") === "live";
 /**
  * `--wait-ms N`: how long the request's observe waits for its lookup (the client's `waitMs`), default 30,000 with a
@@ -761,7 +758,6 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     planner: new QueryPlanner({ seed }),
     now: () => clock,
     config: TIME > 0 ? { sourceTimeoutMs: 1_500 * TIME, ...CONFIG } : CONFIG,
-    ...(INGEST_POOL ? { ingestPool: INGEST_POOL } : {}),
     onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
@@ -1512,5 +1508,4 @@ if (out) {
     ),
   );
 }
-INGEST_POOL?.close();
 if (misses.code) process.exit(misses.code);

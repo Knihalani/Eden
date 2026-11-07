@@ -69,29 +69,15 @@ function isLatin1(text: string): boolean {
  * text's bytes (short text, text that does not compress).
  */
 export function packItem(item: ContextItem): ContextItem {
-  if (isPacked(item)) return item;
-  const packed = packedBytes(item.text);
-  return packed === null ? item : withPacked(item, packed.bytes, packed.latin1);
-}
-
-/**
- * The deflated bytes `packItem` would hold for `text` (and whether they are Latin-1), or null when it would keep the
- * text plain. Pure: the ingest worker (`ingest.ts`, D216) deflates off the event loop with it.
- */
-export function packedBytes(text: string): { bytes: Bytes; latin1: boolean } | null {
-  if (text.length < MIN_PACK_CHARS) return null;
+  const text = item.text;
+  if (text.length < MIN_PACK_CHARS || isPacked(item)) return item;
   const latin1 = isLatin1(text);
   // A lone surrogate (text cut inside an emoji) would come back from UTF-8 as U+FFFD: a held copy that no longer
   // matches what was indexed, and that every refresh would see as changed. Such text stays plain.
-  if (!latin1 && LONE_SURROGATE.test(text)) return null;
+  if (!latin1 && LONE_SURROGATE.test(text)) return item;
   const plain = latin1 ? Buffer.from(text, "latin1") : encoder.encode(text);
-  const bytes = Bun.deflateSync(plain) as Bytes;
-  if (bytes.byteLength > (latin1 ? text.length : text.length * 2) * 0.8) return null;
-  return { bytes, latin1 };
-}
-
-/** A copy of `item` holding `bytes` (`packedBytes` of its text) in place of its text. */
-export function withPacked(item: ContextItem, bytes: Bytes, latin1: boolean): ContextItem {
+  const bytes = Bun.deflateSync(plain);
+  if (bytes.byteLength > (latin1 ? text.length : text.length * 2) * 0.8) return item;
   const { text: _, ...rest } = item;
   Object.defineProperty(rest, PACKED, { value: bytes, enumerable: false });
   Object.defineProperty(rest, "text", latin1 ? LATIN1_TEXT : UTF8_TEXT);

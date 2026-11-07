@@ -55,8 +55,6 @@ import { IntentPatterns, predict, PREDICT_NAMES } from "./anticipate";
 import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache, type Sketch } from "./cache";
 import { SyncManager } from "./sync";
 import { pooledSanitizer } from "./gate";
-import { mentionsOf, pooledIngest } from "./ingest";
-import { takeMentions } from "./prepared";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import {
   arrangedVisit,
@@ -127,7 +125,17 @@ import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
 import { citationsOf, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
-import { contentTermsOf, distinctTermIds, extractEntities, head, isChatterTerms, isStopword, termIds } from "./text";
+import {
+  contentTermsOf,
+  distinctTermIds,
+  extractEntities,
+  extractTypedEntities,
+  head,
+  isChatterTerms,
+  isStopword,
+  PERSISTABLE_KINDS,
+  termIds,
+} from "./text";
 import { SpanStats, Tracer, type SpanSink, type SpanStat } from "./spans";
 import type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
 import { distinctiveTokens, showsUse, type Outstanding } from "./usage";
@@ -147,12 +155,6 @@ export interface PartnerDeps {
    * partner builds its source fan-out itself, so redaction before anything is held can never be swapped out.
    */
   gatePool?: Pick<WorkerPool, "runOrInline">;
-  /**
-   * A worker pool started on `INGEST_MODULE` (trial `ingestWorker`, D216): it redacts each source page and reads it
-   * for the cache (terms, graph, mentions, deflated text) off the event loop. Used only with `config.ingestWorker`; it
-   * then takes the gate pool's place.
-   */
-  ingestPool?: Pick<WorkerPool, "run">;
   /**
    * Decides what each lookup sends to each connector, learned per (tenant, user, connector)
    * (docs/plans/query-planner.md). Absent: every connector gets the cue's terms and entities as before.
@@ -300,12 +302,6 @@ interface Session {
 }
 
 /** Items whose shown words a session keeps (`askDedup`). */
-/**
- * With the ingest worker (D216): a page of fewer characters than this is redacted and read on the event loop, where the
- * round trip to the worker (a structured clone each way) would cost about what the work does: about one item.
- */
-const INGEST_INLINE_BELOW = 2_000;
-
 const MAX_SHOWN = 64;
 
 /** A session's anticipation (`anticipate`): its prefetch in flight, the next one waiting, and what it has fetched. */
@@ -563,19 +559,9 @@ export class ContextPartner {
             sink?.(x);
           })
         : null;
-    const gate =
-      this.config.ingestWorker && deps.ingestPool
-        ? pooledIngest(deps.ingestPool, {
-            maxTextChars: maxText,
-            inlineBelow: INGEST_INLINE_BELOW,
-            now: this.now,
-            graph: this.config.graph,
-            mentions: true,
-            pack: deps.cache.packsText,
-          })
-        : deps.gatePool
-          ? pooledSanitizer(deps.gatePool, maxText)
-          : (items: ContextItem[]) => items.map((i) => sanitizeItem(i, maxText));
+    const gate = deps.gatePool
+      ? pooledSanitizer(deps.gatePool, maxText)
+      : (items: ContextItem[]) => items.map((i) => sanitizeItem(i, maxText));
     this.redact = gate;
     const spans = this.spans;
     // The card enrichment (`cards`) reports its background calls into the same spans.
@@ -3458,10 +3444,12 @@ export class ContextPartner {
     if (added.length === 0) return;
     const spans = this.spans;
     const noting = spans?.open("mentions", parent, { items: added.length });
-    // Read by the ingest worker when it read the item (D216); the same reading otherwise.
     const mentions = added.map((item) => ({
       sourceId: item.sourceId,
-      entities: takeMentions(item) ?? mentionsOf(item),
+      entities: extractTypedEntities(`${item.title}. ${item.text}`)
+        .filter((e) => PERSISTABLE_KINDS.has(e.kind))
+        .slice(0, 20)
+        .map((e) => e.text),
     }));
     if (mentions.length > 0) this.deps.sourceMap.recordMentionsMany(scope, mentions, this.now());
     if (noting) spans!.close(noting);

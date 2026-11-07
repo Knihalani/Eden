@@ -3,13 +3,11 @@
  * fixed total rate, so a lookup's synchronous work (redaction, tokenizing, indexing) delays everyone else's events.
  * Compares gating lookup results on the event loop with gating them in a WorkerPool (D25). Instant sources, no model.
  *
- *   bun packages/engine/bench/concurrent.bench.ts [--ingest] [eventsPerSec=400] [seconds=8] [gateWorkers=0] [users=200]
+ *   bun packages/engine/bench/concurrent.bench.ts [eventsPerSec=400] [seconds=8] [gateWorkers=0] [users=200]
  *                                                 [sourceMs=50-250]
  *
  * Sources answer after a uniform random delay in `sourceMs` (a real MCP source takes tens to hundreds of ms; with
  * 0 every lookup's work lands in one synchronous burst, which no real deployment sees). The CPU is Eden's own.
- *
- * `--ingest`: the trial `ingestWorker` (D216) with one ingest worker, which redacts and reads each source page.
  *
  * Reports `observe` latency (waitMs 0: what an agent waits for on every event), event-loop lag, and how many
  * lookups finished. pipeline.bench.ts is the sequential anchor; this is the multi-user one.
@@ -19,16 +17,14 @@ import { Budget } from "@eden/llm";
 import { WorkerPool } from "@eden/primitives";
 import type { AgentEvent } from "@eden/protocol";
 import type { Source } from "@eden/sources";
-import { ContextPartner, GATE_MODULE, INGEST_MODULE, ItemCache, type Trace } from "../src/index";
+import { ContextPartner, GATE_MODULE, ItemCache, type Trace } from "../src/index";
 import { buildWorkload } from "./workload";
 
-const INGEST = process.argv.includes("--ingest");
-const args = process.argv.filter((a) => a !== "--ingest");
-const rate = Number(args[2] ?? 400);
-const seconds = Number(args[3] ?? 8);
-const gateWorkers = Number(args[4] ?? 0);
-const users = Number(args[5] ?? 200);
-const [minMs, maxMs] = (args[6] ?? "50-250").split("-").map(Number) as [number, number];
+const rate = Number(process.argv[2] ?? 400);
+const seconds = Number(process.argv[3] ?? 8);
+const gateWorkers = Number(process.argv[4] ?? 0);
+const users = Number(process.argv[5] ?? 200);
+const [minMs, maxMs] = (process.argv[6] ?? "50-250").split("-").map(Number) as [number, number];
 
 const total = Math.round(rate * seconds);
 const w = buildWorkload({ itemsPerSource: 1_500, events: Math.ceil(total / users) + 40, seed: 7 });
@@ -69,17 +65,6 @@ const pool =
         inlineBelow: 1_024,
       })
     : undefined;
-const ingestPool = INGEST
-  ? await WorkerPool.start({
-      module: INGEST_MODULE,
-      size: 1,
-      maxQueue: 4_096,
-      maxBatch: 4,
-      taskTimeoutMs: 5_000,
-      inlineBelow: 0,
-      warm: "warmIngest",
-    })
-  : undefined;
 const traces: Trace[] = [];
 const partner = new ContextPartner({
   sources: async () => sources,
@@ -89,8 +74,7 @@ const partner = new ContextPartner({
   model: null,
   onTrace: (t) => traces.push(t),
   gatePool: pool,
-  ...(ingestPool ? { ingestPool } : {}),
-  config: { maxSessionsPerTenant: users * 4, ingestWorker: INGEST },
+  config: { maxSessionsPerTenant: users * 4 },
 });
 
 const t0 = performance.now();
@@ -130,8 +114,6 @@ clearInterval(probe);
 const cpu = process.cpuUsage(cpu0);
 const poolStats = pool?.stats();
 pool?.close();
-const ingestStats = ingestPool?.stats();
-ingestPool?.close();
 
 const pct = (xs: number[], p: number) =>
   [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))]!;
@@ -139,8 +121,7 @@ const fmt = (ms: number) => `${ms.toFixed(2)} ms`;
 const decisions: Record<string, number> = {};
 for (const t of traces) decisions[t.decision] = (decisions[t.decision] ?? 0) + 1;
 console.log(
-  `${events.length} events at ${rate}/s over ${users} users, sources ${minMs}-${maxMs} ms, gate ${gateWorkers ? `pool ${gateWorkers}` : "inline"}` +
-    (INGEST ? ", ingest worker" : ""),
+  `${events.length} events at ${rate}/s over ${users} users, sources ${minMs}-${maxMs} ms, gate ${gateWorkers ? `pool ${gateWorkers}` : "inline"}`,
 );
 console.log(
   `observe: p50 ${fmt(pct(observeMs, 0.5))}  p99 ${fmt(pct(observeMs, 0.99))}  max ${fmt(Math.max(...observeMs))}`,
@@ -155,4 +136,3 @@ console.log(
 );
 console.log("decisions", JSON.stringify(decisions));
 if (poolStats) console.log("pool", JSON.stringify(poolStats));
-if (ingestStats) console.log("ingest", JSON.stringify(ingestStats));

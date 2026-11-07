@@ -25,7 +25,6 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `ledger.ts`, `usage.ts` | Not-twice ledger; usage inference for learning (D13, D18) |
 | `spans.ts`, `trace.ts` | Span tracing (off by default, content-free, D56); decision traces |
 | `gate.ts` | Redaction off the event loop through the worker pool (D25, D26) |
-| `ingest.ts`, `prepared.ts` | Trial `ingestWorker` (D216): the ingest worker's task module (redact, then read each page for the cache: terms, graph, mentions, deflated text) and the per-item readings the cache applies |
 
 `bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `ingest.bench.ts` (memory per synced
 user, ingest µs/item; the scale anchor, docs/TESTING.md), `index-memory` (the per-user index's heap per item and per
@@ -169,12 +168,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   spreads and `JSON` see the text, but a memo that keeps `item.text` keeps a decoded copy. Decode Latin-1 bytes with
   `latin1`, never `TextDecoder`: its output for an accented letter is a two-byte string, and every regex over it ran
   1.17x slower (`pipeline.bench.ts`). Text a new path reads in a loop should be read once into a local.
-- **The ingest worker's reading must store what the event loop would (D216).** `ItemCache.put` applies a reading
-  (`takePrepared`) instead of tokenizing, extracting and deflating: the chunk's distinct terms are interned in each
-  item's order of first occurrence, title then body, so the vocabulary hands out the same ids. A graph reading that
-  binds a date resolved it at the worker's clock and is used only at the same `now`. Anything new that `put` derives
-  from an item's text must be read in the worker too (`ChunkWriter.item`) or computed in `put` from the plain item, and
-  `ingest.test.ts`'s comparison (vocabulary, search, graph walks, stored copies, mentions) must still pass.
+- **Ingest off the event loop was built and rejected (D216).** A worker that redacted each source page and read it for
+  the cache (terms with hash lanes, graph reading, mentions, deflated text; the cache applying the reading with the
+  same stored state) cut a synced item's main-thread cost 3.5x and the concurrent bench's cold-start stall from about
+  1.2 s to 0.1-0.2 s, but one process's capacity inside a 100 ms p99 rose only 1.46x there and fell 3-15% on
+  router-sim realistic, for 1.19x the CPU per item. The code is in commit b217ae1d (`ingest.ts`, `prepared.ts`,
+  `ingest.test.ts`); building it again needs a decision that accepts those numbers.
 - **The graph's memo serves one put (D215).** `UserGraph.rest()` empties it after every put: a remembered sentence is
   a substring that keeps its item's decoded text alive. Do not keep it across puts.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on

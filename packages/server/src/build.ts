@@ -4,7 +4,6 @@ import {
   ContextPartner,
   DEFAULT_CONFIG,
   GATE_MODULE,
-  startIngestWorkers,
   ItemCache,
   ModelCardMaker,
   ModelReaderMaker,
@@ -38,8 +37,6 @@ export interface BuildOptions {
   onTrace?: TraceSink;
   /** A pool from `startGatePool`: lookup results are redacted in it. Without one they are redacted on the loop. */
   gatePool?: WorkerPool;
-  /** A pool from `startIngestPool`, used when the engine config turns on the trial `ingestWorker` (D216). */
-  ingestPool?: WorkerPool;
   /** The query planner (D28): serving by default (D33), in shadow, or off; its learning persists in the source map. */
   queryPlanner?: "off" | "serve" | "shadow";
   onShadow?: ShadowSink;
@@ -126,7 +123,6 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     ...(reader ? { reader } : {}),
     onTrace: options.onTrace,
     gatePool: options.gatePool,
-    ...(options.ingestPool ? { ingestPool: options.ingestPool } : {}),
     planner:
       mode === "off" ? undefined : new QueryPlanner({ seed: (Math.random() * 2 ** 32) >>> 0, store: sourceMap, mode }),
     onShadow: options.onShadow,
@@ -169,12 +165,4 @@ export async function startGatePool(workers: number): Promise<WorkerPool | undef
     // A task of GATE_MODULE: a missing export fails the start, so a rename cannot leave the workers cold unnoticed.
     warm: "warmGateItem",
   });
-}
-
-/**
- * Starts the ingest worker (trial `ingestWorker`, D216; `startIngestWorkers`): one worker per process by default, which
- * redacts each source page and reads it for the cache off the event loop.
- */
-export async function startIngestPool(workers = 1): Promise<WorkerPool | undefined> {
-  return workers > 0 ? startIngestWorkers(workers) : undefined;
 }

@@ -6,7 +6,7 @@
 import { warmGate } from "@eden/redact";
 import { loadConfig, type ServerConfig } from "./config";
 import { sourcesOrExit } from "./connectors";
-import { buildPartner, startGatePool, startIngestPool } from "./build";
+import { buildPartner, startGatePool } from "./build";
 import { engineConfig } from "./engine-config";
 import { createHandler } from "./http";
 import { modelRolesFromEnv } from "./models";
@@ -36,12 +36,9 @@ async function serve(config: ServerConfig): Promise<void> {
   // pool, so a bad sources file exits 2 with its message before any worker starts.
   const sources = sourcesOrExit();
   const gatePool = await startGatePool(config.gateWorkers);
-  // Trial `ingestWorker` (D216): one worker per process redacts and reads source pages off the event loop.
-  const ingestPool = engine.ingestWorker ? await startIngestPool(1) : undefined;
   const models = modelRolesFromEnv();
   const partner = buildPartner({
     gatePool,
-    ingestPool,
     sources: sources.resolver,
     sourceMapPath: config.sourceMapPath,
     queryPlanner: config.queryPlanner,

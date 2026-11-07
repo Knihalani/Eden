@@ -1124,22 +1124,15 @@ export class UserGraph {
 
   /** Puts an item in the graph, replacing what an earlier copy of it put there. */
   add(item: ContextItem, now: number): void {
-    this.addExtracted(item.id, extract(item, now, this.memo));
-  }
-
-  /**
-   * Puts an item in the graph from what `extract` read of it (`add` is this with `extract`): the ingest worker reads
-   * items off the event loop (`ingest.ts`, D216) and the cache places its reading here, with the same result.
-   */
-  addExtracted(itemId: string, x: Extraction): void {
+    const x = extract(item, now, this.memo);
     // A packed word must stay an int32: ids in use and every id this item could intern (its nodes, and its authors,
     // which neither `MAX_NODES` nor `MAX_NODES_PER_ITEM` bounds) stay under `maxIds`, slots under `MAX_INDEX`. Checked
     // before an earlier copy leaves: a copy refused here leaves the one held.
     if (this.top - this.freeIds.length + x.nodes.size + x.authors.length > this.maxIds) return;
-    const h = hashOf(itemId);
-    const replacing = this.slots.get(itemId, h) >= 0;
+    const h = hashOf(item.id);
+    const replacing = this.slots.get(item.id, h) >= 0;
     if (!replacing && this.freeSlots.length === 0 && this.itemAt.length >= MAX_INDEX) return;
-    if (replacing) this.remove(itemId);
+    if (replacing) this.remove(item.id);
     const slot = this.freeSlots.pop() ?? this.itemAt.length;
     if (slot >= this.placedAt.length) {
       this.placedAt = grown(this.placedAt, slot + 1);
@@ -1190,7 +1183,7 @@ export class UserGraph {
       this.flags = grownFlags;
     }
     this.flags[slot] = (x.automated ? AUTOMATED_FLAG : 0) | (x.bound ? BOUND_FLAG : 0);
-    this.itemAt[slot] = itemId;
+    this.itemAt[slot] = item.id;
     this.slotHash[slot] = h;
     this.slots.put(slot);
     this.placedAt[slot] = at;

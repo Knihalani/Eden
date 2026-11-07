@@ -28,8 +28,7 @@ import { sanitizeForStore } from "@eden/redact";
 import type { ListReuse } from "@eden/sources";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
 import { squash, UserGraph, type Seed, type Walked, type WalkOptions } from "./kg";
-import { clearDecoded, packItem, repackLike, withPacked } from "./packed-text";
-import { noteMentions, preparedGraph, preparedMentions, takePrepared, type Prepared } from "./prepared";
+import { clearDecoded, packItem, repackLike } from "./packed-text";
 import { head, termIds } from "./text";
 
 const NO_TERMS = new Uint32Array(0);
@@ -479,15 +478,6 @@ export function sanitizedId(raw: ContextItem, sanitizedRef = sanitizeForStore(ra
 
 let titleIds = new Uint32Array(256);
 let bodyIds = new Uint32Array(4_096);
-/** `indexPrepared`'s scratch: a reading's term index → the user's term id. */
-let termMap = new Uint32Array(1_024);
-
-/** The copy `packText` holds: deflated as the worker's reading says (`Prepared.packed`) when it has one. */
-function packedCopy(item: ContextItem, prep: Prepared | undefined): ContextItem {
-  const packed = prep?.chunk.packed?.[prep.k];
-  if (packed === undefined) return packItem(item);
-  return packed === null ? item : withPacked(item, packed.bytes, packed.latin1);
-}
 
 export class ItemCache {
   private readonly users = new Map<string, UserCache>();
@@ -662,11 +652,6 @@ export class ItemCache {
     };
   }
 
-  /** Whether stored text is held deflated (`CacheLimits.packText`): the ingest worker deflates it when so. */
-  get packsText(): boolean {
-    return this.limits.packText;
-  }
-
   /** Characters of item text kept (`sanitizeItem`'s limit for this cache). */
   get maxTextChars(): number {
     return this.limits.maxTextChars;
@@ -699,8 +684,6 @@ export class ItemCache {
     const held = this.holds.get(scope.tenantId);
     for (const raw of items) {
       const item = sanitized ? raw : sanitizeItem(raw, this.limits.maxTextChars);
-      // The ingest worker's reading of it (D216), taken whichever way it is stored, so none outlives its put.
-      const prep = sanitized ? takePrepared(item) : undefined;
       if (held !== undefined && held.isGone(scope.userId, item.id, now)) continue;
       const old = u.items.get(item.id);
       if (old && synced && !old.synced) {
@@ -745,17 +728,11 @@ export class ItemCache {
       if (old) this.drop(u, old);
       tallyOffset(u, item, 1);
       tally(u, item, 1);
-      // Added before the item is: a graph built on first use (`graphOf`) must not read it twice. A worker's graph
-      // reading is placed as it is unless it binds a date, which it resolved at its own clock (`ingest.ts`).
-      const graph = this.graphOf(u, now);
-      const read = graph && prep ? preparedGraph(prep) : null;
-      if (read && (!read.bound || prep!.chunk.now === now)) graph!.addExtracted(item.id, read);
-      else graph?.add(item, now);
-      const doc = prep ? this.indexPrepared(u, prep) : this.index(u, item);
+      // Added before the item is: a graph built on first use (`graphOf`) must not read it twice.
+      this.graphOf(u, now)?.add(item, now);
+      const doc = this.index(u, item);
       // The copy held: with `packText`, its text deflated (the tallies, graph and index above read the plain one).
-      const stored = this.limits.packText ? packedCopy(item, prep) : item;
-      const mentions = prep ? preparedMentions(prep) : null;
-      if (mentions) noteMentions(stored, mentions);
+      const stored = this.limits.packText ? packItem(item) : item;
       // `raw` always set (if undefined), so every entry has one shape.
       const entry: Entry = {
         item: stored,
@@ -955,38 +932,6 @@ export class ItemCache {
     const nt = t.n;
     const b = termIds(item.text, u.vocab, true);
     return u.index.addFields([titleIds, b.ids], [nt, b.n]);
-  }
-
-  /**
-   * `index` from the ingest worker's reading (`Prepared`, D216): its distinct terms interned in their order of first
-   * occurrence, title then body, with the lanes the worker hashed, so the vocabulary hands out the ids, and the index
-   * gets the postings, that tokenizing the item here would.
-   */
-  private indexPrepared(u: UserCache, p: Prepared): number {
-    const c = p.chunk;
-    const r = c.records;
-    let i = c.at[p.k]!;
-    if (termMap.length < c.termAt.length) termMap = new Uint32Array(c.termAt.length * 2);
-    const lanes = c.lanes;
-    for (let n = r[i++]!; n > 0; n--) {
-      const t = r[i++]!;
-      const h = lanes[t * 3]!;
-      termMap[t] = u.vocab.internRange(
-        c.terms,
-        c.termAt[t]!,
-        c.termAt[t + 1]!,
-        h,
-        lanes[t * 3 + 1]!,
-        lanes[t * 3 + 2]!,
-      );
-    }
-    const nt = r[i++]!;
-    if (titleIds.length < nt) titleIds = new Uint32Array(nt * 2);
-    for (let j = 0; j < nt; j++) titleIds[j] = termMap[r[i++]!]!;
-    const nb = r[i++]!;
-    if (bodyIds.length < nb) bodyIds = new Uint32Array(nb * 2);
-    for (let j = 0; j < nb; j++) bodyIds[j] = termMap[r[i++]!]!;
-    return u.index.addFields([titleIds, bodyIds], [nt, nb]);
   }
 
   /**

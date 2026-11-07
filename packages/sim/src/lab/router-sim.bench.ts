@@ -28,7 +28,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { warmGate } from "@eden/redact";
-import { buildPartner, createHandler, loadConfig, startGatePool, startIngestPool } from "@eden/server";
+import { buildPartner, createHandler, loadConfig, startGatePool } from "@eden/server";
 // `startRouter` is not part of @eden/server's exports (the servers start it from main.ts); lab code reaches in, as
 // packages/server/bench/router.bench.ts does from inside the package.
 import { startRouter } from "../../../server/src/router";
@@ -54,8 +54,6 @@ const SIM = {
   worlds: Number(process.env.ROUTER_SIM_WORLDS ?? 8),
   time: Number(process.env.ROUTER_SIM_TIME ?? 1),
   statsDir: process.env.ROUTER_SIM_STATS ?? "",
-  /** `ROUTER_SIM_INGEST=1`: every server process runs the trial `ingestWorker` with one ingest worker (D216). */
-  ingest: process.env.ROUTER_SIM_INGEST === "1",
 };
 
 if (process.argv[2] === "--child" || process.env.EDEN_ROUTER_CHILD) {
@@ -80,10 +78,8 @@ async function serveChild(): Promise<void> {
   const { resolver, users } = simResolver(worldIndexes(SIM.worlds), profilesNamed(SIM.profile), SIM.time);
   const worldsMs = Math.round(performance.now() - t0);
   const gatePool = await startGatePool(config.gateWorkers);
-  const ingestPool = SIM.ingest ? await startIngestPool(1) : undefined;
   const partner = buildPartner({
     gatePool,
-    ...(ingestPool ? { ingestPool, engine: { ingestWorker: true } } : {}),
     sources: resolver,
     sourceMapPath: config.sourceMapPath,
     queryPlanner: config.queryPlanner,

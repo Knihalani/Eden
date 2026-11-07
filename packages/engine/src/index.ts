@@ -20,7 +20,6 @@ export {
 export { ItemCache, sanitizeItem, type CacheHit, type CacheLimits } from "./cache";
 export { SyncManager, type SyncOptions, type SyncStats } from "./sync";
 export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
-export { INGEST_MODULE, mentionsOf, pooledIngest, prepareItems, startIngestWorkers } from "./ingest";
 export { Ledger } from "./ledger";
 export { inert, oneLine, renderAnswer, renderPacket } from "./render";
 export { classifySituation, type Situation } from "./situation";
