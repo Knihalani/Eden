@@ -15,7 +15,7 @@
  * The upstream key (`Authorization`) is forwarded and never logged; only the message text goes to Eden, as with the
  * SDK. Eden's `ask_context` is not added: give the agent the MCP tool for that (docs/INTEGRATION.md).
  */
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { DEFAULT_WAIT_MS, EdenClient, edenId, withContext } from "@eden/client";
 import type { Injection } from "@eden/protocol";
 
@@ -160,7 +160,9 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     for (const h of (req.headers.get("connection") ?? "").split(",")) if (h.trim()) headers.delete(h.trim());
     for (const h of HOP_BY_HOP) headers.delete(h);
     for (const h of [...headers.keys()]) if (h.startsWith("x-eden-")) headers.delete(h);
-    return doFetch(`${upstream}${path}`, { method: req.method, headers, body }).then((res) => {
+    // The caller's signal: an agent that hangs up cancels the model call, which would otherwise run (and be billed) to
+    // the end for an answer nobody reads (audit A11).
+    return doFetch(`${upstream}${path}`, { method: req.method, headers, body, signal: req.signal }).then((res) => {
       const out = new Headers(res.headers);
       for (const h of DROP_FROM_UPSTREAM) out.delete(h);
       return new Response(res.body, { status: res.status, statusText: res.statusText, headers: out });
@@ -284,7 +286,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
 
   return async function handle(req: Request): Promise<Response> {
     // The proxy holds the tenant's Eden key: with `proxyKey` set, only callers who know it may name a user (D9).
-    if (options.proxyKey !== undefined && req.headers.get("x-eden-proxy-key") !== options.proxyKey) {
+    if (options.proxyKey !== undefined && !sameSecret(req.headers.get("x-eden-proxy-key"), options.proxyKey)) {
       return openAiError(401, "eden proxy: missing or wrong x-eden-proxy-key");
     }
     const url = new URL(req.url);
@@ -319,13 +321,23 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       // Anything Eden-side that threw: the request goes upstream as it came (D14).
       report(e);
     }
+    // The agent hung up during Eden's wait: nobody reads the answer, so the model is not called (audit A11).
+    if (req.signal.aborted) return openAiError(499, "eden proxy: the caller closed the request");
     try {
       return await forward(req, path, sent);
     } catch (e) {
+      if (req.signal.aborted) return openAiError(499, "eden proxy: the caller closed the request");
       report(e);
       return openAiError(502, "eden proxy: upstream unreachable");
     }
   };
+}
+
+/** Compares a caller's secret in time independent of where it first differs (digests: equal lengths). */
+function sameSecret(given: string | null, expected: string): boolean {
+  if (given === null) return false;
+  const digest = (s: string) => createHash("sha256").update(s).digest();
+  return timingSafeEqual(digest(given), digest(expected));
 }
 
 /**
