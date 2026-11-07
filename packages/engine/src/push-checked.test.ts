@@ -7,11 +7,11 @@ import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { AskReader, type ReaderInput, type ReaderKind, type ReaderMaker } from "./reader";
-import { CHECKED_MORE, CHECKED_NONE, COVERED, shownText } from "./render";
+import { CHECKED_MORE, CHECKED_NONE, shownText } from "./render";
 
-// CL4's path-latency trials (docs/research/cl-cl4.md): the push saying it found nothing (`pushChecked`, D246), its
-// packet saying it is what the reading found (`pushCovered`, D250). `askFromPush` (D247), `pushVerifyAhead` (D249)
-// and speculation on the first model request (D248) were measured and deleted.
+// CL4's path-latency trial (docs/research/cl-cl4.md): the push saying it found nothing (`pushChecked`, D246). The
+// packet's closing line (`pushCovered`, D250), `askFromPush` (D247), `pushVerifyAhead` (D249) and speculation on the
+// first model request (D248) were measured and deleted.
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -150,24 +150,5 @@ describe("pushChecked (D246): the push says when its reading found nothing", () 
     await say(p, "thanks, that is all for now");
     expect(maker.calls.length).toBe(0);
     expect(p.takePending(ref())).toEqual([]);
-  });
-});
-
-describe("pushCovered (D250): the push's packet says it is what the reading found", () => {
-  test("the line closes the envelope after the items; an item's line and shown words are unchanged", async () => {
-    const { p } = setup({ pushCovered: true }, { items: [...PLAIN, HOLD] });
-    await say(p, REQUEST);
-    const [got] = p.takePending(ref());
-    const lines = got!.text.split("\n");
-    expect(lines.at(-1)).toBe("</context>");
-    expect(lines.at(-2)).toBe(COVERED);
-    expect(lines.filter((l) => l.startsWith("- [")).length).toBe(1);
-    expect(shownText(got!.text)).not.toContain("Eden: read");
-  });
-
-  test("off, the packet has no such line", async () => {
-    const { p } = setup({}, { items: [...PLAIN, HOLD] });
-    await say(p, REQUEST);
-    expect(p.takePending(ref())[0]!.text).not.toContain(COVERED);
   });
 });

@@ -453,11 +453,6 @@ export interface EngineConfig {
    * `ask_context` call and a model turn on requests Eden has nothing for. Needs `readerPush`.
    */
   pushChecked: boolean;
-  /**
-   * `pushCovered` (trial, D250, CL4 H13): a packet the push queued ends with a line saying Eden read the user's sources
-   * for this request and the items above are what bears on it, so the agent can answer from it in one call.
-   */
-  pushCovered: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -574,5 +569,4 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerVerifyAfter: true,
   readerReuse: true,
   pushChecked: false,
-  pushCovered: false,
 };

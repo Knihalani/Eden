@@ -115,26 +115,19 @@ export function shownText(rendered: string): string {
 }
 
 /**
- * Eden's own lines about a reading (`pushChecked`, D246; `pushCovered`, D250), never an item's: fixed words with no
- * source or event text in them, inside the data envelope (D11, D19). `shownText` drops them (they are no item's words),
- * and no line starts `- [`, so they are counted as no item (`renderedCount`).
+ * Eden's own lines about a reading (`pushChecked`, D246), never an item's: fixed words with no source or event text in
+ * them, inside the data envelope (D11, D19). `shownText` drops them (they are no item's words), and no line starts
+ * `- [`, so they are counted as no item (`renderedCount`).
  */
 export const EDEN_NOTE = "Eden: ";
 export const CHECKED_NONE =
   `${EDEN_NOTE}read the user's connected sources for this request; nothing in them conflicts with it, constrains it ` +
   "or changes it.";
 export const CHECKED_MORE = `${EDEN_NOTE}read the user's connected sources for this request; nothing beyond the context above bears on it.`;
-export const COVERED = `${EDEN_NOTE}read the user's connected sources for this request; the items above are what bears on it.`;
 
 /** A note of Eden's own in the envelope (`CHECKED_NONE`, `CHECKED_MORE`): no item, nothing from a source. */
 export function renderNote(line: string): string {
   return `${HEADER}\n${line}\n</context>`;
-}
-
-/** A packet with one of Eden's own lines added last inside its envelope (`pushCovered`). */
-export function withNote(packet: string, line: string): string {
-  const end = "\n</context>";
-  return packet.endsWith(end) ? `${packet.slice(0, -end.length)}\n${line}${end}` : packet;
 }
 
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */

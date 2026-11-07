@@ -122,16 +122,7 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import {
-  CHECKED_MORE,
-  CHECKED_NONE,
-  citationsOf,
-  COVERED,
-  renderNote,
-  renderPacket,
-  shownText,
-  withNote,
-} from "./render";
+import { CHECKED_MORE, CHECKED_NONE, citationsOf, renderNote, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -1513,8 +1504,6 @@ export class ContextPartner {
           ? this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
       if (injection && was) this.keepUndo(s, injection, checked, was);
-      // `pushCovered` (D250): the packet says it is what Eden's reading of the request found.
-      if (injection && this.config.pushCovered) injection.text = withNote(injection.text, COVERED);
       if (injection) {
         // A later reading that delivers (`readerPushBehind`'s second) takes back an untaken "nothing found" note.
         for (let k = s.pending.length - 1; k >= 0; k--) {
