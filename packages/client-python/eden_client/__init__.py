@@ -156,6 +156,7 @@ class EdenClient:
         timeout_s: Optional[float] = None,
         default_wait_ms: Optional[int] = None,
         on_error: Optional[Callable[[Exception], Any]] = None,
+        shadow: bool = False,
     ) -> None:
         # None is the default, as `??` reads it in TypeScript: `base_url=os.environ.get(...)` when it is unset.
         self._base = ("http://127.0.0.1:8790" if base_url is None else base_url).rstrip("/")
@@ -166,6 +167,9 @@ class EdenClient:
         self._timeout = 0.8 if timeout_s is None else timeout_s
         self._default_wait = DEFAULT_WAIT_MS if default_wait_ms is None else default_wait_ms
         self._on_error = on_error
+        # Shadow mode (the TS client's `shadow`, D282): what Eden returns is not given to the agent, so the server is
+        # told (`?shadow=1` on events and pending) and learns nothing from it as if the agent had been shown it.
+        self._shadow = shadow is True
         bad = [f for f, v in (("tenantId", tenant_id), ("userId", user_id), ("sessionId", session_id))
                if (f != "tenantId" or v) and not _is_id(v)]
         # Every call would be refused (400): said once, up front, without the ids (they may be personal data).
@@ -238,8 +242,9 @@ class EdenClient:
         except TypeError:
             wait = 0
         body = {**self._who(), "at": int(time.time() * 1000), **event}
+        query = "&".join(([f"waitMs={wait}"] if wait else []) + (["shadow=1"] if self._shadow else []))
         res = self._post(
-            f"/v1/events?waitMs={wait}" if wait else "/v1/events",
+            f"/v1/events?{query}" if query else "/v1/events",
             body,
             self._timeout + wait / 1000,
             lambda v: isinstance(v, dict) and (v.get("injection") is None or _is_injection(v.get("injection"))),
@@ -248,7 +253,7 @@ class EdenClient:
 
     def pending(self) -> List[Dict[str, Any]]:
         """Injections queued by slower lookups since the last call (drains the queue)."""
-        res = self._post("/v1/pending", self._who(),
+        res = self._post("/v1/pending?shadow=1" if self._shadow else "/v1/pending", self._who(),
                          valid=lambda v: isinstance(v, dict) and isinstance(v.get("injections"), list))
         return [i for i in (res or {}).get("injections", []) if _is_injection(i)]
 

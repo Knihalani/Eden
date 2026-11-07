@@ -7,7 +7,7 @@ workspace package exists so `bun run test` runs its tests.
 
 | File | Owns |
 |---|---|
-| `eden_client/__init__.py` | `EdenClient` (`observe`, `pending`, `collect`, `ask`, `check`, `feedback`, `health`, `explain`, `source_changed`, `source_notice`), `with_context`, `held_result`, `eden_id`, `ASK_CONTEXT_DESCRIPTION` |
+| `eden_client/__init__.py` | `EdenClient` (`observe`, `pending`, `collect`, `ask`, `check`, `feedback`, `health`, `explain`, `source_changed`, `source_notice`; `shadow=True` sends `?shadow=1` on events and pending, D282), `with_context`, `held_result`, `eden_id`, `ASK_CONTEXT_DESCRIPTION` |
 | `test_eden_client.py` | Unit tests: every call fails open on every failure shape (unreachable, non-2xx, wrong shape, bad JSON) |
 | `src/python.test.ts` | Runs the unit tests, then the client end to end against the real handler, and `eden_id` against `edenId` |
 

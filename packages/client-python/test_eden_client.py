@@ -275,6 +275,23 @@ class Calls(unittest.TestCase):
             stub.close()
 
 
+    def test_shadow_sends_shadow_on_events_and_pending(self):
+        # Parity with the TS client's `shadow` (D282): without `?shadow=1` the server learns from packets no agent saw.
+        def answer(path, body):
+            return 200, {"injection": None, "pending": False} if path.startswith("/v1/events") else {"injections": []}
+
+        stub = Stub(answer)
+        try:
+            c, errors = client(stub.url, shadow=True)
+            c.observe({"kind": "user_message", "text": "hi"})
+            c.observe({"kind": "tool_result", "tool": "x", "output": "y"})
+            c.pending()
+            self.assertEqual([p for p, _, _ in stub.seen],
+                             ["/v1/events?waitMs=3000&shadow=1", "/v1/events?shadow=1", "/v1/pending?shadow=1"])
+            self.assertEqual(errors, [])
+        finally:
+            stub.close()
+
     def test_source_changed_takes_tuples_and_sets(self):
         # Refs in a set or a tuple were read as none: only the bare signal went, and a server that syncs the source
         # answered True, so the caller held the deletion as delivered while Eden still held the item.
