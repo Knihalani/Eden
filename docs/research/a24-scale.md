@@ -1,7 +1,7 @@
 # A24: smaller idle users, and the storm fix shipped
 
 Status: measured 2026-11-07 on branch `claude/a24-scale4` (from `claude/lucid-hypatia-v9wqk5` at 8066c473), A14's two
-open levers ([a14-scale-users.md](a14-scale-users.md)). Decisions D370–D373. Paid spend: $0 (every figure is a
+open levers ([a14-scale-users.md](a14-scale-users.md)). Decisions D370–D374. Paid spend: $0 (every figure is a
 no-model run). Machine: 4 vCPU Xeon, 15 GiB, Bun 1.4.4, `BUN_OPTIONS` and `OPENROUTER_API_KEY` unset; benches run one
 at a time with nothing else on the box.
 
@@ -124,7 +124,7 @@ CL3).
 |---|---|---|---|---|---|---|
 | Base (default before) | 314/384 | 273/384 | 446 | 6,604 | 2,091 | – |
 | `syncIngestTurns` alone (D328 before this note: no gather) | 314 | 273 | 567 | 6,604 | 2,091 | +0 −0, +0 −0 |
-| **New default** (turns + gather), two runs | 314 | 273 | **376**, 376 | 6,604 | 2,091 | +0 −0, +0 −0 |
+| **New default** (turns + gather), two runs; on the merged tip | 314 | 273 | **376**, 376; 377 | 6,604 | 2,091 | +0 −0, +0 −0 |
 | New default with `syncIngestTurns: false` | 314 | 273 | 446 | 6,604 | 2,091 | +0 −0, +0 −0 |
 
 Card replay: 2,357 replayed and 114 uncovered (no cached card) in the base and in the new default. Fewer calls for
@@ -176,6 +176,28 @@ subset of it, not an addition. A14's heap + external double-counted every typed 
 ~5.4 MB of heap (this note's `--no-freeze` rows), its 3,208 B an item ~1,880. D329's statement that `heapUsed` leaves
 out typed arrays is wrong on this runtime; its rule to size machines on RSS stands, and RSS was what A14 sized on.
 `users.bench.ts` now prints the three on their own.
+
+## 5. Fixes from the review of A14 (D374)
+
+The coordinator passed on an independent review of A14 and asked for the small fixes, each with a test that fails
+without it:
+
+- **Thaws only where items are read.** `observe` thawed a frozen user before looking at the event's kind, so a
+  `session_end` or a draft (which read nothing) unpacked a whole user; they now leave the user frozen. `/v1/pending`
+  (the take checks new items against the session's plans) and `/v1/forget` for one source (it drops that source's
+  items from the cache) read items synchronously, which thawed in one ~110-190 ms block at the cap; they now await
+  `partner.ready`, as `/v1/sources/removed` did. A18's `/v1/sources/refs` (D347) answers at once and reads the named
+  refs in the background: each read now awaits `cache.ready` before the drop or store it leads to, and checks a removal
+  that landed meanwhile after that wait, so a user frozen while a fetch was on the wire thaws in slices.
+- **Fan-out copies.** The router sends `/v1/usage` and `/v1/forget` to every child; each child's copy spent a token
+  of that child's divided rate limit, and a child that answered 429 was counted as down. A copy (the router's header,
+  honoured only in a router child) now spends no token and is not counted.
+- **Spend leases (D327, trial).** A child whose lease came back 0 asked the router again at every tally and every
+  `/v1/usage` read (94 asks in the test's run); it now remembers the day is all granted until the next UTC day.
+- **The reviewer of this branch** found three low issues, fixed: a forgotten user's drain waited out its 250 ms
+  gather (now ends at once), `IdSet`'s shared lookup scratch kept its largest size forever (now shrinks back to 4 KB),
+  and an iterator stepped by hand and never finished stops compaction (documented). Its funnel runs gave 377, 376 and
+  376 card calls: the gather's cap is wall time, so a batch's cut can move by one under load.
 
 ## Not done
 

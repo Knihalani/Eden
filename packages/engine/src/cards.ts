@@ -1065,9 +1065,13 @@ export class CardEnricher {
     // The queue of turns is the process's, not the user's: in a storm its tail can be seconds away, so the wait is
     // cut at `until` whatever it is waiting on.
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let stop: (() => void) | undefined;
+    // A forgotten or dropped user's drain stops waiting at once (review of A24), as at the deadline.
     const deadline = new Promise<"late">((r) => {
       timer = setTimeout(() => r("late"), GATHER_MS);
       timer.unref?.();
+      stop = () => r("late");
+      u.abort.signal.addEventListener("abort", stop, { once: true });
     });
     try {
       while (waiting) {
@@ -1077,6 +1081,7 @@ export class CardEnricher {
       }
     } finally {
       clearTimeout(timer);
+      if (stop) u.abort.signal.removeEventListener("abort", stop);
     }
   }
 

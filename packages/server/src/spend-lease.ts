@@ -41,6 +41,8 @@ export class LeasedSpend extends TenantSpend {
   private readonly granted = new Map<string, number>();
   /** tenant@day with a lease request in flight. */
   private readonly asking = new Set<string>();
+  /** tenant@day the router answered 0 for: the day's cap is all granted, so nothing more is asked (A24). */
+  private readonly exhausted = new Set<string>();
   private day = "";
 
   constructor(
@@ -58,11 +60,12 @@ export class LeasedSpend extends TenantSpend {
       // A new UTC day: yesterday's grants are spent or void.
       this.granted.clear();
       this.asking.clear();
+      this.exhausted.clear();
       this.day = day;
     }
     const key = `${tenant}@${day}`;
     const cap = this.chunk + (this.granted.get(key) ?? 0);
-    if (cap - spentUsd < this.chunk / 2 && !this.asking.has(key) && cap < this.capUsd) {
+    if (cap - spentUsd < this.chunk / 2 && !this.asking.has(key) && !this.exhausted.has(key) && cap < this.capUsd) {
       this.asking.add(key);
       try {
         this.ask({ edenLease: { tenant, day, want: this.chunk } });
@@ -80,6 +83,9 @@ export class LeasedSpend extends TenantSpend {
     const key = `${g.tenant}@${g.day}`;
     this.asking.delete(key);
     if (g.usd > 0) this.granted.set(key, (this.granted.get(key) ?? 0) + g.usd);
+    // The ledger grants 0 only once the tenant's day is all granted: asking again (each tally, each `/v1/usage`
+    // read) would be an IPC round trip per call for the same 0.
+    else this.exhausted.add(key);
   }
 }
 

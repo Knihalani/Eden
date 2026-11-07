@@ -66,7 +66,7 @@ class Mail implements Source {
   }
 }
 
-async function setup() {
+async function setup(cache = new ItemCache()) {
   const src = new Mail();
   const other = new Mail();
   let clock = T0;
@@ -84,7 +84,7 @@ async function setup() {
   const p = new ContextPartner({
     sources: async (scope) => [scope.userId === "u1" ? src : other],
     sourceMap: new SourceMap(":memory:", { seed: 1 }),
-    cache: new ItemCache(),
+    cache,
     budget: new Budget(),
     model: null,
     now: () => clock,
@@ -115,6 +115,35 @@ async function setup() {
 const citedIds = (r: { citations: { itemId: string }[] }) => r.citations.map((c) => c.itemId);
 
 describe("sourceRefs (D347): a notice naming its changed refs", () => {
+  test("a user frozen while the read is on the wire is thawed through ready before the store (D325, A24)", async () => {
+    const cache = new ItemCache({ freezeIdleMs: 1, expireEveryMs: 1 });
+    cache.close(); // The test runs the expiry ticks.
+    const { p, src, user, ask, later, at } = await setup(cache);
+    let queued = 0;
+    const real = cache.ready.bind(cache);
+    cache.ready = (scope) => {
+      const r = real(scope);
+      if (r) queued++;
+      return r;
+    };
+    src.add("hold", "Harlow invoice on hold", "Harlow invoice payments are on hold until 30 November", at());
+    src.refDelayMs.set("hold", 20);
+    const r = p.sourceRefs(user, "mail", ["hold"]);
+    // Both users go idle and freeze while the fetch is on the wire.
+    cache.expireIdle(at());
+    cache.expireIdle(at());
+    expect(cache.frozenCount).toBe(2);
+    expect(await r.settled).toBe(1);
+    expect(queued).toBe(1);
+    expect(cache.freezes.thawed).toBe(1);
+    expect(cache.frozenCount).toBe(1); // The other user stays frozen.
+    later();
+    const fetches = src.fetches;
+    const a = await ask();
+    expect(a.answer).toContain("30 November");
+    expect(src.fetches).toBe(fetches);
+  });
+
   test("the named item is re-read and stored; an ask then cites it with no further call", async () => {
     const { p, src, user, ask, later, at } = await setup();
     src.add("hold", "Harlow invoice on hold", "Harlow invoice payments are on hold until 30 November", at());

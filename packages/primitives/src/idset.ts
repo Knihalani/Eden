@@ -10,7 +10,8 @@
  * Same semantics as `Set<string>` for `add`, `has`, `delete`, `size`, `clear` and iteration in insertion order
  * (re-adding a present id does not move it). Deleting while iterating is allowed (the iterator skips what was
  * deleted, as `Set`'s does); an id added while iterating is visited, as with `Set`. Deleted slots are reclaimed by
- * the next `add` that needs room once they are half the slots, never while an iterator is open. Iteration makes a
+ * the next `add` that needs room once they are half the slots, never while an iterator is open: an iterator stepped
+ * by hand must be finished or `return()`ed (a `for…of` does both), or the set stops compacting. Iteration makes a
  * string per id: use `has` on hot paths.
  */
 import { mix32 } from "./hash";
@@ -22,6 +23,8 @@ const MIN_TABLE = 16;
 /** Slot capacity past which the table needs 32-bit entries (a 16-bit one holds slot + 1 below its tomb, 0xffff). */
 const WIDE = 0xfffe;
 const CHUNK = 4_096;
+/** The lookup scratch's resting size (bytes): ids up to 1,365 code units of any kind encode in it. */
+const SCRATCH = 4_096;
 
 export class IdSet implements Iterable<string> {
   /** Encoded ids, back to back in insertion order. */
@@ -43,7 +46,7 @@ export class IdSet implements Iterable<string> {
   private filled = 0;
   private count = 0;
   /** Scratch for the id being looked up, encoded once. */
-  private static key = new Uint8Array(256);
+  private static key = new Uint8Array(SCRATCH);
   private static keyLen = 0;
 
   get size(): number {
@@ -138,6 +141,8 @@ export class IdSet implements Iterable<string> {
     const len = id.length;
     let key = IdSet.key;
     if (len * 3 > key.length) key = IdSet.key = new Uint8Array(len * 3 * 2);
+    // The scratch is the process's: one very long id must not keep a large one alive (review of A24).
+    else if (key.length > SCRATCH && len * 3 <= SCRATCH) key = IdSet.key = new Uint8Array(SCRATCH);
     let n = 0;
     let h = 0x811c9dc5;
     for (let i = 0; i < len; i++) {

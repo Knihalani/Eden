@@ -90,6 +90,32 @@ describe("spend leases across router children (D327)", () => {
     expect(spend.capOf("acme")).toBeCloseTo(leaseChunk(8, 4), 9);
   });
 
+  test("after a 0 grant the child asks no more that day; the next day it asks again (A24)", async () => {
+    const clock = { now: DAY0 };
+    const asked: LeaseRequest[] = [];
+    let spend!: LeasedSpend;
+    // The router's ledger is already all granted: every answer is 0.
+    spend = new LeasedSpend(
+      8,
+      4,
+      (r) => {
+        asked.push(r);
+        queueMicrotask(() => spend.grant({ tenant: r.edenLease.tenant, day: r.edenLease.day, usd: 0 }));
+      },
+      () => clock.now,
+    );
+    const b = new Budget(LIMITS, () => clock.now, spend);
+    await spendUntilRefused(b, "acme/u1", 0.01, 20);
+    for (let i = 0; i < 50; i++) {
+      spend.capOf("acme");
+      await Promise.resolve();
+    }
+    expect(asked).toHaveLength(1);
+    clock.now += 24 * 3_600_000;
+    await spendUntilRefused(b, "acme/u1", 0.01, 20);
+    expect(asked).toHaveLength(2);
+  });
+
   test("the ledger refuses bad amounts and never grants past the cap", () => {
     const ledger = new SpendLedger(4, 2);
     const day = "2026-11-07";

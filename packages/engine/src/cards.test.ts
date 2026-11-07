@@ -278,6 +278,21 @@ describe("the enricher (CardEnricher)", () => {
     expect(withGather.calls).toEqual([10, 10, 10]);
   });
 
+  test("gather (D370): a forgotten user's drain stops waiting at once, with no call", async () => {
+    const maker = new TableMaker(table);
+    const e = new CardEnricher({ maker, budget: new Budget(), now: () => NOW });
+    // Stores that never get their turn: only the deadline (250 ms) or the forget ends the wait.
+    e.gather = () => new Promise<void>(() => {});
+    e.enqueue(scope, [frozen(0), frozen(1)]);
+    await Bun.sleep(5);
+    const t0 = performance.now();
+    const drained = e.idle(); // Holds the drain under way, which the forget leaves to end on its own.
+    e.forget(scope);
+    await drained;
+    expect(performance.now() - t0).toBeLessThan(100);
+    expect(maker.calls).toEqual([]);
+  });
+
   test("a card is used only by requests that arrive after it was made", async () => {
     const e = new CardEnricher({ maker: new TableMaker(table), budget: new Budget(), now: () => NOW });
     e.enqueue(scope, [frozen(0)]);
