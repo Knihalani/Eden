@@ -744,10 +744,10 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cache-probe.ts --suite train1
 (`ephemeral`). On Anthropic's cache (entries end at breakpoints; pi-ai marks the last tool, the system prompt and the
 last message) a dropped packet changes every later request's prefix, so the history is written again. `+ephemeral` and
 `+ephemeralBp` (harness flags on a base with Eden, `--days` or `--day` only; `packet-layout.ts`) run those layouts, the
-second with a breakpoint on the request's user turn. `session-cache-probe.ts` (about $0.003) shows the mechanism on
-the wire over one session (`--dump` prints the bodies: pi-ai sends a system message placed before a user turn after it).
-`packages/sim/lab/a16/earlier.py` says where each hidden task's planted item reached the agent (this packet, an ask, only
-an earlier packet that day, nowhere). Measured (docs/research/a16-loop.md): ephemeral +$0.057/1k against kept over
+second with a breakpoint on the request's user turn. `session-cache-probe.ts` (about $0.003) shows the mechanism on the
+wire over one session (`--dump` prints the bodies: pi-ai sends a system message placed before a user turn after it).
+`packages/sim/lab/a16/earlier.py` says where each hidden task's planted item reached the agent (this packet, an ask,
+only an earlier packet that day, nowhere). Measured (docs/research/a16-loop.md): ephemeral +$0.057/1k against kept over
 days; with the breakpoint −$0.038/1k, but both lose the items first shown in an earlier packet, which Eden does not send
 twice.
 

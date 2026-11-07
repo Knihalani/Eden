@@ -33,7 +33,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { ContextPartner, ItemCache } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel } from "@eden/llm";
-import { ASK_QUESTION_DESCRIPTION, type AgentEvent, type Injection } from "@eden/protocol";
+import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
 import type { World } from "../world";
@@ -113,11 +113,7 @@ const ASK_TOOL = {
   function: {
     name: "ask_context",
     description: ASK_DESCRIPTION,
-    parameters: {
-      type: "object",
-      properties: { question: { type: "string", description: ASK_QUESTION_DESCRIPTION } },
-      required: ["question"],
-    },
+    parameters: { type: "object", properties: { question: { type: "string" } }, required: ["question"] },
   },
 };
 

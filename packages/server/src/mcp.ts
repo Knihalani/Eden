@@ -5,7 +5,7 @@
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { renderAnswer, safeLine, type ContextPartner } from "@eden/engine";
-import { ASK_CONTEXT_DESCRIPTION, ASK_QUESTION_DESCRIPTION, type Scope } from "@eden/protocol";
+import { ASK_CONTEXT_DESCRIPTION, type Scope } from "@eden/protocol";
 import { z } from "zod";
 
 /** An MCP session's id lasts until this long with no ask (the engine's `sessionIdleMs` default) or a UTC day ends. */
@@ -62,7 +62,7 @@ export function createMcpServer(
     "ask_context",
     {
       description: ASK_CONTEXT_DESCRIPTION,
-      inputSchema: { question: z.string().min(1).max(2_000).describe(ASK_QUESTION_DESCRIPTION) },
+      inputSchema: { question: z.string().min(1).max(2_000) },
       annotations: { readOnlyHint: true },
     },
     async ({ question }) => {

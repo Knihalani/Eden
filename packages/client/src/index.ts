@@ -8,7 +8,7 @@ export {
 } from "./client";
 export { heldResult, withContext, type ChatMessageLike } from "./messages";
 // The description Eden recommends for `ask` registered as the agent's tool.
-export { ASK_CONTEXT_DESCRIPTION, ASK_QUESTION_DESCRIPTION } from "@eden/protocol";
+export { ASK_CONTEXT_DESCRIPTION } from "@eden/protocol";
 export type {
   ActionCheck,
   AgentEvent,

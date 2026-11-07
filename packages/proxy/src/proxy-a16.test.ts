@@ -102,14 +102,13 @@ describe("keepPackets (D336)", () => {
     expect(third.at(-1)).toEqual(q3);
   });
 
-  test("on: kept packets are per conversation (D9), and a user message seen twice keeps each copy's own packet", async () => {
+  test("on: kept packets are per conversation (D9)", async () => {
     const a = await session(true, "k-iso-a");
-    const proxy = proxyFor(true);
-    // Another user, the same words: none of user a's packets.
-    await chat(proxy, [system, q1, a1, q2], { "x-eden-user-id": "k-iso-b", "x-eden-session-id": "k-iso-a-s" });
-    const other = seen.at(-1)!.messages;
-    expect(other.filter((m: any) => m.role === "system").length).toBeLessThanOrEqual(2);
     expect(a.second.filter((m: any) => m.role === "system").length).toBe(3);
+    // Another user on the same proxy, the same words and session id: user a's turn-1 packet is not placed before q1.
+    await chat(a.proxy, [system, q1, a1, q2], { "x-eden-user-id": "k-iso-b", "x-eden-session-id": "k-iso-a-s" });
+    const other = seen.at(-1)!.messages;
+    expect(other.slice(0, 2)).toEqual([system, q1]);
   });
 
   test("on, in shadow mode: nothing is inserted, kept or not", async () => {
@@ -125,5 +124,109 @@ describe("keepPackets (D336)", () => {
     await chat(proxy, [system, q1], h);
     await chat(proxy, [system, q1, a1, q2], h);
     expect(seen.at(-1)!.messages).toEqual([system, q1, a1, q2]);
+  });
+});
+
+// A scripted Eden: each user message's text maps to the packet it returns (none if absent), after `delays[text]` ms.
+// The review's probes of keepPackets' keying, overlapping turns and the budget (findings 1–3, 6).
+const script: Record<string, string> = {};
+const delays: Record<string, number> = {};
+/** Packets the fake's `/v1/pending` hands out once, per user id. */
+const pendingFor: Record<string, string> = {};
+const fake = Bun.serve({
+  port: 0,
+  async fetch(req) {
+    const url = new URL(req.url);
+    const body = (await req.json().catch(() => ({}))) as { kind?: string; text?: string };
+    if (url.pathname === "/v1/pending") {
+      const who = (body as { userId?: string }).userId ?? "";
+      const packet = pendingFor[who];
+      delete pendingFor[who];
+      return Response.json({ injections: packet ? [{ id: `i-${packet}`, text: packet }] : [] });
+    }
+    if (url.pathname !== "/v1/events" || body.kind !== "user_message") return Response.json({ injection: null });
+    const text = body.text ?? "";
+    if (delays[text]) await Bun.sleep(delays[text]);
+    const packet = script[text];
+    return Response.json({ injection: packet ? { id: `i-${packet}`, text: packet } : null });
+  },
+});
+afterAll(() => fake.stop(true));
+
+const scripted = (maxKeptBytes?: number) =>
+  createProxy({
+    upstream: `${upstream.url.href}v1`,
+    edenUrl: fake.url.href,
+    edenApiKey: KEY,
+    waitMs: 300,
+    ...(maxKeptBytes ? { maxKeptBytes } : {}),
+  });
+const u = (content: string) => ({ role: "user", content });
+const a = (content: string) => ({ role: "assistant", content });
+const shape = (msgs: any[]) => msgs.map((m) => (m.role === "system" ? `[${m.content}]` : m.content));
+
+describe("keepPackets: placement survives windows, new turns and overlap (the review)", () => {
+  test("a repeated message keeps its own packet when a window drops the first copy", async () => {
+    Object.assign(script, { "yes#1": "", yes: "PKT-YES" });
+    const p = scripted();
+    const h = { "x-eden-user-id": "w1", "x-eden-session-id": "w1-s" };
+    script.yes = "PKT-T2";
+    await chat(p, [u("start"), a("r1"), u("yes")], h);
+    script.yes = "PKT-T4";
+    await chat(p, [u("start"), a("r1"), u("yes"), a("r2"), u("other"), a("r3"), u("yes")], h);
+    // The window slides past turn 2: turn 4's "yes" (after "r3") keeps turn 4's packet.
+    script.next = "";
+    await chat(p, [u("other"), a("r3"), u("yes"), a("r4"), u("next")], { ...h });
+    expect(shape(seen.at(-1)!.messages)).toEqual(["other", "r3", "[PKT-T4]", "yes", "r4", "next"]);
+  });
+
+  test("a new turn repeating an old turn's words gets no old packet (an agent that sends only its latest)", async () => {
+    const p = scripted();
+    const h = { "x-eden-user-id": "w2", "x-eden-session-id": "w2-s" };
+    script.continue = "PKT-OLD";
+    await chat(p, [u("continue")], h);
+    expect(shape(seen.at(-1)!.messages)).toEqual(["[PKT-OLD]", "continue"]);
+    await chat(p, [u("something else")], h);
+    script.continue = "";
+    await chat(p, [u("continue")], h);
+    expect(shape(seen.at(-1)!.messages)).toEqual(["continue"]);
+  });
+
+  test("a request overtaken by a newer turn neither shows nor keeps that turn's packets", async () => {
+    const p = scripted();
+    const h = { "x-eden-user-id": "w3", "x-eden-session-id": "w3-s" };
+    Object.assign(script, { "first q": "PKT-FIRST", "second q": "PKT-SECOND", "third q": "" });
+    delays["first q"] = 700;
+    const slow = chat(p, [u("first q")], h);
+    await Bun.sleep(50);
+    await chat(p, [u("first q"), a("x"), u("second q")], h);
+    await slow;
+    await chat(p, [u("first q"), a("x"), u("second q"), a("y"), u("third q")], h);
+    const last = shape(seen.at(-1)!.messages);
+    expect(last.filter((t) => t === "[PKT-SECOND]")).toHaveLength(1);
+    expect(last).toEqual(["first q", "x", "[PKT-SECOND]", "second q", "y", "third q"]);
+  });
+
+  test("over the budget, placements no longer in the request go first; the newest is kept in place", async () => {
+    const p = scripted(25);
+    const h = { "x-eden-user-id": "w4", "x-eden-session-id": "w4-s" };
+    Object.assign(script, { q1: "P1-xxxxxxx", q2: "P2-xxxxxxx", q3: "P3-xxxxxxx", q4: "" });
+    await chat(p, [u("q1")], h);
+    await chat(p, [u("q1"), a("r1"), u("q2")], h);
+    // A compacted history: q1's placement is no longer in the request, so it makes room for q3's.
+    await chat(p, [u("q2"), a("r2"), u("q3")], h);
+    await chat(p, [u("q2"), a("r2"), u("q3"), a("r3"), u("q4")], h);
+    expect(shape(seen.at(-1)!.messages)).toEqual(["q2", "r2", "[P3-xxxxxxx]", "q3", "r3", "q4"]);
+  });
+
+  test("a request with no user message still gets this turn's packets, where withContext puts them", async () => {
+    const p = scripted();
+    // Only system and assistant messages: the packet comes from pending, and goes at the end as withContext puts it.
+    pendingFor.w5 = "PKT-LATE";
+    await chat(p, [{ role: "system", content: "s" }, a("hello")], {
+      "x-eden-user-id": "w5",
+      "x-eden-session-id": "w5-s",
+    });
+    expect(shape(seen.at(-1)!.messages)).toEqual(["[s]", "hello", "[PKT-LATE]"]);
   });
 });

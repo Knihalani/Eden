@@ -11,9 +11,10 @@ the tenant's house rules in every arm (`--tenant-prompt`, D271) and payload noti
 
 - **Where the agent's money goes around Eden.** On Pi, a turn in which the agent calls `ask_context` costs about 190
   output tokens before Eden answers anything: a sentence telling the user it will look (~50 tokens), each call's own
-  overhead (~39) and a full-sentence question (~144 characters, ~57 tokens), 1.5 calls a turn. With the cache write of
-  the answer and a re-read of the prompt, one such turn is about $0.17 per 1,000 tasks and ~1.4 s **[EST]**. Eden's
-  agent makes 0.57 such turns a nothing-to-add task; the agent alone makes 0.86 search turns of its own.
+  overhead (~39) and a full-sentence question (~144 characters in the pilot, ~57 tokens), 1.5 calls a turn. With the
+  cache write of the answer and a re-read of the prompt, one such turn is about $0.17 per 1,000 tasks and ~1.4 s
+  **[EST]**. Eden's agent makes 0.57 such turns a nothing-to-add task; the agent alone makes 0.86 search turns of its
+  own.
 - **The biggest finding is not in Eden's engine but in how integrations keep its packets.** Pi in the lab keeps every
   packet in the agent's transcript. Our own `withContext` helper and the `@eden/proxy` do not: they insert the current
   packet and leave the old ones out. On Anthropic's prompt cache, whose entries end where the request marks them, a
@@ -25,22 +26,24 @@ the tenant's house rules in every arm (`--tenant-prompt`, D271) and payload noti
   agent raised 2 of those 5, without them 0.
   **Fixed (D336):** the proxy now keeps every earlier turn's packet where it was (`keepPackets`, on by default), and
   INTEGRATION.md, `withContext`'s and `with_context`'s docs tell SDK users to keep the message in their transcript.
-- **The ask tool now asks for search-like questions (D335).** "Write the question like a search, in a few words
-  naming the person, thing or date." Questions fell from ~150 to ~45 characters and a turn that asks from ~175 to ~155
-  output tokens, but the agent asked a little more often. **One request at a time: the same cost (+$0.000 per 1,000,
-  −0.016..+0.017) and time; over a user's days: −$0.016 per 1,000 (−0.026..−0.005), 0.09 s faster (−0.14..−0.04).**
-  Hidden facts pooled +3.0 points (−3.6..+9.6), regraded false concerns 0 against 0. Promoted (D112: neutral or better
-  at no extra cost).
+- **Search-like ask questions were built, measured and deleted (D335).** One sentence in the ask tool's description
+  ("Write the question like a search, in a few words naming the person, thing or date") cut questions from ~155 to ~45
+  characters and a turn that asks from ~175 to ~155 output tokens. **One request at a time it saved nothing** (+$0.000
+  per 1,000, −0.016..+0.017; the agent asked more often, 0.74 → 0.97 a nothing-to-add task). **Over a user's days it
+  saved $0.016 per 1,000 (−0.026..−0.005) and 0.09 s, but the agent asked half as often (0.108 → 0.052 a task) and
+  raised fewer hidden facts** (16 → 13 of 23, −13.0 points, −26.1..+0.0): D257's trap, the ask that finds what the push
+  missed. Pooled over the four runs hidden facts read +3.0 points (−3.6..+9.6). A small saving on one horizon with a
+  recall risk on the other is not D112's "better or neutral", so the wording and its trial flag are deleted.
 - **The cheapest layout was rejected.** Dropping old packets but marking the user's turn as a cache point cost
   −$0.038 per 1,000 against keeping them, level with the agent alone over days (+0.001, −0.016..+0.016) and 0.76 s
   faster, but it loses the same earlier-packet facts (0 of 5). It would need Eden to re-send an item whose packet the
   agent no longer holds; not built.
 - **Rejected on paper or after a $0.03 smoke (D337):** the proxy answering `ask_context` itself (same tokens; it saves
-  only the agent's own round trip: on Pi the whole gap between the two model calls is ~6 ms, Eden's ask included), starting the agent's call before the packet (D248; Eden's path is now
-  7–11 ms), cache marks only where a later read is likely (≤ ~$0.01 per 1,000 [EST], the agent framework's call),
-  packet wording that says facts are verified (D237 says nothing has checked them; Eden's longer answers carry real
-  details), and asking the agent not to narrate or to make one call per thing (Haiku kept narrating and made more
-  calls).
+  only the agent's own round trip: on Pi the whole gap between the two model calls is ~6 ms, Eden's ask included),
+  starting the agent's call before the packet (D248; Eden's path is now 7–11 ms), cache marks only where a later read is
+  likely (≤ ~$0.01 per 1,000 [EST], the agent framework's call), packet wording that says facts are verified (D237 says
+  nothing has checked them; Eden's longer answers carry real details), and asking the agent not to narrate or to make
+  one call per thing (Haiku kept narrating and made more calls).
 
 ## 1. Where the tokens go in a turn that asks
 
@@ -104,10 +107,18 @@ again in the session, `Session.delivered`, while the integration has dropped the
 concerns (Sonnet): 0 in every arm. One request at a time the layouts are the same request by construction (pi-ab
 refuses them without `--day`/`--days`).
 
-**What changed.** `@eden/proxy` keeps each turn's packet text per conversation, keyed by its user message (hash and
-copy number), and re-inserts it there on every later request, Eden up or down, up to 64 KB a conversation (at most
-640 MB over the default 10,000 conversations); `EDEN_PROXY_KEEP_PACKETS=0` restores the old behaviour. Tests:
-`proxy-a16.test.ts` (each request is a prefix of the next, on by default, Eden down, isolation, shadow). The SDKs are
+**What changed.** `@eden/proxy` keeps each turn's packet text per conversation, keyed by its user message together
+with the message before it (and which copy of that pair it is), and re-inserts it there on every later request, Eden
+up or down. A new turn never takes an older turn's placement, even with the same words; a request overtaken by a newer
+turn neither shows nor keeps that turn's packets; past 64 KB (UTF-8) a conversation, placements whose message has left
+the request go first, then the oldest (at most 640 MB over the default 10,000 conversations); a request with no user
+message gets the turn's packets where `withContext` puts them. `EDEN_PROXY_KEEP_PACKETS=0` restores the old
+behaviour. The review found the first version keyed by copy number alone (a sliding window moved a packet to another
+"yes"; an agent that sends only its latest message got an old turn's packet back) and stored an overtaken request's
+packets for good; each is now a test in `proxy-a16.test.ts` that fails on that version. **Promoted directly, not as
+a trial:** it corrects a contradiction between the integration and the engine (Eden delivers an item once per session
+and assumes the agent keeps it), adds no paid call, and makes the proxy do what INTEGRATION.md already promised (an
+unchanged prefix). The SDKs are
 stateless: their docs and INTEGRATION.md say to keep the returned message in the transcript (the README's example
 already does). Not measured: the proxy's own path to a provider (the Pi harness emulates the layouts on the wire), and
 providers with automatic prefix caching (OpenAI's), where dropping a packet costs only the turn after it and keeping
@@ -131,8 +142,13 @@ only before the measured runs.
 
 Wall p50/p90 on neutral: short eden 2.37/4.42 s, terse 2.13/4.03 s, tools 3.45/6.96 s; long eden 1.23/1.91 s, terse
 1.20/1.60 s, tools 1.23/3.82 s. Seed 41's short run hit 79 rate-limit retries (all arms in one process), so its wall
-times are noisier than its costs. Promoted: `ASK_CONTEXT_DESCRIPTION` and `ASK_QUESTION_DESCRIPTION` (the MCP tool's
-parameter, the lab harnesses, the example agent).
+times are noisier than its costs.
+
+**Verdict: deleted.** One request at a time it changed nothing that matters; over days its saving came with half the
+asks and three fewer hidden facts of 23 (an interval that reaches zero, on the horizon where the asks are rare and each
+one that is lost may be the fact). The trial wording, `ASK_QUESTION_DESCRIPTION` and pi-ab's `+terse` are gone; the
+results stay in `packages/sim/lab/a16/` (`eden+terse` rows). A larger multi-day run would be needed to tell the recall
+drop from noise; the payoff (at most $0.016 per 1,000 and 0.09 s over days) does not justify it now.
 
 ## 4. Against the agent alone, with connectors per plan
 
@@ -142,20 +158,20 @@ Token dollars (`arms.py`'s mix `usd`) plus connector calls a task at market.py's
 | run | arm | tokens $/1k | calls a task | Composio | Arcade.dev | Zapier MCP |
 | --- | --- | --- | --- | --- | --- | --- |
 | short | tools | 0.237 | 2.30 | 0.927 | 23.23 | 59.55 |
-| short | eden (D335 wording) | 0.279 | 0.00 | 0.279 | 0.279 | 0.279 |
+| short | eden | 0.279 | 0.00 | 0.279 | 0.279 | 0.279 |
 | long | tools | 0.203 | 1.14 | 0.545 | 11.59 | 29.59 |
-| long | eden, kept, D335 wording | 0.226 | 0.15 | 0.273 | 1.78 | 4.23 |
+| long | eden (kept packets) | 0.241 | 0.15 | 0.287 | 1.79 | 4.24 |
 | long | eden, ephemeral (old proxy) | 0.298 | 0.15 | 0.344 | 1.85 | 4.30 |
 
-Against the agent alone on tokens only, eden is +$0.041/1k short (+0.023..+0.060) and 1.05 s faster, +$0.022/1k over
-days with the D335 wording (+0.006..+0.038) and 0.81 s faster; hidden raised +55.7 points pooled (+47.3..+63.5).
+Against the agent alone on tokens only, eden is +$0.041/1k short (+0.023..+0.060) and 1.05 s faster, +$0.038/1k over
+days with packets kept (+0.019..+0.058) and 0.72 s faster; hidden raised +55.7 points pooled (+47.3..+63.5).
 
 ## 5. Ideas, ranked
 
 | # | Idea | Axis | Payoff | Status |
 | --- | --- | --- | --- | --- |
 | 1 | Keep packets where the agent saw them | cost over days, recall | −$0.057/1k against what integrations sent; keeps earlier-packet facts | **measured, adopted (D336)** |
-| 2 | Search-like ask questions | output tokens | short level; long −$0.016/1k, −0.09 s | **measured, promoted (D335)** |
+| 2 | Search-like ask questions | output tokens | short level; long −$0.016/1k, −0.09 s, half the asks, −3/23 hidden | measured, deleted (D335) |
 | 3 | Drop old packets, mark the user turn | cost over days | −$0.038/1k against kept; loses 2 of 5 earlier-packet facts | measured, rejected (D336) |
 | 4 | Answer-ahead: pre-run the agent's likely ask | turns | session A9's | not duplicated |
 | 5 | The proxy runs `ask_context` itself and continues | latency | < 6 ms an ask on Pi; tokens unchanged | rejected on paper (D337) |
@@ -166,8 +182,8 @@ days with the D335 wording (+0.006..+0.038) and 0.81 s faster; hidden raised +55
 
 ## 6. Decisions
 
-- **D335**: `ask_context`'s description and parameter ask for a few-word, search-like question; promoted from the
-  `+terse` trial opened and closed this session (deleted with its flag).
+- **D335**: a few-word, search-like `ask_context` question (trial `+terse`, opened and closed this session): measured,
+  not better on both horizons, recall risk over days; deleted with its flag.
 - **D336**: keep each packet where the agent saw it: `@eden/proxy` `keepPackets` on by default; the SDKs' and
   INTEGRATION.md's guidance; lab layouts `+ephemeral`, `+ephemeralBp`, `session-cache-probe.ts` and Pi's per-turn
   timeline fields kept as instruments; the cheaper drop-and-mark layout rejected for recall.
@@ -194,8 +210,8 @@ python3 -I packages/sim/lab/cl8/pooled.py eden+terse eden $S/a16-short-4{1,2} $S
 python3 -I packages/sim/lab/a6/connector-price.py short $O/short-arms.txt long $O/long-arms.txt
 ```
 
-`+terse` no longer exists (promoted): the runs above were made with it, at commit `9bcc4ee2` plus the wording cut in
-§3. Today's `eden` arm is that wording.
+`+terse` no longer exists (deleted, D335): the runs above were made at commit `9bcc4ee2` with the wording cut as §3
+says (the trial's code is in `166b622c`, where it had been promoted before the review).
 
 ## Spend (`packages/sim/lab/a16/spend.txt`, cap $2.50)
 

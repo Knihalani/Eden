@@ -3,7 +3,8 @@
 Eden as an OpenAI-compatible proxy in front of the agent's model (D280): the agent changes only its base URL. Each
 `POST …/chat/completions` reports the conversation's new messages to Eden (through `@eden/client`, so it fails open
 like the SDK), puts Eden's packets before the latest user message (`withContext`), keeps the turn's packets on every
-model call of a tool-using turn and every earlier turn's packets where they were (`keepPackets`, D336), and streams the upstream's answer back unchanged. Other routes are forwarded as is.
+model call of a tool-using turn and every earlier turn's packets where they were (`keepPackets`, D336), and streams
+the upstream's answer back unchanged. Other routes are forwarded as is.
 
 ## Files
 
@@ -11,7 +12,7 @@ model call of a tool-using turn and every earlier turn's packets where they were
 |---|---|
 | `src/proxy.ts` | `createProxy` (identity: `x-eden-user-id` or the body's `user`; conversation: `x-eden-session-id` or a hash of its first non-system message; new messages by content hash, `Conversation.seen`; one deadline per request; `proxyKey`), `eventsOf` (messages to events), `textOf` |
 | `src/main.ts` | `bun run proxy` (`EDEN_PROXY_UPSTREAM`, `EDEN_URL`, `EDEN_API_KEY`, `PROXY_PORT`/`PROXY_HOST`, default 127.0.0.1:8791; `EDEN_PROXY_KEY` required off loopback; `EDEN_PROXY_SHADOW`) |
-| `src/proxy-a16.test.ts` | `keepPackets` (D336): off and on, on by default, each request a prefix of the next, Eden down, isolation, shadow |
+| `src/proxy-a16.test.ts` | `keepPackets` (D336): off and on, on by default, each request a prefix of the next, Eden down, isolation, shadow; with a scripted Eden: sliding windows, a repeated message in a new turn, an overtaken request, the byte budget, no user message |
 | `src/proxy.test.ts` | A fake upstream and the real Eden handler in process: injection, once-only reporting, compaction and sliding windows, isolation, eviction, keying, the deadline under a slow Eden, `proxyKey`, hop-by-hop headers, tool events, streaming, fail-open, 502, shadow |
 
 ## Rules
@@ -40,11 +41,13 @@ model call of a tool-using turn and every earlier turn's packets where they were
   `onShadow` gets ids and counts only. The client sends `?shadow=1`, so the server learns nothing from packets no agent
   saw (D282).
 - **Packets stay in place (D336, `keepPackets`, default on; `EDEN_PROXY_KEEP_PACKETS=0` turns it off).** Each turn's
-  packet text is kept per conversation by its user message (hash and copy number) and inserted before that message on
-  every later request, so each request starts with the one before it (Anthropic's cache entries end at breakpoints:
-  dropping a packet rewrote the history, +$0.057/1k over days on Pi) and the agent keeps items Eden will not send twice
-  in a session. Re-inserting needs no Eden call (Eden down: still in place). At most `MAX_KEPT_BYTES` (64 KB) a
-  conversation; past it newer packets are not kept. Shadow mode inserts nothing.
+  packet text is kept per conversation by its user message with the message before it (`userKeys`) and inserted before
+  that message on every later request (a new turn never takes an older turn's placement; a request overtaken by a newer
+  turn neither shows nor keeps that turn's packets), so each request starts with the one before it (Anthropic's cache
+  entries end at breakpoints: dropping a packet rewrote the history, +$0.057/1k over days on Pi) and the agent keeps
+  items Eden will not send twice in a session. Re-inserting needs no Eden call (Eden down: still in place). At most
+  `maxKeptBytes` (64,000 UTF-8 bytes) a conversation: past it placements whose message left the request go first, then
+  the oldest. With no user message the turn's packets go where `withContext` puts them. Shadow mode inserts nothing.
 - No `ask_context` is added to the request's tools: an agent that wants it uses the MCP server.
 
 ## Test

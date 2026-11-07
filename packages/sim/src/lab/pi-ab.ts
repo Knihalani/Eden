@@ -96,7 +96,7 @@ import {
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
-import { ASK_QUESTION_DESCRIPTION, type AgentEvent, type ContextItem } from "@eden/protocol";
+import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import type { World } from "../world";
@@ -523,7 +523,7 @@ const PROMPTS_HASH = armPromptsHash(
   TENANT_PROMPT ? { queryParams, tenant: TENANT_GUIDE } : { queryParams },
   VARIANTS.includes("neutral"),
 );
-const askParams = Type.Object({ question: Type.String({ description: ASK_QUESTION_DESCRIPTION }) });
+const askParams = Type.Object({ question: Type.String() });
 
 /**
  * A model whose calls are charged to the task that started them (`owner()` read when the call starts): a call that
