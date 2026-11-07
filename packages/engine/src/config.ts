@@ -458,18 +458,6 @@ export interface EngineConfig {
    * for this request and the items above are what bears on it, so the agent can answer from it in one call.
    */
   pushCovered: boolean;
-  /**
-   * `askFromPush` (trial, D247, CL4 H9): an ask in the push's request (the same match as `readerReuse`) ranks on the
-   * index the push's search filled, with no search of its own: no live call, no on-demand poll. Its answer still reads
-   * (or reuses) the reader and re-reads what it cites as usual.
-   */
-  askFromPush: boolean;
-  /**
-   * `pushVerifyAhead` (trial, D249, CL4): once the push has read the request, the doubted copies among the items it
-   * ranked first (what an ask in the request would most likely cite) are re-read in the background, so the ask's strict
-   * re-reads (D211) reuse them instead of waiting on connector calls. Costs those re-reads on requests with no ask.
-   */
-  pushVerifyAhead: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -587,6 +575,4 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   pushChecked: false,
   pushCovered: false,
-  askFromPush: false,
-  pushVerifyAhead: false,
 };

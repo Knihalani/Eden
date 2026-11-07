@@ -304,8 +304,6 @@ interface Session {
    * with their content hashes, and its verdict (null when it gave none).
    */
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
-  /** `askFromPush` (D247): the latest push's search, for an ask in its request (`request`, `main` as `pushRead`'s). */
-  pushSearch?: { request: number; main: string; searched: SearchedLive };
   /** The push the latest request started (`readerPush`), settled or not: `requestSettled` waits on it. */
   pushing?: Promise<void>;
   /** The request count (`requests`) when a packet or answer was last built (`pushChecked`'s wording). */
@@ -1445,13 +1443,7 @@ export class ContextPartner {
       this.config.readerPushBehind &&
       this.config.syncPollBehind &&
       this.config.syncOnDemand;
-    // `askFromPush` (D247): an ask in the push's request ranks on what the push's search stored, with no search.
-    const fromPush = !internal.push && this.config.askFromPush ? this.pushSearchFor(s, cue) : null;
-    const searched =
-      internal.again?.searched ?? fromPush ?? (await this.searchLive(s, cue, this.config.askSources, behind));
-    if (internal.push && internal.again === undefined && this.config.askFromPush) {
-      s.pushSearch = { request: internal.request ?? s.requests, main: cue.raw, searched };
-    }
+    const searched = internal.again?.searched ?? (await this.searchLive(s, cue, this.config.askSources, behind));
     const { calls: sourceCalls, plans, probed, local, syncCalls } = searched;
     // `intent`: what the question would change, by the requests written for each item (no model, no call).
     const intentFound = this.intentFinds(s, cue);
@@ -1565,11 +1557,6 @@ export class ContextPartner {
         // `pushChecked` (D246): the reading found nothing to add, from sources that all answered: the agent is told so.
         const line = flagged.length > 0 || s.builtRequest === s.requests ? CHECKED_MORE : CHECKED_NONE;
         s.pending.push(this.note(s, line, `${CHECKED}${cue.id}`));
-      }
-      // `pushVerifyAhead` (D249): what an ask in this request would most likely cite is re-read now, behind the
-      // packet, so the ask's strict re-reads (D211) find them done. Only doubted copies; nothing for a stale request.
-      if (this.config.pushVerifyAhead && internal.again === undefined && !s.closed && still) {
-        this.checkAhead(s, chosen, chosen.length);
       }
       const latencyMs = Math.round(performance.now() - t0);
       // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
@@ -3805,11 +3792,11 @@ export class ContextPartner {
    * them, so the delivery that follows finds them done (`check`) instead of waiting a connector's round trip. The
    * reader reads the copies it was given; a delivery shows the re-read ones.
    */
-  private checkAhead(s: Session, pool: readonly Scored[], cap = VERIFY_AHEAD): void {
+  private checkAhead(s: Session, pool: readonly Scored[]): void {
     if (!this.config.verifyDelivery) return;
     let n = 0;
     for (const x of pool) {
-      if (n >= cap) break;
+      if (n >= VERIFY_AHEAD) break;
       if (!this.doubted(s, x.item)) continue;
       n++;
       void this.check(s, x.item);
@@ -4478,21 +4465,6 @@ export class ContextPartner {
       score: 0,
       createdAt: this.now(),
     };
-  }
-
-  /**
-   * `askFromPush` (D247): the push's search, when this ask is in the push's request and reads against the same request
-   * (`readerReuse`'s match: an ask that acts on its own is another request) and every source it chose answered. Its
-   * calls were the push's: none here.
-   */
-  private pushSearchFor(s: Session, cue: Cue): SearchedLive | null {
-    const p = s.pushSearch;
-    if (!p || p.request !== s.requests || !answeredAll(p.searched)) return null;
-    const acts = (raw: string) => isImperative(raw, MORE_VERBS);
-    const main = acts(cue.raw) ? cue.raw : s.request && acts(s.request.raw) ? s.request.raw : undefined;
-    if (main !== p.main) return null;
-    const { plans: _plans, ...rest } = p.searched;
-    return { ...rest, calls: 0, ...(rest.syncCalls !== undefined ? { syncCalls: 0 } : {}) };
   }
 
   private deliver(
