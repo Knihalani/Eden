@@ -221,10 +221,17 @@ const ev = (who: ReturnType<typeof user>, e: Record<string, unknown>) => ({ ...w
 
 describe("checkAction", () => {
   test("off by default: every call proceeds and no session is opened", async () => {
+    // The default runs only the party check (D376), which has nothing to hold in a session it never saw.
     const { p } = partner({});
     const r = await p.checkAction(ev(user("u1"), { kind: "tool_call", tool: "send_payment", input: { amount: "1" } }));
-    expect(r).toMatchObject({ verdict: "proceed", finding: null, reason: "off" });
+    expect(r).toMatchObject({ verdict: "proceed", finding: null, reason: "clear" });
     expect(p.sessionCount).toBe(0);
+    const { p: off } = partner({ partyCheck: false });
+    const o = await off.checkAction(
+      ev(user("u1"), { kind: "tool_call", tool: "send_payment", input: { amount: "1" } }),
+    );
+    expect(o).toMatchObject({ verdict: "proceed", finding: null, reason: "off" });
+    expect(off.sessionCount).toBe(0);
   });
 
   test("a booking at a time the calendar holds is a finding, as data; the same call again proceeds", async () => {

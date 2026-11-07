@@ -339,6 +339,30 @@ these changes save (the per-test differences above). The one failure seen in the
 Per package, summing each file alone: engine 14.6 s, redact 10.1 s, sim 9.2 s, primitives 5.0 s, server 2.9 s,
 sources 2.8 s, protocol 2.3 s, eval 0.6 s, graph 0.3 s, client 0.1 s, llm 0.1 s (47.8 s in all, start-ups included).
 
+## Many sources per user (2026-11-07, A1, D261–D265)
+
+`bun packages/engine/bench/many-sources.bench.ts [sources=1000] [itemsPerSource=20] [events=300] [asks=40]
+[latencyMs=0] [--config=<json>]`: one user with that many in-memory connectors (four with the workload's requests, the
+rest unrelated), the shipped wiring with no key, a simulated clock; cold start, calls and CPU per event and ask, heap.
+`bun run funnel ... -- --noise-sources 995 --limit 16` screens quality at that size (`--jobs 2`: memory). Figures in
+docs/research/a1-scale.md. A change to sync, routing or per-(user, source) state reports both.
+`bun packages/engine/bench/source-days.bench.ts [sources=1000] [itemsPerSource=20] [days=2] [--churn=1]
+[--mail-per-day=40] [--config=<json>]` (A13, D324) runs the same user over whole simulated days with sources that
+gain items (the sync ticking every minute, a working day of requests and asks, a stub card model under the servers'
+budget) and prints listing, search and card calls per day: the instrument for the sweep, the polls and per-day card
+cost (docs/research/a13-scale.md). 1,000 sources × 20 items × 3 days runs in ~10 s; × 300 items in ~2 min.
+
+## Many users per process (2026-11-07, A14, D325–D329)
+
+`bun packages/engine/bench/users.bench.ts [users=1000] [itemsPerUser=500] [--world] [--no-freeze] [--waves=K]`: the
+shipped wiring over N users with three instant connectors each; backfill CPU, memory per user live and frozen (D325;
+JS heap plus `external`, which `heapUsed` alone leaves out: typed-array stores, most of an index and every packed
+text; and RSS read once it stops falling), thaw time per user, the sliced freeze and thaw's event-loop lag.
+`--waves=4` is the steady state where three quarters of the users are idle. `bun packages/engine/bench/storm.bench.ts
+[users=300] [itemsPerUser=1000] [--config=<json>]`: a cold-start storm on the wall clock with 20-80 ms connectors
+while warm users send events (open loop): storm time and their `observe` p99. Figures:
+docs/research/a14-scale-users.md. A change to the cache, the sync's ingest or per-user state reports both.
+
 ## Scale anchors: memory per user and ingest cost (2026-11-03, 4-core container shared with other agents, Bun 1.4.4)
 
 `bun packages/engine/bench/ingest.bench.ts [users=200] [itemsPerUser=500]` syncs that many users through the real path

@@ -8,8 +8,8 @@ import type { AgentEvent, AskRequest, ContextItem } from "./types";
 export type Checked<T> = { ok: true; value: T } | { ok: false; error: string };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
-/** The longest text an event field may carry. */
-const MAX_TEXT_CHARS = 1_000_000;
+/** The longest text an event field may carry; an integration cuts longer text to it rather than lose the event. */
+export const MAX_TEXT_CHARS = 1_000_000;
 const isText = (v: unknown, max = MAX_TEXT_CHARS): v is string => typeof v === "string" && v.length <= max;
 /** The message for a field that is not a string of at most `max` characters: too long is named, not misread. */
 const textError = (field: string, max: number) =>
@@ -63,6 +63,38 @@ function shapeUnder(root: unknown, maxDepth: number, maxNodes: number): boolean 
         }
       }
     }
+  }
+  return true;
+}
+
+/**
+ * Whether a raw JSON body nests at most `MAX_INPUT_DEPTH` + 8 containers deep and holds at most `MAX_INPUT_NODES` +
+ * 10,000 values, counted outside strings (each `[`, `{` and `,`); a byte scan, so it runs before `JSON.parse`. Under
+ * D100's 8 MB cap, structure is what costs the parse: 4 M small numbers took 106-134 ms and 4 M nested arrays 453-665
+ * ms where an 8 MB string took 4-7 ms. No valid request comes near either bound (a tool input is at most 1,000,000
+ * characters, so ~500,000 values; the envelope adds a few levels and items), so only padded bodies are refused. Not
+ * a JSON check: whatever passes is still parsed and validated as before.
+ */
+export function bodyShapeUnder(bytes: Uint8Array): boolean {
+  const maxDepth = MAX_INPUT_DEPTH + 8;
+  const maxValues = MAX_INPUT_NODES + 10_000;
+  let depth = 0;
+  let values = 0;
+  let inString = false;
+  for (let i = 0; i < bytes.length; i++) {
+    const c = bytes[i]!;
+    if (inString) {
+      // A backslash escapes the next byte (a quote among them). UTF-8 never puts 0x22 or 0x5c inside a multi-byte
+      // character, so a byte scan cannot misread one.
+      if (c === 0x5c) i++;
+      else if (c === 0x22) inString = false;
+      continue;
+    }
+    if (c === 0x22) inString = true;
+    else if (c === 0x5b || c === 0x7b) {
+      if (++depth > maxDepth || ++values > maxValues) return false;
+    } else if (c === 0x5d || c === 0x7d) depth--;
+    else if (c === 0x2c && ++values > maxValues) return false;
   }
   return true;
 }
@@ -222,6 +254,16 @@ export function checkSourceItems(
   return { ok: true, value: { ...head.value, items } };
 }
 
+/**
+ * A notice naming what changed (`POST /v1/sources/refs`, D347): the source's refs it changed or added, at most 100,
+ * with no content; Eden reads them itself. The same shape as a deletion's body.
+ */
+export function checkSourceRefs(
+  v: unknown,
+): Checked<{ tenantId: string; userId: string; sourceId: string; refs: string[] }> {
+  return checkSourceRemoved(v);
+}
+
 /** A deletion notification's body (`POST /v1/sources/removed`): the source's refs it no longer has, at most 100. */
 export function checkSourceRemoved(
   v: unknown,
@@ -234,4 +276,22 @@ export function checkSourceRemoved(
   if (!refs.every((r) => isText(r, 512) && r.length > 0))
     return { ok: false, error: "each ref must be 1-512 characters" };
   return { ok: true, value: { ...head.value, refs: refs as string[] } };
+}
+
+/**
+ * Whether a request with this `Origin` header may be served without a key (the server's dev mode, the proxy with no
+ * `proxyKey`; audit A20). Every browser POST carries an Origin and no agent's HTTP client sends one, so a page on
+ * another site, which can reach 127.0.0.1 by a blind cross-site POST or read the answer by DNS rebinding, is refused;
+ * a page served from this machine (localhost, 127.0.0.1, [::1], any port) is not. A keyed request needs no such check.
+ */
+export function keylessOriginAllowed(origin: string | null): boolean {
+  if (origin === null) return true;
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false; // "null" (a sandboxed frame, a file:// page) and anything unparseable.
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  return url.hostname === "localhost" || url.hostname === "[::1]" || /^127(?:\.\d{1,3}){3}$/.test(url.hostname);
 }

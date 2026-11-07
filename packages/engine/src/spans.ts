@@ -70,6 +70,7 @@ export const SPAN_NAMES = [
   "model",
   "judge.parse",
   "deliver",
+  "verify",
   "fold",
   "render",
   "shadow",

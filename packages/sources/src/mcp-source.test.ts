@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { SourceFanout } from "./guarded";
 import { ArgumentMappingError, McpSource, ReadOnlyViolation, structureOf } from "./mcp-source";
+import { FetchErrorResult } from "./source";
 import { StaticSource } from "./static-source";
 
 /** A connector-like MCP server: one read tool, one write tool. */
@@ -175,10 +176,11 @@ describe("McpSource fetch", () => {
     await s.close();
   });
 
-  test("a record the server no longer has, an Eden content-hash ref, or no fetch tool: null", async () => {
+  test("a record the server no longer has (an error result), an Eden content-hash ref, or no fetch tool", async () => {
     const { server, calls } = notesServer();
     const s = make(server, { name: "get_note" });
-    expect(await s.fetch("gone", scope, AbortSignal.timeout(2_000))).toBeNull();
+    // This server says "not found" with `isError`: thrown, so the engine never holds it as the item's state (D298).
+    await expect(s.fetch("gone", scope, AbortSignal.timeout(2_000))).rejects.toBeInstanceOf(FetchErrorResult);
     expect(await s.fetch("eden-h-0123456789abcdef", scope, AbortSignal.timeout(2_000))).toBeNull();
     expect(calls).toEqual([{ note_id: "gone" }]); // The hash ref never reached the server.
     await s.close();
@@ -221,13 +223,22 @@ describe("McpSource fetch", () => {
     await s.close();
   });
 
-  test("an error result is null even when it carries the asked-for row", async () => {
+  test("an error result is thrown even when it carries the asked-for row, never taken as the record", async () => {
     const reply = (): Reply => ({
       ...text(JSON.stringify({ id: "n1", title: "Error", text: "quota exceeded" })),
       isError: true,
     });
     const s = make(notesServer(true, reply).server, { name: "get_note" });
-    expect(await s.fetch("n1", scope, AbortSignal.timeout(2_000))).toBeNull();
+    await expect(s.fetch("n1", scope, AbortSignal.timeout(2_000))).rejects.toBeInstanceOf(FetchErrorResult);
+    await s.close();
+  });
+
+  test("through the fan-out an error result is answered, not a source failure, and says nothing: error-result", async () => {
+    const reply = (): Reply => ({ ...text("quota exceeded"), isError: true });
+    const s = make(notesServer(true, reply).server, { name: "get_note" });
+    const fanout = new SourceFanout({ sanitize: (items) => items });
+    const got = await fanout.fetchChecked(s, scope, "n1", { timeoutMs: 2_000 });
+    expect(got).toEqual({ status: "failed", why: "error-result" });
     await s.close();
   });
 
@@ -385,5 +396,94 @@ describe("McpSource list: server-paged pages are kept whole", () => {
     expect(seen).toEqual(rows.map((r) => r.id));
     expect(sizes).toEqual([2, 2, 2, 2, 2]);
     expect(calls[0]).toEqual({ limit: 2 });
+  });
+});
+
+describe("McpSource.fetch: a record that wraps rows (D294)", () => {
+  // Gmail's get_thread answers `{id, messages: [...]}`: the rows are messages with their own ids, so matching rows
+  // alone never found the thread and every re-read came back null.
+  const thread = (reply: unknown) => {
+    const server = new McpServer({ name: "mail", version: "1" });
+    const ro = { annotations: { readOnlyHint: true } };
+    server.registerTool("search_threads", { inputSchema: { query: z.string() }, ...ro }, async () => ({ content: [] }));
+    server.registerTool("get_thread", { inputSchema: { threadId: z.string() }, ...ro }, async () => ({
+      content: [{ type: "text", text: JSON.stringify(reply) }],
+    }));
+    return new McpSource({
+      id: "mail",
+      description: "mail",
+      transport: () => {
+        const [client, serverSide] = InMemoryTransport.createLinkedPair();
+        void server.connect(serverSide);
+        return client;
+      },
+      searchTool: { name: "search_threads" },
+      fetchTool: { name: "get_thread" },
+    });
+  };
+  const scope = { tenantId: "t", userId: "u" };
+
+  test("the record whose own id is the ref is the item", async () => {
+    const s = thread({ id: "t1", messages: [{ id: "m1", subject: "heads up", snippet: "ring me first" }] });
+    const got = await s.fetch("t1", scope, AbortSignal.timeout(2_000));
+    expect(got?.ref).toBe("t1");
+    expect(got?.text).toContain("ring me first");
+    await s.close();
+  });
+
+  test("another record's id is still no match, and a row inside it with the ref still is", async () => {
+    const other = thread({ id: "t9", messages: [{ id: "m1", snippet: "x" }] });
+    expect(await other.fetch("t1", scope, AbortSignal.timeout(2_000))).toBeNull();
+    await other.close();
+    const inner = thread({ id: "t9", messages: [{ id: "t1", snippet: "the row" }] });
+    expect((await inner.fetch("t1", scope, AbortSignal.timeout(2_000)))?.text).toContain("the row");
+    await inner.close();
+  });
+});
+
+describe("McpSource.fetch: the record where the reply puts it (D294)", () => {
+  // Rows were looked for in structuredContent and then the text blocks, the record only at the top of
+  // structuredContent: a thread in a text block beside a structuredContent that is not it (FastMCP's
+  // `{result: "<text>"}` for a tool typed `-> str`), or inside an envelope (`{data: {...}}`), came back null.
+  type Reply = { content: { type: "text"; text: string }[]; structuredContent?: Record<string, unknown> };
+  const fetching = (reply: Reply) => {
+    const server = new McpServer({ name: "mail", version: "1" });
+    const ro = { annotations: { readOnlyHint: true } };
+    server.registerTool("search_threads", { inputSchema: { query: z.string() }, ...ro }, async () => ({ content: [] }));
+    server.registerTool("get_thread", { inputSchema: { threadId: z.string() }, ...ro }, async () => reply);
+    return new McpSource({
+      id: "mail",
+      description: "mail",
+      transport: () => {
+        const [client, serverSide] = InMemoryTransport.createLinkedPair();
+        void server.connect(serverSide);
+        return client;
+      },
+      searchTool: { name: "search_threads" },
+      fetchTool: { name: "get_thread" },
+    });
+  };
+  const scope = { tenantId: "t", userId: "u" };
+  const record = { id: "t1", messages: [{ id: "m1", subject: "heads up", snippet: "ring me first" }] };
+
+  test("a record in a text block beside a structuredContent that is not it", async () => {
+    const text = JSON.stringify(record);
+    const s = fetching({ content: [{ type: "text", text }], structuredContent: { result: text } });
+    const got = await s.fetch("t1", scope, AbortSignal.timeout(2_000));
+    expect(got?.ref).toBe("t1");
+    expect(got?.text).toContain("ring me first");
+    await s.close();
+  });
+
+  test("a record inside an envelope", async () => {
+    const s = fetching({ content: [{ type: "text", text: JSON.stringify({ data: { result: record } }) }] });
+    expect((await s.fetch("t1", scope, AbortSignal.timeout(2_000)))?.ref).toBe("t1");
+    await s.close();
+  });
+
+  test("an envelope holding another record is still no match", async () => {
+    const s = fetching({ content: [{ type: "text", text: JSON.stringify({ data: { ...record, id: "t9" } }) }] });
+    expect(await s.fetch("t1", scope, AbortSignal.timeout(2_000))).toBeNull();
+    await s.close();
   });
 });

@@ -1,0 +1,1 @@
+funnel train1-6 seeds 41-42 with neutral, planConflict on vs default: 1152 of 1152 tasks with identical packets (one request per session: nothing arrives after it); TOTAL hidden 305/384 decoys 267/384 both

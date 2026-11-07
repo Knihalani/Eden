@@ -3,5 +3,6 @@
   "cardsEconomy": false,
   "intent": false,
   "cardsLean": false,
-  "intentByKind": false
+  "intentByKind": false,
+  "cardsSourceAware": false
 }

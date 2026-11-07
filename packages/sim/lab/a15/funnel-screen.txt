@@ -1,0 +1,67 @@
+== A15 $0 screens (train1-6, seeds 41-42; docs/research/a15-retrieval.md)
+
+-- offline extra slot (run_screen.py; shipped intent requests)
+bm25 (lexical, sanity)                     k=1: hidden new   4/79  decoys new  11/117  (planted in top 22, decoy 38; items added hidden 382, control 382)
+bm25 (lexical, sanity)                     k=2: hidden new   8/79  decoys new  12/117  (planted in top 31, decoy 45; items added hidden 764, control 764)
+item requests (file given), >= 2 terms      k=1: hidden new  10/79  decoys new   7/117  (planted in top 47, decoy 32; items added hidden 347, control 332)
+item requests (file given), >= 2 terms      k=2: hidden new  11/79  decoys new   7/117  (planted in top 50, decoy 36; items added hidden 654, control 634)
+date window + bm25                         k=1: hidden new   5/79  decoys new   3/117  (planted in top 11, decoy 7; items added hidden 230, control 228)
+date window + bm25                         k=2: hidden new   7/79  decoys new   4/117  (planted in top 13, decoy 8; items added hidden 446, control 439)
+embedding                                  k=1: hidden new   8/79  decoys new  14/117  (planted in top 29, decoy 35; items added hidden 384, control 384)
+embedding                                  k=2: hidden new   9/79  decoys new  16/117  (planted in top 34, decoy 44; items added hidden 768, control 768)
+embedding, date window required            k=1: hidden new   7/79  decoys new   4/117  (planted in top 11, decoy 10; items added hidden 236, control 234)
+embedding, date window required            k=2: hidden new  10/79  decoys new  11/117  (planted in top 17, decoy 17; items added hidden 464, control 464)
+pool order (sanity)                        planted in first 5 254 -> 254 (+0 -0, +0 never surfaced); decoys 219 -> 219 (+0 -0, +0)
+pool + intent requests (rrf)               planted in first 5 254 -> 258 (+11 -7, +11 never surfaced); decoys 219 -> 209 (+4 -14, +4)
+pool + general requests (rrf)              planted in first 5 254 -> 254 (+0 -0, +0 never surfaced); decoys 219 -> 219 (+0 -0, +0)
+pool + intent + date (rrf)                 planted in first 5 254 -> 259 (+12 -7, +12 never surfaced); decoys 219 -> 214 (+7 -12, +7)
+pool + date (rrf)                          planted in first 5 254 -> 248 (+4 -10, +4 never surfaced); decoys 219 -> 218 (+6 -7, +6)
+intent top + date window (interleaved)     k=1: hidden new  10/79  decoys new   7/117  (planted in top 47, decoy 32; items added hidden 358, control 348)
+intent top + date window (interleaved)     k=2: hidden new  16/79  decoys new  10/117  (planted in top 59, decoy 36; items added hidden 691, control 676)
+intent top + date window (interleaved)     k=3: hidden new  16/79  decoys new  10/117  (planted in top 59, decoy 40; items added hidden 1010, control 990)
+
+-- the same with a fresh sample of requests with general ones (gen/intent-v2.jsonl), pools of the shipped run
+general requests, >= 1 terms               k=1: hidden new   4/79  decoys new   1/117  (planted in top 12, decoy 9; items added hidden 371, control 373)
+general requests, >= 1 terms               k=2: hidden new   4/79  decoys new   2/117  (planted in top 13, decoy 10; items added hidden 737, control 741)
+general requests, >= 2 terms               k=1: hidden new   4/79  decoys new   0/117  (planted in top 12, decoy 7; items added hidden 181, control 180)
+general requests, >= 2 terms               k=2: hidden new   4/79  decoys new   1/117  (planted in top 13, decoy 8; items added hidden 321, control 320)
+general requests, >= 3 terms               k=1: hidden new   2/79  decoys new   0/117  (planted in top 6, decoy 1; items added hidden 22, control 18)
+general requests, >= 3 terms               k=2: hidden new   2/79  decoys new   0/117  (planted in top 6, decoy 1; items added hidden 28, control 24)
+item requests (file given), >= 2 terms      k=1: hidden new  15/79  decoys new  11/117  (planted in top 49, decoy 38; items added hidden 355, control 342)
+item requests (file given), >= 2 terms      k=2: hidden new  19/79  decoys new  11/117  (planted in top 54, decoy 41; items added hidden 670, control 649)
+pool order (sanity)                        planted in first 5 254 -> 254 (+0 -0, +0 never surfaced); decoys 219 -> 219 (+0 -0, +0)
+pool + intent requests (rrf)               planted in first 5 254 -> 229 (+10 -35, +10 never surfaced); decoys 219 -> 178 (+10 -51, +10)
+pool + general requests (rrf)              planted in first 5 254 -> 236 (+0 -18, +0 never surfaced); decoys 219 -> 206 (+0 -13, +0)
+pool + intent + date (rrf)                 planted in first 5 254 -> 236 (+9 -27, +9 never surfaced); decoys 219 -> 188 (+10 -41, +10)
+pool + date (rrf)                          planted in first 5 254 -> 248 (+4 -10, +4 never surfaced); decoys 219 -> 218 (+6 -7, +6)
+
+-- pools built and re-ranked with the same fresh sample (f-own.json)
+item requests (file given), >= 2 terms      k=1: hidden new   9/85  decoys new   6/129  (planted in top 46, decoy 35; items added hidden 345, control 334)
+item requests (file given), >= 2 terms      k=2: hidden new  10/85  decoys new   6/129  (planted in top 51, decoy 38; items added hidden 645, control 626)
+pool order (sanity)                        planted in first 5 241 -> 241 (+0 -0, +0 never surfaced); decoys 205 -> 205 (+0 -0, +0)
+pool + intent requests (rrf)               planted in first 5 241 -> 213 (+7 -35, +7 never surfaced); decoys 205 -> 166 (+7 -46, +7)
+pool + general requests (rrf)              planted in first 5 241 -> 241 (+0 -0, +0 never surfaced); decoys 205 -> 205 (+0 -0, +0)
+pool + intent + date (rrf)                 planted in first 5 241 -> 225 (+7 -23, +7 never surfaced); decoys 205 -> 177 (+7 -35, +7)
+pool + date (rrf)                          planted in first 5 241 -> 232 (+4 -13, +4 never surfaced); decoys 205 -> 203 (+4 -6, +4)
+
+-- funnel (score.py). base: the default, shipped requests (intent-v2.jsonl.gz); f-own: a fresh Haiku sample of the
+   same prompt; f-intent-v2: that sample plus up to 2 name-free ("general") requests an item; f-r8-upto: asked "up to
+   8" requests; f-r8: asked "6 to 8"; f-union2: shipped + fresh sample, each item's requests merged; f-union-gen:
+   shipped + fresh with general; reach: --set pushReach; reachB: pushReach also when no candidates are handed;
+   reach-union2: pushReach over union2.
+base.json                                hidden 305/384 decoys 267/384 | in packet: planted 253 decoy 219 | ask bytes (hidden) 223019
+f-own.json                               hidden 299/384 decoys 255/384 | in packet: planted 241 decoy 204 | ask bytes (hidden) 221930
+f-intent-v2.json                         hidden 298/384 decoys 254/384 | in packet: planted 241 decoy 203 | ask bytes (hidden) 221630
+f-r8-upto.json                           hidden 290/384 decoys 280/384 | in packet: planted 236 decoy 227 | ask bytes (hidden) 219330
+f-r8.json                                hidden 286/384 decoys 277/384 | in packet: planted 232 decoy 226 | ask bytes (hidden) 223502
+f-union2.json                            hidden 316/384 decoys 279/384 | in packet: planted 258 decoy 228 | ask bytes (hidden) 228910
+f-union-gen.json                         hidden 314/384 decoys 280/384 | in packet: planted 255 decoy 229 | ask bytes (hidden) 227880
+reach.json                               hidden 312/384 decoys 274/384 | in packet: planted 260 decoy 226 | ask bytes (hidden) 223019
+reachB.json                              hidden 312/384 decoys 274/384 | in packet: planted 261 decoy 226 | ask bytes (hidden) 222803
+reach-union2.json                        hidden 324/384 decoys 288/384 | in packet: planted 266 decoy 238 | ask bytes (hidden) 228910
+
+-- pushReach task diff
+   hidden: +7 ['dinner-guests-vegetarian/41', 'foodbank-shift-coaching-clash/42', 'hosted-travel-preapproval/41', 'nursery-collection-list/41', 'renewal-pack-already-sent/41', 'signing-authority-limit/42', 'tennis-membership-lapsed/41']
+   hidden: -0 []
+   control: +7 ['day-off-clashes-go-live/42', 'dublin-airport-runway-closure/41', 'dublin-airport-runway-closure/42', 'hospitality-per-head-cap/42', 'oncall-swap-incoming/41', 'team-night-vs-all-hands/41', 'team-night-vs-all-hands/42']
+   control: -0 []

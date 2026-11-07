@@ -49,10 +49,10 @@ describe("HTTP API", () => {
     expect(body.injection?.citations[0]?.itemId).toBe("crm:d1");
   });
 
-  test("check: a tool call is checked (proceed with the firewall off); anything else is a 400", async () => {
+  test("check: a tool call is checked (proceed: the default's party check has nothing to hold); else a 400", async () => {
     const res = await post("/v1/check", { ...who, kind: "tool_call", tool: "send_payment", input: { amount: "10" } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ verdict: "proceed", finding: null, reason: "off" });
+    expect(await res.json()).toMatchObject({ verdict: "proceed", finding: null, reason: "clear" });
     expect((await post("/v1/check", { ...who, kind: "user_message", text: "hi" })).status).toBe(400);
     expect((await post("/v1/check", { ...who, kind: "tool_call" })).status).toBe(400);
   });
@@ -69,6 +69,53 @@ describe("HTTP API", () => {
     expect((await post("/v1/whoami", { userId: "a/b" })).status).toBe(400);
     expect((await post("/v1/whoami", { userId: "u1", sessionId: 7 })).status).toBe(400);
     expect((await post("/v1/whoami", { userId: "u1", tenantId: "other" })).status).toBe(403);
+  });
+});
+
+describe("explain (D277): why Eden spoke or stayed silent, content-free", () => {
+  const ex = { userId: "ux", sessionId: "sx" };
+  const decisions = async (body: unknown) =>
+    ((await (await post("/v1/explain", body)).json()) as { decisions: Record<string, unknown>[] }).decisions;
+
+  test("lists the session's decisions with a sentence each and no event or item text", async () => {
+    await post("/v1/events?waitMs=1000", { ...ex, kind: "user_message", text: "Globex renewal with Dana Lee" });
+    await post("/v1/events", { ...ex, kind: "agent_message", text: "Sure, one moment." });
+    const got = await decisions(ex);
+    expect(got.length).toBeGreaterThanOrEqual(2);
+    for (const d of got) {
+      expect(typeof d.why).toBe("string");
+      expect((d.why as string).length).toBeGreaterThan(10);
+      expect(Object.keys(d).sort()).toEqual([
+        "costUsd",
+        "decision",
+        "event",
+        "itemIds",
+        "latencyMs",
+        "modelCalls",
+        "reason",
+        "sourceCalls",
+        "turn",
+        "why",
+      ]);
+    }
+    expect(got.some((d) => (d.itemIds as string[]).includes("crm:d1"))).toBe(true);
+    const text = JSON.stringify(got);
+    for (const word of ["Globex", "Dana", "renewal", "moment", "12%"]) expect(text).not.toContain(word);
+  });
+
+  test("another user's or session's decisions are never shown (isolation); bad ids are a 400", async () => {
+    await post("/v1/events?waitMs=1000", { userId: "uy", sessionId: "sy", kind: "user_message", text: "Globex" });
+    expect(await decisions({ userId: "uy", sessionId: "other" })).toEqual([]);
+    expect(await decisions({ userId: "uz", sessionId: "sy" })).toEqual([]);
+    expect((await decisions({ userId: "uy", sessionId: "sy" })).length).toBeGreaterThan(0);
+    expect((await post("/v1/explain", { userId: "a/b", sessionId: "s" })).status).toBe(400);
+    expect((await post("/v1/explain", { userId: "u1" })).status).toBe(400);
+  });
+
+  test("an ended session has none", async () => {
+    await post("/v1/events", { userId: "uw", sessionId: "sw", kind: "user_message", text: "Globex" });
+    await post("/v1/events", { userId: "uw", sessionId: "sw", kind: "session_end" });
+    expect(await decisions({ userId: "uw", sessionId: "sw" })).toEqual([]);
   });
 });
 
@@ -188,6 +235,33 @@ describe("request body size (D100)", () => {
     expect((await send(h, body)).status).toBe(200);
     expect((await send(h, body, { "content-length": "abc" })).status).toBe(200);
     expect(observed.length).toBe(2);
+  });
+
+  // Under the 8 MB cap, structure costs the loop far more than text: JSON.parse of an 8 MB string field took 4-7 ms
+  // where 4 M small numbers took 106-134 ms and 4 M nested arrays 453-665 ms (best of 3 each), before any check ran.
+  // No valid body comes near: a tool input is at most 1,000,000 characters, so it holds at most ~500,000 values.
+  test("a body holding far more values or depth than any valid request is a 400 before it is parsed", async () => {
+    observed.length = 0;
+    const h = createHandler(spied, { keys: new Map([[key, "acme"]]), dev: false });
+    const half = 4 * 1024 * 1024 - 64;
+    const wide = JSON.stringify({ ...who, kind: "user_message", text: "Globex renewal", junk: Array(half).fill(1) });
+    const deep = JSON.stringify({ ...who, kind: "user_message", text: "Globex renewal" }).slice(0, -1);
+    const nested = `${deep},"junk":${"[".repeat(half)}${"]".repeat(half)}}`;
+    for (const body of [wide, nested]) {
+      expect(Buffer.byteLength(body)).toBeLessThan(8_388_608);
+      const t0 = performance.now();
+      const res = await send(h, body);
+      const ms = performance.now() - t0;
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toMatch(/too many values or nests too deep/);
+      // Loose for a loaded machine: the scan stops at the first token past either bound.
+      expect(ms).toBeLessThan(100);
+    }
+    expect(observed.length).toBe(0);
+    // A long text is no structure: the largest valid event (a 1,000,000-unit text field) is still served.
+    const text = JSON.stringify({ ...who, kind: "user_message", text: `Globex renewal ${'[\\"{,'.repeat(160_000)}` });
+    expect((await send(h, text)).status).toBe(200);
+    expect(observed.length).toBe(1);
   });
 });
 
@@ -467,6 +541,57 @@ describe("change notifications: why one did nothing (still 200)", () => {
       expect(r.status).toBe(200);
       expect(await r.json()).toEqual({ ok: true, synced: false, reason: "not-synced" });
     }
+  });
+});
+
+describe("ref notices (D347): the refs a source changed, read by Eden", () => {
+  test("sources/refs: checked input; not-synced before a sync, synced once the source is warm and notifying", async () => {
+    expect((await post("/v1/sources/refs", { userId: "u1", sourceId: "crm", refs: [] })).status).toBe(400);
+    expect((await post("/v1/sources/refs", { userId: "u1", sourceId: "crm", refs: [7] })).status).toBe(400);
+    const many = Array.from({ length: 101 }, (_, i) => `r${i}`);
+    expect((await post("/v1/sources/refs", { userId: "u1", sourceId: "crm", refs: many })).status).toBe(400);
+    let fetched = 0;
+    let release!: () => void;
+    const wire = new Promise<void>((r) => (release = r));
+    const mail = {
+      id: "mail",
+      kind: "test",
+      description: "mail",
+      notifies: true,
+      search: async () => [],
+      list: async () => ({ items: [], next: null }),
+      fetch: async (ref: string) => {
+        fetched++;
+        await wire; // Held on the wire: the route must answer without waiting for it.
+        return { id: `mail:${ref}`, sourceId: "mail", ref, title: "Changed", text: "A changed message" };
+      },
+    };
+    const p = buildPartner({ sources: async () => [mail], model: null, engine: {} });
+    p.stopSync();
+    const h = createHandler(p, { keys: new Map([[key, "acme"]]), dev: false });
+    const send = (body: unknown) =>
+      h(
+        new Request("http://x/v1/sources/refs", {
+          method: "POST",
+          headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    expect(await (await send({ userId: "u1", sourceId: "mail", refs: ["m1"] })).json()).toEqual({
+      ok: true,
+      synced: false,
+      reason: "not-synced",
+    });
+    const scope = { tenantId: "acme", userId: "u1" };
+    p.sync!.track(scope, Date.now());
+    while (!p.sync!.warm(scope)) await p.sync!.tick();
+    expect(await (await send({ userId: "u1", sourceId: "mail", refs: ["m1"] })).json()).toEqual({
+      ok: true,
+      synced: true,
+    });
+    for (let i = 0; i < 50 && fetched === 0; i++) await Bun.sleep(2);
+    expect(fetched).toBe(1);
+    release();
   });
 });
 

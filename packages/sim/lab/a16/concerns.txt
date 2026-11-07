@@ -1,0 +1,8 @@
+short eden       control 3 -> 0 neutral 3 -> 0
+short eden+ephemeral control 0 -> 0 neutral 0 -> 0
+short eden+ephemeralBp control 0 -> 0 neutral 0 -> 0
+short eden+terse control 0 -> 0 neutral 1 -> 0
+long eden       control 0 -> 0 neutral 2 -> 0
+long eden+ephemeral control 1 -> 0 neutral 1 -> 0
+long eden+ephemeralBp control 0 -> 0 neutral 2 -> 0
+long eden+terse control 0 -> 0 neutral 0 -> 0

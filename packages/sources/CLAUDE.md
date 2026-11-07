@@ -9,12 +9,12 @@ anything is held).
 
 | File | Owns |
 |---|---|
-| `src/source.ts` | `Source` (search; optional `fetch` by id D35, `list` for sync D57, `listsByTime`, `notifies` for push sync D125, `fetchReportsGone` for freshness checks D126), `SearchQuery` (with a day `window`, D44), `ListPage` |
-| `src/mcp-source.ts` | `McpSource`: the read-only check (`readTool`: `readOnlyHint: true` or operator `trustedReadTools`, else `ReadOnlyViolation`), reconnects (re-checking read-only), paged `tools/list`, `toItems` |
+| `src/source.ts` | `Source` (search; optional `fetch` by id D35, `list` for sync D57, `listsByTime`, `notifies` for push sync D125, `fetchReportsGone` for freshness checks D126, `fetchesById`: a get tool is wired, D356), `SearchQuery` (with a day `window`, D44), `ListPage` |
+| `src/mcp-source.ts` | `McpSource`: the read-only check (`readTool`: `readOnlyHint: true` or operator `trustedReadTools`, else `ReadOnlyViolation`), reconnects (re-checking read-only), paged `tools/list`, `toItems`; `fetch` takes a reply that is the record itself when its own id is the ref (`{id, messages: […]}`, a thread fetch's shape, D294) before looking in its rows |
 | `src/schema-args.ts` | Arguments built from a tool's JSON schema (search, fetch, list), deterministic; operator `fixed` values win |
 | `src/shapes.ts` | Query shapes (terms, entities, one call per entity…); `inert` strips search-syntax operators from untrusted text |
 | `src/planner.ts` | `QueryPlanner`, `PlannedSource`: Thompson sampling over shapes per (tenant, user, connector), learned cascade (D28–D33, D38, D39) |
-| `src/guarded.ts` | `SourceFanout`: per-(user, source) breaker, AIMD, GCRA, histogram; singleflight; stale-on-failure result cache; `SharedCalls` (D48); `list`'s `reuse` (`ListReuse`: a held, unchanged item is not redacted again); `fetchChecked` (ok / gone / failed with `why`, D126, D211); `dropResults` (a changed or deleted source's held pages, D126) |
+| `src/guarded.ts` | `SourceFanout`: per-(user, source) breaker, AIMD, GCRA, histogram; singleflight; stale-on-failure result cache; `SharedCalls` (D48); `list`'s `reuse` (`ListReuse`: a held, unchanged item is not redacted again); `list`'s `turn` (awaited after the source answers, before redaction, only when given: the sync's `syncIngestTurns` trial, D328); `fetchChecked` (ok / gone / failed with `why`, D126, D211; an MCP error result is `FetchErrorResult`, settled as answered and reported as "error-result", D298); `dropResults` (a changed or deleted source's held pages, D126) |
 | `src/fanout.ts` | `searchSources`: the plain parallel search with per-source outcome (an aborted `signal` is a "timeout", no call) |
 | `src/static-source.ts` | `StaticSource`: in-memory documents (tests, examples, `EDEN_SOURCES_FILE`, per-user static specs); an inverted index built on the first search and a ref map for `fetch` (D175) |
 | `bench/static-source.bench.ts` | Old search vs lazy term sets vs the shipped index at 400 / 4,000 / 40,000 docs: construct, first-search and per-search ms, heap per doc; checks identical refs |
@@ -29,6 +29,11 @@ anything is held).
 - **Isolation (D9).** Breakers, limits, caches, planner arms and singleflight keys are per tenant/user. A new piece
   of state is keyed the same way and gets a cross-user test (`regressions.test.ts` has examples).
 - **Untrusted text (D11).** Queries are built from user, agent and item text: shapes pass no search syntax through.
+- **Deadlines hold whatever the source does (A5).** `search` (through `Singleflight`) and `fetchChecked` (through
+  `untilAborted`, `src/abort.ts`) return at their deadline even when the source ignores its signal, and `McpSource`
+  gives up its connect at the call's signal; the abandoned call's permit is settled then, so a source that ignores
+  signals can briefly hold more calls than its concurrency cap. `list` is not raced: one more await there moved the
+  funnel's card batching (504 calls to 546); the engine bounds its wait for an on-demand poll instead.
 - **Never throws.** `SourceFanout` reports each source's status ("ok", "cached", "stale", "open", "busy",
   "limited", "throttled", "timeout", "error"); a guard skip spends no rate token and no half-open probe. "limited" is
   our own rate limit skipping the call; "throttled" is the connector's own 429 (or "rate limit", "too many

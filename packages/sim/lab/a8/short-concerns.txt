@@ -1,0 +1,4 @@
+== payload base: short eden       control 4 -> 4 neutral 1 -> 1
+== payload new: short eden       control 3 -> 2 neutral 1 -> 0
+== signals base: short eden       control 4 -> 4 neutral 2 -> 2
+== signals new: short eden       control 4 -> 4 neutral 2 -> 2

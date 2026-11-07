@@ -20,7 +20,10 @@
  *     [--only-concerns]
  *
  * `--only-concerns` (fix-w2b) regrades only the control and neutral answers the run's grader called a concern (any fact
- * true): a check of the false concerns themselves, at a few cents rather than a whole run's worth.
+ * true): a check of the false concerns themselves, at a few cents rather than a whole run's worth. `--only-misses` (A2)
+ * regrades only the hidden answers it called a miss (no fact true); `--conditions a,b` keeps those arms' answers.
+ * `--kinds hidden`, `--only-raised` and `--sample N` (A12) keep a task kind, the hidden answers called raised, and a
+ * fixed pseudo-random N of the rest: a Sonnet check of a Haiku-graded run's hidden rate (docs/research/a12-quality.md).
  *
  * The summary also splits agreement with the run's grader by task kind (hidden, control, neutral), with the counts of
  * facts each grader alone called true, since a disagreement on a control or neutral task moves the false-concern rate.
@@ -31,7 +34,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import type { Model } from "@eden/llm";
 import { chat, gradeMessages, readVerdicts, type RunResult, type Task } from "./ab-common";
 import { isAnthropic, isCapError, labAccess, labModel } from "./free";
-import { byKind, isConcern } from "./regrade-kinds";
+import { byKind, isConcern, isMiss } from "./regrade-kinds";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -52,6 +55,26 @@ const run = JSON.parse(readFileSync(RESULTS, "utf8")) as { grader?: string; task
 const byId = new Map(run.tasks.map((t) => [t.id, t]));
 let todo = run.results.filter((r) => !r.error && r.answer.trim() && byId.get(r.task)?.must.length);
 if (args.includes("--only-concerns")) todo = todo.filter((r) => isConcern(byId.get(r.task)!.kind, r.facts));
+if (args.includes("--only-misses")) todo = todo.filter((r) => isMiss(byId.get(r.task)!.kind, r.facts));
+const CONDITIONS = opt("conditions", "") ? new Set(opt("conditions", "").split(",")) : null;
+if (CONDITIONS) todo = todo.filter((r) => CONDITIONS.has(r.condition));
+// `--kinds hidden` (A12) keeps those task kinds; `--only-raised` the hidden answers the run's grader called raised;
+// `--sample N` a fixed pseudo-random N of what is left (by a hash of task and arm: the same N on every rerun), so a
+// stronger grader can check a cheaper one's "raised" calls at a few cents.
+const KINDS = opt("kinds", "") ? new Set(opt("kinds", "").split(",")) : null;
+if (KINDS) todo = todo.filter((r) => KINDS.has(byId.get(r.task)!.kind));
+if (args.includes("--only-raised")) {
+  todo = todo.filter((r) => byId.get(r.task)!.kind === "hidden" && !isMiss("hidden", r.facts));
+}
+const SAMPLE = Number(opt("sample", "0"));
+if (SAMPLE > 0) {
+  const hash = (x: string) => [...x].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16_777_619) >>> 0, 2_166_136_261);
+  todo = todo
+    .map((r) => ({ r, h: hash(`${r.task}\u0000${r.condition}`) }))
+    .sort((a, b) => a.h - b.h)
+    .slice(0, SAMPLE)
+    .map((x) => x.r);
+}
 if (LIMIT > 0) todo = todo.slice(0, LIMIT);
 
 interface Graded {

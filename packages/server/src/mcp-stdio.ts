@@ -5,7 +5,8 @@
  *   EDEN_TENANT=acme EDEN_USER=u1 EDEN_SOURCES_FILE=examples/personal-agent/sources.json \
  *     bun packages/server/src/mcp-stdio.ts
  *
- * The session id is per process. Proactive delivery needs the HTTP API or the SDK (D14). EDEN_QUERY_PLANNER and
+ * The session id starts per process and moves on after 2 h with no ask or at UTC midnight (D281: MCP sends no session
+ * end). Proactive delivery needs the HTTP API or the SDK (D14). EDEN_QUERY_PLANNER and
  * EDEN_ENGINE_CONFIG (D103) work as for the HTTP server (config.ts). What the query planner
  * learns persists in a source map under $EDEN_HOME, one file per tenant/user (EDEN_SOURCE_MAP overrides it).
  */

@@ -1,0 +1,14 @@
+a16-long-41                  0.1817
+a16-long-42                  0.1861
+a16-pilot-41                 0.0451
+a16-pilot2-41                0.0221
+a16-regrade-long-41          0.0050
+a16-regrade-long-42          0.0022
+a16-regrade-short-41         0.0033
+a16-regrade-short-42         0.0047
+a16-session-probe            0.0053
+a16-short-41                 0.2055
+a16-short-42                 0.2103
+a16-smoke-41                 0.0294
+a16-smoke2-41                0.0294
+TOTAL 0.9301

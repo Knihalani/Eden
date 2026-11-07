@@ -23,6 +23,21 @@ describe("hermes-ab conditions", () => {
     expect(e.waitMs).toBe(3_000);
   });
 
+  test("hermes-eden is Eden in place of the source tools, Pi's eden arm (A16)", () => {
+    const c = parseHermesCondition("hermes-eden", { config: ALL });
+    expect([c.name, c.useTools, c.withPartner, c.useEden, c.askTool, c.eden]).toEqual([
+      "hermes-eden",
+      false,
+      true,
+      true,
+      true,
+      true,
+    ]);
+    expect(parseHermesCondition("hermes-eden@w0", { config: ALL }).waitMs).toBe(0);
+    expect(() => parseHermesCondition("hermes-edenx", { config: ALL })).toThrow(/unknown condition/);
+    expect(() => parseHermesCondition("hermes+eden+ephemeral", { config: ALL })).toThrow(/layouts/);
+  });
+
   test("variants, flags and waits parse as in pi-conditions, and every Eden arm pairs with hermes", () => {
     const variants = parseVariants('{"A5":{"askDedup":true}}');
     const c = parseHermesCondition("hermes+eden~A5+compactParts@w0", { config: ALL, variants, defaults });
@@ -33,7 +48,7 @@ describe("hermes-ab conditions", () => {
   });
 
   test("other names, the judge, --act and duplicates throw", () => {
-    for (const bad of ["eden", "tools", "hermes-eden", "hermes+edenx", "hermes+eden-judge"]) {
+    for (const bad of ["eden", "tools", "hermes-edenx", "hermes+edenx", "hermes+eden-judge", "hermes-eden-judge"]) {
       expect(() => parseHermesCondition(bad, { config: ALL })).toThrow();
     }
     expect(() => parseHermesCondition("hermes", { config: ALL, act: true })).toThrow(/no --act/);

@@ -1,0 +1,42 @@
+
+$ per 1,000 tasks (agent and Eden per task; bg run = Eden's cards and intent while the user worked, per task; one-time = backfill per user; steady = agent + Eden + bg run; all-in = steady + one-time spread over the user's tasks in this run). Recap turns are probes: not tasks, their $ apart.
+condition        n users   agent    Eden  bg run  steady  all-in  mix st  mix all   one-time $/user (from)  reader/t  Eden conn/t  agent tools/t  wall p50  mean  recaps $
+hermes-eden    192     2   0.495   0.000   0.000   0.495   0.495   0.501    0.501           0.0000 (in-run)      0.00         0.56           1.20      3.26  3.19    0.0000
+hermes         192     2   0.340   0.000   0.000   0.340   0.340   0.334    0.334           0.0000 (none)      0.00         0.00           2.21      4.23  4.21    0.0000
+hermes+eden    192     2   0.470   0.000   0.000   0.470   0.470   0.470    0.470           0.0000 (in-run)      0.00         0.57           2.01      4.40  4.22    0.0000
+
+connector calls per task (agent's source tools; Eden's in the task's window; Eden's background while the user worked) and Eden's one-time backfill calls per user; streams recorded before A3 lack the background and backfill
+hermes-eden    agent 0.00  Eden 0.56  background 0.00  mix 0.56  backfill 18/user (6 users)
+hermes         agent 2.21  Eden 0.00  background 0.00  mix 2.21  backfill 0/user (0 users)
+hermes+eden    agent 1.57  Eden 0.57  background 0.00  mix 2.32  backfill 18/user (6 users)
+
+$ per 1,000 tasks with the connectors priced per plan ($ per 1,000 calls; market.py, list prices, assumed): steady, all-in, and on the 1:1:8 mix
+hermes-eden    first-party (quota only)     steady   0.495  all-in   0.495  mix st   0.501  mix all   0.501
+hermes-eden    Composio (overage)           steady   0.664  all-in   0.832  mix st   0.670  mix all   0.839
+hermes-eden    Unified.to (Pro)             steady   0.917  all-in   1.339  mix st   0.923  mix all   1.345
+hermes-eden    Arcade.dev (Team)            steady   6.120  all-in  11.745  mix st   6.126  mix all  11.751
+hermes-eden    Pipedream Connect (overage)  steady   7.245  all-in  13.995  mix st   7.251  mix all  14.001
+hermes-eden    Zapier MCP (10k tasks)       steady  15.007  all-in  29.520  mix st  15.014  mix all  29.526
+hermes         first-party (quota only)     steady   0.340  all-in   0.340  mix st   0.334  mix all   0.334
+hermes         Composio (overage)           steady   1.004  all-in   1.004  mix st   0.996  mix all   0.996
+hermes         Unified.to (Pro)             steady   2.000  all-in   2.000  mix st   1.989  mix all   1.989
+hermes         Arcade.dev (Team)            steady  22.476  all-in  22.476  mix st  22.397  mix all  22.397
+hermes         Pipedream Connect (overage)  steady  26.903  all-in  26.903  mix st  26.809  mix all  26.809
+hermes         Zapier MCP (10k tasks)       steady  57.449  all-in  57.449  mix st  57.256  mix all  57.256
+hermes+eden    first-party (quota only)     steady   0.470  all-in   0.470  mix st   0.470  mix all   0.470
+hermes+eden    Composio (overage)           steady   1.113  all-in   1.281  mix st   1.165  mix all   1.333
+hermes+eden    Unified.to (Pro)             steady   2.076  all-in   2.498  mix st   2.207  mix all   2.629
+hermes+eden    Arcade.dev (Team)            steady  21.877  all-in  27.502  mix st  23.626  mix all  29.251
+hermes+eden    Pipedream Connect (overage)  steady  26.158  all-in  32.908  mix st  28.257  mix all  35.007
+hermes+eden    Zapier MCP (10k tasks)       steady  55.699  all-in  70.211  mix st  60.213  mix all  74.726
+
+per kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s
+hermes-eden    hidden     64  raised 45/64 (70.3%)  $0.470/1k  p50 3.10
+hermes-eden    control    64  raised 0/64 (0.0%)  $0.511/1k  p50 3.36
+hermes-eden    neutral    64  raised 0/64 (0.0%)  $0.504/1k  p50 3.26
+hermes         hidden     64  raised 4/64 (6.3%)  $0.340/1k  p50 4.24
+hermes         control    64  raised 0/64 (0.0%)  $0.349/1k  p50 4.21
+hermes         neutral    64  raised 0/64 (0.0%)  $0.332/1k  p50 4.06
+hermes+eden    hidden     64  raised 41/64 (64.1%)  $0.444/1k  p50 2.75
+hermes+eden    control    64  raised 1/64 (1.6%)  $0.498/1k  p50 4.79
+hermes+eden    neutral    64  raised 2/64 (3.1%)  $0.470/1k  p50 4.56

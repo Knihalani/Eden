@@ -17,11 +17,35 @@ import {
   type ActionCheck,
   type AgentEvent,
   type AskResponse,
+  type ExplainedDecision,
   type Injection,
   type ObserveResult,
   type SourceChangedReason,
   type SourceChangedResult,
 } from "@eden/protocol";
+
+/**
+ * A failure before any answer (refused connection, DNS, timeout) as an error that says where the client was sending
+ * (D365): a runtime's own message ("Unable to connect. Is the computer able to access the url?") names neither the
+ * URL nor the route, so a first-time integrator with the server down or on another port could not tell what failed.
+ * The base URL is configuration, never the request or the key; no `cause` is kept, since a runtime's error may quote
+ * the full URL.
+ */
+function transportError(path: string, baseUrl: string, timeoutMs: number, e: unknown): Error {
+  const route = path.split("?")[0]!;
+  const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+  const why = timedOut ? `no answer within ${timeoutMs} ms` : e instanceof Error ? e.message : String(e);
+  return new Error(`eden ${route}: cannot reach ${redactUrls(baseUrl)} (${redactUrls(why)})`);
+}
+
+/**
+ * Text with every URL's credentials and query removed (`user:password@`, `?token=…`, `#…`), so neither the
+ * configured base URL nor a runtime message quoting it (Node's fetch quotes a URL that carries credentials) puts a
+ * secret in a log.
+ */
+export function redactUrls(text: string): string {
+  return text.replace(/\b([a-z][a-z0-9+.-]*:\/\/)(?:[^\s/]*@)?([^\s?#)]*)(?:[?#][^\s)]*)?/gi, "$1$2");
+}
 
 /** The reasons `/v1/sources/changed` gives (`SourceChangedReason`); anything else from a server is dropped. */
 const REASONS: ReadonlySet<string> = new Set<SourceChangedReason>(["push-off", "not-synced", "not-notifying"]);
@@ -125,6 +149,11 @@ export interface EdenClientOptions {
    */
   onError?: (error: unknown) => void;
   /**
+   * Shadow mode: what Eden returns is not given to the agent (a trial that only logs it). The server then learns
+   * nothing from it as if the agent had been shown it (`?shadow=1` on events and pending).
+   */
+  shadow?: boolean;
+  /**
    * `waitMs` sent on each sent `user_message` observe (not a draft) that passes none of its own (D105, D112).
    * Default `DEFAULT_WAIT_MS` (3,000), the wait the default was measured with: the push's packet (its candidates,
    * D237, after the search and on-demand poll; with `pushCandidates: 0`, the reader's reading, D98: a 1 s wait lost
@@ -154,6 +183,12 @@ export interface SourceChange {
   items?: PushedItem[];
   /** Refs the source no longer has (deleted, recalled). */
   removed?: string[];
+  /**
+   * Refs the source changed or added, when the notification names them but carries no content (a Gmail history's
+   * message ids, a Graph or HubSpot webhook's resource id, a Drive changes list): Eden reads them itself, and puts
+   * nothing else of the source in doubt (D347). Prefer `items` when the notice has them.
+   */
+  refs?: string[];
 }
 
 /** The observe wait on a sent user message when `defaultWaitMs` is unset (D112): the measured default's wait. */
@@ -199,6 +234,7 @@ export class EdenClient {
     /** The 2xx answer's expected shape; another is reported and treated as a failure, so callers never see it. */
     valid?: (v: unknown) => boolean,
   ): Promise<T | null> {
+    let answered = false;
     try {
       const res = await (this.options.fetch ?? fetch)(`${this.baseUrl}${path}`, {
         method: "POST",
@@ -209,6 +245,7 @@ export class EdenClient {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(timeoutMs),
       });
+      answered = true;
       if (!res.ok) throw new Error(`eden ${path}: ${res.status}${await serverError(res)}`);
       const answer: unknown = await res.json();
       if (valid && !valid(answer)) {
@@ -218,8 +255,16 @@ export class EdenClient {
       }
       return answer as T;
     } catch (e) {
-      failed?.(e);
-      this.report(e);
+      // An answer that arrived but could not be read is not "cannot reach" (D365).
+      const unreadable = () => new Error(`eden ${path.split("?")[0]!}: an unreadable answer`);
+      const err =
+        e instanceof Error && e.message.startsWith("eden ")
+          ? e
+          : answered
+            ? unreadable()
+            : transportError(path, this.baseUrl, timeoutMs, e);
+      failed?.(err);
+      this.report(err);
       return null;
     }
   }
@@ -242,7 +287,8 @@ export class EdenClient {
     // Clamped to the server's own range: an Infinity, a negative or a NaN would otherwise make the request's timeout
     // invalid, so every observe would fail before it was sent. NaN > 0 is false, so it waits 0 like a negative.
     const waitMs = asked > 0 ? Math.min(MAX_WAIT_MS, asked) : 0;
-    const wait = waitMs ? `?waitMs=${waitMs}` : "";
+    const query = [...(waitMs ? [`waitMs=${waitMs}`] : []), ...(this.options.shadow ? ["shadow=1"] : [])];
+    const wait = query.length ? `?${query.join("&")}` : "";
     const timeout = (this.options.timeoutMs ?? 800) + waitMs;
     const body = { ...this.who, at: Date.now(), ...event };
     const res = await this.post<ObserveResult>(`/v1/events${wait}`, body, timeout, undefined, (v) => {
@@ -253,7 +299,8 @@ export class EdenClient {
 
   /** Injections queued by slower lookups since the last call. */
   async pending(): Promise<Injection[]> {
-    const res = await this.post<{ injections: unknown[] }>("/v1/pending", this.who, undefined, undefined, (v) => {
+    const path = this.options.shadow ? "/v1/pending?shadow=1" : "/v1/pending";
+    const res = await this.post<{ injections: unknown[] }>(path, this.who, undefined, undefined, (v) => {
       return isRecord(v) && Array.isArray(v.injections);
     });
     // A malformed element is dropped, not the whole queue: the well-formed ones beside it are still context.
@@ -310,6 +357,25 @@ export class EdenClient {
     return res === null ? { ok: false, error } : { ok: true };
   }
 
+  /**
+   * Why Eden spoke or stayed silent in this session (D277): its last decisions, oldest first, each with a plain
+   * sentence (`why`), counts and the ids it delivered or cited; never content. For debugging and logs, not the agent's
+   * loop. Never throws: a failure, or an answer of another shape, is `[]` (reported to `onError`).
+   */
+  async explain(options: { timeoutMs?: number } = {}): Promise<ExplainedDecision[]> {
+    const res = await this.post<{ decisions: unknown[] }>(
+      "/v1/explain",
+      this.who,
+      options.timeoutMs,
+      undefined,
+      (v) => isRecord(v) && Array.isArray(v.decisions),
+    );
+    return (res?.decisions ?? []).filter(
+      (d): d is ExplainedDecision =>
+        isRecord(d) && typeof d.decision === "string" && typeof d.why === "string" && Array.isArray(d.itemIds),
+    );
+  }
+
   /** Tells the partner whether the agent used an injection. Better than the partner's own inference. */
   async feedback(injectionId: string, used: boolean): Promise<void> {
     await this.post("/v1/feedback", { ...this.who, injectionId, used });
@@ -327,6 +393,10 @@ export class EdenClient {
    *   synced yet, takes the items and stores none (`sourceItems` resolves 0; `sourceNotice` says why). When a part
    *   did not reach it (unreachable, refused, an answer of another shape), the plain signal is sent as well, so Eden
    *   polls the source rather than miss the change, and it resolves false.
+   * - **With the changed refs only (`change.refs`, D347):** for a notice that names what changed but carries no
+   *   content. Eden reads those refs itself in the background and puts nothing else of the source in doubt, so the
+   *   agent's next request waits on no re-read; a ref it cannot read falls back to the signal on the server. A part not
+   *   taken (unreachable, or the source not synced and notifying) sends the plain signal and resolves false.
    * - **Without items (a signal):** with the server's `syncPush`, the source is polled at its next use instead of on a
    *   guess. Resolves false when the partner could not be reached or does not sync that source (`sourceNotice` says
    *   why).
@@ -335,8 +405,15 @@ export class EdenClient {
     // A JS caller can pass anything: what is not an array sends nothing, so it is read as none (a plain signal).
     const items = Array.isArray(change?.items) ? change.items : [];
     const removed = Array.isArray(change?.removed) ? change.removed : [];
-    if (items.length === 0 && removed.length === 0) return (await this.sourceNotice(sourceId))?.synced === true;
+    const refs = Array.isArray(change?.refs) ? change.refs : [];
+    if (items.length === 0 && removed.length === 0 && refs.length === 0)
+      return (await this.sourceNotice(sourceId))?.synced === true;
     let delivered = true;
+    for (let i = 0; i < refs.length; i += MAX_PUSHED_ITEMS) {
+      // Not taken as refs (unreachable, or the source is not synced and notifying): the signal below covers it.
+      const r = await this.sourceRefsReached(sourceId, refs.slice(i, i + MAX_PUSHED_ITEMS));
+      if (r === null || !r.synced) delivered = false;
+    }
     for (let i = 0; i < items.length; i += MAX_PUSHED_ITEMS) {
       if ((await this.sourceItemsReached(sourceId, items.slice(i, i + MAX_PUSHED_ITEMS))) === null) delivered = false;
     }
@@ -366,6 +443,21 @@ export class EdenClient {
     if (!res) return null;
     const reason = typeof res.reason === "string" && REASONS.has(res.reason) ? res.reason : undefined;
     return { synced: res.synced === true, ...(reason ? { reason: reason as SourceChangedReason } : {}) };
+  }
+
+  /** `/v1/sources/refs` (D347): the server's answer, or null when it did not take the call. */
+  private async sourceRefsReached(sourceId: string, refs: string[]): Promise<SourceChangedResult | null> {
+    const { tenantId, userId } = this.options;
+    const res = await this.post<{ synced: boolean; reason?: unknown }>(
+      "/v1/sources/refs",
+      { ...(tenantId ? { tenantId } : {}), userId, sourceId, refs },
+      undefined,
+      undefined,
+      (v) => isRecord(v) && typeof v.synced === "boolean",
+    );
+    if (!res) return null;
+    const reason = typeof res.reason === "string" && REASONS.has(res.reason) ? res.reason : undefined;
+    return { synced: res.synced, ...(reason ? { reason: reason as SourceChangedReason } : {}) };
   }
 
   /**

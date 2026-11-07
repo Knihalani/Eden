@@ -426,6 +426,9 @@ const PAIRS = [
   ["both-judge", "both"],
   ["eden-judge", "tools"],
   ["both-judge", "tools"],
+  // hermes-ab (A16): Eden in place of Hermes' source tools, against Hermes alone and against Eden beside them.
+  ["hermes-eden", "hermes"],
+  ["hermes+eden", "hermes-eden"],
 ] as [string, string][];
 // A wait, variant or flag condition ("both@w0", "eden~ALL2", "eden+askDedup") against the one it modifies.
 for (const c of conditions) {

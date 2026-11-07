@@ -25,6 +25,7 @@ choices they drove are in [docs/research/primitives.md](../../docs/research/prim
 | `reply.ts` | `splitReply`, `stripReply`, `dedupText`: quotes, signatures, greetings and forwards marked per line | The text an item adds of its own, for dedup |
 | `dedup.ts` | `TextSketcher` (shingles, SimHash, MinHash, number key), `MinHashIndex` (LSH), `hamming64` | Near-duplicate items |
 | `sketch.ts` | `ExpiringSet`: windowed set of 64-bit keys in typed arrays | Seen-recently checks without a `Map` per key |
+| `idset.ts` | `IdSet`: insertion-ordered string set in typed arrays (one byte arena, 16/32-bit open-addressed table), `Set<string>`'s semantics | Long-lived id sets that outlive their user's other state (the sync's per-source ids, D371) |
 | `stats.ts` | Incomplete beta and its inverse, Clopper–Pearson bounds, `minTrialsToCertify` | Certifying a false-fire rate from counts |
 | `calibrate.ts` | Platt and isotonic calibration, ECE, thresholds for a target precision or false-fire rate | Turning scores into probabilities the decision can trust |
 | `random.ts` | `Xoshiro128`: seedable PRNG with normal, gamma and beta draws | Thompson sampling, reproducible tests |
@@ -221,3 +222,19 @@ memory: 16.3 KB less per light user (about 163 MB per 10,000 such users, an esti
 for a heavy user, whose arrays reach the same size by doubling (33 B per item in the ingest bench, whose users hold
 500 items). `sketch.bench.ts` (ExpiringSet, Bloom, count-min; no `TextSketcher`) was re-run as a control: its memory
 figures are identical before and after.
+
+## IdSet (2026-11-07, D371)
+
+`IdSet` replaces `Set<string>` for the sync's per-source ids, which outlive a frozen user's cache (D325). A new
+primitive, so "before" is the `Set` it replaces. `bench/idset.bench.ts`, back to back on an idle 4-core VM:
+
+| Benchmark | `Set<string>` | `IdSet` |
+|---|---|---|
+| heapUsed per id, 300 sets x 3,000 ids of 13-15 characters | 89.0 B | 37.2 B |
+| heapUsed per id, 300 sets x 3,000 ids of 30 characters | 101.2 B | 58.9 B |
+| `has` present / absent, p50 (3,000 ids of 30 characters) | 7.8 / 11.3 ns | 91.6 / 87.1 ns |
+| `delete` + `add` (re-order), p50 | 40.8 ns | 274.2 ns |
+| iterate 3,000, p50 | 5.36 µs | 184.1-230.8 µs (two runs) |
+
+The trade is memory for speed on calls that are rare per item (docs/research/a24-scale.md). On Bun 1.4 `heapUsed`
+includes typed arrays' stores, so the `IdSet` rows are its whole cost; `external` repeats them (D372).

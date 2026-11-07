@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { MAX_PUSHED_ITEMS, isId, type ActionCheck, type Injection } from "@eden/protocol";
-import { DEFAULT_WAIT_MS, EdenClient, edenId } from "./client";
+import { DEFAULT_WAIT_MS, EdenClient, edenId, redactUrls } from "./client";
 import { heldResult, withContext } from "./messages";
 
 const inj = (text: string) => ({ id: "inj_1", text }) as Injection;
@@ -331,6 +331,72 @@ describe("misconfiguration is visible through onError", () => {
   });
 });
 
+describe("explain (D277)", () => {
+  const answering = (res: () => Response) => (async () => res()) as unknown as typeof fetch;
+  test("returns the decisions; drops malformed ones; posts the user's ids to /v1/explain", async () => {
+    let path = "";
+    let sent: unknown;
+    const good = {
+      turn: 1,
+      event: "user_message",
+      decision: "silent",
+      reason: "no candidates",
+      why: "Silent: x",
+      itemIds: [],
+    };
+    const eden = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      fetch: (async (u: string, init: RequestInit) => {
+        path = new URL(u).pathname;
+        sent = JSON.parse(String(init.body));
+        return Response.json({ decisions: [good, { decision: 3 }, null, { ...good, itemIds: 7 }] });
+      }) as unknown as typeof fetch,
+    });
+    expect(await eden.explain()).toEqual([good] as never);
+    expect(path).toBe("/v1/explain");
+    expect(sent).toEqual({ userId: "u", sessionId: "s" });
+  });
+
+  test("never throws: unreachable, a non-2xx and a wrong shape are [] and reach onError", async () => {
+    const errors: unknown[] = [];
+    const onError = (e: unknown) => errors.push(e);
+    const down = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      baseUrl: "http://127.0.0.1:9",
+      timeoutMs: 200,
+      onError,
+    });
+    expect(await down.explain()).toEqual([]);
+    // It says where it was sending (D365), not only the runtime's "Unable to connect".
+    expect(String(errors[0])).toStartWith("Error: eden /v1/explain: cannot reach http://127.0.0.1:9 (");
+    const hidden = new EdenClient({ userId: "u", sessionId: "s", baseUrl: "http://me:secret@127.0.0.1:9", onError });
+    await hidden.explain();
+    expect(String(errors.at(-1))).toContain("cannot reach http://127.0.0.1:9 (");
+    expect(String(errors.at(-1))).not.toContain("secret");
+    // A runtime message quoting the URL (Node's fetch does, for credentials) and a token in a query are removed too.
+    expect(
+      redactUrls("Request cannot be constructed from a URL that includes credentials: http://me:secret@h:9/v1/ask"),
+    ).toBe("Request cannot be constructed from a URL that includes credentials: http://h:9/v1/ask");
+    // A password containing "@" goes whole, up to the last "@" before the host.
+    expect(redactUrls("cannot reach http://me:p@ss@127.0.0.1:9 (boom)")).toBe("cannot reach http://127.0.0.1:9 (boom)");
+    expect(redactUrls("cannot reach https://eden.example/base?token=abc#x (boom)")).toBe(
+      "cannot reach https://eden.example/base (boom)",
+    );
+    const refused = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      onError,
+      fetch: answering(() => Response.json({ error: "no" }, { status: 401 })),
+    });
+    expect(await refused.explain()).toEqual([]);
+    const odd = new EdenClient({ userId: "u", sessionId: "s", onError, fetch: answering(() => Response.json([1])) });
+    expect(await odd.explain()).toEqual([]);
+    expect(errors.length).toBe(4);
+  });
+});
+
 describe("edenId", () => {
   const raws = [
     "alice+work@x.com",
@@ -528,6 +594,29 @@ describe("sourceChanged with the changed items (payload notices, D210)", () => {
     const eden = new EdenClient({ userId: "u", sessionId: "s", fetch, onError: () => {} });
     expect(await eden.sourceChanged("mail", { items: [item(1)] })).toBe(false);
     expect(calls.at(-1)!.route).toBe("/v1/sources/changed");
+  });
+
+  test("refs (D347) go to /v1/sources/refs with no signal when taken, split at MAX_PUSHED_ITEMS", async () => {
+    const { calls, fetch } = recording(ok);
+    const eden = new EdenClient({ tenantId: "t", userId: "u", sessionId: "s", fetch });
+    const refs = Array.from({ length: MAX_PUSHED_ITEMS + 2 }, (_, i) => `r${i}`);
+    expect(await eden.sourceChanged("mail", { refs })).toBe(true);
+    expect(calls.map((c) => c.route)).toEqual(["/v1/sources/refs", "/v1/sources/refs"]);
+    expect(calls[1]!.body).toEqual({ tenantId: "t", userId: "u", sourceId: "mail", refs: ["r100", "r101"] });
+  });
+
+  test("refs not taken (not synced, refused, wrong shape): the plain signal, false, no throw", async () => {
+    const answers: (() => Response)[] = [
+      () => Response.json({ ok: true, synced: false, reason: "not-synced" }),
+      () => Response.json({ error: "refs must be a non-empty array" }, { status: 400 }),
+      () => Response.json({ ok: true, synced: "yes" }),
+    ];
+    for (const answer of answers) {
+      const { calls, fetch } = recording((route, body) => (route === "/v1/sources/refs" ? answer() : ok(route, body)));
+      const eden = new EdenClient({ userId: "u", sessionId: "s", fetch, onError: () => {} });
+      expect(await eden.sourceChanged("mail", { refs: ["m1"] })).toBe(false);
+      expect(calls.map((c) => c.route)).toEqual(["/v1/sources/refs", "/v1/sources/changed"]);
+    }
   });
 
   test("unreachable: false, no throw", async () => {

@@ -76,6 +76,11 @@ export function modelRolesFromEnv(
   };
 }
 
+/** EDEN_MODEL_USD_PER_TENANT_DAY as validated by `modelRolesFromEnv` (the router's spend ledger reads it too, D327). */
+export function usdPerTenantDayFromEnv(env: Record<string, string | undefined> = process.env): number {
+  return tenantCap(env.EDEN_MODEL_USD_PER_TENANT_DAY);
+}
+
 function tenantCap(raw: string | undefined): number {
   if (raw === undefined || raw === "") return DEFAULT_USD_PER_TENANT_DAY;
   const n = Number(raw);

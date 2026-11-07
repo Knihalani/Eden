@@ -15,7 +15,7 @@
  * - `--baseline`: a `--json` file of an earlier run on the same suites and seeds; prints, task by task, the hidden
  *   items gained and lost and the decoys gained and lost.
  * - Held-out suites are refused without `--blind`: they are measurement only, never for tuning (suites.ts).
- *   UNRUN_BLIND's (held-out 9-13) are kept out of `all`; all have been read already, so none is blind any more.
+ *   UNRUN_BLIND's (held-out 9-17) are kept out of `all`; all have been read (held-out 17 by A29, D399).
  * - Not recorded in bench/ledger.jsonl unless `--record` (a screen is not a result).
  * - `--jobs N`: N hidden-funnel.ts processes, rows merged before the score (same score). At `--time 0` each takes a
  *   block of suite × seed shards and all run at once, default one per core (D139; ms/task is then contended, so
@@ -92,7 +92,7 @@ import {
   type IntentState,
   type ScreenRow,
 } from "./reader-stub";
-import { parseSuites, UNRUN_BLIND } from "./suites";
+import { parseSuites, UNREAD_BLIND, UNRUN_BLIND } from "./suites";
 
 const USAGE = `
 bun run funnel [--suite train] [--seeds 41,42] [--preset default] [--set '{"flag":true}'] [--cards default|none|F]
@@ -168,11 +168,18 @@ if (heldout.length && !cli.has("blind")) {
       `pass --blind for a pre-registered blind check.`,
   );
 }
-const unrun = suites.filter((s) => UNRUN_BLIND.includes(s));
+const unrun = suites.filter((s) => UNRUN_BLIND.includes(s) && !UNREAD_BLIND.includes(s));
 if (unrun.length) {
   console.error(
     `funnel: ${unrun.join(", ")} kept out of \`all\` (UNRUN_BLIND) but read before (D72, D80, D85, D98, D112): ` +
       "not a blind measurement; a blind round needs a new suite",
+  );
+}
+// A suite nobody has read (D350): this run reads it, so it is blind once; say so, and add it to the read ones after.
+const unread = suites.filter((s) => UNREAD_BLIND.includes(s));
+if (unread.length) {
+  console.error(
+    `funnel: ${unread.join(", ")} unread until now: this run is its blind read; move it out of UNREAD_BLIND`,
   );
 }
 

@@ -31,6 +31,20 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   conflictVocab: true,
   sync: true,
   syncPollPageSize: 5,
+  // D262–D265 (A1 scale): a user with many sources.
+  syncPollWidth: 8,
+  syncBackfillLanes: 8,
+  syncLocalComplete: true,
+  routeLocalHits: true,
+  // D320–D323 (A13 scale): cards, the cap and routing for a user with many sources.
+  syncKeepCut: true,
+  routeSketch: true,
+  syncEngagedDeep: true,
+  cardsSourceAware: true,
+  // D328, D370 (A24): background pages stored one per loop turn; the card drain gathers them.
+  syncIngestTurns: true,
+  // D356 (A21): sources the user does not use are swept weekly; their unswept copies are re-read before delivery.
+  syncUnusedSweepMs: 7 * 24 * 3_600_000,
   syncPollBehind: true,
   syncPush: true,
   verifyDelivery: true,
@@ -56,6 +70,15 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   readerGateVisits: true,
   // D237 (CL6): the push's candidates for the agent to judge, no reader call.
   pushCandidates: 5,
+  // D301 (A9): an item stored after an acting request that would have been among its candidates is sent at the take.
+  planConflict: true,
+  // D317 (A12): a nudge to ask when the candidates do not settle the request.
+  askNudge: true,
+  pushCandidatesSettled: 2,
+  // D342 (A17): updates name the times they drop.
+  revisionDiff: true,
+  // D376 (A25): checkAction holds a party only Eden's packets showed.
+  partyCheck: true,
 };
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -87,11 +110,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(44);
+    expect(differ.length).toBe(59);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(44);
+    expect(partKeys.size).toBe(59);
   });
 });
 
@@ -209,8 +232,11 @@ class GatedSource implements Source {
 describe("the default after D227 and D228", () => {
   const scope = { tenantId: "t1", userId: "u1", sessionId: "s1" };
   const at = Date.UTC(2026, 9, 20, 9);
+  // The push's candidates (D237) run with no reader since D276 and search the request at observe; these tests are
+  // about the event's own lookup, so they take the push out.
   const build = (source: Source, traces: Trace[]) =>
     new ContextPartner({
+      config: { pushCandidates: 0 },
       sources: async () => [source],
       sourceMap: new SourceMap(":memory:", { seed: 1 }),
       cache: new ItemCache(),

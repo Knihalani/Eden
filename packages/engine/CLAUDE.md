@@ -18,18 +18,24 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `render.ts`, `fold.ts`                                                     | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52)                                                                                               |
 | `judge.ts`                                                                 | The judge's prompt and parser (indexes only, D19)                                                                                                                                                                             |
 | `line.ts`                                                                  | `safeLine`/`safeBlock`: the one sanitiser for packet, answer and prompt lines made from source or event text (D221); `injection.test.ts` is part D's probe as a standing test                                                 |
+| `shield.ts`                                                                | A10's trial packet defences (D306, D307): `GUARD_LINE` (`guardLine`), `quarantine`/`quarantineItem` (`quarantineInstructions`: instruction-shaped text in delivered items replaced by `QUARANTINED`, no model). `shield.test.ts` holds its precision cases |
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
-| `cards.ts`, `intent.ts`, `sync.ts`                                         | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync                                                                                                                                              |
+| `settle.ts`                                                                | `askNudge`'s no-model test of whether the candidates settle a request's people, things and days (D316, D317)                                                                                                                  |
+| `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
+| `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default): identifiers a call adds and its packets showed; `ItemCache.isCorrespondent` reads the user's header addresses |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
 | `ledger.ts`, `usage.ts`                                                    | Not-twice ledger; usage inference for learning (D13, D18)                                                                                                                                                                     |
-| `spans.ts`, `trace.ts`                                                     | Span tracing (off by default, content-free, D56); decision traces                                                                                                                                                             |
+| `spans.ts`, `trace.ts`                                                     | Span tracing (off by default, content-free, D56); decision traces, `explainTrace` (a sentence per trace, D277); `UsageRecord` for the optional `onUsage` sink (whether the agent used each injection, content-free, D293); `ContextPartner.explain` keeps a session's last `EXPLAIN_TRACES` (32) |
 | `gate.ts`                                                                  | Redaction off the event loop through the worker pool (D25, D26)                                                                                                                                                               |
 
 `bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `ingest.bench.ts` (memory per synced
-user, ingest µs/item; the scale anchor, docs/TESTING.md), `index-memory` (the per-user index's heap per item and per
-user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`.
+user, ingest µs/item; the scale anchor, docs/TESTING.md), `users.bench.ts` (many users: memory live and frozen, thaw,
+D325), `storm.bench.ts` (a cold-start storm with warm users' p99, D328), `index-memory` (the per-user index's heap per
+item and per user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`; `many-sources` (one user,
+~1,000 connectors, a session) and `source-days` (the same over whole days with changing sources: listing and card
+calls per user per day, D324).
 
 ## Invariants (with the decisions)
 
@@ -154,7 +160,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   or by a rate limit the connector's 429 pushed back is "failed", not "skipped" (`FetchFailed.guard`, `pushedBack`,
   D232): the item is left out and named. The rate limit's ordinary spend stays "skipped". "unverifiable" (no fetch tool,
   or a null from a source without `fetchReportsGone`) is cited as held, as D126 delivers it. Proactive deliveries keep
-  D126's rule (a failed re-read is delivered as held).
+  D126's rule (a failed re-read is delivered as held). A null "unverifiable" outcome is held per user
+  (`ContextPartner.unverifiable`, the read mark the re-read began under) and `doubted` is false for the item until
+  the source's next signal or `UNVERIFIABLE_HOLD_MS` (10 min) (D298): before, every delivery past `CHECK_REUSE_MS` and
+  every other session re-fetched an MCP item for the same held answer. Only `why: "null"` is held: an MCP error
+  result (`why: "error-result"`) may pass, so holding it would pin a changed item's old copy. `forget` drops it; a
+  failed, flaked or skipped re-read is never held.
 - **Shown means handed out.** With `askDedup`, what an injection showed is noted (`noteShown`) in `handOut`, which
   every path that gives the agent an injection calls (observe's reply, `takePending`, the firewall's finding, the
   ask's own answer), not when `deliver` builds it: a queued packet the agent has not taken was shown nothing, so an
@@ -202,16 +213,57 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   so no `pushRead` (D193 has nothing to reuse), no `onReader` report and no `checkAhead`. The push's candidates go
   through `verifyItems` and `deliver` (reason `candidates:`), framed by `CANDIDATES_LEAD`, with no "nothing found"
   note when there are none (D257). A `readerPushBehind` second pass replaces an untaken first packet only with
-  candidates of its own. It needs the reader dependency, though it makes no call (a no-key server runs no push). Tests
+  candidates of its own. It does not need the reader dependency (D276): with no reader wired (a no-key server) the
+  push still runs when `pushCandidates` > 0; only the reader's own push (`pushCandidates: 0`) needs one. Tests
   of the reader's own wiring set `pushCandidates: 0` (the core, the `reader` and `candidates` parts all do); the lab's
   reader screens run `--preset minus-candidates`.
+- **`planConflict` (D301, on in the default, part `plans`) is checked at the take, not at the store.** The sync's
+  `onStored` only records the ids per session with acting requests (`queuePlanConflicts`); `takePending` and an
+  observe that starts no push run `checkPlans`, so a new item's card (made in the background as it was stored) can
+  count; at the store it has none yet. The rule is
+  `candidatesOf`'s (first `pushCandidates` of the ranked pool, a constraint-like pool), not "the item itself is a
+  constraint": most planted facts carry no constraint card or wording. Built from the cached copy (the source just
+  gave it) with `deliver`, not `deliverChecked`: a copy a change signal has put in doubt (`doubted`) is not sent but
+  kept waiting for a later take, and `planSent` keeps each item to one plan packet a session, past the ledger's
+  cooldown. The lead quotes the user's own request (redacted, one line, double quotes made single, D301). Answer-ahead (records about the request's names and day in the push, A9)
+  was measured and deleted (D300): it cut asks only on the quarter of requests it reached and moved no mix figure.
+- **The candidates nudge an ask when they do not settle the request (`askNudge`, D316, D317: on in the default;
+  `settle.ts`).** When no handed candidate holds one of the request's entities and (if it names a day) one of its
+  days, the lead adds `ASK_NUDGE`, and `Session.nudged` keeps the push pool's ids past the handed ones for that
+  request (`internal.request`): an ask before the next user message puts those that hold an anchor (current cached
+  copies) in at most half its `maxItems` seats and never its own first, so it never cites more than `maxItems`; a
+  settled packet later in the request clears it. Entities match on letter boundaries (`namesEntity`). The nudge asks,
+  never discourages (D257's lesson): hidden +9.2 points Sonnet-graded, the gain all through the agent's asks (A12,
+  docs/research/a12-quality.md). A wording that tells the agent the candidates are wrong ("none of them matches") was
+  not measured: it risks the agent dropping a planted fact already in the packet (it is there in 322 of 422 nudged
+  hidden tasks at $0). Its unit tests are `ask-nudge.test.ts`.
 - **The candidates' packet is not smaller (D258, D259; docs/research/cl-cl8.md).** 200-byte excerpts lost hidden facts
   (−12.8 points, with the no-repeat switch on: shorter excerpts keep the items but not the fact), k 3 saved only over a
   user's days and made the agent ask more one request at a time, k 3 after a session's first request lost hidden facts,
   and removing an item repeated within a request (the push and the rule paths race on the ledger) saved nothing. A
   smaller push makes a longer ask answer (`askDedup` says in full what a packet showed in part). On Pi, Eden's billed
-  cost above the agent alone is prompt-cache writes on a fixed prefix that was not cached (D260; why is open), not the
-  packet's bytes.
+  cost above the agent alone was prompt-cache writes on a fixed prefix too short to cache (D260; proven by D271: ~500
+  tokens on the wire, under Haiku 5.5's 512 minimum). With an agent prompt that caches in every arm (`--tenant-prompt`),
+  the gap is the packet's own tokens written to the cache (+$0.047/1k short, +$0.050/1k over days on the merged tree, Eden 0.65–0.95 s faster;
+  cheaper than the agent alone on every per-call connector plan), and
+  no lexical cut of packet or ask bytes keeps the planted facts (D273).
+- **A settled request gets fewer candidates (`pushCandidatesSettled` 2, D400, D404; part `fewer`).** Only when the
+  request names an anchor and the handed candidates settle it (`settles`); the first one that settles it is always
+  kept. The packet's bytes are what the agent's prompt cache is written with (D403); the cut moves 11 funnel hidden
+  items from the packet to the ask, so measure any change to it live (`eden~V` on Pi), not on the funnel alone.
+- **The candidates' order, a longer ask and constraint-first excerpts were measured and deleted (D266–D268, A2;
+  docs/research/a2-quality.md; code in commit d096b7ba).** A no-model re-rank (one item per title, the request's date
+  lifted) put the planted item in the packet more often (+11 of 384 at $0, +9 of 182 live) and raised no more facts
+  live (−0.6 points, −4.6..+3.4); an ask past held items cost +$0.021/1k for no gain. Each push pass reports its pool,
+  constraint test and handed ids to the lab hook `onPushPool` (ids and flags only, D269), not to `onReader`, whose
+  consumers count reader readings.
+- **No re-show of a candidate across requests (D340 deleted by D380).** A candidate the agent took for an earlier
+  request stays behind the not-twice ledger (D13) at its own request: a fresh paired run did not show the re-show
+  better (docs/research/a26-reshow.md). Measure any revival on `pi-ab --days`, never the funnel (one request a session).
+- **Updates name the times they drop (D342, `revisionDiff`).** `buildUpdate`'s title reads `Ledger.seenTimes`; times
+  are noted only when a copy is handed out (`watchCopies`, from `copiesOf`'s `times`), never when an update is queued
+  (one superseded in the queue was never shown). `timesOf` compares one written form ("HH:MM", "<day> <mon>"), so a
+  reworded time is the same time; a new form it reads must normalise too, or an unchanged time is called gone.
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read
@@ -225,6 +277,21 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   shares `one()`'s key (`pageKey`); a peek with its own key would silently miss. `Sync.freshen` skips a source
   whose on-demand poll gave up within `demandTimeoutMs` (= `sourceTimeoutMs`), so the next lookup searches it live
   instead of waiting on the same listing.
+- **Ref notices (D347, `sourceRefs`).** A notice naming the refs that changed doubts only those items: `refreshing`
+  (by user and item, with the read mark at the notice) holds each background read until it lands, `doubted` reads it,
+  and `check` returns it (raced against `verifyTimeoutMs`) instead of a second call, unless a signal came after the
+  notice. The read is stored through `Sync.ingest` under the read mark its call began with (D133), after the same
+  removal check as `sourceItems` (`heldGoneSeq`, D160/D176), with the gated ref (never the raw one, D10), and noted in
+  the user's live sessions' `checks` (`noteRefReads`, changed copies only), so a pool built before it applies it. The first ref not read
+  raises `sourceNotice`'s plain signal before its item's doubt is lifted; reads stop when the user is no longer synced
+  (`Sync.notifying`). A new delivery path must keep going through `check`/`verifyItems`, or a named item's old copy
+  goes out.
+- **Two ways to make the signal path faster were measured and deleted (A18, docs/research/a18-latency.md).** A complete
+  poll after a signal standing in for re-reads (`verifyByPoll`, D345) delivered stale copies (5 → 12 of 101 updates):
+  listings are not reliably newest-modified first (a calendar lists future events first, a chat edit keeps its time),
+  so a poll can stop before a changed item. Re-reading an ask's likely citations beside its poll (`askVerifyEarly`,
+  D346) cut the ask's p99 by about a second but read items the answer then left out (+0.06–0.09 connector calls a
+  task). Under signal-only notices the agent's wait is the re-read itself (D126, D211), bounded by `verifyTimeoutMs`.
 - `fetchChecked`'s `gone` needs `Source.fetchReportsGone`: an MCP tool's null fetch proves nothing, so verification
   never deletes an MCP item on its own; deletions there come from `sourceRemoved` or the sweep.
 - **Cached items' `text` is a getter over deflated bytes (D188).** A stored copy is not the object `put` was given;
@@ -237,6 +304,59 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   1.2 s to 0.1-0.2 s, but one process's capacity inside a 100 ms p99 rose only 1.46x there and fell 3-15% on
   router-sim realistic, for 1.19x the CPU per item. The code is in commit b217ae1d (`ingest.ts`, `prepared.ts`,
   `ingest.test.ts`); building it again needs a decision that accepts those numbers.
+- **Many sources (D261–D265, docs/research/a1-scale.md).** The lab's worlds have five sources and fit the sync cap, so
+  the funnel cannot see a user with hundreds: screen such changes with `-- --noise-sources 995 --limit 16` (and
+  `--jobs 2`: the pre-D263 default needed ~4.5 GB a process) and `bench/many-sources.bench.ts`. A synced copy the
+  user's cap cut answers nothing for its source (`Sync.complete`, `syncLocalComplete`): any new path that answers from
+  the local index must go through `localOf`, or it misses what is older than the cut. Routing over many sources needs
+  evidence (mentions, `routeLocalHits`): with a flat prior it is a lottery. Over `syncPollWidth`, `searchLive` routes
+  once, before the poll, and searches the head of that ranking: a second route would draw apart, and an ask must
+  never answer a stale copy it did not poll (D127, D263's review). Per-(user, source) state is multiplied by
+  the source count: keep it lazy (the fan-out's histograms were 8 KB a pair before D261).
+- **Used sources (D320–D323, docs/research/a13-scale.md).** `Sync.engage` marks a source used when a lookup routes to
+  it on evidence of its items (`entityHits`, or `routeLocalHits`), never on the prior's draw or a sketch match alone
+  (counted, sketch matches doubled card calls for no hidden fact), the 64 most recent a user. Used sources drive two things: their cut copies are
+  read whole again and kept first by the trim, up to half the cap in all (`syncEngagedDeep`; unbounded, two used
+  mailboxes filled the cap and stopped every other source's stores), and, past 32 sources, only their items (and items
+  naming a name the user's requests named) reach the card model (`cardsSourceAware`; `CardEnricher.enqueue`'s
+  `defer`). A new path that stores synced items must pass `cardDefer`, or a 1,000-source user's cards go back to every
+  item. `syncKeepCut` filters only background stores: a lookup's on-demand poll still stores past the cut (filtering it
+  lost 2 of 96 hidden facts: what it stores is routing evidence), and the trim waits for 1.5x the cap (trimming the
+  backfill's overshoot back to the cap also lost 2). The sketch (`sketch.ts`) is per (user, source) in `SourceSync`,
+  filled from every listed item in `store`, folded at `warmUp`.
+- **A budget for live searches of cut copies was measured and deleted (D390, D391, docs/research/a28-scale.md).**
+  Searching live only the 4 cut copies with the most routing evidence halved Eden's calls at 1,000 sources live, but
+  left its path time unchanged (one live search of a cut copy that matters costs a connector's latency) and hidden
+  50 → 46 of 72; the code is in commit def8c153. A fixed evidence threshold lost a planted fact behind a world source
+  whose only evidence was its sketch. A lever for path time must take every live search off the push.
+- **Idle users are frozen (D325, docs/research/a14-scale-users.md).** `ItemCache` holds a user idle for
+  `freezeIdleMs` (30 min) as one zstd blob (`FrozenUser`) and thaws them exactly on next use. Every reader of a
+  user's state goes through `peek`/`touch` (which thaw and mark the user seen); only `revision` and `syncedCount`
+  read a frozen user as is. A new per-user field of `UserCache` must be carried by `freezeSteps`/`thawSteps` (or be
+  derived and rebuilt), and `cache-freeze.test.ts`'s twin snapshot extended to read it. A new entry point that serves
+  a user awaits `cache.ready(scope)` first, as `observe`, `ask` and `checkAction` do, or its first read thaws
+  synchronously (~110-190 ms at 3,000 items) with every other request waiting. Bench: `bench/users.bench.ts`;
+  on Bun 1.4 `heapUsed` already counts typed arrays' stores and `external` counts them again (D372): report each
+  on its own, and RSS, never their sum.
+- **`syncIngestTurns` (D328, on in the default since D370).** A background sync page waits its turn (one per
+  event-loop turn) before it is redacted and stored, so a cold-start storm no longer stalls every request
+  (`bench/storm.bench.ts`). The card drain gathers what still waits its turn before calling (`CardEnricher.gather`,
+  wired by the partner, at most `GATHER_MS` 250 ms): without it the drain ran on one page at a time (funnel card calls
+  446 to 567); with it 376, the same items carded. A new await between a page's turn and its store, or in the drain's
+  no-gather path, moves those batches: re-run the funnel's `merged cards use` after touching either.
+- **The sync's per-source ids are an `IdSet` (D371, `@eden/primitives`).** Typed arrays, not one string per id: they
+  outlive a frozen user's cache. `has` is ~90 ns and iterating 3,000 ~0.2 ms (against ~6 ns and ~5 µs for a `Set`):
+  keep iteration off per-item paths.
+- **Unused sources are swept weekly (D356, `syncUnusedSweepMs`, docs/research/a21-scale.md).** Safe only because a
+  skipped sweep's copies are re-read at delivery: `doubted` is true for a copy older than `syncSweepMs` whose source's
+  daily sweep the trial skipped (`Sync.sweepLapsed`, which reads `SourceSync.skipped`, not the sweep's age: an idle
+  user's late sweep must doubt nothing) and for any copy the last sweep missed (`Sync.sweepMissed`). Not "is the source
+  used now": a lookup engages its sources before its delivery is verified. An unswept copy no re-read confirms is left
+  out (never delivered as held, unlike D126's other doubts); after a null re-read it calls `Sync.sweepSoon` (an error or
+  a guard's skip does not). A new delivery path that skips
+  `doubted`/`verifyItems` would hand over items the weekly sweep has not checked; a source that cannot find an item by
+  ref (`Source.fetchesById` false: an `McpSource` with no `fetchTool` still has a `fetch` that answers null) must stay
+  on the daily sweep (`onLongSweep`); a wrapper around a `Source` must copy `fetchesById` (as `notifies`).
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

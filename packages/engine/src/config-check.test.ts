@@ -33,7 +33,8 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     expect(checkEngineConfig({ cards: true })).toEqual({ cards: true });
     expect(checkEngineConfig({ cards: true }, { deps: { cards: true } })).toEqual({ cards: true });
     expect(checkEngineConfig({ cardItems: 2 }, { deps: { cards: true } })).toEqual({ cardItems: 2 });
-    expect(() => checkEngineConfig({ askReaderPool: 20 }, { deps: { cards: true } })).toThrow(/reader dependency/);
+    // `askReaderPool` also cuts the candidates' pool, which needs no reader since D276: a reader-only key here.
+    expect(() => checkEngineConfig({ askReaderWaitMs: 20 }, { deps: { cards: true } })).toThrow(/reader dependency/);
     // Taking a part out (its core value) needs no dependency either.
     expect(checkEngineConfig({ cards: false, askReader: false, askReaderPool: 30 })).toEqual({
       cards: false,

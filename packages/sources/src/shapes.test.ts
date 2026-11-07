@@ -59,5 +59,6 @@ describe("query shapes", () => {
         }
       }
     }
-  });
+    // About 0.6-0.9 s alone; under a loaded parallel `bun run check` it ran past the 5 s default (audit A5).
+  }, 30_000);
 });

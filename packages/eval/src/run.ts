@@ -480,7 +480,14 @@ export function proxyOf(m: Metrics) {
  */
 export function unwiredFlags(config: Partial<EngineConfig>, wired: { reader: boolean }): string[] {
   const out: string[] = [];
-  if (config.askReader && !wired.reader) out.push("askReader (needs a reader: pass --reader stub|oracle)");
+  // The push's candidates (D237) run with no reader (D276): only the reader's own reading is unwired then.
+  if (config.askReader && !wired.reader) {
+    out.push(
+      (config.pushCandidates ?? 0) > 0
+        ? "askReader's reading (needs a reader: pass --reader stub|oracle; the push's candidates run without one, D276)"
+        : "askReader (needs a reader: pass --reader stub|oracle)",
+    );
+  }
   if (config.cards) out.push("cards (needs a card maker; the eval wires none, so no card is made or matched)");
   if (config.intent) out.push("intent (needs the card maker's intent requests; not wired)");
   return out;

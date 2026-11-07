@@ -50,14 +50,33 @@ export const PARTS = {
     syncPush: false,
     verifyDelivery: false,
     readerVerifyAfter: false,
+    syncPollWidth: 0,
+    syncBackfillLanes: 1,
+    syncIngestTurns: false,
+    syncLocalComplete: false,
+    syncKeepCut: false,
+    syncEngagedDeep: false,
+    syncUnusedSweepMs: 0,
   },
   /**
-   * A delivered item its source signalled a change to since it was read is read again first (D126); a handed item
-   * changed at its source is sent again as an "updated:" packet (D205).
+   * Routing by the user's own index: sources holding the request's best local matches first (D265), and by each
+   * source's vocabulary sketch (D322).
    */
-  freshness: { verifyDelivery: false, readerVerifyAfter: false, revisionNotice: false },
+  routing: { routeLocalHits: false, routeSketch: false },
+  /**
+   * A delivered item its source signalled a change to since it was read is read again first (D126); a handed item
+   * changed at its source is sent again as an "updated:" packet (D205), naming the times it no longer has (D342).
+   */
+  freshness: { verifyDelivery: false, readerVerifyAfter: false, revisionNotice: false, revisionDiff: false },
   /** Implication cards (D59, D66), and with them the intent index, which their calls write. */
-  cards: { cards: false, cardsEconomy: false, intent: false, cardsLean: false, intentByKind: false },
+  cards: {
+    cards: false,
+    cardsEconomy: false,
+    intent: false,
+    cardsLean: false,
+    intentByKind: false,
+    cardsSourceAware: false,
+  },
   /** The intent index (D87, D109), what it reads (`cardsLean`, D125) and its carded cut (`intentByKind`, D200). */
   intent: { intent: false, cardsLean: false, intentByKind: false },
   /** The ask-time reader and its push (D95, D96, D99). */
@@ -74,12 +93,34 @@ export const PARTS = {
     askReaderPool: 30,
     askReaderItemChars: 400,
     pushCandidates: 0,
+    askNudge: false,
+    pushCandidatesSettled: 0,
   },
   /**
    * The push's candidates for the agent to judge, in place of the reader's push and ask readings (D236, D237): out,
    * the reader reads both again.
    */
-  candidates: { pushCandidates: 0 },
+  candidates: { pushCandidates: 0, askNudge: false, pushCandidatesSettled: 0 },
+  /**
+   * An item stored after a request the push acted on, that would have been among its candidates, is sent at the next
+   * take whatever the agent asks then (D301).
+   */
+  plans: { planConflict: false },
+  /**
+   * The candidates' nudge to ask when they do not settle the request's people, things and day, and the ask's look past
+   * the handed items (D316, D317).
+   */
+  nudge: { askNudge: false },
+  /**
+   * A request the candidates settle (its people, things and day, `settle.ts`) gets the first two of them, through the
+   * first that settles it, not five (D400, promoted by D404).
+   */
+  fewer: { pushCandidatesSettled: 0 },
+  /**
+   * `checkAction` holds a call adding a recipient, guest or payee account only Eden's packets showed, not the user's
+   * request or correspondence (D375, D376).
+   */
+  parties: { partyCheck: false },
   /** A lookup does not wait for its probes past its own search (D47's grace, 100 ms, taken out). */
   probeGrace: { probeGraceMs: 100 },
 } satisfies Record<string, Partial<EngineConfig>>;

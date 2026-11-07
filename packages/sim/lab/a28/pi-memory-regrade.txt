@@ -1,0 +1,6 @@
+base-41 heap max MB 10146 rss max MB 13183 | regrade concerns: answers 0 confirmed 0 {}
+cut-41 heap max MB 10641 rss max MB 13708 | regrade concerns: answers 1 confirmed 1 {'control': (1, 1)}
+base-42a heap max MB 6315 rss max MB 7699 | regrade concerns: answers 1 confirmed 1 {'control': (1, 1)}
+cut-42a heap max MB 6140 rss max MB 7630 | regrade concerns: answers 2 confirmed 1 {'neutral': (1, 0), 'control': (1, 1)}
+base-42b heap max MB 6138 rss max MB 7554 | regrade concerns: answers 0 confirmed 0 {}
+cut-42b heap max MB 6263 rss max MB 7647 | regrade concerns: answers 0 confirmed 0 {}

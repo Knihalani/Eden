@@ -1,0 +1,7 @@
+kind     tasks        n  eden~ahead     eden
+control  ahead       36           0        0
+control  no ahead   108           5        3
+hidden   ahead       37          26       29
+hidden   no ahead   107          75       77
+neutral  ahead       33           1        2
+neutral  no ahead   111           1        1

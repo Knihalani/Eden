@@ -1,0 +1,11 @@
+a22-long-41                              0.0768
+a22-long-42                              0.0789
+a22-short-41                             0.1536
+a22-short-42                             0.1451
+a22-tgt-41                               0.1248
+a22-tgt-42                               0.1330
+a22-tgt-43                               0.1337
+a22-tgt-44                               0.1366
+redraw (cards-enrich --intent)           0.1986
+sonnet regrades                          0.3985
+TOTAL                                    1.5797
