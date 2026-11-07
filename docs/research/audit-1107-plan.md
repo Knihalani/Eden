@@ -17,3 +17,26 @@ on train; a new blind suite is written for the end of the day if a quality claim
 | A5 | Correctness: a deep bug hunt over engine, server, client, sources (the `/deep-audit` method) with fixes | D281–D285 | $0.5 |
 
 Later waves start from what wave A finds.
+
+## Later waves (started from what earlier sessions found)
+
+| Session | Area |
+| --- | --- |
+| A6 | Moonshots (new shapes for cost, speed and quality) |
+| A7 | Adoption, part 2 |
+| A8 | Connector calls and their plan pricing |
+| A9 | Late facts and plans that conflict (`planConflict`) |
+| A10 | Live prompt-injection suite against the candidates packet |
+| A11 | Second bug hunt on the day's new code |
+| A12 | Powered quality measurement and the ask nudge (`askNudge`) |
+| A13 | Scale part 2: source-aware cards and sweep, routing at 1,000 sources |
+| A14 | Many users per server |
+| A15 | Moonshot: retrieval for facts that share no words with the request |
+| A16 | Moonshot: Eden inside the agent loop |
+| A17 | Quality over long horizons |
+| A18 | Speed and latency end to end |
+| A19 | Blind suite `heldout17` for the end-of-day check |
+| A20 | Security review of the day's additions |
+| A21 | Scale part 3: sweep unused sources less often, live check at 1,000 sources |
+| A22 | Quality: a no-model link line on each candidate; a full intent re-draw spread |
+| A23 | Adoption: a fresh-eyes onboarding walkthrough on three paths |
