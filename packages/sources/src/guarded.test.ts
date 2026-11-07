@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
-import { sharedKey, SourceFanout, type SharedCalls } from "./guarded";
+import { reachedSource, sharedKey, SourceFanout, type SharedCalls } from "./guarded";
 import { PlannedSource, QueryPlanner } from "./planner";
 import type { SearchQuery, Source } from "./source";
 
@@ -100,6 +100,55 @@ describe("SourceFanout", () => {
     const [out] = await f.search([src], query("b"), { timeoutMs: 1_000 });
     expect(out!.status).toBe("limited");
     expect(src.calls).toBe(1);
+  });
+
+  test("the connector's own 429 is throttled (the call reached it), our own limit's skip is limited (D212)", async () => {
+    const src = source(async () => {
+      throw new Error("MCP error -32000: 429 Too Many Requests");
+    });
+    const f = new SourceFanout({ sanitize: (x) => x, cacheBytes: 0, breaker: { minCalls: 100 } });
+    const [first] = await f.search([src], query("a"), { timeoutMs: 1_000 });
+    expect(first!.status).toBe("throttled");
+    expect(reachedSource(first!)).toBe(true);
+    const [second] = await f.search([src], query("b"), { timeoutMs: 1_000 });
+    expect(second!.status).toBe("limited");
+    expect(reachedSource(second!)).toBe(false);
+    // A plain failure stays an error; "rate limit" and "too many requests" in prose are throttled too.
+    for (const [message, status] of [
+      ["upstream 500", "error"],
+      ["rate limit exceeded", "throttled"],
+      ["Too many requests", "throttled"],
+    ] as const) {
+      const g = new SourceFanout({ sanitize: (x) => x, cacheBytes: 0 });
+      const [out] = await g.search([source(async () => Promise.reject(new Error(message)))], query(), {
+        timeoutMs: 1_000,
+      });
+      expect(out!.status).toBe(status);
+    }
+  });
+
+  test("a listing's and a fetch's 429 say throttled too", async () => {
+    const f = new SourceFanout({ sanitize: (x) => x, cacheBytes: 0 });
+    const s: Source = {
+      id: "s",
+      kind: "test",
+      description: "",
+      search: async () => [],
+      list: async () => Promise.reject(new Error("429 Too Many Requests")),
+      fetch: async () => Promise.reject(new Error("429 Too Many Requests")),
+    };
+    expect(await f.list(s, scope, undefined, 10, { timeoutMs: 1_000 })).toBe("throttled");
+    const g = new SourceFanout({ sanitize: (x) => x, cacheBytes: 0 });
+    expect(await g.fetchChecked(s, scope, "1", { timeoutMs: 1_000 })).toEqual({ status: "failed", why: "throttled" });
+    const h = new SourceFanout({ sanitize: (x) => x, cacheBytes: 0 });
+    const flaky = { ...s, fetch: async () => Promise.reject(new Error("socket hang up")) };
+    expect(await h.fetchChecked(flaky, scope, "1", { timeoutMs: 1_000 })).toEqual({ status: "failed", why: "error" });
+    expect(await h.fetchChecked({ ...s, fetch: undefined }, scope, "1", { timeoutMs: 1_000 })).toEqual({
+      status: "failed",
+      why: "no-fetch",
+    });
+    const quiet = { ...s, fetch: async () => null };
+    expect(await h.fetchChecked(quiet, scope, "1", { timeoutMs: 1_000 })).toEqual({ status: "failed", why: "null" });
   });
 
   test("forget drops a user's cached results", async () => {
@@ -336,7 +385,7 @@ describe("SourceFanout fetch", () => {
         "1",
         opts,
       ),
-    ).toEqual({ status: "failed" });
+    ).toEqual({ status: "failed", why: "null" });
     expect(
       await f.fetchChecked(
         source(async () => []),
@@ -344,11 +393,14 @@ describe("SourceFanout fetch", () => {
         "1",
         opts,
       ),
-    ).toEqual({ status: "failed" });
+    ).toEqual({ status: "failed", why: "no-fetch" });
     const throws = readable(async () => {
       throw new Error("500");
     });
-    expect(await f.fetchChecked({ ...throws, fetchReportsGone: true }, scope, "2", opts)).toEqual({ status: "failed" });
+    expect(await f.fetchChecked({ ...throws, fetchReportsGone: true }, scope, "2", opts)).toEqual({
+      status: "failed",
+      why: "error",
+    });
   });
 
   test("dropResults: the next search of that user's source asks it again; other users and sources keep theirs", async () => {

@@ -1,0 +1,403 @@
+{
+ "main|signals": {
+  "callsPerSession": 6.856,
+  "requestCallsPerLookup": 0.75,
+  "backgroundAndBackfill": 696,
+  "reReads": 571,
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 43,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 1
+  },
+  "precision": 0.588,
+  "recall": 0.454,
+  "falseFireRate": 0.008,
+  "askRecallAt5": 0.836
+ },
+ "default|signals": {
+  "callsPerSession": 6.871,
+  "requestCallsPerLookup": 0.754,
+  "backgroundAndBackfill": 696,
+  "reReads": 575,
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 43,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "precision": 0.588,
+  "recall": 0.454,
+  "falseFireRate": 0.008,
+  "askRecallAt5": 0.836
+ },
+ "gmail30|signals": {
+  "callsPerSession": 5.536,
+  "requestCallsPerLookup": 0.679,
+  "backgroundAndBackfill": 459,
+  "reReads": 470,
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 45,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "precision": 0.629,
+  "recall": 0.463,
+  "falseFireRate": 0.008,
+  "askRecallAt5": 0.858
+ },
+ "coalesce|signals": {
+  "callsPerSession": 6.871,
+  "requestCallsPerLookup": 0.754,
+  "backgroundAndBackfill": 696,
+  "reReads": 575,
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 43,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "precision": 0.588,
+  "recall": 0.454,
+  "falseFireRate": 0.008,
+  "askRecallAt5": 0.836
+ },
+ "main|payload": {
+  "callsPerSession": 5.278,
+  "requestCallsPerLookup": 0.217,
+  "backgroundAndBackfill": 698,
+  "reReads": 0,
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 38,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "precision": 0.581,
+  "recall": 0.442,
+  "falseFireRate": 0.008,
+  "askRecallAt5": 0.836
+ },
+ "default|payload": {
+  "callsPerSession": 5.278,
+  "requestCallsPerLookup": 0.217,
+  "backgroundAndBackfill": 698,
+  "reReads": 0,
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 38,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "precision": 0.581,
+  "recall": 0.442,
+  "falseFireRate": 0.008,
+  "askRecallAt5": 0.836
+ },
+ "gmail30|payload": {
+  "callsPerSession": 3.845,
+  "requestCallsPerLookup": 0.214,
+  "backgroundAndBackfill": 463,
+  "reReads": 0,
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 40,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "precision": 0.626,
+  "recall": 0.457,
+  "falseFireRate": 0.008,
+  "askRecallAt5": 0.858
+ },
+ "coalesce|payload": {
+  "callsPerSession": 5.278,
+  "requestCallsPerLookup": 0.217,
+  "backgroundAndBackfill": 698,
+  "reReads": 0,
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 38,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "precision": 0.581,
+  "recall": 0.442,
+  "falseFireRate": 0.008,
+  "askRecallAt5": 0.836
+ },
+ "t3|signals-before": {
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 43,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 1
+  },
+  "freshness": {
+   "checked": 575,
+   "confirmed": 542,
+   "changed": 11,
+   "gone": 13,
+   "failed": 9,
+   "calls": 575
+  },
+  "precision": 0.588,
+  "recall": 0.454,
+  "askRecallAt5": 0.836
+ },
+ "t3|none-after": {
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 46,
+   "staleDelivered": 7
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 7,
+   "deletedCited": 12
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "precision": 0.574,
+  "recall": 0.46,
+  "askRecallAt5": 0.847
+ },
+ "t3|signals-after": {
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 43,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 579,
+   "confirmed": 545,
+   "changed": 11,
+   "gone": 14,
+   "failed": 9,
+   "calls": 579
+  },
+  "precision": 0.588,
+  "recall": 0.454,
+  "askRecallAt5": 0.836
+ },
+ "t3|payload-after": {
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 38,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "precision": 0.581,
+  "recall": 0.442,
+  "askRecallAt5": 0.836
+ },
+ "t3|signals-noverify-after": {
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 44,
+   "staleDelivered": 7
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 7,
+   "deletedCited": 12
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "precision": 0.576,
+  "recall": 0.46,
+  "askRecallAt5": 0.847
+ },
+ "t3|none-final": {
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 46,
+   "staleDelivered": 7
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 7,
+   "deletedCited": 12
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "precision": 0.574,
+  "recall": 0.46,
+  "askRecallAt5": 0.847
+ },
+ "t3|signals-final": {
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 43,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 583,
+   "confirmed": 549,
+   "changed": 11,
+   "gone": 14,
+   "failed": 9,
+   "calls": 579
+  },
+  "precision": 0.588,
+  "recall": 0.454,
+  "askRecallAt5": 0.836
+ },
+ "t3|payload-final": {
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 38,
+   "staleDelivered": 1
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 0,
+   "deletedCited": 0
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "precision": 0.581,
+  "recall": 0.442,
+  "askRecallAt5": 0.836
+ },
+ "t3|signals-noverify-final": {
+  "updates": {
+   "planned": 101,
+   "applied": 101,
+   "updatedDelivered": 44,
+   "staleDelivered": 7
+  },
+  "deletes": {
+   "planned": 34,
+   "applied": 34,
+   "deletedDelivered": 7,
+   "deletedCited": 12
+  },
+  "freshness": {
+   "checked": 0,
+   "confirmed": 0,
+   "changed": 0,
+   "gone": 0,
+   "failed": 0,
+   "calls": 0
+  },
+  "precision": 0.576,
+  "recall": 0.46,
+  "askRecallAt5": 0.847
+ }
+}

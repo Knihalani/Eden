@@ -152,21 +152,36 @@ describe("verifyDelivery: a copy read before its source signalled a change is re
     expect(off.fetches).toBe(0);
   });
 
-  test("a re-read that fails, or a source whose null proves nothing: delivered as held", async () => {
-    for (const src of [new Listed("notes"), new Listed("notes", false)]) {
-      seed(src);
-      const { partner, advance, now } = await synced(src);
-      advance(5 * MIN);
-      partner.sourceChanged(scope, "notes");
-      src.failSearch = true;
-      if (src.fetchReportsGone) src.failFetch = true;
-      else src.docs.delete("q1"); // A null from a source that does not say null means gone.
-      advance(1 * MIN);
-      // The ask path: what it cites is checked too.
-      const r = await partner.ask({ ...scope, sessionId: "s2", question: "Where is the quarterly offsite?" });
-      expect(r.citations.map((c) => c.itemId)).toContain(itemId("notes", "q1"));
-      expect(src.fetches).toBeGreaterThanOrEqual(1);
-    }
+  test("a source whose null proves nothing: delivered as held, on the ask path too", async () => {
+    const src = new Listed("notes", false);
+    seed(src);
+    const { partner, advance } = await synced(src);
+    advance(5 * MIN);
+    partner.sourceChanged(scope, "notes");
+    src.failSearch = true;
+    src.docs.delete("q1"); // A null from a source that does not say null means gone.
+    advance(1 * MIN);
+    const r = await partner.ask({ ...scope, sessionId: "s2", question: "Where is the quarterly offsite?" });
+    expect(r.citations.map((c) => c.itemId)).toContain(itemId("notes", "q1"));
+    expect(src.fetches).toBeGreaterThanOrEqual(1);
+  });
+
+  test("a re-read that fails: delivered as held unasked, but an ask leaves it out and says so (D211)", async () => {
+    const src = new Listed("notes");
+    seed(src);
+    const { partner, advance, now } = await synced(src);
+    advance(5 * MIN);
+    partner.sourceChanged(scope, "notes");
+    src.failSearch = true;
+    src.failFetch = true;
+    advance(1 * MIN);
+    const r = await partner.ask({ ...scope, sessionId: "s2", question: "Where is the quarterly offsite?" });
+    expect(r.citations.map((c) => c.itemId)).not.toContain(itemId("notes", "q1"));
+    expect(r.answer).toContain("could not be re-checked");
+    expect(src.fetches).toBeGreaterThanOrEqual(1);
+    // A proactive delivery still delivers it as held (D126): the ask's answer is the one taken as the sources' word.
+    const got = await say(partner, "Where is the quarterly offsite?", "s1", now());
+    expect(got.flatMap((i) => i.citations.map((c) => c.itemId))).toContain(itemId("notes", "q1"));
   });
 });
 
