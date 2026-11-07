@@ -73,11 +73,16 @@ and a statement on training (none).
 - **Prompt injection:** source text is wrapped and labelled as data; model prompts say item text is never
   instructions; the judge returns indexes only and its free text never reaches the agent, and ask answers are wrapped
   in the same data envelope, so a malicious item cannot add words of its own beyond being picked (D11, D19).
+  Text from a source or an event put on one line of a packet, an answer or a prompt goes through one sanitiser
+  (`safeLine`, D221): no line break of any kind, control or bidi character, and no tag opener, so it cannot forge
+  another item or candidate line or close a fence; `injection.test.ts` checks 20 such payloads on every run.
   The agent still receives the item text: tenants should treat injections as untrusted input.
 - **Deletion:** `POST /v1/forget` drops a user's (or one source's) cache and map rows and the user's live sessions,
   aborting in-flight lookups so nothing is re-cached afterwards (D17), and closes the user's (or that source's) source
   connections (D108). It does not change the configuration: the next lookup reconnects if the directory still lists
   the source, so revoking access means removing it from the directory too.
+- **Secret gate gaps closed (D220):** a bare New Relic user key and a presigned or signed object URL's signature (S3,
+  GCS) are redacted; a Sentry DSN is not (public by Sentry's design).
 - **Fail-open client:** an Eden outage never blocks the tenant's agent.
 
 ## Open items
