@@ -170,6 +170,13 @@ describe("OpenRouterModel", () => {
     expect((await model.chat(req)).stopped).toBe(false);
     native = undefined;
     expect("stopped" in (await model.chat(req))).toBe(false);
+    // Audit A5: OpenAI's "stop" and Google's "STOP" say either a stop hit or a natural end: unset, not false.
+    for (const either of ["stop", "STOP"]) {
+      native = either;
+      expect("stopped" in (await model.chat(req))).toBe(false);
+    }
+    native = "length";
+    expect((await model.chat(req)).stopped).toBe(false);
   });
 
   test("data collection is denied unless the caller (the lab, on free models) explicitly allows it", async () => {

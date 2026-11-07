@@ -316,6 +316,19 @@ function scanAssignments(
   return found;
 }
 
+/**
+ * Where `redactString`'s assignment pass would put a sentinel in `s`: each credential key's whole value, quotes
+ * included. The gate (`sanitizeForStore`) adds these to its rules' spans when a rule fires, since a rule's span can
+ * start inside a quoted value (D13's keyword rule takes `"correct` of `"correct horse battery staple"`), and the
+ * pass run afterwards on the gated text then sees a bare sentinel where the quoted value began and stops there
+ * (audit A5: the rest of the passphrase was stored).
+ */
+export function assignmentSpans(s: string): [number, number][] {
+  const spans: [number, number][] = [];
+  scanAssignments(s, (_keyEnd, valueStart, valueEnd) => spans.push([valueStart, valueEnd]));
+  return spans;
+}
+
 export function redactString(s: string): string {
   // No separate pre-filter for the token patterns: `replace` already returns
   // `s` untouched when nothing matches, so a gate would only scan the string a

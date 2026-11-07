@@ -87,7 +87,9 @@ export function createHandler(
           const checked = checkEvent(body);
           if (!checked.ok) return fail(400, checked.error);
           const waitMs = Math.max(0, Math.min(5_000, Number(url.searchParams.get("waitMs") ?? 0) || 0));
-          return json(await partner.observe(checked.value, { waitMs }));
+          // `?shadow=1`: an integration trying Eden without injecting (the proxy's shadow mode): nothing is learned.
+          const shadow = url.searchParams.get("shadow") === "1";
+          return json(await partner.observe(checked.value, { waitMs, ...(shadow ? { shadow } : {}) }));
         }
         case "/v1/check": {
           // The action firewall: a tool call the agent is about to make, checked against what is held (no model).
@@ -105,7 +107,8 @@ export function createHandler(
           const bad = badId(body, ["userId", "sessionId"]);
           if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
           const who = { tenantId: tenant, userId: body.userId as string, sessionId: body.sessionId as string };
-          return json({ injections: partner.takePending(who) });
+          const shadow = url.searchParams.get("shadow") === "1";
+          return json({ injections: partner.takePending(who, shadow ? { shadow } : {}) });
         }
         case "/v1/whoami": {
           // The client's `health()`: the key, the tenant and the ids are checked as any route checks them, and nothing

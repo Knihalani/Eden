@@ -54,7 +54,17 @@ async function serve(config: ServerConfig): Promise<void> {
     processes: config.child?.count ?? 1,
     onShadow: process.env.EDEN_TRACE === "1" ? (r) => console.log(JSON.stringify({ shadow: r })) : undefined,
     onTrace: process.env.EDEN_TRACE === "1" ? (t) => console.log(JSON.stringify(t)) : undefined,
+    // Whether the agent used each injection (D293), for `bun run digest`; content-free like the traces.
+    onUsage: process.env.EDEN_TRACE === "1" ? (u) => console.log(JSON.stringify({ usage: u })) : undefined,
   });
+  // The background sync's own connector calls (backfill, sweeps) are made outside any request, so no trace has them:
+  // with EDEN_TRACE=1 its cumulative counters are logged once a minute, per process, for `bun run digest` (D293).
+  // `run` tells processes apart where a pid cannot: a container restart is pid 1 again, and replicas share it.
+  const sync = partner.sync;
+  if (process.env.EDEN_TRACE === "1" && sync) {
+    const run = crypto.randomUUID();
+    setInterval(() => console.log(JSON.stringify({ sync: { run, pid: process.pid, ...sync.stats } })), 60_000).unref();
+  }
   // The secret gate compiles its rules on first use; doing it here keeps that stall off the first request.
   warmGate();
   const server = Bun.serve({

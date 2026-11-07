@@ -507,6 +507,11 @@ export interface Background {
    */
   sourceCalls?: number;
   setupSourceCalls?: number;
+  /**
+   * A stream whose Eden has no model roles (`+nokey`, D291): booked for its connector calls only, and left out of
+   * `backfillShares`, which spreads each seed's card spend over the task runs with cards on.
+   */
+  noModels?: boolean;
 }
 
 /**
@@ -518,6 +523,7 @@ export interface Background {
  */
 export function backfillShares(background: Background[]): Map<string, number> {
   const bySeed = new Map<number, { usd: number; runs: number }>();
+  background = background.filter((b) => !b.noModels);
   for (const b of background) {
     const s = bySeed.get(b.seed) ?? { usd: 0, runs: 0 };
     s.usd += b.cardsUsd + b.bridgeUsd;
