@@ -366,6 +366,8 @@ export class SimSource implements Source {
   notifies = false;
   /** The world is the source: a ref it no longer has was deleted. */
   readonly fetchReportsGone = true;
+  /** Fetches by ref (`--null-proves-nothing` makes its null prove nothing; it still finds what exists, D356). */
+  readonly fetchesById = true;
   /** The calendar lists by time, as its list call does (D44). */
   get listsByTime(): boolean {
     return this.id === "calendar";

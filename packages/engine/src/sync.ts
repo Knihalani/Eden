@@ -505,7 +505,9 @@ export class SyncManager {
    */
   sweepMissed(scope: Scope, sourceId: string, itemId: string): boolean {
     if (!((this.o.unusedSweepMs ?? 0) > 0)) return false;
-    return this.users.get(scopeKey(scope))?.sources.get(sourceId)?.missed.has(itemId) === true;
+    // Only a source whose re-read can confirm the item: for another, it would only be withheld (the review, D356).
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    return s !== undefined && s.fetches && s.missed.has(itemId);
   }
 
   /** A re-read found the item at its source (`verifyDelivery`): no longer counted as missed by a sweep. O(1). */
@@ -1229,7 +1231,8 @@ export class SyncManager {
   /** Whether a source's copy goes by its notifications (`push` and the source `notifies`). */
   private notes(s: SourceSync, source: Source): void {
     s.notifies = this.o.push === true && source.notifies === true;
-    s.fetches = typeof source.fetch === "function";
+    // Not every `fetch` can find an item: an MCP source without a get tool answers null to all (the review, D356).
+    s.fetches = typeof source.fetch === "function" && (source.fetchesById ?? source.fetchReportsGone === true);
   }
 
   private failed(s: SourceSync, why: string): void {

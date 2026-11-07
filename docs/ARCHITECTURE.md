@@ -214,11 +214,12 @@ and a sweep stops once it has listed every id it holds for the source (`syncKeep
 every source once a day (deletes need it): about 1,000 listing calls a user a day at 1,000 sources (D324).
 
 A21 (D356, in the default; docs/research/a21-scale.md) sweeps a source the user does not use, and whose connector can
-fetch an item by id, once a week instead (`syncUnusedSweepMs`); a source without a fetch keeps the daily sweep. What
+find an item by id (`Source.fetchesById`: an MCP connector with a get tool), once a week instead
+(`syncUnusedSweepMs`); any other keeps the daily sweep. What
 the skipped sweeps would have vouched for is checked at delivery instead: a copy older than `syncSweepMs` of a source
-whose daily sweep was skipped, or a copy the last sweep did not list, is `doubted`, so every delivery and citation
+whose daily sweep was skipped, or such a source's copy the last sweep did not list, is `doubted`, so every delivery and citation
 re-reads it by id first (D126, D211). A copy no re-read confirms is not delivered and makes its source's sweep due at
-the next tick. At 1,000 sources the sweep falls from ~1,114 to ~284 listing calls a user a day; a five-source user uses
+the next tick. At 1,000 sources the sweep falls from ~1,114 to ~282 listing calls a user a day; a five-source user uses
 all their sources and keeps the daily sweep.
 
 **Change notifications** (D125, `syncPush`; `Source.notifies`, `ContextPartner.sourceChanged` and `sourceItems`,

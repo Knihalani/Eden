@@ -25,13 +25,16 @@ class FetchSource implements Source {
   readonly description = "test";
   lists = 0;
   fetches = 0;
+  /** Whether `fetch` can find an item at all (false: an MCP source with no get tool, which answers null to all). */
+  readonly fetchesById: boolean;
   constructor(
     readonly id: string,
     public items: ContextItem[],
     readonly fetchReportsGone: boolean,
-    withFetch = true,
+    withFetch: boolean | "null" = true,
   ) {
     if (!withFetch) (this as { fetch?: unknown }).fetch = undefined;
+    this.fetchesById = withFetch === true;
   }
   async search(q: SearchQuery): Promise<ContextItem[]> {
     const words = q.text.toLowerCase().split(/\W+/).filter(Boolean);
@@ -46,6 +49,7 @@ class FetchSource implements Source {
     return { items: sorted.slice(at, at + limit), next: at + limit < sorted.length ? String(at + limit) : null };
   }
   async fetch(ref: string): Promise<ContextItem | null> {
+    if (!this.fetchesById) return null;
     this.fetches++;
     return this.items.find((i) => i.ref === ref) ?? null;
   }
@@ -64,7 +68,7 @@ const item = (src: string, i: number, text: string): ContextItem => ({
  * A "bank" source of 20 items, the one asked about (`i15`) far below its newest page (a poll stops at the newest page
  * it already holds, so its copy is vouched for only by a sweep or a re-read), and three filler sources.
  */
-function world(prefix = "", gone = true, withFetch = true) {
+function world(prefix = "", gone = true, withFetch: boolean | "null" = true) {
   const id = `${prefix}bank`;
   const rows = Array.from({ length: 20 }, (_, i) =>
     item(id, i, i === ASKED ? "isa allowance statement for this year" : `card fees ${i}`),
@@ -172,7 +176,7 @@ describe("syncUnusedSweepMs (D356)", () => {
     bank.items = bank.items.filter((i) => i.ref !== REF);
     const reply = await t.partner.ask({ ...alice, sessionId: "s1", question: "Have I used my isa allowance?" });
     expect(reply.citations.map((c) => c.itemId)).not.toContain(itemId("bank", REF));
-    expect(reply.answer).toContain("Left out");
+    expect(reply.answer).toContain("no recent listing of their source confirms them");
     const lists = bank.lists;
     t.advance(MIN);
     t.partner.sync!.track(alice, t.now());
@@ -249,8 +253,9 @@ describe("syncUnusedSweepMs (D356)", () => {
   });
 
   test("one user's withheld copy makes only their sweep due (isolation)", async () => {
+    // The same source ids for both users: state keyed by source alone would leak.
     const a = world("", false);
-    const b = world("b-", false);
+    const b = world("", false);
     const t = setup(
       new Map([
         ["alice", a.all],
@@ -261,7 +266,7 @@ describe("syncUnusedSweepMs (D356)", () => {
     await warm(t.partner, alice);
     await warm(t.partner, bob);
     await live(t, [alice, bob], 2);
-    expect(t.partner.sync!.sweepLapsed(bob, "b-bank")).toBe(true);
+    expect(t.partner.sync!.sweepLapsed(bob, "bank")).toBe(true);
     a.bank.items = a.bank.items.filter((i) => i.ref !== REF);
     await cites(t.partner, alice, "s1");
     const bobLists = b.bank.lists;
@@ -271,5 +276,36 @@ describe("syncUnusedSweepMs (D356)", () => {
     t.partner.sync!.track(bob, t.now());
     await t.partner.sync!.tick();
     expect(b.bank.lists).toBe(bobLists);
+    // Alice's withheld copy was missed by her early sweep; bob's copy of the same id was not.
+    expect(t.partner.sync!.sweepMissed(alice, "bank", itemId("bank", REF))).toBe(true);
+    expect(t.partner.sync!.sweepMissed(bob, "bank", itemId("bank", REF))).toBe(false);
+    expect(t.partner.sync!.sweepLapsed(bob, "bank")).toBe(true);
+  });
+
+  test("on: a copy one sweep missed, from a source whose fetch cannot confirm it, is cited as before", async () => {
+    const { bank, all } = world("", false, "null");
+    const t = setup(new Map([["alice", all]]), ON);
+    await warm(t.partner, alice);
+    const kept = bank.items;
+    bank.items = kept.filter((i) => i.ref !== REF);
+    await live(t, alice, 1.1);
+    bank.items = kept;
+    expect(t.partner.sync!.sweepMissed(alice, "bank", itemId("bank", REF))).toBe(false);
+    expect(await cites(t.partner, alice, "s1")).toContain(itemId("bank", REF));
+  });
+
+  test("on: an MCP source with no get tool (fetch answers null to all) keeps the daily sweep and is cited", async () => {
+    for (const on of [false, true]) {
+      const { bank, all } = world("", false, "null");
+      const t = setup(new Map([["alice", all]]), on ? ON : {});
+      await warm(t.partner, alice);
+      const before = bank.lists;
+      await live(t, alice, 3);
+      expect(bank.lists - before).toBeGreaterThanOrEqual(3);
+      expect(t.partner.sync!.sweepLapsed(alice, "bank")).toBe(false);
+      const reply = await t.partner.ask({ ...alice, sessionId: `s-${on}`, question: "Have I used my isa allowance?" });
+      expect(reply.citations.map((c) => c.itemId)).toContain(itemId("bank", REF));
+      expect(reply.answer).not.toContain("Left out");
+    }
   });
 });

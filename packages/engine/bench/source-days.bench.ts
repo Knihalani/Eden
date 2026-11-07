@@ -55,6 +55,8 @@ const calls = { search: 0, list: 0, fetch: 0 };
 /** An in-memory source whose rows can grow; lists newest first with an offset cursor, searches by name and word. */
 class DaySource implements Source {
   readonly kind = "mcp" as const;
+  /** An MCP connector with its get tool wired: finds by ref, and its null proves nothing (D356). */
+  readonly fetchesById = true;
   readonly description: string;
   rows: ContextItem[];
   private made = 0;

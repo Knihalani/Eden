@@ -1,4 +1,4 @@
-days-calls: seeds 41,42, 8 days, 232 requests, push payload, one ask a request, cards replayed, night 20 h, set {"syncUnusedSweepMs":604800000}
+days-calls: seeds 41,42, 8 days, 232 requests, push payload, one ask a request, cards replayed, night 20 h
 phase     source    op       calls   per request  per user-day
 backfill  calendar  list         2                 1.0 a user
 backfill  crm       list         2                 1.0 a user

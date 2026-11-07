@@ -145,7 +145,7 @@ Card calls add $0.110 → $0.077 a day at 300 items a source (a model cost, the 
   of the bill above. Sweeping a source no lookup has used for days less often would cut it, but a deleted item could
   then be delivered: the trial deleted in A8 (D297) lost removals that way. The safe shape is a longer sweep interval
   for unused sources plus a re-read before anything from such a source is delivered (D126's path); measure the delete
-  lag and the calls together. **Done in A21 (D356, [a21-scale.md](a21-scale.md)):** 1,114 → 284 sweep listings a day,
+  lag and the calls together. **Done in A21 (D356, [a21-scale.md](a21-scale.md)):** 1,114 → 282 sweep listings a day,
   no rise in deleted or stale deliveries.
 - **Card batches are smaller.** Deferred items arrive in small groups as sources become used, so a card call carries
   fewer items (10 against 15 with five sources). The enricher could wait for a fuller batch; not measured.

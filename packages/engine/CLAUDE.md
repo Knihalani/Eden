@@ -301,8 +301,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   user's late sweep must doubt nothing) and for any copy the last sweep missed (`Sync.sweepMissed`). Not "is the source
   used now": a lookup engages its sources before its delivery is verified. An unswept copy no re-read confirms is left
   out (never delivered as held, unlike D126's other doubts) and calls `Sync.sweepSoon`. A new delivery path that skips
-  `doubted`/`verifyItems` would hand over items the weekly sweep has not checked; a source without `fetch` must stay on
-  the daily sweep (`onLongSweep`).
+  `doubted`/`verifyItems` would hand over items the weekly sweep has not checked; a source that cannot find an item by
+  ref (`Source.fetchesById` false: an `McpSource` with no `fetchTool` still has a `fetch` that answers null) must stay
+  on the daily sweep (`onLongSweep`); a wrapper around a `Source` must copy `fetchesById` (as `notifies`).
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 
