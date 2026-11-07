@@ -149,7 +149,11 @@ describe("pushCandidates (D236): the push hands the agent candidates, with no re
   });
 
   test("each excerpt is cut to pushCandidateBytes", async () => {
-    const long = item("long", "Harlow hold", `Payments to Harlow are on hold. ${"Venue deposit invoice words. ".repeat(40)}`);
+    const long = item(
+      "long",
+      "Harlow hold",
+      `Payments to Harlow are on hold. ${"Venue deposit invoice words. ".repeat(40)}`,
+    );
     const { p } = setup({ pushCandidates: 2, pushCandidateBytes: 80 }, { items: [long, ...PLAIN] });
     await say(p, REQUEST);
     const got = p.takePending(ref()).filter((x) => x.reason.startsWith("candidates:"));

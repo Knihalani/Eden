@@ -144,8 +144,7 @@ export const CANDIDATES_CHECK =
   `${EDEN_NOTE}items from the user's sources that may bear on this request; nothing has checked them against it. ` +
   "Before using one, check it is about the same person, thing and date as the request and still current; if it is " +
   "not, ignore it and do not mention it.";
-export const CANDIDATES_NONE =
-  `${EDEN_NOTE}searched the user's connected sources for this request; nothing in them looks like it constrains it.`;
+export const CANDIDATES_NONE = `${EDEN_NOTE}searched the user's connected sources for this request; nothing in them looks like it constrains it.`;
 
 /** A note of Eden's own in the envelope (`CHECKED_NONE`, `CHECKED_MORE`): no item, nothing from a source. */
 export function renderNote(line: string): string {

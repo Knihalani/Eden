@@ -467,7 +467,7 @@ export interface EngineConfig {
   pushCandidates: number;
   /** `pushCandidates`: each candidate's excerpt, in bytes (focused on the request, `compactText`). */
   pushCandidateBytes: number;
-  /** `pushCandidates`: the framing asks the agent to check each candidate's who, what and when first (`CANDIDATES_CHECK`). */
+  /** `pushCandidates`: the framing asks the agent to check each candidate's who, what and when first. */
   pushCandidateCheck: boolean;
   /** `pushCandidates`: an explicit `ask` still reads with the reader (the hybrid); off, no ask calls it either. */
   pushCandidateAskReader: boolean;
