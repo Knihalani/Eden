@@ -15,8 +15,8 @@ only (seeds 41–42); no held-out suite was run.
      arrives, or under the match thresholds).
   2. **The fact is in the packet and the answer does not raise it** (16 of 140 targeted tasks, 17 of 109 short ones).
      About half of these are the Haiku grader missing a fact the answer states: a Sonnet regrade of the 38 such answers
-     in the targeted runs (default and lift arms) called 18 raised. Some of the rest are excerpts that cut the fact (the planted line keeps 93% of the fact's words
-     on average; 38 of 253 lines keep less than 80%).
+     in the targeted runs (default and lift arms) called 18 raised. Some of the rest are excerpts that cut the fact
+     (the planted line keeps 93% of the fact's words on average; 38 of 253 lines keep less than 80%).
   3. **Look-alikes**: of the 13 concerns a Sonnet regrade kept over every arm and run, 10 are one template,
      `restricted-datastore-grant`, where the answer correctly says the decoy's access request was approved and the
      grader still counts it; the others are `publicity-consent-register`, `support-cover-clash` (control) and
@@ -46,8 +46,9 @@ only (seeds 41–42); no held-out suite was run.
 
 `bun run funnel` on train (cards and intent replayed, reader stub) with two diagnostics added for this session:
 
-- the push now reports its candidate pool to `onReader` (outcome `"candidates"`: the pool's ids in order and the ids
-  it handed; content-free), so the funnel's pool lines measure the push's pool (`hidden in pool 283/384`);
+- each push pass now reports its candidate pool to a lab hook (`onPushPool`: the pool's ids in order, `readerGate`'s
+  constraint test per item, the ids it handed; no content), and each funnel row says where the planted item sits in
+  it (`pushPoolAt`, `pushHanded`: hidden in the pool 283/384, handed 253);
 - `hidden-funnel.ts --pool-dump FILE` writes each task's pool with each item's title, text, card and flags (handed,
   automated sender, `readerGate`'s constraint test) and the planted item's place.
 

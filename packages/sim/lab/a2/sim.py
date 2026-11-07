@@ -4,7 +4,8 @@ import json,sys
 rows=[json.loads(l) for l in open(sys.argv[1])]
 def base(pool,k=5): return [x for x in pool if x['handed']] if k==5 else None
 def elig(pool): return [x for x in pool if x['handed'] or True]
-# reconstruct bulk-excluded: items not handed in top region. Approx: handed set = first 5 non-bulk. Recompute nonbulk by assuming items before last handed and not handed are bulk.
+# The handed set is the first five non-bulk items: items before the last handed one that were not handed are taken
+# as bulk mail and left out of every rule's pool (an approximation).
 def nonbulk(r):
   pool=r['pool']; h=[i for i,x in enumerate(pool) if x['handed']]
   if not h: return None

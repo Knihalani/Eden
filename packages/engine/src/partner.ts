@@ -185,7 +185,24 @@ export interface PartnerDeps {
    * (`decide.ts`) and what was delivered. Ids and numbers only, no content. Absent: no facts are computed for it.
    */
   onCandidates?: CandidateSink;
+  /**
+   * A lab hook (`hidden-funnel.ts --pool-dump`, D269): each `pushCandidates` pass's pool and what it handed, ids and
+   * flags only. Apart from `onReader`, whose consumers count reader readings.
+   */
+  onPushPool?: PushPoolSink;
 }
+
+/** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
+export interface PushPoolReport {
+  sessionId: string;
+  /** The push's pool in order (the ids the reader would have read). */
+  pool: string[];
+  /** Per pool item, `readerGate`'s constraint test (cards included). */
+  constraintLike: boolean[];
+  /** The candidates handed (none when no pooled item is constraint-like). */
+  handed: string[];
+}
+export type PushPoolSink = (report: PushPoolReport) => void;
 
 /** One no-model decision's candidates, for `PartnerDeps.onCandidates`. */
 export interface CandidateDump {
@@ -214,11 +231,9 @@ export interface ReaderReport {
   flagged: { id: string; kind: ReaderKind }[];
   /**
    * "read" (a verdict, from a call or the cache), "late" (the wait ran out), "budget" (the reader's `Budget` refused
-   * the call: a session or day cap), "none" (no pool, a failed or unreadable call), "gated" (`readerGate`),
-   * "candidates" (`pushCandidates`: no call; `pool` is the push's pool, `flagged` the candidates it handed, with
-   * kind "blocks" as a placeholder: a lab view, docs/research/a2-quality.md).
+   * the call: a session or day cap), "none" (no pool, a failed or unreadable call), "gated" (`readerGate`).
    */
-  outcome: "read" | "late" | "budget" | "none" | "gated" | "candidates";
+  outcome: "read" | "late" | "budget" | "none" | "gated";
   waitedMs: number;
 }
 export type ReaderSink = (report: ReaderReport) => void;
@@ -1867,17 +1882,13 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    const items = pool.some((x) => this.constraintLike(x, cards))
-      ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates)
-      : [];
-    // The lab's view of the push (content-free): its pool, in order, and the candidates it hands.
-    this.deps.onReader?.({
+    const like = pool.map((x) => this.constraintLike(x, cards));
+    const items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
+    this.deps.onPushPool?.({
       sessionId: s.id,
-      checked: pool.length,
       pool: pool.map((x) => x.item.id),
-      flagged: items.map((x) => ({ id: x.item.id, kind: "blocks" as ReaderKind })),
-      outcome: "candidates",
-      waitedMs: 0,
+      constraintLike: like,
+      handed: items.map((x) => x.item.id),
     });
     return { items };
   }

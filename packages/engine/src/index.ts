@@ -4,6 +4,7 @@ export {
   type CandidateSink,
   type PartnerDeps,
   type ReaderReport,
+  type PushPoolReport,
   type ReaderSink,
 } from "./partner";
 export { FACT_NAMES, vectorOf, type Facts } from "./decide";

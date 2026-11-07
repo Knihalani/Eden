@@ -289,11 +289,12 @@ bun run funnel --jobs 4 -- --reader stub --lead-in clause # draft pool against t
 bun run funnel --jobs 4 -- --pool-dump $PWD/.local/pool.jsonl         # the push's candidate pool per task (A2)
 ```
 
-- **The default's pool (A2, D269).** With `pushCandidates` the push reports its pool to `onReader` (outcome
-  `candidates`, ids only), so the pool lines above measure the candidates' pool (train seeds 41–42: hidden in pool
-  283/384, decoys 247/384); the funnel counts no candidate as a reader flag (`candidatesHanded` in the per-task JSON).
-  `--pool-dump FILE` writes each task's pool in order with each item's title, text, card and flags (`handed`, `auto`
-  for an automated sender, `cl` for `readerGate`'s constraint test) and the planted item's place (`at`): the input
+- **The default's pool (A2, D269).** With `pushCandidates` each push pass reports its pool to the lab hook
+  `onPushPool` (ids, `readerGate`'s constraint test, the handed ids), not to `onReader`, so the reader pool lines above
+  stay 0 under the default; each task's JSON row has `pushPoolAt` (the planted item's place in the last pass's pool,
+  −1 when not in it) and `pushHanded` (train seeds 41–42: in pool 283/384 hidden, 247/384 decoys; handed 253, 219).
+  `--pool-dump FILE` writes each task's last pool in order with each item's title, text, card and flags (`handed`,
+  `auto` for an automated sender, `cl` for the constraint test) and the planted item's place (`at`): the input
   for re-rank screens at $0 (`packages/sim/lab/a2/sim.py`, `feat.py`). A lever that changes which items are handed on
   a few tasks is run live on those tasks first (`pi-ab --templates`, `packages/sim/lab/a2/targeted-templates.txt`).
 

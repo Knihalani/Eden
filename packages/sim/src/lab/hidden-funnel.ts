@@ -86,7 +86,7 @@ import {
   type CandidateDump,
   type CardMaker,
   automated,
-  STANDING_KINDS,
+  type PushPoolReport,
   worthCarding,
   worthCardingStrict,
   ECONOMY_CARD_LIMITS,
@@ -98,7 +98,6 @@ import { Budget, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner } from "@eden/sources";
 import { sanitizeForStore } from "@eden/redact";
-import { arrangedVisit, mayConstrain } from "../../../engine/src/conflict";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
@@ -482,9 +481,9 @@ const INTENT_QUERY_CHARS = 400;
  */
 const ASK_DIAG = opt("ask-diag", "");
 /**
- * `--pool-dump FILE` (a diagnostic, docs/research/a2-quality.md): per task, the push's candidate pool (the
- * `pushCandidates` report) in order, each item's title, text, card and flags (handed, automated, constraint-like), and
- * the planted item's (decoy's) place in it.
+ * `--pool-dump FILE` (a diagnostic, docs/research/a2-quality.md): per task, the push's candidate pool (`onPushPool`,
+ * its last pass: a `readerPushBehind` second pass replaces the first's packet) in order, each item's title, text, card
+ * and flags (handed, automated sender, `readerGate`'s constraint test), and the planted item's (decoy's) place in it.
  */
 const POOL_DUMP = opt("pool-dump", "");
 if (ASK_DIAG) writeFileSync(ASK_DIAG, "");
@@ -763,6 +762,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   if (reader) readerLanes.push(reader);
   // Every report per session, in order: a request can be read twice (`readerPush`'s ask, then the funnel's own).
   const readerReports = new Map<string, ReaderReport[]>();
+  const pushPools = new Map<string, PushPoolReport[]>();
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
@@ -786,6 +786,12 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
         }
       : {}),
     ...(onCandidates ? { onCandidates } : {}),
+    // `pushCandidates`' pool per pass (`--pool-dump`, and `pushPoolAt` in each task's row).
+    onPushPool: (r: PushPoolReport) => {
+      const list = pushPools.get(r.sessionId) ?? [];
+      pushPools.set(r.sessionId, list);
+      list.push(r);
+    },
   });
   // The harness may read the engine's session table (as `quality.ts` `settle` does; product code may not): whether a
   // session's lookup or work its lookup left running (`behind`: `syncPollBehind`'s poll and follow-up, the
@@ -1052,23 +1058,18 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       };
       appendFileSync(PACKETS, JSON.stringify({ ...line, ...extra }) + "\n");
     }
+    const push = pushPools.get(sessionId)?.at(-1);
+    pushPools.delete(sessionId);
     if (POOL_DUMP) {
-      const push = reports.find((x) => x.outcome === "candidates");
       const ids = push?.pool ?? [];
-      const items = ids.map((x) => {
+      const items = ids.map((x, k) => {
         const it = cache.get(scope, x, askAt);
         const card = cards?.cardsOf(scope, [x], askAt).get(x);
         return {
           id: x,
-          handed: push!.flagged.some((f) => f.id === x),
+          handed: push!.handed.includes(x),
           auto: it ? automated(it) : false,
-          // `readerGate`'s constraint test (partner.ts `constraintLike`), as the push read it.
-          cl:
-            (!!card &&
-              (STANDING_KINDS.has(card.kind) || card.kind === "status-change" || card.kind === "already-done")) ||
-            (!!it &&
-              (mayConstrain(`${it.title}. ${it.text}`.toLowerCase()) ||
-                arrangedVisit(`${it.title}. ${it.text}`.toLowerCase()))),
+          cl: push!.constraintLike[k] === true,
           title: it?.title ?? "",
           text: it?.text ?? "",
           ...(card ? { card: card.kind, statement: card.statement } : {}),
@@ -1100,8 +1101,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     callCheck.traced += calls - callsBefore;
     const cachedNow = cache.get(scope, id, clock);
     const replayLine = cachedNow ? inReplay(cachedNow) : null;
-    // A candidates push (`pushCandidates`) reports its pool and what it handed, which no reader judged: not a flag.
-    const flagged = rr && rr.outcome !== "candidates" ? rr.flagged.some((f) => f.id === id) : undefined;
+    const flagged = rr ? rr.flagged.some((f) => f.id === id) : undefined;
     // D173's split, reporting only: reader-flagged, rule path (delivered unflagged) or listed only (ask-cited only).
     const by = surfacedBy({ variant, delivered: got.includes(id), askCited, readerFlagged: flagged });
     perTask.push({
@@ -1122,22 +1122,17 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
             askItems: answered!.citations.length,
             askMs: Number(askMs.toFixed(2)),
           }),
+      // `pushCandidates`' last pass: the planted item's place in its pool (-1: not in it), and whether it was handed.
+      ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       ...(rr
         ? {
             readerOutcome: rr.outcome,
             readerChecked: rr.checked,
             readerInPool: rr.pool.includes(id),
             readerAt: rr.pool.indexOf(id),
-            // A candidates push handed its items unjudged (`candidatesHanded`); only a reader's verdict flags.
-            ...(rr.outcome === "candidates"
-              ? { candidatesHanded: rr.flagged.some((f) => f.id === id) }
-              : {
-                  readerFlags: rr.flagged.length,
-                  readerFlagged: rr.flagged.some((f) => f.id === id),
-                  ...(rr.flagged.some((f) => f.id === id)
-                    ? { readerKind: rr.flagged.find((f) => f.id === id)!.kind }
-                    : {}),
-                }),
+            readerFlags: rr.flagged.length,
+            readerFlagged: rr.flagged.some((f) => f.id === id),
+            ...(rr.flagged.some((f) => f.id === id) ? { readerKind: rr.flagged.find((f) => f.id === id)!.kind } : {}),
             readerWaitMs: rr.waitedMs,
             ...(readerMs !== undefined ? { readerModelMs: readerMs } : {}),
           }

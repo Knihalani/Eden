@@ -13,7 +13,9 @@ def mentions(text,ds):
   t=text.lower()
   for d,mo in ds:
     mn=MON[mo]; ab=mn[:3]
-    pats=[rf'\b{d}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:{mn}|{ab})\b', rf'\b(?:{mn}|{ab})\s+{d}(?:st|nd|rd|th)?\b', rf'\b{d}(?:st|nd|rd|th)\b', rf'\b0?{d}/{mo+1:02d}\b']
+    pats=[rf'\b{d}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:{mn}|{ab})\b',
+          rf'\b(?:{mn}|{ab})\s+{d}(?:st|nd|rd|th)?\b',
+          rf'\b{d}(?:st|nd|rd|th)\b', rf'\b0?{d}/{mo+1:02d}\b']
     if any(re.search(p,t) for p in pats): return True
   return False
 def nonbulk(r):
@@ -35,7 +37,8 @@ for r in rows:
     'D-first':lambda p:([x for x in p if x['D']]+[x for x in p if not x['D']])[:5],
     'top3+D2':lambda p:(p[:3]+[x for x in p[3:] if x['D']][:2]+[x for x in p[3:] if not x['D']])[:5],
     'top4+D1':lambda p:(p[:4]+[x for x in p[4:] if x['D']][:1]+[x for x in p[4:] if not x['D']])[:5],
-    'top3+DC2':lambda p:(p[:3]+[x for x in p[3:] if x['D'] or x['cl']][:2]+[x for x in p[3:] if not (x['D'] or x['cl'])])[:5],
+    'top3+DC2':lambda p:(p[:3]+[x for x in p[3:] if x['D'] or x['cl']][:2]
+                         +[x for x in p[3:] if not (x['D'] or x['cl'])])[:5],
     'D-first-cl':lambda p:([x for x in p if x['D'] and x['cl']]+[x for x in p if not (x['D'] and x['cl'])])[:5],
   }.items():
     got=f(p); res[(name,r['variant'])]+=any(x['id']==r['planted'] for x in got)
@@ -69,7 +72,8 @@ res=collections.Counter(); items=collections.Counter()
 for r in rows:
   p=nonbulk(r)
   if p is None or r['variant']=='neutral': continue
-  for name,f in {'k5':lambda p:p[:5],'tdedupe':tdedupe,'tdedupe2':lambda p:tdedupe(p,5,2),'caldedupe':caldedupe,'dd+D':ddD}.items():
+  arms={'k5':lambda p:p[:5],'tdedupe':tdedupe,'tdedupe2':lambda p:tdedupe(p,5,2),'caldedupe':caldedupe,'dd+D':ddD}
+  for name,f in arms.items():
     got=f(p); res[(name,r['variant'])]+=any(x['id']==r['planted'] for x in got); items[name]+=len(got)
 for n in ['k5','tdedupe','tdedupe2','caldedupe','dd+D']: print(n,res[(n,'hidden')],res[(n,'control')],items[n])
 print('---grid')
