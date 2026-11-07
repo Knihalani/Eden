@@ -3,6 +3,7 @@
  * Starts the partner's HTTP API. `bun run dev` from the repo root. With EDEN_PROCESSES above 1 this process is the
  * router (router.ts, D163) and each of its children runs this file again as one server process (EDEN_ROUTER_CHILD).
  */
+import { SourceMap } from "@eden/graph";
 import { warmGate } from "@eden/redact";
 import { loadConfig, type ServerConfig } from "./config";
 import { sourcesOrExit } from "./connectors";
@@ -42,10 +43,12 @@ async function serve(config: ServerConfig): Promise<void> {
   const sources = sourcesOrExit();
   const gatePool = await startGatePool(config.gateWorkers);
   const models = modelRolesFromEnv();
+  // Held here so a shutdown can write its last outcome batch (`SourceMap.close` flushes).
+  const sourceMap = new SourceMap(config.sourceMapPath);
   const partner = buildPartner({
     gatePool,
     sources: sources.resolver,
-    sourceMapPath: config.sourceMapPath,
+    sourceMap,
     queryPlanner: config.queryPlanner,
     engine,
     // Cards, intent and the reader on OPENROUTER_API_KEY's model (D112); without a key, the default's no-model path.
@@ -89,11 +92,28 @@ async function serve(config: ServerConfig): Promise<void> {
         : "") +
       ")",
   );
+  // Stop on SIGTERM/SIGINT with the source map's last outcome batch written. Without a handler a container's PID 1
+  // ignores SIGTERM (`docker stop` waited 10 s, then SIGKILL), and a router child died by the signal, batch unwritten.
+  let stopping = false;
+  const shutdown = () => {
+    if (stopping) return;
+    stopping = true;
+    void server.stop(true);
+    partner.stopSync();
+    try {
+      sourceMap.close();
+    } catch (e) {
+      console.error(`eden: source map not closed cleanly: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    process.exit(0);
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
   if (child) {
     // The router waits for this port before it routes here; the IPC channel exists only when the router spawned us.
     process.send?.({ edenListening: server.port });
     // The router is gone (killed, crashed): nothing can reach this child any more, so it must not outlive it.
-    process.on("disconnect", () => process.exit(0));
+    process.on("disconnect", shutdown);
   }
 }
 
