@@ -55,6 +55,20 @@ _ERROR_TEXT_CHARS = 300
 _REASONS = {"push-off", "not-synced", "not-notifying"}
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Follows no redirect: a 3xx is a failure like any non-2xx (its status reaches ``on_error``).
+
+    urllib's own handler re-sends a 301/302/303 as a GET with every header, the API key included, to whatever host
+    the ``location`` names; the TypeScript client's ``fetch`` drops the key across origins. Eden never redirects.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def _is_id(v: Any) -> bool:
     # fullmatch: `$` would also match before a final newline, and "abc\n" is no id (TypeScript's `isId` agrees).
     return isinstance(v, str) and _ID.fullmatch(v) is not None
@@ -174,7 +188,7 @@ class EdenClient:
             # Inside the try: a body that cannot be serialised (a datetime in a tool's input) is no context.
             data = json.dumps(body).encode()
             req = urllib.request.Request(self._base + path, data=data, method="POST", headers=headers)
-            with urllib.request.urlopen(req, timeout=self._timeout if timeout_s is None else timeout_s) as res:
+            with _OPENER.open(req, timeout=self._timeout if timeout_s is None else timeout_s) as res:
                 answer = json.loads(res.read().decode())
             if valid is not None and not valid(answer):
                 name = route[len("/v1/"):]

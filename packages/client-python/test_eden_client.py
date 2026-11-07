@@ -113,6 +113,41 @@ class FailOpen(unittest.TestCase):
         c = EdenClient(user_id="u", session_id="s", base_url="http://127.0.0.1:9", timeout_s=0.3, on_error=boom)
         self.assertIsNone(c.ask("q"))
 
+    def test_a_redirect_is_not_followed_and_never_carries_the_key(self):
+        # urllib follows a 301/302/303 as a GET with every header, Authorization included, to any host; the
+        # TypeScript client's fetch drops the key on a cross-origin redirect. Eden never redirects: none is followed.
+        seen = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def answer(self):
+                if self.server is redirect:
+                    self.rfile.read(int(self.headers["content-length"]))
+                    self.send_response(302)
+                    self.send_header("location", f"http://localhost:{other.server_port}/v1/ask")
+                else:
+                    seen.append(self.headers.get("authorization"))
+                    self.send_response(404)
+                self.send_header("content-length", "0")
+                self.end_headers()
+
+            do_GET = do_POST = answer  # noqa: N815
+
+            def log_message(self, *args):
+                pass
+
+        redirect, other = HTTPServer(("127.0.0.1", 0), Handler), HTTPServer(("127.0.0.1", 0), Handler)
+        for s in (redirect, other):
+            threading.Thread(target=s.serve_forever, daemon=True).start()
+        try:
+            c, errors = client(f"http://127.0.0.1:{redirect.server_port}", api_key="k_0123456789abcdef")
+            self.assertIsNone(c.ask("q"))
+            self.assertEqual(seen, [])
+            self.assertEqual(str(errors[0]), "eden /v1/ask: 302")
+        finally:
+            for s in (redirect, other):
+                s.shutdown()
+                s.server_close()
+
     def test_bad_ids_reported_once_without_the_ids(self):
         errors = []
         EdenClient(user_id="alice+x@y.com", session_id="s", on_error=errors.append)
