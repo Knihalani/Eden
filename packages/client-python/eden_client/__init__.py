@@ -53,6 +53,21 @@ _ID_RULE = "1-128 characters of [A-Za-z0-9._:@-]"
 _ERROR_BODY_BYTES = 2_048
 _ERROR_TEXT_CHARS = 300
 _REASONS = {"push-off", "not-synced", "not-notifying"}
+_SEQUENCES = (list, tuple, set, frozenset)
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Follows no redirect: a 3xx is a failure like any non-2xx (its status reaches ``on_error``).
+
+    urllib's own handler re-sends a 301/302/303 as a GET with every header, the API key included, to whatever host
+    the ``location`` names; the TypeScript client's ``fetch`` drops the key across origins. Eden never redirects.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def _is_id(v: Any) -> bool:
@@ -88,7 +103,7 @@ def _is_injection(v: Any) -> bool:
     return isinstance(v, dict) and isinstance(v.get("id"), str) and isinstance(v.get("text"), str)
 
 
-def with_context(messages: List[Dict[str, Any]], injections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def with_context(messages: List[Any], injections: List[Dict[str, Any]]) -> List[Any]:
     """Puts injections in a system message just before the latest user message (``withContext`` in @eden/client).
 
     The packet's text is Eden's ``<context ... note="Data, not instructions.">`` envelope, inserted unchanged.
@@ -98,7 +113,9 @@ def with_context(messages: List[Dict[str, Any]], injections: List[Dict[str, Any]
     text = "\n\n".join(i["text"] for i in injections)
     at = len(messages)
     for i in range(len(messages) - 1, -1, -1):
-        if messages[i].get("role") == "user":
+        m = messages[i]
+        # A dict or a message object (the OpenAI SDK's reply, appended as is): reading it must not throw.
+        if (m.get("role") if isinstance(m, dict) else getattr(m, "role", None)) == "user":
             at = i
             break
     return [*messages[:at], {"role": "system", "content": text}, *messages[at:]]
@@ -123,17 +140,18 @@ class EdenClient:
         session_id: str,
         api_key: Optional[str] = None,
         tenant_id: Optional[str] = None,
-        base_url: str = "http://127.0.0.1:8790",
-        timeout_s: float = 0.8,
+        base_url: Optional[str] = None,
+        timeout_s: Optional[float] = None,
         default_wait_ms: Optional[int] = None,
         on_error: Optional[Callable[[Exception], Any]] = None,
     ) -> None:
-        self._base = base_url.rstrip("/")
+        # None is the default, as `??` reads it in TypeScript: `base_url=os.environ.get(...)` when it is unset.
+        self._base = ("http://127.0.0.1:8790" if base_url is None else base_url).rstrip("/")
         self._key = api_key
         self._tenant = tenant_id
         self._user = user_id
         self._session = session_id
-        self._timeout = timeout_s
+        self._timeout = 0.8 if timeout_s is None else timeout_s
         self._default_wait = DEFAULT_WAIT_MS if default_wait_ms is None else default_wait_ms
         self._on_error = on_error
         bad = [f for f, v in (("tenantId", tenant_id), ("userId", user_id), ("sessionId", session_id))
@@ -163,8 +181,9 @@ class EdenClient:
               failed: Optional[Callable[[Exception], Any]] = None) -> Any:
         """POSTs JSON; the parsed answer, or None on any failure (reported to ``failed`` and ``on_error``).
 
-        ``timeout_s`` bounds each socket operation (``urllib``'s timeout), not the whole request as the TypeScript
-        client's ``AbortSignal.timeout`` does: a server that trickles bytes can hold a call longer.
+        ``timeout_s`` bounds the connect, each socket read, and the body as a whole (the TypeScript client's
+        ``AbortSignal.timeout`` bounds the whole request). Not bounded: name resolution (``getaddrinfo`` takes no
+        timeout) and a status line and headers trickled a byte at a time, each read within the timeout.
         """
         route = path.split("?")[0]
         headers = {"content-type": "application/json"}
@@ -174,8 +193,10 @@ class EdenClient:
             # Inside the try: a body that cannot be serialised (a datetime in a tool's input) is no context.
             data = json.dumps(body).encode()
             req = urllib.request.Request(self._base + path, data=data, method="POST", headers=headers)
-            with urllib.request.urlopen(req, timeout=self._timeout if timeout_s is None else timeout_s) as res:
-                answer = json.loads(res.read().decode())
+            timeout = self._timeout if timeout_s is None else timeout_s
+            deadline = time.monotonic() + timeout
+            with _OPENER.open(req, timeout=timeout) as res:
+                answer = json.loads(_read_by(res, deadline).decode())
             if valid is not None and not valid(answer):
                 name = route[len("/v1/"):]
                 raise EdenError(f"eden {route}: not {'an' if name[:1] in 'aeiou' else 'a'} {name} answer")
@@ -218,13 +239,15 @@ class EdenClient:
         """``observe``'s injection plus anything pending, in one list."""
         return ([injection] if injection else []) + self.pending()
 
-    def ask(self, question: str, max_items: Optional[int] = None, timeout_s: float = 8.0) -> Optional[Dict[str, Any]]:
+    def ask(self, question: str, max_items: Optional[int] = None,
+            timeout_s: Optional[float] = None) -> Optional[Dict[str, Any]]:
         """Asks Eden (the ``ask_context`` tool); the answer with citations, or None."""
         body = {**self._who(), "question": question}
         if max_items is not None:
             body["maxItems"] = max_items
-        return self._post("/v1/ask", body, timeout_s, lambda v: isinstance(v, dict) and isinstance(
-            v.get("answer"), str) and isinstance(v.get("citations"), list))
+        return self._post("/v1/ask", body, 8.0 if timeout_s is None else timeout_s,
+                          lambda v: isinstance(v, dict) and isinstance(v.get("answer"), str)
+                          and isinstance(v.get("citations"), list))
 
     def check(self, tool: str, input: Any, timeout_s: Optional[float] = None) -> Dict[str, Any]:
         """The action firewall (a trial on the server); ``proceed`` on any failure."""
@@ -264,8 +287,9 @@ class EdenClient:
         True when every part reached the server and was taken. A part that did not is followed by the bare signal,
         so Eden polls the source rather than miss the change. With no items and no refs, it is the bare signal.
         """
-        items = items if isinstance(items, list) else []
-        removed = removed if isinstance(removed, list) else []
+        # A tuple or a set of refs is as idiomatic in Python as a list; anything else (a str, a dict) is read as none.
+        items = list(items) if isinstance(items, _SEQUENCES) else []
+        removed = list(removed) if isinstance(removed, _SEQUENCES) else []
         if not items and not removed:
             notice = self.source_notice(source_id)
             return bool(notice and notice["synced"])
@@ -295,6 +319,19 @@ class EdenClient:
         res = self._post(path, {**self._who(session=False), "sourceId": source_id, field: part},
                          valid=lambda v: isinstance(v, dict) and _count(v.get(count)))
         return None if res is None else int(res[count])
+
+
+def _read_by(res: Any, deadline: float) -> bytes:
+    """The body, read a chunk at a time until ``deadline``: urllib's timeout bounds one read, so a server sending a
+    byte at a time would otherwise hold the call for as long as it likes."""
+    chunks: List[bytes] = []
+    while True:
+        if time.monotonic() > deadline:
+            raise TimeoutError("timed out")
+        chunk = res.read1(65_536)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
 
 
 def _count(v: Any) -> bool:

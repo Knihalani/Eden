@@ -15,9 +15,9 @@
  * The upstream key (`Authorization`) is forwarded and never logged; only the message text goes to Eden, as with the
  * SDK. Eden's `ask_context` is not added: give the agent the MCP tool for that (docs/INTEGRATION.md).
  */
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { DEFAULT_WAIT_MS, EdenClient, edenId, withContext } from "@eden/client";
-import type { Injection } from "@eden/protocol";
+import { MAX_TEXT_CHARS, type Injection } from "@eden/protocol";
 
 export interface ProxyOptions {
   /** The model's OpenAI-compatible base URL, with its version path (`https://api.openai.com/v1`). */
@@ -101,6 +101,36 @@ export function textOf(content: unknown): string {
     .join("\n");
 }
 
+/**
+ * Text cut to what Eden's API takes: past it the event was refused whole (a 400 the client swallows), so a large file
+ * read reached Eden as nothing; the engine reads only a text's head anyway (audit A11). No lone high surrogate is left.
+ */
+function capped(text: string): string {
+  if (text.length <= MAX_TEXT_CHARS) return text;
+  const cut = text.slice(0, MAX_TEXT_CHARS);
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+}
+
+/**
+ * A tool call's input as Eden's API takes it: past `MAX_TEXT_CHARS` of JSON the event was refused whole, as long text
+ * was (a write of a large file); such input goes as the head of its arguments' text, cut until its JSON fits (escapes
+ * can make it longer than the text). The engine reads only an input's head (the review of audit A11).
+ */
+function cappedInput(input: unknown, args: unknown): unknown {
+  let json: string;
+  try {
+    json = JSON.stringify(input) ?? "";
+  } catch {
+    return {};
+  }
+  if (json.length <= MAX_TEXT_CHARS) return input;
+  let text = capped(typeof args === "string" ? args : json);
+  while (text.length > 0 && JSON.stringify(text).length > MAX_TEXT_CHARS) {
+    text = text.slice(0, Math.floor(text.length * 0.9)).replace(/[\uD800-\uDBFF]$/, "");
+  }
+  return text;
+}
+
 /** A message's identity for "already reported": role, text, tool call ids and calls. */
 function hashOf(m: Message): string {
   const calls = Array.isArray(m.tool_calls) ? JSON.stringify(m.tool_calls) : "";
@@ -114,7 +144,7 @@ type EventInput = Parameters<EdenClient["observe"]>[0];
 
 /** Eden events for one message; `tools` maps a tool call id to its tool's name, for the results that follow. */
 export function eventsOf(m: Message, tools: Map<string, string>): EventInput[] {
-  const text = textOf(m.content);
+  const text = capped(textOf(m.content));
   if (m.role === "user") return text ? [{ kind: "user_message", text }] : [];
   if (m.role === "assistant") {
     const out: EventInput[] = text ? [{ kind: "agent_message", text }] : [];
@@ -129,7 +159,7 @@ export function eventsOf(m: Message, tools: Map<string, string>): EventInput[] {
       } catch {
         // Arguments that are not JSON go as their text.
       }
-      out.push({ kind: "tool_call", tool: fn.name, input: input ?? {} });
+      out.push({ kind: "tool_call", tool: fn.name, input: cappedInput(input ?? {}, fn.arguments) });
     }
     return out;
   }
@@ -160,7 +190,9 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     for (const h of (req.headers.get("connection") ?? "").split(",")) if (h.trim()) headers.delete(h.trim());
     for (const h of HOP_BY_HOP) headers.delete(h);
     for (const h of [...headers.keys()]) if (h.startsWith("x-eden-")) headers.delete(h);
-    return doFetch(`${upstream}${path}`, { method: req.method, headers, body }).then((res) => {
+    // The caller's signal: an agent that hangs up cancels the model call, which would otherwise run (and be billed) to
+    // the end for an answer nobody reads (audit A11).
+    return doFetch(`${upstream}${path}`, { method: req.method, headers, body, signal: req.signal }).then((res) => {
       const out = new Headers(res.headers);
       for (const h of DROP_FROM_UPSTREAM) out.delete(h);
       return new Response(res.body, { status: res.status, statusText: res.statusText, headers: out });
@@ -284,7 +316,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
 
   return async function handle(req: Request): Promise<Response> {
     // The proxy holds the tenant's Eden key: with `proxyKey` set, only callers who know it may name a user (D9).
-    if (options.proxyKey !== undefined && req.headers.get("x-eden-proxy-key") !== options.proxyKey) {
+    if (options.proxyKey !== undefined && !sameSecret(req.headers.get("x-eden-proxy-key"), options.proxyKey)) {
       return openAiError(401, "eden proxy: missing or wrong x-eden-proxy-key");
     }
     const url = new URL(req.url);
@@ -319,13 +351,23 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       // Anything Eden-side that threw: the request goes upstream as it came (D14).
       report(e);
     }
+    // The agent hung up during Eden's wait: nobody reads the answer, so the model is not called (audit A11).
+    if (req.signal.aborted) return openAiError(499, "eden proxy: the caller closed the request");
     try {
       return await forward(req, path, sent);
     } catch (e) {
+      if (req.signal.aborted) return openAiError(499, "eden proxy: the caller closed the request");
       report(e);
       return openAiError(502, "eden proxy: upstream unreachable");
     }
   };
+}
+
+/** Compares a caller's secret in time independent of where it first differs (digests: equal lengths). */
+function sameSecret(given: string | null, expected: string): boolean {
+  if (given === null) return false;
+  const digest = (s: string) => createHash("sha256").update(s).digest();
+  return timingSafeEqual(digest(given), digest(expected));
 }
 
 /**

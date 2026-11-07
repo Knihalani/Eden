@@ -62,12 +62,17 @@ describe("simulated sources", () => {
     // The bucket used to hold at most `rate` tokens and needed one to pass, so 0.2/s refused every call.
     const slow = { ...REALISTIC.crm!, latency: { medianMs: 0, sigma: 0 }, errorRate: 0, ratePerSec: 0.2 };
     const crm = new SimSource(new SimIndex("crm", w), slow, 0.001, 1); // 1 ms real = 1 s simulated
+    // The bucket's clock is the test's: on a loaded box, 5 ms of wall time between two calls is 5 simulated seconds.
+    let nowMs = 0;
+    crm.clock = () => nowMs;
     const q = { scope, text: arc.person!.full, entities: [], limit: 5 };
     await crm.search(q, signal); // the first call of a fresh bucket passes
     await expect(crm.search(q, signal)).rejects.toThrow(/429/); // the second, at once, is over the rate
-    await Bun.sleep(8); // over 5 simulated seconds: one more token
+    nowMs += 4.9; // under 5 simulated seconds: still no token
+    await expect(crm.search(q, signal)).rejects.toThrow(/429/);
+    nowMs += 0.2; // past 5 simulated seconds: one more token
     await crm.search(q, signal);
-    expect(crm.stats.limited).toBe(1);
+    expect(crm.stats.limited).toBe(2);
   });
 
   test("a rate of 0 refuses every call", async () => {

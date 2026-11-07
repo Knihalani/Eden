@@ -13,7 +13,8 @@ import { ItemCache } from "./cache";
 import type { EngineConfig } from "./config";
 import { ContextPartner } from "./partner";
 import { AskReader, type ReaderInput, type ReaderMaker } from "./reader";
-import { explainTrace } from "./trace";
+import { EXPLAIN_TRACES } from "./partner";
+import { explainTrace, type UsageRecord } from "./trace";
 
 // A seeded fuzz world for the engine's state machine (`fuzz.test.ts`): two tenants with two users each, two sessions
 // per user, one notifying, listable, re-readable source per user whose items the plan adds, edits and deletes, and
@@ -40,6 +41,8 @@ const DAY = 24 * HOUR;
 /** Monday 2 November 2026, 09:00 UTC. */
 export const T0 = Date.UTC(2026, 10, 2, 9);
 const SOURCE = "mail";
+/** How long a removal holds its ids gone (`partner.ts`'s `GONE_HOLD_MS`). */
+const GONE_HOLD_MS = 10 * MIN;
 
 // Secret-shaped strings, assembled from parts so no scanner reads this file as holding one.
 export const AWS_KEY = "AK" + "IA" + "QWERTYUIOPASDFGH";
@@ -47,6 +50,33 @@ export const GH_TOKEN = "gh" + "p_" + "aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5";
 const PHRASE = ["violet", "tractor", "mango", "seven"].join(" ");
 /** What must never reach the agent: the raw secrets, and the tail of the quoted phrase (audit A5's bug 1). */
 export const SECRET_PIECES = [AWS_KEY, GH_TOKEN, "tractor mango", "mango seven"];
+/**
+ * Words of the planted items, titles and the plan's questions and messages that no fixed sentence of `explainTrace`
+ * uses: an explanation that says one carries content (D56, D277). "budget" and "review" are left out (fixed words).
+ */
+const CONTENT_WORDS = [
+  "Harlow",
+  "invoice",
+  "deposit",
+  "Lisbon",
+  "offsite",
+  "flights",
+  "finance",
+  "legal",
+  "Dentist",
+  "dentist",
+  "Okafor",
+  "Atlas",
+  "migration",
+  "Acme",
+  "renewal",
+  "Priya",
+  "canteen",
+  "Lunch",
+  "lunch",
+  "Deploy key",
+  "vpn password",
+];
 
 /** Topics: a constraint-worded sentence (so the rule paths, the gates and the candidates have something to take). */
 const TOPICS = [
@@ -306,6 +336,11 @@ export interface WorldOptions {
   noReader?: boolean;
   /** Check the not-twice invariant (proactive packets). */
   notTwice?: boolean;
+  /**
+   * This tenant's events and takes run as the proxy's shadow mode sends them (D282: `{ shadow: true }`): what comes
+   * back is checked like any hand-out, and must teach nothing (no usage outcome, nothing outstanding).
+   */
+  shadowTenant?: string;
 }
 
 export class World {
@@ -317,9 +352,19 @@ export class World {
   private readonly sched: () => number;
   private readonly sessions = new Map<string, SessionState>();
   /** By item id: the op after whose settle a removal stands; cleared when the plan re-adds the ref. */
-  private readonly removed = new Map<string, { op: number; at: number; settledAfter: number | null }>();
+  private readonly removed = new Map<
+    string,
+    { op: number; at: number; settledAfter: number | null; outlived?: boolean }
+  >();
   private readonly inflight = new Set<Promise<unknown>>();
   private opIndex = -1;
+  /** Draws for the read-only checks run after each op (`explain`), apart from the plan and the scheduling. */
+  private readonly checks: () => number;
+  /** Injection ids handed out (a packet is handed once), and those returned through a shadow call (D282). */
+  private readonly handedIds = new Set<string>();
+  private readonly shadowIds = new Set<string>();
+  /** Usage outcomes the engine reported (`onUsage`) and not yet checked. */
+  private readonly usage: UsageRecord[] = [];
   private readonly cooldown: number;
   private readonly idleMs: number;
   handOuts = 0;
@@ -330,6 +375,7 @@ export class World {
     private readonly opts: WorldOptions,
   ) {
     this.sched = mulberry32(seed ^ 0x9e3779b9);
+    this.checks = mulberry32(seed ^ 0x85ebca6b);
     const now = () => this.clock;
     this.partner = new ContextPartner({
       sources: async (sc) => {
@@ -341,6 +387,7 @@ export class World {
       budget: new Budget(),
       model: null,
       now,
+      onUsage: (u) => this.usage.push(u),
       ...(opts.noReader ? {} : { reader: new AskReader({ maker: new StubReader(), budget: new Budget(), now }) }),
       config: opts.config,
     });
@@ -461,7 +508,7 @@ export class World {
     // "deletes-queued", fixed by `dropRemovedPending` and `dropGone`'s queue pass (see `fuzz.test.ts`).
     for (const c of h.citations) {
       const r = this.removed.get(c.itemId);
-      if (r && r.settledAfter !== null && h.op > r.settledAfter) {
+      if (r && r.settledAfter !== null && !r.outlived && h.op > r.settledAfter) {
         const queued = h.injection !== undefined && h.injection.createdAt < r.at;
         this.violate(
           queued ? "deletes-queued" : "deletes",
@@ -502,8 +549,26 @@ export class World {
 
   /** 1. Isolation of what `explain` keeps (D277): a session's traces name only its own items and itself. */
   private checkExplain(user: User, sessionId: string): void {
-    for (const t of this.partner.explain({ ...user.scope, sessionId })) {
+    const traces = this.partner.explain({ ...user.scope, sessionId });
+    // The ring is bounded (D277), and a session the harness saw end (or never opened) has none: the traces live and
+    // die with the session, so a call that re-created a closed session after an await shows up here.
+    if (traces.length > EXPLAIN_TRACES) {
+      this.violate("explain-bound", `explain for ${user.tag}/${sessionId} kept ${traces.length} traces`);
+    }
+    if (traces.length > 0 && !this.sessions.get(`${user.tag}#${sessionId}`)?.open) {
+      this.violate("closed", `explain for closed ${user.tag}/${sessionId} has ${traces.length} traces`);
+    }
+    for (const t of traces) {
       const said = explainTrace(t);
+      // Content-free (D56, D277): no planted text, title word, secret or question in the trace or its sentence.
+      const all = `${JSON.stringify(t)}\n${said}`;
+      for (const w of [...CONTENT_WORDS, ...SECRET_PIECES, ...this.users.map((o) => `zq${o.tag}`)]) {
+        if (all.includes(w))
+          this.violate("explain-content", `explain for ${user.tag}/${sessionId} says "${w}": ${said}`);
+      }
+      if (!(t.costUsd >= 0 && t.sourceCalls >= 0 && t.modelCalls >= 0 && t.latencyMs >= 0)) {
+        this.violate("explain-shape", `explain for ${user.tag}/${sessionId}: a negative or non-number count`);
+      }
       if (t.sessionId !== sessionId)
         this.violate("isolation", `explain for ${user.tag}/${sessionId} has ${t.sessionId}`);
       for (const id of t.itemIds) {
@@ -519,7 +584,19 @@ export class World {
     }
   }
 
-  private injectionOut(user: User, sessionId: string, via: HandOut["via"], i: Injection, op: number): void {
+  private injectionOut(
+    user: User,
+    sessionId: string,
+    via: HandOut["via"],
+    i: Injection,
+    op: number,
+    shadow = false,
+  ): void {
+    // A packet leaves its queue once: the same injection handed out twice is a queue bug (and counts usage twice).
+    if (this.handedIds.has(i.id))
+      this.violate("handed-twice", `${via} for ${user.tag}/${sessionId} gave ${i.id} again`);
+    this.handedIds.add(i.id);
+    if (shadow) this.shadowIds.add(i.id);
     if (i.tenantId !== user.scope.tenantId || i.userId !== user.scope.userId || i.sessionId !== sessionId) {
       this.violate("isolation", `${via} for ${user.tag}/${sessionId} returned a packet addressed elsewhere`);
     }
@@ -573,6 +650,7 @@ export class World {
       if (this.partner.sessionCount > this.openCount()) {
         this.violate("sessions", `sessionCount ${this.partner.sessionCount} > open ${this.openCount()}`);
       }
+      this.readOnlyChecks();
       await this.jitter();
     }
     this.opIndex = ops.length;
@@ -581,14 +659,47 @@ export class World {
     for (const u of this.users) {
       for (const sid of sessionsOf) {
         const st = this.state(u, sid);
-        const got = this.partner.takePending({ ...u.scope, sessionId: sid });
+        const shadow = this.opts.shadowTenant === u.scope.tenantId;
+        const got = this.partner.takePending({ ...u.scope, sessionId: sid }, shadow ? { shadow } : {});
         if (!st.open && got.length > 0) this.violate("closed", `${u.tag}/${sid} closed but had ${got.length} queued`);
-        for (const i of got) this.injectionOut(u, sid, "take", i, ops.length);
+        for (const i of got) this.injectionOut(u, sid, "take", i, ops.length, shadow);
         this.checkExplain(u, sid);
       }
     }
     if (this.partner.sessionCount > this.openCount()) {
       this.violate("sessions", `sessionCount ${this.partner.sessionCount} > open ${this.openCount()} at the end`);
+    }
+    this.checkShadow();
+  }
+
+  /**
+   * After every op, with no await (so a run is the same with or without them): `explain` for a random user's session,
+   * as `POST /v1/explain` would be called: often another user's session ids (every user has s0 and s1, and u0 and u1
+   * are in both tenants) or a session never opened (s2); then the shadow check.
+   */
+  private readOnlyChecks(): void {
+    const user = this.users[Math.floor(this.checks() * this.users.length)]!;
+    const sid = ["s0", "s1", "s2"][Math.floor(this.checks() * 3)]!;
+    this.checkExplain(user, sid);
+    this.checkShadow();
+  }
+
+  /** D282: what a shadow call returned was not handed to an agent, so nothing is learned from it. */
+  private checkShadow(): void {
+    if (!this.opts.shadowTenant) return;
+    for (const u of this.usage) {
+      if (this.shadowIds.has(u.injectionId)) {
+        this.violate("shadow", `usage recorded for shadow packet ${u.injectionId} (${u.how}, ${u.sessionId})`);
+      }
+    }
+    this.usage.length = 0;
+    // Nothing a shadow call returned is outstanding (usage tracking starts in `handOut`, which shadow skips).
+    const sessions = (this.partner as unknown as { sessions: Map<string, { outstanding: Map<string, unknown> }> })
+      .sessions;
+    for (const [key, s] of sessions) {
+      for (const id of s.outstanding.keys()) {
+        if (this.shadowIds.has(id)) this.violate("shadow", `${key} tracks shadow packet ${id} as outstanding`);
+      }
     }
   }
 
@@ -599,7 +710,15 @@ export class World {
       for (const u of this.users) await this.partner.revisionsSettled(u.scope);
       for (let n = 0; n < 5; n++) await new Promise<void>((r) => setImmediate(r));
     }
-    for (const r of this.removed.values()) if (r.settledAfter === null) r.settledAfter = k;
+    for (const r of this.removed.values()) {
+      if (r.settledAfter !== null) continue;
+      r.settledAfter = k;
+      // A page read before the removal and stored after its hold ended (`GONE_HOLD_MS`) brings the item back: the
+      // engine bounds that race by time (a call's timeout, seconds, against a ten-minute hold, D126), and only the
+      // harness's clock can jump past the hold while a page is between its call and its store (audit A11: default
+      // seeds 9648, 19657). Not checked for such a removal.
+      if (this.clock - r.at >= GONE_HOLD_MS) r.outlived = true;
+    }
   }
 
   private start(op: Op, k: number): Promise<unknown> {
@@ -609,6 +728,7 @@ export class World {
     const [a, b, c, d] = op.r;
     const src = user.source;
     const refs = [...src.docs.keys()];
+    const shadow = this.opts.shadowTenant === user.scope.tenantId;
     const pickRef = () => (refs.length > 0 ? refs[Math.floor(b * refs.length)]! : null);
     const event = (kind: "user_message" | "agent_message" | "tool_result", text: string) => {
       const waits = [undefined, 0, 30, 2_000];
@@ -619,9 +739,10 @@ export class World {
           ? ({ ...ref, at: this.clock, kind, tool: "read_mail", output: text } as AgentEvent)
           : ({ ...ref, at: this.clock, kind, text } as AgentEvent);
       this.touch(user, sessionId, true);
+      const options = { ...(waitMs === undefined ? {} : { waitMs }), ...(shadow ? { shadow } : {}) };
       return this.partner
-        .observe(e, waitMs === undefined ? {} : { waitMs })
-        .then((r) => r.injection && this.injectionOut(user, sessionId, "observe", r.injection, k));
+        .observe(e, options)
+        .then((r) => r.injection && this.injectionOut(user, sessionId, "observe", r.injection, k, shadow));
     };
     switch (op.kind) {
       case "user": {
@@ -652,12 +773,12 @@ export class World {
       case "take": {
         this.describe(op, k, "");
         const st = this.state(user, sessionId);
-        const got = this.partner.takePending(ref);
+        const got = this.partner.takePending(ref, shadow ? { shadow } : {});
         // 5. A closed session hands nothing out.
         if (!st.open && got.length > 0) {
           this.violate("closed", `takePending on closed ${user.tag}/${sessionId} returned ${got.length}`);
         }
-        for (const i of got) this.injectionOut(user, sessionId, "take", i, k);
+        for (const i of got) this.injectionOut(user, sessionId, "take", i, k, shadow);
         this.checkExplain(user, sessionId);
         return Promise.resolve();
       }

@@ -31,14 +31,17 @@
  *
  * The router reads each POST body once to find `userId` (a `JSON.parse` the child repeats; router.bench.ts measures
  * the hop) and forwards the bytes unchanged with the `authorization` and `content-type` headers. A declared
- * content-length past `maxBodyBytes` is refused here with the handler's 413 (D100) so it is never buffered twice;
- * every other answer, auth, rate limit and validation included, is the child's.
+ * content-length past `maxBodyBytes` is refused here with the handler's 413 (D100) so it is never buffered twice,
+ * and a request past the tenant's whole rate (`tenantRatePerSec`, `tenantBurst`, undivided) gets the handler's 429
+ * here before its body is read; every other answer, auth, the child's own 1/N rate limit and validation included, is
+ * the child's.
  */
 import { Database } from "bun:sqlite";
 import { existsSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SourceMap } from "@eden/graph";
-import { fnv1a, mix32 } from "@eden/primitives";
+import { fnv1a, Gcra, mix32 } from "@eden/primitives";
+import { bodyShapeUnder } from "@eden/protocol";
 import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, MAX_PROCESSES, type ServerConfig } from "./config";
 
 /** The child a tenant/user is served by: stable across restarts and router instances, spread by a mixed FNV-1a. */
@@ -54,7 +57,9 @@ export function childFor(tenant: string, userId: string, children: number): numb
  * without one go to the tenant's own child, where the handler refuses them with its usual 400.
  */
 export function userOf(body: Uint8Array): string {
-  if (body.byteLength === 0) return "";
+  // A body the child refuses unparsed (`bodyShapeUnder`, http.ts) is not parsed here either: padded structure is where
+  // the parse's cost lies (hundreds of ms for 8 MB), on the one thread every tenant's requests pass through.
+  if (body.byteLength === 0 || !bodyShapeUnder(body)) return "";
   try {
     const parsed: unknown = JSON.parse(decoder.decode(body));
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -173,7 +178,7 @@ const MAX_RESTART_MS = 30_000;
 export interface RouterOptions {
   /** The router's own configuration (`loadConfig`): port, host, keys, dev, body cap, source-map base, processes. */
   config: Pick<ServerConfig, "port" | "host" | "keys" | "dev" | "sourceMapPath" | "processes"> &
-    Partial<Pick<ServerConfig, "maxBodyBytes">>;
+    Partial<Pick<ServerConfig, "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst">>;
   /** The environment each child starts from (default `process.env`); the router sets its own variables over it. */
   env?: Record<string, string | undefined>;
   /** The child entry (default `main.ts` beside this file). */
@@ -344,6 +349,10 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     return config.dev && !key ? "dev" : null;
   };
   const fail = (status: number, error: string) => Response.json({ error }, { status });
+  // The tenant's whole rate and burst (each child holds 1/N of them): past it, a request is refused here before its
+  // body is read, as one process refuses it (http.ts). Otherwise a tenant over its rate still had every body buffered
+  // and parsed on the router's one thread, unlimited, before a child could say 429, starving every other tenant.
+  const limiter = new Gcra({ ratePerSec: config.tenantRatePerSec ?? 200, burst: config.tenantBurst ?? 400 });
 
   const forward = async (c: Child, req: Request, url: URL, body: Uint8Array | undefined): Promise<Response> => {
     if (!c.up) return fail(503, UNAVAILABLE);
@@ -415,6 +424,13 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         // Only an authenticated POST is read for its user; anything else gets the child's own answer (405, 401).
         if (req.method !== "POST" || tenant === null)
           return forward(children[childFor(tenant ?? "", "", n)]!, req, url, undefined);
+        const waitMs = limiter.take(tenant);
+        if (waitMs > 0) {
+          return Response.json(
+            { error: "rate limited" },
+            { status: 429, headers: { "retry-after": String(Math.ceil(waitMs / 1_000)) } },
+          );
+        }
         if (Number(req.headers.get("content-length") ?? NaN) > maxBodyBytes) return fail(413, tooLarge);
         let body: Uint8Array;
         try {

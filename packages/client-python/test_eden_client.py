@@ -3,6 +3,7 @@
 
 import json
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -113,6 +114,87 @@ class FailOpen(unittest.TestCase):
         c = EdenClient(user_id="u", session_id="s", base_url="http://127.0.0.1:9", timeout_s=0.3, on_error=boom)
         self.assertIsNone(c.ask("q"))
 
+    def test_a_redirect_is_not_followed_and_never_carries_the_key(self):
+        # urllib follows a 301/302/303 as a GET with every header, Authorization included, to any host; the
+        # TypeScript client's fetch drops the key on a cross-origin redirect. Eden never redirects: none is followed.
+        seen = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def answer(self):
+                if self.server is redirect:
+                    self.rfile.read(int(self.headers["content-length"]))
+                    self.send_response(302)
+                    self.send_header("location", f"http://localhost:{other.server_port}/v1/ask")
+                else:
+                    seen.append(self.headers.get("authorization"))
+                    self.send_response(404)
+                self.send_header("content-length", "0")
+                self.end_headers()
+
+            do_GET = do_POST = answer  # noqa: N815
+
+            def log_message(self, *args):
+                pass
+
+        redirect, other = HTTPServer(("127.0.0.1", 0), Handler), HTTPServer(("127.0.0.1", 0), Handler)
+        for s in (redirect, other):
+            threading.Thread(target=s.serve_forever, daemon=True).start()
+        try:
+            c, errors = client(f"http://127.0.0.1:{redirect.server_port}", api_key="k_0123456789abcdef")
+            self.assertIsNone(c.ask("q"))
+            self.assertEqual(seen, [])
+            self.assertEqual(str(errors[0]), "eden /v1/ask: 302")
+        finally:
+            for s in (redirect, other):
+                s.shutdown()
+                s.server_close()
+
+    def test_a_trickled_body_is_cut_at_the_timeout(self):
+        # urllib's timeout bounds each socket read: a body sent a byte every 0.1 s held a 0.3 s call for its whole
+        # length (10 s here); the TypeScript client's AbortSignal.timeout bounds the body too.
+        class Trickle(BaseHTTPRequestHandler):
+            def do_POST(self):  # noqa: N802
+                self.rfile.read(int(self.headers["content-length"]))
+                self.send_response(200)
+                self.send_header("content-length", "100")
+                self.end_headers()
+                try:
+                    for _ in range(100):
+                        self.wfile.write(b" ")
+                        self.wfile.flush()
+                        time.sleep(0.1)
+                except OSError:
+                    pass
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Trickle)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            c, errors = client(f"http://127.0.0.1:{server.server_port}")
+            c._timeout = 0.3
+            started = time.monotonic()
+            self.assertIsNone(c.ask("q", timeout_s=0.3))
+            self.assertLess(time.monotonic() - started, 1.5)
+            self.assertIn("timed out", str(errors[0]))
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_none_options_take_the_defaults(self):
+        # `base_url=os.environ.get("EDEN_URL")` is None when unset: the TypeScript client's `??` takes the default
+        # there, where this one threw (base_url) or made observe throw in the agent's loop (timeout_s).
+        stub = Stub(lambda p, b: (200, {"injection": None, "answer": "a", "citations": []}))
+        try:
+            self.assertEqual(EdenClient(user_id="u", session_id="s", base_url=None)._base, "http://127.0.0.1:8790")
+            c = EdenClient(user_id="u", session_id="s", base_url=stub.url, timeout_s=None, default_wait_ms=None)
+            self.assertEqual(c.observe({"kind": "user_message", "text": "hi"}), {"injection": None, "pending": False})
+            self.assertEqual(stub.seen[-1][0], "/v1/events?waitMs=3000")
+            self.assertEqual(c.ask("q", timeout_s=None)["answer"], "a")
+        finally:
+            stub.close()
+
     def test_bad_ids_reported_once_without_the_ids(self):
         errors = []
         EdenClient(user_id="alice+x@y.com", session_id="s", on_error=errors.append)
@@ -164,6 +246,24 @@ class Calls(unittest.TestCase):
             stub.close()
 
 
+    def test_source_changed_takes_tuples_and_sets(self):
+        # Refs in a set or a tuple were read as none: only the bare signal went, and a server that syncs the source
+        # answered True, so the caller held the deletion as delivered while Eden still held the item.
+        def answer(path, body):
+            return 200, {"/v1/sources/removed": {"removed": len(body.get("refs", []))},
+                         "/v1/sources/items": {"stored": len(body.get("items", []))}}.get(path, {"synced": True})
+
+        stub = Stub(answer)
+        try:
+            c, errors = client(stub.url)
+            self.assertTrue(c.source_changed("mail", items=({"ref": "1", "text": "x"},), removed={"2"}))
+            self.assertEqual([p for p, _, _ in stub.seen], ["/v1/sources/items", "/v1/sources/removed"])
+            self.assertEqual(stub.seen[-1][1]["refs"], ["2"])
+            self.assertEqual(errors, [])
+        finally:
+            stub.close()
+
+
 class Helpers(unittest.TestCase):
     def test_with_context_before_the_latest_user_message(self):
         msgs = [{"role": "system", "content": "s"}, {"role": "user", "content": "a"},
@@ -172,6 +272,18 @@ class Helpers(unittest.TestCase):
         self.assertEqual([m["role"] for m in out], ["system", "user", "assistant", "system", "user"])
         self.assertEqual(out[3]["content"], INJ["text"])
         self.assertIs(with_context(msgs, []), msgs)
+
+    def test_with_context_takes_message_objects(self):
+        # The OpenAI SDK's reply message is an object with `.role`, often appended to the list as is; `.get` on it
+        # threw in the agent's loop (the TypeScript withContext reads `.role` on anything).
+        class Message:
+            def __init__(self, role, content):
+                self.role, self.content = role, content
+
+        msgs = [{"role": "user", "content": "a"}, Message("assistant", "b"), Message("user", "c"), "odd"]
+        out = with_context(msgs, [INJ])
+        self.assertEqual(out[2:4], [{"role": "system", "content": INJ["text"]}, msgs[2]])
+        self.assertEqual(len(out), 5)
 
     def test_held_result(self):
         self.assertIn(INJ["text"], held_result("send", INJ))

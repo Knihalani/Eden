@@ -31,8 +31,8 @@ export interface BuildOptions {
   model?: Model | null;
   /**
    * The default's model roles (D112): cards and intent in the background; the ask-time reader on the request path,
-   * which the default calls only with `pushCandidates: 0` (D237). The push's candidates also need the reader role
-   * wired (a no-key server runs no push), though they make no call.
+   * which the default calls only with `pushCandidates: 0` (D237). The push's candidates need no reader role: they make
+   * no call, so a no-key server runs them too (D276).
    * The servers pass `modelRolesFromEnv()` (models.ts), all null without OPENROUTER_API_KEY; unset, none (`NO_MODELS`).
    * A null role leaves its part of the default inert, so the same configuration runs its no-model path.
    */

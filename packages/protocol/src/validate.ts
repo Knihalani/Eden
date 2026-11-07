@@ -8,8 +8,8 @@ import type { AgentEvent, AskRequest, ContextItem } from "./types";
 export type Checked<T> = { ok: true; value: T } | { ok: false; error: string };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
-/** The longest text an event field may carry. */
-const MAX_TEXT_CHARS = 1_000_000;
+/** The longest text an event field may carry; an integration cuts longer text to it rather than lose the event. */
+export const MAX_TEXT_CHARS = 1_000_000;
 const isText = (v: unknown, max = MAX_TEXT_CHARS): v is string => typeof v === "string" && v.length <= max;
 /** The message for a field that is not a string of at most `max` characters: too long is named, not misread. */
 const textError = (field: string, max: number) =>
@@ -63,6 +63,38 @@ function shapeUnder(root: unknown, maxDepth: number, maxNodes: number): boolean 
         }
       }
     }
+  }
+  return true;
+}
+
+/**
+ * Whether a raw JSON body nests at most `MAX_INPUT_DEPTH` + 8 containers deep and holds at most `MAX_INPUT_NODES` +
+ * 10,000 values, counted outside strings (each `[`, `{` and `,`); a byte scan, so it runs before `JSON.parse`. Under
+ * D100's 8 MB cap, structure is what costs the parse: 4 M small numbers took 106-134 ms and 4 M nested arrays 453-665
+ * ms where an 8 MB string took 4-7 ms. No valid request comes near either bound (a tool input is at most 1,000,000
+ * characters, so ~500,000 values; the envelope adds a few levels and items), so only padded bodies are refused. Not
+ * a JSON check: whatever passes is still parsed and validated as before.
+ */
+export function bodyShapeUnder(bytes: Uint8Array): boolean {
+  const maxDepth = MAX_INPUT_DEPTH + 8;
+  const maxValues = MAX_INPUT_NODES + 10_000;
+  let depth = 0;
+  let values = 0;
+  let inString = false;
+  for (let i = 0; i < bytes.length; i++) {
+    const c = bytes[i]!;
+    if (inString) {
+      // A backslash escapes the next byte (a quote among them). UTF-8 never puts 0x22 or 0x5c inside a multi-byte
+      // character, so a byte scan cannot misread one.
+      if (c === 0x5c) i++;
+      else if (c === 0x22) inString = false;
+      continue;
+    }
+    if (c === 0x22) inString = true;
+    else if (c === 0x5b || c === 0x7b) {
+      if (++depth > maxDepth || ++values > maxValues) return false;
+    } else if (c === 0x5d || c === 0x7d) depth--;
+    else if (c === 0x2c && ++values > maxValues) return false;
   }
   return true;
 }

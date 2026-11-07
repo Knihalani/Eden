@@ -89,6 +89,70 @@ describe("router rate limit, divided", () => {
   );
 
   test.concurrent(
+    "past the tenant's whole rate the router answers 429 before reading the body, as one process does",
+    async () => {
+      const dir = tempDir("eden-router-over-");
+      const env = {
+        ...process.env,
+        EDEN_HOME: dir,
+        EDEN_API_KEYS: keys,
+        EDEN_TENANT_RPS: "0.01",
+        EDEN_TENANT_BURST: "2",
+      };
+      const config = { ...loadConfig(env), port: 0, processes: 2 };
+      const router = await startRouter({ config, env, log: () => {}, onOutput: () => {} });
+      try {
+        // The tenant's whole burst, over two users (one per child or both on one: either way the tenant's 2).
+        for (const userId of ["u-a", "u-b"]) {
+          await fetch(`http://127.0.0.1:${router.port}/v1/whoami`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${KEY}` },
+            body: JSON.stringify({ userId }),
+          });
+        }
+        // A third request whose body never arrives: the router used to wait on it (each such request holding up to a
+        // body's worth of buffer and a parse on the router's one thread) before any child could refuse it.
+        const started = performance.now();
+        const head = await new Promise<string>((resolve) => {
+          let got = "";
+          void Bun.connect({
+            hostname: "127.0.0.1",
+            port: router.port,
+            socket: {
+              open(s) {
+                s.write(
+                  `POST /v1/whoami HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer ${KEY}\r\nContent-Length: 64\r\n\r\n`,
+                );
+              },
+              data(s, d) {
+                got += new TextDecoder().decode(d);
+                resolve(got);
+                s.end();
+              },
+              close() {
+                resolve(got);
+              },
+            },
+          });
+        });
+        expect(head.split("\r\n")[0]).toBe("HTTP/1.1 429 Too Many Requests");
+        expect(head.toLowerCase()).toContain("retry-after:");
+        expect(performance.now() - started).toBeLessThan(2_000);
+        // The other tenant is unaffected.
+        const other = await fetch(`http://127.0.0.1:${router.port}/v1/whoami`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${OTHER_KEY}` },
+          body: JSON.stringify({ userId: "u-a" }),
+        });
+        expect(other.status).toBe(200);
+      } finally {
+        await router.stop();
+      }
+    },
+    30_000,
+  );
+
+  test.concurrent(
     "a child that cannot start fails the router's start, and every child is stopped",
     async () => {
       const dir = tempDir("eden-router-bad-");

@@ -707,7 +707,7 @@ export class ContextPartner {
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
     // not cut at `askReaderWaitMs` (that bounds an explicit ask): a reading that lands later is still queued, while its
     // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
-    const internal: { push: true; request?: number } = { push: true };
+    const internal: { push: true; request?: number; turn?: number } = { push: true };
     const push =
       this.config.readerPush &&
       this.config.askReader &&
@@ -726,7 +726,12 @@ export class ContextPartner {
     const t0 = performance.now();
     const observing = this.observeEvent(event, options);
     // `observeEvent` counts the request before its first await, so the session's count now names this request.
-    if (push) internal.request = this.sessions.get(sessionKey(event))?.requests;
+    // Its turn too: the push's trace names its request's turn, as a lookup's does, not the one current when it settles.
+    if (push) {
+      const s = this.sessions.get(sessionKey(event));
+      internal.request = s?.requests;
+      internal.turn = s?.turn;
+    }
     const result = await observing;
     if (!push) {
       // `planConflict` (D301): what arrived since the last take, checked now, so `pending` says a packet waits.
@@ -946,7 +951,12 @@ export class ContextPartner {
         // The calls were the first reading's; the second makes none (nor any plan) of its own.
         const { plans: _plans, ...rest } = searched;
         const again = { ...rest, calls: 0, ...(rest.syncCalls !== undefined ? { syncCalls: 0 } : {}) };
-        await this.ask(request, { push: true, request: internal.request, again: { searched: again, prev } });
+        await this.ask(request, {
+          push: true,
+          request: internal.request,
+          turn: internal.turn,
+          again: { searched: again, prev },
+        });
       })
       .catch(() => {});
     this.addBehind(s, work);
@@ -1005,7 +1015,12 @@ export class ContextPartner {
    * Copies: changing one changes nothing held.
    */
   explain(ref: Scope & { sessionId: string }): Trace[] {
-    return (this.sessions.get(sessionKey(ref))?.traces ?? []).map((t) => ({ ...t, itemIds: [...t.itemIds] }));
+    return (this.sessions.get(sessionKey(ref))?.traces ?? []).map((t) => ({
+      ...t,
+      itemIds: [...t.itemIds],
+      // A plan's shapes are an array of their own: a shallow copy shared them with the held trace (audit A11).
+      ...(t.plans ? { plans: t.plans.map((p) => ({ ...p, shapes: [...p.shapes] })) } : {}),
+    }));
   }
 
   /**
@@ -1679,7 +1694,7 @@ export class ContextPartner {
       const costUsd = reading?.costUsd ?? 0;
       this.trace(s, {
         sessionId: s.id,
-        turn: s.turn,
+        turn: internal.turn ?? s.turn,
         event: "user_message",
         decision: "reader-push",
         reason: cue.id,
@@ -1695,7 +1710,8 @@ export class ContextPartner {
         ...(candidates ? { candidates: true } : {}),
         itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
       });
-      if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
+      const turn = internal.turn ?? s.turn;
+      if (root) spans!.close(root, { session: s.id, turn, decision: "reader-push", delivered: !!injection });
       if (behind && cue.polled) this.pushAgain(s, request, internal, cue.polled, searched, injection);
       return { answer: "", citations: [], usedModel: reading?.called === true, costUsd, latencyMs };
     }
@@ -4018,9 +4034,11 @@ export class ContextPartner {
     const due = scored.filter((x) => recent(x.item.id) || doubted.has(x.item.id));
     if (due.length === 0) return scored;
     const t0 = performance.now();
-    const before = this.freshness.calls;
+    // The calls of the re-reads this delivery started, counted by them: the engine-wide counter's change over the
+    // awaits took in other sessions' and tenants' re-reads, and could go negative (audit A11's fuzz).
+    const made = { calls: 0 };
     const outcomes = new Map(
-      await Promise.all(due.map(async (x) => [x.item.id, await this.check(s, x.item)] as const)),
+      await Promise.all(due.map(async (x) => [x.item.id, await this.check(s, x.item, made)] as const)),
     );
     if (strict && !s.closed) {
       // One more read (`check` reuses no failure) for a plain error, often one bad call, and for a read our own guard
@@ -4028,7 +4046,7 @@ export class ContextPartner {
       const again = due.filter((x) => doubted.has(x.item.id) && RETRIED.has(outcomes.get(x.item.id)!));
       for (let k = 0; k < again.length && !s.closed; k += STRICT_RETRY_LANES) {
         const batch = again.slice(k, k + STRICT_RETRY_LANES);
-        const read = await Promise.all(batch.map(async (x) => [x.item.id, await this.check(s, x.item)] as const));
+        const read = await Promise.all(batch.map(async (x) => [x.item.id, await this.check(s, x.item, made)] as const));
         for (const [id, o] of read) outcomes.set(id, o);
       }
     }
@@ -4040,7 +4058,7 @@ export class ContextPartner {
       reason: cue.id,
       latencyMs: Math.round(performance.now() - t0),
       // Calls this delivery waited on that were made for it (a re-read started ahead is counted where it began).
-      sourceCalls: this.freshness.calls - before,
+      sourceCalls: made.calls,
       modelCalls: 0,
       costUsd: 0,
       itemIds: due.map((x) => x.item.id),
@@ -4069,9 +4087,10 @@ export class ContextPartner {
   /**
    * One item's re-read (`verifyDelivery`), shared by every delivery of the session that wants it while it runs or for
    * `CHECK_REUSE_MS` after: started ahead (`checkAhead`, beside the reader's call) or by `verifyItems`. A changed copy
-   * is stored, a gone item dropped from the cache and the sync's bookkeeping. Never throws.
+   * is stored, a gone item dropped from the cache and the sync's bookkeeping. Never throws. `made` counts the call of
+   * a re-read this starts (not one it joins).
    */
-  private check(s: Session, item: ContextItem): Promise<CheckOutcome> {
+  private check(s: Session, item: ContextItem, made?: { calls: number }): Promise<CheckOutcome> {
     const checks = (s.checks ??= new Map());
     const now = this.now();
     const held = checks.get(item.id);
@@ -4091,7 +4110,7 @@ export class ContextPartner {
     const entry: { at: number; mark: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome } = {
       at: now,
       mark,
-      outcome: this.recheck(s, item, mark).then((o) => (entry.settled = o)),
+      outcome: this.recheck(s, item, mark, made).then((o) => (entry.settled = o)),
     };
     const outcome = entry.outcome;
     checks.delete(item.id);
@@ -4100,7 +4119,12 @@ export class ContextPartner {
     return outcome;
   }
 
-  private async recheck(s: Session, item: ContextItem, readMark: number): Promise<CheckOutcome> {
+  private async recheck(
+    s: Session,
+    item: ContextItem,
+    readMark: number,
+    made: { calls: number } = { calls: 0 },
+  ): Promise<CheckOutcome> {
     this.freshness.checked++;
     try {
       const all = await this.deps.sources(s.scope).catch((): Source[] => []);
@@ -4110,6 +4134,7 @@ export class ContextPartner {
         return "unverifiable";
       }
       this.freshness.calls++;
+      made.calls++;
       const got = await this.fanout.fetchChecked(source, s.scope, item.ref, {
         timeoutMs: this.config.verifyTimeoutMs,
         signal: s.abort.signal,
@@ -4123,6 +4148,7 @@ export class ContextPartner {
         // ("failed"), so a strict ask leaves it out and says so (D211, D232).
         if (got.why === "refused") {
           this.freshness.calls--;
+          made.calls--;
           return got.guard === "open" || got.pushedBack ? "failed" : "skipped";
         }
         // A null from a source whose null does not mean gone (an MCP tool) says nothing, and says it every time: like
@@ -4215,7 +4241,16 @@ export class ContextPartner {
     reason: string,
     cue: Cue,
   ): Promise<Injection | null> {
-    const kept = await this.verifyItems(s, scored, cue);
+    // The items were ranked against the ledger before the re-reads' await; a delivery during it (the next request's
+    // fast path from the cache) may have handed some out since, and `build` marks without testing again: an item
+    // whose ledger entry changed over the await is left out (audit A11's fuzz, default seed 2577; core seed 704). An
+    // entry gone meanwhile was swept (past the cooldown, or past `MAX_LEDGER_ITEMS`), not handed out: kept (review).
+    const was = new Map(scored.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
+    const verified = await this.verifyItems(s, scored, cue);
+    const kept = verified.filter((x) => {
+      const now = s.ledger.entry(x.item.id);
+      return now === undefined || sameEntry(was.get(x.item.id), now);
+    });
     if (kept.length === 0 || s.closed) return null;
     return this.deliver(s, kept, mode, reason, cue);
   }
@@ -5313,6 +5348,8 @@ interface AskInternal {
   push?: boolean;
   /** The session's request count when the push's request was counted: a later request makes it stale. */
   request?: number;
+  /** The session's turn when the push's request was counted: the push's trace reports it (audit A11). */
+  turn?: number;
   /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
   again?: { searched: SearchedLive; prev: Injection | null };
 }

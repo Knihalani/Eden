@@ -440,3 +440,50 @@ describe("McpSource.fetch: a record that wraps rows (D294)", () => {
     await inner.close();
   });
 });
+
+describe("McpSource.fetch: the record where the reply puts it (D294)", () => {
+  // Rows were looked for in structuredContent and then the text blocks, the record only at the top of
+  // structuredContent: a thread in a text block beside a structuredContent that is not it (FastMCP's
+  // `{result: "<text>"}` for a tool typed `-> str`), or inside an envelope (`{data: {...}}`), came back null.
+  type Reply = { content: { type: "text"; text: string }[]; structuredContent?: Record<string, unknown> };
+  const fetching = (reply: Reply) => {
+    const server = new McpServer({ name: "mail", version: "1" });
+    const ro = { annotations: { readOnlyHint: true } };
+    server.registerTool("search_threads", { inputSchema: { query: z.string() }, ...ro }, async () => ({ content: [] }));
+    server.registerTool("get_thread", { inputSchema: { threadId: z.string() }, ...ro }, async () => reply);
+    return new McpSource({
+      id: "mail",
+      description: "mail",
+      transport: () => {
+        const [client, serverSide] = InMemoryTransport.createLinkedPair();
+        void server.connect(serverSide);
+        return client;
+      },
+      searchTool: { name: "search_threads" },
+      fetchTool: { name: "get_thread" },
+    });
+  };
+  const scope = { tenantId: "t", userId: "u" };
+  const record = { id: "t1", messages: [{ id: "m1", subject: "heads up", snippet: "ring me first" }] };
+
+  test("a record in a text block beside a structuredContent that is not it", async () => {
+    const text = JSON.stringify(record);
+    const s = fetching({ content: [{ type: "text", text }], structuredContent: { result: text } });
+    const got = await s.fetch("t1", scope, AbortSignal.timeout(2_000));
+    expect(got?.ref).toBe("t1");
+    expect(got?.text).toContain("ring me first");
+    await s.close();
+  });
+
+  test("a record inside an envelope", async () => {
+    const s = fetching({ content: [{ type: "text", text: JSON.stringify({ data: { result: record } }) }] });
+    expect((await s.fetch("t1", scope, AbortSignal.timeout(2_000)))?.ref).toBe("t1");
+    await s.close();
+  });
+
+  test("an envelope holding another record is still no match", async () => {
+    const s = fetching({ content: [{ type: "text", text: JSON.stringify({ data: { ...record, id: "t9" } }) }] });
+    expect(await s.fetch("t1", scope, AbortSignal.timeout(2_000))).toBeNull();
+    await s.close();
+  });
+});

@@ -379,12 +379,12 @@ export function nextCursorOf(content: unknown, structured?: unknown): string | n
 export function toItems(sourceId: string, content: unknown, limit: number, structured?: unknown): ContextItem[] {
   const out: ContextItem[] = [];
   const fromStructured = structured === undefined ? null : rowsOf(structured, 0);
-  if (fromStructured) {
-    for (const row of fromStructured) out.push(rowItem(sourceId, row));
-    return out.slice(0, limit);
-  }
+  // Only the rows kept are mapped: a row with no id is hashed and stringified, ~2 µs each, so a 100,000-row reply
+  // cost ~200 ms for a search keeping 10.
+  if (fromStructured) return fromStructured.slice(0, limit).map((row) => rowItem(sourceId, row));
   const blocks = Array.isArray(content) ? (content as Block[]) : [];
   for (const block of blocks) {
+    if (out.length >= limit) break;
     if (block.type !== "text" || !block.text) continue;
     const parsed = parseJson(block.text);
     if (parsed === undefined) {
@@ -393,19 +393,31 @@ export function toItems(sourceId: string, content: unknown, limit: number, struc
       continue;
     }
     // JSON with no rows in it (`[]`, `{"totalFound": 0, "messages": []}`, `{}`) is an empty result.
-    for (const row of rowsOf(parsed, 0) ?? []) out.push(rowItem(sourceId, row));
+    for (const row of rowsOf(parsed, 0) ?? []) {
+      if (out.length >= limit) break;
+      out.push(rowItem(sourceId, row));
+    }
   }
   return out.slice(0, limit);
 }
 
-/** The top-level JSON objects of a tool result (its `structuredContent`, else each text block's), not their rows. */
+/**
+ * The JSON objects of a tool result that may be a fetched record itself, not its rows: the top-level object of its
+ * `structuredContent` and of each text block, each followed by the objects its container keys hold (an envelope's
+ * `{data: {...}}`, to `rowsOf`'s depth). The text blocks are read even beside a structuredContent, as `jsonRows` falls
+ * back to them: a server may put the record in its text and something else there (FastMCP's `{result: "<text>"}`).
+ */
 function topObjects(content: unknown, structured?: unknown): Row[] {
-  if (structured !== undefined) return isObject(structured) ? [structured as Row] : [];
+  const out: Row[] = [];
+  const add = (o: unknown, depth: number): void => {
+    if (depth > 3 || !isObject(o)) return;
+    out.push(o);
+    for (const k of CONTAINER_KEYS) add(o[k], depth + 1);
+  };
+  add(structured, 0);
   const blocks = Array.isArray(content) ? (content as Block[]) : [];
-  return blocks.flatMap((b) => {
-    const parsed = b.type === "text" && b.text ? parseJson(b.text) : undefined;
-    return isObject(parsed) ? [parsed as Row] : [];
-  });
+  for (const b of blocks) if (b.type === "text" && b.text) add(parseJson(b.text), 0);
+  return out;
 }
 
 /** The rows of a tool result: its `structuredContent`, else every text block that holds JSON. Prose is no row. */

@@ -236,6 +236,33 @@ describe("request body size (D100)", () => {
     expect((await send(h, body, { "content-length": "abc" })).status).toBe(200);
     expect(observed.length).toBe(2);
   });
+
+  // Under the 8 MB cap, structure costs the loop far more than text: JSON.parse of an 8 MB string field took 4-7 ms
+  // where 4 M small numbers took 106-134 ms and 4 M nested arrays 453-665 ms (best of 3 each), before any check ran.
+  // No valid body comes near: a tool input is at most 1,000,000 characters, so it holds at most ~500,000 values.
+  test("a body holding far more values or depth than any valid request is a 400 before it is parsed", async () => {
+    observed.length = 0;
+    const h = createHandler(spied, { keys: new Map([[key, "acme"]]), dev: false });
+    const half = 4 * 1024 * 1024 - 64;
+    const wide = JSON.stringify({ ...who, kind: "user_message", text: "Globex renewal", junk: Array(half).fill(1) });
+    const deep = JSON.stringify({ ...who, kind: "user_message", text: "Globex renewal" }).slice(0, -1);
+    const nested = `${deep},"junk":${"[".repeat(half)}${"]".repeat(half)}}`;
+    for (const body of [wide, nested]) {
+      expect(Buffer.byteLength(body)).toBeLessThan(8_388_608);
+      const t0 = performance.now();
+      const res = await send(h, body);
+      const ms = performance.now() - t0;
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toMatch(/too many values or nests too deep/);
+      // Loose for a loaded machine: the scan stops at the first token past either bound.
+      expect(ms).toBeLessThan(100);
+    }
+    expect(observed.length).toBe(0);
+    // A long text is no structure: the largest valid event (a 1,000,000-unit text field) is still served.
+    const text = JSON.stringify({ ...who, kind: "user_message", text: `Globex renewal ${'[\\"{,'.repeat(160_000)}` });
+    expect((await send(h, text)).status).toBe(200);
+    expect(observed.length).toBe(1);
+  });
 });
 
 describe("gate pool", () => {

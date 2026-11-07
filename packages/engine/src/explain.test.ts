@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
-import { StaticSource } from "@eden/sources";
+import { QueryPlanner, StaticSource } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { CORE_CONFIG } from "./parts";
 import { ContextPartner, EXPLAIN_TRACES } from "./partner";
-import { explainTrace, type Trace } from "./trace";
+import { explainTrace, SILENT_REASONS, type Trace } from "./trace";
 
 // D277: `explain` keeps a session's last decisions (its traces), content-free, for "why this packet / why silent".
 
@@ -52,6 +52,31 @@ describe("explain (D277)", () => {
     expect(p.explain(ref)).toEqual([]);
   });
 
+  test("a copy all the way down: a trace's plans too (audit A11)", async () => {
+    const p = new ContextPartner({
+      sources: async () => [
+        new StaticSource("crm", "deals", [{ ref: "d1", title: "Globex renewal", text: "Dana Lee wants 12% off" }]),
+      ],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      planner: new QueryPlanner({ seed: 1 }),
+      config: CORE_CONFIG,
+    });
+    for (let i = 0; i < 4; i++) {
+      await p.observe(ev({ kind: "user_message", text: `Globex renewal for Dana Lee, item ${101 + i}?` }), {
+        waitMs: 1_000,
+      });
+    }
+    const planned = p.explain(ref).find((t) => (t.plans?.length ?? 0) > 0);
+    expect(planned).toBeDefined();
+    const before = JSON.stringify(p.explain(ref));
+    planned!.plans![0]!.calls = 999;
+    planned!.plans![0]!.shapes.push("changed");
+    expect(JSON.stringify(p.explain(ref))).toBe(before);
+  });
+
   test("every decision and known silent reason has its own sentence", () => {
     const base: Trace = {
       sessionId: "s",
@@ -94,5 +119,18 @@ describe("explain (D277)", () => {
       "action firewall",
     );
     expect(explainTrace({ ...base, decision: "reader-push", readerCalls: 1 })).toContain("reader read it");
+  });
+
+  test("SILENT_REASONS names every silent reason partner.ts writes (trace-report and digest print only these)", async () => {
+    const src = await Bun.file(new URL("./partner.ts", import.meta.url)).text();
+    const written = [
+      ...src.matchAll(/(?:done|trace)\("silent", "([^"]+)"\)/g),
+      ...src.matchAll(/noModel\("([^"]+)"/g),
+      ...src.matchAll(/"(no model(?: budget)?)"/g),
+    ].map((m) => m[1]!);
+    expect(written.length).toBeGreaterThan(8);
+    for (const r of written) expect(SILENT_REASONS).toContain(r);
+    // A silent trace's reason is otherwise a variable (`why`): its values are the noModel calls' above.
+    expect([...src.matchAll(/done\("silent", (?!")([^)]+)\)/g)].map((m) => m[1])).toEqual(["why"]);
   });
 });

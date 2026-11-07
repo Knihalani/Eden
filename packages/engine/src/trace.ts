@@ -64,6 +64,37 @@ export interface Trace {
 
 export type TraceSink = (trace: Trace) => void;
 
+/** Every decision a trace can carry, for readers of a log (trace-report, digest) to check a line against. */
+export const TRACE_DECISIONS: readonly Trace["decision"][] = [
+  "skipped",
+  "repeat",
+  "silent",
+  "fast",
+  "sources",
+  "model",
+  "answer",
+  "reader-push",
+  "reader-late",
+  "verify",
+];
+
+/**
+ * Every reason a "silent" trace gives (fixed words, `partner.ts`). Readers of a log print only these: a line that is
+ * not the engine's (a log is often stdout and stderr together) must not put its words in a report (audit A11).
+ */
+export const SILENT_REASONS: readonly string[] = [
+  "slow path busy",
+  "served",
+  "no candidates",
+  "judge: untied",
+  "no model",
+  "no model budget",
+  "model error",
+  "model truncated",
+  "model: none",
+  "error",
+];
+
 /**
  * Whether the agent used one injection (D293), when that becomes known: inferred from a later agent message or tool
  * call repeating its distinctive terms (D18), counted unused when its usage window passed (`expired`) or its session
