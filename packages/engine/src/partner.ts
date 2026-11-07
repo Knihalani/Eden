@@ -1866,10 +1866,7 @@ export class ContextPartner {
           )
         : new Map<string, Card>();
     if (!pool.some((x) => this.constraintLike(x, cards))) return { items: [] };
-    // `pushCandidatesLater` (D259 trial): fewer on a session's later requests, whose agent still holds earlier packets.
-    const later = this.config.pushCandidatesLater;
-    const k = later > 0 && s.requests > 1 ? Math.min(later, this.config.pushCandidates) : this.config.pushCandidates;
-    return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, k) };
+    return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) };
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */

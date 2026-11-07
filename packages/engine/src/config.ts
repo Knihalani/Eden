@@ -464,12 +464,6 @@ export interface EngineConfig {
    * first (`CANDIDATES_LEAD`). 0 is the reader's push and asks (D95–D99).
    */
   pushCandidates: number;
-  /**
-   * D259 trial (CL8, off at 0): with `pushCandidates`, the number of candidates on a session's later requests (after
-   * its first). An agent keeps a session's earlier packets in its transcript and re-reads them on every later model
-   * request, so later packets cost more; a session's first request keeps `pushCandidates`. 0 is `pushCandidates`.
-   */
-  pushCandidatesLater: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -587,5 +581,4 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
-  pushCandidatesLater: 0,
 };
