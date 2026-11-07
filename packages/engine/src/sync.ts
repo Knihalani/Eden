@@ -75,6 +75,12 @@ export interface SyncOptions {
    * the bound on a lost notification (`syncPushMaxStaleMs`); 0 or absent: `maxStaleMs`.
    */
   pushMaxStaleMs?: number;
+  /**
+   * Trial `syncCarriedSweepMs` (A8): with `push`, a notifying source whose notifications carry their changes (items
+   * through `ingest`, removals through `carried`) and that has had no bare notification since is swept this often (ms)
+   * instead of every `sweepMs`. 0 or absent: every source every `sweepMs`.
+   */
+  carriedSweepMs?: number;
 }
 
 export interface SyncDeps {
@@ -151,6 +157,11 @@ interface SourceSync {
    * until read again (`signalledSince`).
    */
   noticedMark: number;
+  /**
+   * Trial `syncCarriedSweepMs`: the source's notifications carry their changes (items or removals came, and no bare
+   * notification since), so a deletion reaches Eden as a removal and the sweep is only the bound on a lost one.
+   */
+  carries: boolean;
   /** `notices` when the last complete poll began: the copy is behind while they differ. */
   noticesPolled: number;
   /** `notices` when the backfill's latest page began: what the backfill has read when it ends (`warmUp`). */
@@ -264,6 +275,8 @@ export class SyncManager {
     if (!s || !s.notifies) return false;
     s.notices++;
     s.noticedMark = ++this.marks;
+    // A bare notification: this change, a deletion included, may reach Eden only through a poll or a sweep.
+    s.carries = false;
     return true;
   }
 
@@ -285,6 +298,7 @@ export class SyncManager {
   ingest(scope: Scope, sourceId: string, items: ContextItem[]): number {
     const u = this.users.get(scopeKey(scope));
     const s = u?.sources.get(sourceId);
+    if (s && items.length > 0) s.carries = true;
     if (!u || !s || s.phase !== "warm") return 0;
     // Only what the push changed is marked: a replayed, unchanged item was synced before and is a true boundary.
     const changed = new Set<string>();
@@ -296,6 +310,15 @@ export class SyncManager {
     }
     while (s.pushed.size > MAX_PUSHED) s.pushed.delete(s.pushed.keys().next().value as string);
     return n;
+  }
+
+  /**
+   * A deletion notification for the source (`ContextPartner.sourceRemoved`): its notifications carry their changes
+   * (trial `syncCarriedSweepMs`). O(1), no I/O.
+   */
+  carried(scope: Scope, sourceId: string): void {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    if (s) s.carries = true;
   }
 
   /**
@@ -408,6 +431,12 @@ export class SyncManager {
 
   // ── internals ──
 
+  /** How often a source is swept: `sweepMs`, or the trial's `carriedSweepMs` for one whose notices carry changes. */
+  private sweepEvery(s: SourceSync): number {
+    const carried = this.o.carriedSweepMs ?? 0;
+    return this.o.push && s.notifies && s.carries && carried > 0 ? carried : this.o.sweepMs;
+  }
+
   private isCurrent(s: SourceSync, now: number): boolean {
     if (s.phase !== "warm") return false;
     const age = now - s.polledAt;
@@ -468,7 +497,8 @@ export class SyncManager {
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);
         if (!source || s.phase !== "warm" || s.busy || now < s.retryAt) return;
-        if (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs) await this.run(s, () => this.sweep(u, s, source));
+        if (s.sweep !== null || now - s.sweptAt >= this.sweepEvery(s))
+          await this.run(s, () => this.sweep(u, s, source));
       }),
     );
   }
@@ -858,6 +888,7 @@ function newSourceSync(id: string): SourceSync {
     notifies: false,
     notices: 0,
     noticedMark: 0,
+    carries: false,
     noticesPolled: 0,
     noticesBackfill: 0,
     pushed: new Map(),

@@ -613,6 +613,7 @@ export class ContextPartner {
             demandTimeoutMs: c.sourceTimeoutMs,
             push: c.syncPush,
             pushMaxStaleMs: c.syncPushMaxStaleMs,
+            carriedSweepMs: c.syncCarriedSweepMs,
           },
         )
       : null;
@@ -2071,6 +2072,7 @@ export class ContextPartner {
     const ids = refs
       .slice(0, MAX_PUSHED_ITEMS)
       .map((ref) => sanitizedId({ id: itemId(sourceId, ref), sourceId, ref, title: "", text: "" }));
+    this.sync?.carried(scope, sourceId);
     return this.dropGone(scope, sourceId, ids);
   }
 

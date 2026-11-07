@@ -255,6 +255,15 @@ export interface EngineConfig {
    */
   syncPushMaxStaleMs: number;
   /**
+   * Trial (A8, D297; owner: repo owner; ends 2026-12-07; off: 0). With `syncPush`, a notifying source whose
+   * notifications carry their changes (`sourceItems` or `sourceRemoved` came, and no bare `sourceChanged` since) is
+   * re-listed whole (the sweep) this often (ms) instead of every `syncSweepMs`: its deletions arrive as removals, so
+   * the sweep is only the bound on a lost one. A daily sweep is about 12 listing calls a user-day on a sim mailbox
+   * (`days-calls.ts`), each billed on a per-call connector platform. A bare notification brings the daily sweep back
+   * until items or removals come again.
+   */
+  syncCarriedSweepMs: number;
+  /**
    * Every item about to be delivered (a packet or an `ask` answer, from the slow path, the reader's push or the
    * action firewall) whose source signalled a change after the copy was read (`Sync.signalledSince`, with
    * `syncPush`) is fetched again by its ref first (`SourceFanout.fetchChecked`, within `verifyTimeoutMs`, in parallel;
@@ -542,6 +551,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncLocalAll: true,
   syncPush: true,
   syncPushMaxStaleMs: 24 * 3_600_000,
+  syncCarriedSweepMs: 0,
   verifyDelivery: true,
   verifyTimeoutMs: 1_500,
   cards: true,

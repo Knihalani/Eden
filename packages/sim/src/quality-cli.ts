@@ -4,7 +4,8 @@
  *   zoo-tune|zoo-a|zoo-b] [--planner [--planner-max-calls 3] [--planner-no-cascade] [--planner-cascade-min 0.05]
  *   [--planner-no-reuse] [--planner-deadline-margin 2] [--planner-latency-quantile 0.9]
  *   [--planner-mode serve|shadow] [--promote-after N]] [--time 0] [--wait 0]
- *   [--noise 1] [--updates 0] [--deletes 0] [--push none|signals|payload] [--refresh-after-hours H] [--tool-rate 0.4]
+ *   [--noise 1] [--updates 0] [--deletes 0] [--push none|signals|payload] [--lost-notices 0]
+ *   [--refresh-after-hours H] [--tool-rate 0.4]
  *   [--judge none|perfect|noisy] [--live] [--brief] [--config '{"probes":true}']
  *   [--timeline out.jsonl] [--sync]
  *   [--cards DIR/cards-v2.jsonl]
@@ -67,6 +68,7 @@ const cli = flags(
         "updates",
         "deletes",
         "push",
+        "lost-notices",
         "refresh-after-hours",
         "tool-rate",
         "judge",
@@ -172,6 +174,7 @@ const opts: QualityOptions = {
     }
     return m;
   })(),
+  lostNotices: Number(arg("lost-notices", "0")),
   config: {
     ...(has("refresh-after-hours") ? { refreshAfterMs: Number(arg("refresh-after-hours", "0")) * 3_600_000 } : {}),
     // Any engine setting, as JSON (`--config '{"probes":true}'`): for experiments behind a flag.
