@@ -783,7 +783,8 @@ export class ContextPartner {
       this.markCue(s, cue);
       const injection = this.deliver(s, fast, "proactive", `cache:${cue.id}`, cue);
       trace("fast", cue.id, { itemIds: fast.map((x) => x.item.id) });
-      if (queued) s.pending.unshift(queued);
+      // A "nothing found" note this delivery supersedes is not put back (`pushChecked`, D246).
+      if (queued && !queued.reason.startsWith(CHECKED)) s.pending.unshift(queued);
       return reply(injection);
     }
     if (repeat) {

@@ -197,4 +197,30 @@ describe("pushChecked (D246): the push says when its reading found nothing", () 
     await p.observe({ ...ref(), at: NOW, kind: "session_end" } as AgentEvent);
     expect(p.takePending(ref())).toEqual([]);
   });
+
+  test("a pool with no candidate, from sources that answered, gets the note", async () => {
+    const { p, maker } = setup({ pushChecked: true }, { items: [] });
+    await say(p, REQUEST);
+    expect(maker.calls.length).toBe(0);
+    const got = p.takePending(ref());
+    expect(got.length).toBe(1);
+    expect(got[0]!.text).toContain(CHECKED_NONE);
+  });
+
+  test("the fast path's delivery does not put back the note it took from the queue", async () => {
+    const parking = item("p1", "Harlow parking", "The Harlow car park closes at six on Fridays for resurfacing.", 5);
+    const { p } = setup({ pushChecked: true, confidentScore: 0, minMatchedTerms: 0 }, { items: [...PLAIN, parking] });
+    await say(p, REQUEST);
+
+    // A message arriving in the same request, answered from the cache at once (the fast path).
+    const o = await p.observe({
+      ...ref(),
+      at: NOW,
+      kind: "external",
+      source: "gmail",
+      text: "Reminder from Harlow: the car park closes at six on Fridays for resurfacing.",
+    } as AgentEvent);
+    expect(o.injection?.citations.length ?? 0).toBeGreaterThan(0);
+    expect(p.takePending(ref()).filter((i) => i.reason.startsWith("checked:"))).toEqual([]);
+  });
 });

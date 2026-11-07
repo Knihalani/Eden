@@ -212,8 +212,11 @@ where it was; its re-sent first calls are where the time went.
 `EDEN_NOTE`): an injection citing nothing, queued like a packet, only when the push's reader gave a verdict (or the
 pool was empty; a gated pool is no all-clear) from at least one source, all of which answered (D127), only for the
 request's own session and only while it is the latest. The next user message, and any packet or answer built for the
-session, drop it if untaken (`dropChecked`). With `readerPushBehind` the first reading reads a synced copy the poll may
-then change: an agent that takes the note before the second reading delivers gets "nothing", then the packet. Its words are fixed (no source or
+session, drop it if untaken (`dropChecked`), and the fast path does not put back a note it took before delivering. Two
+edges remain, both erring to silence or to a later packet: a late packet from an earlier request drops the current
+request's untaken note; and a note the agent has already taken can be followed by a packet (the slow path's, or with
+`readerPushBehind` the second reading's, after the poll changed a synced copy). Revision updates (`buildUpdate`) do not
+drop it. Its words are fixed (no source or
 event text), inside the data envelope (D11, D19), and `shownText` drops them. Tests: `push-checked.test.ts`.
 
 ## 7. Reproduce
