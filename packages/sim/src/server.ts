@@ -7,6 +7,12 @@
  *
  *   bun packages/sim/src/server.ts [--port 0] [--worlds 20] [--profile realistic] [--time 1] [--accel 1]
  *     [--tenants 10] [--tenant-rps 200] [--model none|fake] [--gate-workers 0] [--source-map file|memory]
+ *     [--sync off|on]
+ *
+ * `--sync` (fix-s3b): the engine's background sync is on in its default (D57), but this server never ticked it, so
+ * users were tracked and never backfilled: every figure measured before had unsynced users. `off` (the default) keeps
+ * that, so earlier figures stay comparable; `on` ticks it as the shipped server does (`startSync`, every
+ * `--sync-every-ms`, default 60,000 on the server's clock) and adds `POST /sim/sync-warm`.
  *
  * Prints one JSON line {"listening": port} when ready. Control endpoints (no auth; a benchmark process only):
  *   GET  /sim/stats   process CPU, memory, event-loop lag, engine and source counters since the last reset
@@ -14,6 +20,8 @@
  *   POST /sim/gc      full GC, then stats (for memory measurements)
  *   POST /sim/fault   {"source": "gmail", "kind": "outage"|"slow"|"rate", "seconds": 30, "factor"?: 5, "rate"?: 0.5}
  *   POST /sim/exit    exit cleanly (writes a profile when started with bun --cpu-prof)
+ *   POST /sim/sync-warm  (`--sync on`) tick the sync until every tracked user's backfill is done, or `maxTicks`
+ *                     ({"maxTicks"?: 400}); returns ticks, ms, background calls, users tracked and warm
  */
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -38,6 +46,7 @@ const worlds = Number(arg("worlds", "20"));
 const timeScale = Number(arg("time", "1"));
 const accel = Number(arg("accel", "1"));
 const tenants = Number(arg("tenants", "10"));
+const syncMode = arg("sync", "off");
 const profiles = { realistic: REALISTIC, ideal: IDEAL, entities: REALISTIC_ENTITIES }[arg("profile", "realistic")]!;
 
 /** Which world a user lives in: the same function the load generator uses, so both sides agree. */
@@ -52,6 +61,7 @@ export const tenantKey = (k: number) => `simkey-tenant${k}-0123456789`;
 if (import.meta.main) await main();
 
 async function main() {
+  if (syncMode !== "off" && syncMode !== "on") throw new Error(`--sync must be off or on, not ${syncMode}`);
   const t0 = performance.now();
   const indexes: SimIndex[][] = [];
   for (let w = 0; w < worlds; w++) indexes.push(simIndexes(buildWorld({ seed: 1_000 + w })));
@@ -62,6 +72,7 @@ async function main() {
     const key = scopeKey(scope);
     let s = users.get(key);
     if (!s) {
+      scopes.set(key, scope);
       s = sourcesFor(indexes[worldOf(scope.userId, worlds)]!, profiles, timeScale, users.size + 1, false);
       for (const src of s) src.fault = faults.get(src.id) ?? {};
       users.set(key, s);
@@ -108,6 +119,11 @@ async function main() {
     gatePool,
     config: timeScale > 0 ? { sourceTimeoutMs: 1_500 * timeScale } : {},
   });
+  const scopes = new Map<string, Scope>();
+  const sync = syncMode === "on" ? partner.sync : null;
+  if (syncMode === "on" && !sync) throw new Error("--sync on, but the engine's sync is off in this configuration");
+  // The shipped server's timer (build.ts); its period is on the real clock, so `--accel` does not speed it up.
+  if (sync) partner.startSync(Number(arg("sync-every-ms", "60000")));
   const keys = new Map<string, string>();
   for (let k = 0; k < tenants; k++) keys.set(tenantKey(k), `tenant${k}`);
   const tenantRps = Number(arg("tenant-rps", "200"));
@@ -143,6 +159,9 @@ async function main() {
       }
     }
     const sessions = (partner as unknown as { sessions: Map<string, unknown> }).sessions.size;
+    const syncStats = sync
+      ? { synced: sync.userCount, warm: [...scopes.values()].filter((sc) => sync.warm(sc)).length }
+      : {};
     return {
       wallMs: Math.round(wall),
       cpuPercent: Math.round(((cpu.user + cpu.system) / 1_000 / wall) * 1_000) / 10,
@@ -156,6 +175,8 @@ async function main() {
       cachedUsers: cache.userCount,
       sessions,
       worldsBuiltMs: Math.round(worldsMs),
+      sync: syncMode,
+      ...syncStats,
       ...counters,
       sources: bySource,
     };
@@ -183,6 +204,11 @@ async function main() {
         if (url.pathname === "/sim/exit") {
           setTimeout(() => process.exit(0), 50); // A clean exit, so a --cpu-prof profile is written.
           return Response.json({ ok: true });
+        }
+        if (url.pathname === "/sim/sync-warm") {
+          if (!sync) return new Response("start the server with --sync on", { status: 400 });
+          const body = (await req.json().catch(() => ({}))) as { maxTicks?: number };
+          return Response.json(await warmAll(sync, [...scopes.values()], body.maxTicks ?? 400));
         }
         if (url.pathname === "/sim/gc") {
           Bun.gc(true);
@@ -225,6 +251,30 @@ async function main() {
       startupMs: Math.round(performance.now() - t0),
     }),
   );
+}
+
+/**
+ * Ticks the sync until every user it was given is warm (each source's backfill done), as a long-running server would
+ * have them after a while, or until `maxTicks`. A tick that makes no call while users are still cold has nothing it
+ * may do yet (the per-source call budget refills on the clock), so it waits a little before the next.
+ */
+export async function warmAll(
+  sync: { tick(): Promise<number>; warm(scope: Scope): boolean },
+  scopes: readonly Scope[],
+  maxTicks: number,
+  idleMs = 250,
+) {
+  const t0 = performance.now();
+  let ticks = 0;
+  let calls = 0;
+  const cold = () => scopes.filter((sc) => !sync.warm(sc)).length;
+  while (ticks < maxTicks && cold() > 0) {
+    const made = await sync.tick();
+    ticks++;
+    calls += made;
+    if (made === 0) await Bun.sleep(idleMs);
+  }
+  return { ticks, calls, ms: Math.round(performance.now() - t0), users: scopes.length, cold: cold() };
 }
 
 function quantiles(xs: number[]) {

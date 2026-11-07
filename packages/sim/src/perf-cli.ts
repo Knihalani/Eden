@@ -10,7 +10,11 @@
  *   steady   production-like: 300 users at real pacing and real source latency for 90 s
  *   ramp     saturation: pacing compressed 10x, users doubling from 100 to 3,200, 20 s per step
  *   memory   server memory after warming 250, 500, 1,000 and 2,000 users (forced GC before each reading), and
- *            edenOnly: the readings minus the zero-user one (the in-process sim worlds), MB per user
+ *            edenOnly: the readings minus the zero-user one (the in-process sim worlds), MB per user.
+ *            `--synced` (fix-s3b): the server runs with `--sync on` and each step's users are backfilled
+ *            (`/sim/sync-warm`) before the reading, as a long-running server holds them; steps default to 100, 250
+ *            and 500 users there (`--steps 100,250,500` sets either). Without it the server never syncs (the old
+ *            figures' setting, kept so they stay comparable).
  *   soak     --minutes 10 with the server clock at 144x (10 minutes = a simulated day: TTLs, idle sessions,
  *            daily budgets)
  *   faults   300 users; Gmail down for 30 s, then Drive 5x slower for 30 s, then a CRM 429 storm for 30 s
@@ -137,12 +141,26 @@ async function ramp() {
   }
 }
 
+const SYNCED = args.includes("--synced");
+
+/** `--steps a,b,c`: the user counts `memory` reads at, increasing; else its default for the mode. */
+export function memorySteps(raw: string | undefined, synced: boolean): number[] {
+  if (raw === undefined) return synced ? [100, 250, 500] : [250, 500, 1_000, 2_000];
+  const steps = raw.split(",").map(Number);
+  if (!steps.length || steps.some((n, i) => !Number.isInteger(n) || n <= 0 || (i > 0 && n <= steps[i - 1]!))) {
+    throw new Error(`--steps must be increasing whole numbers above 0, not ${raw}`);
+  }
+  return steps;
+}
+
 async function memory() {
-  const s = await startServer(["--time", "0.02"]);
+  const s = await startServer(["--time", "0.02", ...(SYNCED ? ["--sync", "on"] : [])]);
   try {
-    const readings = [{ users: 0, ...(await sim(s.base, "gc")) }];
+    const readings: Record<string, unknown>[] = [{ users: 0, ...(await sim(s.base, "gc")) }];
+    const warming: Record<string, unknown>[] = [];
     let done = 0;
-    for (const target of [250, 500, 1_000, 2_000]) {
+    const i = args.indexOf("--steps");
+    for (const target of memorySteps(i >= 0 ? args[i + 1] : undefined, SYNCED)) {
       // Each new user runs three sessions quickly: their cache fills from real lookups.
       await load(s.base, {
         users: target - done,
@@ -154,9 +172,20 @@ async function memory() {
         askRate: 0.3,
       });
       done = target;
+      if (SYNCED) {
+        const w = await sim(s.base, "sync-warm", { maxTicks: 2_000 });
+        warming.push({ users: target, ...w });
+        if (Number(w.cold) > 0) throw new Error(`${w.cold} users never warmed: the reading would not be synced users`);
+      }
       readings.push({ users: target, ...(await sim(s.base, "gc")) });
     }
-    return { scenario: "memory", readings, edenOnly: edenOnly(readings) };
+    return {
+      scenario: "memory",
+      synced: SYNCED,
+      readings,
+      edenOnly: edenOnly(readings),
+      ...(SYNCED ? { warming } : {}),
+    };
   } finally {
     s.stop();
   }
@@ -308,7 +337,9 @@ async function hot() {
 }
 
 const scenarios: Record<string, () => Promise<unknown>> = { steady, ramp, memory, soak, faults, cold, hot };
-const fn = scenarios[scenario];
-if (!fn) throw new Error(`unknown scenario ${scenario}: ${Object.keys(scenarios).join(", ")}`);
-console.log(JSON.stringify(await fn(), null, 2));
-process.exit(0);
+if (import.meta.main) {
+  const fn = scenarios[scenario];
+  if (!fn) throw new Error(`unknown scenario ${scenario}: ${Object.keys(scenarios).join(", ")}`);
+  console.log(JSON.stringify(await fn(), null, 2));
+  process.exit(0);
+}

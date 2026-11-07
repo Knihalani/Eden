@@ -12,6 +12,7 @@
  * - eden:  Eden's packet injected before the user turn (and any queued later, before each model request), plus
  *          `ask_context` backed by the real `ContextPartner` with `--config`;
  * - both:  the search tools, with Eden's injected context (Eden sees the agent's tool results);
+ * - both+ask: as both, plus `ask_context` (fix-s3b: the shape integrators ship, weak point 4);
  * - eden-judge, both-judge: as eden and both, with Eden's model judge on.
  *
  * A condition may end in `@w<ms>` ("both@w0"): how long the first observe waits for Eden's slow path before the agent's
@@ -140,6 +141,7 @@ import { effective, PRESETS } from "./presets";
 import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Budgeted } from "./reader-disk";
 import { parseSuites } from "./suites";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
+import { DayLog, dayId, isRecap, placePackets, poolDays, shiftClocks, withRecaps, type DaySummary } from "./pi-day";
 import { sanitizeForStore } from "@eden/redact";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 
@@ -172,6 +174,11 @@ const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 // The first N tasks of each world only: a plumbing check before a real run.
 const LIMIT = Number(opt("limit", "0"));
+// `--day K` (pi-day.ts): one agent session and one Eden session per K requests, the world changing between them, and
+// a recap turn closing each day; 0 (the default) is one session per request.
+const DAY = Number(opt("day", "0"));
+if (!Number.isInteger(DAY) || DAY < 0) throw new Error(`--day must be a whole number of requests, not ${DAY}`);
+const DAYS: (DaySummary & { seed: number; kind: string })[] = [];
 // `--templates a,b`: only the hidden-context tasks of these templates (both variants), for a small targeted smoke.
 const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
 
@@ -311,6 +318,7 @@ const graderReplay = REPLAY_DIR
  * reads them as F recorded them.
  */
 const REUSE_FILE = opt("reuse-arms", "");
+if (REUSE_FILE && DAY > 0) throw new Error("--reuse-arms copies single-request arms: it cannot stand in for --day");
 if (REUSE_FILE && !existsSync(REUSE_FILE)) throw new Error(`--reuse-arms ${REUSE_FILE}: no such file`);
 
 // ---- Spend: one hard cap over every call, reserved before the call at its worst case and settled at its real cost.
@@ -524,16 +532,20 @@ const textOf = (m: AgentMessage | undefined) =>
 
 /** One world under one condition: a fresh Eden (if any) sees the world's tasks in order, as in agent-ab. */
 async function runWorld(
-  world: World,
+  shared: World,
   seed: number,
-  tasks: Task[],
+  baseTasks: Task[],
   cond: Condition,
   records: TaskRecord[],
   grading: Promise<void>[],
 ): Promise<RunResult[]> {
+  // `--day` changes items during the run: each stream gets its own copy of them, since every condition's stream reads
+  // the same world concurrently.
+  const world: World = DAY > 0 ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
+  const tasks = DAY > 0 ? withRecaps(baseTasks, DAY) : baseTasks;
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
   const notify = pushNotifier(sources, CONNECTORS, seed);
-  const { name: condition, waitMs, useEden, withPartner, useTools, judge, act, firewall, config } = cond;
+  const { name: condition, waitMs, useEden, withPartner, useTools, askTool, judge, act, firewall, config } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.
@@ -675,6 +687,13 @@ async function runWorld(
     await partner.observe({ ...who, at: clock, kind: "session_end" });
     previous = null;
   };
+  // `--day`: the day's log, the agent's transcript so far, and each earlier turn's packets; a new day starts after a
+  // recap (and at the first task).
+  let day: DayLog | null = null;
+  let dayNo = -1;
+  let newDay = true;
+  let dayMessages: AgentMessage[] = [];
+  const dayPackets: string[][] = [];
   for (const task of tasks) {
     if (exhausted()) break;
     if (PACER.remaining < TASK_REQUESTS) {
@@ -684,10 +703,19 @@ async function runWorld(
     clock += 3_600_000; // an hour between tasks: Eden's clock, for its caches and planner
     if (sync) await sync.tick();
     notify(partner, scope);
-    const sessionId = task.id;
+    if (DAY > 0 && newDay) {
+      dayNo++;
+      day = new DayLog(dayId(task.id, dayNo), condition);
+      dayMessages = [];
+      dayPackets.length = 0;
+    }
+    const startsDay = newDay;
+    newDay = DAY > 0 && isRecap(task);
+    day?.turn();
+    const sessionId = DAY > 0 ? dayId(task.id, dayNo) : task.id;
     const ev = (e: Record<string, unknown>) => ({ ...scope, sessionId, at: clock, ...e }) as AgentEvent;
     const r: RunResult = emptyResult(task.id, condition);
-    await closePrevious();
+    if (startsDay) await closePrevious();
     const tl = new Timeline();
     current = tl;
     bySession.set(sessionId, { r, tl });
@@ -718,14 +746,20 @@ async function runWorld(
         r.injectedItems += i.citations.length;
         r.injectedChars += i.text.length;
         uptake.packet(i);
+        day?.packet(
+          i.citations.map((c) => c.itemId),
+          i.text,
+        );
         tl.point("eden.inject", { items: i.citations.length, chars: i.text.length, mode: i.mode });
       }
     };
     try {
       if (partner) {
-        const o = tl.begin("eden.observe", "eden", "path", { event: "session_start" });
-        await partner.observe(ev({ kind: "session_start", agent: "pi-ab" }));
-        tl.end(o);
+        if (startsDay) {
+          const o = tl.begin("eden.observe", "eden", "path", { event: "session_start" });
+          await partner.observe(ev({ kind: "session_start", agent: "pi-ab" }));
+          tl.end(o);
+        }
         const arriving = task.event === "external" ? { source: "gmail" } : {};
         const o2 = tl.begin("eden.observe", "eden", "path", { event: task.event });
         const first = await partner.observe(ev({ kind: task.event, text: task.text, ...arriving }), { waitMs });
@@ -734,6 +768,10 @@ async function runWorld(
           r.injectedItems += first.injection.citations.length;
           r.injectedChars += first.injection.text.length;
           uptake.packet(first.injection);
+          day?.packet(
+            first.injection.citations.map((c) => c.itemId),
+            first.injection.text,
+          );
           tl.point("eden.inject", { items: first.injection.citations.length, chars: first.injection.text.length });
         }
       }
@@ -768,7 +806,8 @@ async function runWorld(
           });
         }
       }
-      if (useEden && !useTools && partner) {
+      // `eden`, and `both+ask` (the shape integrators ship: own tools, Eden's context and its ask).
+      if (askTool && partner) {
         tools.push({
           name: "ask_context",
           description: ASK_DESCRIPTION,
@@ -784,6 +823,10 @@ async function runWorld(
             // The agent's question is recorded with the answer (sim data is fake), for replays of real questions.
             const question = sanitizeForStore(params.question);
             uptake.answer(a, question);
+            day?.answer(
+              a.citations.map((c) => c.itemId),
+              a.answer,
+            );
             tl.point("eden.ask", { question: question.slice(0, QUESTION_CHARS), items: a.citations.length });
             return { content: [{ type: "text", text: a.answer || "Nothing found." }], details: {} };
           },
@@ -837,6 +880,8 @@ async function runWorld(
       const agent = new Agent({
         initialState: {
           systemPrompt: systemPrompt(world, { lookups: LOOKUPS, data: useTools || useEden, act }),
+          // `--day`: the day's transcript so far (its earlier requests, tool calls and answers).
+          ...(DAY > 0 && !startsDay ? { messages: dayMessages } : {}),
           model: piModel,
           thinkingLevel: "off",
           tools,
@@ -846,6 +891,12 @@ async function runWorld(
         // the user turn (agent-ab's `withContext` placement), never stored in the agent's own transcript.
         transformContext: async (messages) => {
           takeEden();
+          // `--day`: the packets of the day's earlier turns stay where the agent saw them, before their requests.
+          if (DAY > 0 && dayPackets.some((p) => p.length)) {
+            const asSystem = (text: string) =>
+              ({ role: "system", content: text, timestamp: Date.now() }) as unknown as AgentMessage;
+            return placePackets(messages, dayPackets, packets, asSystem);
+          }
           if (!packets.length) return messages;
           const at = messages.map((m) => m.role).lastIndexOf("user");
           const sys = packets.map((text) => ({ role: "system" as const, content: text, timestamp: Date.now() }));
@@ -1032,6 +1083,10 @@ async function runWorld(
         }
       });
       await agent.prompt(userPrompt(task));
+      if (DAY > 0) {
+        dayMessages = [...agent.state.messages];
+        dayPackets.push([...packets]);
+      }
       // A request that never reached its end (refused by the cap, or thrown) gives back its reservation.
       if (request) {
         const q = request as { id: number };
@@ -1058,6 +1113,28 @@ async function runWorld(
     record.firstTokenMs = record.requests[0]?.firstTokenMs ?? null;
     if (r.error) record.error = r.error.slice(0, 200);
     if (partner) Object.assign(record, uptake.fields());
+    if (DAY > 0 && day) {
+      // The world changes after the request: its planted item's times move, the source serves the new text, and a
+      // notifying source says so (`--push`), as a meeting moved later that day would.
+      const it = task.planted && !isRecap(task) ? world.items.find((x) => x.id === task.planted) : undefined;
+      if (it) {
+        const moved = shiftClocks(it.text);
+        if (moved.moves.length) {
+          it.text = moved.text;
+          it.updatedAt = clock;
+          for (const src of sources) if (src.id === it.sourceId) src.reindex();
+          if (partner && CONNECTORS.push !== "none") partner.sourceChanged(scope, it.sourceId);
+          day.changed(it.id, moved.moves);
+        }
+      }
+      if (isRecap(task)) {
+        // The recap is measured, never graded or reported as a task.
+        day.recap(r.error ? "" : r.answer);
+        DAYS.push({ ...day.summary(), seed, kind: task.kind });
+        previous = { sessionId, r };
+        continue;
+      }
+    }
     out.push(r);
     bg.tasks.push(r.task);
     records.push(record);
@@ -1222,6 +1299,7 @@ writeFileSync(
       background,
       ...(REPLAY_DIR ? { replay: replaySummary() } : {}),
       ...(REUSE_FILE ? { reusedArms: { from: REUSE_FILE, conditions: reused.conditions } } : {}),
+      ...(DAY > 0 ? { day: DAY, days: DAYS, daysPooled: poolDays(DAYS) } : {}),
       overBudget: overBudget(budgeted),
       timeline: TIMELINE,
       wallSeconds: Math.round((performance.now() - t0) / 100) / 10,

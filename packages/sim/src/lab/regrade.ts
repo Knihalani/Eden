@@ -12,11 +12,22 @@
  *     --graders cohere/north-mini-code:free,dots-studio/dots-3-note-preview:free [--limit 4] [--out regrade.json]
  *     [--allow-logging] [--rpm 18] [--max-requests N]
  *
+ * A `claude-*` grader is Anthropic's API through the lab provider (D97), metered on a spend ledger with a hard cap, and
+ * needs no OpenRouter key (fix-s3b: a stronger grader regrades a Haiku-graded run):
+ *
+ *   env -u OPENROUTER_API_KEY bun packages/sim/src/lab/regrade.ts --results pi-ab.json --graders claude-sonnet-5-5
+ *     --spend-ledger .local/ledger.jsonl --spend-cap 4 --spend-headroom 0.3 --run-label regrade [--out regrade.json]
+ *
+ * The summary also splits agreement with the run's grader by task kind (hidden, control, neutral), with the counts of
+ * facts each grader alone called true, since a disagreement on a control or neutral task moves the false-concern rate.
+ *
  * One request per answer per grader (plus retries). The answers are sim data.
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import type { Model } from "@eden/llm";
 import { chat, gradeMessages, readVerdicts, type RunResult, type Task } from "./ab-common";
-import { isCapError, labAccess } from "./free";
+import { isAnthropic, isCapError, labAccess, labModel } from "./free";
+import { byKind } from "./regrade-kinds";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -30,7 +41,7 @@ if (!GRADERS.length) throw new Error("--graders is required");
 const LIMIT = Number(opt("limit", "0"));
 const OUT = opt("out", "");
 const KEY = process.env.OPENROUTER_API_KEY;
-if (!KEY) throw new Error("needs OPENROUTER_API_KEY");
+if (!KEY && GRADERS.some((g) => !isAnthropic(g))) throw new Error("an OpenRouter grader needs OPENROUTER_API_KEY");
 const access = labAccess(args, GRADERS);
 
 const run = JSON.parse(readFileSync(RESULTS, "utf8")) as { grader?: string; tasks: Task[]; results: RunResult[] };
@@ -47,8 +58,15 @@ interface Graded {
   error?: string;
   ms?: number;
   reply?: string;
+  usd?: number;
 }
 const graded: Graded[] = [];
+const anthropicModels = new Map<string, Model>();
+const anthropicGrader = (id: string): Model => {
+  let m = anthropicModels.get(id);
+  if (!m) anthropicModels.set(id, (m = labModel(access, { apiKey: "", model: id }, "grader")));
+  return m;
+};
 const meter = { before: () => {}, after: () => {} };
 for (const r of todo) {
   const task = byId.get(r.task)!;
@@ -56,13 +74,26 @@ for (const r of todo) {
     const g: Graded = { task: r.task, condition: r.condition, grader };
     const t0 = performance.now();
     try {
-      const via = { fetch: access.fetch, allowLogging: access.allowLogging };
-      const { msg } = await chat(KEY, meter, grader, gradeMessages(task, r.answer), undefined, true, via);
-      const verdicts = readVerdicts(msg.content ?? "");
+      let content: string;
+      if (isAnthropic(grader)) {
+        // The request `gradeWith` sends (pi-ab's Anthropic grader): same prompt, cap and JSON mode, on the ledger.
+        const messages = gradeMessages(task, r.answer).map((m) => ({
+          role: m.role as "system" | "user" | "assistant",
+          content: String(m.content ?? ""),
+        }));
+        const res = await anthropicGrader(grader).chat({ messages, maxTokens: 2_000, json: true });
+        g.usd = res.costUsd ?? 0;
+        content = res.text;
+      } else {
+        const via = { fetch: access.fetch, allowLogging: access.allowLogging };
+        const { msg } = await chat(KEY!, meter, grader, gradeMessages(task, r.answer), undefined, true, via);
+        content = msg.content ?? "";
+      }
+      const verdicts = readVerdicts(content);
       g.facts = Object.fromEntries(task.must.map((f, i) => [f.id, verdicts.get(String(i + 1)) === true]));
       g.readable = task.must.every((_, i) => verdicts.has(String(i + 1)));
       // The grader's reply on sim data, kept short for a reader checking a disagreement.
-      g.reply = (msg.content ?? "").slice(-200);
+      g.reply = content.slice(-200);
     } catch (e) {
       g.error = isCapError(e) ? "request cap reached" : e instanceof Error ? e.message.slice(0, 160) : String(e);
     }
@@ -100,6 +131,15 @@ const summary = GRADERS.map((grader) => {
     factsTrue: mine.reduce((n, g) => n + Object.values(g.facts ?? {}).filter(Boolean).length, 0),
     agreeWithRun: original,
     agreeWith: others,
+    usd: mine.reduce((n, g) => n + (g.usd ?? 0), 0),
+    // Per task kind: agreement with the run's grader, and the facts only one of them called true.
+    byKind: byKind(
+      mine.map((g) => ({
+        kind: byId.get(g.task)?.kind ?? "hidden",
+        mine: g.facts,
+        run: todo.find((r) => r.task === g.task && r.condition === g.condition)?.facts,
+      })),
+    ),
   };
 });
 const out = { results: RESULTS, runGrader: run.grader, summary, requests: access.pacer.summary(), graded };
