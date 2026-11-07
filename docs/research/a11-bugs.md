@@ -193,7 +193,22 @@ the cap cut is not reachable today (496 packets across train1-6 seeds 41-42, non
   retrying without Eden's context (no such upstream seen; a retry would double the model call).
 - The removal hold under a real clock jump (above). Source-map file modes in an existing `/data`.
 
+## Review
+
+The `reviewer` subagent ran `check` and `eval` on the branch, probed `bodyShapeUnder` (escapes, the widest valid
+inputs at about 666,000 counted values against 1,010,000, stray `]`), the router limiter's keying and order, SIGTERM,
+streaming through the proxy with the caller's signal (10 chunks over 1 s all arrived) and `readTrace` against every
+decision and silent reason partner.ts emits: APPROVE, with two low findings, both taken: `deliverChecked` dropped an
+item whose ledger entry a sweep (not a delivery) removed during the re-reads (now kept; not reproduced end to end, the
+predicate was wrong), and the proxy still sent a tool call whose input's JSON was past the cap (now the head of its
+arguments, `proxy-a11.test.ts`). It noted the body scan doubles the router's cost on a large text body (about 8 ms
+scan and 11 ms parse for 8 MB).
+
 ## Measurements on the final tree
 
-See the commit that adds this note for the runs on the final tree: `bun run check`, `bun run eval`, the funnel, the
-confirmation fuzz and the reviewer.
+- `bun run check`: green, 2,091 pass, 0 fail.
+- `bun run eval`: precision 0.5909, recall 0.52, falseFireRate 0, plannedLookups 87 (the same before the branch).
+- `bun run funnel --jobs 4`: hidden 305/384, decoys 267/384 (unchanged), run before and after the fuzz's engine fixes.
+- Fuzz on the merged tree: seeds 20,001-24,000 on all five configurations before the review fix (4 × 1,000, about
+  376 s a chunk), seeds 24,001-26,000 after it (4 × 500, about 183 s): no violation.
+- Paid calls: none ($0).
