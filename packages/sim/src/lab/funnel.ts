@@ -15,7 +15,7 @@
  * - `--baseline`: a `--json` file of an earlier run on the same suites and seeds; prints, task by task, the hidden
  *   items gained and lost and the decoys gained and lost.
  * - Held-out suites are refused without `--blind`: they are measurement only, never for tuning (suites.ts).
- *   UNRUN_BLIND's (held-out 9-17) are kept out of `all`; all but UNREAD_BLIND's (held-out 17, D350) have been read.
+ *   UNRUN_BLIND's (held-out 9-17) are kept out of `all`; all have been read (held-out 17 by A29, D399).
  * - Not recorded in bench/ledger.jsonl unless `--record` (a screen is not a result).
  * - `--jobs N`: N hidden-funnel.ts processes, rows merged before the score (same score). At `--time 0` each takes a
  *   block of suite × seed shards and all run at once, default one per core (D139; ms/task is then contended, so

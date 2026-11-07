@@ -1,0 +1,96 @@
+{
+  "provider": "anthropic-direct (lab, D97)",
+  "model": "claude-haiku-5-5",
+  "wiring": "buildPartner (DEFAULT_CONFIG, DEFAULT_LIMITS, tenant cap $25/day)",
+  "set": {},
+  "users": [
+    {
+      "user": "user:41",
+      "seed": 41,
+      "itemsAtSources": 1492,
+      "syncTicks": 45,
+      "syncCalls": 18,
+      "warm": true,
+      "syncMs": 10044,
+      "enrichMs": 28470,
+      "cardCalls": 7,
+      "inputTokens": 22100,
+      "cachedTokens": 7920,
+      "outputTokens": 10849,
+      "outPerCall": 1550,
+      "usd": 0.006955,
+      "stats": {
+        "enqueued": 1492,
+        "prefiltered": 1392,
+        "leanSkipped": 1338,
+        "reused": 10,
+        "carded": 73,
+        "sent": 127,
+        "sentenceReused": 17,
+        "calls": 7,
+        "retries": 0,
+        "costUsd": 0.006954700000000001,
+        "failures": 0,
+        "overBudget": 0,
+        "unanchored": 0,
+        "implausible": 0,
+        "requestOnly": 54,
+        "requested": 127,
+        "deferred": 0
+      }
+    },
+    {
+      "user": "user:42",
+      "seed": 42,
+      "itemsAtSources": 1497,
+      "syncTicks": 46,
+      "syncCalls": 18,
+      "warm": true,
+      "syncMs": 10216,
+      "enrichMs": 32330,
+      "cardCalls": 6,
+      "inputTokens": 19708,
+      "cachedTokens": 7920,
+      "outputTokens": 12353,
+      "outPerCall": 2059,
+      "usd": 0.007434,
+      "stats": {
+        "enqueued": 1497,
+        "prefiltered": 1401,
+        "leanSkipped": 1350,
+        "reused": 14,
+        "carded": 57,
+        "sent": 120,
+        "sentenceReused": 13,
+        "calls": 6,
+        "retries": 0,
+        "costUsd": 0.007434499999999999,
+        "failures": 0,
+        "overBudget": 0,
+        "unanchored": 0,
+        "implausible": 12,
+        "requestOnly": 51,
+        "requested": 107,
+        "deferred": 0
+      }
+    }
+  ],
+  "meanUsd": 0.007194,
+  "meanCalls": 6.5,
+  "meanItems": 1494.5,
+  "userShape": {
+    "suites": [
+      "heldout17"
+    ],
+    "days": 2,
+    "daySize": [
+      16,
+      16
+    ],
+    "mix": {
+      "hidden": 1,
+      "control": 1,
+      "neutral": 8
+    }
+  }
+}

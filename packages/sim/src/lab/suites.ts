@@ -126,8 +126,8 @@ const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
 /**
  * Held-out suites kept out of `all` so a tuning command cannot spend them; held-out 9-13 have been read (D72, D80,
  * D85, D98, D112) and a blind round needs a new suite. Held-out 14 is RealUse-1's blind suite (run once for it);
- * held-out 15 was RealUse-2's (run once); held-out 16 was the CL wave's final check (RealUse-3); held-out 17 is
- * unrun, reserved for the end-of-day confirmation. A run names them to measure on them (with `--blind`).
+ * held-out 15 was RealUse-2's (run once); held-out 16 was the CL wave's final check (RealUse-3); held-out 17 was the
+ * end-of-day confirmation's (A29, run once). A run names them to measure on them (with `--blind`).
  */
 export const UNRUN_BLIND = [
   "heldout9",
@@ -140,8 +140,9 @@ export const UNRUN_BLIND = [
   "heldout16",
   "heldout17",
 ];
-/** The UNRUN_BLIND suites nobody has read yet: the funnel's "read before" warning skips them (D350). */
-export const UNREAD_BLIND = ["heldout17"];
+/** The UNRUN_BLIND suites nobody has read yet: the funnel's "read before" warning skips them (D350). Held-out 17 was
+ * read by A29 (D399): none is unread now. */
+export const UNREAD_BLIND: string[] = [];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**
