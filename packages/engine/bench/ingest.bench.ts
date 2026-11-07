@@ -22,7 +22,11 @@
  * dropped, minus the heap before the users were built: the text the cache keeps is counted. The source map's SQLite
  * pages live outside the JS heap and are not counted.
  *
- * Run: `bun packages/engine/bench/ingest.bench.ts [--world] [--plain] [users=200] [itemsPerUser=500]
+ * `--ingest`: the `shipped` mode runs the trial `ingestWorker` (D216) with one ingest worker, which redacts and reads
+ * each listed page; the other modes are unchanged. Its backfill line is wall time, with the worker's CPU beside the
+ * main thread's; `cpu` prints each mode's whole-process CPU per item (both threads).
+ *
+ * Run: `bun packages/engine/bench/ingest.bench.ts [--world] [--plain] [--ingest] [users=200] [itemsPerUser=500]
  * [mode=all|core|graph|shipped]`, or `bun packages/engine/bench/ingest.bench.ts --quick [--world] [--plain]`. `--plain`
  * holds item text as plain strings (`CacheLimits.packText` off), the layout before D188.
  *
@@ -41,17 +45,24 @@ import type { ContextItem, Scope } from "@eden/protocol";
 import { SourceMap } from "@eden/graph";
 import { Budget, DEFAULT_LIMITS } from "@eden/llm";
 import { SourceFanout, type ListPage, type Source } from "@eden/sources";
+import { WorkerPool } from "@eden/primitives";
 import { ItemCache, sanitizeItem } from "../src/cache";
+import { INGEST_MODULE } from "../src/ingest";
 import { DEFAULT_CONFIG } from "../src/config";
 import { ContextPartner } from "../src/partner";
 import { SyncManager, type SyncOptions } from "../src/sync";
+import { mainThreadCpuUs } from "./thread-cpu";
 import { buildWorkload } from "./workload";
 
 const QUICK = process.argv.includes("--quick");
 const WORLD = process.argv.includes("--world");
 /** `--plain`: the cache holds item text as plain strings (`packText` off; D188's before), in every mode. */
 const PLAIN = process.argv.includes("--plain");
-const args = process.argv.slice(2).filter((a) => a !== "--quick" && a !== "--world" && a !== "--plain");
+/** `--ingest`: the shipped mode with the trial `ingestWorker` and one ingest worker (D216). */
+const INGEST = process.argv.includes("--ingest");
+const args = process.argv
+  .slice(2)
+  .filter((a) => a !== "--quick" && a !== "--world" && a !== "--plain" && a !== "--ingest");
 if (QUICK && args.length > 0) throw new Error("--quick runs 40 × 500 in every mode; it takes no other arguments");
 const USERS = QUICK ? 40 : Number(args[0] ?? 200);
 const PER_USER = QUICK ? 500 : Number(args[1] ?? 500);
@@ -70,6 +81,10 @@ interface Result {
   releasedB: number;
   backfillMs: number;
   sweepMs: number;
+  /** Whole-process CPU (every thread) per item over the backfill, µs. */
+  cpuUs: number;
+  /** The main thread's CPU per item over the backfill, µs (`thread-cpu.ts`). */
+  mainUs: number;
 }
 
 /** A connector that lists a fixed set of items newest first, instantly. */
@@ -154,7 +169,20 @@ async function run(mode: Mode): Promise<Result> {
   });
   let sync: SyncManager;
   let sweepAfter: number;
+  let closePool = () => {};
   if (mode === "shipped") {
+    const ingestPool = INGEST
+      ? await WorkerPool.start({
+          module: INGEST_MODULE,
+          size: 1,
+          maxQueue: 4_096,
+          maxBatch: 4,
+          taskTimeoutMs: 60_000,
+          inlineBelow: 0,
+          warm: "warmIngest",
+        })
+      : undefined;
+    closePool = () => ingestPool?.close();
     const partner = new ContextPartner({
       sources,
       sourceMap: new SourceMap(),
@@ -162,7 +190,13 @@ async function run(mode: Mode): Promise<Result> {
       budget: new Budget(DEFAULT_LIMITS),
       model: null,
       now,
-      config: { syncMaxItems: PER_USER, syncMaxUsersPerTenant: USERS + 1, syncCallsPerMin: 1e7 },
+      ...(ingestPool ? { ingestPool } : {}),
+      config: {
+        syncMaxItems: PER_USER,
+        syncMaxUsersPerTenant: USERS + 1,
+        syncCallsPerMin: 1e7,
+        ingestWorker: INGEST,
+      },
     });
     if (!partner.sync) throw new Error("the default has no sync");
     sync = partner.sync;
@@ -210,7 +244,11 @@ async function run(mode: Mode): Promise<Result> {
   const synced = () => users.reduce((s, { scope }) => s + cache.syncedCount(scope), 0);
   const before = heap();
   for (const { scope } of users) sync.track(scope, clock);
+  const cpu0 = process.cpuUsage();
+  const main0 = mainThreadCpuUs();
   const backfillMs = await listAll(n);
+  const cpu = process.cpuUsage(cpu0);
+  const mainUs = (mainThreadCpuUs() - main0) / n;
   const after = heap();
   if (synced() !== n) throw new Error(`synced ${synced()} items, expected ${n}`);
 
@@ -222,6 +260,7 @@ async function run(mode: Mode): Promise<Result> {
   // The sources' raw items dropped: what is left is the cache's own (its copies of the text included).
   for (const { source } of users) source.items = [];
   const released = heap();
+  closePool();
   if (synced() !== n) throw new Error(`synced ${synced()} items after the sweep, expected ${n}`);
 
   return {
@@ -233,6 +272,8 @@ async function run(mode: Mode): Promise<Result> {
     releasedB: (released - base) / n,
     backfillMs,
     sweepMs,
+    cpuUs: (cpu.user + cpu.system) / n,
+    mainUs,
   };
 }
 
@@ -250,6 +291,8 @@ const minus = (a: Result, b: Result, label: string): Result => ({
   releasedB: a.releasedB - b.releasedB,
   backfillMs: a.backfillMs - b.backfillMs,
   sweepMs: a.sweepMs - b.sweepMs,
+  cpuUs: a.cpuUs - b.cpuUs,
+  mainUs: a.mainUs - b.mainUs,
 });
 
 if (MODE !== "all") {
@@ -264,6 +307,7 @@ if (MODE !== "all") {
       import.meta.path,
       ...(WORLD ? ["--world"] : []),
       ...(PLAIN ? ["--plain"] : []),
+      ...(INGEST ? ["--ingest"] : []),
       String(USERS),
       String(PER_USER),
     ];
@@ -287,6 +331,10 @@ if (MODE !== "all") {
   console.log(`per stage (the difference between modes):`);
   console.log(line("+graph", minus(graph, core, "+graph")));
   console.log(line("+onStored", minus(shipped, graph, "+onStored")));
+  console.log(
+    `cpu (backfill): ${results.map((r) => `${r.mode} ${r.cpuUs.toFixed(1)} µs/item (main thread ${r.mainUs.toFixed(1)})`).join(", ")}` +
+      (INGEST ? " (shipped with the ingest worker)" : ""),
+  );
   const ratio = (a: number, b: number) => (a / b).toFixed(2);
   console.log(
     `shipped / core: backfill ${ratio(shipped.backfillUs, core.backfillUs)}x, memory ` +

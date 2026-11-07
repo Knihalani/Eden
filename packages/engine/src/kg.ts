@@ -1124,15 +1124,22 @@ export class UserGraph {
 
   /** Puts an item in the graph, replacing what an earlier copy of it put there. */
   add(item: ContextItem, now: number): void {
-    const x = extract(item, now, this.memo);
+    this.addExtracted(item.id, extract(item, now, this.memo));
+  }
+
+  /**
+   * Puts an item in the graph from what `extract` read of it (`add` is this with `extract`): the ingest worker reads
+   * items off the event loop (`ingest.ts`, D216) and the cache places its reading here, with the same result.
+   */
+  addExtracted(itemId: string, x: Extraction): void {
     // A packed word must stay an int32: ids in use and every id this item could intern (its nodes, and its authors,
     // which neither `MAX_NODES` nor `MAX_NODES_PER_ITEM` bounds) stay under `maxIds`, slots under `MAX_INDEX`. Checked
     // before an earlier copy leaves: a copy refused here leaves the one held.
     if (this.top - this.freeIds.length + x.nodes.size + x.authors.length > this.maxIds) return;
-    const h = hashOf(item.id);
-    const replacing = this.slots.get(item.id, h) >= 0;
+    const h = hashOf(itemId);
+    const replacing = this.slots.get(itemId, h) >= 0;
     if (!replacing && this.freeSlots.length === 0 && this.itemAt.length >= MAX_INDEX) return;
-    if (replacing) this.remove(item.id);
+    if (replacing) this.remove(itemId);
     const slot = this.freeSlots.pop() ?? this.itemAt.length;
     if (slot >= this.placedAt.length) {
       this.placedAt = grown(this.placedAt, slot + 1);
@@ -1183,7 +1190,7 @@ export class UserGraph {
       this.flags = grownFlags;
     }
     this.flags[slot] = (x.automated ? AUTOMATED_FLAG : 0) | (x.bound ? BOUND_FLAG : 0);
-    this.itemAt[slot] = item.id;
+    this.itemAt[slot] = itemId;
     this.slotHash[slot] = h;
     this.slots.put(slot);
     this.placedAt[slot] = at;
@@ -1228,6 +1235,20 @@ export class UserGraph {
       this.release(to);
       return;
     }
+  }
+
+  /**
+   * Forgets what the memo read (`Memo`), once a batch of adds is done (`ItemCache.put` calls it after each put). A
+   * remembered sentence or person is cut from an item's text, and in JSC such a substring keeps that whole text
+   * alive: kept between puts, 256 of them held about 190-310 B an item of a synced user (ingest.bench.ts; D215). The
+   * memo pays within a batch, a listing page of one user's mail with its shared footers and senders: emptied after
+   * every 100 adds, the graph's add took the same time as with it kept (52-59 against 51-56 µs an item, workload;
+   * 35-36 against 35-39, sim world; scratch runs, 20 users x 500 items). The same nodes either way: it only saves
+   * reading a sentence again.
+   */
+  rest(): void {
+    this.memo.sentences.clear();
+    this.memo.people.clear();
   }
 
   /** Takes an item out: its edges, the links it stated, and nodes nothing else holds. */

@@ -469,6 +469,14 @@ export interface EngineConfig {
    * kind or constraint word reads (R3-19; on in the default, D124, amending D122).
    */
   readerGateVisits: boolean;
+  /**
+   * Trial (D216; owner repo owner, ends 2026-12-07): redact and read each source page in the ingest worker
+   * (`ingest.ts`, `PartnerDeps.ingestPool`): its terms, graph reading, mentions and deflated text are prepared off the
+   * event loop and the cache only applies them, with the same stored state. Inert without an `ingestPool` (the
+   * servers start one worker per process when this is on). Off: pages are redacted and read on the event loop (or
+   * redacted in the gate pool, D26).
+   */
+  ingestWorker: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -593,4 +601,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerPushBehind: true,
   readerGate: true,
   readerGateVisits: true,
+  ingestWorker: false,
 };

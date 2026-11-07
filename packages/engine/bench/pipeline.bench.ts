@@ -5,13 +5,15 @@
  * complexity. Reports per-event latency of `observe` (fast path, waitMs 0), the CPU cost of slow-path lookups, and
  * event-loop lag while the stream runs.
  *
- *   bun packages/engine/bench/pipeline.bench.ts [--plain] [itemsPerSource=1500] [events=2000] [gateWorkers=0]
+ *   bun packages/engine/bench/pipeline.bench.ts [--plain] [--ingest] [itemsPerSource=1500] [events=2000] [gateWorkers=0]
  *     [warmup=20]
  *
  * The first `warmup` events are reported on their own line and left out of the steady-state percentiles: event #0
  * pays JIT compilation and session set-up (30-45 ms), which otherwise is the whole-run max and reads as a recurring
  * stall. Lag samples taken while those events ran are split off the same way. The cold maxima stay printed so start-up
  * cost remains visible.
+ *
+ * `--ingest`: the trial `ingestWorker` (D216) with one ingest worker; each page's redaction and reading run in it.
  *
  * With gateWorkers > 0, lookup results are redacted in a WorkerPool (D25) and each event waits for the pool to drain.
  * The stream is sequential, so this shows the pool's overhead and that decisions do not change, not the tail latency
@@ -20,12 +22,14 @@
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import { WorkerPool } from "@eden/primitives";
-import { ContextPartner, GATE_MODULE, ItemCache, type Trace } from "../src/index";
+import { ContextPartner, GATE_MODULE, INGEST_MODULE, ItemCache, type Trace } from "../src/index";
 import { buildWorkload } from "./workload";
 
 /** `--plain`: the cache holds item text as plain strings (`packText` off; D188's before). */
 const PLAIN = process.argv.includes("--plain");
-const argv = process.argv.filter((a) => a !== "--plain");
+/** `--ingest`: the trial `ingestWorker` with one ingest worker (D216). */
+const INGEST = process.argv.includes("--ingest");
+const argv = process.argv.filter((a) => a !== "--plain" && a !== "--ingest");
 const itemsPerSource = Number(argv[2] ?? 1_500);
 const eventCount = Number(argv[3] ?? 2_000);
 const gateWorkers = Number(argv[4] ?? 0);
@@ -43,6 +47,18 @@ const pool =
       })
     : undefined;
 
+const ingestPool = INGEST
+  ? await WorkerPool.start({
+      module: INGEST_MODULE,
+      size: 1,
+      maxQueue: 4_096,
+      maxBatch: 4,
+      taskTimeoutMs: 5_000,
+      inlineBelow: 0,
+      warm: "warmIngest",
+    })
+  : undefined;
+
 const traces: Trace[] = [];
 const partner = new ContextPartner({
   sources: async () => w.sources,
@@ -52,6 +68,7 @@ const partner = new ContextPartner({
   model: null,
   onTrace: (t) => traces.push(t),
   gatePool: pool,
+  ...(ingestPool ? { ingestPool, config: { ingestWorker: true } } : {}),
 });
 
 // Event-loop lag probe: a 1 ms interval; lag = how late it fires.
@@ -84,6 +101,7 @@ const total = performance.now() - t0;
 clearInterval(probe);
 const poolStats = pool?.stats();
 pool?.close();
+ingestPool?.close();
 
 const pct = (xs: number[], p: number) =>
   [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))]!;

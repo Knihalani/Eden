@@ -8,6 +8,7 @@ import {
   ContextPartner,
   ItemCache,
   ModelReaderMaker,
+  startIngestWorkers,
   type EngineConfig,
   type ReaderReport,
   type Trace,
@@ -218,6 +219,20 @@ const percentile = (xs: number[], p: number) => {
 };
 
 export async function runScenarios(scenarios: Scenario[], options: RunOptions): Promise<Metrics> {
+  // The trial `ingestWorker` (D216) reads lookups in a real worker, as the servers would run it.
+  const ingestPool = options.config?.ingestWorker ? await startIngestWorkers(1, 60_000) : undefined;
+  try {
+    return await runWith(scenarios, options, ingestPool);
+  } finally {
+    ingestPool?.close();
+  }
+}
+
+async function runWith(
+  scenarios: Scenario[],
+  options: RunOptions,
+  ingestPool: Awaited<ReturnType<typeof startIngestWorkers>> | undefined,
+): Promise<Metrics> {
   if (options.reader && options.readerModel) throw new Error("a stub reader and a live reader are exclusive");
   const readerKind = options.readerModel ? ("live" as const) : options.reader;
   // A capped run charges every budget to its one cap; an uncapped one keeps the old unbounded budgets.
@@ -289,6 +304,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       budget: budget(),
       model: options.model,
       config: options.config,
+      ...(ingestPool ? { ingestPool } : {}),
       onTrace: (t) => traces.push(t),
       ...(options.planner ? { planner: new QueryPlanner({ seed: 1 }) } : {}),
       ...(reader ? { reader, onReader: (r: ReaderReport) => reports.push(r) } : {}),
