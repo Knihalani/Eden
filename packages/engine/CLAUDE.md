@@ -259,8 +259,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   the source count: keep it lazy (the fan-out's histograms were 8 KB a pair before D261).
 - **Used sources (D320–D323, docs/research/a13-scale.md).** `Sync.engage` marks a source used when a lookup routes to
   it on evidence of its items (`entityHits`, or `routeLocalHits`), never on the prior's draw or a sketch match alone
-  (counted, sketch matches doubled card calls for no hidden fact). Used sources drive two things: their cut copies are
-  read whole again and kept first by the trim (`syncEngagedDeep`), and, past 32 sources, only their items (and items
+  (counted, sketch matches doubled card calls for no hidden fact), the 64 most recent a user. Used sources drive two things: their cut copies are
+  read whole again and kept first by the trim, up to half the cap in all (`syncEngagedDeep`; unbounded, two used
+  mailboxes filled the cap and stopped every other source's stores), and, past 32 sources, only their items (and items
   naming a name the user's requests named) reach the card model (`cardsSourceAware`; `CardEnricher.enqueue`'s
   `defer`). A new path that stores synced items must pass `cardDefer`, or a 1,000-source user's cards go back to every
   item. `syncKeepCut` filters only background stores: a lookup's on-demand poll still stores past the cut (filtering it
