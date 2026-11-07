@@ -248,7 +248,11 @@ export class McpSource implements Source {
     if (!args) return null;
     const result = await client.callTool({ name: fetchTool.name, arguments: args }, undefined, { signal });
     if (result.isError) return null;
-    const row = jsonRows(result.content, result.structuredContent).find((r) => first(r, ID_KEYS) === ref);
+    // The record itself first: a reply that is one object with this id wins over the rows it holds (Gmail's
+    // get_thread is `{id, messages: [...]}`, whose rows carry message ids, never the thread's; D294).
+    const row =
+      topObjects(result.content, result.structuredContent).find((r) => first(r, ID_KEYS) === ref) ??
+      jsonRows(result.content, result.structuredContent).find((r) => first(r, ID_KEYS) === ref);
     return row ? rowItem(this.id, row) : null;
   }
 
@@ -381,6 +385,16 @@ export function toItems(sourceId: string, content: unknown, limit: number, struc
     for (const row of rowsOf(parsed, 0) ?? []) out.push(rowItem(sourceId, row));
   }
   return out.slice(0, limit);
+}
+
+/** The top-level JSON objects of a tool result (its `structuredContent`, else each text block's), not their rows. */
+function topObjects(content: unknown, structured?: unknown): Row[] {
+  if (structured !== undefined) return isObject(structured) ? [structured as Row] : [];
+  const blocks = Array.isArray(content) ? (content as Block[]) : [];
+  return blocks.flatMap((b) => {
+    const parsed = b.type === "text" && b.text ? parseJson(b.text) : undefined;
+    return isObject(parsed) ? [parsed as Row] : [];
+  });
 }
 
 /** The rows of a tool result: its `structuredContent`, else every text block that holds JSON. Prose is no row. */

@@ -24,6 +24,7 @@ import { readFileSync, statSync } from "node:fs";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { isId, scopeKey, type Scope } from "@eden/protocol";
+import { expandPreset } from "./connector-presets";
 import {
   McpSource,
   StaticSource,
@@ -75,8 +76,17 @@ export interface McpSpec {
 
 export type SourceSpec = StaticSpec | McpSpec;
 
+/**
+ * An MCP spec by preset (D294): a common server's read tools filled in by `checkSpecs` (`connector-presets.ts`); any
+ * field given here wins over the preset's.
+ */
+export type PresetSpec = Omit<McpSpec, "kind" | "description" | "searchTool"> &
+  Partial<Pick<McpSpec, "description" | "searchTool">> & { kind?: "mcp"; preset: string };
+
 /** One user's source specs. May be async (a vault). A throw is that user's configuration error. */
-export type SourceDirectory = (scope: Scope) => Promise<SourceSpec[]> | SourceSpec[];
+export type SourceDirectory = (
+  scope: Scope,
+) => Promise<(SourceSpec | PresetSpec)[]> | (SourceSpec | PresetSpec)[];
 
 /** A source configuration that cannot be used; the message names the field. */
 export class SourceConfigError extends Error {}
@@ -415,8 +425,18 @@ function fingerprintOf(spec: SourceSpec): string {
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
 /** Checks a list of specs (from a file or a directory); throws `SourceConfigError` naming the first bad field. */
-export function checkSpecs(raw: unknown, where: string): SourceSpec[] {
-  if (!Array.isArray(raw)) throw new SourceConfigError(`${where} must be an array of sources`);
+export function checkSpecs(input: unknown, where: string): SourceSpec[] {
+  if (!Array.isArray(input)) throw new SourceConfigError(`${where} must be an array of sources`);
+  // A `preset` (D294) fills in a common server's read tools before anything is checked, so the expanded spec meets
+  // every rule below (and McpSource's read-only check on connect) like one written out by hand.
+  const raw = input.map((s, i) => {
+    if (!isObject(s)) throw new SourceConfigError(`${where}[${i}] must be an object`);
+    try {
+      return expandPreset(s);
+    } catch (e) {
+      throw new SourceConfigError(`${where}[${i}]: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  });
   const seen = new Set<string>();
   raw.forEach((s, i) => {
     const at = `${where}[${i}]`;
@@ -480,7 +500,7 @@ export function checkSpecs(raw: unknown, where: string): SourceSpec[] {
       throw new SourceConfigError(`${at}.notifies must be true or false`);
     }
   });
-  return raw as SourceSpec[];
+  return raw as unknown as SourceSpec[];
 }
 
 /** Each user's specs, or the message of what is wrong with their entry. */

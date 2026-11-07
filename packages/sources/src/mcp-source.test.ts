@@ -387,3 +387,45 @@ describe("McpSource list: server-paged pages are kept whole", () => {
     expect(calls[0]).toEqual({ limit: 2 });
   });
 });
+
+describe("McpSource.fetch: a record that wraps rows (D294)", () => {
+  // Gmail's get_thread answers `{id, messages: [...]}`: the rows are messages with their own ids, so matching rows
+  // alone never found the thread and every re-read came back null.
+  const thread = (reply: unknown) => {
+    const server = new McpServer({ name: "mail", version: "1" });
+    const ro = { annotations: { readOnlyHint: true } };
+    server.registerTool("search_threads", { inputSchema: { query: z.string() }, ...ro }, async () => ({ content: [] }));
+    server.registerTool("get_thread", { inputSchema: { threadId: z.string() }, ...ro }, async () => ({
+      content: [{ type: "text", text: JSON.stringify(reply) }],
+    }));
+    return new McpSource({
+      id: "mail",
+      description: "mail",
+      transport: () => {
+        const [client, serverSide] = InMemoryTransport.createLinkedPair();
+        void server.connect(serverSide);
+        return client;
+      },
+      searchTool: { name: "search_threads" },
+      fetchTool: { name: "get_thread" },
+    });
+  };
+  const scope = { tenantId: "t", userId: "u" };
+
+  test("the record whose own id is the ref is the item", async () => {
+    const s = thread({ id: "t1", messages: [{ id: "m1", subject: "heads up", snippet: "ring me first" }] });
+    const got = await s.fetch("t1", scope, AbortSignal.timeout(2_000));
+    expect(got?.ref).toBe("t1");
+    expect(got?.text).toContain("ring me first");
+    await s.close();
+  });
+
+  test("another record's id is still no match, and a row inside it with the ref still is", async () => {
+    const other = thread({ id: "t9", messages: [{ id: "m1", snippet: "x" }] });
+    expect(await other.fetch("t1", scope, AbortSignal.timeout(2_000))).toBeNull();
+    await other.close();
+    const inner = thread({ id: "t9", messages: [{ id: "t1", snippet: "the row" }] });
+    expect((await inner.fetch("t1", scope, AbortSignal.timeout(2_000)))?.text).toContain("the row");
+    await inner.close();
+  });
+});
