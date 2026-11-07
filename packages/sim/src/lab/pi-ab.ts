@@ -54,7 +54,7 @@
  *     [--conditions none,tools,eden,both] [--config H|'{"probes":true}'] [--model z-ai/glm-5.3-flash]
  *     [--grader anthropic/claude-haiku-5.5] [--budget 0.6] [--out pi-ab.json] [--timeline dir] [--time-scale 1]
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
- *     [--variant-config '{"name":{...}}'] [--act] [--cards FILE [--cards-out FILE]] [--card-sort price]
+ *     [--variant-config '{"name":{...}}'] [--act] [--dress] [--cards FILE [--cards-out FILE]] [--card-sort price]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent default|none|FILE[,FILE]]
  *     [--replay DIR [--replay-timing] [--replay-only]] [--reuse-arms earlier.json]
  *
@@ -195,6 +195,11 @@ const VARIANTS = (USER_DAYS > 0 ? "hidden,control,neutral" : opt("variants", "hi
   "hidden" | "control" | "neutral"
 )[];
 const ACT = args.includes("--act");
+// `--dress` (A6, D287): one ordinary message per person or firm a request names that no item of its world names.
+const DRESS = args.includes("--dress");
+if (DRESS && (USER_DAYS > 0 || args.includes("--reuse-arms"))) {
+  throw new Error("--dress dresses the per-suite worlds only: not with --days or --reuse-arms");
+}
 const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden,eden-act-firewall" : "none,tools,eden,both").split(",");
 const OUT = opt("out", "pi-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
@@ -1294,7 +1299,7 @@ const worlds: { seed: number; world: World; tasks: Task[]; daySizes?: number[]; 
     : SEEDS.flatMap((seed) =>
         SUITE_LIST.flatMap((suite) =>
           (LOOKUPS ? ["hidden" as const] : variantsFor(suite, VARIANTS)).map((variant) => {
-            const w = worldOf(seed, suite, variant, LIMITS);
+            const w = worldOf(seed, suite, variant, LIMITS, { dress: DRESS });
             const picked = TEMPLATES ? { ...w, tasks: w.tasks.filter((t) => TEMPLATES.has(t.type)) } : w;
             return LIMIT > 0 ? { ...picked, tasks: picked.tasks.slice(0, LIMIT) } : picked;
           }),
@@ -1409,6 +1414,7 @@ writeFileSync(
       config: CONFIG,
       ...(Object.keys(CONFIG_VARIANTS).length ? { variantConfig: CONFIG_VARIANTS } : {}),
       ...(ACT ? { act: true } : {}),
+      ...(DRESS ? { dress: true } : {}),
       ...(CARDS_FILE ? { cards: { replay: CARDS_FILE, out: CARDS_OUT } } : {}),
       ...(INTENT_WANTED ? { intent: { line: INTENT_LINE, files: INTENT_FILES, ...intentCount } } : {}),
       timeScale: TIME_SCALE,

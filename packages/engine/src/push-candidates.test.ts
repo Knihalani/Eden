@@ -60,7 +60,10 @@ const DEADLINE = item(
   4,
 );
 
-function setup(config: Record<string, unknown>, opts: { items?: ContextItem[]; fail?: boolean } = {}) {
+function setup(
+  config: Record<string, unknown>,
+  opts: { items?: ContextItem[]; fail?: boolean; noReader?: boolean } = {},
+) {
   const maker = new Reader();
   const source: Source = {
     id: "mail",
@@ -86,7 +89,7 @@ function setup(config: Record<string, unknown>, opts: { items?: ContextItem[]; f
       readerGate: true,
       ...config,
     },
-    reader: new AskReader({ maker, budget: new Budget(), now: () => NOW }),
+    ...(opts.noReader ? {} : { reader: new AskReader({ maker, budget: new Budget(), now: () => NOW }) }),
   });
   return { p, maker };
 }
@@ -199,5 +202,51 @@ describe("pushCandidates (D236, D237): the push hands the agent candidates, with
     expect(() => checkEngineConfig({ pushCandidates: 2.5 }, { deps })).toThrow();
     expect(() => checkEngineConfig({ pushCandidates: 41 }, { deps })).toThrow();
     expect(() => checkEngineConfig({ pushCandidates: 3, readerPush: false }, { deps })).toThrow(/readerPush/);
+  });
+});
+
+// D276 (A4): the candidates make no model call, so they need no reader. A server with no model key (no reader built)
+// delivers them too; before D276 it ran no push at all.
+describe("pushCandidates with no reader dependency (D276: the no-key server)", () => {
+  const quiet = { confidentScore: 99, fallbackMatchedTerms: 99 };
+  const candidates = (p: ContextPartner) => p.takePending(ref()).filter((x) => x.reason.startsWith("candidates:"));
+
+  test("no reader wired: the push still hands the agent its candidates", async () => {
+    const { p, maker } = setup({ ...quiet, pushCandidates: 3 }, { noReader: true });
+    await say(p, REQUEST);
+    expect(maker.calls.length).toBe(0);
+    const got = candidates(p);
+    expect(got.length).toBe(1);
+    expect(got[0]!.citations.length).toBe(3);
+    expect(got[0]!.text.split("\n")[1]).toBe(CANDIDATES_LEAD);
+  });
+
+  test("no reader and pushCandidates 0: no push, as before (the reader's push needs a reader)", async () => {
+    const { p } = setup({ ...quiet }, { noReader: true });
+    await say(p, REQUEST);
+    expect(p.takePending(ref())).toEqual([]);
+  });
+
+  test("no reader: an explicit ask still answers with no model", async () => {
+    const { p } = setup({ ...quiet, pushCandidates: 3 }, { noReader: true });
+    const answer = await p.ask({ ...ref(), question: "Pay the Harlow invoice: is anything in the way?" });
+    expect(answer.usedModel).toBe(false);
+    expect(answer.citations.length).toBeGreaterThan(0);
+  });
+
+  test("no reader: nothing constraint-like in the pool gives no packet", async () => {
+    const { p } = setup({ ...quiet, pushCandidates: 3 }, { noReader: true, items: PLAIN });
+    await say(p, REQUEST);
+    expect(candidates(p)).toEqual([]);
+  });
+
+  test("the config check accepts candidates with no reader wired", () => {
+    const deps = { reader: false, cards: false };
+    expect(() => checkEngineConfig({ pushCandidates: 3 }, { deps })).not.toThrow();
+    // The push's own settings act on the candidates too (review of D276) …
+    expect(() => checkEngineConfig({ readerPushWaitMs: 1_000, askReaderPool: 10 }, { deps })).not.toThrow();
+    // … but not with the candidates off, and the reader's own settings still need a reader.
+    expect(() => checkEngineConfig({ pushCandidates: 0, readerPushWaitMs: 1_000 }, { deps })).toThrow(/reader/);
+    expect(() => checkEngineConfig({ askReaderWaitMs: 1_000 }, { deps })).toThrow(/reader/);
   });
 });

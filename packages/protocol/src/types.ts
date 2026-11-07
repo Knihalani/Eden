@@ -111,6 +111,30 @@ export interface ObserveResult {
 }
 
 /**
+ * One decision Eden made in a session, as `POST /v1/explain` returns it (D277): why it spoke or stayed silent, with no
+ * content. `decision` is the engine's trace decision ("skipped", "repeat", "silent", "fast", "sources", "model",
+ * "answer", "reader-push", "reader-late", "verify"); `reason` its fixed words or a cue id (a hash, never text); `why` a
+ * plain sentence; `itemIds` the items it delivered or cited (ids only). Counts and cost are this decision's own.
+ */
+export interface ExplainedDecision {
+  turn: number;
+  event: string;
+  decision: string;
+  reason: string;
+  why: string;
+  latencyMs: number;
+  sourceCalls: number;
+  modelCalls: number;
+  costUsd: number;
+  itemIds: string[];
+}
+
+/** `POST /v1/explain`: the session's last decisions, oldest first (at most 32; none once the session ended). */
+export interface ExplainResponse {
+  decisions: ExplainedDecision[];
+}
+
+/**
  * What the partner says about an action the agent is about to take (`checkAction`, the action firewall): the agent's
  * tool call is checked, before it runs, against what the partner holds. `proceed` when nothing held bears on it;
  * `finding` with the held context that does, as data (an `Injection` in the usual envelope). What the integration does

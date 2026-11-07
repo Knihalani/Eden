@@ -12,6 +12,7 @@ import { buildSessions } from "../sessions";
 import type { ActionRecord } from "./act";
 import type { SimSource } from "../sources";
 import { buildWorld, type World } from "../world";
+import { dressEntities } from "./dress-entities";
 import { clearSlot, dress } from "./hidden-context";
 import { SUITES } from "./suites";
 
@@ -182,17 +183,29 @@ export function worldOf(
   suite: string,
   variant: "hidden" | "control" | "neutral",
   limits: { maxTasks: number; maxOffworld: number },
+  /** `dress` (A6, D287): one ordinary message per person or firm a request names that no base item names. */
+  opts: { dress?: boolean } = {},
 ): { seed: number; world: World; tasks: Task[] } {
   const world = buildWorld({ seed: seed * 1_000 });
   if (suite === "lookups") return { seed, world, tasks: tasksOf(world, seed, limits.maxTasks, limits.maxOffworld) };
   const secrets = world.items.filter((i) => i.secret).map((i) => i.secret!);
   const before = world.items.length;
+  // `dress`: what the world names before planting (and before `clearSlot`, which filters `world.items`).
+  const base = opts.dress ? world.items.slice() : [];
   const planted = SUITES[suite]!(world, seed, variant);
   const plantedItems = world.items.slice(before);
   for (const it of plantedItems) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
   const keep = new Set(plantedItems.map((it) => it.id));
   for (const h of planted) clearSlot(world, h.text, keep);
+  // After the planted items are read off the end of `world.items`: dressing appends its own after them.
+  if (opts.dress)
+    dressEntities(
+      world,
+      base,
+      planted.map((h) => h.text),
+      seed,
+    );
   // One planted item per task, in the tasks' order (as `hidden-funnel.ts` reads them).
   const tasks: Task[] = planted.map((h, i) => ({
     id: h.id,
