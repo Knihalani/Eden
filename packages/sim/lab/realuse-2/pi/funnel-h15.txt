@@ -1,0 +1,229 @@
+$ bun packages/sim/src/lab/funnel.ts --blind --suite "heldout15" --seeds "41,42,43,44" --json ".local/r2/funnel-h15.json" -- --neutral
+funnel: heldout15 kept out of `all` (UNRUN_BLIND) but read before (D72, D80, D85, D98, D112): not a blind measurement; a blind round needs a new suite
+funnel: the reader is on and no `-- --reader`: screening with `--reader stub` ($0, nothing binds)
+funnel: intent: intent-v2.jsonl.gz by default, D158
+funnel: 4 processes on 4 cores, each a block of suites × seeds (D139); ms/task is CONTENDED, --jobs 1 for an uncontended latency figure
+funnel: 4 shards (suite × seed) in 4 processes, 4 at a time on 4 cores; the first: bun /home/user/Eden/packages/sim/src/lab/hidden-funnel.ts --suite heldout15 --seeds 41 --config '{}' --json /tmp/eden-funnel-x5RdkR/part-0.json --label default --ask --cards /tmp/eden-funnel-x5RdkR/cards.jsonl --no-record --neutral --reader stub --intent /tmp/eden-funnel-x5RdkR/intent.jsonl
+
+== heldout15 seed 41 (exit 0, 5.2 s)
+suite heldout15, seeds 41, config {}
+--reader stub: the reader says nothing binds, so hidden and decoy delivered here are NOT the preset's numbers (NEW falls back toward its rule paths); only the pool lines measure something (pool content, not a bound)
+template                 hidden: returned delivered   control: decoy delivered   calls/task  ms/task
+invoice-awaiting-po                   0/1       0/1                      0/1          2.0    140.0
+board-pages-done                      0/1       0/1                      0/1          3.0     16.9
+pilot-review-new-owner                0/1       0/1                      0/1          3.0     57.4
+team-dinner-spend-cap                 0/1       0/1                      0/1          3.0     46.4
+babysitter-mum-booked                 0/1       1/1                      0/1          2.0     45.3
+pta-quiz-parents-evening              0/1       0/1                      0/1          4.0     37.1
+nephew-size-up                        0/1       0/1                      0/1          3.0     41.4
+trip-consent-slip                     0/1       0/1                      0/1          3.0     14.2
+painkiller-anticoagulant              0/1       0/1                      0/1          2.0     13.5
+ankle-no-impact                       0/1       0/1                      0/1          3.0     27.4
+lens-strength-changed                 0/1       0/1                      0/1          3.0      2.3
+penicillin-on-form                    0/1       0/1                      0/1          3.0      3.8
+amex-headroom                         0/1       1/1                      0/1          3.0      9.6
+gig-money-back                        0/1       0/1                      0/1          3.0      2.9
+accountant-filed-return               0/1       0/1                      0/1          4.0      7.8
+overpayment-allowance-left              0/1       0/1                      0/1          3.0      4.6
+berlin-outbound-retimed               0/1       0/1                      0/1          2.0     18.1
+winter-sports-not-covered              0/1       0/1                      0/1          3.0     13.8
+vatican-feast-day                     0/1       1/1                      1/1          3.0      7.7
+christmas-extra-passenger              0/1       0/1                      0/1          5.0     22.8
+kennel-cough-lapsed                   0/1       1/1                      0/1          2.0     23.9
+conservation-area-windows              0/1       0/1                      1/1          3.0     19.1
+collection-day-moves                  0/1       0/1                      0/1          3.0     25.4
+cleaner-in-porto                      0/1       0/1                      0/1          1.0     15.2
+child-passport-in-progress              0/1       0/1                      1/1          2.0     10.2
+jury-service-summons                  0/1       0/1                      0/1          3.0      4.0
+gym-minimum-term                      0/1       0/1                      0/1          3.0     13.3
+tenancy-fixed-term                    0/1       0/1                      0/1          4.0      9.4
+coeliac-dinner-guest                  0/1       0/1                      0/1          2.0      5.6
+presale-already-got                   0/1       0/1                      0/1          4.0      4.5
+surprise-fortieth-friday              0/1       1/1                      0/1          3.0      6.1
+friend-on-nights                      0/1       0/1                      0/1          3.0     13.2
+TOTAL                                0/32      5/32                     3/32          2.9     21.3
+heldout15  hidden in pool 23/32, decoy in pool 19/32, mean pool items 11.5, mean prompt 7450.3 chars (standing prefix 0.0) over 52 reader calls
+heldout15 hidden surfaced 26/32: flagged 0, rule path 5 (grounded-card 2, grounded-conflict 2, grounded-clash 1), listed only 21; hidden in pool 23, hidden flagged in pool 0
+heldout15 decoys surfaced 22/32: flagged 0, rule path 3 (fallback 1, grounded-card 1, grounded-conflict 1), listed only 19; decoys in pool 19, decoys flagged in pool 0
+NEUTRAL heldout15: any packet 7/32; 0.22 items, 0.22 packets, 54 packet bytes/task; ask 4.94 items/task; reader flagged any 0/32; 2.81 calls/task; 9.3 ms/task
+delivered before first model call (observe wait 3000 ms): hidden 5 of 5 delivered (32 tasks), decoys 3 of 3 delivered (32 tasks)
+intent: live (replayed requests for 1100 of 1104 items asked)
+intent: planted items with an intent replay line: hidden 32/32, decoys 32/32
+calls: connectors received 186 in the tasks' windows (186 of them on-demand listings); traces summed 186 (cross-check, fetches included)
+sync: backfill 36 calls (18.0/user, 535 ms/user), background 36 (0.56/task), on-demand 6 (0.09/task in lookups' traces; 186 at the connectors in the tasks' windows, in calls/task; 186 by the sync's count); request 2.91/task; amortised total 4.03/task; local sources 5.00/lookup; demand items 900, background items 6044
+cards: 342 replayed, 1282 uncovered (no cached card)
+cards use: {"enqueued":3022,"prefiltered":2791,"leanSkipped":1866,"reused":18,"carded":177,"sent":1104,"sentenceReused":34,"calls":69,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":0,"implausible":2,"requestOnly":925,"requested":1098,"users":2}
+overBudget: reader 0 (2 lanes), cards 0 (2 lanes)
+
+== heldout15 seed 42 (exit 0, 5.2 s)
+suite heldout15, seeds 42, config {}
+--reader stub: the reader says nothing binds, so hidden and decoy delivered here are NOT the preset's numbers (NEW falls back toward its rule paths); only the pool lines measure something (pool content, not a bound)
+template                 hidden: returned delivered   control: decoy delivered   calls/task  ms/task
+invoice-awaiting-po                   0/1       0/1                      0/1          2.0     88.7
+board-pages-done                      0/1       0/1                      0/1          3.0     25.0
+pilot-review-new-owner                0/1       0/1                      0/1          3.0     84.2
+team-dinner-spend-cap                 0/1       0/1                      0/1          3.0      6.2
+babysitter-mum-booked                 0/1       1/1                      0/1          2.0      7.6
+pta-quiz-parents-evening              0/1       0/1                      0/1          4.0     12.5
+nephew-size-up                        0/1       0/1                      0/1          3.0     13.7
+trip-consent-slip                     0/1       0/1                      0/1          3.0     13.9
+painkiller-anticoagulant              0/1       0/1                      0/1          2.0     11.4
+ankle-no-impact                       0/1       0/1                      0/1          3.0     11.3
+lens-strength-changed                 0/1       0/1                      0/1          3.0      6.3
+penicillin-on-form                    0/1       0/1                      0/1          3.0      2.9
+amex-headroom                         0/1       1/1                      0/1          3.0     13.9
+gig-money-back                        0/1       0/1                      0/1          3.0      8.0
+accountant-filed-return               0/1       0/1                      0/1          3.0      6.5
+overpayment-allowance-left              0/1       0/1                      0/1          3.0      4.6
+berlin-outbound-retimed               0/1       0/1                      0/1          2.0     15.7
+winter-sports-not-covered              0/1       0/1                      0/1          3.0      8.0
+vatican-feast-day                     0/1       1/1                      0/1          3.0     18.8
+christmas-extra-passenger              0/1       0/1                      0/1          4.0      9.0
+kennel-cough-lapsed                   0/1       1/1                      0/1          2.0     17.6
+conservation-area-windows              0/1       0/1                      1/1          3.0     12.6
+collection-day-moves                  0/1       0/1                      0/1          3.0     19.5
+cleaner-in-porto                      0/1       0/1                      0/1          1.0     12.2
+child-passport-in-progress              0/1       1/1                      1/1          2.0      6.0
+jury-service-summons                  0/1       0/1                      0/1          3.0     11.6
+gym-minimum-term                      0/1       0/1                      0/1          3.0     27.9
+tenancy-fixed-term                    0/1       0/1                      0/1          4.0     17.1
+coeliac-dinner-guest                  0/1       0/1                      0/1          2.0     11.2
+presale-already-got                   0/1       0/1                      0/1          3.0      4.6
+surprise-fortieth-friday              0/1       1/1                      0/1          4.0      9.0
+friend-on-nights                      0/1       0/1                      0/1          2.0     11.0
+TOTAL                                0/32      6/32                     2/32          2.8     16.5
+heldout15  hidden in pool 24/32, decoy in pool 20/32, mean pool items 11.5, mean prompt 7556.7 chars (standing prefix 0.0) over 52 reader calls
+heldout15 hidden surfaced 28/32: flagged 0, rule path 6 (grounded-card 3, grounded-conflict 2, grounded-clash 1), listed only 22; hidden in pool 24, hidden flagged in pool 0
+heldout15 decoys surfaced 19/32: flagged 0, rule path 2 (grounded-card 1, grounded-conflict 1), listed only 17; decoys in pool 20, decoys flagged in pool 0
+NEUTRAL heldout15: any packet 6/32; 0.19 items, 0.19 packets, 52 packet bytes/task; ask 4.94 items/task; reader flagged any 0/32; 2.53 calls/task; 11.2 ms/task
+delivered before first model call (observe wait 3000 ms): hidden 6 of 6 delivered (32 tasks), decoys 2 of 2 delivered (32 tasks)
+intent: live (replayed requests for 1178 of 1178 items asked)
+intent: planted items with an intent replay line: hidden 32/32, decoys 32/32
+calls: connectors received 180 in the tasks' windows (180 of them on-demand listings); traces summed 180 (cross-check, fetches included)
+sync: backfill 36 calls (18.0/user, 568 ms/user), background 36 (0.56/task), on-demand 2 (0.03/task in lookups' traces; 180 at the connectors in the tasks' windows, in calls/task; 180 by the sync's count); request 2.81/task; amortised total 3.94/task; local sources 5.00/lookup; demand items 890, background items 6092
+cards: 360 replayed, 1375 uncovered (no cached card)
+cards use: {"enqueued":3046,"prefiltered":2815,"leanSkipped":1814,"reused":28,"carded":173,"sent":1178,"sentenceReused":26,"calls":68,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":2,"implausible":2,"requestOnly":1001,"requested":1174,"users":2}
+overBudget: reader 0 (2 lanes), cards 0 (2 lanes)
+
+== heldout15 seed 43 (exit 0, 5.2 s)
+suite heldout15, seeds 43, config {}
+--reader stub: the reader says nothing binds, so hidden and decoy delivered here are NOT the preset's numbers (NEW falls back toward its rule paths); only the pool lines measure something (pool content, not a bound)
+template                 hidden: returned delivered   control: decoy delivered   calls/task  ms/task
+invoice-awaiting-po                   0/1       0/1                      0/1          3.0    158.8
+board-pages-done                      0/1       0/1                      0/1          2.0     37.3
+pilot-review-new-owner                0/1       0/1                      0/1          4.0     80.4
+team-dinner-spend-cap                 0/1       0/1                      0/1          3.0     17.2
+babysitter-mum-booked                 0/1       1/1                      0/1          3.0     14.6
+pta-quiz-parents-evening              0/1       0/1                      0/1          3.0     24.6
+nephew-size-up                        0/1       0/1                      0/1          4.0     19.9
+trip-consent-slip                     0/1       0/1                      0/1          2.0     17.9
+painkiller-anticoagulant              0/1       0/1                      0/1          3.0     14.2
+ankle-no-impact                       0/1       0/1                      0/1          2.0     10.3
+lens-strength-changed                 0/1       0/1                      0/1          4.0      3.4
+penicillin-on-form                    0/1       0/1                      0/1          2.0      4.7
+amex-headroom                         0/1       1/1                      0/1          4.0     20.8
+gig-money-back                        0/1       0/1                      0/1          2.0      8.4
+accountant-filed-return               0/1       0/1                      0/1          4.0      7.9
+overpayment-allowance-left              0/1       0/1                      0/1          2.0      3.9
+berlin-outbound-retimed               0/1       0/1                      0/1          3.0     22.0
+winter-sports-not-covered              0/1       0/1                      0/1          2.0      9.6
+vatican-feast-day                     0/1       1/1                      0/1          4.0     15.2
+christmas-extra-passenger              0/1       0/1                      1/1          3.0     40.2
+kennel-cough-lapsed                   0/1       1/1                      0/1          3.0     12.7
+conservation-area-windows              0/1       0/1                      1/1          2.0      5.9
+collection-day-moves                  0/1       0/1                      0/1          4.0     16.3
+cleaner-in-porto                      0/1       0/1                      0/1          1.0     17.9
+child-passport-in-progress              0/1       0/1                      1/1          3.0      6.5
+jury-service-summons                  0/1       0/1                      0/1          2.0      6.2
+gym-minimum-term                      0/1       0/1                      0/1          4.0     10.6
+tenancy-fixed-term                    0/1       0/1                      0/1          2.0     11.6
+coeliac-dinner-guest                  0/1       0/1                      0/1          3.0      5.6
+presale-already-got                   0/1       0/1                      0/1          3.0      3.0
+surprise-fortieth-friday              0/1       1/1                      0/1          4.0     13.3
+friend-on-nights                      0/1       0/1                      0/1          2.0      8.4
+TOTAL                                0/32      5/32                     3/32          2.9     20.3
+heldout15  hidden in pool 23/32, decoy in pool 20/32, mean pool items 11.5, mean prompt 7573.2 chars (standing prefix 0.0) over 52 reader calls
+heldout15 hidden surfaced 25/32: flagged 0, rule path 5 (grounded-card 2, grounded-conflict 2, grounded-clash 1), listed only 20; hidden in pool 23, hidden flagged in pool 0
+heldout15 decoys surfaced 20/32: flagged 0, rule path 3 (grounded-card 2, grounded-conflict 1), listed only 17; decoys in pool 20, decoys flagged in pool 0
+NEUTRAL heldout15: any packet 6/32; 0.19 items, 0.19 packets, 50 packet bytes/task; ask 5.00 items/task; reader flagged any 0/32; 2.78 calls/task; 11.9 ms/task
+delivered before first model call (observe wait 3000 ms): hidden 5 of 5 delivered (32 tasks), decoys 3 of 3 delivered (32 tasks)
+intent: live (replayed requests for 1152 of 1152 items asked)
+intent: planted items with an intent replay line: hidden 32/32, decoys 32/32
+calls: connectors received 184 in the tasks' windows (184 of them on-demand listings); traces summed 184 (cross-check, fetches included)
+sync: backfill 36 calls (18.0/user, 564 ms/user), background 36 (0.56/task), on-demand 2 (0.03/task in lookups' traces; 184 at the connectors in the tasks' windows, in calls/task; 184 by the sync's count); request 2.88/task; amortised total 4.00/task; local sources 5.00/lookup; demand items 910, background items 6112
+cards: 366 replayed, 1330 uncovered (no cached card)
+cards use: {"enqueued":3056,"prefiltered":2817,"leanSkipped":1848,"reused":32,"carded":180,"sent":1152,"sentenceReused":24,"calls":68,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":0,"implausible":3,"requestOnly":969,"requested":1149,"users":2}
+overBudget: reader 0 (2 lanes), cards 0 (2 lanes)
+
+== heldout15 seed 44 (exit 0, 5.2 s)
+suite heldout15, seeds 44, config {}
+--reader stub: the reader says nothing binds, so hidden and decoy delivered here are NOT the preset's numbers (NEW falls back toward its rule paths); only the pool lines measure something (pool content, not a bound)
+template                 hidden: returned delivered   control: decoy delivered   calls/task  ms/task
+invoice-awaiting-po                   0/1       0/1                      0/1          3.0     83.4
+board-pages-done                      0/1       0/1                      0/1          2.0     20.2
+pilot-review-new-owner                0/1       0/1                      0/1          6.0     20.9
+team-dinner-spend-cap                 0/1       0/1                      0/1          2.0     28.7
+babysitter-mum-booked                 0/1       1/1                      0/1          3.0     14.3
+pta-quiz-parents-evening              0/1       0/1                      0/1          2.0      8.8
+nephew-size-up                        0/1       0/1                      0/1          5.0     10.8
+trip-consent-slip                     0/1       0/1                      0/1          2.0      6.9
+painkiller-anticoagulant              0/1       0/1                      0/1          3.0     12.6
+ankle-no-impact                       0/1       0/1                      0/1          2.0     22.3
+lens-strength-changed                 0/1       0/1                      0/1          5.0      2.7
+penicillin-on-form                    0/1       0/1                      0/1          2.0      3.3
+amex-headroom                         0/1       1/1                      0/1          3.0     10.5
+gig-money-back                        0/1       0/1                      0/1          3.0      3.0
+accountant-filed-return               0/1       0/1                      0/1          5.0      4.2
+overpayment-allowance-left              0/1       0/1                      0/1          2.0      4.0
+berlin-outbound-retimed               0/1       0/1                      0/1          3.0     28.7
+winter-sports-not-covered              0/1       0/1                      0/1          2.0     12.1
+vatican-feast-day                     0/1       1/1                      0/1          5.0     15.3
+christmas-extra-passenger              0/1       0/1                      1/1          2.0     14.5
+kennel-cough-lapsed                   0/1       1/1                      0/1          3.0      7.5
+conservation-area-windows              0/1       0/1                      1/1          2.0     13.9
+collection-day-moves                  0/1       0/1                      0/1          5.0     22.7
+cleaner-in-porto                      0/1       0/1                      0/1          1.0     16.9
+child-passport-in-progress              0/1       1/1                      1/1          3.0     12.7
+jury-service-summons                  0/1       0/1                      0/1          2.0      7.7
+gym-minimum-term                      0/1       0/1                      0/1          4.0     17.6
+tenancy-fixed-term                    0/1       0/1                      0/1          3.0     12.2
+coeliac-dinner-guest                  0/1       0/1                      0/1          3.0     10.0
+presale-already-got                   0/1       0/1                      0/1          2.0      8.4
+surprise-fortieth-friday              0/1       1/1                      0/1          4.0      7.0
+friend-on-nights                      0/1       0/1                      0/1          2.0      5.9
+TOTAL                                0/32      6/32                     3/32          3.0     14.7
+heldout15  hidden in pool 23/32, decoy in pool 18/32, mean pool items 11.5, mean prompt 7616.3 chars (standing prefix 0.0) over 52 reader calls
+heldout15 hidden surfaced 25/32: flagged 0, rule path 6 (grounded-card 3, grounded-conflict 2, grounded-clash 1), listed only 19; hidden in pool 23, hidden flagged in pool 0
+heldout15 decoys surfaced 19/32: flagged 0, rule path 3 (grounded-card 2, grounded-conflict 1), listed only 16; decoys in pool 18, decoys flagged in pool 0
+NEUTRAL heldout15: any packet 5/32; 0.16 items, 0.16 packets, 40 packet bytes/task; ask 4.88 items/task; reader flagged any 0/32; 2.91 calls/task; 10.2 ms/task
+delivered before first model call (observe wait 3000 ms): hidden 6 of 6 delivered (32 tasks), decoys 3 of 3 delivered (32 tasks)
+intent: live (replayed requests for 1150 of 1150 items asked)
+intent: planted items with an intent replay line: hidden 32/32, decoys 32/32
+calls: connectors received 192 in the tasks' windows (192 of them on-demand listings); traces summed 192 (cross-check, fetches included)
+sync: backfill 36 calls (18.0/user, 697 ms/user), background 36 (0.56/task), on-demand 4 (0.06/task in lookups' traces; 192 at the connectors in the tasks' windows, in calls/task; 192 by the sync's count); request 3.00/task; amortised total 4.13/task; local sources 5.00/lookup; demand items 940, background items 6076
+cards: 342 replayed, 1351 uncovered (no cached card)
+cards use: {"enqueued":3038,"prefiltered":2821,"leanSkipped":1834,"reused":22,"carded":158,"sent":1150,"sentenceReused":32,"calls":68,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":4,"implausible":1,"requestOnly":987,"requested":1145,"users":2}
+overBudget: reader 0 (2 lanes), cards 0 (2 lanes)
+merged NEUTRAL heldout15: any packet 24/128; 0.19 items, 0.19 packets, 49 packet bytes/task; ask 4.94 items/task; reader flagged any 0/128; 2.76 calls/task; 10.6 ms/task
+
+merged 4 shards from 4 processes: hidden returned 0/128, delivered 22/128; decoys delivered 11/128; 2.9 calls/task; 13.5 ms/task CONTENDED (4 processes at once: not a latency figure; use --jobs 1 for one)
+merged sync (summed): {"backfill":144,"background":144,"demand":14,"demandAll":742,"lookups":512,"localSources":2560,"warmMs":4728.6764330000005,"demandSeen":742,"demandItems":3640,"backgroundItems":24324,"users":8}; request 2.90/task, amortised total 4.02/task, backfill 591 ms/user (contended); demand items 3640, background items 24324
+merged cards use (summed): {"enqueued":12162,"prefiltered":11244,"leanSkipped":7362,"reused":100,"carded":688,"sent":4584,"sentenceReused":116,"calls":273,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":6,"implausible":8,"requestOnly":3882,"requested":4566,"users":8}
+(each process's own summary lines above, such as sync, cards, reader, overBudget and cpu, cover its block only; overBudget's reader and bridge counts are not summed here)
+
+funnel score (surfaced = delivered or cited by ask), default, seeds 41,42,43,44, 5 s (4 jobs; ms/task in the shards is CONTENDED)
+  intent: live (intent-v2.jsonl.gz by default, D158)
+  --reader stub: the reader says nothing binds, so hidden and decoy delivered here are NOT the preset's numbers (NEW falls back toward its rule paths); only the pool lines measure something (pool content, not a bound)
+  heldout15  hidden 104/128  decoys 80/128
+  TOTAL      hidden 104/128  decoys 80/128
+  delivered before first model call (observe wait default ms): hidden 22 of 22 delivered (128 tasks), decoys 11 of 11 delivered (128 tasks)
+  TOTAL hidden surfaced 104/128: flagged 0, rule path 22 (grounded-card 10, grounded-conflict 8, grounded-clash 4), listed only 82; hidden in pool 93, hidden flagged in pool 0
+  TOTAL decoys surfaced 80/128: flagged 0, rule path 11 (grounded-card 6, grounded-conflict 4, fallback 1), listed only 69; decoys in pool 77, decoys flagged in pool 0
+  TOTAL rule precision (delivered by path, hidden/decoys: all; unflagged; read unflagged):
+  TOTAL   grounded-card 10/6; 10/6; 8/2
+  TOTAL   grounded-conflict 8/4; 8/4; 8/4
+  TOTAL   grounded-clash 4/0; 4/0; 4/0
+  TOTAL   fallback 0/1; 0/1; 0/1  decoys outnumber hidden
+  intent: planted items with an intent replay line: hidden 128/128, decoys 128/128
+reader screen (pool: the ids the reader was given for the request, a measurement of pool content, not a bound; top-K: the ask's ranked candidates; draft: the draft's pool against the request's first read):
+  heldout15  hidden in pool 93/128, decoy in pool 77/128, mean pool items 11.5, mean prompt 7549.2 chars (standing prefix 0.0) over 208 reader calls
