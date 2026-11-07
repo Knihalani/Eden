@@ -98,7 +98,7 @@ first model call, by any path (the rule paths and the push); neutral = tasks wit
 - The neutral reader top-up no longer covers the default's neutral prompts at this tip (590 misses, answered without
   the reader), so the default's neutral packet count above is an undercount; the candidates arms make no reader call.
 - The promoted default at $0: TOTAL hidden 305/384, decoys 267/384, 0 reader calls; `--preset minus-candidates`
-  reproduces the old default exactly (321/129, 643 replayed, 0 misses).
+  reproduces the old default exactly (322/139 on the merged tree with D240 on; 321/129 before D240; 643 replayed, 0 misses).
 
 ## 3. Live screens (Pi, train, `--push signals`, 8 templates a suite, n = 48 a kind)
 

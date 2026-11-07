@@ -256,6 +256,9 @@ export class AnthropicModel implements Model {
       // Whatever arrived is booked, a stream cut short included: the tokens were billed.
       this.book(state, t0);
     }
+    // A complete stream always reports why it stopped; one cut short (a dropped connection) is an error, not a reply:
+    // its text could pass for a reply the stop sequence ended (D240's `closeStopped`) and drop the entries after it.
+    if (state.stopReason === null) throw new Error("anthropic: the stream ended without a stop reason");
     const usage = usageOf(state);
     return {
       text: request.json ? unfence(state.text) : state.text,

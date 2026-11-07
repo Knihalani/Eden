@@ -73,14 +73,17 @@ describe("AnthropicModel", () => {
     expect(body.thinking).toEqual({ type: "disabled" });
   });
 
-  test("reports a reply its stop sequence ended, and none when the stream gave no stop reason", async () => {
+  test("reports a reply its stop sequence ended; a stream cut with no stop reason is an error", async () => {
     const stopped = okEvents('{"a":1').map((e) =>
       e.type === "message_delta" ? { ...e, delta: { stop_reason: "stop_sequence" } } : e,
     );
     const req = { messages: [{ role: "user" as const, content: "q" }], maxTokens: 50, stop: ["X"] };
     expect((await new AnthropicModel({ apiKey: "k", fetch: streamFetch(stopped) }).chat(req)).stopped).toBe(true);
     const cut = okEvents('{"a":1').filter((e) => e.type !== "message_delta");
-    expect("stopped" in (await new AnthropicModel({ apiKey: "k", fetch: streamFetch(cut) }).chat(req))).toBe(false);
+    // A cut stream's text could pass for a stopped reply (D240's closeStopped) and lose the entries after it.
+    await expect(new AnthropicModel({ apiKey: "k", fetch: streamFetch(cut) }).chat(req)).rejects.toThrow(
+      "without a stop reason",
+    );
   });
 
   test("sends stop sequences only when asked", () => {

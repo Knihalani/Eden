@@ -395,6 +395,14 @@ describe("readerStopEarly (D240): the reply stops at the first entry not about t
     expect(got.bears).toBeNull();
   });
 
+  test("a brace inside the stopped entry's why does not hide the entry (review of the CL wave)", () => {
+    expect(parseReaderFull(closeStopped(`${binding}{"i":1,"why":"the {Q3} account, not this",`), 3)).toEqual({
+      bears: [{ i: 2, kind: "blocks", why: "frozen until Friday" }],
+      rejected: [1],
+    });
+    expect(parseReaderFull(closeStopped(`${binding}{"i":1,"why":"a \\"quoted\\" {x}",`), 3)?.rejected).toEqual([1]);
+  });
+
   test("the maker sends the stop only when asked, and closes a cut reply only then", async () => {
     const cut = `${binding}{"i":1,"why":"another account",`;
     const model = new FakeModel(() => cut);

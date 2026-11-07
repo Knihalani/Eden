@@ -471,9 +471,24 @@ function kindOf(raw: string): ReaderKind | undefined {
 export function closeStopped(text: string): string {
   let t = text.trimEnd();
   if (t.endsWith(READER_STOP)) t = t.slice(0, -READER_STOP.length).trimEnd();
-  const open = t.slice(t.lastIndexOf("{"));
+  const open = t.slice(lastOpenBrace(t));
   if (!STOPPED_ENTRY.test(open)) return text;
   return `${t}${t.endsWith(",") ? "" : ","}${READER_STOP}}]}`;
+}
+
+/** The index of the last `{` outside a JSON string (a `why` may hold braces), or 0 when there is none. */
+function lastOpenBrace(text: string): number {
+  let last = 0;
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === "\\") i++;
+      else if (c === '"') quoted = false;
+    } else if (c === '"') quoted = true;
+    else if (c === "{") last = i;
+  }
+  return last;
 }
 
 /** An open entry as the stop leaves it: its index, then its whole `why`, then at most a comma. */
