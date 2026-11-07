@@ -34,6 +34,12 @@ describe("audit A20: keyless (dev) requests from a browser on another origin are
       expect((await dev(ask({ origin }))).status).toBe(200);
     },
   );
+  test.each(["Bearer \u00a0", "Bearer \u000b", "Bearer\u00a0"])(
+    "an Authorization that parses to no key is key-less too (the review): %j with a foreign Origin gets a 403",
+    async (authorization) => {
+      expect((await dev(ask({ origin: "http://evil.example:8790", authorization }))).status).toBe(403);
+    },
+  );
   test("an agent's client (no Origin) is served", async () => {
     expect((await dev(ask({}))).status).toBe(200);
   });

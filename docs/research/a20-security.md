@@ -34,7 +34,8 @@ older, but the branch makes it the README's quickstart with real sources and shi
 request, same-origin included), and no agent's HTTP client sends one (Bun's and Node's `fetch`, Python's `urllib`,
 the OpenAI SDKs). `keylessOriginAllowed` (`@eden/protocol`) allows a missing `Origin` and an `http(s)` origin on this
 machine (`localhost`, `127.x.x.x`, `[::1]`, any port, for a local web UI) and refuses the rest, `null` included. A
-key-less request it refuses gets a 403: in `createHandler`, in the router before it reads the body (it forwards only
+key-less request it refuses gets a 403 (key-less meaning no key after parsing, `keyOf` in
+`packages/server/src/auth.ts`, not a missing header; see the review below): in `createHandler`, in the router before it reads the body (it forwards only
 `authorization` and `content-type`, so a child never sees `Origin`), and at the top of the proxy before anything is
 read or forwarded. A keyed request is unchanged: a browser cannot send `Authorization` or `x-eden-proxy-key` cross-site
 without a CORS grant, and Eden gives none. No new configuration.
@@ -45,6 +46,13 @@ no Origin, and a keyed request with a foreign Origin, 200 before and after. `rou
 a two-child dev router answered a foreign-origin `/v1/whoami` 200 with the old `router.ts` (the handler fix alone does
 not reach it), 403 after. `proxy.test.ts` ("audit A20"): two foreign origins reached the upstream before, 403 and
 nothing upstream after; a loopback origin, no Origin, and a keyed proxy with a foreign Origin, 200.
+
+**The review's finding (fixed before merge).** The first version tested whether an `Authorization` header was
+present; `tenantOf` strips `^Bearer\s+`, and JS `\s` matches a no-break space that HTTP does not trim, so
+`Authorization: Bearer` plus U+00A0 was served as dev with the header present and skipped the check. A rebinding page
+can set that header on its same-origin fetch with no preflight, so it read `/v1/ask` again (the reviewer reproduced
+it over a raw socket against `Bun.serve`: 200 with the calendar text). Both the tenant and the check now use the
+parsed, trimmed key. `browser-origin.test.ts` adds three such values (200 before, 403 after) and the router test one.
 
 ### 2. Low: a passphrase in single or typographic quotes was stored in part (D352)
 

@@ -71,6 +71,8 @@ describe("audit A20: dev mode behind the router", () => {
             body: JSON.stringify({ userId: "me" }),
           }).then((r) => r.status);
         expect(await whoami({ origin: "http://evil.example:8790" })).toBe(403);
+        // An Authorization that parses to no key is no key (the review: "Bearer" and a no-break space).
+        expect(await whoami({ origin: "http://evil.example:8790", authorization: "Bearer \u00a0" })).toBe(403);
         expect(await whoami({ origin: "http://localhost:3000" })).toBe(200);
         expect(await whoami({})).toBe(200);
       } finally {
