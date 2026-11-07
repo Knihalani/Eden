@@ -297,6 +297,31 @@ describe("the proxy (D280)", () => {
     expect(seen.at(-1)!.edenHeaders).toEqual([]);
   });
 
+  test("audit A20: with no proxyKey, a browser page on another origin gets a 403 and reaches nothing", async () => {
+    // Without a key the proxy serves whoever names a user. A page the user visits can POST to 127.0.0.1:8791 (a
+    // text/plain body is parsed all the same) or, by DNS rebinding, read the answer, which with a keyless local model
+    // upstream carries the named user's context. Browsers send Origin on every POST; agents' clients send none.
+    const proxy = proxyFor();
+    const body = { model: "m", messages: [{ role: "user", content: "lunch with Priya?" }], user: "u-a20" };
+    seen.length = 0;
+    for (const origin of ["http://evil.example:8791", "null"]) {
+      const res = await chat(proxy, body, { origin });
+      expect(res.status).toBe(403);
+    }
+    expect(seen.length).toBe(0);
+    expect((await chat(proxy, body, { origin: "http://localhost:3000" })).status).toBe(200);
+    expect((await chat(proxy, body)).status).toBe(200);
+    // With a proxy key the key is the check: a browser app that holds it may call from its own origin.
+    const keyed = createProxy({
+      upstream: `${upstream.url.href}v1`,
+      edenUrl: eden.url.href,
+      edenApiKey: KEY,
+      proxyKey: "p_0123456789abcdef",
+    });
+    const ok = await chat(keyed, body, { origin: "https://app.example", "x-eden-proxy-key": "p_0123456789abcdef" });
+    expect(ok.status).toBe(200);
+  });
+
   test("hop-by-hop headers and those Connection names are not forwarded", async () => {
     const proxy = proxyFor();
     seen.length = 0;

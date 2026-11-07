@@ -35,6 +35,7 @@ import {
   checkSourceItems,
   checkSourceRemoved,
   isId,
+  keylessOriginAllowed,
 } from "@eden/protocol";
 import { DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
 import type { UserSources } from "./user-sources";
@@ -60,6 +61,9 @@ export function createHandler(
     // Dev mode accepts a missing key, never a wrong one: a typo'd production key must not land in tenant "dev".
     return config.dev && !key ? "dev" : null;
   };
+  /** A keyless (dev) request from a browser page on another site (audit A20: `keylessOriginAllowed`). */
+  const foreignPage = (req: Request, tenant: string) =>
+    tenant === "dev" && !req.headers.get("authorization") && !keylessOriginAllowed(req.headers.get("origin"));
   const badId = (body: Json, fields: string[]) => fields.find((f) => !isId(body[f]));
 
   return async function handle(req: Request): Promise<Response> {
@@ -68,6 +72,7 @@ export function createHandler(
     if (req.method !== "POST") return fail(405, "method not allowed");
     const tenant = tenantOf(req);
     if (!tenant) return fail(401, "missing or unknown API key");
+    if (foreignPage(req, tenant)) return fail(403, "dev mode serves no key-less request from another site's page");
     const waitMs = limiter.take(tenant);
     if (waitMs > 0) {
       return Response.json(

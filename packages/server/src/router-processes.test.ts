@@ -55,6 +55,32 @@ function rowsByFile(dir: string, scope: string): Record<string, number> {
   return out;
 }
 
+describe("audit A20: dev mode behind the router", () => {
+  test.concurrent(
+    "a keyless request from another site's page is refused by the router (the child never sees Origin)",
+    async () => {
+      const dir = tempDir("eden-router-origin-");
+      const env = { ...process.env, EDEN_HOME: dir, EDEN_DEV: "1" };
+      const config = { ...loadConfig(env), port: 0, processes: 2 };
+      const router = await startRouter({ config, env, log: () => {}, onOutput: () => {} });
+      try {
+        const whoami = (headers: Record<string, string>) =>
+          fetch(`http://127.0.0.1:${router.port}/v1/whoami`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ userId: "me" }),
+          }).then((r) => r.status);
+        expect(await whoami({ origin: "http://evil.example:8790" })).toBe(403);
+        expect(await whoami({ origin: "http://localhost:3000" })).toBe(200);
+        expect(await whoami({})).toBe(200);
+      } finally {
+        await router.stop();
+      }
+    },
+    30_000,
+  );
+});
+
 describe("router rate limit, divided", () => {
   test.concurrent(
     "a tenant's burst is split across children: one child holds burst / N",
