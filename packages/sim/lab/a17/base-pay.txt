@@ -1,0 +1,38 @@
+== by position in the day (pos 0 = the day's first request)
+-- eden
+ bucket   hidden raised   pk now    ask  earlier only   ctl concern   neu concern  asks/t agent $/1k  in tok wall p50
+    0-3     6/10 (0.60)        6      0             2   0/10 (0.00)  2/108 (0.02)    0.18      0.226    3331     1.43
+    4-7     7/14 (0.50)        7      0             5   0/10 (0.00)  1/104 (0.01)    0.01      0.220    5781     1.28
+   8-11     7/10 (0.70)        5      0             3   1/15 (0.07)  0/103 (0.00)    0.00      0.234    8118     1.21
+    12+    10/12 (0.83)        7      0             4   0/11 (0.00)   3/73 (0.04)    0.00      0.256   10859     1.24
+   hidden by way: packet-now 24/25 (0.96) ask-only 0/0 (0.00) earlier-only 6/14 (0.43) never 0/7 (0.00)
+-- tools
+ bucket   hidden raised   pk now    ask  earlier only   ctl concern   neu concern  asks/t agent $/1k  in tok wall p50
+    0-3     0/10 (0.00)        0      0             0   0/10 (0.00)  0/108 (0.00)    0.00      0.195    3512     1.87
+    4-7     1/14 (0.07)        0      0             0   0/10 (0.00)  1/104 (0.01)    0.00      0.182    5240     1.17
+   8-11     0/10 (0.00)        0      0             0   0/15 (0.00)  0/103 (0.00)    0.00      0.204    7207     1.18
+    12+     1/12 (0.08)        0      0             0   0/11 (0.00)   0/73 (0.00)    0.00      0.260   10946     2.12
+   hidden by way: packet-now 0/0 (0.00) ask-only 0/0 (0.00) earlier-only 0/0 (0.00) never 2/46 (0.04)
+== pair eden - tools (n 480 tasks)
+  hidden   all        n   46  rate +0.609 (+0.478..+0.761)
+  hidden   early(<4)  n   10  rate +0.600 (+0.300..+0.900)
+  hidden   late(>=4)  n   36  rate +0.611 (+0.444..+0.778)
+  control  all        n   46  rate +0.022 (+0.000..+0.065)
+  control  early(<4)  n   10  rate +0.000 (+0.000..+0.000)
+  control  late(>=4)  n   36  rate +0.028 (+0.000..+0.083)
+  neutral  all        n  388  rate +0.013 (+0.000..+0.026)
+  neutral  early(<4)  n  108  rate +0.019 (+0.000..+0.046)
+  neutral  late(>=4)  n  280  rate +0.011 (-0.004..+0.029)
+  agent $/1k   +0.0253 (+0.0146..+0.0353)
+  eden $/1k    +0.0000 (+0.0000..+0.0000)
+  wall s       -0.6769 (-0.7822..-0.5741)
+  asks         +0.0500 (+0.0271..+0.0750)
+  in tok       +321.6146 (-25.7604..+656.2500)
+== recaps (sums over days)
+  eden: delivered 1814 repeatDelivered 63 repeatChanged 63 updatePackets 43 changed 79 staleDeliveries 0 staleRecap 9 freshRecap 35 days 32 recapUsd 0.0152
+  tools: delivered 0 repeatDelivered 0 repeatChanged 0 updatePackets 0 changed 79 staleDeliveries 0 staleRecap 7 freshRecap 7 days 32 recapUsd 0.0113
+== recaps paired by day, eden - tools (n 32 days)
+  staleRecap            7 ->        9   per day +0.0625 (-0.0938..+0.2500)
+  freshRecap            7 ->       35   per day +0.8750 (+0.5938..+1.1562)
+  updatePackets         0 ->       43   per day +1.3438 (+1.1250..+1.5625)
+  recapUsd        0.01135 ->  0.01523   per day +0.0001 (+0.0001..+0.0001)

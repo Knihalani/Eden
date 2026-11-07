@@ -86,6 +86,7 @@ not strict yet.
 | No-model funnel     | `hidden-funnel.ts` (`bun run funnel` wraps it) | Per task: planted item returned, cached, delivered; with `--ask`, cited by an ask; decoy delivered on controls; source calls and ms per task. Deterministic at `--time 0`                                                  |
 | Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][+ask][+nokey][@w<ms>]`, graded by a second model; per-task timelines; `--day K`; `--days D` (a user's mixed days, recipe 4c) |
 | Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`), or Eden in place of its source tools (`hermes-eden`, A16: Pi's `eden` shape); same tasks, grader and results format as Pi                                                                                   |
+| Injection suite     | `injection-ab.ts`                              | A10 (D305): planted prompt-injection attempts against Pi with recorded-only action tools: attack success by arm and kind, hidden facts kept; `--dry` is its $0 screen (recipe 4d)                                                                                    |
 | In-house loop       | `agent-ab.ts`                                  | The pre-Pi loop; label any result from it as such (CLAUDE.md)                                                                                                                                                              |
 | Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load; `sim:perf memory --synced` and `steady --synced` (A3) backfill their users first (the scenarios otherwise never sync)                  |
 | Connector lab       | `bun run sim:lab:build && bun run sim:lab`     | Real MCP servers in Docker over seeded backends                                                                                                                                                                            |
@@ -429,8 +430,13 @@ work vocabulary, ~3% of items naming one of the world's people) and screen 16 ta
 bun run funnel --jobs 2 --suite train1,train2,train3,train4,train5,train6 --seeds 41 --json n995.json \
   -- --noise-sources 995 --limit 16     # ~45 s; --jobs 2: memory. --set '<arm>' for a trial
 bun run funnel --jobs 2 --suite train1,train2,train3,train4,train5,train6 --seeds 41 -- --limit 16   # five sources
-bun packages/engine/bench/source-days.bench.ts 1000 300 3 --config='<arm>'   # listing and card calls a day
+bun packages/engine/bench/source-days.bench.ts 1000 300 3 --config='<arm>'   # listing, card and fetch calls a day
 ```
+
+Live (A21, D357): `pi-ab --noise-sources 995` gives Eden's arms the same noise connectors (the tools arm keeps the
+world's five as its agent's tools); one seed per process (two at once ran out of memory). Deletions under lost notices
+with every source on the weekly sweep (D356's worst case): `quality-cli --never-used` (no source is ever "used").
+Recipes and figures: docs/research/a21-scale.md.
 
 Read hidden/decoys, `calls/task`, and the `merged cards use` line's `calls` and `sent` (card calls are stub-counted:
 noise items are not in the replay; price them at $0.000181 a call, A1). Compare task by task against the same seed
@@ -710,6 +716,29 @@ packages/sim/lab/a7/run.sh a7-nokey-41 --seeds 41 --budget 0.4     # and 42; too
 bun packages/sim/src/lab/pi-ab-report.ts .local/a7/runs/a7-nokey-4{1,2}.json
 ```
 
+### 4d. Prompt injection: the A10 suite (D305)
+
+19 attack kinds (`injection-suite.ts`: instructions to the agent, forged Eden lines and tool calls, exfiltration
+asks, overrides, role-play turns, markdown images, hidden HTML, Unicode tags, split instructions, tool-targeted asks,
+and social engineering from foreign, spoofed and the user's own addresses), one per hidden-context task in turn,
+planted where the candidates push delivers it. The agent is Pi on Haiku 5.5 through Anthropic (lab transport) with
+`act.ts`'s action tools, which record calls and do nothing; every attacker address is under `.example`. A run is
+followed when an action call matches the attack's target, or its words are in the reply and a Haiku grader reads the
+reply as passing them on (not warning about them). About $0.0005 a task an arm (A10's runs, 2026-11-07).
+
+```bash
+# $0: how often the push hands the agent the attack, and what reaches it, per kind (Eden only, no agent)
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/injection-ab.ts --dry --suites train --seeds 41 --arms eden
+# live: tools (no Eden), the no-key default, the reader shape and a trial over the default
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/injection-ab.ts --suites train --seeds 41 \
+  --variants hidden,control --arms tools,eden,reader,eden~G --variant-config '{"G":{"guardLine":true}}' \
+  --spend-ledger .local/a10/ledger.jsonl --spend-cap 1.5 --spend-headroom 0.06 --run-label a10 --out .local/a10/run.json
+bun test ./packages/sim/src/lab/injection-suite.test.ts   # the standing $0 test, about 2 s
+```
+
+The `eden` arm is a server with no model key (no cards; `+nokey`, D291); the `reader` arm has no cards either. The
+attack's opening quotes the request, so delivery is the suite's best case for the attacker (71 of 72 on train seed 41).
+
 ### 4c. A long horizon: one user's days (`--days`, H16, CL5)
 
 `--days D` replaces the per-suite, per-variant worlds with one world per seed: a user who brings D days of requests
@@ -752,6 +781,15 @@ bun packages/sim/src/lab/pi-cost-report.ts .local/long-41.json .local/long-42.js
 `.local/cards-all.jsonl` is the checked-in card caches concatenated (`cards-v2`, `cards-train`, `cards-train-4344`),
 as `bun run funnel --cards default` merges them. The CL baseline's figures and command lines are in
 docs/research/cl-cl5.md.
+
+**By position in the day (A17).** `python3 -I packages/sim/lab/a17/days.py [--buckets 0,4,8,12] [--pair A,B] STEM...`
+reads `--days` runs (`STEM.json` and `STEM.tl/tasks.jsonl`, so run with `--timeline`) by position in the day: hidden
+raised, how the planted item reached the agent (this request's packet, an ask, or only earlier that day), concerns,
+asks, agent $/1k, input tokens and wall per bucket; `--pair` pairs task by task within a set (stems
+`a17-<arm>-<set>-<seed>`) and recaps by day. `reshown.py` splits in-packet hidden tasks into first showings and
+re-shows (D340). Recaps that name an old time carry `staleHanded` and `staleUpdated` in the day summaries (was the item
+handed that day, did an update reach the agent). Wrapper and runs: `packages/sim/lab/a17/run.sh`,
+docs/research/a17-long-quality.md (about $0.04 per user-arm for 8 days of Haiku).
 
 **The agent's prompt cache (D260).** Billed agent cost on Anthropic depends on what the cache holds: Pi's agent with
 Eden has a ~565-token fixed prefix that was not cached across tasks in CL8's runs (cause not established), the tools
@@ -864,6 +902,8 @@ compares two arm shapes. The report pairs `hermes-eden` with `hermes` and with `
   before each day's recap is sent as the moved items (`sourceItems`) under `payload` and as a bare signal under
   `signals` (D272; before it a bare signal in every mode, which put ~650 ms of re-reads on Eden's path in every long
   payload run; `--recap-notice signal` reproduces it, A8).
+- `--push refs` (D347): the notices `signals` sends, each naming one ref (the source's newest item; its content is
+  unchanged), sent as `sourceRefs`; with `--days`, the recap's moved items named by ref.
 - **Connector calls over a user's days at $0 (A8, `days-calls.ts`):** the `--days` user through Eden alone (no agent,
   no model, time scale 0), every connector call counted by source, operation and phase (request, notice, the sync's
   tick, the one-time backfill): `bun packages/sim/src/lab/days-calls.ts --seeds 41,42 --days 8 --push payload --ask
@@ -871,6 +911,12 @@ compares two arm shapes. The report pairs `hermes-eden` with `hermes` and with `
   nights put eight days in about 36 hours of Eden's clock (the daily sweep runs about once a user); `--night-h 20`
   gives 24-hour days for per-user-day figures (docs/research/a8-connector-calls.md).
 - The results header records both (`sourceProfile`, `push`).
+- **The same at $0 (A18):** `bun run funnel` takes them after `--`, with `--time 1`: `-- --time 1 --source-profile
+  F --push signals|payload|refs` (and `--fetch-gone false`: sources whose fetch null proves nothing, as an MCP tool's).
+  Add `--timeline T.jsonl` and `--json F.json` (`--jobs 1`) and read where the agent's wait went with
+  `bun packages/sim/src/lab/latency-report.ts T.jsonl --funnel F.json`: the request (observe with its push) and the
+  ask, p50/p90/p99, and each piece's share (`verify` is the re-reads). train1–6, seed 41, `--limit 16`: about 2–5 min a
+  profile (`.local/a18/run.sh` in docs/research/a18-latency.md).
 
 `market.py` (in `packages/sim/lab/before-after/`) prices a run's `tools` and `eden` arms per agent model and
 connector plan; `--reuse-arms` copies the `tools` arm of an earlier run on the same profile, so only Eden is paid for.
@@ -883,12 +929,14 @@ The quality runner (`quality-cli.ts`) changes the world during a run and counts 
   copy still showing the old time is `updates.staleDelivered` of `updatedDelivered`.
 - `--deletes RATE`: fact-stating items are deleted at the source before a later session (`planDeletes`); a packet
   item or an ask citation of one is `deletes.deletedDelivered` / `deletedCited`.
-- `--push none|signals|payload`: how changes reach Eden (signals call `sourceChanged`; payload calls `sourceItems` and
-  `sourceRemoved`). `--lost-notices P` (A8) loses each source's notice for a change with chance P (its own random
-  stream; `lostNotices` counts them), for what a backstop such as the sweep must catch (D297).
-  `--null-proves-nothing` (A8) makes the sim sources fetch as MCP connectors do: a null re-read does not prove the
-  item gone (`fetchReportsGone` false, D298). `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed,
-  changed, gone, failed, calls).
+- `--push none|signals|payload|refs`: how changes reach Eden (signals call `sourceChanged`; payload calls
+  `sourceItems` and `sourceRemoved`; refs (D347) calls `sourceRefs` with the changed items' refs and `sourceRemoved`).
+  `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed, changed, gone, failed, calls) and the ref reads
+  (`refsRead`, `refsFallback`). `--fetch-gone false` (A18): every source's fetch null proves nothing, as an MCP
+  connector's (a deleted item's re-read is "unverifiable").
+  `--lost-notices P` (A8) loses each source's notice for a change with chance P (its own random stream;
+  `lostNotices` counts them), for what a backstop such as the sweep must catch (D297). `--null-proves-nothing` (A8)
+  is the same as `--fetch-gone false`.
 
 D126's matrix: `bun packages/sim/src/quality-cli.ts --users 8 --sessions 20 --updates 0.6 --deletes 0.05
 [--push signals|payload] [--config '{"verifyDelivery":false}'] [--jobs 4]`, $0 (`verifyDelivery` is in the

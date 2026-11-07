@@ -43,6 +43,8 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   cardsSourceAware: true,
   // D328, D370 (A24): background pages stored one per loop turn; the card drain gathers them.
   syncIngestTurns: true,
+  // D356 (A21): sources the user does not use are swept weekly; their unswept copies are re-read before delivery.
+  syncUnusedSweepMs: 7 * 24 * 3_600_000,
   syncPollBehind: true,
   syncPush: true,
   verifyDelivery: true,
@@ -72,6 +74,8 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   planConflict: true,
   // D317 (A12): a nudge to ask when the candidates do not settle the request.
   askNudge: true,
+  // D342 (A17): updates name the times they drop.
+  revisionDiff: true,
 };
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -103,11 +107,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(55);
+    expect(differ.length).toBe(57);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(55);
+    expect(partKeys.size).toBe(57);
   });
 });
 

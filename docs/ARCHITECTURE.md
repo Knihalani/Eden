@@ -220,6 +220,15 @@ no dated item older than the user's cut (the copy is then cut), the user's items
 and a sweep stops once it has listed every id it holds for the source (`syncKeepCut`, D321). The daily sweep still lists
 every source once a day (deletes need it): about 1,000 listing calls a user a day at 1,000 sources (D324).
 
+A21 (D356, in the default; docs/research/a21-scale.md) sweeps a source the user does not use, and whose connector can
+find an item by id (`Source.fetchesById`: an MCP connector with a get tool), once a week instead
+(`syncUnusedSweepMs`); any other keeps the daily sweep. What
+the skipped sweeps would have vouched for is checked at delivery instead: a copy older than `syncSweepMs` of a source
+whose daily sweep was skipped, or such a source's copy the last sweep did not list, is `doubted`, so every delivery and citation
+re-reads it by id first (D126, D211). A copy no re-read confirms is not delivered and makes its source's sweep due at
+the next tick. At 1,000 sources the sweep falls from ~1,114 to ~282 listing calls a user a day; a five-source user uses
+all their sources and keeps the daily sweep.
+
 **Change notifications** (D125, `syncPush`; `Source.notifies`, `ContextPartner.sourceChanged` and `sourceItems`,
 `POST /v1/sources/changed` and `/v1/sources/items`, the client's `sourceChanged`/`sourceItems`): a source whose
 integrator forwards the provider's change notifications is not polled on its learned change rate. A notification marks
@@ -258,7 +267,12 @@ a deleted item, from a notification or a re-read, is also dropped from the fan-o
 hold), so a page read before the deletion cannot bring it back. A re-read that is on the wire when a deletion
 notification lands does not revive the item (`recheck` checks `ItemCache.isHeldGone` before storing): it counts as
 gone.
-The re-reads are traced as "verify" decisions with their `sourceCalls`.
+The re-reads are traced as "verify" decisions with their `sourceCalls`, and their wait is a "verify" span (A18).
+A notice that names the refs it changed without their content (`ContextPartner.sourceRefs`, `POST /v1/sources/refs`,
+D347) doubts only those items: each is fetched in the background (two at a time, `REF_TIMEOUT_MS` 5 s, a guard's skip
+or a plain error tried again) and stored as synced under its call's read mark; until its read lands the item is in
+doubt and a delivery waits on that read (`refreshing`, no second call, at most `verifyTimeoutMs`). A ref that cannot
+be read turns the notice into the plain signal.
 
 **Poll behind the lookup** (D65, `syncPollBehind`, on in the default, D112; with `sync` and `syncOnDemand`): without it,
 a lookup that finds a synced source stale waits for that source's on-demand poll (`sync.freshen`, one or two listing
@@ -287,6 +301,15 @@ untaken (the push's second reading) announces nothing. A change notice for a sou
 from is polled at once in the background (one listing call, at most one at a time and 30 s apart per user and
 source), so the packet is usually queued before the agent's next request; nothing on the observe path waits for it.
 Without it, a fact the agent already holds stays in its transcript in the old version (docs/research/fix-s7-revisions.md).
+Since D342 (`revisionDiff`, part `freshness`) an update also names the times and dates the session was shown for the
+item that the new version no longer has ("…; this version replaces it; no longer: 09:30"): the ledger keeps every
+handed version's times (`Ledger.seenTimes`, `timesOf`, no model).
+
+**Re-showing a candidate across requests** (D340, `pushReshow`, a trial, off): the not-twice ledger (D13) keeps an
+item back within its cooldown; with the trial on, a push candidate the agent took for an *earlier request* of the
+session (`Session.handedIn`, the request its candidates' packet was handed out in) is handed again when it ranks among
+this request's candidates and passes `readerGate`'s constraint test; never twice within one request. Over a day a constraint-worded item is often pushed first for an unrelated request, where the
+agent was told to ignore it, and the agent rarely went back to it at its own (docs/research/a17-long-quality.md).
 
 **New items against what the agent already acted on** (D301, `planConflict`, on in the default, part `plans`): each
 session keeps the cues of its last 12 requests the push ran for (the acting requests). Items the sync stores after

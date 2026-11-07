@@ -64,7 +64,7 @@ export interface QualityOptions {
    * deletion, `payload` forwards the changed items themselves and the deleted refs; `none` (the default) forwards
    * nothing. Any mode but `none` marks every sim source as notifying.
    */
-  push?: "none" | "signals" | "payload";
+  push?: "none" | "signals" | "payload" | "refs";
   /**
    * With `push`: the share of change notices lost on the way (A8), each source's notice for one change drawn alone
    * on its own random stream, so the sessions and sources draw as without it. 0 (the default): none lost.
@@ -75,6 +75,16 @@ export interface QualityOptions {
    * false), so a deleted item's re-read is "unverifiable" and only a sweep or a removal drops it.
    */
   nullProvesNothing?: boolean;
+  /**
+   * False (A18): every sim source's fetch null proves nothing, as an MCP connector's (`fetchReportsGone` false), so a
+   * deleted item's re-read is "unverifiable". Default true (the sim holds its items).
+   */
+  fetchGone?: boolean;
+  /**
+   * Lab only (A21, D356): no source ever counts as used (`Sync.engage` is a no-op), so with `syncUnusedSweepMs` every
+   * source takes the longer sweep: the worst case for deletions a lost notice leaves to the sweep.
+   */
+  neverUsed?: boolean;
   agentToolRate?: number;
   /**
    * With no live model: "perfect" puts an oracle judge in the model's place (the ceiling of the model path),
@@ -564,6 +574,7 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
     if (o.nullProvesNothing)
       for (const src of sources) Object.defineProperty(src, "fetchReportsGone", { value: false, enumerable: true });
     if ((o.push ?? "none") !== "none") for (const s of sources) s.notifies = true;
+    if (o.fetchGone === false) for (const s of sources) s.fetchReportsGone = false;
     return { world, sessions, asks, updates, deletes, sources };
   });
   const runUser = async (u: number) => {
@@ -621,6 +632,7 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
       ...(o.spanSink ? { onSpan: o.spanSink(`u${u}`) } : {}),
       ...(cards ? { cards } : {}),
     });
+    if (o.neverUsed && partner.sync) partner.sync.engage = () => [];
     const who = { tenantId: "sim", userId: `u${u}` };
     /** `lostNotices`: its own stream, so a run with none lost draws everything else as before. */
     const losing = new Rng(o.seed * 7_907 + u);
@@ -636,6 +648,18 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
         }
         if (mode === "signals") {
           partner.sourceChanged(who, s.id);
+          continue;
+        }
+        if (mode === "refs") {
+          // A notice that names what changed and carries no content (D347): Eden reads those refs itself. Awaited, as
+          // the notice lands well before the next session's first request; deletions are named as payload's are.
+          const named = s
+            .listAll()
+            .filter((i) => changed.includes(i.id))
+            .map((i) => i.ref);
+          if (named.length > 0) await partner.sourceRefs(who, s.id, named).settled;
+          const refs = gone.filter((i) => i.sourceId === s.id).map((i) => i.ref);
+          if (refs.length > 0) partner.sourceRemoved(who, s.id, refs);
           continue;
         }
         const items = s.listAll().filter((i) => changed.includes(i.id));

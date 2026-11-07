@@ -271,6 +271,18 @@ await eden.sourceChanged("gmail", {
   item), it also sends the bare signal, so the source is polled rather than the change missed, and resolves false.
   The routes underneath are `POST /v1/sources/items {userId, sourceId, items}` and `POST /v1/sources/removed {userId,
 sourceId, refs}` (at most 100 each), also exposed as `client.sourceItems` and `client.sourceRemoved`.
+- **The refs that changed, without their content (D347).** A Gmail `history.list` gives message ids, a Graph or
+  HubSpot webhook a resource id, a Drive changes list file ids: `client.sourceChanged(sourceId, { refs, removed })`
+  (Python `source_changed(source_id, refs=…, removed=…)`, route `POST /v1/sources/refs {userId, sourceId, refs}`, at
+  most 100). Eden reads those refs itself in the background through the source's fetch tool and holds them as synced;
+  **nothing else of the source is put in doubt**, so the agent's next request waits on no re-read and no poll. A named
+  item is held as unconfirmed only until its read lands (a delivery that needs it waits on that read, at most
+  `verifyTimeoutMs`); a ref Eden cannot read (no fetch tool, an error after retries, a timeout) turns the notice into
+  the bare signal below. The route answers 200 at once with `{synced, reason?}` as `/v1/sources/changed` does. In the
+  lab (A18, train1–6 seed 41, direct market profile, time scale 1, the same notices as signals): the agent's wait on a
+  request p50 1,013 → 6 ms and p90 1,507 → 17 ms, an `ask_context` p50 588 → 2.3 ms and p99 2,782 → 1,050 ms, connector
+  calls 7.4 → 2.0 a task; the freshness simulation delivered no more stale or deleted items than payload notices
+  (docs/research/a18-latency.md). Each ref is one fetch: prefer the items when you already have them.
 - **Only that the source changed** (a Gmail `watch` push you do not expand, a Calendar or Drive channel, a HubSpot
   webhook): `client.sourceChanged(sourceId)`, or `POST /v1/sources/changed {userId, sourceId}`. The source is polled
   once, at its next use, however many notifications came first, and every item Eden read from it before the signal is
@@ -297,8 +309,9 @@ they were cached.
 A signal that says only "this source changed" does not say what changed. Eden then treats every item it read from
 that source before the signal as unconfirmed, and reads such an item again by its id before delivering it (D126: about
 0.5 re-reads per agent turn in the simulation, each one connector call; a source without a fetch tool is delivered as
-held). Notifications that carry their items or name their deletions need no re-reads, so prefer them where the
-provider offers them; for a Gmail push, turn the history id into items and deletions with `history.list` first.
+held). Notifications that carry their items, name the refs that changed, or name their deletions need no re-reads, so prefer
+them where the provider offers them; for a Gmail push, turn the history id into message ids (and deletions) with
+`history.list` first.
 
 Receiving notifications has its own cost, which Eden does not see: a platform may bill trigger runs, and a Gmail push
 carries only a history id that your code turns into items with a `history.list` call.

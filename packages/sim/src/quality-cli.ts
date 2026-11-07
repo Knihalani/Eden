@@ -5,7 +5,7 @@
  *   [--planner-no-reuse] [--planner-deadline-margin 2] [--planner-latency-quantile 0.9]
  *   [--planner-mode serve|shadow] [--promote-after N]] [--time 0] [--wait 0]
  *   [--noise 1] [--updates 0] [--deletes 0] [--push none|signals|payload] [--lost-notices 0]
- *   [--null-proves-nothing]
+ *   [--null-proves-nothing] [--never-used]
  *   [--refresh-after-hours H] [--tool-rate 0.4]
  *   [--judge none|perfect|noisy] [--live] [--brief] [--config '{"probes":true}']
  *   [--timeline out.jsonl] [--sync]
@@ -70,6 +70,7 @@ const cli = flags(
         "deletes",
         "push",
         "lost-notices",
+        "fetch-gone",
         "refresh-after-hours",
         "tool-rate",
         "judge",
@@ -91,6 +92,7 @@ const cli = flags(
         "sync",
         "tally",
         "null-proves-nothing",
+        "never-used",
       ].map((k) => [k, "bool" as const]),
     ),
   },
@@ -173,10 +175,12 @@ const opts: QualityOptions = {
   noiseScale: Number(arg("noise", "1")),
   updates: Number(arg("updates", "0")),
   deletes: Number(arg("deletes", "0")),
+  // `--fetch-gone false` (A18): sources answer a deleted ref with a null that proves nothing, as an MCP tool does.
+  fetchGone: arg("fetch-gone", "true") !== "false",
   push: (() => {
     const m = arg("push", "none");
-    if (m !== "none" && m !== "signals" && m !== "payload") {
-      console.error("quality-cli: --push must be none, signals or payload");
+    if (m !== "none" && m !== "signals" && m !== "payload" && m !== "refs") {
+      console.error("quality-cli: --push must be none, signals, payload or refs");
       process.exit(2);
     }
     return m;
@@ -190,6 +194,8 @@ const opts: QualityOptions = {
     return v;
   })(),
   nullProvesNothing: has("null-proves-nothing"),
+  // A21 (D356): no source counts as used, so `syncUnusedSweepMs` sweeps every source less often (the worst case).
+  neverUsed: has("never-used"),
   config: {
     ...(has("refresh-after-hours") ? { refreshAfterMs: Number(arg("refresh-after-hours", "0")) * 3_600_000 } : {}),
     // Any engine setting, as JSON (`--config '{"probes":true}'`): for experiments behind a flag.

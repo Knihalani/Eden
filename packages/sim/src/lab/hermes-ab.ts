@@ -374,7 +374,7 @@ async function runWorld(
   grading: Promise<void>[],
 ): Promise<RunResult[]> {
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
-  const notify = pushNotifier(sources, CONNECTORS, seed);
+  const notify = pushNotifier(sources, CONNECTORS, seed, world.now);
   const { name: condition, waitMs, withPartner, config, eden, useTools } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;

@@ -18,6 +18,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `render.ts`, `fold.ts`                                                     | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52)                                                                                               |
 | `judge.ts`                                                                 | The judge's prompt and parser (indexes only, D19)                                                                                                                                                                             |
 | `line.ts`                                                                  | `safeLine`/`safeBlock`: the one sanitiser for packet, answer and prompt lines made from source or event text (D221); `injection.test.ts` is part D's probe as a standing test                                                 |
+| `shield.ts`                                                                | A10's trial packet defences (D306, D307): `GUARD_LINE` (`guardLine`), `quarantine`/`quarantineItem` (`quarantineInstructions`: instruction-shaped text in delivered items replaced by `QUARANTINED`, no model). `shield.test.ts` holds its precision cases |
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
 | `settle.ts`                                                                | `askNudge`'s no-model test of whether the candidates settle a request's people, things and days (D316, D317)                                                                                                                  |
 | `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
@@ -251,6 +252,16 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   live (−0.6 points, −4.6..+3.4); an ask past held items cost +$0.021/1k for no gain. Each push pass reports its pool,
   constraint test and handed ids to the lab hook `onPushPool` (ids and flags only, D269), not to `onReader`, whose
   consumers count reader readings.
+- **Trial: a candidate re-shown across requests (D340, `pushReshow`, off, ends 2026-12-07).** "Earlier" is the
+  request the agent *took* the item in, in a candidates' packet (`Session.handedIn`, set in `handOut`), never the
+  request it was queued for: judged by the ledger's delivery turn, a packet of the last request taken with the next
+  one's observe was handed twice in one take (found by `fuzz.test.ts`; its `reshow-flaky` variant runs the trial, and
+  its not-twice invariant allows a re-hand only at a later request). Only constraint-like candidates (`candidatesOf`'s
+  `like`). One request a session (the funnel, the eval's single turns) never exercises it; measure on `pi-ab --days`.
+- **Updates name the times they drop (D342, `revisionDiff`).** `buildUpdate`'s title reads `Ledger.seenTimes`; times
+  are noted only when a copy is handed out (`watchCopies`, from `copiesOf`'s `times`), never when an update is queued
+  (one superseded in the queue was never shown). `timesOf` compares one written form ("HH:MM", "<day> <mon>"), so a
+  reworded time is the same time; a new form it reads must normalise too, or an unchanged time is called gone.
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read
@@ -264,6 +275,21 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   shares `one()`'s key (`pageKey`); a peek with its own key would silently miss. `Sync.freshen` skips a source
   whose on-demand poll gave up within `demandTimeoutMs` (= `sourceTimeoutMs`), so the next lookup searches it live
   instead of waiting on the same listing.
+- **Ref notices (D347, `sourceRefs`).** A notice naming the refs that changed doubts only those items: `refreshing`
+  (by user and item, with the read mark at the notice) holds each background read until it lands, `doubted` reads it,
+  and `check` returns it (raced against `verifyTimeoutMs`) instead of a second call, unless a signal came after the
+  notice. The read is stored through `Sync.ingest` under the read mark its call began with (D133), after the same
+  removal check as `sourceItems` (`heldGoneSeq`, D160/D176), with the gated ref (never the raw one, D10), and noted in
+  the user's live sessions' `checks` (`noteRefReads`, changed copies only), so a pool built before it applies it. The first ref not read
+  raises `sourceNotice`'s plain signal before its item's doubt is lifted; reads stop when the user is no longer synced
+  (`Sync.notifying`). A new delivery path must keep going through `check`/`verifyItems`, or a named item's old copy
+  goes out.
+- **Two ways to make the signal path faster were measured and deleted (A18, docs/research/a18-latency.md).** A complete
+  poll after a signal standing in for re-reads (`verifyByPoll`, D345) delivered stale copies (5 → 12 of 101 updates):
+  listings are not reliably newest-modified first (a calendar lists future events first, a chat edit keeps its time),
+  so a poll can stop before a changed item. Re-reading an ask's likely citations beside its poll (`askVerifyEarly`,
+  D346) cut the ask's p99 by about a second but read items the answer then left out (+0.06–0.09 connector calls a
+  task). Under signal-only notices the agent's wait is the re-read itself (D126, D211), bounded by `verifyTimeoutMs`.
 - `fetchChecked`'s `gone` needs `Source.fetchReportsGone`: an MCP tool's null fetch proves nothing, so verification
   never deletes an MCP item on its own; deletions there come from `sourceRemoved` or the sweep.
 - **Cached items' `text` is a getter over deflated bytes (D188).** A stored copy is not the object `put` was given;
@@ -314,6 +340,16 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **The sync's per-source ids are an `IdSet` (D371, `@eden/primitives`).** Typed arrays, not one string per id: they
   outlive a frozen user's cache. `has` is ~90 ns and iterating 3,000 ~0.2 ms (against ~6 ns and ~5 µs for a `Set`):
   keep iteration off per-item paths.
+- **Unused sources are swept weekly (D356, `syncUnusedSweepMs`, docs/research/a21-scale.md).** Safe only because a
+  skipped sweep's copies are re-read at delivery: `doubted` is true for a copy older than `syncSweepMs` whose source's
+  daily sweep the trial skipped (`Sync.sweepLapsed`, which reads `SourceSync.skipped`, not the sweep's age: an idle
+  user's late sweep must doubt nothing) and for any copy the last sweep missed (`Sync.sweepMissed`). Not "is the source
+  used now": a lookup engages its sources before its delivery is verified. An unswept copy no re-read confirms is left
+  out (never delivered as held, unlike D126's other doubts); after a null re-read it calls `Sync.sweepSoon` (an error or
+  a guard's skip does not). A new delivery path that skips
+  `doubted`/`verifyItems` would hand over items the weekly sweep has not checked; a source that cannot find an item by
+  ref (`Source.fetchesById` false: an `McpSource` with no `fetchTool` still has a `fetch` that answers null) must stay
+  on the daily sweep (`onLongSweep`); a wrapper around a `Source` must copy `fetchesById` (as `notifies`).
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

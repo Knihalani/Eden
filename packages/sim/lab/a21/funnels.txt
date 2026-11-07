@@ -1,0 +1,25 @@
+== .local/a21/f5-final.txt
+TOTAL                                0/96     68/96                    65/96          2.7      9.5
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL                                0/96     71/96                    65/96          2.6     10.4
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL                                0/96     65/96                    56/96          2.7     11.5
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL                                0/96     68/96                    48/96          2.6     11.2
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+merged cards use (summed): {"enqueued":72696,"prefiltered":33587,"leanSkipped":29118,"reused":36614,"carded":2091,"sent":6604,"sentenceReused":360,"calls":446,"retries":0,"costUsd":0,"failures":0,"ove
+  TOTAL      hidden 314/384  decoys 273/384
+== .local/a21/f995-final-41.txt
+TOTAL                                7/48     33/48                    34/48         49.8     36.5
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+TOTAL                               15/48     35/48                    24/48         47.2     38.6
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+merged cards use (summed): {"enqueued":276089,"prefiltered":17514,"leanSkipped":15186,"reused":120,"carded":1049,"sent":5028,"sentenceReused":204,"calls":508,"retries":0,"costUsd":0,"failures":0,"over
+  TOTAL      hidden 77/96  decoys 69/96
+== .local/a21/f995-final-42.txt
+TOTAL                                6/48     33/48                    34/48         51.1     40.7
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+TOTAL                               15/48     35/48                    23/48         47.6     41.3
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+merged cards use (summed): {"enqueued":275872,"prefiltered":17747,"leanSkipped":15124,"reused":169,"carded":1014,"sent":5542,"sentenceReused":156,"calls":534,"retries":0,"costUsd":0,"failures":0,"over
+  TOTAL      hidden 76/96  decoys 64/96

@@ -1476,13 +1476,15 @@ export class ItemCache {
   /**
    * Null when the user is not frozen; else a promise that resolves once they are thawed (D325), as an urgent job of
    * the slice scheduler (`pump`): other users' events do not wait behind this one's thaw. A read before it resolves
-   * thaws the rest at once (`peek`): the answer is the same, only the wait moves.
+   * thaws the rest at once (`peek`): the answer is the same, only the wait moves. While a thaw some caller waits on
+   * is still queued, a later caller waits on it too, even if a read (or a forget) already ended the frozen state:
+   * otherwise a session's later event would run before its earlier one, still waiting in the queue.
    */
   ready(scope: Scope): Promise<void> | null {
     const key = scopeKey(scope);
     const x = this.users.get(key);
-    if (!(x instanceof FrozenUser)) return null;
     const running = this.thawing.get(key);
+    if (!(x instanceof FrozenUser)) return running?.done ?? null;
     if (running?.from === x) return running.done;
     const done = new Promise<void>((resolve) => {
       this.urgent.push({

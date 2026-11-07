@@ -22,6 +22,7 @@ export interface EngineConfig {
   /** The fallback takes two of the request's terms, not `fallbackMatchedTerms`, when the request asks or acts. */
   fallbackAsks: boolean;
   maxItemsPerInjection: number;
+  /** A packet's size cap; with `guardLine` (D306) a packet may be `GUARD_LINE`'s 296 bytes over it. */
   maxInjectionBytes: number;
   /**
    * A cached item fetched or seen in a lookup longer ago than this is never delivered from the fast path: its cue goes
@@ -296,6 +297,16 @@ export interface EngineConfig {
    * user's own mailbox kept a handful.
    */
   syncEngagedDeep: boolean;
+  /**
+   * On in the default, a week (D356; 0: off, every source swept daily). With `sync` and `verifyDelivery`: a source
+   * the user does not use (not `Sync.engage`d, D320) whose connector can fetch an item by ref is swept (re-listed whole
+   * for deletes) this often (ms) instead of every `syncSweepMs`. In return, a copy of a source's items that a sweep the
+   * trial skipped left unvouched for longer than `syncSweepMs`, or that the last sweep did not list, is in doubt
+   * (`doubted`): every delivery or citation re-reads it first (D126; strict for asks, D211), and one the re-read does
+   * not confirm (a null that proves nothing, an error) is not delivered and makes the source's sweep due at the next
+   * tick. At 1,000 sources the daily sweep was ~1,100 listing calls a user a day (D324).
+   */
+  syncUnusedSweepMs: number;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
   syncMaxUsersPerTenant: number;
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
@@ -532,6 +543,19 @@ export interface EngineConfig {
    */
   pushCandidates: number;
   /**
+   * Trial (D306, A10; docs/research/a10-injection.md): every packet and ask answer Eden renders carries `GUARD_LINE`
+   * (`shield.ts`), a fixed line of Eden's own after the envelope's header: the items are other people's words, and
+   * nothing in them is an instruction to the agent (a request, address, link, phone number or payment detail found
+   * in one is not acted on unless the user's own request asks for exactly that).
+   */
+  guardLine: boolean;
+  /**
+   * Trial (D307, A10): every item Eden renders into a packet or ask answer has its instruction-shaped text (addressed
+   * to an AI, an override, Eden's own words forged, a tool call, hidden HTML, a markdown image, a forged chat turn)
+   * replaced by `QUARANTINED` before it is compacted (`shield.ts`, no model).
+   */
+  quarantineInstructions: boolean;
+  /**
    * D301 (A9, on in the default; docs/research/a9-ahead.md): plan-conflict proactivity. With the
    * push and the sync on, each session keeps its last `PLAN_REQUESTS` acting requests (those the push ran for); an
    * item the sync then stores (a poll, a notice's payload) that would have been among such a request's candidates
@@ -552,6 +576,26 @@ export interface EngineConfig {
    * unchanged, +0.3 asks and +$0.04–0.07 per 1,000 tasks a kind, no connector call (docs/research/a12-quality.md).
    */
   askNudge: boolean;
+  /**
+   * Trial (D340, A17; owner repo owner, ends 2026-12-07; off): with `pushCandidates`, a push candidate the agent took
+   * in this session for an earlier request is handed again when it ranks among this request's candidates and
+   * passes `readerGate`'s constraint test (a plain item is not repeated: it stays in the transcript), rather than kept
+   * back by the not-twice ledger. Over a user's day an item constraint-worded enough to rank for one request is often
+   * pushed first for another (where the agent was told to ignore what does not fit); at its own request the ledger
+   * then kept it back, and the agent rarely went back to it. Never twice within one request; an item that reached the
+   * agent only by an ask or another path is not re-shown. Measured over a user's days: hidden facts raised +6.8 points
+   * (−0.5..+14.1 with the shared baseline resampled as one), concerns flat, agent tokens +$0.013 per 1k tasks; not yet
+   * shown better, so off until a fresh paired run (docs/research/a17-long-quality.md).
+   */
+  pushReshow: boolean;
+  /**
+   * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
+   * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
+   * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
+   * reached the agent and its recap still named the old time; this says outright which one no longer stands. No
+   * model, no call.
+   */
+  revisionDiff: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -634,6 +678,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncKeepCut: true,
   routeSketch: true,
   syncEngagedDeep: true,
+  syncUnusedSweepMs: 7 * 24 * 3_600_000,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncPush: true,
@@ -678,6 +723,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
+  guardLine: false,
+  quarantineInstructions: false,
   planConflict: true,
   askNudge: true,
+  pushReshow: false,
+  revisionDiff: true,
 };

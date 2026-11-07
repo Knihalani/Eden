@@ -11,7 +11,12 @@
 export interface ShownCopy {
   version: number;
   sourceId: string;
+  /** `revisionDiff` (D342): the times and dates the agent was shown in any version of the item, oldest first. */
+  times?: string[];
 }
+
+/** Times and dates kept per shown item (`revisionDiff`), the most recently shown kept. */
+const MAX_SHOWN_TIMES = 16;
 
 /**
  * Items a session's ledger keeps at most, oldest delivery dropped first. The cooldown sweep in `mark` only runs as
@@ -95,10 +100,26 @@ export class Ledger {
   }
 
   /** The agent now holds `version` of the item (handed out, or an update for it queued). */
-  noteShown(itemId: string, version: number, sourceId: string): void {
+  noteShown(itemId: string, version: number, sourceId: string, times?: readonly string[]): void {
+    const was = this.shown.get(itemId);
     this.shown.delete(itemId); // Re-insert so Map order stays least recently shown first.
-    this.shown.set(itemId, { version, sourceId });
+    // `revisionDiff`: every version's times stay, an old one too, since the agent's transcript holds them all.
+    const all = [...(was?.times ?? [])];
+    for (const t of times ?? []) {
+      const at = all.indexOf(t);
+      if (at >= 0) all.splice(at, 1);
+      all.push(t);
+    }
+    this.shown.set(
+      itemId,
+      all.length ? { version, sourceId, times: all.slice(-MAX_SHOWN_TIMES) } : { version, sourceId },
+    );
     while (this.shown.size > MAX_SHOWN_COPIES) this.shown.delete(this.shown.keys().next().value as string);
+  }
+
+  /** `revisionDiff`: the times and dates the agent was shown for the item, in any version (oldest first). */
+  seenTimes(itemId: string): readonly string[] {
+    return this.shown.get(itemId)?.times ?? [];
   }
 
   /** The agent was handed another version of the item than `version`: what it holds is superseded. */

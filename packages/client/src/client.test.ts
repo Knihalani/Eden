@@ -581,6 +581,29 @@ describe("sourceChanged with the changed items (payload notices, D210)", () => {
     expect(calls.at(-1)!.route).toBe("/v1/sources/changed");
   });
 
+  test("refs (D347) go to /v1/sources/refs with no signal when taken, split at MAX_PUSHED_ITEMS", async () => {
+    const { calls, fetch } = recording(ok);
+    const eden = new EdenClient({ tenantId: "t", userId: "u", sessionId: "s", fetch });
+    const refs = Array.from({ length: MAX_PUSHED_ITEMS + 2 }, (_, i) => `r${i}`);
+    expect(await eden.sourceChanged("mail", { refs })).toBe(true);
+    expect(calls.map((c) => c.route)).toEqual(["/v1/sources/refs", "/v1/sources/refs"]);
+    expect(calls[1]!.body).toEqual({ tenantId: "t", userId: "u", sourceId: "mail", refs: ["r100", "r101"] });
+  });
+
+  test("refs not taken (not synced, refused, wrong shape): the plain signal, false, no throw", async () => {
+    const answers: (() => Response)[] = [
+      () => Response.json({ ok: true, synced: false, reason: "not-synced" }),
+      () => Response.json({ error: "refs must be a non-empty array" }, { status: 400 }),
+      () => Response.json({ ok: true, synced: "yes" }),
+    ];
+    for (const answer of answers) {
+      const { calls, fetch } = recording((route, body) => (route === "/v1/sources/refs" ? answer() : ok(route, body)));
+      const eden = new EdenClient({ userId: "u", sessionId: "s", fetch, onError: () => {} });
+      expect(await eden.sourceChanged("mail", { refs: ["m1"] })).toBe(false);
+      expect(calls.map((c) => c.route)).toEqual(["/v1/sources/refs", "/v1/sources/changed"]);
+    }
+  });
+
   test("unreachable: false, no throw", async () => {
     const errors: unknown[] = [];
     const eden = new EdenClient({

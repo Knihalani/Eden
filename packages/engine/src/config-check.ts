@@ -111,6 +111,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncKeepCut: SYNC,
   routeSketch: SYNC,
   syncEngagedDeep: SYNC,
+  syncUnusedSweepMs: ["sync", "verifyDelivery"],
   syncMaxUsersPerTenant: SYNC,
   syncLocalAll: SYNC,
   cardItems: ["cards"],
@@ -143,6 +144,8 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCandidates: PUSH,
   planConflict: [...PUSH, "sync"],
   askNudge: PUSH,
+  pushReshow: PUSH,
+  revisionDiff: ["revisionNotice"],
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */

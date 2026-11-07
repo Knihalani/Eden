@@ -57,7 +57,7 @@
  *     [--variant-config '{"name":{...}}'] [--act] [--dress] [--cards FILE [--cards-out FILE]] [--card-sort price]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent default|none|FILE[,FILE]]
  *     [--replay DIR [--replay-timing] [--replay-only]] [--reuse-arms earlier.json]
- *     [--recap-notice push|signal]
+ *     [--recap-notice push|signal] [--noise-sources N [--noise-items 20]]
  *
  * `--replay DIR` replays the reader's and the grader's calls from DIR and appends new ones; `--reuse-arms F` copies the
  * `none` and `tools` arms from a matching earlier run instead of running them (both at their definitions below).
@@ -103,6 +103,7 @@ import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, ty
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
+import { noiseSources } from "./noise-sources";
 import type { World } from "../world";
 import { connectorHeader, connectorOptions, pushNotifier, recapNotice, sourceFields } from "./connector-options";
 import {
@@ -226,6 +227,13 @@ const LIMIT = Number(opt("limit", "0"));
 // a recap turn closing each day; 0 (the default) is one session per request.
 const DAY = Number(opt("day", "0"));
 if (!Number.isInteger(DAY) || DAY < 0) throw new Error(`--day must be a whole number of requests, not ${DAY}`);
+// `--noise-sources N` (A21): N unrelated connectors beside the world's five in Eden's arms only (`noise-sources.ts`,
+// `--noise-items` items each, default 20), as the funnel's flag (A1): a user with ~1,000 connected sources. The tools
+// arm keeps the world's sources (its agent's tools); every connector call Eden makes, noise ones too, is counted.
+const NOISE_SOURCES = Number(opt("noise-sources", "0"));
+const NOISE_ITEMS = Number(opt("noise-items", "20"));
+if (!Number.isInteger(NOISE_SOURCES) || NOISE_SOURCES < 0 || !Number.isInteger(NOISE_ITEMS) || NOISE_ITEMS < 1)
+  throw new Error("--noise-sources and --noise-items take whole numbers (--noise-items at least 1)");
 /** Either day mode: `--day K` (fixed days per suite and variant) or `--days D` (a user's mixed days). */
 const DAYS_ON = DAY > 0 || USER_DAYS > 0;
 // `--late` (A9, pi-late.ts): each request's planted item arrives right after the agent answers it; what the agent
@@ -642,7 +650,7 @@ async function runWorld(
       ? withRecaps(baseTasks, DAY)
       : baseTasks;
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
-  const notify = pushNotifier(sources, CONNECTORS, seed);
+  const notify = pushNotifier(sources, CONNECTORS, seed, world.now);
   const {
     name: condition,
     waitMs,
@@ -665,7 +673,9 @@ async function runWorld(
   // Every connector call Eden makes in this stream, in a task's window or not (the backfill, the sync's ticks between
   // tasks): `Background.sourceCalls`, priced per connector plan by pi-cost-report.ts.
   let edenCalls = 0;
-  const edenSources = sources.map((s) =>
+  const noise =
+    NOISE_SOURCES > 0 && cond.withPartner ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME_SCALE, seed) : [];
+  const edenSources = [...sources, ...noise].map((s) =>
     watched(s, (id, op, start, end, status, items) => {
       edenCalls++;
       bg.sourceCalls = edenCalls;

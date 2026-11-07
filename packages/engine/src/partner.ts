@@ -19,6 +19,7 @@ import { createHash } from "node:crypto";
 import type { SourceMap } from "@eden/graph";
 import type { Budget, Model, Reservation } from "@eden/llm";
 import {
+  type Citation,
   itemId,
   MAX_QUESTION_CHARS,
   newId,
@@ -123,6 +124,7 @@ import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
 import { ASK_NUDGE, CANDIDATES_LEAD, citationsOf, PLAN_LEAD, renderPacket, shownText } from "./render";
+import { quarantineTitle } from "./shield";
 import { safeLine } from "./line";
 import { anchored, anchorsOf, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
@@ -265,6 +267,8 @@ interface Session {
    * the latest: the agent's own events move `turn` within one request, a new user message moves this.
    */
   requests: number;
+  /** `pushReshow` (D340): by item, the request (`requests`) it was last handed out in; at most `MAX_HANDED_IN`. */
+  handedIn: Map<string, number>;
   /** The session's last `EXPLAIN_TRACES` traces, oldest first (`explain`, D277). */
   traces: Trace[];
   lastActive: number;
@@ -336,6 +340,8 @@ interface Session {
   planSent?: Set<string>;
 }
 
+/** Items whose hand-out request a session keeps (`pushReshow`, D340): far above what a day's packets cite. */
+const MAX_HANDED_IN = 512;
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
 
@@ -540,6 +546,11 @@ export class ContextPartner {
   /** `stopSync` was called (and no `startSync` since): notices start no revision poll. */
   private revisionsStopped = false;
   /**
+   * `sourceRefs` (D347): by user and item, the re-read a ref notice started and has not finished. The item is in doubt
+   * until it lands (`doubted`), and a delivery's re-read waits on it rather than make a second call (`check`).
+   */
+  private readonly refreshing = new Map<string, { mark: number; outcome: Promise<CheckOutcome> }>();
+  /**
    * `readerPushBehind`: what a push packet's delivery changed in its own session, so a second reading that withdraws
    * the packet untaken can undo it (`withdraw`). Keyed by the packet, so it goes with it.
    */
@@ -552,7 +563,18 @@ export class ContextPartner {
    * `verifyDelivery`'s outcomes since start: items checked, confirmed, changed, gone, unverifiable, calls made; and
    * gone-holds the cache's caps dropped while still live (`ItemCache.holdsEvicted`), which reopen D126's race.
    */
-  readonly freshness = { checked: 0, confirmed: 0, changed: 0, gone: 0, failed: 0, calls: 0, holdsEvicted: 0 };
+  readonly freshness = {
+    checked: 0,
+    confirmed: 0,
+    changed: 0,
+    gone: 0,
+    failed: 0,
+    calls: 0,
+    holdsEvicted: 0,
+    /** `sourceRefs` (D347): refs read, and notices that fell back to the plain signal. */
+    refsRead: 0,
+    refsFallback: 0,
+  };
   /**
    * Re-reads that came back "unverifiable" because the source's null proves nothing (an MCP fetch, `fetchReportsGone`
    * false, whose reply lacked the record), by user, then item id: the read mark the re-read began under and when. The
@@ -671,6 +693,8 @@ export class ContextPartner {
             keepCut: c.syncKeepCut,
             sketch: c.routeSketch,
             engagedDeep: c.syncEngagedDeep,
+            // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
+            unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
           },
         )
       : null;
@@ -1083,9 +1107,9 @@ export class ContextPartner {
   }
 
   /** The agent now holds these versions: noted in the session's ledger, and the session watched for revisions. */
-  private watchCopies(s: Session, copies: readonly { id: string; sourceId: string; version: number }[]): void {
+  private watchCopies(s: Session, copies: readonly Copy[]): void {
     if (s.closed || copies.length === 0) return;
-    for (const c of copies) s.ledger.noteShown(c.id, c.version, c.sourceId);
+    for (const c of copies) s.ledger.noteShown(c.id, c.version, c.sourceId, c.times);
     // An update still queued whose every copy this hand-out rendered in the same version says nothing new.
     const held = new Map(copies.map((c) => [c.id, c.version]));
     for (let k = s.pending.length - 1; k >= 0; k--) {
@@ -1217,6 +1241,7 @@ export class ContextPartner {
       const { injection, items: said } = this.buildUpdate(s, rest);
       rest = rest.slice(said.length);
       // Promised now: a second store of the same version, before the agent takes this, queues nothing more.
+      // Its times are noted when it is handed out (`watchCopies`): one superseded in the queue was never shown.
       for (const it of said) s.ledger.noteShown(it.id, versionOf(it), it.sourceId);
       s.pending.push(injection);
       this.trace(s, {
@@ -1242,12 +1267,18 @@ export class ContextPartner {
    * handing out an older packet queued before it cannot leave the ledger at the older version.
    */
   private buildUpdate(s: Session, items: readonly ContextItem[]): { injection: Injection; items: ContextItem[] } {
-    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${UPDATED_NOTE}` }));
-    let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes });
+    // The quarantine (D307) reads the item's own title, before Eden's tag and note go round it: a title it replaces
+    // whole must not take "updated:" and "this version replaces it" with it.
+    const own = (t: string) => (this.config.quarantineInstructions ? quarantineTitle(t) : t);
+    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${own(it.title)}${this.updatedNote(s, it)}` }));
+    let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes, ...this.shield() });
     let n = renderedCount(items, text);
     if (n === 0) {
       // Not even the first line fits a tiny `maxInjectionBytes`: it is said alone, under a cap that holds its line.
-      text = renderPacket(tagged.slice(0, 1), { maxBytes: Math.max(this.config.maxInjectionBytes, 512) });
+      text = renderPacket(tagged.slice(0, 1), {
+        maxBytes: Math.max(this.config.maxInjectionBytes, 512),
+        ...this.shield(),
+      });
       n = 1;
     }
     const said = items.slice(0, n);
@@ -1258,7 +1289,7 @@ export class ContextPartner {
       sessionId: s.id,
       mode: "proactive",
       text,
-      citations: citationsOf(said),
+      citations: this.cited(said),
       reason: `${UPDATED}${id}`,
       score: 1,
       createdAt: this.now(),
@@ -1273,9 +1304,20 @@ export class ContextPartner {
       items: said.map((i) => ({ sourceId: i.sourceId, id: i.id })),
       text: shownText(text),
       ...(this.config.askDedup ? { shown: { items: said, text } } : {}),
-      copies: copiesOf(said),
+      copies: copiesOf(said, this.config.revisionDiff),
     });
     return { injection, items: said };
+  }
+
+  /**
+   * How an update's title ends: `UPDATED_NOTE`, and with `revisionDiff` (D342) the times and dates the agent was shown
+   * for the item that this version no longer has ("no longer: 09:30"), read before the ledger notes the new copy.
+   */
+  private updatedNote(s: Session, item: ContextItem): string {
+    if (!this.config.revisionDiff) return UPDATED_NOTE;
+    const now = new Set(timesOf(item));
+    const gone = s.ledger.seenTimes(item.id).filter((t) => !now.has(t));
+    return gone.length ? `${UPDATED_NOTE.slice(0, -1)}; no longer: ${gone.join(", ")})` : UPDATED_NOTE;
   }
 
   /**
@@ -1679,7 +1721,11 @@ export class ContextPartner {
         (x) =>
           withdrawn.has(x.item.id) ||
           s.ledger.isFresh(x.item.id, s.turn) ||
-          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
+          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)) ||
+          (candidates !== null &&
+            this.config.pushReshow &&
+            candidates.like.has(x.item.id) &&
+            this.handedBefore(s, x.item.id)),
       );
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
@@ -1761,7 +1807,8 @@ export class ContextPartner {
     // `verifyDelivery`: what the answer cites is re-read first when a signal doubted its copy; gone items are left out,
     // and so are doubted ones no re-read confirmed (D211), named in the answer.
     const unconfirmed = new Map<string, number>();
-    const checked = await this.verifyItems(s, chosen, cue, { unconfirmed });
+    const unswept = new Map<string, number>();
+    const checked = await this.verifyItems(s, chosen, cue, { unconfirmed, unswept });
     const items = checked.map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
     const answering = this.answering(s, cue);
@@ -1776,6 +1823,7 @@ export class ContextPartner {
       // The session closing during the re-reads leaves nothing checked either (D127): not an all-clear.
       searched.closed === true || s.closed,
       unconfirmed,
+      unswept,
     );
     if (rendering) spans!.close(rendering, { items: items.length });
     if (this.deps.onCandidates) {
@@ -1835,7 +1883,7 @@ export class ContextPartner {
     if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "answer", delivered: items.length > 0 });
     return {
       answer,
-      citations: citationsOf(items),
+      citations: this.cited(items),
       usedModel,
       costUsd,
       latencyMs,
@@ -2070,7 +2118,7 @@ export class ContextPartner {
     s: Session,
     cue: Cue,
     ranked: readonly Scored[],
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
+  ): { items: Scored[]; pool: Scored[]; like: Set<string>; unsettled?: Anchors } {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
@@ -2080,7 +2128,7 @@ export class ContextPartner {
       seen.add(x.item.id);
       pool.push(x);
     }
-    if (pool.length === 0) return { items: [], pool };
+    if (pool.length === 0) return { items: [], pool, like: new Set() };
     const cards =
       this.config.cards && this.deps.cards
         ? this.deps.cards.cardsOf(
@@ -2105,7 +2153,9 @@ export class ContextPartner {
       handed: items.map((x) => x.item.id),
       ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
     });
-    return { items, pool, ...(unsettled ? { unsettled } : {}) };
+    // `pushReshow` (D340) hands again only what passes the constraint test: plain context stays in the transcript.
+    const likeIds = new Set(pool.filter((_, k) => like[k]).map((x) => x.item.id));
+    return { items, pool, like: likeIds, ...(unsettled ? { unsettled } : {}) };
   }
 
   /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */
@@ -2230,6 +2280,19 @@ export class ContextPartner {
         itemIds: packet.citations.map((c) => c.itemId),
       });
     }
+  }
+
+  /**
+   * `pushReshow` (D340): the item was handed out as a push candidate in this session for an earlier request
+   * (`handedIn`: the agent took it before the latest user message), so this request's candidates may hand it again if
+   * it passes the constraint test (the caller checks). Never one handed for this request: a packet of the last request
+   * taken with this one's observe counts as this request's.
+   */
+  private handedBefore(s: Session, id: string): boolean {
+    // Handed out (taken by the agent) for an earlier request: a packet of the last request taken with this one's
+    // observe counts as this request's.
+    const handed = s.handedIn.get(id);
+    return handed !== undefined && handed < s.requests;
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
@@ -2433,6 +2496,114 @@ export class ContextPartner {
   }
 
   /**
+   * A change notification that names what changed but carries no content (D347, A18): the refs the source changed or
+   * added (a Gmail history's message ids, a Graph or HubSpot webhook's resource id, a Drive changes list). Each ref is
+   * re-read by its fetch in the background (within `REF_TIMEOUT_MS`; a guard's skip or a plain error goes again), a
+   * lane of two at a time, and stored as synced under the read mark its call
+   * began with; one the source no longer has (`gone`) is dropped. No other item of the source is put in doubt, so no
+   * delivery re-reads them and no lookup polls the source for it: the same effect as a payload notice
+   * (`sourceItems`), with the connector call made here instead of by the integrator. Until its re-read lands a named
+   * cached item is in doubt (`doubted`), and a delivery waits on that read (`check`). A ref that could not be read
+   * (no fetch tool, an error, a timeout, a guard's skip, a null that proves nothing) turns the notice into a plain
+   * signal (`sourceNotice`): the source's copy is polled and its items re-read before delivery, as before (D126).
+   * A source that is not synced and notifying takes the plain signal at once, with its reason. `settled` resolves to
+   * how many items were stored new or changed.
+   */
+  sourceRefs(scope: Scope, sourceId: string, refs: string[]): SourceChangedResult & { settled: Promise<number> } {
+    const sync = this.sync;
+    if (!this.config.syncPush || !sync) return { synced: false, reason: "push-off", settled: Promise.resolve(0) };
+    if (refs.length === 0 || !sync.notifying(scope, sourceId))
+      return { ...this.sourceNotice(scope, sourceId), settled: Promise.resolve(0) };
+    // A held search page predates the change: the next lookup asks the source again.
+    this.fanout.dropResults(scope, sourceId);
+    const user = scopeKey(scope);
+    const named = [...new Set(refs)].slice(0, MAX_PUSHED_ITEMS).map((ref) => ({
+      ref,
+      id: sanitizedId({ id: itemId(sourceId, ref), sourceId, ref, title: "", text: "" }),
+    }));
+    // The read mark when the notice came: a signal after it makes a delivery read the item itself rather than reuse
+    // this read (`check`), which may have answered before that newer change.
+    const noticeMark = sync.mark();
+    const settle = new Map<string, (o: CheckOutcome) => void>();
+    for (const { id } of named) {
+      const key = `${user}|${id}`;
+      const outcome = new Promise<CheckOutcome>((r) => settle.set(key, r));
+      const entry = { mark: noticeMark, outcome };
+      this.refreshing.set(key, entry);
+      void outcome.then(() => {
+        if (this.refreshing.get(key) === entry) this.refreshing.delete(key);
+      });
+    }
+    let signalled = false;
+    // What could not be read is left to the plain signal, raised at its first failure and before that item's doubt
+    // is lifted: the source is polled and its copies (that one included) re-read on delivery, as under D126.
+    const fallback = () => {
+      if (signalled) return;
+      signalled = true;
+      this.freshness.refsFallback++;
+      this.sourceNotice(scope, sourceId);
+    };
+    // Still synced for this user (not forgotten, the sync not stopped): else the reads stop, storing nothing.
+    const live = () => sync.notifying(scope, sourceId);
+    const settled = (async (): Promise<number> => {
+      let stored = 0;
+      const done = (id: string, o: CheckOutcome, mark = noticeMark) => {
+        if (o === "failed" || o === "flaked" || o === "skipped" || o === "unverifiable") fallback();
+        // Only a changed copy: a pool's copy of a confirmed item is the cached one already.
+        else if (o === "changed") this.noteRefReads(scope, [{ id, outcome: o, mark }]);
+        settle.get(`${user}|${id}`)?.(o);
+      };
+      try {
+        const source = (await this.deps.sources(scope).catch((): Source[] => [])).find((x) => x.id === sourceId);
+        for (let k = 0; k < named.length; k += REF_LANES) {
+          const lane = named.slice(k, k + REF_LANES);
+          await Promise.all(
+            lane.map(async ({ ref, id }) => {
+              if (!source?.fetch) return done(id, "unverifiable");
+              if (!live()) return done(id, "failed");
+              let mark = sync.mark();
+              let seq = this.deps.cache.heldGoneSeq(scope, id, this.now());
+              let got = await this.fanout.fetchChecked(source, scope, ref, { timeoutMs: REF_TIMEOUT_MS });
+              // Off the agent's path, a read our own guard skipped (the source's slots or rate tokens in use by a
+              // lookup) waits and goes again, as does one plain error; an open breaker or a 429 does not.
+              for (let t = 0; t < REF_TRIES && got.status === "failed" && refTryAgain(got) && live(); t++) {
+                await Bun.sleep(REF_RETRY_MS * (t + 1));
+                if (!live()) break;
+                mark = sync.mark();
+                seq = this.deps.cache.heldGoneSeq(scope, id, this.now());
+                got = await this.fanout.fetchChecked(source, scope, ref, { timeoutMs: REF_TIMEOUT_MS });
+              }
+              this.freshness.refsRead++;
+              if (got.status === "failed") return done(id, "failed");
+              if (got.status === "gone") {
+                this.dropGone(scope, sourceId, [id]);
+                return done(id, "gone");
+              }
+              // A removal that landed while the fetch was on the wire wins (D160, D176): not revived, not stored.
+              const now = this.now();
+              const held = this.deps.cache.heldGoneSeq(scope, id, now);
+              if (held !== 0 && held !== seq) return done(id, "gone");
+              // The source's id and our id; the ref as the fan-out's gate left it (a raw ref may hold a secret, D10).
+              const copy = { ...got.item, id, sourceId };
+              this.deps.cache.revive(scope, [id]);
+              const n = sync.ingest(scope, sourceId, [copy], mark);
+              stored += n;
+              return done(id, n > 0 ? "changed" : "confirmed", mark);
+            }),
+          );
+        }
+      } catch {
+        fallback();
+      } finally {
+        // Anything not settled above (a throw) reads as not re-read, after the signal is raised.
+        for (const { id } of named) settle.get(`${user}|${id}`)?.("failed");
+      }
+      return stored;
+    })();
+    return { synced: true, settled };
+  }
+
+  /**
    * Drops everything held for a user, or for one of their sources (a revoked connector): cached items, source-map
    * rows, and the user's live sessions (their windows and queued injections hold content). In-flight lookups are
    * aborted, and their results discarded.
@@ -2491,6 +2662,7 @@ export class ContextPartner {
       key,
       turn: 0,
       requests: 0,
+      handedIn: new Map(),
       traces: [],
       lastActive: now,
       window: [],
@@ -2576,6 +2748,15 @@ export class ContextPartner {
     if (built?.copies) {
       this.watchCopies(s, built.copies);
       built.copies = undefined;
+    }
+    // `pushReshow` (D340): the request each push candidate was last handed out in (what the agent took, not what was
+    // queued). Only candidates' packets: an item that reached the agent by an ask or another path is not re-shown.
+    if (this.config.pushReshow && injection.reason.startsWith("candidates:")) {
+      for (const c of injection.citations) {
+        s.handedIn.delete(c.itemId);
+        s.handedIn.set(c.itemId, s.requests);
+      }
+      while (s.handedIn.size > MAX_HANDED_IN) s.handedIn.delete(s.handedIn.keys().next().value!);
     }
     if (!built || s.outstanding.has(injection.id)) return;
     if (this.recordedOf(s.scope)?.has(injection.id)) return;
@@ -3971,7 +4152,7 @@ export class ContextPartner {
   private engageSources(s: Session, cue: Cue, searched: readonly string[]): void {
     const sync = this.sync;
     const cards = this.config.cardsSourceAware && this.config.cards && this.deps.cards !== undefined;
-    if (!sync || (!cards && !this.config.syncEngagedDeep)) return;
+    if (!sync || (!cards && !this.config.syncEngagedDeep && !(this.config.syncUnusedSweepMs > 0))) return;
     if (cards && cue.entities.length > 0) {
       sync.notePeople(
         s.scope,
@@ -4081,6 +4262,27 @@ export class ContextPartner {
   }
 
   /**
+   * Ref notices' reads that landed (D347), noted as recent re-reads in each live session of the user
+   * (`Session.checks`, as `check` keeps its own): a pool a session built before they landed holds the older copies, and
+   * `verifyItems` then applies these outcomes to them (a changed item goes out as the cache now holds it). Called for
+   * changed copies only, before their doubt is lifted: one walk of the process's sessions per changed ref.
+   */
+  private noteRefReads(scope: Scope, landed: readonly { id: string; outcome: CheckOutcome; mark: number }[]): void {
+    if (landed.length === 0) return;
+    const user = scopeKey(scope);
+    const now = this.now();
+    for (const s of this.sessions.values()) {
+      if (s.closed || scopeKey(s.scope) !== user) continue;
+      const checks = (s.checks ??= new Map());
+      for (const { id, outcome, mark } of landed) {
+        checks.delete(id);
+        checks.set(id, { at: now, mark, outcome: Promise.resolve(outcome), settled: outcome });
+      }
+      while (checks.size > MAX_CHECKS) checks.delete(checks.keys().next().value as string);
+    }
+  }
+
+  /**
    * Whether an item must be re-read before it is delivered (`verifyDelivery`): its source signalled a change since the
    * copy's read began (`Sync.signalledSince` on its `ItemCache.readMark`; D133: not since it was stored, which a
    * signal while the call was on the wire precedes) and no listing or notification has brought it again since. A
@@ -4088,12 +4290,33 @@ export class ContextPartner {
    * no measured gain; a silent source's changes reach Eden through the sync's polls and sweeps).
    */
   private doubted(s: Session, item: ContextItem): boolean {
+    // A ref notice's re-read still on the wire (D347): the copy held is from before the change.
+    if (this.refreshing.size > 0 && this.refreshing.has(`${scopeKey(s.scope)}|${item.id}`)) return true;
+    if (this.unswept(s.scope, item)) return true;
     const mark = this.deps.cache.readMark(s.scope, item.id);
     if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark) !== true) return false;
     // A re-read since that signal could not tell (a null that proves nothing): another says the same until it signals.
     const held = this.unverifiable.get(scopeKey(s.scope))?.get(item.id);
     if (held === undefined || this.now() - held.at > UNVERIFIABLE_HOLD_MS) return true;
     return this.sync.signalledSince(s.scope, item.sourceId, held.mark);
+  }
+
+  /**
+   * `syncUnusedSweepMs` (D356): the item's source is one the user does not use, swept less often, and neither a sweep
+   * nor any other read has seen this copy for longer than the daily sweep would have allowed (`syncSweepMs`): a
+   * deletion the sweep has not seen yet may be behind it, so it is re-read before it is delivered or cited. O(1).
+   */
+  private unswept(scope: Scope, item: ContextItem): boolean {
+    const every = this.config.syncSweepMs;
+    if (!(this.config.syncUnusedSweepMs > 0) || !this.sync) return false;
+    const at = this.deps.cache.fetchedAt(scope, item.id);
+    if (at === undefined) return false;
+    const now = this.now();
+    // A copy the last sweep did not list: the second miss that drops it may be a week away (on the longer sweep), and
+    // a withheld copy's own early sweep is such a first miss (the MCP worst case cited 3 against 1). Whatever its age:
+    // listed since, it would not be missed.
+    if (this.sync.sweepMissed(scope, item.sourceId, item.id)) return true;
+    return now - at > every && this.sync.sweepLapsed(scope, item.sourceId, now);
   }
 
   /** Notes an "unverifiable" re-read of a user's item under the read mark it began with (`unverifiable`). */
@@ -4120,13 +4343,14 @@ export class ContextPartner {
    * one still not confirmed is left out, counted by source in `strict.unconfirmed` for the answer to name. An ask's
    * answer is taken as what the sources hold now, so a copy a signal doubted and nothing confirmed is not cited (one
    * ask in 360 cited a deleted item that way in RealUse-1 part D). A source with no fetch tool, or whose null proves
-   * nothing, is cited as held.
+   * nothing, is cited as held. A copy only a sweep could vouch for (`unswept`, D356) is cited only if a re-read
+   * confirms it; one left out is counted in `strict.unswept`, named in the answer with its own reason.
    */
   private async verifyItems(
     s: Session,
     scored: Scored[],
     cue: Cue,
-    strict?: { unconfirmed: Map<string, number> },
+    strict?: { unconfirmed: Map<string, number>; unswept: Map<string, number> },
   ): Promise<Scored[]> {
     if (!this.config.verifyDelivery || scored.length === 0) return scored;
     const now = this.now();
@@ -4137,16 +4361,24 @@ export class ContextPartner {
       return held !== undefined && now - held.at <= CHECK_REUSE_MS;
     };
     const doubted = new Set<string>();
-    for (const x of scored) if (this.doubted(s, x.item)) doubted.add(x.item.id);
+    // `syncUnusedSweepMs` (D356): copies only the sweep could vouch for, delivered only if a re-read confirms them.
+    const unswept = new Set<string>();
+    for (const x of scored) {
+      if (this.unswept(s.scope, x.item)) unswept.add(x.item.id);
+      if (unswept.has(x.item.id) || this.doubted(s, x.item)) doubted.add(x.item.id);
+    }
     const due = scored.filter((x) => recent(x.item.id) || doubted.has(x.item.id));
     if (due.length === 0) return scored;
     const t0 = performance.now();
     // The calls of the re-reads this delivery started, counted by them: the engine-wide counter's change over the
     // awaits took in other sessions' and tenants' re-reads, and could go negative (audit A11's fuzz).
     const made = { calls: 0 };
+    // The re-reads' wait as its own span (A18): counts only, under the delivery or ask that waits on it.
+    const verifying = this.spans?.open("verify", cue.span, { async: true, due: due.length });
     const outcomes = new Map(
       await Promise.all(due.map(async (x) => [x.item.id, await this.check(s, x.item, made)] as const)),
     );
+    let rounds = 1;
     if (strict && !s.closed) {
       // One more read (`check` reuses no failure) for a plain error, often one bad call, and for a read our own guard
       // skipped while the others held the source's slots; two at a time, the fan-out's starting concurrency per source.
@@ -4155,6 +4387,7 @@ export class ContextPartner {
         const batch = again.slice(k, k + STRICT_RETRY_LANES);
         const read = await Promise.all(batch.map(async (x) => [x.item.id, await this.check(s, x.item, made)] as const));
         for (const [id, o] of read) outcomes.set(id, o);
+        rounds++;
       }
     }
     this.trace(s, {
@@ -4170,6 +4403,11 @@ export class ContextPartner {
       costUsd: 0,
       itemIds: due.map((x) => x.item.id),
     });
+    if (verifying) {
+      let skipped = 0;
+      for (const o of outcomes.values()) if (o === "skipped") skipped++;
+      this.spans!.close(verifying, { calls: made.calls, rounds, skipped, strict: !!strict });
+    }
     if (s.closed) return [];
     const after = this.now();
     return scored.flatMap((x) => {
@@ -4177,6 +4415,15 @@ export class ContextPartner {
       if (o === "gone") return [];
       // A removal that landed while the other re-reads ran (audit A5): the item is gone whatever its own outcome said.
       if (this.deps.cache.isHeldGone(s.scope, x.item.id, after)) return [];
+      // An unswept copy no re-read confirmed (a null that proves nothing, an error, a skip): the sweep it was waiting
+      // for is due now, and until it or a re-read vouches for the copy, it is not delivered nor cited.
+      if (unswept.has(x.item.id) && o !== "confirmed" && o !== "changed") {
+        // Only a null (the source could not say) is left to the sweep; an error or our own guard's skip is not worth
+        // a whole listing: the next delivery re-reads it (the review).
+        if (o === "unverifiable") this.sync?.sweepSoon(s.scope, x.item.sourceId);
+        if (strict) strict.unswept.set(x.item.sourceId, (strict.unswept.get(x.item.sourceId) ?? 0) + 1);
+        return [];
+      }
       if (strict && doubted.has(x.item.id) && (o === "failed" || o === "flaked")) {
         strict.unconfirmed.set(x.item.sourceId, (strict.unconfirmed.get(x.item.sourceId) ?? 0) + 1);
         return [];
@@ -4198,6 +4445,17 @@ export class ContextPartner {
    * a re-read this starts (not one it joins).
    */
   private check(s: Session, item: ContextItem, made?: { calls: number }): Promise<CheckOutcome> {
+    // A ref notice is re-reading this item now (D347): its outcome, with no second call.
+    const refreshing = this.refreshing.size > 0 ? this.refreshing.get(`${scopeKey(s.scope)}|${item.id}`) : undefined;
+    // Not past a signal that came after the notice: that read may have answered before the newer change.
+    if (refreshing && this.sync?.signalledSince(s.scope, item.sourceId, refreshing.mark) !== true) {
+      // Waited on no longer than a re-read of its own would be (`verifyTimeoutMs`): past it, not confirmed.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<CheckOutcome>(
+        (r) => (timer = setTimeout(() => r("failed"), this.config.verifyTimeoutMs)),
+      );
+      return Promise.race([refreshing.outcome, late]).finally(() => clearTimeout(timer));
+    }
     const checks = (s.checks ??= new Map());
     const now = this.now();
     const held = checks.get(item.id);
@@ -4279,6 +4537,8 @@ export class ContextPartner {
       }
       const copy = { ...got.item, id: item.id, sourceId: item.sourceId, ref: item.ref };
       this.deps.cache.revive(s.scope, [item.id]);
+      // Found at its source: a sweep that missed it skipped it (an offset listing shifts), D356's doubt is answered.
+      this.sync?.vouched(s.scope, item.sourceId, item.id);
       const synced = this.deps.cache.isSynced(s.scope, item.id);
       // Stored as read now (its fetch time moves), as synced when the sync held it; carded and noted like any read.
       const changed = this.store(s, [copy], 0, synced, readMark) > 0;
@@ -4978,6 +5238,25 @@ export class ContextPartner {
   }
 
   /**
+   * The citations of what was rendered. With `quarantineInstructions` (D307) their titles are quarantined as the
+   * packet's are: the MCP route prints each citation's title under the answer (`Sources:`), so a subject written for
+   * an AI would otherwise reach the agent beside the packet that removed it (A10's review).
+   */
+  private cited(items: readonly ContextItem[]): Citation[] {
+    const cites = citationsOf([...items]);
+    if (!this.config.quarantineInstructions) return cites;
+    return cites.map((c) => ({ ...c, title: quarantineTitle(c.title) }));
+  }
+
+  /** The A10 trials' render options (D306, D307): Eden's guard line and the instruction quarantine, when on. */
+  private shield(): { guard?: true; quarantine?: true } {
+    return {
+      ...(this.config.guardLine ? { guard: true as const } : {}),
+      ...(this.config.quarantineInstructions ? { quarantine: true as const } : {}),
+    };
+  }
+
+  /**
    * How an ask's answer is rendered. Not compacted, it says each item whole; `compactAsk` cuts each item to what
    * bears on the question as a packet's are, and `askDedup` says an item this session already showed by what is new
    * in it, or by its title alone.
@@ -4988,6 +5267,7 @@ export class ContextPartner {
     const dense = compact && this.config.densePacket;
     return {
       maxBytes: 4_000,
+      ...this.shield(),
       ...(compact
         ? {
             focus: focusOf(cue),
@@ -5092,6 +5372,7 @@ export class ContextPartner {
     const options: Parameters<typeof renderPacket>[1] = {
       maxBytes: frame?.maxBytes ?? this.config.maxInjectionBytes,
       ...(frame ? { lead: frame.lead } : {}),
+      ...this.shield(),
       ...(this.config.compactInjection || frame
         ? {
             focus: focusOf(cue),
@@ -5109,7 +5390,7 @@ export class ContextPartner {
       sessionId: s.id,
       mode,
       text: renderPacket(items, options),
-      citations: citationsOf(items),
+      citations: this.cited(items),
       reason,
       score: Math.max(...scored.map((x) => x.score)),
       createdAt: this.now(),
@@ -5126,7 +5407,13 @@ export class ContextPartner {
         ? { shown: { items: shown === undefined ? items : scored.map((x) => x.item), text: shown ?? injection.text } }
         : {}),
       ...(this.config.revisionNotice
-        ? { copies: renderedCopies(shown === undefined ? items : scored.map((x) => x.item), shown ?? injection.text) }
+        ? {
+            copies: renderedCopies(
+              shown === undefined ? items : scored.map((x) => x.item),
+              shown ?? injection.text,
+              this.config.revisionDiff,
+            ),
+          }
         : {}),
     });
     return injection;
@@ -5153,6 +5440,7 @@ export class ContextPartner {
       ...(source.listsByTime !== undefined ? { listsByTime: source.listsByTime } : {}),
       ...(source.notifies !== undefined ? { notifies: source.notifies } : {}),
       ...(source.fetchReportsGone !== undefined ? { fetchReportsGone: source.fetchReportsGone } : {}),
+      ...(source.fetchesById !== undefined ? { fetchesById: source.fetchesById } : {}),
       // A listing (the sync, D57) is traced by the sync itself (`sync.list`): passed through as it is.
       ...(source.list ? { list: source.list.bind(source) } : {}),
       // One `then`, no async frame of its own: a source call is the most frequent span (tracing overhead).
@@ -5267,9 +5555,61 @@ function whenAborted(signal: AbortSignal): Promise<void> {
   return new Promise((r) => (signal.aborted ? r() : signal.addEventListener("abort", () => r(), { once: true })));
 }
 
-/** The version of each item a packet or answer hands the agent (`revisionNotice`). */
-function copiesOf(items: readonly ContextItem[]): { id: string; sourceId: string; version: number }[] {
-  return items.map((it) => ({ id: it.id, sourceId: it.sourceId, version: versionOf(it) }));
+/** What a packet hands the agent of an item (`revisionNotice`): its version and, for `revisionDiff`, its times. */
+interface Copy {
+  id: string;
+  sourceId: string;
+  version: number;
+  times?: string[];
+}
+
+/** Each item's copy; its times only with `revisionDiff` (`withTimes`), so the switch off reads no text for them. */
+function copiesOf(items: readonly ContextItem[], withTimes: boolean): Copy[] {
+  return items.map((it) =>
+    withTimes
+      ? { id: it.id, sourceId: it.sourceId, version: versionOf(it), times: timesOf(it) }
+      : { id: it.id, sourceId: it.sourceId, version: versionOf(it) },
+  );
+}
+
+/** A clock time ("9:15", "14:00", "3pm"), a day and month either way round, or a weekday (`revisionDiff`). */
+const MONTH =
+  "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|" +
+  "nov(?:ember)?|dec(?:ember)?)";
+const TIME_OR_DATE = new RegExp(
+  "\\b(?:([01]?\\d|2[0-3]):([0-5]\\d)(?:\\s?([ap]m))?|(1[0-2]|0?[1-9])\\s?([ap]m)|" +
+    `(\\d{1,2})(?:st|nd|rd|th)?\\s${MONTH}|${MONTH}\\s(\\d{1,2})(?:st|nd|rd|th)?|` +
+    "((?:mon|tues|wednes|thurs|fri|satur|sun)day))\\b",
+  "gi",
+);
+/** At most this many times are read from one item (`revisionDiff`). */
+const MAX_ITEM_TIMES = 16;
+
+/** A 12-hour clock's hour in 24-hour form. */
+const hour24 = (h: number, ampm: string | undefined) =>
+  ampm === undefined ? h : (h % 12) + (ampm.toLowerCase() === "pm" ? 12 : 0);
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * `revisionDiff` (D342): the distinct times and dates in an item's title and text, in order, each in one form so a
+ * reworded time is the same time: a clock as 24-hour "HH:MM" ("9:30am", "09:30" and "9:30" are "09:30"; "3pm" is
+ * "15:00"), a date as "<day> <3-letter month>" ("Oct 4th" and "4 October" are "4 oct"), a weekday lowercased. No
+ * model: a pattern over the words, so "3.45" (a price) is no time and "decision 2" no date. An unmarked clock is read
+ * as 24-hour: "9:30" then "9:30pm" says 09:30 is gone, the honest reading of an ambiguous edit. Exported for tests.
+ */
+export function timesOf(item: Pick<ContextItem, "title" | "text">): string[] {
+  const out: string[] = [];
+  for (const m of `${item.title}\n${item.text}`.matchAll(TIME_OR_DATE)) {
+    let t: string;
+    if (m[1] !== undefined) t = `${pad(hour24(Number(m[1]), m[3]))}:${m[2]}`;
+    else if (m[4] !== undefined) t = `${pad(hour24(Number(m[4]), m[5]))}:00`;
+    else if (m[6] !== undefined) t = `${Number(m[6])} ${m[7]!.slice(0, 3).toLowerCase()}`;
+    else if (m[8] !== undefined) t = `${Number(m[9])} ${m[8].slice(0, 3).toLowerCase()}`;
+    else t = m[10]!.toLowerCase();
+    if (!out.includes(t)) out.push(t);
+    if (out.length >= MAX_ITEM_TIMES) break;
+  }
+  return out;
 }
 
 /**
@@ -5284,8 +5624,8 @@ function renderedCount(items: readonly ContextItem[], text: string): number {
 }
 
 /** The copies of the items whose lines the agent receives: one cut from the text was not shown. */
-function renderedCopies(items: readonly ContextItem[], text: string) {
-  return copiesOf(items.slice(0, renderedCount(items, text)));
+function renderedCopies(items: readonly ContextItem[], text: string, withTimes: boolean) {
+  return copiesOf(items.slice(0, renderedCount(items, text)), withTimes);
 }
 
 /** An item's words as the ledger records them (`Ledger.revised`): a copy edited at its source hashes otherwise. */
@@ -5328,11 +5668,22 @@ function honestAnswer(
   unresolved = false,
   closed = false,
   unconfirmed?: ReadonlyMap<string, number>,
+  unswept?: ReadonlyMap<string, number>,
 ): string {
   const told = reachAnswer(packet, sources, unresolved, closed);
-  if (!unconfirmed || unconfirmed.size === 0) return told;
-  const names = [...unconfirmed].map(([id, n]) => `${id} (${n})`).join(", ");
-  const left = `Left out items from ${names}: their source reported changes and they could not be re-checked`;
+  const notes: string[] = [];
+  const list = (m: ReadonlyMap<string, number>) => [...m].map(([id, n]) => `${id} (${n})`).join(", ");
+  if (unconfirmed && unconfirmed.size > 0) {
+    const why = "their source reported changes and they could not be re-checked";
+    notes.push(`Left out items from ${list(unconfirmed)}: ${why}`);
+  }
+  // D356: a source swept weekly whose copies no listing has seen for a day; nothing was reported about them.
+  if (unswept && unswept.size > 0) {
+    const why = "no recent listing of their source confirms them and they could not be re-checked";
+    notes.push(`Left out items from ${list(unswept)}: ${why}`);
+  }
+  if (notes.length === 0) return told;
+  const left = notes.join(". ");
   // An answer that would read as an all-clear says it is not one.
   if (told === "Nothing in the connected sources.")
     return `Nothing confirmed in the connected sources. ${left}, so this is not an all-clear.`;
@@ -5613,6 +5964,21 @@ const ASKS_BLOCKERS =
 
 /** Items one `sourceItems` call stores at most (a notification carries a few; a bigger batch is a listing's job). */
 const MAX_PUSHED_ITEMS = 100;
+/** A ref notice's re-reads run this many at a time (D347): the fan-out's starting concurrency per source. */
+const REF_LANES = 2;
+/** A ref read the guard skipped or that hit one plain error goes again up to this many times, this far apart (×k). */
+const REF_TRIES = 4;
+const REF_RETRY_MS = 150;
+/**
+ * A ref read's deadline: it runs off the agent's path, so it may wait out a connector's slow tail (a hosted
+ * connector passed 1.5 s on about one fetch in five, D347) rather than fall back to the source-wide signal.
+ */
+const REF_TIMEOUT_MS = 5_000;
+/** Whether a failed ref read is worth another: our own guard's skip that clears in moments, or a plain error. */
+function refTryAgain(got: { why: string; guard?: string; pushedBack?: boolean }): boolean {
+  if (got.why === "error") return true;
+  return got.why === "refused" && got.guard !== "open" && got.pushedBack !== true;
+}
 
 /** The most candidates an ask's reader reads, whatever `askReaderPool` says. */
 const READER_POOL_CAP = READER_MAX_ITEMS;
