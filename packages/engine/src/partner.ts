@@ -131,7 +131,6 @@ import {
   extractTypedEntities,
   head,
   isChatterTerms,
-  isRecapRequest,
   isStopword,
   PERSISTABLE_KINDS,
   termIds,
@@ -263,8 +262,6 @@ interface Session {
   requests: number;
   /** The session's turn when its latest user message arrived (`pushReshow`: what was handed before it is another request's). */
   requestTurn: number;
-  /** `recapRefresh` (D341): items this session was sent an "updated:" packet for, oldest first, at most 128. */
-  revisedIds: Set<string>;
   /** The session's last `EXPLAIN_TRACES` traces, oldest first (`explain`, D277). */
   traces: Trace[];
   lastActive: number;
@@ -325,8 +322,6 @@ interface Session {
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
 }
 
-/** Items a session remembers it was sent updates for (`recapRefresh`). */
-const MAX_REVISED_IDS = 128;
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
 
@@ -751,10 +746,6 @@ export class ContextPartner {
     const prep = spans?.open("observe.prep", root!.id);
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
-    // `recapRefresh` (D341): before anything else this request queues, so the current versions come last but one.
-    if (event.kind === "user_message" && this.config.recapRefresh && s.revisedIds.size > 0 && isRecapRequest(text)) {
-      this.refreshRevised(s);
-    }
     const terms = text ? distinctTermIds(text, s.vocab) : NO_TERMS;
     this.checkUsage(s, event, terms);
     this.remember(s, event, text, terms);
@@ -1034,9 +1025,9 @@ export class ContextPartner {
   }
 
   /** The agent now holds these versions: noted in the session's ledger, and the session watched for revisions. */
-  private watchCopies(s: Session, copies: readonly { id: string; sourceId: string; version: number }[]): void {
+  private watchCopies(s: Session, copies: readonly Copy[]): void {
     if (s.closed || copies.length === 0) return;
-    for (const c of copies) s.ledger.noteShown(c.id, c.version, c.sourceId);
+    for (const c of copies) s.ledger.noteShown(c.id, c.version, c.sourceId, c.times);
     // An update still queued whose every copy this hand-out rendered in the same version says nothing new.
     const held = new Map(copies.map((c) => [c.id, c.version]));
     for (let k = s.pending.length - 1; k >= 0; k--) {
@@ -1153,20 +1144,6 @@ export class ContextPartner {
   }
 
   /**
-   * `recapRefresh` (D341): every item this session was sent an update for, queued again as "updated:" packets in its
-   * current cached version (no source call). An item gone from the cache (removed, expired, evicted) is skipped.
-   */
-  private refreshRevised(s: Session): void {
-    if (!this.config.revisionNotice) return;
-    const now = this.now();
-    const items = [...s.revisedIds].flatMap((id) => {
-      const cur = this.deps.cache.get(s.scope, id, now);
-      return cur ? [cur] : [];
-    });
-    this.queueUpdates(s, items);
-  }
-
-  /**
    * Queues "updated:" packets for these stored copies in one session: as many as the size cut needs, an earlier
    * update still queued for the same items replaced, each copy noted as promised.
    */
@@ -1182,14 +1159,7 @@ export class ContextPartner {
       const { injection, items: said } = this.buildUpdate(s, rest);
       rest = rest.slice(said.length);
       // Promised now: a second store of the same version, before the agent takes this, queues nothing more.
-      for (const it of said) {
-        s.ledger.noteShown(it.id, versionOf(it), it.sourceId);
-        if (this.config.recapRefresh) {
-          s.revisedIds.delete(it.id);
-          s.revisedIds.add(it.id);
-          if (s.revisedIds.size > MAX_REVISED_IDS) s.revisedIds.delete(s.revisedIds.values().next().value!);
-        }
-      }
+      for (const it of said) s.ledger.noteShown(it.id, versionOf(it), it.sourceId, timesOf(it));
       s.pending.push(injection);
       this.trace(s, {
         sessionId: s.id,
@@ -1214,7 +1184,7 @@ export class ContextPartner {
    * handing out an older packet queued before it cannot leave the ledger at the older version.
    */
   private buildUpdate(s: Session, items: readonly ContextItem[]): { injection: Injection; items: ContextItem[] } {
-    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${UPDATED_NOTE}` }));
+    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${this.updatedNote(s, it)}` }));
     let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes });
     let n = renderedCount(items, text);
     if (n === 0) {
@@ -1248,6 +1218,17 @@ export class ContextPartner {
       copies: copiesOf(said),
     });
     return { injection, items: said };
+  }
+
+  /**
+   * How an update's title ends: `UPDATED_NOTE`, and with `revisionDiff` (D342) the times and dates the agent was shown
+   * for the item that this version no longer has ("no longer: 09:30"), read before the ledger notes the new copy.
+   */
+  private updatedNote(s: Session, item: ContextItem): string {
+    if (!this.config.revisionDiff) return UPDATED_NOTE;
+    const now = new Set(timesOf(item));
+    const gone = s.ledger.seenTimes(item.id).filter((t) => !now.has(t));
+    return gone.length ? `${UPDATED_NOTE.slice(0, -1)}; no longer: ${gone.join(", ")})` : UPDATED_NOTE;
   }
 
   /**
@@ -2269,7 +2250,6 @@ export class ContextPartner {
       turn: 0,
       requests: 0,
       requestTurn: 0,
-      revisedIds: new Set(),
       traces: [],
       lastActive: now,
       window: [],
@@ -4931,8 +4911,41 @@ function whenAborted(signal: AbortSignal): Promise<void> {
 }
 
 /** The version of each item a packet or answer hands the agent (`revisionNotice`). */
-function copiesOf(items: readonly ContextItem[]): { id: string; sourceId: string; version: number }[] {
-  return items.map((it) => ({ id: it.id, sourceId: it.sourceId, version: versionOf(it) }));
+/** What a packet hands the agent of an item (`revisionNotice`): its version and, for `revisionDiff`, its times. */
+interface Copy {
+  id: string;
+  sourceId: string;
+  version: number;
+  times?: string[];
+}
+
+function copiesOf(items: readonly ContextItem[]): Copy[] {
+  return items.map((it) => ({ id: it.id, sourceId: it.sourceId, version: versionOf(it), times: timesOf(it) }));
+}
+
+/** A clock time ("9:15", "14:00", "3pm"), a day and month either way round, or a weekday (`revisionDiff`). */
+const TIME_OR_DATE = new RegExp(
+  "\\b(?:(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s?[ap]m)?|(?:1[0-2]|0?[1-9])\\s?[ap]m|" +
+    "\\d{1,2}(?:st|nd|rd|th)?\\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*|" +
+    "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\s\\d{1,2}(?:st|nd|rd|th)?|" +
+    "(?:mon|tues|wednes|thurs|fri|satur|sun)day)\\b",
+  "gi",
+);
+/** At most this many times are read from one item (`revisionDiff`). */
+const MAX_ITEM_TIMES = 16;
+
+/**
+ * `revisionDiff` (D342): the distinct times and dates in an item's title and text, lowercased, in order. Exported for
+ * tests. No model: a pattern over the words, so "3.45" (a price) is no time and "may 4" is a date.
+ */
+export function timesOf(item: Pick<ContextItem, "title" | "text">): string[] {
+  const out: string[] = [];
+  for (const m of `${item.title}\n${item.text}`.matchAll(TIME_OR_DATE)) {
+    const t = m[0].toLowerCase().replace(/\s+/g, " ");
+    if (!out.includes(t)) out.push(t);
+    if (out.length >= MAX_ITEM_TIMES) break;
+  }
+  return out;
 }
 
 /**

@@ -499,12 +499,12 @@ export interface EngineConfig {
    */
   pushReshow: boolean;
   /**
-   * Trial (D341, A17; owner repo owner, ends 2026-12-07): with `revisionNotice`, a recap- or summary-shaped user
-   * request (`isRecapRequest`, no model) re-sends, as "updated:" packets in their current version, every item this
-   * session was sent an update for. D205's update reaches the agent once, many turns before a recap written from a
-   * transcript that still holds the old version; this puts the current one last. No source call (the cached copy).
+   * Trial (D342, A17; owner repo owner, ends 2026-12-07): with `revisionNotice`, an "updated:" line also names the
+   * times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier versions that
+   * the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update reached the
+   * agent and its recap still named the old time; this says outright which one no longer stands. No model, no call.
    */
-  recapRefresh: boolean;
+  revisionDiff: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -627,5 +627,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerStopEarly: true,
   pushCandidates: 5,
   pushReshow: false,
-  recapRefresh: false,
+  revisionDiff: false,
 };

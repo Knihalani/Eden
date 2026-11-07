@@ -113,3 +113,23 @@ if recaps:
         agg[d["condition"]]["recapUsd"] += d.get("recapUsd") or 0
     for c, v in sorted(agg.items()):
         print(f"  {c}: " + " ".join(f"{k} {round(x, 4) if isinstance(x, float) else x}" for k, x in v.items()))
+
+# Recaps paired by day (same set, seed and day id): stale (old time only) and fresh (new time) items named, B - A.
+for a, b in pairs:
+    def days_of(cond):
+        out = {}
+        for d in recaps:
+            if d["condition"] == cond:
+                out[(re.sub(r"^a17-[^-]+-", "", d["stem"]).rsplit("-", 1)[0], d["day"])] = d
+        return out
+    A, B = days_of(a), days_of(b)
+    ks = [k for k in A if k in B]
+    if not ks: continue
+    print(f"== recaps paired by day, {b} - {a} (n {len(ks)} days)")
+    for f in ["staleRecap", "freshRecap", "updatePackets", "recapUsd"]:
+        m, lo, hi = boot([(B[k].get(f) or 0) - (A[k].get(f) or 0) for k in ks])
+        print(f"  {f:14} {sum(A[k].get(f) or 0 for k in ks):8.4g} -> {sum(B[k].get(f) or 0 for k in ks):8.4g}   per day {m:+.4f} ({lo:+.4f}..{hi:+.4f})")
+    for c, D in [(a, A), (b, B)]:
+        sh = sum(D[k].get("staleHanded") or 0 for k in ks); su = sum(D[k].get("staleUpdated") or 0 for k in ks)
+        if any("staleHanded" in D[k] for k in ks):
+            print(f"  {c}: of the stale items, handed that day {sh}, sent an update after the change {su}")
