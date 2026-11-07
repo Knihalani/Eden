@@ -49,16 +49,16 @@ pool + date (rrf)                          planted in first 5 241 -> 232 (+4 -13
    8" requests; f-r8: asked "6 to 8"; f-union2: shipped + fresh sample, each item's requests merged; f-union-gen:
    shipped + fresh with general; reach: --set pushReach; reachB: pushReach also when no candidates are handed;
    reach-union2: pushReach over union2.
-base.json                                hidden 305/384 decoys 267/384 | in packet: planted 253 decoy 219 | neutral packets 0/0 bytes 0 | ask bytes (hidden) 223019
-f-own.json                               hidden 299/384 decoys 255/384 | in packet: planted 241 decoy 204 | neutral packets 0/0 bytes 0 | ask bytes (hidden) 221930
-f-intent-v2.json                         hidden 298/384 decoys 254/384 | in packet: planted 241 decoy 203 | neutral packets 0/0 bytes 0 | ask bytes (hidden) 221630
-f-r8-upto.json                           hidden 290/384 decoys 280/384 | in packet: planted 236 decoy 227 | neutral packets 0/0 bytes 0 | ask bytes (hidden) 219330
-f-r8.json                                hidden 286/384 decoys 277/384 | in packet: planted 232 decoy 226 | neutral packets 0/0 bytes 0 | ask bytes (hidden) 223502
-f-union2.json                            hidden 316/384 decoys 279/384 | in packet: planted 258 decoy 228 | neutral packets 0/0 bytes 0 | ask bytes (hidden) 228910
-f-union-gen.json                         hidden 314/384 decoys 280/384 | in packet: planted 255 decoy 229 | neutral packets 0/0 bytes 0 | ask bytes (hidden) 227880
-reach.json                               hidden 312/384 decoys 274/384 | in packet: planted 260 decoy 226 | neutral packets 0/0 bytes 0 | ask bytes (hidden) 223019
-reachB.json                              hidden 312/384 decoys 274/384 | in packet: planted 261 decoy 226 | neutral packets 0/0 bytes 0 | ask bytes (hidden) 222803
-reach-union2.json                        hidden 324/384 decoys 288/384 | in packet: planted 266 decoy 238 | neutral packets 0/0 bytes 0 | ask bytes (hidden) 228910
+base.json                                hidden 305/384 decoys 267/384 | in packet: planted 253 decoy 219 | ask bytes (hidden) 223019
+f-own.json                               hidden 299/384 decoys 255/384 | in packet: planted 241 decoy 204 | ask bytes (hidden) 221930
+f-intent-v2.json                         hidden 298/384 decoys 254/384 | in packet: planted 241 decoy 203 | ask bytes (hidden) 221630
+f-r8-upto.json                           hidden 290/384 decoys 280/384 | in packet: planted 236 decoy 227 | ask bytes (hidden) 219330
+f-r8.json                                hidden 286/384 decoys 277/384 | in packet: planted 232 decoy 226 | ask bytes (hidden) 223502
+f-union2.json                            hidden 316/384 decoys 279/384 | in packet: planted 258 decoy 228 | ask bytes (hidden) 228910
+f-union-gen.json                         hidden 314/384 decoys 280/384 | in packet: planted 255 decoy 229 | ask bytes (hidden) 227880
+reach.json                               hidden 312/384 decoys 274/384 | in packet: planted 260 decoy 226 | ask bytes (hidden) 223019
+reachB.json                              hidden 312/384 decoys 274/384 | in packet: planted 261 decoy 226 | ask bytes (hidden) 222803
+reach-union2.json                        hidden 324/384 decoys 288/384 | in packet: planted 266 decoy 238 | ask bytes (hidden) 228910
 
 -- pushReach task diff
    hidden: +7 ['dinner-guests-vegetarian/41', 'foodbank-shift-coaching-clash/42', 'hosted-travel-preapproval/41', 'nursery-collection-list/41', 'renewal-pack-already-sent/41', 'signing-authority-limit/42', 'tennis-membership-lapsed/41']

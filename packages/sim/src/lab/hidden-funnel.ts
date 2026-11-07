@@ -76,7 +76,6 @@ import {
   AskReader,
   CardEnricher,
   cardKey,
-  sanitizeItem,
   intentCut,
   intentReach,
   ModelReaderMaker,
@@ -93,6 +92,7 @@ import {
   ECONOMY_CARD_LIMITS,
   type Trace,
   readerMessages,
+  sanitizeItem,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
@@ -660,8 +660,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     // `--corpus-dump` (A2): the world's items as its sources hold them, with the tasks and their planted ids.
     // Each item as its source lists it (a separate, unmetered set of sources), and `h`: the card key of the copy the
     // cache holds (redacted), to join an item to its replayed cards and requests.
-    const listed = simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll());
-    const items = listed.map((raw) => {
+    const rows = simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll());
+    const items = rows.map((raw) => {
       const it = sanitizeItem(raw);
       return { id: raw.id, h: cardKey(it), title: it.title, text: it.text.slice(0, 1_200) };
     });

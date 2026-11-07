@@ -12,12 +12,8 @@ def line(name, r):
     d = sum(surf(t) for k, t in r.items() if k[2] == 'control')
     ph = sum(bool(t.get('pushHanded')) for k, t in r.items() if k[2] == 'hidden')
     pd = sum(bool(t.get('pushHanded')) for k, t in r.items() if k[2] == 'control')
-    nb = sum(t.get('packetBytes', 0) for k, t in r.items() if k[2] == 'neutral')
-    nn = sum(1 for k in r if k[2] == 'neutral')
-    nb_pk = sum(1 for k, t in r.items() if k[2] == 'neutral' and t.get('packets', 0) > 0)
     ab = [t.get('askBytes', 0) for k, t in r.items() if k[2] == 'hidden']
-    print(f"{name:40s} hidden {h}/384 decoys {d}/384 | in packet: planted {ph} decoy {pd} | neutral packets {nb_pk}/{nn} "
-          f"bytes {nb} | ask bytes (hidden) {sum(ab)}")
+    print(f"{name:40s} hidden {h}/384 decoys {d}/384 | in packet: planted {ph} decoy {pd} | ask bytes (hidden) {sum(ab)}")
 line(sys.argv[1], base)
 for f in sys.argv[2:]:
     r = rows(f)

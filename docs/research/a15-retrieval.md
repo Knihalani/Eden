@@ -23,14 +23,16 @@ a command in this note.
 - **Built and measured live, then deleted: trial `pushReach` (D330).** On Pi with payload notices, over short,
   targeted and `--days 8` runs: **hidden facts raised −2.6 points (−8.9..+3.1, n 191), Sonnet-regraded concerns −0.4
   (−1.1..+0.4), cost level** (+$0.005 per 1,000 tasks on the short mix, −0.015..+0.024; +$0.002 over a user's days,
-  −0.006..+0.009; connector calls unchanged). The slots did reach the agent: the planted item was in the packet more
+  −0.006..+0.009, agent and per-task Eden; all-in with background cards +0.014, from cards made live for whichever
+  arm missed the replay first; connector calls unchanged). The slots did reach the agent: the planted item was in the packet more
   often (short 106 → 112 of 144, targeted 13 → 20 of 24). The agent raised it less often once there: **86% of in-packet
   planted facts raised without the slots, 79% with them** (113/132 against 114/145). More items, thinner attention; and
   a fact that shares no word with the request is also one the agent has to make the leap for.
-- **One side finding that matters for every intent lever (D332).** Asking the card model again for the same items'
-  requests, with the same prompt, moved 19 hidden tasks up and 25 down in the funnel (305 → 299). One sample of
-  requests is a noisy thing: a funnel delta under about 20 tasks from anything touching the intent index is inside one
-  re-draw. The union of two samples reached 316 hidden and 279 look-alikes (from 305/267): more phrasings help, at
+- **One side finding that matters for every intent lever (D332).** Asking the card model again for the items'
+  requests moved, on the 332 hidden and 302 control tasks both samples cover, 18 hidden tasks up and 14 down (decoys
+  16 up, 7 down). One sample of requests is a noisy thing: a funnel delta of about 15 tasks from anything touching
+  the intent index can be one re-draw (provisional: the fresh sample also came from a longer prompt, below). The
+  union of two samples reached 316 hidden and 279 look-alikes over all tasks (from 305/267): more phrasings help, at
   the same one-for-one exchange, for a second card call's worth of output. Asking for more phrasings in one call made
   it worse (8 asked: 286/277).
 - **What this says.** At $0 a request, retrieval cannot tell a fact from its look-alike, and on this lab's agent a
@@ -44,7 +46,8 @@ a command in this note.
 intent replayed): hidden surfaced 305/384, decoys 267/384, planted in the packet 253, decoy in the packet 219 (A2's
 figures, reproduced). Of the 79 hidden never surfaced: 29 are in the push's pool past the first five, 33 in a pool
 without the planted item, 17 with no pool (no pushed candidates). What links the 50 not pooled to their request,
-read by hand from the dump (`misses.txt`; one template can count twice):
+read by hand from the dumps (`.local/a15/misses.txt`, not committed: `miss.py`'s listing of request, item and
+coverage per task; one template can count twice):
 
 | Link | Templates | Examples |
 | --- | --- | --- |
@@ -71,11 +74,11 @@ lever on. Full output: `packages/sim/lab/a15/funnel-screen.txt`.
 | 1 | Plain BM25 extra slot (control) | offline, k 1 | 4 / 11 | — |
 | 2 | **(a) Name-free ("general") requests** at ingest: up to 2 more per item saying only the kind of action and thing ("pay a plumber for a callout") | paid sample ($0.20), funnel and offline | in the index: hidden 298 against 299 for the same sample without them; as their own slot, 4 / 0–1 | not built: too general to rank the planted item first (12 of 384 in top 1) |
 | 3 | **(a) More phrasings in the same call** ("up to 8", "6 to 8" requests) | paid samples ($0.41), funnel | hidden 290 and 286, decoys 280 and 277 (against 305/267); the model wrote 3.3 and 4.0 requests an item | not built: worse |
-| 4 | **(a) Two independent samples, merged** (shipped + one fresh) | funnel | hidden 316, decoys 279 | not built (D332): one-for-one, a second call's output at ingest |
+| 4 | **(a) Two independent samples, merged** (shipped + one fresh) | funnel | hidden 316, decoys 279 (on the tasks both cover: +16 −5 hidden, +14 −1 decoys) | not built (D332): one-for-one, a second call's output at ingest |
 | 5 | **(b) Date window**: the best lexical match whose stated span covers a request's day | offline, k 1 | 5 / 3 | built inside 9 |
 | 6 | **(c) Local embedding** (all-MiniLM-L6-v2) as an extra slot | offline, k 1 | 8 / 14 (A2's 8 / 14 reproduced) | not built |
 | 7 | **(c) Embedding, only when a date constraint also matches** | offline, k 1 | 7 / 4 | not built: the gate kills decoys, but it is 2 facts over idea 5 for a model dependency (D22) |
-| 8 | **Re-rank the pool by the items' requests** (reciprocal rank with the pool order) | offline | +4 net planted in the first five with the shipped requests; **−28 net** when pools and re-rank use a fresh sample | not built: not robust to the request sample |
+| 8 | **Re-rank the pool by the items' requests** (reciprocal rank with the pool order) | offline | +4 net planted in the first five with the shipped requests; **−28 net** when pools and re-rank use the fresh sample (which lacks requests for 290 of the items asked) | not built: not robust to the request sample |
 | 9 | **Intent hit at a looser bar** (two request terms, any coverage) + date window: two push slots | offline k 2: 16 / 10; funnel (the engine): **hidden 305 → 312, decoys 267 → 274** (+7 −0 each) | | **built (D330), live below** |
 | 10 | (d) Aliases from the user's vocabulary | on paper | at most 2 of 384 (the nicknames); the place aliases need a world gazetteer, not the user's words | not built |
 | 11 | (e) Constraint ledger matched by slot (who, what, when, limit) | on paper | the when-slot is idea 5; the limit-slot fits 3 of 384; cards hold slots for the carded items only (37% of planted items in packets, D286) | not built |
@@ -90,8 +93,8 @@ when the push hands candidates (17 never-surfaced tasks have none; running the s
 
 `packages/sim/lab/a15/run.sh LABEL payload eden,eden+pushReach …` (A2's harness: Haiku agent and grader, card model
 replayed, direct connector profile, payload notices, time scale 1), both arms in one process, paired by task; pooled
-with `cl8/pooled.py`, concerns regraded by Sonnet (`regrade.ts --only-concerns`, 19 answers over the six runs; in the short runs the two
-neutral concerns only the trial arm had were grader errors).
+with `cl8/pooled.py`, concerns regraded by Sonnet (`regrade.ts --only-concerns`, 19 answers over the six runs; in
+the short runs the two neutral concerns only the trial arm had were grader errors).
 
 | Runs | n hidden | Hidden raised (points) | Concerns, regraded (points) | $/1k mix | Wall, mix (s) |
 | --- | --- | --- | --- | --- | --- |
@@ -122,9 +125,10 @@ Not better on its axis, so deleted (D112): the code is in commit `1041e04d` (`re
 - **D330** `pushReach` rejected and deleted.
 - **D331** not built on $0 evidence: name-free requests, more requests in one call, the pool re-ranked by requests, a
   local embedding as an extra slot (with or without a date gate), aliases and a constraint ledger (on paper).
-- **D332** the intent requests are one noisy sample: a fresh draw moves about 20 hidden tasks each way in the funnel;
-  the union of two draws reaches +11 hidden and +12 decoys. A lever that touches the intent index is screened over
-  two request samples before it is believed.
+- **D332** the intent requests are one noisy sample: on the tasks both samples cover, a fresh draw moved 18 hidden
+  tasks up and 14 down; the union of two draws reaches +11 hidden and +12 decoys over all tasks. A lever that touches
+  the intent index is screened over two request samples before it is believed (provisional: the fresh draw came from
+  a longer prompt and left 290 items without requests).
 - **D333** lab: `--corpus-dump` lists each item as its source lists it and the cache holds it, with its card key `h`;
   `packages/sim/lab/a15/` holds the offline screens.
 
@@ -147,13 +151,13 @@ bun run funnel --jobs 4 --json .local/a15/base.json -- --pool-dump $PWD/.local/a
 zcat packages/sim/lab/distilled/intent-v2.jsonl.gz > .local/a15/intent.jsonl
 python3 -I packages/sim/lab/a15/run_screen.py corpus.jsonl base.json pool.jsonl [EMB_DIR|-] intent.jsonl  # in .local/a15
 VENV/bin/python packages/sim/lab/a15/embed.py .local/a15/corpus.jsonl .local/a15/emb   # sentence-transformers, CPU
-# request samples (code of the general and 8-request prompts: this note, section 2; not committed):
+# request samples (the general and 8-request prompts are quoted after this block; their code is not committed):
 env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cards-enrich.ts --dir .local/a15/gen --funnel train --seeds 41,42 \
   --intent --model claude-haiku-5-5 --spend-ledger .local/a15/ledger.jsonl --spend-cap 2.5 --cap 1 --concurrency 6
 bun run funnel --jobs 4 --intent FILE --json OUT.json                       # each sample, and the merged files
 python3 -I packages/sim/lab/a15/score.py base.json OUT.json …
 git checkout 1041e04d   # the trial
-bun run funnel --jobs 4 --set '{"pushReach":true}' --json .local/a15/reach.json -- --neutral
+bun run funnel --jobs 4 --set '{"pushReach":true}' --json .local/a15/reach.json
 L=packages/sim/lab/a15/run.sh
 $L a15-short-pay-41 payload eden,eden+pushReach --seeds 41 --variants hidden,control,neutral --limit 12 --budget 0.3
 $L a15-tgt-pay-41 payload eden,eden+pushReach --seeds 41 --variants hidden,control,neutral \

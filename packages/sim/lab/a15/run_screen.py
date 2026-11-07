@@ -8,7 +8,7 @@ import numpy as np
 
 corpus, funnel, pooldump = sys.argv[1:4]
 embdir = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] != '-' else ''
-# A requests file written with `cards-enrich --general` (`q`: how many of `r` are the item's own).
+# A requests file; a line's `q` (A15's general-requests sample, not committed) says how many of `r` are the item's own.
 genfile = sys.argv[5] if len(sys.argv) > 5 else ''
 OWN, GEN = {}, {}
 if genfile:
