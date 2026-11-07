@@ -130,7 +130,7 @@ promotes again; it is microseconds beside a source call.
 
 ## What is left
 
-- **The sweep and polls past the cap (#8).** A daily sweep lists every source up to `syncMaxItems` and stores it all,
+- **The sweep and polls past the cap (#9).** A daily sweep lists every source up to `syncMaxItems` and stores it all,
   and a poll stores each source's newest whatever the user's cut: at 1,000 sources that is a thousand-plus calls a
   user a day and items the cache's synced cap (5,000) then evicts, oldest synced first, which can be the user's
   newest mail. Next: a sweep that stops once it has seen every id it holds for the source, and a store that keeps
@@ -150,7 +150,7 @@ promotes again; it is microseconds beside a source call.
   that but was not neutral (D262), so a cheaper store for items the trim will drop is the open lever.
 - **The backfill overshoot (#8)** is small and left. With lanes the trim and the warm-up-by-frontier check run once a
   batch, so a batch can list a page one lane would have skipped (reviewer); the measured calls did not move.
-- **Live searches of cut copies (#9)** are the honest cost of D264; a large mailbox is searched live on lookups that
+- **Live searches of cut copies (#10)** are the honest cost of D264; a large mailbox is searched live on lookups that
   route to it, as before sync.
 
 ## Reproduce
