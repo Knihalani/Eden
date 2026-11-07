@@ -356,12 +356,26 @@ describe("results cache: real bytes, group drops, drops across state eviction", 
     // The heap once every search's 1 s deadline timer (`AbortSignal.timeout`, real time) has lapsed, the least of three
     // collections: how many of the 50,000 timers were still pending decided the reading, and under a loaded parallel
     // run the bound failed once with nothing wrong (audit A5). The bounds are unchanged.
+    // Under heavy load (a parallel Hermes run) timers fire late, so one fixed wait was not enough (audit A11): the
+    // reading is taken again, 250 ms apart, until it stops falling by more than 64 KB (at most 8 s), with no pending
+    // timer left to free.
     const settled = async () => {
       await Bun.sleep(1_100);
-      let least = Infinity;
-      for (let k = 0; k < 3; k++) {
-        Bun.gc(true);
-        least = Math.min(least, heapStats().heapSize);
+      const least3 = () => {
+        let least = Infinity;
+        for (let k = 0; k < 3; k++) {
+          Bun.gc(true);
+          least = Math.min(least, heapStats().heapSize);
+        }
+        return least;
+      };
+      let least = least3();
+      for (let k = 0; k < 32; k++) {
+        await Bun.sleep(250);
+        const next = least3();
+        const fell = least - next;
+        least = Math.min(least, next);
+        if (fell < 64_000) break;
       }
       return least;
     };
@@ -385,7 +399,7 @@ describe("results cache: real bytes, group drops, drops across state eviction", 
     const heldByCache = grew - ((await settled()) - before);
     expect(heldByCache).toBeLessThan(4_000_000); // before the fix: ~17 MB (~345 B per entry, every entry held)
     expect(grew).toBeLessThan(5_000_000); // the rest is the fan-out's own state, ~0.25 MB
-  }, 30_000);
+  }, 90_000);
 
   test("dropResults(a, 's') removes only that pair's pages, lookups and planner calls alike", async () => {
     const f = new SourceFanout({ sanitize: (x) => x, ratePerSec: 1_000, burst: 1_000 });
