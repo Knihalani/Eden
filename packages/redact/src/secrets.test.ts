@@ -217,6 +217,12 @@ describe("sanitizeForStore (D13, A6 §2.2): the value goes, what it is stays", (
       "Signature%3D[REDACTED]%26x%3D1",
     ],
     [
+      "a percent-encoded value cut at %26 still lets the next parameter be found (D220)",
+      `next=b%3F${"X-Amz-" + "Signature%3D"}${"0a1b2c3d".repeat(8)}%26${"X-Amz-" + "Security-Token%3D"}${alnum(40)}%26x%3D1`,
+      alnum(40),
+      "Signature%3D[REDACTED]%26X-Amz-Security-Token%3D[REDACTED]%26x%3D1",
+    ],
+    [
       "a private key block, whole",
       ["-----BEGIN RSA " + "PRIVATE KEY-----", alnum(64), alnum(64, 5), "-----END RSA PRIVATE KEY-----"].join("\n"),
       alnum(64, 5),

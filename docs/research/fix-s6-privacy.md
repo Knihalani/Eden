@@ -12,10 +12,16 @@ unset. The plan is [realuse-1-weak-points.md](realuse-1-weak-points.md), issue 1
      "new relic" within reach, so a key pasted alone passed.
    - `eden-presigned-url`: the value of `X-Amz-Signature`, `X-Goog-Signature` and `X-Amz-Security-Token` in a URL
      query. Only the value goes, so the URL still names the object. It matches the URL as written plainly, in JSON
-     from a Go server (`&` as `\u0026`), and percent-encoded inside another URL (`%26`, `%3D`). The reviewer found
-     the last two missing from the first version.
-   - The value is an unrolled loop, with the length checked in code. A first version with a lookahead at every
-     character cost 240 ms per MB on one long value, against 3.5 now.
+     from a Go server (`&` as `\u0026`), and percent-encoded inside another URL (`%3F`, `%26`, `%3D`). The reviewer
+     found the last two missing from the first version.
+   - A regex finds the parameter name; the value is read by a walk over its characters, to the first stop or `%26`.
+     Each walk ends where the next name can begin, so the text is read about once. The review dropped two regex forms
+     of the value that were not linear on JavaScriptCore:
+     - a lookahead at every character: 240 ms per MB on one long value;
+     - an unrolled loop over `%`: 215 ms for a 1 MB value of `%`, and past that no match at all, so the value stayed
+       in clear (the reviewer's second-pass finding).
+     A third form (a greedy class cut at `%26` in code) was dropped before commit: it re-read the rest of the text for
+     every `%26`-joined parameter.
    - **The decision on presigned URLs: redact.** D187 left them alone because they expire. This reverses that. A
      SigV4 presigned URL lasts up to 7 days, and whoever holds it can read (or write) a private object. Eden stores
      it, indexes it and sends it to a model, so an expiry does not make it safe. The cost is a dead link in Eden's
@@ -112,11 +118,11 @@ after the original 30.
 
 | | Before | First | Final |
 |---|---:|---:|---:|
-| Worst of the original 30, `sanitizeForStore` | 77.3 ms (`keyword-near-entropy`) | 77.1 ms (`password-eq-repeat`) | 68.3 ms (`password-eq-repeat`) |
-| `presigned-param-repeat` (`&X-Amz-Signature=` + 15 hex, repeated) | 14.6 ms | 13.0 ms | 26.0 ms |
-| `nrak-near-miss` (`NRAK-` + 26 letters, repeated) | 45.6 ms | 46.5 ms | 57.5 ms |
-| `presigned-encoded-repeat` (`%26X-Amz-Signature%3D` + 14 hex) | – | – | 16.2 ms |
-| Worst `redactString` / `redact` | 11.2 / 11.6 ms | 14.7 / 12.4 ms | 10.5 / 20.4 ms |
+| Worst of the original 30, `sanitizeForStore` | 77.3 ms (`keyword-near-entropy`) | 77.1 ms (`password-eq-repeat`) | 68.3 ms (`keyword-near-entropy`) |
+| `presigned-param-repeat` (`&X-Amz-Signature=` + 15 hex, repeated) | 14.6 ms | 13.0 ms | 17.8 ms |
+| `nrak-near-miss` (`NRAK-` + 26 letters, repeated) | 45.6 ms | 46.5 ms | 58.7 ms |
+| `presigned-encoded-repeat` (`%26X-Amz-Signature%3D` + 14 hex) | – | – | 12.8 ms |
+| Worst `redactString` / `redact` | 11.2 / 11.6 ms | 14.7 / 12.4 ms | 10.2 / 13.8 ms |
 
 Part D measured the worst case as 65 ms on its run. The spread between runs here is load on the shared box (the
 `nrak-near-miss` row moves 46-58 ms with no change to its rule).
@@ -125,15 +131,17 @@ Size scaling (a scratch script, best of 3, ms per MB at 0.25 / 1 / 4 MB), final 
 
 | Shape | 0.25 MB | 1 MB | 4 MB |
 |---|---:|---:|---:|
-| `presigned-param-repeat` | 40.2 | 31.8 | 18.9 |
-| one long signature value | 3.4 | 3.5 | 3.5 |
-| `presigned-encoded-repeat` | 9.9 | 12.7 | 13.1 |
-| `\u0026x-amz-security-token=` repeated | 57.7 | 52.7 | 52.5 |
-| `nrak-near-miss` | 52.6 | 46.9 | 46.5 |
-| `password-eq-repeat` (part D's worst) | 73.4 | 73.8 | 73.1 |
+| `presigned-param-repeat` | 29.5 | 16.5 | 15.8 |
+| one long signature value | 9.5 | 9.7 | 8.9 |
+| one long value of `%` | 15.5 | 5.8 | 5.8 |
+| `%26`-joined parameters, no stop | 14.9 | 12.2 | 14.0 |
+| `presigned-encoded-repeat` | 11.9 | 10.9 | 7.6 |
+| `\u0026x-amz-security-token=` repeated | 46.1 | 47.8 | 55.5 |
+| `nrak-near-miss` | 56.6 | 56.1 | 46.5 |
+| `password-eq-repeat` (part D's worst) | 62.0 | 61.3 | 74.9 |
 
-No row grows faster than its size, so time is linear. On the first rules, the one-long-value row was 4.3 / 4.2 / 4.1
-before the end-of-value change and 292 / 240 / 71 with the per-character lookahead; the unrolled loop fixed it.
+No row grows faster than its size, so time is linear. For comparison, the one-long-value row was 4.3 / 4.2 / 4.1 ms
+per MB on the first rule (a plain class) and 292 / 240 / 71 with the per-character lookahead.
 
 ### Gate bench
 
@@ -141,9 +149,9 @@ before the end-of-value change and 292 / 240 / 71 with the per-character lookahe
 
 | Input | Before | After |
 |---|---:|---:|
-| 256 B | 4.68 / 3.23 | 5.20 / 4.32 |
-| 2 KB | 12.63 / 19.89 | 13.20 / 10.14 |
-| 16 KB | 119.1 / 130.2 | 151.5 / 120.6 |
+| 256 B | 4.68 / 3.23 | 5.06 / 4.95 |
+| 2 KB | 12.63 / 19.89 | 12.83 / 10.40 |
+| 16 KB | 119.1 / 130.2 | 105.1 / 128.5 |
 
 Within noise. The new rules run only when the prefilter sees `nrak-`, `x-amz-` or `x-goog-`.
 
@@ -154,7 +162,7 @@ Within noise. The new rules run only when the prefilter sees `nrak-`, `x-amz-` o
 
 ### Gate and eval
 
-- `bun run check` on the final tree: format, types and 1,869 tests, 0 failures (1,862 before the review fixes).
+- `bun run check` on the final tree: format, types and 1,872 tests, 0 failures (1,862 before the review fixes).
 - `bun run eval` (no model): precision 0.8276, recall 0.48, falseFireRate 0, 31 scenarios and 148 turns; privacy 0
   leaked, 0 of 30 not inert. This matches part D's T2.
 - Funnel: not run. No shipped path changed: the judge is not wired by the servers, and render.ts and reader.ts are

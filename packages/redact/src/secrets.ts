@@ -127,22 +127,47 @@ const PROVIDER_SHAPES: [string, RegExp][] = [
 ];
 /**
  * A presigned or signed object URL (S3 SigV4, GCS V4) is a bearer capability until it expires, up to 7 days: anyone
- * holding it reads (or writes) the object (D220, which reverses D187's note). Only the value goes (group 1), so the
- * URL still says which object it was; an STS session token in the URL goes too. Before the name, `;` covers `&amp;`
- * in HTML mail, `\u0026` JSON from Go servers (encoding/json escapes `&`), and `%26` a URL percent-encoded inside
- * another (a redirect's `next=`), whose `=` is `%3D`. The value stops at a backslash or `%26` for the same reasons. It
- * is written as an unrolled loop (runs without `%`, then `%` not starting `26`, then a run) so each character is read
- * once: a lookahead at every character cost 240 ms per MB on one long value, against 4 with a plain class.
+ * holding it reads (or writes) the object (D220, which reverses D187's note). Only the value goes, so the URL still
+ * says which object it was; an STS session token in the URL goes too. Before the name, `;` covers `&amp;` in HTML
+ * mail, `\u0026` JSON from Go servers (encoding/json escapes `&`), and `%3F`/`%26` a URL percent-encoded inside
+ * another (a redirect's `next=`), whose `=` is `%3D`. The value stops at a backslash or `%26` for the same reasons.
+ *
+ * The regex finds only the name; the value is read by a walk over its characters to the first stop or `%26`. Each
+ * walk ends where the next name can begin, so the text is read about once. Written in the regex the value was not
+ * linear: a lookahead at every character cost 240 ms per MB on one long value; an unrolled loop over `%` kept engine
+ * state per `%` (215 ms for a 1 MB value of `%`, and past that the engine gave up and matched nothing, leaving the
+ * value in clear); a greedy class cut at `%26` afterwards re-read the rest of the text for every parameter.
  */
-const PRESIGNED = new RegExp(
-  String.raw`(?:[?&;]|\\u0026|%26)(?:x-amz-signature|x-goog-signature|x-amz-security-token)(?:=|%3D)` +
-    String.raw`([^\s&#"'<>\\%]*(?:%(?!26)[^\s&#"'<>\\%]*)*)`,
-  "dgi",
+const PRESIGNED_NAME = new RegExp(
+  String.raw`(?:[?&;]|\\u0026|%3F|%26)(?:x-amz-signature|x-goog-signature|x-amz-security-token)(?:=|%3D)`,
+  "gi",
 );
 /** The shortest value taken for a signature or token: shorter is a placeholder or a name, not a credential. */
 const PRESIGNED_MIN = 16;
-const presignedSpans = (text: string): Span[] =>
-  matchSpans(PRESIGNED, text).filter(([start, end]) => end - start >= PRESIGNED_MIN);
+/** Where a value stops: whitespace, `&`, `#`, quotes, `<`, `>`, backslash (char codes; `%26` is checked apart). */
+const VALUE_STOP = new Set([...`&#"'<>\\`].map((c) => c.charCodeAt(0)));
+
+function presignedSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  const name = new RegExp(PRESIGNED_NAME); // its own lastIndex
+  for (let m = name.exec(text); m; m = name.exec(text)) {
+    const start = m.index + m[0].length;
+    let end = start;
+    for (; end < text.length; end++) {
+      const c = text.charCodeAt(end);
+      if (VALUE_STOP.has(c) || isSpace(c)) break;
+      // `%26` ends the value (an encoded `&`).
+      if (c === 37 && text.charCodeAt(end + 1) === 50 && text.charCodeAt(end + 2) === 54) break;
+    }
+    if (end - start >= PRESIGNED_MIN) spans.push([start, end]);
+    name.lastIndex = Math.max(end, m.index + 1); // the next name may begin at the stop (`%26`, `&`)
+  }
+  return spans;
+}
+
+const isSpace = (c: number) =>
+  c <= 32 ? c === 32 || (c >= 9 && c <= 13) : c > 127 && /\s/.test(String.fromCharCode(c));
+
 const ENTROPY_TOKEN = /\S{32,}/g;
 /** How far from a long token rule (d) looks for a secret keyword. */
 const KEYWORD_REACH = 40;
