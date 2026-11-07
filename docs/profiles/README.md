@@ -10,6 +10,7 @@ compare against the default, or to switch a part off in a deployment that must (
 |---|---:|---:|---:|---:|---:|
 | (none: the default) | 214 / 211 | 0.8 | 0.48 | 0.0147 | 12.4 |
 | [`minus-reader.json`](minus-reader.json) | 214 / 211 | 0.8 | 0.48 | 0.0147 | 11.4 |
+| [`minus-candidates.json`](minus-candidates.json) (2026-11-07, D237) | the old default: 321 / 129 with recipe 2a's paid reader replayed (the default: 305 / 267, no reader call) | as the default | as the default | as the default | — |
 | [`minus-cards.json`](minus-cards.json) | 214 / 210 | 0.8 | 0.48 | 0.0147 | 10.7 |
 | [`minus-sync.json`](minus-sync.json) | 197 / 190 | 0.8 | 0.48 | 0.0147 | 12.1 |
 | [`minus-grounds.json`](minus-grounds.json) | 210 / 210 | 0.893 | 0.5 | 0 | 8.6 |

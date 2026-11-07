@@ -38,7 +38,7 @@ export function renderPacket(
      */
     note?: (item: ContextItem) => string | undefined;
     /**
-     * `pushCandidates` (trial, D236): a line of Eden's own (`EDEN_NOTE`, fixed words) after the header, framing the
+     * `pushCandidates` (D236): a line of Eden's own (`EDEN_NOTE`, fixed words) after the header, framing the
      * items as candidates the agent checks against the request. Never source or event text.
      */
     lead?: string;
@@ -131,16 +131,13 @@ export const CHECKED_NONE =
 export const CHECKED_MORE = `${EDEN_NOTE}read the user's connected sources for this request; nothing beyond the context above bears on it.`;
 
 /**
- * `pushCandidates` (trial, D236, CL6 H19): the push hands the agent the top of its pool with no reader call, framed
- * as candidates that may bear on the request. `CANDIDATES_LEAD` is the plain framing; `CANDIDATES_CHECK`
- * (`pushCandidateCheck`) asks the agent to check each against the request's who, what and when first (D96's
- * why-before-binds moved into the agent's packet). `CANDIDATES_NONE` (`pushCandidateNone`): no candidate could
- * constrain the request, from sources that all answered.
+ * `pushCandidates` (D236, D237; CL6 H19): the push hands the agent the top of its pool with no reader call, after this
+ * line: the items may bear on the request, and the agent checks each against the request's who, what and when first
+ * (D96's why-before-binds moved into the agent's packet; without the check, look-alikes were raised 4 times in 48).
+ * `CANDIDATES_NONE`: no candidate could constrain the request, from sources that all answered. Fixed words, inside
+ * the data envelope (D11, D19): the instruction is Eden's own, to the agent, about the items around it.
  */
 export const CANDIDATES_LEAD =
-  `${EDEN_NOTE}items from the user's sources that may bear on this request; nothing has checked them against it. ` +
-  "Use one only if it applies to this request.";
-export const CANDIDATES_CHECK =
   `${EDEN_NOTE}items from the user's sources that may bear on this request; nothing has checked them against it. ` +
   "Before using one, check it is about the same person, thing and date as the request and still current; if it is " +
   "not, ignore it and do not mention it.";

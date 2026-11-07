@@ -159,7 +159,7 @@ describe("pushCandidates under readerPushBehind (D236)", () => {
   });
 
   test("pushCandidateNone: a pool with nothing constraint-like gets the note, citing nothing", async () => {
-    const { p, src, warm, advance, now } = setup({ pushCandidates: 2, pushCandidateNone: true, readerGate: true });
+    const { p, src, warm, advance, now } = setup({ pushCandidates: 2, readerGate: true });
     src.items = src.items.filter((x) => x.id !== HOLD);
     await warm(user);
     advance(5 * HOUR);

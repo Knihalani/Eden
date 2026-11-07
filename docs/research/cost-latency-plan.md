@@ -61,5 +61,11 @@ $ per 1,000 tasks on the 1:1:8 mix (assumed traffic), Haiku 5.5 at $0.10 / $0.50
 of 100 neutral reads decided; looser rules lost planted facts), H2 not built (D234: 1.08x safe ceiling), H15 not built
 (D235: local models AUC 0.44–0.61). H10 needs another no-model verdict: H1 does not provide one.
 
+**CL6 outcome (2026-11-07, [cl-cl6.md](cl-cl6.md)), H19 "the agent is the reader":** promoted (D237). The push hands
+the agent its pool's first five items, framed to be checked against the request, with no reader call. Pi, train
+seeds 41–42, 1:1:8 mix, steady $/1k: short 0.338 (tools 0.368, old default 0.631), long 0.326 (tools 0.317, old
+0.568) with signal notices; hidden −3.6 points pooled (−8.4..+1.2); neutral wall −0.7 to −1.4 s. Variants deleted
+(D236). The reader-side levers (H1–H5) now apply only to `pushCandidates: 0`.
+
 Every lever enters as a trial switch (D112), is screened at $0 where possible (paid reader replay, `gate-traffic`),
 then measured live on Pi on train suites, **short and long horizon**, and is promoted or deleted with its code.

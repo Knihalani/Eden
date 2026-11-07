@@ -189,6 +189,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   never source or event text. CL4's other path levers (speculation D248, re-reading ahead D249, `askFromPush` D247, a
   packet closing line D250) were measured and deleted: an ask's time is its strict re-reads (D211) under signal-only
   notices, not its search or its reader.
+- **`pushCandidates` (D236, D237: 5 in the default) skips `readAsk` on the push and on every ask:** no reader call,
+  so no `pushRead` (D193 has nothing to reuse), no `onReader` report and no `checkAhead`. The push's candidates go
+  through `verifyItems` and `deliver` (reason `candidates:`), framed by `CANDIDATES_LEAD`; `CANDIDATES_NONE` is a
+  `checked:` note citing nothing (dropped untaken like D246's). A `readerPushBehind` second pass replaces an untaken
+  first packet only with candidates of its own. Tests of the reader's own wiring set `pushCandidates: 0` (the core,
+  the `reader` and `candidates` parts all do); the lab's reader screens run `--preset minus-candidates`.
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read

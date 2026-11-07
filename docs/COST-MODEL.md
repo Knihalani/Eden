@@ -100,6 +100,14 @@ rows, $0.0453 ($0.0172 off, $0.0281 low). It used a scratch script outside the r
 
 The bridging query (D89) was deleted by D112; its cost notes are in git history.
 
+**Since D237 (CL6, 2026-11-07) the default makes no reader call** (`pushCandidates` 5: the push hands the agent its
+pool's first five items to judge, about 950 bytes a task in the $0 funnel; an ask reads nothing either). Eden's
+per-task model spend is $0; the agent reads about 300–600 more input tokens a task on the short horizon. Pi, Anthropic
+Haiku (lab provider), train seeds 41–42, 1:1:8 mix, steady state per 1,000 tasks: short 0.338 (signals) and 0.415
+(payload, billed; cache hits vary between runs) against the old default's 0.631 and 0.665 and the agent alone's
+0.368; long 0.326 and 0.338 against 0.568 and 0.529 and the agent alone's 0.317 (docs/research/cl-cl6.md). The reader
+figures below hold for `pushCandidates: 0` (`--preset minus-candidates`).
+
 Ask-time reader (D95, `askReader`, in the default since D112; `reader.ts`). One call per `ask` about an action (an
 imperative question, a question about blockers, or an ask while the session's latest request acts; any ask with
 `askReaderQuestions`), never per event, never on the fast path, cached per user and session by request and pool, so a

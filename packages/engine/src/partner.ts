@@ -123,7 +123,6 @@ import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
 import {
-  CANDIDATES_CHECK,
   CANDIDATES_LEAD,
   CANDIDATES_NONE,
   CHECKED_MORE,
@@ -1466,11 +1465,10 @@ export class ContextPartner {
       push: internal.push === true,
       ...(internal.request !== undefined ? { request: internal.request } : {}),
     };
-    // `pushCandidates` (D236): the push reads with no reader call; an explicit ask only with `pushCandidateAskReader`.
+    // `pushCandidates` (D236, D237): no reader call, on the push or on an ask (the agent reads the candidates).
     const candidating = this.config.pushCandidates > 0;
-    const reads = !candidating || (!internal.push && this.config.pushCandidateAskReader);
     const reading =
-      this.config.askReader && this.deps.reader && reads
+      this.config.askReader && this.deps.reader && !candidating
         ? await this.readAsk(
             s,
             cue,
@@ -1547,7 +1545,6 @@ export class ContextPartner {
         s.pending.push(this.note(s, line, `${CHECKED}${cue.id}`));
       } else if (
         candidates &&
-        this.config.pushCandidateNone &&
         internal.again === undefined &&
         flagged.length === 0 &&
         s.builtRequest !== s.requests &&
@@ -1555,7 +1552,9 @@ export class ContextPartner {
         still &&
         answeredAll(searched)
       ) {
-        // `pushCandidateNone` (D236): nothing in the pool could constrain the request, from sources that all answered.
+        // `pushCandidates` (D236): nothing in the pool could constrain the request, from sources that all answered. Not
+        // a reading (D246 gives its note only after one): a departure D237 records, measured live as no rise in
+        // concerns on nothing-to-add requests.
         s.pending.push(this.note(s, CANDIDATES_NONE, `${CHECKED}${cue.id}`));
       }
       const latencyMs = Math.round(performance.now() - t0);
@@ -1885,10 +1884,9 @@ export class ContextPartner {
 
   /**
    * `pushCandidates` (D236): the push's candidates for the agent to judge, with no model call. The pool `readAsk` would
-   * read (the first `askReaderPool` distinct items of `ranked`), its constraint-like items first (`readerGate`'s test,
-   * cards included; bulk mail never), then the rest, each group in the pool's order (or the pool's order alone, with
-   * `pushCandidatePoolOrder`); the first `pushCandidates` of them. A pool with no constraint-like item gives none, as
-   * `readerGate` would read none.
+   * read (the first `askReaderPool` distinct items of `ranked`) in its own order, bulk mail out; the first
+   * `pushCandidates` of them. A pool with no constraint-like item (`readerGate`'s test, cards included) gives none, as
+   * `readerGate` would read none. (Constraint-like items first lost 27 points of hidden facts live: D236.)
    */
   private candidatesOf(s: Session, cue: Cue, ranked: readonly Scored[]): { items: Scored[] } {
     const pool: Scored[] = [];
@@ -1909,22 +1907,17 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    const constraint = pool.filter((x) => this.constraintLike(x, cards));
-    if (constraint.length === 0) return { items: [] };
-    // `pushCandidatePoolOrder`: the pool's own order (bulk mail out), not constraint-like items first.
-    const ordered = this.config.pushCandidatePoolOrder
-      ? pool.filter((x) => !bulkMail(x.item))
-      : [...constraint, ...pool.filter((x) => !constraint.includes(x) && !bulkMail(x.item))];
-    return { items: ordered.slice(0, this.config.pushCandidates) };
+    if (!pool.some((x) => this.constraintLike(x, cards))) return { items: [] };
+    return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) };
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
   private candidateFrame(): PacketFrame {
     // At most the pool's items (`candidatesOf`), each bounded (`RANGES`): the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
-    const each = this.config.pushCandidateBytes;
+    const each = this.config.compactItemBytes;
     return {
-      lead: this.config.pushCandidateCheck ? CANDIDATES_CHECK : CANDIDATES_LEAD,
+      lead: CANDIDATES_LEAD,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),

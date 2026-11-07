@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
-import { checkEngineConfig, COUNT_PARENTS, NEEDS_DEP, PARENTS } from "./config-check";
+import { checkEngineConfig, NEEDS_DEP, PARENTS } from "./config-check";
 import { CORE_CONFIG, PARTS, type Part } from "./parts";
 
 const ALL_DEPS = { cards: true, reader: true };
@@ -99,14 +99,10 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     });
   });
 
-  test("every PARENTS and NEEDS_DEP entry names real settings; every parent is a flag (or a listed count)", () => {
+  test("every PARENTS and NEEDS_DEP entry names real settings; every parent is a flag", () => {
     for (const [key, parents] of Object.entries(PARENTS)) {
       expect(Object.hasOwn(DEFAULT_CONFIG, key)).toBe(true);
-      // `COUNT_PARENTS` (`pushCandidates`, D236) are counts whose 0 is off; every other parent is a flag.
-      for (const p of parents!) {
-        const want = COUNT_PARENTS.has(p as keyof EngineConfig) ? "number" : "boolean";
-        expect(typeof DEFAULT_CONFIG[p as keyof EngineConfig]).toBe(want);
-      }
+      for (const p of parents!) expect(typeof DEFAULT_CONFIG[p as keyof EngineConfig]).toBe("boolean");
       expect(parents).not.toContain(key);
     }
     for (const key of Object.keys(NEEDS_DEP)) expect(Object.hasOwn(DEFAULT_CONFIG, key)).toBe(true);

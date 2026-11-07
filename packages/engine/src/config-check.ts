@@ -60,11 +60,6 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerReuse: "reader",
   pushChecked: "reader",
   pushCandidates: "reader",
-  pushCandidateBytes: "reader",
-  pushCandidateCheck: "reader",
-  pushCandidateAskReader: "reader",
-  pushCandidateNone: "reader",
-  pushCandidatePoolOrder: "reader",
 };
 
 /**
@@ -123,15 +118,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerReuse: PUSH,
   pushChecked: PUSH,
   pushCandidates: PUSH,
-  pushCandidateBytes: [...PUSH, "pushCandidates"],
-  pushCandidateCheck: [...PUSH, "pushCandidates"],
-  pushCandidateAskReader: [...PUSH, "pushCandidates"],
-  pushCandidateNone: [...PUSH, "pushCandidates"],
-  pushCandidatePoolOrder: [...PUSH, "pushCandidates"],
 };
-
-/** Parents that are counts, on above 0 (`pushCandidates`, D236); every other parent is a flag. */
-export const COUNT_PARENTS: ReadonlySet<Key> = new Set<Key>(["pushCandidates"]);
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
 type Range = { integer?: true; min?: number; max?: number };
@@ -187,7 +174,6 @@ const RANGES: Partial<Record<Key, Range>> = {
   intentSeats: COUNT,
   askReaderPool: COUNT,
   pushCandidates: { integer: true, max: 40 },
-  pushCandidateBytes: { integer: true, min: 1, max: 2_000 },
 };
 
 /** String-list keys whose entries must come from a known list. */
@@ -245,8 +231,7 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
     for (const key of Object.keys(out) as Key[]) {
       const parents = PARENTS[key];
       if (!parents || isCore(key, merged[key])) continue;
-      // A count parent (`COUNT_PARENTS`) is on when above 0.
-      const off = parents.filter((p) => !(merged[p] === true || (COUNT_PARENTS.has(p) && (merged[p] as number) > 0)));
+      const off = parents.filter((p) => merged[p] !== true);
       if (off.length) {
         throw new Error(
           `${where}: "${key}" acts only with ${parents.map((p) => `"${p}"`).join(" and ")} on, and this ` +

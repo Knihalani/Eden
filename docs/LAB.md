@@ -423,6 +423,12 @@ reader cache at $0. The haiku-opt.md command sets `askReaderWaitMs: 60000` so la
 
 ### 2a. The default's paid Haiku reading, replayed at $0
 
+**Since D237 (CL6) the default makes no reader call** (`pushCandidates` 5): its funnel replays nothing from this cache
+(TOTAL hidden 305/384, decoys 267/384, 0 reader calls, train seeds 41–42 with `--neutral`). Every recipe below that
+screens the reader (2a, 2b, the `minus-<part>` replays) now runs `--preset minus-candidates`, which reproduces the
+pre-D237 default exactly (321/129, 643 replayed, 0 misses, 2026-11-07). The neutral top-up no longer covers that
+preset's neutral prompts at this tip (590 misses, answered without the reader).
+
 The reader cache of the shipped default (D158: cards and intent requests replayed; intent thresholds 0.2/1/12 since
 D179, `intentByKind` since D200) on train1–6, seeds 41–42, is checked in gzipped:
 `packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz`, 4,377 lines, all `claude-haiku-5-5`, plain md5
