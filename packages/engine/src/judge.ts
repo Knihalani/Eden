@@ -5,7 +5,8 @@
  */
 import type { ChatMessage } from "@eden/llm";
 import type { ContextItem } from "@eden/protocol";
-import { compactText, inert, oneLine } from "./render";
+import { safeBlock, safeLine } from "./line";
+import { compactText } from "./render";
 
 /** A compacted candidate's room in the judge's input: about what 280 characters of an uncompacted one take. */
 const JUDGE_ITEM_BYTES = 280;
@@ -27,8 +28,9 @@ export function judgeMessages(
 ): ChatMessage[] {
   const each = size.itemBytes ?? JUDGE_ITEM_BYTES;
   const text = (c: ContextItem) => (focus ? compactText(c.text, focus, each) : clip(c.text, 280));
+  // One candidate, one line (D221): a line break in a title or text would start a forged `[n] (source)` line.
   const list = candidates.map(
-    (c, i) => `[${i}] (${c.sourceId}) ${inert(oneLine(clip(c.title, 80)))} — ${inert(text(c))}`,
+    (c, i) => `[${i}] (${safeLine(c.sourceId)}) ${safeLine(clip(c.title, 80))} — ${safeLine(text(c))}`,
   );
   return [
     {
@@ -71,8 +73,8 @@ export function parseJudge(text: string, count: number): number[] {
 
 /**
  * The recent turns, tagged and made inert: they hold incoming mail and tool output, so text in them must not be able
- * to close the tag and pose as a candidate list or an instruction.
+ * to close the tag and pose as a candidate list or an instruction. Their lines stay, written as LFs (`safeBlock`).
  */
 function conversation(recent: string, max: number): string {
-  return `<conversation>\n${inert(clipTail(recent, max))}\n</conversation>`;
+  return `<conversation>\n${safeBlock(clipTail(recent, max))}\n</conversation>`;
 }
