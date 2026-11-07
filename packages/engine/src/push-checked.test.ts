@@ -11,7 +11,8 @@ import { CHECKED_MORE, CHECKED_NONE, COVERED, shownText } from "./render";
 
 // CL4's path-latency trials (docs/research/cl-cl4.md): the push saying it found nothing (`pushChecked`, D246), its
 // packet saying it is what the reading found (`pushCovered`, D250), and what a speculating integration waits on
-// (`requestSettled`, `pendingItems`, D248). `askFromPush` (D247) and `pushVerifyAhead` (D249) were measured and deleted.
+// (`requestSettled`, `pendingItems`, D248). `askFromPush` (D247) and `pushVerifyAhead` (D249) were measured and
+// deleted.
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
