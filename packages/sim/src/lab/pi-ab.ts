@@ -1194,9 +1194,11 @@ async function runWorld(
           }
           let settled = false;
           void until.then(() => (settled = true));
-          await Promise.race([reading, until]);
+          // `+specend`: the call runs to its end first; a turn that called a tool is passed on as it is.
+          const ended = speculate === "end" ? await reading : null;
+          if (speculate !== "end") await Promise.race([reading, until]);
           if (!settled) await until;
-          const items = specItems();
+          const items = ended?.stopReason === "toolUse" ? 0 : specItems();
           if (items === 0 || options?.signal?.aborted) {
             // Nothing to restart for: what was held goes out, and the rest of the call streams through.
             for (const ev of held) out.push(ev);
