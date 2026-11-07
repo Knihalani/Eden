@@ -407,13 +407,6 @@ export interface EngineConfig {
   /** Judge seats kept for intent hits the lexical ranking did not seat (with a model). */
   intentSeats: number;
   /**
-   * Trial (D330, docs/research/a15-retrieval.md; owner repo owner, ends 2026-12-07): with `pushCandidates`, a push that
-   * hands candidates adds up to two items its pool did not hold: the best intent hit holding two of the request's terms
-   * whatever its coverage, and the best lexical match whose text states a span covering a day the request names
-   * (`reach.ts`). No model, no source call.
-   */
-  pushReach: boolean;
-  /**
    * The ask-time model reader (D95, `reader.ts`): for an `ask` about an action, one budgeted model call reads the top
    * `askReaderPool` candidates the ask already ranked (compact, redacted, fenced as data) and says which would block,
    * limit or change the request, or show it done; those lead the answer, each with a short bearing, and the usual
@@ -600,7 +593,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intentCardCoverage: 0.1,
   intentCardHits: 4,
   intentWeight: 1,
-  pushReach: false,
   intentSeats: 1,
   askReader: true,
   askReaderPool: 15,

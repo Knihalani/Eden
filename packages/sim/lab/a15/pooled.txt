@@ -1,0 +1,16 @@
+== short
+eden+pushReach − eden  hidden raised                        runs 2 n  144  -1.4 points (-7.6..+4.9)
+eden+pushReach − eden  concerns (control+neutral), graded   runs 2 n  288  -0.3 points (-2.1..+1.0)
+eden+pushReach − eden  concerns, regraded                   runs 2 n  288  -0.3 points (-1.0..+0.0)
+== targeted
+eden+pushReach − eden  hidden raised                        runs 2 n   24  +0.0 points (-25.0..+20.8)
+eden+pushReach − eden  concerns (control+neutral), graded   runs 2 n   48  +0.0 points (+0.0..+0.0)
+eden+pushReach − eden  concerns, regraded                   runs 2 n   48  +0.0 points (+0.0..+0.0)
+== long
+eden+pushReach − eden  hidden raised                        runs 2 n   23  -13.0 points (-26.1..+0.0)
+eden+pushReach − eden  concerns (control+neutral), graded   runs 2 n  209  +0.0 points (-2.9..+2.9)
+eden+pushReach − eden  concerns, regraded                   runs 2 n  209  -0.5 points (-2.4..+1.0)
+== all six
+eden+pushReach − eden  hidden raised                        runs 6 n  191  -2.6 points (-8.9..+3.1)
+eden+pushReach − eden  concerns (control+neutral), graded   runs 6 n  545  -0.2 points (-1.7..+1.3)
+eden+pushReach − eden  concerns, regraded                   runs 6 n  545  -0.4 points (-1.1..+0.4)

@@ -66,7 +66,6 @@ import {
   type Verdict,
 } from "./conflict";
 import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
-import { coversDay, textSpans } from "./reach";
 import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
 import {
   READER_MAX_ITEMS,
@@ -204,8 +203,6 @@ export interface PushPoolReport {
   constraintLike: boolean[];
   /** The candidates handed (none when no pooled item is constraint-like). */
   handed: string[];
-  /** Trial `pushReach` (D330): the items its two slots added after the candidates (also in `handed`). */
-  reached?: string[];
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -1545,12 +1542,6 @@ export class ContextPartner {
       const pushes = new Set<string>(this.config.readerPushKinds);
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
       const candidates = candidating ? this.candidatesOf(s, cue, [...order, ...scored]) : null;
-      // Trial `pushReach` (D330): up to two items the pool did not hold, after its candidates.
-      if (candidates && this.config.pushReach && candidates.items.length > 0) {
-        const reached = this.reachOf(s, cue, candidates.items);
-        candidates.items.push(...reached);
-        if (reached.length > 0) this.deps.onPushPool?.(candidates.report(reached));
-      }
       const flagged = candidates
         ? candidates.items
         : reading
@@ -1942,11 +1933,7 @@ export class ContextPartner {
    * `pushCandidates` of them. A pool with no constraint-like item (`readerGate`'s test, cards included) gives none, as
    * `readerGate` would read none. (Constraint-like items first lost 27 points of hidden facts live: D236.)
    */
-  private candidatesOf(
-    s: Session,
-    cue: Cue,
-    ranked: readonly Scored[],
-  ): { items: Scored[]; report: (reached: Scored[]) => PushPoolReport } {
+  private candidatesOf(s: Session, cue: Cue, ranked: readonly Scored[]): { items: Scored[] } {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
@@ -1956,7 +1943,7 @@ export class ContextPartner {
       seen.add(x.item.id);
       pool.push(x);
     }
-    if (pool.length === 0) return { items: [], report: () => this.poolReport(s, [], [], [], []) };
+    if (pool.length === 0) return { items: [] };
     const cards =
       this.config.cards && this.deps.cards
         ? this.deps.cards.cardsOf(
@@ -1967,76 +1954,19 @@ export class ContextPartner {
         : new Map<string, Card>();
     const like = pool.map((x) => this.constraintLike(x, cards));
     const items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
-    const handed = items.map((x) => x.item.id);
-    this.deps.onPushPool?.(this.poolReport(s, pool, like, handed, []));
-    return { items, report: (reached) => this.poolReport(s, pool, like, handed, reached) };
-  }
-
-  private poolReport(
-    s: Session,
-    pool: readonly Scored[],
-    constraintLike: boolean[],
-    handed: string[],
-    reached: readonly Scored[],
-  ): PushPoolReport {
-    const more = reached.map((x) => x.item.id);
-    return {
+    this.deps.onPushPool?.({
       sessionId: s.id,
       pool: pool.map((x) => x.item.id),
-      constraintLike,
-      handed: [...handed, ...more],
-      ...(more.length > 0 ? { reached: more } : {}),
-    };
-  }
-
-  /**
-   * Trial `pushReach` (D330, docs/research/a15-retrieval.md): two more candidates the pool did not hold, for facts the
-   * request needs but barely shares words with. (1) The best intent hit holding two of the request's terms, under the
-   * coverage the intent cut asks for (`intentMinCoverage`): the item's model-written requests are in other words than
-   * its text. (2) The best lexical match, `REACH_DEPTH` deep, whose text states a span covering a day the request names
-   * (`textSpans`): "closed 14–22 November" for a flight on the 18th. No model, no source call: the user's own index.
-   */
-  private reachOf(s: Session, cue: Cue, handed: readonly Scored[]): Scored[] {
-    const now = this.now();
-    const taken = new Set(handed.map((x) => x.item.id));
-    const out: Scored[] = [];
-    const take = (item: ContextItem | null, matched: number) => {
-      if (!item || taken.has(item.id) || bulkMail(item)) return false;
-      taken.add(item.id);
-      out.push({ item, score: 0, matched, sketch: null });
-      return true;
-    };
-    const enricher = this.deps.cards;
-    if (this.config.cards && this.config.intent && enricher) {
-      const accept = (id: string) => this.deps.cache.get(s.scope, id, now) !== null;
-      const text = cue.raw.slice(0, INTENT_QUERY_CHARS);
-      for (const f of enricher.intentFinds(s.scope, text, cue.arrived ?? now, this.config.intentHits, accept)) {
-        if (f.hit.matched < REACH_MIN_MATCHED) continue;
-        if (f.ids.some((id) => take(this.deps.cache.get(s.scope, id, now), f.hit.matched))) break;
-      }
-    }
-    const days = cue.time?.days;
-    const vocab = this.deps.cache.peekVocab(s.scope);
-    if (days && days.size > 0 && vocab) {
-      const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
-      const query: number[] = [];
-      for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
-      const at = cue.arrived ?? now;
-      for (const h of query.length > 0 ? this.deps.cache.search(s.scope, query, query.length, REACH_DEPTH, now) : []) {
-        if (taken.has(h.item.id)) continue;
-        if (!coversDay(textSpans(`${h.item.title}\n${h.item.text}`, at), days)) continue;
-        if (take(h.item, 0)) break;
-      }
-    }
-    return out;
+      constraintLike: like,
+      handed: items.map((x) => x.item.id),
+    });
+    return { items };
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
   private candidateFrame(): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
-    const k =
-      Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP) +
-      (this.config.pushReach ? REACH_SLOTS : 0);
+    const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
       lead: CANDIDATES_LEAD,
@@ -4917,11 +4847,6 @@ function pendingOf(s: Session): boolean {
 
 /** `pushCandidates` (D236): the most of an item a candidate's excerpt says, whatever `compactItemBytes` is set to. */
 const MAX_CANDIDATE_BYTES = 2_000;
-/** Trial `pushReach` (D330): the slots it adds after the candidates, the request terms an intent hit must hold, and
- * how deep the lexical search for an item whose stated span covers the request's day reads. */
-const REACH_SLOTS = 2;
-const REACH_MIN_MATCHED = 2;
-const REACH_DEPTH = 100;
 
 /** `pushCandidates` (D236): a candidates' packet's framing line and cut. */
 interface PacketFrame {

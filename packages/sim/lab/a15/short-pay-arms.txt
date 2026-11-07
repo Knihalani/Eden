@@ -1,0 +1,20 @@
+arm              kind      n  rate   wall p50/p90/mean s  all-in $/1k (agent, Eden)  Eden path ms (obs, ask)  turns  asks  reader  conn  restarts
+eden             hidden   144 0.715   2.83/ 5.18/ 3.30   0.420 (0.412, 0.000)        11 (   9,    2)   1.29  0.47  0.00   0.00  0.00
+eden             control  144 0.028   3.16/ 4.93/ 3.41   0.430 (0.421, 0.000)        11 (   8,    4)   1.54  0.79  0.00   0.00  0.00
+eden             neutral  144 0.000   3.50/ 4.97/ 3.59   0.428 (0.420, 0.000)        11 (   7,    5)   1.70  1.06  0.00   0.00  0.00
+eden+pushReach   hidden   144 0.701   2.90/ 5.63/ 3.39   0.438 (0.429, 0.000)        11 (   9,    3)   1.33  0.54  0.00   0.00  0.00
+eden+pushReach   control  144 0.007   2.99/ 5.52/ 3.44   0.442 (0.434, 0.000)        11 (   8,    3)   1.47  0.72  0.00   0.00  0.00
+eden+pushReach   neutral  144 0.014   3.40/ 5.04/ 3.54   0.431 (0.422, 0.000)        13 (   8,    5)   1.69  1.03  0.00   0.00  0.00
+
+== paired differences per kind (a − b), bootstrap 95%; * the interval excludes zero
+eden+pushReach   − eden   hidden   rate -0.014 (-0.076..+0.049)  wall s +0.081 (-0.121..+0.288)  $/1k +0.017 (-0.003..+0.038)  Eden ms +0 (-1..+1) turns +0.035 (-0.028..+0.104) 
+eden+pushReach   − eden   control  rate -0.021 (-0.049..+0.000)  wall s +0.036 (-0.185..+0.263)  $/1k +0.012 (-0.012..+0.037)  Eden ms -0 (-1..+1) turns -0.076 (-0.153..+0.007) 
+eden+pushReach   − eden   neutral  rate +0.014 (+0.000..+0.035)  wall s -0.052 (-0.264..+0.162)  $/1k +0.002 (-0.022..+0.026)  Eden ms +1 (+1..+2) turns -0.007 (-0.090..+0.076) 
+
+== traffic mix (assumed 1 hidden : 1 control : 8 neutral)
+arm               raised    wrong      usd    agent  edenusd     wall   edenms    turns     asks   reader     conn
+eden               0.072    0.003    0.428    0.419    0.000    3.541   11.298    1.644    0.976    0.000    0.000
+eden+pushReach     0.070    0.012    0.432    0.424    0.000    3.511   12.427    1.635    0.953    0.000    0.000
+
+== mix pairs (a − b), bootstrap 95%; * excludes zero
+eden+pushReach   − eden   raised -0.001 (-0.008..+0.006)   wrong +0.009 (-0.003..+0.026)   usd +0.005 (-0.015..+0.024)   wall -0.030 (-0.203..+0.146)   edenms +1.129 (+0.515..+1.770)*  conn +0.000 (+0.000..+0.000) 

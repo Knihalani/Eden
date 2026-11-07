@@ -82,7 +82,7 @@ evaluate('bm25 (lexical, sanity)', pt, worlds, r_bm25)
 if genfile:
     for need in (1, 2, 3):
         evaluate(f'general requests, >= {need} terms', pt, worlds, lambda w, t, c: r_req(w, t, c, 'gen', need))
-    evaluate('own requests (new sample), >= 2 terms', pt, worlds, lambda w, t, c: r_req(w, t, c, 'own', 2))
+    evaluate('item requests (file given), >= 2 terms', pt, worlds, lambda w, t, c: r_req(w, t, c, 'own', 2))
 evaluate('date window + bm25', pt, worlds, r_date)
 if embdir:
     evaluate('embedding', pt, worlds, r_emb)

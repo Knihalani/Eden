@@ -499,7 +499,9 @@ const ASK_DIAG = opt("ask-diag", "");
 const POOL_DUMP = opt("pool-dump", "");
 /**
  * `--corpus-dump FILE` (a diagnostic, docs/research/a2-quality.md): per suite world, its items (title, text head) and
- * its tasks with their planted ids, for offline retrieval screens.
+ * its tasks with their planted ids, for offline retrieval screens. Since A15 (docs/research/a15-retrieval.md) each
+ * item is as its source lists it and the cache holds it (redacted), with `h`, its card key, which joins it to the
+ * replayed cards and intent requests (`packages/sim/lab/a15/run_screen.py`).
  */
 const CORPUS_DUMP = opt("corpus-dump", "");
 if (ASK_DIAG) writeFileSync(ASK_DIAG, "");
@@ -1155,8 +1157,6 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
           }),
       // `pushCandidates`' last pass: the planted item's place in its pool (-1: not in it), and whether it was handed.
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
-      // Trial `pushReach` (D330): the items its slots added, and whether the planted one is among them.
-      ...(push?.reached ? { pushReached: push.reached.length, pushReachedIt: push.reached.includes(id) } : {}),
       ...(rr
         ? {
             readerOutcome: rr.outcome,
