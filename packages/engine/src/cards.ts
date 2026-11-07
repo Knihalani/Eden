@@ -689,6 +689,11 @@ export interface CardStats {
   requestOnly: number;
   /** With `intent`: items given one request or more. */
   requested: number;
+  /**
+   * `cardsSourceAware`: items left unread because their source is one of many the user's lookups have not used and
+   * they name none of the user's people (read once a lookup uses the source: `enqueue` again).
+   */
+  deferred: number;
 }
 
 /**
@@ -717,6 +722,7 @@ export class CardEnricher {
     implausible: 0,
     requestOnly: 0,
     requested: 0,
+    deferred: 0,
   };
   /**
    * Span tracing (`spans.ts`): each enrichment call is a `cards.make` span (counts only, D19). The partner sets it
@@ -823,7 +829,11 @@ export class CardEnricher {
     }
   }
 
-  enqueue(scope: Scope, items: readonly ContextItem[]): void {
+  /**
+   * `defer` (`cardsSourceAware`): an item it holds is left unread for now, with no card and no entry (uncovered, as an
+   * item not yet read), unless its content already has one; enqueued again later, it is read as any new item.
+   */
+  enqueue(scope: Scope, items: readonly ContextItem[], defer?: (item: ContextItem) => boolean): void {
     if (items.length === 0) return;
     const u = this.user(scope);
     const now = this.deps.now();
@@ -841,6 +851,10 @@ export class CardEnricher {
       const known = u.byHash.get(hash);
       if (known) known.seenAt = now;
       const queued = u.queue.some((q) => q.hash === hash);
+      if (!known && !queued && defer?.(item)) {
+        this.stats.deferred++;
+        continue;
+      }
       // Lean skipping is by date, and the key is the content: a recurring event's upcoming occurrence says what its old
       // one said, and was never read for its requests because the old one was skipped first (audit A5).
       if (known?.leanSkipped && !queued && readForIntent(item, now, this.limits.leanDays)) {

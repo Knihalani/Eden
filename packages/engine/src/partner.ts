@@ -135,6 +135,7 @@ import {
   PERSISTABLE_KINDS,
   termIds,
 } from "./text";
+import { sketchTerms, termHashes } from "./sketch";
 import { SpanStats, Tracer, type SpanSink, type SpanStat } from "./spans";
 import type { ShadowRecord, ShadowSink, Trace, TraceSink, UsageRecord, UsageSink } from "./trace";
 import { distinctiveTokens, showsUse, type Outstanding } from "./usage";
@@ -614,8 +615,9 @@ export class ContextPartner {
               if (this.config.cards) this.deps.cards?.touch(scope, ids);
             },
             onStored: (scope, items) => {
-              this.enqueueCards(scope, items);
-              this.recordMentions(scope, items);
+              const mentions = mentionsOf(items);
+              this.enqueueCards(scope, items, this.cardDefer(scope, items, mentions));
+              this.recordMentions(scope, items, 0, mentions);
               this.queueRevised(scope, items);
             },
             tracer: spans,
@@ -637,6 +639,9 @@ export class ContextPartner {
             demandTimeoutMs: c.sourceTimeoutMs,
             push: c.syncPush,
             pushMaxStaleMs: c.syncPushMaxStaleMs,
+            keepCut: c.syncKeepCut,
+            sketch: c.routeSketch,
+            engagedDeep: c.syncEngagedDeep,
           },
         )
       : null;
@@ -2988,10 +2993,12 @@ export class ContextPartner {
     if (all.length === 0) return { calls: 0, sources: [] };
     // `routeLocalHits` (D265): which sources hold the request's best local matches, for routing. Only past the
     // lookup's own width: with as few sources as it searches, every one is searched whatever the order.
-    const boost =
-      this.config.routeLocalHits && all.length > Math.min(limit, this.config.lookupSources)
-        ? this.localRouteHits(s, cue)
-        : undefined;
+    const wide = all.length > Math.min(limit, this.config.lookupSources);
+    const boost = addBoosts(
+      this.config.routeLocalHits && wide ? this.localRouteHits(s, cue) : undefined,
+      // `routeSketch` (D322): the sources whose sketches hold the request's rarer terms, read or trimmed.
+      this.config.routeSketch && wide ? this.sketchRouteHits(s, cue) : undefined,
+    );
     // One deadline for the whole lookup (D140): the on-demand poll, the live search, the planner's cascade and the
     // probes share it. An ask waits for its poll, so a poll and a search with deadlines of their own could hold the
     // reader back twice `sourceTimeoutMs` (a listing that hangs, then the search that follows it).
@@ -3078,6 +3085,13 @@ export class ContextPartner {
     if (routing) this.spans!.close(routing, { sources: ranked.length, local: local?.size ?? 0, syncCalls });
     const byId = sourcesById(all);
     const routed = ranked.map((r) => byId.get(r.sourceId)!).filter(Boolean);
+    // A source routed on evidence (a name it mentioned, the request's words in its items or sketch), not on the prior's
+    // draw alone: what `cardsSourceAware` and `syncEngagedDeep` count as one the user uses.
+    this.engageSources(
+      s,
+      cue,
+      ranked.filter((r) => r.score - 2 * r.sampled > 0).map((r) => r.sourceId),
+    );
     // Only the sources not answered locally are searched live; the local ones answer the same query below.
     const found = local ? routed.filter((x) => !local.has(x.id)) : routed;
     // Serving through the planner only in "serve" mode; in "shadow" the lookup is served as without one.
@@ -3652,8 +3666,57 @@ export class ContextPartner {
   }
 
   /** `cards`: what is new to the cache (looked up or synced) is read for constraints in the background, off-path. */
-  private enqueueCards(scope: Scope, added: ContextItem[]): void {
-    if (this.config.cards && this.deps.cards && added.length > 0) this.deps.cards.enqueue(scope, added);
+  private enqueueCards(scope: Scope, added: ContextItem[], defer?: (item: ContextItem) => boolean): void {
+    if (this.config.cards && this.deps.cards && added.length > 0) this.deps.cards.enqueue(scope, added, defer);
+  }
+
+  /**
+   * `cardsSourceAware` (D320): for a user with more than `SOURCE_AWARE_MIN` synced sources, which synced items wait
+   * unread: those of a source no lookup of the user's has searched that name none of the names the user's requests
+   * named (`mentions`: each item's names, as the source map records them). Undefined (read all) otherwise.
+   */
+  private cardDefer(
+    scope: Scope,
+    items: readonly ContextItem[],
+    mentions: readonly { entities: string[] }[],
+  ): ((item: ContextItem) => boolean) | undefined {
+    const sync = this.sync;
+    if (!this.config.cardsSourceAware || !sync || sync.sourceCount(scope) <= SOURCE_AWARE_MIN) return undefined;
+    const people = sync.peopleOf(scope);
+    const keep = new Set<string>();
+    items.forEach((item, i) => {
+      if (sync.engaged(scope, item.sourceId)) keep.add(item.id);
+      else if (people.size > 0 && mentions[i]!.entities.some((e) => people.has(e.toLowerCase()))) keep.add(item.id);
+    });
+    return (item) => !keep.has(item.id);
+  }
+
+  /**
+   * `cardsSourceAware` (D320), `syncEngagedDeep` (D323): the sources a lookup searched (or answered from the index)
+   * are the user's in use (`Sync.engage`). With `cardsSourceAware`, the first time one is, its held synced items are
+   * read by the card model, and the request's names are noted as the user's people.
+   */
+  private engageSources(s: Session, cue: Cue, searched: readonly string[]): void {
+    const sync = this.sync;
+    const cards = this.config.cardsSourceAware && this.config.cards && this.deps.cards !== undefined;
+    if (!sync || (!cards && !this.config.syncEngagedDeep)) return;
+    if (cards && cue.entities.length > 0) {
+      sync.notePeople(
+        s.scope,
+        cue.entities.map((e) => e.toLowerCase()),
+      );
+    }
+    const fresh = sync.engage(s.scope, searched);
+    if (!cards || fresh.length === 0 || sync.sourceCount(s.scope) <= SOURCE_AWARE_MIN) return;
+    const now = this.now();
+    const held: ContextItem[] = [];
+    for (const id of fresh) {
+      for (const itemId of sync.syncedIds(s.scope, id)) {
+        const item = this.deps.cache.get(s.scope, itemId, now);
+        if (item) held.push(item);
+      }
+    }
+    this.enqueueCards(s.scope, held);
   }
 
   /**
@@ -3708,17 +3771,16 @@ export class ContextPartner {
   }
 
   /** Records the entity mentions of items new to the user's cache or changed (lookups and the sync, D57). */
-  private recordMentions(scope: Scope, added: ContextItem[], parent = 0): void {
+  private recordMentions(
+    scope: Scope,
+    added: ContextItem[],
+    parent = 0,
+    given?: { sourceId: string; entities: string[] }[],
+  ): void {
     if (added.length === 0) return;
     const spans = this.spans;
     const noting = spans?.open("mentions", parent, { items: added.length });
-    const mentions = added.map((item) => ({
-      sourceId: item.sourceId,
-      entities: extractTypedEntities(`${item.title}. ${item.text}`)
-        .filter((e) => PERSISTABLE_KINDS.has(e.kind))
-        .slice(0, 20)
-        .map((e) => e.text),
-    }));
+    const mentions = given ?? mentionsOf(added);
     if (mentions.length > 0) this.deps.sourceMap.recordMentionsMany(scope, mentions, this.now());
     if (noting) spans!.close(noting);
   }
@@ -4139,6 +4201,13 @@ export class ContextPartner {
     if (counts.size === 0) return undefined;
     for (const [id, n] of counts) counts.set(id, Math.log2(1 + n));
     return counts;
+  }
+
+  /** `routeSketch` (D322): each source's match of the request's terms against its vocabulary sketch (no call). */
+  private sketchRouteHits(s: Session, cue: Cue): Map<string, number> | undefined {
+    if (!this.sync) return undefined;
+    const terms = sketchTerms(`${cue.text} ${cue.entities.join(" ")}`).slice(0, MAX_SKETCH_TERMS);
+    return this.sync.sketchScores(s.scope, terms.map(termHashes));
   }
 
   /** The sources whose synced copy is current (`sync`, D57), which answer from the local index; null when none. */
@@ -5264,6 +5333,34 @@ function bulkMail(item: ContextItem): boolean {
   const category = item.meta?.category;
   return (category !== undefined && BULK_CATEGORY.test(category)) || BULK_TITLE.test(item.title);
 }
+
+/** The names each item mentions, as the source map records them (D57): at most 20 an item, persistable kinds. */
+function mentionsOf(items: readonly ContextItem[]): { sourceId: string; entities: string[] }[] {
+  return items.map((item) => ({
+    sourceId: item.sourceId,
+    entities: extractTypedEntities(`${item.title}. ${item.text}`)
+      .filter((e) => PERSISTABLE_KINDS.has(e.kind))
+      .slice(0, 20)
+      .map((e) => e.text),
+  }));
+}
+
+/** `routeSketch`: a request's terms matched against the sources' sketches, at most (its first). */
+const MAX_SKETCH_TERMS = 16;
+
+/** Two routing boosts summed per source; either may be absent. */
+function addBoosts(
+  a: Map<string, number> | undefined,
+  b: Map<string, number> | undefined,
+): Map<string, number> | undefined {
+  if (!a || !b) return a ?? b;
+  const out = new Map(a);
+  for (const [id, x] of b) out.set(id, (out.get(id) ?? 0) + x);
+  return out;
+}
+
+/** `cardsSourceAware` (D320): users with at most this many synced sources have every synced item read, as before. */
+const SOURCE_AWARE_MIN = 32;
 
 /** `routeLocalHits`: the user's best local matches for a request that routing counts per source (D265). */
 const LOCAL_ROUTE_HITS = 40;
