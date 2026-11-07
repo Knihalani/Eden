@@ -28,6 +28,7 @@ describe("trace-report (D279)", () => {
       "eden partner listening on http://127.0.0.1:8790 (dev, no auth)",
       JSON.stringify({ shadow: { sessionId: "s" } }),
       "not json {",
+      JSON.stringify({ decision: "fast", sessionId: "s", latencyMs: 1, itemIds: [] }), // no reason: skipped
       t({}),
       t({ decision: "skipped", reason: "agent_message", sourceCalls: 0, latencyMs: 0 }),
       t({ decision: "sources", reason: "cue:1", itemIds: ["a"], latencyMs: 40, sourceCalls: 2 }),

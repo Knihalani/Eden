@@ -29,7 +29,10 @@ export interface TraceReport {
   /** Events the engine saw (every trace but its own follow-ups: "verify", "reader-late", a sync poll's "skipped"). */
   events: number;
   decisions: Record<string, number>;
-  /** Events after which Eden handed the agent items (a packet, candidates or an answer with citations), each once. */
+  /**
+   * Events after which Eden handed the agent items (a packet, candidates or an answer with citations), each once, by
+   * session id and turn: traces carry no user, so two users sharing a session id and a turn count once.
+   */
   spoke: number;
   /** Lookups that ended with nothing (`silent`), with their reasons. */
   silentReasons: Record<string, number>;
@@ -47,6 +50,7 @@ function isTrace(v: unknown): v is Trace {
   return (
     typeof t.decision === "string" &&
     typeof t.sessionId === "string" &&
+    typeof t.reason === "string" &&
     typeof t.latencyMs === "number" &&
     Array.isArray(t.itemIds)
   );

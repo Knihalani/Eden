@@ -255,7 +255,7 @@ class EdenClient:
                          lambda v: isinstance(v, dict) and isinstance(v.get("decisions"), list))
         return [d for d in (res or {}).get("decisions", [])
                 if isinstance(d, dict) and isinstance(d.get("decision"), str) and isinstance(d.get("why"), str)
-                and isinstance(d.get("itemIds", []), list)]
+                and isinstance(d.get("itemIds"), list)]
 
     def source_changed(self, source_id: str, items: Optional[List[Dict[str, Any]]] = None,
                        removed: Optional[List[str]] = None) -> bool:

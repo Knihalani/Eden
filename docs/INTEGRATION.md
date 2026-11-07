@@ -278,10 +278,16 @@ EDEN_PROXY_UPSTREAM=https://api.openai.com/v1 EDEN_URL=http://127.0.0.1:8790 EDE
   the turn's later model calls (tool loops), and streams the upstream's answer back unchanged. Other routes
   (`/v1/models`, embeddings) pass through.
 - **Identity.** `x-eden-user-id` (else the body's `user`) names the end user; without either, Eden is skipped.
-  `x-eden-session-id` names the conversation; without it the proxy keys it by a hash of its first two messages, so
-  send it if many conversations open identically. Ids pass through `edenId`.
-- **Fails open.** Eden down, slow or refusing: the request goes upstream unchanged. Only an unreachable upstream is an
+  `x-eden-session-id` names the conversation; without it the proxy keys it by a hash of its first non-system
+  message (system prompts may change per request), so send it if many conversations open identically. Ids pass
+  through `edenId`. New messages are found by content, so compacted or sliding histories work; on first sight of a
+  conversation (or after a restart) only its latest user message on is reported.
+- **Fails open.** Eden down, slow or refusing: the request goes upstream unchanged, after at most the wait plus
+  800 ms of Eden's work. Only an unreachable upstream is an
   error (502). The upstream key is forwarded and never logged; only message text goes to Eden, as with the SDK.
+- **Off this machine, set `EDEN_PROXY_KEY`.** The proxy holds your tenant's Eden key and serves whichever user a
+  caller names, so with `PROXY_HOST` beyond loopback it refuses to start without its own key, which callers send as
+  `x-eden-proxy-key`.
 - **Shadow mode, a trial with no risk** (`EDEN_PROXY_SHADOW=1`): the proxy reports every conversation to Eden and
   lets it decide, but forwards each request unchanged and prints one JSON line (user, session, packet count, item ids;
   no text) per request Eden would have changed. Run it on real traffic for a week, then read `bun run trace-report`

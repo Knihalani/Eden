@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { buildPartner, createHandler } from "@eden/server";
 import { StaticSource } from "@eden/sources";
 import { createProxy, eventsOf } from "./proxy";
@@ -30,7 +31,9 @@ const upstream = Bun.serve({
       path: url.pathname,
       auth: req.headers.get("authorization"),
       body,
-      edenHeaders: [...req.headers.keys()].filter((h) => h.startsWith("x-eden-")),
+      edenHeaders: [...req.headers.keys()].filter(
+        (h) => h.startsWith("x-eden-") || h === "proxy-authorization" || h === "x-private",
+      ),
     });
     if (url.pathname === "/v1/models") return Response.json({ data: [{ id: "m" }] });
     if (body?.stream) {
@@ -185,6 +188,129 @@ describe("the proxy (D280)", () => {
     expect(records[0]!.itemIds).toContain("calendar:evt-priya");
     expect(JSON.stringify(records)).not.toContain("Dishoom");
     expect((await explain("u6", "s6")).length).toBeGreaterThan(0);
+  });
+
+  test("a compacted or sliding history still reports its new messages, and never an old one again (review)", async () => {
+    const proxy = proxyFor();
+    const h = { "x-eden-user-id": "u7", "x-eden-session-id": "s7" };
+    const long = Array.from({ length: 6 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", content: `m${i} chat` }));
+    await chat(proxy, { model: "m", messages: long }, h);
+    // Compaction: a summary and a new question replace the history.
+    await chat(
+      proxy,
+      {
+        model: "m",
+        messages: [
+          { role: "system", content: "summary" },
+          { role: "user", content: "NEW Q" },
+        ],
+      },
+      h,
+    );
+    // A sliding window: the oldest dropped, one new pair added.
+    await chat(
+      proxy,
+      {
+        model: "m",
+        messages: [...long.slice(2), { role: "assistant", content: "a" }, { role: "user", content: "LAST Q" }],
+      },
+      h,
+    );
+    const users = (await explain("u7", "s7")).filter((d) => d.event === "user_message");
+    // First sight reports from the latest user message only (m4); then NEW Q and LAST Q; m0..m4 never again.
+    expect(users.length).toBe(3);
+  });
+
+  test("two users with one session id keep separate state; the opening keys a conversation (isolation)", async () => {
+    const proxy = proxyFor();
+    const q = [{ role: "user", content: "What time is lunch with Priya Raman?" }];
+    await chat(proxy, { model: "m", messages: q }, { "x-eden-user-id": "u8", "x-eden-session-id": "same" });
+    await chat(proxy, { model: "m", messages: q }, { "x-eden-user-id": "u9", "x-eden-session-id": "same" });
+    expect((await explain("u8", "same")).filter((d) => d.event === "user_message").length).toBe(1);
+    expect((await explain("u9", "same")).filter((d) => d.event === "user_message").length).toBe(1);
+    // No session header: a changing system prompt keeps the key; a different first question is another conversation.
+    const sys = (d: string) => ({ role: "system", content: `Today is ${d}.` });
+    await chat(proxy, { model: "m", user: "u10", messages: [sys("Mon"), ...q] });
+    await chat(proxy, {
+      model: "m",
+      user: "u10",
+      messages: [sys("Tue"), ...q, { role: "assistant", content: "12:30" }],
+    });
+    const keyed = `c:${createHash("sha256").update(`user:${q[0]!.content}`).digest("hex").slice(0, 32)}`;
+    expect((await explain("u10", keyed)).filter((d) => d.event === "user_message").length).toBe(1);
+  });
+
+  test("conversations past maxSessions are dropped, least recent first", async () => {
+    const proxy = createProxy({
+      upstream: `${upstream.url.href}v1`,
+      edenUrl: eden.url.href,
+      edenApiKey: KEY,
+      waitMs: 500,
+      maxSessions: 1,
+    });
+    const h = (s: string) => ({ "x-eden-user-id": "u11", "x-eden-session-id": s });
+    const q = [
+      { role: "user", content: "hello there" },
+      { role: "assistant", content: "hi" },
+    ];
+    await chat(proxy, { model: "m", messages: q }, h("a"));
+    await chat(proxy, { model: "m", messages: q }, h("b"));
+    // "a" was evicted: on its next request it is new again, so only from its latest user message on is reported.
+    await chat(proxy, { model: "m", messages: [...q, { role: "user", content: "again" }] }, h("a"));
+    expect((await explain("u11", "a")).filter((d) => d.event === "user_message").length).toBe(2);
+  });
+
+  test("a slow Eden holds a request at most its wait plus 800 ms, however many messages are new (D14)", async () => {
+    const slow = Bun.serve({
+      port: 0,
+      fetch: async () => {
+        await Bun.sleep(700);
+        return Response.json({ injection: null, pending: false, injections: [] });
+      },
+    });
+    try {
+      const proxy = createProxy({ upstream: `${upstream.url.href}v1`, edenUrl: slow.url.href, waitMs: 200 });
+      const h = { "x-eden-user-id": "u12", "x-eden-session-id": "s12" };
+      await chat(proxy, { model: "m", messages: [{ role: "user", content: "first" }] }, h);
+      const many = Array.from({ length: 12 }, (_, i) => ({ role: i % 2 ? "user" : "assistant", content: `n${i}` }));
+      const t0 = performance.now();
+      const res = await chat(proxy, { model: "m", messages: [{ role: "user", content: "first" }, ...many] }, h);
+      expect(res.status).toBe(200);
+      expect(performance.now() - t0).toBeLessThan(200 + 800 + 400);
+    } finally {
+      slow.stop(true);
+    }
+  });
+
+  test("proxyKey: callers without it get a 401 and reach nothing", async () => {
+    const proxy = createProxy({
+      upstream: `${upstream.url.href}v1`,
+      edenUrl: eden.url.href,
+      edenApiKey: KEY,
+      proxyKey: "p_0123456789abcdef",
+    });
+    const body = { model: "m", messages: [{ role: "user", content: "hi" }], user: "u13" };
+    seen.length = 0;
+    expect((await chat(proxy, body)).status).toBe(401);
+    expect(seen.length).toBe(0);
+    expect((await chat(proxy, body, { "x-eden-proxy-key": "p_0123456789abcdef" })).status).toBe(200);
+    expect(seen.at(-1)!.edenHeaders).toEqual([]);
+  });
+
+  test("hop-by-hop headers and those Connection names are not forwarded", async () => {
+    const proxy = proxyFor();
+    seen.length = 0;
+    await chat(
+      proxy,
+      { model: "m", messages: [{ role: "user", content: "hi" }] },
+      {
+        "proxy-authorization": "Basic secret",
+        connection: "x-private",
+        "x-private": "1",
+      },
+    );
+    expect(seen.at(-1)!.auth).toBe("Bearer sk-upstream");
+    expect(seen.at(-1)!.edenHeaders).toEqual([]);
   });
 
   test("an unreachable upstream is a 502 with an OpenAI-shaped error", async () => {

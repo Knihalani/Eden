@@ -456,9 +456,18 @@ event's start (`startMs`) and the order of a day's events (`ItemCache.timed`, un
 it. Tests run with TZ=UTC (`scripts/test-preload.ts`);
 `tz.test.ts` checks the same answers under Asia/Tokyo and America/Los_Angeles.
 
+## The proxy (D280)
+
+`@eden/proxy` (`bun run proxy`) is an OpenAI-compatible endpoint in front of the agent's model for agents that cannot
+add the SDK: it turns each chat request's new messages (by content, so compacted and sliding histories work) into
+events through `@eden/client`, inserts the turn's packets with `withContext`, and streams the upstream's answer back.
+It fails open under one deadline per request (the observe's wait plus 800 ms), keeps per-conversation state in memory
+(bounded, keyed by user and session), and off loopback needs its own key (`EDEN_PROXY_KEY`), since it holds the
+tenant's. A shadow mode reports and decides but injects nothing.
+
 ## What is deliberately missing (see ROADMAP.md)
 
 Per-user MCP connections with OAuth and a token vault; persistent session state;
-streaming delivery; the OpenAI-compatible injecting proxy; a richer graph (entity resolution, relations, freshness);
+streaming delivery; a richer graph (entity resolution, relations, freshness);
 learned situation classification; per-agent (not just per-user) learning; multi-machine deployment (the router,
 D163, spreads users over processes on one machine; the caps it splits are per process, not shared).

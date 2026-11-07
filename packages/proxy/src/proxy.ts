@@ -10,12 +10,13 @@
  *
  * Fails open (D14): with Eden down, slow or refusing, the request goes upstream as it came. Identity: the
  * `x-eden-user-id` header, else the body's OpenAI `user` field; the conversation is `x-eden-session-id`, else a hash
- * of the conversation's first messages (stable as it grows). Ids pass through `edenId`. No user id: no Eden.
+ * of its first message that is not a system prompt (stable as it grows). Ids pass through `edenId`. No user id: no
+ * Eden. With `proxyKey`, every caller must send it (`x-eden-proxy-key`). One deadline bounds Eden's work per request.
  * The upstream key (`Authorization`) is forwarded and never logged; only the message text goes to Eden, as with the
  * SDK. Eden's `ask_context` is not added: give the agent the MCP tool for that (docs/INTEGRATION.md).
  */
 import { createHash } from "node:crypto";
-import { EdenClient, edenId, withContext } from "@eden/client";
+import { DEFAULT_WAIT_MS, EdenClient, edenId, withContext } from "@eden/client";
 import type { Injection } from "@eden/protocol";
 
 export interface ProxyOptions {
@@ -26,6 +27,11 @@ export interface ProxyOptions {
   edenApiKey?: string;
   /** How long a user message's observe may wait for Eden's lookup (ms); the client's default, 3,000. */
   waitMs?: number;
+  /**
+   * A secret callers must send as `x-eden-proxy-key`. The proxy holds the tenant's Eden key and trusts the user id a
+   * caller names, so anything beyond this machine must not reach it without one (`main.ts` refuses to start so).
+   */
+  proxyKey?: string;
   /** Conversations remembered (which messages were reported, the turn's packets); least recent dropped. */
   maxSessions?: number;
   /**
@@ -49,13 +55,36 @@ interface Message {
 }
 
 interface Conversation {
-  /** Messages already reported to Eden (a prefix of the history). */
-  reported: number;
-  /** The packets Eden gave since the latest user message, re-inserted on every call of the turn. */
+  /**
+   * What was already reported, by content: per message hash, how many copies of it were seen in one request. A
+   * message is new when the request holds more copies of it than were seen, so a history that is compacted or slides
+   * (old messages dropped, a summary added) still reports its new messages, and never an old one again.
+   */
+  seen: Map<string, number>;
+  /** Bumped by every request with a new user message; Eden's answers for an older turn are dropped. */
+  turn: number;
+  /** The packets Eden gave in the current turn, re-inserted on every call of the turn. */
   packets: Injection[];
 }
 
-const HOP_BY_HOP = ["host", "connection", "content-length", "accept-encoding", "transfer-encoding"];
+/** Message hashes kept per conversation; the oldest go first (their messages may then be reported again). */
+const MAX_SEEN = 2_000;
+/** Beyond the observe's wait: the most Eden's work may add to a request before it goes upstream regardless (ms). */
+const EDEN_SLACK_MS = 800;
+
+const HOP_BY_HOP = [
+  "host",
+  "connection",
+  "keep-alive",
+  "te",
+  "trailer",
+  "upgrade",
+  "proxy-authorization",
+  "proxy-connection",
+  "content-length",
+  "accept-encoding",
+  "transfer-encoding",
+];
 const DROP_FROM_UPSTREAM = ["content-encoding", "content-length", "transfer-encoding", "connection"];
 
 /** The text of an OpenAI message's content (a string, or text parts); images and other parts are left out. */
@@ -68,6 +97,15 @@ export function textOf(content: unknown): string {
     )
     .filter((t): t is string => typeof t === "string" && t.length > 0)
     .join("\n");
+}
+
+/** A message's identity for "already reported": role, text, tool call ids and calls. */
+function hashOf(m: Message): string {
+  const calls = Array.isArray(m.tool_calls) ? JSON.stringify(m.tool_calls) : "";
+  const id = typeof m.tool_call_id === "string" ? m.tool_call_id : "";
+  return createHash("sha256")
+    .update(`${String(m.role)}\u0000${textOf(m.content)}\u0000${id}\u0000${calls}`)
+    .digest("hex");
 }
 
 type EventInput = Parameters<EdenClient["observe"]>[0];
@@ -116,6 +154,8 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
 
   const forward = (req: Request, path: string, body: string | ArrayBuffer | null): Promise<Response> => {
     const headers = new Headers(req.headers);
+    // Headers the client's own Connection header names are for this hop only, like the fixed list.
+    for (const h of (req.headers.get("connection") ?? "").split(",")) if (h.trim()) headers.delete(h.trim());
     for (const h of HOP_BY_HOP) headers.delete(h);
     for (const h of [...headers.keys()]) if (h.startsWith("x-eden-")) headers.delete(h);
     return doFetch(`${upstream}${path}`, { method: req.method, headers, body }).then((res) => {
@@ -132,19 +172,45 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     const rawUser = req.headers.get("x-eden-user-id") ?? (typeof body.user === "string" ? body.user : "");
     if (!rawUser) return null;
     const userId = edenId(rawUser);
-    // The conversation: the caller's id, else its opening (system prompt and first user message), stable as it grows.
+    // The conversation: the caller's id, else its first message that is not a system prompt (a system prompt may
+    // carry today's date and change every request), stable as the conversation grows.
     const rawSession = req.headers.get("x-eden-session-id");
-    const opening = messages.slice(0, 2).map((m: Message) => `${String(m.role)}:${textOf(m.content)}`);
+    const first = (messages as Message[]).find((m) => m.role !== "system" && m.role !== "developer");
+    const opening = first ? `${String(first.role)}:${textOf(first.content)}` : "";
     const sessionId = rawSession
       ? edenId(rawSession)
-      : `c:${createHash("sha256").update(JSON.stringify(opening)).digest("hex").slice(0, 32)}`;
+      : `c:${createHash("sha256").update(opening).digest("hex").slice(0, 32)}`;
     const key = `${userId}#${sessionId}`;
-    const conv = conversations.get(key) ?? { reported: 0, packets: [] };
+    const known = conversations.get(key);
+    const conv: Conversation = known ?? { seen: new Map(), turn: 0, packets: [] };
     conversations.delete(key);
     conversations.set(key, conv);
     if (conversations.size > maxSessions) conversations.delete(conversations.keys().next().value!);
-    // A history that shrank (edited, truncated) reports nothing old again: only what lies past it is new.
-    if (conv.reported > messages.length) conv.reported = messages.length;
+
+    // Which messages are new, by content (see `Conversation.seen`). On first sight of a conversation (a restart, an
+    // eviction) only the latest user message and what follows it are reported: a long history is not replayed.
+    const tools = new Map<string, string>();
+    const copies = new Map<string, number>();
+    const fresh: Message[] = [];
+    const lastUserAt = (messages as Message[]).map((m) => m.role).lastIndexOf("user");
+    for (const [i, m] of (messages as Message[]).entries()) {
+      eventsOf(m, tools); // tool names, for the results that follow
+      const h = hashOf(m);
+      const k = (copies.get(h) ?? 0) + 1;
+      copies.set(h, k);
+      if (k > (conv.seen.get(h) ?? 0)) {
+        conv.seen.delete(h);
+        conv.seen.set(h, k);
+        if (known || i >= lastUserAt) fresh.push(m);
+      }
+    }
+    while (conv.seen.size > MAX_SEEN) conv.seen.delete(conv.seen.keys().next().value!);
+    const lastUser = fresh.map((m) => m.role).lastIndexOf("user");
+    if (lastUser >= 0) {
+      conv.turn++;
+      conv.packets = [];
+    }
+    const turn = conv.turn;
     const eden = new EdenClient({
       baseUrl: options.edenUrl,
       ...(options.edenApiKey ? { apiKey: options.edenApiKey } : {}),
@@ -153,38 +219,51 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       onError: report,
       ...(options.waitMs !== undefined ? { defaultWaitMs: options.waitMs } : {}),
     });
-    const tools = new Map<string, string>();
-    for (const m of messages.slice(0, conv.reported) as Message[]) eventsOf(m, tools);
-    const fresh = messages.slice(conv.reported) as Message[];
-    conv.reported = messages.length;
-    const got: Injection[] = [];
-    const lastUser = fresh.map((m) => m.role).lastIndexOf("user");
-    if (lastUser >= 0) conv.packets = [];
-    for (const [i, m] of fresh.entries()) {
-      for (const ev of eventsOf(m, tools)) {
-        // Only the latest user message waits for its lookup; older new messages are reported without a wait.
-        const waiting = ev.kind === "user_message" && i === lastUser;
-        const { injection } = await eden.observe(ev, waiting ? {} : { waitMs: 0 });
-        if (injection) got.push(injection);
+    const keep = (got: Injection[]) => {
+      // A newer turn started meanwhile (a concurrent request): this turn's packets are not carried into it.
+      if (conv.turn !== turn) return;
+      const ids = new Set(conv.packets.map((p) => p.id));
+      for (const p of got) if (!ids.has(p.id)) conv.packets.push(p);
+    };
+    const work = (async () => {
+      const tool = new Map(tools);
+      for (const [i, m] of fresh.entries()) {
+        for (const ev of eventsOf(m, tool)) {
+          // Only the latest user message waits for its lookup; the others are reported without a wait.
+          const waiting = ev.kind === "user_message" && i === lastUser;
+          const { injection } = await eden.observe(ev, waiting ? {} : { waitMs: 0 });
+          if (injection) keep([injection]);
+        }
       }
-    }
-    got.push(...(await eden.pending()));
-    const seen = new Set(conv.packets.map((p) => p.id));
-    for (const p of got) if (!seen.has(p.id)) conv.packets.push(p);
-    if (conv.packets.length === 0) return null;
+      keep(await eden.pending());
+    })().catch(report);
+    // One deadline for all of Eden's work in this request: past it the request goes upstream with what is in hand,
+    // and what lands later stays for the turn's next model call (D14: a slow Eden never holds the agent long).
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const budget = (options.waitMs ?? DEFAULT_WAIT_MS) + EDEN_SLACK_MS;
+    await Promise.race([work, new Promise((r) => (timer = setTimeout(r, budget)))]);
+    clearTimeout(timer);
+    const packets = [...conv.packets];
+    if (packets.length === 0) return null;
     if (options.shadow) {
-      const itemIds = conv.packets.flatMap((p) => p.citations.map((c) => c.itemId));
+      const itemIds = packets.flatMap((p) => p.citations.map((c) => c.itemId));
       try {
-        options.onShadow?.({ userId, sessionId, packets: conv.packets.length, itemIds });
+        options.onShadow?.({ userId, sessionId, packets: packets.length, itemIds });
       } catch {
         // A broken sink never breaks the agent's call.
       }
       return null;
     }
-    return withContext(messages as { role: string; content: unknown }[], conv.packets);
+    return withContext(messages as { role: string; content: unknown }[], packets);
   };
 
+  const openAiError = (status: number, message: string) => Response.json({ error: { message } }, { status });
+
   return async function handle(req: Request): Promise<Response> {
+    // The proxy holds the tenant's Eden key: with `proxyKey` set, only callers who know it may name a user (D9).
+    if (options.proxyKey !== undefined && req.headers.get("x-eden-proxy-key") !== options.proxyKey) {
+      return openAiError(401, "eden proxy: missing or wrong x-eden-proxy-key");
+    }
     const url = new URL(req.url);
     const path = url.pathname.replace(/^\/v1(?=\/|$)/, "") + url.search;
     if (req.method !== "POST" || !url.pathname.endsWith("/chat/completions")) {
@@ -192,10 +271,15 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
         return await forward(req, path, req.method === "GET" || req.method === "HEAD" ? null : await req.arrayBuffer());
       } catch (e) {
         report(e);
-        return Response.json({ error: { message: "eden proxy: upstream unreachable" } }, { status: 502 });
+        return openAiError(502, "eden proxy: upstream unreachable");
       }
     }
-    const raw = await req.text();
+    let raw: string;
+    try {
+      raw = await req.text();
+    } catch {
+      return openAiError(400, "eden proxy: the request body could not be read");
+    }
     let sent = raw;
     let body: unknown = null;
     try {
@@ -216,7 +300,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       return await forward(req, path, sent);
     } catch (e) {
       report(e);
-      return Response.json({ error: { message: "eden proxy: upstream unreachable" } }, { status: 502 });
+      return openAiError(502, "eden proxy: upstream unreachable");
     }
   };
 }

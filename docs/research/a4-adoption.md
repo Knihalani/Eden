@@ -1,7 +1,8 @@
 # A4: why a team would not adopt Eden, and what was fixed (2026-11-07)
 
 Session A4 of the afternoon audit ([audit-1107-plan.md](audit-1107-plan.md)), decisions D276–D280. Branch
-`claude/a4-adoption` from `claude/lucid-hypatia-v9wqk5` (c7cfc8fc9). Spend: about $0.0003 (one live check of the proxy on Anthropic Haiku; everything else $0).
+`claude/a4-adoption` from `claude/lucid-hypatia-v9wqk5` (c7cfc8fc9). Spend: about $0.0005 (three Haiku calls checking the proxy live through Anthropic's OpenAI-compatible endpoint: 677
+input and 772 output tokens at `pricing.ts`'s rates; everything else $0).
 
 ## In plain words
 
@@ -65,7 +66,10 @@ Recommended next: D, then C (D shows value in five minutes; C proves it on their
 - **D279** (`packages/server/src/trace-report.ts`, `bun run trace-report`): tests on synthetic and real traces.
 - **D280** (`Dockerfile`, `.dockerignore`, README, `package.json`, `main.ts` warning): built and run in Docker here.
   `packages/proxy` (`createProxy`, `bun run proxy`, shadow mode): 8 tests with a fake upstream and the real handler;
-  one live run through Anthropic's OpenAI-compatible endpoint (Haiku 5.5, about $0.0003).
+  live runs through Anthropic's OpenAI-compatible endpoint (Haiku 5.5), before and after the review's rework; both
+  replies named the mail constraint only the candidates packet carried. A second review's 12 findings (shrinking
+  histories, a per-request deadline, proxy auth, keying, hop-by-hop headers, trace-report and parity nits) are fixed
+  and tested (14 proxy tests).
 - Walked as a newcomer: README block run as written; `examples/personal-agent/agent.ts` offline; MCP stdio
   `initialize`, `tools/list`, `tools/call`; the server with and without `OPENROUTER_API_KEY` (no paid call was made:
   no request was sent while a key was set).

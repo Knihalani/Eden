@@ -130,7 +130,8 @@ class Calls(unittest.TestCase):
                 "/v1/pending": {"injections": [INJ, {"id": 1}]},
                 "/v1/ask": {"answer": "a", "citations": []},
                 "/v1/whoami": {"ok": True},
-                "/v1/explain": {"decisions": [{"decision": "silent", "why": "w"}, {"why": 1}]},
+                "/v1/explain": {"decisions": [{"decision": "silent", "why": "w", "itemIds": []}, {"why": 1},
+                                              {"decision": "silent", "why": "w"}]},
                 "/v1/sources/items": {"ok": True, "stored": 2},
                 "/v1/sources/changed": {"ok": True, "synced": False, "reason": "not-synced"},
             }.get(route, {"ok": True})
@@ -152,7 +153,7 @@ class Calls(unittest.TestCase):
             self.assertEqual(c.ask("q", max_items=3)["answer"], "a")
             self.assertEqual(stub.seen[-1][1]["maxItems"], 3)
             self.assertEqual(c.health(), {"ok": True})
-            self.assertEqual(c.explain(), [{"decision": "silent", "why": "w"}])
+            self.assertEqual(c.explain(), [{"decision": "silent", "why": "w", "itemIds": []}])
             self.assertEqual(c.source_notice("mail"), {"synced": False, "reason": "not-synced"})
             self.assertTrue(c.source_changed("mail", items=[{"ref": str(i), "text": "t"} for i in range(150)]))
             sent = [b for p, b, _ in stub.seen if p == "/v1/sources/items"]
