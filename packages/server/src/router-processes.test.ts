@@ -92,7 +92,13 @@ describe("router rate limit, divided", () => {
     "past the tenant's whole rate the router answers 429 before reading the body, as one process does",
     async () => {
       const dir = tempDir("eden-router-over-");
-      const env = { ...process.env, EDEN_HOME: dir, EDEN_API_KEYS: keys, EDEN_TENANT_RPS: "0.01", EDEN_TENANT_BURST: "2" };
+      const env = {
+        ...process.env,
+        EDEN_HOME: dir,
+        EDEN_API_KEYS: keys,
+        EDEN_TENANT_RPS: "0.01",
+        EDEN_TENANT_BURST: "2",
+      };
       const config = { ...loadConfig(env), port: 0, processes: 2 };
       const router = await startRouter({ config, env, log: () => {}, onOutput: () => {} });
       try {
@@ -114,7 +120,9 @@ describe("router rate limit, divided", () => {
             port: router.port,
             socket: {
               open(s) {
-                s.write(`POST /v1/whoami HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer ${KEY}\r\nContent-Length: 64\r\n\r\n`);
+                s.write(
+                  `POST /v1/whoami HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer ${KEY}\r\nContent-Length: 64\r\n\r\n`,
+                );
               },
               data(s, d) {
                 got += new TextDecoder().decode(d);

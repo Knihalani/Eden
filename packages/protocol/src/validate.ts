@@ -85,8 +85,10 @@ export function bodyShapeUnder(bytes: Uint8Array): boolean {
   for (let i = 0; i < bytes.length; i++) {
     const c = bytes[i]!;
     if (inString) {
-      if (c === 0x5c) i++; // A backslash escapes the next byte (a quote among them); UTF-8 never puts 0x22 or 0x5c in
-      else if (c === 0x22) inString = false; // a multi-byte character, so a byte scan cannot misread one.
+      // A backslash escapes the next byte (a quote among them). UTF-8 never puts 0x22 or 0x5c inside a multi-byte
+      // character, so a byte scan cannot misread one.
+      if (c === 0x5c) i++;
+      else if (c === 0x22) inString = false;
       continue;
     }
     if (c === 0x22) inString = true;

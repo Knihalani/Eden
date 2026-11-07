@@ -259,7 +259,7 @@ describe("request body size (D100)", () => {
     }
     expect(observed.length).toBe(0);
     // A long text is no structure: the largest valid event (a 1,000,000-unit text field) is still served.
-    const text = JSON.stringify({ ...who, kind: "user_message", text: `Globex renewal ${"[\\\"{,".repeat(160_000)}` });
+    const text = JSON.stringify({ ...who, kind: "user_message", text: `Globex renewal ${'[\\"{,'.repeat(160_000)}` });
     expect((await send(h, text)).status).toBe(200);
     expect(observed.length).toBe(1);
   });
