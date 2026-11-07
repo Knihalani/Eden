@@ -146,6 +146,16 @@ export const AHEAD_LEAD =
   `${EDEN_NOTE}records from the user's sources about who and what this request names (the newest record for each ` +
   "person or firm named, and the calendar of the day it names), for reference; nothing has checked them against it.";
 
+/**
+ * `planConflict` (A9): the framing line of a packet about an earlier request; the request's own words follow, quoted.
+ * Like the candidates' lead, it asks the agent to check before using an item, and to say nothing of one that does not
+ * bear on that request.
+ */
+export const PLAN_LEAD =
+  `${EDEN_NOTE}new in the user's sources since an earlier request in this conversation, and may bear on it; nothing ` +
+  "has checked it against that request. If it is about the same person, thing and date and changes what was done or " +
+  "planned, tell the user; if not, ignore it and do not mention it. The earlier request:";
+
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";
 const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;
