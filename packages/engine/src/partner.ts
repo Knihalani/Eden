@@ -1589,7 +1589,8 @@ export class ContextPartner {
       // A packet still queued for the agent whose every item this answer says in full is not handed out again; one it
       // covers only in part stays queued (its other items are news). Removed, never `withdraw`n: the agent now has
       // each of its items, so what its delivery marked stands.
-      const cited = new Set(items.map((i) => i.id));
+      // Only what the answer's text rendered: an item its size cap cut was not said (audit A5).
+      const cited = new Set(items.slice(0, renderedCount(items, injection.text)).map((i) => i.id));
       for (let k = s.pending.length - 1; k >= 0; k--) {
         const queued = s.pending[k]!.citations;
         // An "updated:" packet goes only when the answer rendered its items' new version (`watchCopies`, D205): an
