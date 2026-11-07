@@ -11,7 +11,9 @@
  *     --spend-ledger .local/ledger.jsonl --spend-cap 4 --spend-headroom 0.3 --run-label cold [--out cold.json]
  *
  * Each user is a hidden-variant world of a train suite (`worldOf`, as pi-ab builds it), its connectors the realistic
- * profile at time scale 0. One user at a time, so each user's calls and dollars are its own.
+ * profile at time scale 0. One user at a time, so each user's calls and dollars are its own. `user:SEED` is instead
+ * the long-horizon user `pi-ab --days` builds for that seed (pi-user.ts, over `--suite`, default train, with `--days`,
+ * `--day-size` and `--mix` as pi-ab takes them): the one-time backfill `pi-cost-report.ts --lifetime` books for it.
  *
  * `--set JSON`: engine settings over the default (e.g. `{"cardsLeanDays":30}`, CL3's comparison with D244). The
  * deleted trial `cardsBatch` (D242) added `--bulk` here: commit 4e072585.
@@ -23,6 +25,8 @@ import { buildPartner } from "@eden/server";
 import { REALISTIC, simSources } from "../sources";
 import { worldOf } from "./ab-common";
 import { parseJson } from "./flags";
+import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf } from "./pi-user";
+import { parseSuites } from "./suites";
 import { labAccess, labModel } from "./free";
 import { warmAll } from "../server";
 
@@ -43,6 +47,16 @@ const OUT = opt("out", "");
 // Checked as the servers check EDEN_ENGINE_CONFIG: an unknown key (a deleted trial's), a wrong type or an out-of-range
 // value stops the run, rather than running the default under the setting's name. Cards are wired, the reader is not.
 const SET = checkEngineConfig(parseJson(opt("set", "{}"), "--set"), { where: "--set", deps: { cards: true } });
+/** `user:SEED`'s world, as `pi-ab --days` plans it. */
+const userWorld = (seed: number) => {
+  const suites = parseSuites(opt("suite", "train"));
+  const plan = planUser(seed, suiteTemplates(seed, suites), {
+    days: Number(opt("days", "8")),
+    size: parseDaySize(opt("day-size", "12-20")),
+    mix: parseMix(opt("mix", "1:1:8")),
+  });
+  return userWorldOf(seed, plan).world;
+};
 const ACCESS = labAccess(args, [MODEL]);
 
 interface Row {
@@ -54,7 +68,8 @@ interface Row {
 }
 const rows: Row[] = [];
 for (const { suite, seed } of USERS) {
-  const { world } = worldOf(seed, suite, "hidden", { maxTasks: 30, maxOffworld: 5 });
+  const world =
+    suite === "user" ? userWorld(seed) : worldOf(seed, suite, "hidden", { maxTasks: 30, maxOffworld: 5 }).world;
   const sources = simSources(world, REALISTIC, 0, seed);
   let calls = 0;
   let usd = 0;
@@ -103,6 +118,7 @@ for (const { suite, seed } of USERS) {
   const synced = sources.reduce((n, s) => n + s.listAll().length, 0);
   const row = {
     user: `${suite}:${seed}`,
+    seed,
     itemsAtSources: synced,
     syncTicks: warm.ticks,
     syncCalls: warm.calls,
