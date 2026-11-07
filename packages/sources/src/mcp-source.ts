@@ -378,12 +378,12 @@ export function nextCursorOf(content: unknown, structured?: unknown): string | n
 export function toItems(sourceId: string, content: unknown, limit: number, structured?: unknown): ContextItem[] {
   const out: ContextItem[] = [];
   const fromStructured = structured === undefined ? null : rowsOf(structured, 0);
-  if (fromStructured) {
-    for (const row of fromStructured) out.push(rowItem(sourceId, row));
-    return out.slice(0, limit);
-  }
+  // Only the rows kept are mapped: a row with no id is hashed and stringified, ~2 µs each, so a 100,000-row reply
+  // cost ~200 ms for a search keeping 10.
+  if (fromStructured) return fromStructured.slice(0, limit).map((row) => rowItem(sourceId, row));
   const blocks = Array.isArray(content) ? (content as Block[]) : [];
   for (const block of blocks) {
+    if (out.length >= limit) break;
     if (block.type !== "text" || !block.text) continue;
     const parsed = parseJson(block.text);
     if (parsed === undefined) {
@@ -392,7 +392,10 @@ export function toItems(sourceId: string, content: unknown, limit: number, struc
       continue;
     }
     // JSON with no rows in it (`[]`, `{"totalFound": 0, "messages": []}`, `{}`) is an empty result.
-    for (const row of rowsOf(parsed, 0) ?? []) out.push(rowItem(sourceId, row));
+    for (const row of rowsOf(parsed, 0) ?? []) {
+      if (out.length >= limit) break;
+      out.push(rowItem(sourceId, row));
+    }
   }
   return out.slice(0, limit);
 }

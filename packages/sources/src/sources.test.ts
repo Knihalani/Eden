@@ -34,6 +34,22 @@ describe("toItems", () => {
     expect(items[1]).toMatchObject({ text: "plain note" });
     expect(items[1]!.ref).toMatch(/^eden-h-[0-9a-f]{16}$/);
   });
+
+  test("maps only the rows it keeps", () => {
+    // A reply of 100,000 rows with no ids cost ~200 ms of hashing and JSON.stringify for a search keeping 10.
+    let read = 0;
+    const row = (i: number) => ({
+      get title() {
+        read++;
+        return `row ${i}`;
+      },
+    });
+    const rows = Array.from({ length: 50 }, (_, i) => row(i));
+    expect(toItems("s", [], 3, { results: rows }).map((i) => i.title)).toEqual(["row 0", "row 1", "row 2"]);
+    expect(read).toBeLessThanOrEqual(3 * 4);
+    const blocks = [0, 1, 2].map((b) => ({ type: "text", text: JSON.stringify([{ id: `${b}a` }, { id: `${b}b` }]) }));
+    expect(toItems("s", blocks, 3).map((i) => i.ref)).toEqual(["0a", "0b", "1a"]);
+  });
 });
 
 describe("searchSources", () => {
