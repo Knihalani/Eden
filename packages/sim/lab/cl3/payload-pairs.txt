@@ -1,0 +1,12 @@
+signals  hidden   n=64 rate 0.641 wall p50 4.64 mean 4.97 $/1k agent+eden 0.580 conn 6.33 = list 3.34 fetch 2.84 search 0.14 asks 0.47
+payload  hidden   n=64 rate 0.672 wall p50 3.74 mean 3.92 $/1k agent+eden 0.566 conn 0.56 = list 0.56 fetch 0.00 search 0.00 asks 0.42
+  payload - signals hidden raised +0.031 (-0.125..+0.188)
+  payload - signals hidden wall -1.043 (-1.486..-0.621)
+  payload - signals hidden usd -0.014 (-0.051..+0.022)
+  payload - signals hidden conn -5.766 (-6.531..-5.078)
+signals  control  n=64 rate 0.000 wall p50 5.58 mean 5.42 $/1k agent+eden 0.620 conn 6.91 = list 3.34 fetch 3.28 search 0.28 asks 0.84
+payload  control  n=64 rate 0.000 wall p50 4.38 mean 4.46 $/1k agent+eden 0.638 conn 0.56 = list 0.56 fetch 0.00 search 0.00 asks 0.95
+  payload - signals control raised +0.000 (+0.000..+0.000)
+  payload - signals control wall -0.963 (-1.413..-0.507)
+  payload - signals control usd +0.017 (-0.029..+0.063)
+  payload - signals control conn -6.344 (-7.156..-5.531)
