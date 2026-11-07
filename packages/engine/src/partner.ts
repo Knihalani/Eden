@@ -664,11 +664,7 @@ export class ContextPartner {
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
     // not cut at `askReaderWaitMs` (that bounds an explicit ask): a reading that lands later is still queued, while its
     // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
-    const internal: { push: true; request?: number; weak?: () => void } = { push: true };
-    // `readerPushWeakNoWait` (trial, D191): the push says when its pool falls below the evidence bar, and the observe
-    // stops waiting for it then; the reading runs on and its packet is queued for the next model request.
-    let weak: Promise<void> | null = null;
-    if (this.config.readerPushWeakNoWait) weak = new Promise<void>((resolve) => (internal.weak = resolve));
+    const internal: { push: true; request?: number } = { push: true };
     const push =
       this.config.readerPush &&
       this.config.askReader &&
@@ -693,7 +689,7 @@ export class ContextPartner {
     const left = Math.min(options.waitMs ?? 0, this.config.readerPushWaitMs) - (performance.now() - t0);
     if (left > 0) {
       let timer: ReturnType<typeof setTimeout> | undefined;
-      await Promise.race([push, ...(weak ? [weak] : []), new Promise((r) => (timer = setTimeout(r, left)))]);
+      await Promise.race([push, new Promise((r) => (timer = setTimeout(r, left)))]);
       clearTimeout(timer);
     }
     // A push still running, or one that queued its packet, is pending work the integration should poll for.
@@ -1321,8 +1317,6 @@ export class ContextPartner {
             internal.push ? Infinity : this.config.askReaderWaitMs,
             {
               push: internal.push === true,
-              intents,
-              ...(internal.weak ? { weak: internal.weak } : {}),
               ...(internal.request !== undefined ? { request: internal.request } : {}),
             },
           )
@@ -1581,10 +1575,6 @@ export class ContextPartner {
       report("gated");
       return null;
     }
-    // `readerPushWeakNoWait` (trial, D191): a push whose pool is weak stops the observe's wait; it still reads.
-    if (opts.push === true && this.config.readerPushWeakNoWait && !this.evidenceClears(pool, cards, opts.intents)) {
-      opts.weak?.();
-    }
     // `readerReuse` (trial, D193): an ask in the push's request reads the push's verdict, with no call of its own.
     const reuseAt = performance.now();
     const reused = opts.push ? null : await this.reusePush(s, pool, main, waitMs);
@@ -1730,26 +1720,6 @@ export class ContextPartner {
     }
     const text = `${x.item.title}. ${x.item.text}`.toLowerCase();
     return mayConstrain(text) || (this.config.readerGateVisits && arrangedVisit(text));
-  }
-
-  /**
-   * `readerPushWeakNoWait`'s bar (trial, D191): one of the pool's first `readerWeakTop` candidates, not bulk mail, is an
-   * anchored intent hit with enough of the request in its requests, or is constraint-like with a high enough no-model
-   * score. No model, no call.
-   */
-  private evidenceClears(
-    pool: readonly Scored[],
-    cards: ReadonlyMap<string, Card>,
-    intents: ReadonlyMap<string, IntentFind> | undefined,
-  ): boolean {
-    const c = this.config;
-    for (const x of pool.slice(0, c.readerWeakTop)) {
-      if (bulkMail(x.item)) continue;
-      const f = intents?.get(x.item.id);
-      if (f && f.coverage >= c.readerWeakCoverage && f.matched >= c.readerWeakMatched) return true;
-      if (x.score >= c.readerWeakScore && this.constraintLike(x, cards)) return true;
-    }
-    return false;
   }
 
   /**
@@ -5065,15 +5035,11 @@ interface AskInternal {
   request?: number;
   /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
   again?: { searched: SearchedLive; prev: Injection | null };
-  /** `readerPushWeakNoWait` (trial, D191): called when the push's pool falls below the evidence bar. */
-  weak?: () => void;
 }
 
-/** `readAsk`'s options: whether it reads for the push, the ask's anchored intent hits, and the push's hooks. */
+/** `readAsk`'s options: whether it reads for the push, and the push's request. */
 interface ReadOpts {
   push?: boolean;
-  intents?: ReadonlyMap<string, IntentFind>;
-  weak?: () => void;
   /** The push's request (`AskInternal.request`), recorded with its reading for `readerReuse`. */
   request?: number;
 }

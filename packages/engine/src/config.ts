@@ -470,19 +470,6 @@ export interface EngineConfig {
    */
   readerGateVisits: boolean;
   /**
-   * Trial (D191, S1, off): with `readerPush`, `observe` stops waiting for the push as soon as its pool is weak: none
-   * of its first `readerWeakTop` candidates (not bulk mail) is an anchored intent hit holding at least
-   * `readerWeakCoverage` of the request's idf in at least `readerWeakMatched` terms, or constraint-like (`readerGate`'s
-   * test) with a no-model score of at least `readerWeakScore`. The reading still runs and its packet is queued for the
-   * agent's next model request; a pool that clears the bar is waited for as before. (D190 gated the reader's call on
-   * the same bar, and was deleted.)
-   */
-  readerPushWeakNoWait: boolean;
-  readerWeakTop: number;
-  readerWeakCoverage: number;
-  readerWeakMatched: number;
-  readerWeakScore: number;
-  /**
    * Trial (D192, S1, off): with `verifyDelivery`, no doubted candidate is re-read beside the reader's call
    * (`checkAhead`); a delivery re-reads only the items it cites, after the reader named them (`verifyItems`).
    */
@@ -619,11 +606,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerPushBehind: true,
   readerGate: true,
   readerGateVisits: true,
-  readerPushWeakNoWait: false,
-  readerWeakTop: 3,
-  readerWeakCoverage: 0.3,
-  readerWeakMatched: 2,
-  readerWeakScore: 0.5,
   readerVerifyAfter: false,
   readerReuse: false,
 };

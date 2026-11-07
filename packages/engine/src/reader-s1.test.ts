@@ -4,15 +4,14 @@ import { Budget } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
-import { checkEngineConfig } from "./config-check";
 import { ContextPartner, type ReaderReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { AskReader, type ReaderInput, type ReaderKind, type ReaderMaker } from "./reader";
 import type { Trace } from "./trace";
 
-// The S1 reader trials (D191-D193, docs/research/fix-s1-reader.md): no observe wait on a weak pool,
-// re-reads after the reader names an item (freshness-push.test.ts), and the ask reusing the push's reading. The evidence
-// gate (D190) and the short output schema (D194) were measured and deleted.
+// The S1 reader trials (docs/research/fix-s1-reader.md): the ask reusing the push's reading (D193); re-reads after the
+// reader names an item (D192) are tested in freshness-push.test.ts. The evidence gate (D190), the observe not waiting
+// on a weak pool (D191) and the short output schema (D194) were measured and deleted.
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -90,53 +89,6 @@ function partner(config: Record<string, unknown>, maker: Reader) {
 const ref = (sessionId = "s1", userId = "u1") => ({ tenantId: "t", userId, sessionId });
 const say = (p: ContextPartner, text: string, waitMs = 2_000, sessionId = "s1") =>
   p.observe({ ...ref(sessionId), at: NOW, kind: "user_message", text } as AgentEvent, { waitMs });
-
-describe("readerPushWeakNoWait's bar: the config check", () => {
-  test("its keys are taken only with a reader, the push and the flag on", () => {
-    expect(() => checkEngineConfig({ readerPushWeakNoWait: true }, { deps: { reader: false } })).toThrow();
-    expect(() => checkEngineConfig({ readerWeakTop: 5 }, { deps: { reader: true } })).toThrow();
-    expect(() =>
-      checkEngineConfig({ readerPushWeakNoWait: true, readerWeakTop: 0 }, { deps: { reader: true } }),
-    ).toThrow();
-    expect(() =>
-      checkEngineConfig({ readerPushWeakNoWait: true, readerWeakTop: 5 }, { deps: { reader: true } }),
-    ).not.toThrow();
-  });
-});
-
-describe("readerPushWeakNoWait (D191): no blocking wait when the push's pool is weak", () => {
-  test("a weak pool: observe returns at once; the reading runs on and its packet is queued for the next request", async () => {
-    const maker = new Reader(true);
-    const { p } = partner(
-      { readerPush: true, readerPushWeakNoWait: true, readerWeakScore: 1_000, readerWeakCoverage: 1 },
-      maker,
-    );
-    const t0 = performance.now();
-    const r = await say(p, REQUEST, 3_000);
-    // The reading is held: observe returning at all shows it did not wait for it.
-    expect(performance.now() - t0).toBeLessThan(1_500);
-    expect(r.pending).toBe(true);
-    await until(() => maker.calls.length === 1);
-    maker.release();
-    await until(() => p.takePending(ref()).some((x) => x.reason.startsWith("reader:")));
-  });
-
-  test("a pool that clears the bar is waited for, as without the flag", async () => {
-    const maker = new Reader(true);
-    const { p } = partner(
-      { readerPush: true, readerPushWeakNoWait: true, readerWeakScore: 0, readerWeakTop: 10 },
-      maker,
-    );
-    let done = false;
-    const observing = say(p, REQUEST, 3_000).then(() => (done = true));
-    await until(() => maker.calls.length === 1);
-    for (let k = 0; k < 20; k++) await tick();
-    expect(done).toBe(false);
-    maker.release();
-    await observing;
-    expect(p.takePending(ref()).some((x) => x.reason.startsWith("reader:"))).toBe(true);
-  });
-});
 
 describe("readerReuse (D193): an ask in the push's request reads the push's verdict", () => {
   const QUESTION = "Anything about Harlow I should know before paying?";

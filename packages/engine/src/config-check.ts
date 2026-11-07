@@ -53,11 +53,6 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerPushBehind: "reader",
   readerGate: "reader",
   readerGateVisits: "reader",
-  readerPushWeakNoWait: "reader",
-  readerWeakTop: "reader",
-  readerWeakCoverage: "reader",
-  readerWeakMatched: "reader",
-  readerWeakScore: "reader",
   readerVerifyAfter: "reader",
   readerReuse: "reader",
 };
@@ -119,11 +114,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerPushKinds: PUSH,
   readerPushWaitMs: PUSH,
   readerPushBehind: [...PUSH, ...POLL_BEHIND],
-  readerPushWeakNoWait: PUSH,
-  readerWeakTop: [...PUSH, "readerPushWeakNoWait"],
-  readerWeakCoverage: [...PUSH, "readerPushWeakNoWait"],
-  readerWeakMatched: [...PUSH, "readerPushWeakNoWait"],
-  readerWeakScore: [...PUSH, "readerPushWeakNoWait"],
   readerVerifyAfter: [...READER, "verifyDelivery"],
   readerReuse: PUSH,
   anticipateCalls: ["anticipate"],
@@ -186,9 +176,6 @@ const RANGES: Partial<Record<Key, Range>> = {
   intentMinMatched: COUNT,
   intentSeats: COUNT,
   askReaderPool: COUNT,
-  readerWeakTop: SIZE,
-  readerWeakCoverage: SHARE,
-  readerWeakMatched: COUNT,
 };
 
 /**
