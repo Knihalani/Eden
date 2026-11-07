@@ -1,11 +1,10 @@
 /**
  * A6 (docs/research/a6-moonshots.md, D287; lab only): "dressed" worlds. A request often names a person or firm that no
- * item of its generated world names ("Pay Ethan Brooks's first invoice"): on train, 77% of nothing-to-add requests and
- * 55% of hidden ones do, so both arms spend turns hunting for records a real user would have. Dressing adds, for each
- * such name, one ordinary message from it: a person's catch-up note with a direct line, a firm's account notice with
- * a reference. Neither says anything that could bear on a request (no constraint wording, no date the request names,
- * no amount), so a hidden task stays hidden and a control or neutral one stays clean; what changes is that the
- * agent's first lookups can succeed. Deterministic per seed. Only `worldOf(…, { dress: true })` calls it.
+ * item of its generated world names ("Pay Ethan Brooks's first invoice"), so the agent's first lookups cannot
+ * succeed. Dressing adds, for each person or firm so named, one ordinary message from it with a phone number and an
+ * address. It says nothing that could bear on a request (no constraint wording, no date the request names, no
+ * amount), so a hidden task stays hidden and a control or neutral one stays clean. Measured: neither arm's cost, time
+ * or lookups change significantly (§4). Deterministic per seed. Only `worldOf(…, { dress: true })` calls it.
  */
 import { extractTypedEntities } from "@eden/engine";
 import type { World, WorldItem } from "../world";

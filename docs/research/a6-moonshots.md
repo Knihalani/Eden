@@ -4,7 +4,7 @@ Status: 2026-11-07, branch `claude/a6-moonshots` (from `claude/lucid-hypatia-v9w
 the afternoon audit (docs/research/audit-1107-plan.md). Decisions D286–D288. Every paid call went to the Anthropic API
 with `HAIKU_API_KEY`, `claude-haiku-5-5` in every role (agent, grader, cards, intent), through the lab provider (D97),
 `OPENROUTER_API_KEY` unset, on one ledger (`.local/a6/ledger.jsonl`) with a hard cap of $3: **Anthropic-direct lab
-figures**. Train only (seeds 41–42): no held-out suite was run. **Spent: $1.387** (`packages/sim/lab/a6/spend.txt`). Numbers marked **[EST]** are arithmetic or judgement,
+figures**. Train only (seeds 41–42): no held-out suite was run. **Spent: $2.171** (`packages/sim/lab/a6/spend.txt`). Numbers marked **[EST]** are arithmetic or judgement,
 not measured; every other number comes from a command in this note.
 
 ## In plain words
@@ -22,19 +22,20 @@ not measured; every other number comes from a command in this note.
   **hidden facts +1.2 points (−4.8..+7.2), regraded concerns +0.0 (−1.2..+1.2), and dearer on both horizons** (+$0.036
   per 1,000 tasks on the short 1:1:8 mix, +0.016..+0.056; +$0.015 over a user's days, +0.005..+0.025, all-in as `arms.py` counts it; steady +0.011): not better on
   its axis, so deleted (D112). Only 37% of the planted facts that reach a packet carry a constraint card, which caps it.
-- **Built and kept as a lab instrument: dressed worlds (`pi-ab --dress`, D287).** A request often names a person or
-  firm no item of its world names (77% of train's nothing-to-add requests, 55% of hidden ones); dressing gives each such
-  name one ordinary message. Measured against the same tasks undressed: **the tools agent does not change** (mix wall
-  −0.03 s, −0.27..+0.20; searches +0.02), while **Eden's agent asks 16% less** (−0.16 asks a task, −0.26..−0.06) and
-  answers **0.18 s sooner** (−0.31..−0.05). So the lab's absent records inflate Eden's own asks a little and understate
-  its lead: eden − tools wall on the mix is −1.64 s undressed and −1.78 s dressed; hidden facts and cost do not move
-  significantly. Today's figures stand; future work on asks (idea 2) should be screened dressed.
+- **Built and kept as a lab instrument: dressed worlds (`pi-ab --dress`, D287).** Requests often name someone the
+  generated world holds no record of (by a broad count, 77% of train's nothing-to-add requests and 55% of hidden ones);
+  dressing gives each person or firm so named one ordinary message (68 names on seed 41). Measured on the merged tree
+  against the same tasks undressed, run side by side: **neither arm changes significantly** (Eden's agent: asks
+  −0.07 a task, −0.17..+0.03; mix wall −0.07 s, −0.32..+0.16; the tools agent: wall −0.05 s, searches +0.06), and
+  eden − tools on the mix is −1.44 s undressed against −1.46 s dressed. **The published comparisons are not an artefact
+  of the missing records.** (A first, broader dresser, which also dressed ids, acronyms, places and holidays, read
+  −0.16 asks; the review caught it, and it is superseded.)
 - **Rejected on paper with $0 evidence (D288):** a per-user standing brief in the agent's cached prefix (the cards it
   would be built from cover 37% of the planted facts that reach a packet, and 29% of look-alikes), an entity census
   line (fires on 4 of the 6 hidden pilot tasks whose fact the agent's own ask found: D257's failure again), usage
   learning per item (relevance is per request; an item ignored on Monday is the fact on Thursday).
-- **What is left for a 2x.** Not Eden's own spend or time. The agent's turns (Eden's agent still asks 0.83 times a
-  nothing-to-add task with every record present: idea 2, answer-ahead, is the lever and is now measurable), its misses
+- **What is left for a 2x.** Not Eden's own spend or time. The agent's turns (Eden's agent still asks 0.92 times a
+  nothing-to-add task with the named people and firms present: idea 2, answer-ahead, is the lever and is now measurable), its misses
   (pool misses are A2's; agent inattention to a candidate it was given is the rest), and event-driven speech after the
   agent acted (idea 5), which no suite measures yet.
 
@@ -66,7 +67,7 @@ Ranked by expected payoff on their axis times the chance the lab can show it hon
 
 | # | Idea | Axis | Payoff [EST] | Status |
 | --- | --- | --- | --- | --- |
-| 1 | Worlds that hold what their requests assume ("dressed" worlds) | measurement validity | measured: Eden's asks −16%, its lead holds | **built (lab, D287)** |
+| 1 | Worlds that hold what their requests assume ("dressed" worlds) | measurement validity | measured: no significant change in either arm | **built (lab, D287)** |
 | 2 | Answer-ahead: the push carries the records the agent would ask for first | latency, cost | −0.5 asks/task, −0.7 s/task, −10–15% agent $ | proposed; needs 1 |
 | 3 | Precomputed bearings: card tags on candidates | hidden facts, false concerns | up to the reader's ~5 points | **built, measured, deleted (D286)** |
 | 4 | Entity census ("no item names X") | latency | large in the lab, small in real use | rejected at $0 (D288) |
@@ -87,13 +88,14 @@ Ranked by expected payoff on their axis times the chance the lab can show it hon
   real user would have about what it names: a contact or signature line, a recent thread, an invoice, a calendar entry
   for the named day, none of them bearing on the request (written by a template author, checked by the same
   "no planted fact" rule the neutral variant uses).
-- **Payoff (measured, §4).** A truer price for both arms, and the ground idea 2 needs. The expectation that the
-  hunts dominate both arms' cost was wrong: the tools agent searches as often in a dressed world; Eden's agent asks
-  16% less. Eden's measured lead over the agent alone is slightly larger in dressed worlds.
+- **Payoff (measured, §4).** A check on the benchmark rather than a gain. The expectation that the hunts dominate
+  either arm's cost was wrong: with the people and firms present, neither arm's searches, asks or wall time moved
+  significantly, and Eden's lead over the agent alone is the same.
 - **Risks.** A dressing that echoes the planted fact's words turns a control into a hidden task; dressing must keep
   the decoy and hidden items the only constraint-worded items about the named entity.
-- **Proof run.** `census.ts --dress` reads 0 absent names in every variant (undressed: 272, 267 and 421 of 626 names
-  in hidden, control and neutral); the Pi pair is §4.
+- **Proof run.** `census.ts` counts absent names broadly (every capitalised run and id): 272, 267 and 421 of 626 in
+  hidden, control and neutral undressed; 166, 171 and 283 dressed, the rest being places, acronyms, ids and lone
+  words that dressing leaves alone by design. The Pi pair is §4.
 
 ### Idea 2: answer-ahead (the push carries the first lookups)
 
@@ -107,7 +109,7 @@ Ranked by expected payoff on their axis times the chance the lab can show it hon
   prefix, not the answer's bytes, D260).
 - **Risks.** More bytes on every request (CL8: bytes are cheap, turns are not); the D257 trap (anything that makes the
   agent ask less loses the hidden facts the ask finds: 2 of 18 in the pilot came only from asks).
-- **Cheap proof.** On dressed worlds (`--dress`, where Eden's agent still asks 0.66–0.83 times a control or
+- **Cheap proof.** On dressed worlds (`--dress`, where Eden's agent still asks 0.83 times a control and 0.92 times a
   nothing-to-add task): at $0, the share of a run's ask citations already in the extended push (undressed pilot: 51
   of 273); live, asks a task and hidden facts on one paired short run (~$0.15 for two arms, one seed).
 
@@ -213,40 +215,47 @@ excerpt.
 
 ## 4. Dressed worlds (D287, kept as a lab flag)
 
-`worldOf(…, { dress: true })` (`dress-entities.ts`): for every name a suite's requests use (`requestNames`: typed
-entities without URLs or emails, a leading imperative verb and a possessive taken off) that no item of the base world
-(before planting) names, one message from it: a person's "Good to catch up" note with a direct line, or a firm's
-"your account" notice with a reference; 10–40 days old, no constraint wording (`mayConstrain` false, tested), the same
-in every variant. `pi-ab --dress` (short horizon only; refused with `--days` and `--reuse-arms`; results carry
-`dress: true`). 203 items over train seed 41's six worlds (the same in every variant). Eden's whole spend in the
-dressed runs was $0.0032 and $0.0043 (seeds 41, 42; run headers): dressing adds no material background cost.
+`worldOf(…, { dress: true })` (`dress-entities.ts`): for every person or firm a suite's requests name that no item of
+the base world (before planting) names, one message from it ("Thanks for your message … You can reach <name> on 020
+7946 0xxx or at this address"), 10–40 days old, with no constraint wording (`mayConstrain` false, tested on train2, 4
+and 6, the last two with slots `clearSlot` empties), the same in every variant, appended after the planted items and
+after `clearSlot`. `requestNames` keeps only the extractor's `name` entities, a leading imperative verb and a
+possessive taken off, and of those two-word names that are not a place, season, event or product word, firm names
+(a firm word last), and one-word names with an inner capital ("FreshCart"); ids, acronyms, places, holidays, products
+and lone words are left out (tested). Telling a person from a firm by name failed on the suites' invented firms, so
+one template serves both. 68 names on seed 41's six worlds. `pi-ab --dress` (short horizon only; refused with `--days`
+and `--reuse-arms`; results carry `dress: true`).
 
-Pi, `tools,eden`, the same tasks as §3's short runs, dressed (`dress-short-pay-arms.txt`, `dress-pairs.txt`, paired by
-task id across the two runs, run at different times):
+**The review's catch.** The first dresser took every capitalised run and id: invoice ids (`CP-2210`, which then
+headed a message repeating the request's strongest key), acronyms, places, holidays, a laptop that sent a "good to
+catch up" note. Its run (`dress-pairs.txt`, before the A4 merge) read Eden's asks −0.16 a task (−0.26..−0.06) and wall
+−0.18 s: an effect of the junk records, not of the missing ones. Superseded by the runs below.
+
+Pi, `tools,eden`, on the merged tree (A4 in), payload notices, train seeds 41–42 (`--limit 12`, 144 tasks a kind),
+undressed and dressed run side by side (`m-plain-arms.txt`, `m-dress-arms.txt`, `m-dress-pairs.txt`, paired by task):
 
 | Mix 1:1:8 (dressed − undressed) | tools | eden |
 | --- | --- | --- |
-| Wall mean | −0.03 s (−0.27..+0.20) | **−0.18 s (−0.31..−0.05)** |
-| Agent $/1k | +0.011 (−0.007..+0.028) | +0.016 (−0.002..+0.033) |
-| Model turns | +0.01 (−0.08..+0.09) | **−0.13 (−0.20..−0.07)** |
-| Searches (tools) / asks (eden) | +0.02 (−0.23..+0.27) | **−0.16 (−0.26..−0.06)** |
-| Hidden raised | −1.4 points (−6.9..+4.2) | −2.8 points (−10.4..+4.9) |
+| Wall mean | −0.05 s (−0.34..+0.22) | −0.07 s (−0.32..+0.16) |
+| $/1k (`arms.py` all-in per task) | +0.015 (−0.001..+0.030) | +0.010 (−0.010..+0.030) |
+| Model turns | +0.00 (−0.08..+0.08) | −0.04 (−0.10..+0.03) |
+| Searches (tools) / asks (eden) | +0.06 (−0.18..+0.29) | −0.07 (−0.17..+0.03) |
+| Hidden raised (hidden tasks) | +2.8 points (−2.8..+8.3) | −3.5 points (−9.7..+2.8) |
 
-Within the dressed run, eden − tools: hidden +56.2 points (+47.2..+65.3), mix wall −1.78 s (−2.03..−1.53), mix
-$/1k +0.042 (+0.021..+0.063); undressed (§3's run) −1.64 s and +0.028. Regraded concerns, dressed eden: control 3 of
-144, neutral 1 of 144 (undressed: 1 and 1); too few to weigh, and the dressed messages carry no constraint, so a
-concern there is the agent's own reading (not inspected further). **Reading:** the tools agent's searches do not
-depend on whether the record exists (it searches about 3.4 times a task either way); Eden's agent asks less when the
-push's search finds the named person, so the artefact costs Eden's arm, not the agent alone, and the published
-comparisons are, if anything, conservative for Eden. Kept as a lab flag (no engine code) because idea 2 can only be
-screened on it.
+Within each run, eden − tools on the mix: undressed hidden +6.5 points of mix (+5.6..+7.3), wall −1.44 s
+(−1.77..−1.12), $/1k +0.015 (−0.008..+0.037); dressed +5.8 (+5.0..+6.7), −1.46 s (−1.79..−1.14), +0.011
+(−0.010..+0.033). Regraded concerns (Haiku, `m-concerns.txt`): eden control 2 → 3, neutral 2 → 4 of 144; tools
+control 0 → 1, neutral 0 → 2. Read by hand, the four dressed eden neutral concerns are generic hedges ("which Dana?",
+"I couldn't confirm the migration is approved"); none cites a dressing message. **Reading:** missing records do not
+drive either arm's cost or time in this lab, and Eden's measured lead does not depend on them. Kept as a lab flag (no
+engine code) because idea 2 (answer-ahead) needs worlds where the first lookups can succeed.
 
 ## 5. Decisions
 
 - **D286**: trial `pushCandidateCards` opened and closed the same day: measured not better (§3), deleted with its
   code and tests (code in `7d254437`).
-- **D287**: lab only, `pi-ab --dress` (`dress-entities.ts`), kept: the absent-record artefact measured (§4); Eden's
-  published lead over the agent alone stands; work on asks or turns is screened dressed.
+- **D287**: lab only, `pi-ab --dress` (`dress-entities.ts`), kept: the absent-record artefact measured (§4) and not
+  material; Eden's published lead over the agent alone stands; work on what the agent looks up first uses it.
 - **D288**: not built, on $0 evidence: the entity census line (idea 4), the standing brief in the agent's prefix (idea
   6), usage-learned ranking per item (idea 7).
 
@@ -266,15 +275,15 @@ python3 -I packages/sim/lab/a6/tags.py .local/a6/f-base.packets.jsonl .local/a6/
 export A6_VC='{"cards":{"pushCandidateCards":true}}'; A=tools,eden,eden~cards
 $R a6-short-pay-41 payload $A --seeds 41 --variants hidden,control,neutral --limit 12 --budget 0.45   # and 42
 $R a6-long-pay-41 payload $A --seeds 41 --days 8 --budget 0.3                  # 42: --budget 0.35
-# Dressed worlds:
-$R a6-dress-short-pay-41 payload tools,eden --seeds 41 --variants hidden,control,neutral --limit 12 --dress \
-  --budget 0.35                                                                # and 42
+# Dressed worlds, on the merged tree, undressed and dressed side by side:
+$R a6-m-plain-41 payload tools,eden --seeds 41 --variants hidden,control,neutral --limit 12 --budget 0.3    # and 42
+$R a6-m-dress-41 payload tools,eden --seeds 41 --variants hidden,control,neutral --limit 12 --dress --budget 0.3
 S=.local/a6/runs; O=packages/sim/lab/a6
 python3 -I packages/sim/lab/cl7/arms.py --arms tools,eden,eden~cards $S/a6-short-pay-4{1,2}   # long, dressed alike
 bun packages/sim/src/lab/pi-cost-report.ts $S/a6-long-pay-4{1,2}.json
 python3 -I packages/sim/lab/cl8/cache.py $S/a6-short-pay-4{1,2}
 python3 -I packages/sim/lab/cl8/pooled.py eden~cards eden $S/a6-short-pay-4{1,2} $S/a6-long-pay-4{1,2}
-python3 -I $O/dress-pairs.py eden $S/a6-short-pay-4{1,2} -- $S/a6-dress-short-pay-4{1,2}       # and tools
+python3 -I $O/dress-pairs.py eden $S/a6-m-plain-4{1,2} -- $S/a6-m-dress-4{1,2}       # and tools
 env -u OPENROUTER_API_KEY bun packages/sim/src/lab/regrade.ts --results $S/a6-short-pay-41.json \
   --graders claude-haiku-5-5 --only-concerns --spend-ledger .local/a6/ledger.jsonl --spend-cap 3 \
   --spend-headroom 0.1 --run-label a6-regrade-short-pay-41 --out $S/regrade-short-pay-41.json   # each run
@@ -288,6 +297,7 @@ python3 -I packages/sim/lab/cl8/concerns.py $S/regrade-*.json
 | pilot (eden, seed 41, 72 tasks) | 0.034 |
 | card tags, short, three arms, seeds 41–42 | 0.626 |
 | card tags, long, three arms, users 41–42 | 0.303 |
-| dressed, short, two arms, seeds 41–42 | 0.422 |
-| concern regrades (Haiku) | 0.002 |
-| **Total** | **1.387** |
+| dressed, first dresser (superseded), two arms, seeds 41–42 | 0.422 |
+| undressed and dressed on the merged tree, two arms each, seeds 41–42 | 0.783 |
+| concern regrades (Haiku) | 0.003 |
+| **Total** | **2.171** |

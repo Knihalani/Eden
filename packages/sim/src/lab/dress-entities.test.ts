@@ -3,7 +3,8 @@ import { mayConstrain } from "@eden/engine";
 import { worldOf } from "./ab-common";
 import { requestNames } from "./dress-entities";
 
-// A6 (D287): dressed worlds give each person or firm a request names (that no item names) one ordinary message, and change nothing else.
+// A6 (D287): dressed worlds give each person or firm a request names (that no item names) one ordinary message,
+// and change nothing else.
 const LIMITS = { maxTasks: 1e9, maxOffworld: 0 };
 const texts = (w: { world: { items: { title: string; text: string }[] } }) =>
   w.world.items.map((i) => `${i.title}\n${i.text}`.toLowerCase());
