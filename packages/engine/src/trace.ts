@@ -65,6 +65,24 @@ export interface Trace {
 export type TraceSink = (trace: Trace) => void;
 
 /**
+ * Whether the agent used one injection (D293), when that becomes known: inferred from a later agent message or tool
+ * call repeating its distinctive terms (D18), counted unused when its usage window passed (`expired`) or its session
+ * ended (`ended`), or reported by the integration (`explicit`, D13; a correction of an earlier outcome too). Ids, a
+ * flag and the connector ids only, like a trace (D56): never the injection's or the event's text. An injection id is
+ * random (`newId`), not derived from content.
+ */
+export interface UsageRecord {
+  sessionId: string;
+  injectionId: string;
+  used: boolean;
+  how: "inferred" | "expired" | "ended" | "explicit";
+  /** The connectors whose items the injection carried (configuration ids, as in a trace's item ids). */
+  sourceIds: string[];
+}
+
+export type UsageSink = (record: UsageRecord) => void;
+
+/**
  * What the query planner found in shadow mode for one connector of one lookup, beside what was served. Shapes, counts
  * and item ids only, like a trace; never query text or item content (D19). `status`: "ok", "limited" (no rate token
  * was left for it), "error".

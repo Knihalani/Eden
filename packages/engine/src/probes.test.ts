@@ -642,7 +642,10 @@ describe("more of D48's settings, through the engine", () => {
       model,
       now: () => at,
       ...(planner ? { planner } : {}),
-      config: { ...CORE_CONFIG, probeGraceMs: 1_000, ...config },
+      // A generous source deadline: the static sources answer at once, and under a loaded parallel run the default
+      // 1.5 s deadline cut the search, so nothing reached the judge (judgeItemBytes read an empty `model.calls`; a
+      // 1 ms deadline reproduces it).
+      config: { ...CORE_CONFIG, probeGraceMs: 1_000, sourceTimeoutMs: 30_000, ...config },
     });
   const logged = (id: string, items: { ref: string; title: string; text: string }[], log: string[]): Source => {
     const s = new StaticSource(id, id, items);

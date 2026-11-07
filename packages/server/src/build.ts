@@ -10,6 +10,7 @@ import {
   type EngineConfig,
   type ShadowSink,
   type TraceSink,
+  type UsageSink,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, DEFAULT_LIMITS, TenantSpend, type Model } from "@eden/llm";
@@ -37,6 +38,8 @@ export interface BuildOptions {
    */
   models?: ModelRoles;
   onTrace?: TraceSink;
+  /** Whether the agent used each injection, once known (D293); `main.ts` logs it with `EDEN_TRACE=1`. */
+  onUsage?: UsageSink;
   /** A pool from `startGatePool`: lookup results are redacted in it. Without one they are redacted on the loop. */
   gatePool?: WorkerPool;
   /** The query planner (D28): serving by default (D33), in shadow, or off; its learning persists in the source map. */
@@ -58,6 +61,11 @@ export interface BuildOptions {
    * model-spend cap is divided by it, since each process holds its own `TenantSpend`.
    */
   processes?: number;
+  /**
+   * The partner's clock (default `Date.now`): an embedding replaying a fixed world, such as `bun run demo` over the
+   * simulated user, whose items are dated around that world's own "now" (D292).
+   */
+  now?: () => number;
 }
 
 /**
@@ -95,6 +103,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
   const mode = options.queryPlanner ?? "serve";
   const config = { ...DEFAULT_CONFIG, ...options.engine };
   const models = options.models ?? NO_MODELS;
+  const now = options.now ?? Date.now;
   // One cap per tenant per UTC day shared by every role, besides each role's own per-session and per-user-day caps.
   const tenants = tenantSpendFor(models.usdPerTenantDay, options.processes);
   const budget = () => new Budget(DEFAULT_LIMITS, undefined, tenants);
@@ -103,7 +112,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
       ? new CardEnricher({
           maker: new ModelCardMaker(models.cards, models.cardsRetry ? { retry: models.cardsRetry } : {}),
           budget: budget(),
-          now: () => Date.now(),
+          now,
         })
       : undefined;
   const reader =
@@ -111,7 +120,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
       ? new AskReader({
           maker: new ModelReaderMaker(models.reader),
           budget: budget(),
-          now: () => Date.now(),
+          now,
           onFailure: readerFailureLog(options.log ?? console.error, models.scrub),
         })
       : undefined;
@@ -121,9 +130,11 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     cache: new ItemCache(),
     budget: budget(),
     model: options.model ?? null,
+    ...(options.now ? { now: options.now } : {}),
     ...(cards ? { cards } : {}),
     ...(reader ? { reader } : {}),
     onTrace: options.onTrace,
+    ...(options.onUsage ? { onUsage: options.onUsage } : {}),
     gatePool: options.gatePool,
     planner:
       mode === "off" ? undefined : new QueryPlanner({ seed: (Math.random() * 2 ** 32) >>> 0, store: sourceMap, mode }),

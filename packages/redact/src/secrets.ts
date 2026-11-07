@@ -29,7 +29,7 @@
  */
 import { MultiMatcher } from "@eden/primitives";
 import { RE2JS } from "re2js";
-import { redact, REDACTED } from "./redact";
+import { assignmentSpans, redact, REDACTED } from "./redact";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
 
 interface Allowlist {
@@ -83,10 +83,11 @@ export interface SecretRule {
 
 /**
  * D13's keyword rule, case-insensitive (env lines spell it `PASSWORD=`), with `is` read as a word and the value in
- * group 1. A value already redacted is no secret.
+ * group 1. A value already redacted is no secret. A double-quoted value is taken whole, up to 256 characters (audit
+ * A5: `\S{6,}` took `"correct` of `my password is "correct horse battery staple"` and left the rest).
  */
 const KEYWORD_RULE = new RegExp(
-  String.raw`(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*(?!\[REDACTED\])(\S{6,})`,
+  String.raw`(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*(?!\[REDACTED\])("[^"\n]{4,256}"|\S{6,})`,
   "dgi",
 );
 const SECRET_WORD = /(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)/i;
@@ -724,9 +725,10 @@ export function gateOf(rules: SecretRule[]): Gate {
         .map((found) => found.id)
         .sort(),
     sanitizeForStore(text) {
-      const spans = findings(text)
-        .flatMap((found) => found.spans)
-        .sort((a, b) => a[0] - b[0]);
+      const found = findings(text).flatMap((f) => f.spans);
+      // A rule's span can cut a quoted credential value short, and hide the next key from the assignment pass below:
+      // with any finding, that pass's spans on the original text join the rules' (audit A5). No finding, no extra scan.
+      const spans = (found.length > 0 ? [...found, ...assignmentSpans(text)] : found).sort((a, b) => a[0] - b[0]);
       let out = "";
       let at = 0;
       for (const [start, end] of spans) {

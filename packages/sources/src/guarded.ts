@@ -27,6 +27,7 @@ import {
 } from "@eden/primitives";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { PlannedSource, type PlanCalls } from "./planner";
+import { untilAborted } from "./abort";
 import type { ListPage, SearchQuery, Source } from "./source";
 
 /**
@@ -331,7 +332,7 @@ export class SourceFanout {
     const started = performance.now();
     let raw: ContextItem | null;
     try {
-      raw = await source.fetch(ref, scope, signal);
+      raw = await untilAborted(source.fetch(ref, scope, signal), signal);
     } catch (e) {
       const message = String(e);
       if (signal.aborted && !timeout.aborted) {

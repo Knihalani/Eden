@@ -23,6 +23,11 @@ model call of a tool-using turn, and streams the upstream's answer back unchange
   refuses to start without `EDEN_PROXY_KEY` (callers send `x-eden-proxy-key`).
 - **New messages by content** (`Conversation.seen`: per message hash, copies seen), so compaction and sliding
   windows report what is new and never repeat the old. A turn counter keeps a concurrent older turn's packets out.
+  A request ending with a user message already seen ("yes" again) is still a new turn unless its messages repeat the
+  previous request's exactly (`Conversation.last`: a retry; a stateless agent saying the same thing twice in a row
+  looks the same and is reported once, audit A5).
+- **Only `messages` is rewritten** (`withMessages`): the rest of the body goes upstream byte for byte (a 64-bit
+  `seed` survives), audit A5.
 - **Secrets.** The upstream `Authorization` is forwarded, never logged; `x-eden-*` headers are not forwarded. `onError`
   gets the client's errors (route, status, reason), never message text or a body.
 - **Untrusted text (D11, D19).** Packets are inserted as Eden's envelope, unchanged.
@@ -31,7 +36,8 @@ model call of a tool-using turn, and streams the upstream's answer back unchange
   a key (the hash skips system prompts, which may change per request): callers who can should send
   `x-eden-session-id`.
 - **Shadow mode** (`shadow`, `EDEN_PROXY_SHADOW=1`): everything is reported and decided, nothing is injected;
-  `onShadow` gets ids and counts only.
+  `onShadow` gets ids and counts only. The client sends `?shadow=1`, so the server learns nothing from packets no agent
+  saw (D282).
 - No `ask_context` is added to the request's tools: an agent that wants it uses the MCP server.
 
 ## Test

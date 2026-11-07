@@ -16,6 +16,9 @@
  * - `+ask` (fix-s3b, weak point 4): not an engine flag but the harness's, and only on a `both` base: the agent also
  *   gets `ask_context` beside its own source tools and Eden's injected context, the shape integrators ship
  *   (`both+ask`). `eden` has the tool already, so `eden+ask` throws rather than run `eden` under another name;
+ * - `+nokey` (D291): also the harness's: Eden runs as a server with no model key builds it (`buildPartner` with
+ *   `NO_MODELS`): the same engine settings, but no card enricher (so no cards and no intent requests) and no reader.
+ *   Only a base with Eden takes it;
  * - `@w<ms>`: how long the first observe waits for Eden's slow path (default 3000, the client's `withContext`).
  *
  * An unknown base throws: a typo must not run Eden under another condition's name.
@@ -42,10 +45,14 @@ export interface Condition {
   /** The agent gets `ask_context`: `eden` bases, and `both` bases with `+ask`. */
   askTool: boolean;
   judge: boolean;
+  /** `+nokey`: no card enricher and no reader are built, as on a server without a model key (D291). */
+  noKey: boolean;
 }
 
 /** The harness flag `+ask`: `ask_context` beside the tools, never sent to the engine as a setting. */
 const ASK_FLAG = "ask";
+/** The harness flag `+nokey`: the partner gets no model roles, never sent to the engine as a setting. */
+const NOKEY_FLAG = "nokey";
 
 const BASES = ["none", "tools", "eden", "both", "eden-judge", "both-judge"] as const;
 const SHAPE = /^([a-z-]+?)(-act(?:-firewall)?)?(?:~([A-Za-z0-9_.-]+))?((?:\+[^+@~]+)*)(?:@(.*))?$/;
@@ -88,7 +95,13 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
   if (askFlag && !base.startsWith("both")) {
     throw new Error(`condition ${name}: +ask adds ask_context beside the tools, so only a both base takes it`);
   }
-  const flags = allFlags.filter((f) => f !== ASK_FLAG);
+  const noKey = allFlags.includes(NOKEY_FLAG);
+  if (noKey && (base === "none" || base === "tools" || base.endsWith("-judge"))) {
+    throw new Error(
+      `condition ${name}: +nokey takes Eden's model roles away, so only eden or both (no judge, which needs a model) takes it`,
+    );
+  }
+  const flags = allFlags.filter((f) => f !== ASK_FLAG && f !== NOKEY_FLAG);
   let extra: Record<string, unknown> = {};
   if (variant !== undefined) {
     const v = options.variants?.[variant];
@@ -131,6 +144,7 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
     useTools: base === "tools" || base.startsWith("both"),
     askTool: base.startsWith("eden") || askFlag,
     judge: base.endsWith("-judge"),
+    noKey,
   };
 }
 

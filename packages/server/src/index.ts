@@ -11,6 +11,7 @@ export {
 } from "./models";
 export { loadConfig, type ServerConfig } from "./config";
 export { staticResolver } from "./connectors";
+export { expandPreset, PRESETS, type ConnectorPreset } from "./connector-presets";
 export { sourcesFromEnv, staticSources } from "./connectors";
 export {
   checkSpecs,
@@ -19,6 +20,7 @@ export {
   UserSources,
   type HeaderValue,
   type McpSpec,
+  type PresetSpec,
   type SourceDirectory,
   type SourceSpec,
   type StaticSpec,

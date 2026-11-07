@@ -1,0 +1,7 @@
+{
+  "name": "@eden/example-oauth-directory",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": { "@eden/server": "workspace:*", "@eden/protocol": "workspace:*" }
+}
