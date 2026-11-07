@@ -8,7 +8,7 @@ long-running server), each told to reproduce every suspicion with a failing test
 again here (the cause read in the code, the test run failing before the fix and passing after). Branch
 `claude/a5-bugs` from `c7cfc8fc9`. No paid calls.
 
-Eleven bugs fixed, ranked by severity. Every fix has a test that fails without it.
+Eleven bugs in the first pass, ranked by severity, then more from A4's merged code, the fuzz harness and the connector-call hunt (sections below). Every fix has a test that fails without it.
 
 | # | Severity | Area | Bug | Test |
 |---|---|---|---|---|
@@ -161,6 +161,61 @@ Plus two load-flaky tests made robust (below).
   `max_tokens`, `length`, `MAX_TOKENS`, `tool_use`, `tool_calls`), and unset for anything else, as for an unreported
   reason.
 
+## Classes, not cases: the engine fuzz harness
+
+The parent asked for structural checks that remove a whole class of bugs. `packages/engine/src/fuzz.test.ts` (with
+`fuzz-world.ts`) is a seeded fuzz of the engine's session state machine: 2 tenants × 2 users × 2 sessions, one
+notifying, listable, fetchable source per user whose calls settle after a seeded 0–3 turns, and random interleavings
+(about 40% run in the background) of user, agent and tool events with and without waits, asks, takes, source adds,
+edits and deletes with or without their notices (`sourceChanged`, `sourceItems`, `sourceRemoved`), session ends,
+forgets, sync ticks and clock jumps across UTC midnight. After every hand-out and every operation it checks:
+isolation (D9, `explain` traces included), redaction of planted secrets (D10), the data envelope (D11), no hand-out of
+a removed item after its removal settled (D126), nothing for a closed session and `sessionCount` bounded (D17), fail
+open, and not-twice (proactive repeats of an item version within the cooldown). Four configurations: the default with
+a stub reader, the default with no reader (D276), the default with one source call in ten failing, and the core.
+`bun test` runs 8 seeds × 60 operations a configuration plus the regression seeds in 2.6–3.2 s; `FUZZ_SEEDS`,
+`FUZZ_OPS`, `FUZZ_PLAN` (replay) and `FUZZ_MINIMIZE` scale and shrink it.
+
+- **Found and fixed: a packet queued before `sourceRemoved` was handed out after it** (default config: 29 of 2,000
+  seeds at 60 operations; candidates, rule-path, fallback and "updated:" packets). `dropGone` cleared the cache, the
+  sync's records and held pages, not packets already queued. A removal now drops queued packets citing a removed item
+  for every session of that user (undoing their ledger marks where an undo was kept), and `takePending` and observe's
+  hand-out drop any that cite an item held gone (`dropRemovedPending`). Seeds 61 and 328 run with every default run.
+- **Left, documented: two rule paths repeating an item version in one session** (`CORE_CONFIG` only, 1 of 2,000
+  seeds: core 704). A request's fast path delivers from the cache while the previous request's slow path is in flight;
+  the slow path ranked against the ledger before its awaits and `build` marks without testing it again. The same race
+  between the candidates push and the rule paths is documented and kept (D258, cl-cl8.md "Repeats"); the harness exempts
+  that form and reports this one when scaled.
+- **Scale runs**: about 11,500 seed-runs while it was built (2,000 × 60 and 500 × 200 operations on three
+  configurations, 1,000 × 60 on four), then 1,000 × 60 on all four on the fixed tree: no violation but core 704.
+
+## Wasted connector calls
+
+Connector calls are priced per call on some platforms ($10–26 per 1,000), so a hunter counted calls. Fixed
+(`engine/src/sync-calls.test.ts`, each failing before):
+
+- **A demand listing cut at the lookup's deadline (D283).** `freshen` passed the lookup's 1.5 s signal into the
+  listing, so a listing slower than that was cancelled (and billed) by every lookup, stored nothing and never made the
+  source current (4 listings for 4 lookups, current 0 of 4). The lookup now stops waiting at its deadline, and the
+  listing goes on under the sync's own timeout (a closed session still cuts it); a later lookup joins it (`busy`).
+  `ask-deadline.test.ts`'s "polled again" case now expects the join.
+- **The daily sweep paged every source to the user's whole cap (D283).** `maxItems` (3,000) is across sources, so a
+  quiet source was listed to 3,000 items a day and its synced set grew past the backfill's cut. The sweep now reads a
+  source back to the oldest item synced from it and stores nothing older (test: 4 pages and 20 synced docs before, 1
+  page and 1 after). About 29 calls a day per extra large source per active user at page 100.
+- **A broken list tool listed again by every lookup.** `freshen` ignored `retryAt`. It now skips a source whose
+  listing failed twice running while it backs off (searched live, as D127 has it). One failure is not enough: in the
+  funnel that rule replaced cheap polls after transient failures with live searches and probes (2.69 request calls a
+  task became 2.83); with two it stays 2.69 and a broken tool costs one listing a back-off step.
+- **Handed to A8, not fixed here: a null re-read re-fetched by every ask** (`partner.ts` `recheck`/`check`). A null
+  from a source without `fetchReportsGone` (every MCP source) is "unverifiable" and the copy stays doubted, so every
+  later ask or delivery citing it re-fetches it after `CHECK_REUSE_MS` (30 s) or from another session (6 asks 31 s
+  apart: 6 fetches for one signal; 4 sessions: 4). Background fetches with payload notices are A8's area; the repro
+  was passed on.
+- Checked and not wasteful: re-reads shared within 30 s, a notice on an unchanged source (one 5-item page), demand
+  polls joining a running read, probes and the planner deduped, `afterPoll` and the second push pass searching no
+  more, sources without fetch, `tools/list` once per connect, open breakers, payload notices (no poll).
+
 ## A4's new code (merged mid-session at a750f5f22)
 
 A fifth hunter read A4's merge (D276 candidates without a reader, D277 traces and `/v1/explain`, D278 the Python
@@ -188,6 +243,8 @@ proxy bugs were fixed (`proxy/src/proxy-a5.test.ts`, `with-messages.test.ts`):
   sources answer at once, so nothing waits longer.
 - `partner.test.ts` "only the head of a large event is read": one wall-clock sample under 250 ms; now the best of
   three sessions (a reading of the whole megabyte is slower on every try, so the bound still catches it).
+- `shapes.test.ts` "fuzz: every built query is inert, …": 0.6–0.9 s alone, past bun's 5 s default under a loaded
+  `bun run check`; an explicit 30 s timeout (fewer assertions per query were tried and saved nothing).
 
 ## Review
 
@@ -213,9 +270,14 @@ Unicode case folding hiding a key; a withdrawn packet announcing a revision; `ta
 
 ## Measurements on the final tree
 
-- `bun run check`: green, 1,947 pass, 0 fail (base: 1,926).
-- `bun run eval`: identical to the base on every metric (precision 0.828, recall 0.48, falseFireRate 0) except
-  `plannedLookups`, which is 121 or 122 run to run on both trees (base: 122, 121, 122, 121, 121, 122; this branch: 121,
-  122, 121, 122, 122, 122).
-- `bun run funnel --jobs 4 --baseline <base>`: hidden 305/384, decoys 267/384 on both; task by task +0 −0; cards
-  summed calls 546 on both.
+The first comparisons in this session (eval and funnel "unchanged") ran the base checkout with `node_modules`
+symlinked into this checkout, so `@eden/*` resolved to the branch's code on both sides: they compared the branch with
+itself. The base was then given its own install and everything re-measured against the parent tip:
+
+- `bun run check`: green, 2,005 pass, 0 fail (base c7cfc8fc9: 1,926; the tip's merges add their own tests).
+- `bun run eval` (parent tip ae5757b75, after D276's by-design change): precision 0.5909, recall 0.52, falseFireRate
+  0, `plannedLookups` 87 on the tip and on this branch, two runs each.
+- `bun run funnel --jobs 4 --baseline <tip>`: hidden 305/384, decoys 267/384 on both; task by task +0 −0; request
+  calls 2.69 a task and amortised 3.81 on both; card calls 504 on both. Two first versions moved it and were changed
+  (above): racing `SourceFanout.list` (card calls 504 to 546, by moving the card drain's timing) and skipping a
+  listing after one failure (request calls 2.69 to 2.83).
