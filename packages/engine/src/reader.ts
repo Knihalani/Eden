@@ -277,7 +277,7 @@ export function readerMessages(input: ReaderInput): ChatMessage[] {
     const card = it.card ? ` | card: ${inert(it.card)}` : "";
     return (
       `<item i="${i}" source="${inert(it.source).replace(/"/g, "")}" date="${inert(it.date).replace(/"/g, "")}"` +
-      `${it.from ? ` from="${inert(it.from)}"` : ""}>` +
+      `${it.from ? ` from="${inert(it.from).replace(/["\r\n\u0085\u2028\u2029]/g, "")}"` : ""}>` +
       `${inert(it.title)}: ${inert(it.text)}${card}</item>`
     );
   });
