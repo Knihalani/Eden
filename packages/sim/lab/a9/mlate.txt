@@ -1,0 +1,12 @@
+arm          kind        n   own  later  turns
+eden         hidden    115     1     50   2.51
+eden         control   123     0      5   2.51
+eden~noplan  hidden    128     1     12   2.50
+eden~noplan  control   123     0      1   2.51
+
+eden         plan packets taken   80  agent $ per day 1.788/1k-days (69 days; $ 0.1234)
+eden~noplan  plan packets taken    0  agent $ per day 1.743/1k-days (70 days; $ 0.1220)
+
+eden − eden~noplan hidden   corrected (later replies raise the fact)   n  111  +35.1 points (+25.2..+45.0)
+eden − eden~noplan control  false alarm (look-alike raised)            n  112  +4.5 points (+0.9..+8.9)
+eden − eden~noplan agent $/1k tasks (recaps excluded) n 266  +0.0055 (-0.0094..+0.0198)

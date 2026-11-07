@@ -1,0 +1,9 @@
+arm          kind        n   own  later  turns
+eden         control   144     1      1   2.50
+eden~plan    control   144     1      8   2.50
+
+eden         plan packets taken    0  agent $ per day 1.622/1k-days (36 days; $ 0.0584)
+eden~plan    plan packets taken   40  agent $ per day 1.721/1k-days (36 days; $ 0.0619)
+
+eden~plan − eden   control  false alarm (look-alike raised)            n  144  +4.9 points (+1.4..+9.0)
+eden~plan − eden   agent $/1k tasks (recaps excluded) n 144  +0.0172 (+0.0021..+0.0322)

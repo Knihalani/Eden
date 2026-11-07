@@ -122,7 +122,8 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import { CANDIDATES_LEAD, citationsOf, renderPacket, shownText } from "./render";
+import { CANDIDATES_LEAD, citationsOf, PLAN_LEAD, renderPacket, shownText } from "./render";
+import { safeLine } from "./line";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -318,6 +319,12 @@ interface Session {
    * with their content hashes, and its verdict (null when it gave none).
    */
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
+  /** `planConflict` (D301): the session's last `PLAN_REQUESTS` acting requests (the push's cues), oldest first. */
+  acted?: Cue[];
+  /** `planConflict` (D301): ids the sync stored since the last take, at most `PLAN_WAITING`, oldest first. */
+  planNew?: Set<string>;
+  /** `planConflict` (D301): ids a plan packet has sent, at most `PLAN_SENT`: each is said once per session. */
+  planSent?: Set<string>;
 }
 
 /** Items whose shown words a session keeps (`askDedup`). */
@@ -516,6 +523,8 @@ export class ContextPartner {
    * (`revisionsSettled`).
    */
   private readonly watching = new Map<string, Set<Session>>();
+  /** `planConflict` (D301): by user scope key, the live sessions with acting requests; a session leaves on close. */
+  private readonly acting = new Map<string, Set<Session>>();
   private readonly revisionPolls = new Map<string, Promise<void>>();
   /** By user and source: the notice poll's state (`pollRevised`), at most `MAX_REVISION_SOURCES`, idle ones dropped. */
   private readonly revisionSources = new Map<string, RevisionSource>();
@@ -627,6 +636,7 @@ export class ContextPartner {
               this.enqueueCards(scope, items);
               this.recordMentions(scope, items);
               this.queueRevised(scope, items);
+              this.queuePlanConflicts(scope, items);
             },
             tracer: spans,
           },
@@ -710,7 +720,12 @@ export class ContextPartner {
     // `observeEvent` counts the request before its first await, so the session's count now names this request.
     if (push) internal.request = this.sessions.get(sessionKey(event))?.requests;
     const result = await observing;
-    if (!push) return result;
+    if (!push) {
+      // `planConflict` (D301): what arrived since the last take, checked now, so `pending` says a packet waits.
+      const live = this.config.planConflict ? this.sessions.get(sessionKey(event)) : undefined;
+      if (live) this.checkPlans(live);
+      return live && live.pending.length > 0 && !result.pending ? { ...result, pending: true } : result;
+    }
     let settled = false;
     void push.then(() => (settled = true));
     const left = Math.min(options.waitMs ?? 0, this.config.readerPushWaitMs) - (performance.now() - t0);
@@ -720,7 +735,9 @@ export class ContextPartner {
       clearTimeout(timer);
     }
     // A push still running, or one that queued its packet, is pending work the integration should poll for.
-    const queued = (this.sessions.get(sessionKey(event))?.pending.length ?? 0) > 0;
+    const live = this.sessions.get(sessionKey(event));
+    if (live) this.checkPlans(live);
+    const queued = (live?.pending.length ?? 0) > 0;
     return { ...result, pending: result.pending || !settled || queued };
   }
 
@@ -990,6 +1007,7 @@ export class ContextPartner {
   takePending(ref: Scope & { sessionId: string }, options: { shadow?: boolean } = {}): Injection[] {
     const s = this.sessions.get(sessionKey(ref));
     if (!s) return [];
+    this.checkPlans(s);
     // What the agent reads last about an item is its current copy (D232): a packet with a copy the cache has since
     // replaced goes before the packets that render current copies, and an update made stale by a packet of the batch
     // that renders the current copy is dropped. Queue order holds otherwise.
@@ -1548,6 +1566,7 @@ export class ContextPartner {
     // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
     // a proactive packet (queued, taken before its next model request); nothing else is answered or handed out.
     if (internal.push) {
+      if (this.config.planConflict && internal.again === undefined) this.noteActed(s, cue);
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
@@ -1973,6 +1992,130 @@ export class ContextPartner {
     return { items };
   }
 
+  /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */
+  private noteActed(s: Session, cue: Cue): void {
+    if (s.closed) return;
+    const acted = (s.acted ??= []);
+    acted.push(cue);
+    if (acted.length > PLAN_REQUESTS) acted.shift();
+    const key = scopeKey(s.scope);
+    let set = this.acting.get(key);
+    if (!set) this.acting.set(key, (set = new Set()));
+    set.add(s);
+  }
+
+  private unact(s: Session): void {
+    const key = scopeKey(s.scope);
+    const set = this.acting.get(key);
+    if (!set) return;
+    set.delete(s);
+    if (set.size === 0) this.acting.delete(key);
+  }
+
+  /**
+   * `planConflict` (D301): items the sync just stored (a poll, a backfill page, a notice's payload) wait, per session
+   * of their user with acting requests, for the session's next take (`checkPlans`): by then the item's card, made in
+   * the background as it was stored, can say whether it constrains. No index or card work here, on the store's path.
+   */
+  private queuePlanConflicts(scope: Scope, items: readonly ContextItem[]): void {
+    if (!this.config.planConflict || items.length === 0) return;
+    const sessions = this.acting.get(scopeKey(scope));
+    if (!sessions) return;
+    for (const s of sessions) {
+      if (s.closed) continue;
+      const waiting = (s.planNew ??= new Set());
+      for (const it of items) {
+        if (bulkMail(it)) continue;
+        waiting.delete(it.id);
+        waiting.add(it.id);
+        if (waiting.size > PLAN_WAITING) waiting.delete(waiting.values().next().value as string);
+      }
+    }
+  }
+
+  /**
+   * `planConflict` (D301), at a take: the items stored since the last one, checked against the session's acting
+   * requests. An item no packet has handed the session that would have been among such a request's candidates (the
+   * first `pushCandidates` of its pool, `rank`'s first `askReaderPool` distinct items, bulk mail out, a pool with an
+   * item that passes `readerGate`'s constraint test, its card included: `candidatesOf`'s rule) is queued, one packet
+   * per request. Built at once from the cached copy, the one the source just gave
+   * (nothing to re-read), except a copy a change signal has put in doubt, which waits for a later take. Said once per
+   * session (`planSent`). Index lookups only: at most
+   * `PLAN_REQUESTS` a take, and only when something new was stored.
+   */
+  private checkPlans(s: Session): void {
+    const waiting = s.planNew;
+    if (!this.config.planConflict || s.closed || !s.acted || !waiting || waiting.size === 0) return;
+    const now = this.now();
+    const sent = (s.planSent ??= new Set());
+    // A copy a change signal has put in doubt since it was read (D126's `doubted`) waits for a later take, when the
+    // poll the signal starts has stored the current one; a held-gone id is not in the cache. Once sent, never again.
+    const fresh = new Set<string>();
+    const later: string[] = [];
+    for (const id of waiting) {
+      const it = this.deps.cache.get(s.scope, id, now);
+      if (!it || sent.has(id) || !s.ledger.isFresh(id, s.turn)) continue;
+      if (this.config.verifyDelivery && this.doubted(s, it)) later.push(id);
+      else fresh.add(id);
+    }
+    waiting.clear();
+    for (const id of later) waiting.add(id);
+    if (fresh.size === 0) return;
+    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
+    const said = new Set<string>();
+    for (const cue of s.acted) {
+      const pool: Scored[] = [];
+      const seen = new Set<string>();
+      for (const x of this.rank(s, cue, { ignoreLedger: true })) {
+        if (pool.length >= cap) break;
+        if (seen.has(x.item.id)) continue;
+        seen.add(x.item.id);
+        pool.push(x);
+      }
+      // The candidates' rule (`candidatesOf`): the pool holds something that could constrain the request, and the new
+      // item is among its first `pushCandidates` (bulk mail out), as it would have been had it been there then.
+      const top = pool.filter((x) => !bulkMail(x.item)).slice(0, Math.max(1, this.config.pushCandidates));
+      const hits = top.filter((x) => fresh.has(x.item.id) && !said.has(x.item.id));
+      if (hits.length === 0) continue;
+      const cards =
+        this.config.cards && this.deps.cards
+          ? this.deps.cards.cardsOf(
+              s.scope,
+              pool.map((x) => x.item.id),
+              now,
+            )
+          : new Map<string, Card>();
+      if (!pool.some((x) => this.constraintLike(x, cards))) continue;
+      const bearing = hits;
+      for (const x of bearing) {
+        said.add(x.item.id);
+        sent.add(x.item.id);
+        if (sent.size > PLAN_SENT) sent.delete(sent.values().next().value as string);
+      }
+      // The user's own (redacted) words, on one line, their double quotes made single so the quote cannot be closed
+      // and the rest read as Eden's voice.
+      const lead = `${PLAN_LEAD} "${safeLine(head(cue.raw, PLAN_QUOTE_CHARS)).replace(/["“”]/g, "'")}"`;
+      const packet = this.deliver(s, bearing, "proactive", `plan:${cue.id}`, cue, undefined, {
+        lead,
+        itemBytes: Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES),
+        maxBytes: Math.max(this.config.maxInjectionBytes, 400 + PLAN_QUOTE_CHARS + bearing.length * 2_120),
+      });
+      s.pending.push(packet);
+      this.trace(s, {
+        sessionId: s.id,
+        turn: s.turn,
+        event: "source_change",
+        decision: "sources",
+        reason: packet.reason,
+        latencyMs: 0,
+        sourceCalls: 0,
+        modelCalls: 0,
+        costUsd: 0,
+        itemIds: packet.citations.map((c) => c.itemId),
+      });
+    }
+  }
+
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
   private candidateFrame(): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
@@ -2273,6 +2416,7 @@ export class ContextPartner {
     this.deps.reader?.endSession(s.key);
     this.sessions.delete(s.key);
     this.unwatch(s);
+    this.unact(s);
     const n = (this.perTenant.get(s.scope.tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(s.scope.tenantId);
     else this.perTenant.set(s.scope.tenantId, n);
@@ -4880,6 +5024,12 @@ function pendingOf(s: Session): boolean {
 
 /** `pushCandidates` (D236): the most of an item a candidate's excerpt says, whatever `compactItemBytes` is set to. */
 const MAX_CANDIDATE_BYTES = 2_000;
+
+/** `planConflict` (D301): acting requests a session keeps, and how much of one its packet quotes. */
+const PLAN_REQUESTS = 12;
+const PLAN_QUOTE_CHARS = 200;
+const PLAN_WAITING = 64;
+const PLAN_SENT = 256;
 
 /** `pushCandidates` (D236): a candidates' packet's framing line and cut. */
 interface PacketFrame {

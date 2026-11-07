@@ -39,7 +39,9 @@ export function renderPacket(
     note?: (item: ContextItem) => string | undefined;
     /**
      * `pushCandidates` (D236): a line of Eden's own (`EDEN_NOTE`, fixed words) after the header, framing the
-     * items as candidates the agent checks against the request. Never source or event text.
+     * items as candidates the agent checks against the request. Never source text; the one event text a lead
+     * carries is `planConflict`'s quote of the user's own earlier request (D301: redacted, one line, double quotes
+     * made single).
      */
     lead?: string;
   },
@@ -120,9 +122,9 @@ export function shownText(rendered: string): string {
 }
 
 /**
- * Eden's own lines, never an item's: fixed words with no source or event text in them, inside the data envelope (D11,
- * D19). `shownText` drops them (they are no item's words), and no line starts `- [`, so they are counted as no item
- * (`renderedCount`).
+ * Eden's own lines, never an item's: fixed words with no source text in them, inside the data envelope (D11, D19);
+ * the only event text is `planConflict`'s quote of the user's own earlier request (D301). `shownText` drops them
+ * (they are no item's words), and no line starts `- [`, so they are counted as no item (`renderedCount`).
  */
 export const EDEN_NOTE = "Eden: ";
 
@@ -137,6 +139,16 @@ export const CANDIDATES_LEAD =
   `${EDEN_NOTE}items from the user's sources that may bear on this request; nothing has checked them against it. ` +
   "Before using one, check it is about the same person, thing and date as the request and still current; if it is " +
   "not, ignore it and do not mention it.";
+
+/**
+ * `planConflict` (D301): the framing line of a packet about an earlier request; the request's own words follow, quoted.
+ * Like the candidates' lead, it asks the agent to check before using an item, and to say nothing of one that does not
+ * bear on that request.
+ */
+export const PLAN_LEAD =
+  `${EDEN_NOTE}new in the user's sources since an earlier request in this conversation, and may bear on it; nothing ` +
+  "has checked it against that request. If it is about the same person, thing and date and changes what was done or " +
+  "planned, tell the user; if not, ignore it and do not mention it. The earlier request:";
 
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";

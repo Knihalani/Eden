@@ -61,6 +61,8 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   readerGateVisits: true,
   // D237 (CL6): the push's candidates for the agent to judge, no reader call.
   pushCandidates: 5,
+  // D301 (A9): an item stored after an acting request that would have been among its candidates is sent at the take.
+  planConflict: true,
 };
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -92,11 +94,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(48);
+    expect(differ.length).toBe(49);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(48);
+    expect(partKeys.size).toBe(49);
   });
 });
 

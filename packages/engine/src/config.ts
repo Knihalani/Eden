@@ -488,6 +488,15 @@ export interface EngineConfig {
    * first (`CANDIDATES_LEAD`). 0 is the reader's push and asks (D95–D99).
    */
   pushCandidates: number;
+  /**
+   * D301 (A9, on in the default; docs/research/a9-ahead.md): plan-conflict proactivity. With the
+   * push and the sync on, each session keeps its last `PLAN_REQUESTS` acting requests (those the push ran for); an
+   * item the sync then stores (a poll, a notice's payload) that would have been among such a request's candidates
+   * (`pushCandidates`' rule: the first of its pool, the pool holding something constraint-like) is queued for the
+   * agent's next take as a packet naming that request (`PLAN_LEAD`), whatever the agent asks then. Once per item per
+   * session; checked at the take, so its card can count; no source or model call.
+   */
+  planConflict: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -609,4 +618,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
+  planConflict: true,
 };
