@@ -76,6 +76,7 @@ import {
   AskReader,
   CardEnricher,
   cardKey,
+  sanitizeItem,
   intentCut,
   intentReach,
   ModelReaderMaker,
@@ -655,7 +656,13 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   for (const task of tasks) clearSlot(world, task.text, keep);
   if (CORPUS_DUMP) {
     // `--corpus-dump` (A2): the world's items as its sources hold them, with the tasks and their planted ids.
-    const items = world.items.map((it) => ({ id: it.id, title: it.title, text: it.text.slice(0, 1_200) }));
+    // Each item as its source lists it (a separate, unmetered set of sources), and `h`: the card key of the copy the
+    // cache holds (redacted), to join an item to its replayed cards and requests.
+    const listed = simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll());
+    const items = listed.map((raw) => {
+      const it = sanitizeItem(raw);
+      return { id: raw.id, h: cardKey(it), title: it.title, text: it.text.slice(0, 1_200) };
+    });
     const asks = tasks.map((t, i) => ({ template: t.template, request: t.text, planted: planted[i]?.id ?? "" }));
     appendFileSync(CORPUS_DUMP, `${JSON.stringify({ suite, seed, variant, tasks: asks, items })}\n`);
   }
@@ -1148,6 +1155,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
           }),
       // `pushCandidates`' last pass: the planted item's place in its pool (-1: not in it), and whether it was handed.
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
+      // Trial `pushReach` (D330): the items its slots added, and whether the planted one is among them.
+      ...(push?.reached ? { pushReached: push.reached.length, pushReachedIt: push.reached.includes(id) } : {}),
       ...(rr
         ? {
             readerOutcome: rr.outcome,
