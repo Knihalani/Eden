@@ -41,3 +41,6 @@ Later waves start from what wave A finds.
 | A22 | Quality: a no-model link line on each candidate; a full intent re-draw spread |
 | A23 | Adoption: a fresh-eyes onboarding walkthrough on three paths |
 | A24 | Scale part 4: compact per-user sync id sets; a card drain on its own timer (D328) |
+| A25 | Injection residual: a check on actions that add a recipient, guest or payee only a packet named |
+| A26 | Decide the `pushReshow` trial (D340) with a fresh paired run |
+| A27 | Hermes cost with Eden: plugin context and the prompt cache, cards spend, Eden's connector calls |
