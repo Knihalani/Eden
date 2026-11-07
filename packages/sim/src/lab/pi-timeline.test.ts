@@ -131,10 +131,10 @@ describe("engine spans in the Pi timeline", () => {
     for (let i = 0; i < 20_000; i++) route(sp(1_000 + i, 0, "sync.list"));
     expect(performance.now() - t0).toBeLessThan(1_000);
     expect(got).toEqual([]);
-    // A deep chain under a prefetch whose root names the session at its close.
+    // A deep chain under a root that names the session at its close.
     route(sp(3, 2, "probe.person"));
     route(sp(2, 1, "probes"));
-    route(sp(1, 0, "anticipate.prefetch", { session: "s" }));
+    route(sp(1, 0, "observe", { session: "s" }));
     expect(got.map(([s, id]) => `${s}:${id}`).sort()).toEqual(["s:1", "s:2", "s:3"]);
   });
 });

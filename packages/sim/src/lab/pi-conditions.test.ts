@@ -27,8 +27,8 @@ describe("pi-ab conditions", () => {
   test("+flag is shorthand for a variant that turns one flag on, and stacks on a named variant", () => {
     expect(parseCondition("eden+askDedup", { config: ALL }).config).toEqual({ ...ALL, askDedup: true });
     const variants = parseVariants('{"ALL2":{"cardsEconomy":true}}');
-    const c = parseCondition("eden~ALL2+slowPathQueue@w0", { config: ALL, variants });
-    expect(c.config).toEqual({ ...ALL, cardsEconomy: true, slowPathQueue: true });
+    const c = parseCondition("eden~ALL2+readerReuse@w0", { config: ALL, variants });
+    expect(c.config).toEqual({ ...ALL, cardsEconomy: true, readerReuse: true });
     expect(c.waitMs).toBe(0);
     expect(() => parseCondition("eden+bad-flag", { config: ALL })).toThrow(/bad flag/);
     // The run's own configuration object is never written through.
@@ -126,7 +126,7 @@ describe("pi-ab conditions", () => {
   test("a variant or flag condition pairs with the condition it modifies, in the report", () => {
     expect(pairedWith("eden~ALL2")).toBe("eden");
     expect(pairedWith("eden+askDedup")).toBe("eden");
-    expect(pairedWith("eden-act~ALL2+slowPathQueue")).toBe("eden-act");
+    expect(pairedWith("eden-act~ALL2+readerReuse")).toBe("eden-act");
     expect(pairedWith("eden~ALL2@w0")).toBe("eden@w0");
     expect(pairedWith("both@w0")).toBe("both");
     expect(pairedWith("eden")).toBeNull();

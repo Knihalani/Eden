@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_CONFIG, PARTS, type Part } from "@eden/engine";
 import { FakeModel } from "@eden/llm";
@@ -8,7 +8,7 @@ import { edenHome } from "@eden/protocol";
 import { SourceMap } from "@eden/graph";
 import { buildPartner, openSourceMap } from "./build";
 import { stdioSourceMapPath } from "./config";
-import { ANTICIPATE_PARTS, engineConfig, parseEngineConfig } from "./engine-config";
+import { engineConfig, parseEngineConfig } from "./engine-config";
 import { DEFAULT_USD_PER_TENANT_DAY, modelRolesFromEnv, NO_MODELS } from "./models";
 
 const dir = mkdtempSync(join(edenHome(), "engine-config-"));
@@ -162,8 +162,8 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
 
   test("settings that would do nothing or break a feature are refused, naming the key (audit 2026-11-03b)", () => {
     const refused: [Record<string, unknown>, string][] = [
-      // A typo switches nothing off.
-      [{ anticipateOff: ["srve"] }, "anticipateOff"],
+      // A typo names no kind.
+      [{ readerPushKinds: ["blockz"] }, "readerPushKinds"],
       // 0-item pages: nothing syncs.
       [{ syncPageSize: 0, sync: true }, "syncPageSize"],
       // A 0 cap stops backfill at once and trims every synced item: sync silently off.
@@ -179,7 +179,9 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     expect(() => parseEngineConfig({ syncStaleChance: 7 })).toThrow(/"syncStaleChance" must be at most 1/);
     expect(() => parseEngineConfig({ askReaderPool: 2.5 })).toThrow(/"askReaderPool" must be a whole number/);
     expect(() => parseEngineConfig({ syncPageSize: 0 })).toThrow(/"syncPageSize" must be at least 1/);
-    expect(() => parseEngineConfig({ anticipateOff: ["serve", "srve"] })).toThrow(/"anticipateOff" has "srve"/);
+    expect(() => parseEngineConfig({ readerPushKinds: ["blocks", "blockz"] })).toThrow(
+      /"readerPushKinds" has "blockz"/,
+    );
     // Legal: nothing, 0 where 0 means off, defaults of dependency-only keys, chances at the bounds, real parts.
     const accepted: Record<string, unknown>[] = [
       {},
@@ -188,19 +190,9 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
       { readerPushKinds: [...DEFAULT_CONFIG.readerPushKinds] },
       { syncStaleChance: DEFAULT_CONFIG.syncStaleChance },
       { probeFreshFloor: 0, probeYieldFloor: 1 },
-      { anticipateOff: ["serve", "names"] },
       { confidentScore: 1.25, refreshAfterMs: 0 },
     ];
     for (const config of accepted) expect(parseEngineConfig(config)).toEqual(config);
-  });
-
-  test("anticipateOff's parts are exactly the ones partner.ts reads", () => {
-    const source = readFileSync(join(import.meta.dir, "../../engine/src/partner.ts"), "utf8");
-    // `off` is partner.ts's local alias for `this.config.anticipateOff` in `anticipate`.
-    expect(source).toContain("const off = this.config.anticipateOff;");
-    const read = new Set([...source.matchAll(/\b(?:anticipateOff|off)\.includes\("(\w+)"\)/g)].map((m) => m[1]!));
-    expect(read.size).toBeGreaterThan(0);
-    expect([...read].sort()).toEqual([...ANTICIPATE_PARTS].sort());
   });
 
   test("every checked-in profile in docs/profiles is the default minus a part, parses and builds a partner", () => {

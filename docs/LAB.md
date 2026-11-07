@@ -53,9 +53,9 @@ written by hand.
 
 | Preset         | What                                                                                                                                                                                                                                                                                                              |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `default`      | The unified default: NEWL (D99) plus poll behind, small poll pages, no probe grace, the push's reader not waiting for the poll, the slow-path queue (D112). Cards, intent and the reader need their dependencies (`--cards`, `--intent`, a reader); without them they are inert, as in a server with no model key |
-| `minus-<part>` | The default with one of `PARTS` (`packages/engine/src/parts.ts`) taken out: probes, grounds, fallback, compaction, judge, graph, anticipate, sync, freshness, askVerdicts, cards, intent, reader, slowPathQueue, probeGrace                                                                                       |
-| `minus-all`    | The default with every part taken out: `CORE_CONFIG`, the no-feature core (the old production default)                                                                                                                                                                                                            |
+| `default`      | The unified default: NEWL (D99) plus poll behind, small poll pages, no probe grace, the push's reader not waiting for the poll (D112). Cards, intent and the reader need their dependencies (`--cards`, `--intent`, a reader); without them they are inert, as in a server with no model key |
+| `minus-<part>` | The default with one of `PARTS` (`packages/engine/src/parts.ts`) taken out: probes, grounds, fallback, compaction, sync, freshness, cards, intent, reader, probeGrace (D229; graph, askVerdicts, anticipate and slowPathQueue were deleted by D225–D228, and judge left `PARTS`)                                                                                       |
+| `minus-all`    | The default with every part taken out: `CORE_CONFIG`, the no-feature core (the old production default; since D229 it keeps the judge's settings at their default values, which only a lab run with a judge wired reads)                                                                                                                                                                                                            |
 
 A trial (DECISIONS.md, "Trial switches") is measured as `--set '{...}'` over `default` (funnel) or
 `--variant-config '{"X":{...}}' --conditions eden,eden~X` (pi-ab, hermes-ab, whose `--config` defaults to `default`);
@@ -344,10 +344,12 @@ train1 seed 41 wrote 54 lines for its 54 reader calls.
   wait 1,500 26 of 28 (12/14, 14/14), the default 3,000 27 of 28 (13/14, 14/14); score 36/64 and 39/64 in all three.
   The client SDK and server default `waitMs` to 0 (D98).
 - **`-- --overlap`** sends the suite's next request in the same session, not waited for, just before each request,
-  so the request arrives while a lookup is in flight: the only funnel task shape `slowPathQueue` acts on. The run
-  prints `overlap: slow path busy N times (M queued by slowPathQueue)`. It changes the task shape: its scores are not
-  comparable with a run without it. ALL3 train1–6 seeds 41–42 `--jobs 4`, `--time 0`: `slowPathQueue` off 214/384
-  hidden, 210/384 decoys (busy 58–64 per shard, none queued); on 216/384, 211/384 (every busy request queued).
+  so the request arrives while a lookup is in flight: a request that finds the slow path busy is not looked up. The
+  run prints `overlap: slow path busy N times`. It changes the task shape: its scores are not comparable with a run
+  without it. ALL3 train1–6 seeds 41–42 `--jobs 4`, `--time 0`: `slowPathQueue` off 214/384 hidden, 210/384 decoys
+  (busy 58–64 per shard, none queued); on 216/384, 211/384 (every busy request queued). On 2026-11-07, with the paid
+  Haiku reader replayed (train1–6 seeds 41–42, `--jobs 4`), the default then (with the queue) read 316/133 against
+  310/85 without it (25–26 reader misses); the queue was deleted (D228).
 - **Sync items.** The sync line and the JSON `sync` carry `demandItems` and `backgroundItems` (`SyncStats`, summed
   per user before each lane's sync is discarded), the counter D101 is judged on, now reproducible at $0:
   `bun run funnel --jobs 4` (ALL3, train, seeds 41–42) demand items 182,742 and background items 76,796; with
@@ -355,7 +357,7 @@ train1 seed 41 wrote 54 lines for its 54 reader calls.
 
 ### 1d. The retrieval screen: half of train, every task agreeing with the funnel (audit 2026-11-06 F25)
 
-For a change to what reaches the reader (retrieval, ranking, intent, probes, the graph, sync), screen first on
+For a change to what reaches the reader (retrieval, ranking, intent, probes, sync), screen first on
 `retrieval-screen.ts`, then gate on recipe 1 or 2a. The screen is train1–6 at seed 41 only: the part of train every
 replay cache covers with no miss (cards and intent requests for seeds 41–42, every planted item with an intent line;
 the Haiku reader cache of recipe 2a replays seed 41 whole, 324 calls and 0 misses, its 2 misses are seed 42's). Each
@@ -387,7 +389,7 @@ funnel on four past changes (`agree`, each change run both ways against the defa
 | D159's looser intent `{"intentMinCoverage":0.2,"intentMinMatched":1,"intentHits":12}` | 384/384        | 42 / 42                         | +16, +22; +8, +21                      | +9, +10; +8, +14  | agree  |
 | `--preset minus-probes`                                                               | 384/384        | 32 / 32                         | −10, −11; −12, −9                      | −4, −5; −5, −5    | agree  |
 | `--preset minus-intent`                                                               | 384/384        | 42 / 42                         | −32, −45; −17, −24                     | −17, −20; −8, −12 | agree  |
-| `--preset minus-graph`                                                                | 384/384        | 6 / 6                           | −1, +3; −2, +1                         | −1, +1; −1, 0     | differ |
+| `--preset minus-graph` (history: the preset is gone, D225)                            | 384/384        | 6 / 6                           | −1, +3; −2, +1                         | −1, +1; −1, 0     | differ |
 
 Every task agreed in every change, as it must (same worlds, same order): that is a determinism check, not evidence that
 the screen predicts. The evidence is the verdict, the sign of the totals, which agreed on the three changes that moved
@@ -419,8 +421,9 @@ reader cache at $0. The haiku-opt.md command sets `askReaderWaitMs: 60000` so la
 
 The reader cache of the shipped default (D158: cards and intent requests replayed; intent thresholds 0.2/1/12 since
 D179, `intentByKind` since D200) on train1–6, seeds 41–42, is checked in gzipped:
-`packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz`, 1,968 lines, all `claude-haiku-5-5`, plain md5
-`d0ff788fa9cbad0f3c755f043b25d43b` (1,416 lines, md5 `47eb6393a75b49c14f0f7b802473fd59`, before D200's top-up). It was recorded on 2026-11-06 from an empty cache by one metered live run (ledger
+`packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz`, 4,377 lines, all `claude-haiku-5-5`, plain md5
+`32c5fa518a67a2db657f35f981e3262a` (1,968 lines, md5 `d0ff788fa9cbad0f3c755f043b25d43b`, before fix-w2a's top-up;
+1,416 lines, md5 `47eb6393a75b49c14f0f7b802473fd59`, before D200's). It was recorded on 2026-11-06 from an empty cache by one metered live run (ledger
 run `ib-reader-intent-cache-default`: 652 calls, $0.18548, 418 s, TOTAL hidden 274/384, decoys 137/384, 0 misses),
 then topped up the same day for the completed intent file (ledger run `r2-intent-reader-topup`: 73 calls, $0.02102;
 docs/research/edge-intent.md), and again for the D179 thresholds (ledger runs `close-d159-reader-topup`, 570 calls,
@@ -429,7 +432,10 @@ deleted verb-gate trial (D168's verb-recognising request gate; ledger run `close
 $0.03306; its 119 lines, appended after the first 1,297, are inert for the default), and for D200's carded cut
 (ledger runs `s3a-bykind-reader-topup`, 499 rows, $0.15136, `s3a-default-reader-topup2`, 2 calls, $0.0007, and,
 after the review's fix, `s3a-default-reader-topup3`, 53 calls, $0.01671; docs/research/fix-s3a-intent.md). The older readings stay in the file, so a `--set` back to 0.35/2/6, or
-`{"intentByKind":false}` (the pre-D200 311/137), still replays.
+`{"intentByKind":false}` (the pre-D200 311/137), still replays. It was topped up again in fix-w2a (ledger runs
+`w2a-topup-*`, `w2a-topup2-*`, `w2a-topup-slim`, `w2a-topup-overlap-*`, $0.676 in all;
+docs/research/fix-w2a-parts.md) so every `--preset minus-<part>` of the current `PARTS` replays with 0 misses and
+`--overlap` replays with about 25 misses.
 The cache is plain JSONL that a live reader appends to, so it is unpacked under `.local/` (`--reader-cache` refuses a
 `.gz`):
 
@@ -439,9 +445,11 @@ bun run funnel --jobs 4 --allow-misses --json .local/haiku-default.json -- --rea
   --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl
 ```
 
-Measured on 2026-11-07 after D200's top-up, from the committed file (no ledger flag, so no spend; about 10 s):
-`merged reader replay {"replayed":654,"sent":0,"missed":0,"failed":0}`, TOTAL hidden 315/384, decoys 133/384, reader
-pool hidden 285/384 and decoy 254/384. Before D200 (2026-11-06, after the D179 and verb-gate top-ups): 651 replayed,
+Measured on 2026-11-07 after the deletions (D225–D228), from the committed file (no ledger flag, so no spend):
+`merged reader replay {"replayed":643,"sent":0,"missed":0,"failed":0}`, TOTAL hidden 313/384, decoys 127/384, reader
+pool hidden 282/384 and decoys 249/384 (before the deletions, the same day: 314/132, pool 285/254). After D200's
+top-up (2026-11-07, about 10 s): 654 replayed, 0 missed, TOTAL hidden 315/384, decoys 133/384, reader pool hidden
+285/384 and decoy 254/384. Before D200 (2026-11-06, after the D179 and verb-gate top-ups): 651 replayed,
 0 missed, TOTAL hidden 311/384, decoys 137/384, reader pool hidden 278/384 and decoy 254/384. At 0.35/2/6 it read 647 replayed, 2 missed, 281/139, pool 262/246 (and with the older
 intent file before that: 645 replayed, 5 missed, 273/137, pool 257/240). A change upstream of the reader can leave
 misses (answered without the reader, fail open), which is why the recipe keeps `--allow-misses`; without it a miss

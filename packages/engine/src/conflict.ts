@@ -331,23 +331,14 @@ const UNTIED = new RegExp(
  * What depends on the item alone (its statements, their marks, its words and references) is read once per item and
  * vocabulary (`analyse`); what depends on the request (ties, dates, amounts, the twin check) is read here each time.
  */
-export function assess(
-  frame: Frame,
-  item: ContextItem,
-  now: number,
-  extraTies?: ReadonlySet<string>,
-  speaks = false,
-): Verdict {
+export function assess(frame: Frame, item: ContextItem, now: number, extraTies?: ReadonlySet<string>): Verdict {
   // A consequence probe's find (`consequence.ts`) is tied to the request by its action class's own words: "freeze"
   // and "production" tie a release request that says neither. Plural "s" dropped, as for the request's own words.
   const extra = extraTies ? new Set([...extraTies].map(stem)) : null;
   const V = frame.vocab === true;
   const a = analyse(item, V);
   // A message from someone the request names speaks for them: its "I" is them ("I'm vegetarian" from Sam).
-  // `speaks`: the knowledge graph (`kg.ts`) says the item's author is someone the request names, or one of their
-  // organisation's people, or the person the request names by role ("my manager"), though no name matches here.
-  const fromNamed =
-    speaks || (a.sender !== "" && frame.names.some((n) => n.split(/\s+/).every((w) => a.sender.includes(w))));
+  const fromNamed = a.sender !== "" && frame.names.some((n) => n.split(/\s+/).every((w) => a.sender.includes(w)));
   // A statement is tied to the request when it holds one of its words, or speaks in the first person from someone
   // it names. Only a tied statement's conflict is the request's ("travel over £500 needs pre-approval" in a mail
   // from Oskar is no conflict with lunch with Oskar). A request that names someone ties by name only: another
@@ -739,7 +730,7 @@ function dateVerdict(
 
 /**
  * Whether a sentence (lower case) states something that stops, moves or settles an action (`BLOCKS`, `MOVES`,
- * `DONE`, `STANDING`): the knowledge graph links such an item to the days and things it names as constraining them.
+ * `DONE`, `STANDING`).
  */
 export function constrains(s: string): boolean {
   // Most sentences match none of the four: one search each (no match objects) answers them. `search` ignores the
@@ -787,7 +778,7 @@ export function arrangedVisit(s: string): boolean {
   return t.search(BOOKED_VISIT) >= 0 || t.search(BE_IN) >= 0;
 }
 
-/** The spans and limits a sentence (lower case) states, as ISO days (`datesOf`), for the knowledge graph. */
+/** The spans and limits a sentence (lower case) states, as ISO days (`datesOf`), for the action firewall. */
 export function datesIn(s: string, now: number): { spans: { from: string; to: string }[]; limits: string[] } {
   return datesOf(s.slice(0, MAX_TEXT).replace(/[\u2013\u2014]/g, "-"), now);
 }

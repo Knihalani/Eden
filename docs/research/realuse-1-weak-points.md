@@ -93,6 +93,8 @@ files; each session's decision rows use its own block of numbers (below) so para
 - $0 train: grounds, anticipate, compaction, fallback, freshness, judge, probeGrace, slowPathQueue contribute 0;
   graph (+6) and askVerdicts (+16 hidden, +9 decoys) read better removed at the stub; grounds and graph no live
   difference. **Fix.** Paid-replay ablation per part at the current default, then promote or delete (D112).
+- **Status (wave 2, W2a):** decided in D225–D229, [fix-w2a-parts.md](fix-w2a-parts.md): graph, askVerdicts,
+  anticipate and slowPathQueue deleted; the other parts kept; judge out of `PARTS`.
 
 ## 12. Benchmark gaps (S3b, and wave 2)
 

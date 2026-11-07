@@ -12,7 +12,6 @@ import type { Trace } from "./trace";
 /** Every setting where the default and the core differ, with its value in the default (D112). */
 const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   fallbackAsks: true,
-  slowPathQueue: true,
   probes: true,
   compactInjection: true,
   probeGraceMs: 0,
@@ -22,12 +21,6 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   consequenceProbe: true,
   probeRoles: true,
   probeShare: true,
-  graph: true,
-  graphMerge: true,
-  anticipate: true,
-  judgeContested: true,
-  judgeTied: true,
-  judgeItemBytes: 200,
   quietSettled: true,
   groundAway: true,
   groundConflict: true,
@@ -44,7 +37,6 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   revisionNotice: true,
   cards: true,
   cardsEconomy: true,
-  askVerdicts: true,
   compactAsk: true,
   askDedup: true,
   compactParts: true,
@@ -92,11 +84,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(50);
+    expect(differ.length).toBe(42);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(50);
+    expect(partKeys.size).toBe(42);
   });
 });
 
@@ -185,6 +177,75 @@ describe("the default with no model and no partner dependencies", () => {
       expect(t.modelCalls).toBe(0);
       expect(t.costUsd).toBe(0);
     }
+    p.stopSync();
+  });
+});
+
+/** A searchable source whose searches wait for `release`, and that counts every call. */
+class GatedSource implements Source {
+  readonly kind = "test";
+  readonly description = "Gated notes";
+  calls = 0;
+  readonly queries: string[] = [];
+  private open!: () => void;
+  readonly gate = new Promise<void>((r) => (this.open = r));
+  constructor(readonly id: string) {}
+  release(): void {
+    this.open();
+  }
+  async search(q: SearchQuery): Promise<ContextItem[]> {
+    this.calls++;
+    this.queries.push(JSON.stringify(q));
+    await this.gate;
+    return [];
+  }
+}
+
+// Anticipation (D227) and the slow-path queue (D228) were deleted; what the default does in their place is pinned
+// here, so a later change to the draft branch or the busy branch fails a test.
+describe("the default after D227 and D228", () => {
+  const scope = { tenantId: "t1", userId: "u1", sessionId: "s1" };
+  const at = Date.UTC(2026, 9, 20, 9);
+  const build = (source: Source, traces: Trace[]) =>
+    new ContextPartner({
+      sources: async () => [source],
+      sourceMap: new SourceMap(":memory:", { seed: 1 }),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => at,
+      onTrace: (t) => traces.push(t),
+    });
+
+  test("a draft the user is still typing is ignored: no source call, no trace, no session", async () => {
+    const traces: Trace[] = [];
+    const notes = new GatedSource("notes");
+    notes.release();
+    const p = build(notes, traces);
+    const draft = { ...scope, at, kind: "user_message", text: "Ask Dana Lee about the Globex renewal", draft: true };
+    const r = await p.observe(draft as AgentEvent);
+    expect(r.injection).toBeNull();
+    expect(notes.calls).toBe(0);
+    expect(traces).toEqual([]);
+    expect(p.takePending(scope)).toEqual([]);
+    p.stopSync();
+  });
+
+  test("a request that finds the slow path busy is traced 'slow path busy' and not looked up later", async () => {
+    const traces: Trace[] = [];
+    const notes = new GatedSource("notes");
+    const p = build(notes, traces);
+    const ev = (text: string, n: number) => ({ ...scope, at: at + n, kind: "user_message", text }) as AgentEvent;
+    await p.observe(ev("Prep me for the Globex renewal with Dana Lee", 0));
+    const busy = await p.observe(ev("Book the Lisbon flights for the Acme offsite", 1));
+    expect(busy.injection).toBeNull();
+    expect(traces.some((t) => t.decision === "silent" && t.reason === "slow path busy")).toBe(true);
+    notes.release();
+    // Let the first lookup settle: nothing then looks the busy request up.
+    for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(traces.some((t) => t.reason?.startsWith("queued cue"))).toBe(false);
+    expect(notes.calls).toBeGreaterThan(0);
+    expect(notes.queries.filter((q) => /lisbon|acme/i.test(q))).toEqual([]);
     p.stopSync();
   });
 });

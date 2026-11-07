@@ -27,11 +27,9 @@ OpenRouter returns the real cost per call (`usage.cost`), and the engine books t
 | Judge                                                                                                       | system ≈ 100 tok + window ≤ 4,000 chars (≈ 1,000 tok) + ≤ 6 candidates × ≈ 100 tok ≈ 1,700 tok | 512 tok, reasoning included (D45) | ≈ $0.00051                      |
 | Card enrichment (`cards`, in the default since D112 and kept there by D113(5); background, never per event) | system ≈ 700 tok + ≤ 10 items × (title ≤ 160 + own text ≤ 900 chars) ≈ 3,400 tok               | 2,000 tok, no reasoning (D149)    | ≈ $0.0015                       |
 
-Queued request (`slowPathQueue`, D102, in the default since D112). No new kind of call: a request that arrives while
-the session's slow path is busy is looked up once that slow path settles, instead of being dropped. One slot per
-session (the latest request wins), so it adds at most one extra slow path, so at most one judge call (under the
-session's `Budget`, as any lookup's), per busy window. A queued request older than 10 s, in cooldown by then, or in a
-session that closed makes no call.
+Queued request (`slowPathQueue`, D102): deleted by D228 (2026-11-07; docs/research/fix-w2a-parts.md). A request that
+arrives while the session's slow path is busy is not looked up, so the one extra slow path (and judge call) per busy
+window it could add is gone.
 
 Smaller poll pages (`syncPollPageSize`, D101, in the default since D112 at 5). No model call. An on-demand poll lists
 far
@@ -270,14 +268,12 @@ from $0.156 to about $0.039 per 1,000 tasks, Eden ALL all-in from $0.474 to abou
 
 Sync push (D66) was deleted by D112.
 
-With `graph` (D58, in the default since D112) the judge sees at most `graphSeats` (1) more candidate, about 100 more
-input tokens per
-call at its cap; no other model call is added and the graph makes no source call. Measured in simulation (realistic,
-4 seeds, perfect judge): $0.0172 → $0.0178 per 1,000 turns, model calls per turn 0.213 → 0.215.
+The knowledge graph (`graph`, D58) and its judge seat were deleted by D225 (2026-11-07;
+docs/research/fix-w2a-parts.md): no measured value on train with the paid reader replayed.
 
 The action firewall (`actionCheck`, off by default; proposed D69, docs/research/econ-firewall.md) adds no model call
-and no source call: each check of an agent's tool call is CPU on what is held (the cache, the probes' memo, the graph,
-the cards), 4–5 ms p50 and at most 28 ms per check in the no-model replay of the track's recorded calls (seeds 41–43,
+and no source call: each check of an agent's tool call is CPU on what is held (the cache, the probes' memo, the
+cards), 4–5 ms p50 and at most 28 ms per check in the no-model replay of the track's recorded calls (seeds 41–43,
 ALL). Its cost is the agent's: a held call costs the agent about one more model request to read the finding and
 answer, +$0.3–0.6 per 1,000 such tasks and +5–7 s on them (the track's live runs, in-sample; agent cost over
 all tasks, within noise).
@@ -488,7 +484,7 @@ unmeasured advice.
 
 ## Levers, in order of leverage
 
-1. Fewer model calls: better cheap scoring (M1 tuning), the graph (M3), learned silence. Done so far: ask answers
+1. Fewer model calls: better cheap scoring (M1 tuning), the graph (M3; deleted by D225), learned silence. Done so far: ask answers
    without a model by default (D43), which halved model calls per turn in simulation (realistic, perfect judge, seeds
    31–40: 0.378 to 0.198; cost per 1,000 turns $0.027 to $0.014) with recall, precision and ask retrieval unchanged.
    Grounding the no-model path in people and days (D44) adds no model call: with the perfect judge, model calls per turn
@@ -570,16 +566,16 @@ and 5.2-5.4x `core`, the graph's add 182-192 µs and 2.6 KB; D150 cut the read t
 screen identical, which closed the planned `graphLite` trial with no switch. Arithmetic, not measured: a cold restart
 that backfills 10,000 users × 3,000 items at about 260 µs each is about 7,800 CPU-seconds per process, about a third of
 it the graph. The graph adds no paid call; the paid-reader funnel credits it with 4 more hidden facts surfaced of 384
-(and 2 more decoys), so it stays in the default (D141).
+(and 2 more decoys), so D141 kept it. D225 (2026-11-07; docs/research/fix-w2a-parts.md) deleted it: with the paid
+reader replayed after a top-up it read 317/131 without it against 314/132, so `shipped` no longer pays the `+graph`
+share and the figures above that include it are history.
 
-Anticipation (D60, `anticipate`, in the default since D112; docs/research/moon-anticipate.md) adds no model call on any
-path: its predictions are fixed linear reads of an event's head, and its prefetches are source calls within
-`anticipateCalls` (4 per event, `probeCalls` for a draft) and `anticipateSessionCalls` (24 per session). Measured
-in-sample: source calls +1.0% to +3.5% in simulation, +3.9% connector searches per task in the dev funnel with a draft
-lead-in; with the perfect judge, model calls per turn 0.213 → 0.226 and $0.0170 → $0.0182 per 1,000 turns (realistic,
-seeds 41–44: more lookups reach the judge with candidates).
+Anticipation (D60, `anticipate`) was deleted by D227 (2026-11-07; docs/research/fix-w2a-parts.md): its prefetches
+were 0.5 source calls a task (16% of request-time calls) with no measured gain on train with the paid reader
+replayed; without it the default makes 2.7 rather than 3.2 connector calls a task.
 
-Combined (proposed D62, docs/research/moonshots.md; one session, in-sample, realistic seeds 41–44, perfect judge
+Combined (proposed D62, docs/research/moonshots.md; history: `graph`, `graphMerge` and `anticipate` were deleted by
+D225 and D227; one session, in-sample, realistic seeds 41–44, perfect judge
 modelled): R (H + `consequenceProbe`, `probeRoles`, `graph`, `graphMerge`, `cards`, `anticipate`) costs $0.0195 per
 1,000 turns against H's $0.0170 (+15%), 0.231 model calls per turn (0.213), 7.88 source calls per lookup (7.78; 8.76
 with no model); in the per-task funnel 9.94 calls per task against 8.49 (a draft's prefetch and the class query). R +
@@ -593,7 +589,7 @@ telemetry spans), and the graph about 35% (the review's runs: ALL 31.5 s, ALL �
 The graph's build cost, measured after the review (D63; 20 users with full caches of 2,000 realistic items each):
 heap 3.38 → 8.16 MB per user and cache-put CPU 120 → 361 ms per 2,000 items, about 48 GB more heap at the cache's
 10,000 users per tenant. Request-time engine CPU stays under 1 ms per lookup at p50 for the graph walk and card
-matching.
+matching. (History: the graph was deleted by D225 on 2026-11-07, and its build cost with it.)
 
 The judge, measured on ALL (D65, docs/research/econ-judge.md; in-sample). On the critical path it adds no facts and
 costs time: in the full benchmark (D64), in-sample, paired, eden-judge − eden is −0.026 hidden at +1.10 s and +$0.039

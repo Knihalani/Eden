@@ -48,7 +48,7 @@ describe("judgeTied", () => {
 
   test("candidates sharing only a word common to the user's items are not judged; off, they are", async () => {
     const off = new FakeModel(() => '{"pick": []}');
-    await say(engine({}, off), "that sounds perfect");
+    await say(engine({ judgeTied: false }, off), "that sounds perfect");
     expect(off.calls.length).toBe(1);
     const on = new FakeModel(() => '{"pick": [0]}');
     expect(await say(engine({ judgeTied: true }, on), "that sounds perfect")).toEqual([]);

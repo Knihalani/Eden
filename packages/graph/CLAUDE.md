@@ -4,7 +4,7 @@ The source map, layer 1 of the knowledge graph: per user, which sources mention 
 source has proven in each situation (a Beta posterior per user, situation and source, D13, D18, D23). Routing reads
 it to ask the few sources likely to know. SQLite via `bun:sqlite` (D15). One file: `src/source-map.ts`.
 
-(The per-user graph over cached items, D58, is the engine's `kg.ts`, in memory; it is not this package.)
+(The per-user knowledge graph over cached items, D58, was the engine's `kg.ts`, since deleted; it was not this package.)
 
 ## What it holds, and what it must not (D8)
 

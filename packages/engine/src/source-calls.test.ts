@@ -74,7 +74,7 @@ async function settled(flights: Flights, traces: Trace[], sent: Map<string, numb
 const quiet: ReaderMaker = { read: async () => ({ bears: [], costUsd: 0 }) };
 
 const total = (sent: Map<string, number>) => [...sent.values()].reduce((a, b) => a + b, 0);
-const traced = (traces: Trace[]) => traces.reduce((n, t) => n + t.sourceCalls + (t.anticipateCalls ?? 0), 0);
+const traced = (traces: Trace[]) => traces.reduce((n, t) => n + t.sourceCalls, 0);
 
 async function run(
   config: Record<string, unknown>,

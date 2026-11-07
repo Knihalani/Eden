@@ -472,7 +472,6 @@ describe("an item steering its own requests (anchoredIntents)", () => {
         ...CORE_CONFIG,
         cards: true,
         intent: true,
-        askVerdicts: true,
         sync: true,
         syncPageSize: 50,
         syncCallsPerMin: 600,

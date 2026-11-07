@@ -224,7 +224,7 @@ export type SurfacedBy = "flagged" | "rule path" | "listed only";
 
 /**
  * How a surfaced planted item was surfaced: the reader flagged it (whatever injection carried it); delivered without
- * the flag (a rule path: grounded-*, fallback, sources, cache, anticipated-*); or only listed by the ask, with no flag
+ * the flag (a rule path: grounded-*, fallback, sources, cache); or only listed by the ask, with no flag
  * and no delivery (`readAsk`'s `rest`: chosen minus explicit rejections, partner.ts). Null when not surfaced.
  */
 export function surfacedBy(t: SurfacedRow): SurfacedBy | null {
