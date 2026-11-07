@@ -19,10 +19,17 @@
  * - `+nokey` (D291): also the harness's: Eden runs as a server with no model key builds it (`buildPartner` with
  *   `NO_MODELS`): the same engine settings, but no card enricher (so no cards and no intent requests) and no reader.
  *   Only a base with Eden takes it;
+ * - `+terse` (A16, D335, trial): also the harness's, on a base whose agent has `ask_context`: the tool is described
+ *   with `ASK_CONTEXT_DESCRIPTION_TERSE` and its question with `ASK_QUESTION_TERSE` (`@eden/protocol`);
+ * - `+ephemeral`, `+ephemeralBp` (A16, D336): also the harness's, on a base with Eden: how earlier requests' packets
+ *   stay in the transcript (`packet-layout.ts`): only the current request's, as `withContext` and the proxy send them,
+ *   and with a cache breakpoint on the request's user turn. Only multi-request sessions (`--day`, `--days`) differ;
  * - `@w<ms>`: how long the first observe waits for Eden's slow path (default 3000, the client's `withContext`).
  *
  * An unknown base throws: a typo must not run Eden under another condition's name.
  */
+
+import type { PacketLayout } from "./packet-layout";
 
 /** The settings each variant name adds over `--config`. */
 export type Variants = Record<string, Record<string, unknown>>;
@@ -47,12 +54,20 @@ export interface Condition {
   judge: boolean;
   /** `+nokey`: no card enricher and no reader are built, as on a server without a model key (D291). */
   noKey: boolean;
+  /** `+terse` (D335, trial): `ask_context` asks for search-like questions and no narration. */
+  askTerse: boolean;
+  /** `+ephemeral`, `+ephemeralBp` (D336): how earlier requests' packets stay in the transcript; else `kept`. */
+  packets: PacketLayout;
 }
 
 /** The harness flag `+ask`: `ask_context` beside the tools, never sent to the engine as a setting. */
 const ASK_FLAG = "ask";
 /** The harness flag `+nokey`: the partner gets no model roles, never sent to the engine as a setting. */
 const NOKEY_FLAG = "nokey";
+/** The harness flag `+terse` (D335): the trial's `ask_context` description, never sent to the engine. */
+const TERSE_FLAG = "terse";
+/** The harness flags of D336's packet layouts, never sent to the engine. */
+const LAYOUT_FLAGS: readonly PacketLayout[] = ["ephemeral", "ephemeralBp"];
 
 const BASES = ["none", "tools", "eden", "both", "eden-judge", "both-judge"] as const;
 const SHAPE = /^([a-z-]+?)(-act(?:-firewall)?)?(?:~([A-Za-z0-9_.-]+))?((?:\+[^+@~]+)*)(?:@(.*))?$/;
@@ -101,7 +116,19 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
       `condition ${name}: +nokey takes Eden's model roles away, so only eden or both (no judge, which needs a model) takes it`,
     );
   }
-  const flags = allFlags.filter((f) => f !== ASK_FLAG && f !== NOKEY_FLAG);
+  const askTool = base.startsWith("eden") || askFlag;
+  const askTerse = allFlags.includes(TERSE_FLAG);
+  if (askTerse && (!askTool || base.endsWith("-judge"))) {
+    throw new Error(`condition ${name}: +terse changes ask_context's description, so only eden or both+ask takes it`);
+  }
+  const layouts = LAYOUT_FLAGS.filter((f) => allFlags.includes(f));
+  if (layouts.length > 1) throw new Error(`condition ${name}: +ephemeral and +ephemeralBp are two layouts; name one`);
+  if (layouts.length && (base === "none" || base === "tools")) {
+    throw new Error(`condition ${name}: +${layouts[0]} places Eden's packets, so only a base with Eden takes it`);
+  }
+  const flags = allFlags.filter(
+    (f) => f !== ASK_FLAG && f !== NOKEY_FLAG && f !== TERSE_FLAG && !(LAYOUT_FLAGS as string[]).includes(f),
+  );
   let extra: Record<string, unknown> = {};
   if (variant !== undefined) {
     const v = options.variants?.[variant];
@@ -142,9 +169,11 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
     useEden,
     withPartner: useEden || firewall,
     useTools: base === "tools" || base.startsWith("both"),
-    askTool: base.startsWith("eden") || askFlag,
+    askTool,
     judge: base.endsWith("-judge"),
     noKey,
+    askTerse,
+    packets: layouts[0] ?? "kept",
   };
 }
 

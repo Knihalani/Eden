@@ -96,7 +96,7 @@ import {
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
-import type { AgentEvent, ContextItem } from "@eden/protocol";
+import { ASK_CONTEXT_DESCRIPTION_TERSE, ASK_QUESTION_TERSE, type AgentEvent, type ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import type { World } from "../world";
@@ -143,6 +143,7 @@ import { effective, PRESETS } from "./presets";
 import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Budgeted } from "./reader-disk";
 import { parseSuites } from "./suites";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
+import { earlierPackets, userTurnBreakpoint } from "./packet-layout";
 import {
   DayLog,
   dayId,
@@ -242,6 +243,10 @@ const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
   act: ACT,
   defaults: DEFAULT_CONFIG as unknown as Record<string, unknown>,
 });
+// D336's layouts differ only where a session holds several requests; on one request they would rerun `eden`.
+if (!DAYS_ON && CONDITIONS.some((c) => c.packets !== "kept")) {
+  throw new Error("+ephemeral and +ephemeralBp change how earlier requests' packets are kept: use --days or --day");
+}
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
 const USES_READER = CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).askReader);
@@ -519,6 +524,8 @@ const PROMPTS_HASH = armPromptsHash(
   VARIANTS.includes("neutral"),
 );
 const askParams = Type.Object({ question: Type.String() });
+/** `+terse` (D335, trial): the question described as a search. */
+const askParamsTerse = Type.Object({ question: Type.String({ description: ASK_QUESTION_TERSE }) });
 
 /**
  * A model whose calls are charged to the task that started them (`owner()` read when the call starts): a call that
@@ -562,6 +569,11 @@ interface TaskRecord {
     cached?: number;
     /** Of `in`, the tokens written to the prompt cache (Anthropic: billed at 1.25x input). */
     cacheWrite?: number;
+    /** A16: the reply's visible text (characters) and its tool calls, so a report can split a turn's output. */
+    textChars?: number;
+    calls?: number;
+    /** A16: the text of a reply that called a tool (sim data, first `SAY_CHARS`): what the agent says before asking. */
+    say?: string;
   }[];
   events: Timeline["events"];
   dropped: number;
@@ -582,6 +594,17 @@ const textOf = (m: AgentMessage | undefined) =>
         .map((c) => c.text)
         .join("")
     : "";
+
+/** A16: how much of a tool turn's text a timeline keeps (sim data). */
+const SAY_CHARS = 400;
+
+/** A16: a reply's shape for the timeline: its text's length, its tool calls and, when it called one, its text. */
+function turnShape(m: AgentMessage): { textChars: number; calls: number; say?: string } {
+  if (m.role !== "assistant") return { textChars: 0, calls: 0 };
+  const text = textOf(m);
+  const calls = m.content.filter((c) => c.type === "toolCall").length;
+  return { textChars: text.length, calls, ...(calls && text ? { say: text.slice(0, SAY_CHARS) } : {}) };
+}
 
 /** One world under one condition: a fresh Eden (if any) sees the world's tasks in order, as in agent-ab. */
 async function runWorld(
@@ -617,6 +640,8 @@ async function runWorld(
     firewall,
     config,
     noKey,
+    askTerse,
+    packets: layout,
   } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
@@ -944,9 +969,10 @@ async function runWorld(
       if (askTool && partner) {
         tools.push({
           name: "ask_context",
-          description: ASK_DESCRIPTION,
+          // `+terse` (D335, trial): the same tool, asked for search-like questions and no narration.
+          description: askTerse ? ASK_CONTEXT_DESCRIPTION_TERSE : ASK_DESCRIPTION,
           label: "ask_context",
-          parameters: askParams,
+          parameters: askTerse ? askParamsTerse : askParams,
           prepareArguments: (a) => {
             const x = (a ?? {}) as { query?: unknown; question?: unknown };
             return { question: String(x.question ?? x.query ?? "") };
@@ -1034,7 +1060,8 @@ async function runWorld(
           if (DAYS_ON && dayPackets.some((p) => p.length)) {
             const asSystem = (text: string) =>
               ({ role: "system", content: text, timestamp: Date.now() }) as unknown as AgentMessage;
-            return placePackets(messages, dayPackets, packets, asSystem);
+            // `+ephemeral`, `+ephemeralBp` (D336): earlier requests' packets gone, as `withContext` and the proxy send.
+            return placePackets(messages, earlierPackets(layout, dayPackets), packets, asSystem);
           }
           if (!packets.length) return messages;
           const at = messages.map((m) => m.role).lastIndexOf("user");
@@ -1077,7 +1104,12 @@ async function runWorld(
               maxRetries: 0,
               timeoutMs: 90_000,
               cacheRetention: "short",
-              onPayload: (payload) => anthropicThinkingOff(MODEL, payload),
+              onPayload: (payload) => {
+                const p = anthropicThinkingOff(MODEL, payload);
+                // `+ephemeralBp` (D336): the request's user turn gets a breakpoint, so its entry outlives the packet.
+                if (layout === "ephemeralBp") userTurnBreakpoint(p as { messages?: unknown });
+                return p;
+              },
               onProviderStreamEvent: (event) => {
                 const e = event as { type?: string };
                 if (mine.first === null && (e.type === "content_block_start" || e.type === "content_block_delta")) {
@@ -1210,6 +1242,7 @@ async function runWorld(
             cost,
             ...(q.cached ? { cached: q.cached } : {}),
             ...(q.cacheWrite ? { cacheWrite: q.cacheWrite } : {}),
+            ...turnShape(e.message),
           });
         } else if (e.type === "tool_execution_start") {
           r.toolCalls++;

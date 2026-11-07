@@ -167,4 +167,27 @@ describe("pi-ab conditions", () => {
       expect(() => parseCondition(n, { config: ALL })).toThrow(/nokey/);
     expect(pairedWith("eden+nokey")).toBe("eden");
   });
+  test("+terse: the agent's ask_context gets the trial's terse description, nothing else changes (D335)", () => {
+    const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+    const c = parseCondition("eden+terse", { config: ALL, defaults });
+    expect([c.askTerse, c.askTool, c.useEden]).toEqual([true, true, true]);
+    expect(c.config).toEqual(ALL);
+    expect(parseCondition("both+ask+terse", { config: ALL, defaults }).askTerse).toBe(true);
+    expect(parseCondition("eden", { config: ALL }).askTerse).toBe(false);
+    // Only an arm whose agent has ask_context takes it.
+    for (const n of ["tools+terse", "none+terse", "both+terse"])
+      expect(() => parseCondition(n, { config: ALL })).toThrow(/terse/);
+    expect(pairedWith("eden+terse")).toBe("eden");
+  });
+  test("+ephemeral, +ephemeralBp: how earlier requests' packets are kept, a harness setting (D336)", () => {
+    const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+    expect(parseCondition("eden", { config: ALL }).packets).toBe("kept");
+    const e = parseCondition("eden+ephemeral", { config: ALL, defaults });
+    expect([e.packets, e.config]).toEqual(["ephemeral", ALL]);
+    expect(parseCondition("both+ask+ephemeralBp", { config: ALL, defaults }).packets).toBe("ephemeralBp");
+    // Without Eden there are no packets; both flags at once would be two layouts.
+    for (const n of ["tools+ephemeral", "none+ephemeralBp", "eden+ephemeral+ephemeralBp"])
+      expect(() => parseCondition(n, { config: ALL })).toThrow(/ephemeral/);
+    expect(pairedWith("eden+ephemeralBp")).toBe("eden");
+  });
 });
