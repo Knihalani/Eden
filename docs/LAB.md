@@ -429,8 +429,13 @@ work vocabulary, ~3% of items naming one of the world's people) and screen 16 ta
 bun run funnel --jobs 2 --suite train1,train2,train3,train4,train5,train6 --seeds 41 --json n995.json \
   -- --noise-sources 995 --limit 16     # ~45 s; --jobs 2: memory. --set '<arm>' for a trial
 bun run funnel --jobs 2 --suite train1,train2,train3,train4,train5,train6 --seeds 41 -- --limit 16   # five sources
-bun packages/engine/bench/source-days.bench.ts 1000 300 3 --config='<arm>'   # listing and card calls a day
+bun packages/engine/bench/source-days.bench.ts 1000 300 3 --config='<arm>'   # listing, card and fetch calls a day
 ```
+
+Live (A21, D357): `pi-ab --noise-sources 995` gives Eden's arms the same noise connectors (the tools arm keeps the
+world's five as its agent's tools); one seed per process (two at once ran out of memory). Deletions under lost notices
+with every source on the weekly sweep (D356's worst case): `quality-cli --never-used` (no source is ever "used").
+Recipes and figures: docs/research/a21-scale.md.
 
 Read hidden/decoys, `calls/task`, and the `merged cards use` line's `calls` and `sent` (card calls are stub-counted:
 noise items are not in the replay; price them at $0.000181 a call, A1). Compare task by task against the same seed

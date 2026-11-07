@@ -91,7 +91,8 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
 ## Pitfalls seen in this repo
 
 - **One seed per `pi-ab.ts` process.** One process for four seeds over nine suites was killed for memory (14 GB;
-  docs/research/pi-full-benchmark.md); the Haiku campaign ran three processes at once, RSS up to 3.35 GB each.
+  docs/research/pi-full-benchmark.md); the Haiku campaign ran three processes at once, RSS up to 3.35 GB each. With
+  `--noise-sources 995` (D357) run one process at a time: two at once were killed on 15 GiB (A21).
 - The default needs `--cards`, `--intent` (requests replayed) and a reader for its model parts; without them they are
   inert (the funnel screens with `--reader stub` when none is named). `bun run funnel` passes the checked-in cards
   and, since D158, the checked-in intent requests (train seeds 41–44, held-out 10–11 seeds 41–42, held-out 13 seeds

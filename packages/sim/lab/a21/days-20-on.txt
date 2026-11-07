@@ -1,0 +1,12 @@
+1000 sources × 20 items, churn 1/day
+cold: list 1000 bg + 0 demand, search 3, fetch 0, cards 0 calls ($0, 0 items, 19961 deferred), listed 19961, held 3000, 2167 ms
+day 1: list 47 bg + 116 demand, search 390, fetch 0, cards 75 calls ($0.0136, 395 items, 215 deferred), listed 1533, held 3079, 1292 ms
+day 2: list 135 bg + 232 demand, search 544, fetch 0, cards 105 calls ($0.019, 445 items, 839 deferred), listed 4308, held 3000, 1429 ms
+day 3: list 134 bg + 173 demand, search 367, fetch 0, cards 103 calls ($0.0186, 394 items, 688 deferred), listed 4177, held 3000, 1330 ms
+day 4: list 128 bg + 208 demand, search 435, fetch 0, cards 129 calls ($0.0233, 448 items, 1047 deferred), listed 4719, held 3003, 1487 ms
+day 5: list 125 bg + 226 demand, search 458, fetch 0, cards 121 calls ($0.0219, 468 items, 1366 deferred), listed 5194, held 3063, 1455 ms
+day 6: list 136 bg + 235 demand, search 484, fetch 0, cards 111 calls ($0.0201, 458 items, 1415 deferred), listed 5742, held 3095, 1623 ms
+day 7: list 140 bg + 232 demand, search 428, fetch 0, cards 93 calls ($0.0168, 371 items, 1379 deferred), listed 5912, held 3002, 1527 ms
+day 8: list 915 bg + 247 demand, search 491, fetch 0, cards 164 calls ($0.0297, 1407 items, 6155 deferred), listed 26859, held 2987, 2954 ms
+day 9: list 166 bg + 281 demand, search 602, fetch 0, cards 96 calls ($0.0174, 427 items, 1738 deferred), listed 6965, held 3000, 1748 ms
+day 10: list 172 bg + 261 demand, search 570, fetch 0, cards 90 calls ($0.0163, 352 items, 1810 deferred), listed 7162, held 3005, 1766 ms

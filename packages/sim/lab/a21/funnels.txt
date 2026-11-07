@@ -1,0 +1,94 @@
+== .local/a21/f5-def.txt
+TOTAL                                0/96     68/96                    65/96          2.7      9.9
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL hidden surfaced 78/96: flagged 0, rule path 68 (candidates 63, grounded-conflict 2, fallback 1, grounded-card 1, grounded-clash 1), listed only 10; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 73/96: flagged 0, rule path 65 (candidates 61, fallback 1, grounded-clash 1, grounded-conflict 1, sources 1), listed only 8; decoys in pool 0, decoys flagged in pool 0
+TOTAL                                0/96     71/96                    65/96          2.6      9.4
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL hidden surfaced 80/96: flagged 0, rule path 71 (candidates 66, grounded-conflict 3, fallback 1, grounded-clash 1), listed only 9; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 74/96: flagged 0, rule path 65 (candidates 61, fallback 1, grounded-clash 1, grounded-conflict 1, sources 1), listed only 9; decoys in pool 0, decoys flagged in pool 0
+TOTAL                                0/96     65/96                    56/96          2.7     10.8
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL hidden surfaced 76/96: flagged 0, rule path 65 (candidates 61, grounded-conflict 4), listed only 11; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 67/96: flagged 0, rule path 56 (candidates 52, grounded-conflict 2, cache 1, fallback 1), listed only 11; decoys in pool 0, decoys flagged in pool 0
+TOTAL                                0/96     68/96                    48/96          2.6     10.6
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL hidden surfaced 80/96: flagged 0, rule path 68 (candidates 63, grounded-conflict 4, fallback 1), listed only 12; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 59/96: flagged 0, rule path 48 (candidates 43, grounded-conflict 2, cache 1, fallback 1, sources 1), listed only 11; decoys in pool 0, decoys flagged in pool 0
+merged cards use (summed): {"enqueued":72696,"prefiltered":33587,"leanSkipped":29118,"reused":36614,"carded":2091,"sent":6604,"sentenceReused":360,"calls":446,"retries":0,"costUsd":0,"failures":0,"ove
+  TOTAL      hidden 314/384  decoys 273/384
+  TOTAL hidden surfaced 314/384: flagged 0, rule path 272 (candidates 253, grounded-conflict 13, fallback 3, grounded-clash 2, grounded-card 1), listed only 42; hidden in pool 0, hidden flagged in poo
+  TOTAL decoys surfaced 273/384: flagged 0, rule path 234 (candidates 217, grounded-conflict 6, fallback 4, sources 3, cache 2, grounded-clash 2), listed only 39; decoys in pool 0, decoys flagged in p
+== .local/a21/f5-on.txt
+TOTAL                                0/96     68/96                    65/96          2.7      9.4
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL hidden surfaced 78/96: flagged 0, rule path 68 (candidates 63, grounded-conflict 2, fallback 1, grounded-card 1, grounded-clash 1), listed only 10; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 73/96: flagged 0, rule path 65 (candidates 61, fallback 1, grounded-clash 1, grounded-conflict 1, sources 1), listed only 8; decoys in pool 0, decoys flagged in pool 0
+TOTAL                                0/96     71/96                    65/96          2.6     11.6
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL hidden surfaced 80/96: flagged 0, rule path 71 (candidates 66, grounded-conflict 3, fallback 1, grounded-clash 1), listed only 9; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 74/96: flagged 0, rule path 65 (candidates 61, fallback 1, grounded-clash 1, grounded-conflict 1, sources 1), listed only 9; decoys in pool 0, decoys flagged in pool 0
+TOTAL                                0/96     65/96                    56/96          2.7     10.7
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL hidden surfaced 76/96: flagged 0, rule path 65 (candidates 61, grounded-conflict 4), listed only 11; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 67/96: flagged 0, rule path 56 (candidates 52, grounded-conflict 2, cache 1, fallback 1), listed only 11; decoys in pool 0, decoys flagged in pool 0
+TOTAL                                0/96     68/96                    48/96          2.6     10.4
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL hidden surfaced 80/96: flagged 0, rule path 68 (candidates 63, grounded-conflict 4, fallback 1), listed only 12; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 59/96: flagged 0, rule path 48 (candidates 43, grounded-conflict 2, cache 1, fallback 1, sources 1), listed only 11; decoys in pool 0, decoys flagged in pool 0
+merged cards use (summed): {"enqueued":72696,"prefiltered":33587,"leanSkipped":29118,"reused":36614,"carded":2091,"sent":6604,"sentenceReused":360,"calls":446,"retries":0,"costUsd":0,"failures":0,"ove
+  TOTAL      hidden 314/384  decoys 273/384
+  TOTAL hidden surfaced 314/384: flagged 0, rule path 272 (candidates 253, grounded-conflict 13, fallback 3, grounded-clash 2, grounded-card 1), listed only 42; hidden in pool 0, hidden flagged in poo
+  TOTAL decoys surfaced 273/384: flagged 0, rule path 234 (candidates 217, grounded-conflict 6, fallback 4, sources 3, cache 2, grounded-clash 2), listed only 39; decoys in pool 0, decoys flagged in p
+== .local/a21/f995-def-41.txt
+TOTAL                                7/48     33/48                    34/48         49.8     38.5
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+TOTAL hidden surfaced 38/48: flagged 0, rule path 33 (candidates 22, grounded-conflict 8, fallback 3), listed only 5; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 39/48: flagged 0, rule path 34 (candidates 25, grounded-conflict 4, fallback 3, grounded-away 1, sources 1), listed only 5; decoys in pool 0, decoys flagged in pool 0
+TOTAL                               15/48     35/48                    24/48         47.2     40.1
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+TOTAL hidden surfaced 39/48: flagged 0, rule path 35 (candidates 21, grounded-conflict 10, fallback 3, sources 1), listed only 4; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 30/48: flagged 0, rule path 24 (candidates 14, grounded-conflict 5, fallback 4, cache 1), listed only 6; decoys in pool 0, decoys flagged in pool 0
+merged cards use (summed): {"enqueued":276089,"prefiltered":17514,"leanSkipped":15186,"reused":120,"carded":1049,"sent":5028,"sentenceReused":204,"calls":508,"retries":0,"costUsd":0,"failures":0,"over
+  TOTAL      hidden 77/96  decoys 69/96
+  TOTAL hidden surfaced 77/96: flagged 0, rule path 68 (candidates 43, grounded-conflict 18, fallback 6, sources 1), listed only 9; hidden in pool 0, hidden flagged in pool 0
+  TOTAL decoys surfaced 69/96: flagged 0, rule path 58 (candidates 39, grounded-conflict 9, fallback 7, cache 1, grounded-away 1, sources 1), listed only 11; decoys in pool 0, decoys flagged in pool 0
+== .local/a21/f995-def-42.txt
+TOTAL                                6/48     33/48                    34/48         51.1     36.2
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+TOTAL hidden surfaced 38/48: flagged 0, rule path 33 (candidates 23, grounded-conflict 7, fallback 1, grounded-card 1, sources 1), listed only 5; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 37/48: flagged 0, rule path 34 (candidates 24, grounded-conflict 5, fallback 4, sources 1), listed only 3; decoys in pool 0, decoys flagged in pool 0
+TOTAL                               15/48     35/48                    23/48         47.6     35.2
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+TOTAL hidden surfaced 38/48: flagged 0, rule path 35 (candidates 21, grounded-conflict 11, fallback 3), listed only 3; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 27/48: flagged 0, rule path 23 (candidates 15, grounded-conflict 4, fallback 2, sources 2), listed only 4; decoys in pool 0, decoys flagged in pool 0
+merged cards use (summed): {"enqueued":275872,"prefiltered":17747,"leanSkipped":15124,"reused":169,"carded":1014,"sent":5542,"sentenceReused":156,"calls":534,"retries":0,"costUsd":0,"failures":0,"over
+  TOTAL      hidden 76/96  decoys 64/96
+  TOTAL hidden surfaced 76/96: flagged 0, rule path 68 (candidates 44, grounded-conflict 18, fallback 4, grounded-card 1, sources 1), listed only 8; hidden in pool 0, hidden flagged in pool 0
+  TOTAL decoys surfaced 64/96: flagged 0, rule path 57 (candidates 39, grounded-conflict 9, fallback 6, sources 3), listed only 7; decoys in pool 0, decoys flagged in pool 0
+== .local/a21/f995-on-41.txt
+TOTAL                                7/48     33/48                    34/48         49.8     34.3
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+TOTAL hidden surfaced 38/48: flagged 0, rule path 33 (candidates 22, grounded-conflict 8, fallback 3), listed only 5; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 39/48: flagged 0, rule path 34 (candidates 25, grounded-conflict 4, fallback 3, grounded-away 1, sources 1), listed only 5; decoys in pool 0, decoys flagged in pool 0
+TOTAL                               15/48     35/48                    24/48         47.2     38.3
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+TOTAL hidden surfaced 39/48: flagged 0, rule path 35 (candidates 21, grounded-conflict 10, fallback 3, sources 1), listed only 4; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 30/48: flagged 0, rule path 24 (candidates 14, grounded-conflict 5, fallback 4, cache 1), listed only 6; decoys in pool 0, decoys flagged in pool 0
+merged cards use (summed): {"enqueued":276089,"prefiltered":17514,"leanSkipped":15186,"reused":120,"carded":1049,"sent":5028,"sentenceReused":204,"calls":508,"retries":0,"costUsd":0,"failures":0,"over
+  TOTAL      hidden 77/96  decoys 69/96
+  TOTAL hidden surfaced 77/96: flagged 0, rule path 68 (candidates 43, grounded-conflict 18, fallback 6, sources 1), listed only 9; hidden in pool 0, hidden flagged in pool 0
+  TOTAL decoys surfaced 69/96: flagged 0, rule path 58 (candidates 39, grounded-conflict 9, fallback 7, cache 1, grounded-away 1, sources 1), listed only 11; decoys in pool 0, decoys flagged in pool 0
+== .local/a21/f995-on-42.txt
+TOTAL                                6/48     33/48                    34/48         51.1     37.0
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+TOTAL hidden surfaced 38/48: flagged 0, rule path 33 (candidates 23, grounded-conflict 7, fallback 1, grounded-card 1, sources 1), listed only 5; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 37/48: flagged 0, rule path 34 (candidates 24, grounded-conflict 5, fallback 4, sources 1), listed only 3; decoys in pool 0, decoys flagged in pool 0
+TOTAL                               15/48     35/48                    23/48         47.6     37.3
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+TOTAL hidden surfaced 38/48: flagged 0, rule path 35 (candidates 21, grounded-conflict 11, fallback 3), listed only 3; hidden in pool 0, hidden flagged in pool 0
+TOTAL decoys surfaced 27/48: flagged 0, rule path 23 (candidates 15, grounded-conflict 4, fallback 2, sources 2), listed only 4; decoys in pool 0, decoys flagged in pool 0
+merged cards use (summed): {"enqueued":275872,"prefiltered":17747,"leanSkipped":15124,"reused":169,"carded":1014,"sent":5542,"sentenceReused":156,"calls":534,"retries":0,"costUsd":0,"failures":0,"over
+  TOTAL      hidden 76/96  decoys 64/96
+  TOTAL hidden surfaced 76/96: flagged 0, rule path 68 (candidates 44, grounded-conflict 18, fallback 4, grounded-card 1, sources 1), listed only 8; hidden in pool 0, hidden flagged in pool 0
+  TOTAL decoys surfaced 64/96: flagged 0, rule path 57 (candidates 39, grounded-conflict 9, fallback 6, sources 3), listed only 7; decoys in pool 0, decoys flagged in pool 0

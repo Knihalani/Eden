@@ -295,6 +295,14 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   lost 2 of 96 hidden facts: what it stores is routing evidence), and the trim waits for 1.5x the cap (trimming the
   backfill's overshoot back to the cap also lost 2). The sketch (`sketch.ts`) is per (user, source) in `SourceSync`,
   filled from every listed item in `store`, folded at `warmUp`.
+- **Unused sources are swept weekly (D356, `syncUnusedSweepMs`, docs/research/a21-scale.md).** Safe only because a
+  skipped sweep's copies are re-read at delivery: `doubted` is true for a copy older than `syncSweepMs` whose source's
+  daily sweep the trial skipped (`Sync.sweepLapsed`, which reads `SourceSync.skipped`, not the sweep's age: an idle
+  user's late sweep must doubt nothing) and for any copy the last sweep missed (`Sync.sweepMissed`). Not "is the source
+  used now": a lookup engages its sources before its delivery is verified. An unswept copy no re-read confirms is left
+  out (never delivered as held, unlike D126's other doubts) and calls `Sync.sweepSoon`. A new delivery path that skips
+  `doubted`/`verifyItems` would hand over items the weekly sweep has not checked; a source without `fetch` must stay on
+  the daily sweep (`onLongSweep`).
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 
