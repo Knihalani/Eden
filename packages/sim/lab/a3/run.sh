@@ -1,6 +1,7 @@
 #!/bin/bash
 # A3 on Pi (docs/research/a3-cost-speed.md): LABEL PUSH CONDITIONS then pi-ab flags. CL8's run.sh with every arm given
 # the tenant's house rules (`--tenant-prompt`, D271), so every arm's fixed prefix is above the cache minimum.
+# D274's cov arm ran on commit 7f9e37738: --variant-config '{"cov":{"pushCandidatesCovers":true}}'.
 L=$1; PUSH=$2; CONDS=$3; shift 3
 env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite train --conditions $CONDS --config default \
   --tenant-prompt \

@@ -33,5 +33,10 @@ describe("source-side deletions (--deletes)", () => {
     const pushed = await runQuality({ ...base, deletes: 0.3, push: "payload" });
     expect(pushed.deletes.applied).toBeGreaterThan(0);
     expect(pushed.deletes.deletedDelivered + pushed.deletes.deletedCited).toBe(0);
+    expect(pushed.lostNotices).toBe(0);
+    // `lostNotices` (A8): every notice lost, so the deletions reach Eden only through its sweeps, and are counted.
+    const lost = await runQuality({ ...base, deletes: 0.3, push: "payload", lostNotices: 1 });
+    expect(lost.lostNotices).toBeGreaterThan(0);
+    expect(lost.deletes.applied).toBe(pushed.deletes.applied);
   }, 20_000); // Two quality runs: about 3 s alone, more under the full suite's load.
 });

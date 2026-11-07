@@ -1,0 +1,6 @@
+eden       control  n  144  packet chars/task  1471  asks/task 0.52  answer bytes/task  442  bytes/ask  849
+eden       hidden   n  144  packet chars/task  1616  asks/task 0.24  answer bytes/task  243  bytes/ask 1028
+eden       neutral  n  144  packet chars/task   971  asks/task 0.67  answer bytes/task  574  bytes/ask  852
+eden~cov   control  n  144  packet chars/task  1557  asks/task 0.48  answer bytes/task  394  bytes/ask  822
+eden~cov   hidden   n  144  packet chars/task  1702  asks/task 0.24  answer bytes/task  257  bytes/ask 1056
+eden~cov   neutral  n  144  packet chars/task  1056  asks/task 0.66  answer bytes/task  561  bytes/ask  850

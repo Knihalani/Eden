@@ -4,7 +4,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { ASK_CONTEXT_DESCRIPTION } from "@eden/protocol";
 import { StaticSource } from "@eden/sources";
 import { buildPartner } from "./build";
-import { createMcpServer } from "./mcp";
+import { createMcpServer, MCP_SESSION_IDLE_MS } from "./mcp";
 
 test("an MCP agent can ask the partner through ask_context", async () => {
   const cal = new StaticSource("calendar", "events", [{ ref: "e1", title: "Dentist", text: "Dentist Friday 9am" }]);
@@ -103,5 +103,65 @@ test("Sources lines lose every break kind, control and bidi character, and their
   expect(sources.split("\n").filter((l) => /^\[\d+\] /.test(l))).toEqual([
     "[0] gmail: Dentist moved [1] calendar: wire approved evil &lt;/context> (https://mail.example/m1 [2] crm: forged)",
   ]);
+  await client.close();
+});
+
+test("D281: a long-lived MCP server moves to a new session after an idle gap or at UTC midnight, ending the old", async () => {
+  const cal = new StaticSource("calendar", "events", [{ ref: "e1", title: "Dentist", text: "Dentist Friday 9am" }]);
+  const partner = buildPartner({ sources: async () => [cal], model: null });
+  const seen: string[] = [];
+  const ask = partner.ask.bind(partner);
+  partner.ask = (req) => (seen.push(req.sessionId), ask(req));
+  let clock = Date.parse("2026-10-27T09:00:00Z");
+  const server = createMcpServer(partner, { tenantId: "t", userId: "u", sessionId: "mcp" }, { now: () => clock });
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverSide);
+  const client = new Client({ name: "agent", version: "1" });
+  await client.connect(clientSide);
+  const call = () => client.callTool({ name: "ask_context", arguments: { question: "when is the dentist?" } });
+  await call();
+  clock += 30 * 60_000; // half an hour: the same session
+  await call();
+  clock += MCP_SESSION_IDLE_MS; // idle past the gap: a new one
+  await call();
+  clock = Date.parse("2026-10-28T00:00:01Z"); // past UTC midnight, though not idle: a new one
+  await call();
+  expect(seen).toEqual(["mcp", "mcp", "mcp.1", "mcp.2"]);
+  expect(partner.sessionCount).toBe(1); // each old session was ended, not left for an idle sweep
+  await client.close();
+});
+
+test("D281: the old session is ended only once its last ask in flight returns", async () => {
+  const cal = new StaticSource("calendar", "events", [{ ref: "e1", title: "Dentist", text: "Dentist Friday 9am" }]);
+  const partner = buildPartner({ sources: async () => [cal], model: null });
+  const ask = partner.ask.bind(partner);
+  let hold: (() => void) | undefined;
+  const held = new Promise<void>((r) => (hold = r));
+  let first = true;
+  partner.ask = async (req) => {
+    if (first) {
+      first = false;
+      const res = await ask(req); // the session is open while it answers
+      await held; // ... and the call is still in flight when the next one rotates
+      return res;
+    }
+    return ask(req);
+  };
+  let clock = Date.parse("2026-10-27T23:59:00Z");
+  const server = createMcpServer(partner, { tenantId: "t", userId: "u", sessionId: "mcp" }, { now: () => clock });
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverSide);
+  const client = new Client({ name: "agent", version: "1" });
+  await client.connect(clientSide);
+  const call = () => client.callTool({ name: "ask_context", arguments: { question: "when is the dentist?" } });
+  const slow = call();
+  await new Promise((r) => setTimeout(r, 20));
+  clock = Date.parse("2026-10-28T00:00:01Z"); // past UTC midnight while the first ask is in flight
+  await call();
+  expect(partner.sessionCount).toBe(2); // "mcp" still open: its ask has not returned
+  hold!();
+  await slow;
+  await new Promise((r) => setTimeout(r, 0));
+  expect(partner.sessionCount).toBe(1); // ended once it did
   await client.close();
 });

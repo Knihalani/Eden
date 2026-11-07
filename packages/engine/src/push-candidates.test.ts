@@ -5,7 +5,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { checkEngineConfig } from "./config-check";
-import { ContextPartner } from "./partner";
+import { ContextPartner, type PushPoolReport, type ReaderReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { AskReader, type ReaderInput, type ReaderMaker } from "./reader";
 import { CANDIDATES_LEAD, shownText } from "./render";
@@ -62,7 +62,13 @@ const DEADLINE = item(
 
 function setup(
   config: Record<string, unknown>,
-  opts: { items?: ContextItem[]; fail?: boolean; noReader?: boolean } = {},
+  opts: {
+    items?: ContextItem[];
+    fail?: boolean;
+    noReader?: boolean;
+    onReader?: (r: ReaderReport) => void;
+    onPushPool?: (r: PushPoolReport) => void;
+  } = {},
 ) {
   const maker = new Reader();
   const source: Source = {
@@ -90,6 +96,8 @@ function setup(
       ...config,
     },
     ...(opts.noReader ? {} : { reader: new AskReader({ maker, budget: new Budget(), now: () => NOW }) }),
+    ...(opts.onReader ? { onReader: opts.onReader } : {}),
+    ...(opts.onPushPool ? { onPushPool: opts.onPushPool } : {}),
   });
   return { p, maker };
 }
@@ -202,6 +210,36 @@ describe("pushCandidates (D236, D237): the push hands the agent candidates, with
     expect(() => checkEngineConfig({ pushCandidates: 2.5 }, { deps })).toThrow();
     expect(() => checkEngineConfig({ pushCandidates: 41 }, { deps })).toThrow();
     expect(() => checkEngineConfig({ pushCandidates: 3, readerPush: false }, { deps })).toThrow(/readerPush/);
+  });
+
+  test("the lab's view (onPushPool, D269): the pool in order, its constraint test, the handed ids; no content", async () => {
+    const pools: PushPoolReport[] = [];
+    const readings: ReaderReport[] = [];
+    const { p } = setup(
+      { ...quiet, pushCandidates: 2 },
+      { onPushPool: (r) => pools.push(r), onReader: (r) => readings.push(r) },
+    );
+    await say(p, REQUEST);
+    const handed = candidates(p)[0]!.citations.map((c) => c.itemId);
+    expect(pools.length).toBe(1);
+    expect(pools[0]!.sessionId).toBe("s1");
+    expect(pools[0]!.pool.length).toBe(4);
+    expect(pools[0]!.constraintLike.length).toBe(4);
+    expect(pools[0]!.constraintLike.filter(Boolean).length).toBe(2);
+    expect(pools[0]!.handed).toEqual(handed);
+    // Ids and flags only: no item's words travel in the report.
+    expect(JSON.stringify(pools[0])).not.toContain("Harlow");
+    // The reader's consumers see nothing: no reading was made.
+    expect(readings).toEqual([]);
+  });
+
+  test("onPushPool: a pool with nothing constraint-like is reported with nothing handed", async () => {
+    const pools: PushPoolReport[] = [];
+    const { p } = setup({ ...quiet, pushCandidates: 3 }, { items: PLAIN, onPushPool: (r) => pools.push(r) });
+    await say(p, REQUEST);
+    expect(pools.length).toBe(1);
+    expect(pools[0]!.constraintLike).toEqual([false, false]);
+    expect(pools[0]!.handed).toEqual([]);
   });
 });
 

@@ -132,12 +132,15 @@ describe("D140: one deadline for an ask's poll, live search and probes", () => {
     expect(beforeReader!).toBeLessThan(ONE_DEADLINE);
   }, 10_000);
 
-  test("once sourceTimeoutMs has passed since that poll gave up, the source is polled again", async () => {
+  test("once sourceTimeoutMs has passed since that poll gave up, a listing still running is joined, not made again", async () => {
+    // Audit A5: the lookup stops waiting at its deadline, not the listing, which runs on under the sync's own timeout;
+    // a later lookup joins it (`busy`) within its own deadline rather than bill the connector a second listing.
     const { src, ask, advance } = await setup();
     await ask("s1");
     const lists = src.lists;
     advance(TIMEOUT);
-    await ask("s2");
-    expect(src.lists).toBeGreaterThan(lists);
+    const { totalMs } = await ask("s2");
+    expect(src.lists).toBe(lists);
+    expect(totalMs).toBeLessThan(ONE_DEADLINE * 2);
   }, 10_000);
 });

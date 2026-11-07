@@ -13,6 +13,13 @@ export interface ShownCopy {
   sourceId: string;
 }
 
+/**
+ * Items a session's ledger keeps at most, oldest delivery dropped first. The cooldown sweep in `mark` only runs as
+ * turns pass, and an ask-only session (the MCP server's, which sends no events) never moves its turn, so without a cap
+ * every item its answers cited stayed for the session's life (audit A5). Far above what one session's context holds.
+ */
+export const MAX_LEDGER_ITEMS = 2_048;
+
 /** Items whose handed-out version a session keeps (`revisionNotice`), most recently shown kept longest. */
 const MAX_SHOWN_COPIES = 256;
 
@@ -56,6 +63,11 @@ export class Ledger {
       if (turn - at < this.cooldownTurns) break;
       this.delivered.delete(id);
       this.versions.delete(id);
+    }
+    while (this.delivered.size > MAX_LEDGER_ITEMS) {
+      const oldest = this.delivered.keys().next().value as string;
+      this.delivered.delete(oldest);
+      this.versions.delete(oldest);
     }
   }
 

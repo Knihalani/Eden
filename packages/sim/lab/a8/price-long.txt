@@ -1,0 +1,7 @@
+what                                tokens calls/t first-party    Composio  Unified.to  Arcade.dev   Pipedream  Zapier MCP
+long payload, eden, old recap        0.345   2.330       0.345       1.044       2.093      23.645      28.305      60.459
+long payload, eden, fixed recap      0.354   0.160       0.354       0.402       0.474       1.954       2.274       4.482
+long payload, tools                  0.337   1.690       0.337       0.844       1.605      17.237      20.617      43.939
+long signals, eden                   0.337   6.430       0.337       2.266       5.159      64.637      77.497     166.231
+24h days payload, Eden only ($0)     0.000   0.897       0.000       0.269       0.673       8.970      10.764      23.143
+24h days signals, Eden only ($0)     0.000   2.487       0.000       0.746       1.865      24.870      29.844      64.165

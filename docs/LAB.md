@@ -20,17 +20,17 @@ Every suite plants one item per template into a seeded world (~1,500 items); the
 agent should raise, the control variant a near-miss decoy (resolved, another entity, prerequisite met). 32 templates
 per suite for train1–6 and held-out 10–12.
 
-| Name                                       | Use                                                                                                   | Status                                                                                  |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `train` = `train1`–`train6`                | **Tune here.** Six authors, written blind, one life area each (broad-set.md)                          | Tuning set                                                                              |
-| `dev6a`, `dev6b`                           | Development suites (after D72); two authors, so rules overfit their wording (broad-set.md)            | Tuning, with care                                                                       |
-| `hidden`, `heldout`, `heldout2`–`heldout4` | The old in-sample suites; every configuration since D47 was tuned on them                             | In-sample                                                                               |
-| `heldout5`–`heldout8`                      | Blind, measurement only                                                                               | Run many times; contaminated by dev6a/6b templates (D80)                                |
-| `heldout9`                                 | Blind (econ tracks)                                                                                   | Run in D72; contaminated (D80)                                                          |
-| `heldout10`, `heldout11`                   | Blind                                                                                                 | Run in D80, D85, and several times in the Haiku campaign's funnel (haiku-benchmark.md)  |
-| `heldout12`                                | Blind                                                                                                 | First run with a strong model in D98                                                    |
-| `heldout14`                                | Blind, RealUse-1's (benchmark-realuse-1.md); 32 templates over 8 life areas, with a `neutral` variant | Run once for RealUse-1 (realuse-1/A-heldout14.md)                                       |
-| `heldout15`                                | Blind, the weak-points plan's (fix-s3b-lab.md); 32 new templates, same areas, with `neutral`          | **Read** (RealUse-2, 2026-11-07: Pi seeds 41–44, Hermes 41–42, the blind funnel); spent |
+| Name                                       | Use                                                                                                   | Status                                                                                                                   |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `train` = `train1`–`train6`                | **Tune here.** Six authors, written blind, one life area each (broad-set.md)                          | Tuning set                                                                                                               |
+| `dev6a`, `dev6b`                           | Development suites (after D72); two authors, so rules overfit their wording (broad-set.md)            | Tuning, with care                                                                                                        |
+| `hidden`, `heldout`, `heldout2`–`heldout4` | The old in-sample suites; every configuration since D47 was tuned on them                             | In-sample                                                                                                                |
+| `heldout5`–`heldout8`                      | Blind, measurement only                                                                               | Run many times; contaminated by dev6a/6b templates (D80)                                                                 |
+| `heldout9`                                 | Blind (econ tracks)                                                                                   | Run in D72; contaminated (D80)                                                                                           |
+| `heldout10`, `heldout11`                   | Blind                                                                                                 | Run in D80, D85, and several times in the Haiku campaign's funnel (haiku-benchmark.md)                                   |
+| `heldout12`                                | Blind                                                                                                 | First run with a strong model in D98                                                                                     |
+| `heldout14`                                | Blind, RealUse-1's (benchmark-realuse-1.md); 32 templates over 8 life areas, with a `neutral` variant | Run once for RealUse-1 (realuse-1/A-heldout14.md)                                                                        |
+| `heldout15`                                | Blind, the weak-points plan's (fix-s3b-lab.md); 32 new templates, same areas, with `neutral`          | **Read** (RealUse-2, 2026-11-07: Pi seeds 41–44, Hermes 41–42, the blind funnel); spent                                  |
 | `heldout16`                                | Blind, the CL wave's (cl-cl5.md); 32 new templates over the same 8 areas, with `neutral`              | **Read** (RealUse-3 Pi, 2026-11-07, realuse-3/pi-heldout16.md): no longer blind; cards and intent cached for seeds 41–44 |
 
 **The `neutral` variant** (held-out 14–16 and, since CL5, train1–6; `neutral.ts`, `NEUTRAL_SUITES`): the same request
@@ -87,7 +87,7 @@ not strict yet.
 | Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`); same tasks, grader and results format as Pi                                                                                   |
 | Injection suite     | `injection-ab.ts`                              | A10 (D305): planted prompt-injection attempts against Pi with recorded-only action tools: attack success by arm and kind, hidden facts kept; `--dry` is its $0 screen (recipe 4d)                                                                                    |
 | In-house loop       | `agent-ab.ts`                                  | The pre-Pi loop; label any result from it as such (CLAUDE.md)                                                                                                                                                              |
-| Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load; `sim:perf memory --synced` and `steady --synced` (A3) backfill their users first (the scenarios otherwise never sync)                                                    |
+| Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load; `sim:perf memory --synced` and `steady --synced` (A3) backfill their users first (the scenarios otherwise never sync)                  |
 | Connector lab       | `bun run sim:lab:build && bun run sim:lab`     | Real MCP servers in Docker over seeded backends                                                                                                                                                                            |
 
 Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too), `agent-ab-report.ts` (shared tables,
@@ -287,7 +287,18 @@ bun run funnel --jobs 4 -- --reader stub                  # pool recall per suit
 bun run funnel --jobs 4 -- --reader oracle:0.9,0.1        # ground-truth proxy, every line labelled
 bun run funnel --jobs 4 -- --packet-k 10,15,20                          # planted item in the ask's top K
 bun run funnel --jobs 4 -- --reader stub --lead-in clause # draft pool against the request's
+bun run funnel --jobs 4 -- --pool-dump $PWD/.local/pool.jsonl         # the push's candidate pool per task (A2)
+bun run funnel --jobs 4 -- --corpus-dump $PWD/.local/corpus.jsonl     # each world's items, for offline retrieval screens
 ```
+
+- **The default's pool (A2, D269).** With `pushCandidates` each push pass reports its pool to the lab hook
+  `onPushPool` (ids, `readerGate`'s constraint test, the handed ids), not to `onReader`, so the reader pool lines above
+  stay 0 under the default; each task's JSON row has `pushPoolAt` (the planted item's place in the last pass's pool,
+  −1 when not in it) and `pushHanded` (train seeds 41–42: in pool 283/384 hidden, 247/384 decoys; handed 253, 219).
+  `--pool-dump FILE` writes each task's last pool in order with each item's title, text, card and flags (`handed`,
+  `auto` for an automated sender, `cl` for the constraint test) and the planted item's place (`at`): the input
+  for re-rank screens at $0 (`packages/sim/lab/a2/sim.py`, `feat.py`). A lever that changes which items are handed on
+  a few tasks is run live on those tasks first (`pi-ab --templates`, `packages/sim/lab/a2/targeted-templates.txt`).
 
 - **`--reader stub`** says nothing binds and prints, per suite, `hidden in pool X/N, decoy in pool Y/N, mean pool
 items, mean prompt chars (standing prefix)`. Pool means the ids the reader was given for the request (the push's
@@ -636,7 +647,9 @@ same (docs/research/a6-moonshots.md §4). Use it for levers on what the agent lo
 - `--day K`: one agent transcript and one Eden session per K requests of a stream (template order), and a recap turn
   closing each day ("anything to watch out for, with the times"; measured, never graded). Just before the recap the
   day's planted items change (`shiftClocks` moves their clock times, `shiftMeta` their structured start; the sources
-  reindexed and, with `--push`, signalled): only then, so a moved item cannot land in a later graded request's slot.
+  reindexed and, with `--push`, announced: `signals` a bare `sourceChanged` per touched source, `payload` the moved
+  items through `sourceItems`, as the client sends them (D210); `--recap-notice signal` keeps the bare signals every
+  run sent before D272, A8): only then, so a moved item cannot land in a later graded request's slot.
   A changed item misses the replay caches (its content hash changed) and is carded live; `lateItems` is not measured
   (a late packet goes to the day's next request). The
   results gain `days` and `daysPooled` (`pi-day.ts`): repeat deliveries (and those of a changed item), `(shown
@@ -650,6 +663,21 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite heldout14 --
   --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 --push signals \
   --source-profile packages/sim/lab/before-after/market-profiles/direct.json --budget 1 \
   --spend-ledger .local/ledger.jsonl --spend-cap 4 --spend-headroom 0.3 --run-label day-41 --out .local/day-41.json
+```
+
+- `--day K --late` (A9, `pi-late.ts`; docs/research/a9-ahead.md): each request's planted item (the hidden fact, or the
+  control's look-alike) is held out of the world until the agent has answered that request, then arrives at its
+  source as a new item (with `--push payload` its notice carries it: `sourceItems`; with `signals`, a notice), and the
+  day goes on. The harness then waits for the item's card (up to 10 s, standing in for the ten minutes before the next
+  request). No clock is moved before the recap. Each planted request's result gains `lateFacts` (the grader on its
+  later replies that day, the next requests' answers and the recap, joined in `lateText`) and `lateTurns`: on a hidden
+  day a true verdict is the agent correcting course, on a control day a false alarm. The request's own grade is
+  expected to miss (the item did not exist yet). `packages/sim/lab/a9/late.py ARM BASE[,BASE] STEM…` reports it, paired.
+
+```bash
+A9_VC='{"plan":{"planConflict":true}}' packages/sim/lab/a9/run.sh a9-late-41 payload tools,eden,eden~plan \
+  --seeds 41 --variants hidden,control --limit 12 --day 4 --late --budget 0.35    # ~$0.30 a seed
+python3 -I packages/sim/lab/a9/late.py eden~plan eden,tools .local/a9/runs/a9-late-41
 ```
 
 ### 4b'. The server with no model key (`+nokey`, D291)
@@ -738,6 +766,14 @@ input and output per arm and kind, from the timelines; `--prefix` adds the count
 labelled so) beside billed figures, and compare arms within one run: an arm sending a task's identical prompt after
 another arm reads it whole.
 
+**Connector pricing (A3).** `pi-cost-report.ts` also counts every connector call (the agent's `tool.search_*`
+calls, Eden's in each task's window, Eden's background calls between tasks and its one-time backfill, from
+`Background.sourceCalls`/`setupSourceCalls`, recorded since A3) and prints every total again per plan
+(`CONNECTOR_PLANS`: first-party 0, Composio 0.30, Unified.to 0.75, Arcade.dev 10, Pipedream 12, Zapier MCP 25.8 $ per
+1,000 calls, from `before-after/market.py`) with eden − tools per plan. Runs recorded before it lack the background
+and backfill counts (printed 0). Quote the long horizon's all-in: a short run spreads each stream's backfill over its
+few tasks.
+
 **Why, and the fix (D271).** `cache-probe.ts` (a few calls, $0.0003 an arm) sends each arm's first request as pi-ai
 builds it, twice, the second with another task's user turn: the `eden` arm's tools-and-system prefix is about 500
 tokens on the wire, under Haiku 5.5's 512-token minimum, so it is never read; the tools arm's 867 is. `--tenant-prompt`
@@ -758,7 +794,10 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cache-probe.ts --suite train1
   through the lab provider on the ledger (no OpenRouter key needed); the summary adds `byKind` (agreement with the
   run's grader on hidden, control and neutral, and which way each disagreement went). `--only-concerns` regrades
   only the control and neutral answers the run's grader called a concern: W2b's check, 39 answers for $0.055
-  (docs/research/fix-w2b-false-concerns.md).
+  (docs/research/fix-w2b-false-concerns.md). `--only-misses` regrades the hidden answers it called a miss and
+  `--conditions a,b` keeps those arms (A2: Sonnet called 18 of 38 Haiku in-packet misses raised, $0.054).
+- **A Sonnet 5.5 agent on Pi** (`pi-ab --model claude-sonnet-5-5`): the lab sends `thinking: between_tools`
+  (`anthropicThinkingOff`), as Sonnet 5.5 refuses "disabled". About 30× Haiku's agent cost a task (A2, D270).
 - **Where a false concern came from** (fix-w2b): each pi-ab task line keeps its packets' ways (`ways`: the reason's
   kind and cited ids; `reader` is the reader push) and its asks' answer text (`asks[].text`, cut at 5,000
   characters; an `Eden's reader:` line is a flagged item). `python3 -I packages/sim/lab/fix-w2b/attribute.py out.json
@@ -797,7 +836,13 @@ minute on free models (hermes-lab.md, estimates).
   notifications that carry their items, which in a static world means none and no poll. With `--days`, the change
   before each day's recap is sent as the moved items (`sourceItems`) under `payload` and as a bare signal under
   `signals` (D272; before it a bare signal in every mode, which put ~650 ms of re-reads on Eden's path in every long
-  payload run).
+  payload run; `--recap-notice signal` reproduces it, A8).
+- **Connector calls over a user's days at $0 (A8, `days-calls.ts`):** the `--days` user through Eden alone (no agent,
+  no model, time scale 0), every connector call counted by source, operation and phase (request, notice, the sync's
+  tick, the one-time backfill): `bun packages/sim/src/lab/days-calls.ts --seeds 41,42 --days 8 --push payload --ask
+--cards .local/a8/cards-all.jsonl [--night-h 20] [--recap-notice signal] [--set JSON]`, about 10 s. pi-ab's 2 h
+  nights put eight days in about 36 hours of Eden's clock (the daily sweep runs about once a user); `--night-h 20`
+  gives 24-hour days for per-user-day figures (docs/research/a8-connector-calls.md).
 - The results header records both (`sourceProfile`, `push`).
 
 `market.py` (in `packages/sim/lab/before-after/`) prices a run's `tools` and `eden` arms per agent model and
@@ -812,7 +857,11 @@ The quality runner (`quality-cli.ts`) changes the world during a run and counts 
 - `--deletes RATE`: fact-stating items are deleted at the source before a later session (`planDeletes`); a packet
   item or an ask citation of one is `deletes.deletedDelivered` / `deletedCited`.
 - `--push none|signals|payload`: how changes reach Eden (signals call `sourceChanged`; payload calls `sourceItems` and
-  `sourceRemoved`). `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed, changed, gone, failed, calls).
+  `sourceRemoved`). `--lost-notices P` (A8) loses each source's notice for a change with chance P (its own random
+  stream; `lostNotices` counts them), for what a backstop such as the sweep must catch (D297).
+  `--null-proves-nothing` (A8) makes the sim sources fetch as MCP connectors do: a null re-read does not prove the
+  item gone (`fetchReportsGone` false, D298). `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed,
+  changed, gone, failed, calls).
 
 D126's matrix: `bun packages/sim/src/quality-cli.ts --users 8 --sessions 20 --updates 0.6 --deletes 0.05
 [--push signals|payload] [--config '{"verifyDelivery":false}'] [--jobs 4]`, $0 (`verifyDelivery` is in the

@@ -130,7 +130,7 @@ for (const c of costs) {
   console.log(
     `${c.condition.padEnd(14)} agent ${x.agent.toFixed(2)}  Eden ${x.eden.toFixed(2)}  background ` +
       `${x.background.toFixed(2)}  mix ${c.mixConnectorPerTask === null ? "-" : c.mixConnectorPerTask.toFixed(2)}  ` +
-      `backfill ${c.backfillCallsPerUser.toFixed(0)}/user`,
+      `backfill ${c.backfillCallsPerUser.toFixed(0)}/user (${c.backfillUsers} users)`,
   );
 }
 console.log(

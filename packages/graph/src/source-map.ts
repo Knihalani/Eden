@@ -29,6 +29,11 @@ export interface RouteRequest {
   /** All sources the user has; routing ranks them. */
   sourceIds: string[];
   limit: number;
+  /**
+   * Evidence from the user's own index, added to each source's score (`routeLocalHits`, D265): how many of the
+   * request's best local matches each source holds. Absent: none.
+   */
+  boost?: ReadonlyMap<string, number>;
 }
 
 export interface RankedSource {
@@ -182,6 +187,15 @@ export class SourceMap {
     return { shown: row?.shown ?? 0, used: row?.used ?? 0 };
   }
 
+  /** Every source's outcomes in a situation for a user, by source id (sources with none are absent). */
+  private outcomesIn(scope: Scope, situation: string): Map<string, { shown: number; used: number }> {
+    this.flush();
+    const rows = this.db
+      .query("SELECT source_id AS sourceId, shown, used FROM utility WHERE scope = ? AND situation = ?")
+      .all(scopeKey(scope), situation) as { sourceId: string; shown: number; used: number }[];
+    return new Map(rows.map((r) => [r.sourceId, { shown: r.shown, used: r.used }]));
+  }
+
   /** Which sources have mentioned an entity, most often first. */
   sourcesFor(scope: Scope, entity: string): { sourceId: string; count: number }[] {
     return this.db
@@ -201,13 +215,17 @@ export class SourceMap {
         hits.set(sourceId, (hits.get(sourceId) ?? 0) + Math.log2(1 + count));
       }
     }
+    // The situation's outcomes for every source in one query (D261): one query per source cost a user with 1,000
+    // connectors 1,000 queries a route, and a lookup routes several times (its search, each person probe).
+    const known = this.outcomesIn(request.scope, request.situation);
     return request.sourceIds
       .map((sourceId) => {
         const entityHits = hits.get(sourceId) ?? 0;
-        const { shown, used } = this.outcomes(request.scope, request.situation, sourceId);
+        const { shown, used } = known.get(sourceId) ?? NONE;
         const utility = (used + 1) / (shown + 2);
         const sampled = this.explore ? this.rng.beta(used + 1, shown - used + 1) : utility;
-        return { sourceId, entityHits, utility, sampled, score: entityHits + 2 * sampled };
+        const boost = request.boost?.get(sourceId) ?? 0;
+        return { sourceId, entityHits, utility, sampled, score: entityHits + boost + 2 * sampled };
       })
       .sort((a, b) => b.score - a.score || a.sourceId.localeCompare(b.sourceId))
       .slice(0, request.limit);
@@ -251,6 +269,8 @@ export class SourceMap {
     this.db.close();
   }
 }
+
+const NONE = { shown: 0, used: 0 } as const;
 
 export function normalizeEntity(e: string): string {
   return e.trim().toLowerCase().replace(/\s+/g, " ");

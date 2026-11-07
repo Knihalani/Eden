@@ -155,7 +155,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   or by a rate limit the connector's 429 pushed back is "failed", not "skipped" (`FetchFailed.guard`, `pushedBack`,
   D232): the item is left out and named. The rate limit's ordinary spend stays "skipped". "unverifiable" (no fetch tool,
   or a null from a source without `fetchReportsGone`) is cited as held, as D126 delivers it. Proactive deliveries keep
-  D126's rule (a failed re-read is delivered as held).
+  D126's rule (a failed re-read is delivered as held). A null "unverifiable" outcome is held per user
+  (`ContextPartner.unverifiable`, the read mark the re-read began under) and `doubted` is false for the item until
+  the source's next signal or `UNVERIFIABLE_HOLD_MS` (10 min) (D298): before, every delivery past `CHECK_REUSE_MS` and
+  every other session re-fetched an MCP item for the same held answer. Only `why: "null"` is held: an MCP error
+  result (`why: "error-result"`) may pass, so holding it would pin a changed item's old copy. `forget` drops it; a
+  failed, flaked or skipped re-read is never held.
 - **Shown means handed out.** With `askDedup`, what an injection showed is noted (`noteShown`) in `handOut`, which
   every path that gives the agent an injection calls (observe's reply, `takePending`, the firewall's finding, the
   ask's own answer), not when `deliver` builds it: a queued packet the agent has not taken was shown nothing, so an
@@ -207,6 +212,16 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   push still runs when `pushCandidates` > 0; only the reader's own push (`pushCandidates: 0`) needs one. Tests
   of the reader's own wiring set `pushCandidates: 0` (the core, the `reader` and `candidates` parts all do); the lab's
   reader screens run `--preset minus-candidates`.
+- **`planConflict` (D301, on in the default, part `plans`) is checked at the take, not at the store.** The sync's
+  `onStored` only records the ids per session with acting requests (`queuePlanConflicts`); `takePending` and an
+  observe that starts no push run `checkPlans`, so a new item's card (made in the background as it was stored) can
+  count; at the store it has none yet. The rule is
+  `candidatesOf`'s (first `pushCandidates` of the ranked pool, a constraint-like pool), not "the item itself is a
+  constraint": most planted facts carry no constraint card or wording. Built from the cached copy (the source just
+  gave it) with `deliver`, not `deliverChecked`: a copy a change signal has put in doubt (`doubted`) is not sent but
+  kept waiting for a later take, and `planSent` keeps each item to one plan packet a session, past the ledger's
+  cooldown. The lead quotes the user's own request (redacted, one line, double quotes made single, D301). Answer-ahead (records about the request's names and day in the push, A9)
+  was measured and deleted (D300): it cut asks only on the quarter of requests it reached and moved no mix figure.
 - **The candidates' packet is not smaller (D258, D259; docs/research/cl-cl8.md).** 200-byte excerpts lost hidden facts
   (−12.8 points, with the no-repeat switch on: shorter excerpts keep the items but not the fact), k 3 saved only over a
   user's days and made the agent ask more one request at a time, k 3 after a session's first request lost hidden facts,
@@ -214,8 +229,15 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   smaller push makes a longer ask answer (`askDedup` says in full what a packet showed in part). On Pi, Eden's billed
   cost above the agent alone was prompt-cache writes on a fixed prefix too short to cache (D260; proven by D271: ~500
   tokens on the wire, under Haiku 5.5's 512 minimum). With an agent prompt that caches in every arm (`--tenant-prompt`),
-  the gap is the packet's own tokens written to the cache (+$0.060/1k short, +$0.080/1k over days, Eden faster), and
+  the gap is the packet's own tokens written to the cache (+$0.047/1k short, +$0.050/1k over days on the merged tree, Eden 0.65–0.95 s faster;
+  cheaper than the agent alone on every per-call connector plan), and
   no lexical cut of packet or ask bytes keeps the planted facts (D273).
+- **The candidates' order, a longer ask and constraint-first excerpts were measured and deleted (D266–D268, A2;
+  docs/research/a2-quality.md; code in commit d096b7ba).** A no-model re-rank (one item per title, the request's date
+  lifted) put the planted item in the packet more often (+11 of 384 at $0, +9 of 182 live) and raised no more facts
+  live (−0.6 points, −4.6..+3.4); an ask past held items cost +$0.021/1k for no gain. Each push pass reports its pool,
+  constraint test and handed ids to the lab hook `onPushPool` (ids and flags only, D269), not to `onReader`, whose
+  consumers count reader readings.
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read
@@ -241,6 +263,15 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   1.2 s to 0.1-0.2 s, but one process's capacity inside a 100 ms p99 rose only 1.46x there and fell 3-15% on
   router-sim realistic, for 1.19x the CPU per item. The code is in commit b217ae1d (`ingest.ts`, `prepared.ts`,
   `ingest.test.ts`); building it again needs a decision that accepts those numbers.
+- **Many sources (D261–D265, docs/research/a1-scale.md).** The lab's worlds have five sources and fit the sync cap, so
+  the funnel cannot see a user with hundreds: screen such changes with `-- --noise-sources 995 --limit 16` (and
+  `--jobs 2`: the pre-D263 default needed ~4.5 GB a process) and `bench/many-sources.bench.ts`. A synced copy the
+  user's cap cut answers nothing for its source (`Sync.complete`, `syncLocalComplete`): any new path that answers from
+  the local index must go through `localOf`, or it misses what is older than the cut. Routing over many sources needs
+  evidence (mentions, `routeLocalHits`): with a flat prior it is a lottery. Over `syncPollWidth`, `searchLive` routes
+  once, before the poll, and searches the head of that ranking: a second route would draw apart, and an ask must
+  never answer a stale copy it did not poll (D127, D263's review). Per-(user, source) state is multiplied by
+  the source count: keep it lazy (the fan-out's histograms were 8 KB a pair before D261).
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

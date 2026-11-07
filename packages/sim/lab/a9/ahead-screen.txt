@@ -1,0 +1,3 @@
+hidden   tasks 384  with ahead 104 (27%)  items/task 0.64  ahead bytes/task 144  other packets' bytes/task 1518 (default 1518; same other items 384/384)  planted in ahead 2, only there 2
+control  tasks 384  with ahead 96 (25%)  items/task 0.62  ahead bytes/task 138  other packets' bytes/task 1418 (default 1418; same other items 384/384)  planted in ahead 3, only there 3
+neutral  tasks 384  with ahead 95 (25%)  items/task 0.59  ahead bytes/task 128  other packets' bytes/task 937 (default 937; same other items 384/384)  planted in ahead 0, only there 0

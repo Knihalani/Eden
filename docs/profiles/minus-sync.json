@@ -5,5 +5,8 @@
   "readerPushBehind": false,
   "syncPush": false,
   "verifyDelivery": false,
-  "readerVerifyAfter": false
+  "readerVerifyAfter": false,
+  "syncPollWidth": 0,
+  "syncBackfillLanes": 1,
+  "syncLocalComplete": false
 }

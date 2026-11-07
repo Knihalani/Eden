@@ -103,6 +103,9 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncPushMaxStaleMs: ["sync", "syncPush"],
   verifyTimeoutMs: ["verifyDelivery"],
   syncCatchupPages: SYNC,
+  syncPollWidth: ["sync", "syncOnDemand"],
+  syncBackfillLanes: SYNC,
+  syncLocalComplete: SYNC,
   syncMaxUsersPerTenant: SYNC,
   syncLocalAll: SYNC,
   cardItems: ["cards"],
@@ -132,6 +135,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerReuse: PUSH,
   readerStopEarly: READER,
   pushCandidates: PUSH,
+  planConflict: [...PUSH, "sync"],
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
@@ -177,6 +181,8 @@ const RANGES: Partial<Record<Key, Range>> = {
   syncStaleChance: SHARE,
   syncCallsPerMin: COUNT,
   syncCatchupPages: COUNT,
+  syncPollWidth: COUNT,
+  syncBackfillLanes: SIZE,
   syncMaxUsersPerTenant: SIZE,
   cardItems: COUNT,
   decideCandidates: COUNT,

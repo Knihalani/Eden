@@ -4,6 +4,7 @@ export {
   type CandidateSink,
   type PartnerDeps,
   type ReaderReport,
+  type PushPoolReport,
   type ReaderSink,
 } from "./partner";
 export { FACT_NAMES, vectorOf, type Facts } from "./decide";
@@ -51,6 +52,7 @@ export {
   worthCardingStrict,
   sentenceKey,
   STANDING_KINDS,
+  automated,
   ECONOMY_CARD_LIMITS,
   type Action,
   type Card,

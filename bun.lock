@@ -94,6 +94,7 @@
         "@eden/protocol": "workspace:*",
       },
       "devDependencies": {
+        "@eden/graph": "workspace:*",
         "@eden/server": "workspace:*",
         "@eden/sources": "workspace:*",
       },

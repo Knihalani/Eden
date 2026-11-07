@@ -34,6 +34,12 @@ export interface SyncOptions {
   /** Items asked per listing page. */
   pageSize: number;
   /**
+   * `syncBackfillLanes` (D262, 8 in the default): the backfill reads this many sources' next pages at once (the
+   * newest unread first, as one lane does), so a user's cold start is not one listing call after another. 1 or unset:
+   * one at a time.
+   */
+  backfillLanes?: number;
+  /**
    * An incremental poll's first page, at least (`syncPollPageSize`; 0 or absent: every page is `pageSize`). Set, a
    * poll's first page is sized to the changes the source's learned rate expects since its last poll (twice that, at
    * least this, at most `pageSize`). A page after it that is needed tops the items asked up to the next multiple of
@@ -96,6 +102,16 @@ const PRIOR_HOURS = 7 * 24;
 const RATE_MEMORY_HOURS = 14 * 24;
 /** Pages a background catch-up reads at most in one go. */
 const MAX_POLL_PAGES = 20;
+
+/** Where a lookup's poll stopped at its page cap, for the background read that finishes it as one poll. */
+interface PollResume {
+  cursor: string | undefined;
+  changed: number;
+  started: number;
+  notices: number;
+  pushSeq: number;
+}
+
 /** Background sync calls leave this many of the serving rate limit's tokens for lookups. */
 const SERVING_HEADROOM = 2;
 const HOUR = 3_600_000;
@@ -112,6 +128,14 @@ interface SourceSync {
   /** The backfill's next page, and whether the listing has no more. */
   cursor: string | undefined;
   exhausted: boolean;
+  /**
+   * Whether the user's copy of this source lacks items the source has (D264): its backfill stopped at the user's
+   * `maxItems` cut before the listing ended, or a trim dropped some of its items. Such a copy holds only the source's
+   * newest, so a lookup that answers the source from it can miss an older item the source would find.
+   */
+  cut: boolean;
+  /** The cache revision at which every synced id was last found held (`complete`), or -1. */
+  wholeAt: number;
   /** The oldest `updatedAt` the backfill has read (+Infinity before its first page): the recency merge's key. */
   frontier: number;
   /** When the last complete poll (or the backfill) ended; -Infinity before. */
@@ -334,6 +358,27 @@ export class SyncManager {
     return s !== undefined && s.notifies && s.noticedMark > readMark;
   }
 
+  /**
+   * Whether the user's copy of a source holds everything the source listed (D264): warm, and neither its backfill
+   * nor a trim cut it at the user's `maxItems`. False for an unknown source.
+   */
+  complete(scope: Scope, sourceId: string, now = this.deps.now()): boolean {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    if (s === undefined || s.phase !== "warm" || s.cut) return false;
+    // The cache can let synced items go on its own (its `maxSyncedPerUser` cap, `syncTtlMs`): a copy is whole only
+    // while it still holds every item synced from the source. Checked again only after the user's cache changed.
+    const revision = this.deps.cache.revision(scope);
+    if (s.wholeAt === revision) return true;
+    const held = this.deps.cache.syncedReader(scope, now);
+    for (const id of s.ids) {
+      if (held(id)) continue;
+      s.cut = true;
+      return false;
+    }
+    s.wholeAt = revision;
+    return true;
+  }
+
   /** Whether the user's copy of a source has finished its backfill, current or not (`syncPollBehind`). */
   isWarm(scope: Scope, sourceId: string): boolean {
     return this.users.get(scopeKey(scope))?.sources.get(sourceId)?.phase === "warm";
@@ -377,12 +422,19 @@ export class SyncManager {
   /**
    * A lookup's on-demand poll (`syncOnDemand`): every warm source of the user that is not current is polled now,
    * at most `catchupPages` pages each before the lookup goes on (the rest is read in the background), within the
-   * lookup's deadline. Returns the listing calls this freshen made (not another lookup's, made meanwhile); the
-   * sources it brought current answer the lookup locally. `tally.fresh` counts the items stored new or changed by its
-   * polls, and by any read it waited on instead (a sweep, a catch-up, another lookup's poll: `SourceSync.busy`
-   * resolves to what that read stored), or none for one it stopped waiting on (`signal`).
+   * lookup's deadline (`signal`: the poll itself goes on past it, unless `stop` aborts). Returns the listing calls
+   * this freshen made (not another lookup's, made meanwhile); the sources it brought current answer the lookup
+   * locally. `tally.fresh` counts the items stored new or changed by its polls, and by any read it waited on
+   * instead (a sweep, a catch-up, another lookup's poll: `SourceSync.busy` resolves to what that read stored), or
+   * none for one it stopped waiting on (`signal`).
    */
-  async freshen(scope: Scope, sources: Source[], signal: AbortSignal, tally?: { fresh: number }): Promise<number> {
+  async freshen(
+    scope: Scope,
+    sources: Source[],
+    signal: AbortSignal,
+    tally?: { fresh: number },
+    stop?: AbortSignal,
+  ): Promise<number> {
     const u = this.users.get(scopeKey(scope));
     if (!u) return 0;
     const now = this.deps.now();
@@ -394,12 +446,26 @@ export class SyncManager {
         if (!s || s.phase !== "warm" || this.isCurrent(s, now) || !source.list) return;
         // Its last on-demand poll just ran out of time (D140): not current, so the lookup searches it live.
         if (now - s.demandGaveUpAt < (this.o.demandTimeoutMs ?? 0)) return;
+        // Its listing failed twice running and is backing off (`failed`): every lookup listed it again regardless, a
+        // billed call on top of the live search it makes anyway (audit A5). Not current, so searched live, as D127 has
+        // it. After one failure it is polled as before: a listing that failed once is usually back, and one listing
+        // costs less than the live search and probes it replaces (the funnel: 2.69 request calls a task either way,
+        // 2.83 when one failure was enough to skip).
+        if (s.failures >= 2 && now < s.retryAt) return;
         if (s.busy) {
           // A read already running (a sweep, a catch-up, or another lookup's poll): its answer, not a second call.
           own.fresh += await Promise.race([s.busy, aborted(signal).then(() => 0)]);
           return;
         }
-        await this.run(s, () => this.poll(u, s, source, this.o.catchupPages, true, signal, own));
+        // The lookup stops waiting at its deadline; the listing does not stop with it (audit A5). Cut at the lookup's
+        // deadline, a listing slower than it was billed by every lookup and never stored anything, so the source never
+        // became current; it now finishes under the sync's own timeout, and the next lookup finds it current.
+        // `stop` (the session ending) still cuts it: then nothing waits for it, and its calls are traced as made.
+        const polling = this.run(s, () => this.poll(u, s, source, this.o.catchupPages, true, stop, own));
+        const done = await Promise.race([polling.then(() => true), aborted(signal).then(() => false)]);
+        // Ended with its session: the cut listing settles at once (as before), and its call is counted as made.
+        if (!done && stop?.aborted) await polling;
+        else if (!done) s.demandGaveUpAt = this.deps.now();
       }),
     );
     if (tally) tally.fresh += own.fresh;
@@ -454,8 +520,9 @@ export class SyncManager {
       this.notes(u.sources.get(x.id)!, x);
     }
     // A source the user no longer has (or that no longer lists) is not synced: its state and synced items go.
+    const listed = new Set(listable.map((x) => x.id));
     for (const [id, s] of [...u.sources]) {
-      if (listable.some((x) => x.id === id)) continue;
+      if (listed.has(id)) continue;
       u.sources.delete(id);
       this.stats.deleted += this.deps.cache.dropSynced(u.scope, s.ids);
     }
@@ -479,6 +546,7 @@ export class SyncManager {
    * or guards say wait is left for the next tick, as is the rest once any call fails.
    */
   private async backfill(u: UserSync, byId: Map<string, Source>): Promise<void> {
+    const lanes = Math.max(1, Math.floor(this.o.backfillLanes ?? 1));
     for (;;) {
       if (u.gone) return;
       const now = this.deps.now();
@@ -492,41 +560,81 @@ export class SyncManager {
         if (filling.every((s) => s.phase === "warm")) return;
       }
       const ready = filling.filter((s) => s.phase === "backfill" && now >= s.retryAt && !s.busy);
-      // The newest unread page first: the source whose read items reach least far back.
-      const next = ready.sort((a, b) => b.frontier - a.frontier)[0];
-      if (!next) return;
-      const source = byId.get(next.id);
-      if (!source) return;
-      if (this.budget.take(budgetKey(u, next)) > 0) return;
-      let page: Awaited<ReturnType<SourceFanout["list"]>> | undefined;
-      next.noticesBackfill = next.notices;
-      await this.run(next, async () => {
-        const readMark = this.marks;
-        page = await this.list("backfill", source, u.scope, next.cursor, this.o.pageSize, {
-          timeoutMs: this.o.timeoutMs,
-          reserve: SERVING_HEADROOM,
-        });
-        // Stored within the read, so what it stored is the read's (`SourceSync.reading`).
-        if (typeof page !== "string" && !u.gone) this.store(u, next, page.items, readMark);
-      });
-      if (page === undefined || u.gone) return;
-      if (typeof page === "string") {
-        if (page !== "limited" && page !== "busy") this.stats.backgroundCalls++;
-        this.failed(next, page);
-        return;
+      // The newest unread page first: the source whose read items reach least far back. With lanes, the next
+      // `lanes` such sources at once; the first that has no source or must wait for its budget ends the batch, as it
+      // ends the one-lane backfill.
+      ready.sort((a, b) => b.frontier - a.frontier);
+      const batch: { next: SourceSync; source: Source }[] = [];
+      for (const next of ready) {
+        if (batch.length >= lanes) break;
+        const source = byId.get(next.id);
+        if (!source || this.budget.take(budgetKey(u, next)) > 0) break;
+        batch.push({ next, source });
       }
-      this.stats.backgroundCalls++;
-      this.stats.backgroundItems += page.items.length;
-      next.failures = 0;
-      for (const it of page.items)
-        if (it.updatedAt !== undefined) next.frontier = Math.min(next.frontier, it.updatedAt);
-      if (page.items.length > 0 && page.items.every((it) => it.updatedAt === undefined)) next.frontier = -Infinity;
-      next.cursor = page.next ?? undefined;
-      if (page.next === null || page.items.length === 0) {
-        next.exhausted = true;
-        this.warmUp(u, next, this.deps.now());
+      if (batch.length === 0) return;
+      const pages = await Promise.all(
+        batch.map(async ({ next, source }) => {
+          let page: Awaited<ReturnType<SourceFanout["list"]>> | undefined;
+          next.noticesBackfill = next.notices;
+          await this.run(next, async () => {
+            const readMark = this.marks;
+            page = await this.list("backfill", source, u.scope, next.cursor, this.o.pageSize, {
+              timeoutMs: this.o.timeoutMs,
+              reserve: SERVING_HEADROOM,
+            });
+            // Stored within the read, so what it stored is the read's (`SourceSync.reading`).
+            if (typeof page !== "string" && !u.gone) this.store(u, next, page.items, readMark);
+          });
+          return page;
+        }),
+      );
+      let stop = false;
+      for (let k = 0; k < batch.length; k++) {
+        const next = batch[k]!.next;
+        const page = pages[k];
+        if (u.gone) return;
+        // The lane's read did not run or threw: nothing to record; the others' pages were stored and are recorded.
+        if (page === undefined) {
+          stop = true;
+          continue;
+        }
+        if (typeof page === "string") {
+          if (page !== "limited" && page !== "busy") this.stats.backgroundCalls++;
+          this.failed(next, page);
+          stop = true;
+          continue;
+        }
+        this.stats.backgroundCalls++;
+        this.stats.backgroundItems += page.items.length;
+        next.failures = 0;
+        for (const it of page.items)
+          if (it.updatedAt !== undefined) next.frontier = Math.min(next.frontier, it.updatedAt);
+        if (page.items.length > 0 && page.items.every((it) => it.updatedAt === undefined)) next.frontier = -Infinity;
+        next.cursor = page.next ?? undefined;
+        if (page.next === null || page.items.length === 0) {
+          next.exhausted = true;
+          this.warmUp(u, next, this.deps.now());
+        }
       }
+      if (stop) return;
     }
+  }
+
+  /**
+   * The oldest `updatedAt` among the items synced from `s`; -Infinity (read as before, to the user's cap) when one has
+   * none (it cannot be placed in the listing) or when none is synced: an empty or trimmed source's new items reach
+   * the background only through this sweep (the review: Infinity there stored nothing and marked the source current).
+   */
+  private oldestSynced(u: UserSync, s: SourceSync): number {
+    if (s.ids.size === 0) return -Infinity;
+    const now = this.deps.now();
+    let oldest = Infinity;
+    for (const id of s.ids) {
+      const at = this.deps.cache.get(u.scope, id, now)?.updatedAt;
+      if (at === undefined) return -Infinity;
+      if (at < oldest) oldest = at;
+    }
+    return oldest;
   }
 
   private total(u: UserSync): number {
@@ -542,12 +650,16 @@ export class SyncManager {
    */
   private trim(u: UserSync, now: number): number {
     const all: { id: string; at: number; s: SourceSync }[] = [];
+    const at = this.deps.cache.updatedAtReader(u.scope, now);
     for (const s of u.sources.values()) {
-      for (const id of s.ids) all.push({ id, at: this.deps.cache.get(u.scope, id, now)?.updatedAt ?? -Infinity, s });
+      for (const id of s.ids) all.push({ id, at: at(id) ?? -Infinity, s });
     }
     all.sort((a, b) => b.at - a.at);
     const gone = all.slice(this.o.maxItems);
-    for (const g of gone) g.s.ids.delete(g.id);
+    for (const g of gone) {
+      g.s.ids.delete(g.id);
+      g.s.cut = true;
+    }
     this.deps.cache.dropSynced(
       u.scope,
       gone.map((g) => g.id),
@@ -562,14 +674,17 @@ export class SyncManager {
   private warmUp(u: UserSync, s: SourceSync, now: number): void {
     if (s.phase === "warm") return;
     s.phase = "warm";
+    // Done before its listing ended: the rest was older than the user's cut, and is not held.
+    if (!s.exhausted) s.cut = true;
     s.polledAt = now;
     // Notifications that came before the backfill's last page began are read by it; later ones are not.
     s.noticesPolled = s.noticesBackfill;
     s.sweptAt = now;
     let recent = 0;
     let timed = 0;
+    const updatedAt = this.deps.cache.updatedAtReader(u.scope, now);
     for (const id of s.ids) {
-      const at = this.deps.cache.get(u.scope, id, now)?.updatedAt;
+      const at = updatedAt(id);
       if (at === undefined) continue;
       timed++;
       if (at <= now && at > now - PRIOR_HOURS * HOUR) recent++;
@@ -596,18 +711,22 @@ export class SyncManager {
     demand: boolean,
     signal?: AbortSignal,
     tally?: { fresh: number; calls: number },
+    resume?: PollResume,
   ): Promise<void> {
-    const started = this.deps.now();
-    const notices = s.notices;
-    const pushSeq = s.pushSeq;
-    let cursor: string | undefined;
-    let changed = 0;
+    // A background continuation of a lookup's poll goes on from where that poll stopped, as one poll: from the top,
+    // its first page held what the lookup had just stored, read as the boundary, and the source was marked current
+    // with the pages past the cap never read (audit A5).
+    const started = resume?.started ?? this.deps.now();
+    const notices = resume?.notices ?? s.notices;
+    const pushSeq = resume?.pushSeq ?? s.pushSeq;
+    let cursor: string | undefined = resume?.cursor;
+    let changed = resume?.changed ?? 0;
     // `pollPageSize`: the first page is sized to what changed, not to the backfill's page; each page after it tops the
     // items asked up to the next multiple of `pageSize` (5, then 95, then 100). So a poll lists no more items than
     // `maxPages` full pages would, catches up as far before the lookup goes on, and makes at most one more call.
     const adaptive = (this.o.pollPageSize ?? 0) > 0;
     const itemCap = maxPages * this.o.pageSize;
-    const first = adaptive ? Math.min(this.firstPage(s, started), itemCap) : this.o.pageSize;
+    const first = adaptive && !resume ? Math.min(this.firstPage(s, started), itemCap) : this.o.pageSize;
     let asked = 0;
     // A lookup's poll that stops because the lookup ran out of time (or ended): no evidence against the source, but
     // the next lookup within `demandTimeoutMs` searches it live rather than wait on its listing again (D140).
@@ -622,6 +741,9 @@ export class SyncManager {
       const limit = !adaptive ? this.o.pageSize : p === 0 ? first : Math.min(topUp, itemCap - asked);
       asked += limit;
       const readMark = this.marks;
+      // A lookup's tally counts the call when it is sent: the lookup may stop waiting before it answers (D283), and
+      // its trace must still hold the call the connector received (the review). A guard's skip, no call, is taken back.
+      if (tally) tally.calls++;
       const page = await this.list(demand ? "demand" : "poll", source, u.scope, cursor, limit, {
         timeoutMs: this.o.timeoutMs,
         signal,
@@ -629,13 +751,14 @@ export class SyncManager {
       });
       if (u.gone) return;
       if (typeof page === "string") {
-        if (page !== "limited" && page !== "busy") this.count(demand, tally);
+        if (page !== "limited" && page !== "busy") this.count(demand);
+        else if (tally) tally.calls--;
         // The lookup gave up (its deadline, the session ending): no evidence against the source, no back-off.
         if (signal?.aborted) return gaveUp();
         this.failed(s, page);
         return;
       }
-      this.count(demand, tally);
+      this.count(demand);
       if (demand) this.stats.demandItems += page.items.length;
       else this.stats.backgroundItems += page.items.length;
       s.failures = 0;
@@ -653,7 +776,10 @@ export class SyncManager {
     }
     // Not caught up in `maxPages`: a lookup goes on with the source stale; the rest is read in the background.
     if (demand && !u.gone) {
-      void Promise.resolve().then(() => this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false)));
+      const from: PollResume = { cursor, changed, started, notices, pushSeq };
+      void Promise.resolve().then(() =>
+        this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false, undefined, undefined, from)),
+      );
     }
   }
 
@@ -700,6 +826,10 @@ export class SyncManager {
     const pushSeq = s.pushSeq;
     s.sweep ??= { cursor: undefined, seen: new Set() };
     const sw = s.sweep;
+    // How far back this source's synced items reach: the sweep reads that far, not the user's whole cap (`maxItems`
+    // is across sources; a quiet source was paged to 3,000 items a day and its synced set grew past the backfill's
+    // cut, audit A5). Listings run newest first; a source with an undated item is read as before.
+    const cut = this.oldestSynced(u, s);
     for (let p = 0; p < MAX_POLL_PAGES; p++) {
       if (u.gone) return;
       if (this.budget.take(budgetKey(u, s)) > 0) return;
@@ -718,11 +848,17 @@ export class SyncManager {
       this.stats.backgroundCalls++;
       this.stats.backgroundItems += page.items.length;
       const first = sw.seen.size === 0;
-      const fresh = this.store(u, s, page.items, readMark);
+      const older = (it: ContextItem) => it.updatedAt !== undefined && it.updatedAt < cut;
+      const fresh = this.store(
+        u,
+        s,
+        page.items.filter((it) => !older(it)),
+        readMark,
+      );
       for (const it of page.items) sw.seen.add(it.id);
       // The sweep's first page is the newest: it is also a poll.
       if (first) this.polled(s, started, fresh, notices, pushSeq);
-      const full = sw.seen.size >= this.o.maxItems;
+      const full = sw.seen.size >= this.o.maxItems || page.items.some(older);
       if (page.next === null || page.items.length === 0 || full) {
         // Missed by this sweep and the one before: gone. Missed by this one only: perhaps skipped (an offset listing
         // shifted, a short page ended the listing early), so kept and checked again by the next sweep.
@@ -761,7 +897,7 @@ export class SyncManager {
       // Listed while a sweep is under way (by the sweep, or by a poll between its pages): the source has it.
       s.sweep?.seen.add(it.id);
     }
-    trimIds(s.ids, this.o.maxItems);
+    if (trimIds(s.ids, this.o.maxItems)) s.cut = true;
     this.deps.onListed?.(
       u.scope,
       own.map((it) => it.id),
@@ -807,11 +943,9 @@ export class SyncManager {
   }
 
   /** One listing call, a lookup's (`demand`, also counted in its freshen's `tally`) or the background's. */
-  private count(demand: boolean, tally?: { calls: number }): void {
-    if (demand) {
-      this.stats.demandCalls++;
-      if (tally) tally.calls++;
-    } else this.stats.backgroundCalls++;
+  private count(demand: boolean): void {
+    if (demand) this.stats.demandCalls++;
+    else this.stats.backgroundCalls++;
   }
 
   /**
@@ -825,12 +959,27 @@ export class SyncManager {
     const p = work()
       .catch(() => {})
       .then(() => reading.stored);
-    s.busy = p;
+    // What waiters see: settles with the read, or when the watchdog below lets the source go.
+    let free!: (stored: number) => void;
+    const busy = new Promise<number>((r) => (free = r));
+    void p.then(free);
+    s.busy = busy;
+    // A listing that ignores its signal and never answers would hold the source busy for good (every later read and
+    // lookup waits on it; the review). Past the longest a read that honours its timeouts can take, the source is let
+    // go; the stuck read, if it ever settles, changes nothing it no longer owns. A timer, not a race: one more await on
+    // the listing path moves the card drain's timing (a5-bugs.md).
+    const release = () => {
+      free(reading.stored);
+      if (s.busy === busy) s.busy = null;
+      if (s.reading === reading) s.reading = null;
+    };
+    const watchdog = setTimeout(release, (MAX_POLL_PAGES + 1) * this.o.timeoutMs);
+    (watchdog as { unref?: () => void }).unref?.();
     try {
       return await p;
     } finally {
-      if (s.busy === p) s.busy = null;
-      if (s.reading === reading) s.reading = null;
+      clearTimeout(watchdog);
+      release();
     }
   }
 }
@@ -842,6 +991,8 @@ function newSourceSync(id: string): SourceSync {
     phase: "backfill",
     cursor: undefined,
     exhausted: false,
+    cut: false,
+    wholeAt: -1,
     frontier: Infinity,
     polledAt: -Infinity,
     sweptAt: -Infinity,
@@ -867,14 +1018,18 @@ function newSourceSync(id: string): SourceSync {
 
 const budgetKey = (u: UserSync, s: SourceSync) => `${u.key}|${s.id}`;
 
-/** Keeps a source's id set at most `max * 1.5`, dropping the longest synced first (the cache bounds the items). */
-function trimIds(ids: Set<string>, max: number): void {
+/**
+ * Keeps a source's id set at most `max * 1.5`, dropping the longest synced first (the cache bounds the items); returns
+ * whether any went (the copy is then cut, D264).
+ */
+function trimIds(ids: Set<string>, max: number): boolean {
   const cap = Math.ceil(max * 1.5);
-  if (ids.size <= cap) return;
+  if (ids.size <= cap) return false;
   for (const id of ids) {
     if (ids.size <= cap) break;
     ids.delete(id);
   }
+  return true;
 }
 
 function aborted(signal: AbortSignal): Promise<void> {

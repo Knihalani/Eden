@@ -29,7 +29,8 @@ import {
   type ListMapping,
   type ToolSchema,
 } from "./schema-args";
-import type { ListPage, SearchQuery, Source } from "./source";
+import { untilAborted } from "./abort";
+import { FetchErrorResult, type ListPage, type SearchQuery, type Source } from "./source";
 
 export interface McpSourceOptions {
   id: string;
@@ -122,6 +123,15 @@ export class McpSource implements Source {
     if (options.listTool) this.list = (scope, cursor, limit, signal) => this.listPage(scope, cursor, limit, signal);
   }
 
+  /**
+   * `connect`, given up when `signal` aborts: the SDK's `connect` and `tools/list` take no signal and wait up to its
+   * own 60 s request timeout, so a server that never answers held a listing or re-read past the lookup's deadline
+   * (audit A5). The connect itself goes on, shared by the next call.
+   */
+  private connectFor(signal?: AbortSignal): Promise<Client> {
+    return signal ? untilAborted(this.connect(), signal) : this.connect();
+  }
+
   private async connect(): Promise<Client> {
     if (this.client) return this.client;
     if (Date.now() < this.retryAt) throw this.lastError;
@@ -208,7 +218,7 @@ export class McpSource implements Source {
   }
 
   async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {
-    const client = await this.connect();
+    const client = await this.connectFor(signal);
     const result = await client.callTool(
       {
         name: this.options.searchTool.name,
@@ -243,11 +253,12 @@ export class McpSource implements Source {
   async fetch(ref: string, _scope: Scope, signal?: AbortSignal): Promise<ContextItem | null> {
     const fetchTool = this.options.fetchTool;
     if (!fetchTool || ref.startsWith(CONTENT_REF)) return null;
-    const client = await this.connect();
+    const client = await this.connectFor(signal);
     const args = fetchTool.args ? fetchTool.args(ref) : buildFetchArgs(this.fetchMapping!, ref);
     if (!args) return null;
     const result = await client.callTool({ name: fetchTool.name, arguments: args }, undefined, { signal });
-    if (result.isError) return null;
+    // An error result says nothing about the record, and may pass: thrown, so it is never held as the item's state.
+    if (result.isError) throw new FetchErrorResult(`${this.id}: ${fetchTool.name} returned an error`);
     // The record itself first: a reply that is one object with this id wins over the rows it holds (Gmail's
     // get_thread is `{id, messages: [...]}`, whose rows carry message ids, never the thread's; D294).
     const row =
@@ -266,7 +277,7 @@ export class McpSource implements Source {
    */
   private async listPage(_scope: Scope, cursor: string | undefined, limit: number, signal: AbortSignal) {
     const listTool = this.options.listTool!;
-    const client = await this.connect();
+    const client = await this.connectFor(signal);
     const args = listTool.args ? listTool.args(cursor, limit) : buildListArgs(this.listMapping!, cursor, limit);
     const result = await client.callTool({ name: listTool.name, arguments: args }, undefined, { signal });
     if (result.isError) throw new Error(`${this.id}: ${listTool.name} returned an error`);
