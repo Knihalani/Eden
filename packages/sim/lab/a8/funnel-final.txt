@@ -1,0 +1,3 @@
+bun run funnel --jobs 3 --baseline (parent tip 07e881cd), on this branch's final engine
+  TOTAL      hidden 305/384  decoys 267/384
+against .local/a8/funnel-tip.json: hidden +0 −0, decoys +0 −0

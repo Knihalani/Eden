@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import { itemId, type ContextItem, type Scope } from "@eden/protocol";
-import type { ListPage, SearchQuery, Source } from "@eden/sources";
+import { FetchErrorResult, type ListPage, type SearchQuery, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
@@ -23,6 +23,11 @@ class McpMail implements Source {
   readonly notifies = true;
   readonly fetchReportsGone = false;
   fetches = 0;
+  /** The next fetches answer with an MCP error result (`isError`: a 5xx, a quota message) instead of the record. */
+  errorNext = 0;
+  /** Called when a fetch starts; the fetch waits on `release` when set (a signal lands while it is on the wire). */
+  onFetch: (() => void) | null = null;
+  release: Promise<void> | null = null;
   items = new Map<string, ContextItem>();
   add(ref: string, title: string, text: string, at: number): void {
     this.items.set(ref, { id: itemId(this.id, ref), sourceId: this.id, ref, title, text, updatedAt: at });
@@ -44,6 +49,12 @@ class McpMail implements Source {
   }
   async fetch(ref: string): Promise<ContextItem | null> {
     this.fetches++;
+    this.onFetch?.();
+    if (this.release) await this.release;
+    if (this.errorNext > 0) {
+      this.errorNext--;
+      throw new FetchErrorResult("mail: get_message returned an error");
+    }
     return this.items.get(ref) ?? null;
   }
 }
@@ -156,5 +167,59 @@ describe("an unverifiable re-read stands until the source's next signal (A8)", (
     expect((p as unknown as { unverifiable: Map<string, unknown> }).unverifiable.size).toBe(1);
     p.forget(u);
     expect((p as unknown as { unverifiable: Map<string, unknown> }).unverifiable.size).toBe(0);
+  });
+
+  test("an error result is not held: the next ask re-reads and cites the changed copy (review finding)", async () => {
+    const { p, src, users, ask, advance } = await setup();
+    const u = users[0]!;
+    const held = src.items.get("hold")!;
+    src.items.set("hold", { ...held, text: "Harlow invoice payments resumed on Monday; the dispute is settled" });
+    p.sourceChanged(u, "mail");
+    advance(60_000);
+    src.errorNext = 1; // One transient tool error.
+    expect(cited(await ask(u))).toContain(HOLD); // Unverifiable: cited as held, as before.
+    advance(31_000);
+    const r = await ask(u);
+    expect(src.fetches).toBe(2);
+    expect(r.answer).toContain("resumed on Monday");
+  });
+
+  test("a held null lasts at most 10 minutes: a changed copy behind it is read again after that", async () => {
+    const { p, src, users, ask, advance } = await setup();
+    const u = users[0]!;
+    const held = src.items.get("hold")!;
+    src.items.delete("hold"); // The record is missing for now (prose \"not found\" from a lagging replica, say).
+    p.sourceChanged(u, "mail");
+    advance(60_000);
+    await ask(u);
+    advance(5 * 60_000);
+    await ask(u);
+    expect(src.fetches).toBe(1);
+    src.items.set("hold", { ...held, text: "Harlow invoice payments resumed on Monday; the dispute is settled" });
+    advance(6 * 60_000);
+    const r = await ask(u);
+    expect(src.fetches).toBe(2);
+    expect(r.answer).toContain("resumed on Monday");
+  });
+
+  test("a signal while the null re-read is on the wire keeps the item doubted", async () => {
+    const { p, src, users, ask, advance } = await setup();
+    const u = users[0]!;
+    src.items.delete("hold");
+    p.sourceChanged(u, "mail");
+    advance(60_000);
+    let open!: () => void;
+    src.release = new Promise<void>((r) => (open = r));
+    const started = new Promise<void>((r) => (src.onFetch = r));
+    const first = ask(u);
+    await started;
+    p.sourceChanged(u, "mail"); // Lands after the re-read's read mark was taken.
+    src.onFetch = null;
+    src.release = null;
+    open();
+    await first;
+    advance(31_000);
+    await ask(u, "s2");
+    expect(src.fetches).toBe(2);
   });
 });

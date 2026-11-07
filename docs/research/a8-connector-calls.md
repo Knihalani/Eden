@@ -1,10 +1,10 @@
 # A8: Eden's connector calls on per-call connector platforms
 
 Status: 2026-11-07, branch `claude/a8-connector-calls` (from `claude/lucid-hypatia-v9wqk5` at `ae5757b75`, then merged
-with its tip `8274294f`, which carries A3's D272). Decisions D296–D299. Paid calls: Anthropic API only,
+with its tips `8274294f` (A3's D272) and `07e881cd` (A5's D283)). Decisions D296–D299. Paid calls: Anthropic API only,
 `HAIKU_API_KEY`, `claude-haiku-5-5` in every role, lab provider (D97), `OPENROUTER_API_KEY` unset, own ledger
 (`.local/a8/ledger.jsonl`, hard cap $1.5): **Anthropic-direct lab figures**. Train only, seeds 41–42. **Spent:
-$0.830.** Numbers marked **[EST]** are arithmetic, not measured; every other number comes from a command in this note.
+$0.939.** Numbers marked **[EST]** are arithmetic, not measured; every other number comes from a command in this note.
 
 ## In plain words
 
@@ -32,8 +32,10 @@ $0.830.** Numbers marked **[EST]** are arithmetic, not measured; every other num
   went (D112).
 - **A real engine waste, fixed (D298, A5's lead).** For MCP connectors, whose "not found" proves nothing, a re-read
   that found nothing was repeated by every later delivery and every other session of the user, for the same answer.
-  Now the outcome stands for that user until the source signals again: 6 asks → 1 fetch, 4 sessions → 1 fetch. The
-  lab's sources do report deletions, so it does not move the lab's numbers.
+  Now a reply that simply lacked the record stands for that user until the source signals again, for at most 10
+  minutes: 6 asks → 1 fetch, 4 sessions → 1 fetch. An MCP error result is never held (it may pass, and a changed
+  copy behind it must be read next time). The lab's sources do report deletions, so it does not move the lab's
+  numbers.
 - **What to tell integrators on per-call platforms:** forward notices with their items (D210). Bare signals cost
   6.43 calls a task over a user's days (live), 40 times payload's 0.16, because every signal doubts the whole source.
 
@@ -66,7 +68,7 @@ at any request (D126 holds). `days-calls.test.ts` asserts this.
 | --- | --- | --- | --- | --- | --- |
 | eden, old recap | 13/23 | 0 / 1 | 0.345 | 2.33 | 2.57 s |
 | eden, fixed | 14/23 | 1 / 0 | 0.354 | 0.16 | 2.04 s |
-| tools (agent alone) | 1/23 | 0 / 1 (graded 2) | 0.337 | 1.69 | 3.20 s |
+| tools (agent alone) | 1/23 | 0 / 1 (graded 0 / 2) | 0.337 | 1.69 | 3.20 s |
 
 Paired new − old: connector calls −2.18 a task (−2.44..−1.93) on the 1:1:8 mix, every kind excluding 0; hidden +0.043
 (−0.087..+0.174); mix $/1k tokens +0.009 (+0.002..+0.017), all of it neutral tasks (+0.013, +0.005..+0.021; the agent's
@@ -122,13 +124,24 @@ A5's lead, reproduced here first (`unverifiable-reread.test.ts`, failing before 
 from a source with `fetchReportsGone` false (every MCP source) that returns null is "unverifiable", and the item is
 delivered and cited as held (D126, D211); but its read mark did not move, so `doubted` stayed true. `check` reuses an
 outcome only for 30 s and only within the session, so 6 asks 31 s apart made 6 fetches, and 4 sessions of one user 4.
-Fix: `ContextPartner.unverifiable` holds, per user (D9) and item, the read mark the null re-read began under; `doubted`
-is false for the item until the source signals again (`Sync.signalledSince` on that mark). Same answers (cited as held
-either way); a new signal re-reads; a failed or skipped re-read is never held, so D211's strict retries are unchanged;
-`forget` drops it; bounded at 512 items a user and 4,096 users. quality-cli with sim sources made to behave as MCP
+Fix: `ContextPartner.unverifiable` holds, per user (D9) and item, the read mark the null re-read began under and when;
+`doubted` is false for the item until the source signals again (`Sync.signalledSince` on that mark) or 10 minutes pass
+(`UNVERIFIABLE_HOLD_MS`). Only a reply that lacked the record is held: the second review found that `McpSource.fetch`
+turned an MCP error result (`isError`: a 5xx, a quota message, often "not found") into the same null, so one transient
+error pinned an edited item's old copy for every later ask until the next signal (a probe: the +31 s ask cited the old
+text with 1 fetch, against the edited text with 2 before). `McpSource.fetch` now throws `FetchErrorResult` on
+`isError`; `SourceFanout.fetchChecked` settles it as answered (breaker success, as its null was) and reports
+`why: "error-result"`, which the engine treats as unverifiable and never holds; the 10-minute cap bounds a transient
+error worded as prose. Answers are the same as before D298 for a lasting null (cited as held either way); a new signal
+re-reads; failed, flaked or skipped re-reads are never held, so D211's strict retries are unchanged; a signal while the
+null re-read is on the wire keeps the item doubted (the read mark is taken before the call); `forget` drops it;
+bounded at 512 items a user and 4,096 users (eviction only costs a re-read). Tests: `unverifiable-reread.test.ts` (7:
+the four counts, the error result then the edited copy, the 10-minute cap, the on-the-wire signal),
+`mcp-source.test.ts` (an error result throws, and reads `error-result` through the fan-out). A delivery's fast path
+now hands a held item straight from the cache, as it would any undoubted copy. quality-cli with sim sources made to behave as MCP
 (`--null-proves-nothing`, new), 8 users × 20 sessions, `--updates 0.6 --deletes 0.05 --push signals`
 (`unverifiable-quality.txt`): re-reads 765 → 761, everything else identical (stale 5/74, deleted delivered/cited 11/11,
-precision 0.412, recall 0.540): that sim spaces a user's sessions hours apart, so few repeats occur. A5's estimate of
+precision 0.412, recall 0.540; 763 after the review fix): that sim spaces a user's sessions hours apart, so few repeats occur. A5's estimate of
 5–20 calls a user-day on MCP with signal-only notices is A5's, not measured here.
 
 ## 5. Short horizon (one request at a time)
@@ -173,13 +186,22 @@ Eden against the agent alone's $43.9 (its calls do not depend on the clock), at 
 
 ## 7. Checks
 
-- `bun run eval` (no model): identical to the parent tip (precision 0.5909, recall 0.52, falseFireRate 0).
-- `bun run funnel --jobs 3`: hidden 305/384, decoys 267/384, `+0 −0` task by task against the parent tip.
+- `bun run eval` (no model) on the final code: identical to the parent tip `07e881cd` (precision 0.5909, recall
+  0.52, falseFireRate 0; `eval-final.txt`).
+- `bun run funnel --jobs 3` on the final code: hidden 305/384, decoys 267/384, `+0 −0` task by task against the parent
+  tip (`funnel-final.txt`).
+- After merging A5 (`07e881cd`): `days-calls` identical (`days-calls-*-a5.txt`); live, the long payload eden arm on
+  the merged tree against the fixed-recap run above, same 232 tasks (`long-pay-a5-pair.txt`, `long-pay-a5-cost.txt`):
+  connector calls 0.16 → 0.16 a task (all listings), hidden 14/23 → 16/23 (+0.087, −0.087..+0.261), mix $/1k tokens
+  +0.001 (−0.007..+0.009), backfill 18 listings a user (now recorded by pi-ab).
 - quality-cli freshness matrix, payload and signals, unchanged by D298 on sim sources (they report deletions).
 - Tests: `days-calls.test.ts`, `unverifiable-reread.test.ts` (4, failing before the fix), `deletes.test.ts`
   (`lostNotices`), `connector-options.test.ts` (A3's `recapNotice`).
-- `reviewer` on the code (REQUEST_CHANGES: eight findings on the trial and the lab flags; fixed, then the trial was
-  deleted on its measurement); second pass on the final diff: REVIEW2_PLACEHOLDER
+- `reviewer` on the code, first pass: REQUEST_CHANGES, eight findings on the trial and the lab flags; fixed, then
+  the trial was deleted on its measurement. Second pass on the final diff: REQUEST_CHANGES, one correctness finding
+  (an MCP error result held as unverifiable could pin a changed item's old copy, §4), fixed with tests; the untested
+  on-the-wire case and the fast path covered or stated; funnel, eval and the tools arm's concerns committed
+  (`funnel-final.txt`, `eval-final.txt`, `long-pay-concerns.txt`).
 
 ## Decisions
 
@@ -221,8 +243,9 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/regrade.ts --results $S/a8-lo
 | long payload, fixed recap, tools + eden | 0.211 |
 | long payload, old recap, eden | 0.107 |
 | long signals, eden | 0.105 |
-| regrades (Haiku, concerns only) | 0.002 |
+| long payload, eden, after merging A5 | 0.109 |
 | short payload + signals, eden, parent tip and this branch | 0.406 |
-| **Total** | **0.830** |
+| regrades (Haiku, concerns only) | 0.002 |
+| **Total** | **0.939** |
 
 Ledger `.local/a8/ledger.jsonl` (per run: `packages/sim/lab/a8/spend.txt`), cap $1.5.
