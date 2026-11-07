@@ -4967,7 +4967,8 @@ const pad = (n: number) => String(n).padStart(2, "0");
  * `revisionDiff` (D342): the distinct times and dates in an item's title and text, in order, each in one form so a
  * reworded time is the same time: a clock as 24-hour "HH:MM" ("9:30am", "09:30" and "9:30" are "09:30"; "3pm" is
  * "15:00"), a date as "<day> <3-letter month>" ("Oct 4th" and "4 October" are "4 oct"), a weekday lowercased. No
- * model: a pattern over the words, so "3.45" (a price) is no time and "decision 2" no date. Exported for tests.
+ * model: a pattern over the words, so "3.45" (a price) is no time and "decision 2" no date. An unmarked clock is read
+ * as 24-hour: "9:30" then "9:30pm" says 09:30 is gone, the honest reading of an ambiguous edit. Exported for tests.
  */
 export function timesOf(item: Pick<ContextItem, "title" | "text">): string[] {
   const out: string[] = [];
