@@ -1701,6 +1701,8 @@ export class ContextPartner {
     // `readerReuse` (D193): an ask in the push's request reads the push's verdict, with no call of its own.
     const reuseAt = performance.now();
     const reused = opts.push ? null : await this.reusePush(s, pool, main, waitMs);
+    // The session can close while the ask waits on the push's verdict: no call for it (audit A5).
+    if (s.closed) return null;
     // The ask's own read, when there was nothing to reuse, waits only what is left of its wait.
     const readWaitMs = Number.isFinite(waitMs) ? waitMs - (performance.now() - reuseAt) : waitMs;
     // The likely deliveries are re-read while the reader reads (`verifyDelivery`): the delivery then waits on no call.
