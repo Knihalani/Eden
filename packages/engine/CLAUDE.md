@@ -24,7 +24,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
 | `ledger.ts`, `usage.ts`                                                    | Not-twice ledger; usage inference for learning (D13, D18)                                                                                                                                                                     |
-| `spans.ts`, `trace.ts`                                                     | Span tracing (off by default, content-free, D56); decision traces, `explainTrace` (a sentence per trace, D277); `ContextPartner.explain` keeps a session's last `EXPLAIN_TRACES` (32) |
+| `spans.ts`, `trace.ts`                                                     | Span tracing (off by default, content-free, D56); decision traces, `explainTrace` (a sentence per trace, D277); `UsageRecord` for the optional `onUsage` sink (whether the agent used each injection, content-free, D293); `ContextPartner.explain` keeps a session's last `EXPLAIN_TRACES` (32) |
 | `gate.ts`                                                                  | Redaction off the event loop through the worker pool (D25, D26)                                                                                                                                                               |
 
 `bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `ingest.bench.ts` (memory per synced
@@ -219,8 +219,16 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   user's days and made the agent ask more one request at a time, k 3 after a session's first request lost hidden facts,
   and removing an item repeated within a request (the push and the rule paths race on the ledger) saved nothing. A
   smaller push makes a longer ask answer (`askDedup` says in full what a packet showed in part). On Pi, Eden's billed
-  cost above the agent alone is prompt-cache writes on a fixed prefix that was not cached (D260; why is open), not the
-  packet's bytes.
+  cost above the agent alone was prompt-cache writes on a fixed prefix too short to cache (D260; proven by D271: ~500
+  tokens on the wire, under Haiku 5.5's 512 minimum). With an agent prompt that caches in every arm (`--tenant-prompt`),
+  the gap is the packet's own tokens written to the cache (+$0.060/1k short, +$0.080/1k over days, Eden faster), and
+  no lexical cut of packet or ask bytes keeps the planted facts (D273).
+- **The candidates' order, a longer ask and constraint-first excerpts were measured and deleted (D266–D268, A2;
+  docs/research/a2-quality.md; code in commit d096b7ba).** A no-model re-rank (one item per title, the request's date
+  lifted) put the planted item in the packet more often (+11 of 384 at $0, +9 of 182 live) and raised no more facts
+  live (−0.6 points, −4.6..+3.4); an ask past held items cost +$0.021/1k for no gain. Each push pass reports its pool,
+  constraint test and handed ids to the lab hook `onPushPool` (ids and flags only, D269), not to `onReader`, whose
+  consumers count reader readings.
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read
@@ -246,6 +254,15 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   1.2 s to 0.1-0.2 s, but one process's capacity inside a 100 ms p99 rose only 1.46x there and fell 3-15% on
   router-sim realistic, for 1.19x the CPU per item. The code is in commit b217ae1d (`ingest.ts`, `prepared.ts`,
   `ingest.test.ts`); building it again needs a decision that accepts those numbers.
+- **Many sources (D261–D265, docs/research/a1-scale.md).** The lab's worlds have five sources and fit the sync cap, so
+  the funnel cannot see a user with hundreds: screen such changes with `-- --noise-sources 995 --limit 16` (and
+  `--jobs 2`: the pre-D263 default needed ~4.5 GB a process) and `bench/many-sources.bench.ts`. A synced copy the
+  user's cap cut answers nothing for its source (`Sync.complete`, `syncLocalComplete`): any new path that answers from
+  the local index must go through `localOf`, or it misses what is older than the cut. Routing over many sources needs
+  evidence (mentions, `routeLocalHits`): with a flat prior it is a lottery. Over `syncPollWidth`, `searchLive` routes
+  once, before the poll, and searches the head of that ranking: a second route would draw apart, and an ask must
+  never answer a stale copy it did not poll (D127, D263's review). Per-(user, source) state is multiplied by
+  the source count: keep it lazy (the fan-out's histograms were 8 KB a pair before D261).
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

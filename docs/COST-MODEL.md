@@ -516,6 +516,19 @@ What a tenant's own agent costs depends mostly on the agent: in D64, 85% of its 
 (−27%) but lost 0.12 of hidden facts raised (in-sample). docs/INTEGRATION.md collects the agent-side levers; they are
 unmeasured advice.
 
+## The agent's extra tokens under the candidates default (A3, D271–D273)
+
+With no reader call on the path (D237), Eden's per-task cost to a tenant is the agent's own: the packet (about 1 KB on
+a nothing-to-add request, 1.4–1.6 KB on one with something to add) and `ask_context` answers (816–964 bytes an ask,
+0.33–0.70 asks a task one request at a time, 0.04–0.06 over days) enter the agent's prompt, are written to its cache
+once (1.25x input) and read back on later requests (0.1x). Measured on Pi with a prompt that caches in every arm
+(train, Anthropic Haiku, lab figures; docs/research/a3-cost-speed.md): Eden writes 865 vs 318 tokens a nothing-to-add
+task one request at a time and 629 vs 262 over days; $ per 1,000 tasks on the 1:1:8 mix +0.060 (+0.042..+0.078) and
++0.080 (+0.065..+0.095) against the agent alone, while Eden saves model turns (wall −0.96 s and −0.42 s). Cuts of
+packet or ask bytes by lexical anchoring drop planted facts or move the bytes into the ask (D258, D273): the packet's
+bytes are what recall costs. An agent with a fixed prompt under the provider's cache minimum (512 tokens on Haiku 5.5)
+pays its whole prompt as a cache write on every task; Pi's minimal Eden agent did (D260, D271).
+
 ## Levers, in order of leverage
 
 1. Fewer model calls: better cheap scoring (M1 tuning), the graph (M3; deleted by D225), learned silence. Done so far: ask answers

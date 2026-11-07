@@ -12,7 +12,7 @@
  *   costs no source call, and the static world sends none. `none` (the default): sources do not notify.
  */
 import { readFileSync } from "node:fs";
-import type { Scope } from "@eden/protocol";
+import type { ContextItem, Scope } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { Rng } from "../rng";
 import { REALISTIC, withOverrides, type ProfileSet, type SimSource, type SourceProfile } from "../sources";
@@ -96,4 +96,33 @@ export function pushNotifier(
     for (const s of sources)
       if (rng.chance(1 - Math.exp(-(o.pushRates[s.id] ?? 0)))) partner.sourceChanged(scope, s.id);
   };
+}
+
+/**
+ * `--days` (pi-ab): the notice for the items a day's recap moved, as the push mode says an integration sends it. A
+ * `payload` notice carries the moved items (`sourceItems`, what `EdenClient.sourceChanged(id, { items })` sends: no
+ * signal, so no other copy of the source is put in doubt); `signals` is a bare signal per source. Before A3 (D272)
+ * every mode sent the bare signal, so from each day's first recap on every push re-read its candidates from that source
+ * on the agent's critical path (about 650 ms a task in CL5-CL8's long payload runs). Returns the items sent.
+ */
+export async function recapNotice(
+  partner: {
+    sourceChanged(scope: Scope, sourceId: string): boolean;
+    sourceItems(scope: Scope, sourceId: string, items: ContextItem[]): Promise<number>;
+  },
+  scope: Scope,
+  sources: readonly Pick<SimSource, "id" | "listAll">[],
+  moved: ReadonlySet<string>,
+  push: PushMode,
+): Promise<number> {
+  let sent = 0;
+  for (const src of sources) {
+    const items = src.listAll().filter((x) => moved.has(x.id));
+    if (items.length === 0 || push === "none") continue;
+    if (push === "payload") {
+      await partner.sourceItems(scope, src.id, items);
+      sent += items.length;
+    } else partner.sourceChanged(scope, src.id);
+  }
+  return sent;
 }

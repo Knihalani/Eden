@@ -137,7 +137,7 @@ import {
   termIds,
 } from "./text";
 import { SpanStats, Tracer, type SpanSink, type SpanStat } from "./spans";
-import type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
+import type { ShadowRecord, ShadowSink, Trace, TraceSink, UsageRecord, UsageSink } from "./trace";
 import { distinctiveTokens, showsUse, type Outstanding } from "./usage";
 
 export interface PartnerDeps {
@@ -149,6 +149,8 @@ export interface PartnerDeps {
   model: Model | null;
   config?: Partial<EngineConfig>;
   onTrace?: TraceSink;
+  /** Whether the agent used each injection, once known (D293): content-free, for an integrator's digest. */
+  onUsage?: UsageSink;
   now?: () => number;
   /**
    * A worker pool (`WorkerPool` started on `GATE_MODULE`) that redacts lookup results off the event loop (D26). The
@@ -186,7 +188,24 @@ export interface PartnerDeps {
    * (`decide.ts`) and what was delivered. Ids and numbers only, no content. Absent: no facts are computed for it.
    */
   onCandidates?: CandidateSink;
+  /**
+   * A lab hook (`hidden-funnel.ts --pool-dump`, D269): each `pushCandidates` pass's pool and what it handed, ids and
+   * flags only. Apart from `onReader`, whose consumers count reader readings.
+   */
+  onPushPool?: PushPoolSink;
 }
+
+/** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
+export interface PushPoolReport {
+  sessionId: string;
+  /** The push's pool in order (the ids the reader would have read). */
+  pool: string[];
+  /** Per pool item, `readerGate`'s constraint test (cards included). */
+  constraintLike: boolean[];
+  /** The candidates handed (none when no pooled item is constraint-like). */
+  handed: string[];
+}
+export type PushPoolSink = (report: PushPoolReport) => void;
 
 /** One no-model decision's candidates, for `PartnerDeps.onCandidates`. */
 export interface CandidateDump {
@@ -227,6 +246,8 @@ interface Recorded {
   sourceIds: string[];
   situation: string;
   used: boolean;
+  /** The session the injection was delivered in: a later correction's usage record names it (D293). */
+  sessionId: string;
 }
 
 interface Session {
@@ -385,6 +406,8 @@ interface ProbeOpts {
   local?: ReadonlySet<string> | null;
   /** The lookup's deadline (`performance.now()` time, D140); absent: `sourceTimeoutMs` from when the probes start. */
   deadlineAt?: number;
+  /** `routeLocalHits` (D265): the lookup's local evidence per source, for the probes' routing. */
+  boost?: ReadonlyMap<string, number>;
 }
 /** `intent`'s reciprocal-rank constant: rank 0 scores 1/k (the usual 60 flattens a five-item list to a tie). */
 const ASK_FUSE_K = 2;
@@ -610,6 +633,7 @@ export class ContextPartner {
           {
             maxItems: c.syncMaxItems,
             pageSize: c.syncPageSize,
+            backfillLanes: c.syncBackfillLanes,
             pollPageSize: c.syncPollPageSize,
             staleChance: c.syncStaleChance,
             maxStaleMs: c.syncMaxStaleMs,
@@ -654,7 +678,12 @@ export class ContextPartner {
     }
   }
 
-  async observe(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
+  /**
+   * `shadow` (an integration trying Eden without injecting: the proxy's shadow mode, D280): what is returned is not
+   * handed out to an agent, so nothing is noted as shown and no usage outcome is learned from it (audit A5: a shadow
+   * trial taught the source map that every source it would have cited went unused).
+   */
+  async observe(event: AgentEvent, options: { waitMs?: number; shadow?: boolean } = {}): Promise<ObserveResult> {
     // `readerPush`: a request that acts is also read by the ask-time reader, as an ask of the engine's own; what it
     // flags is queued as a packet. The observe waits for it within its own wait, so an agent that never calls
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
@@ -702,7 +731,10 @@ export class ContextPartner {
     return { ...result, pending: result.pending || !settled || queued };
   }
 
-  private async observeEvent(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
+  private async observeEvent(
+    event: AgentEvent,
+    options: { waitMs?: number; shadow?: boolean } = {},
+  ): Promise<ObserveResult> {
     const t0 = performance.now();
     const spans = this.spans;
     const root = spans?.open("observe", 0, { kind: event.kind });
@@ -751,7 +783,7 @@ export class ContextPartner {
       });
     };
     const reply = (injection: Injection | null): ObserveResult => {
-      if (injection) this.handOut(s, injection);
+      if (injection && !options.shadow) this.handOut(s, injection);
       if (root) {
         spans!.close(root, {
           session: s.id,
@@ -764,6 +796,7 @@ export class ContextPartner {
       return { injection, pending: pendingOf(s) };
     };
 
+    this.dropRemovedPending(s);
     const queued = s.pending.shift() ?? null;
     const lookup = wantsLookup(event, text, terms, s.vocab);
     if (!lookup) {
@@ -957,17 +990,39 @@ export class ContextPartner {
     return (this.sessions.get(sessionKey(ref))?.traces ?? []).map((t) => ({ ...t, itemIds: [...t.itemIds] }));
   }
 
-  /** Injections the slow path queued for a session, oldest first. Integrations that poll call this. */
-  takePending(ref: Scope & { sessionId: string }): Injection[] {
+  /**
+   * Injections the slow path queued for a session, oldest first. Integrations that poll call this. `shadow`: taken but
+   * not handed to an agent (see `observe`).
+   */
+  takePending(ref: Scope & { sessionId: string }, options: { shadow?: boolean } = {}): Injection[] {
     const s = this.sessions.get(sessionKey(ref));
     if (!s) return [];
     this.checkPlans(s);
     // What the agent reads last about an item is its current copy (D232): a packet with a copy the cache has since
     // replaced goes before the packets that render current copies, and an update made stale by a packet of the batch
     // that renders the current copy is dropped. Queue order holds otherwise.
+    this.dropRemovedPending(s);
     const out = this.currentLast(s, this.withoutCoveredUpdates(s.pending.splice(0)));
-    for (const injection of out) this.handOut(s, injection);
+    if (!options.shadow) for (const injection of out) this.handOut(s, injection);
     return out;
+  }
+
+  /**
+   * A queued packet that cites an item since removed at its source (`sourceRemoved`, D126) is not handed out: the agent
+   * would read a deleted item as current. Found by the engine fuzz harness (`fuzz.test.ts`, audit A5): the removal
+   * cleared the cache, the sync's records and held pages, but not packets already queued. The packet goes whole (its
+   * text cannot lose one item safely: folding and framing span items); what its delivery marked is undone where an undo
+   * was kept, as for a withdrawn packet, and otherwise its other items stay marked (silence over a repeat).
+   */
+  private dropRemovedPending(s: Session): void {
+    if (s.pending.length === 0) return;
+    const now = this.now();
+    for (let k = s.pending.length - 1; k >= 0; k--) {
+      const packet = s.pending[k]!;
+      if (!packet.citations.some((c) => this.deps.cache.isHeldGone(s.scope, c.itemId, now))) continue;
+      s.pending.splice(k, 1);
+      this.withdraw(s, packet);
+    }
   }
 
   // ── revisionNotice (D205) ──
@@ -1517,31 +1572,46 @@ export class ContextPartner {
       // older copies, if the agent has not taken it, gives way to this one (its items count as undelivered here). One
       // the agent has taken stays taken: only what is new to it, or what the poll changed since, goes out again.
       const prev = internal.again?.prev;
-      const withdrawn = new Set<string>();
       // A candidates pass replaces the first packet only with candidates of its own (CL6 review).
-      if (prev && (reading?.read || (candidates?.items.length ?? 0) > 0) && !s.closed && latest) {
-        const at = s.pending.indexOf(prev);
-        if (at >= 0) {
-          s.pending.splice(at, 1);
-          for (const c of prev.citations) withdrawn.add(c.itemId);
-          // The agent never got it: what its delivery marked is undone before this reading delivers.
-          this.withdraw(s, prev);
-        }
-      }
+      const replacing = !!prev && (reading?.read || (candidates?.items.length ?? 0) > 0) && !s.closed && latest;
+      // The first packet's items count as undelivered for this reading while it is still queued. It is withdrawn only
+      // after the re-reads below, in the same step as its replacement is queued: withdrawn before them, a take while a
+      // re-read was on the wire found neither packet, and the push's context reached the agent a request late (audit
+      // A5); a candidates pass with nothing left to deliver keeps it.
+      const withdrawn = new Set<string>(
+        replacing && s.pending.includes(prev!) ? prev!.citations.map((c) => c.itemId) : [],
+      );
       const fresh = flagged.filter(
         (x) =>
           withdrawn.has(x.item.id) ||
           s.ledger.isFresh(x.item.id, s.turn) ||
           (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
       );
-      // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
-      const was = behind ? new Map(fresh.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
-      const checked = fresh.length > 0 && !s.closed && latest ? await this.verifyItems(s, fresh, cue) : [];
+      let checked = fresh.length > 0 && !s.closed && latest ? await this.verifyItems(s, fresh, cue) : [];
       const still = internal.request === undefined || internal.request === s.requests;
+      const delivering = checked.length > 0 && !s.closed && still;
+      if (replacing && (delivering || !candidates)) {
+        const at = s.pending.indexOf(prev!);
+        if (at >= 0) {
+          s.pending.splice(at, 1);
+          // The agent never got it: what its delivery marked is undone before this reading delivers.
+          this.withdraw(s, prev!);
+        } else if (withdrawn.size > 0) {
+          // The agent took it during the re-reads: its items are delivered after all, and go again only if revised.
+          checked = checked.filter(
+            (x) =>
+              !withdrawn.has(x.item.id) ||
+              s.ledger.isFresh(x.item.id, s.turn) ||
+              s.ledger.revised(x.item.id, versionOf(x.item), s.turn),
+          );
+        }
+      }
+      // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
+      const was = behind ? new Map(checked.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       const injection =
-        checked.length > 0 && !s.closed && still
+        delivering && checked.length > 0
           ? candidates
             ? this.deliver(s, checked, "proactive", `candidates:${cue.id}`, cue, undefined, this.candidateFrame())
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
@@ -1622,7 +1692,8 @@ export class ContextPartner {
       // A packet still queued for the agent whose every item this answer says in full is not handed out again; one it
       // covers only in part stays queued (its other items are news). Removed, never `withdraw`n: the agent now has
       // each of its items, so what its delivery marked stands.
-      const cited = new Set(items.map((i) => i.id));
+      // Only what the answer's text rendered: an item its size cap cut was not said (audit A5).
+      const cited = new Set(items.slice(0, renderedCount(items, injection.text)).map((i) => i.id));
       for (let k = s.pending.length - 1; k >= 0; k--) {
         const queued = s.pending[k]!.citations;
         // An "updated:" packet goes only when the answer rendered its items' new version (`watchCopies`, D205): an
@@ -1734,6 +1805,8 @@ export class ContextPartner {
     // `readerReuse` (D193): an ask in the push's request reads the push's verdict, with no call of its own.
     const reuseAt = performance.now();
     const reused = opts.push ? null : await this.reusePush(s, pool, main, waitMs);
+    // The session can close while the ask waits on the push's verdict: no call for it (audit A5).
+    if (s.closed) return null;
     // The ask's own read, when there was nothing to reuse, waits only what is left of its wait.
     const readWaitMs = Number.isFinite(waitMs) ? waitMs - (performance.now() - reuseAt) : waitMs;
     // The likely deliveries are re-read while the reader reads (`verifyDelivery`): the delivery then waits on no call.
@@ -1898,8 +1971,15 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    if (!pool.some((x) => this.constraintLike(x, cards))) return { items: [] };
-    return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) };
+    const like = pool.map((x) => this.constraintLike(x, cards));
+    const items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
+    this.deps.onPushPool?.({
+      sessionId: s.id,
+      pool: pool.map((x) => x.item.id),
+      constraintLike: like,
+      handed: items.map((x) => x.item.id),
+    });
+    return { items };
   }
 
   /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */
@@ -2124,7 +2204,7 @@ export class ContextPartner {
     const o = s?.outstanding.get(f.injectionId);
     if (s && o) {
       s.outstanding.delete(f.injectionId);
-      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used);
+      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used, { sessionId: f.sessionId, how: "explicit" });
       return true;
     }
     // The session may have ended (and counted the injection unused): the user's record outlives it.
@@ -2133,6 +2213,13 @@ export class ContextPartner {
     if (r.used !== f.used) {
       for (const sourceId of r.sourceIds) this.deps.sourceMap.correctOutcome(scope, r.situation, sourceId, f.used);
       r.used = f.used;
+      this.usage({
+        sessionId: r.sessionId,
+        injectionId: f.injectionId,
+        used: f.used,
+        how: "explicit",
+        sourceIds: r.sourceIds,
+      });
     }
     return true;
   }
@@ -2304,7 +2391,9 @@ export class ContextPartner {
     s.closed = true;
     s.abort.abort();
     if (learn) {
-      for (const [id, o] of s.outstanding) this.record(s.scope, id, o.sourceIds, o.situation, false);
+      for (const [id, o] of s.outstanding) {
+        this.record(s.scope, id, o.sourceIds, o.situation, false, { sessionId: s.id, how: "ended" });
+      }
     }
     s.outstanding.clear();
     s.pending.length = 0;
@@ -2384,11 +2473,20 @@ export class ContextPartner {
       const expired = s.turn - o.deliveredTurn > this.config.usageWindowTurns;
       if (!used && !expired) continue;
       s.outstanding.delete(id);
-      this.record(s.scope, id, o.sourceIds, o.situation, used);
+      const how = used ? "inferred" : "expired";
+      this.record(s.scope, id, o.sourceIds, o.situation, used, { sessionId: s.id, how });
     }
   }
 
-  private record(scope: Scope, injectionId: string, sourceIds: string[], situation: string, used: boolean): void {
+  private record(
+    scope: Scope,
+    injectionId: string,
+    sourceIds: string[],
+    situation: string,
+    used: boolean,
+    report: { sessionId: string; how: UsageRecord["how"] },
+  ): void {
+    this.usage({ sessionId: report.sessionId, injectionId, used, how: report.how, sourceIds });
     for (const sourceId of sourceIds) this.deps.sourceMap.recordOutcome(scope, situation, sourceId, used);
     const key = scopeKey(scope);
     const tenant = this.recorded.get(scope.tenantId) ?? new Map<string, Map<string, Recorded>>();
@@ -2396,7 +2494,7 @@ export class ContextPartner {
     const mine = tenant.get(key) ?? new Map<string, Recorded>();
     tenant.delete(key); // Re-insert: Map order is least recently recorded user first.
     tenant.set(key, mine);
-    mine.set(injectionId, { sourceIds, situation, used });
+    mine.set(injectionId, { sourceIds, situation, used, sessionId: report.sessionId });
     while (mine.size > MAX_RECORDED) mine.delete(mine.keys().next().value as string);
     while (tenant.size > MAX_RECORDED_USERS) tenant.delete(tenant.keys().next().value as string);
   }
@@ -3032,6 +3130,12 @@ export class ContextPartner {
     if (unresolved) return { calls: 0, sources: [], unresolved: true };
     if (s.closed) return { calls: 0, sources: [], closed: true };
     if (all.length === 0) return { calls: 0, sources: [] };
+    // `routeLocalHits` (D265): which sources hold the request's best local matches, for routing. Only past the
+    // lookup's own width: with as few sources as it searches, every one is searched whatever the order.
+    const boost =
+      this.config.routeLocalHits && all.length > Math.min(limit, this.config.lookupSources)
+        ? this.localRouteHits(s, cue)
+        : undefined;
     // One deadline for the whole lookup (D140): the on-demand poll, the live search, the planner's cascade and the
     // probes share it. An ask waits for its poll, so a poll and a search with deadlines of their own could hold the
     // reader back twice `sourceTimeoutMs` (a listing that hangs, then the search that follows it).
@@ -3041,12 +3145,31 @@ export class ContextPartner {
     // call; with `syncOnDemand`, a stale one is polled first (one listing call, rather than its search and probes).
     let local: Set<string> | null = null;
     let syncCalls = 0;
+    let preRanked: ReturnType<SourceMap["route"]> | null = null;
+    let pollable: Set<string> | null = null;
     if (this.sync) {
+      // `syncPollWidth` (D263): over that many sources, only the best routed are polled. The lookup is routed once,
+      // here, before its poll, and searches the head of the same ranking, so every source it searches was polled
+      // (two routes would draw apart: an ask then answered unpolled stale copies as "nothing", review of D263). Under
+      // the width nothing changes: the route runs after the poll, as before, and draws as before.
+      const width = this.config.syncOnDemand ? this.config.syncPollWidth : 0;
+      if (width > 0 && all.length > width) {
+        preRanked = this.deps.sourceMap.route({
+          scope: s.scope,
+          entities: cue.entities,
+          situation: s.situation,
+          sourceIds: all.map((x) => x.id),
+          limit: Math.max(width, limit),
+          ...(boost ? { boost } : {}),
+        });
+        pollable = new Set(preRanked.map((r) => r.sourceId));
+      }
       if (this.config.syncOnDemand) {
         const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(left())]);
         const freshening = this.spans?.open("sync.freshen", cue.span, { async: true });
         const tally = { fresh: 0 };
-        const polled = this.sync.freshen(s.scope, all, signal, tally).then((calls) => {
+        const toPoll = pollable ? all.filter((x) => pollable!.has(x.id)) : all;
+        const polled = this.sync.freshen(s.scope, toPoll, signal, tally, s.abort.signal).then((calls) => {
           if (freshening) this.spans!.close(freshening, { calls, fresh: tally.fresh, ...(behind ? { behind } : {}) });
           return calls;
         });
@@ -3080,21 +3203,25 @@ export class ContextPartner {
               return tally.fresh > 0;
             })
             .catch(() => false);
-        } else syncCalls = await polled;
+        } else syncCalls = await polled; // `freshen` stops waiting at the deadline itself (D140, D283)
         if (s.closed) return { calls: syncCalls, syncCalls, sources: [], closed: true };
       }
       local = this.localOf(s, all, behind);
     }
     const routing = this.spans?.open("route", cue.span);
-    const ranked = this.deps.sourceMap.route({
-      scope: s.scope,
-      entities: cue.entities,
-      situation: s.situation,
-      sourceIds: all.map((x) => x.id),
-      limit,
-    });
+    const ranked =
+      preRanked?.slice(0, limit) ??
+      this.deps.sourceMap.route({
+        scope: s.scope,
+        entities: cue.entities,
+        situation: s.situation,
+        sourceIds: all.map((x) => x.id),
+        limit,
+        ...(boost ? { boost } : {}),
+      });
     if (routing) this.spans!.close(routing, { sources: ranked.length, local: local?.size ?? 0, syncCalls });
-    const routed = ranked.map((r) => all.find((x) => x.id === r.sourceId)!).filter(Boolean);
+    const byId = sourcesById(all);
+    const routed = ranked.map((r) => byId.get(r.sourceId)!).filter(Boolean);
     // Only the sources not answered locally are searched live; the local ones answer the same query below.
     const found = local ? routed.filter((x) => !local.has(x.id)) : routed;
     // Serving through the planner only in "serve" mode; in "shadow" the lookup is served as without one.
@@ -3164,7 +3291,11 @@ export class ContextPartner {
     const settled = searching.catch(() => null);
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing = this.config.probes
-      ? this.probe(s, cue, routed, all, listing, probed, settled, shared, { local, deadlineAt }).catch(() => {})
+      ? this.probe(s, cue, routed, all, listing, probed, settled, shared, {
+          local,
+          deadlineAt,
+          ...(boost ? { boost } : {}),
+        }).catch(() => {})
       : null;
     // The same query answered by the synced sources from the local index (D57): no call, nothing to store.
     const answeredHere = local
@@ -3490,6 +3621,8 @@ export class ContextPartner {
     const listers = all.filter((x) => x.listsByTime === true);
     // A person or organisation goes to the sources most likely to hold them, by the source map's own record of which
     // sources mention which names (any source may, not only the lookup's): three per name, not every source.
+    const byId = sourcesById(all);
+    const allIds = all.map((x) => x.id);
     const routeFor = (name: string, limit = c.probePeopleSources) =>
       opts.offline
         ? all
@@ -3498,10 +3631,11 @@ export class ContextPartner {
               scope: s.scope,
               entities: [name],
               situation: s.situation,
-              sourceIds: all.map((x) => x.id),
+              sourceIds: allIds,
               limit,
+              ...(opts.boost ? { boost: opts.boost } : {}),
             })
-            .map((r) => all.find((x) => x.id === r.sourceId)!)
+            .map((r) => byId.get(r.sourceId)!)
             .filter(Boolean);
     const people = off.has("people") ? [] : cue.entities.slice(0, 2);
     // `probeTopicAlone`: the topic only for a request that names no one (with people, their probes find what the topic
@@ -3825,16 +3959,23 @@ export class ContextPartner {
       itemIds: due.map((x) => x.item.id),
     });
     if (s.closed) return [];
+    const after = this.now();
     return scored.flatMap((x) => {
       const o = outcomes.get(x.item.id);
       if (o === "gone") return [];
+      // A removal that landed while the other re-reads ran (audit A5): the item is gone whatever its own outcome said.
+      if (this.deps.cache.isHeldGone(s.scope, x.item.id, after)) return [];
       if (strict && doubted.has(x.item.id) && (o === "failed" || o === "flaked")) {
         strict.unconfirmed.set(x.item.sourceId, (strict.unconfirmed.get(x.item.sourceId) ?? 0) + 1);
         return [];
       }
       if (o !== "changed") return [x];
-      const copy = this.deps.cache.get(s.scope, x.item.id, this.now());
-      return copy ? [{ ...x, item: copy }] : [x];
+      // The copy in hand is the one the re-read found superseded: with no current copy cached (evicted meanwhile, not
+      // removed), nothing is cited, and a strict ask names it as not re-checked, not an all-clear (D127).
+      const copy = this.deps.cache.get(s.scope, x.item.id, after);
+      if (copy) return [{ ...x, item: copy }];
+      if (strict) strict.unconfirmed.set(x.item.sourceId, (strict.unconfirmed.get(x.item.sourceId) ?? 0) + 1);
+      return [];
     });
   }
 
@@ -3939,6 +4080,19 @@ export class ContextPartner {
    * listing read before the deletion cannot store them back), from the sync's bookkeeping and from held search pages.
    */
   private dropGone(scope: Scope, sourceId: string, ids: string[]): number {
+    // Packets queued for this user that cite a removed item go now: the hold that `dropRemovedPending` reads at
+    // hand-out lasts `GONE_HOLD_MS`, and a packet can wait longer than that in an idle session's queue.
+    const gone = new Set(ids);
+    const user = scopeKey(scope);
+    for (const s of this.sessions.values()) {
+      if (s.pending.length === 0 || scopeKey(s.scope) !== user) continue;
+      for (let k = s.pending.length - 1; k >= 0; k--) {
+        const packet = s.pending[k]!;
+        if (!packet.citations.some((c) => gone.has(c.itemId))) continue;
+        s.pending.splice(k, 1);
+        this.withdraw(s, packet);
+      }
+    }
     this.sync?.removed(scope, sourceId, ids);
     this.fanout.dropResults(scope, sourceId);
     const evicted = this.deps.cache.holdsEvicted(scope.tenantId);
@@ -4110,12 +4264,39 @@ export class ContextPartner {
     );
   }
 
+  /**
+   * `routeLocalHits` (D265): for each source, log2(1 + how many of the request's best matches in the user's own index
+   * it holds), from one search of the cache (no call); undefined when the user has nothing cached or nothing matches.
+   */
+  private localRouteHits(s: Session, cue: Cue): Map<string, number> | undefined {
+    const cache = this.deps.cache;
+    const vocab = cache.peekVocab(s.scope);
+    if (!vocab) return undefined;
+    const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
+    const query: number[] = [];
+    for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
+    if (query.length === 0) return undefined;
+    const counts = new Map<string, number>();
+    for (const h of cache.search(s.scope, query, query.length, LOCAL_ROUTE_HITS, this.now())) {
+      counts.set(h.item.sourceId, (counts.get(h.item.sourceId) ?? 0) + 1);
+    }
+    if (counts.size === 0) return undefined;
+    for (const [id, n] of counts) counts.set(id, Math.log2(1 + n));
+    return counts;
+  }
+
   /** The sources whose synced copy is current (`sync`, D57), which answer from the local index; null when none. */
   private localOf(s: Session, all: readonly Source[], behind = false): Set<string> | null {
     if (!this.sync) return null;
     const now = this.now();
-    // `behind`: a warm copy answers while its poll runs (`syncPollBehind`), never one still in its backfill.
-    const ok = (id: string) => this.sync!.current(s.scope, id, now) || (behind && this.sync!.isWarm(s.scope, id));
+    // `behind`: a warm copy answers while its poll runs (`syncPollBehind`), never one still in its backfill; so does a
+    // warm copy past `syncPollWidth` that the lookup did not poll (D263). An ask never passes `behind`: a stale copy
+    // it did not poll is searched live (D127), within the probes' call budget.
+    // With `syncLocalComplete`, only a copy that holds the whole source answers for it (D264): one the user's cap cut
+    // is searched live, or a lookup would miss what is older than the cut.
+    const whole = (id: string) => !this.config.syncLocalComplete || this.sync!.complete(s.scope, id);
+    const ok = (id: string) =>
+      whole(id) && (this.sync!.current(s.scope, id, now) || (behind && this.sync!.isWarm(s.scope, id)));
     const local = new Set(all.filter((x) => ok(x.id)).map((x) => x.id));
     return local.size > 0 ? local : null;
   }
@@ -4774,6 +4955,14 @@ export class ContextPartner {
     };
   }
 
+  private usage(u: UsageRecord): void {
+    try {
+      this.deps.onUsage?.({ ...u, sourceIds: [...u.sourceIds] });
+    } catch {
+      // A broken sink never breaks learning or feedback.
+    }
+  }
+
   private trace(s: Session, t: Trace): void {
     // The session's last decisions, for `explain` (D277): content-free like the trace itself, dropped with the session.
     s.traces.push(t);
@@ -5224,4 +5413,17 @@ function localDay(at: number, offsetMin: number): string {
 function bulkMail(item: ContextItem): boolean {
   const category = item.meta?.category;
   return (category !== undefined && BULK_CATEGORY.test(category)) || BULK_TITLE.test(item.title);
+}
+
+/** `routeLocalHits`: the user's best local matches for a request that routing counts per source (D265). */
+const LOCAL_ROUTE_HITS = 40;
+
+/**
+ * A user's sources by id, the first of any repeated id (as `Array.find` gave): a lookup maps routed ids back to sources
+ * through it, which was a scan of every source per routed one (quadratic for a user with 1,000 connectors, D261).
+ */
+function sourcesById(all: readonly Source[]): Map<string, Source> {
+  const byId = new Map<string, Source>();
+  for (const x of all) if (!byId.has(x.id)) byId.set(x.id, x);
+  return byId;
 }

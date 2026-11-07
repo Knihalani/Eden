@@ -317,6 +317,26 @@ describe("backfillShares: Eden's background spend per task run", () => {
     expect(shares.get("c\u0000eden")).toBeCloseTo(0.06, 12);
     expect([...shares.values()].reduce((n, x) => n + x, 0)).toBeCloseTo(0.064, 12);
   });
+
+  test("a stream with no model roles (+nokey, D291) is booked for its connector calls, not in the card spread", () => {
+    const bg: Background[] = [
+      { seed: 41, suite: "s", condition: "eden", tasks: ["a", "b"], cardsUsd: 0.004, bridgeUsd: 0, calls: 2 },
+      {
+        seed: 41,
+        suite: "s",
+        condition: "eden+nokey",
+        tasks: ["a", "b"],
+        cardsUsd: 0,
+        bridgeUsd: 0,
+        calls: 0,
+        sourceCalls: 18,
+        noModels: true,
+      },
+    ];
+    const shares = backfillShares(bg);
+    expect(shares.get("a\u0000eden")).toBeCloseTo(0.002, 12);
+    expect(shares.has("a\u0000eden+nokey")).toBe(false);
+  });
 });
 
 describe("pi-ab-report --reconcile", () => {

@@ -1,0 +1,18 @@
+Eden's one-time backfill: 648 listing calls over 36 streams (18 per simulated user), 0 calls between tasks; spread over the run's 432 tasks per arm: 1.50 a task
+
+| Arm | Agent connector calls/task (mix) | Eden request-time calls/task | Eden backfill calls/task (one-time, spread) | Model $/1k (mix) |
+|---|---|---|---|---|
+| tools | 3.38 | 0.00 | 0.00 | 0.375 |
+| eden | 0.00 | 0.00 | 1.50 | 0.426 |
+| eden+nokey | 0.00 | 0.00 | 1.50 | 0.416 |
+
+$ per 1,000 tasks on the 1:1:8 mix, model + connectors (steady state: request-time calls only; all-in adds the backfill spread over this run's tasks):
+
+| Plan ($/1k calls) | tools steady / all-in | eden steady / all-in | eden+nokey steady / all-in |
+|---|---|---|---|
+| First-party APIs (quota only) (0.0) | 0.375 / 0.375 | 0.426 / 0.426 | 0.416 / 0.416 |
+| Composio (overage) (0.3) | 1.389 / 1.389 | 0.426 / 0.876 | 0.416 / 0.866 |
+| Unified.to (Pro) (0.75) | 2.910 / 2.910 | 0.426 / 1.551 | 0.416 / 1.541 |
+| Arcade.dev (Team) (10.0) | 34.167 / 34.167 | 0.426 / 15.426 | 0.416 / 15.416 |
+| Pipedream Connect (overage) (12.0) | 40.925 / 40.925 | 0.426 / 18.426 | 0.416 / 18.416 |
+| Zapier MCP (10k tasks) (25.8) | 87.558 / 87.558 | 0.426 / 39.126 | 0.416 / 39.116 |

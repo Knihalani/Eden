@@ -103,7 +103,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import type { World } from "../world";
-import { connectorHeader, connectorOptions, pushNotifier, sourceFields } from "./connector-options";
+import { connectorHeader, connectorOptions, pushNotifier, recapNotice, sourceFields } from "./connector-options";
 import {
   armPromptsHash,
   ASK_DESCRIPTION,
@@ -117,6 +117,7 @@ import {
   reusableArms,
   searchToolSpec,
   systemPrompt,
+  TENANT_GUIDE,
   TOOL_ITEMS,
   userPrompt,
   worldOf,
@@ -130,6 +131,7 @@ import { variantsFor } from "./neutral";
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
 import { DiskCardMaker, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
 import {
+  anthropicThinkingOff,
   isAnthropic,
   isCapError,
   labAccess,
@@ -250,13 +252,13 @@ const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
 });
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
-const USES_READER = CONDITIONS.some((c) => c.withPartner && effective(c.config).askReader);
+const USES_READER = CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).askReader);
 // Every model a role of this run calls, once: the pacer and spend ledger are set up for them, and the key check below
 // reads the same list, so a role added here cannot go unchecked.
 const RUN_MODELS = [
   MODEL,
   GRADER,
-  ...(CONDITIONS.some((c) => c.withPartner && effective(c.config).cards) ? [CARD_MODEL] : []),
+  ...(CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).cards) ? [CARD_MODEL] : []),
   ...(USES_READER ? [READER_MODEL] : []),
 ];
 // Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
@@ -287,7 +289,9 @@ if (CARDS_FILE && !existsSync(CARDS_FILE)) throw new Error(`--cards ${CARDS_FILE
 // The intent requests (D158): with cards replayed the card model writes requests only for the items it cards live,
 // so the checked-in requests are replayed by default where they cover the run, as the funnel does (`--intent none`
 // opts out; a list of files replays those). A run they do not cover is labelled intent inert in its header.
-const INTENT_WANTED = CONDITIONS.some((c) => c.withPartner && effective(c.config).intent && effective(c.config).cards);
+const INTENT_WANTED = CONDITIONS.some(
+  (c) => c.withPartner && !c.noKey && effective(c.config).intent && effective(c.config).cards,
+);
 const INTENT = harnessIntent(opt("intent", "default"), {
   wanted: INTENT_WANTED,
   cardsReplayed: !!CARDS_FILE,
@@ -516,7 +520,12 @@ function meteredModel(
 /** The tool parameter every search tool and `ask_context` takes: one string, as agent-ab declares it. */
 const queryParams = Type.Object({ query: Type.String({ description: "What to search for" }) });
 // What the Eden-free arms see and how they are graded, recorded with the results so `--reuse-arms` can check it.
-const PROMPTS_HASH = armPromptsHash({ queryParams }, VARIANTS.includes("neutral"));
+/** `--tenant-prompt` (A3, D271): the tenant's house rules (`TENANT_GUIDE`) in every arm's system prompt. */
+const TENANT_PROMPT = args.includes("--tenant-prompt");
+const PROMPTS_HASH = armPromptsHash(
+  TENANT_PROMPT ? { queryParams, tenant: TENANT_GUIDE } : { queryParams },
+  VARIANTS.includes("neutral"),
+);
 const askParams = Type.Object({ question: Type.String() });
 
 /**
@@ -607,16 +616,33 @@ async function runWorld(
       : baseTasks;
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
   const notify = pushNotifier(sources, CONNECTORS, seed);
-  const { name: condition, waitMs, useEden, withPartner, useTools, askTool, judge, act, firewall, config } = cond;
+  const {
+    name: condition,
+    waitMs,
+    useEden,
+    withPartner,
+    useTools,
+    askTool,
+    judge,
+    act,
+    firewall,
+    config,
+    noKey,
+  } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.
   let current: Timeline | null = null;
   const bySession = new Map<string, { r: RunResult; tl: Timeline }>();
+  // Every connector call Eden makes in this stream, in a task's window or not (the backfill, the sync's ticks between
+  // tasks): `Background.sourceCalls`, priced per connector plan by pi-cost-report.ts.
+  let edenCalls = 0;
   const edenSources = sources.map((s) =>
-    watched(s, (id, op, start, end, status, items) =>
-      current?.span("eden.source", "eden", "bg", start, end, { source: id, op, status, items }),
-    ),
+    watched(s, (id, op, start, end, status, items) => {
+      edenCalls++;
+      bg.sourceCalls = edenCalls;
+      current?.span("eden.source", "eden", "bg", start, end, { source: id, op, status, items });
+    }),
   );
   // What this stream's background calls (cards) cost: booked to Eden's total, charged to no task (Background).
   // Recorded in the results as the calls happen (below), so a stream that stops early (OverBudget, the request cap)
@@ -650,15 +676,22 @@ async function runWorld(
   const cardMaker = (): CardMaker =>
     diskCards ? new DiskCardMaker(CARDS_FILE, liveCards(), { out: CARDS_OUT, shared: diskCards }) : liveCards();
   const cards =
-    withPartner && effective(config).cards
+    // `+nokey` (D291): a server with no model key builds no card enricher and no reader (models.ts NO_MODELS).
+    withPartner && !noKey && effective(config).cards
       ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   if (cards) budgeted.cards.push(cards);
+  // A stream with Eden but no cards (`+nokey`, D291) is booked too, for its connector calls (the backfill, ticks); it
+  // has no model spend, and `noModels` keeps it out of the card backfill each seed's model reports spread.
   if (cards) background.push(bg);
+  else if (withPartner) {
+    bg.noModels = true;
+    background.push(bg);
+  }
   // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
   let readerTask: RunResult | null = null;
   const reader =
-    withPartner && effective(config).askReader
+    withPartner && !noKey && effective(config).askReader
       ? new AskReader({
           maker: new ModelReaderMaker(
             meteredModel(
@@ -742,6 +775,8 @@ async function runWorld(
   // background spend is made while the user works (new and changed items).
   bg.setupUsd = bg.cardsUsd;
   bg.setupCalls = bg.calls;
+  bg.setupSourceCalls = edenCalls;
+  bg.sourceCalls = edenCalls;
   const out: RunResult[] = [];
   let previous: { sessionId: string; r: RunResult } | null = null;
   const closePrevious = async () => {
@@ -829,6 +864,7 @@ async function runWorld(
       // text, and a notifying source says so (`--push`), as plans moved during the day would. Only before the recap,
       // which is never graded: a moved item could otherwise land in a later request's slot and change its grade.
       const touched = new Set<string>();
+      const movedIds = new Set<string>();
       for (const id of dayPlanted) {
         const it = world.items.find((x) => x.id === id);
         if (!it) continue;
@@ -838,11 +874,18 @@ async function runWorld(
         if (it.meta) it.meta = shiftMeta(it.meta, moved.moves);
         it.updatedAt = clock;
         touched.add(it.sourceId);
+        movedIds.add(it.id);
         day.changed(it.id, moved.moves);
       }
       for (const src of sources) if (touched.has(src.id)) src.reindex();
       if (partner && CONNECTORS.push !== "none") {
-        for (const id of touched) partner.sourceChanged(scope, id);
+        // `payload`: the notice carries the moved items, as the client sends one (`sourceChanged` with items calls
+        // only `sourceItems`): no signal, so no other copy of the source is put in doubt. Before A3 (D272) this sent
+        // a bare signal in every mode, so from each day's first recap on every push re-read its candidates from that
+        // source on the agent's critical path (about 650 ms a task in CL5-CL8's long payload runs).
+        // A3's first fix moved items without naming them, and its notice went out empty: refuse that.
+        if (touched.size > 0 && movedIds.size === 0) throw new Error("recap moved items but named none");
+        await recapNotice(partner, scope, sources, movedIds, CONNECTORS.push);
         // The change lands two hours before the recap: what the notice started in the background (`revisionNotice`'s
         // poll; nothing when that trial is off) has settled by then. Bounded, so a hung poll cannot stall the stream.
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -1016,7 +1059,12 @@ async function runWorld(
       let ledgerEst = 0;
       const agent = new Agent({
         initialState: {
-          systemPrompt: systemPrompt(world, { lookups: LOOKUPS, data: useTools || useEden, act }),
+          systemPrompt: systemPrompt(world, {
+            lookups: LOOKUPS,
+            data: useTools || useEden,
+            act,
+            tenant: TENANT_PROMPT,
+          }),
           // `--day`: the day's transcript so far (its earlier requests, tool calls and answers).
           ...(DAYS_ON && !startsDay ? { messages: dayMessages } : {}),
           model: piModel,
@@ -1075,6 +1123,7 @@ async function runWorld(
               maxRetries: 0,
               timeoutMs: 90_000,
               cacheRetention: "short",
+              onPayload: (payload) => anthropicThinkingOff(MODEL, payload),
               onProviderStreamEvent: (event) => {
                 const e = event as { type?: string };
                 if (mine.first === null && (e.type === "content_block_start" || e.type === "content_block_delta")) {

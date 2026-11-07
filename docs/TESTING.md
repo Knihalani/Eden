@@ -339,6 +339,14 @@ these changes save (the per-test differences above). The one failure seen in the
 Per package, summing each file alone: engine 14.6 s, redact 10.1 s, sim 9.2 s, primitives 5.0 s, server 2.9 s,
 sources 2.8 s, protocol 2.3 s, eval 0.6 s, graph 0.3 s, client 0.1 s, llm 0.1 s (47.8 s in all, start-ups included).
 
+## Many sources per user (2026-11-07, A1, D261–D265)
+
+`bun packages/engine/bench/many-sources.bench.ts [sources=1000] [itemsPerSource=20] [events=300] [asks=40]
+[latencyMs=0] [--config=<json>]`: one user with that many in-memory connectors (four with the workload's requests, the
+rest unrelated), the shipped wiring with no key, a simulated clock; cold start, calls and CPU per event and ask, heap.
+`bun run funnel ... -- --noise-sources 995 --limit 16` screens quality at that size (`--jobs 2`: memory). Figures in
+docs/research/a1-scale.md. A change to sync, routing or per-(user, source) state reports both.
+
 ## Scale anchors: memory per user and ingest cost (2026-11-03, 4-core container shared with other agents, Bun 1.4.4)
 
 `bun packages/engine/bench/ingest.bench.ts [users=200] [itemsPerUser=500]` syncs that many users through the real path

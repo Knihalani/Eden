@@ -4,6 +4,7 @@ export {
   type CandidateSink,
   type PartnerDeps,
   type ReaderReport,
+  type PushPoolReport,
   type ReaderSink,
 } from "./partner";
 export { FACT_NAMES, vectorOf, type Facts } from "./decide";
@@ -29,7 +30,7 @@ export {
   type SpanSink,
   type SpanStat,
 } from "./spans";
-export type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
+export type { ShadowRecord, ShadowSink, Trace, TraceSink, UsageRecord, UsageSink } from "./trace";
 export { explainTrace } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";
@@ -50,6 +51,7 @@ export {
   worthCardingStrict,
   sentenceKey,
   STANDING_KINDS,
+  automated,
   ECONOMY_CARD_LIMITS,
   type Action,
   type Card,

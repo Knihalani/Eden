@@ -1,0 +1,20 @@
+arm              kind      n  rate   wall p50/p90/mean s  all-in $/1k (agent, Eden)  Eden path ms (obs, ask)  turns  asks  reader  conn  restarts
+tools            hidden   144 0.104   3.15/ 5.10/ 3.08   0.233 (0.233, 0.000)         0 (   0,    0)   1.83  0.00  0.00   2.22  0.00
+tools            control  144 0.000   3.19/ 4.84/ 3.03   0.231 (0.231, 0.000)         0 (   0,    0)   1.82  0.00  0.00   2.25  0.00
+tools            neutral  144 0.007   3.18/ 4.50/ 2.95   0.218 (0.218, 0.000)         0 (   0,    0)   1.76  0.00  0.00   2.08  0.00
+eden             hidden   144 0.611   1.71/ 2.98/ 1.88   0.283 (0.265, 0.000)        10 (   8,    2)   1.24  0.33  0.00   0.00  0.00
+eden             control  144 0.014   1.86/ 3.17/ 2.08   0.300 (0.282, 0.000)        10 (   7,    2)   1.40  0.53  0.00   0.00  0.00
+eden             neutral  144 0.000   2.06/ 2.99/ 2.03   0.277 (0.260, 0.000)        10 (   6,    3)   1.51  0.70  0.00   0.00  0.00
+
+== paired differences per kind (a − b), bootstrap 95%; * the interval excludes zero
+eden             − tools  hidden   rate +0.507 (+0.417..+0.597)* wall s -1.200 (-1.443..-0.950)* $/1k +0.050 (+0.028..+0.071)* Eden ms +10 (+9..+11) turns -0.583 (-0.688..-0.479)*
+eden             − tools  control  rate +0.014 (+0.000..+0.035)  wall s -0.952 (-1.201..-0.705)* $/1k +0.069 (+0.046..+0.092)* Eden ms +10 (+9..+10) turns -0.417 (-0.521..-0.312)*
+eden             − tools  neutral  rate -0.007 (-0.021..+0.000)  wall s -0.925 (-1.169..-0.688)* $/1k +0.060 (+0.038..+0.082)* Eden ms +10 (+9..+10) turns -0.243 (-0.347..-0.139)*
+
+== traffic mix (assumed 1 hidden : 1 control : 8 neutral)
+arm               raised    wrong      usd    agent  edenusd     wall   edenms    turns     asks   reader     conn
+tools              0.010    0.006    0.221    0.221    0.000    2.971    0.000    1.770    0.000    0.000    2.114
+eden               0.061    0.001    0.280    0.263    0.000    2.016    9.572    1.476    0.647    0.000    0.000
+
+== mix pairs (a − b), bootstrap 95%; * excludes zero
+eden             − tools  raised +0.051 (+0.042..+0.060)*  wrong -0.004 (-0.017..+0.003)   usd +0.060 (+0.042..+0.078)*  wall -0.955 (-1.158..-0.765)*  edenms +9.572 (+9.059..+10.132)*  conn -2.114 (-2.319..-1.903)*

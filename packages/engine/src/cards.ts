@@ -629,6 +629,8 @@ interface Stored {
   at: number;
   /** When an item last linked to it (made, or an item with this content enqueued): its time to live runs from here. */
   seenAt: number;
+  /** Kept with no card because `cardsLean` skipped it by its date, not by its words (`readForIntent`). */
+  leanSkipped?: true;
 }
 
 /** An item waiting for the model. `only`: rejected by the prefilter, read for its requests only (`intent`). */
@@ -838,7 +840,14 @@ export class CardEnricher {
       }
       const known = u.byHash.get(hash);
       if (known) known.seenAt = now;
-      if (known || u.queue.some((q) => q.hash === hash)) {
+      const queued = u.queue.some((q) => q.hash === hash);
+      // Lean skipping is by date, and the key is the content: a recurring event's upcoming occurrence says what its old
+      // one said, and was never read for its requests because the old one was skipped first (audit A5).
+      if (known?.leanSkipped && !queued && readForIntent(item, now, this.limits.leanDays)) {
+        this.enlist(u, { item, hash, only: true });
+        continue;
+      }
+      if (known || queued) {
         this.stats.reused++;
         continue;
       }
@@ -850,7 +859,12 @@ export class CardEnricher {
           this.enlist(u, { item, hash, only: true });
         } else {
           if (this.limits.intent) this.stats.leanSkipped++;
-          this.keep(u, hash, { card: null, at: now, seenAt: now });
+          this.keep(u, hash, {
+            card: null,
+            at: now,
+            seenAt: now,
+            ...(this.limits.intent ? { leanSkipped: true } : {}),
+          });
         }
         continue;
       }

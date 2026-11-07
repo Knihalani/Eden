@@ -237,6 +237,30 @@ export interface EngineConfig {
    */
   syncPollBehind: boolean;
   syncCatchupPages: number;
+  /**
+   * 8 in the default (D263): with `syncOnDemand`, a lookup over more than this many sources polls only the stale ones
+   * among the top this-many by routing (its own search's and its probes' best sources); a warm source past them
+   * answers from the index as it stands, as under `syncPollBehind`, until a lookup routes to it or the sweep re-reads
+   * it. A user with 1,000 connectors otherwise had every stale one polled by whichever lookup came next. 0: every
+   * stale source.
+   */
+  syncPollWidth: number;
+  /** Sources whose backfill pages are read at once, newest unread first (1: one at a time; 8 in the default, D262). */
+  syncBackfillLanes: number;
+  /**
+   * On in the default (D264): a synced source answers a lookup from the local index only when the user's copy holds
+   * all of it; one cut at `syncMaxItems` (the backfill stopped before its listing ended, or a trim dropped some of its
+   * items) is searched live, as an unsynced source is. Off: a cut copy answers from the index and misses what is
+   * older.
+   */
+  syncLocalComplete: boolean;
+  /**
+   * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
+   * the user's own index) to its score, so a source whose items share the request's words is searched and probed
+   * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
+   * usefulness, alone.
+   */
+  routeLocalHits: boolean;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
   syncMaxUsersPerTenant: number;
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
@@ -547,6 +571,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncOnDemand: true,
   syncPollBehind: true,
   syncCatchupPages: 2,
+  syncPollWidth: 8,
+  syncBackfillLanes: 8,
+  syncLocalComplete: true,
+  routeLocalHits: true,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncPush: true,

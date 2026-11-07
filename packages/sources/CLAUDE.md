@@ -10,7 +10,7 @@ anything is held).
 | File | Owns |
 |---|---|
 | `src/source.ts` | `Source` (search; optional `fetch` by id D35, `list` for sync D57, `listsByTime`, `notifies` for push sync D125, `fetchReportsGone` for freshness checks D126), `SearchQuery` (with a day `window`, D44), `ListPage` |
-| `src/mcp-source.ts` | `McpSource`: the read-only check (`readTool`: `readOnlyHint: true` or operator `trustedReadTools`, else `ReadOnlyViolation`), reconnects (re-checking read-only), paged `tools/list`, `toItems` |
+| `src/mcp-source.ts` | `McpSource`: the read-only check (`readTool`: `readOnlyHint: true` or operator `trustedReadTools`, else `ReadOnlyViolation`), reconnects (re-checking read-only), paged `tools/list`, `toItems`; `fetch` takes a reply that is the record itself when its own id is the ref (`{id, messages: […]}`, a thread fetch's shape, D294) before looking in its rows |
 | `src/schema-args.ts` | Arguments built from a tool's JSON schema (search, fetch, list), deterministic; operator `fixed` values win |
 | `src/shapes.ts` | Query shapes (terms, entities, one call per entity…); `inert` strips search-syntax operators from untrusted text |
 | `src/planner.ts` | `QueryPlanner`, `PlannedSource`: Thompson sampling over shapes per (tenant, user, connector), learned cascade (D28–D33, D38, D39) |
@@ -29,6 +29,11 @@ anything is held).
 - **Isolation (D9).** Breakers, limits, caches, planner arms and singleflight keys are per tenant/user. A new piece
   of state is keyed the same way and gets a cross-user test (`regressions.test.ts` has examples).
 - **Untrusted text (D11).** Queries are built from user, agent and item text: shapes pass no search syntax through.
+- **Deadlines hold whatever the source does (A5).** `search` (through `Singleflight`) and `fetchChecked` (through
+  `untilAborted`, `src/abort.ts`) return at their deadline even when the source ignores its signal, and `McpSource`
+  gives up its connect at the call's signal; the abandoned call's permit is settled then, so a source that ignores
+  signals can briefly hold more calls than its concurrency cap. `list` is not raced: one more await there moved the
+  funnel's card batching (504 calls to 546); the engine bounds its wait for an on-demand poll instead.
 - **Never throws.** `SourceFanout` reports each source's status ("ok", "cached", "stale", "open", "busy",
   "limited", "throttled", "timeout", "error"); a guard skip spends no rate token and no half-open probe. "limited" is
   our own rate limit skipping the call; "throttled" is the connector's own 429 (or "rate limit", "too many

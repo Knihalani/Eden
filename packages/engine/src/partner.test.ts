@@ -48,13 +48,19 @@ describe("observe", () => {
       waitMs: 1_000,
     });
     expect(late.injection).toBeNull(); // The cue sits past the cap: never read.
-    const t0 = performance.now();
-    const early = await p.observe(
-      ev({ kind: "user_message", sessionId: "s9", text: `Dana Lee and the Globex renewal? ${filler}` }),
-      { waitMs: 1_000 },
-    );
-    expect(early.injection?.citations.map((c) => c.itemId)).toContain("crm:deal-9");
-    expect(performance.now() - t0).toBeLessThan(250);
+    // The best of three sessions: one wall-clock sample failed under a loaded parallel run with nothing wrong, and a
+    // reading of the whole megabyte is slower on every try, so the minimum still catches it.
+    const took: number[] = [];
+    for (const sessionId of ["s9", "s10", "s11"]) {
+      const t0 = performance.now();
+      const early = await p.observe(
+        ev({ kind: "user_message", sessionId, text: `Dana Lee and the Globex renewal? ${filler}` }),
+        { waitMs: 1_000 },
+      );
+      took.push(performance.now() - t0);
+      expect(early.injection?.citations.map((c) => c.itemId)).toContain("crm:deal-9");
+    }
+    expect(Math.min(...took)).toBeLessThan(250);
   });
 
   test("a secret cut by maxEventChars is dropped, not stored in part", async () => {

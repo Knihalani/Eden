@@ -1,0 +1,3 @@
+short eden       control 4 -> 4 neutral 1 -> 1
+short eden+nokey control 6 -> 3 neutral 2 -> 2
+short tools      control 0 -> 0 neutral 2 -> 1

@@ -50,7 +50,12 @@ export const PARTS = {
     syncPush: false,
     verifyDelivery: false,
     readerVerifyAfter: false,
+    syncPollWidth: 0,
+    syncBackfillLanes: 1,
+    syncLocalComplete: false,
   },
+  /** Routing by the user's own index: sources holding the request's best local matches first (D265). */
+  routing: { routeLocalHits: false },
   /**
    * A delivered item its source signalled a change to since it was read is read again first (D126); a handed item
    * changed at its source is sent again as an "updated:" packet (D205).

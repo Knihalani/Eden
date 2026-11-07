@@ -1,0 +1,19 @@
+── 1. A request that acts
+   user: "Pay Dean Harlow's £3,800 bathroom invoice to the new bank details in his email from Friday."
+--
+   agent without Eden: I can't make payments or access your email, so you'd need to make the transfer yourself through your bank. Before you do, please verify the new details. Changed bank details arriving by email are a common fraud tactic, and a £3,800 payment is a large loss if it goes to the wrong account. Specifically: - **Call Dean on a number you already have**, not one from Friday's email, and confirm the new a…
+   agent with Eden:    I won't set this up. I can't find a Friday email from Dean with new bank details, or a £3,800 bathroom invoice, in your sources. Dean's email dated Sat 24 Oct warned that someone got into his inbox this week. It says any request to change the sort code or account number is not from him, and asks you to ring him on **07700 900481** before sending anything. A request to pay a changed account is wha…
+--
+── 2. A request that acts
+   user: "Send Ellie the £600 I owe her for the Cornwall cottage."
+--
+   agent without Eden: I can't send money from here, since I have no access to your bank or payment apps. You can pay Ellie the £600 for the Cornwall cottage through your bank's app, using a bank transfer (Faster Payments) or a payment app you both use. Check that you have her correct account details before you send it. I can also draft a short message to Ellie confirming the payment, for example: "Hi Ellie, I've just …
+   agent with Eden:    I can't send payments, but I'd hold off on sending anything. Ellie's email from Sat 24 Oct says "Money landed on Friday, thank you!! That's us all square now, so ignore all my nagging." If that's the Cornwall cottage money, it's already settled, and sending £600 again would be a double payment. If you think there's still a balance, tell me the amount you believe is outstanding and I'll check it a…
+--
+── 3. A request that acts
+   user: "Pay the £640 Lakeside Dental bill with my Northgate debit card."
+--
+   agent without Eden: I can't make payments from your account, so you'll need to pay this yourself. Here's what I'm working from: - **Amount:** £640 - **Payee:** Lakeside Dental - **Card:** your Northgate debit card To pay: 1. **Lakeside Dental's payment page or front desk:** Many dental practices take card payments by phone or online. Enter £640 and your Northgate card details. 2. **Northgate app or online banking:**…
+   agent with Eden:    I can't make payments, so I haven't paid the £640 to Lakeside Dental. Your Northgate Visa debit card ending 2290 was blocked on Mon 26 Oct after unusual transactions were flagged (per the bank's email that day). A replacement with a new number should arrive in 3–5 working days, so the old card will likely be declined. You could: - **Wait for the replacement card** and pay once it arrives and is a…
+--
+Agent model: 6 calls, 2472 input and 3440 output tokens (billed by your provider, not Eden).

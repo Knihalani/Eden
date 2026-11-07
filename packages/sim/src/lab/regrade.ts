@@ -20,7 +20,8 @@
  *     [--only-concerns]
  *
  * `--only-concerns` (fix-w2b) regrades only the control and neutral answers the run's grader called a concern (any fact
- * true): a check of the false concerns themselves, at a few cents rather than a whole run's worth.
+ * true): a check of the false concerns themselves, at a few cents rather than a whole run's worth. `--only-misses` (A2)
+ * regrades only the hidden answers it called a miss (no fact true); `--conditions a,b` keeps those arms' answers.
  *
  * The summary also splits agreement with the run's grader by task kind (hidden, control, neutral), with the counts of
  * facts each grader alone called true, since a disagreement on a control or neutral task moves the false-concern rate.
@@ -31,7 +32,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import type { Model } from "@eden/llm";
 import { chat, gradeMessages, readVerdicts, type RunResult, type Task } from "./ab-common";
 import { isAnthropic, isCapError, labAccess, labModel } from "./free";
-import { byKind, isConcern } from "./regrade-kinds";
+import { byKind, isConcern, isMiss } from "./regrade-kinds";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -52,6 +53,9 @@ const run = JSON.parse(readFileSync(RESULTS, "utf8")) as { grader?: string; task
 const byId = new Map(run.tasks.map((t) => [t.id, t]));
 let todo = run.results.filter((r) => !r.error && r.answer.trim() && byId.get(r.task)?.must.length);
 if (args.includes("--only-concerns")) todo = todo.filter((r) => isConcern(byId.get(r.task)!.kind, r.facts));
+if (args.includes("--only-misses")) todo = todo.filter((r) => isMiss(byId.get(r.task)!.kind, r.facts));
+const CONDITIONS = opt("conditions", "") ? new Set(opt("conditions", "").split(",")) : null;
+if (CONDITIONS) todo = todo.filter((r) => CONDITIONS.has(r.condition));
 if (LIMIT > 0) todo = todo.slice(0, LIMIT);
 
 interface Graded {

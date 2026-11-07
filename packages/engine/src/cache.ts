@@ -910,6 +910,27 @@ export class ItemCache {
     return this.peek(scope)?.items.get(id)?.readMark;
   }
 
+  /**
+   * `get(scope, id, now)?.updatedAt` for many ids of one user, looking the user up once (the sync's trim reads every
+   * synced item's time after each backfill page; one lookup per id was a tenth of a 1,000-source cold start, D261).
+   */
+  updatedAtReader(scope: Scope, now = Date.now()): (id: string) => number | undefined {
+    const items = this.peek(scope)?.items;
+    return (id) => {
+      const e = items?.get(id);
+      return e && this.alive(e, now) ? e.item.updatedAt : undefined;
+    };
+  }
+
+  /** Whether each id is held as a synced item and alive, for many ids of one user (the sync's `complete`, D264). */
+  syncedReader(scope: Scope, now = Date.now()): (id: string) => boolean {
+    const items = this.peek(scope)?.items;
+    return (id) => {
+      const e = items?.get(id);
+      return e !== undefined && e.synced === true && this.alive(e, now);
+    };
+  }
+
   get(scope: Scope, id: string, now = Date.now()): ContextItem | null {
     const e = this.peek(scope)?.items.get(id);
     return e && this.alive(e, now) ? e.item : null;

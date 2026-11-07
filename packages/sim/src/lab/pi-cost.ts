@@ -20,6 +20,21 @@
 import type { Background, RunResult, Task } from "./ab-common";
 import { REALUSE_MIX } from "./pi-ab-weighted";
 
+/**
+ * Connector plans, $ per 1,000 tool calls (packages/sim/lab/before-after/market.py's `CONNECTORS`; sources in
+ * docs/research/eden-market-effect.md, list prices as researched there, assumed for any one tenant). Every connector
+ * call is priced at its plan's rate: the agent's own source tool calls and all of Eden's (request-time searches,
+ * polls and re-reads, the background sync's ticks, the one-time backfill).
+ */
+export const CONNECTOR_PLANS: Readonly<Record<string, number>> = {
+  "first-party (quota only)": 0,
+  "Composio (overage)": 0.3,
+  "Unified.to (Pro)": 0.75,
+  "Arcade.dev (Team)": 10,
+  "Pipedream Connect (overage)": 12,
+  "Zapier MCP (10k tasks)": 25.8,
+};
+
 /** The long-horizon user a run planned, or a cold start measured: what must match for one to stand for the other. */
 export interface UserShape {
   suites: string[];
@@ -75,6 +90,8 @@ export interface CostTask {
   wallS: number;
   /** The agent's own tool calls (search tools, and `ask_context` where it has it). */
   agentTools: number;
+  /** Of them, calls to a connector (`tool.search_*` spans): `ask_context` and action tools are not connector calls. */
+  agentSourceCalls: number;
   readerCalls: number;
   /** Eden's connector calls in the task's window (searches, fetches, listings). */
   edenSourceCalls: number;
@@ -107,6 +124,12 @@ export interface ConditionCost {
   readerCallsPerTask: number;
   edenSourceCallsPerTask: number;
   agentToolsPerTask: number;
+  /** Connector calls per task: the agent's, Eden's in the task's window, Eden's background while the user worked. */
+  connectorPerTask: { agent: number; eden: number; background: number };
+  /** Eden's one-time backfill connector calls per user (before the first request). */
+  backfillCallsPerUser: number;
+  /** The same per-task calls on the 1:1:8 mix (the background is per task already), when every kind has tasks. */
+  mixConnectorPerTask: number | null;
   wallP50: number;
   wallMean: number;
   recapUsd: number;
@@ -146,6 +169,7 @@ export function costTasks(
         edenUsd: r.edenCostUsd,
         wallS: r.wallMs / 1_000,
         agentTools: r.toolCalls,
+        agentSourceCalls: rec ? rec.events.filter((e) => e.ph === "B" && e.ev.startsWith("tool.search_")).length : 0,
         readerCalls: rec ? countSpans(rec.events, "eden.reader") : 0,
         edenSourceCalls: rec ? countSpans(rec.events, "eden.source") : 0,
         ...(graded === undefined ? {} : { raised: graded }),
@@ -188,6 +212,15 @@ export function conditionCosts(
     const mixSteady = mixed
       ? kinds.reduce((a, [k, w]) => a + w * mean(byKind(k).map((t) => t.agentUsd + t.edenUsd)), 0) + backgroundRun
       : null;
+    // Eden's connector calls outside any task's window (the sync's ticks, notices' polls) while the user worked: the
+    // stream's total less its backfill and less what the tasks' windows counted. Streams before A3 lack the total.
+    const counted = bg.filter((b) => b.sourceCalls !== undefined);
+    const backfillCalls = counted.reduce((a, b) => a + (b.setupSourceCalls ?? 0), 0);
+    const inTasks = ts.reduce((a, t) => a + t.edenSourceCalls, 0);
+    const streamCalls = counted.reduce((a, b) => a + b.sourceCalls!, 0);
+    const backgroundCalls = counted.length ? Math.max(0, streamCalls - backfillCalls - inTasks) : 0;
+    const perTaskConn = (xs: readonly CostTask[]) => mean(xs.map((t) => t.agentSourceCalls + t.edenSourceCalls));
+    const bgConn = ts.length ? backgroundCalls / ts.length : 0;
     return {
       condition,
       tasks: ts.length,
@@ -204,6 +237,13 @@ export function conditionCosts(
       readerCallsPerTask: mean(ts.map((t) => t.readerCalls)),
       edenSourceCallsPerTask: mean(ts.map((t) => t.edenSourceCalls)),
       agentToolsPerTask: mean(ts.map((t) => t.agentTools)),
+      connectorPerTask: {
+        agent: mean(ts.map((t) => t.agentSourceCalls)),
+        eden: mean(ts.map((t) => t.edenSourceCalls)),
+        background: bgConn,
+      },
+      backfillCallsPerUser: seeds.length ? backfillCalls / seeds.length : 0,
+      mixConnectorPerTask: mixed ? kinds.reduce((a, [k, w]) => a + w * perTaskConn(byKind(k)), 0) + bgConn : null,
       wallP50: p50(ts.map((t) => t.wallS)),
       wallMean: mean(ts.map((t) => t.wallS)),
       recapUsd: recaps.filter((r) => r.condition === condition).reduce((a, r) => a + r.usd, 0),
@@ -259,4 +299,25 @@ export function dayRows(tasks: readonly CostTask[]) {
     }
   }
   return out;
+}
+
+/**
+ * One condition's $ per task under a connector plan: steady (model + connector calls per task, the background's
+ * included) and all-in (plus the one-time backfill, its model spend and its connector calls, over the user's tasks);
+ * the 1:1:8 mix the same when the run has every kind.
+ */
+export function planCosts(c: ConditionCost, perThousand: number) {
+  const per = perThousand / 1_000;
+  const conn = c.connectorPerTask.agent + c.connectorPerTask.eden + c.connectorPerTask.background;
+  const backfill = c.tasks ? (c.backfillCallsPerUser * c.users * per) / c.tasks : 0;
+  const steady = c.steady + conn * per;
+  const allIn = c.allIn + conn * per + backfill;
+  const mixSteady =
+    c.mixSteady === null || c.mixConnectorPerTask === null ? null : c.mixSteady + c.mixConnectorPerTask * per;
+  return {
+    steady,
+    allIn,
+    mixSteady,
+    mixAllIn: mixSteady === null || c.mixAllIn === null ? null : mixSteady + (c.mixAllIn - c.mixSteady!) + backfill,
+  };
 }

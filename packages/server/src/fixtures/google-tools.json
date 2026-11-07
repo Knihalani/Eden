@@ -1,0 +1,90 @@
+{
+ "search_threads": {
+  "type": "object",
+  "properties": {
+   "includeTrash": {
+    "type": "boolean"
+   },
+   "pageSize": {
+    "type": "integer",
+    "format": "int32",
+    "description": "Optional. The maximum number of threads to return. Max 50."
+   },
+   "pageToken": {
+    "type": "string",
+    "description": "Optional. Page token to retrieve a specific page of results."
+   },
+   "query": {
+    "type": "string",
+    "description": "Optional. A query string to filter the threads (Gmail syntax)."
+   },
+   "view": {
+    "type": "string",
+    "enum": [
+     "THREAD_VIEW_UNSPECIFIED",
+     "THREAD_VIEW_METADATA_ONLY",
+     "THREAD_VIEW_MINIMAL",
+     "THREAD_VIEW_IDS_ONLY",
+     "THREAD_VIEW_SUMMARY"
+    ]
+   }
+  }
+ },
+ "get_thread": {
+  "type": "object",
+  "properties": {
+   "messageFormat": {
+    "type": "string",
+    "enum": [
+     "MESSAGE_FORMAT_UNSPECIFIED",
+     "MINIMAL",
+     "FULL_CONTENT",
+     "METADATA_ONLY",
+     "PLAIN_TEXT"
+    ]
+   },
+   "threadId": {
+    "type": "string",
+    "description": "Required. The unique identifier of the thread to fetch."
+   }
+  },
+  "required": [
+   "threadId"
+  ]
+ },
+ "search_events": {
+  "type": "object",
+  "properties": {
+   "pageSize": {
+    "type": "integer",
+    "format": "int32"
+   },
+   "pageToken": {
+    "type": "string"
+   },
+   "query": {
+    "type": "string",
+    "description": "Required. Query string to search for events (case-insensitive)."
+   }
+  },
+  "required": [
+   "query"
+  ]
+ },
+ "get_event": {
+  "type": "object",
+  "properties": {
+   "calendarId": {
+    "type": "string",
+    "description": "Optional. ID of the calendar containing the event."
+   },
+   "eventId": {
+    "type": "string",
+    "description": "Required. Event ID."
+   }
+  },
+  "required": [
+   "eventId"
+  ]
+ }
+}
