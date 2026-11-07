@@ -262,6 +262,16 @@ untaken (the push's second reading) announces nothing. A change notice for a sou
 from is polled at once in the background (one listing call, at most one at a time and 30 s apart per user and
 source), so the packet is usually queued before the agent's next request; nothing on the observe path waits for it.
 Without it, a fact the agent already holds stays in its transcript in the old version (docs/research/fix-s7-revisions.md).
+Since D342 (`revisionDiff`, part `freshness`) an update also names the times and dates the session was shown for the
+item that the new version no longer has ("…; this version replaces it; no longer: 09:30"): the ledger keeps every
+handed version's times (`Ledger.seenTimes`, `timesOf`, no model).
+
+**Re-showing a candidate across requests** (D340, `pushReshow`, on in the default, part `candidates`): the not-twice
+ledger (D13) keeps an item back within its cooldown, but a push candidate the agent took for an *earlier request* of
+the session (`Session.handedIn`, the request it was handed out in) is handed again when it ranks among this request's
+candidates and passes `readerGate`'s constraint test; never twice within one request, and never beside an untaken
+packet that holds it. Over a day a constraint-worded item is often pushed first for an unrelated request, where the
+agent was told to ignore it, and the agent rarely went back to it at its own (docs/research/a17-long-quality.md).
 
 **Deleted by D112:** `decideConflict` (D67), `judgeBehind`, push relaying (`syncPush`, `sourcePushes`,
 `sourceChanged`, D66) and the other switches D112 lists. The candidates' facts (`decide.ts`) still reach the lab only

@@ -109,6 +109,11 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
   Hermes gets both. `--day K` runs K requests per agent session (`pi-day.ts`), with a recap turn that is never
   graded. After the change notices before the recap it waits up to 10 s for `revisionsSettled` (D205's background
   poll), standing in for the two hours between change and recap; `DaySummary.updatePackets` counts "updated:" packets.
+  The change lands just before the recap, so a lever that re-sends an update at the recap repeats the packet the agent
+  has just read (D341); `staleHanded`/`staleUpdated` say whether a stale recap's item was handed and updated that day.
+- **Position in the day** (A17): `../../lab/a17/days.py` reads `--days` runs per position bucket and pairs arms task by
+  task (it needs `--timeline`). One request a session (the funnel, short pi-ab) cannot see D340's re-show: screen it on
+  `--days` only.
 - **pi-ab and hermes-ab default to `--time-scale 1`** (since 2026-11-03): sources take their profiles' assumed
   latency, so the "Eden on the critical path" column includes the on-demand sync poll. Earlier results (every
   haiku-phase3 row) ran at 0, connectors instant; compare like with like. Use 0 only for a stated quality-only rerun.

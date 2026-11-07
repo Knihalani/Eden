@@ -221,6 +221,15 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   live (−0.6 points, −4.6..+3.4); an ask past held items cost +$0.021/1k for no gain. Each push pass reports its pool,
   constraint test and handed ids to the lab hook `onPushPool` (ids and flags only, D269), not to `onReader`, whose
   consumers count reader readings.
+- **A candidate is re-shown across requests (D340, `pushReshow`).** "Earlier" is the request the agent *took* the item
+  in (`Session.handedIn`, set in `handOut`), never the request it was queued for, and an item still in an untaken
+  packet is not re-shown: judged by the ledger's delivery turn, a packet of the last request taken with the next one's
+  observe was handed twice in one take (found by `fuzz.test.ts`, whose not-twice invariant allows a re-hand only at a
+  later request). Only constraint-like candidates (`candidatesOf`'s `like`): plain items stay in the transcript. One
+  request a session (the funnel, the eval's single turns) never exercises it; measure on `pi-ab --days`.
+- **Updates name the times they drop (D342, `revisionDiff`).** `buildUpdate`'s title reads `Ledger.seenTimes` before
+  `queueUpdates` notes the new copy; every path that notes a shown copy passes `timesOf` (`copiesOf` carries them), or
+  the "no longer" list misses that version's times.
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read
