@@ -42,7 +42,6 @@ describe("audit A5: fan-out deadlines on list and fetch", () => {
     const t0 = performance.now();
     const page = await f.list(slow(800), scope, undefined, 10, { timeoutMs: 50 });
     const ms = performance.now() - t0;
-    console.log("list:", page, Math.round(ms), "ms with timeoutMs 50");
     expect(ms).toBeLessThan(300);
   });
 
@@ -51,7 +50,6 @@ describe("audit A5: fan-out deadlines on list and fetch", () => {
     const t0 = performance.now();
     const got = await f.fetchChecked(slow(800), scope, "r1", { timeoutMs: 50 });
     const ms = performance.now() - t0;
-    console.log("fetchChecked:", got, Math.round(ms), "ms with timeoutMs 50");
     expect(ms).toBeLessThan(300);
   });
 
@@ -77,7 +75,6 @@ describe("audit A5: fan-out deadlines on list and fetch", () => {
       ),
       new Promise((r) => setTimeout(() => r("still pending after 1.5 s"), 1_500)),
     ]);
-    console.log("McpSource.list:", outcome, Math.round(performance.now() - t0), "ms with a 100 ms signal");
     expect(outcome).not.toBe("still pending after 1.5 s");
   });
 });

@@ -68,7 +68,6 @@ describe("audit A5: a lookup's on-demand poll and its deadline (D140)", () => {
     const t0 = performance.now();
     await partner.ask({ ...scope, sessionId: "s1", question: "Where is the quarterly plan?" } as never);
     const ms = performance.now() - t0;
-    console.log("ask took", Math.round(ms), "ms with sourceTimeoutMs 100 and a 1500 ms listing");
     expect(ms).toBeLessThan(800);
   });
 });
