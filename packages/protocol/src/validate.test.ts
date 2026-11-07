@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { itemId } from "./ids";
-import { MAX_QUESTION_CHARS, checkAsk, checkEvent, checkSourceItems } from "./validate";
+import { MAX_QUESTION_CHARS, bodyShapeUnder, checkAsk, checkEvent, checkSourceItems } from "./validate";
 
 const scope = { tenantId: "acme", userId: "u_1", sessionId: "s_1" };
 
@@ -143,6 +143,30 @@ describe("tool_call.input depth and size (D100)", () => {
     });
     expect(() => call(throwing)).not.toThrow();
     expect(call(throwing).ok).toBe(false);
+  });
+});
+
+describe("bodyShapeUnder: the raw body's values and depth before the parse", () => {
+  const bytes = (v: unknown) => new TextEncoder().encode(typeof v === "string" ? v : JSON.stringify(v));
+  test("every valid request passes: the widest and the deepest tool input checkEvent accepts", () => {
+    const wide = { ...scope, kind: "tool_call", tool: "t", input: Array(499_990).fill(1) };
+    expect(checkEvent(wide).ok).toBe(true);
+    expect(bodyShapeUnder(bytes(wide))).toBe(true);
+    let input: unknown = 1;
+    for (let i = 0; i < 1_000; i++) input = [input];
+    const deep = { ...scope, kind: "tool_call", tool: "t", input };
+    expect(checkEvent(deep).ok).toBe(true);
+    expect(bodyShapeUnder(bytes(deep))).toBe(true);
+  });
+  test("brackets, commas and escaped quotes inside strings are text, not structure", () => {
+    const text = `"[{,\\" ${"[[[,,,{{{".repeat(200_000)}`;
+    expect(bodyShapeUnder(bytes({ ...scope, kind: "user_message", text }))).toBe(true);
+    expect(bodyShapeUnder(bytes({ text: 'ünïcødé 😀 \\\\"' }))).toBe(true);
+  });
+  test("past either bound it is refused", () => {
+    expect(bodyShapeUnder(bytes(`{"x":${"[".repeat(1_009)}${"]".repeat(1_009)}}`))).toBe(false);
+    expect(bodyShapeUnder(bytes({ x: Array(1_010_002).fill(0) }))).toBe(false);
+    expect(bodyShapeUnder(bytes({ x: Array(1_000_000).fill(0) }))).toBe(true);
   });
 });
 

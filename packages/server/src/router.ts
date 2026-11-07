@@ -41,6 +41,7 @@ import { existsSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SourceMap } from "@eden/graph";
 import { fnv1a, Gcra, mix32 } from "@eden/primitives";
+import { bodyShapeUnder } from "@eden/protocol";
 import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, MAX_PROCESSES, type ServerConfig } from "./config";
 
 /** The child a tenant/user is served by: stable across restarts and router instances, spread by a mixed FNV-1a. */
@@ -56,7 +57,9 @@ export function childFor(tenant: string, userId: string, children: number): numb
  * without one go to the tenant's own child, where the handler refuses them with its usual 400.
  */
 export function userOf(body: Uint8Array): string {
-  if (body.byteLength === 0) return "";
+  // A body the child refuses unparsed (`bodyShapeUnder`, http.ts) is not parsed here either: padded structure is where
+  // the parse's cost lies (hundreds of ms for 8 MB), on the one thread every tenant's requests pass through.
+  if (body.byteLength === 0 || !bodyShapeUnder(body)) return "";
   try {
     const parsed: unknown = JSON.parse(decoder.decode(body));
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {

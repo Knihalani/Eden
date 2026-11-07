@@ -27,11 +27,20 @@
  */
 import { explainTrace, type ContextPartner } from "@eden/engine";
 import { Gcra } from "@eden/primitives";
-import { checkAsk, checkEvent, checkSourceChanged, checkSourceItems, checkSourceRemoved, isId } from "@eden/protocol";
+import {
+  bodyShapeUnder,
+  checkAsk,
+  checkEvent,
+  checkSourceChanged,
+  checkSourceItems,
+  checkSourceRemoved,
+  isId,
+} from "@eden/protocol";
 import { DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
 import type { UserSources } from "./user-sources";
 
 type Json = Record<string, unknown>;
+const decoder = new TextDecoder();
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const fail = (status: number, error: string) => json({ error }, status);
 
@@ -72,7 +81,10 @@ export function createHandler(
     if (declared > maxBodyBytes) return fail(413, tooLarge);
     let body: Json;
     try {
-      const parsed: unknown = await req.json();
+      const bytes = new Uint8Array(await req.arrayBuffer());
+      // Before the parse, which is where a padded body's cost lies (D100's cap bounds bytes, not values or depth).
+      if (!bodyShapeUnder(bytes)) return fail(400, "body holds too many values or nests too deep");
+      const parsed: unknown = JSON.parse(decoder.decode(bytes));
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return fail(400, "body must be an object");
       body = parsed as Json;
     } catch {

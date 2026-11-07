@@ -73,6 +73,15 @@ describe("routing key", () => {
       expect(userOf(enc(bad))).toBe("");
     }
   });
+
+  test("userOf does not parse a padded body on the router's one thread: it goes to the child's 400 unparsed", () => {
+    const half = 4 * 1024 * 1024 - 64;
+    const nested = new TextEncoder().encode(`{"userId":"u1","junk":${"[".repeat(half)}${"]".repeat(half)}}`);
+    const t0 = performance.now();
+    expect(userOf(nested)).toBe("");
+    // The parse took 453-665 ms on such a body; the scan stops at the first bracket past the depth bound.
+    expect(performance.now() - t0).toBeLessThan(100);
+  });
 });
 
 describe("per-child caps and files (D163)", () => {
