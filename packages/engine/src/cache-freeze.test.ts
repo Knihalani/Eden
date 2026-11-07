@@ -7,6 +7,7 @@ import type { ContextItem, Scope } from "@eden/protocol";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import { buildWorkload } from "../bench/workload";
+import type { ListPage, Source } from "@eden/sources";
 import { ItemCache, type CacheHit } from "./cache";
 import { ContextPartner } from "./partner";
 import { termIds } from "./text";
@@ -332,12 +333,25 @@ describe("idle users frozen (D325)", () => {
     expect(cache.syncedCount(alice)).toBe(2_001);
   });
 
-  test("the shipped default thaws a frozen user through `ready` before it serves them", async () => {
+  /** Counts the thaws a caller queued through `ready` (a promise: the user was frozen when it asked). */
+  function spyReady(cache: ItemCache): { queued: number } {
+    const seen = { queued: 0 };
+    const real = cache.ready.bind(cache);
+    cache.ready = (scope) => {
+      const p = real(scope);
+      if (p) seen.queued++;
+      return p;
+    };
+    return seen;
+  }
+
+  test("the partner's entry points thaw a frozen user through `ready`, never all at once inside a read", async () => {
     // Exactness is the cache's (the twin tests above): two runs of the partner itself differ with wall-clock timing
     // (background slow paths settle at different points), so here the partner's own path is checked, not equality.
     const w = buildWorkload({ itemsPerSource: 120, events: 12, seed: 3 });
     let clock = w.events[0]!.at;
     const cache = manual({ freezeIdleMs: 1, expireEveryMs: 1 });
+    const spy = spyReady(cache);
     const partner = new ContextPartner({
       sources: async () => w.sources,
       sourceMap: new SourceMap(),
@@ -346,24 +360,75 @@ describe("idle users frozen (D325)", () => {
       model: null,
       now: () => clock,
     });
+    const freeze = () => {
+      cache.expireIdle(clock);
+      cache.expireIdle(clock);
+      expect(cache.frozenCount).toBe(1);
+    };
     const question = `what did ${w.people[0]} say about the account?`;
     await partner.ask({ ...w.scope, sessionId: "s1", question });
     expect(cache.revision(w.scope)).toBeGreaterThan(0); // The lookup stored what it found.
-    cache.expireIdle(clock);
-    cache.expireIdle(clock);
-    expect(cache.frozenCount).toBe(1);
-    const revision = cache.revision(w.scope);
+    // Each entry point: the frozen user's thaw is the queued one (`ready` handed out a promise), so the count of thaws
+    // equals the count of queued ones: none ran inside a read.
+    freeze();
     await partner.ask({ ...w.scope, sessionId: "s1", question });
+    freeze();
+    await partner.observe(w.events[0]!, { waitMs: 0 });
+    freeze();
+    await partner.checkAction({ ...w.events[0]!, kind: "tool_call", tool: "send_email", input: { to: "x" } });
+    freeze();
+    const item = { id: "mail:new-1", sourceId: "mail", ref: "new-1", title: "A new note", text: "about the account" };
+    await partner.sourceItems(w.scope, "mail", [item]);
     expect(cache.frozenCount).toBe(0);
-    expect(cache.freezes.thawed).toBe(1);
-    cache.expireIdle(clock);
-    cache.expireIdle(clock);
-    expect(cache.frozenCount).toBe(1);
+    expect(spy.queued).toBe(4);
+    expect(cache.freezes.thawed).toBe(4);
     for (const event of w.events) {
       clock = event.at;
       await partner.observe(event, { waitMs: 0 });
     }
-    expect(cache.frozenCount).toBe(0);
-    expect(cache.revision(w.scope)).toBeGreaterThanOrEqual(revision);
+    expect(cache.freezes.thawed).toBe(spy.queued);
+  });
+
+  test("a due sweep or a backfill thaws a frozen user through `ready` before it reads them", async () => {
+    let clock = T0;
+    const items = Array.from({ length: 40 }, (_, i) => makeItem(rng(i), i, "alice")).map((it) => ({
+      ...it,
+      sourceId: "mail",
+      id: `mail:alice-${it.ref}`,
+    }));
+    const mail: Source = {
+      id: "mail",
+      kind: "test",
+      description: "mail",
+      search: async () => [],
+      list: async (_s: Scope, cursor: string | undefined, limit: number): Promise<ListPage> => {
+        const at = cursor ? Number(cursor) : 0;
+        return { items: items.slice(at, at + limit), next: at + limit < items.length ? String(at + limit) : null };
+      },
+    };
+    const cache = manual({ freezeIdleMs: 1, expireEveryMs: 1 });
+    const spy = spyReady(cache);
+    const partner = new ContextPartner({
+      sources: async () => [mail],
+      sourceMap: new SourceMap(),
+      cache,
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { syncCallsPerMin: 1e6 },
+    });
+    const sync = partner.sync!;
+    sync.track(alice, clock);
+    for (let i = 0; i < 20 && cache.syncedCount(alice) < 40; i++) await sync.tick();
+    expect(cache.syncedCount(alice)).toBe(40);
+    // A day on, the user active again (a sweep is due) but not yet read: frozen meanwhile.
+    clock += 25 * 3_600_000;
+    cache.expireIdle(clock);
+    cache.expireIdle(clock);
+    expect(cache.frozenCount).toBe(1);
+    sync.track(alice, clock);
+    await sync.tick();
+    expect(spy.queued).toBe(1);
+    expect(cache.freezes.thawed).toBe(1);
   });
 });

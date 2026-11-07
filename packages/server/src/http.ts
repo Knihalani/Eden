@@ -32,7 +32,7 @@ import { explainTrace, type ContextPartner } from "@eden/engine";
 import { Gcra } from "@eden/primitives";
 import { checkAsk, checkEvent, checkSourceChanged, checkSourceItems, checkSourceRemoved, isId } from "@eden/protocol";
 import type { TenantSpend } from "@eden/llm";
-import { DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
+import { DEFAULT_MAX_BODY_BYTES, FANOUT_COPY, type ServerConfig } from "./config";
 import type { UserSources } from "./user-sources";
 
 type Json = Record<string, unknown>;
@@ -118,7 +118,8 @@ export function createHandler(
     body.tenantId ??= tenant;
     if (body.tenantId !== tenant) return fail(403, "tenantId does not match the API key");
 
-    if (ROUTES.has(url.pathname)) count(tenant, url.pathname.slice(4)); // Known routes only: a bounded record.
+    // Known routes only (a bounded record), and not a router's fan-out copy (counted once, by the owning child).
+    if (ROUTES.has(url.pathname) && req.headers.get(FANOUT_COPY) !== "1") count(tenant, url.pathname.slice(4));
     try {
       switch (url.pathname) {
         case "/v1/events": {
@@ -219,6 +220,7 @@ export function createHandler(
           const checked = checkSourceChanged(body);
           if (!checked.ok) return fail(400, checked.error);
           const { userId, sourceId } = checked.value;
+          await partner.ready({ tenantId: tenant, userId }); // D325: a frozen user thaws in slices first (null: none).
           // 200 either way (a no-op notification is not a caller error); `reason` says why nothing was synced.
           return json({ ok: true, ...partner.sourceNotice({ tenantId: tenant, userId }, sourceId) });
         }
@@ -234,6 +236,7 @@ export function createHandler(
           const checked = checkSourceRemoved(body);
           if (!checked.ok) return fail(400, checked.error);
           const { userId, sourceId, refs } = checked.value;
+          await partner.ready({ tenantId: tenant, userId }); // D325, as above.
           return json({ ok: true, removed: partner.sourceRemoved({ tenantId: tenant, userId }, sourceId, refs) });
         }
         case "/v1/sources": {

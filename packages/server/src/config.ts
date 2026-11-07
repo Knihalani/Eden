@@ -72,6 +72,9 @@ export interface ServerConfig {
   spendLeases: boolean;
 }
 
+/** The header the router puts on a fan-out's copies to children that do not own the user (not counted, D326). */
+export const FANOUT_COPY = "x-eden-fanout-copy";
+
 /** Most server processes the router starts (EDEN_PROCESSES); far above any core count the router helps on. */
 export const MAX_PROCESSES = 64;
 
@@ -246,10 +249,6 @@ function bodyBytes(raw: string | undefined): number {
   return n;
 }
 
-/**
- * Default 0 (D26): on the real engine with realistic source latency the pool was neutral in steady state and cost
- * more CPU. Deployments whose sources return large or keyword-dense items may gain; more than cores − 1 never helps.
- */
 /** An on/off variable: "1" on, "0" or unset off; anything else stops startup. */
 function flag(raw: string | undefined, name: string): boolean {
   if (raw === undefined || raw === "" || raw === "0") return false;
@@ -257,6 +256,10 @@ function flag(raw: string | undefined, name: string): boolean {
   throw new Error(`${name} must be 0 or 1, got ${raw}`);
 }
 
+/**
+ * Default 0 (D26): on the real engine with realistic source latency the pool was neutral in steady state and cost
+ * more CPU. Deployments whose sources return large or keyword-dense items may gain; more than cores − 1 never helps.
+ */
 function workers(raw: string | undefined): number {
   if (raw === undefined || raw === "") return 0;
   const n = Number(raw);

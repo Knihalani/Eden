@@ -30,7 +30,8 @@ this note is about many users.
 - **Operators can now see and cap a tenant across processes.** `POST /v1/usage` (D326) gives a tenant's spend, calls,
   requests and users today, added up over every process. Behind a switch (D327), a tenant's daily model budget is
   shared out by the router instead of cut into equal slices per process, so a tenant with one busy user can use most
-  of their cap, not a quarter of it (on 4 cores), and never more than all of it.
+  of their cap, not a quarter of it (on 4 cores), and never more than all of it (except that a process restarted
+  mid-day may spend its first small slice, an eighth of the cap's quarter on 4 cores, once more).
 - **What is left:** a frozen user still keeps ~200 B an item of sync bookkeeping (the ids of what was synced) live; a
   restart still re-reads every user's sources (state is in memory only, D8); the storm fix needs a card writer that
   does not follow store timing before it can ship.
@@ -54,7 +55,8 @@ The biggest number in the table is what a user costs at the sync cap, so the wor
 ### Design
 
 `ItemCache` counts expiry ticks (`epoch`, every 10 minutes on its timer). A user read or written is marked seen at the
-tick; one not seen for `freezeIdleMs` (30 min: three ticks, never fewer than two) is frozen at the next tick
+tick; one not seen for `freezeIdleMs` (30 min: three ticks, never fewer than two, so 20-30 minutes after the last use)
+is frozen at that tick
 (`FrozenUser`): its entries (the item as JSON sees it, text decoded; fetch time, read mark, class, raw hash, sketch
 and its insertion sequence `Entry.seq`) and its party and offset tallies become one JSON string compressed by zstd at
 level 3 (Bun 1.4's `zstdCompressSync`), kept in memory. The vocabulary, index, sketcher, entries and item objects go.
@@ -127,7 +129,13 @@ The first event per user afterwards (fast path) was 8.2 ms p50 either way.
 
 ### Known costs
 
-- A returning user's first request waits for their thaw (~0.1 s at the cap) once per pause of 30 minutes or more.
+- A returning user's first request waits for their thaw (~0.1 s at the cap) once per pause of 20-30 minutes or more
+  (a user last seen during a 10-minute tick freezes two or three ticks later).
+- A frozen user is thawed (queued, in slices) by anything that reads their items: their requests, a change
+  notification or removal for one of their sources (`syncPush`, on in the default), a due daily sweep, or a backfill;
+  each keeps them live for another 20-30 minutes. The steady state above assumes idle users' sources are quiet; a
+  user whose mailbox notifies every few minutes never stays frozen. The review found these paths thawing at once
+  inside the read; they now await `ready` as the requests do (`cache-freeze.test.ts`).
 - The sync's weekly drop of a user idle for `syncDropMs` (7 days) reads their items, which thaws them at once
   (synchronously, ~0.1 s at the cap), once a week per such user.
 - A frozen user keeps ~600 KB of state outside the cache at 3,000 items, mostly one string per synced item: the
@@ -166,7 +174,9 @@ numbers (`processes`, `processesDown`). Counts and dollars only.
 `EDEN_SPEND_LEASES=1` (trial): each child starts a tenant's day with cap/(4N) and asks the router's ledger for chunks
 of cap/(4N) once under half a chunk is left. `spend-lease.test.ts`, $25 a tenant over 4 children: one busy child spent
 $20.31 (the cap less the other three children's unused starts) against $6.25 with the divided cap; four busy children
-together stayed within $25. Not promoted: no paid run was made, and tenants spread over many users gain nothing.
+together stayed within $25. The IPC round trip between a real router and its children is exercised only up to the
+children's starts (`router-processes.test.ts`): without a model key nothing spends, so no grant is asked for in a test.
+Not promoted: no paid run was made, and tenants spread over many users gain nothing.
 
 ## Users per machine and hosting cost, before and after
 

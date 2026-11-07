@@ -1309,16 +1309,6 @@ export class ContextPartner {
   }
 
   /**
-   * The action firewall (`actionCheck`; docs/research/econ-firewall.md): an agent's tool call, before it runs, checked
-   * against what is held, with no model and no source call. The session's request and the call's arguments read as
-   * words (`actionText`: its days written out, its amounts, names and references) make one cue; what the request's
-   * structure grounds against it (`grounded`: a clash at the time it books, a conflict the conflict test reads, a
-   * card's, someone away that day; `FIREWALL_GROUNDS`) is the finding, delivered already or not: the agent
-   * is about to act as if it were not there. Anything else proceeds, as does a call made again unchanged after a
-   * finding (the agent's informed choice). A finding is data in the usual envelope; what the integration does with it
-   * is its own. With the flag off, every call proceeds and no state is touched. Never throws: a failure proceeds.
-   */
-  /**
    * What this process holds for a tenant (D326, `/v1/usage`): users with a cache (frozen ones counted apart, D325),
    * their items, and users the sync keeps current. Counts only, no ids or content.
    */
@@ -1332,6 +1322,25 @@ export class ContextPartner {
     };
   }
 
+  /**
+   * Null when the user's cache is not frozen; else when it is thawed (D325, `ItemCache.ready`). Every entry point that
+   * serves a user awaits it first (`observe`, `ask`, `checkAction`, `sourceItems`; the server before a notice or a
+   * removal), so a thaw runs in slices and other users' requests do not wait behind it.
+   */
+  ready(scope: Scope): Promise<void> | null {
+    return this.deps.cache.ready(scope);
+  }
+
+  /**
+   * The action firewall (`actionCheck`; docs/research/econ-firewall.md): an agent's tool call, before it runs, checked
+   * against what is held, with no model and no source call. The session's request and the call's arguments read as
+   * words (`actionText`: its days written out, its amounts, names and references) make one cue; what the request's
+   * structure grounds against it (`grounded`: a clash at the time it books, a conflict the conflict test reads, a
+   * card's, someone away that day; `FIREWALL_GROUNDS`) is the finding, delivered already or not: the agent
+   * is about to act as if it were not there. Anything else proceeds, as does a call made again unchanged after a
+   * finding (the agent's informed choice). A finding is data in the usual envelope; what the integration does with it
+   * is its own. With the flag off, every call proceeds and no state is touched. Never throws: a failure proceeds.
+   */
   async checkAction(event: AgentEvent): Promise<ActionCheck> {
     const t0 = performance.now();
     const thawing = this.deps.cache.ready(event); // D325, as in `observe`.
@@ -2139,6 +2148,8 @@ export class ContextPartner {
    */
   async sourceItems(scope: Scope, sourceId: string, items: ContextItem[]): Promise<number> {
     if (!this.config.syncPush || !this.sync || items.length === 0) return 0;
+    const thawing = this.ready(scope); // D325: a frozen user is thawed in slices, not all at once on this put.
+    if (thawing) await thawing;
     const own = items.filter((it) => it.sourceId === sourceId).slice(0, MAX_PUSHED_ITEMS);
     // The removal holding each id gone before the redaction (0: none). These items came after that removal, so they
     // revive it (D160).

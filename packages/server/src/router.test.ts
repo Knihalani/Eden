@@ -277,6 +277,9 @@ describe("router over real child processes", () => {
     expect(other.requests.events ?? 0).toBe(0);
     expect(other.users).toBe(0);
     expect((await post("/v1/usage", { tenantId: "globex" })).status).toBe(403);
+    // The router asks every child; only the owner counts the call: one usage request reads as one.
+    const again = await usage();
+    expect(again.requests.usage! - after.requests.usage!).toBe(1);
   });
 
   test("auth, tenant checks and validation are still the child's answers", async () => {

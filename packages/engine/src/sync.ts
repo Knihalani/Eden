@@ -81,7 +81,10 @@ export interface SyncOptions {
    * the bound on a lost notification (`syncPushMaxStaleMs`); 0 or absent: `maxStaleMs`.
    */
   pushMaxStaleMs?: number;
-  /** `syncIngestTurns` (D328, trial): a background read's page is redacted and stored at its turn (`turn`). */
+  /**
+   * `syncIngestTurns` (D328, trial): a background read's page (backfill, sweep, a poll's background pages) waits its
+   * `turn` before it is redacted and stored.
+   */
   ingestTurns?: boolean;
 }
 
@@ -397,11 +400,6 @@ export class SyncManager {
     return !!u && u.sources.size > 0 && [...u.sources.values()].every((s) => s.phase === "warm");
   }
 
-  /**
-   * One round of background work, for every synced user: drop the idle and those past the tenant's cap, then per
-   * user backfill and sweeps, as each source's budget allows. Never runs twice at once, never throws.
-   * Returns the listing calls it made.
-   */
   /** Users of the tenant this sync keeps current (D326). */
   tenantUsers(tenantId: string): number {
     let n = 0;
@@ -409,6 +407,11 @@ export class SyncManager {
     return n;
   }
 
+  /**
+   * One round of background work, for every synced user: drop the idle and those past the tenant's cap, then per
+   * user backfill and sweeps, as each source's budget allows. Never runs twice at once, never throws.
+   * Returns the listing calls it made.
+   */
   async tick(): Promise<number> {
     if (this.ticking) return 0;
     this.ticking = true;
@@ -536,10 +539,19 @@ export class SyncManager {
       this.stats.deleted += this.deps.cache.dropSynced(u.scope, s.ids);
     }
     const byId = new Map(listable.map((x) => [x.id, x]));
+    // D325: a frozen user is thawed in slices before a read that touches their items, not all at once inside it.
+    // Only when a thaw is pending: one more await on every step would move when pages land (the funnel's cards).
+    let thawing = [...u.sources.values()].some((s) => s.phase === "backfill") ? this.deps.cache.ready(u.scope) : null;
+    if (thawing) await thawing;
+    if (u.gone) return;
     await this.backfill(u, byId);
     const now = this.deps.now();
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
+    const due = (s: SourceSync) => s.phase === "warm" && (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs);
+    thawing = [...u.sources.values()].some(due) ? this.deps.cache.ready(u.scope) : null;
+    if (thawing) await thawing;
+    if (u.gone) return;
     await Promise.all(
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);

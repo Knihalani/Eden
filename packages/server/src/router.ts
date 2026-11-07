@@ -39,7 +39,7 @@ import { existsSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SourceMap } from "@eden/graph";
 import { fnv1a, mix32 } from "@eden/primitives";
-import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, MAX_PROCESSES, type ServerConfig } from "./config";
+import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, FANOUT_COPY, MAX_PROCESSES, type ServerConfig } from "./config";
 import { usdPerTenantDayFromEnv } from "./models";
 import { isLeaseRequest, SpendLedger } from "./spend-lease";
 
@@ -361,9 +361,18 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   };
   const fail = (status: number, error: string) => Response.json({ error }, { status });
 
-  const forward = async (c: Child, req: Request, url: URL, body: Uint8Array | undefined): Promise<Response> => {
+  const forward = async (
+    c: Child,
+    req: Request,
+    url: URL,
+    body: Uint8Array | undefined,
+    copy = false,
+  ): Promise<Response> => {
     if (!c.up) return fail(503, UNAVAILABLE);
     const headers: Record<string, string> = {};
+    // A fan-out's copy to a child that does not own the user (forget, usage): served, but not counted as a request
+    // of the tenant's (D326), so `/v1/usage` sums to one per call. The router sets it; a caller's own is not forwarded.
+    if (copy) headers[FANOUT_COPY] = "1";
     const auth = req.headers.get("authorization");
     if (auth !== null) headers.authorization = auth;
     const type = req.headers.get("content-type");
@@ -384,7 +393,7 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   // source-map rows. The caller gets the owner's answer (its 400 for a bad body, say); a 2xx there with any other
   // child down or failing is a 503, so the caller retries until every file is clean.
   const forgetEverywhere = async (owner: Child, req: Request, url: URL, body: Uint8Array): Promise<Response> => {
-    const answers = await Promise.all(children.map((c) => forward(c, req, url, body)));
+    const answers = await Promise.all(children.map((c) => forward(c, req, url, body, c !== owner)));
     const mine = answers[owner.index]!;
     for (const r of answers) if (r !== mine) void r.arrayBuffer().catch(() => {}); // Frees each connection.
     if (mine.status < 200 || mine.status >= 300) return mine;
@@ -395,7 +404,7 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   // Usage (D326) is the tenant's across every child: their numbers summed (`processesDown` counts those that did not
   // answer), the owner's answer when it is a 4xx (a bad body), 503 when no child answered.
   const usageEverywhere = async (owner: Child, req: Request, url: URL, body: Uint8Array): Promise<Response> => {
-    const answers = await Promise.all(children.map((c) => forward(c, req, url, body)));
+    const answers = await Promise.all(children.map((c) => forward(c, req, url, body, c !== owner)));
     const mine = answers[owner.index]!;
     if (mine.status >= 400 && mine.status < 500) {
       for (const r of answers) if (r !== mine) void r.arrayBuffer().catch(() => {});

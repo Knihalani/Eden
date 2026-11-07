@@ -248,10 +248,10 @@ export interface EngineConfig {
   /** Sources whose backfill pages are read at once, newest unread first (1: one at a time; 8 in the default, D262). */
   syncBackfillLanes: number;
   /**
-   * Trial (D328, off): a page the background sync listed (backfill, sweep, timed poll; never a lookup's on-demand
-   * poll) is redacted and stored only at its turn: at most one such page per turn of the event loop, the others
-   * waiting (`SyncManager.turn`). A cold-start storm's pages otherwise arrive together and are stored back to back,
-   * and every request waits behind them all.
+   * Trial (D328, off): a page the background sync listed (backfill, sweep, the pages a poll reads in the background
+   * after a lookup stopped waiting; never what a lookup's on-demand poll waits for) is redacted and stored only at
+   * its turn: at most one such page per turn of the event loop, the others waiting (`SyncManager.turn`). A cold-start
+   * storm's pages otherwise arrive together and are stored back to back, and every request waits behind them all.
    */
   syncIngestTurns: boolean;
   /**
