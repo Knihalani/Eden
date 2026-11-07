@@ -12,13 +12,19 @@
  *
  * Each user is a hidden-variant world of a train suite (`worldOf`, as pi-ab builds it), its connectors the realistic
  * profile at time scale 0. One user at a time, so each user's calls and dollars are its own.
+ *
+ * `--set JSON`: engine settings over the default (CL3's trials, e.g. `{"intentRequests":2,"cardsLeanDays":7}`).
+ * `--bulk`: the trial `cardsBatch` (D242) on, its bulk maker Anthropic's Message Batches API (`labBatchModel`, half
+ * price, polled); each user's row then also gives the batches' turnaround (`batches`: requests, ms from submission to
+ * end). The users run one at a time, so with `--bulk` each waits for its batches (minutes, at most a day).
  */
 import { writeFileSync } from "node:fs";
 import type { CardEnricher } from "@eden/engine";
+import type { Model } from "@eden/llm";
 import { buildPartner } from "@eden/server";
 import { REALISTIC, simSources } from "../sources";
 import { worldOf } from "./ab-common";
-import { labAccess, labModel } from "./free";
+import { labAccess, labBatchModel, labModel } from "./free";
 import { warmAll } from "../server";
 
 const args = process.argv.slice(2);
@@ -35,6 +41,8 @@ const USERS = opt("users", "train1:41")
     return { suite, seed: Number(seed) };
   });
 const OUT = opt("out", "");
+const SET = JSON.parse(opt("set", "{}")) as Record<string, unknown>;
+const BULK = args.includes("--bulk");
 const ACCESS = labAccess(args, [MODEL]);
 
 interface Row {
@@ -52,24 +60,37 @@ for (const { suite, seed } of USERS) {
   let usd = 0;
   let inTok = 0;
   let outTok = 0;
+  let cachedTok = 0;
+  let bulkCalls = 0;
   const model = labModel(ACCESS, { apiKey: "", model: MODEL }, "eden.cards");
+  const batchModel = BULK ? labBatchModel(ACCESS, MODEL, "eden.cards") : null;
   // Counted here as well as on the ledger, so each user's row is its own.
-  const counted = {
-    id: model.id,
-    chat: async (req: Parameters<typeof model.chat>[0]) => {
-      const res = await model.chat(req);
+  const count = (m: Model, bulk: boolean): Model => ({
+    id: m.id,
+    chat: async (req) => {
+      const res = await m.chat(req);
       calls++;
+      if (bulk) bulkCalls++;
       usd += res.costUsd ?? 0;
       inTok += res.usage.inputTokens;
       outTok += res.usage.outputTokens;
+      cachedTok += res.usage.cachedInputTokens;
       return res;
     },
-  };
+  });
+  const counted = count(model, false);
   const partner = buildPartner({
     sources: async () => sources,
     sourceMapPath: ":memory:",
     queryPlanner: "off",
-    models: { reader: null, cards: counted, cardsRetry: null, usdPerTenantDay: 25 },
+    models: {
+      reader: null,
+      cards: counted,
+      cardsRetry: null,
+      usdPerTenantDay: 25,
+      ...(batchModel ? { cardsBulk: count(batchModel, true) } : {}),
+    },
+    engine: { ...SET, ...(BULK ? { cardsBatch: true } : {}) },
   });
   // The harness ticks the sync itself (until the user is warm), not the server's minute timer.
   partner.stopSync();
@@ -93,8 +114,12 @@ for (const { suite, seed } of USERS) {
     syncMs: Math.round(syncMs),
     enrichMs: Math.round(ms - syncMs),
     cardCalls: calls,
+    bulkCalls,
     inputTokens: inTok,
+    cachedTokens: cachedTok,
     outputTokens: outTok,
+    outPerCall: Math.round(outTok / Math.max(1, calls)),
+    ...(batchModel ? { batches: batchModel.batches } : {}),
     usd: Math.round(usd * 1e6) / 1e6,
     stats: { ...cards.stats },
   };
@@ -107,6 +132,8 @@ const out = {
   provider: "anthropic-direct (lab, D97)",
   model: MODEL,
   wiring: "buildPartner (DEFAULT_CONFIG, DEFAULT_LIMITS, tenant cap $25/day)",
+  set: SET,
+  bulk: BULK,
   users: rows,
   meanUsd: Math.round(mean("usd") * 1e6) / 1e6,
   meanCalls: mean("cardCalls"),

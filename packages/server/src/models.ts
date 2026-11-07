@@ -27,6 +27,11 @@ export interface ModelRoles {
   cards: Model | null;
   /** The card model with default routing, for a batch the price-routed endpoint cut off (D66's retry). */
   cardsRetry: Model | null;
+  /**
+   * Trial `cardsBatch` (D242): the card model a backlog goes to, a batch API at half price. Never set from the
+   * environment: OpenRouter has no batch API and Anthropic is lab only (D97), so only the lab's harnesses pass one.
+   */
+  cardsBulk?: Model | null;
   /** One cap on each tenant's spend per UTC day, across roles. */
   usdPerTenantDay: number;
   /**

@@ -351,6 +351,21 @@ export interface EngineConfig {
   /** With `cardsLean`: how old (days, by its date or its start) an unconstrained item may be and still be read. */
   cardsLeanDays: number;
   /**
+   * Trial (D242, CL3, ends 2026-11-21): with `cards`, a user's card queue of at least `cardsBatchFrom` items (a
+   * backfill, a sweep) goes to the embedder's bulk card maker (`CardEnricher`'s `bulk` dep: a batch API at half the
+   * price, answering within hours) instead of the live one. New items arriving later stay live. Inert without a bulk
+   * maker: the servers wire none (OpenRouter has no batch API; the lab's is Anthropic's, D97).
+   */
+  cardsBatch: boolean;
+  /** With `cardsBatch`: the queue length (items) from which a user's queue goes to the bulk maker. */
+  cardsBatchFrom: number;
+  /**
+   * With `intent`: requests asked for and kept per item, at most `MAX_REQUESTS` (4, the default). Below 4 (trial
+   * D243, CL3, ends 2026-11-21) the prompt asks for that many short requests, and requests a replay or an earlier
+   * call stored beyond it are cut, so a $0 replay screens it.
+   */
+  intentRequests: number;
+  /**
    * Items the intent index may add to a request's candidates, best first. The default's 12/0.2/1 (with the two
    * below) is D159's arm, promoted by D179 on a Pi held-out 13 pair with intent replayed
    * (docs/research/edge-intent.md).
@@ -539,6 +554,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intent: true,
   cardsLean: true,
   cardsLeanDays: 30,
+  cardsBatch: false,
+  cardsBatchFrom: 20,
+  intentRequests: 4,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,

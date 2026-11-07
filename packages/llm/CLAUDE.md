@@ -16,6 +16,7 @@ No dependencies (plain `fetch`).
 | `src/pricing.ts` | `PRICES` (incl. `anthropic/claude-haiku-5.5` through OpenRouter, D112), `priceFor` (`EDEN_MODEL_PRICE` override), `costOf`: estimates for budgeting; OpenRouter's reported cost wins |
 | `src/pacing.ts` | `Pacer` (lab): per-minute limit, request cap (`RequestCapReached`), 429/5xx backoff honouring Retry-After |
 | `src/anthropic.ts` | `AnthropicModel` (lab only, D97): Messages API, prompt caching, streaming TTFT, cost from usage, a `meter` hook the spend ledger uses |
+| `src/anthropic-batch.ts` | `AnthropicBatchModel` (lab only, D97; trial `cardsBatch`, D242): calls gathered for `windowMs` go out as one Message Batch, polled until ended, each caller settled from its `custom_id`'s result; every token at half price (`BATCH_DISCOUNT`), metered like `AnthropicModel` |
 | `src/fake.ts`, `src/tokens.ts` | `FakeModel` (scripted replies, records calls); `estimateTokens` |
 
 ## Rules that apply here
@@ -44,6 +45,9 @@ bun run test:pkg llm             # < 0.1 s; fetch is faked, no network
 - A test that needs a key sets it on the options, never in `process.env` (the preload clears it and other files
   must not see it).
 - `pacing.test.ts` drives time through injected clocks; do not add real sleeps.
+- `AnthropicBatchModel` answers within minutes to hours (24 h at most). Only background work whose no-model path
+  serves meanwhile may use it (the card maker's backlog, D242); never the reader or anything a user waits on. An abort
+  after submission rejects the caller but the request still runs and is booked when its batch ends.
 
 ## Where next
 
