@@ -11,10 +11,10 @@ ledger `.local/cl1/ledger.jsonl` with a $4 cap: **Anthropic-direct lab figures**
   request against that and the reader is only called for unclear pools. Built, measured on train with the paid reader
   replayed, and dropped. The best safe version cut reader calls by **4%** on train (643 → 615) and decided **4 of 100**
   nothing-to-add pools on heldout14 (read; cost only). Every looser rule that decided more pools lost hidden facts the
-  reader finds: deciding a third of train's pools lost about 100 of the reader's ~250 planted flags.
+  reader finds: deciding a third of train's pools lost about 100 of the reader's 555 planted flags (both seeds, one per item per pool read).
 - **Why it fails.** Two different things, measured separately:
-  1. Judging an item alone, without the request, the model disagrees with the reader on about one planted item in
-     ten: it says "binds nothing" for 32 planted items the reader flags (prompt v2), and an item's conditions (its
+  1. Judging an item alone, without the request, the model disagrees with the reader on about one planted flag in
+     seventeen: it says "binds nothing" for 32 of the 555 planted flags (prompt v2), and an item's conditions (its
      days, its party) are often stated in ways that do not line up with the request.
   2. The no-model matcher cannot tell whether a request is one of the requests an item binds. Retrieval puts items
      that share the request's words in the pool, so almost every pooled item shares a term or two with the request
@@ -47,7 +47,7 @@ Trial switch `readAtIngest` (off), all of it in commit `aea45d62` and deleted in
   reader's lookalikes, D96). Anything else, or an item with no record yet, sends the pool to the reader unchanged (the
   reader's prompt is byte-identical, so the replay still hits).
 - Lab: `apply-disk.ts` (records keyed by prompt version and content hash), `hidden-funnel.ts` `--apply`,
-  `--apply-model` (live, metered), `--apply-only` (a top-up limited to items that reach a pool: the engine's decision
+  `--apply-model` (live, metered), `--apply-out`, `--apply-only` (a top-up limited to items that reach a pool: the engine's decision
   on those pools is then what full coverage gives), `--apply-log`, and `--card-model`/`--cards-out`.
 
 ## H1: the screen (train1–6, seeds 41–42, paid Haiku reader replayed, LAB.md recipe 2a)
@@ -143,6 +143,6 @@ bun run gate-traffic --reuse
 | --- | --- | --- |
 | cl1-apply-sample, cl1-apply-topup, cl1-apply-topup2 (prompt v1) | eden.apply | 0.0591 |
 | cl1-apply-v2-topup (prompt v2, train) | eden.apply | 0.0686 |
-| cl1-apply-h14, cl1-h14-cards-apply (heldout14 records) | eden.apply | 0.0280 |
+| cl1-apply-h14, cl1-h14-cards-apply (heldout14 records) | eden.apply | 0.0281 |
 | cl1-h14-cards-apply (heldout14 cards and intent) | eden.cards | 0.0389 |
 | **Total** | | **0.1947** |
