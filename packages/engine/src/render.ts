@@ -39,8 +39,9 @@ export function renderPacket(
     note?: (item: ContextItem) => string | undefined;
     /**
      * `pushCandidates` (D236): a line of Eden's own (`EDEN_NOTE`, fixed words) after the header, framing the
-     * items as candidates the agent checks against the request. Never source text; the one event text a lead carries
-     * is `planConflict`'s quote of the user's own earlier request (D301: redacted, one line, double quotes made single).
+     * items as candidates the agent checks against the request. Never source text; the one event text a lead
+     * carries is `planConflict`'s quote of the user's own earlier request (D301: redacted, one line, double quotes
+     * made single).
      */
     lead?: string;
   },
@@ -122,8 +123,8 @@ export function shownText(rendered: string): string {
 
 /**
  * Eden's own lines, never an item's: fixed words with no source text in them, inside the data envelope (D11, D19);
- * the only event text is `planConflict`'s quote of the user's own earlier request (D301). `shownText` drops them (they are no item's words), and no line starts `- [`, so they are counted as no item
- * (`renderedCount`).
+ * the only event text is `planConflict`'s quote of the user's own earlier request (D301). `shownText` drops them
+ * (they are no item's words), and no line starts `- [`, so they are counted as no item (`renderedCount`).
  */
 export const EDEN_NOTE = "Eden: ";
 

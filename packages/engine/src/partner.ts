@@ -2038,8 +2038,8 @@ export class ContextPartner {
     if (!this.config.planConflict || s.closed || !s.acted || !waiting || waiting.size === 0) return;
     const now = this.now();
     const sent = (s.planSent ??= new Set());
-    // A copy a change signal has put in doubt since it was read (D126's `doubted`) waits for a later take, when the poll
-    // the signal starts has stored the current one; a held-gone id is not in the cache. Once sent, never again.
+    // A copy a change signal has put in doubt since it was read (D126's `doubted`) waits for a later take, when the
+    // poll the signal starts has stored the current one; a held-gone id is not in the cache. Once sent, never again.
     const fresh = new Set<string>();
     const later: string[] = [];
     for (const id of waiting) {
