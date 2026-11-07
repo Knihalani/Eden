@@ -208,6 +208,18 @@ class Helpers(unittest.TestCase):
         self.assertEqual(out[3]["content"], INJ["text"])
         self.assertIs(with_context(msgs, []), msgs)
 
+    def test_with_context_takes_message_objects(self):
+        # The OpenAI SDK's reply message is an object with `.role`, often appended to the list as is; `.get` on it
+        # threw in the agent's loop (the TypeScript withContext reads `.role` on anything).
+        class Message:
+            def __init__(self, role, content):
+                self.role, self.content = role, content
+
+        msgs = [{"role": "user", "content": "a"}, Message("assistant", "b"), Message("user", "c"), "odd"]
+        out = with_context(msgs, [INJ])
+        self.assertEqual(out[2:4], [{"role": "system", "content": INJ["text"]}, msgs[2]])
+        self.assertEqual(len(out), 5)
+
     def test_held_result(self):
         self.assertIn(INJ["text"], held_result("send", INJ))
 
