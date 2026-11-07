@@ -20,6 +20,11 @@ const OFF = {
   syncBackfillLanes: 1,
   syncLocalComplete: false,
   routeLocalHits: false,
+  // A13's (D320–D323), so these tests keep measuring the A1 switches alone.
+  routeSketch: false,
+  syncKeepCut: false,
+  syncEngagedDeep: false,
+  cardsSourceAware: false,
 };
 
 /** A recent-first listing source that counts its calls and how many are in flight at once. */

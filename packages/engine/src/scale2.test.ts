@@ -53,9 +53,9 @@ const item = (src: string, i: number, text: string, hoursOld: number): ContextIt
 });
 
 /** `n` sources of `per` items each; the first is "bank" (items about an ISA allowance), the rest filler. */
-function sources(n: number, per: number): ListSource[] {
+function sources(n: number, per: number, prefix = ""): ListSource[] {
   return Array.from({ length: n }, (_, k) => {
-    const id = k === 0 ? "bank" : `src${k}`;
+    const id = k === 0 ? `${prefix}bank` : `${prefix}src${k}`;
     return new ListSource(
       id,
       Array.from({ length: per }, (_, i) =>
@@ -152,7 +152,7 @@ describe("cardsSourceAware (D320)", () => {
     const { partner, cards, maker } = setup(
       new Map([
         ["alice", sources(40, 2)],
-        ["bob", sources(40, 2)],
+        ["bob", sources(40, 2, "b-")],
       ]),
       { cardsSourceAware: true },
     );
@@ -161,12 +161,12 @@ describe("cardsSourceAware (D320)", () => {
     await partner.ask({ ...alice, sessionId: "s1", question: "Have I used my isa allowance?" });
     await cards.idle();
     expect(partner.sync!.engaged(alice, "bank")).toBe(true);
-    expect(partner.sync!.engaged(bob, "bank")).toBe(false);
+    expect(partner.sync!.engaged(bob, "b-bank")).toBe(false);
     partner.sync!.notePeople(alice, ["dana whitfield"]);
     expect(partner.sync!.peopleOf(bob).size).toBe(0);
-    // Every card read so far was alice's: bob's cards hold nothing.
-    expect(maker.read.length).toBeGreaterThan(0);
-    expect(cards.stats.deferred).toBeGreaterThan(0);
+    // Alice's bank was read; none of bob's items were.
+    expect(maker.read.some((id) => id.startsWith("bank"))).toBe(true);
+    expect(maker.read.some((id) => id.startsWith("b-"))).toBe(false);
     partner.forget(alice);
     expect(partner.sync!.peopleOf(alice).size).toBe(0);
   });
@@ -344,5 +344,90 @@ describe("syncEngagedDeep (D323)", () => {
     for (let i = 0; i < 5; i++) await partner.sync!.tick();
     expect(partner.sync!.complete(alice, "bank")).toBe(true);
     expect(partner.sync!.complete(bob, "bank")).toBe(false);
+  });
+});
+
+describe("review regressions (A13)", () => {
+  test("used sources keep at most half the cap: other sources' new items are still stored", async () => {
+    // Two used sources of 20 items each, a cap of 30: before, they took the whole cap and the cut went to Infinity.
+    const mine = sources(40, 3);
+    mine[0]!.items = Array.from({ length: 20 }, (_, i) => item("bank", i, `isa allowance statement ${i}`, 900 + i));
+    mine[1]!.items = Array.from({ length: 20 }, (_, i) => item("src1", i, `pension letter ${i}`, 950 + i));
+    const { partner, cache, advance } = setup(new Map([["alice", mine]]), {
+      syncMaxItems: 30,
+      syncEngagedDeep: true,
+      syncKeepCut: true,
+    });
+    await warm(partner, alice);
+    partner.sync!.engage(alice, ["bank", "src1"]);
+    for (let i = 0; i < 10; i++) await partner.sync!.tick();
+    // A new newest item in an unused source: the daily sweep stores it.
+    mine[7]!.items.push(item("src7", 99, "a fresh filler note", 0.1));
+    advance(25 * HOUR);
+    partner.sync!.track(alice);
+    await partner.sync!.tick();
+    expect(cache.isSynced(alice, itemId("src7", "i99"))).toBe(true);
+  });
+
+  test("items deferred past 32 sources are read when their source is used, even after the count fell", async () => {
+    const all = sources(40, 3);
+    const byUser = new Map([["alice", all as Source[]]]);
+    const { partner, cards, maker } = setup(byUser, { cardsSourceAware: true });
+    await warm(partner, alice);
+    await cards.idle();
+    expect(cards.stats.deferred).toBeGreaterThan(0);
+    byUser.set("alice", all.slice(0, 30));
+    await partner.sync!.tick();
+    await partner.ask({ ...alice, sessionId: "s1", question: "Have I used my isa allowance?" });
+    await cards.idle();
+    expect(maker.read.some((id) => id.startsWith("bank"))).toBe(true);
+  });
+
+  test("a user's used sources are the 64 most recently used", async () => {
+    const { partner } = setup(new Map([["alice", sources(100, 1)]]), {});
+    await warm(partner, alice);
+    partner.sync!.engage(
+      alice,
+      Array.from({ length: 70 }, (_, k) => `src${k + 1}`),
+    );
+    expect(partner.sync!.engaged(alice, "src1")).toBe(false);
+    expect(partner.sync!.engaged(alice, "src6")).toBe(false);
+    expect(partner.sync!.engaged(alice, "src7")).toBe(true);
+    // Used again, it is the most recent: the next ones out are others.
+    partner.sync!.engage(alice, ["src7", "bank"]);
+    expect(partner.sync!.engaged(alice, "src7")).toBe(true);
+    expect(partner.sync!.engaged(alice, "src8")).toBe(false);
+  });
+
+  test("a saturated sketch starts again rather than match every term", () => {
+    const sk = new TermSketch();
+    for (let i = 0; i < 40; i++) sk.add(...termHashes(`seed${i}`));
+    sk.fold();
+    for (let i = 0; i < 2_000; i++) sk.add(...termHashes(`more${i}x`));
+    let false_ = 0;
+    for (let i = 0; i < 1_000; i++) if (sk.has(...termHashes(`unseen${i}y`))) false_++;
+    expect(false_ / 1_000).toBeLessThan(0.1);
+  });
+
+  test("a source used while its backfill ran ends whole: kept first, read to its end", async () => {
+    // The bank's 20 items interleave with the others' by age, so the cap (30) cuts it; it lists 10 a page.
+    const mine = sources(40, 3);
+    mine[0]!.items = Array.from({ length: 20 }, (_, i) => item("bank", i, `isa allowance statement ${i}`, 2 * i + 0.5));
+    // One listing a source a tick (a burst of one): the backfill spans ticks.
+    const { partner, advance } = setup(new Map([["alice", mine]]), {
+      syncMaxItems: 30,
+      syncEngagedDeep: true,
+      syncCallsPerMin: 3,
+    });
+    partner.sync!.track(alice);
+    await partner.sync!.tick();
+    expect(partner.sync!.isWarm(alice, "bank")).toBe(false);
+    partner.sync!.engage(alice, ["bank"]);
+    for (let i = 0; i < 60 && !partner.sync!.complete(alice, "bank"); i++) {
+      advance(60_000);
+      partner.sync!.track(alice);
+      await partner.sync!.tick();
+    }
+    expect(partner.sync!.complete(alice, "bank")).toBe(true);
   });
 });

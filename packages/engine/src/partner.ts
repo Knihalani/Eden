@@ -3710,7 +3710,9 @@ export class ContextPartner {
       );
     }
     const fresh = sync.engage(s.scope, searched);
-    if (!cards || fresh.length === 0 || sync.sourceCount(s.scope) <= SOURCE_AWARE_MIN) return;
+    // Whatever the user's source count now: items deferred while it was past `SOURCE_AWARE_MIN` are read (the review: a
+    // count that fell to 32 first left them unread for good).
+    if (!cards || fresh.length === 0) return;
     const now = this.now();
     const held: ContextItem[] = [];
     for (const id of fresh) {

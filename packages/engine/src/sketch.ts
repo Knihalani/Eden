@@ -18,6 +18,8 @@ const MAX_BITS = 1 << 15;
 const MIN_BITS = 1 << 10;
 /** Folding stops before the fill passes this: past it a k = 2 filter's false matches pass ~4%. */
 const FOLD_FILL = 0.2;
+/** A fill past this restarts the sketch: a k = 2 filter half full matches a quarter of the terms it never saw. */
+const SATURATED = 0.5;
 
 export class TermSketch {
   private bits = new Uint32Array(MAX_BITS / 32);
@@ -30,6 +32,12 @@ export class TermSketch {
 
   /** Adds a term by its two hashes (`termHashes`). */
   add(h1: number, h2: number): void {
+    // Saturated (a folded sketch whose source grew, or a busy one): it would match every term, so it starts again,
+    // full size, from what comes next (the daily sweep re-lists the source). The review measured 96% false matches.
+    if (this.set > SATURATED * this.bits.length * 32) {
+      this.bits = new Uint32Array(MAX_BITS / 32);
+      this.set = 0;
+    }
     const mask = this.bits.length * 32 - 1;
     this.setBit(h1 & mask);
     this.setBit((h1 + h2) & mask);

@@ -140,6 +140,8 @@ const MAX_PUSHED = 1_000;
 const USERS_AT_ONCE = 16;
 /** Names held per user for `cardsSourceAware` (`notePeople`). */
 const MAX_PEOPLE = 256;
+/** Sources a user's lookups use at once (`engage`): past it, the least recently used is no longer counted. */
+const MAX_USED = 64;
 
 interface SourceSync {
   id: string;
@@ -235,6 +237,8 @@ interface UserSync {
    * Kept here because they live and go with the user's sync (eviction, `forget`).
    */
   people: Set<string>;
+  /** Sources marked used (`engage`), least recently used first, at most `MAX_USED`. */
+  used: Set<string>;
 }
 
 export interface SyncStats {
@@ -296,6 +300,7 @@ export class SyncManager {
       gone: false,
       cutAt: -Infinity,
       people: new Set(),
+      used: new Set(),
     });
   }
 
@@ -441,11 +446,25 @@ export class SyncManager {
     const fresh: string[] = [];
     for (const id of sourceIds) {
       const s = u.sources.get(id);
-      if (!s || s.engaged) continue;
+      if (!s) continue;
+      // Most recently used last: past `MAX_USED`, the least recently used is used no longer (the review: a set that
+      // only grew gave back the card savings over weeks).
+      u.used.delete(id);
+      u.used.add(id);
+      if (s.engaged) continue;
       s.engaged = true;
       fresh.push(id);
       // `engagedDeep`: a cut copy of a source the user uses is read again, whole, from the top (`deepen`).
       if (this.o.engagedDeep && s.phase === "warm" && s.cut) s.deep = { cursor: undefined, lost: false };
+    }
+    while (u.used.size > MAX_USED) {
+      const old = u.used.values().next().value as string;
+      u.used.delete(old);
+      const s = u.sources.get(old);
+      if (s) {
+        s.engaged = false;
+        s.deep = null;
+      }
     }
     return fresh;
   }
@@ -787,10 +806,25 @@ export class SyncManager {
     for (const s of u.sources.values()) {
       for (const id of s.ids) all.push({ id, at: at(id) ?? -Infinity, s });
     }
-    // `engagedDeep`: the items of sources the user's lookups use are kept before any other's, newest first in each.
+    all.sort((a, b) => b.at - a.at);
+    // `engagedDeep`: the newest items of sources the user's lookups use, up to half the cap in all, are kept before any
+    // other's; the rest compete by recency. A bound, or two large used mailboxes filled the whole cap and no other
+    // source's new item could be stored again (the review: `cutAt` went to Infinity).
     const first = this.o.engagedDeep === true;
-    all.sort((a, b) => (first && a.s.engaged !== b.s.engaged ? (a.s.engaged ? -1 : 1) : b.at - a.at));
-    const gone = all.slice(this.o.maxItems);
+    const kept: typeof all = [];
+    const rest: typeof all = [];
+    if (first) {
+      let used = 0;
+      const share = Math.floor(this.o.maxItems / 2);
+      for (const x of all) {
+        if (x.s.engaged && used < share) {
+          kept.push(x);
+          used++;
+        } else rest.push(x);
+      }
+    } else rest.push(...all);
+    const room = Math.max(0, this.o.maxItems - kept.length);
+    const gone = rest.slice(room);
     for (const g of gone) {
       g.s.ids.delete(g.id);
       g.s.cut = true;
@@ -800,14 +834,11 @@ export class SyncManager {
       u.scope,
       gone.map((g) => g.id),
     );
-    // The recency cut over what is kept of the sources not put first (with `engagedDeep`; else of all).
-    let oldest = Infinity;
-    for (let i = 0; i < Math.min(all.length, this.o.maxItems); i++) {
-      if (!(first && all[i]!.s.engaged)) oldest = Math.min(oldest, all[i]!.at);
-    }
-    if (oldest === Infinity) oldest = first && all.length >= this.o.maxItems ? Infinity : -Infinity;
+    // The recency cut: the oldest kept of what competed by recency (all of it without `engagedDeep`). Half the cap or
+    // more competes, so it is finite once the user is at the cap.
+    const oldest = room > 0 ? (rest[Math.min(rest.length, room) - 1]?.at ?? -Infinity) : -Infinity;
     u.cutAt = all.length >= this.o.maxItems ? oldest : -Infinity;
-    return first ? oldest : (all[Math.min(all.length, this.o.maxItems) - 1]?.at ?? -Infinity);
+    return oldest;
   }
 
   /**
@@ -914,6 +945,8 @@ export class SyncManager {
       changed += fresh;
       if (tally) tally.fresh += fresh;
       // The listing has reached what was synced before: an item held unchanged that a notification did not bring.
+      // An item `keepCut` refused (older than the user's cut) counts too: listings run newest first, so what follows is
+      // older still, and the poll is done.
       const boundary = page.items.some((it) => !stored.has(it.id) && !s.pushed.has(it.id));
       if (boundary || page.next === null || page.items.length === 0) {
         this.polled(s, started, changed, notices, pushSeq);
@@ -1050,7 +1083,7 @@ export class SyncManager {
       // The sweep's first page is the newest: it is also a poll.
       if (first) this.polled(s, started, fresh, notices, pushSeq);
       // `keepCut`: every id held for the source is listed: what follows is older than all of it, and not held.
-      const all = this.o.keepCut === true && [...s.ids].every((id) => sw.seen.has(id));
+      const all = this.o.keepCut === true && seenAll(s.ids, sw.seen);
       const full = sw.seen.size >= this.o.maxItems || page.items.some(older) || all;
       if (page.next === null || page.items.length === 0 || full) {
         // Missed by this sweep and the one before: gone. Missed by this one only: perhaps skipped (an offset listing
@@ -1087,6 +1120,7 @@ export class SyncManager {
     if (this.o.sketch) {
       const sketch = (s.sketch ??= new TermSketch());
       for (const it of items) {
+        // Held items too: a sketch that restarted (saturated) is filled again by the next sweep's re-listing.
         if (it.sourceId !== s.id) continue;
         for (const t of sketchTerms(`${it.title} ${it.text}`)) sketch.add(...termHashes(t));
       }
@@ -1256,6 +1290,12 @@ function trimIds(ids: Set<string>, max: number): boolean {
     if (ids.size <= cap) break;
     ids.delete(id);
   }
+  return true;
+}
+
+/** Whether every held id has been seen (an early exit, no copy of the set). */
+function seenAll(ids: ReadonlySet<string>, seen: ReadonlySet<string>): boolean {
+  for (const id of ids) if (!seen.has(id)) return false;
   return true;
 }
 
