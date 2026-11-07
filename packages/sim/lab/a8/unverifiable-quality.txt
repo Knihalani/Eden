@@ -1,0 +1,6 @@
+quality-cli --users 8 --sessions 20 --updates 0.6 --deletes 0.05 --jobs 4 --push signals --null-proves-nothing [--config '{"sync":true}'], before (HEAD partner.ts) and after the fix
+nosync-before re-reads  765 (checked 788, failed 47) stale 5/74 deleted delivered/cited 11/11 P 0.412 R 0.54 ff 0.055 calls/lookup 0.765
+nosync-fixed  re-reads  761 (checked 784, failed 43) stale 5/74 deleted delivered/cited 11/11 P 0.412 R 0.54 ff 0.055 calls/lookup 0.765
+sync-before re-reads  765 (checked 788, failed 47) stale 5/74 deleted delivered/cited 11/11 P 0.412 R 0.54 ff 0.055 calls/lookup 1.313
+sync-fixed  re-reads  761 (checked 784, failed 43) stale 5/74 deleted delivered/cited 11/11 P 0.412 R 0.54 ff 0.055 calls/lookup 1.315
+after the review fix (10 min cap, error results never held): re-reads  763 (checked 786, failed 45) stale 5/74 deleted delivered/cited 11/11 P 0.412 R 0.54 ff 0.055

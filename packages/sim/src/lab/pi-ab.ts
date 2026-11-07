@@ -57,6 +57,7 @@
  *     [--variant-config '{"name":{...}}'] [--act] [--dress] [--cards FILE [--cards-out FILE]] [--card-sort price]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent default|none|FILE[,FILE]]
  *     [--replay DIR [--replay-timing] [--replay-only]] [--reuse-arms earlier.json]
+ *     [--recap-notice push|signal]
  *
  * `--replay DIR` replays the reader's and the grader's calls from DIR and appends new ones; `--reuse-arms F` copies the
  * `none` and `tools` arms from a matching earlier run instead of running them (both at their definitions below).
@@ -185,6 +186,11 @@ const DAY_SIZE = parseDaySize(opt("day-size", "12-20"));
 const MIX = parseMix(opt("mix", "1:1:8"));
 const GAP_MS = Number(opt("gap-min", "10")) * 60_000;
 const NIGHT_MS = Number(opt("night-h", "2")) * 3_600_000;
+// `--recap-notice push|signal` (A8): how the day's recap announces its moved items. `push` (the default) follows
+// `--push` (D272); `signal` sends a bare `sourceChanged` whatever `--push` says, as every run before D272 did.
+const RECAP_NOTICE = opt("recap-notice", "push");
+if (RECAP_NOTICE !== "push" && RECAP_NOTICE !== "signal") throw new Error("--recap-notice must be push or signal");
+const RECAP_SIGNAL = RECAP_NOTICE === "signal";
 if (USER_DAYS > 0) {
   for (const f of ["day", "variants", "templates", "reuse-arms"]) {
     if (args.includes(`--${f}`)) throw new Error(`--days plans the user's requests itself: it cannot take --${f}`);
@@ -842,7 +848,9 @@ async function runWorld(
         // source on the agent's critical path (about 650 ms a task in CL5-CL8's long payload runs).
         // A3's first fix moved items without naming them, and its notice went out empty: refuse that.
         if (touched.size > 0 && movedIds.size === 0) throw new Error("recap moved items but named none");
-        await recapNotice(partner, scope, sources, movedIds, CONNECTORS.push);
+        // `--recap-notice signal` (A8): the bare signals every run sent before D272, to reproduce its re-reads.
+        if (RECAP_SIGNAL) for (const id of touched) partner.sourceChanged(scope, id);
+        else await recapNotice(partner, scope, sources, movedIds, CONNECTORS.push);
         // The change lands two hours before the recap: what the notice started in the background (`revisionNotice`'s
         // poll; nothing when that trial is off) has settled by then. Bounded, so a hung poll cannot stall the stream.
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -1455,7 +1463,9 @@ writeFileSync(
       background,
       ...(REPLAY_DIR ? { replay: replaySummary() } : {}),
       ...(REUSE_FILE ? { reusedArms: { from: REUSE_FILE, conditions: reused.conditions } } : {}),
-      ...(DAYS_ON ? { ...(DAY > 0 ? { day: DAY } : {}), days: DAYS, daysPooled: poolDays(DAYS) } : {}),
+      ...(DAYS_ON
+        ? { ...(DAY > 0 ? { day: DAY } : {}), days: DAYS, daysPooled: poolDays(DAYS), recapNotice: RECAP_NOTICE }
+        : {}),
       ...(USER_DAYS > 0
         ? {
             user: {

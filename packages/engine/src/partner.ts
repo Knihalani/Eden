@@ -535,6 +535,16 @@ export class ContextPartner {
    * gone-holds the cache's caps dropped while still live (`ItemCache.holdsEvicted`), which reopen D126's race.
    */
   readonly freshness = { checked: 0, confirmed: 0, changed: 0, gone: 0, failed: 0, calls: 0, holdsEvicted: 0 };
+  /**
+   * Re-reads that came back "unverifiable" because the source's null proves nothing (an MCP fetch, `fetchReportsGone`
+   * false, whose reply lacked the record), by user, then item id: the read mark the re-read began under and when. The
+   * item is delivered and cited as held either way (D126, D211), so until the source signals again, and for at most
+   * `UNVERIFIABLE_HOLD_MS`, a fetch would most likely say the same: `doubted` is false for it. Without this every later
+   * delivery past `CHECK_REUSE_MS`, and every other session of the user, fetched it again (A5's lead, A8, D298). An
+   * error result (`FetchErrorResult`, "error-result") is never held: it may pass, and a changed copy behind it must
+   * be read at the next delivery. Least recently noted first; `MAX_UNVERIFIABLE` per user, `MAX_UNVERIFIABLE_USERS`.
+   */
+  private readonly unverifiable = new Map<string, Map<string, { mark: number; at: number }>>();
   /** The secret gate every item passes before it is held (D10): the fanout's, and `sourceItems`'. */
   private readonly redact: (items: ContextItem[]) => ContextItem[] | Promise<ContextItem[]>;
   /** What each user's probes bring back (`probeFresh`, `probeYield`). */
@@ -2171,6 +2181,8 @@ export class ContextPartner {
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
     this.recorded.get(scope.tenantId)?.delete(key);
     this.deps.cache.forget(scope, sourceId);
+    // Any forget drops the user's held outcomes (one source's ids are not told apart from the rest here).
+    this.unverifiable.delete(key);
     this.deps.sourceMap.forget(scope, sourceId);
     this.fanout.forget(scope, sourceId);
     this.deps.planner?.forget(scope, sourceId);
@@ -3753,7 +3765,25 @@ export class ContextPartner {
    */
   private doubted(s: Session, item: ContextItem): boolean {
     const mark = this.deps.cache.readMark(s.scope, item.id);
-    return mark !== undefined && this.sync?.signalledSince(s.scope, item.sourceId, mark) === true;
+    if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark) !== true) return false;
+    // A re-read since that signal could not tell (a null that proves nothing): another says the same until it signals.
+    const held = this.unverifiable.get(scopeKey(s.scope))?.get(item.id);
+    if (held === undefined || this.now() - held.at > UNVERIFIABLE_HOLD_MS) return true;
+    return this.sync.signalledSince(s.scope, item.sourceId, held.mark);
+  }
+
+  /** Notes an "unverifiable" re-read of a user's item under the read mark it began with (`unverifiable`). */
+  private noteUnverifiable(scope: Scope, id: string, readMark: number): void {
+    const key = scopeKey(scope);
+    let user = this.unverifiable.get(key);
+    if (user) this.unverifiable.delete(key);
+    else user = new Map();
+    this.unverifiable.set(key, user);
+    user.delete(id);
+    user.set(id, { mark: readMark, at: this.now() });
+    while (user.size > MAX_UNVERIFIABLE) user.delete(user.keys().next().value as string);
+    while (this.unverifiable.size > MAX_UNVERIFIABLE_USERS)
+      this.unverifiable.delete(this.unverifiable.keys().next().value as string);
   }
 
   /**
@@ -3896,7 +3926,10 @@ export class ContextPartner {
         }
         // A null from a source whose null does not mean gone (an MCP tool) says nothing, and says it every time: like
         // a source with no fetch, its items are cited as held (D126). A plain error is worth one more read.
-        return got.why === "null" ? "unverifiable" : got.why === "error" ? "flaked" : "failed";
+        // A null whose reply lacked the record says the same next time: held (D298). An error result may pass: not.
+        if (got.why === "null" && !s.closed) this.noteUnverifiable(s.scope, item.id, readMark);
+        if (got.why === "null" || got.why === "error-result") return "unverifiable";
+        return got.why === "error" ? "flaked" : "failed";
       }
       if (got.status === "gone") {
         this.freshness.gone++;
@@ -5244,6 +5277,11 @@ const MIN_OWN_READ_MS = 250;
 const RETRIED: ReadonlySet<CheckOutcome> = new Set<CheckOutcome>(["flaked", "skipped"]);
 const STRICT_RETRY_LANES = 2;
 const CHECK_REUSE_MS = 30_000;
+/** `unverifiable`: items held per user, and users held (least recently noted dropped first). */
+const MAX_UNVERIFIABLE = 512;
+const MAX_UNVERIFIABLE_USERS = 4_096;
+/** `unverifiable`: how long a held null stands at most, signal or not (a reply lacking the record may be transient). */
+const UNVERIFIABLE_HOLD_MS = 10 * 60_000;
 /** How long an item its source said is gone is kept from being stored again (the fan-out's stale-result window). */
 const GONE_HOLD_MS = 10 * 60_000;
 /** A lookup with less of its deadline left than this sends no live search (D140): no call could answer in time. */

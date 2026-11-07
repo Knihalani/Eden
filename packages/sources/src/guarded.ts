@@ -28,7 +28,7 @@ import {
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { PlannedSource, type PlanCalls } from "./planner";
 import { untilAborted } from "./abort";
-import type { ListPage, SearchQuery, Source } from "./source";
+import { FetchErrorResult, type ListPage, type SearchQuery, type Source } from "./source";
 
 /**
  * One lookup's queries in flight or answered, by source and text (`sharedKey`): what the query planner and the probes
@@ -71,7 +71,7 @@ export interface FanoutOutcome {
  */
 export interface FetchFailed {
   status: "failed";
-  why: "no-fetch" | "refused" | "aborted" | "error" | "timeout" | "throttled" | "null" | "gate";
+  why: "no-fetch" | "refused" | "aborted" | "error" | "timeout" | "throttled" | "null" | "error-result" | "gate";
   guard?: "open" | "limited" | "busy";
   pushedBack?: boolean;
 }
@@ -340,6 +340,13 @@ export class SourceFanout {
         return failed("aborted");
       }
       s.latency.record(performance.now() - started);
+      if (e instanceof FetchErrorResult) {
+        // The source answered, with an error result (`isError`): settled as answered, as its null was before D298;
+        // it says nothing either way about the item, and is not held (`error-result`, not `null`).
+        s.limiter.release("ok");
+        s.breaker.success(epoch);
+        return failed("error-result");
+      }
       s.limiter.release("dropped");
       s.breaker.failure(epoch);
       if (RATE_LIMITED.test(message)) {

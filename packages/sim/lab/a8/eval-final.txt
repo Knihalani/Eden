@@ -1,0 +1,100 @@
+{
+  "live": false,
+  "waitMs": 2000,
+  "planner": true,
+  "inert": [
+    "askReader's reading (needs a reader: pass --reader stub|oracle; the push's candidates run without one, D276)",
+    "cards (needs a card maker; the eval wires none, so no card is made or matched)",
+    "intent (needs the card maker's intent requests; not wired)"
+  ],
+  "scenarios": 31,
+  "turns": 148,
+  "scoredTurns": 104,
+  "precision": 0.5909090909090909,
+  "recall": 0.52,
+  "falseFireRate": 0,
+  "counts": {
+    "expected": 50,
+    "found": 26,
+    "delivered": 44,
+    "deliveredExpected": 26,
+    "silentTurns": 68,
+    "falseFires": 0
+  },
+  "modelCallsPerTurn": 0,
+  "costPerTurnUsd": 0,
+  "latencyP50Ms": 0.42396199999998885,
+  "latencyP95Ms": 7.279648000000066,
+  "decisions": {
+    "skipped": 80,
+    "silent": 49,
+    "reader-push": 17,
+    "fallback": 5,
+    "sources": 14,
+    "answer": 6
+  },
+  "plannedLookups": 87,
+  "byCategory": {
+    "adversarial": {
+      "scenarios": 6,
+      "scoredTurns": 19,
+      "precision": 1,
+      "recall": 0.6,
+      "falseFireRate": 0
+    },
+    "follow-ups": {
+      "scenarios": 3,
+      "scoredTurns": 9,
+      "precision": 1,
+      "recall": 0.5,
+      "falseFireRate": 0
+    },
+    "inbox": {
+      "scenarios": 5,
+      "scoredTurns": 19,
+      "precision": 0.5,
+      "recall": 0.6666666666666666,
+      "falseFireRate": 0
+    },
+    "purchases": {
+      "scenarios": 4,
+      "scoredTurns": 11,
+      "precision": 0.4,
+      "recall": 0.2857142857142857,
+      "falseFireRate": 0
+    },
+    "relationships": {
+      "scenarios": 4,
+      "scoredTurns": 12,
+      "precision": 0.42857142857142855,
+      "recall": 0.42857142857142855,
+      "falseFireRate": 0
+    },
+    "scheduling": {
+      "scenarios": 6,
+      "scoredTurns": 26,
+      "precision": 0.7692307692307693,
+      "recall": 0.6666666666666666,
+      "falseFireRate": 0
+    },
+    "travel": {
+      "scenarios": 3,
+      "scoredTurns": 8,
+      "precision": 0.3333333333333333,
+      "recall": 0.3333333333333333,
+      "falseFireRate": 0
+    }
+  },
+  "privacy": {
+    "secretsPlanted": 2,
+    "secretsExposed": 3,
+    "secretsLeaked": 0,
+    "injections": 30,
+    "notInert": 0
+  },
+  "ask": {
+    "cases": 6,
+    "answered": 6,
+    "recall": 1
+  }
+}

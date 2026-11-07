@@ -224,7 +224,10 @@ dropped from the cache and left out; one that cannot be checked is delivered as 
 (D211): there a re-read that failed with a plain error, or that our own guard skipped in ordinary use (a busy permit,
 the rate limit's normal spend), is tried once more, and a copy still not confirmed is left out and named in the answer;
 a re-read refused by an open breaker or by a rate limit the connector's 429 pushed back is not tried again and is left
-out at once (D232). A source with no fetch tool, or whose null proves nothing, is still cited as held. With no signal nothing is
+out at once (D232). A source with no fetch tool, or whose null proves nothing, is still cited as held; such a null
+("unverifiable", a reply that lacked the record) stands for the user until the source signals again or 10 minutes
+pass (`unverifiable`, D298), so later deliveries and other sessions do not fetch it again for the same answer; an MCP
+error result (`FetchErrorResult`, "error-result") is unverifiable too but never held. With no signal nothing is
 re-read: a copy's age alone is no doubt (re-reading by age was measured live and deleted, D126), and a silent source's
 changes arrive through polls and the daily sweep. The fast path, which may not call a source, sends a doubted item to
 the slow path. Deletion notifications (`ContextPartner.sourceRemoved`, `POST /v1/sources/removed`) drop items at once;

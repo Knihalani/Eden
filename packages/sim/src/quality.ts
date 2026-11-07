@@ -65,6 +65,16 @@ export interface QualityOptions {
    * nothing. Any mode but `none` marks every sim source as notifying.
    */
   push?: "none" | "signals" | "payload";
+  /**
+   * With `push`: the share of change notices lost on the way (A8), each source's notice for one change drawn alone
+   * on its own random stream, so the sessions and sources draw as without it. 0 (the default): none lost.
+   */
+  lostNotices?: number;
+  /**
+   * Sim sources fetch as an MCP connector does (A8): a null re-read does not prove the item gone (`fetchReportsGone`
+   * false), so a deleted item's re-read is "unverifiable" and only a sweep or a removal drops it.
+   */
+  nullProvesNothing?: boolean;
   agentToolRate?: number;
   /**
    * With no live model: "perfect" puts an oracle judge in the model's place (the ceiling of the model path),
@@ -240,6 +250,8 @@ export interface QualityReport {
    * source deleted them, a stale delivery of another kind; and `verifyDelivery`'s re-reads and outcomes.
    */
   deletes: { planned: number; applied: number; deletedDelivered: number; deletedCited: number };
+  /** Change notices `lostNotices` dropped (A8). */
+  lostNotices: number;
   freshness: { checked: number; confirmed: number; changed: number; gone: number; failed: number; calls: number };
   model: { callsPerTurn: number; costPerTurnUsd: number; costPer1kTurnsUsd: number };
   sources: {
@@ -398,6 +410,7 @@ export interface QualityTally {
       deletesApplied: number;
       deletedDelivered: number;
       deletedCited: number;
+      lostNotices: number;
       notInert: number;
       sourceCalls: number;
       useful: number;
@@ -509,6 +522,7 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
   let deletesApplied = 0;
   let deletedDelivered = 0;
   let deletedCited = 0;
+  let lostNotices = 0;
   const freshness = { checked: 0, confirmed: 0, changed: 0, gone: 0, failed: 0, calls: 0 };
   let notInert = 0;
   let sourceCalls = 0;
@@ -546,6 +560,9 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
     relabel(sessions, asks, updates);
     const deletes = planDeletes(world, sessions.length, o.seed * 17_389 + u, o.deletes ?? 0);
     const sources = simSources(world, o.profiles, o.timeScale, o.seed + u);
+    // `nullProvesNothing` (A8): an MCP connector's fetch, whose null does not say the item is gone (D126).
+    if (o.nullProvesNothing)
+      for (const src of sources) Object.defineProperty(src, "fetchReportsGone", { value: false, enumerable: true });
     if ((o.push ?? "none") !== "none") for (const s of sources) s.notifies = true;
     return { world, sessions, asks, updates, deletes, sources };
   });
@@ -605,12 +622,18 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
       ...(cards ? { cards } : {}),
     });
     const who = { tenantId: "sim", userId: `u${u}` };
+    /** `lostNotices`: its own stream, so a run with none lost draws everything else as before. */
+    const losing = new Rng(o.seed * 7_907 + u);
     /** `push`: what an integrator forwards when the source changes items or deletes them. */
     const notify = async (touched: Set<string>, changed: string[], gone: WorldItem[]) => {
       const mode = o.push ?? "none";
       if (mode === "none") return;
       for (const s of sources) {
         if (!touched.has(s.id)) continue;
+        if ((o.lostNotices ?? 0) > 0 && losing.chance(o.lostNotices!)) {
+          lostNotices++;
+          continue;
+        }
         if (mode === "signals") {
           partner.sourceChanged(who, s.id);
           continue;
@@ -1076,6 +1099,7 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
         deletesApplied,
         deletedDelivered,
         deletedCited,
+        lostNotices,
         notInert,
         sourceCalls,
         useful,
@@ -1109,7 +1133,8 @@ export function qualityReport(t: QualityTally, o: QualityOptions): QualityReport
   const { turns, injections, itemsDelivered, redundant, noise, secretsPlanted, secretsLeaked } = t.counts.scalars;
   const { injectionItems, updatesPlanned, updatesApplied, fetches, updatedDelivered, staleDelivered } =
     t.counts.scalars;
-  const { deletesPlanned, deletesApplied, deletedDelivered, deletedCited, notInert, sourceCalls } = t.counts.scalars;
+  const { deletesPlanned, deletesApplied, deletedDelivered, deletedCited, lostNotices, notInert, sourceCalls } =
+    t.counts.scalars;
   const { useful, results, errors, limited, aborted, lookups, modelCalls } = t.counts.scalars;
   const cost = t.counts.scalars.costUsd;
   const { observeMs, deliveryMs, injBytes } = t.samples;
@@ -1155,6 +1180,7 @@ export function qualityReport(t: QualityTally, o: QualityOptions): QualityReport
     privacy: { secretsPlanted, secretsLeaked, injectionItemsDelivered: injectionItems, deliveredNotInert: notInert },
     updates: { planned: updatesPlanned, applied: updatesApplied, updatedDelivered, staleDelivered },
     deletes: { planned: deletesPlanned, applied: deletesApplied, deletedDelivered, deletedCited },
+    lostNotices,
     freshness,
     model: {
       callsPerTurn: r3(modelCalls / turns),

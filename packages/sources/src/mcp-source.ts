@@ -30,7 +30,7 @@ import {
   type ToolSchema,
 } from "./schema-args";
 import { untilAborted } from "./abort";
-import type { ListPage, SearchQuery, Source } from "./source";
+import { FetchErrorResult, type ListPage, type SearchQuery, type Source } from "./source";
 
 export interface McpSourceOptions {
   id: string;
@@ -257,7 +257,8 @@ export class McpSource implements Source {
     const args = fetchTool.args ? fetchTool.args(ref) : buildFetchArgs(this.fetchMapping!, ref);
     if (!args) return null;
     const result = await client.callTool({ name: fetchTool.name, arguments: args }, undefined, { signal });
-    if (result.isError) return null;
+    // An error result says nothing about the record, and may pass: thrown, so it is never held as the item's state.
+    if (result.isError) throw new FetchErrorResult(`${this.id}: ${fetchTool.name} returned an error`);
     // The record itself first: a reply that is one object with this id wins over the rows it holds (Gmail's
     // get_thread is `{id, messages: [...]}`, whose rows carry message ids, never the thread's; D294).
     const row =
