@@ -1218,10 +1218,14 @@ async function runWorld(
             }
           }
           try {
+            // Eden's packets placed for the first call come out, and `transform` places them all again with the new
+            // ones. The leading system message (the prompt and the tools, `normalizeContext`) stays where it is.
+            const packet = (m: { role: string; content?: unknown }) =>
+              m.role === "system" && typeof m.content === "string" && m.content.startsWith("<context ");
             const again = {
               ...context,
               messages: (await transform(
-                context.messages.filter((m) => (m.role as string) !== "system") as AgentMessage[],
+                context.messages.filter((m) => !packet(m as { role: string })) as AgentMessage[],
               )) as typeof context.messages,
             };
             for await (const ev of send(model, again, options)) out.push(ev);
