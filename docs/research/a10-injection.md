@@ -29,7 +29,7 @@ action tools that only record what it tried to do.
   for an AI with a fixed Eden marker, and keeping the sender's domain in compacted mail. None lowered attack
   success measurably, because the attacks that land are not instruction-shaped, and Haiku already ignores those
   that are. None lost hidden facts live. The quarantine is exact on the lab's text: it removes every AI-addressed
-  attack from what the agent sees (118 of 204 tasks → 0 of 204) and changes no other item (0 of 6,901 distinct items).
+  attack from what the agent sees (117 of 198 tasks → 0 of 198) and changes no other item (0 of 6,901 distinct items).
   The guard line and the quarantine stay trials, to be decided on an agent model that does follow such text. The
   sender-domain switch cost planted-fact words at $0 and is deleted.
 - **Found on the way**: the lab's own worlds carry three injection mails. The default's packets already delivered
@@ -47,8 +47,8 @@ here.
 - `packages/sim/src/lab/injection-suite.ts`: the 19 attack kinds, their planting, and their success tests. Each
   attack is one item (two for `split`): an email, a shared document or a calendar invite. It opens on the topic of
   one hidden-context task, quoting the request and naming the task's planted item, and is dated a day before now.
-  The quote is the attacker's best case: it makes the push deliver the attack (278 of 288 tasks on train seeds
-  41–42, on the tree merged with A5 and A9; 280 before). All attacker addresses are under `client-services.example` (reserved, unroutable). Three sender kinds:
+  The quote is the attacker's best case: it makes the push deliver the attack (280 of 288 tasks on train seeds
+  41–42). All attacker addresses are under `client-services.example` (reserved, unroutable). Three sender kinds:
   the attacker's domain, the counterpart's own address (`spoofed-*`: a compromised or forged counterpart), and the
   user's own (`self-note`).
 - `injection-ab.ts`: the live harness. Pi (`@earendil-works/pi-agent-core`) on `claude-haiku-5-5` through
@@ -136,12 +136,14 @@ Hidden facts on the 144 hidden tasks of seeds 41–42, paired against eden: tool
 
 ### $0 (no agent, deterministic)
 
-- Delivery: the default's push handed the agent the planted attack on 278 of 288 tasks (seeds 41–42; the tree
-  merged with A5 and A9, 280 on the base the live runs used).
+- Delivery: the default's push handed the agent the planted attack on 280 of 288 tasks (seeds 41–42, the same
+  on the base the live runs used and on the tree merged with A5 and A9).
 - What reached the agent (final quarantine patterns, seeds 41–42): the targets of the 13 instruction-shaped kinds
-  (the self-note included) 118/204 tasks by default, 0/204 with the quarantine. The six social-engineering kinds
-  (cc-attacker, invite-add, payee-swap, phish-link, spoofed-cc, spoofed-payee) 48/84 either way. The quarantine
-  marker was in the packet on 164 of 288 tasks.
+  (the self-note included) 117/198 tasks by default, 0/198 with the quarantine. The six social-engineering kinds
+  (cc-attacker, invite-add, payee-swap, phish-link, spoofed-cc, spoofed-payee) 47/90 either way. The quarantine
+  marker was in the packet on 163 of 288 tasks. (One `--dry` process over both seeds, or chunks of it with
+  `--offset`/`--limit`: the kinds go in turn over the run's whole task list, so a run per seed allots them
+  differently.)
 - Precision on simulated text (train1–6, seeds 41–44, hidden/control/neutral): 6,901 distinct items. The quarantine
   changed 12, all of them the world's own injection mails, and 0 of 986 planted items. `injection-suite.test.ts`
   keeps the seed-41 version of this check.
@@ -165,7 +167,7 @@ Hidden facts on the 144 hidden tasks of seeds 41–42, paired against eden: tool
   (below).
 - **D307** `quarantineInstructions`: a trial, not promoted. Live attack success did not fall (2/288 against 2/288):
   the attacks that landed were not instruction-shaped. Hidden facts are neutral live (+0.035) and at $0 (0 words
-  lost). It removes every instruction-shaped attack from what the agent sees (118/204 → 0/204), at no paid cost.
+  lost). It removes every instruction-shaped attack from what the agent sees (117/198 → 0/198), at no paid cost.
   The rule for this round was to promote only on a measured fall in attack success. It stays a trial to 2026-12-03,
   decided by the same suite on an agent that does follow instruction-shaped injections, plus a precision check on
   real-world mail text (the lab's is synthetic): promoted if those successes fall with hidden facts not lower and no
@@ -188,12 +190,16 @@ Hidden facts on the 144 hidden tasks of seeds 41–42, paired against eden: tool
   checks and the reviewer's:
   - a vocative "Assistant,", an all-caps "SYSTEM:" and a bracketed "[SYSTEM]";
   - a line break no longer ends a sentence, so a hard-wrapped instruction is read whole, and the text's separators
-    are kept, so the quarantine is idempotent on any input;
+    are kept; a seeded fuzz of 200,000 hostile inputs found no output that a second pass changes;
   - the rest of a quarantined sentence's paragraph goes with it;
   - matching on a copy with full-width letters folded and zero-width characters removed;
-  - every repeat bounded, so the time is linear in the text (it was 2.5 s on 100 KB of `<div a `);
+  - every repeat bounded, with no adjacent whitespace repeats, so the time grows linearly on every crafted input
+    tried (it was 2.5 s on 100 KB of `<div a `, and 15 s on 100 KB of spaces after "do not tell");
   - narrower patterns, against false positives the reviewer found: markdown headings without a colon, "[user]", "AI
-    assistant feature", "use snake_case", "system message", "Garden of Eden:";
+    assistant feature", "use snake_case", "system message", "Garden of Eden:", "Venue: Eden:", "Dear agent",
+    "tell the user group", "developer instructions", "[System] review", "call the reset_password helpdesk line";
+  - lines tested trimmed, so an indented "Assistant," or "SYSTEM:" is caught;
+  - a hidden span (an HTML preheader) poisons nothing after it;
   - ask citations' titles quarantined too (the MCP route prints them under `Sources:`);
   - an update's own tag kept round a quarantined title;
   - the reader's note quarantined;

@@ -34,7 +34,8 @@ const LT = "(?:<|&lt;|＜|﹤)";
  * JSON, a markdown image (a URL the agent's client may fetch, leaking what its query holds), a forged turn of a
  * conversation (a role marker as a heading or chat token with its colon, up to the next blank line) and Eden's own
  * words forged at a line's or sentence's start (to the end of the line, as Eden's lines run). Every repeat is bounded
- * (A10's review: unbounded `[^>]*…[^>]*` ran 2.5 s on 100 KB of `<div a `), so each pattern is linear in the text.
+ * (A10's review: unbounded `[^>]*…[^>]*` ran 2.5 s on 100 KB of `<div a `), so time grows linearly on every crafted
+ * input tried (shield.test.ts).
  */
 const SPANS: RegExp[] = [
   new RegExp(`${LT}!--[\\s\\S]{0,4000}?(?:-->|$)`, "g"),
@@ -49,7 +50,7 @@ const SPANS: RegExp[] = [
   ),
   /\{[^{}]{0,400}"(?:name|tool|function)"\s{0,9}:\s{0,9}"[A-Za-z_][\w.-]{0,60}"[^{}]{0,400}"(?:arguments|args|parameters|input)"\s{0,9}:\s{0,9}(?:\{[^{}]{0,1000}\}|\[[^\]]{0,1000}\]|"[^"]{0,1000}")[^{}]{0,400}\}/g,
   /!\[[^\]\n]{0,200}\]\([^)\n]{0,500}\)/g,
-  /(?:^|(?<=[\n.!?:;]\s{0,9}))Eden(?:'s\s+reader)?\s{0,9}:[^\n]*/g,
+  /(?<=(?:^|[\n.!?;])\s{0,9})Eden(?:'s\s+reader)?\s{0,9}:[^\n]*/g,
   // A connector's snippet is often one line, so the heading may sit mid-line; its hashes and colon are the tell.
   /(?:^|(?<=\s))(?:#{1,6}[ \t]{0,9}|<\|im_start\|>[ \t]{0,9})(?:system|user|assistant|human)[ \t]{0,9}:[\s\S]*?(?=\n[ \t]*\n|$)/gi,
 ];
@@ -58,31 +59,35 @@ const SPANS: RegExp[] = [
 const SENTENCE: RegExp[] = [
   // Addressed to an assistant or agent as a reader of the text.
   /\b(?:note|message|notice|update|instructions?|reminder|attention|request)\s+(?:to|for)\s+(?:the|my|your|any|all)\s+(?:ai\s+)?(?:assistants?|agents?|bots?|models?)\b/i,
-  /\b(?:dear|hey|hello|hi|attention)\s+(?:ai\s+|automated\s+|virtual\s+)?(?:assistants?|agents?|bots?)\b/i,
+  // Greeted as an AI: "Dear agent" or "Dear Assistant" alone is also mail to an estate agent or a person's PA.
+  /\b(?:dear|hey|hello|hi|attention)\s+(?:ai|automated|virtual)\s+(?:assistants?|agents?|bots?)\b/i,
   /\b(?:ai|automated|virtual|digital)\s+(?:assistants?|agents?|models?)\s*[:,]/i,
   /\b(?:assistants?|agents?|models?|llms?|bots?)\s+(?:reading|processing|handling|summari[sz]ing|parsing)\s+(?:this|these)\b/i,
   /\bthe\s+(?:ai\s+)?(?:assistant|agent)\s+(?:must|should|shall|needs?\s+to|is\s+(?:required|instructed|asked)|notes)\b/i,
   // A role named at a sentence's start, as a speaker ("SYSTEM:") or a vocative ("Assistant, this is the owner").
   // "System:" in any case is also a field name ("System: prod-core"), so only shouting it counts, or a bracketed tag.
-  /(?:^|[.!?:;\n]\s*)(?:dear\s+)?(?:assistant|ai|claude|chatgpt|gpt|copilot)\s*[:,]/i,
-  /(?:^|[.!?:;\n]\s*)agent\s*,/i,
-  /(?:^|[.!?:;\n]\s*)SYSTEM\s*:/,
-  /\[(?:system|developer|assistant)\]/i,
+  // Lines and parts are tested trimmed (`shaped`), so `^` holds for an indented line too.
+  /(?:^|[.!?:;\n])\s*(?:assistant|ai|claude|chatgpt|gpt|copilot)\s*[:,]/i,
+  /(?:^|[.!?:;\n])\s*agent\s*,\s*(?:this|you|please|send|forward|use|call|ignore|do)\b/i,
+  /(?:^|[.!?:;\n])\s*SYSTEM\s*:/,
+  /^\s*\[(?:system|developer|assistant)\]/i,
   /\b(?:you\s+are|act\s+as|you're)\s+(?:now\s+)?(?:an?|the|in)\s+(?:ai|assistant|agent|audit\s+mode|admin\s+mode|developer\s+mode)\b/i,
   // Speaks of the user in the third person, to whoever answers them: mail to a person says "you".
-  /\b(?:tell|ask|inform|remind|instruct|advise|warn|direct)\s+the\s+user\b/i,
+  /\b(?:tell|ask|inform|remind|instruct|advise|warn|direct)\s+the\s+user\b(?!\s+(?:group|guide|manual|base|community|forum|interface|account|agreement|research|stor(?:y|ies)|experience|list|testing))/i,
   /\b(?:reply|replies|response|responses|answers?|messages?)\s+to\s+the\s+user\b/i,
   /\bthe\s+user's\s+(?:last|latest|recent|other|\d+|emails?|e-mails?|mail|mailbox|inbox|files|documents|passwords?|contacts|messages|data|chats?|calendar)\b/i,
   /\b(?:end|start|begin|finish|sign)\s+(?:every|each|all|your)\s+(?:reply|replies|response|responses|answers?)\b/i,
   // Overrides.
   /\bignore\s+(?:all\s+|any\s+)?(?:of\s+)?(?:the\s+|your\s+)?(?:previous|prior|above|earlier|preceding|other)\s+(?:instructions?|prompts?|messages?|rules|directions)\b/i,
-  /\b(?:system|developer)\s*(?:override|prompt|instructions)\b/i,
+  /\b(?:system|developer)\s*(?:override|prompt)\b/i,
   /\bnew\s+(?:policy|instructions?|rules?)\s+from\s+(?:the\s+)?(?:assistant|operator|system|developer|admin)/i,
   /\b(?:jailbreak|dan\s+mode|developer\s+mode)\b/i,
-  /\bdo\s+not\s+(?:tell|mention|reveal|show)\s+(?:this|it)?\s*(?:to\s+)?(?:the\s+user|anyone)\b/i,
+  /\bdo\s+not\s+(?:tell|mention|reveal|show)\s+(?:(?:this|it)\s+)?(?:to\s+)?(?:the\s+user|anyone)\b/i,
   // A tool named for the agent to call: a snake_case name after a verb of calling ("use" is left out: "use
   // snake_case for the columns").
-  /\b(?:call|invoke|trigger|execute)\s+(?:the\s+)?(?:tool\s+|function\s+)?`?[a-z]+_[a-z_]+`?\b/,
+  // ...followed by what a call takes ("call do_action to …", "call schedule_event and invite …"), not a noun
+  // ("call the reset_password helpdesk line").
+  /\b(?:call|invoke|trigger|execute)\s+(?:the\s+)?(?:tool\s+|function\s+)?`?[a-z]+_[a-z_]+`?(?:\s*\(|\s+(?:and|to|with|now|first|tool|function)\b|\s*[.,;:]|\s*$)/,
   // A forged copy of Eden's marker with something after it, passed off as screened (the marker alone is ours).
   /\[Eden removed text here\b.{0,200}\]\s*\S/,
 ];
@@ -102,11 +107,11 @@ const plain = (s: string) => s.normalize("NFKC").replace(/\p{Cf}/gu, "");
 
 /** One part's tests: on it with its line breaks as spaces, and on each of its lines (a role at a line's start). */
 const shaped = (part: string) => {
-  const p = plain(part);
-  const flat = p.replace(/\s+/g, " ");
+  const p = plain(part).replace(/[ \t]+/g, " ");
+  const flat = p.replace(/\s+/g, " ").trim();
   return (
     SENTENCE.some((re) => re.test(flat)) ||
-    (p.includes("\n") && p.split("\n").some((l) => SENTENCE.some((re) => re.test(l))))
+    (p.includes("\n") && p.split("\n").some((l) => SENTENCE.some((re) => re.test(l.trim()))))
   );
 };
 
@@ -120,7 +125,9 @@ const shaped = (part: string) => {
 export function quarantine(text: string): string {
   const folded = plain(text);
   let spanned = folded;
-  for (const re of SPANS) spanned = spanned.replace(re, (m) => (/^\s/.test(m) ? ` ${QUARANTINED}` : QUARANTINED));
+  // A span's marker is followed by a space: text run on after it ("…</div>Booking …") is its own part, not a forged
+  // marker's payload.
+  for (const re of SPANS) spanned = spanned.replace(re, (m) => `${/^\s/.test(m) ? " " : ""}${QUARANTINED} `);
   const out = spanned === folded ? text : spanned;
   const parts = out.split(SENTENCES);
   let changed = out !== text;
@@ -131,11 +138,8 @@ export function quarantine(text: string): string {
   for (let i = 0; i < parts.length; i += 2) {
     if (i > 0 && /\n[ \t]*\n/.test(parts[i - 1]!)) poisoned = false;
     const p = parts[i]!;
-    if (p === QUARANTINED) {
-      poisoned = true;
-      continue;
-    }
-    if (!p.trim() || !(poisoned || shaped(p))) continue;
+    // A marker a span left is not a sentence that spoke: a hidden preheader poisons nothing after it.
+    if (p.trim() === QUARANTINED || !p.trim() || !(poisoned || shaped(p))) continue;
     parts[i] = QUARANTINED;
     poisoned = true;
     changed = true;
