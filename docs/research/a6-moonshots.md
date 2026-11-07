@@ -20,7 +20,7 @@ not measured; every other number comes from a command in this note.
   card's validated fields ("Eden's card: freeze on pay; until 2026-11-30 | …"): the paid reader's per-request bearing
   (D95, worth about 5 points, D237's −4.9) precomputed at ingest for $0 a request. Pooled over the short and long runs,
   **hidden facts +1.2 points (−4.8..+7.2), regraded concerns +0.0 (−1.2..+1.2), and dearer on both horizons** (+$0.036
-  per 1,000 tasks on the short 1:1:8 mix, +0.016..+0.056; +$0.015 over a user's days, +0.005..+0.025): not better on
+  per 1,000 tasks on the short 1:1:8 mix, +0.016..+0.056; +$0.015 over a user's days, +0.005..+0.025, all-in as `arms.py` counts it; steady +0.011): not better on
   its axis, so deleted (D112). Only 37% of the planted facts that reach a packet carry a constraint card, which caps it.
 - **Built and kept as a lab instrument: dressed worlds (`pi-ab --dress`, D287).** A request often names a person or
   firm no item of its world names (77% of train's nothing-to-add requests, 55% of hidden ones); dressing gives each such
@@ -50,7 +50,7 @@ not measured; every other number comes from a command in this note.
 | Asks per task (pilot) | hidden 0.54, control 1.00, neutral 1.08 | pilot below |
 | Questions naming an entity the world lacks | neutral 15/26, control 13/24, hidden 7/13 (approximate: entity extraction) | `asks-absent.ts` |
 
-Pilot: `packages/sim/lab/a6/run.sh a6-pilot-41 payload eden --seeds 41 --variants hidden,control,neutral --limit 4
+Pilot (`pilot.txt`, `asks-absent-pilot.txt`): `packages/sim/lab/a6/run.sh a6-pilot-41 payload eden --seeds 41 --variants hidden,control,neutral --limit 4
 --budget 0.1` ($0.0339, 72 tasks). The ask questions (timeline `eden.ask` points) read like a person's first lookups:
 "Who is Ilse Marchetti? Find the current quote…", "Leon Ashby: email address…", "Is 16:00 free?". Only 51 of the 273
 items the asks cited were already in the push's packet: the asks are not re-checks of the candidates.
@@ -195,16 +195,16 @@ tasks an arm; `short-pay-arms.txt`, `long-pay-arms.txt`, `long-pay-cost.txt`, `p
 | | eden | eden~cards | paired (cards − eden) |
 | --- | --- | --- | --- |
 | Short: hidden raised | 72.2% | 72.9% | +0.7 points (−6.2..+7.6) |
-| Short: mix $/1k (agent billed) | 0.404 | 0.440 | **+0.036 (+0.016..+0.056)** |
+| Short: mix $/1k (`arms.py` all-in) | 0.404 | 0.440 | **+0.036 (+0.016..+0.056)** |
 | Short: mix wall mean | 3.15 s | 3.23 s | +0.09 s (−0.05..+0.23) |
 | Short: asks a task (hidden / control / neutral) | 0.53 / 0.89 / 0.99 | 0.46 / 0.84 / 1.07 | |
 | Long: hidden raised | 14/23 | 15/23 | +4.3 points (−13.0..+21.7) |
-| Long: mix $/1k steady | 0.332 | 0.343 | **+0.015 (+0.005..+0.025)** |
+| Long: mix $/1k (`arms.py` all-in) | 0.332 | 0.346 | **+0.015 (+0.005..+0.025)**; `pi-cost-report` steady 0.332 → 0.343 |
 | Pooled, 4 runs: hidden raised | | | +1.2 points (−4.8..+7.2), n 167 |
 | Pooled: concerns on control + neutral, regraded | | | +0.0 points (−1.2..+1.2), n 497 |
 
-Where the extra dollars went (`short-pay-cache.txt`): the tagged first prompt is about 80 tokens longer (hidden: 1,256
-read + written against 1,337), carried into each later turn, and it was read from the cache less often (first-request
+Where the extra dollars went (`short-pay-cache.txt`): the tagged first prompt is about 80 tokens longer (hidden: 1,337
+read + written against 1,256), carried into each later turn, and it was read from the cache less often (first-request
 hit 14–24% against 35%: arms whose prompts match another arm's read them whole, D260's lab artefact, which here favours
 `eden`). Output tokens did not change (hidden 472 vs 466 a task). **Verdict:** no gain on its axis within ±6 points,
 dearer on both horizons: deleted with its code and tests (D112). The tag's ceiling is the card's coverage: 63% of the
