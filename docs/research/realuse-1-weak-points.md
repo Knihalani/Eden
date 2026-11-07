@@ -117,4 +117,5 @@ files; each session's decision rows use its own block of numbers (below) so para
 | S4 | 5, 8, 9 | `sync.ts`, `packages/client`, `sources/src/guarded.ts`, partner.ts's ask verification; INTEGRATION.md | D210–D214 | $1 |
 | S5 | 7 | `cache.ts`, `kg.ts`, a new ingest worker, partner.ts's `store` hook | D215–D219 | $0.5 |
 | S6 | 10 | `packages/redact`, a new shared line sanitiser and its callers outside reader.ts and render.ts | D220–D224 | $0.5 |
+| W2b | 2 | reader.ts's prompt and verdicts; partner.ts's ask-answer composition | D230–D234 | $4 |
 | Wave 2 | 11, final | ablations, deletions, `heldout15` blind confirmation (Pi, Hermes), RealUse-2 | D225+ | about $8 |

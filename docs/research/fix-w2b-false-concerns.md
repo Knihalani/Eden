@@ -56,10 +56,10 @@ What the table says:
   five neutral concerns are the grader counting a hedge ("I'd check your allowance", "confirm the end date") or an
   answer that says the opposite; Sonnet rejects all six. Held-out 14's neutral excess (7/128 against 2/128 in
   RealUse-1) did not reproduce: 3/128 and 2/128 here, none of them real.
-- **The grader inflates the rate.** 15 of 39 concerns (16 with the unclear one) are the Haiku grader's errors by hand (the washer warranty
-  answer says it *expired*; the export-ticket answer says the fix *ships*). Sonnet is stricter still: it also rejects
-  answers that raise the decoy's concern with the decoy's own details (Bass Rock's 400 mm limit applied to a Farne
-  Islands trip), because the listed fact names the other place.
+- **The grader inflates the rate.** 15 of 39 concerns (16 with the unclear one) are the Haiku grader's errors by hand
+  (the washer warranty answer says it *expired*; the export-ticket answer says the fix *ships*). Sonnet is stricter
+  still: it also rejects answers that raise the decoy's concern with the decoy's own details (Bass Rock's 400 mm limit
+  applied to a Farne Islands trip), because the listed fact names the other place.
 - **Two real causes of about equal size.** Reader-flagged look-alikes (13 real: the hide-lens limit for another
   place, a neighbour consent already given, last year's deleted recording, a vendor bill already corrected) and
   listed-only items (10 real: a fee quoted for the user's sister, another supplier's day rate). By the shipped
@@ -107,8 +107,10 @@ replayed, `{"replayed":643,"sent":0,"missed":0,"failed":0}`) is a check that not
 | | false concerns / neutral | 1.6% / 1.6% | 0.0 (−4.7..+4.7) / −1.6 (−4.7..0.0) |
 | all (320) | hidden; false concerns (control) | 70.9%; 2.5% | 0.0 (−4.1..+4.1); +0.3 (−1.3..+1.9) |
 | | Eden $/1k, agent $/1k (control) | 0.250, 0.347 | +0.002 (−0.011..+0.016), 0.000 (−0.013..+0.013) |
+| held-out 14 control (64) | agent $/1k | 0.325 | +0.028 (+0.001..+0.056) |
 
-  Listed-only concerns in its arm: 4 against the default's 3. Where the note is visible in the record
+  The one interval that excludes zero is the agent's cost on held-out 14 control tasks (+$0.028/1k, n = 64; pooled
+  0.000). Listed-only concerns in its arm: 4 against the default's 3. Where the note is visible in the record
   (accountant-fee, seed 41) the agent read it, wrote "one caveat: that email is addressed as being for my sister
   Ellie", and still gave the sister's fee as the user's.
 
@@ -138,7 +140,8 @@ What this says about issue 2:
 L="--spend-ledger .local/ledger.jsonl --spend-cap 4 --spend-headroom 0.3"
 mkdir -p .local/w2b/enrich && cp packages/sim/lab/cards/cards-v2.jsonl .local/w2b/enrich/
 gunzip -c packages/sim/lab/distilled/intent-v2.jsonl.gz > .local/w2b/enrich/intent-v2.jsonl
-E="env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cards-enrich.ts --dir .local/w2b/enrich --model claude-haiku-5-5 $L"
+E="env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cards-enrich.ts --dir .local/w2b/enrich \
+  --model claude-haiku-5-5 $L"
 $E --run-label w2b-enrich --funnel heldout10,heldout11,heldout12,heldout13 --seeds 41,42,43,44
 $E --run-label w2b-intent --funnel heldout10,heldout11,heldout12,heldout13 --seeds 41,42,43,44 --intent  # twice
 # cards-merged.jsonl: cards-v2 then each intent-file card not in it (realuse-1/B-pi-continuity.md's Reproduce)
@@ -147,7 +150,8 @@ python3 -I packages/sim/lab/fix-w2b/attribute.py .local/w2b/attr-p1.json .local/
 env -u OPENROUTER_API_KEY bun packages/sim/src/lab/regrade.ts --results F --graders claude-sonnet-5-5 \
   --only-concerns $L --run-label w2b-regrade-X --out X.json
 python3 -I packages/sim/lab/fix-w2b/analyze.py out.json h10_13=<files> h14=<files> all=<files>
-gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz > .local/reader-haiku-train-4142-intent.jsonl
+gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz \
+  > .local/reader-haiku-train-4142-intent.jsonl
 bun run funnel --jobs 4 --allow-misses --set '{"askUnreadNote":true}' -- --reader replay \
   --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl   # on 14968b2b
 ```

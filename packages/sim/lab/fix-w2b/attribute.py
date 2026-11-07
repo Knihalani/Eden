@@ -10,13 +10,18 @@ with any fact true. Its planted item (control: the decoy) is attributed, first m
   rule-path       another proactive packet cited it (grounded-*, fallback, sources, cache, ...)
   ask-flagged     an ask answer cited it on a line that carries "Eden's reader:" (the reader flagged it)
   ask-listed      an ask answer cited it with no reader note (listed only)
+  ask-cut         an ask answer cited it but cut its line (the 4,000-byte cap): the agent never read it
   none            no Eden packet or answer cited it
+
+A flagged line starts its text with "Eden's reader: " and a kind ("blocks: ...", render.ts READER_TAG); a note of
+D230's deleted "not flagged" kind does not count as a flag.
 
 Neutral tasks plant nothing: they are listed with what reached the agent, for reading by hand. With --regrade, a
 regrade.ts output's verdicts are joined, and a concern the regrader does not call true is marked `grader?`.
 """
 import json
 import os
+import re
 import sys
 
 
@@ -25,17 +30,16 @@ def lines_of(answer):
     return [l for l in (answer or "").split("\n") if l.startswith("- [")]
 
 
-def ask_way(rec, item):
-    for a in rec.get("asks") or []:
-        if item in a["cited"]:
-            ls = lines_of(a.get("text", ""))
-            k = a["cited"].index(item)
-            if k < len(ls) and "Eden's reader:" in ls[k]:
-                return "ask-flagged"
-            return "ask-listed"
-    if item in (rec.get("askCited") or []):
-        return "ask-listed"
-    return None
+FLAG = re.compile(r"^- \[[^\]]*\] Eden's reader: (?!not flagged)")
+
+
+def line_way(a, item):
+    """An answer's way for a cited item: its n-th rendered line is its n-th citation (renderPacket, citationsOf)."""
+    ls = lines_of(a.get("text", ""))
+    k = a["cited"].index(item)
+    if k >= len(ls):
+        return "ask-cut"
+    return "ask-flagged" if FLAG.match(ls[k]) else "ask-listed"
 
 
 def all_ways(rec, item):
@@ -50,9 +54,7 @@ def all_ways(rec, item):
         out.append("rule-path:?")
     for a in rec.get("asks") or []:
         if item in a["cited"]:
-            ls = lines_of(a.get("text", ""))
-            k = a["cited"].index(item)
-            v = "ask-flagged" if k < len(ls) and "Eden's reader:" in ls[k] else "ask-listed"
+            v = line_way(a, item)
             if v not in out:
                 out.append(v)
     return out
