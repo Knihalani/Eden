@@ -212,6 +212,24 @@ class Calls(unittest.TestCase):
             stub.close()
 
 
+    def test_source_changed_takes_tuples_and_sets(self):
+        # Refs in a set or a tuple were read as none: only the bare signal went, and a server that syncs the source
+        # answered True, so the caller held the deletion as delivered while Eden still held the item.
+        def answer(path, body):
+            return 200, {"/v1/sources/removed": {"removed": len(body.get("refs", []))},
+                         "/v1/sources/items": {"stored": len(body.get("items", []))}}.get(path, {"synced": True})
+
+        stub = Stub(answer)
+        try:
+            c, errors = client(stub.url)
+            self.assertTrue(c.source_changed("mail", items=({"ref": "1", "text": "x"},), removed={"2"}))
+            self.assertEqual([p for p, _, _ in stub.seen], ["/v1/sources/items", "/v1/sources/removed"])
+            self.assertEqual(stub.seen[-1][1]["refs"], ["2"])
+            self.assertEqual(errors, [])
+        finally:
+            stub.close()
+
+
 class Helpers(unittest.TestCase):
     def test_with_context_before_the_latest_user_message(self):
         msgs = [{"role": "system", "content": "s"}, {"role": "user", "content": "a"},

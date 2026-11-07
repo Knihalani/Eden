@@ -53,6 +53,7 @@ _ID_RULE = "1-128 characters of [A-Za-z0-9._:@-]"
 _ERROR_BODY_BYTES = 2_048
 _ERROR_TEXT_CHARS = 300
 _REASONS = {"push-off", "not-synced", "not-notifying"}
+_SEQUENCES = (list, tuple, set, frozenset)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -283,8 +284,9 @@ class EdenClient:
         True when every part reached the server and was taken. A part that did not is followed by the bare signal,
         so Eden polls the source rather than miss the change. With no items and no refs, it is the bare signal.
         """
-        items = items if isinstance(items, list) else []
-        removed = removed if isinstance(removed, list) else []
+        # A tuple or a set of refs is as idiomatic in Python as a list; anything else (a str, a dict) is read as none.
+        items = list(items) if isinstance(items, _SEQUENCES) else []
+        removed = list(removed) if isinstance(removed, _SEQUENCES) else []
         if not items and not removed:
             notice = self.source_notice(source_id)
             return bool(notice and notice["synced"])
