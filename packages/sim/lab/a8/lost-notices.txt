@@ -1,0 +1,10 @@
+quality-cli --users 16 --sessions 20 --updates 0.6 --deletes 0.1 --jobs 4 --push payload --lost-notices L --config '{"sync":true[,"syncCarriedSweepMs":604800000]}' (after the review fixes)
+trial  lost  notices-lost  deleted delivered/cited (of applied)  stale/updated  P      R      ff     bg-calls  calls/lookup
+off    0                0    0/0   (of 128)              16/160        0.420  0.517  0.059      1096  1.007
+off    0.1             39    0/1   (of 128)              20/161        0.421  0.517  0.059      1096  1.001
+off    0.2             88    8/5   (of 128)              23/161        0.424  0.519  0.059      1096  0.996
+off    0.3            127   11/12  (of 128)              24/161        0.424  0.519  0.059      1096  0.993
+on     0                0    0/0   (of 128)              16/159        0.420  0.517  0.059       175  0.445
+on     0.1             39    2/12  (of 128)              23/160        0.420  0.517  0.059       183  0.446
+on     0.2             88   11/31  (of 128)              27/161        0.423  0.519  0.059       194  0.448
+on     0.3            127   15/50  (of 128)              34/162        0.422  0.517  0.059       223  0.463

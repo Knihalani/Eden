@@ -65,3 +65,13 @@ export interface Source {
 
 /** The sources one user's partner may read. Resolved per user, since each user connects their own accounts. */
 export type SourceResolver = (scope: Scope) => Promise<Source[]>;
+
+/**
+ * A fetch the source answered with an error result (an MCP tool's `isError`: a 5xx, a quota message, often "not
+ * found"), thrown by `fetch` rather than returned as null (A8, D298): it says nothing about the item, as a null from
+ * a source without `fetchReportsGone` does, but unlike a reply that simply lacks the record it may be transient, so
+ * Eden never holds it as the item's state. Not a failure of the source's: `SourceFanout` settles it as answered.
+ */
+export class FetchErrorResult extends Error {
+  override readonly name = "FetchErrorResult";
+}

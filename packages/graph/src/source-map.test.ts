@@ -28,6 +28,37 @@ describe("SourceMap", () => {
     expect(map.utility(alice, "research", "calendar")).toBe(0.5);
   });
 
+  test("routing many sources reads each one's outcomes in its own situation and user (D261's one query)", () => {
+    const ids = Array.from({ length: 300 }, (_, i) => `src-${i}`);
+    const seeded = (explore: boolean) => {
+      const map = new SourceMap(":memory:", { explore, seed: 5 });
+      ids.forEach((id, i) => {
+        for (let k = 0; k < i % 7; k++) map.recordOutcome(alice, "scheduling", id, k % 3 !== 0);
+        // Another situation and another user must not leak into alice's scheduling routes.
+        if (i % 11 === 0) for (let k = 0; k < 9; k++) map.recordOutcome(alice, "chat", id, true);
+        if (i % 13 === 0) for (let k = 0; k < 9; k++) map.recordOutcome(bob, "scheduling", id, true);
+      });
+      map.recordMentions(alice, "src-42", ["Dana Lee"]);
+      return map;
+    };
+    const map = seeded(false);
+    const ranked = map.route({
+      scope: alice,
+      entities: ["Dana Lee"],
+      situation: "scheduling",
+      sourceIds: ids,
+      limit: 300,
+    });
+    for (const r of ranked) expect(r.utility).toBeCloseTo(map.utility(alice, "scheduling", r.sourceId));
+    const expected = [...ranked].sort((a, b) => b.score - a.score || a.sourceId.localeCompare(b.sourceId));
+    expect(ranked.map((r) => r.sourceId)).toEqual(expected.map((r) => r.sourceId));
+    expect(ranked[0]!.sourceId).toBe("src-42");
+    // With exploration, the same seed draws the same order whatever the limit.
+    const a = seeded(true).route({ scope: alice, entities: [], situation: "scheduling", sourceIds: ids, limit: 5 });
+    const b = seeded(true).route({ scope: alice, entities: [], situation: "scheduling", sourceIds: ids, limit: 300 });
+    expect(a.map((r) => r.sourceId)).toEqual(b.slice(0, 5).map((r) => r.sourceId));
+  });
+
   test("an explicit correction flips one recorded outcome", () => {
     const map = new SourceMap(":memory:", { explore: false });
     map.recordOutcome(alice, "chat", "crm", false);

@@ -1,0 +1,20 @@
+tasks in every arm: 216 (hidden 72, control 72, neutral 72)
+arm       kind      n   rate   $/1k   calls/t (agent, Eden)
+base      hidden    72  0.708  0.348  7.31 (0.00, 7.31)
+base      control   72  0.056  0.353  7.85 (0.00, 7.85)
+base      neutral   72  0.028  0.374  9.07 (0.00, 9.07)
+base      mix 1:1:8             0.370  8.77 (0.00, 8.77)
+new       hidden    72  0.722  0.355  7.14 (0.00, 7.14)
+new       control   72  0.056  0.368  7.57 (0.00, 7.57)
+new       neutral   72  0.028  0.350  8.72 (0.00, 8.72)
+new       mix 1:1:8             0.352  8.45 (0.00, 8.45)
+
+Eden's connector calls a task by source and operation (all tasks of the arm, in its timelines):
+  base: gmail fetch 3.847, slack list 1.000, gmail list 1.000, slack fetch 0.856, calendar fetch 0.468, drive fetch 0.338, drive list 0.167, calendar list 0.167, crm fetch 0.088, crm list 0.083, slack search 0.060
+  new: gmail fetch 3.630, slack list 1.000, gmail list 1.000, slack fetch 0.824, calendar fetch 0.426, drive fetch 0.301, drive list 0.167, calendar list 0.167, crm fetch 0.106, slack search 0.106, crm list 0.083
+
+== paired B − A, bootstrap 95%; * the interval excludes zero
+new − base raised: hidden +0.014 (-0.083..+0.111) ; control +0.000 (-0.056..+0.056) ; neutral +0.000 (-0.056..+0.056) ; mix +0.001 (-0.044..+0.047) 
+new − base usd   : hidden +0.007 (-0.019..+0.031) ; control +0.015 (-0.011..+0.042) ; neutral -0.024 (-0.054..+0.006) ; mix -0.017 (-0.042..+0.008) 
+new − base conn  : hidden -0.167 (-0.653..+0.292) ; control -0.278 (-0.778..+0.222) ; neutral -0.347 (-1.056..+0.375) ; mix -0.322 (-0.899..+0.275) 
+new − base eden  : hidden -0.167 (-0.653..+0.292) ; control -0.278 (-0.764..+0.208) ; neutral -0.347 (-1.056..+0.375) ; mix -0.322 (-0.889..+0.268) 

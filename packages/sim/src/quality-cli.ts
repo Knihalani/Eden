@@ -4,7 +4,9 @@
  *   zoo-tune|zoo-a|zoo-b] [--planner [--planner-max-calls 3] [--planner-no-cascade] [--planner-cascade-min 0.05]
  *   [--planner-no-reuse] [--planner-deadline-margin 2] [--planner-latency-quantile 0.9]
  *   [--planner-mode serve|shadow] [--promote-after N]] [--time 0] [--wait 0]
- *   [--noise 1] [--updates 0] [--deletes 0] [--push none|signals|payload] [--refresh-after-hours H] [--tool-rate 0.4]
+ *   [--noise 1] [--updates 0] [--deletes 0] [--push none|signals|payload] [--lost-notices 0]
+ *   [--null-proves-nothing]
+ *   [--refresh-after-hours H] [--tool-rate 0.4]
  *   [--judge none|perfect|noisy] [--live] [--brief] [--config '{"probes":true}']
  *   [--timeline out.jsonl] [--sync]
  *   [--cards DIR/cards-v2.jsonl]
@@ -67,6 +69,7 @@ const cli = flags(
         "updates",
         "deletes",
         "push",
+        "lost-notices",
         "refresh-after-hours",
         "tool-rate",
         "judge",
@@ -79,10 +82,16 @@ const cli = flags(
       ].map((k) => [k, "value" as const]),
     ),
     ...Object.fromEntries(
-      ["planner", "planner-no-cascade", "planner-no-reuse", "live", "brief", "sync", "tally"].map((k) => [
-        k,
-        "bool" as const,
-      ]),
+      [
+        "planner",
+        "planner-no-cascade",
+        "planner-no-reuse",
+        "live",
+        "brief",
+        "sync",
+        "tally",
+        "null-proves-nothing",
+      ].map((k) => [k, "bool" as const]),
     ),
   },
   `
@@ -172,6 +181,15 @@ const opts: QualityOptions = {
     }
     return m;
   })(),
+  lostNotices: (() => {
+    const v = Number(arg("lost-notices", "0"));
+    if (!Number.isFinite(v) || v < 0 || v > 1) {
+      console.error("quality-cli: --lost-notices takes a share in [0, 1]");
+      process.exit(2);
+    }
+    return v;
+  })(),
+  nullProvesNothing: has("null-proves-nothing"),
   config: {
     ...(has("refresh-after-hours") ? { refreshAfterMs: Number(arg("refresh-after-hours", "0")) * 3_600_000 } : {}),
     // Any engine setting, as JSON (`--config '{"probes":true}'`): for experiments behind a flag.

@@ -187,7 +187,24 @@ export interface PartnerDeps {
    * (`decide.ts`) and what was delivered. Ids and numbers only, no content. Absent: no facts are computed for it.
    */
   onCandidates?: CandidateSink;
+  /**
+   * A lab hook (`hidden-funnel.ts --pool-dump`, D269): each `pushCandidates` pass's pool and what it handed, ids and
+   * flags only. Apart from `onReader`, whose consumers count reader readings.
+   */
+  onPushPool?: PushPoolSink;
 }
+
+/** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
+export interface PushPoolReport {
+  sessionId: string;
+  /** The push's pool in order (the ids the reader would have read). */
+  pool: string[];
+  /** Per pool item, `readerGate`'s constraint test (cards included). */
+  constraintLike: boolean[];
+  /** The candidates handed (none when no pooled item is constraint-like). */
+  handed: string[];
+}
+export type PushPoolSink = (report: PushPoolReport) => void;
 
 /** One no-model decision's candidates, for `PartnerDeps.onCandidates`. */
 export interface CandidateDump {
@@ -382,6 +399,8 @@ interface ProbeOpts {
   local?: ReadonlySet<string> | null;
   /** The lookup's deadline (`performance.now()` time, D140); absent: `sourceTimeoutMs` from when the probes start. */
   deadlineAt?: number;
+  /** `routeLocalHits` (D265): the lookup's local evidence per source, for the probes' routing. */
+  boost?: ReadonlyMap<string, number>;
 }
 /** `intent`'s reciprocal-rank constant: rank 0 scores 1/k (the usual 60 flattens a five-item list to a tie). */
 const ASK_FUSE_K = 2;
@@ -516,6 +535,16 @@ export class ContextPartner {
    * gone-holds the cache's caps dropped while still live (`ItemCache.holdsEvicted`), which reopen D126's race.
    */
   readonly freshness = { checked: 0, confirmed: 0, changed: 0, gone: 0, failed: 0, calls: 0, holdsEvicted: 0 };
+  /**
+   * Re-reads that came back "unverifiable" because the source's null proves nothing (an MCP fetch, `fetchReportsGone`
+   * false, whose reply lacked the record), by user, then item id: the read mark the re-read began under and when. The
+   * item is delivered and cited as held either way (D126, D211), so until the source signals again, and for at most
+   * `UNVERIFIABLE_HOLD_MS`, a fetch would most likely say the same: `doubted` is false for it. Without this every later
+   * delivery past `CHECK_REUSE_MS`, and every other session of the user, fetched it again (A5's lead, A8, D298). An
+   * error result (`FetchErrorResult`, "error-result") is never held: it may pass, and a changed copy behind it must
+   * be read at the next delivery. Least recently noted first; `MAX_UNVERIFIABLE` per user, `MAX_UNVERIFIABLE_USERS`.
+   */
+  private readonly unverifiable = new Map<string, Map<string, { mark: number; at: number }>>();
   /** The secret gate every item passes before it is held (D10): the fanout's, and `sourceItems`'. */
   private readonly redact: (items: ContextItem[]) => ContextItem[] | Promise<ContextItem[]>;
   /** What each user's probes bring back (`probeFresh`, `probeYield`). */
@@ -604,6 +633,7 @@ export class ContextPartner {
           {
             maxItems: c.syncMaxItems,
             pageSize: c.syncPageSize,
+            backfillLanes: c.syncBackfillLanes,
             pollPageSize: c.syncPollPageSize,
             staleChance: c.syncStaleChance,
             maxStaleMs: c.syncMaxStaleMs,
@@ -1948,8 +1978,15 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    if (!pool.some((x) => this.constraintLike(x, cards))) return { items: [] };
-    return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) };
+    const like = pool.map((x) => this.constraintLike(x, cards));
+    const items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
+    this.deps.onPushPool?.({
+      sessionId: s.id,
+      pool: pool.map((x) => x.item.id),
+      constraintLike: like,
+      handed: items.map((x) => x.item.id),
+    });
+    return { items };
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
@@ -2160,6 +2197,8 @@ export class ContextPartner {
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
     this.recorded.get(scope.tenantId)?.delete(key);
     this.deps.cache.forget(scope, sourceId);
+    // Any forget drops the user's held outcomes (one source's ids are not told apart from the rest here).
+    this.unverifiable.delete(key);
     this.deps.sourceMap.forget(scope, sourceId);
     this.fanout.forget(scope, sourceId);
     this.deps.planner?.forget(scope, sourceId);
@@ -2975,6 +3014,12 @@ export class ContextPartner {
     if (unresolved) return { calls: 0, sources: [], unresolved: true };
     if (s.closed) return { calls: 0, sources: [], closed: true };
     if (all.length === 0) return { calls: 0, sources: [] };
+    // `routeLocalHits` (D265): which sources hold the request's best local matches, for routing. Only past the
+    // lookup's own width: with as few sources as it searches, every one is searched whatever the order.
+    const boost =
+      this.config.routeLocalHits && all.length > Math.min(limit, this.config.lookupSources)
+        ? this.localRouteHits(s, cue)
+        : undefined;
     // One deadline for the whole lookup (D140): the on-demand poll, the live search, the planner's cascade and the
     // probes share it. An ask waits for its poll, so a poll and a search with deadlines of their own could hold the
     // reader back twice `sourceTimeoutMs` (a listing that hangs, then the search that follows it).
@@ -2984,12 +3029,31 @@ export class ContextPartner {
     // call; with `syncOnDemand`, a stale one is polled first (one listing call, rather than its search and probes).
     let local: Set<string> | null = null;
     let syncCalls = 0;
+    let preRanked: ReturnType<SourceMap["route"]> | null = null;
+    let pollable: Set<string> | null = null;
     if (this.sync) {
+      // `syncPollWidth` (D263): over that many sources, only the best routed are polled. The lookup is routed once,
+      // here, before its poll, and searches the head of the same ranking, so every source it searches was polled
+      // (two routes would draw apart: an ask then answered unpolled stale copies as "nothing", review of D263). Under
+      // the width nothing changes: the route runs after the poll, as before, and draws as before.
+      const width = this.config.syncOnDemand ? this.config.syncPollWidth : 0;
+      if (width > 0 && all.length > width) {
+        preRanked = this.deps.sourceMap.route({
+          scope: s.scope,
+          entities: cue.entities,
+          situation: s.situation,
+          sourceIds: all.map((x) => x.id),
+          limit: Math.max(width, limit),
+          ...(boost ? { boost } : {}),
+        });
+        pollable = new Set(preRanked.map((r) => r.sourceId));
+      }
       if (this.config.syncOnDemand) {
         const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(left())]);
         const freshening = this.spans?.open("sync.freshen", cue.span, { async: true });
         const tally = { fresh: 0 };
-        const polled = this.sync.freshen(s.scope, all, signal, tally, s.abort.signal).then((calls) => {
+        const toPoll = pollable ? all.filter((x) => pollable!.has(x.id)) : all;
+        const polled = this.sync.freshen(s.scope, toPoll, signal, tally, s.abort.signal).then((calls) => {
           if (freshening) this.spans!.close(freshening, { calls, fresh: tally.fresh, ...(behind ? { behind } : {}) });
           return calls;
         });
@@ -3029,15 +3093,19 @@ export class ContextPartner {
       local = this.localOf(s, all, behind);
     }
     const routing = this.spans?.open("route", cue.span);
-    const ranked = this.deps.sourceMap.route({
-      scope: s.scope,
-      entities: cue.entities,
-      situation: s.situation,
-      sourceIds: all.map((x) => x.id),
-      limit,
-    });
+    const ranked =
+      preRanked?.slice(0, limit) ??
+      this.deps.sourceMap.route({
+        scope: s.scope,
+        entities: cue.entities,
+        situation: s.situation,
+        sourceIds: all.map((x) => x.id),
+        limit,
+        ...(boost ? { boost } : {}),
+      });
     if (routing) this.spans!.close(routing, { sources: ranked.length, local: local?.size ?? 0, syncCalls });
-    const routed = ranked.map((r) => all.find((x) => x.id === r.sourceId)!).filter(Boolean);
+    const byId = sourcesById(all);
+    const routed = ranked.map((r) => byId.get(r.sourceId)!).filter(Boolean);
     // Only the sources not answered locally are searched live; the local ones answer the same query below.
     const found = local ? routed.filter((x) => !local.has(x.id)) : routed;
     // Serving through the planner only in "serve" mode; in "shadow" the lookup is served as without one.
@@ -3107,7 +3175,11 @@ export class ContextPartner {
     const settled = searching.catch(() => null);
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing = this.config.probes
-      ? this.probe(s, cue, routed, all, listing, probed, settled, shared, { local, deadlineAt }).catch(() => {})
+      ? this.probe(s, cue, routed, all, listing, probed, settled, shared, {
+          local,
+          deadlineAt,
+          ...(boost ? { boost } : {}),
+        }).catch(() => {})
       : null;
     // The same query answered by the synced sources from the local index (D57): no call, nothing to store.
     const answeredHere = local
@@ -3433,6 +3505,8 @@ export class ContextPartner {
     const listers = all.filter((x) => x.listsByTime === true);
     // A person or organisation goes to the sources most likely to hold them, by the source map's own record of which
     // sources mention which names (any source may, not only the lookup's): three per name, not every source.
+    const byId = sourcesById(all);
+    const allIds = all.map((x) => x.id);
     const routeFor = (name: string, limit = c.probePeopleSources) =>
       opts.offline
         ? all
@@ -3441,10 +3515,11 @@ export class ContextPartner {
               scope: s.scope,
               entities: [name],
               situation: s.situation,
-              sourceIds: all.map((x) => x.id),
+              sourceIds: allIds,
               limit,
+              ...(opts.boost ? { boost: opts.boost } : {}),
             })
-            .map((r) => all.find((x) => x.id === r.sourceId)!)
+            .map((r) => byId.get(r.sourceId)!)
             .filter(Boolean);
     const people = off.has("people") ? [] : cue.entities.slice(0, 2);
     // `probeTopicAlone`: the topic only for a request that names no one (with people, their probes find what the topic
@@ -3706,7 +3781,25 @@ export class ContextPartner {
    */
   private doubted(s: Session, item: ContextItem): boolean {
     const mark = this.deps.cache.readMark(s.scope, item.id);
-    return mark !== undefined && this.sync?.signalledSince(s.scope, item.sourceId, mark) === true;
+    if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark) !== true) return false;
+    // A re-read since that signal could not tell (a null that proves nothing): another says the same until it signals.
+    const held = this.unverifiable.get(scopeKey(s.scope))?.get(item.id);
+    if (held === undefined || this.now() - held.at > UNVERIFIABLE_HOLD_MS) return true;
+    return this.sync.signalledSince(s.scope, item.sourceId, held.mark);
+  }
+
+  /** Notes an "unverifiable" re-read of a user's item under the read mark it began with (`unverifiable`). */
+  private noteUnverifiable(scope: Scope, id: string, readMark: number): void {
+    const key = scopeKey(scope);
+    let user = this.unverifiable.get(key);
+    if (user) this.unverifiable.delete(key);
+    else user = new Map();
+    this.unverifiable.set(key, user);
+    user.delete(id);
+    user.set(id, { mark: readMark, at: this.now() });
+    while (user.size > MAX_UNVERIFIABLE) user.delete(user.keys().next().value as string);
+    while (this.unverifiable.size > MAX_UNVERIFIABLE_USERS)
+      this.unverifiable.delete(this.unverifiable.keys().next().value as string);
   }
 
   /**
@@ -3849,7 +3942,10 @@ export class ContextPartner {
         }
         // A null from a source whose null does not mean gone (an MCP tool) says nothing, and says it every time: like
         // a source with no fetch, its items are cited as held (D126). A plain error is worth one more read.
-        return got.why === "null" ? "unverifiable" : got.why === "error" ? "flaked" : "failed";
+        // A null whose reply lacked the record says the same next time: held (D298). An error result may pass: not.
+        if (got.why === "null" && !s.closed) this.noteUnverifiable(s.scope, item.id, readMark);
+        if (got.why === "null" || got.why === "error-result") return "unverifiable";
+        return got.why === "error" ? "flaked" : "failed";
       }
       if (got.status === "gone") {
         this.freshness.gone++;
@@ -4073,12 +4169,39 @@ export class ContextPartner {
     );
   }
 
+  /**
+   * `routeLocalHits` (D265): for each source, log2(1 + how many of the request's best matches in the user's own index
+   * it holds), from one search of the cache (no call); undefined when the user has nothing cached or nothing matches.
+   */
+  private localRouteHits(s: Session, cue: Cue): Map<string, number> | undefined {
+    const cache = this.deps.cache;
+    const vocab = cache.peekVocab(s.scope);
+    if (!vocab) return undefined;
+    const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
+    const query: number[] = [];
+    for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
+    if (query.length === 0) return undefined;
+    const counts = new Map<string, number>();
+    for (const h of cache.search(s.scope, query, query.length, LOCAL_ROUTE_HITS, this.now())) {
+      counts.set(h.item.sourceId, (counts.get(h.item.sourceId) ?? 0) + 1);
+    }
+    if (counts.size === 0) return undefined;
+    for (const [id, n] of counts) counts.set(id, Math.log2(1 + n));
+    return counts;
+  }
+
   /** The sources whose synced copy is current (`sync`, D57), which answer from the local index; null when none. */
   private localOf(s: Session, all: readonly Source[], behind = false): Set<string> | null {
     if (!this.sync) return null;
     const now = this.now();
-    // `behind`: a warm copy answers while its poll runs (`syncPollBehind`), never one still in its backfill.
-    const ok = (id: string) => this.sync!.current(s.scope, id, now) || (behind && this.sync!.isWarm(s.scope, id));
+    // `behind`: a warm copy answers while its poll runs (`syncPollBehind`), never one still in its backfill; so does a
+    // warm copy past `syncPollWidth` that the lookup did not poll (D263). An ask never passes `behind`: a stale copy
+    // it did not poll is searched live (D127), within the probes' call budget.
+    // With `syncLocalComplete`, only a copy that holds the whole source answers for it (D264): one the user's cap cut
+    // is searched live, or a lookup would miss what is older than the cut.
+    const whole = (id: string) => !this.config.syncLocalComplete || this.sync!.complete(s.scope, id);
+    const ok = (id: string) =>
+      whole(id) && (this.sync!.current(s.scope, id, now) || (behind && this.sync!.isWarm(s.scope, id)));
     const local = new Set(all.filter((x) => ok(x.id)).map((x) => x.id));
     return local.size > 0 ? local : null;
   }
@@ -5172,6 +5295,11 @@ const MIN_OWN_READ_MS = 250;
 const RETRIED: ReadonlySet<CheckOutcome> = new Set<CheckOutcome>(["flaked", "skipped"]);
 const STRICT_RETRY_LANES = 2;
 const CHECK_REUSE_MS = 30_000;
+/** `unverifiable`: items held per user, and users held (least recently noted dropped first). */
+const MAX_UNVERIFIABLE = 512;
+const MAX_UNVERIFIABLE_USERS = 4_096;
+/** `unverifiable`: how long a held null stands at most, signal or not (a reply lacking the record may be transient). */
+const UNVERIFIABLE_HOLD_MS = 10 * 60_000;
 /** How long an item its source said is gone is kept from being stored again (the fan-out's stale-result window). */
 const GONE_HOLD_MS = 10 * 60_000;
 /** A lookup with less of its deadline left than this sends no live search (D140): no call could answer in time. */
@@ -5191,4 +5319,17 @@ function localDay(at: number, offsetMin: number): string {
 function bulkMail(item: ContextItem): boolean {
   const category = item.meta?.category;
   return (category !== undefined && BULK_CATEGORY.test(category)) || BULK_TITLE.test(item.title);
+}
+
+/** `routeLocalHits`: the user's best local matches for a request that routing counts per source (D265). */
+const LOCAL_ROUTE_HITS = 40;
+
+/**
+ * A user's sources by id, the first of any repeated id (as `Array.find` gave): a lookup maps routed ids back to sources
+ * through it, which was a scan of every source per routed one (quadratic for a user with 1,000 connectors, D261).
+ */
+function sourcesById(all: readonly Source[]): Map<string, Source> {
+  const byId = new Map<string, Source>();
+  for (const x of all) if (!byId.has(x.id)) byId.set(x.id, x);
+  return byId;
 }

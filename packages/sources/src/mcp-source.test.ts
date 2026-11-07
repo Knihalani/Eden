@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { SourceFanout } from "./guarded";
 import { ArgumentMappingError, McpSource, ReadOnlyViolation, structureOf } from "./mcp-source";
+import { FetchErrorResult } from "./source";
 import { StaticSource } from "./static-source";
 
 /** A connector-like MCP server: one read tool, one write tool. */
@@ -175,10 +176,11 @@ describe("McpSource fetch", () => {
     await s.close();
   });
 
-  test("a record the server no longer has, an Eden content-hash ref, or no fetch tool: null", async () => {
+  test("a record the server no longer has (an error result), an Eden content-hash ref, or no fetch tool", async () => {
     const { server, calls } = notesServer();
     const s = make(server, { name: "get_note" });
-    expect(await s.fetch("gone", scope, AbortSignal.timeout(2_000))).toBeNull();
+    // This server says "not found" with `isError`: thrown, so the engine never holds it as the item's state (D298).
+    await expect(s.fetch("gone", scope, AbortSignal.timeout(2_000))).rejects.toBeInstanceOf(FetchErrorResult);
     expect(await s.fetch("eden-h-0123456789abcdef", scope, AbortSignal.timeout(2_000))).toBeNull();
     expect(calls).toEqual([{ note_id: "gone" }]); // The hash ref never reached the server.
     await s.close();
@@ -221,13 +223,22 @@ describe("McpSource fetch", () => {
     await s.close();
   });
 
-  test("an error result is null even when it carries the asked-for row", async () => {
+  test("an error result is thrown even when it carries the asked-for row, never taken as the record", async () => {
     const reply = (): Reply => ({
       ...text(JSON.stringify({ id: "n1", title: "Error", text: "quota exceeded" })),
       isError: true,
     });
     const s = make(notesServer(true, reply).server, { name: "get_note" });
-    expect(await s.fetch("n1", scope, AbortSignal.timeout(2_000))).toBeNull();
+    await expect(s.fetch("n1", scope, AbortSignal.timeout(2_000))).rejects.toBeInstanceOf(FetchErrorResult);
+    await s.close();
+  });
+
+  test("through the fan-out an error result is answered, not a source failure, and says nothing: error-result", async () => {
+    const reply = (): Reply => ({ ...text("quota exceeded"), isError: true });
+    const s = make(notesServer(true, reply).server, { name: "get_note" });
+    const fanout = new SourceFanout({ sanitize: (items) => items });
+    const got = await fanout.fetchChecked(s, scope, "n1", { timeoutMs: 2_000 });
+    expect(got).toEqual({ status: "failed", why: "error-result" });
     await s.close();
   });
 

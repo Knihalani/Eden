@@ -186,6 +186,18 @@ while no page reaches what was already synced, the next tops the items asked up 
 call (an on-demand poll: one to three calls, against one or two). Backfill and sweeps keep `syncPageSize`. `SyncStats`
 counts the items listed (`demandItems`, `backgroundItems`) beside the calls.
 
+**Many sources** (A1, D261–D265, all in the default; docs/research/a1-scale.md). A user's newest `syncMaxItems` are
+kept across all their sources, so with many busy connectors a source's synced copy can be cut to its newest few items.
+Such a copy (`Sync.complete` false: its backfill stopped at the user's cut before its listing ended, or a trim dropped
+some of its items) does not answer for its source (`syncLocalComplete`, D264): the source is searched live like an
+unsynced one, so what is older than the cut is still found. A lookup polls at most its `syncPollWidth` (8) best-routed
+stale sources (D263); a warm source past them answers from its copy as it stands, as under `syncPollBehind`. Routing
+(`SourceMap.route`) adds, per source, log2(1 + its items among the request's 40 best matches in the user's own index)
+(`routeLocalHits`, D265), so a request that names no one still reaches the sources whose items share its words. The
+backfill reads 8 sources' pages at once, newest unread first (`syncBackfillLanes`, D262); first pages sized to a
+source's share of the cap were measured and deleted (D262). With no more sources than the lookup searches, and none cut,
+none of this changes anything.
+
 **Change notifications** (D125, `syncPush`; `Source.notifies`, `ContextPartner.sourceChanged` and `sourceItems`,
 `POST /v1/sources/changed` and `/v1/sources/items`, the client's `sourceChanged`/`sourceItems`): a source whose
 integrator forwards the provider's change notifications is not polled on its learned change rate. A notification marks
@@ -212,7 +224,10 @@ dropped from the cache and left out; one that cannot be checked is delivered as 
 (D211): there a re-read that failed with a plain error, or that our own guard skipped in ordinary use (a busy permit,
 the rate limit's normal spend), is tried once more, and a copy still not confirmed is left out and named in the answer;
 a re-read refused by an open breaker or by a rate limit the connector's 429 pushed back is not tried again and is left
-out at once (D232). A source with no fetch tool, or whose null proves nothing, is still cited as held. With no signal nothing is
+out at once (D232). A source with no fetch tool, or whose null proves nothing, is still cited as held; such a null
+("unverifiable", a reply that lacked the record) stands for the user until the source signals again or 10 minutes
+pass (`unverifiable`, D298), so later deliveries and other sessions do not fetch it again for the same answer; an MCP
+error result (`FetchErrorResult`, "error-result") is unverifiable too but never held. With no signal nothing is
 re-read: a copy's age alone is no doubt (re-reading by age was measured live and deleted, D126), and a silent source's
 changes arrive through polls and the daily sweep. The fast path, which may not call a source, sends a doubted item to
 the slow path. Deletion notifications (`ContextPartner.sourceRemoved`, `POST /v1/sources/removed`) drop items at once;
