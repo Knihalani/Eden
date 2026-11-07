@@ -65,7 +65,7 @@ import {
   type Frame,
   type Verdict,
 } from "./conflict";
-import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
+import { cardKey, cardTag, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
 import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
 import {
   READER_MAX_ITEMS,
@@ -122,7 +122,7 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import { CANDIDATES_LEAD, citationsOf, renderPacket, shownText } from "./render";
+import { CANDIDATES_LEAD, CARD_LEAD, CARD_TAG, citationsOf, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -1511,7 +1511,15 @@ export class ContextPartner {
       const injection =
         checked.length > 0 && !s.closed && still
           ? candidates
-            ? this.deliver(s, checked, "proactive", `candidates:${cue.id}`, cue, undefined, this.candidateFrame())
+            ? this.deliver(
+                s,
+                checked,
+                "proactive",
+                `candidates:${cue.id}`,
+                cue,
+                undefined,
+                this.candidateFrame(candidates.cards),
+              )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
       if (injection && was) this.keepUndo(s, injection, checked, was);
@@ -1846,7 +1854,11 @@ export class ContextPartner {
    * `pushCandidates` of them. A pool with no constraint-like item (`readerGate`'s test, cards included) gives none, as
    * `readerGate` would read none. (Constraint-like items first lost 27 points of hidden facts live: D236.)
    */
-  private candidatesOf(s: Session, cue: Cue, ranked: readonly Scored[]): { items: Scored[] } {
+  private candidatesOf(
+    s: Session,
+    cue: Cue,
+    ranked: readonly Scored[],
+  ): { items: Scored[]; cards: ReadonlyMap<string, Card> } {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
@@ -1856,7 +1868,7 @@ export class ContextPartner {
       seen.add(x.item.id);
       pool.push(x);
     }
-    if (pool.length === 0) return { items: [] };
+    if (pool.length === 0) return { items: [], cards: new Map() };
     const cards =
       this.config.cards && this.deps.cards
         ? this.deps.cards.cardsOf(
@@ -1865,20 +1877,32 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    if (!pool.some((x) => this.constraintLike(x, cards))) return { items: [] };
-    return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) };
+    if (!pool.some((x) => this.constraintLike(x, cards))) return { items: [], cards };
+    return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates), cards };
   }
 
-  /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
-  private candidateFrame(): PacketFrame {
+  /**
+   * `pushCandidates` (D236): how the candidates' packet is framed and cut. `pushCandidateCards` (D286): each
+   * candidate with a card of a constraint kind is said with it first (`cardTag`), and the lead says what that is.
+   */
+  private candidateFrame(cards?: ReadonlyMap<string, Card>): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
+    const tags = this.config.pushCandidateCards && cards && cards.size > 0 ? cards : null;
     return {
-      lead: CANDIDATES_LEAD,
+      lead: tags ? CANDIDATES_LEAD + CARD_LEAD : CANDIDATES_LEAD,
+      ...(tags
+        ? {
+            note: (item: ContextItem) => {
+              const card = tags.get(item.id);
+              return card ? cardTag(card) : undefined;
+            },
+          }
+        : {}),
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
-      maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
+      maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120) + (tags ? k * CARD_TAG_BYTES : 0)),
     };
   }
 
@@ -4513,6 +4537,7 @@ export class ContextPartner {
     const options: Parameters<typeof renderPacket>[1] = {
       maxBytes: frame?.maxBytes ?? this.config.maxInjectionBytes,
       ...(frame ? { lead: frame.lead } : {}),
+      ...(frame?.note ? { note: frame.note, noteTag: CARD_TAG } : {}),
       ...(this.config.compactInjection || frame
         ? {
             focus: focusOf(cue),
@@ -4643,7 +4668,15 @@ interface PacketFrame {
   lead: string;
   itemBytes: number;
   maxBytes: number;
+  /** `pushCandidateCards` (D286): an item's card tag (`cardTag`), said after `CARD_TAG`. */
+  note?: (item: ContextItem) => string | undefined;
 }
+
+/**
+ * `pushCandidateCards` (D286): the room a card tag takes on its line (`CARD_TAG`, the kind, up to three actions, two
+ * dates, a limit, the separator), so a tag does not cut the excerpt it precedes.
+ */
+const CARD_TAG_BYTES = 110;
 
 /** `revisionNotice`: an "updated:" packet's reason prefix, and what each of its items' titles starts with. */
 const UPDATED = "updated:";

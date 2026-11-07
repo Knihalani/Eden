@@ -109,6 +109,42 @@ const MAX_ENTITIES = 6;
 const MAX_ENTITY_CHARS = 60;
 const MAX_STATEMENT_CHARS = 160;
 
+/** `pushCandidateCards` (D286): how `cardTag` says each kind. */
+const KIND_WORDS: Record<Exclude<CardKind, "none">, string> = {
+  freeze: "freeze",
+  deadline: "deadline",
+  limit: "limit",
+  absence: "absence",
+  prohibition: "prohibition",
+  dependency: "needs something first",
+  "status-change": "status change",
+  preference: "preference",
+  "already-done": "already done",
+};
+
+/**
+ * `pushCandidateCards` (D286): a card said in fixed words from its validated fields only (kind, canonical actions,
+ * the span's ISO dates, a limit in one of `parseCards`'s units), never the model's `statement` or `entities`: no
+ * model-written text reaches the agent. Undefined for a `none` card. Each field is checked again here, so a card
+ * built some other way cannot put free text in the packet.
+ */
+export function cardTag(card: Card): string | undefined {
+  if (card.kind === "none" || !(card.kind in KIND_WORDS)) return undefined;
+  const parts = [KIND_WORDS[card.kind]];
+  const actions = card.actions.filter((a) => a in ACTIONS);
+  if (actions.length) parts[0] += ` on ${actions.join(", ")}`;
+  const start = card.start && ISO_DAY.test(card.start) ? card.start : undefined;
+  const end = card.end && ISO_DAY.test(card.end) ? card.end : undefined;
+  if (start && end) parts.push(start === end ? `on ${start}` : `${start} to ${end}`);
+  else if (start) parts.push(`from ${start}`);
+  else if (end) parts.push(`until ${end}`);
+  if (typeof card.limit === "number" && Number.isFinite(card.limit)) {
+    const unit = card.unit && /^[£$€%]$/.test(card.unit) ? card.unit : "";
+    parts.push(unit === "%" ? `at most ${card.limit}%` : `at most ${unit}${card.limit}`);
+  }
+  return parts.join("; ");
+}
+
 /** The key a card is cached under: a hash of the item's redacted title and text (its id is not its content). */
 export function cardKey(item: ContextItem): string {
   return createHash("sha256").update(item.title).update("\n").update(item.text).digest("hex").slice(0, 32);

@@ -17,7 +17,7 @@ export { Ledger } from "./ledger";
 export { inert, oneLine, renderAnswer, renderPacket } from "./render";
 export { safeBlock, safeLine } from "./line";
 export { classifySituation, type Situation } from "./situation";
-export { contentTerms, distinctTermIds, extractEntities, isChatter, termIds } from "./text";
+export { contentTerms, distinctTermIds, extractEntities, extractTypedEntities, isChatter, termIds } from "./text";
 export {
   cpuNow,
   SPAN_NAMES,
@@ -93,3 +93,4 @@ export {
   type ReaderStats,
   type ReaderVerdict,
 } from "./reader";
+export { mayConstrain } from "./conflict";

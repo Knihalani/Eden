@@ -464,6 +464,15 @@ export interface EngineConfig {
    * first (`CANDIDATES_LEAD`). 0 is the reader's push and asks (D95–D99).
    */
   pushCandidates: number;
+  /**
+   * Trial (D286, A6 moonshots, docs/research/a6-moonshots.md; owner: repo owner, ends 2026-12-07): with
+   * `pushCandidates` and `cards`, each candidate that holds a card of a constraint kind is said with that card first,
+   * from its validated fields only (`cardTag`: the kind, the canonical actions, the span's ISO dates, a limit and its
+   * unit; never the model's statement or entities), after `CARD_TAG`, and the lead adds one fixed sentence saying what
+   * the tag is. A precomputed bearing: the background card call's reading of the item, shown where the paid reader's
+   * per-request bearing (D95) used to be, with no request-time call. Off: the candidates are said as D237 ships them.
+   */
+  pushCandidateCards: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -581,4 +590,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
+  pushCandidateCards: false,
 };
