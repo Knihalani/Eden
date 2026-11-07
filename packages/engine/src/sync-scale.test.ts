@@ -1,6 +1,6 @@
 /**
- * The A1 scale trials on the background sync (docs/research/a1-scale.md): a user with many sources. `syncBackfillShare`
- * and `syncBackfillLanes` (D262) change how the backfill reads, not what it keeps; `syncPollWidth` (D263) bounds a
+ * The A1 scale switches on the background sync (docs/research/a1-scale.md): a user with many sources.
+ * `syncBackfillLanes` (D262) changes how the backfill reads, not what it keeps; `syncPollWidth` (D263) bounds a
  * lookup's on-demand poll; `syncLocalComplete` (D264) searches live a source whose synced copy the user's cap cut.
  */
 import { describe, expect, test } from "bun:test";
@@ -14,6 +14,13 @@ import { ContextPartner } from "./partner";
 const HOUR = 3_600_000;
 const T0 = Date.UTC(2026, 9, 20, 9);
 const scope = { tenantId: "t1", userId: "u1" };
+/** Every A1 switch off (the pre-D262 sync); each test turns on what it measures. */
+const OFF = {
+  syncPollWidth: 0,
+  syncBackfillLanes: 1,
+  syncLocalComplete: false,
+  routeLocalHits: false,
+};
 
 /** A recent-first listing source that counts its calls and how many are in flight at once. */
 class ListSource implements Source {
@@ -76,7 +83,7 @@ function setup(sources: Source[], config: Record<string, unknown>) {
     budget: new Budget(),
     model: null,
     now: () => clock,
-    config: { sync: true, syncPageSize: 10, syncPollPageSize: 2, syncCallsPerMin: 6_000, ...config },
+    config: { sync: true, syncPageSize: 10, syncPollPageSize: 2, syncCallsPerMin: 6_000, ...OFF, ...config },
   });
   return { partner, cache, advance: (ms: number) => (clock += ms), now: () => clock };
 }
@@ -92,43 +99,27 @@ function held(cache: ItemCache, sources: ListSource[]): string[] {
   return sources.flatMap((s) => s.items.filter((i) => cache.isSynced(scope, i.id)).map((i) => i.id)).sort();
 }
 
-describe("syncBackfillShare and syncBackfillLanes (D262)", () => {
-  test("a share-sized first page and parallel lanes keep the same newest items, from fewer listed", async () => {
+describe("syncBackfillLanes (D262)", () => {
+  test("8 lanes read several sources' pages at once and keep the same newest items, from the same calls", async () => {
     const run = async (config: Record<string, unknown>) => {
       ListSource.maxInFlight = 0;
       const sources = many(40, 12);
       const { partner, cache } = setup(sources, { syncMaxItems: 30, ...config });
       await warm(partner);
-      const listed = sources.reduce((n, s) => n + s.limits.reduce((a, b) => a + b, 0), 0);
       return {
         held: held(cache, sources),
-        first: sources.map((s) => s.limits[0]),
-        listed,
+        calls: sources.reduce((n, s) => n + s.lists, 0),
         lanes: ListSource.maxInFlight,
       };
     };
-    const off = await run({});
-    const on = await run({ syncBackfillShare: true, syncBackfillLanes: 8 });
-    // The newest 30 overall: sources 0..39 hold item 0 (0..39 h old) and nothing else is newer than 39 h... the cut.
-    expect(off.held).toHaveLength(30);
-    expect(on.held).toEqual(off.held);
-    // Off, every first page is a whole one; on, each asks its share: ceil(30 / 40) = 1, at least syncPollPageSize 2.
-    expect(off.first.every((x) => x === 10)).toBe(true);
-    expect(on.first.every((x) => x === 2)).toBe(true);
-    expect(on.listed).toBeLessThan(off.listed / 2);
-    expect(off.lanes).toBe(1);
-    expect(on.lanes).toBeGreaterThan(1);
-    expect(on.lanes).toBeLessThanOrEqual(8);
-  });
-
-  test("with few sources the share is a whole page: nothing changes", async () => {
-    const run = async (config: Record<string, unknown>) => {
-      const sources = many(3, 12);
-      const { partner, cache } = setup(sources, { syncMaxItems: 100, ...config });
-      await warm(partner);
-      return { held: held(cache, sources), limits: sources.map((s) => s.limits) };
-    };
-    expect(await run({ syncBackfillShare: true })).toEqual(await run({}));
+    const one = await run({});
+    const eight = await run({ syncBackfillLanes: 8 });
+    expect(one.held).toHaveLength(30);
+    expect(eight.held).toEqual(one.held);
+    expect(eight.calls).toBe(one.calls);
+    expect(one.lanes).toBe(1);
+    expect(eight.lanes).toBeGreaterThan(1);
+    expect(eight.lanes).toBeLessThanOrEqual(8);
   });
 });
 

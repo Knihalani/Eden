@@ -34,15 +34,9 @@ export interface SyncOptions {
   /** Items asked per listing page. */
   pageSize: number;
   /**
-   * `syncBackfillShare` (trial, D262): a source's first backfill page asks for its share of `maxItems` (`maxItems`
-   * over the user's listable sources, at least `pollPageSize` or 1, at most `pageSize`) rather than a whole page.
-   * The backfill keeps the newest `maxItems` across sources, so a user with 1,000 sources listed 100 items from each to
-   * keep 3; later pages are whole, so the merge reads as far back as before. Unset: every page is `pageSize`.
-   */
-  backfillShare?: boolean;
-  /**
-   * `syncBackfillLanes` (trial, D262): the backfill reads this many sources' next pages at once (the newest unread
-   * first, as one lane does), so a user's cold start is not one listing call after another. 1 or unset: one at a time.
+   * `syncBackfillLanes` (D262, 8 in the default): the backfill reads this many sources' next pages at once (the
+   * newest unread first, as one lane does), so a user's cold start is not one listing call after another. 1 or unset:
+   * one at a time.
    */
   backfillLanes?: number;
   /**
@@ -539,7 +533,7 @@ export class SyncManager {
           next.noticesBackfill = next.notices;
           await this.run(next, async () => {
             const readMark = this.marks;
-            page = await this.list("backfill", source, u.scope, next.cursor, this.backfillPage(u, next), {
+            page = await this.list("backfill", source, u.scope, next.cursor, this.o.pageSize, {
               timeoutMs: this.o.timeoutMs,
               reserve: SERVING_HEADROOM,
             });
@@ -574,17 +568,6 @@ export class SyncManager {
       }
       if (stop) return;
     }
-  }
-
-  /**
-   * A backfill page's size: `pageSize`, or with `backfillShare` a source's first page sized to its share of the
-   * user's `maxItems` (D262).
-   */
-  private backfillPage(u: UserSync, s: SourceSync): number {
-    const page = this.o.pageSize;
-    if (!this.o.backfillShare || s.cursor !== undefined || s.frontier !== Infinity) return page;
-    const share = Math.ceil(this.o.maxItems / Math.max(1, u.sources.size));
-    return Math.min(page, Math.max(this.o.pollPageSize || 1, share));
   }
 
   private total(u: UserSync): number {

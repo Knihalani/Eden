@@ -237,6 +237,13 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   1.2 s to 0.1-0.2 s, but one process's capacity inside a 100 ms p99 rose only 1.46x there and fell 3-15% on
   router-sim realistic, for 1.19x the CPU per item. The code is in commit b217ae1d (`ingest.ts`, `prepared.ts`,
   `ingest.test.ts`); building it again needs a decision that accepts those numbers.
+- **Many sources (D261–D265, docs/research/a1-scale.md).** The lab's worlds have five sources and fit the sync cap, so
+  the funnel cannot see a user with hundreds: screen such changes with `-- --noise-sources 995 --limit 16` (and
+  `--jobs 2`: the pre-D263 default needed ~4.5 GB a process) and `bench/many-sources.bench.ts`. A synced copy the
+  user's cap cut answers nothing for its source (`Sync.complete`, `syncLocalComplete`): any new path that answers from
+  the local index must go through `localOf`, or it misses what is older than the cut. Routing over many sources needs
+  evidence (mentions, `routeLocalHits`): with a flat prior it is a lottery. Per-(user, source) state is multiplied by
+  the source count: keep it lazy (the fan-out's histograms were 8 KB a pair before D261).
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

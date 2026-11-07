@@ -600,7 +600,6 @@ export class ContextPartner {
           {
             maxItems: c.syncMaxItems,
             pageSize: c.syncPageSize,
-            backfillShare: c.syncBackfillShare,
             backfillLanes: c.syncBackfillLanes,
             pollPageSize: c.syncPollPageSize,
             staleChance: c.syncStaleChance,
@@ -4021,8 +4020,8 @@ export class ContextPartner {
     const now = this.now();
     // `behind`: a warm copy answers while its poll runs (`syncPollBehind`), never one still in its backfill. With
     // `syncPollWidth`, so does a warm copy the lookup did not poll (past its width, D263).
-    // With `syncLocalComplete`, only a copy that holds the whole source answers for it (D264): one the user's cap cut is
-    // searched live, or a lookup would miss what is older than the cut.
+    // With `syncLocalComplete`, only a copy that holds the whole source answers for it (D264): one the user's cap cut
+    // is searched live, or a lookup would miss what is older than the cut.
     const whole = (id: string) => !this.config.syncLocalComplete || this.sync!.complete(s.scope, id);
     const ok = (id: string) =>
       whole(id) &&
