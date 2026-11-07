@@ -260,6 +260,11 @@ CRM deal stage, a missing budget): none names a planted fact. No control answer 
 Both arms are cheaper and faster today; the agent alone gains more. Eden's long-horizon path time fell from 420 ms
 to 11 ms (consistent with removing the harness re-reads A3 named, D272; not separately measured here). Seeds 41–42 here against 41–44 there: heldout17's intervals are wider.
 
+## 8. Hermes
+
+_Placeholder: the coordinator's Hermes run (arms `hermes`, `hermes-eden`, `hermes+eden`; seeds 41–42; payload; at
+`ed93f3365`) fills this section. Everything above is Pi only._
+
 ## 7. Reproduce
 
 ```bash
