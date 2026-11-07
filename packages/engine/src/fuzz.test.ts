@@ -40,8 +40,6 @@ const CONFIGS: Record<string, WorldOptions> = {
   // What ships, with tenant t1 behind the proxy's shadow mode (D282): its events and takes say `shadow`, so nothing
   // they return may be learned from; tenant t0 is live beside it.
   "default-shadow": { config: DEFAULT_CONFIG, shadowTenant: "t1", notTwice: true },
-  // The `pushReshow` trial (D340) on, with failures: re-handed at a later request, never twice in one.
-  "reshow-flaky": { config: { ...DEFAULT_CONFIG, pushReshow: true }, failRate: 0.1, notTwice: true },
   // A10 (D305): every item carries an injection payload; the inert invariant runs. With the trials of D306 and D307
   // on, no payload's instruction words reach a handout.
   "default-hostile": { config: DEFAULT_CONFIG, hostile: true, notTwice: true },

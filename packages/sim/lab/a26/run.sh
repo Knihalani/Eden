@@ -4,7 +4,7 @@
 L=$1; PUSH=$2; shift 2
 env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite train --conditions eden,eden+pushReshow \
   --config default --tenant-prompt \
-  --cards .local/a26/cards-all.jsonl --cards-out .local/a26/runs/$L.cards.jsonl \
+  --cards ${CARDS:-.local/a26/cards-all.jsonl} --cards-out .local/a26/runs/$L.cards.jsonl \
   --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 \
   --source-profile packages/sim/lab/before-after/market-profiles/direct.json --push $PUSH \
   --spend-ledger .local/a26/ledger.jsonl --spend-cap 1.2 --spend-headroom 0.1 --run-label $L \

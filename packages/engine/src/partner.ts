@@ -267,8 +267,6 @@ interface Session {
    * the latest: the agent's own events move `turn` within one request, a new user message moves this.
    */
   requests: number;
-  /** `pushReshow` (D340): by item, the request (`requests`) it was last handed out in; at most `MAX_HANDED_IN`. */
-  handedIn: Map<string, number>;
   /** The session's last `EXPLAIN_TRACES` traces, oldest first (`explain`, D277). */
   traces: Trace[];
   lastActive: number;
@@ -340,8 +338,6 @@ interface Session {
   planSent?: Set<string>;
 }
 
-/** Items whose hand-out request a session keeps (`pushReshow`, D340): far above what a day's packets cite. */
-const MAX_HANDED_IN = 512;
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
 
@@ -1700,11 +1696,7 @@ export class ContextPartner {
         (x) =>
           withdrawn.has(x.item.id) ||
           s.ledger.isFresh(x.item.id, s.turn) ||
-          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)) ||
-          (candidates !== null &&
-            this.config.pushReshow &&
-            candidates.like.has(x.item.id) &&
-            this.handedBefore(s, x.item.id)),
+          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
       );
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
@@ -2095,7 +2087,7 @@ export class ContextPartner {
     s: Session,
     cue: Cue,
     ranked: readonly Scored[],
-  ): { items: Scored[]; pool: Scored[]; like: Set<string>; unsettled?: Anchors } {
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
@@ -2105,7 +2097,7 @@ export class ContextPartner {
       seen.add(x.item.id);
       pool.push(x);
     }
-    if (pool.length === 0) return { items: [], pool, like: new Set() };
+    if (pool.length === 0) return { items: [], pool };
     const cards =
       this.config.cards && this.deps.cards
         ? this.deps.cards.cardsOf(
@@ -2130,9 +2122,7 @@ export class ContextPartner {
       handed: items.map((x) => x.item.id),
       ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
     });
-    // `pushReshow` (D340) hands again only what passes the constraint test: plain context stays in the transcript.
-    const likeIds = new Set(pool.filter((_, k) => like[k]).map((x) => x.item.id));
-    return { items, pool, like: likeIds, ...(unsettled ? { unsettled } : {}) };
+    return { items, pool, ...(unsettled ? { unsettled } : {}) };
   }
 
   /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */
@@ -2257,19 +2247,6 @@ export class ContextPartner {
         itemIds: packet.citations.map((c) => c.itemId),
       });
     }
-  }
-
-  /**
-   * `pushReshow` (D340): the item was handed out as a push candidate in this session for an earlier request
-   * (`handedIn`: the agent took it before the latest user message), so this request's candidates may hand it again if
-   * it passes the constraint test (the caller checks). Never one handed for this request: a packet of the last request
-   * taken with this one's observe counts as this request's.
-   */
-  private handedBefore(s: Session, id: string): boolean {
-    // Handed out (taken by the agent) for an earlier request: a packet of the last request taken with this one's
-    // observe counts as this request's.
-    const handed = s.handedIn.get(id);
-    return handed !== undefined && handed < s.requests;
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
@@ -2531,7 +2508,6 @@ export class ContextPartner {
       key,
       turn: 0,
       requests: 0,
-      handedIn: new Map(),
       traces: [],
       lastActive: now,
       window: [],
@@ -2617,15 +2593,6 @@ export class ContextPartner {
     if (built?.copies) {
       this.watchCopies(s, built.copies);
       built.copies = undefined;
-    }
-    // `pushReshow` (D340): the request each push candidate was last handed out in (what the agent took, not what was
-    // queued). Only candidates' packets: an item that reached the agent by an ask or another path is not re-shown.
-    if (this.config.pushReshow && injection.reason.startsWith("candidates:")) {
-      for (const c of injection.citations) {
-        s.handedIn.delete(c.itemId);
-        s.handedIn.set(c.itemId, s.requests);
-      }
-      while (s.handedIn.size > MAX_HANDED_IN) s.handedIn.delete(s.handedIn.keys().next().value!);
     }
     if (!built || s.outstanding.has(injection.id)) return;
     if (this.recordedOf(s.scope)?.has(injection.id)) return;

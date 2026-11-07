@@ -291,11 +291,9 @@ Since D342 (`revisionDiff`, part `freshness`) an update also names the times and
 item that the new version no longer has ("…; this version replaces it; no longer: 09:30"): the ledger keeps every
 handed version's times (`Ledger.seenTimes`, `timesOf`, no model).
 
-**Re-showing a candidate across requests** (D340, `pushReshow`, a trial, off): the not-twice ledger (D13) keeps an
-item back within its cooldown; with the trial on, a push candidate the agent took for an *earlier request* of the
-session (`Session.handedIn`, the request its candidates' packet was handed out in) is handed again when it ranks among
-this request's candidates and passes `readerGate`'s constraint test; never twice within one request. Over a day a constraint-worded item is often pushed first for an unrelated request, where the
-agent was told to ignore it, and the agent rarely went back to it at its own (docs/research/a17-long-quality.md).
+**No re-show across requests** (D340's trial, deleted by D380): the not-twice ledger (D13) keeps a push candidate
+back within its cooldown even when the agent took it for an earlier, unrelated request of the session; a fresh paired
+run did not show re-showing it better (docs/research/a26-reshow.md).
 
 **New items against what the agent already acted on** (D301, `planConflict`, on in the default, part `plans`): each
 session keeps the cues of its last 12 requests the push ran for (the acting requests). Items the sync stores after

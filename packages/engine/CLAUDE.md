@@ -252,12 +252,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   live (−0.6 points, −4.6..+3.4); an ask past held items cost +$0.021/1k for no gain. Each push pass reports its pool,
   constraint test and handed ids to the lab hook `onPushPool` (ids and flags only, D269), not to `onReader`, whose
   consumers count reader readings.
-- **Trial: a candidate re-shown across requests (D340, `pushReshow`, off, ends 2026-12-07).** "Earlier" is the
-  request the agent *took* the item in, in a candidates' packet (`Session.handedIn`, set in `handOut`), never the
-  request it was queued for: judged by the ledger's delivery turn, a packet of the last request taken with the next
-  one's observe was handed twice in one take (found by `fuzz.test.ts`; its `reshow-flaky` variant runs the trial, and
-  its not-twice invariant allows a re-hand only at a later request). Only constraint-like candidates (`candidatesOf`'s
-  `like`). One request a session (the funnel, the eval's single turns) never exercises it; measure on `pi-ab --days`.
+- **No re-show of a candidate across requests (D340 deleted by D380).** A candidate the agent took for an earlier
+  request stays behind the not-twice ledger (D13) at its own request: a fresh paired run did not show the re-show
+  better (docs/research/a26-reshow.md). Measure any revival on `pi-ab --days`, never the funnel (one request a session).
 - **Updates name the times they drop (D342, `revisionDiff`).** `buildUpdate`'s title reads `Ledger.seenTimes`; times
   are noted only when a copy is handed out (`watchCopies`, from `copiesOf`'s `times`), never when an update is queued
   (one superseded in the queue was never shown). `timesOf` compares one written form ("HH:MM", "<day> <mon>"), so a
