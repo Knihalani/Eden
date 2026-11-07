@@ -70,6 +70,7 @@ const cli = flags(
         "deletes",
         "push",
         "lost-notices",
+        "fetch-gone",
         "refresh-after-hours",
         "tool-rate",
         "judge",
@@ -173,10 +174,12 @@ const opts: QualityOptions = {
   noiseScale: Number(arg("noise", "1")),
   updates: Number(arg("updates", "0")),
   deletes: Number(arg("deletes", "0")),
+  // `--fetch-gone false` (A18): sources answer a deleted ref with a null that proves nothing, as an MCP tool does.
+  fetchGone: arg("fetch-gone", "true") !== "false",
   push: (() => {
     const m = arg("push", "none");
-    if (m !== "none" && m !== "signals" && m !== "payload") {
-      console.error("quality-cli: --push must be none, signals or payload");
+    if (m !== "none" && m !== "signals" && m !== "payload" && m !== "refs") {
+      console.error("quality-cli: --push must be none, signals, payload or refs");
       process.exit(2);
     }
     return m;

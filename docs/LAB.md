@@ -897,6 +897,8 @@ compares two arm shapes. The report pairs `hermes-eden` with `hermes` and with `
   before each day's recap is sent as the moved items (`sourceItems`) under `payload` and as a bare signal under
   `signals` (D272; before it a bare signal in every mode, which put ~650 ms of re-reads on Eden's path in every long
   payload run; `--recap-notice signal` reproduces it, A8).
+- `--push refs` (D347): the notices `signals` sends, each naming one ref (the source's newest item; its content is
+  unchanged), sent as `sourceRefs`; with `--days`, the recap's moved items named by ref.
 - **Connector calls over a user's days at $0 (A8, `days-calls.ts`):** the `--days` user through Eden alone (no agent,
   no model, time scale 0), every connector call counted by source, operation and phase (request, notice, the sync's
   tick, the one-time backfill): `bun packages/sim/src/lab/days-calls.ts --seeds 41,42 --days 8 --push payload --ask
@@ -904,6 +906,12 @@ compares two arm shapes. The report pairs `hermes-eden` with `hermes` and with `
   nights put eight days in about 36 hours of Eden's clock (the daily sweep runs about once a user); `--night-h 20`
   gives 24-hour days for per-user-day figures (docs/research/a8-connector-calls.md).
 - The results header records both (`sourceProfile`, `push`).
+- **The same at $0 (A18):** `bun run funnel` takes them after `--`, with `--time 1`: `-- --time 1 --source-profile
+  F --push signals|payload|refs` (and `--fetch-gone false`: sources whose fetch null proves nothing, as an MCP tool's).
+  Add `--timeline T.jsonl` and `--json F.json` (`--jobs 1`) and read where the agent's wait went with
+  `bun packages/sim/src/lab/latency-report.ts T.jsonl --funnel F.json`: the request (observe with its push) and the
+  ask, p50/p90/p99, and each piece's share (`verify` is the re-reads). train1–6, seed 41, `--limit 16`: about 2–5 min a
+  profile (`.local/a18/run.sh` in docs/research/a18-latency.md).
 
 `market.py` (in `packages/sim/lab/before-after/`) prices a run's `tools` and `eden` arms per agent model and
 connector plan; `--reuse-arms` copies the `tools` arm of an earlier run on the same profile, so only Eden is paid for.
@@ -916,12 +924,14 @@ The quality runner (`quality-cli.ts`) changes the world during a run and counts 
   copy still showing the old time is `updates.staleDelivered` of `updatedDelivered`.
 - `--deletes RATE`: fact-stating items are deleted at the source before a later session (`planDeletes`); a packet
   item or an ask citation of one is `deletes.deletedDelivered` / `deletedCited`.
-- `--push none|signals|payload`: how changes reach Eden (signals call `sourceChanged`; payload calls `sourceItems` and
-  `sourceRemoved`). `--lost-notices P` (A8) loses each source's notice for a change with chance P (its own random
-  stream; `lostNotices` counts them), for what a backstop such as the sweep must catch (D297).
-  `--null-proves-nothing` (A8) makes the sim sources fetch as MCP connectors do: a null re-read does not prove the
-  item gone (`fetchReportsGone` false, D298). `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed,
-  changed, gone, failed, calls).
+- `--push none|signals|payload|refs`: how changes reach Eden (signals call `sourceChanged`; payload calls
+  `sourceItems` and `sourceRemoved`; refs (D347) calls `sourceRefs` with the changed items' refs and `sourceRemoved`).
+  `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed, changed, gone, failed, calls) and the ref reads
+  (`refsRead`, `refsFallback`). `--fetch-gone false` (A18): every source's fetch null proves nothing, as an MCP
+  connector's (a deleted item's re-read is "unverifiable").
+  `--lost-notices P` (A8) loses each source's notice for a change with chance P (its own random stream;
+  `lostNotices` counts them), for what a backstop such as the sweep must catch (D297). `--null-proves-nothing` (A8)
+  is the same as `--fetch-gone false`.
 
 D126's matrix: `bun packages/sim/src/quality-cli.ts --users 8 --sessions 20 --updates 0.6 --deletes 0.05
 [--push signals|payload] [--config '{"verifyDelivery":false}'] [--jobs 4]`, $0 (`verifyDelivery` is in the

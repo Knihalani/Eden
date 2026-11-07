@@ -6,6 +6,7 @@ export {
   checkEvent,
   checkAsk,
   checkSourceChanged,
+  checkSourceRefs,
   checkSourceItems,
   checkSourceRemoved,
   isId,

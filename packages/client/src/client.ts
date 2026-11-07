@@ -160,6 +160,12 @@ export interface SourceChange {
   items?: PushedItem[];
   /** Refs the source no longer has (deleted, recalled). */
   removed?: string[];
+  /**
+   * Refs the source changed or added, when the notification names them but carries no content (a Gmail history's
+   * message ids, a Graph or HubSpot webhook's resource id, a Drive changes list): Eden reads them itself, and puts
+   * nothing else of the source in doubt (D347). Prefer `items` when the notice has them.
+   */
+  refs?: string[];
 }
 
 /** The observe wait on a sent user message when `defaultWaitMs` is unset (D112): the measured default's wait. */
@@ -354,6 +360,10 @@ export class EdenClient {
    *   synced yet, takes the items and stores none (`sourceItems` resolves 0; `sourceNotice` says why). When a part
    *   did not reach it (unreachable, refused, an answer of another shape), the plain signal is sent as well, so Eden
    *   polls the source rather than miss the change, and it resolves false.
+   * - **With the changed refs only (`change.refs`, D347):** for a notice that names what changed but carries no
+   *   content. Eden reads those refs itself in the background and puts nothing else of the source in doubt, so the
+   *   agent's next request waits on no re-read; a ref it cannot read falls back to the signal on the server. A part not
+   *   taken (unreachable, or the source not synced and notifying) sends the plain signal and resolves false.
    * - **Without items (a signal):** with the server's `syncPush`, the source is polled at its next use instead of on a
    *   guess. Resolves false when the partner could not be reached or does not sync that source (`sourceNotice` says
    *   why).
@@ -362,8 +372,15 @@ export class EdenClient {
     // A JS caller can pass anything: what is not an array sends nothing, so it is read as none (a plain signal).
     const items = Array.isArray(change?.items) ? change.items : [];
     const removed = Array.isArray(change?.removed) ? change.removed : [];
-    if (items.length === 0 && removed.length === 0) return (await this.sourceNotice(sourceId))?.synced === true;
+    const refs = Array.isArray(change?.refs) ? change.refs : [];
+    if (items.length === 0 && removed.length === 0 && refs.length === 0)
+      return (await this.sourceNotice(sourceId))?.synced === true;
     let delivered = true;
+    for (let i = 0; i < refs.length; i += MAX_PUSHED_ITEMS) {
+      // Not taken as refs (unreachable, or the source is not synced and notifying): the signal below covers it.
+      const r = await this.sourceRefsReached(sourceId, refs.slice(i, i + MAX_PUSHED_ITEMS));
+      if (r === null || !r.synced) delivered = false;
+    }
     for (let i = 0; i < items.length; i += MAX_PUSHED_ITEMS) {
       if ((await this.sourceItemsReached(sourceId, items.slice(i, i + MAX_PUSHED_ITEMS))) === null) delivered = false;
     }
@@ -393,6 +410,21 @@ export class EdenClient {
     if (!res) return null;
     const reason = typeof res.reason === "string" && REASONS.has(res.reason) ? res.reason : undefined;
     return { synced: res.synced === true, ...(reason ? { reason: reason as SourceChangedReason } : {}) };
+  }
+
+  /** `/v1/sources/refs` (D347): the server's answer, or null when it did not take the call. */
+  private async sourceRefsReached(sourceId: string, refs: string[]): Promise<SourceChangedResult | null> {
+    const { tenantId, userId } = this.options;
+    const res = await this.post<{ synced: boolean; reason?: unknown }>(
+      "/v1/sources/refs",
+      { ...(tenantId ? { tenantId } : {}), userId, sourceId, refs },
+      undefined,
+      undefined,
+      (v) => isRecord(v) && typeof v.synced === "boolean",
+    );
+    if (!res) return null;
+    const reason = typeof res.reason === "string" && REASONS.has(res.reason) ? res.reason : undefined;
+    return { synced: res.synced, ...(reason ? { reason: reason as SourceChangedReason } : {}) };
   }
 
   /**

@@ -344,6 +344,15 @@ export class SyncManager {
   }
 
   /**
+   * Whether a notification for this source acts (`changed` would take it) and items it names can be stored as synced
+   * (`ingest`): synced for the user, warm, and notifying. O(1), no I/O.
+   */
+  notifying(scope: Scope, sourceId: string): boolean {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    return s !== undefined && s.notifies && s.phase === "warm";
+  }
+
+  /**
    * Why `changed` ignored a notification for this source: no sync state for it (an unknown user or source, a typo'd
    * id, a search-only source, or one no lookup has synced yet; telling these apart would need the user's sources,
    * which is I/O), or synced but not declared `notifies`. O(1), no I/O.
@@ -358,14 +367,15 @@ export class SyncManager {
    * poll would, with no call. The source's copy is not marked current by them (other changes may have come
    * unannounced): only a poll does that. Returns how many were new or changed; 0 for a source not synced yet.
    */
-  ingest(scope: Scope, sourceId: string, items: ContextItem[]): number {
+  ingest(scope: Scope, sourceId: string, items: ContextItem[], readMark?: number): number {
     const u = this.users.get(scopeKey(scope));
     const s = u?.sources.get(sourceId);
     if (!u || !s || s.phase !== "warm") return 0;
     // Only what the push changed is marked: a replayed, unchanged item was synced before and is a true boundary.
     const changed = new Set<string>();
-    // Read under the mark its signal set (`sourceChanged` comes first): no doubt of what it brought.
-    const n = this.store(u, s, items, this.marks, changed);
+    // Read under the mark its signal set (`sourceChanged` comes first): no doubt of what it brought. Items a ref notice
+    // fetched (`sourceRefs`, D347) are read under the mark their call began with (D133).
+    const n = this.store(u, s, items, readMark ?? this.marks, changed);
     for (const id of changed) {
       s.pushed.delete(id); // Re-insert: the map stays in arrival order.
       s.pushed.set(id, ++s.pushSeq);

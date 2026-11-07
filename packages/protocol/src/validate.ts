@@ -254,6 +254,16 @@ export function checkSourceItems(
   return { ok: true, value: { ...head.value, items } };
 }
 
+/**
+ * A notice naming what changed (`POST /v1/sources/refs`, D347): the source's refs it changed or added, at most 100,
+ * with no content; Eden reads them itself. The same shape as a deletion's body.
+ */
+export function checkSourceRefs(
+  v: unknown,
+): Checked<{ tenantId: string; userId: string; sourceId: string; refs: string[] }> {
+  return checkSourceRemoved(v);
+}
+
 /** A deletion notification's body (`POST /v1/sources/removed`): the source's refs it no longer has, at most 100. */
 export function checkSourceRemoved(
   v: unknown,
