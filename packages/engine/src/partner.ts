@@ -960,7 +960,12 @@ export class ContextPartner {
    * Copies: changing one changes nothing held.
    */
   explain(ref: Scope & { sessionId: string }): Trace[] {
-    return (this.sessions.get(sessionKey(ref))?.traces ?? []).map((t) => ({ ...t, itemIds: [...t.itemIds] }));
+    return (this.sessions.get(sessionKey(ref))?.traces ?? []).map((t) => ({
+      ...t,
+      itemIds: [...t.itemIds],
+      // A plan's shapes are an array of their own: a shallow copy shared them with the held trace (audit A11).
+      ...(t.plans ? { plans: t.plans.map((p) => ({ ...p, shapes: [...p.shapes] })) } : {}),
+    }));
   }
 
   /**

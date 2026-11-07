@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
-import { StaticSource } from "@eden/sources";
+import { QueryPlanner, StaticSource } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { CORE_CONFIG } from "./parts";
 import { ContextPartner, EXPLAIN_TRACES } from "./partner";
@@ -50,6 +50,31 @@ describe("explain (D277)", () => {
     await p.observe(ev({ kind: "user_message", text: "Globex" }));
     await p.observe(ev({ kind: "session_end" }));
     expect(p.explain(ref)).toEqual([]);
+  });
+
+  test("a copy all the way down: a trace's plans too (audit A11)", async () => {
+    const p = new ContextPartner({
+      sources: async () => [
+        new StaticSource("crm", "deals", [{ ref: "d1", title: "Globex renewal", text: "Dana Lee wants 12% off" }]),
+      ],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      planner: new QueryPlanner({ seed: 1 }),
+      config: CORE_CONFIG,
+    });
+    for (let i = 0; i < 4; i++) {
+      await p.observe(ev({ kind: "user_message", text: `Globex renewal for Dana Lee, item ${101 + i}?` }), {
+        waitMs: 1_000,
+      });
+    }
+    const planned = p.explain(ref).find((t) => (t.plans?.length ?? 0) > 0);
+    expect(planned).toBeDefined();
+    const before = JSON.stringify(p.explain(ref));
+    planned!.plans![0]!.calls = 999;
+    planned!.plans![0]!.shapes.push("changed");
+    expect(JSON.stringify(p.explain(ref))).toBe(before);
   });
 
   test("every decision and known silent reason has its own sentence", () => {
