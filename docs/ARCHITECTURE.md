@@ -198,6 +198,21 @@ backfill reads 8 sources' pages at once, newest unread first (`syncBackfillLanes
 source's share of the cap were measured and deleted (D262). With no more sources than the lookup searches, and none cut,
 none of this changes anything.
 
+A13 (D320–D324, all in the default; docs/research/a13-scale.md) adds what a user with many sources needs past A1. A
+source a lookup routed to on evidence of its items (a name it mentioned, or the request's words among its held items:
+`Sync.engage`) is one the user uses. Such a source's copy, if the cap cut it, is read again from the top, two pages a
+tick, up to half `syncMaxItems` (`syncEngagedDeep`, D323), and the user's trim keeps the items of used sources before
+any other's, so the user's own mailbox is whole and answers from the index instead of a handful of its newest items
+among 1,000 connectors' newest. Each source keeps a vocabulary sketch of everything the sync listed from it (a Bloom
+filter, 128 B to 4 KB, `sketch.ts`), kept after the trim; routing adds, per source, log2(1 + the request's terms the
+sketch holds, each weighted by how few sources hold it) (`routeSketch`, D322). A sketch match routes a search but does
+not by itself make a source used. For a user with more than 32 synced sources, the card model reads only items of used
+sources or items naming a name the user's own requests named; the rest wait, uncovered, and are read when their source
+is first used (`cardsSourceAware`, D320). After the backfill the sync keeps to its cap: sweeps and background polls store
+no dated item older than the user's cut (the copy is then cut), the user's items are trimmed back to the cap at 1.5x it,
+and a sweep stops once it has listed every id it holds for the source (`syncKeepCut`, D321). The daily sweep still lists
+every source once a day (deletes need it): about 1,000 listing calls a user a day at 1,000 sources (D324).
+
 **Change notifications** (D125, `syncPush`; `Source.notifies`, `ContextPartner.sourceChanged` and `sourceItems`,
 `POST /v1/sources/changed` and `/v1/sources/items`, the client's `sourceChanged`/`sourceItems`): a source whose
 integrator forwards the provider's change notifications is not polled on its learned change rate. A notification marks

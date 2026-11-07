@@ -346,6 +346,11 @@ sources 2.8 s, protocol 2.3 s, eval 0.6 s, graph 0.3 s, client 0.1 s, llm 0.1 s 
 rest unrelated), the shipped wiring with no key, a simulated clock; cold start, calls and CPU per event and ask, heap.
 `bun run funnel ... -- --noise-sources 995 --limit 16` screens quality at that size (`--jobs 2`: memory). Figures in
 docs/research/a1-scale.md. A change to sync, routing or per-(user, source) state reports both.
+`bun packages/engine/bench/source-days.bench.ts [sources=1000] [itemsPerSource=20] [days=2] [--churn=1]
+[--mail-per-day=40] [--config=<json>]` (A13, D324) runs the same user over whole simulated days with sources that
+gain items (the sync ticking every minute, a working day of requests and asks, a stub card model under the servers'
+budget) and prints listing, search and card calls per day: the instrument for the sweep, the polls and per-day card
+cost (docs/research/a13-scale.md). 1,000 sources × 20 items × 3 days runs in ~10 s; × 300 items in ~2 min.
 
 ## Scale anchors: memory per user and ingest cost (2026-11-03, 4-core container shared with other agents, Bun 1.4.4)
 

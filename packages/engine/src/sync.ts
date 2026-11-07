@@ -26,6 +26,7 @@ import { Gcra } from "@eden/primitives";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import type { Source, SourceFanout, SourceResolver } from "@eden/sources";
 import type { ItemCache } from "./cache";
+import { sketchTerms, termHashes, TermSketch } from "./sketch";
 import type { Tracer } from "./spans";
 
 export interface SyncOptions {
@@ -71,6 +72,24 @@ export interface SyncOptions {
    * lookup's whole deadline too; the source is searched live instead. 0 or absent: every lookup polls.
    */
   demandTimeoutMs?: number;
+  /**
+   * `syncKeepCut` (D321, a trial): the user's sync keeps to its `maxItems` after the backfill too. A poll or a sweep
+   * stores no dated item older than the user's cut (the oldest item kept when the user is at the cap; the source's
+   * copy is then cut, D264), the user's synced items are trimmed back to the cap once they pass it by a page, and a
+   * sweep stops once it has listed every id it holds for the source.
+   */
+  keepCut?: boolean;
+  /**
+   * `syncEngagedDeep` (D323, a trial): a source a lookup of the user's searched (`engage`) whose copy the cap cut is
+   * read again from the top, a page or two a tick, up to half the user's `maxItems`; the user's trim keeps the items
+   * of such sources before any other's, so the copy of a source the user uses is whole and answers from the index.
+   */
+  engagedDeep?: boolean;
+  /**
+   * `routeSketch` (D322, a trial): each source keeps a vocabulary sketch of what the sync listed from it (`sketch.ts`),
+   * which `sketchScores` reads for routing.
+   */
+  sketch?: boolean;
   /**
    * `syncPush`: a source that says it `notifies` is current until told it changed (`Sync.changed`) or its last poll
    * is `maxStaleMs` old, instead of by its learned change rate.
@@ -119,6 +138,10 @@ const HOUR = 3_600_000;
 const MAX_PUSHED = 1_000;
 /** Users a tick works on at once. */
 const USERS_AT_ONCE = 16;
+/** Names held per user for `cardsSourceAware` (`notePeople`). */
+const MAX_PEOPLE = 256;
+/** Sources a user's lookups use at once (`engage`): past it, the least recently used is no longer counted. */
+const MAX_USED = 64;
 
 interface SourceSync {
   id: string;
@@ -186,6 +209,15 @@ interface SourceSync {
    */
   pushed: Map<string, number>;
   pushSeq: number;
+  /** `cardsSourceAware`: a lookup of the user's has searched this source (`engage`). */
+  engaged: boolean;
+  /**
+   * `engagedDeep`: the read from the top of an engaged source's listing under way (its next page), or null. `undefined`
+   * cursor with `deep` set: the first page.
+   */
+  deep: { cursor: string | undefined; lost: boolean } | null;
+  /** `routeSketch`: the terms of what the sync listed from the source (made at its first store). */
+  sketch: TermSketch | null;
 }
 
 interface UserSync {
@@ -195,6 +227,18 @@ interface UserSync {
   activeAt: number;
   /** Set when the user is dropped or forgotten: work still in flight for them stores nothing. */
   gone: boolean;
+  /**
+   * The oldest `updatedAt` the user's synced items keep once they reached `maxItems` (`trim`); -Infinity while under
+   * it. With `keepCut`, polls and sweeps store nothing dated before it.
+   */
+  cutAt: number;
+  /**
+   * `cardsSourceAware`: names the user's own requests named (folded), most recently named last, at most `MAX_PEOPLE`.
+   * Kept here because they live and go with the user's sync (eviction, `forget`).
+   */
+  people: Set<string>;
+  /** Sources marked used (`engage`), least recently used first, at most `MAX_USED`. */
+  used: Set<string>;
 }
 
 export interface SyncStats {
@@ -254,6 +298,9 @@ export class SyncManager {
       sources: new Map(),
       activeAt: now,
       gone: false,
+      cutAt: -Infinity,
+      people: new Set(),
+      used: new Set(),
     });
   }
 
@@ -382,6 +429,96 @@ export class SyncManager {
   /** Whether the user's copy of a source has finished its backfill, current or not (`syncPollBehind`). */
   isWarm(scope: Scope, sourceId: string): boolean {
     return this.users.get(scopeKey(scope))?.sources.get(sourceId)?.phase === "warm";
+  }
+
+  /** How many sources the user's sync holds (listable sources the resolver gave at the last tick). */
+  sourceCount(scope: Scope): number {
+    return this.users.get(scopeKey(scope))?.sources.size ?? 0;
+  }
+
+  /**
+   * `cardsSourceAware`: marks sources a lookup of the user's searched (or answered from the index). Returns those
+   * marked for the first time, whose held items the caller may now read. O(ids), no I/O.
+   */
+  engage(scope: Scope, sourceIds: Iterable<string>): string[] {
+    const u = this.users.get(scopeKey(scope));
+    if (!u) return [];
+    const fresh: string[] = [];
+    for (const id of sourceIds) {
+      const s = u.sources.get(id);
+      if (!s) continue;
+      // Most recently used last: past `MAX_USED`, the least recently used is used no longer (the review: a set that
+      // only grew gave back the card savings over weeks).
+      u.used.delete(id);
+      u.used.add(id);
+      if (s.engaged) continue;
+      s.engaged = true;
+      fresh.push(id);
+      // `engagedDeep`: a cut copy of a source the user uses is read again, whole, from the top (`deepen`).
+      if (this.o.engagedDeep && s.phase === "warm" && s.cut) s.deep = { cursor: undefined, lost: false };
+    }
+    while (u.used.size > MAX_USED) {
+      const old = u.used.values().next().value as string;
+      u.used.delete(old);
+      const s = u.sources.get(old);
+      if (s) {
+        s.engaged = false;
+        s.deep = null;
+      }
+    }
+    return fresh;
+  }
+
+  /** Whether a lookup of the user's has searched the source (`engage`). False for one the sync does not hold. */
+  engaged(scope: Scope, sourceId: string): boolean {
+    return this.users.get(scopeKey(scope))?.sources.get(sourceId)?.engaged === true;
+  }
+
+  /** Ids of the items synced from a source for the user, oldest synced first (a copy). */
+  syncedIds(scope: Scope, sourceId: string): string[] {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    return s ? [...s.ids] : [];
+  }
+
+  /** `cardsSourceAware`: names the user's own requests named (folded by the caller). Bounded: the oldest named go. */
+  notePeople(scope: Scope, names: Iterable<string>): void {
+    const u = this.users.get(scopeKey(scope));
+    if (!u) return;
+    for (const n of names) {
+      u.people.delete(n);
+      u.people.add(n);
+    }
+    while (u.people.size > MAX_PEOPLE) u.people.delete(u.people.values().next().value as string);
+  }
+
+  /** The names `notePeople` holds for the user (live: read, do not keep). */
+  peopleOf(scope: Scope): ReadonlySet<string> {
+    return this.users.get(scopeKey(scope))?.people ?? EMPTY;
+  }
+
+  /**
+   * `routeSketch` (D322): per source, log2(1 + the request's terms its sketch holds, each weighted by how few of the
+   * user's sketched sources hold it: log(N / df) / log(N), so a term every source has counts nothing). Sources
+   * matching no term are absent; undefined when fewer than two sources are sketched. No I/O; O(sources × terms).
+   */
+  sketchScores(scope: Scope, terms: readonly (readonly [number, number])[]): Map<string, number> | undefined {
+    const u = this.users.get(scopeKey(scope));
+    if (!u || terms.length === 0) return undefined;
+    const sketched: SourceSync[] = [];
+    for (const s of u.sources.values()) if (s.sketch) sketched.push(s);
+    if (sketched.length < 2) return undefined;
+    const hits = terms.map((t) => sketched.filter((s) => s.sketch!.has(t[0], t[1])));
+    const logN = Math.log(sketched.length);
+    const score = new Map<string, number>();
+    for (const holders of hits) {
+      if (holders.length === 0) continue;
+      const w = Math.log(sketched.length / holders.length) / logN;
+      if (w <= 0) continue;
+      for (const s of holders) score.set(s.id, (score.get(s.id) ?? 0) + w);
+    }
+    if (score.size === 0) return undefined;
+    for (const [id, x] of score) score.set(id, Math.log2(1 + x));
+    return score;
   }
 
   /** Users synced now. */
@@ -528,6 +665,21 @@ export class SyncManager {
     }
     const byId = new Map(listable.map((x) => [x.id, x]));
     await this.backfill(u, byId);
+    if (this.o.engagedDeep) {
+      await Promise.all(
+        [...u.sources.values()].map(async (s) => {
+          const source = byId.get(s.id);
+          if (!source || !s.deep || s.busy || this.deps.now() < s.retryAt) return;
+          await this.run(s, () => this.deepen(u, s, source));
+        }),
+      );
+      if (!u.gone && this.total(u) > this.o.maxItems + this.o.pageSize) this.trim(u, this.deps.now());
+    }
+    // `keepCut`: polls and sweeps add the sources' new items; half the cap past it, the oldest go, back to the cap,
+    // before the cache's own synced cap would evict by sync order instead. Not sooner: trimming the backfill's last
+    // pages back to the cap took evidence routing reads (`routeLocalHits`) and lost 2 of 96 hidden facts at 1,000
+    // sources (a13-scale.md).
+    if (this.o.keepCut && !u.gone && this.total(u) > this.o.maxItems * 1.5) this.trim(u, this.deps.now());
     const now = this.deps.now();
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
@@ -655,16 +807,38 @@ export class SyncManager {
       for (const id of s.ids) all.push({ id, at: at(id) ?? -Infinity, s });
     }
     all.sort((a, b) => b.at - a.at);
-    const gone = all.slice(this.o.maxItems);
+    // `engagedDeep`: the newest items of sources the user's lookups use, up to half the cap in all, are kept before any
+    // other's; the rest compete by recency. A bound, or two large used mailboxes filled the whole cap and no other
+    // source's new item could be stored again (the review: `cutAt` went to Infinity).
+    const first = this.o.engagedDeep === true;
+    const kept: typeof all = [];
+    const rest: typeof all = [];
+    if (first) {
+      let used = 0;
+      const share = Math.floor(this.o.maxItems / 2);
+      for (const x of all) {
+        if (x.s.engaged && used < share) {
+          kept.push(x);
+          used++;
+        } else rest.push(x);
+      }
+    } else rest.push(...all);
+    const room = Math.max(0, this.o.maxItems - kept.length);
+    const gone = rest.slice(room);
     for (const g of gone) {
       g.s.ids.delete(g.id);
       g.s.cut = true;
+      if (g.s.deep) g.s.deep.lost = true;
     }
     this.deps.cache.dropSynced(
       u.scope,
       gone.map((g) => g.id),
     );
-    return all[Math.min(all.length, this.o.maxItems) - 1]?.at ?? -Infinity;
+    // The recency cut: the oldest kept of what competed by recency (all of it without `engagedDeep`). Half the cap or
+    // more competes, so it is finite once the user is at the cap.
+    const oldest = room > 0 ? (rest[Math.min(rest.length, room) - 1]?.at ?? -Infinity) : -Infinity;
+    u.cutAt = all.length >= this.o.maxItems ? oldest : -Infinity;
+    return oldest;
   }
 
   /**
@@ -674,8 +848,12 @@ export class SyncManager {
   private warmUp(u: UserSync, s: SourceSync, now: number): void {
     if (s.phase === "warm") return;
     s.phase = "warm";
+    // The backfill's pages are in: a quiet source's sketch shrinks to what its terms need.
+    s.sketch?.fold();
     // Done before its listing ended: the rest was older than the user's cut, and is not held.
     if (!s.exhausted) s.cut = true;
+    // `engagedDeep`: a source a lookup used while its backfill ran is read whole now (`engage` saw it cold).
+    if (this.o.engagedDeep && s.engaged && s.cut && !s.deep) s.deep = { cursor: undefined, lost: false };
     s.polledAt = now;
     // Notifications that came before the backfill's last page began are read by it; later ones are not.
     s.noticesPolled = s.noticesBackfill;
@@ -763,10 +941,12 @@ export class SyncManager {
       else this.stats.backgroundItems += page.items.length;
       s.failures = 0;
       const stored = new Set<string>();
-      const fresh = this.store(u, s, page.items, readMark, stored);
+      const fresh = this.store(u, s, page.items, readMark, stored, this.o.keepCut && !demand);
       changed += fresh;
       if (tally) tally.fresh += fresh;
       // The listing has reached what was synced before: an item held unchanged that a notification did not bring.
+      // An item `keepCut` refused (older than the user's cut) counts too: listings run newest first, so what follows is
+      // older still, and the poll is done.
       const boundary = page.items.some((it) => !stored.has(it.id) && !s.pushed.has(it.id));
       if (boundary || page.next === null || page.items.length === 0) {
         this.polled(s, started, changed, notices, pushSeq);
@@ -816,6 +996,48 @@ export class SyncManager {
   }
 
   /**
+   * `engagedDeep`: up to two pages of an engaged source's listing from the top, stored as the backfill stores (past
+   * the user's cut: the trim then keeps them first). The listing read to its end with every item held makes the copy
+   * whole again (D264); one past half the user's `maxItems` stops, and the copy stays cut (searched live, as before).
+   */
+  private async deepen(u: UserSync, s: SourceSync, source: Source): Promise<void> {
+    const deep = s.deep;
+    if (!deep) return;
+    for (let p = 0; p < 2; p++) {
+      if (u.gone || s.deep !== deep) return;
+      if (this.budget.take(budgetKey(u, s)) > 0) return;
+      const readMark = this.marks;
+      const page = await this.list("backfill", source, u.scope, deep.cursor, this.o.pageSize, {
+        timeoutMs: this.o.timeoutMs,
+        reserve: SERVING_HEADROOM,
+      });
+      if (u.gone) return;
+      if (typeof page === "string") {
+        if (page !== "limited" && page !== "busy") this.stats.backgroundCalls++;
+        this.failed(s, page);
+        return;
+      }
+      this.stats.backgroundCalls++;
+      this.stats.backgroundItems += page.items.length;
+      s.failures = 0;
+      this.store(u, s, page.items, readMark);
+      if (page.next === null || page.items.length === 0) {
+        s.deep = null;
+        s.exhausted = true;
+        // Whole if no trim let any of it go meanwhile; `complete` still checks every id against the cache.
+        s.cut = deep.lost;
+        s.wholeAt = -1;
+        return;
+      }
+      if (s.ids.size >= this.o.maxItems / 2) {
+        s.deep = null;
+        return;
+      }
+      deep.cursor = page.next;
+    }
+  }
+
+  /**
    * A sweep: the whole listing re-read (up to `maxItems`), page by page across ticks as the budget allows; when it
    * ends, every item synced from the source that it did not list is dropped (delete propagation). A sweep that fails
    * is abandoned and nothing is dropped.
@@ -854,11 +1076,15 @@ export class SyncManager {
         s,
         page.items.filter((it) => !older(it)),
         readMark,
+        undefined,
+        this.o.keepCut,
       );
       for (const it of page.items) sw.seen.add(it.id);
       // The sweep's first page is the newest: it is also a poll.
       if (first) this.polled(s, started, fresh, notices, pushSeq);
-      const full = sw.seen.size >= this.o.maxItems || page.items.some(older);
+      // `keepCut`: every id held for the source is listed: what follows is older than all of it, and not held.
+      const all = this.o.keepCut === true && seenAll(s.ids, sw.seen);
+      const full = sw.seen.size >= this.o.maxItems || page.items.some(older) || all;
       if (page.next === null || page.items.length === 0 || full) {
         // Missed by this sweep and the one before: gone. Missed by this one only: perhaps skipped (an offset listing
         // shifted, a short page ended the listing early), so kept and checked again by the next sweep.
@@ -879,13 +1105,40 @@ export class SyncManager {
    * Stores a page's (redacted) items as synced, read under `readMark` (`mark` when its call began); returns how many
    * were new or changed (their ids into `changedIds`).
    */
-  private store(u: UserSync, s: SourceSync, items: ContextItem[], readMark: number, changedIds?: Set<string>): number {
+  private store(
+    u: UserSync,
+    s: SourceSync,
+    items: ContextItem[],
+    readMark: number,
+    changedIds?: Set<string>,
+    keepCut = false,
+  ): number {
     // The same user object and source state: work for a user forgotten and back since must not land.
     if (u.gone || items.length === 0 || this.users.get(u.key) !== u || u.sources.get(s.id) !== s) return 0;
     const now = this.deps.now();
+    // `routeSketch`: every listed item's terms, kept or not (what the cap trims still says what the source holds).
+    if (this.o.sketch) {
+      const sketch = (s.sketch ??= new TermSketch());
+      for (const it of items) {
+        // Held items too: a sketch that restarted (saturated) is filled again by the next sweep's re-listing.
+        if (it.sourceId !== s.id) continue;
+        for (const t of sketchTerms(`${it.title} ${it.text}`)) sketch.add(...termHashes(t));
+      }
+    }
+    // `keepCut`: a poll's or a sweep's item dated before the user's cut would be the first a trim drops (the cache's
+    // synced cap evicted such items oldest synced first, which could be the user's newest mail). Not stored, and the
+    // source's copy is then not whole (D264). An item already held is stored as before (an update of what is kept).
+    let kept = items;
+    // A used source's items are kept before the cut's (`engagedDeep`): the cut is the other sources' only.
+    if (keepCut && u.cutAt > -Infinity && !(this.o.engagedDeep && s.engaged)) {
+      const cut = u.cutAt;
+      kept = items.filter((it) => it.updatedAt === undefined || it.updatedAt >= cut || s.ids.has(it.id));
+      if (kept.length < items.length) s.cut = true;
+      if (kept.length === 0) return 0;
+    }
     // An item its source said is gone (`ItemCache.isHeldGone`) was listed before the deletion: neither stored nor
     // counted as synced, or the listing would undo `removed`.
-    const own = items.filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now));
+    const own = kept.filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now));
     const changed = this.deps.cache.put(u.scope, own, now, true, true, readMark);
     if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
@@ -897,7 +1150,10 @@ export class SyncManager {
       // Listed while a sweep is under way (by the sweep, or by a poll between its pages): the source has it.
       s.sweep?.seen.add(it.id);
     }
-    if (trimIds(s.ids, this.o.maxItems)) s.cut = true;
+    if (trimIds(s.ids, this.o.maxItems)) {
+      s.cut = true;
+      if (s.deep) s.deep.lost = true;
+    }
     this.deps.onListed?.(
       u.scope,
       own.map((it) => it.id),
@@ -1013,8 +1269,13 @@ function newSourceSync(id: string): SourceSync {
     noticesBackfill: 0,
     pushed: new Map(),
     pushSeq: 0,
+    engaged: false,
+    deep: null,
+    sketch: null,
   };
 }
+
+const EMPTY: ReadonlySet<string> = new Set();
 
 const budgetKey = (u: UserSync, s: SourceSync) => `${u.key}|${s.id}`;
 
@@ -1029,6 +1290,12 @@ function trimIds(ids: Set<string>, max: number): boolean {
     if (ids.size <= cap) break;
     ids.delete(id);
   }
+  return true;
+}
+
+/** Whether every held id has been seen (an early exit, no copy of the set). */
+function seenAll(ids: ReadonlySet<string>, seen: ReadonlySet<string>): boolean {
+  for (const id of ids) if (!seen.has(id)) return false;
   return true;
 }
 
