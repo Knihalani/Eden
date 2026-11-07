@@ -73,9 +73,8 @@ function many(n: number, per: number): ListSource[] {
   );
 }
 
-function setup(sources: Source[], config: Record<string, unknown>) {
+function setup(sources: Source[], config: Record<string, unknown>, cache = new ItemCache()) {
   let clock = T0;
-  const cache = new ItemCache();
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed: 1 }),
@@ -195,9 +194,11 @@ describe("syncPollWidth (D263)", () => {
     return sources.reduce((n, s) => n + s.lists, 0) - before;
   };
 
-  test("a lookup over more sources than the width polls only that many", async () => {
+  test("a lookup over more sources than the width polls that many, or the sources it searches if more", async () => {
     expect(await stalePolls({})).toBe(20);
-    expect(await stalePolls({ syncPollWidth: 4 })).toBe(4);
+    expect(await stalePolls({ syncPollWidth: 10 })).toBe(10);
+    // An ask searches `askSources` (6): every source it searches is polled first.
+    expect(await stalePolls({ syncPollWidth: 4 })).toBe(6);
   });
 
   test("at or under the width every stale source is polled, as with it off", async () => {
@@ -209,7 +210,7 @@ describe("syncPollWidth (D263)", () => {
 describe("routeLocalHits (D265)", () => {
   test("a source whose synced items share the request's words is searched first among many", async () => {
     const run = async (config: Record<string, unknown>) => {
-      const noise = many(30, 10);
+      const noise = many(200, 2);
       const words = ["isa allowance tax year", "pension contribution", "savings rate isa", "allowance letter"];
       // Three recent statements share the request's words (they are synced); older ones do not, and the oldest, the
       // one the user asks about, is far past the user's cut (never listed).
@@ -227,7 +228,7 @@ describe("routeLocalHits (D265)", () => {
       bank.items[24]!.text = "You have used your full ISA allowance for this tax year";
       const sources = [...noise, bank];
       const { partner } = setup(sources, {
-        syncMaxItems: 60,
+        syncMaxItems: 300,
         syncStaleChance: 0.99,
         syncMaxStaleMs: 24 * HOUR,
         syncLocalComplete: true,
@@ -242,6 +243,8 @@ describe("routeLocalHits (D265)", () => {
       });
       return { searched: bank.searches > 0, cited: res.citations.map((c) => c.itemId).includes(bank.items[24]!.id) };
     };
+    // Off, 201 sources with flat priors: the ask's 6 and the probes' picks miss the bank (seeded, so it stays so).
+    expect(await run({})).toEqual({ searched: false, cited: false });
     expect(await run({ routeLocalHits: true })).toEqual({ searched: true, cited: true });
   });
 
@@ -260,5 +263,66 @@ describe("routeLocalHits (D265)", () => {
     expect(plain.map((r) => r.sourceId)).toEqual(["a", "b", "c"]);
     expect(boosted.map((r) => r.sourceId)).toEqual(["c", "a", "b"]);
     expect(boosted[0]!.score).toBeCloseTo(plain[2]!.score + 1);
+  });
+});
+
+describe("review regressions (A1)", () => {
+  test("an ask over more sources than the poll width never answers a stale copy it did not poll", async () => {
+    // Review of D263: the poll's pre-route and the lookup's route drew apart, and an ask answered stale, unpolled
+    // copies as "Nothing in the connected sources.".
+    const run = async (config: Record<string, unknown>) => {
+      const sources = many(20, 3);
+      const { partner, advance, now } = setup(sources, { syncMaxItems: 100, syncMaxStaleMs: HOUR, ...config });
+      await warm(partner);
+      advance(2 * HOUR); // Every copy is stale.
+      sources[0]!.items.push({
+        id: itemId("src0", "fresh"),
+        sourceId: "src0",
+        ref: "fresh",
+        title: "Zed Quinn contract",
+        text: "Zed Quinn signed the Globex contract renewal today",
+        updatedAt: now(),
+      });
+      const res = await partner.ask({ ...scope, sessionId: "s1", question: "Did Zed Quinn sign the Globex renewal?" });
+      return {
+        cited: res.citations.map((c) => c.itemId).includes(itemId("src0", "fresh")),
+        // Every source the ask reports as answered from the index was current: polled, not a stale copy.
+        staleLocal: (res.sources ?? []).filter(
+          (x) => x.status === "local" && !partner.sync!.current(scope, x.sourceId),
+        ),
+      };
+    };
+    expect((await run({})).cited).toBe(true);
+    for (const width of [2, 4, 8]) {
+      const r = await run({ syncPollWidth: width });
+      expect(r.staleLocal).toEqual([]);
+    }
+  });
+
+  test("a copy whose items the cache let go is no longer complete", async () => {
+    const sources = many(2, 4);
+    const cache = new ItemCache({ maxSyncedPerUser: 6 });
+    const { partner } = setup(sources, { syncMaxItems: 100 }, cache);
+    await warm(partner);
+    const whole = sources.map((s) => s.items.every((i) => cache.isSynced(scope, i.id)));
+    expect(whole.some((x) => !x)).toBe(true);
+    expect(sources.map((s) => partner.sync!.complete(scope, s.id))).toEqual(whole);
+  });
+
+  test("whether a copy is cut is each user's own", async () => {
+    const sources = many(4, 10);
+    const { partner, cache } = setup(sources, { syncMaxItems: 20 });
+    await warm(partner);
+    const other = { tenantId: "t1", userId: "u2" };
+    partner.sync!.track(other);
+    for (let i = 0; i < 200 && !partner.sync!.warm(other); i++) await partner.sync!.tick();
+    // Same sources, same cap: the same cut for each user, and forgetting one user leaves the other's.
+    const of = (sc: Scope) => sources.map((s) => partner.sync!.complete(sc, s.id));
+    expect(of(other)).toEqual(of(scope));
+    expect(of(scope).some((x) => !x)).toBe(true);
+    partner.forget(scope);
+    expect(of(scope).every((x) => !x)).toBe(true);
+    expect(of(other).some((x) => !x)).toBe(true);
+    expect(cache.syncedCount(other)).toBeGreaterThan(0);
   });
 });

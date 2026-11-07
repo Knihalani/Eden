@@ -242,7 +242,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `--jobs 2`: the pre-D263 default needed ~4.5 GB a process) and `bench/many-sources.bench.ts`. A synced copy the
   user's cap cut answers nothing for its source (`Sync.complete`, `syncLocalComplete`): any new path that answers from
   the local index must go through `localOf`, or it misses what is older than the cut. Routing over many sources needs
-  evidence (mentions, `routeLocalHits`): with a flat prior it is a lottery. Per-(user, source) state is multiplied by
+  evidence (mentions, `routeLocalHits`): with a flat prior it is a lottery. Over `syncPollWidth`, `searchLive` routes
+  once, before the poll, and searches the head of that ranking: a second route would draw apart, and an ask must
+  never answer a stale copy it did not poll (D127, D263's review). Per-(user, source) state is multiplied by
   the source count: keep it lazy (the fan-out's histograms were 8 KB a pair before D261).
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.

@@ -124,6 +124,8 @@ interface SourceSync {
    * newest, so a lookup that answers the source from it can miss an older item the source would find.
    */
   cut: boolean;
+  /** The cache revision at which every synced id was last found held (`complete`), or -1. */
+  wholeAt: number;
   /** The oldest `updatedAt` the backfill has read (+Infinity before its first page): the recency merge's key. */
   frontier: number;
   /** When the last complete poll (or the backfill) ended; -Infinity before. */
@@ -350,9 +352,21 @@ export class SyncManager {
    * Whether the user's copy of a source holds everything the source listed (D264): warm, and neither its backfill
    * nor a trim cut it at the user's `maxItems`. False for an unknown source.
    */
-  complete(scope: Scope, sourceId: string): boolean {
+  complete(scope: Scope, sourceId: string, now = this.deps.now()): boolean {
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
-    return s !== undefined && s.phase === "warm" && !s.cut;
+    if (s === undefined || s.phase !== "warm" || s.cut) return false;
+    // The cache can let synced items go on its own (its `maxSyncedPerUser` cap, `syncTtlMs`): a copy is whole only
+    // while it still holds every item synced from the source. Checked again only after the user's cache changed.
+    const revision = this.deps.cache.revision(scope);
+    if (s.wholeAt === revision) return true;
+    const held = this.deps.cache.syncedReader(scope, now);
+    for (const id of s.ids) {
+      if (held(id)) continue;
+      s.cut = true;
+      return false;
+    }
+    s.wholeAt = revision;
+    return true;
   }
 
   /** Whether the user's copy of a source has finished its backfill, current or not (`syncPollBehind`). */
@@ -547,7 +561,12 @@ export class SyncManager {
       for (let k = 0; k < batch.length; k++) {
         const next = batch[k]!.next;
         const page = pages[k];
-        if (page === undefined || u.gone) return;
+        if (u.gone) return;
+        // The lane's read did not run or threw: nothing to record; the others' pages were stored and are recorded.
+        if (page === undefined) {
+          stop = true;
+          continue;
+        }
         if (typeof page === "string") {
           if (page !== "limited" && page !== "busy") this.stats.backgroundCalls++;
           this.failed(next, page);
@@ -891,6 +910,7 @@ function newSourceSync(id: string): SourceSync {
     cursor: undefined,
     exhausted: false,
     cut: false,
+    wholeAt: -1,
     frontier: Infinity,
     polledAt: -Infinity,
     sweptAt: -Infinity,
@@ -916,8 +936,10 @@ function newSourceSync(id: string): SourceSync {
 
 const budgetKey = (u: UserSync, s: SourceSync) => `${u.key}|${s.id}`;
 
-/** Keeps a source's id set at most `max * 1.5`, dropping the longest synced first (the cache bounds the items). */
-/** Bounds a source's id set (oldest synced first go); returns whether any went. */
+/**
+ * Keeps a source's id set at most `max * 1.5`, dropping the longest synced first (the cache bounds the items); returns
+ * whether any went (the copy is then cut, D264).
+ */
 function trimIds(ids: Set<string>, max: number): boolean {
   const cap = Math.ceil(max * 1.5);
   if (ids.size <= cap) return false;

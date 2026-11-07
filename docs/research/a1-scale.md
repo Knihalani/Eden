@@ -83,14 +83,17 @@ per task (listings plus searches). ms/task is contended (2 processes) and only i
 | + `syncPollWidth` 8 (D263) | 25/96 | 25/96 | 20.9 | 20.8 | 0.02 | 26 |
 | + `syncLocalComplete` (D264) | 40/96 | 40/96 | 79.6 | 20.5 | 59.1 | 55 |
 | + `routeLocalHits` (D265) | 53/96 | 48/96 | 55.5 | 14.3 | 41.2 | 73 |
-| + `syncBackfillLanes` 8 (D262): **the new default** | 53/96 | 47/96 | 55.3 | 14.2 | 41.0 | 48 |
+| + `syncBackfillLanes` 8 (D262) | 53/96 | 47/96 | 55.3 | 14.2 | 41.0 | 48 |
+| **The new default** (after the review fix to D263: one route, asks search unpolled stale copies live) | 53/96 | 50/96 | 54.5 | 13.7 | 40.8 | 48 |
 | (deleted) + `syncBackfillShare` | 50/96 | 46/96 | 56.3 | 14.6 | 41.7 | 63 |
 
 Card calls (the paid background role, stub-counted here) over the same screen: five sources 267; old default at 1,000
-sources 27,236; + D263 12,773; + D264 12,948; + D265 12,807; + lanes 8,124; + share 4,929.
+sources 27,236; + D263 12,773; + D264 12,948; + D265 12,807; + lanes 8,124 (the new default after the fix: 8,120); + share 4,929.
 
 Seed 42, same suites: D263–D265 50/96 hidden, 46/96 decoys, 57.6 calls, 12,802 card calls; with lanes 8 50/96,
-47/96, 57.5, 8,014 card calls; with the share too 50/96, 46/96, 57.9. With 100-item noise sources (one process per
+47/96, 57.5, 8,014 card calls; with the share too 50/96, 46/96, 57.9; the new default 50/96, 48/96, 57.5, 8,029 card
+calls. Decoys rise with hidden facts at about the five-source rate (0.94–0.96 decoys a hidden fact against 0.92):
+the new searches find what a search of the source finds; D264 and D265 accept that trade explicitly. With 100-item noise sources (one process per
 suite, train1 and train2, seed 41; the harness's indexes of 99,500 noise items did not fit a 6-suite process):
 lanes 8 13/32 hidden, 18/32 decoys, listing 27.2 and 19.8 a task; with the share 13/32, 15/32, listing 38.2 and 30.2.
 The `syncLocalComplete` arm without the poll width was OOM-killed at
@@ -145,7 +148,8 @@ promotes again; it is microseconds beside a source call.
   per-source state after D261 (12 MB before). Cold-start storms: a 1,000-source user's cold start still stores
   every first page (12 s of CPU at 100 items a source, on the event loop in 8-page batches); sizing first pages saved
   that but was not neutral (D262), so a cheaper store for items the trim will drop is the open lever.
-- **The backfill overshoot (#7)** is small and left.
+- **The backfill overshoot (#8)** is small and left. With lanes the trim and the warm-up-by-frontier check run once a
+  batch, so a batch can list a page one lane would have skipped (reviewer); the measured calls did not move.
 - **Live searches of cut copies (#9)** are the honest cost of D264; a large mailbox is searched live on lookups that
   route to it, as before sync.
 

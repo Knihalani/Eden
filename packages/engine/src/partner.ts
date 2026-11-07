@@ -2891,30 +2891,30 @@ export class ContextPartner {
     // call; with `syncOnDemand`, a stale one is polled first (one listing call, rather than its search and probes).
     let local: Set<string> | null = null;
     let syncCalls = 0;
+    let preRanked: ReturnType<SourceMap["route"]> | null = null;
+    let pollable: Set<string> | null = null;
     if (this.sync) {
-      // `syncPollWidth` (trial, D263): over that many sources, only the best routed are polled; the others answer from
-      // their warm copy. Under it nothing changes (no extra route, so the source map draws as before).
+      // `syncPollWidth` (D263): over that many sources, only the best routed are polled. The lookup is routed once,
+      // here, before its poll, and searches the head of the same ranking, so every source it searches was polled
+      // (two routes would draw apart: an ask then answered unpolled stale copies as "nothing", review of D263). Under
+      // the width nothing changes: the route runs after the poll, as before, and draws as before.
       const width = this.config.syncOnDemand ? this.config.syncPollWidth : 0;
-      const pollable =
-        width > 0 && all.length > width
-          ? new Set(
-              this.deps.sourceMap
-                .route({
-                  scope: s.scope,
-                  entities: cue.entities,
-                  situation: s.situation,
-                  sourceIds: all.map((x) => x.id),
-                  limit: width,
-                  ...(boost ? { boost } : {}),
-                })
-                .map((r) => r.sourceId),
-            )
-          : null;
+      if (width > 0 && all.length > width) {
+        preRanked = this.deps.sourceMap.route({
+          scope: s.scope,
+          entities: cue.entities,
+          situation: s.situation,
+          sourceIds: all.map((x) => x.id),
+          limit: Math.max(width, limit),
+          ...(boost ? { boost } : {}),
+        });
+        pollable = new Set(preRanked.map((r) => r.sourceId));
+      }
       if (this.config.syncOnDemand) {
         const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(left())]);
         const freshening = this.spans?.open("sync.freshen", cue.span, { async: true });
         const tally = { fresh: 0 };
-        const toPoll = pollable ? all.filter((x) => pollable.has(x.id)) : all;
+        const toPoll = pollable ? all.filter((x) => pollable!.has(x.id)) : all;
         const polled = this.sync.freshen(s.scope, toPoll, signal, tally).then((calls) => {
           if (freshening) this.spans!.close(freshening, { calls, fresh: tally.fresh, ...(behind ? { behind } : {}) });
           return calls;
@@ -2952,17 +2952,19 @@ export class ContextPartner {
         } else syncCalls = await polled;
         if (s.closed) return { calls: syncCalls, syncCalls, sources: [], closed: true };
       }
-      local = this.localOf(s, all, behind, pollable);
+      local = this.localOf(s, all, behind);
     }
     const routing = this.spans?.open("route", cue.span);
-    const ranked = this.deps.sourceMap.route({
-      scope: s.scope,
-      entities: cue.entities,
-      situation: s.situation,
-      sourceIds: all.map((x) => x.id),
-      limit,
-      ...(boost ? { boost } : {}),
-    });
+    const ranked =
+      preRanked?.slice(0, limit) ??
+      this.deps.sourceMap.route({
+        scope: s.scope,
+        entities: cue.entities,
+        situation: s.situation,
+        sourceIds: all.map((x) => x.id),
+        limit,
+        ...(boost ? { boost } : {}),
+      });
     if (routing) this.spans!.close(routing, { sources: ranked.length, local: local?.size ?? 0, syncCalls });
     const byId = sourcesById(all);
     const routed = ranked.map((r) => byId.get(r.sourceId)!).filter(Boolean);
@@ -4010,23 +4012,17 @@ export class ContextPartner {
   }
 
   /** The sources whose synced copy is current (`sync`, D57), which answer from the local index; null when none. */
-  private localOf(
-    s: Session,
-    all: readonly Source[],
-    behind = false,
-    pollable: ReadonlySet<string> | null = null,
-  ): Set<string> | null {
+  private localOf(s: Session, all: readonly Source[], behind = false): Set<string> | null {
     if (!this.sync) return null;
     const now = this.now();
-    // `behind`: a warm copy answers while its poll runs (`syncPollBehind`), never one still in its backfill. With
-    // `syncPollWidth`, so does a warm copy the lookup did not poll (past its width, D263).
+    // `behind`: a warm copy answers while its poll runs (`syncPollBehind`), never one still in its backfill; so does a
+    // warm copy past `syncPollWidth` that the lookup did not poll (D263). An ask never passes `behind`: a stale copy
+    // it did not poll is searched live (D127), within the probes' call budget.
     // With `syncLocalComplete`, only a copy that holds the whole source answers for it (D264): one the user's cap cut
     // is searched live, or a lookup would miss what is older than the cut.
     const whole = (id: string) => !this.config.syncLocalComplete || this.sync!.complete(s.scope, id);
     const ok = (id: string) =>
-      whole(id) &&
-      (this.sync!.current(s.scope, id, now) ||
-        ((behind || (pollable !== null && !pollable.has(id))) && this.sync!.isWarm(s.scope, id)));
+      whole(id) && (this.sync!.current(s.scope, id, now) || (behind && this.sync!.isWarm(s.scope, id)));
     const local = new Set(all.filter((x) => ok(x.id)).map((x) => x.id));
     return local.size > 0 ? local : null;
   }
@@ -5125,13 +5121,13 @@ function bulkMail(item: ContextItem): boolean {
   return (category !== undefined && BULK_CATEGORY.test(category)) || BULK_TITLE.test(item.title);
 }
 
+/** `routeLocalHits`: the user's best local matches for a request that routing counts per source (D265). */
+const LOCAL_ROUTE_HITS = 40;
+
 /**
  * A user's sources by id, the first of any repeated id (as `Array.find` gave): a lookup maps routed ids back to sources
  * through it, which was a scan of every source per routed one (quadratic for a user with 1,000 connectors, D261).
  */
-/** `routeLocalHits`: the user's best local matches for a request that routing counts per source (D265). */
-const LOCAL_ROUTE_HITS = 40;
-
 function sourcesById(all: readonly Source[]): Map<string, Source> {
   const byId = new Map<string, Source>();
   for (const x of all) if (!byId.has(x.id)) byId.set(x.id, x);
