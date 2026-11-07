@@ -28,6 +28,9 @@ import type { Task } from "./ab-common";
 /** The engine's marker for an item already shown in the session (render.ts `SHOWN`, askDedup). */
 export const SHOWN_MARK = "(shown above)";
 
+/** How an "updated:" packet names each item (partner.ts, `revisionNotice`). */
+export const UPDATED_MARK = "] updated: ";
+
 /** The day's last turn: not a task (never graded, not in the results), only measured. */
 export const RECAP_TEXT =
   "Before I act on today's plans: give me a short recap of anything I should watch out for across everything we " +
@@ -123,6 +126,8 @@ export interface DaySummary {
   repeatChanged: number;
   /** Packets and ask answers carrying `(shown above)`. */
   shownMarks: number;
+  /** "updated:" packets (`revisionNotice`): an item handed earlier, sent again in its changed version. */
+  updatePackets: number;
   /** Ask citations of items a packet had delivered earlier that day. */
   askRepeat: number;
   /** Items changed during the day (planted items with a clock time). */
@@ -183,6 +188,7 @@ export class DayLog {
     let repeatDelivered = 0;
     let repeatChanged = 0;
     let shownMarks = 0;
+    let updatePackets = 0;
     let askRepeat = 0;
     let staleDeliveries = 0;
     const firstPacket = new Map<string, number>();
@@ -190,6 +196,7 @@ export class DayLog {
       moves.some((m) => text.includes(m.from)) && !moves.some((m) => text.includes(m.to));
     for (const d of this.deliveries) {
       if (d.text.includes(SHOWN_MARK)) shownMarks++;
+      if (!d.ask && d.text.includes(UPDATED_MARK)) updatePackets++;
       for (const id of d.ids) {
         const change = this.changes.get(id);
         if (change && d.turn >= change.turn && oldOnly(d.text, change.moves)) staleDeliveries++;
@@ -221,6 +228,7 @@ export class DayLog {
       repeatDelivered,
       repeatChanged,
       shownMarks,
+      updatePackets,
       askRepeat,
       changed: this.changes.size,
       staleDeliveries,
@@ -241,6 +249,7 @@ export function poolDays(days: readonly DaySummary[]): Record<string, Omit<DaySu
       repeatDelivered: 0,
       repeatChanged: 0,
       shownMarks: 0,
+      updatePackets: 0,
       askRepeat: 0,
       changed: 0,
       staleDeliveries: 0,

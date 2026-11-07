@@ -69,15 +69,17 @@ describe("pi-ab --day (fix-s3b)", () => {
     log.answer(["B"], "B again"); // ask repeat
     log.turn(); // 2: the recap
     log.answer(["A"], "A now at 14:30"); // fresh, not stale
+    log.packet(["A"], "- [cal] updated: A (changed): A now at 14:30"); // an update packet: a repeat, changed, fresh
     log.recap("Watch the 12:30 slot for A.");
     expect(log.summary()).toEqual({
       day: "d",
       condition: "eden",
       turns: 3,
-      delivered: 4,
-      repeatDelivered: 2,
-      repeatChanged: 1,
+      delivered: 5,
+      repeatDelivered: 3,
+      repeatChanged: 2,
       shownMarks: 1,
+      updatePackets: 1,
       askRepeat: 2, // the turn-1 ask of B and the recap-turn ask of A
       changed: 1,
       staleDeliveries: 1,

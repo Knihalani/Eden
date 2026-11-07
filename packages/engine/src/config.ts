@@ -364,6 +364,14 @@ export interface EngineConfig {
    */
   actionCheck: boolean;
   /**
+   * Trial (D205, owner repo owner, ends 2026-12-07): an item this session was handed (a packet taken, an ask's answer)
+   * that is stored again with other words (a sync poll, a notice carrying items, a re-read) is sent once more as an
+   * "updated:" packet, once per revision, queued for the agent's next take. A request waits (within its `waitMs`) for
+   * the poll of a notifying source that signalled since a handed copy was read, so the packet is ready before the
+   * model call. Off: the agent keeps the version it was handed until a lookup happens to deliver the new one.
+   */
+  revisionNotice: boolean;
+  /**
    * `ask` answers compacted as packets are (D76; docs/research/gen-tokens.md): each item cut to the parts that bear on
    * the question (`compactText`), at most `askItemBytes`, rather than said whole up to the answer's 4 KB. The items and
    * their order are unchanged; only how much of each the agent reads. Off: answers say each item whole.
@@ -571,6 +579,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   decideCandidates: 64,
   maxEventChars: 32_000,
   actionCheck: false,
+  revisionNotice: false,
   compactAsk: true,
   askDedup: true,
   compactParts: true,

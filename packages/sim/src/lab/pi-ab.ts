@@ -748,7 +748,14 @@ async function runWorld(
         day.changed(it.id, moved.moves);
       }
       for (const src of sources) if (touched.has(src.id)) src.reindex();
-      if (partner && CONNECTORS.push !== "none") for (const id of touched) partner.sourceChanged(scope, id);
+      if (partner && CONNECTORS.push !== "none") {
+        for (const id of touched) partner.sourceChanged(scope, id);
+        // The change lands two hours before the recap: what the notice started in the background (`revisionNotice`'s
+        // poll; nothing when that trial is off) has settled by then. Bounded, so a hung poll cannot stall the stream.
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([partner.revisionsSettled(scope), new Promise((r) => (timer = setTimeout(r, 10_000)))]);
+        clearTimeout(timer);
+      }
     }
     const ev = (e: Record<string, unknown>) => ({ ...scope, sessionId, at: clock, ...e }) as AgentEvent;
     const r: RunResult = emptyResult(task.id, condition);
