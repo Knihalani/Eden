@@ -1278,6 +1278,9 @@ export class ContextPartner {
       const all = await this.deps.sources(scope).catch((): Source[] => []);
       const source = all.find((x) => x.id === sourceId);
       if (!source || signal.aborted) return;
+      // D325: the poll reads the user's held copies; a frozen user is thawed in slices first (only when frozen).
+      const thawing = this.deps.cache.ready(scope);
+      if (thawing) await thawing;
       await sync.freshen(scope, [source], signal);
     })()
       .catch(() => {})
@@ -1324,8 +1327,9 @@ export class ContextPartner {
 
   /**
    * Null when the user's cache is not frozen; else when it is thawed (D325, `ItemCache.ready`). Every entry point that
-   * serves a user awaits it first (`observe`, `ask`, `checkAction`, `sourceItems`; the server before a notice or a
-   * removal), so a thaw runs in slices and other users' requests do not wait behind it.
+   * serves a user's items awaits it first (`observe`, `ask`, `checkAction`, `sourceItems`, a notice's revision poll;
+   * the server before a removal), so a thaw runs in slices and other users' requests do not wait behind it. A bare
+   * change notice reads no items and leaves a frozen user frozen.
    */
   ready(scope: Scope): Promise<void> | null {
     return this.deps.cache.ready(scope);

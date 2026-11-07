@@ -382,6 +382,16 @@ describe("idle users frozen (D325)", () => {
     expect(cache.frozenCount).toBe(0);
     expect(spy.queued).toBe(4);
     expect(cache.freezes.thawed).toBe(4);
+    // A bare change notice reads no item: with no session holding a copy of the source, the user stays frozen.
+    for (const sessionId of new Set(["s1", ...w.events.map((e) => e.sessionId)])) {
+      await partner.observe({ ...w.scope, sessionId, kind: "session_end", at: clock });
+    }
+    expect(spy.queued).toBe(4); // Ending a session reads no item.
+    freeze();
+    partner.sourceNotice(w.scope, "mail");
+    await Bun.sleep(5);
+    expect(cache.frozenCount).toBe(1);
+    expect(spy.queued).toBe(4);
     for (const event of w.events) {
       clock = event.at;
       await partner.observe(event, { waitMs: 0 });

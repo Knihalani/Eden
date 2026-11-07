@@ -220,7 +220,6 @@ export function createHandler(
           const checked = checkSourceChanged(body);
           if (!checked.ok) return fail(400, checked.error);
           const { userId, sourceId } = checked.value;
-          await partner.ready({ tenantId: tenant, userId }); // D325: a frozen user thaws in slices first (null: none).
           // 200 either way (a no-op notification is not a caller error); `reason` says why nothing was synced.
           return json({ ok: true, ...partner.sourceNotice({ tenantId: tenant, userId }, sourceId) });
         }

@@ -131,11 +131,12 @@ The first event per user afterwards (fast path) was 8.2 ms p50 either way.
 
 - A returning user's first request waits for their thaw (~0.1 s at the cap) once per pause of 20-30 minutes or more
   (a user last seen during a 10-minute tick freezes two or three ticks later).
-- A frozen user is thawed (queued, in slices) by anything that reads their items: their requests, a change
-  notification or removal for one of their sources (`syncPush`, on in the default), a due daily sweep, or a backfill;
-  each keeps them live for another 20-30 minutes. The steady state above assumes idle users' sources are quiet; a
-  user whose mailbox notifies every few minutes never stays frozen. The review found these paths thawing at once
-  inside the read; they now await `ready` as the requests do (`cache-freeze.test.ts`).
+- A frozen user is thawed (queued, in slices) by anything that reads their items: their requests, items pushed or
+  removed for one of their sources (`syncPush`, on in the default), a change notice's revision poll (only while one
+  of their sessions holds a copy from that source), a due daily sweep, or a backfill; each keeps them live for another
+  20-30 minutes. A bare change notice reads nothing and leaves them frozen. The steady state above assumes idle users'
+  sources rarely push items; one whose mailbox pushes items every few minutes never stays frozen. The review found
+  these paths thawing at once inside the read; they now await `ready` as the requests do (`cache-freeze.test.ts`).
 - The sync's weekly drop of a user idle for `syncDropMs` (7 days) reads their items, which thaws them at once
   (synchronously, ~0.1 s at the cap), once a week per such user.
 - A frozen user keeps ~600 KB of state outside the cache at 3,000 items, mostly one string per synced item: the
