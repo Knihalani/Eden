@@ -337,4 +337,26 @@ describe("sourceRefs (D347): a notice naming its changed refs", () => {
     const kept = await inner.verifyItems(s, [{ item: old, score: 1, matched: 0, sketch: null }], { id: "c", span: 0 });
     expect(kept.map((x) => x.item.text).join(" ")).toContain("30 November");
   });
+
+  test("a landed read is noted in that user's sessions only: another user's sessions are not walked", async () => {
+    const { p, src, user, user2, at } = await setup();
+    type S = { checks?: Map<string, unknown>; closed: boolean };
+    const inner = p as unknown as { session(e: unknown): S };
+    const mine = [inner.session({ ...user, sessionId: "a" }), inner.session({ ...user, sessionId: "b" })];
+    const theirs = Array.from({ length: 5 }, (_, i) => inner.session({ ...user2, sessionId: `o${i}` }));
+    // Count every read of another user's session's state from here on.
+    let reads = 0;
+    for (const s of theirs) {
+      let closed = s.closed;
+      Object.defineProperty(s, "closed", {
+        get: () => (reads++, closed),
+        set: (v: boolean) => void (closed = v),
+      });
+    }
+    src.add("hold", "Harlow invoice on hold", "Harlow invoice payments are on hold until 30 November", at());
+    expect(await p.sourceRefs(user, "mail", ["hold"]).settled).toBe(1);
+    for (const s of mine) expect(s.checks?.has(HOLD)).toBe(true);
+    for (const s of theirs) expect(s.checks).toBeUndefined();
+    expect(reads).toBe(0);
+  });
 });
