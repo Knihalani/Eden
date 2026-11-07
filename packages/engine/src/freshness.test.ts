@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
-import { itemId, type AgentEvent, type ContextItem, type Scope } from "@eden/protocol";
+import { itemId, type AgentEvent, type ContextItem, type Injection, type Scope } from "@eden/protocol";
 import type { SearchQuery, Source } from "@eden/sources";
 import { ItemCache, sanitizedId, sanitizeItem } from "./cache";
 import { ContextPartner, type PartnerDeps, type ReaderReport } from "./partner";
@@ -380,6 +380,31 @@ describe("D133: a signal that lands while a read is on the wire doubts the copy 
     expect(cited).not.toContain(itemId("notes", "q1"));
     expect(cache.get(scope, itemId("notes", "q1"), now())).toBeFalsy();
     expect(cache.isHeldGone(scope, itemId("notes", "q1"), now())).toBe(true); // The gone-hold stands.
+  });
+
+  test("an item the next request's fast path hands out during a delivery's re-read is not delivered again", async () => {
+    // Audit A11's fuzz (default seed 2577, core seed 704): the slow path ranked against the ledger, awaited the
+    // re-read of a doubted item, then delivered every item it ranked; the next request's fast path had handed one of
+    // them out from the cache meanwhile, so the agent got it twice in one cooldown.
+    const src = new SlowFetch("notes");
+    seed(src);
+    src.docs.set("b1", { title: "Budget review", text: "The budget review with finance is on Friday at 10:00." });
+    const { partner, advance, now } = await synced(src);
+    advance(5 * MIN);
+    src.failSearch = true; // The poll the signal starts fails: q1 stays doubted.
+    partner.sourceChanged(scope, "notes");
+    await partner.sourceItems(scope, "notes", [src.item("b1")!]); // b1 is current again; q1 is not.
+    advance(MIN);
+    let second: Promise<(Injection | null)[]> | null = null;
+    src.during = () => {
+      second = say(partner, "When is the budget review with finance on Friday?", "s1", now());
+    };
+    const first = await say(partner, "Prepare for the quarterly offsite and the budget review", "s1", now());
+    const later = await second!;
+    const cited = [...first, ...later].flatMap((i) => i!.citations.map((c) => c.itemId));
+    expect(src.fetches).toBeGreaterThanOrEqual(1);
+    expect(cited).toContain(itemId("notes", "b1"));
+    expect(cited.filter((id) => id === itemId("notes", "b1")).length).toBe(1);
   });
 
   test("a signal in the same millisecond as a read's start, after it began, doubts the copy; one before does not", async () => {

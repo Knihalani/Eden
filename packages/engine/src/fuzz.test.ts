@@ -20,10 +20,12 @@ const SEEDS = Number(process.env.FUZZ_SEEDS ?? 8);
 const OPS = Number(process.env.FUZZ_OPS ?? 60);
 const FROM = Number(process.env.FUZZ_FROM ?? 1);
 /**
- * Seeds that once failed, run with every default run (a fixed bug stays fixed): 61 and 328, "deletes-queued"; 1539,
- * "explain-shape" (a verify trace counting other sessions' re-reads, audit A11).
+ * Seeds that once failed, run with every default run in the configuration they failed in (a fixed bug stays fixed):
+ * 61 and 328, "deletes-queued"; 1539, "explain-shape" (a verify trace counting other sessions' re-reads); 2577 and
+ * core's 704, "not-twice" (a fast path delivery during a slow path's re-read, repeated by it). The last three: A11.
  */
-const REGRESSIONS = process.env.FUZZ_SEEDS || process.env.FUZZ_PLAN ? [] : [61, 328, 1539];
+const REGRESSIONS: Record<string, number[]> =
+  process.env.FUZZ_SEEDS || process.env.FUZZ_PLAN ? {} : { default: [61, 328, 1539, 2577], core: [704] };
 const MINIMIZE = process.env.FUZZ_MINIMIZE === "1";
 const PLAN = process.env.FUZZ_PLAN ? (JSON.parse(process.env.FUZZ_PLAN) as Op[]) : null;
 
@@ -48,10 +50,10 @@ const CONFIGS: Record<string, WorldOptions> = {
  * None listed. "deletes-queued" (a packet queued before `sourceRemoved` handed out after it; default seeds 61, 328,
  * 362, 384, 538, … at 60 ops) was fixed by `dropRemovedPending` (audit A5).
  *
- * Not listed, so a scaled run fails on it: "not-twice" at core seed 704 (60 ops), two rule paths repeating an item
- * version in one session. The fast path delivers from the cache while the previous request's slow path is in flight
- * (it runs before the `s.inflight` test); the slow path ranked against the ledger before its awaits and `build` marks
- * without testing it again. The push-vs-rule form of this race is documented and exempt (cl-cl8.md, "Repeats").
+ * "not-twice" at core seed 704 and default seed 2577 (60 ops), two rule paths repeating an item version in one
+ * session, was fixed in `deliverChecked` (audit A11): the fast path delivered from the cache while the previous
+ * request's slow path awaited a re-read, and the slow path, ranked against the ledger before that await, delivered it
+ * again. The push-vs-rule form of this race is documented and exempt (cl-cl8.md, "Repeats").
  */
 const KNOWN_INVARIANTS = new Set<string>();
 
@@ -66,7 +68,7 @@ describe("engine fuzz: invariants hold under random operation orders", () => {
       const failures: string[] = [];
       const known = new Map<string, number[]>();
       let cited = 0;
-      const seeds = [...Array.from({ length: PLAN ? 1 : SEEDS }, (_, i) => FROM + i), ...REGRESSIONS];
+      const seeds = [...Array.from({ length: PLAN ? 1 : SEEDS }, (_, i) => FROM + i), ...(REGRESSIONS[name] ?? [])];
       for (const seed of seeds) {
         const ops = PLAN ?? plan(seed, OPS);
         const world = await runSeed(seed, ops, options);
