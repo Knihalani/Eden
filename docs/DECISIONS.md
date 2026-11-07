@@ -224,4 +224,5 @@ neutral at no extra paid cost) or deleted with its code and tests. A trial past 
 |---|---|---|---|---|
 | Action firewall (D69, D72) | `actionCheck`, `POST /v1/check` | repo owner | 2026-12-03 | A blind Pi run of `-act-firewall` with control tasks flagged at most 0.05 (D72's bar); else the switch, `firewall.ts` and the route go |
 | tsgo as the merge gate (D113) | `scripts/typecheck.sh` | repo owner | 2026-12-03 | A month of `tsgo` and `tsc` agreeing on every merge |
+| Ask answers say when no reading checked them (D231) | `askUnreadNote` | repo owner | 2026-12-07 | Live Pi on held-out 10–14 paired with the default: false or neutral concerns lower, no significant hidden loss, no paid-cost rise; else deleted (fix-w2b) |
 | Anthropic prompt cache on OpenRouter (D145) | `anthropicCache` in `OpenRouterOptions` (`packages/llm/src/openrouter.ts`) | repo owner | 2026-12-03 | One OpenRouter probe: cached tokens above 0 on a second `anthropic/claude-haiku-5.5` call through the ZDR endpoints at realistic per-user spacing; then on for `anthropic/*` roles in `modelRolesFromEnv` with COST-MODEL figures, else the flag and its tests go |

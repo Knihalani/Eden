@@ -58,7 +58,6 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerGateVisits: "reader",
   readerVerifyAfter: "reader",
   readerReuse: "reader",
-  askUnflaggedNote: "reader",
 };
 
 /**
@@ -123,7 +122,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerPushBehind: [...PUSH, ...POLL_BEHIND],
   readerVerifyAfter: [...READER, "verifyDelivery"],
   readerReuse: PUSH,
-  askUnflaggedNote: READER,
   anticipateCalls: ["anticipate"],
   anticipateSessionCalls: ["anticipate"],
   anticipateOff: ["anticipate"],

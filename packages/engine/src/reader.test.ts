@@ -22,9 +22,9 @@ import {
   type ReaderInput,
   type ReaderKind,
   type ReaderMaker,
-  UNFLAGGED_NOTE,
+  UNREAD_NOTE,
 } from "./reader";
-import { READER_TAG, shownText } from "./render";
+import { shownText } from "./render";
 import type { Trace } from "./trace";
 import { CORE_CONFIG } from "./parts";
 
@@ -660,33 +660,31 @@ describe("the reader in the engine (config.askReader)", () => {
     expect(failed.answers.u1![0]!.ids).toContain("mail:n0");
   });
 
-  test("askUnflaggedNote (fix-w2b): an item the reader read and did not flag says so; unread items say nothing", async () => {
-    const lines = (answer: string) => answer.split("\n").filter((l) => l.startsWith("- ["));
-    const on = await run({ askReader: true, askUnflaggedNote: true });
-    const a = on.answers.u1![0]!;
-    const shown = lines(a.answer);
-    expect(a.ids[0]).toBe("mail:hold");
-    // The flagged item keeps its bearing; every other item the reader read carries the unflagged note.
-    expect(shown[0]).toContain(`${READER_TAG}blocks`);
-    expect(shown.length).toBeGreaterThan(1);
-    for (const l of shown.slice(1)) expect(l).toContain(`${READER_TAG}${UNFLAGGED_NOTE} | `);
-    // Off (the default), the other items carry no note.
-    const off = await run({ askReader: true });
-    for (const l of lines(off.answers.u1![0]!.answer).slice(1)) expect(l).not.toContain(READER_TAG);
-    // With the pool cut to 2, only the second item was read with the flagged one: the rest say nothing.
-    const cut = await run({ askReader: true, askUnflaggedNote: true, askReaderPool: 2 });
-    const read = new Set(cut.reports[0]!.pool);
-    const cutLines = lines(cut.answers.u1![0]!.answer);
-    cut.answers.u1![0]!.ids.forEach((id, k) => {
-      if (id === "mail:hold" || k >= cutLines.length) return;
-      expect(cutLines[k]!.includes(UNFLAGGED_NOTE)).toBe(read.has(id));
-    });
-    // No reading (the reader failed): nothing is said to be unflagged.
+  test("askUnreadNote (fix-w2b): an answer the reader did not read ends with the note; a read one does not", async () => {
+    // Read: the reader flagged the hold, so the answer is checked against the request and says nothing more.
+    const read = await run({ askReader: true, askUnreadNote: true });
+    expect(read.answers.u1![0]!.ids.length).toBeGreaterThan(0);
+    expect(read.answers.u1![0]!.answer).not.toContain(UNREAD_NOTE);
+    // The reader failed: the items were found by search only, and the answer ends with the note.
     const failed = await run(
-      { askReader: true, askUnflaggedNote: true },
+      { askReader: true, askUnreadNote: true },
       { maker: new ScriptedReader(flags("mail:hold"), { fail: true }) },
     );
-    expect(failed.answers.u1![0]!.answer).not.toContain(UNFLAGGED_NOTE);
+    expect(failed.answers.u1![0]!.ids.length).toBeGreaterThan(0);
+    expect(failed.answers.u1![0]!.answer.endsWith(UNREAD_NOTE)).toBe(true);
+    // No reader at all (the no-model path): the same note.
+    const none = await run({ askUnreadNote: true });
+    expect(none.answers.u1![0]!.answer.endsWith(UNREAD_NOTE)).toBe(true);
+    // Off (the default): no note either way.
+    const off = await run({ askReader: true }, { maker: new ScriptedReader(flags("mail:hold"), { fail: true }) });
+    expect(off.answers.u1![0]!.answer).not.toContain(UNREAD_NOTE);
+    // An empty answer stays the honest "nothing" (D127), with no note.
+    const all = (input: ReaderInput) => input.items.map((_, i) => i);
+    const empty = await run(
+      { askReader: true, askReaderDrop: true, askUnreadNote: true },
+      { maker: new ScriptedReader(() => [], { reject: all }) },
+    );
+    expect(empty.answers.u1![0]!.answer).toBe("Nothing in the connected sources.");
   });
 
   test("readerPush: an acting request is read on observe and what binds is queued as a packet", async () => {
