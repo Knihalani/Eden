@@ -8,8 +8,9 @@ import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { AskReader, type ReaderInput, type ReaderMaker } from "./reader";
 
-// D126 on the reader's push: the reader's likely picks are re-read beside its call (`checkAhead`), the delivery shares
-// that re-read, and a packet whose re-read outlasts a newer user message is not queued.
+// D126 on the reader's push, with `readerVerifyAfter` off (these tests build on CORE_CONFIG): the reader's likely picks
+// are re-read beside its call (`checkAhead`), the delivery shares that re-read, and a packet whose re-read outlasts a
+// newer user message is not queued. The default's path (D192, re-reads after the reader names) is the last describe.
 
 const HOUR = 3_600_000;
 const T0 = Date.UTC(2026, 10, 2, 9);
@@ -268,7 +269,7 @@ class PickNone implements ReaderMaker {
   }
 }
 
-describe("readerVerifyAfter (trial, D192): re-reads start only once the reader names an item", () => {
+describe("readerVerifyAfter (D192): re-reads start only once the reader names an item", () => {
   test("the named item is re-read at delivery, once, and the push delivers the current copy", async () => {
     const { p, src, maker, user, say } = await setup({ readerVerifyAfter: true });
     src.add("hold", "Harlow invoice on hold", "Harlow dispute settled: the invoice may be paid now", T0 - 9 * HOUR);
@@ -292,5 +293,20 @@ describe("readerVerifyAfter (trial, D192): re-reads start only once the reader n
       for (let n = 0; n < 50; n++) await tick();
       expect(src.fetches).toBe(fetches);
     }
+  });
+
+  test("D193 with D192: an ask reusing a push whose flagged item its re-read changed reads the current copy", async () => {
+    const { p, src, maker, user, say } = await setup({ readerVerifyAfter: true, readerReuse: true });
+    src.add("hold", "Harlow invoice on hold", "Harlow dispute settled: the invoice may be paid now", T0 - 9 * HOUR);
+    expect(p.sourceChanged(user, "mail")).toBe(true);
+    await say("Pay the Harlow invoice today");
+    const pushed = maker.calls.length;
+    expect(pushed).toBeGreaterThanOrEqual(1);
+    // The push read the old copy and flagged it; its delivery re-read and stored the new one. The ask in the same
+    // request does not take a bearing made from the old copy: it reads the current one.
+    const a = await p.ask({ ...user, sessionId: "s1", question: "Anything about Harlow before I pay?", maxItems: 3 });
+    expect(maker.calls.length).toBe(pushed + 1);
+    expect(maker.calls.at(-1)!.items.find((x) => x.id === HOLD)?.text).toContain("dispute settled");
+    expect(a.answer).toContain("Eden's reader");
   });
 });

@@ -352,7 +352,8 @@ queued and the agent has not taken is replaced, its ledger entries restored. The
 the reading (bounded by the reader's model call and the session's close), and `observe` reports `pending` while it runs.
 With `readerReuse` (on in the default, D193), an `ask` made before the next user message and read against the push's
 own request (not an ask that acts on its own) takes the push's verdict on the items both pools hold unchanged, with no
-reader call of its own (`Session.pushRead`); a push with no verdict leaves the ask to read, and one still out past the
+reader call of its own (`Session.pushRead`); it was read against the user's request, not the agent's question. A push
+with no verdict, or one that flagged an item changed since it read it, leaves the ask to read; one still out past the
 ask's wait leaves the ask answered without the reader.
 Its packet is queued only if the session is still open and no newer user message has arrived; the agent's own events in
 between (tool calls, its replies) do not make it stale.

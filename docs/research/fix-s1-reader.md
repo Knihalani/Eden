@@ -11,8 +11,9 @@ Never run here: `heldout15` (reserved for the final blind check).
 
 - Two of the five fixes ship. **An `ask_context` call made while the user's request is still current now reuses the
   reader's push reading instead of paying for a second reading (D193).** **Re-reads of items a change signal put in
-  doubt now start only for items the reader actually names (D192).** Together, on the Pi agent with Haiku: about 23%
-  less spent per task across the realistic 1:1:8 traffic mix ($0.856 → $0.628 per 1,000 tasks), 0.49 s less wall time
+  doubt now start only for items the reader actually names (D192).** Together, on the Pi agent with Haiku: about 27%
+  less spent per task across the realistic 1:1:8 traffic mix ($0.856 → $0.628 per 1,000 tasks; Eden's own share
+  $0.511 → $0.286, 44% less), 0.49 s less wall time
   per task, 2.45 fewer connector calls, and on neutral turns half the reader calls (1.78 → 0.88). No measured loss in
   hidden facts raised or rise in false concerns.
 - Three fixes were measured and deleted with their code and tests. An evidence gate in front of the reader (D190) could
@@ -156,7 +157,12 @@ What the numbers say:
   −0.95 a task), and with them their wait and the re-reads started beside them. Alone, its hidden-facts difference was
   +1.6 points in run 1 and −7.8 points in run 2 (−15.6..0.0, touching zero), so a loss of a few points cannot be ruled
   out for (d) alone. With (c) it read +1.6 (−4.7..+7.8). An ask that acts on its own (another request) and an ask whose
-  push gave no verdict still read as before.
+  push gave no verdict still read as before. A reused verdict was read without the agent's own question (the push read
+  the user's request), so its look-alike drops apply to the ask's answer too; the narrow-ask screen (304/139) measured
+  that. After the final review, an ask also reads anew when an item the push flagged has changed since the push read it
+  (with (c) on, the push's own delivery re-read may store a new copy): the bearing would describe the old copy. That
+  path needs a change signal on a flagged item; it came after both live runs, which did not measure it
+  (`freshness-push.test.ts`).
 - **(c) is the connector-call fix.** It removes 1.6 to 2.6 fetches a task: the re-reads `checkAhead` started beside
   every reader call, on doubted items the reader mostly did not name (D134 kept them for latency). Alone it was slower
   (control wall +0.38 s): a delivery whose item is doubted now waits for its re-read after the reader. With (d) there

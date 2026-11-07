@@ -156,7 +156,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   be called (D134), after `readAsk`'s empty-pool and `readerGate` returns, and never for an ask that reuses the push.
 - **`readerReuse` (D193, on in the default):** an ask in the push's request reads `Session.pushRead` (the push's
   request text, its pool's content hashes, its verdict) with no call; it must match the push's own request (`main`),
-  or an ask that acts on its own would get the push's verdict on another request (`reader-s1.test.ts`). The fix-S1
+  or an ask that acts on its own would get the push's verdict on another request (`reader-s1.test.ts`); and an item
+  the push flagged must still have the content it read, or the ask reads anew (`freshness-push.test.ts`). The fix-S1
   trials that failed (D190 evidence gate, D191 no wait on a weak pool, D194 short schema) are deleted: rebuilding one
   needs a new decision.
 - **One deadline per lookup (D140).** `searchLive` takes `deadlineAt` once, after resolving the sources and before

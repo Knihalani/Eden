@@ -1745,6 +1745,10 @@ export class ContextPartner {
     ]).finally(() => clearTimeout(timer));
     if (v === "late") return "late";
     if (!v) return null;
+    // An item the push flagged whose copy changed since it read it (the push's own re-read, D192, or another): its
+    // bearing was of the old copy, so the ask reads the current one with a call of its own.
+    const now = new Map(pool.map((x) => [x.item.id, cardKey(x.item)]));
+    if (v.bears.some((b) => now.has(b.id) && now.get(b.id) !== prior.hashes.get(b.id))) return null;
     const same = new Set(pool.filter((x) => prior.hashes.get(x.item.id) === cardKey(x.item)).map((x) => x.item.id));
     return {
       verdict: {
