@@ -75,6 +75,11 @@ export interface QualityOptions {
    * false), so a deleted item's re-read is "unverifiable" and only a sweep or a removal drops it.
    */
   nullProvesNothing?: boolean;
+  /**
+   * Lab only (A21, D356): no source ever counts as used (`Sync.engage` is a no-op), so with `syncUnusedSweepMs` every
+   * source takes the longer sweep: the worst case for deletions a lost notice leaves to the sweep.
+   */
+  neverUsed?: boolean;
   agentToolRate?: number;
   /**
    * With no live model: "perfect" puts an oracle judge in the model's place (the ceiling of the model path),
@@ -621,6 +626,7 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
       ...(o.spanSink ? { onSpan: o.spanSink(`u${u}`) } : {}),
       ...(cards ? { cards } : {}),
     });
+    if (o.neverUsed && partner.sync) partner.sync.engage = () => [];
     const who = { tenantId: "sim", userId: `u${u}` };
     /** `lostNotices`: its own stream, so a run with none lost draws everything else as before. */
     const losing = new Rng(o.seed * 7_907 + u);

@@ -91,6 +91,12 @@ export interface SyncOptions {
    */
   sketch?: boolean;
   /**
+   * `syncUnusedSweepMs` (D356, on in the default at a week; 0 or absent: off): a source the user does not use (`engage`) whose connector
+   * can fetch by ref is swept this often (ms) instead of every `sweepMs`. The engine re-reads its copies older than
+   * `sweepMs` before delivering them (`sweepLapsed`), since a deletion may be behind them.
+   */
+  unusedSweepMs?: number;
+  /**
    * `syncPush`: a source that says it `notifies` is current until told it changed (`Sync.changed`) or its last poll
    * is `maxStaleMs` old, instead of by its learned change rate.
    */
@@ -218,6 +224,13 @@ interface SourceSync {
   deep: { cursor: string | undefined; lost: boolean } | null;
   /** `routeSketch`: the terms of what the sync listed from the source (made at its first store). */
   sketch: TermSketch | null;
+  /** The source's connector can fetch an item by ref (`unusedSweepMs`: only such a source may be swept less often). */
+  fetches: boolean;
+  /**
+   * `unusedSweepMs`: a sweep the daily rule (`sweepMs`) would have run for an active user was not run since the last
+   * complete sweep, because the source was on the longer one. Its copies older than `sweepMs` are then in doubt.
+   */
+  skipped: boolean;
 }
 
 interface UserSync {
@@ -469,6 +482,45 @@ export class SyncManager {
     return fresh;
   }
 
+  /**
+   * `unusedSweepMs` (D356): whether the source skipped a daily sweep for the longer one since its last complete sweep,
+   * which is older than `sweepMs`, so a copy of its items older than that may hide a deletion the daily sweep would
+   * have seen.
+   * False for a source the sync does not hold or with the trial off. O(1), no I/O.
+   */
+  sweepLapsed(scope: Scope, sourceId: string, now = this.deps.now()): boolean {
+    if (!((this.o.unusedSweepMs ?? 0) > 0)) return false;
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    // Whether it is used now or not: a lookup that cites an item engages its source first, and the sweep that makes
+    // due runs at a tick, after the delivery. Only a sweep the trial skipped counts: an idle user's daily sweep waits
+    // for them as before (the 5-source days: counting those re-read 27 copies for nothing).
+    return s !== undefined && s.phase === "warm" && s.skipped && now - s.sweptAt > this.o.sweepMs;
+  }
+
+  /**
+   * `unusedSweepMs` (D356): whether the source's last complete sweep did not list this item (one miss; two drop it).
+   * On the daily sweep the second miss comes a day later; on the longer one a week, so until a re-read or a listing
+   * vouches for it the copy is in doubt. False with the trial off. O(1), no I/O.
+   */
+  sweepMissed(scope: Scope, sourceId: string, itemId: string): boolean {
+    if (!((this.o.unusedSweepMs ?? 0) > 0)) return false;
+    return this.users.get(scopeKey(scope))?.sources.get(sourceId)?.missed.has(itemId) === true;
+  }
+
+  /** A re-read found the item at its source (`verifyDelivery`): no longer counted as missed by a sweep. O(1). */
+  vouched(scope: Scope, sourceId: string, itemId: string): void {
+    this.users.get(scopeKey(scope))?.sources.get(sourceId)?.missed.delete(itemId);
+  }
+
+  /**
+   * `unusedSweepMs` (D356): a re-read of one of the source's unswept copies could not confirm it, so its sweep is due
+   * at the next tick of an active user, whatever its interval. O(1), no I/O.
+   */
+  sweepSoon(scope: Scope, sourceId: string): void {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    if (s && s.phase === "warm") s.sweptAt = -Infinity;
+  }
+
   /** Whether a lookup of the user's has searched the source (`engage`). False for one the sync does not hold. */
   engaged(scope: Scope, sourceId: string): boolean {
     return this.users.get(scopeKey(scope))?.sources.get(sourceId)?.engaged === true;
@@ -611,6 +663,14 @@ export class SyncManager {
 
   // ── internals ──
 
+  /**
+   * `unusedSweepMs` (D356): a source the user does not use whose connector can fetch by ref is swept that often. One
+   * without a fetch keeps the daily sweep: its copies could not be re-read before delivery.
+   */
+  private onLongSweep(s: SourceSync): boolean {
+    return (this.o.unusedSweepMs ?? 0) > 0 && !s.engaged && s.fetches;
+  }
+
   private isCurrent(s: SourceSync, now: number): boolean {
     if (s.phase !== "warm") return false;
     const age = now - s.polledAt;
@@ -687,7 +747,9 @@ export class SyncManager {
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);
         if (!source || s.phase !== "warm" || s.busy || now < s.retryAt) return;
-        if (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs) await this.run(s, () => this.sweep(u, s, source));
+        const every = this.onLongSweep(s) ? Math.max(this.o.unusedSweepMs!, this.o.sweepMs) : this.o.sweepMs;
+        if (s.sweep !== null || now - s.sweptAt >= every) await this.run(s, () => this.sweep(u, s, source));
+        else if (now - s.sweptAt >= this.o.sweepMs) s.skipped = true;
       }),
     );
   }
@@ -1095,6 +1157,7 @@ export class SyncManager {
         this.stats.deleted += this.deps.cache.dropSynced(u.scope, gone);
         s.sweep = null;
         s.sweptAt = this.deps.now();
+        s.skipped = false;
         return;
       }
       sw.cursor = page.next;
@@ -1165,6 +1228,7 @@ export class SyncManager {
   /** Whether a source's copy goes by its notifications (`push` and the source `notifies`). */
   private notes(s: SourceSync, source: Source): void {
     s.notifies = this.o.push === true && source.notifies === true;
+    s.fetches = typeof source.fetch === "function";
   }
 
   private failed(s: SourceSync, why: string): void {
@@ -1272,6 +1336,8 @@ function newSourceSync(id: string): SourceSync {
     engaged: false,
     deep: null,
     sketch: null,
+    fetches: false,
+    skipped: false,
   };
 }
 

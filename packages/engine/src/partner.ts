@@ -670,6 +670,8 @@ export class ContextPartner {
             keepCut: c.syncKeepCut,
             sketch: c.routeSketch,
             engagedDeep: c.syncEngagedDeep,
+            // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
+            unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
           },
         )
       : null;
@@ -3931,7 +3933,7 @@ export class ContextPartner {
   private engageSources(s: Session, cue: Cue, searched: readonly string[]): void {
     const sync = this.sync;
     const cards = this.config.cardsSourceAware && this.config.cards && this.deps.cards !== undefined;
-    if (!sync || (!cards && !this.config.syncEngagedDeep)) return;
+    if (!sync || (!cards && !this.config.syncEngagedDeep && !(this.config.syncUnusedSweepMs > 0))) return;
     if (cards && cue.entities.length > 0) {
       sync.notePeople(
         s.scope,
@@ -4048,12 +4050,31 @@ export class ContextPartner {
    * no measured gain; a silent source's changes reach Eden through the sync's polls and sweeps).
    */
   private doubted(s: Session, item: ContextItem): boolean {
+    if (this.unswept(s.scope, item)) return true;
     const mark = this.deps.cache.readMark(s.scope, item.id);
     if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark) !== true) return false;
     // A re-read since that signal could not tell (a null that proves nothing): another says the same until it signals.
     const held = this.unverifiable.get(scopeKey(s.scope))?.get(item.id);
     if (held === undefined || this.now() - held.at > UNVERIFIABLE_HOLD_MS) return true;
     return this.sync.signalledSince(s.scope, item.sourceId, held.mark);
+  }
+
+  /**
+   * `syncUnusedSweepMs` (D356): the item's source is one the user does not use, swept less often, and neither a sweep
+   * nor any other read has seen this copy for longer than the daily sweep would have allowed (`syncSweepMs`): a
+   * deletion the sweep has not seen yet may be behind it, so it is re-read before it is delivered or cited. O(1).
+   */
+  private unswept(scope: Scope, item: ContextItem): boolean {
+    const every = this.config.syncSweepMs;
+    if (!(this.config.syncUnusedSweepMs > 0) || !this.sync) return false;
+    const at = this.deps.cache.fetchedAt(scope, item.id);
+    if (at === undefined) return false;
+    const now = this.now();
+    // A copy the last sweep did not list: the second miss that drops it may be a week away (on the longer sweep), and
+    // a withheld copy's own early sweep is such a first miss (the MCP worst case cited 3 against 1). Whatever its age:
+    // listed since, it would not be missed.
+    if (this.sync.sweepMissed(scope, item.sourceId, item.id)) return true;
+    return now - at > every && this.sync.sweepLapsed(scope, item.sourceId, now);
   }
 
   /** Notes an "unverifiable" re-read of a user's item under the read mark it began with (`unverifiable`). */
@@ -4097,7 +4118,12 @@ export class ContextPartner {
       return held !== undefined && now - held.at <= CHECK_REUSE_MS;
     };
     const doubted = new Set<string>();
-    for (const x of scored) if (this.doubted(s, x.item)) doubted.add(x.item.id);
+    // `syncUnusedSweepMs` (D356): copies only the sweep could vouch for, delivered only if a re-read confirms them.
+    const unswept = new Set<string>();
+    for (const x of scored) {
+      if (this.unswept(s.scope, x.item)) unswept.add(x.item.id);
+      if (unswept.has(x.item.id) || this.doubted(s, x.item)) doubted.add(x.item.id);
+    }
     const due = scored.filter((x) => recent(x.item.id) || doubted.has(x.item.id));
     if (due.length === 0) return scored;
     const t0 = performance.now();
@@ -4137,6 +4163,13 @@ export class ContextPartner {
       if (o === "gone") return [];
       // A removal that landed while the other re-reads ran (audit A5): the item is gone whatever its own outcome said.
       if (this.deps.cache.isHeldGone(s.scope, x.item.id, after)) return [];
+      // An unswept copy no re-read confirmed (a null that proves nothing, an error, a skip): the sweep it was waiting
+      // for is due now, and until it or a re-read vouches for the copy, it is not delivered nor cited.
+      if (unswept.has(x.item.id) && o !== "confirmed" && o !== "changed") {
+        this.sync?.sweepSoon(s.scope, x.item.sourceId);
+        if (strict) strict.unconfirmed.set(x.item.sourceId, (strict.unconfirmed.get(x.item.sourceId) ?? 0) + 1);
+        return [];
+      }
       if (strict && doubted.has(x.item.id) && (o === "failed" || o === "flaked")) {
         strict.unconfirmed.set(x.item.sourceId, (strict.unconfirmed.get(x.item.sourceId) ?? 0) + 1);
         return [];
@@ -4239,6 +4272,8 @@ export class ContextPartner {
       }
       const copy = { ...got.item, id: item.id, sourceId: item.sourceId, ref: item.ref };
       this.deps.cache.revive(s.scope, [item.id]);
+      // Found at its source: a sweep that missed it skipped it (an offset listing shifts), D356's doubt is answered.
+      this.sync?.vouched(s.scope, item.sourceId, item.id);
       const synced = this.deps.cache.isSynced(s.scope, item.id);
       // Stored as read now (its fetch time moves), as synced when the sync held it; carded and noted like any read.
       const changed = this.store(s, [copy], 0, synced, readMark) > 0;

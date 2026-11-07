@@ -55,6 +55,7 @@ export const PARTS = {
     syncLocalComplete: false,
     syncKeepCut: false,
     syncEngagedDeep: false,
+    syncUnusedSweepMs: 0,
   },
   /**
    * Routing by the user's own index: sources holding the request's best local matches first (D265), and by each
