@@ -248,6 +248,13 @@ export interface EngineConfig {
   /** Sources whose backfill pages are read at once, newest unread first (1: one at a time; 8 in the default, D262). */
   syncBackfillLanes: number;
   /**
+   * Trial (D328, off): a page the background sync listed (backfill, sweep, timed poll; never a lookup's on-demand
+   * poll) is redacted and stored only at its turn: at most one such page per turn of the event loop, the others
+   * waiting (`SyncManager.turn`). A cold-start storm's pages otherwise arrive together and are stored back to back,
+   * and every request waits behind them all.
+   */
+  syncIngestTurns: boolean;
+  /**
    * On in the default (D264): a synced source answers a lookup from the local index only when the user's copy holds
    * all of it; one cut at `syncMaxItems` (the backfill stopped before its listing ended, or a trim dropped some of its
    * items) is searched live, as an unsynced source is. Off: a cut copy answers from the index and misses what is
@@ -564,6 +571,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncCatchupPages: 2,
   syncPollWidth: 8,
   syncBackfillLanes: 8,
+  syncIngestTurns: false,
   syncLocalComplete: true,
   routeLocalHits: true,
   syncMaxUsersPerTenant: 1_000,

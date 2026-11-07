@@ -65,10 +65,20 @@ class ListSource implements Source {
  * Memory after a full GC: the JS heap plus what it holds outside itself (`external`: typed arrays' stores, which are
  * most of an index and every packed text, and which `heapUsed` leaves out), and RSS.
  */
-const mem = () => {
+const mem = async () => {
+  // RSS comes down some seconds after a storm's garbage is collected (the allocator returns pages lazily): read it
+  // once it has stopped falling (under 1% a second), at most 20 s on.
+  let rss = Number.POSITIVE_INFINITY;
+  for (let t = 0; t < 20; t++) {
+    Bun.gc(true);
+    const now = process.memoryUsage().rss;
+    if (now > rss * 0.99) break;
+    rss = now;
+    await Bun.sleep(1_000);
+  }
   Bun.gc(true);
   const m = process.memoryUsage();
-  return { heap: m.heapUsed + m.external, rss: m.rss };
+  return { heap: m.heapUsed + m.external, rss: Math.min(rss, m.rss) };
 };
 
 async function pool(): Promise<ContextItem[]> {
@@ -103,7 +113,7 @@ const avgChars = Math.round(base.reduce((s, i) => s + i.text.length, 0) / base.l
 let clock = Date.UTC(2026, 10, 3, 9);
 const T0 = clock;
 const now = () => clock;
-const m0 = mem(); // Before any user: the baseline every per-user figure is taken from (as ingest.bench's "released").
+const m0 = await mem(); // Before any user: the baseline every per-user figure is taken from (as ingest.bench's "released").
 
 const users: { scope: Scope; sources: ListSource[] }[] = [];
 for (let u = 0; u < USERS; u++) {
@@ -157,8 +167,9 @@ for (let w = 0; w < WAVES; w++) {
 const stormMs = performance.now() - t0;
 const cpu = process.cpuUsage(cpu0);
 for (const { sources } of users) for (const s of sources) s.items = [];
-const m2 = mem();
-const perUser = (a: { heap: number; rss: number }, b: { heap: number; rss: number }) => ({
+const m2 = await mem();
+type Mem = { heap: number; rss: number };
+const perUser = (a: Mem, b: Mem) => ({
   heapMB: (a.heap - b.heap) / USERS / MB,
   rssMB: (a.rss - b.rss) / USERS / MB,
 });
@@ -173,7 +184,7 @@ if (!NO_FREEZE) {
   for (let t = 0; t < 4 && cache.frozenCount < USERS; t++) cache.expireIdle(clock);
   freezeMs = performance.now() - f0;
   if (cache.frozenCount !== USERS) throw new Error(`froze ${cache.frozenCount} of ${USERS}`);
-  frozen = perUser(mem(), m0);
+  frozen = perUser(await mem(), m0);
   blobBytes = cache.frozenBytes;
 }
 
@@ -186,7 +197,7 @@ for (const { scope } of users) {
   cache.search(scope, q.ids, q.n, 10, clock);
   thaws.push(performance.now() - a);
 }
-const m4 = mem();
+const m4 = await mem();
 
 /** Event-loop lag while `work` runs: a 1 ms timer chain, each delay past 1 ms recorded. */
 async function lagDuring(work: () => Promise<void>): Promise<{ ms: number; lagMax: number; lagP99: number }> {

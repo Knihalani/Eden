@@ -81,6 +81,8 @@ export interface SyncOptions {
    * the bound on a lost notification (`syncPushMaxStaleMs`); 0 or absent: `maxStaleMs`.
    */
   pushMaxStaleMs?: number;
+  /** `syncIngestTurns` (D328, trial): a background read's page is redacted and stored at its turn (`turn`). */
+  ingestTurns?: boolean;
 }
 
 export interface SyncDeps {
@@ -935,7 +937,12 @@ export class SyncManager {
     given: { timeoutMs: number; signal?: AbortSignal; reserve?: number },
   ): ReturnType<SourceFanout["list"]> {
     // Items the cache holds unchanged are not redacted again (most of a poll or a sweep re-lists what is held).
-    const options = { ...given, reuse: this.deps.cache.reuseFor(scope) };
+    const options = {
+      ...given,
+      reuse: this.deps.cache.reuseFor(scope),
+      // D328 (trial): background pages wait their turn; a lookup's own poll never waits behind them.
+      ...(this.o.ingestTurns && phase !== "demand" ? { turn: this.turn } : {}),
+    };
     const tracer = this.deps.tracer;
     if (!tracer) return this.deps.fanout.list(source, scope, cursor, limit, options);
     const sp = tracer.open("sync.list", 0, { async: true, phase, source: source.id });
@@ -948,6 +955,20 @@ export class SyncManager {
       throw e;
     }
   }
+
+  /** The last turn handed out (`turn`). */
+  private turns: Promise<void> = Promise.resolve();
+
+  /**
+   * `syncIngestTurns` (D328): resolves one turn of the event loop after the turn before it resolved, so the pages
+   * waiting on it are redacted and stored one per loop turn, in the order they arrived, with every request, timer
+   * and I/O callback that came meanwhile run in between. A page is a few milliseconds to ~15 ms of work (100 items).
+   */
+  private readonly turn = (): Promise<void> => {
+    const t = this.turns.then(() => new Promise<void>((resolve) => setImmediate(resolve)));
+    this.turns = t;
+    return t;
+  };
 
   /** One listing call, a lookup's (`demand`, also counted in its freshen's `tally`) or the background's. */
   private count(demand: boolean): void {

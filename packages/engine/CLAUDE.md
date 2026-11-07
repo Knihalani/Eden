@@ -28,8 +28,9 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `gate.ts`                                                                  | Redaction off the event loop through the worker pool (D25, D26)                                                                                                                                                               |
 
 `bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `ingest.bench.ts` (memory per synced
-user, ingest µs/item; the scale anchor, docs/TESTING.md), `index-memory` (the per-user index's heap per item and per
-user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`.
+user, ingest µs/item; the scale anchor, docs/TESTING.md), `users.bench.ts` (many users: memory live and frozen, thaw,
+D325), `storm.bench.ts` (a cold-start storm with warm users' p99, D328), `index-memory` (the per-user index's heap per
+item and per user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`.
 
 ## Invariants (with the decisions)
 
@@ -255,6 +256,17 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   once, before the poll, and searches the head of that ranking: a second route would draw apart, and an ask must
   never answer a stale copy it did not poll (D127, D263's review). Per-(user, source) state is multiplied by
   the source count: keep it lazy (the fan-out's histograms were 8 KB a pair before D261).
+- **Idle users are frozen (D325, docs/research/a14-scale-users.md).** `ItemCache` holds a user idle for
+  `freezeIdleMs` (30 min) as one zstd blob (`FrozenUser`) and thaws them exactly on next use. Every reader of a
+  user's state goes through `peek`/`touch` (which thaw and mark the user seen); only `revision` and `syncedCount`
+  read a frozen user as is. A new per-user field of `UserCache` must be carried by `freezeSteps`/`thawSteps` (or be
+  derived and rebuilt), and `cache-freeze.test.ts`'s twin snapshot extended to read it. A new entry point that serves
+  a user awaits `cache.ready(scope)` first, as `observe`, `ask` and `checkAction` do, or its first read thaws
+  synchronously (~110-190 ms at 3,000 items) with every other request waiting. Bench: `bench/users.bench.ts`;
+  `heapUsed` alone misses typed arrays (`external`): use both, and RSS, for memory per user.
+- **`syncIngestTurns` (D328, trial, off).** A background sync page waits its turn (one per event-loop turn) before it
+  is redacted and stored: a cold-start storm no longer stalls every request (`bench/storm.bench.ts`), but the card
+  drain then runs on smaller batches (funnel card calls 428 to 549, the same items carded), so it is not promoted.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

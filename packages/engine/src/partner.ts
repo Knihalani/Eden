@@ -636,6 +636,7 @@ export class ContextPartner {
             timeoutMs: Math.max(c.sourceTimeoutMs, 5_000),
             demandTimeoutMs: c.sourceTimeoutMs,
             push: c.syncPush,
+            ingestTurns: c.syncIngestTurns,
             pushMaxStaleMs: c.syncPushMaxStaleMs,
           },
         )
