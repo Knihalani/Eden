@@ -1,0 +1,20 @@
+
+## direct
+cond  kind     n   rate  p50s  p90s meanS edenPathMs share  inFresh cRead cWrite  out  agent$/1k edenTask$/1k bkfill$/1k allIn$/1k agentCalls asks eSearch eList eFetch reader packets bytes
+eden  hidden   128 0.773 4.52 7.32 4.93   1932 0.384      3   692   693  436   0.312   0.253   0.091   0.657 0.00 0.60 0.26 3.25 3.13 0.94 1.20 476
+eden  control  128 0.016 5.47 7.86 5.58   2149 0.379      4  1097   616  476   0.326   0.248   0.091   0.665 0.00 1.04 0.36 3.28 3.95 0.97 0.79 279
+eden  neutral   64 0.094 6.02 8.85 5.98   2287 0.367      4  1095   707  498   0.349   0.227   0.091   0.667 0.00 1.23 0.39 3.45 4.55 0.89 0.50 149
+eden  MIX 1:1:8 raised 0.077 wrong 0.077 $/1k 0.665 (Eden 0.323) wall p50 5.64 p90 8.77 mean 5.83 calls 8.14 edenPathShare 0.370
+eden~slim hidden   128 0.727 4.22 7.72 4.83   1885 0.380      3   623   731  420   0.308   0.226   0.091   0.626 0.00 0.58 0.00 3.30 3.01 0.89 1.12 443
+eden~slim control  128 0.016 5.63 7.99 5.63   2242 0.385      4   865   832  470   0.348   0.251   0.091   0.691 0.00 1.06 0.11 3.30 3.87 0.98 0.77 273
+eden~slim neutral   64 0.016 5.70 8.48 5.93   2290 0.375      5  1025   815  489   0.357   0.224   0.091   0.672 0.00 1.30 0.30 3.28 4.48 0.91 0.50 138
+eden~slim MIX 1:1:8 raised 0.073 wrong 0.014 $/1k 0.669 (Eden 0.318) wall p50 5.61 p90 8.48 mean 5.79 calls 7.81 edenPathShare 0.377
+
+## paired differences a − b, bootstrap 95%
+eden~slim - eden         hidden  n=128 rate -0.047 (-0.117..+0.016) wall -0.10 (-0.41..+0.21) $/1k -0.031 (-0.065..+0.001) calls -0.34 (-0.77..+0.09) edenPathMs -47 (-221..+124)
+eden~slim - eden         control n=128 rate +0.000 (-0.023..+0.023) wall +0.06 (-0.26..+0.36) $/1k +0.025 (-0.003..+0.054) calls -0.31 (-0.78..+0.15) edenPathMs +94 (-84..+268)
+eden~slim - eden         neutral n= 64 rate -0.078 (-0.156..+0.000) wall -0.05 (-0.43..+0.35) $/1k +0.005 (-0.035..+0.048) calls -0.33 (-1.03..+0.34) edenPathMs +2 (-257..+252)
+eden~slim - eden         MIX    raised -0.005 (-0.012..+0.002) wrong -0.062 (-0.126..-0.001) wall -0.04 (-0.35..+0.26) $/1k +0.004 (-0.030..+0.038) calls -0.33 (-0.92..+0.24)
+eden~slim - eden hidden  reader -0.05 (-0.11..+0.01) fetch -0.12 (-0.51..+0.26) asks -0.02 (-0.16..+0.11)
+eden~slim - eden control reader +0.01 (-0.03..+0.05) fetch -0.09 (-0.51..+0.33) asks +0.02 (-0.11..+0.16)
+eden~slim - eden neutral reader +0.02 (-0.05..+0.09) fetch -0.06 (-0.67..+0.56) asks +0.06 (-0.09..+0.22)
