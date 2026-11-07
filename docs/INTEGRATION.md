@@ -71,6 +71,10 @@ Work still running when the wait ends arrives later through `pending`/`collect`,
   of hidden facts raised, with wall time p50 within 0.15 s (D98); no wait lost 18.2 to 32.3 points on train (D99,
   [research/haiku-phase3.md](research/haiku-phase3.md)). The reader took 1,190 ms at p50 and 1,768 ms at p90 there
   (prompt v7), so a wait under about 2 s misses some readings; no wait between 1 s and 3 s was measured.
+- **Do not send the agent's first model request before the observe replies** (CL4, D248). Sending it at once and
+  re-sending it when a packet lands cut no wall time on Pi (−0.14 s, −0.52..+0.28, assumed traffic mix) and cost
+  +$0.058 per 1,000 tasks; re-sending only when the first reply was a final answer made the agent call `ask_context`
+  first and cost more. The wait is a cap, not a delay: when no reading is coming the observe replied at p50 3–240 ms.
 
 ## Keep `ask_context` (measured, D70)
 
@@ -224,6 +228,9 @@ await eden.sourceChanged("gmail", {
   once, at its next use, however many notifications came first, and every item Eden read from it before the signal is
   re-read by its id before it is delivered or cited (D126, D131, D211). For a busy inbox this saves little: it changes
   about every hour, so it is polled about as often as before. Use it only where the provider gives no items.
+  **It also makes `ask_context` slow** (CL4, D249): on Pi with signals, an ask took 1.35–1.59 s, almost all of it
+  re-reading 4–5 doubted copies it cites; with the items pushed it took 0.19 s (heldout14 neutral tasks, one seed,
+  Anthropic-direct lab figures, docs/research/cl-cl4.md).
 
 Declare the sources you forward: `"notifies": true` in the user's source spec (`EDEN_USER_SOURCES_FILE` or your
 `SourceDirectory`), or `notifies: true` on a `Source` you build. A source that notifies is polled only when told it
