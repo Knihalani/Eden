@@ -19,6 +19,16 @@
         "@eden/server": "workspace:*",
       },
     },
+    "examples/onboarding": {
+      "name": "@eden/example-onboarding",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@eden/client": "workspace:*",
+        "@eden/proxy": "workspace:*",
+        "@eden/server": "workspace:*",
+        "@eden/sources": "workspace:*",
+      },
+    },
     "examples/personal-agent": {
       "name": "@eden/example-personal-agent",
       "version": "0.0.0",
@@ -213,6 +223,8 @@
     "@eden/eval": ["@eden/eval@workspace:packages/eval"],
 
     "@eden/example-oauth-directory": ["@eden/example-oauth-directory@workspace:examples/oauth-directory"],
+
+    "@eden/example-onboarding": ["@eden/example-onboarding@workspace:examples/onboarding"],
 
     "@eden/example-personal-agent": ["@eden/example-personal-agent@workspace:examples/personal-agent"],
 

@@ -1,9 +1,11 @@
 # Eden's HTTP server (D280). Build and run from the repo root:
 #   docker build -t eden .
-#   docker run -p 8790:8790 -e EDEN_API_KEYS="acme:<a key of 16+ characters>" -e EDEN_PROCESSES=2 \
+#   docker run -p 8790:8790 -e EDEN_API_KEYS="acme:$(openssl rand -hex 24)" -e EDEN_PROCESSES=2 \
 #     -v eden-data:/data eden
-# Add -e OPENROUTER_API_KEY=… for the model roles, -v ./sources:/sources:ro with EDEN_USER_SOURCES_FILE or
-# EDEN_SOURCES_FILE for connectors. Set EDEN_PROCESSES to the container's CPU quota: a quota the container cannot see
+# (keep the key: callers send it as Authorization: Bearer <key>; one tenant:key pair per tenant, comma-separated).
+# Add -e OPENROUTER_API_KEY=… for the model roles. Connectors: -v ./sources:/sources:ro
+# -e EDEN_USER_SOURCES_FILE=/sources/users.json (a path inside the container), plus -e for each token variable the
+# file names; it is re-read on change. A mistake stops startup with one line naming it (exit 2). Set EDEN_PROCESSES to the container's CPU quota: a quota the container cannot see
 # is not detected (docs/INTEGRATION.md, "Processes and per-tenant caps").
 FROM oven/bun:1.4.4
 WORKDIR /app

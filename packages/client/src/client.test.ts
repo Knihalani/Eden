@@ -369,6 +369,12 @@ describe("explain (D277)", () => {
       onError,
     });
     expect(await down.explain()).toEqual([]);
+    // It says where it was sending (D365), not only the runtime's "Unable to connect".
+    expect(String(errors[0])).toStartWith("Error: eden /v1/explain: cannot reach http://127.0.0.1:9 (");
+    const hidden = new EdenClient({ userId: "u", sessionId: "s", baseUrl: "http://me:secret@127.0.0.1:9", onError });
+    await hidden.explain();
+    expect(String(errors.at(-1))).toContain("cannot reach http://127.0.0.1:9 (");
+    expect(String(errors.at(-1))).not.toContain("secret");
     const refused = new EdenClient({
       userId: "u",
       sessionId: "s",
@@ -378,7 +384,7 @@ describe("explain (D277)", () => {
     expect(await refused.explain()).toEqual([]);
     const odd = new EdenClient({ userId: "u", sessionId: "s", onError, fetch: answering(() => Response.json([1])) });
     expect(await odd.explain()).toEqual([]);
-    expect(errors.length).toBe(3);
+    expect(errors.length).toBe(4);
   });
 });
 

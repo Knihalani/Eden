@@ -11,12 +11,21 @@
  *   EDEN_PROXY_KEEP_PACKETS=0  insert only the current turn's packets (D336's default keeps earlier ones in place)
  *   EDEN_PROXY_SHADOW=1  report to Eden but inject nothing; one JSON line per request Eden would have changed
  */
+import { EdenClient } from "@eden/client";
 import { createProxy } from "./proxy";
 
 const upstream = process.env.EDEN_PROXY_UPSTREAM;
 if (!upstream || !/^https?:\/\//.test(upstream)) {
   console.error("eden proxy: set EDEN_PROXY_UPSTREAM to the model's base URL (https://api.openai.com/v1)");
   process.exit(2);
+}
+// A base URL with no path is almost always a missing version (`…/v1`): the upstream would get `/chat/completions` and
+// answer 404 at the agent's first call, far from this setting (D365).
+if (new URL(upstream).pathname.replace(/\/$/, "") === "") {
+  console.error(
+    `eden proxy: EDEN_PROXY_UPSTREAM=${new URL(upstream).origin} has no path; most providers need their version` +
+      ` path (https://api.openai.com/v1, https://openrouter.ai/api/v1). Continuing as given.`,
+  );
 }
 const edenUrl = process.env.EDEN_URL || "http://127.0.0.1:8790";
 const host = process.env.PROXY_HOST || "127.0.0.1";
@@ -49,3 +58,20 @@ console.log(
   `eden proxy on http://${server.hostname}:${server.port}/v1 -> ${upstream} (Eden at ${edenUrl})` +
     (process.env.EDEN_PROXY_SHADOW === "1" ? " in shadow mode: nothing is injected" : ""),
 );
+// One probe of Eden at startup, so a server that is down or a key it refuses shows here once, not as a line per request
+// (D365). The proxy runs either way: it fails open, and Eden may start later.
+void new EdenClient({
+  baseUrl: edenUrl,
+  ...(process.env.EDEN_API_KEY ? { apiKey: process.env.EDEN_API_KEY } : {}),
+  userId: "proxy-startup",
+  sessionId: "probe",
+})
+  .health()
+  .then((h) =>
+    console.error(
+      h.ok
+        ? `eden proxy: Eden at ${edenUrl} accepted ${process.env.EDEN_API_KEY ? "EDEN_API_KEY" : "a key-less request (dev)"}`
+        : `eden proxy: Eden not usable yet (${h.error}); requests go upstream without context until it is` +
+            (process.env.EDEN_API_KEY ? "" : " (set EDEN_API_KEY if the server has EDEN_API_KEYS)"),
+    ),
+  );

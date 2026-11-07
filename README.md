@@ -62,6 +62,13 @@ EDEN_USER=u EDEN_TENANT=t EDEN_SOURCES_FILE=examples/personal-agent/sources.json
 bun run trace-report server.log    # the server's output, saved by `tee` above
 ```
 
+What you see: the first request gets a packet (`injection.text`, the `<context …>` envelope your agent puts before
+its model call) and `pending: true` (slower work may queue more for `/v1/pending`). An item is delivered once per
+session, so the later `/v1/ask` cites the same items as `(shown above)` rather than repeating them; ask in a new
+`sessionId` to see their text again. Your agent is in its own repository? `bun run pack:client` writes the
+TypeScript client as a standalone package (`npm install /path/to/Eden/dist/eden-client`; the workspace package cannot
+be installed from outside, D365), and Python uses `pip install /path/to/Eden/packages/client-python`.
+
 Then point Eden at your users' real connectors (`EDEN_USER_SOURCES_FILE`, docs/INTEGRATION.md "Connect each user's
 own sources"; presets such as `{"preset": "gmail", …}` name a common server's read tools for you, D294), set `EDEN_API_KEYS` instead of `EDEN_DEV`, and optionally `OPENROUTER_API_KEY` for the background
 cards and intent index. Developing Eden itself: `bun run check` (format, types, tests) and `bun run eval` (the
@@ -70,9 +77,11 @@ hard spend cap (D128).
 
 ## Integrating an agent
 
-**One line: put Eden in front of your model.** `EDEN_PROXY_UPSTREAM=https://api.openai.com/v1 bun run proxy` serves
-an OpenAI-compatible endpoint on `http://127.0.0.1:8791/v1`; point your agent's `base_url` there and send
-`x-eden-user-id` (or the body's `user`). Each chat request's new messages are reported to Eden and its context is
+**One line: put Eden in front of your model.** With the server above running,
+`EDEN_PROXY_UPSTREAM=https://api.openai.com/v1 bun run proxy` serves an OpenAI-compatible endpoint on
+`http://127.0.0.1:8791/v1` (`PROXY_PORT` moves it; against a keyed server add `EDEN_API_KEY`, and `EDEN_URL` if it is
+not on `127.0.0.1:8790`); point your agent's `base_url` there and send `x-eden-user-id` (or the body's `user`). At
+startup it prints whether it reached Eden. Each chat request's new messages are reported to Eden and its context is
 inserted before the latest user message, and kept there on later turns (D336); the answer streams back unchanged, and
 with Eden down the request goes through as it came (D280). Any OpenAI-compatible upstream works (OpenAI, OpenRouter,
 Anthropic's `https://api.anthropic.com/v1`, a local server). For full control, use the SDK:
@@ -144,4 +153,7 @@ docs/INTEGRATION.md).
 
 ## Status
 
-M0 (scaffold) done. Next: M1, an eval worth tuning against. See [docs/ROADMAP.md](docs/ROADMAP.md).
+M0 (scaffold) done; M1, an eval worth tuning against, in progress, with every measured result in
+[docs/research/INDEX.md](docs/research/INDEX.md). See [docs/ROADMAP.md](docs/ROADMAP.md). Nothing is published to
+npm, PyPI or an image registry yet: install from a checkout as above (`bun run pack:client`, `pip install
+./packages/client-python`, `docker build`).

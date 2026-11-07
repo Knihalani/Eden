@@ -222,6 +222,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
   const maxSessions = options.maxSessions ?? 10_000;
   const keepPackets = options.keepPackets ?? true;
   const conversations = new Map<string, Conversation>();
+  let warnedNoUser = false;
   const report = (e: unknown) => {
     try {
       options.onError?.(e);
@@ -250,7 +251,20 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     const messages = body.messages;
     if (!Array.isArray(messages) || messages.length === 0) return null;
     const rawUser = req.headers.get("x-eden-user-id") ?? (typeof body.user === "string" ? body.user : "");
-    if (!rawUser) return null;
+    if (!rawUser) {
+      // Once per proxy, through onError: otherwise a caller that forgot the header saw the agent work with no packet
+      // and no word anywhere of why (D365). No content: the line names the header, not the request.
+      if (!warnedNoUser) {
+        warnedNoUser = true;
+        report(
+          new Error(
+            "eden proxy: a chat request named no user (send x-eden-user-id or the body's user); it went upstream" +
+              " without Eden's context, and later ones will too (said once)",
+          ),
+        );
+      }
+      return null;
+    }
     const userId = edenId(rawUser);
     // The conversation: the caller's id, else its first message that is not a system prompt (a system prompt may
     // carry today's date and change every request), stable as the conversation grows.
@@ -367,6 +381,11 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
   const openAiError = (status: number, message: string) => Response.json({ error: { message } }, { status });
 
   return async function handle(req: Request): Promise<Response> {
+    // The proxy's own liveness, for a load balancer or a container check (D365): before the key checks, since it says
+    // nothing about any user, and answered here rather than forwarded (the upstream has no such route).
+    if ((req.method === "GET" || req.method === "HEAD") && new URL(req.url).pathname === "/healthz") {
+      return Response.json({ ok: true });
+    }
     // The proxy holds the tenant's Eden key: with `proxyKey` set, only callers who know it may name a user (D9).
     if (options.proxyKey !== undefined && !sameSecret(req.headers.get("x-eden-proxy-key"), options.proxyKey)) {
       return openAiError(401, "eden proxy: missing or wrong x-eden-proxy-key");

@@ -68,6 +68,12 @@ class FailOpen(unittest.TestCase):
         c, errors = client()
         self.check_all_quiet(c)
         self.assertTrue(errors)
+        # The error names where it was sending (D365), and a credential in the base URL never reaches it.
+        self.assertTrue(str(errors[0]).startswith("eden /v1/events: cannot reach http://127.0.0.1:9 ("), errors[0])
+        c, errors = client("http://user:secret@127.0.0.1:9")
+        c.ask("q")
+        self.assertIn("cannot reach http://127.0.0.1:9 (", str(errors[0]))
+        self.assertNotIn("secret", str(errors[0]))
 
     def test_non_2xx_carries_the_server_reason(self):
         stub = Stub(lambda p, b: (401, {"error": "missing or unknown API key"}))

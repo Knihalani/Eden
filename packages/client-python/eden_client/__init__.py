@@ -21,6 +21,7 @@ import math
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Callable, Dict, List, Optional
 
@@ -136,6 +137,17 @@ class EdenError(Exception):
     """What ``on_error`` receives: the route, the status and the server's reason (never the request or the key)."""
 
 
+
+def _without_userinfo(base: str) -> str:
+    """A base URL with any `user:password@` removed, so a credential in it never reaches a log."""
+    try:
+        parts = urllib.parse.urlsplit(base)
+    except ValueError:
+        return "the configured base_url"
+    if "@" not in parts.netloc:
+        return base
+    return urllib.parse.urlunsplit(parts._replace(netloc=parts.netloc.rsplit("@", 1)[1]))
+
 class EdenClient:
     def __init__(
         self,
@@ -207,7 +219,9 @@ class EdenClient:
         except urllib.error.HTTPError as e:
             err: Exception = EdenError(f"eden {route}: {e.code}{_server_error(e)}")
         except Exception as e:  # noqa: BLE001 - fail open on anything (D14)
-            err = e if isinstance(e, EdenError) else EdenError(f"eden {route}: {type(e).__name__}: {e}")
+            # Where it was sending, so a server that is down or on another port is obvious (D365); never the key.
+            err = e if isinstance(e, EdenError) else EdenError(
+                f"eden {route}: cannot reach {_without_userinfo(self._base)} ({type(e).__name__}: {e})")
         if failed is not None:
             failed(err)
         self._report(err)

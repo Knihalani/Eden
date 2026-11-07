@@ -24,6 +24,32 @@ import {
   type SourceChangedResult,
 } from "@eden/protocol";
 
+/**
+ * A failure before any answer (refused connection, DNS, timeout) as an error that says where the client was sending
+ * (D365): a runtime's own message ("Unable to connect. Is the computer able to access the url?") names neither the
+ * URL nor the route, so a first-time integrator with the server down or on another port could not tell what failed.
+ * The base URL is configuration, never the request or the key; the original error is the `cause`.
+ */
+function transportError(path: string, baseUrl: string, timeoutMs: number, e: unknown): Error {
+  const route = path.split("?")[0]!;
+  const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+  const why = timedOut ? `no answer within ${timeoutMs} ms` : e instanceof Error ? e.message : String(e);
+  return new Error(`eden ${route}: cannot reach ${withoutUserinfo(baseUrl)} (${why})`, { cause: e });
+}
+
+/** A base URL with any `user:password@` removed, so a credential in it never reaches a log. */
+function withoutUserinfo(baseUrl: string): string {
+  try {
+    const url = new URL(baseUrl);
+    if (!url.username && !url.password) return baseUrl;
+    url.username = "";
+    url.password = "";
+    return url.href.replace(/\/$/, "");
+  } catch {
+    return "the configured baseUrl";
+  }
+}
+
 /** The reasons `/v1/sources/changed` gives (`SourceChangedReason`); anything else from a server is dropped. */
 const REASONS: ReadonlySet<string> = new Set<SourceChangedReason>(["push-off", "not-synced", "not-notifying"]);
 
@@ -224,8 +250,10 @@ export class EdenClient {
       }
       return answer as T;
     } catch (e) {
-      failed?.(e);
-      this.report(e);
+      const err =
+        e instanceof Error && e.message.startsWith("eden ") ? e : transportError(path, this.baseUrl, timeoutMs, e);
+      failed?.(err);
+      this.report(err);
       return null;
     }
   }
