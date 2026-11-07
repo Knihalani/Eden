@@ -9,8 +9,8 @@ servers ship. Decisions D271–D274. Final figures (§11) are on the tree merged
 ## In plain words
 
 **Final, on the merged tree (§11):** against the agent alone with its own search tools, both given the same tenant
-prompt, Eden costs **+$0.047 per 1,000 tasks one request at a time** (+0.029..+0.065) and **+$0.050 over a user's
-days** (+0.035..+0.065) in model tokens, is **0.95 s and 0.65 s faster** a task, and raises the hidden fact on 67% of
+prompt, Eden costs **+$0.047 per 1,000 tasks one request at a time** (+0.029..+0.065) and **+$0.05–0.07 over a user's
+days** (+0.050, +0.035..+0.065; on the A5 tip +0.068, +0.052..+0.083) in model tokens, is **0.95 s and 0.65 s faster** a task, and raises the hidden fact on 67% of
 hidden tasks against 8% (13 of 23 against 1 of 23 over days). **Priced with the connectors' own per-call fees, Eden
 is cheaper on every paid plan** (it replaces the agent's 1.0–2.2 tool calls a task with 0–0.16 of its own): over days
 −$0.17 per 1,000 tasks on Composio to −$18.7 on Zapier MCP all-in, backfill included (§12). The rest of this section
@@ -223,6 +223,15 @@ The false-concern rise one request at a time is the control and neutral answers 
 of 144), not regraded; earlier regrades found most such concerns were grader errors (fix-w2b), so read it as
 unresolved, not as harm.
 
+**Over days again on the A5 tip (`07e881cd1`, D281–D283's sync fixes; ledger runs `a3f-long-pay-41/42`, $0.135;
+`final-long-pay-arms.txt`, `final-long-pay-cost.txt`), with the harness now splitting calls between tasks:** hidden
+12/23 vs 1/23 (+47.8 points), mix $/1k 0.247 vs 0.178 (**+0.068, +0.052..+0.083**), wall **−0.55 s (−0.72..−0.39)**,
+Eden on the path 7.7 ms; Eden's connector calls 0.16 a task, all between tasks (the sync's ticks), 0 in a task's
+window, against the agent alone's 0.89. Priced (eden − tools, mix all-in): first-party +0.068, Composio −0.106,
+Unified.to −0.368, Arcade.dev −5.76, Pipedream −6.92, Zapier MCP −14.96 per 1,000 tasks. The two merged-tree long runs
+differ by +0.050 vs +0.068 in tokens mostly through the agent alone's own cost (0.189 vs 0.178): quote the range,
+**+$0.05–0.07 per 1,000 tasks over days**.
+
 ## 12. Connector pricing (the owner's instruction)
 
 `pi-cost-report.ts` now prices every connector call per plan (`CONNECTOR_PLANS`, from `before-after/market.py`; list
@@ -242,9 +251,12 @@ $ per 1,000 tasks on the 1:1:8 mix (`merged-*-cost.txt`):
 The short runs' all-in is pessimistic for Eden: each of their 36 streams is a separate user whose 18 backfill calls
 are spread over only its 12 tasks; the long runs (one user over 232 tasks) are the shape to quote. (The report's
 first-party row differs slightly from §11's arms.py figure: the report weights the mix per kind before adding the
-background; arms.py adds each run's background per task.) Eden's background sync during the run made no connector
-calls in these runs: with payload notices nothing was polled. A signal-only integration would add listings and
-re-reads (D245) at its plan's rate, which is where a per-call plan makes D210's payload advice worth money.
+background; arms.py adds each run's background per task.) In these runs pi-ab booked Eden's calls between tasks (the
+sync's ticks, the recap notice) to the previous task's window, so the split "Eden 0.16 / background 0" over days is
+Eden's connector calls in a task's window or between tasks together; the priced totals do not depend on the split. The
+harness now clears the task's timeline between tasks (the review's finding), so later runs split them. A signal-only
+integration would add listings and re-reads (D245) at its plan's rate, which is where a per-call plan makes D210's
+payload advice worth money.
 
 A lever that saves tokens by adding connector calls must be judged on these plans: at Composio's $0.30 per 1,000
 calls, one extra call a task costs $0.30 per 1,000 tasks, six times Eden's whole token gap.
@@ -259,13 +271,13 @@ own spend is $0 a request and ~$0.02 per 1,000 in the background. Five redesigns
    it is why Eden is 0.65–0.95 s faster and saves 1.0–2.2 connector calls a task (−$0.2 to −$56 per 1,000 on paid
    plans, §12). Remaining: make it the integration default in INTEGRATION.md's words (a product step, not code).
 2. **Packets that make the ask unnecessary** (answer ahead: the push says it is what an ask would return). Tasks with
-   an ask cost ~$0.19 per 1,000 more and 1.3 s longer (unpaired, §3), so the ceiling was about −$0.11 and −0.8 s on the
+   an ask cost ~$0.19 per 1,000 more and 1.3 s longer (unpaired, from the `.local` timelines of §3; no committed summary), so the ceiling was about −$0.11 and −0.8 s on the
    mix. **Built and measured (D274, `pushCandidatesCovers`): asks 0.615 → 0.600 a task, no change**; the agent asks
    for what the packet does not hold (contact details, the thread), not to re-check it. A real answer-ahead would have
    to predict those working facts; D257 showed that discouraging the ask loses hidden facts.
 3. **Zero bytes when nothing binds.** Needs a verdict that rarely misses; four lexical forms failed at $0 (D273), the
    paid reader costs more than the bytes it saves (D237), cards cover 37% of planted facts (A6). Ceiling: the packet's
-   writes, about $0.045 per 1,000 over days. Not buildable without a better no-model verdict.
+   writes, about $0.04 per 1,000 over days (merged-tree cache split: $0.076–0.081 against $0.034–0.038). Not buildable without a better no-model verdict.
 4. **A standing per-user brief in the agent's cached prefix** (refreshed in the background, read at 0.1x). Rejected on
    $0 evidence by A6 (D288): the cards it would be built from cover too little, and a brief that changes busts the
    tenant's cache for every turn after it.
@@ -288,7 +300,8 @@ faster than the agent alone.
 | a3-long3-pay-41, -42 | 0.077 |
 | a3m-short-pay-41, -42 (merged tree, with D274's arm) | 0.406 |
 | a3m-long-pay-41, -42 (merged tree) | 0.136 |
-| **Total** | **1.096** of $2 |
+| a3f-long-pay-41, -42 (A5 tip) | 0.135 |
+| **Total** | **1.231** of $2 |
 
 ## 10. Reproduce
 
