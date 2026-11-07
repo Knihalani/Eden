@@ -286,7 +286,16 @@ bun run funnel --jobs 4 -- --reader stub                  # pool recall per suit
 bun run funnel --jobs 4 -- --reader oracle:0.9,0.1        # ground-truth proxy, every line labelled
 bun run funnel --jobs 4 -- --packet-k 10,15,20                          # planted item in the ask's top K
 bun run funnel --jobs 4 -- --reader stub --lead-in clause # draft pool against the request's
+bun run funnel --jobs 4 -- --pool-dump $PWD/.local/pool.jsonl         # the push's candidate pool per task (A2)
 ```
+
+- **The default's pool (A2, D269).** With `pushCandidates` the push reports its pool to `onReader` (outcome
+  `candidates`, ids only), so the pool lines above measure the candidates' pool (train seeds 41–42: hidden in pool
+  283/384, decoys 247/384); the funnel counts no candidate as a reader flag (`candidatesHanded` in the per-task JSON).
+  `--pool-dump FILE` writes each task's pool in order with each item's title, text, card and flags (`handed`, `auto`
+  for an automated sender, `cl` for `readerGate`'s constraint test) and the planted item's place (`at`): the input
+  for re-rank screens at $0 (`packages/sim/lab/a2/sim.py`, `feat.py`). A lever that changes which items are handed on
+  a few tasks is run live on those tasks first (`pi-ab --templates`, `packages/sim/lab/a2/targeted-templates.txt`).
 
 - **`--reader stub`** says nothing binds and prints, per suite, `hidden in pool X/N, decoy in pool Y/N, mean pool
 items, mean prompt chars (standing prefix)`. Pool means the ids the reader was given for the request (the push's
@@ -701,7 +710,10 @@ another arm reads it whole.
   through the lab provider on the ledger (no OpenRouter key needed); the summary adds `byKind` (agreement with the
   run's grader on hidden, control and neutral, and which way each disagreement went). `--only-concerns` regrades
   only the control and neutral answers the run's grader called a concern: W2b's check, 39 answers for $0.055
-  (docs/research/fix-w2b-false-concerns.md).
+  (docs/research/fix-w2b-false-concerns.md). `--only-misses` regrades the hidden answers it called a miss and
+  `--conditions a,b` keeps those arms (A2: Sonnet called 18 of 38 Haiku in-packet misses raised, $0.054).
+- **A Sonnet 5.5 agent on Pi** (`pi-ab --model claude-sonnet-5-5`): the lab sends `thinking: between_tools`
+  (`anthropicThinkingOff`), as Sonnet 5.5 refuses "disabled". About 30× Haiku's agent cost a task (A2, D270).
 - **Where a false concern came from** (fix-w2b): each pi-ab task line keeps its packets' ways (`ways`: the reason's
   kind and cited ids; `reader` is the reader push) and its asks' answer text (`asks[].text`, cut at 5,000
   characters; an `Eden's reader:` line is a flagged item). `python3 -I packages/sim/lab/fix-w2b/attribute.py out.json

@@ -53,7 +53,6 @@ import {
 } from "@eden/sources";
 import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache, type Sketch } from "./cache";
 import { SyncManager } from "./sync";
-import { liftCandidates } from "./candidates";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import {
@@ -1470,20 +1469,6 @@ export class ContextPartner {
           )
         : null;
     if (reading) chosen = reading.chosen;
-    // `askPastShown` (trial, D267): with the candidates the agent judges, an ask goes past the items it already holds
-    // (shown this session at their current version) to `limit` it does not, at most `limit` more lines; the held
-    // ones stay in the answer, said by title or by what is new (`askDedup`).
-    if (candidating && this.config.askPastShown && !internal.push && s.shown) {
-      const shown = s.shown;
-      const past: Scored[] = [];
-      let fresh = 0;
-      for (const x of order) {
-        if (fresh >= limit || past.length >= 2 * limit) break;
-        past.push(x);
-        if (!shown.has(shownKey(x.item))) fresh++;
-      }
-      chosen = past;
-    }
     // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
     // a proactive packet (queued, taken before its next model request); nothing else is answered or handed out.
     if (internal.push) {
@@ -1882,10 +1867,9 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    const eligible = pool.filter((x) => !bulkMail(x.item));
-    // `pushCandidateLift` (trial, D266): one item per title, and items naming the request's date move up.
-    const ordered = this.config.pushCandidateLift ? liftCandidates(eligible, cue.raw) : eligible;
-    const items = pool.some((x) => this.constraintLike(x, cards)) ? ordered.slice(0, this.config.pushCandidates) : [];
+    const items = pool.some((x) => this.constraintLike(x, cards))
+      ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates)
+      : [];
     // The lab's view of the push (content-free): its pool, in order, and the candidates it hands.
     this.deps.onReader?.({
       sessionId: s.id,
@@ -1908,9 +1892,6 @@ export class ContextPartner {
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
-      ...(this.config.pushCandidateStress
-        ? { stress: (t: string) => mayConstrain(t) || (this.config.readerGateVisits && arrangedVisit(t)) }
-        : {}),
     };
   }
 
@@ -4545,7 +4526,6 @@ export class ContextPartner {
     const options: Parameters<typeof renderPacket>[1] = {
       maxBytes: frame?.maxBytes ?? this.config.maxInjectionBytes,
       ...(frame ? { lead: frame.lead } : {}),
-      ...(frame?.stress ? { stress: frame.stress } : {}),
       ...(this.config.compactInjection || frame
         ? {
             focus: focusOf(cue),
@@ -4676,8 +4656,6 @@ interface PacketFrame {
   lead: string;
   itemBytes: number;
   maxBytes: number;
-  /** `pushCandidateStress` (D268): parts that may state a constraint are kept first when an excerpt is cut. */
-  stress?: (part: string) => boolean;
 }
 
 /** `revisionNotice`: an "updated:" packet's reason prefix, and what each of its items' titles starts with. */

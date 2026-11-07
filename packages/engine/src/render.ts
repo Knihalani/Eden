@@ -42,11 +42,6 @@ export function renderPacket(
      * items as candidates the agent checks against the request. Never source or event text.
      */
     lead?: string;
-    /**
-     * `pushCandidateStress` (trial, D268): with `focus`, a part this says may state a constraint (it is given the part
-     * in lower case) counts `STRESS_WEIGHT` more when the excerpt is cut, so the rule itself is what an item keeps.
-     */
-    stress?: (part: string) => boolean;
   },
 ): string {
   const before = options.shownBefore;
@@ -80,7 +75,7 @@ export function renderPacket(
         options.split,
       );
       // `compactText`, with what this session showed of the item before as known too.
-      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, focus, each, options.stress);
+      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, focus, each);
       for (const w of title) shown.add(w);
       for (const w of text.toLowerCase().match(WORDS) ?? []) shown.add(w);
       return { ...item, text };
@@ -424,13 +419,9 @@ export function messageParts(
 }
 
 /** The parts that bear most on the request's words, at most `maxBytes`, in their own order, gaps marked "…". */
-/** `pushCandidateStress` (D268): what a part that may state a constraint counts beyond its focus words. */
-export const STRESS_WEIGHT = 1.5;
-
-function pick(parts: Part[], focus: ReadonlySet<string>, maxBytes: number, stress?: (part: string) => boolean): string {
+function pick(parts: Part[], focus: ReadonlySet<string>, maxBytes: number): string {
   const score = (part: Part, k: number) => {
     let n = k === 0 ? 0.5 : 0;
-    if (stress?.(part.text.toLowerCase())) n += STRESS_WEIGHT;
     for (const w of part.text.toLowerCase().match(WORDS) ?? []) if (focus.has(w)) n += 1;
     n += DIGIT.test(part.text) ? 1 : 0;
     return part.quoted ? (n >= 1 ? n - 0.75 : -1) : n - k * 0.001; // ties: the earlier part

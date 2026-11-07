@@ -5,7 +5,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { checkEngineConfig } from "./config-check";
-import { ContextPartner } from "./partner";
+import { ContextPartner, type ReaderReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { AskReader, type ReaderInput, type ReaderMaker } from "./reader";
 import { CANDIDATES_LEAD, shownText } from "./render";
@@ -60,7 +60,10 @@ const DEADLINE = item(
   4,
 );
 
-function setup(config: Record<string, unknown>, opts: { items?: ContextItem[]; fail?: boolean } = {}) {
+function setup(
+  config: Record<string, unknown>,
+  opts: { items?: ContextItem[]; fail?: boolean; onReader?: (r: ReaderReport) => void } = {},
+) {
   const maker = new Reader();
   const source: Source = {
     id: "mail",
@@ -87,6 +90,7 @@ function setup(config: Record<string, unknown>, opts: { items?: ContextItem[]; f
       ...config,
     },
     reader: new AskReader({ maker, budget: new Budget(), now: () => NOW }),
+    ...(opts.onReader ? { onReader: opts.onReader } : {}),
   });
   return { p, maker };
 }
@@ -199,5 +203,19 @@ describe("pushCandidates (D236, D237): the push hands the agent candidates, with
     expect(() => checkEngineConfig({ pushCandidates: 2.5 }, { deps })).toThrow();
     expect(() => checkEngineConfig({ pushCandidates: 41 }, { deps })).toThrow();
     expect(() => checkEngineConfig({ pushCandidates: 3, readerPush: false }, { deps })).toThrow(/readerPush/);
+  });
+
+  test("the lab's view (onReader, A2): the push's pool in order and the candidates handed, content-free", async () => {
+    const reports: ReaderReport[] = [];
+    const { p } = setup({ ...quiet, pushCandidates: 2 }, { onReader: (r) => reports.push(r) });
+    await say(p, REQUEST);
+    const handed = candidates(p)[0]!.citations.map((c) => c.itemId);
+    const push = reports.filter((r) => r.outcome === "candidates");
+    expect(push.length).toBe(1);
+    expect(push[0]!.pool.length).toBe(4);
+    expect(push[0]!.checked).toBe(4);
+    expect(push[0]!.flagged.map((f) => f.id)).toEqual(handed);
+    // Ids only: no item's words travel in the report.
+    expect(JSON.stringify(push[0])).not.toContain("Harlow");
   });
 });

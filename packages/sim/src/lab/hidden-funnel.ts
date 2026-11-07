@@ -1100,7 +1100,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     callCheck.traced += calls - callsBefore;
     const cachedNow = cache.get(scope, id, clock);
     const replayLine = cachedNow ? inReplay(cachedNow) : null;
-    const flagged = rr ? rr.flagged.some((f) => f.id === id) : undefined;
+    // A candidates push (`pushCandidates`) reports its pool and what it handed, which no reader judged: not a flag.
+    const flagged = rr && rr.outcome !== "candidates" ? rr.flagged.some((f) => f.id === id) : undefined;
     // D173's split, reporting only: reader-flagged, rule path (delivered unflagged) or listed only (ask-cited only).
     const by = surfacedBy({ variant, delivered: got.includes(id), askCited, readerFlagged: flagged });
     perTask.push({
@@ -1127,9 +1128,16 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
             readerChecked: rr.checked,
             readerInPool: rr.pool.includes(id),
             readerAt: rr.pool.indexOf(id),
-            readerFlags: rr.flagged.length,
-            readerFlagged: rr.flagged.some((f) => f.id === id),
-            ...(rr.flagged.some((f) => f.id === id) ? { readerKind: rr.flagged.find((f) => f.id === id)!.kind } : {}),
+            // A candidates push handed its items unjudged (`candidatesHanded`); only a reader's verdict flags.
+            ...(rr.outcome === "candidates"
+              ? { candidatesHanded: rr.flagged.some((f) => f.id === id) }
+              : {
+                  readerFlags: rr.flagged.length,
+                  readerFlagged: rr.flagged.some((f) => f.id === id),
+                  ...(rr.flagged.some((f) => f.id === id)
+                    ? { readerKind: rr.flagged.find((f) => f.id === id)!.kind }
+                    : {}),
+                }),
             readerWaitMs: rr.waitedMs,
             ...(readerMs !== undefined ? { readerModelMs: readerMs } : {}),
           }
