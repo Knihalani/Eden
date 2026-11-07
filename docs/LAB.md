@@ -687,6 +687,14 @@ bun packages/sim/src/lab/pi-cost-report.ts .local/long-41.json .local/long-42.js
 as `bun run funnel --cards default` merges them. The CL baseline's figures and command lines are in
 docs/research/cl-cl5.md.
 
+**The agent's prompt cache (D260).** Billed agent cost on Anthropic depends on what the cache holds: Pi's agent with
+Eden has a ~565-token fixed prefix that was not cached across tasks in CL8's runs (cause not established), the tools
+agent an 867-token one that was, so one request at a time Eden's first prompt is written at 1.25x while the tools
+agent's is read at 0.1x. Quote `python3 -I packages/sim/lab/cl8/cache.py [--prefix 565] STEM ...` (reads, writes, plain
+input and output per arm and kind, from the timelines; `--prefix` adds the counterfactual with that prefix cached,
+labelled so) beside billed figures, and compare arms within one run: an arm sending a task's identical prompt after
+another arm reads it whole.
+
 ### 4b. Regrade with another grader, and cold-start cost
 
 - `regrade.ts --results F --graders claude-sonnet-5-5 --spend-ledger … --spend-cap …`: a `claude-*` grader goes
