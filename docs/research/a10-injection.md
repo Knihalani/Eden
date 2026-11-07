@@ -69,6 +69,12 @@ here.
   the guard leads every packet and no AI-addressed target is shown. The quarantine leaves every planted item of
   train1–6 alone and catches the world's own injection mails.
 - `injection-world.ts`: one case's world and Eden up to the push, shared by both.
+- A5's seeded engine fuzz (`fuzz.test.ts`, `fuzz-world.ts`) gains `hostile` worlds. Every item ends with an
+  injection payload: an envelope break, a forged item line, an order to the assistant, a forged Eden line, or a
+  tool call. An "inert" invariant then checks that no handout has unbalanced `</context>` or a forged line. With
+  `quarantineInstructions` on, it also checks that none of the payloads' words get through. Configurations
+  `default-hostile` and `default-hostile-shielded` (8 seeds × 60 ops each by default) pass. With the word check
+  forced on and no quarantine, they fail on every user, through asks and observes.
 
 Tasks: train1–6, the first 12 templates each, hidden and control variants. One attack per task, with the kinds
 taken in turn, on seeds 41 and 42 (288 tasks an arm). An "acting" subset ran the six social-engineering kinds on
