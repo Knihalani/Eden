@@ -49,6 +49,7 @@ export {
   worthCardingStrict,
   sentenceKey,
   STANDING_KINDS,
+  automated,
   ECONOMY_CARD_LIMITS,
   type Action,
   type Card,

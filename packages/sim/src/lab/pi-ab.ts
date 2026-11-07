@@ -127,6 +127,7 @@ import { variantsFor } from "./neutral";
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
 import { DiskCardMaker, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
 import {
+  anthropicThinkingOff,
   isAnthropic,
   isCapError,
   labAccess,
@@ -1024,6 +1025,7 @@ async function runWorld(
               maxRetries: 0,
               timeoutMs: 90_000,
               cacheRetention: "short",
+              onPayload: (payload) => anthropicThinkingOff(MODEL, payload),
               onProviderStreamEvent: (event) => {
                 const e = event as { type?: string };
                 if (mine.first === null && (e.type === "content_block_start" || e.type === "content_block_delta")) {

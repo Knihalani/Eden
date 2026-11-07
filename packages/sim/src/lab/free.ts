@@ -186,6 +186,22 @@ export function piAnthropicModel(id: string, maxTokens: number): PiModel<"anthro
 }
 
 /**
+ * Models that reject `thinking: {type: "disabled"}` (400) and turn thinking off with `between_tools` instead: Sonnet
+ * 5.5, as `AnthropicModel` (`@eden/llm`) knows. pi-ai sends "disabled" for a reasoning model with thinking off.
+ */
+const OFF_IS_BETWEEN_TOOLS = new Set(["claude-sonnet-5-5"]);
+
+/**
+ * The Pi agent's Messages API payload with thinking off in the words `id` accepts (A2: a Sonnet agent; Haiku's
+ * payload is returned as it is).
+ */
+export function anthropicThinkingOff(id: string, payload: unknown): unknown {
+  const p = payload as { thinking?: { type?: string } };
+  if (!OFF_IS_BETWEEN_TOOLS.has(id) || p.thinking?.type !== "disabled") return payload;
+  return { ...(payload as object), thinking: { type: "between_tools" } };
+}
+
+/**
  * pi-ai's model registry with the lab's providers and these models on them: OpenRouter (key OPENROUTER_API_KEY) and
  * Anthropic (key HAIKU_API_KEY, else ANTHROPIC_API_KEY; `keyFor`).
  */

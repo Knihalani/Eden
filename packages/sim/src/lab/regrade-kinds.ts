@@ -51,3 +51,11 @@ export function byKind(pairs: readonly KindPair[]): Record<string, KindRow> {
 export function isConcern(kind: string, facts?: Record<string, boolean>): boolean {
   return (kind === "control" || kind === "neutral") && Object.values(facts ?? {}).some(Boolean);
 }
+
+/**
+ * Whether the run's grader called a hidden answer a miss (no fact true): `--only-misses` (A2,
+ * docs/research/a2-quality.md), a check of the hidden facts graded as not raised, which a weaker grader can miss.
+ */
+export function isMiss(kind: string, facts?: Record<string, boolean>): boolean {
+  return kind === "hidden" && !Object.values(facts ?? {}).some(Boolean);
+}

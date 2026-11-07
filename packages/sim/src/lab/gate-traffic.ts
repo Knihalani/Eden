@@ -199,7 +199,7 @@ export class ReuseLedger {
 const tally = (): Tally => ({
   messages: 0,
   calls: 0,
-  outcomes: { read: 0, gated: 0, none: 0, late: 0, budget: 0, skipped: 0 },
+  outcomes: { read: 0, gated: 0, none: 0, late: 0, budget: 0, skipped: 0, candidates: 0 },
   bindingInPool: 0,
   bindingGated: 0,
   poolItems: 0,

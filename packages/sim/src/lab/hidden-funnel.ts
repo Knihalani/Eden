@@ -85,6 +85,8 @@ import {
   ItemCache,
   type CandidateDump,
   type CardMaker,
+  automated,
+  STANDING_KINDS,
   worthCarding,
   worthCardingStrict,
   ECONOMY_CARD_LIMITS,
@@ -96,6 +98,7 @@ import { Budget, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner } from "@eden/sources";
 import { sanitizeForStore } from "@eden/redact";
+import { arrangedVisit, mayConstrain } from "../../../engine/src/conflict";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
@@ -191,6 +194,7 @@ const cli = flags(
         "packets",
         "candidates",
         "ask-diag",
+        "pool-dump",
         "label",
         "json",
         "rpm",
@@ -477,6 +481,12 @@ const INTENT_QUERY_CHARS = 400;
  * no intent requests, and no match (D173).
  */
 const ASK_DIAG = opt("ask-diag", "");
+/**
+ * `--pool-dump FILE` (a diagnostic, docs/research/a2-quality.md): per task, the push's candidate pool (the
+ * `pushCandidates` report) in order, each item's title, text, card and flags (handed, automated, constraint-like), and
+ * the planted item's (decoy's) place in it.
+ */
+const POOL_DUMP = opt("pool-dump", "");
 if (ASK_DIAG) writeFileSync(ASK_DIAG, "");
 /**
  * Each `--ask-diag` row's variant, rank, cached flag and coverage facts (`ask-coverage.ts`), for the run's split of
@@ -1041,6 +1051,31 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
         ...(answered ? { answer: answered.answer, answerIds: answered.citations.map((c) => c.itemId) } : {}),
       };
       appendFileSync(PACKETS, JSON.stringify({ ...line, ...extra }) + "\n");
+    }
+    if (POOL_DUMP) {
+      const push = reports.find((x) => x.outcome === "candidates");
+      const ids = push?.pool ?? [];
+      const items = ids.map((x) => {
+        const it = cache.get(scope, x, askAt);
+        const card = cards?.cardsOf(scope, [x], askAt).get(x);
+        return {
+          id: x,
+          handed: push!.flagged.some((f) => f.id === x),
+          auto: it ? automated(it) : false,
+          // `readerGate`'s constraint test (partner.ts `constraintLike`), as the push read it.
+          cl:
+            (!!card &&
+              (STANDING_KINDS.has(card.kind) || card.kind === "status-change" || card.kind === "already-done")) ||
+            (!!it &&
+              (mayConstrain(`${it.title}. ${it.text}`.toLowerCase()) ||
+                arrangedVisit(`${it.title}. ${it.text}`.toLowerCase()))),
+          title: it?.title ?? "",
+          text: it?.text ?? "",
+          ...(card ? { card: card.kind, statement: card.statement } : {}),
+        };
+      });
+      const line = { suite, seed, variant, template: task.template, request: task.text, detail: task.detail };
+      appendFileSync(POOL_DUMP, `${JSON.stringify({ ...line, planted: id, at: ids.indexOf(id), pool: items })}\n`);
     }
     if (CANDIDATES) {
       const line = {

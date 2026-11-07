@@ -464,6 +464,25 @@ export interface EngineConfig {
    * first (`CANDIDATES_LEAD`). 0 is the reader's push and asks (D95–D99).
    */
   pushCandidates: number;
+  /**
+   * Trial (D266, A2; owner repo owner, ends 2026-12-07; `candidates.ts`): with `pushCandidates`, the pool is
+   * re-ordered with no model before its first items are handed: a repeat of a title already in the pool is left out,
+   * and after the first three, up to two items that name a date the request names move up (`liftCandidates`).
+   */
+  pushCandidateLift: boolean;
+  /**
+   * Trial (D267, A2; owner repo owner, ends 2026-12-07): with `pushCandidates` and `askDedup` (which keeps what each
+   * session was shown), an ask's answer goes past the items the
+   * agent already holds (shown this session at their current version) until it has `maxItems` it does not, with at
+   * most twice `maxItems` lines; held items stay, said by title or by what is new (`askDedup`).
+   */
+  askPastShown: boolean;
+  /**
+   * Trial (D268, A2; owner repo owner, ends 2026-12-07): with `pushCandidates`, a candidate's excerpt, when cut, keeps
+   * first the sentences and lines that may state a constraint (`mayConstrain`, `arrangedVisit`: `readerGate`'s words),
+   * beside those with the request's words (`STRESS_WEIGHT` in render.ts).
+   */
+  pushCandidateStress: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -581,4 +600,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
+  pushCandidateLift: false,
+  askPastShown: false,
+  pushCandidateStress: false,
 };
