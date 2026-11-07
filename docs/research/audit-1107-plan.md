@@ -40,3 +40,4 @@ Later waves start from what wave A finds.
 | A21 | Scale part 3: sweep unused sources less often, live check at 1,000 sources |
 | A22 | Quality: a no-model link line on each candidate; a full intent re-draw spread |
 | A23 | Adoption: a fresh-eyes onboarding walkthrough on three paths |
+| A24 | Scale part 4: compact per-user sync id sets; a card drain on its own timer (D328) |
