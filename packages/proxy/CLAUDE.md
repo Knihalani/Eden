@@ -19,6 +19,8 @@ model call of a tool-using turn, and streams the upstream's answer back unchange
   All of Eden's work in one request has one deadline (the observe's wait plus 800 ms); what lands later stays for the
   turn's next call. On first sight of a conversation only its latest user message on is reported (no replay of a
   long history). Only an unreachable upstream is an error (502), an unreadable body a 400, both OpenAI-shaped.
+  A caller that hangs up cancels the model call (the upstream fetch takes its signal), and one gone during Eden's
+  wait gets a 499 with no model call (D312). Text past 1,000,000 characters is reported cut, not dropped (D312).
 - **Auth (D9).** The proxy holds the tenant's Eden key and trusts the user a caller names: off loopback `main.ts`
   refuses to start without `EDEN_PROXY_KEY` (callers send `x-eden-proxy-key`).
 - **New messages by content** (`Conversation.seen`: per message hash, copies seen), so compaction and sliding
