@@ -122,7 +122,7 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import { citationsOf, renderPacket, shownText } from "./render";
+import { CHECKED_MORE, CHECKED_NONE, citationsOf, COVERED, renderNote, renderPacket, shownText, withNote } from "./render";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -295,6 +295,10 @@ interface Session {
    * with their content hashes, and its verdict (null when it gave none).
    */
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
+  /** `askFromPush` (D247): the latest push's search, for an ask in its request (`request`, `main` as `pushRead`'s). */
+  pushSearch?: { request: number; main: string; searched: SearchedLive };
+  /** The request count (`requests`) when a packet or answer was last built for this session (`pushChecked`'s wording). */
+  builtRequest?: number;
 }
 
 /** Items whose shown words a session keeps (`askDedup`). */
@@ -1408,7 +1412,13 @@ export class ContextPartner {
       this.config.readerPushBehind &&
       this.config.syncPollBehind &&
       this.config.syncOnDemand;
-    const searched = internal.again?.searched ?? (await this.searchLive(s, cue, this.config.askSources, behind));
+    // `askFromPush` (D247): an ask in the push's request ranks on what the push's search stored, with no search.
+    const fromPush = !internal.push && this.config.askFromPush ? this.pushSearchFor(s, cue) : null;
+    const searched =
+      internal.again?.searched ?? fromPush ?? (await this.searchLive(s, cue, this.config.askSources, behind));
+    if (internal.push && internal.again === undefined && this.config.askFromPush) {
+      s.pushSearch = { request: internal.request ?? s.requests, main: cue.raw, searched };
+    }
     const { calls: sourceCalls, plans, probed, local, syncCalls } = searched;
     // `intent`: what the question would change, by the requests written for each item (no model, no call).
     const intentFound = this.intentFinds(s, cue);
@@ -1502,7 +1512,27 @@ export class ContextPartner {
           ? this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
       if (injection && was) this.keepUndo(s, injection, checked, was);
-      if (injection) s.pending.push(injection);
+      // `pushCovered` (D250): the packet says it is what Eden's reading of the request found.
+      if (injection && this.config.pushCovered) injection.text = withNote(injection.text, COVERED);
+      if (injection) {
+        // A later reading that delivers (`readerPushBehind`'s second) takes back an untaken "nothing found" note.
+        for (let k = s.pending.length - 1; k >= 0; k--) {
+          if (s.pending[k]!.reason.startsWith(CHECKED)) s.pending.splice(k, 1);
+        }
+        s.pending.push(injection);
+      } else if (
+        this.config.pushChecked &&
+        internal.again === undefined &&
+        (flagged.length === 0 || fresh.length === 0) &&
+        !s.closed &&
+        still &&
+        (reading === null || reading.read) &&
+        answeredAll(searched)
+      ) {
+        // `pushChecked` (D246): the reading found nothing to add, from sources that all answered: the agent is told so.
+        const line = flagged.length > 0 || s.builtRequest === s.requests ? CHECKED_MORE : CHECKED_NONE;
+        s.pending.push(this.note(s, line, `${CHECKED}${cue.id}`));
+      }
       const latencyMs = Math.round(performance.now() - t0);
       // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
       // trace carries it, since this response goes to no caller.
@@ -4397,6 +4427,36 @@ export class ContextPartner {
    * `shown` is what the agent receives when it is not the injection's own text (an ask's answer). With
    * `compactInjection`, each item is cut to what bears on `cue` (`compactText`) rather than to its first bytes.
    */
+  /** An injection of Eden's own words, citing nothing (`pushChecked`). Not built: no usage, ledger or copies. */
+  private note(s: Session, line: string, reason: string): Injection {
+    return {
+      ...s.scope,
+      id: newId("inj", this.now()),
+      sessionId: s.id,
+      mode: "proactive",
+      text: renderNote(line),
+      citations: [],
+      reason,
+      score: 0,
+      createdAt: this.now(),
+    };
+  }
+
+  /**
+   * `askFromPush` (D247): the push's search, when this ask is in the push's request and reads against the same request
+   * (`readerReuse`'s match: an ask that acts on its own is another request) and every source it chose answered. Its
+   * calls were the push's: none here.
+   */
+  private pushSearchFor(s: Session, cue: Cue): SearchedLive | null {
+    const p = s.pushSearch;
+    if (!p || p.request !== s.requests || !answeredAll(p.searched)) return null;
+    const acts = (raw: string) => isImperative(raw, MORE_VERBS);
+    const main = acts(cue.raw) ? cue.raw : s.request && acts(s.request.raw) ? s.request.raw : undefined;
+    if (main !== p.main) return null;
+    const { plans: _plans, ...rest } = p.searched;
+    return { ...rest, calls: 0, ...(rest.syncCalls !== undefined ? { syncCalls: 0 } : {}) };
+  }
+
   private deliver(
     s: Session,
     scored: Scored[],
@@ -4429,6 +4489,7 @@ export class ContextPartner {
         scored.map((x) => x.item.id),
       );
     }
+    s.builtRequest = s.requests;
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
     // Every item counts as delivered, an echo folded out of the packet too: the agent has its occurrence.
@@ -4574,6 +4635,18 @@ const NO_TERMS = new Uint32Array(0);
  */
 function pendingOf(s: Session): boolean {
   return s.inflight !== null || !!s.behind || s.pending.length > 0;
+}
+
+/** `pushChecked` (D246): a "nothing found" note's reason prefix. */
+const CHECKED = "checked:";
+
+/** Every source a search chose answered (D127): no failure, no unresolved list, no closed session. */
+function answeredAll(searched: SearchedLive): boolean {
+  return (
+    searched.unresolved !== true &&
+    searched.closed !== true &&
+    (searched.sources ?? []).every((x) => ANSWERED.has(x.status))
+  );
 }
 
 /** `revisionNotice`: an "updated:" packet's reason prefix, and what each of its items' titles starts with. */

@@ -445,6 +445,25 @@ export interface EngineConfig {
    * past the ask's wait leaves the ask answered without the reader, with no call.
    */
   readerReuse: boolean;
+  /**
+   * `pushChecked` (trial, D246, CL4 H8): when the push read the user's request and flagged nothing, a short note goes to
+   * the agent in the data envelope: Eden read the user's connected sources for this request and nothing in them bears
+   * on it (after a packet for the same request: nothing beyond it). Only when every source the push searched answered
+   * (D127) and its reading gave a verdict, or found no candidate to read. Meant to spare the agent an `ask_context` call
+   * and a model turn on requests Eden has nothing for. Needs `readerPush`.
+   */
+  pushChecked: boolean;
+  /**
+   * `pushCovered` (trial, D250, CL4 H13): a packet the push queued ends with a line saying Eden read the user's sources
+   * for this request and the items above are what bears on it, so the agent can answer from it in one call.
+   */
+  pushCovered: boolean;
+  /**
+   * `askFromPush` (trial, D247, CL4 H9): an ask in the push's request (the same match as `readerReuse`) ranks on the
+   * index the push's search filled, with no search of its own: no live call, no on-demand poll. Its answer still reads
+   * (or reuses) the reader and re-reads what it cites as usual.
+   */
+  askFromPush: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -560,4 +579,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerGateVisits: true,
   readerVerifyAfter: true,
   readerReuse: true,
+  pushChecked: false,
+  pushCovered: false,
+  askFromPush: false,
 };
