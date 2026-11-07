@@ -1033,7 +1033,12 @@ export class ContextPartner {
         !i.reason.startsWith(UPDATED) ||
         !(this.built.get(i)?.copies ?? []).every((c) => versionNow(c.id) !== c.version && renderedNow.has(c.id)),
     );
-    return [...kept.filter(stale), ...kept.filter((i) => !stale(i))];
+    // Within the rest, updates last: with no cached copy to compare (evicted, expired) an update is still the newest
+    // word the batch has on its items; a non-update packet that renders another version of a cached item is stale and
+    // already went first.
+    const isUpdate = (i: Injection) => i.reason.startsWith(UPDATED);
+    const fresh = kept.filter((i) => !stale(i));
+    return [...kept.filter(stale), ...fresh.filter((i) => !isUpdate(i)), ...fresh.filter(isUpdate)];
   }
 
   private unwatch(s: Session): void {

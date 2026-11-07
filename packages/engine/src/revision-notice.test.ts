@@ -610,3 +610,23 @@ test("a stale update queued before a packet with the current copy: the current c
   expect(a.filter((i) => cites([i], OFFSITE)).at(-1)!.text).toContain("15:00");
   expect([...a, ...b].filter((i) => i.text.includes("15:00"))).toHaveLength(1);
 });
+
+test("an update queued before an older packet whose item has left the cache: the update is still the last word (D232)", async () => {
+  const t = await setup();
+  const P = t.partner as any;
+  const first = await say(t.partner, "Remind me where the quarterly offsite is", "s1", t.now());
+  expect(cites(first, OFFSITE)).toBe(true);
+  const s = P.sessions.get("t/u#s1");
+  const v1 = P.deps.cache.get(scope, OFFSITE, t.now());
+  const v1copy = { ...v1, text: v1.text, title: v1.title };
+  t.advance(MIN);
+  await t.partner.sourceItems(scope, "notes", [
+    { id: OFFSITE, sourceId: "notes", ref: "q1", title: "Quarterly offsite", text: moveText("11:30") },
+  ]);
+  const cue = { raw: "offsite", terms: new Uint32Array(0), entities: [], span: 0 };
+  s.pending.push(P.build(s, [{ item: v1copy, score: 1 }], "proactive", "probe", cue, 0));
+  // The item leaves the cache before the take: nothing to compare the queued copies with.
+  P.deps.cache.removeItems(scope, [OFFSITE], t.now());
+  const a = t.partner.takePending({ ...scope, sessionId: "s1" });
+  expect(a.filter((i) => cites([i], OFFSITE)).at(-1)!.text).toContain("11:30");
+});
