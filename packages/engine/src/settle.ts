@@ -94,7 +94,7 @@ export function anchorsOf(
   return { entities, days: set, named, offset };
 }
 
-const hasDay = (a: Anchors) => a.days.size > 0 || a.named.length > 0;
+export const hasDay = (a: Anchors) => a.days.size > 0 || a.named.length > 0;
 
 /** The calendar days of the time window as `NamedDay`s, so an item that writes the date out ("Fri 13 Nov") matches. */
 function windowDays(a: Anchors): NamedDay[] {
@@ -142,4 +142,16 @@ export function settles(items: readonly ContextItem[], a: Anchors): boolean {
 /** Whether `item` holds any of the request's anchors (an entity or a day): what the ask's deeper look keeps. */
 export function anchored(item: ContextItem, a: Anchors): boolean {
   return namesEntity(item, a) || namesRequestDay(item, a);
+}
+
+/**
+ * `pushCandidatesSettled` (D400, D404): how many of `items` (in order) to hand when the request has an anchor and the
+ * items settle it: the first `fewer`, extended through the first item that settles it alone. Otherwise (no anchor,
+ * unsettled, `fewer` 0 or not below the count) all of them.
+ */
+export function settledCut(items: readonly ContextItem[], a: Anchors, fewer: number): number {
+  if (fewer <= 0 || fewer >= items.length) return items.length;
+  if (a.entities.length === 0 && !hasDay(a)) return items.length;
+  const first = items.findIndex((x) => settles([x], a));
+  return first < 0 ? items.length : Math.max(fewer, first + 1);
 }

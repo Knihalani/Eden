@@ -1,4 +1,5 @@
 {
   "pushCandidates": 0,
-  "askNudge": false
+  "askNudge": false,
+  "pushCandidatesSettled": 0
 }

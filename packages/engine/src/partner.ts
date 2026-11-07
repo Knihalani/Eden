@@ -126,7 +126,7 @@ import { Ledger, type LedgerEntry } from "./ledger";
 import { ASK_NUDGE, CANDIDATES_LEAD, citationsOf, PLAN_LEAD, renderPacket, shownText } from "./render";
 import { quarantineTitle } from "./shield";
 import { safeLine } from "./line";
-import { anchored, anchorsOf, settles, type Anchors } from "./settle";
+import { anchored, anchorsOf, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -2143,13 +2143,20 @@ export class ContextPartner {
           )
         : new Map<string, Card>();
     const like = pool.map((x) => this.constraintLike(x, cards));
-    const items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
+    let items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
-    if (this.config.askNudge && items.length > 0) {
+    const fewer = this.config.pushCandidatesSettled;
+    if ((this.config.askNudge || fewer > 0) && items.length > 0) {
       const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
       const handed = items.map((x) => x.item);
-      if (!settles(handed, anchors)) unsettled = anchors;
+      if (!settles(handed, anchors)) {
+        if (this.config.askNudge) unsettled = anchors;
+      } else if (fewer > 0) {
+        // `pushCandidatesSettled` (D400, D404): a request its anchors settle gets fewer candidates, never losing the
+        // first one that settles it.
+        items = items.slice(0, settledCut(handed, anchors, fewer));
+      }
     }
     this.deps.onPushPool?.({
       sessionId: s.id,

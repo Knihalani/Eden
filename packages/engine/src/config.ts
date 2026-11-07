@@ -577,6 +577,16 @@ export interface EngineConfig {
    */
   askNudge: boolean;
   /**
+   * D400 (A30, docs/research/a30-token-gap.md; promoted by D404: 2 in the default, part `fewer`; 0 = off): with
+   * `pushCandidates`, when the request names an anchor (a person, thing or day) and the handed candidates settle it
+   * (`settle.ts`, `askNudge`'s test), the push hands only the first `pushCandidatesSettled` of them, extended through
+   * the first candidate that settles the request. Why: on Pi under the house rules the agent bill's gap to the agent
+   * alone is the packet's own tokens written to the prompt cache (D271, D395); a settled request may need fewer.
+   * Pi, train seeds 41–42, short and over days: hidden +5.8 points (−0.6..+12.3) against 5, mix $/1k −0.008 short
+   * (−0.023..+0.007) and −0.013 over days (−0.024..−0.001); funnel 314/273 unchanged.
+   */
+  pushCandidatesSettled: number;
+  /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
    * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
@@ -715,5 +725,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   quarantineInstructions: false,
   planConflict: true,
   askNudge: true,
+  pushCandidatesSettled: 2,
   revisionDiff: true,
 };

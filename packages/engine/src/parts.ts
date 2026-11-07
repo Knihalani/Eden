@@ -94,12 +94,13 @@ export const PARTS = {
     askReaderItemChars: 400,
     pushCandidates: 0,
     askNudge: false,
+    pushCandidatesSettled: 0,
   },
   /**
    * The push's candidates for the agent to judge, in place of the reader's push and ask readings (D236, D237): out,
    * the reader reads both again.
    */
-  candidates: { pushCandidates: 0, askNudge: false },
+  candidates: { pushCandidates: 0, askNudge: false, pushCandidatesSettled: 0 },
   /**
    * An item stored after a request the push acted on, that would have been among its candidates, is sent at the next
    * take whatever the agent asks then (D301).
@@ -110,6 +111,11 @@ export const PARTS = {
    * the handed items (D316, D317).
    */
   nudge: { askNudge: false },
+  /**
+   * A request the candidates settle (its people, things and day, `settle.ts`) gets the first two of them, through the
+   * first that settles it, not five (D400, promoted by D404).
+   */
+  fewer: { pushCandidatesSettled: 0 },
   /** A lookup does not wait for its probes past its own search (D47's grace, 100 ms, taken out). */
   probeGrace: { probeGraceMs: 100 },
 } satisfies Record<string, Partial<EngineConfig>>;
