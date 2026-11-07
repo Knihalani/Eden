@@ -1,0 +1,10 @@
+a28-cut-41 0.0859
+a28-base-41 0.0869
+a28-cut-42a 0.0401
+a28-base-42a 0.0392
+a28-cut-42b 0.0591
+a28-base-42b 0.0543
+a28-regrade-cut-41 0.0001
+a28-regrade-base-42a 0.0001
+a28-regrade-cut-42a 0.0001
+total 0.3659

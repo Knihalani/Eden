@@ -1,0 +1,18 @@
+tasks in every arm: 216 (hidden 72, control 72, neutral 72)
+arm       kind      n   rate   $/1k   calls/t (agent, Eden)
+base      hidden    72  0.694  0.749  34.46 (0.00, 34.46)
+base      control   72  0.014  0.778  40.03 (0.00, 40.03)
+base      neutral   72  0.000  0.742  43.96 (0.00, 43.96)
+base      mix 1:1:8             0.747  42.62 (0.00, 42.62)
+cut       hidden    72  0.639  0.781  19.36 (0.00, 19.36)
+cut       control   72  0.028  0.788  20.28 (0.00, 20.28)
+cut       neutral   72  0.014  0.780  23.75 (0.00, 23.75)
+cut       mix 1:1:8             0.781  22.96 (0.00, 22.96)
+
+Eden's connector calls a task by source and operation (all tasks of the arm, in its timelines):
+
+== paired B − A, bootstrap 95%; * the interval excludes zero
+cut − base raised: hidden -0.056 (-0.125..+0.014) ; control +0.014 (-0.028..+0.069) ; neutral +0.014 (+0.000..+0.042) ; mix +0.007 (-0.011..+0.036) 
+cut − base usd   : hidden +0.032 (-0.002..+0.063) ; control +0.010 (-0.020..+0.041) ; neutral +0.037 (+0.001..+0.075)*; mix +0.034 (+0.005..+0.065)*
+cut − base conn  : hidden -15.097 (-18.639..-11.778)*; control -19.750 (-23.250..-16.417)*; neutral -20.208 (-24.264..-16.333)*; mix -19.651 (-22.881..-16.596)*
+cut − base eden  : hidden -15.097 (-18.569..-11.764)*; control -19.750 (-23.306..-16.458)*; neutral -20.208 (-24.125..-16.417)*; mix -19.651 (-22.901..-16.668)*
