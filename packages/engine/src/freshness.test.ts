@@ -132,6 +132,27 @@ describe("verifyDelivery: a copy read before its source signalled a change is re
     expect(verifyCalls).toBe(src.fetches);
   });
 
+  test("two sessions re-reading at once: each verify trace counts its own calls, never the other's", async () => {
+    // The fuzz (audit A11, default seeds 1539 and 10316) found a verify trace with `sourceCalls` -1: the count was the
+    // engine-wide re-read counter's change over the await, so another session's (or tenant's) calls landed in it.
+    const src = new Listed("notes");
+    seed(src);
+    const { partner, advance, now, traces } = await synced(src);
+    advance(5 * MIN);
+    src.docs.set("q1", { title: "Quarterly offsite", text: "The quarterly offsite moved to Porto on 19 November." });
+    partner.sourceChanged(scope, "notes");
+    src.failSearch = true;
+    advance(1 * MIN);
+    await Promise.all([
+      say(partner, "Remind me where the quarterly offsite is", "s2", now()),
+      say(partner, "Remind me where the quarterly offsite is", "s3", now()),
+    ]);
+    const verify = traces.filter((t) => t.decision === "verify");
+    expect(verify.length).toBe(2);
+    for (const t of verify) expect(t.sourceCalls).toBe(1);
+    expect(verify.reduce((n, t) => n + t.sourceCalls, 0)).toBe(src.fetches);
+  });
+
   test("no signal: an old copy is delivered with no re-read; the part taken out never re-reads", async () => {
     const quiet = new Listed("notes");
     seed(quiet);

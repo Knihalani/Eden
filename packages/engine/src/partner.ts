@@ -3833,9 +3833,11 @@ export class ContextPartner {
     const due = scored.filter((x) => recent(x.item.id) || doubted.has(x.item.id));
     if (due.length === 0) return scored;
     const t0 = performance.now();
-    const before = this.freshness.calls;
+    // The calls of the re-reads this delivery started, counted by them: the engine-wide counter's change over the
+    // awaits took in other sessions' and tenants' re-reads, and could go negative (audit A11's fuzz).
+    const made = { calls: 0 };
     const outcomes = new Map(
-      await Promise.all(due.map(async (x) => [x.item.id, await this.check(s, x.item)] as const)),
+      await Promise.all(due.map(async (x) => [x.item.id, await this.check(s, x.item, made)] as const)),
     );
     if (strict && !s.closed) {
       // One more read (`check` reuses no failure) for a plain error, often one bad call, and for a read our own guard
@@ -3843,7 +3845,7 @@ export class ContextPartner {
       const again = due.filter((x) => doubted.has(x.item.id) && RETRIED.has(outcomes.get(x.item.id)!));
       for (let k = 0; k < again.length && !s.closed; k += STRICT_RETRY_LANES) {
         const batch = again.slice(k, k + STRICT_RETRY_LANES);
-        const read = await Promise.all(batch.map(async (x) => [x.item.id, await this.check(s, x.item)] as const));
+        const read = await Promise.all(batch.map(async (x) => [x.item.id, await this.check(s, x.item, made)] as const));
         for (const [id, o] of read) outcomes.set(id, o);
       }
     }
@@ -3855,7 +3857,7 @@ export class ContextPartner {
       reason: cue.id,
       latencyMs: Math.round(performance.now() - t0),
       // Calls this delivery waited on that were made for it (a re-read started ahead is counted where it began).
-      sourceCalls: this.freshness.calls - before,
+      sourceCalls: made.calls,
       modelCalls: 0,
       costUsd: 0,
       itemIds: due.map((x) => x.item.id),
@@ -3884,9 +3886,10 @@ export class ContextPartner {
   /**
    * One item's re-read (`verifyDelivery`), shared by every delivery of the session that wants it while it runs or for
    * `CHECK_REUSE_MS` after: started ahead (`checkAhead`, beside the reader's call) or by `verifyItems`. A changed copy
-   * is stored, a gone item dropped from the cache and the sync's bookkeeping. Never throws.
+   * is stored, a gone item dropped from the cache and the sync's bookkeeping. Never throws. `made` counts the call of
+   * a re-read this starts (not one it joins).
    */
-  private check(s: Session, item: ContextItem): Promise<CheckOutcome> {
+  private check(s: Session, item: ContextItem, made?: { calls: number }): Promise<CheckOutcome> {
     const checks = (s.checks ??= new Map());
     const now = this.now();
     const held = checks.get(item.id);
@@ -3906,7 +3909,7 @@ export class ContextPartner {
     const entry: { at: number; mark: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome } = {
       at: now,
       mark,
-      outcome: this.recheck(s, item, mark).then((o) => (entry.settled = o)),
+      outcome: this.recheck(s, item, mark, made).then((o) => (entry.settled = o)),
     };
     const outcome = entry.outcome;
     checks.delete(item.id);
@@ -3915,7 +3918,12 @@ export class ContextPartner {
     return outcome;
   }
 
-  private async recheck(s: Session, item: ContextItem, readMark: number): Promise<CheckOutcome> {
+  private async recheck(
+    s: Session,
+    item: ContextItem,
+    readMark: number,
+    made: { calls: number } = { calls: 0 },
+  ): Promise<CheckOutcome> {
     this.freshness.checked++;
     try {
       const all = await this.deps.sources(s.scope).catch((): Source[] => []);
@@ -3925,6 +3933,7 @@ export class ContextPartner {
         return "unverifiable";
       }
       this.freshness.calls++;
+      made.calls++;
       const got = await this.fanout.fetchChecked(source, s.scope, item.ref, {
         timeoutMs: this.config.verifyTimeoutMs,
         signal: s.abort.signal,
@@ -3938,6 +3947,7 @@ export class ContextPartner {
         // ("failed"), so a strict ask leaves it out and says so (D211, D232).
         if (got.why === "refused") {
           this.freshness.calls--;
+          made.calls--;
           return got.guard === "open" || got.pushedBack ? "failed" : "skipped";
         }
         // A null from a source whose null does not mean gone (an MCP tool) says nothing, and says it every time: like

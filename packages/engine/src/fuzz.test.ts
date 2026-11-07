@@ -19,8 +19,11 @@ import { CORE_CONFIG } from "./parts";
 const SEEDS = Number(process.env.FUZZ_SEEDS ?? 8);
 const OPS = Number(process.env.FUZZ_OPS ?? 60);
 const FROM = Number(process.env.FUZZ_FROM ?? 1);
-/** Seeds that once failed, run with every default run (a fixed bug stays fixed): 61 and 328, "deletes-queued". */
-const REGRESSIONS = process.env.FUZZ_SEEDS || process.env.FUZZ_PLAN ? [] : [61, 328];
+/**
+ * Seeds that once failed, run with every default run (a fixed bug stays fixed): 61 and 328, "deletes-queued"; 1539,
+ * "explain-shape" (a verify trace counting other sessions' re-reads, audit A11).
+ */
+const REGRESSIONS = process.env.FUZZ_SEEDS || process.env.FUZZ_PLAN ? [] : [61, 328, 1539];
 const MINIMIZE = process.env.FUZZ_MINIMIZE === "1";
 const PLAN = process.env.FUZZ_PLAN ? (JSON.parse(process.env.FUZZ_PLAN) as Op[]) : null;
 
