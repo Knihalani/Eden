@@ -30,7 +30,7 @@ per suite for train1–6 and held-out 10–12.
 | `heldout10`, `heldout11`                   | Blind                                                                                                 | Run in D80, D85, and several times in the Haiku campaign's funnel (haiku-benchmark.md) |
 | `heldout12`                                | Blind                                                                                                 | First run with a strong model in D98                                                   |
 | `heldout14`                                | Blind, RealUse-1's (benchmark-realuse-1.md); 32 templates over 8 life areas, with a `neutral` variant | Run once for RealUse-1 (realuse-1/A-heldout14.md)                                      |
-| `heldout15`                                | Blind, the weak-points plan's (fix-s3b-lab.md); 32 new templates, same areas, with `neutral`          | **Unrun.** Reserved for wave 2's final blind check; cards and intent cached, seeds 41–44 |
+| `heldout15`                                | Blind, the weak-points plan's (fix-s3b-lab.md); 32 new templates, same areas, with `neutral`          | **Read** (RealUse-2, 2026-11-07: Pi seeds 41–44, Hermes 41–42, the blind funnel); spent |
 
 **The `neutral` variant** (held-out 14 and 15; `neutral.ts`, `NEUTRAL_SUITES`): the same request as `hidden` and
 `control` with nothing planted. `bun run funnel ... -- --neutral` prints NEUTRAL lines (any packet delivered, items,

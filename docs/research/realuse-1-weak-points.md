@@ -1,6 +1,7 @@
 # Eden's weak points after RealUse-1, and the plan to fix them
 
-Status: 2026-11-07. Source: [benchmark-realuse-1-results.md](benchmark-realuse-1-results.md) and the part notes in
+Status: 2026-11-07, **executed**: outcomes per issue and the blind confirmation on heldout15 are in
+[benchmark-realuse-2-results.md](benchmark-realuse-2-results.md). Source: [benchmark-realuse-1-results.md](benchmark-realuse-1-results.md) and the part notes in
 [realuse-1/](realuse-1/). Every evidence figure below is quoted from those notes (Anthropic-direct Haiku lab runs);
 causes marked "likely" are readings of the code, not measurements. Work is split into sessions that own disjoint
 files; each session's decision rows use its own block of numbers (below) so parallel branches do not collide.
