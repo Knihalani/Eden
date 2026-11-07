@@ -525,7 +525,7 @@ export class ContextPartner {
    * `sourceRefs` (D347): by user and item, the re-read a ref notice started and has not finished. The item is in doubt
    * until it lands (`doubted`), and a delivery's re-read waits on it rather than make a second call (`check`).
    */
-  private readonly refreshing = new Map<string, Promise<CheckOutcome>>();
+  private readonly refreshing = new Map<string, { mark: number; outcome: Promise<CheckOutcome> }>();
   /**
    * `readerPushBehind`: what a push packet's delivery changed in its own session, so a second reading that withdraws
    * the packet untaken can undo it (`withdraw`). Keyed by the packet, so it goes with it.
@@ -2203,20 +2203,35 @@ export class ContextPartner {
       ref,
       id: sanitizedId({ id: itemId(sourceId, ref), sourceId, ref, title: "", text: "" }),
     }));
+    // The read mark when the notice came: a signal after it makes a delivery read the item itself rather than reuse
+    // this read (`check`), which may have answered before that newer change.
+    const noticeMark = sync.mark();
     const settle = new Map<string, (o: CheckOutcome) => void>();
     for (const { id } of named) {
       const key = `${user}|${id}`;
       const outcome = new Promise<CheckOutcome>((r) => settle.set(key, r));
-      this.refreshing.set(key, outcome);
+      const entry = { mark: noticeMark, outcome };
+      this.refreshing.set(key, entry);
       void outcome.then(() => {
-        if (this.refreshing.get(key) === outcome) this.refreshing.delete(key);
+        if (this.refreshing.get(key) === entry) this.refreshing.delete(key);
       });
     }
+    let signalled = false;
+    // What could not be read is left to the plain signal, raised at its first failure and before that item's doubt
+    // is lifted: the source is polled and its copies (that one included) re-read on delivery, as under D126.
+    const fallback = () => {
+      if (signalled) return;
+      signalled = true;
+      this.freshness.refsFallback++;
+      this.sourceNotice(scope, sourceId);
+    };
+    // Still synced for this user (not forgotten, the sync not stopped): else the reads stop, storing nothing.
+    const live = () => sync.notifying(scope, sourceId);
     const settled = (async (): Promise<number> => {
       let stored = 0;
-      let unread = false;
-      const done = (id: string, o: CheckOutcome) => {
-        if (o === "failed" || o === "flaked" || o === "skipped" || o === "unverifiable") unread = true;
+      const done = (id: string, o: CheckOutcome, mark = noticeMark) => {
+        if (o === "failed" || o === "flaked" || o === "skipped" || o === "unverifiable") fallback();
+        else if (o === "changed" || o === "confirmed") this.noteRefRead(scope, id, o, mark);
         settle.get(`${user}|${id}`)?.(o);
       };
       try {
@@ -2226,13 +2241,15 @@ export class ContextPartner {
           await Promise.all(
             lane.map(async ({ ref, id }) => {
               if (!source?.fetch) return done(id, "unverifiable");
+              if (!live()) return done(id, "failed");
               let mark = sync.mark();
               let seq = this.deps.cache.heldGoneSeq(scope, id, this.now());
               let got = await this.fanout.fetchChecked(source, scope, ref, { timeoutMs: REF_TIMEOUT_MS });
               // Off the agent's path, a read our own guard skipped (the source's slots or rate tokens in use by a
               // lookup) waits and goes again, as does one plain error; an open breaker or a 429 does not.
-              for (let k = 0; k < REF_TRIES && got.status === "failed" && refTryAgain(got); k++) {
-                await Bun.sleep(REF_RETRY_MS * (k + 1));
+              for (let t = 0; t < REF_TRIES && got.status === "failed" && refTryAgain(got) && live(); t++) {
+                await Bun.sleep(REF_RETRY_MS * (t + 1));
+                if (!live()) break;
                 mark = sync.mark();
                 seq = this.deps.cache.heldGoneSeq(scope, id, this.now());
                 got = await this.fanout.fetchChecked(source, scope, ref, { timeoutMs: REF_TIMEOUT_MS });
@@ -2247,24 +2264,20 @@ export class ContextPartner {
               const now = this.now();
               const held = this.deps.cache.heldGoneSeq(scope, id, now);
               if (held !== 0 && held !== seq) return done(id, "gone");
-              const copy = { ...got.item, id, sourceId, ref };
+              // The source's id and our id; the ref as the fan-out's gate left it (a raw ref may hold a secret, D10).
+              const copy = { ...got.item, id, sourceId };
               this.deps.cache.revive(scope, [id]);
               const n = sync.ingest(scope, sourceId, [copy], mark);
               stored += n;
-              return done(id, n > 0 ? "changed" : "confirmed");
+              return done(id, n > 0 ? "changed" : "confirmed", mark);
             }),
           );
         }
       } catch {
-        unread = true;
+        fallback();
       } finally {
-        // Anything not settled above (a throw) reads as not re-read.
+        // Anything not settled above (a throw) reads as not re-read, after the signal is raised.
         for (const { id } of named) settle.get(`${user}|${id}`)?.("failed");
-      }
-      // What could not be read is left to the plain signal: the source is polled, and its copies re-read on delivery.
-      if (unread) {
-        this.freshness.refsFallback++;
-        this.sourceNotice(scope, sourceId);
       }
       return stored;
     })();
@@ -3861,6 +3874,23 @@ export class ContextPartner {
    * copy's age alone does not doubt it (D126: re-reading by age cost 4.6 connector calls and 0.33 s per task live, for
    * no measured gain; a silent source's changes reach Eden through the sync's polls and sweeps).
    */
+  /**
+   * A ref notice's read that landed (D347), noted as a recent re-read in each live session of the user
+   * (`Session.checks`, as `check` keeps its own): a pool a session built before it landed holds the older copy, and
+   * `verifyItems` then applies this outcome to it (a changed item goes out as the cache now holds it).
+   */
+  private noteRefRead(scope: Scope, id: string, outcome: CheckOutcome, mark: number): void {
+    const user = scopeKey(scope);
+    const now = this.now();
+    for (const s of this.sessions.values()) {
+      if (s.closed || scopeKey(s.scope) !== user) continue;
+      const checks = (s.checks ??= new Map());
+      checks.delete(id);
+      checks.set(id, { at: now, mark, outcome: Promise.resolve(outcome), settled: outcome });
+      while (checks.size > MAX_CHECKS) checks.delete(checks.keys().next().value as string);
+    }
+  }
+
   private doubted(s: Session, item: ContextItem): boolean {
     // A ref notice's re-read still on the wire (D347): the copy held is from before the change.
     if (this.refreshing.size > 0 && this.refreshing.has(`${scopeKey(s.scope)}|${item.id}`)) return true;
@@ -3964,13 +3994,14 @@ export class ContextPartner {
   private check(s: Session, item: ContextItem): Promise<CheckOutcome> {
     // A ref notice is re-reading this item now (D347): its outcome, with no second call.
     const refreshing = this.refreshing.size > 0 ? this.refreshing.get(`${scopeKey(s.scope)}|${item.id}`) : undefined;
-    if (refreshing) {
+    // Not past a signal that came after the notice: that read may have answered before the newer change.
+    if (refreshing && this.sync?.signalledSince(s.scope, item.sourceId, refreshing.mark) !== true) {
       // Waited on no longer than a re-read of its own would be (`verifyTimeoutMs`): past it, not confirmed.
       let timer: ReturnType<typeof setTimeout> | undefined;
       const late = new Promise<CheckOutcome>(
         (r) => (timer = setTimeout(() => r("failed"), this.config.verifyTimeoutMs)),
       );
-      return Promise.race([refreshing, late]).finally(() => clearTimeout(timer));
+      return Promise.race([refreshing.outcome, late]).finally(() => clearTimeout(timer));
     }
     const checks = (s.checks ??= new Map());
     const now = this.now();

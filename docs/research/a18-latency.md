@@ -24,15 +24,16 @@ lab provider, D97) with `OPENROUTER_API_KEY` unset, on this session's own ledger
   content (Gmail history ids, Graph and HubSpot resource ids, Drive change lists). A new route,
   `POST /v1/sources/refs` (`sourceChanged(id, { refs })` in both clients), has Eden read just those items in the
   background and doubt nothing else. With the same notices as the signals runs:
-  - **funnel, direct:** request p50 **1,013 → 6 ms**, p90 **1,507 → 14 ms**; ask p50 **588 → 2.5 ms**, p99
-    **2,782 → 1,033 ms**; connector calls **7.4 → 2.0 a task** (seed 42: 7.8 → 1.6), planted facts unchanged;
-  - **funnel, hosted:** request p50 1,406 → 6 ms, p90 1,512 → 850 ms; ask p50 1,505 → 2.6 ms, p90 2,778 → 8 ms;
-    calls 8.4 → 2.4 a task;
+  - **funnel, direct:** request p50 **1,013 → 6 ms**, p90 **1,507 → 17 ms**; ask p50 **588 → 2.3 ms**, p99
+    **2,782 → 1,050 ms**; connector calls **7.4 → 2.0 a task** (seed 42: 7.8 → 1.6), planted facts unchanged;
+  - **funnel, hosted:** request p50 1,406 → 6 ms, p90 1,512 → 850 ms; ask p50 1,505 → 2.6 ms, p90 2,778 → 10 ms;
+    calls 8.4 → 2.4 a task; 2 of 96 planted facts fewer than payload (asks that came while their own item's read was
+    on the wire);
   - **Pi, real agent:** Eden's share of the critical path **1,438–1,587 ms (41–43%) → 69–73 ms (3%)**; each task
     **1.3–1.6 s faster** (paired, both seeds); hidden facts raised 60 of 96 against 65 under signals and 58 with
     payload (differences not significant either way);
   - **freshness:** the staleness simulation delivered no more stale or deleted items than payload notices (5 of 101
-    and 0), with 236 fetches against 761 re-reads.
+    and 0), with no delivery re-reads against 761.
 - **What is left.** With ref notices, the remaining tail (p99 about 1.5 s) is a request that arrives while its own
   item's read is still on the wire; the lab sends each notice at the same instant as the request, which real
   notices rarely do. With bare signals the wait is the freshness guarantee itself, bounded by `verifyTimeoutMs`: the
@@ -144,8 +145,17 @@ marked `refreshing`, so `doubted` holds it in doubt and `check` waits on its rea
 instead of making a second call. In the background, two at a time: a fetch within 5 s (`REF_TIMEOUT_MS`; off the
 agent's path), a guard's skip or a plain error tried again up to 4 times; an item the source no longer has is dropped;
 a found one is stored as synced under the read mark its call began with, unless a removal landed during the call.
-Anything not read (no fetch tool, errors, a timeout, a null that proves nothing) turns the notice into the plain
-signal. Stores announce revisions as any sync store does (D205). `freshness.refsRead` and `refsFallback` count them.
+The first ref not read (no fetch tool, errors, a timeout, a null that proves nothing) raises the plain signal before
+its item's doubt is lifted. A signal after the notice makes a delivery read the item itself rather than reuse the ref
+read. A landed read is noted in the user's live sessions as a recent re-read (a pool built before it applies it).
+Reads stop when the user is forgotten or no longer synced. The stored ref is the gated one (D10). Stores announce
+revisions as any sync store does (D205). `freshness.refsRead` and `refsFallback` count them.
+
+**Review.** The reviewer subagent's probes found three faults in the first build, all fixed with a regression test
+each (each test fails on the first build): a failed read lifted its item's doubt until every lane had finished, so an
+ask in that window cited the old copy with no re-read; a signal during a ref read did not stop a delivery reusing it;
+the raw ref (a secret-shaped one in the probe) was stored past the gate. Also fixed: reads went on after a forget, and
+a pool built before a read landed delivered its older copy.
 
 **Integration.** `POST /v1/sources/refs {userId, sourceId, refs}` answers at once with `{ok, synced, reason?}`
 (`checkSourceRefs`, the deletion body's shape); `EdenClient.sourceChanged(id, { refs })` and Python
@@ -162,12 +172,14 @@ quality-cli it names the updated items. In pi-ab's `--days` recap it names the m
 
 | run | request p50 / p90 / p99 ms | ask p50 / p90 / p99 ms | calls a task | hidden / decoys |
 | --- | --- | --- | --- | --- |
-| direct 41 | 1,013 / 1,507 / 1,516 → **6.0 / 14 / 1,504** | 588 / 1,506 / 2,782 → **2.5 / 4.3 / 1,033** | 7.44 → **1.98** | 75 / 69 → 76 / 70 (payload 76 / 70) |
-| direct 42 | 956 / 1,510 / 1,548 → **6.7 / 163 / 1,511** | 721 / 1,504 / 2,725 → **2.6 / 9.3 / 1,245** | 7.79 → **1.62** | 76 / 65 → 76 / 66 (payload 76 / 66, identical tasks) |
-| hosted 41 | 1,406 / 1,512 / 1,534 → **6.4 / 850 / 1,509** | 1,505 / 2,778 / 3,991 → **2.6 / 8.1 / 3,010** | 8.38 → **2.37** | 76 / 66 → 75 / 70 (payload 76 / 70) |
+| direct 41 | 1,013 / 1,507 / 1,516 → **5.7 / 17 / 1,504** | 588 / 1,506 / 2,782 → **2.3 / 3.9 / 1,050** | 7.44 → **2.00** | 75 / 69 → 75 / 70 (payload 76 / 70) |
+| direct 42 | 956 / 1,510 / 1,548 → **6.1 / 155 / 1,506** | 721 / 1,504 / 2,725 → **2.5 / 4.3 / 1,250** | 7.79 → **1.62** | 76 / 65 → 76 / 66 (payload 76 / 66, identical tasks) |
+| hosted 41 | 1,406 / 1,512 / 1,534 → **6.4 / 850 / 1,508** | 1,505 / 2,778 / 3,991 → **2.6 / 10 / 3,010** | 8.38 → **2.37** | 76 / 66 → 74 / 70 (payload 76 / 70) |
 
-Against payload, ref notices differed in 0 tasks (direct 42) and 2 (hosted 41): asks that came while their own item's
-read was on the wire and gave up at `verifyTimeoutMs`, which the lab's zero lead time causes. The decoys refs and
+These are the final build (after the review's fixes, below); the first build's runs (`r3-*`, `r4-*`) gave the same
+figures within a few milliseconds and one planted fact. Against payload, ref notices differed in 1 task (direct 41),
+0 (direct 42) and 2 (hosted 41): asks that came while their own item's read was on the wire and gave up at
+`verifyTimeoutMs` (strict, D211: left out and named), which the lab's zero lead time causes. The decoys refs and
 payload surface above signals are asks that signals' strict re-reads left out for want of a confirmation.
 
 **Freshness**, quality-cli (`--users 8 --sessions 20 --updates 0.6 --deletes 0.05 --jobs 2`), $0:
@@ -176,8 +188,8 @@ payload surface above signals are asks that signals' strict re-reads left out fo
 | --- | --- | --- | --- | --- | --- |
 | signals | 5 / 73 | 0 / 0 | 0.403 / 0.531 | 761 | 0.764 |
 | payload | 5 / 69 | 0 / 0 | 0.396 / 0.518 | 0 | 0.136 |
-| refs | 5 / 69 | 0 / 0 | 0.396 / 0.518 | 18 (+ 236 ref fetches) | 0.427 |
-| refs, `--fetch-gone false` | identical to refs | | | | |
+| refs | 5 / 69 | 0 / 0 | 0.396 / 0.518 | 0 (+ the ref fetches) | 0.413 |
+| refs, `--fetch-gone false` (first build) | identical to refs then | | | | |
 
 **Pi** (`.local/a18/pi.sh`: the eden arm, `--tenant-prompt`, direct profile, time scale 1, train1–6, `--variants
 hidden,control,neutral --limit 8`, one process an arm, the three arms at once; 144 tasks an arm a seed):
@@ -211,7 +223,9 @@ caches the others wrote (agent $0.030 against $0.039 a seed).
 
 Tests: `packages/engine/src/source-refs.test.ts` (the named item read and cited with no further call, the others not
 doubted where a signal doubts them, an ask during the read waits on it with one call in all, a gone ref, the fallback
-to the signal, not-synced, two users), `http.test.ts` (the route), `client.test.ts` (refs batches, not-taken shapes),
+to the signal, not-synced, two users, and the review's: a failure while other reads run, a signal during a read, a
+secret-shaped ref, a removal and a forget during reads, a retry that succeeds, a read slower than `verifyTimeoutMs`,
+a pool from before the read), `http.test.ts` (the route), `client.test.ts` (refs batches, not-taken shapes),
 `test_eden_client.py` (parity), `connector-options.test.ts` (`recapNotice` refs). `bun run check` green; `bun run eval`
 identical to the base tree but its latency fields (p50 0.316 → 0.258 ms, p95 6.13 → 6.02 ms, which move run to run).
 

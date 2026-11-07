@@ -235,11 +235,14 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   whose on-demand poll gave up within `demandTimeoutMs` (= `sourceTimeoutMs`), so the next lookup searches it live
   instead of waiting on the same listing.
 - **Ref notices (D347, `sourceRefs`).** A notice naming the refs that changed doubts only those items: `refreshing`
-  (by user and item) holds each background read until it lands, `doubted` reads it, and `check` returns it (raced
-  against `verifyTimeoutMs`) instead of a second call. The read is stored through `Sync.ingest` under the read mark its
-  call began with (D133), after the same removal check as `sourceItems` (`heldGoneSeq`, D160/D176); a ref not read
-  turns the notice into `sourceNotice`'s plain signal, so freshness is never weaker than a signal's. Anything that
-  makes a new delivery path must keep going through `check`/`verifyItems`, or a named item's old copy goes out.
+  (by user and item, with the read mark at the notice) holds each background read until it lands, `doubted` reads it,
+  and `check` returns it (raced against `verifyTimeoutMs`) instead of a second call, unless a signal came after the
+  notice. The read is stored through `Sync.ingest` under the read mark its call began with (D133), after the same
+  removal check as `sourceItems` (`heldGoneSeq`, D160/D176), with the gated ref (never the raw one, D10), and noted in
+  the user's live sessions' `checks` (`noteRefRead`), so a pool built before it applies it. The first ref not read
+  raises `sourceNotice`'s plain signal before its item's doubt is lifted; reads stop when the user is no longer synced
+  (`Sync.notifying`). A new delivery path must keep going through `check`/`verifyItems`, or a named item's old copy
+  goes out.
 - **Two ways to make the signal path faster were measured and deleted (A18, docs/research/a18-latency.md).** A complete
   poll after a signal standing in for re-reads (`verifyByPoll`, D345) delivered stale copies (5 → 12 of 101 updates):
   listings are not reliably newest-modified first (a calendar lists future events first, a chat edit keeps its time),

@@ -3,7 +3,7 @@ import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import { itemId, type ContextItem, type Scope } from "@eden/protocol";
 import type { ListPage, SearchQuery, Source } from "@eden/sources";
-import { ItemCache } from "./cache";
+import { ItemCache, sanitizedId } from "./cache";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 
@@ -47,11 +47,22 @@ class Mail implements Source {
     const at = cursor ? Number(cursor) : 0;
     return { items: sorted.slice(at, at + limit), next: at + limit < sorted.length ? String(at + limit) : null };
   }
+  /** Per ref: a delay (ms) and errors to throw, one per fetch, before answering. */
+  refDelayMs = new Map<string, number>();
+  refErrors = new Map<string, string[]>();
+  /** Per ref: a gate the fetch waits on after reading the item (what the source said, held on the wire). */
+  refGate = new Map<string, Promise<void>>();
   async fetch(ref: string): Promise<ContextItem | null> {
     this.fetches++;
-    if (this.fetchDelayMs > 0) await Bun.sleep(this.fetchDelayMs);
+    const delay = this.refDelayMs.get(ref) ?? this.fetchDelayMs;
+    if (delay > 0) await Bun.sleep(delay);
     if (this.fetchError) throw new Error(this.fetchError);
-    return this.items.get(ref) ?? null;
+    const err = this.refErrors.get(ref)?.shift();
+    if (err) throw new Error(err);
+    const item = this.items.get(ref) ?? null;
+    const gate = this.refGate.get(ref);
+    if (gate) await gate;
+    return item;
   }
 }
 
@@ -186,5 +197,115 @@ describe("sourceRefs (D347): a notice naming its changed refs", () => {
     await r.settled;
     expect(other.fetches).toBe(0);
     expect(a.answer).toContain("until the dispute ends");
+  });
+
+  test("a read that fails while others are still on the wire: its item is in doubt at once (the plain signal)", async () => {
+    const { p, src, user, ask, at } = await setup();
+    src.add("hold", "Harlow invoice on hold", "Harlow invoice payments are on hold until 30 November", at());
+    src.refErrors.set("hold", Array(10).fill("upstream 503"));
+    src.refDelayMs.set("n0", 3_000);
+    const r = p.sourceRefs(user, "mail", ["hold", "n0"]);
+    await Bun.sleep(1_800);
+    expect(p.freshness.refsFallback).toBe(1);
+    const a = await ask();
+    // Not the held copy unread: re-read or polled (the new words), or left out and named; never the old words.
+    expect(a.answer).not.toContain("until the dispute ends");
+    await r.settled;
+  }, 10_000);
+
+  test("a signal while a ref read is on the wire: a delivery reads the item itself, not that read", async () => {
+    const { p, src, user, ask, at } = await setup();
+    src.add("hold", "Harlow invoice on hold", "Harlow invoice payments are on hold until 30 November", at());
+    let release!: () => void;
+    src.refGate.set("hold", new Promise<void>((r) => (release = r)));
+    const r = p.sourceRefs(user, "mail", ["hold"]);
+    await Bun.sleep(10);
+    src.add("hold", "Harlow invoice on hold", "Harlow invoice payments are on hold until 12 December", at() + 1);
+    expect(p.sourceChanged(user, "mail")).toBe(true);
+    src.refGate.delete("hold");
+    const asked = ask();
+    await Bun.sleep(20);
+    release();
+    const a = await asked;
+    await r.settled;
+    expect(a.answer).toContain("12 December");
+    expect(a.answer).not.toContain("30 November");
+  });
+
+  test("the ref is stored as the gate left it: a secret-shaped ref is not held raw (D10)", async () => {
+    const { p, src, user, at } = await setup();
+    const secret = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8";
+    src.add(secret, "A note", "A note about lunch orders", at());
+    await p.sourceRefs(user, "mail", [secret]).settled;
+    const cache = (p as unknown as { deps: { cache: ItemCache } }).deps.cache;
+    const id = sanitizedId({ id: itemId("mail", secret), sourceId: "mail", ref: secret, title: "", text: "" });
+    const held = cache.get(user, id, at());
+    expect(held).not.toBeNull();
+    expect(`${held!.id} ${held!.ref}`).not.toContain(secret);
+  });
+
+  test("a removal while the read is on the wire wins: not revived, not cited", async () => {
+    const { p, src, user, ask, later } = await setup();
+    let release!: () => void;
+    src.refGate.set("hold", new Promise<void>((r) => (release = r)));
+    const r = p.sourceRefs(user, "mail", ["hold"]);
+    await Bun.sleep(10);
+    p.sourceRemoved(user, "mail", ["hold"]);
+    release();
+    await r.settled;
+    later();
+    expect(citedIds(await ask())).not.toContain(HOLD);
+  });
+
+  test("forget while reads are queued: the reads stop and nothing is stored", async () => {
+    const { p, src, user } = await setup();
+    src.fetchDelayMs = 30;
+    const refs = Array.from({ length: 10 }, (_, i) => `x${i}`);
+    for (const ref of refs) src.add(ref, `Item ${ref}`, `Item ${ref} text`, T0);
+    const r = p.sourceRefs(user, "mail", refs);
+    await Bun.sleep(5);
+    p.forget(user);
+    await r.settled;
+    expect(src.fetches).toBeLessThanOrEqual(2);
+  });
+
+  test("one plain error then an answer: read on the retry, no fallback to the signal", async () => {
+    const { p, src, user, ask, later, at } = await setup();
+    src.add("hold", "Harlow invoice on hold", "Harlow invoice payments are on hold until 30 November", at());
+    src.refErrors.set("hold", ["upstream 503"]);
+    expect(await p.sourceRefs(user, "mail", ["hold"]).settled).toBe(1);
+    expect(p.freshness.refsFallback).toBe(0);
+    later();
+    const before = src.fetches;
+    const a = await ask("Who is on the lunch orders note?");
+    expect(a.citations.length).toBeGreaterThan(0);
+    expect(src.fetches).toBe(before);
+  });
+
+  test("a read slower than verifyTimeoutMs: an ask stops waiting and leaves the item out, named (D211)", async () => {
+    const { p, src, user, ask, at } = await setup();
+    src.add("hold", "Harlow invoice on hold", "Harlow invoice payments are on hold until 30 November", at());
+    src.refDelayMs.set("hold", 2_200);
+    const r = p.sourceRefs(user, "mail", ["hold"]);
+    const a = await ask();
+    expect(citedIds(a)).not.toContain(HOLD);
+    expect(a.answer).toContain("could not be re-checked");
+    await r.settled;
+  }, 10_000);
+
+  test("a copy a session held from before the read landed goes out as the read found it", async () => {
+    const { p, src, user, at } = await setup();
+    const inner = p as unknown as {
+      verifyItems(s: unknown, scored: unknown[], cue: unknown): Promise<{ item: ContextItem }[]>;
+      session(e: unknown): unknown;
+      deps: { cache: ItemCache };
+    };
+    const s = inner.session({ ...user, sessionId: "s9" });
+    const old = inner.deps.cache.get(user, HOLD, at())!;
+    expect(old.text).toContain("until the dispute ends");
+    src.add("hold", "Harlow invoice on hold", "Harlow invoice payments are on hold until 30 November", at());
+    await p.sourceRefs(user, "mail", ["hold"]).settled;
+    const kept = await inner.verifyItems(s, [{ item: old, score: 1, matched: 0, sketch: null }], { id: "c", span: 0 });
+    expect(kept.map((x) => x.item.text).join(" ")).toContain("30 November");
   });
 });

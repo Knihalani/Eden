@@ -524,6 +524,8 @@ describe("ref notices (D347): the refs a source changed, read by Eden", () => {
     const many = Array.from({ length: 101 }, (_, i) => `r${i}`);
     expect((await post("/v1/sources/refs", { userId: "u1", sourceId: "crm", refs: many })).status).toBe(400);
     let fetched = 0;
+    let release!: () => void;
+    const wire = new Promise<void>((r) => (release = r));
     const mail = {
       id: "mail",
       kind: "test",
@@ -533,6 +535,7 @@ describe("ref notices (D347): the refs a source changed, read by Eden", () => {
       list: async () => ({ items: [], next: null }),
       fetch: async (ref: string) => {
         fetched++;
+        await wire; // Held on the wire: the route must answer without waiting for it.
         return { id: `mail:${ref}`, sourceId: "mail", ref, title: "Changed", text: "A changed message" };
       },
     };
@@ -561,6 +564,7 @@ describe("ref notices (D347): the refs a source changed, read by Eden", () => {
     });
     for (let i = 0; i < 50 && fetched === 0; i++) await Bun.sleep(2);
     expect(fetched).toBe(1);
+    release();
   });
 });
 
