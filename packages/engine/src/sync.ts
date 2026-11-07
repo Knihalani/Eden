@@ -821,6 +821,8 @@ export class SyncManager {
     s.sketch?.fold();
     // Done before its listing ended: the rest was older than the user's cut, and is not held.
     if (!s.exhausted) s.cut = true;
+    // `engagedDeep`: a source a lookup used while its backfill ran is read whole now (`engage` saw it cold).
+    if (this.o.engagedDeep && s.engaged && s.cut && !s.deep) s.deep = { cursor: undefined, lost: false };
     s.polledAt = now;
     // Notifications that came before the backfill's last page began are read by it; later ones are not.
     s.noticesPolled = s.noticesBackfill;
@@ -1093,7 +1095,8 @@ export class SyncManager {
     // synced cap evicted such items oldest synced first, which could be the user's newest mail). Not stored, and the
     // source's copy is then not whole (D264). An item already held is stored as before (an update of what is kept).
     let kept = items;
-    if (keepCut && u.cutAt > -Infinity) {
+    // A used source's items are kept before the cut's (`engagedDeep`): the cut is the other sources' only.
+    if (keepCut && u.cutAt > -Infinity && !(this.o.engagedDeep && s.engaged)) {
       const cut = u.cutAt;
       kept = items.filter((it) => it.updatedAt === undefined || it.updatedAt >= cut || s.ids.has(it.id));
       if (kept.length < items.length) s.cut = true;
