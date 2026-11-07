@@ -32,8 +32,9 @@ per suite for train1–6 and held-out 10–12.
 | `heldout14`                                | Blind, RealUse-1's (benchmark-realuse-1.md); 32 templates over 8 life areas, with a `neutral` variant | Run once for RealUse-1 (realuse-1/A-heldout14.md)                                                                        |
 | `heldout15`                                | Blind, the weak-points plan's (fix-s3b-lab.md); 32 new templates, same areas, with `neutral`          | **Read** (RealUse-2, 2026-11-07: Pi seeds 41–44, Hermes 41–42, the blind funnel); spent                                  |
 | `heldout16`                                | Blind, the CL wave's (cl-cl5.md); 32 new templates over the same 8 areas, with `neutral`              | **Read** (RealUse-3 Pi, 2026-11-07, realuse-3/pi-heldout16.md): no longer blind; cards and intent cached for seeds 41–44 |
+| `heldout17` | Blind, the end-of-day confirmation's (a19-heldout17.md, D350); 32 new templates over the same 8 areas, with `neutral`; 8 late-arrival templates (`HELDOUT17_LATE`, for `--late`) | **Unrun**; cards and intent cached for seeds 41–44 |
 
-**The `neutral` variant** (held-out 14–16 and, since CL5, train1–6; `neutral.ts`, `NEUTRAL_SUITES`): the same request
+**The `neutral` variant** (held-out 14–17 and, since CL5, train1–6; `neutral.ts`, `NEUTRAL_SUITES`): the same request
 as `hidden` and `control` with nothing planted. The train suites get it from `withNeutral` in suites.ts (the control
 planted and taken out again, ids `<suite>-neutral`), so tuning can measure nothing-to-add turns without a held-out
 suite; their neutral worlds add no item the hidden and control worlds lack, so the card and intent replays cover them

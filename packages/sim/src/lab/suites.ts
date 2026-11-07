@@ -23,6 +23,7 @@ import { plantHeldout13 } from "./hidden-heldout13";
 import { plantHeldout14 } from "./hidden-heldout14";
 import { plantHeldout15 } from "./hidden-heldout15";
 import { plantHeldout16 } from "./hidden-heldout16";
+import { plantHeldout17 } from "./hidden-heldout17";
 import { plantTrain1 } from "./hidden-train1";
 import { plantTrain2 } from "./hidden-train2";
 import { plantTrain3 } from "./hidden-train3";
@@ -105,6 +106,11 @@ export const SUITES: Record<string, Plant> = {
   // the HiddenTask interface, the sim world API and the CL goal; with `neutral`. Reserved for the CL combination's
   // final blind check: do not run it (funnel or agent) before then, never tune on it.
   heldout16: plantHeldout16,
+  // The end-of-day confirmation's blind suite (D350, docs/research/a19-heldout17.md), written by an author who saw only
+  // heldout16's format, the HiddenTask interface, the sim world API and a short brief; with `neutral`, and eight
+  // templates whose fact reads as arriving later that day (`HELDOUT17_LATE`, for `pi-ab --late`). Reserved for the
+  // end-of-day confirmation: do not run it (funnel or agent) before then, never tune on it.
+  heldout17: plantHeldout17,
   // The broad tuning set: six suites written blind (each author saw only the world generator, the text helpers and
   // the HiddenTask interface), one life area each, so a change must generalise across authors to show up. Tune on them.
   train1: withNeutral("train1", plantTrain1),
@@ -120,8 +126,8 @@ const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
 /**
  * Held-out suites kept out of `all` so a tuning command cannot spend them; held-out 9-13 have been read (D72, D80,
  * D85, D98, D112) and a blind round needs a new suite. Held-out 14 is RealUse-1's blind suite (run once for it);
- * held-out 15 was RealUse-2's (run once); held-out 16 is unrun, reserved for the CL wave's final check. A run names
- * them to measure on them (with `--blind`).
+ * held-out 15 was RealUse-2's (run once); held-out 16 was the CL wave's final check (RealUse-3); held-out 17 is
+ * unrun, reserved for the end-of-day confirmation. A run names them to measure on them (with `--blind`).
  */
 export const UNRUN_BLIND = [
   "heldout9",
@@ -132,7 +138,10 @@ export const UNRUN_BLIND = [
   "heldout14",
   "heldout15",
   "heldout16",
+  "heldout17",
 ];
+/** The UNRUN_BLIND suites nobody has read yet: the funnel's "read before" warning skips them (D350). */
+export const UNREAD_BLIND = ["heldout17"];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**
