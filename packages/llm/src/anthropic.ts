@@ -148,6 +148,7 @@ export function anthropicBody(options: AnthropicOptions, request: ChatRequest, s
   return {
     model,
     max_tokens: request.maxTokens,
+    ...(request.stop?.length ? { stop_sequences: request.stop } : {}),
     ...(system.length ? { system } : {}),
     messages,
     // Haiku 5.5 rejects non-default sampling parameters, so temperature is never sent.
@@ -265,6 +266,7 @@ export class AnthropicModel implements Model {
       latencyMs: Math.round(performance.now() - t0),
       ttftMs: state.firstTokenAt === null ? undefined : Math.round(state.firstTokenAt - t0),
       truncated: state.stopReason === "max_tokens",
+      ...(state.stopReason !== null ? { stopped: state.stopReason === "stop_sequence" } : {}),
     };
   }
 

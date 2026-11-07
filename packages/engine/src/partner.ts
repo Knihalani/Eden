@@ -1727,6 +1727,7 @@ export class ContextPartner {
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
       // Sticky routing to the provider that holds the user's cached prefix, as the judge, answer and cards calls do.
       cacheKey: userCacheKey(s.scope),
+      ...(this.config.readerStopEarly ? { stopEarly: true } : {}),
     };
     // Who makes the call, for the accounting: a read that finds a verdict cached, or a call another read started
     // (an ask joining its push), makes none. Known before the read, for when this ask's wait runs out first.

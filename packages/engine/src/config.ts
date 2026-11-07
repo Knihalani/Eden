@@ -450,6 +450,12 @@ export interface EngineConfig {
    */
   readerReuse: boolean;
   /**
+   * D240 (on in the default): with `askReader`, the reader's reply stops at the first entry the model says is not
+   * about the request's own thing (`READER_STOP`). Binding entries come first, so what is cut is the look-alikes after
+   * the first one, which it would only reject: half the output tokens, about 250 ms less per reading.
+   */
+  readerStopEarly: boolean;
+  /**
    * `pushChecked` (trial, D246, CL4 H8): when the push read the user's request and flagged nothing, a short note goes
    * to the agent in the data envelope: Eden read the user's connected sources for this request and nothing in them
    * bears on it (after a packet for the same request: nothing beyond it). Only when every source the push searched
@@ -572,5 +578,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerGateVisits: true,
   readerVerifyAfter: true,
   readerReuse: true,
+  readerStopEarly: true,
   pushChecked: false,
 };

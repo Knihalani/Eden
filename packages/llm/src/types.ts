@@ -25,6 +25,11 @@ export interface ChatRequest {
    * effort set can leave no room for the answer (D45). Models that do not reason ignore it.
    */
   reasoning?: "low" | "medium" | "high";
+  /**
+   * Stop sequences: the model stops before writing any of them, and the reply's text leaves it out (Anthropic
+   * `stop_sequences`, OpenRouter `stop`). The caller reads a reply cut there knowing where it was cut.
+   */
+  stop?: string[];
 }
 
 export interface Usage {
@@ -53,6 +58,12 @@ export interface ChatResponse {
   ttftMs?: number;
   /** The model stopped at `maxTokens`: the text may be cut off (or empty, when reasoning used the cap). */
   truncated?: boolean;
+  /**
+   * Whether the reply ended on one of the request's `stop` sequences (true), ended any other way (false), or the
+   * provider did not say (unset). A caller that closes a stopped reply checks this first: a reply cut short by a
+   * dropped stream is not one the stop ended.
+   */
+  stopped?: boolean;
 }
 
 /** The one interface the engine sees. Tests use `FakeModel`; production uses `OpenRouterModel`. */

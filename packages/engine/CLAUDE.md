@@ -183,6 +183,14 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   the push flagged must still have the content it read, or the ask reads anew (`freshness-push.test.ts`). The fix-S1
   trials that failed (D190 evidence gate, D191 no wait on a weak pool, D194 short schema) are deleted: rebuilding one
   needs a new decision.
+- **The reader's reply stops early (D240, `readerStopEarly`, on in the default).** `ModelReaderMaker` sends
+  `READER_STOP` (`"same":false`) as a stop sequence; a stopped reply is closed by `closeStopped` (the entry being
+  written reads as rejected) only when it does not parse on its own. Rejections after the first look-alike are lost by
+  design, so `askReaderDrop` keeps those items in ask answers (funnel decoys listed rise; live false concerns did
+  not, docs/research/cl-cl2.md). A stopped reading is another verdict: `readerKey` adds "stop" when on. A smaller pool
+  (`askReaderPool` 10), a 160-character item window, compact item fences, trimming the pool by `constraintLike` or by
+  the card pass's `none` mark, and a per-user cached item prefix were measured and not taken (D238, D239, D241): the
+  trims drop planted items (lean carding leaves most of them uncarded).
 - **`pushChecked` (D246, trial, off)** queues an injection that cites nothing (`citations: []`, reason `checked:`): a
   harness or integration that counts items must not read an empty packet as a delivery, and a later reading that
   delivers withdraws it if untaken. Its line starts `Eden: ` (`EDEN_NOTE`), which `shownText` drops; it is fixed text,

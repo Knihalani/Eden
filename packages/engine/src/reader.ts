@@ -18,6 +18,8 @@
  * - Verdicts are cached per user and session by a hash of the request and of the pool (ids and content), bounded per
  *   user and per tenant, kept at most `ttlMs`, and dropped on any `forget` of the user or one of their sources
  *   (a bearing is made from the items' text).
+ * - The reply stops at the first entry the model says is not about the request's thing (`READER_STOP`, D240): binding
+ *   entries come first, so the cut is the later look-alikes' rejections, never a bearing the model wrote before it.
  * - Fail open: on a budget refusal, a model error, unreadable output, or no answer within the ask's wait, the ask is
  *   answered as without the flag. A call that outlives the wait still fills the cache for the next ask.
  */
@@ -48,6 +50,13 @@ const READER_WHY_CHARS = 120;
  * back to its usual answer.
  */
 const READER_MAX_TOKENS = 2_000;
+/**
+ * `readerStopEarly` (D240, on in the default): the reply stops where the model first writes that an entry is not
+ * about the request's own thing. The prompt asks for binding entries first, so what follows is lookalikes the reader
+ * would only reject: output the agent never sees, paid for and waited on. The stopped entry keeps its `why` (written
+ * before `same`, D96), so its index still counts as rejected.
+ */
+export const READER_STOP = '"same":false';
 
 /** What a binding item does to the request. Fixed words, so the agent reads Eden's label and not the model's. */
 export const READER_KINDS = ["blocks", "changes", "limits", "done"] as const;
@@ -100,6 +109,8 @@ export interface ReaderInput {
    * where their cached prefix is. Routing only: not part of `readerKey`, and never sent as prompt text.
    */
   cacheKey?: string;
+  /** `readerStopEarly` (D240): the call stops at the first entry the model says is not the request's thing. */
+  stopEarly?: boolean;
 }
 
 /**
@@ -267,6 +278,8 @@ export function readerKey(input: ReaderInput): string {
   h.update(head(input.question ?? "").toLowerCase()).update("\n");
   // The standing count and each item's text as read: the same items rendered another way are another prompt.
   h.update(`standing ${input.standing ?? 0}\n`);
+  // A stopped reading names fewer rejections: another verdict. Only when on, so other keys stay as they were.
+  if (input.stopEarly) h.update("stop\n");
   for (const it of input.items.slice(0, READER_MAX_ITEMS)) h.update(`${it.id}\t${it.hash}\t${it.text}\n`);
   return h.digest("hex").slice(0, 32);
 }
@@ -448,6 +461,24 @@ function kindOf(raw: string): ReaderKind | undefined {
   return k === "already done" || k === "already-done" ? "done" : undefined;
 }
 
+/**
+ * A reply cut at `READER_STOP`, closed so it parses: the entry it was writing ends as `same: false` (a rejection),
+ * and the list and object are closed. Only a reply that ends where the stop fires, right after an entry's index and
+ * complete `why` (D96 writes `why` before `same`), is closed; any other unparseable text (a stream cut mid-entry, a
+ * reply cut after `"same":true`) comes back unchanged and stays unreadable, so the ask fails open. A route that leaves
+ * the stop sequence in the text is read as if it had not.
+ */
+export function closeStopped(text: string): string {
+  let t = text.trimEnd();
+  if (t.endsWith(READER_STOP)) t = t.slice(0, -READER_STOP.length).trimEnd();
+  const open = t.slice(t.lastIndexOf("{"));
+  if (!STOPPED_ENTRY.test(open)) return text;
+  return `${t}${t.endsWith(",") ? "" : ","}${READER_STOP}}]}`;
+}
+
+/** An open entry as the stop leaves it: its index, then its whole `why`, then at most a comma. */
+const STOPPED_ENTRY = /^\{\s*"i"\s*:\s*"?\d+"?\s*,\s*"why"\s*:\s*"(?:[^"\\]|\\.)*"\s*,?$/;
+
 /** How a bearing is said before the item's title: Eden's label in fixed words, then the model's short bearing. */
 export function readerNote(kind: ReaderKind, why: string): string {
   return why ? `${KIND_LABEL[kind]}: ${why}` : KIND_LABEL[kind];
@@ -479,11 +510,16 @@ export class ModelReaderMaker implements ReaderMaker {
       messages: readerMessages(input),
       maxTokens: READER_MAX_TOKENS,
       json: true,
+      ...(input.stopEarly ? { stop: [READER_STOP] } : {}),
       ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),
       signal,
     });
     const n = Math.min(input.items.length, READER_MAX_ITEMS);
-    const parsed = res.truncated ? null : parseReaderFull(res.text, n);
+    const parsed = res.truncated
+      ? null
+      : (parseReaderFull(res.text, n) ??
+        // Closed only when the stop may have ended it: a provider that says the reply ended otherwise is not.
+        (input.stopEarly && res.stopped !== false ? parseReaderFull(closeStopped(res.text), n) : null));
     return { bears: parsed?.bears ?? null, rejected: parsed?.rejected ?? [], costUsd: res.costUsd, usage: res.usage };
   }
 }
