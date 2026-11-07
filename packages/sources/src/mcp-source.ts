@@ -397,14 +397,23 @@ export function toItems(sourceId: string, content: unknown, limit: number, struc
   return out.slice(0, limit);
 }
 
-/** The top-level JSON objects of a tool result (its `structuredContent`, else each text block's), not their rows. */
+/**
+ * The JSON objects of a tool result that may be a fetched record itself, not its rows: the top-level object of its
+ * `structuredContent` and of each text block, each followed by the objects its container keys hold (an envelope's
+ * `{data: {...}}`, to `rowsOf`'s depth). The text blocks are read even beside a structuredContent, as `jsonRows` falls
+ * back to them: a server may put the record in its text and something else there (FastMCP's `{result: "<text>"}`).
+ */
 function topObjects(content: unknown, structured?: unknown): Row[] {
-  if (structured !== undefined) return isObject(structured) ? [structured as Row] : [];
+  const out: Row[] = [];
+  const add = (o: unknown, depth: number): void => {
+    if (depth > 3 || !isObject(o)) return;
+    out.push(o);
+    for (const k of CONTAINER_KEYS) add(o[k], depth + 1);
+  };
+  add(structured, 0);
   const blocks = Array.isArray(content) ? (content as Block[]) : [];
-  return blocks.flatMap((b) => {
-    const parsed = b.type === "text" && b.text ? parseJson(b.text) : undefined;
-    return isObject(parsed) ? [parsed as Row] : [];
-  });
+  for (const b of blocks) if (b.type === "text" && b.text) add(parseJson(b.text), 0);
+  return out;
 }
 
 /** The rows of a tool result: its `structuredContent`, else every text block that holds JSON. Prose is no row. */
