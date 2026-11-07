@@ -53,7 +53,9 @@ class Mail implements Source {
   }
 }
 
-test("a re-read 'changed' item deleted while another re-read runs is not cited (old copy of a deleted item)", async () => {
+type During = (p: ContextPartner, user: { tenantId: string; userId: string }, src: Mail) => void;
+
+async function askWhileBReReads(during: During) {
   const src = new Mail();
   let clock = T0;
   src.add(
@@ -103,12 +105,28 @@ test("a re-read 'changed' item deleted while another re-read runs is not cited (
   // While B's re-read waits, A (already re-read as changed) is deleted and its deletion notified.
   src.onSlow = () =>
     setTimeout(() => {
-      src.items.delete("holdA");
-      p.sourceRemoved(user, "mail", ["holdA"]);
+      during(p, user, src);
       src.release?.();
     }, 20);
-  const r = await ask();
+  return { r: await ask() };
+}
+
+test("a re-read 'changed' item deleted while another re-read runs is not cited (old copy of a deleted item)", async () => {
+  const { r } = await askWhileBReReads((p, user, src) => {
+    src.items.delete("holdA");
+    p.sourceRemoved(user, "mail", ["holdA"]);
+  });
   // Bug: A is cited, with its old pre-change text.
   expect(r.citations.map((c) => c.itemId)).not.toContain(A);
   expect(r.answer).not.toContain("until the dispute ends");
+});
+
+test("a re-read 'changed' item whose new copy left the cache (no removal) is named as not re-checked (D127)", async () => {
+  // The item still exists at its source: leaving it out silently would read as an all-clear when it was the only one.
+  const { r } = await askWhileBReReads((p, user) => {
+    (p as unknown as { deps: { cache: ItemCache } }).deps.cache.dropSynced(user, [A]);
+  });
+  expect(r.citations.map((c) => c.itemId)).not.toContain(A);
+  expect(r.answer).not.toContain("until the dispute ends");
+  expect(r.answer).toContain("could not be re-checked");
 });

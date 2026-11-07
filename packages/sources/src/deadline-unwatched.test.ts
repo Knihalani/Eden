@@ -43,6 +43,7 @@ describe("audit A5: fan-out deadlines on list and fetch", () => {
     const page = await f.list(slow(800), scope, undefined, 10, { timeoutMs: 50 });
     const ms = performance.now() - t0;
     expect(ms).toBeLessThan(300);
+    expect(page).toBe("timeout");
   });
 
   test("fetchChecked returns within its timeoutMs when the source ignores the signal", async () => {
@@ -51,6 +52,7 @@ describe("audit A5: fan-out deadlines on list and fetch", () => {
     const got = await f.fetchChecked(slow(800), scope, "r1", { timeoutMs: 50 });
     const ms = performance.now() - t0;
     expect(ms).toBeLessThan(300);
+    expect(got).toMatchObject({ status: "failed", why: "timeout" });
   });
 
   test("McpSource.list honours its signal while connecting (a server that never answers initialize)", async () => {

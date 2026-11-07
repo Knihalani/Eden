@@ -29,6 +29,10 @@ anything is held).
 - **Isolation (D9).** Breakers, limits, caches, planner arms and singleflight keys are per tenant/user. A new piece
   of state is keyed the same way and gets a cross-user test (`regressions.test.ts` has examples).
 - **Untrusted text (D11).** Queries are built from user, agent and item text: shapes pass no search syntax through.
+- **Deadlines hold whatever the source does (A5).** `search` (through `Singleflight`), `list` and `fetchChecked`
+  (through `untilAborted`, `src/abort.ts`) return at their deadline even when the source ignores its signal, and
+  `McpSource` gives up its connect at the call's signal; the abandoned call's permit is settled then, so a source
+  that ignores signals can briefly hold more calls than its concurrency cap.
 - **Never throws.** `SourceFanout` reports each source's status ("ok", "cached", "stale", "open", "busy",
   "limited", "throttled", "timeout", "error"); a guard skip spends no rate token and no half-open probe. "limited" is
   our own rate limit skipping the call; "throttled" is the connector's own 429 (or "rate limit", "too many

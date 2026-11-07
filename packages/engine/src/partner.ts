@@ -3695,9 +3695,12 @@ export class ContextPartner {
         return [];
       }
       if (o !== "changed") return [x];
-      // The copy in hand is the one the re-read found superseded: with no current copy cached, nothing is cited.
+      // The copy in hand is the one the re-read found superseded: with no current copy cached (evicted meanwhile, not
+      // removed), nothing is cited, and a strict ask names it as not re-checked, not an all-clear (D127).
       const copy = this.deps.cache.get(s.scope, x.item.id, after);
-      return copy ? [{ ...x, item: copy }] : [];
+      if (copy) return [{ ...x, item: copy }];
+      if (strict) strict.unconfirmed.set(x.item.sourceId, (strict.unconfirmed.get(x.item.sourceId) ?? 0) + 1);
+      return [];
     });
   }
 

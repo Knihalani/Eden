@@ -41,7 +41,10 @@ Plus two load-flaky tests made robust (below).
   original text (`assignmentSpans`, new export of `redact.ts`) to the rules' spans. No finding, no extra scan.
 - **Cost.** `bun packages/primitives/bench/gate.bench.ts`, two runs each: 2 KB p50 12.18/13.44 µs before, 12.06/12.15
   µs after; 16 KB p50 137.8/135.5 µs before, 130.4/131.2 µs after (noise).
-- **Left.** Over-redaction is unchanged: a credential field's rule span can still swallow the following field's key
+- **Recall cost.** Quoted prose after a credential word is now redacted whole (`Secret Santa: "Bring a gift under
+  $20"` loses the quote, where before only `"Bring` went): the safe direction; eval and funnel unchanged. The
+  reviewer timed crafted 112–130 KB inputs at 6–19 ms (linear, D24).
+- **Left.** Over-redaction is otherwise unchanged: a credential field's rule span can still swallow the following field's key
   (`{"password":"hunter2long","note":"meet Dana at 9"}` stores `{"password":[REDACTED] Dana at 9"}`, before and after;
   another rule's span), and a closing `}` after a redacted value can be eaten by the final pass. Precision losses, not
   leaks.
@@ -70,7 +73,8 @@ Plus two load-flaky tests made robust (below).
 - **Fix.** `untilAborted` (new `sources/src/abort.ts`) races the call against its signal in `list` and `fetchChecked`
   (a search was already bounded by `Singleflight`); `McpSource` gives up its `connect` at the call's signal
   (`connectFor`), the connect itself going on for the next call. A late answer is ignored; the permit and breaker are
-  settled as for a timeout.
+  settled as for a timeout (the caller's own abort settles it as "ignored"), so a source that ignores its signal can
+  briefly hold more calls than its concurrency cap, as an abandoned search already could.
 
 ## 4. Strict ask: a re-read item deleted meanwhile (medium)
 
@@ -80,7 +84,9 @@ Plus two load-flaky tests made robust (below).
 - **Cause.** `verifyItems`' last step fell back to the copy in hand when the cache had no current copy, and checked no
   removal after the re-reads settled (`recheck` checks `isHeldGone` only within its own read).
 - **Fix.** After the re-reads, an item the cache holds gone is dropped whatever its own outcome; a "changed" item with
-  no current copy cached is not cited in its superseded copy.
+  no current copy cached (evicted meanwhile, not removed) is not cited in its superseded copy, and a strict ask counts
+  it as not re-checked, so the answer names it rather than reading as an all-clear (D127; the review's finding 1, with
+  its own test).
 
 ## 5. readerPushBehind: a gap with no packet queued (medium)
 
@@ -103,7 +109,8 @@ Plus two load-flaky tests made robust (below).
   the client restarted the server.
 - **Fix (D281).** `createMcpServer` moves to a new session id (`<id>.<n>`) after `MCP_SESSION_IDLE_MS` (2 h, the
   engine's `sessionIdleMs`) with no ask, or when the UTC day changes, and ends the old session (`session_end`), so its
-  state goes at once. A per-session cap that resets daily in `Budget` was the alternative; it would change the
+  state goes at once, once the old session's last ask in flight returns (MCP clients may call tools in parallel; the
+  review's finding 4). A per-session cap that resets daily in `Budget` was the alternative; it would change the
   Budget's meaning for every embedding, where a session is the agent's.
 
 ## 7. cardsLean and recurring events (low-medium)
@@ -156,6 +163,15 @@ Plus two load-flaky tests made robust (below).
   sources answer at once, so nothing waits longer.
 - `partner.test.ts` "only the head of a large event is read": one wall-clock sample under 250 ms; now the best of
   three sessions (a reading of the whole megabyte is slower on every try, so the bound still catches it).
+
+## Review
+
+The `reviewer` subagent ran `check` and `eval` on the branch, re-ran the new tests against the base, and mutation-tested
+`verifyItems`: REQUEST_CHANGES for one finding (a strict ask dropping an evicted "changed" item without naming it,
+fixed above with a test), plus low ones taken: assertions on the deadline tests' statuses, the abandoned-permit note,
+MCP rotation waiting for in-flight asks, ARCHITECTURE.md. It probed the `readerPushBehind` restructure (candidates and
+reader paths, a packet taken during the re-reads, an item revised meanwhile) and the `PollResume` continuation and
+found them sound.
 
 ## Checked and rejected (one line each)
 
