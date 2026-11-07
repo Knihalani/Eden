@@ -8,7 +8,7 @@ OpenRouter route.
 
 ## The question
 
-Held-out 10–13 false concerns went from 0.6% (agent alone) to 3.1% with Eden, and in the $0 funnel 68 of 137 decoys
+Held-out 10–13 false concerns went from 0.6% (agent alone) to 3.1% with Eden, and in the $0 funnel 69 of 137 decoys
 surfaced came from rule paths that deliver before the reader reads (D151, D173). Which rule paths cost more decoys
 than they find hidden facts, and does removing, vetoing or labelling them lower false concerns live?
 
@@ -80,11 +80,11 @@ intervals (10,000 resamples over tasks, `packages/sim/lab/fix-s2/analyze.py`; su
 | held-out 14 (128)   | hidden facts raised       | 75.0% | **−9.4 (−17.2..−1.6)**    | −3.9 (−10.9..+3.1)        |
 |                     | false concerns (control)  | 0.8%  | 0.0 (−2.3..+2.3)          | −0.8 (−2.3..0.0)          |
 |                     | neutral concerns          | 2.3%  | −0.8 (−3.9..+1.6)         | −0.8 (−3.1..+1.6)         |
-|                     | wall, neutral (s)         | 5.89  | **+0.36 (+0.03..+0.71)**  | −0.05 (−0.42..+0.30)      |
+|                     | wall, neutral (s)†        | 5.89  | **+0.36 (+0.03..+0.71)**  | −0.05 (−0.42..+0.30)      |
 
-Eden's per-task $ moved by under $0.04/1k in either arm (intervals span 0), so neither costs more.
+† eden column: p50 wall; the differences: mean paired difference. Eden's per-task $ moved by under $0.04/1k in either arm (intervals span 0), so neither costs more.
 
-**Reading.** The veto does what the funnel says to the packet (a fifth fewer decoy items on controls) and nothing to
+**Reading.** The veto does what the funnel says to the packet (a fifth fewer items injected on control tasks) and nothing to
 false concerns: the agent was already dismissing those items. What it removes that mattered were right items the
 reader rejected by name (foodbank-shift and teatime-visit lost on both seeds of held-out 10, one fewer item each), and
 the hold costs wall time where Eden has nothing to add. The label moved nothing measurable.
@@ -110,7 +110,7 @@ promoted and all are deleted with their code and tests (D195 veto, D196 retireme
 commit 6659406b). What stays: the funnel's per-rule precision table (`rulePrecisionLines`), reporting only.
 
 What this says about issue 2: the rule paths do put most decoys in front of the agent, but the live agent sets them
-aside. Removing a fifth to a sixth of the decoy items on controls (veto, retirement) left false concerns where they
+aside. Cutting the items injected on control tasks by a fifth to a sixth (veto, retirement) left false concerns where they
 were (3.1–3.5% on held-out 10–13), so the +2.5-point rise RealUse-1 measured is not explained by rule-path decoy
 items alone. Likelier sources to examine next, unmeasured here: what the reader itself flags on controls (23 decoys
 flagged on train), the ask's listed-only items (45), and the wording of the push packet. Held-out 15 was not run.

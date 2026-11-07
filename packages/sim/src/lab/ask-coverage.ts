@@ -331,11 +331,15 @@ export function rulePrecisionLines(name: string, rows: readonly SurfacedRow[]): 
     by.set(w, a);
   }
   if (by.size === 0) return [];
-  const out = [`${name} rule precision (delivered by path, hidden/decoys: all; unflagged; read unflagged):`];
+  // "Read unflagged" needs pool data (`--reader`); without it the column would read 0/0, as if nothing were read.
+  const pooled = rows.some((t) => t.poolHas !== undefined);
+  const head = pooled ? "all; unflagged; read unflagged" : "all; unflagged";
+  const out = [`${name} rule precision (delivered by path, hidden/decoys: ${head}):`];
   const sum = (a: number[]) => a[0]! + a[1]!;
   for (const [w, a] of [...by].sort((x, y) => sum(y[1]) - sum(x[1]) || x[0].localeCompare(y[0]))) {
     const worse = a[1]! > a[0]! ? "  decoys outnumber hidden" : "";
-    out.push(`${name}   ${w} ${a[0]}/${a[1]}; ${a[2]}/${a[3]}; ${a[4]}/${a[5]}${worse}`);
+    const read = pooled ? `; ${a[4]}/${a[5]}` : "";
+    out.push(`${name}   ${w} ${a[0]}/${a[1]}; ${a[2]}/${a[3]}${read}${worse}`);
   }
   return out;
 }

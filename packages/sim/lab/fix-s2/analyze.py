@@ -15,22 +15,28 @@ BASE = "eden"
 
 
 def load(files):
-    tasks, res = {}, {}
+    tasks, res, dropped = {}, {}, 0
     for f in files:
         d = json.load(open(f))
         for t in d["tasks"]:
             tasks[t["id"]] = t["kind"]
         for r in d["results"]:
             if r.get("error") or not r.get("facts"):
+                dropped += 1
                 continue
+            key = (r["task"], r["condition"])
+            if key in res:
+                raise SystemExit(f"{f}: {key} is in two files (pass one run per seed)")
             v = list(r["facts"].values())
-            res[(r["task"], r["condition"])] = {
+            res[key] = {
                 "rate": sum(1 for x in v if x) / len(v),
                 "wall": r["wallMs"] / 1000,
                 "eden": r.get("edenCostUsd", 0),
                 "agent": r["costUsd"],
                 "items": r.get("injectedItems", 0),
             }
+    if dropped:
+        print(f"  dropped {dropped} results with an error or no facts")
     return tasks, res
 
 
@@ -68,6 +74,10 @@ def main():
                 }
                 if arm != BASE:
                     paired = [t for t in have if (t, BASE) in res]
+                    row["paired"] = len(paired)
+                    if not paired:
+                        rows[f"{kind}/{arm}"] = row
+                        continue
                     for key in ("rate", "wall", "eden"):
                         d = [res[(t, arm)][key] - res[(t, BASE)][key] for t in paired]
                         lo, hi = boot(d)
@@ -77,7 +87,6 @@ def main():
                             round(scale * lo, 4),
                             round(scale * hi, 4),
                         ]
-                    row["paired"] = len(paired)
                 rows[f"{kind}/{arm}"] = row
         report[name] = rows
         print(f"== {name}")

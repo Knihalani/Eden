@@ -257,6 +257,11 @@ describe("surfaced split (D173)", () => {
       "TOTAL   fallback 0/2; 0/2; 0/2  decoys outnumber hidden",
     ]);
     expect(rulePrecisionLines("x", [t({ askCited: true })])).toEqual([]);
+    // No pool data (no reader): the read-unflagged column is left out rather than shown as 0/0.
+    expect(rulePrecisionLines("x", [t({ delivered: true, why: "fallback" })])).toEqual([
+      "x rule precision (delivered by path, hidden/decoys: all; unflagged):",
+      "x   fallback 0/1; 0/1  decoys outnumber hidden",
+    ]);
   });
   test("planted coverage: null without replay facts, a warning below 100%", () => {
     expect(plantedCoverageLine([t({})])).toBeNull();
