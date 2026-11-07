@@ -237,13 +237,13 @@ const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
 });
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
-const USES_READER = CONDITIONS.some((c) => c.withPartner && effective(c.config).askReader);
+const USES_READER = CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).askReader);
 // Every model a role of this run calls, once: the pacer and spend ledger are set up for them, and the key check below
 // reads the same list, so a role added here cannot go unchecked.
 const RUN_MODELS = [
   MODEL,
   GRADER,
-  ...(CONDITIONS.some((c) => c.withPartner && effective(c.config).cards) ? [CARD_MODEL] : []),
+  ...(CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).cards) ? [CARD_MODEL] : []),
   ...(USES_READER ? [READER_MODEL] : []),
 ];
 // Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
@@ -274,7 +274,7 @@ if (CARDS_FILE && !existsSync(CARDS_FILE)) throw new Error(`--cards ${CARDS_FILE
 // The intent requests (D158): with cards replayed the card model writes requests only for the items it cards live,
 // so the checked-in requests are replayed by default where they cover the run, as the funnel does (`--intent none`
 // opts out; a list of files replays those). A run they do not cover is labelled intent inert in its header.
-const INTENT_WANTED = CONDITIONS.some((c) => c.withPartner && effective(c.config).intent && effective(c.config).cards);
+const INTENT_WANTED = CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).intent && effective(c.config).cards);
 const INTENT = harnessIntent(opt("intent", "default"), {
   wanted: INTENT_WANTED,
   cardsReplayed: !!CARDS_FILE,
@@ -591,7 +591,7 @@ async function runWorld(
       : baseTasks;
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
   const notify = pushNotifier(sources, CONNECTORS, seed);
-  const { name: condition, waitMs, useEden, withPartner, useTools, askTool, judge, act, firewall, config } = cond;
+  const { name: condition, waitMs, useEden, withPartner, useTools, askTool, judge, act, firewall, config, noKey } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.
@@ -634,7 +634,8 @@ async function runWorld(
   const cardMaker = (): CardMaker =>
     diskCards ? new DiskCardMaker(CARDS_FILE, liveCards(), { out: CARDS_OUT, shared: diskCards }) : liveCards();
   const cards =
-    withPartner && effective(config).cards
+    // `+nokey` (D291): a server with no model key builds no card enricher and no reader (models.ts NO_MODELS).
+    withPartner && !noKey && effective(config).cards
       ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   if (cards) budgeted.cards.push(cards);
@@ -642,7 +643,7 @@ async function runWorld(
   // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
   let readerTask: RunResult | null = null;
   const reader =
-    withPartner && effective(config).askReader
+    withPartner && !noKey && effective(config).askReader
       ? new AskReader({
           maker: new ModelReaderMaker(
             meteredModel(

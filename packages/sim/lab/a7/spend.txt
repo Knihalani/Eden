@@ -1,0 +1,5 @@
+a7-nokey-41 0.3156
+a7-nokey-42 0.3092
+a7-regrade-41 0.0008
+a7-regrade-42 0.0004
+total 0.6259
