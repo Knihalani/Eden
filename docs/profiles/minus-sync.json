@@ -10,5 +10,6 @@
   "syncBackfillLanes": 1,
   "syncLocalComplete": false,
   "syncKeepCut": false,
-  "syncEngagedDeep": false
+  "syncEngagedDeep": false,
+  "syncUnusedSweepMs": 0
 }
