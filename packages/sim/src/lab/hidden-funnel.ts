@@ -100,7 +100,8 @@ import { QueryPlanner } from "@eden/sources";
 import { sanitizeForStore } from "@eden/redact";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
-import { REALISTIC, simSources } from "../sources";
+import { simSources } from "../sources";
+import { connectorOptions, pushNotifier } from "./connector-options";
 import { noiseSources } from "./noise-sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
@@ -207,6 +208,10 @@ const cli = flags(
         "distill",
         "noise-sources",
         "noise-items",
+        "source-profile",
+        "push",
+        "push-rates",
+        "fetch-gone",
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
@@ -240,6 +245,16 @@ const TIME = Number(opt("time", "0"));
  * (default 20; `noise-sources.ts`), so the screen runs a user with ~1,000 sources. 0 (the default): none.
  */
 const NOISE_SOURCES = Number(opt("noise-sources", "0"));
+/**
+ * `--source-profile FILE|JSON`, `--push none|signals|payload`, `--push-rates` (A18, the live harnesses' connector
+ * options, connector-options.ts): the market latency profiles and change notices pi-ab runs under, so the funnel at
+ * `--time 1` times Eden's own path (observe, push, ask re-reads, search, poll) as the agent would wait on it, at $0.
+ * `signals`: before each task each source notifies with chance 1 - exp(-rate); `payload` sends none (the world does
+ * not change). Defaults (REALISTIC, no notices) leave every earlier run as it was.
+ */
+const CONNECTORS = connectorOptions(opt);
+/** `--fetch-gone false`: the sources' fetch null proves nothing, as an MCP connector's (A18; default true). */
+const FETCH_GONE = opt("fetch-gone", "true") !== "false";
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
 /** `--config`: engine settings, checked whole (checkEngineConfig); a typo or a child whose parent is off exits 2. */
 const CONFIG = ((): Record<string, unknown> => {
@@ -659,10 +674,10 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     const asks = tasks.map((t, i) => ({ template: t.template, request: t.text, planted: planted[i]?.id ?? "" }));
     appendFileSync(CORPUS_DUMP, `${JSON.stringify({ suite, seed, variant, tasks: asks, items })}\n`);
   }
-  const sources = [
-    ...simSources(world, REALISTIC, TIME, seed),
-    ...(NOISE_SOURCES > 0 ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed) : []),
-  ];
+  const own = simSources(world, CONNECTORS.profiles, TIME, seed);
+  const notify = pushNotifier(own, CONNECTORS, seed);
+  if (!FETCH_GONE) for (const s of own) s.fetchReportsGone = false;
+  const sources = [...own, ...(NOISE_SOURCES > 0 ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed) : [])];
   const returned = new Set<string>();
   let served = 0;
   for (const s of sources) {
@@ -919,6 +934,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
         syncUse.background += n;
       }
     } else clock += 3_600_000;
+    // `--push signals`: the hour's change notices, as pi-ab sends them before each task.
+    notify(partner, scope);
     // A neutral task plants nothing: no item has the empty id, so every planted-item field reads false.
     const id = variant === "neutral" ? "" : planted[i]!.id;
     const sessionId = task.id;

@@ -180,6 +180,11 @@ interface SourceSync {
   /** `notices` when the backfill's latest page began: what the backfill has read when it ends (`warmUp`). */
   noticesBackfill: number;
   /**
+   * The source's `fetchReportsGone` (D126): a re-read of one of its items can tell a deletion, which no poll can
+   * (`pollCovers`, D345). False until the sync has seen the source.
+   */
+  fetchProvesGone: boolean;
+  /**
    * Items stored from notifications (`ingest`) since the last complete poll, with the order they came in. They are the
    * newest the source has but were never listed, so a poll must not take one of them for the point where its listing
    * reaches what was synced before (`boundary`): items between them and that point would be skipped.
@@ -356,6 +361,29 @@ export class SyncManager {
   signalledSince(scope: Scope, sourceId: string, readMark: number): boolean {
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
     return s !== undefined && s.notifies && s.noticedMark > readMark;
+  }
+
+  /**
+   * `verifyByPoll` (D345): whether every change notification this source sent has been followed by a complete poll
+   * that began after it, so each item the source changed since then was listed again (a poll reads the listing,
+   * newest updated first, down to what was synced before) and stored under a newer read mark; an item still held
+   * from before the signal is unchanged. A deletion is not listed, so this stands in for a re-read only where a
+   * re-read could not tell a deletion either (the source's fetch null proves nothing: an MCP tool). O(1), no I/O.
+   */
+  pollCovers(scope: Scope, sourceId: string): boolean {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    return s !== undefined && s.notifies && !s.fetchProvesGone && s.phase === "warm" && s.notices === s.noticesPolled;
+  }
+
+  /**
+   * `verifyByPoll` (D345): the read in flight for a notifying source a poll could cover (`pollCovers`) whose
+   * notifications are not all polled yet, to wait on instead of re-reading its items one by one; null when there is
+   * none. It may be a read that began before the latest notification: `pollCovers` says afterwards whether it covered.
+   */
+  coveringPoll(scope: Scope, sourceId: string): Promise<number> | null {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    if (!s || !s.notifies || s.fetchProvesGone || s.phase !== "warm" || s.notices === s.noticesPolled) return null;
+    return s.busy;
   }
 
   /**
@@ -909,6 +937,7 @@ export class SyncManager {
   /** Whether a source's copy goes by its notifications (`push` and the source `notifies`). */
   private notes(s: SourceSync, source: Source): void {
     s.notifies = this.o.push === true && source.notifies === true;
+    s.fetchProvesGone = source.fetchReportsGone === true;
   }
 
   private failed(s: SourceSync, why: string): void {
@@ -1011,6 +1040,7 @@ function newSourceSync(id: string): SourceSync {
     noticedMark: 0,
     noticesPolled: 0,
     noticesBackfill: 0,
+    fetchProvesGone: false,
     pushed: new Map(),
     pushSeq: 0,
   };

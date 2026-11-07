@@ -3753,7 +3753,55 @@ export class ContextPartner {
    */
   private doubted(s: Session, item: ContextItem): boolean {
     const mark = this.deps.cache.readMark(s.scope, item.id);
-    return mark !== undefined && this.sync?.signalledSince(s.scope, item.sourceId, mark) === true;
+    if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark) !== true) return false;
+    // `verifyByPoll` (D345): a complete poll since the signal listed every changed item again, and a re-read of this
+    // source could not tell a deletion: it would prove nothing the poll did not.
+    return !(this.config.verifyByPoll && this.sync.pollCovers(s.scope, item.sourceId));
+  }
+
+  /**
+   * `verifyByPoll` (D345), before `verifyItems` decides what to re-read: for the items a signal put in doubt whose
+   * source has a poll in flight that could cover them (`Sync.coveringPoll`), waits for those polls (within
+   * `verifyTimeoutMs`, or the session's close), so only what they leave in doubt is re-read. An item a covering poll
+   * clears is delivered as the cache now holds it (the poll may have stored a newer copy than the one in hand); one no
+   * longer cached keeps the copy in hand, which `doubted` then reads as in doubt. No await when nothing waits.
+   */
+  private async coveredByPoll(s: Session, scored: Scored[]): Promise<Scored[]> {
+    const sync = this.sync;
+    if (!sync) return scored;
+    const signalled = (x: Scored) => {
+      const mark = this.deps.cache.readMark(s.scope, x.item.id);
+      return mark !== undefined && sync.signalledSince(s.scope, x.item.sourceId, mark);
+    };
+    // In doubt before any wait: a poll that stores a newer copy moves the item's read mark past the signal.
+    const before = new Set<string>();
+    const polls = new Set<Promise<number>>();
+    for (const x of scored) {
+      if (!signalled(x)) continue;
+      before.add(x.item.id);
+      const poll = sync.coveringPoll(s.scope, x.item.sourceId);
+      if (poll) polls.add(poll);
+    }
+    if (before.size === 0) return scored;
+    if (polls.size > 0) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let stop: (() => void) | undefined;
+      const closed = new Promise<void>((r) => (stop = r));
+      s.abort.signal.addEventListener("abort", stop!, { once: true });
+      await Promise.race([
+        Promise.all(polls),
+        new Promise<void>((r) => (timer = setTimeout(r, this.config.verifyTimeoutMs))),
+        closed,
+      ]);
+      clearTimeout(timer);
+      s.abort.signal.removeEventListener("abort", stop!);
+    }
+    const now = this.now();
+    return scored.map((x) => {
+      if (!before.has(x.item.id) || this.doubted(s, x.item)) return x;
+      const copy = this.deps.cache.get(s.scope, x.item.id, now);
+      return copy ? { ...x, item: copy } : x;
+    });
   }
 
   /**
@@ -3782,11 +3830,17 @@ export class ContextPartner {
       const held = s.checks?.get(id);
       return held !== undefined && now - held.at <= CHECK_REUSE_MS;
     };
+    if (this.config.verifyByPoll) {
+      scored = await this.coveredByPoll(s, scored);
+      if (s.closed) return [];
+    }
     const doubted = new Set<string>();
     for (const x of scored) if (this.doubted(s, x.item)) doubted.add(x.item.id);
     const due = scored.filter((x) => recent(x.item.id) || doubted.has(x.item.id));
     if (due.length === 0) return scored;
     const t0 = performance.now();
+    // The re-reads' wait as its own span (A18): counts only, under the delivery or ask that waits on it.
+    const verifying = this.spans?.open("verify", cue.span, { async: true, due: due.length });
     const before = this.freshness.calls;
     const outcomes = new Map(
       await Promise.all(due.map(async (x) => [x.item.id, await this.check(s, x.item)] as const)),
@@ -3814,6 +3868,7 @@ export class ContextPartner {
       costUsd: 0,
       itemIds: due.map((x) => x.item.id),
     });
+    if (verifying) this.spans!.close(verifying, { calls: this.freshness.calls - before });
     if (s.closed) return [];
     const after = this.now();
     return scored.flatMap((x) => {

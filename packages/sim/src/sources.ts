@@ -364,8 +364,11 @@ export class SimSource implements Source {
   readonly kind = "sim";
   /** Whether the lab forwards this source's change notifications (`--push`, the engine's `syncPush`). */
   notifies = false;
-  /** The world is the source: a ref it no longer has was deleted. */
-  readonly fetchReportsGone = true;
+  /**
+   * The world is the source: a ref it no longer has was deleted. The lab's `--fetch-gone false` (A18) sets it false, as
+   * an MCP connector is (a null fetch proves nothing), for the re-read paths that depend on it (D126, D345).
+   */
+  fetchReportsGone = true;
   /** The calendar lists by time, as its list call does (D44). */
   get listsByTime(): boolean {
     return this.id === "calendar";

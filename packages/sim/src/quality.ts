@@ -65,6 +65,11 @@ export interface QualityOptions {
    * nothing. Any mode but `none` marks every sim source as notifying.
    */
   push?: "none" | "signals" | "payload";
+  /**
+   * False (A18): every sim source's fetch null proves nothing, as an MCP connector's (`fetchReportsGone` false), so a
+   * deleted item's re-read is "unverifiable". Default true (the sim holds its items).
+   */
+  fetchGone?: boolean;
   agentToolRate?: number;
   /**
    * With no live model: "perfect" puts an oracle judge in the model's place (the ceiling of the model path),
@@ -547,6 +552,7 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
     const deletes = planDeletes(world, sessions.length, o.seed * 17_389 + u, o.deletes ?? 0);
     const sources = simSources(world, o.profiles, o.timeScale, o.seed + u);
     if ((o.push ?? "none") !== "none") for (const s of sources) s.notifies = true;
+    if (o.fetchGone === false) for (const s of sources) s.fetchReportsGone = false;
     return { world, sessions, asks, updates, deletes, sources };
   });
   const runUser = async (u: number) => {
