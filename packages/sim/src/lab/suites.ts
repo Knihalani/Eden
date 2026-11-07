@@ -22,6 +22,7 @@ import { plantHeldout12 } from "./hidden-heldout12";
 import { plantHeldout13 } from "./hidden-heldout13";
 import { plantHeldout14 } from "./hidden-heldout14";
 import { plantHeldout15 } from "./hidden-heldout15";
+import { plantHeldout16 } from "./hidden-heldout16";
 import { plantTrain1 } from "./hidden-train1";
 import { plantTrain2 } from "./hidden-train2";
 import { plantTrain3 } from "./hidden-train3";
@@ -40,6 +41,27 @@ const twoVariant =
   (world, seed, variant) => {
     if (variant === "neutral") throw new Error(`${name} builds no neutral variant (neutral.ts NEUTRAL_SUITES)`);
     return plant(world, seed, variant);
+  };
+
+/**
+ * A two-variant suite given the `neutral` variant without touching its file (CL5, docs/research/cl-cl5.md): the
+ * control is planted and its item taken out again, so the request text and every RNG draw are the control's (and the
+ * hidden's: both are built every time), the world is the base world, and the ids read `<suite>-neutral`. Valid only
+ * for a planting function that adds items at the end of `world.items` and touches nothing else (the train suites do;
+ * suites.test.ts checks that the neutral world equals the unplanted one).
+ */
+const withNeutral =
+  (name: string, plant: (world: World, seed: number, variant: "hidden" | "control") => HiddenTask[]): Plant =>
+  (world, seed, variant) => {
+    if (variant !== "neutral") return plant(world, seed, variant);
+    const before = world.items.length;
+    const tasks = plant(world, seed, "control");
+    world.items.length = before;
+    const from = `:${name}-control:`;
+    return tasks.map((t) => {
+      if (!t.id.includes(from)) throw new Error(`${name}: control id ${t.id} lacks ${from}`);
+      return { ...t, id: t.id.replace(from, `:${name}-neutral:`) };
+    });
   };
 
 export const SUITES: Record<string, Plant> = {
@@ -79,14 +101,18 @@ export const SUITES: Record<string, Plant> = {
   // only heldout14's format, the HiddenTask interface, the sim world API and RealUse-1's design; with `neutral`.
   // Reserved for wave 2's final blind confirmation: do not run it (funnel or agent) before then, never tune on it.
   heldout15: plantHeldout15,
+  // The CL wave's blind suite (H17, docs/research/cl-cl5.md), written by an author who saw only heldout15's format,
+  // the HiddenTask interface, the sim world API and the CL goal; with `neutral`. Reserved for the CL combination's
+  // final blind check: do not run it (funnel or agent) before then, never tune on it.
+  heldout16: plantHeldout16,
   // The broad tuning set: six suites written blind (each author saw only the world generator, the text helpers and
   // the HiddenTask interface), one life area each, so a change must generalise across authors to show up. Tune on them.
-  train1: twoVariant("train1", plantTrain1),
-  train2: twoVariant("train2", plantTrain2),
-  train3: twoVariant("train3", plantTrain3),
-  train4: twoVariant("train4", plantTrain4),
-  train5: twoVariant("train5", plantTrain5),
-  train6: twoVariant("train6", plantTrain6),
+  train1: withNeutral("train1", plantTrain1),
+  train2: withNeutral("train2", plantTrain2),
+  train3: withNeutral("train3", plantTrain3),
+  train4: withNeutral("train4", plantTrain4),
+  train5: withNeutral("train5", plantTrain5),
+  train6: withNeutral("train6", plantTrain6),
 };
 export const SUITE_NAMES = Object.keys(SUITES);
 const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
@@ -94,10 +120,19 @@ const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
 /**
  * Held-out suites kept out of `all` so a tuning command cannot spend them; held-out 9-13 have been read (D72, D80,
  * D85, D98, D112) and a blind round needs a new suite. Held-out 14 is RealUse-1's blind suite (run once for it);
- * held-out 15 is unrun, reserved for the weak-points plan's final check. A run names them to measure on them (with
- * `--blind`).
+ * held-out 15 was RealUse-2's (run once); held-out 16 is unrun, reserved for the CL wave's final check. A run names them
+ * to measure on them (with `--blind`).
  */
-export const UNRUN_BLIND = ["heldout9", "heldout10", "heldout11", "heldout12", "heldout13", "heldout14", "heldout15"];
+export const UNRUN_BLIND = [
+  "heldout9",
+  "heldout10",
+  "heldout11",
+  "heldout12",
+  "heldout13",
+  "heldout14",
+  "heldout15",
+  "heldout16",
+];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**

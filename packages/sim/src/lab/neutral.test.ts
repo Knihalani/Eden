@@ -27,7 +27,9 @@ describe("variantsFor", () => {
     expect(supportsNeutral("heldout14")).toBe(true);
     expect(variantsFor("heldout14", ["hidden", "control", "neutral"])).toEqual(["hidden", "control", "neutral"]);
     expect(variantsFor("heldout13", ["hidden", "control", "neutral"])).toEqual(["hidden", "control"]);
-    expect(variantsFor("train1", ["neutral"])).toEqual([]);
+    expect(variantsFor("heldout12", ["neutral"])).toEqual([]);
+    // The train suites build it since CL5 (suites.ts withNeutral).
+    expect(variantsFor("train1", ["neutral"])).toEqual(["neutral"]);
     expect(() => variantsFor("heldout14", ["hiden" as "hidden"])).toThrow(/unknown variant/);
   });
 
