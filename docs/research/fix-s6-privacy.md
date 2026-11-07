@@ -168,6 +168,19 @@ Within noise. The new rules run only when the prefilter sees `nrak-`, `x-amz-` o
 - Funnel: not run. No shipped path changed: the judge is not wired by the servers, and render.ts and reader.ts are
   untouched.
 
+## Review
+
+The `reviewer` subagent made three passes.
+
+1. **REQUEST_CHANGES on `1658dbc2`.** The presigned rule missed JSON-escaped and percent-encoded URLs. PRIVACY.md
+   claimed packets already used `safeLine`. A comment in line.ts was wrong. CloudFront, SigV2 and Azure SAS were
+   unlisted. Unicode tag characters were kept. All five were fixed in `4b141657`.
+2. **REQUEST_CHANGES on `4b141657`.** The unrolled-loop value regex was super-linear on a run of `%`, and past 1 MB it
+   matched nothing. Fixed in `28ecbcd6` by the character walk.
+3. **APPROVE on `28ecbcd6`.** The reviewer's own scaling ran up to 4 MB, all linear. The slowest was a value of CJK
+   characters, 35 ms per MB, under the gate's earlier 77 ms worst. That case is slow because `isSpace` runs a regex
+   per non-ASCII character. Replacing that regex with a code-point set is optional and not done.
+
 ## Left open
 
 - **Sentry DSN:** not redacted. Its key is public by Sentry's design.
