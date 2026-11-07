@@ -46,6 +46,8 @@ export interface Trace {
    */
   readerCalls?: number;
   readerCostUsd?: number;
+  /** On a "reader-push" trace: the push handed out candidates (`pushCandidates`, D237), not a reading. */
+  candidates?: boolean;
   itemIds: string[];
   /**
    * With the query planner on: per connector searched, the shapes it sent, its calls and how many items came back.
@@ -79,3 +81,76 @@ export interface ShadowRecord {
 }
 
 export type ShadowSink = (record: ShadowRecord) => void;
+
+/**
+ * One plain sentence on why a trace's decision was made (D277), for `explain` and an operator's logs. Built from the
+ * decision, its fixed reason words and the counts: no content (a cue id is a hash, never the text).
+ */
+export function explainTrace(t: Trace): string {
+  const n = t.itemIds.length;
+  const items = `${n} item${n === 1 ? "" : "s"}`;
+  switch (t.decision) {
+    case "skipped":
+      if (t.reason === "sync poll behind") {
+        return "A background sync poll that an earlier lookup did not wait for finished; its source calls are counted here.";
+      }
+      return `Not looked up: this ${t.reason} event carries no information need (chatter, an agent message, a result with nothing new).`;
+    case "repeat":
+      return "Not looked up again: the same cue was looked up a few turns ago (cueCooldownTurns).";
+    case "fast":
+      if (t.reason.startsWith("action-")) {
+        return `The action firewall found ${items} bearing on the tool call about to run (no model call).`;
+      }
+      return `Spoke from the user's cached items with no source call: ${items} matched surely enough.`;
+    case "sources":
+      if (t.reason.startsWith("updated:")) {
+        return `Sent a newer version of ${items} already shown in this session: the source changed them.`;
+      }
+      if (t.reason.startsWith("grounded-")) {
+        return `Spoke after a source search: ${items} grounded by the request's people, days or a conflict (no model).`;
+      }
+      if (t.reason.startsWith("fallback")) {
+        return `Spoke after a source search: the single best match (${items}) passed the no-model fallback bar.`;
+      }
+      return `Spoke after a source search: ${items} passed the no-model confidence bar.`;
+    case "model":
+      return `Spoke after a model judged the candidates: ${items}.`;
+    case "answer":
+      return `Answered an ask_context question with ${items}${t.modelCalls > 0 ? " (with a model call)" : " (no model call)"}.`;
+    case "reader-push":
+      if (t.candidates) {
+        return n > 0
+          ? `The request acts: handed the agent ${items} as candidates to check against it, with no model call (D237).`
+          : "The request acts, but nothing found looked able to constrain it (no constraint wording or card), so no candidates were sent.";
+      }
+      if (t.readerCalls === undefined) {
+        return "The request acts, but the reader made no reading (nothing to read, gated, over budget or unavailable), so nothing was pushed.";
+      }
+      return n > 0
+        ? `The request acts: the reader read it and flagged ${items}.`
+        : "The request acts: the reader read it and flagged nothing that bears on it.";
+    case "reader-late":
+      return "A reader call an ask had stopped waiting for finished late; its cost is counted here.";
+    case "verify":
+      return `Re-read ${items} whose source reported changes, before delivering them.`;
+    case "silent":
+      switch (t.reason) {
+        case "slow path busy":
+          return "Silent: an earlier lookup in this session was still running, so this event was not looked up.";
+        case "no candidates":
+          return "Silent: looked in the sources and found nothing that matched.";
+        case "served":
+          return "Silent: the request was already answered by an earlier delivery and nothing new and sure turned up.";
+        case "no model":
+          return "Silent: found candidates, but none passed the no-model bar (score, entities, grounding), and no judge is wired: Eden stays quiet rather than guess (D3).";
+        case "no model budget":
+          return "Silent: found candidates, none passed the no-model bar, and the model budget was spent.";
+        case "model: none":
+          return "Silent: the model judged the candidates and picked none.";
+        case "judge: untied":
+          return "Silent: the candidates were barely tied to the request, so no judge was asked.";
+        default:
+          return `Silent: looked and delivered nothing (${t.reason}).`;
+      }
+  }
+}

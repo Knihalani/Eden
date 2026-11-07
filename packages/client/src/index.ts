@@ -13,6 +13,8 @@ export type {
   ActionCheck,
   AgentEvent,
   AskResponse,
+  ExplainedDecision,
+  ExplainResponse,
   Injection,
   ObserveResult,
   SourceChangedReason,

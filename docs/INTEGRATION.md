@@ -263,6 +263,101 @@ provider offers them; for a Gmail push, turn the history id into items and delet
 Receiving notifications has its own cost, which Eden does not see: a platform may bill trigger runs, and a Gmail push
 carries only a history id that your code turns into items with a `history.list` call.
 
+## The one-line integration: Eden in front of your model (`bun run proxy`, D280)
+
+If your agent calls an OpenAI-compatible chat API, you can add Eden without touching its loop:
+
+```bash
+EDEN_PROXY_UPSTREAM=https://api.openai.com/v1 EDEN_URL=http://127.0.0.1:8790 EDEN_API_KEY=… bun run proxy
+# the agent: base_url="http://127.0.0.1:8791/v1", plus a header x-eden-user-id: <your user's id>
+```
+
+- On each `POST /v1/chat/completions` the proxy reports the conversation's new messages (user text, the assistant's
+  text and tool calls, tool results) to Eden once each, waits for the user message's lookup as the SDK does (up to
+  3 s), inserts Eden's packets as a system message just before the latest user message, keeps the turn's packets on
+  the turn's later model calls (tool loops), and streams the upstream's answer back unchanged. Other routes
+  (`/v1/models`, embeddings) pass through.
+- **Identity.** `x-eden-user-id` (else the body's `user`) names the end user; without either, Eden is skipped.
+  `x-eden-session-id` names the conversation; without it the proxy keys it by a hash of its first non-system
+  message (system prompts may change per request), so send it if many conversations open identically. Ids pass
+  through `edenId`. New messages are found by content, so compacted or sliding histories work; on first sight of a
+  conversation (or after a restart) only its latest user message on is reported.
+- **Fails open.** Eden down, slow or refusing: the request goes upstream unchanged, after at most the wait plus
+  800 ms of Eden's work. Only an unreachable upstream is an
+  error (502). The upstream key is forwarded and never logged; only message text goes to Eden, as with the SDK.
+- **Off this machine, set `EDEN_PROXY_KEY`.** The proxy holds your tenant's Eden key and serves whichever user a
+  caller names, so with `PROXY_HOST` beyond loopback it refuses to start without its own key, which callers send as
+  `x-eden-proxy-key`.
+- **Shadow mode, a trial with no risk** (`EDEN_PROXY_SHADOW=1`): the proxy reports every conversation to Eden and
+  lets it decide, but forwards each request unchanged and prints one JSON line (user, session, packet count, item ids;
+  no text) per request Eden would have changed. Run it on real traffic for a week, then read `bun run trace-report`
+  on the Eden server's `EDEN_TRACE=1` log and `/v1/explain` on the sessions that matter, before letting it inject.
+- **What it does not do.** It adds no `ask_context` tool (give the agent the MCP server for that, D70 says keep it),
+  and it cannot report events that never reach the model (a webhook's new mail: forward those with `sourceChanged`).
+- **Checked live** (2026-11-07): a plain Python `urllib` call to Anthropic's OpenAI-compatible endpoint
+  (`claude-haiku-5-5`) through the proxy and a no-key Eden on the example sources, asking "Can you move my lunch with
+  Priya Raman to 11:30 on Thursday?", got back "Priya emailed that she can't do anything before 12:15, so 11:30 may
+  not work for her": the candidate packet carried the mail the agent had no tool to read. One run, not a measurement.
+
+## Why did Eden say this, or stay silent? (`explain`, D277)
+
+Every decision Eden makes is traced with no content (D56): its kind, fixed reason words or a cue id (a hash), its
+time, its source and model calls, its cost, and the ids of the items it delivered or cited. The server keeps a
+session's last 32 in memory, and `POST /v1/explain {userId, sessionId}` (the clients' `explain()`) returns them, oldest
+first, each with a plain sentence:
+
+```json
+{ "decisions": [
+  { "turn": 1, "event": "user_message", "decision": "sources", "reason": "cue:5f1bf447b6",
+    "why": "Spoke after a source search: 2 items passed the no-model confidence bar.", "latencyMs": 41,
+    "sourceCalls": 4, "modelCalls": 0, "costUsd": 0, "itemIds": ["calendar:evt-priya", "gmail:m-priya"] },
+  { "turn": 3, "event": "user_message", "decision": "silent", "reason": "no candidates",
+    "why": "Silent: looked in the sources and found nothing that matched.", "...": "..." } ] }
+```
+
+- It reads only, changes nothing and is scoped like every route (the key's tenant, the body's user and session). A
+  session that ended (`session_end`, idle) or a user forgotten (`/v1/forget`) has none.
+- The common silent reasons: `no candidates` (nothing matched: check the user's sources with `/v1/sources` and that
+  the item is there), `no model` (candidates matched but none passed the no-model bar; Eden stays quiet rather than
+  guess, D3), `slow path busy` (an earlier lookup was still running), a `skipped` event (chatter, an agent message).
+  A request that acts shows a `reader-push` decision: the candidates it handed out, or why there were none.
+- Item ids are the source's own refs (`gmail:<message id>`); they are ids, not text, but they name the user's items:
+  treat the output as you treat your agent's logs.
+- On the server, `EDEN_TRACE=1` logs the same records for every session as JSON lines.
+
+## Measure Eden on your own traffic (`bun run trace-report`, D279)
+
+The lab's numbers are simulated; yours are not. Run the server with `EDEN_TRACE=1`, keep its output, and run
+`bun run trace-report server.log` (or pipe the log in; `--json` for a machine-readable summary). It prints how often
+Eden spoke or stayed silent and why, its time to a decision per kind (p50, p95, p99), source and model calls per
+event, and the request-time model spend per 1,000 events. Not in it: the background card and intent calls (no trace;
+their spend is under `EDEN_MODEL_USD_PER_TENANT_DAY` and on the provider's bill), and the network and client wait
+(time `observe` in your own loop for that). To compare with the lab, the same report on `bun run eval`'s traffic is
+in the eval's `latencyP50Ms`/`decisions`.
+
+## Other languages
+
+- **Python:** `packages/client-python` (`pip install ./packages/client-python`, import `eden_client`), the same calls
+  as `@eden/client` (`observe`, `pending`, `collect`, `ask`, `check`, `feedback`, `health`, `explain`,
+  `source_changed`) and `with_context`, standard library only, fail-open (D278). `eden_id` maps ids exactly as the
+  TypeScript `edenId` does, so a mixed stack finds one user's state. Synchronous: from asyncio, call it through
+  `asyncio.to_thread`.
+- **Anything else:** the HTTP API is a handful of JSON POSTs (`packages/server/src/http.ts` lists them). Keep the
+  client's contract: short timeouts (800 ms, plus the observe's `waitMs`), and every error is "no context", never an
+  exception in the agent's loop.
+- **MCP:** `bun packages/server/src/mcp-stdio.ts` serves `ask_context` for one user over stdio; `createMcpServer`
+  attaches it to any MCP transport. Eden's push (observe) is not an MCP tool: an MCP-only agent gets answers, not the
+  unasked packet.
+
+## Hosting
+
+`docker build -t eden .` from the repo root builds the server image (D280); its header lists the flags. It listens on
+`PORT` (8790) on all interfaces, keeps the source map (entity names and counts, never content, D8) in the `/data`
+volume, and reports health on `/healthz`. Item text, sessions and the explain traces live in memory: a restart starts
+users' caches over (the background sync refills them) and loses nothing a user wrote. Set `EDEN_PROCESSES` to the
+container's CPU quota and read "Processes and per-tenant caps" below. Never run `EDEN_DEV=1` on a reachable port (the
+server warns when it listens beyond loopback).
+
 ## Configuration
 
 There is one configuration, the default (D112): the best measured setup, NEWL (D99) with the speed and memory
@@ -276,7 +371,8 @@ the poll, the slow-path queue, vocabulary release). Run it as shipped:
   budget, and one cap per tenant per day spans them all (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25). Cost per task
   and per user is in [COST-MODEL.md](COST-MODEL.md); disclose the model provider to your users
   ([PRIVACY.md](PRIVACY.md)).
-- **Without a key**, the same default runs its no-model path: nothing to change.
+- **Without a key**, the same default runs its no-model path: nothing to change. The push's candidates make no model
+  call and run there too (D276): a request that acts gets up to five items to check, at $0.
 - Pass the client's default wait (3,000 ms on a sent user message, `DEFAULT_WAIT_MS`); see the waitMs section above.
 - `EDEN_ENGINE_CONFIG` takes a JSON file of settings over the default, usually one of `docs/profiles/minus-*.json`
   ("default minus a part") for a comparison. New behaviour arrives as a trial switch with an owner and an end date

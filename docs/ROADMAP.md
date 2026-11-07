@@ -109,7 +109,8 @@ train / held-out split for tuning, and text not written by templates.
 
 ## M5 — Production
 - Persistent session state (Redis or SQLite), multi-instance, rate limits per tenant, metrics and tracing export.
-- OpenAI-compatible injecting proxy (port the archived `packages/wrap` approach) for agents that cannot add the SDK.
+- ~~OpenAI-compatible injecting proxy~~: done (`@eden/proxy`, D280), with a shadow mode. Left: an `ask_context` tool
+  injected into the request's tools, and a proxy for Anthropic's native Messages API.
 - Streaming delivery (SSE) for long-running proactive agents.
 - DPA template, subprocessor list, data-flow diagram for tenants (PRIVACY.md).
 

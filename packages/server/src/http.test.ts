@@ -72,6 +72,53 @@ describe("HTTP API", () => {
   });
 });
 
+describe("explain (D277): why Eden spoke or stayed silent, content-free", () => {
+  const ex = { userId: "ux", sessionId: "sx" };
+  const decisions = async (body: unknown) =>
+    ((await (await post("/v1/explain", body)).json()) as { decisions: Record<string, unknown>[] }).decisions;
+
+  test("lists the session's decisions with a sentence each and no event or item text", async () => {
+    await post("/v1/events?waitMs=1000", { ...ex, kind: "user_message", text: "Globex renewal with Dana Lee" });
+    await post("/v1/events", { ...ex, kind: "agent_message", text: "Sure, one moment." });
+    const got = await decisions(ex);
+    expect(got.length).toBeGreaterThanOrEqual(2);
+    for (const d of got) {
+      expect(typeof d.why).toBe("string");
+      expect((d.why as string).length).toBeGreaterThan(10);
+      expect(Object.keys(d).sort()).toEqual([
+        "costUsd",
+        "decision",
+        "event",
+        "itemIds",
+        "latencyMs",
+        "modelCalls",
+        "reason",
+        "sourceCalls",
+        "turn",
+        "why",
+      ]);
+    }
+    expect(got.some((d) => (d.itemIds as string[]).includes("crm:d1"))).toBe(true);
+    const text = JSON.stringify(got);
+    for (const word of ["Globex", "Dana", "renewal", "moment", "12%"]) expect(text).not.toContain(word);
+  });
+
+  test("another user's or session's decisions are never shown (isolation); bad ids are a 400", async () => {
+    await post("/v1/events?waitMs=1000", { userId: "uy", sessionId: "sy", kind: "user_message", text: "Globex" });
+    expect(await decisions({ userId: "uy", sessionId: "other" })).toEqual([]);
+    expect(await decisions({ userId: "uz", sessionId: "sy" })).toEqual([]);
+    expect((await decisions({ userId: "uy", sessionId: "sy" })).length).toBeGreaterThan(0);
+    expect((await post("/v1/explain", { userId: "a/b", sessionId: "s" })).status).toBe(400);
+    expect((await post("/v1/explain", { userId: "u1" })).status).toBe(400);
+  });
+
+  test("an ended session has none", async () => {
+    await post("/v1/events", { userId: "uw", sessionId: "sw", kind: "user_message", text: "Globex" });
+    await post("/v1/events", { userId: "uw", sessionId: "sw", kind: "session_end" });
+    expect(await decisions({ userId: "uw", sessionId: "sw" })).toEqual([]);
+  });
+});
+
 describe("input checks (review finding 12)", () => {
   test("ids are validated on every route and used must be a boolean", async () => {
     expect((await post("/v1/pending", { userId: "a/b", sessionId: "s" })).status).toBe(400);
