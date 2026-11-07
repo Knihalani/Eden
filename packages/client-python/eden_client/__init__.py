@@ -137,7 +137,7 @@ class EdenError(Exception):
 
 
 
-_URL = re.compile(r"\b([a-z][a-z0-9+.-]*://)(?:[^\s/@]*@)?([^\s?#)]*)(?:[?#][^\s)]*)?", re.I)
+_URL = re.compile(r"\b([a-z][a-z0-9+.-]*://)(?:[^\s/]*@)?([^\s?#)]*)(?:[?#][^\s)]*)?", re.I)
 
 
 def redact_urls(text: str) -> str:

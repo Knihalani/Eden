@@ -379,6 +379,8 @@ describe("explain (D277)", () => {
     expect(
       redactUrls("Request cannot be constructed from a URL that includes credentials: http://me:secret@h:9/v1/ask"),
     ).toBe("Request cannot be constructed from a URL that includes credentials: http://h:9/v1/ask");
+    // A password containing "@" goes whole, up to the last "@" before the host.
+    expect(redactUrls("cannot reach http://me:p@ss@127.0.0.1:9 (boom)")).toBe("cannot reach http://127.0.0.1:9 (boom)");
     expect(redactUrls("cannot reach https://eden.example/base?token=abc#x (boom)")).toBe(
       "cannot reach https://eden.example/base (boom)",
     );

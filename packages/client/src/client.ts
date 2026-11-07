@@ -44,7 +44,7 @@ function transportError(path: string, baseUrl: string, timeoutMs: number, e: unk
  * secret in a log.
  */
 export function redactUrls(text: string): string {
-  return text.replace(/\b([a-z][a-z0-9+.-]*:\/\/)(?:[^\s/@]*@)?([^\s?#)]*)(?:[?#][^\s)]*)?/gi, "$1$2");
+  return text.replace(/\b([a-z][a-z0-9+.-]*:\/\/)(?:[^\s/]*@)?([^\s?#)]*)(?:[?#][^\s)]*)?/gi, "$1$2");
 }
 
 /** The reasons `/v1/sources/changed` gives (`SourceChangedReason`); anything else from a server is dropped. */

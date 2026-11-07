@@ -113,6 +113,11 @@ The reviewer subagent returned REQUEST_CHANGES with eight findings, all fixed:
 7. The smoke tests take port 0 and read the listening line (no port race), and skip visibly without Node.
 8. A 178-column Dockerfile comment line (the line checker does not scan the Dockerfile).
 
+The re-review approved, with three low notes: a password containing `@` leaked its tail (fixed: the credential part
+now runs to the last `@` before the host, tested in both clients); with several processes the router still prints
+"restarting in 1000 ms" for a child that failed before listening, before the final `eden:` line (left as it was); a
+timeout while the body is read is reported as "an unreadable answer" (rare, left).
+
 ## Checks
 
 `bun run check` green 3 of 3 on the final tree; `bun run eval` (no-model) identical to the base branch's JSON apart
