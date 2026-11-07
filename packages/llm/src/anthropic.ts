@@ -266,6 +266,7 @@ export class AnthropicModel implements Model {
       latencyMs: Math.round(performance.now() - t0),
       ttftMs: state.firstTokenAt === null ? undefined : Math.round(state.firstTokenAt - t0),
       truncated: state.stopReason === "max_tokens",
+      ...(state.stopReason !== null ? { stopped: state.stopReason === "stop_sequence" } : {}),
     };
   }
 

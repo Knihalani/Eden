@@ -58,6 +58,12 @@ export interface ChatResponse {
   ttftMs?: number;
   /** The model stopped at `maxTokens`: the text may be cut off (or empty, when reasoning used the cap). */
   truncated?: boolean;
+  /**
+   * Whether the reply ended on one of the request's `stop` sequences (true), ended any other way (false), or the
+   * provider did not say (unset). A caller that closes a stopped reply checks this first: a reply cut short by a
+   * dropped stream is not one the stop ended.
+   */
+  stopped?: boolean;
 }
 
 /** The one interface the engine sees. Tests use `FakeModel`; production uses `OpenRouterModel`. */

@@ -462,14 +462,22 @@ function kindOf(raw: string): ReaderKind | undefined {
 }
 
 /**
- * A reply cut at `READER_STOP` (the provider leaves the stop sequence out), closed so it parses: the entry it was
- * writing ends as `same: false` (a rejection), and the list and object are closed. A reply that ended on its own
- * parses before this is tried.
+ * A reply cut at `READER_STOP`, closed so it parses: the entry it was writing ends as `same: false` (a rejection),
+ * and the list and object are closed. Only a reply that ends where the stop fires, right after an entry's index and
+ * complete `why` (D96 writes `why` before `same`), is closed; any other unparseable text (a stream cut mid-entry, a
+ * reply cut after `"same":true`) comes back unchanged and stays unreadable, so the ask fails open. A route that leaves
+ * the stop sequence in the text is read as if it had not.
  */
 export function closeStopped(text: string): string {
-  const t = text.trimEnd();
-  return `${t}${/[{,]$/.test(t) ? "" : ","}${READER_STOP}}]}`;
+  let t = text.trimEnd();
+  if (t.endsWith(READER_STOP)) t = t.slice(0, -READER_STOP.length).trimEnd();
+  const open = t.slice(t.lastIndexOf("{"));
+  if (!STOPPED_ENTRY.test(open)) return text;
+  return `${t}${t.endsWith(",") ? "" : ","}${READER_STOP}}]}`;
 }
+
+/** An open entry as the stop leaves it: its index, then its whole `why`, then at most a comma. */
+const STOPPED_ENTRY = /^\{\s*"i"\s*:\s*"?\d+"?\s*,\s*"why"\s*:\s*"(?:[^"\\]|\\.)*"\s*,?$/;
 
 /** How a bearing is said before the item's title: Eden's label in fixed words, then the model's short bearing. */
 export function readerNote(kind: ReaderKind, why: string): string {
@@ -509,7 +517,9 @@ export class ModelReaderMaker implements ReaderMaker {
     const n = Math.min(input.items.length, READER_MAX_ITEMS);
     const parsed = res.truncated
       ? null
-      : (parseReaderFull(res.text, n) ?? (input.stopEarly ? parseReaderFull(closeStopped(res.text), n) : null));
+      : (parseReaderFull(res.text, n) ??
+        // Closed only when the stop may have ended it: a provider that says the reply ended otherwise is not.
+        (input.stopEarly && res.stopped !== false ? parseReaderFull(closeStopped(res.text), n) : null));
     return { bears: parsed?.bears ?? null, rejected: parsed?.rejected ?? [], costUsd: res.costUsd, usage: res.usage };
   }
 }

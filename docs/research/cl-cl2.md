@@ -118,7 +118,9 @@ look-alikes). On the committed cache (4,377 replies): 3.2 entries a reply, 2,097
 
 `readerStopEarly` sends `"same":false` as a stop sequence: the reply ends where the model first writes that an entry
 is not about the request's own thing. The entry it was writing keeps its `why` and is read as rejected
-(`closeStopped`), so D96's reason-first order stands; what is lost is every entry after it. A lab replay simulates
+(`closeStopped`), so D96's reason-first order stands; what is lost is every entry after it. Only a reply that ends
+exactly where the stop fires, and whose provider reports no other ending, is closed: a reply cut anywhere else (a
+dropped stream) stays unreadable and fails open, as before (a fix from the review of this change). A lab replay simulates
 the stop on recorded replies (`stopLine`, counts and timings scaled by characters kept, labelled
 `READER STOP-SIMULATED`), then a live read checked it:
 

@@ -155,6 +155,23 @@ describe("OpenRouterModel", () => {
     expect(sent.stop).toEqual(["X"]);
   });
 
+  test("reads whether the stop ended the reply from the provider's own reason, unset when not given", async () => {
+    let native: string | undefined;
+    const fake = (async () =>
+      Response.json({
+        choices: [{ message: { content: "ok" }, finish_reason: "stop", native_finish_reason: native }],
+        usage: {},
+      })) as unknown as typeof fetch;
+    const model = new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake });
+    const req = { messages: [{ role: "user" as const, content: "hi" }], maxTokens: 50, stop: ["X"] };
+    native = "stop_sequence";
+    expect((await model.chat(req)).stopped).toBe(true);
+    native = "end_turn";
+    expect((await model.chat(req)).stopped).toBe(false);
+    native = undefined;
+    expect("stopped" in (await model.chat(req))).toBe(false);
+  });
+
   test("data collection is denied unless the caller (the lab, on free models) explicitly allows it", async () => {
     const sent: any[] = [];
     const fake = (async (_url: string, init: RequestInit) => {

@@ -116,6 +116,11 @@ export class OpenRouterModel implements Model {
       ...(data.provider ? { provider: data.provider } : {}),
       latencyMs: Math.round(performance.now() - t0),
       truncated: data.choices?.[0]?.finish_reason === "length",
+      // Only the provider's own reason tells a stop sequence from a natural end (OpenRouter's finish_reason says
+      // "stop" for both); unset when it is not reported.
+      ...(typeof data.choices?.[0]?.native_finish_reason === "string"
+        ? { stopped: data.choices[0].native_finish_reason === "stop_sequence" }
+        : {}),
     };
   }
 }
@@ -151,7 +156,7 @@ function anthropicCacheMessages(messages: ChatMessage[]) {
 interface OpenRouterResponse {
   model?: string;
   provider?: string;
-  choices?: { message?: { content?: string }; finish_reason?: string }[];
+  choices?: { message?: { content?: string }; finish_reason?: string; native_finish_reason?: string }[];
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;

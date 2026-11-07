@@ -361,7 +361,41 @@ describe("readerStopEarly (D240): the reply stops at the first entry not about t
     expect(parseReaderFull(closeStopped(`${binding}{"i":1,"why":"other",${READER_STOP}`), 3)?.rejected).toEqual([1]);
   });
 
-  test("the maker sends the stop only when asked, and repairs only a stopped reply", async () => {
+  test("only text that ends where the stop fires is closed: a reply cut anywhere else stays unreadable", () => {
+    const entry = '{"bears":[{"i":2,"why":"frozen until Friday"';
+    // Cut after the verdict began (a dropped stream, not the stop): before D240's review fix this read item 2 as
+    // rejected, and askReaderDrop would then leave the binding item out of the answer.
+    for (const cut of [
+      `${entry},"same":true`,
+      `${entry},"same":true,"binds":true,"k":"blocks"`,
+      `${entry},"same":true,"binds":true,"k":"blocks"}`,
+      '{"bears":[{"i":2,"why":"frozen until Fri',
+      '{"bears":[{"i":2,',
+      '{"bears":[',
+    ]) {
+      expect(parseReaderFull(closeStopped(cut), 3)).toBeNull();
+    }
+    expect(parseReaderFull(closeStopped(`${entry},`), 3)?.rejected).toEqual([2]);
+  });
+
+  test("the maker closes no reply its provider says ended another way", async () => {
+    const cut = `${binding}{"i":1,"why":"another account",`;
+    const model: Model = {
+      id: "stub",
+      chat: async () => ({
+        text: cut,
+        usage: { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0 },
+        costUsd: 0,
+        model: "stub",
+        latencyMs: 0,
+        stopped: false,
+      }),
+    };
+    const got = await new ModelReaderMaker(model).read({ ...input(), stopEarly: true }, new AbortController().signal);
+    expect(got.bears).toBeNull();
+  });
+
+  test("the maker sends the stop only when asked, and closes a cut reply only then", async () => {
     const cut = `${binding}{"i":1,"why":"another account",`;
     const model = new FakeModel(() => cut);
     const on = await new ModelReaderMaker(model).read({ ...input(), stopEarly: true }, new AbortController().signal);

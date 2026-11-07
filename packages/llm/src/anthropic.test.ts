@@ -73,6 +73,16 @@ describe("AnthropicModel", () => {
     expect(body.thinking).toEqual({ type: "disabled" });
   });
 
+  test("reports a reply its stop sequence ended, and none when the stream gave no stop reason", async () => {
+    const stopped = okEvents('{"a":1').map((e) =>
+      e.type === "message_delta" ? { ...e, delta: { stop_reason: "stop_sequence" } } : e,
+    );
+    const req = { messages: [{ role: "user" as const, content: "q" }], maxTokens: 50, stop: ["X"] };
+    expect((await new AnthropicModel({ apiKey: "k", fetch: streamFetch(stopped) }).chat(req)).stopped).toBe(true);
+    const cut = okEvents('{"a":1').filter((e) => e.type !== "message_delta");
+    expect("stopped" in (await new AnthropicModel({ apiKey: "k", fetch: streamFetch(cut) }).chat(req))).toBe(false);
+  });
+
   test("sends stop sequences only when asked", () => {
     const req = { messages: [{ role: "user" as const, content: "a" }], maxTokens: 10 };
     expect("stop_sequences" in anthropicBody({ apiKey: "k" }, req, false)).toBe(false);
@@ -138,6 +148,7 @@ describe("AnthropicModel", () => {
     expect(res.usage).toEqual({ inputTokens: 640, cachedInputTokens: 600, cacheWriteTokens: 0, outputTokens: 12 });
     expect(res.ttftMs).toBeGreaterThanOrEqual(0);
     expect(res.truncated).toBe(false);
+    expect(res.stopped).toBe(false);
     expect(seen.headers?.get("x-api-key")).toBe("secret");
     expect(seen.body?.stream).toBe(true);
     expect(reserved.length).toBe(1);

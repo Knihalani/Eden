@@ -54,7 +54,9 @@ for c in C:
               f"      {m('reader'):.2f}    {m('conn'):.2f}")
 random.seed(1)
 print("\n== paired differences a - b, bootstrap 95% (5000 draws)")
-pairs = [(a, b) for a, b in [("eden~diet", "eden"), ("eden~stop", "eden"), ("eden~diet", "eden~stop"), ("eden~diet", "tools"), ("eden", "tools")] if a in C and b in C]
+PAIRS = [("eden~diet", "eden"), ("eden~stop", "eden"), ("eden~nostop", "eden"), ("eden~diet", "eden~stop"),
+         ("eden~diet", "tools"), ("eden", "tools")]
+pairs = [(a, b) for a, b in PAIRS if a in C and b in C]
 for a, b in pairs:
     for k in kinds:
         ids = [t for t, kk in KIND.items() if kk == k and (t, a) in X and (t, b) in X]
