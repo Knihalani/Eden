@@ -240,6 +240,11 @@ interface Session {
    * the latest: the agent's own events move `turn` within one request, a new user message moves this.
    */
   requests: number;
+  /**
+   * `ruleVeto`: the push's reading of the request numbered `request` (null when it did not read: gated, late, failed),
+   * which that request's rule-path delivery waits for.
+   */
+  pushReading?: { request: number; ready: Promise<PushVerdict | null> };
   lastActive: number;
   window: string[];
   /**
@@ -658,7 +663,7 @@ export class ContextPartner {
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
     // not cut at `askReaderWaitMs` (that bounds an explicit ask): a reading that lands later is still queued, while its
     // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
-    const internal: { push: true; request?: number } = { push: true };
+    const internal: AskInternal & { push: true } = { push: true };
     const push =
       this.config.readerPush &&
       this.config.askReader &&
@@ -676,6 +681,12 @@ export class ContextPartner {
     const observing = this.observeEvent(event, options);
     // `observeEvent` counts the request before its first await, so the session's count now names this request.
     if (push) internal.request = this.sessions.get(sessionKey(event))?.requests;
+    // `ruleVeto`: this request's rule-path delivery waits for the push's reading. Set before the slow path's first
+    // await resolves (`observeEvent` has only started), so its lookup always finds it.
+    if (push && this.config.ruleVeto && internal.request !== undefined) {
+      const s = this.sessions.get(sessionKey(event));
+      if (s) s.pushReading = { request: internal.request, ready: push.then(() => internal.verdict ?? null) };
+    }
     const result = await observing;
     if (!push) return result;
     let settled = false;
@@ -1354,6 +1365,8 @@ export class ContextPartner {
           : null;
       if (injection && was) this.keepUndo(s, injection, checked, was);
       if (injection) s.pending.push(injection);
+      // `ruleVeto`: the request's rule-path delivery waits for this (`observe` resolves it as the push returns).
+      if (reading?.verdict && internal.again === undefined) internal.verdict = reading.verdict;
       const latencyMs = Math.round(performance.now() - t0);
       // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
       // trace carries it, since this response goes to no caller.
@@ -1514,6 +1527,8 @@ export class ContextPartner {
     read: boolean;
     called: boolean;
     costUsd: number;
+    /** `ruleVeto`: what this reading read, flagged and rejected (a reading only). */
+    verdict?: PushVerdict;
   } | null> {
     const reader = this.deps.reader!;
     const acts = (raw: string) => isImperative(raw, MORE_VERBS);
@@ -1678,6 +1693,11 @@ export class ContextPartner {
       read: true,
       called,
       costUsd,
+      verdict: {
+        pool: new Set(pool.map((x) => x.item.id)),
+        bears: new Set(verdict.bears.map((b) => b.id)),
+        rejected: new Set(verdict.rejected ?? []),
+      },
     };
   }
 
@@ -3642,6 +3662,33 @@ export class ContextPartner {
   }
 
   /** `deliver`, after `verifyItems`: null when every item was found gone, or the session closed meanwhile. */
+  /** `rulesOff`: whether the rule path with this delivery reason (`RULE_PATHS`) is retired. */
+  private retired(path: string): boolean {
+    return this.config.rulesOff.length > 0 && this.config.rulesOff.includes(path);
+  }
+
+  /**
+   * `ruleVeto`: a rule path's items for the session's latest request, once the push has read that request: what the
+   * reader read and did not flag is left out (`ruleVetoNamed`: what it rejected by name). Waits for the reading, which
+   * is bounded by the reader's call and the session's close. With no push for the request, or a push that did not
+   * read (gated, late, over budget, failed), the items pass as they are. A request newer than the one read moves the
+   * agent past it, so nothing is left (the push queues nothing then either).
+   */
+  private async vetoed(s: Session, items: Scored[]): Promise<Scored[]> {
+    const held = this.config.ruleVeto ? s.pushReading : undefined;
+    if (!held || items.length === 0 || held.request !== s.requests) return items;
+    const v = await held.ready;
+    if (s.closed || held.request !== s.requests) return [];
+    if (!v) return items;
+    const named = this.config.ruleVetoNamed;
+    // An item the push delivered while this waited (one it flagged) has gone out once: not again by the rule.
+    return items.filter(
+      (x) =>
+        s.ledger.isFresh(x.item.id, s.turn) &&
+        (named ? !v.rejected.has(x.item.id) : !v.pool.has(x.item.id) || v.bears.has(x.item.id)),
+    );
+  }
+
   private async deliverChecked(
     s: Session,
     scored: Scored[],
@@ -4198,22 +4245,26 @@ export class ContextPartner {
       if (served) {
         // A follow-up (`afterPoll`) decides as with no model whatever is configured: its judge call would be the
         // event's second (docs/COST-MODEL.md).
-        const ruled =
-          this.deps.model && !cue.followUp
-            ? []
-            : sure.length > 0
-              ? sure
-              : this.grounded(
-                  s,
-                  cue,
-                  this.eligible(scored, cue, new Set(probedIds ?? []), bridged, carded, intents),
-                  eventKind,
-                  bridged,
-                  consequence?.cls,
-                  walked,
-                  walked.size > 0 ? scored.filter((x) => walked.has(x.item.id)) : [],
-                  carded,
-                ).items;
+        const ground = () => {
+          const g = this.grounded(
+            s,
+            cue,
+            this.eligible(scored, cue, new Set(probedIds ?? []), bridged, carded, intents),
+            eventKind,
+            bridged,
+            consequence?.cls,
+            walked,
+            walked.size > 0 ? scored.filter((x) => walked.has(x.item.id)) : [],
+            carded,
+          );
+          return this.retired(`grounded-${g.how}`) ? [] : g.items;
+        };
+        // `ruleVeto`: what the push read and did not flag is left out (after waiting for its reading).
+        const ruled = await this.vetoed(
+          s,
+          this.deps.model && !cue.followUp ? [] : sure.length > 0 && !this.retired("sources") ? sure : ground(),
+        );
+        if (s.closed) return null;
         // A follow-up corrects: an item the agent was given whose words its poll changed goes out again, as it now
         // reads, whatever it scores (the agent holds the superseded copy).
         const corrected = cue.followUp ? scored.filter((x) => x.revised && !ruled.includes(x)) : [];
@@ -4239,14 +4290,20 @@ export class ContextPartner {
       // scores as sure is judged with the rest in the same call.
       const contested = this.config.judgeContested && sure.length > 1;
       const judgeSure = contested && this.deps.model !== null;
-      if (sure.length > 0 && !judgeSure) {
+      if (sure.length > 0 && !judgeSure && !this.retired("sources")) {
         dumped("lookup", sure, "sure");
+        const kept = await this.vetoed(s, sure);
+        if (s.closed) return null;
+        if (kept.length === 0) {
+          done("silent", "rule veto");
+          return null;
+        }
         done(
           "sources",
           cue.id,
-          sure.map((x) => x.item),
+          kept.map((x) => x.item),
         );
-        return await this.deliverChecked(s, sure, "proactive", `sources:${cue.id}`, cue);
+        return await this.deliverChecked(s, kept, "proactive", `sources:${cue.id}`, cue);
       }
       // An event on a day the request names is a candidate whatever it scores on words (D44).
       const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true;
@@ -4308,14 +4365,20 @@ export class ContextPartner {
       const noModel = async (why: string, reasonPrefix: string): Promise<Injection | null> => {
         // What scored as sure is delivered as it would have been with no judge to ask: a failing or unaffordable
         // model is never worse than none (D41).
-        if (judgeSure) {
+        if (judgeSure && !this.retired("sources")) {
           dumped("lookup", sure, "sure", true);
+          const kept = await this.vetoed(s, sure);
+          if (s.closed) return null;
+          if (kept.length === 0) {
+            done("silent", "rule veto");
+            return null;
+          }
           done(
             "sources",
             cue.id + reasonPrefix,
-            sure.map((x) => x.item),
+            kept.map((x) => x.item),
           );
-          return await this.deliverChecked(s, sure, "proactive", `sources:${cue.id}`, cue);
+          return await this.deliverChecked(s, kept, "proactive", `sources:${cue.id}`, cue);
         }
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
         const grounding = spans?.open("ground", cue.span, { candidates: eligible.length });
@@ -4331,23 +4394,36 @@ export class ContextPartner {
           carded,
         );
         if (grounding) spans!.close(grounding, { grounded: grounded.items.length });
-        if (grounded.items.length > 0) {
+        // `rulesOff`: a retired ground delivers nothing, and the fallback decides as if it had found nothing.
+        if (grounded.items.length > 0 && !this.retired(`grounded-${grounded.how}`)) {
           dumped("lookup", grounded.items, `grounded-${grounded.how}`, true);
+          const kept = await this.vetoed(s, grounded.items);
+          if (s.closed) return null;
+          if (kept.length === 0) {
+            done("silent", "rule veto");
+            return null;
+          }
           done(
             "sources",
             `grounded-${grounded.how}${reasonPrefix}:${cue.id}`,
-            grounded.items.map((x) => x.item),
+            kept.map((x) => x.item),
           );
-          return await this.deliverChecked(s, grounded.items, "proactive", `grounded-${grounded.how}:${cue.id}`, cue);
+          return await this.deliverChecked(s, kept, "proactive", `grounded-${grounded.how}:${cue.id}`, cue);
         }
         const falling = spans?.open("fallback", cue.span);
-        const top = this.fallback(unsure, cue);
+        const top = this.retired("fallback") ? null : this.fallback(unsure, cue);
         if (falling) spans!.close(falling, { picked: top !== null });
         const items = top ? [top] : [];
         dumped("lookup", items, "fallback", true);
+        const kept = top ? await this.vetoed(s, items) : [];
+        if (s.closed) return null;
+        if (top && kept.length === 0) {
+          done("silent", "rule veto");
+          return null;
+        }
         if (top) {
           done("sources", `fallback${reasonPrefix}:${cue.id}`, [top.item]);
-          return await this.deliverChecked(s, items, "proactive", `fallback:${cue.id}`, cue);
+          return await this.deliverChecked(s, kept, "proactive", `fallback:${cue.id}`, cue);
         }
         done("silent", why);
         return null;
@@ -4689,6 +4765,8 @@ export class ContextPartner {
           }
         : {}),
       ...(this.config.compactParts ? { split: true } : {}),
+      // `ruleLabel`: a packet no reader flagged (a rule path's, `RULE_REASON`) says it was matched, not read.
+      ...(this.config.ruleLabel && mode === "proactive" && RULE_REASON.test(reason) ? { rule: true } : {}),
     };
     const injection: Injection = {
       ...s.scope,
@@ -4960,6 +5038,21 @@ interface AskInternal {
   request?: number;
   /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
   again?: { searched: SearchedLive; prev: Injection | null };
+  /** `ruleVeto`: what the push's first reading read, flagged and rejected, set once it has delivered. */
+  verdict?: PushVerdict;
+}
+
+/** The delivery reasons of the rule paths (no reader or judge picked the items), for `ruleLabel`. */
+const RULE_REASON = /^(?:sources|fallback|grounded-|anticipated-|cache)/;
+
+/** `ruleVeto`: a push reading's ids, for the request's rule-path delivery. */
+interface PushVerdict {
+  /** Every item the reader was shown. */
+  pool: ReadonlySet<string>;
+  /** Every item it said bears on the request, whatever its kind. */
+  bears: ReadonlySet<string>;
+  /** The items it read and rejected by name. */
+  rejected: ReadonlySet<string>;
 }
 
 const sessionKey = (e: Scope & { sessionId: string }) => `${scopeKey(e)}#${e.sessionId}`;

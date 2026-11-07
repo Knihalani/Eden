@@ -6,6 +6,7 @@ import {
   intentPlace,
   plantedCoverageLine,
   surfacedBy,
+  rulePrecisionLines,
   surfacedLines,
   surfacedSplit,
   type AskCoverage,
@@ -239,6 +240,23 @@ describe("surfaced split (D173)", () => {
       "x decoys surfaced 1/1: flagged 0, rule path 1 (unknown 1), listed only 0",
     ]);
     expect(surfacedLines("x", [])).toEqual([]);
+  });
+  test("rule precision: every delivery by its path, flagged or not; the reader's own deliveries left out", () => {
+    const rows = [
+      t({ delivered: true, readerFlagged: true, poolHas: true, why: "reader" }),
+      t({ variant: "hidden", delivered: true, readerFlagged: true, poolHas: true, why: "grounded-conflict" }),
+      t({ variant: "hidden", delivered: true, poolHas: false, why: "grounded-conflict" }),
+      t({ delivered: true, poolHas: true, why: "grounded-conflict" }),
+      t({ delivered: true, poolHas: true, why: "fallback" }),
+      t({ delivered: true, poolHas: true, why: "fallback" }),
+      t({ askCited: true, poolHas: true }),
+    ];
+    expect(rulePrecisionLines("TOTAL", rows)).toEqual([
+      "TOTAL rule precision (delivered by path, hidden/decoys: all; unflagged; read unflagged):",
+      "TOTAL   grounded-conflict 2/1; 1/1; 0/1",
+      "TOTAL   fallback 0/2; 0/2; 0/2  decoys outnumber hidden",
+    ]);
+    expect(rulePrecisionLines("x", [t({ askCited: true })])).toEqual([]);
   });
   test("planted coverage: null without replay facts, a warning below 100%", () => {
     expect(plantedCoverageLine([t({})])).toBeNull();

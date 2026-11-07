@@ -469,7 +469,50 @@ export interface EngineConfig {
    * kind or constraint word reads (R3-19; on in the default, D124, amending D122).
    */
   readerGateVisits: boolean;
+  /**
+   * Trial (S2, ends 2026-12-07): with `readerPush`, a lookup's rule-path delivery (what scored as sure, a no-model
+   * ground, the fallback; `RULE_PATHS`) for a request the push reads waits for that reading, and the items the reader
+   * read and did not flag are left out (`ruleVetoNamed`: only those it rejected by name). Items it did not read, and
+   * every delivery when it did not read (gated, late, over budget, failed), pass as before. No model call of its own:
+   * the reading is the push's, paid for anyway. Off by default.
+   */
+  ruleVeto: boolean;
+  /** Trial (S2, ends 2026-12-07): with `ruleVeto`, only the items the push's reader rejected by name are left out. */
+  ruleVetoNamed: boolean;
+  /**
+   * Trial (S2, ends 2026-12-07): the rule paths retired (`RULE_PATHS` names: "fallback", "sources",
+   * "grounded-conflict", ...). A retired ground falls through to the next rule, as if it had found nothing. Empty by
+   * default.
+   */
+  rulesOff: string[];
+  /**
+   * Trial (S2, ends 2026-12-07): a packet a rule path delivered (no reader flagged its items) says so in its envelope
+   * (`RULE_BASIS`), so the agent weighs it as a structural match, not a reading. Off by default.
+   */
+  ruleLabel: boolean;
 }
+
+/**
+ * The rule paths `rulesOff` can retire: a lookup's delivery reasons, by prefix (`grounded-<how>` from `grounded()`,
+ * `sources` for what scored as sure, `fallback` for D36's best guess). The server's config check reads this list.
+ */
+export const RULE_PATHS: readonly string[] = [
+  "sources",
+  "fallback",
+  "grounded-clash",
+  "grounded-conflict",
+  "grounded-graph",
+  "grounded-card",
+  "grounded-away",
+  "grounded-person",
+  "grounded-person-day",
+  "grounded-person-next",
+  "grounded-time-named",
+  "grounded-time-schedule",
+  "grounded-occasion",
+  "grounded-occasion-person",
+  "grounded-occasion-sender",
+];
 
 export const DEFAULT_CONFIG: EngineConfig = {
   confidentScore: 1.1,
@@ -593,4 +636,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerPushBehind: true,
   readerGate: true,
   readerGateVisits: true,
+  ruleVeto: false,
+  ruleVetoNamed: false,
+  rulesOff: [],
+  ruleLabel: false,
 };
