@@ -358,8 +358,8 @@ export interface CacheLimits {
   packText: boolean;
   /**
    * A user neither read nor written for this long (ms) is frozen at the next expiry tick (`FrozenUser`, D325): held as
-   * one compressed blob and thawed, exactly, on next use. Measured in expiry ticks (`expireEveryMs`), at least two, so a
-   * lookup that read the user's vocabulary before an await never finds it rebuilt after. 0: never.
+   * one compressed blob and thawed, exactly, on next use. Measured in expiry ticks (`expireEveryMs`), at least two, so
+   * a lookup that read the user's vocabulary before an await never finds it rebuilt after. 0: never.
    */
   freezeIdleMs: number;
 }

@@ -3,8 +3,9 @@
  * thaw costs, and how long a cold-start storm takes (every user arriving at once).
  *
  * The shipped wiring as `ingest.bench.ts`'s `shipped` mode builds it (a `ContextPartner` on `DEFAULT_CONFIG`, no model,
- * a `SourceMap` file in a temp directory, as the servers keep one), each user with their own in-memory connectors (mail, calendar, docs: the items split
- * three ways, listed newest first, instantly), synced by the partner's own `SyncManager`. Only capacity settings are
+ * a `SourceMap` file in a temp directory, as the servers keep one), each user with their own in-memory connectors
+ * (mail, calendar, docs: the items split three ways, listed newest first, instantly), synced by the partner's own
+ * `SyncManager`. Only capacity settings are
  * raised (`syncMaxItems`, users per tenant, calls per minute). The cache's timer is off; the bench runs its ticks.
  *
  * Phases:
@@ -113,7 +114,8 @@ const avgChars = Math.round(base.reduce((s, i) => s + i.text.length, 0) / base.l
 let clock = Date.UTC(2026, 10, 3, 9);
 const T0 = clock;
 const now = () => clock;
-const m0 = await mem(); // Before any user: the baseline every per-user figure is taken from (as ingest.bench's "released").
+// Before any user: the baseline every per-user figure is taken from (as ingest.bench's "released").
+const m0 = await mem();
 
 const users: { scope: Scope; sources: ListSource[] }[] = [];
 for (let u = 0; u < USERS; u++) {
@@ -137,7 +139,7 @@ const cache = new ItemCache({ maxUsersPerTenant: USERS + 1, maxSyncedPerUser: Ma
 cache.close(); // The bench runs the expiry ticks itself.
 const partner = new ContextPartner({
   sources: async (scope) => byUser.get(scope.userId)!,
-  // A file, as the servers open (in memory, its pages would count in RSS as user state; a file's page cache is bounded).
+  // A file, as the servers open (in memory its pages would count in RSS as user state; a file's page cache is bounded).
   sourceMap: new SourceMap(join(mkdtempSync(join(tmpdir(), "eden-users-")), "source-map.db")),
   cache,
   budget: new Budget(DEFAULT_LIMITS),
