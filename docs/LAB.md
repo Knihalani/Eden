@@ -572,7 +572,13 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite heldout14 --
 
 - `regrade.ts --results F --graders claude-sonnet-5-5 --spend-ledger … --spend-cap …`: a `claude-*` grader goes
   through the lab provider on the ledger (no OpenRouter key needed); the summary adds `byKind` (agreement with the
-  run's grader on hidden, control and neutral, and which way each disagreement went).
+  run's grader on hidden, control and neutral, and which way each disagreement went). `--only-concerns` regrades
+  only the control and neutral answers the run's grader called a concern: W2b's check, 39 answers for $0.055
+  (docs/research/fix-w2b-false-concerns.md).
+- **Where a false concern came from** (fix-w2b): each pi-ab task line keeps its packets' ways (`ways`: the reason's
+  kind and cited ids; `reader` is the reader push) and its asks' answer text (`asks[].text`, cut at 5,000
+  characters; an `Eden's reader:` line is a flagged item). `python3 -I packages/sim/lab/fix-w2b/attribute.py out.json
+  RUN.json …` attributes each concern's decoy to push-flagged, rule-path, ask-flagged, ask-listed or none.
 - `cold-start.ts --users train1:41,…`: a new user's cards and intent from an empty cache through the servers'
   `buildPartner` (default configuration and budgets), the card role on Anthropic Haiku; calls, tokens and $ per user.
 

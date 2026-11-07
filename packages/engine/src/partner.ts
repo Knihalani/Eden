@@ -73,7 +73,6 @@ import {
   readerFocus,
   readerItem,
   readerNote,
-  UNREAD_NOTE,
   type AskReader,
   type ReaderInput,
   type ReaderRead,
@@ -1647,9 +1646,7 @@ export class ContextPartner {
     const rendering = spans?.open("render", cue.span);
     const answering = this.answering(s, cue);
     if (reading?.notes.size) answering.note = (item) => reading.notes.get(item.id);
-    const rendered = items.length ? renderPacket(items, answering) : "";
-    // `askUnreadNote` (trial, D231): items no reading checked against the request say so once, after the envelope.
-    const packet = rendered && this.config.askUnreadNote && !reading?.read ? `${rendered}\n${UNREAD_NOTE}` : rendered;
+    const packet = items.length ? renderPacket(items, answering) : "";
     // D127: "nothing" is said only when the sources the ask chose answered; one that failed is named, in the text
     // (an MCP caller sees only the text) and in `sources`.
     const answer = honestAnswer(

@@ -22,7 +22,6 @@ import {
   type ReaderInput,
   type ReaderKind,
   type ReaderMaker,
-  UNREAD_NOTE,
 } from "./reader";
 import { shownText } from "./render";
 import type { Trace } from "./trace";
@@ -658,33 +657,6 @@ describe("the reader in the engine (config.askReader)", () => {
       { maker: new ScriptedReader(flags("mail:hold"), { reject, fail: true }) },
     );
     expect(failed.answers.u1![0]!.ids).toContain("mail:n0");
-  });
-
-  test("askUnreadNote (fix-w2b): an answer the reader did not read ends with the note; a read one does not", async () => {
-    // Read: the reader flagged the hold, so the answer is checked against the request and says nothing more.
-    const read = await run({ askReader: true, askUnreadNote: true });
-    expect(read.answers.u1![0]!.ids.length).toBeGreaterThan(0);
-    expect(read.answers.u1![0]!.answer).not.toContain(UNREAD_NOTE);
-    // The reader failed: the items were found by search only, and the answer ends with the note.
-    const failed = await run(
-      { askReader: true, askUnreadNote: true },
-      { maker: new ScriptedReader(flags("mail:hold"), { fail: true }) },
-    );
-    expect(failed.answers.u1![0]!.ids.length).toBeGreaterThan(0);
-    expect(failed.answers.u1![0]!.answer.endsWith(UNREAD_NOTE)).toBe(true);
-    // No reader at all (the no-model path): the same note.
-    const none = await run({ askUnreadNote: true });
-    expect(none.answers.u1![0]!.answer.endsWith(UNREAD_NOTE)).toBe(true);
-    // Off (the default): no note either way.
-    const off = await run({ askReader: true }, { maker: new ScriptedReader(flags("mail:hold"), { fail: true }) });
-    expect(off.answers.u1![0]!.answer).not.toContain(UNREAD_NOTE);
-    // An empty answer stays the honest "nothing" (D127), with no note.
-    const all = (input: ReaderInput) => input.items.map((_, i) => i);
-    const empty = await run(
-      { askReader: true, askReaderDrop: true, askUnreadNote: true },
-      { maker: new ScriptedReader(() => [], { reject: all }) },
-    );
-    expect(empty.answers.u1![0]!.answer).toBe("Nothing in the connected sources.");
   });
 
   test("readerPush: an acting request is read on observe and what binds is queued as a packet", async () => {

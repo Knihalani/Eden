@@ -33,6 +33,11 @@ files; each session's decision rows use its own block of numbers (below) so para
 - **Outcome (S2, 2026-11-07, [fix-s2-rules.md](fix-s2-rules.md)).** All three fixes measured live and deleted
   (D195–D197): none lowered false concerns (held-out 10–13 3.1% → 3.1% with the veto); the veto lost hidden facts on
   held-out 14 (−9.4). Rule-path decoy items are not what the agent raises; the cause is open.
+- **Outcome (W2b, 2026-11-07, [fix-w2b-false-concerns.md](fix-w2b-false-concerns.md)).** Attributed: of 39
+  Haiku-graded concerns 15 (+1 unclear) are grader errors, none is the agent's invention; the real ones are
+  reader-flagged look-alikes (13) and listed-only items of information asks the reader never reads (10). Framing the
+  ask answer (D230, D231) moved nothing live; both deleted. Next: the reader's look-alike judgements, and reading
+  information asks (a cost decision).
 
 ## 3. Recall: facts Eden never surfaces (S3a)
 

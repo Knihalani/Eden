@@ -505,13 +505,6 @@ export interface EngineConfig {
    * past the ask's wait leaves the ask answered without the reader, with no call.
    */
   readerReuse: boolean;
-  /**
-   * Trial (fix-w2b, D231; off, owner repo owner, ends 2026-12-07): an ask answer with items that the reader gave no
-   * reading (an information question it does not read, a gated pool, a late, failed or refused call, no reader wired)
-   * ends with `UNREAD_NOTE`: found by search, not checked against the request. No call, no item dropped: only the
-   * answer's wording. An answer the reader read, and an empty one, are unchanged.
-   */
-  askUnreadNote: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -642,5 +635,4 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerGateVisits: true,
   readerVerifyAfter: true,
   readerReuse: true,
-  askUnreadNote: false,
 };

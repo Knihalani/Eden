@@ -12,8 +12,8 @@ interface Cited {
 export const PACKETS_CHARS = 6_000;
 /** The longest an agent's recorded `ask_context` question gets. */
 export const QUESTION_CHARS = 500;
-/** The longest a recorded `ask_context` answer's text gets (fix-w2b: which items the agent read flagged or listed). */
-export const ANSWER_CHARS = 3_000;
+/** The longest a recorded `ask_context` answer's text gets: past the engine's 4,000-byte answer and its last lines. */
+export const ANSWER_CHARS = 5_000;
 
 /**
  * One `ask_context` call: the agent's question, the ids its answer cited, the answer's size in bytes and its text

@@ -448,15 +448,6 @@ function kindOf(raw: string): ReaderKind | undefined {
   return k === "already done" || k === "already-done" ? "done" : undefined;
 }
 
-/**
- * `askUnreadNote` (fix-w2b, trial D231): the line an ask answer ends with when the reader gave it no reading (not asked
- * for an information question, gated, late, failed, or not wired), so the agent reads the items as related by search,
- * not as reasons to change the request (the "related, not confirmed" framing). Fixed words, no model text.
- */
-export const UNREAD_NOTE =
-  "Eden found these items by search and did not check them against the request: confirm each is about the same " +
-  "person, thing and date before relying on it.";
-
 /** How a bearing is said before the item's title: Eden's label in fixed words, then the model's short bearing. */
 export function readerNote(kind: ReaderKind, why: string): string {
   return why ? `${KIND_LABEL[kind]}: ${why}` : KIND_LABEL[kind];
