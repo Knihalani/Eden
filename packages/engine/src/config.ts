@@ -445,6 +445,22 @@ export interface EngineConfig {
    * past the ask's wait leaves the ask answered without the reader, with no call.
    */
   readerReuse: boolean;
+  /**
+   * Trial (D238, CL2, ends 2026-11-21): with `askReader`, a pool candidate that could not constrain the request by
+   * `readerGate`'s own test (no card of a constraint, state-change or done kind, no constraint wording; bulk mail
+   * never) is not sent to the reader: input it reads only to reject or ignore.
+   */
+  readerPoolTrim: boolean;
+  /**
+   * Trial (D240, CL2, ends 2026-11-21): with `askReader`, the reader's reply stops at the first entry the model says is
+   * not about the request's own thing (`READER_STOP`): binding entries come first, so what is cut is rejections.
+   */
+  readerStopEarly: boolean;
+  /**
+   * Trial (D239, CL2, ends 2026-11-21): with `askReader`, each item the reader reads is fenced as a bare
+   * `<item i="n">` with its source, date and sender leading its text, not as named attributes (fewer input tokens).
+   */
+  readerCompactItems: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -560,4 +576,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerGateVisits: true,
   readerVerifyAfter: true,
   readerReuse: true,
+  readerPoolTrim: false,
+  readerStopEarly: false,
+  readerCompactItems: false,
 };

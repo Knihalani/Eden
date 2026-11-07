@@ -25,6 +25,11 @@ export interface ChatRequest {
    * effort set can leave no room for the answer (D45). Models that do not reason ignore it.
    */
   reasoning?: "low" | "medium" | "high";
+  /**
+   * Stop sequences: the model stops before writing any of them, and the reply's text leaves it out (Anthropic
+   * `stop_sequences`, OpenRouter `stop`). The caller reads a reply cut there knowing where it was cut.
+   */
+  stop?: string[];
 }
 
 export interface Usage {

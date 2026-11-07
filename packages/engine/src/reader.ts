@@ -48,6 +48,13 @@ const READER_WHY_CHARS = 120;
  * back to its usual answer.
  */
 const READER_MAX_TOKENS = 2_000;
+/**
+ * `readerStopEarly` (D240, trial): the reply stops where the model first writes that an entry is not about the
+ * request's own thing. The prompt asks for binding entries first, so what follows is lookalikes the reader would
+ * only reject: output the agent never sees, paid for and waited on. The stopped entry keeps its `why` (written
+ * before `same`, D96), so its index still counts as rejected.
+ */
+export const READER_STOP = '"same":false';
 
 /** What a binding item does to the request. Fixed words, so the agent reads Eden's label and not the model's. */
 export const READER_KINDS = ["blocks", "changes", "limits", "done"] as const;
@@ -100,6 +107,13 @@ export interface ReaderInput {
    * where their cached prefix is. Routing only: not part of `readerKey`, and never sent as prompt text.
    */
   cacheKey?: string;
+  /** `readerStopEarly` (D240): the call stops at the first entry the model says is not the request's thing. */
+  stopEarly?: boolean;
+  /**
+   * `readerCompactItems` (D239): each item's source, date and sender lead its text inside a bare `<item i="n">`
+   * fence, instead of three named, quoted attributes: the same facts in fewer tokens.
+   */
+  compact?: boolean;
 }
 
 /**
@@ -267,6 +281,9 @@ export function readerKey(input: ReaderInput): string {
   h.update(head(input.question ?? "").toLowerCase()).update("\n");
   // The standing count and each item's text as read: the same items rendered another way are another prompt.
   h.update(`standing ${input.standing ?? 0}\n`);
+  // A stopped reading names fewer rejections: another verdict. Only when on, so other keys stay as they were.
+  if (input.stopEarly) h.update("stop\n");
+  if (input.compact) h.update("compact\n");
   for (const it of input.items.slice(0, READER_MAX_ITEMS)) h.update(`${it.id}\t${it.hash}\t${it.text}\n`);
   return h.digest("hex").slice(0, 32);
 }
@@ -275,6 +292,10 @@ export function readerKey(input: ReaderInput): string {
 export function readerMessages(input: ReaderInput): ChatMessage[] {
   const items = input.items.slice(0, READER_MAX_ITEMS).map((it, i) => {
     const card = it.card ? ` | card: ${inert(it.card)}` : "";
+    if (input.compact) {
+      const from = it.from ? `; from ${inert(it.from)}` : "";
+      return `<item i="${i}">${inert(it.source)}; ${inert(it.date)}${from}; ${inert(it.title)}: ${inert(it.text)}${card}</item>`;
+    }
     return (
       `<item i="${i}" source="${inert(it.source).replace(/"/g, "")}" date="${inert(it.date).replace(/"/g, "")}"` +
       `${it.from ? ` from="${inert(it.from).replace(/["\r\n\u0085\u2028\u2029]/g, "")}"` : ""}>` +
@@ -448,6 +469,16 @@ function kindOf(raw: string): ReaderKind | undefined {
   return k === "already done" || k === "already-done" ? "done" : undefined;
 }
 
+/**
+ * A reply cut at `READER_STOP` (the provider leaves the stop sequence out), closed so it parses: the entry it was
+ * writing ends as `same: false` (a rejection), and the list and object are closed. A reply that ended on its own
+ * parses before this is tried.
+ */
+export function closeStopped(text: string): string {
+  const t = text.trimEnd();
+  return `${t}${/[{,]$/.test(t) ? "" : ","}${READER_STOP}}]}`;
+}
+
 /** How a bearing is said before the item's title: Eden's label in fixed words, then the model's short bearing. */
 export function readerNote(kind: ReaderKind, why: string): string {
   return why ? `${KIND_LABEL[kind]}: ${why}` : KIND_LABEL[kind];
@@ -479,11 +510,14 @@ export class ModelReaderMaker implements ReaderMaker {
       messages: readerMessages(input),
       maxTokens: READER_MAX_TOKENS,
       json: true,
+      ...(input.stopEarly ? { stop: [READER_STOP] } : {}),
       ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),
       signal,
     });
     const n = Math.min(input.items.length, READER_MAX_ITEMS);
-    const parsed = res.truncated ? null : parseReaderFull(res.text, n);
+    const parsed = res.truncated
+      ? null
+      : (parseReaderFull(res.text, n) ?? (input.stopEarly ? parseReaderFull(closeStopped(res.text), n) : null));
     return { bears: parsed?.bears ?? null, rejected: parsed?.rejected ?? [], costUsd: res.costUsd, usage: res.usage };
   }
 }

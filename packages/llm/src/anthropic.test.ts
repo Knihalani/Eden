@@ -73,6 +73,14 @@ describe("AnthropicModel", () => {
     expect(body.thinking).toEqual({ type: "disabled" });
   });
 
+  test("sends stop sequences only when asked", () => {
+    const req = { messages: [{ role: "user" as const, content: "a" }], maxTokens: 10 };
+    expect("stop_sequences" in anthropicBody({ apiKey: "k" }, req, false)).toBe(false);
+    expect(anthropicBody({ apiKey: "k" }, { ...req, stop: ['"same":false'] }, false).stop_sequences).toEqual([
+      '"same":false',
+    ]);
+  });
+
   test("Sonnet 5.5 turns thinking off with between_tools (disabled is a 400 there) and is priced as listed", () => {
     const req = { messages: [{ role: "user" as const, content: "a" }], maxTokens: 100 };
     const sonnet = anthropicBody({ apiKey: "k", model: "claude-sonnet-5-5" }, req, false);

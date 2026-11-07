@@ -17,7 +17,7 @@
  */
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
-import type { ChatRequest, ChatResponse, Model } from "@eden/llm";
+import { anthropicPrice, priceFor, type ChatRequest, type ChatResponse, type Model } from "@eden/llm";
 import { readerMessages } from "@eden/engine";
 
 interface Line {
@@ -58,11 +58,41 @@ export function promptKey(model: string, request: ChatRequest, salt?: Record<str
         maxTokens: request.maxTokens,
         json: request.json === true,
         reasoning: keyedReasoning(model, request),
+        // Only when sent, so every key made before stop sequences existed is unchanged.
+        ...(request.stop?.length ? { stop: request.stop } : {}),
         ...(salt ? { salt } : {}),
       }),
     )
     .digest("hex")
     .slice(0, 40);
+}
+
+/**
+ * A recorded reply as it would have ended at the first of `stop` (D240's screen, lab only, labelled): the text up to
+ * it (a provider leaves the stop sequence out), output tokens, the time after the first token and the output's cost
+ * scaled by the share of characters kept. It assumes the model writes the same tokens up to the stop with or without
+ * the stop sequence, which sampling does: the stop ends the reply, it does not steer it. Null when no stop occurs in
+ * the text (the reply ended on its own, as it would have).
+ */
+export function stopLine<L extends Omit<Line, "k">>(line: L, stop: readonly string[]): L | null {
+  let at = -1;
+  for (const x of stop) {
+    const i = line.text.indexOf(x);
+    if (i >= 0 && (at < 0 || i < at)) at = i;
+  }
+  if (at < 0) return null;
+  const share = line.text.length > 0 ? at / line.text.length : 1;
+  const out = line.usage.outputTokens;
+  const kept = Math.round(out * share);
+  const price = line.model.startsWith("claude-") ? anthropicPrice(line.model).output : priceFor(line.model).output;
+  const ttft = line.ttftMs ?? 0;
+  return {
+    ...line,
+    text: line.text.slice(0, at),
+    usage: { ...line.usage, outputTokens: kept },
+    costUsd: Math.max(0, line.costUsd - ((out - kept) * price) / 1_000_000),
+    latencyMs: Math.round(ttft + (line.latencyMs - ttft) * share),
+  };
 }
 
 /** The reader's fixed instructions, as `ModelReaderMaker` sends them (its system message does not depend on input). */
@@ -200,6 +230,11 @@ export class ReplayModel implements Model {
   failed = 0;
   /** `--reader-subset`: prompts the cache missed that a recorded superset pool answered (approximate). */
   subsetReplayed = 0;
+  /**
+   * Requests with stop sequences answered from a line recorded without them, cut at the stop (`stopLine`): a screen
+   * of D240 at $0, approximate in its token and time figures (scaled by characters) and labelled so.
+   */
+  stopSimulated = 0;
   readonly latencies: number[] = [];
   readonly calls: ReplayCall[] = [];
 
@@ -223,6 +258,14 @@ export class ReplayModel implements Model {
     const k = promptKey(this.id, request, this.options.salt);
     const held = this.lines.get(k);
     if (held) return this.replay(held, request.signal);
+    if (request.stop?.length) {
+      // A line recorded without the stop: what the model wrote, cut where the stop would have ended it.
+      const full = this.lines.get(promptKey(this.id, { ...request, stop: undefined }, this.options.salt));
+      if (full) {
+        this.stopSimulated++;
+        return this.replay(stopLine(full, request.stop) ?? full, request.signal);
+      }
+    }
     // Checked without an await first: the call that makes a prompt live registers it before it yields.
     const flying = this.inFlight.get(k);
     if (flying) {
@@ -234,7 +277,10 @@ export class ReplayModel implements Model {
     if (approx !== null) {
       this.subsetReplayed++;
       const usage = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 };
-      return { text: approx, usage, costUsd: 0, latencyMs: 0, model: this.id };
+      const text = request.stop?.length
+        ? (stopLine({ text: approx, usage, costUsd: 0, latencyMs: 0, model: this.id }, request.stop)?.text ?? approx)
+        : approx;
+      return { text, usage, costUsd: 0, latencyMs: 0, model: this.id };
     }
     if (!this.inner) {
       this.missed++;

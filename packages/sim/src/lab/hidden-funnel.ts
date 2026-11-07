@@ -1398,6 +1398,12 @@ const missHint = readerModel
     )
   : null;
 if (missHint) console.log(`${missHint}\n`);
+if (readerModel && readerModel.stopSimulated > 0) {
+  console.log(
+    `READER STOP-SIMULATED: ${readerModel.stopSimulated} reader replies were recorded without the stop sequence and ` +
+      "cut where it would have ended them: tokens, cost and latency scaled by characters kept (approximate)",
+  );
+}
 if (READER_SUBSET && readerModel) {
   console.log(
     `READER SUBSET-REPLAYED: ${readerModel.subsetReplayed} reader prompts were answered from a recorded superset pool ` +
@@ -1496,6 +1502,7 @@ if (out) {
                 missed: readerModel.missed,
                 failed: readerModel.failed,
                 ...(READER_SUBSET ? { subset: readerModel.subsetReplayed } : {}),
+                ...(readerModel.stopSimulated > 0 ? { stopSimulated: readerModel.stopSimulated } : {}),
               },
             }
           : {}),

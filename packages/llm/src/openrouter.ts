@@ -68,6 +68,7 @@ export class OpenRouterModel implements Model {
           ? anthropicCacheMessages(request.messages)
           : request.messages.map(({ role, content }) => ({ role, content })),
       max_tokens: request.maxTokens,
+      ...(request.stop?.length ? { stop: request.stop } : {}),
       temperature: request.temperature ?? 0,
       ...(request.json ? { response_format: { type: "json_object" } } : {}),
       // The reasoning itself is never read: excluding it keeps it off the wire (it is still billed as output). With no
