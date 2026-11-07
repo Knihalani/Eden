@@ -30,6 +30,9 @@ files; each session's decision rows use its own block of numbers (below) so para
 - **Fixes.** A per-rule precision table with the paid reader (replay); retire or tighten rules whose decoys outnumber
   their hidden finds; route rule deliveries through the reader when it runs anyway; test labelling rule-path items so
   the agent weighs them (a hypothesis, live).
+- **Outcome (S2, 2026-11-07, [fix-s2-rules.md](fix-s2-rules.md)).** All three fixes measured live and deleted
+  (D195–D197): none lowered false concerns (held-out 10–13 3.1% → 3.1% with the veto); the veto lost hidden facts on
+  held-out 14 (−9.4). Rule-path decoy items are not what the agent raises; the cause is open.
 
 ## 3. Recall: facts Eden never surfaces (S3a)
 

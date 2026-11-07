@@ -310,6 +310,39 @@ export function surfacedLines(name: string, rows: readonly SurfacedRow[]): strin
 }
 
 /**
+ * The per-rule precision table (S2, docs/research/fix-s2-rules.md): for each rule path (the delivering injection's
+ * `why`; the reader's own push left out), the planted items it delivered, hidden/decoys, three ways: all of them,
+ * whatever the reader made of them; unflagged (the reader did not flag them in the request's last reading: what the
+ * rule adds); and read unflagged (in that reading's pool and not flagged: what a veto by the reader would remove).
+ * Paths with most deliveries first; a path whose decoys outnumber its hidden finds is marked. None for no deliveries.
+ */
+export function rulePrecisionLines(name: string, rows: readonly SurfacedRow[]): string[] {
+  const by = new Map<string, number[]>();
+  for (const t of rows) {
+    if (!t.delivered || t.why === "reader") continue;
+    const w = t.why || "unknown";
+    const a = by.get(w) ?? [0, 0, 0, 0, 0, 0];
+    const d = t.variant === "hidden" ? 0 : 1;
+    a[d]! += 1;
+    if (!t.readerFlagged) a[2 + d]! += 1;
+    if (!t.readerFlagged && t.poolHas) a[4 + d]! += 1;
+    by.set(w, a);
+  }
+  if (by.size === 0) return [];
+  // "Read unflagged" needs pool data (`--reader`); without it the column would read 0/0, as if nothing were read.
+  const pooled = rows.some((t) => t.poolHas !== undefined);
+  const head = pooled ? "all; unflagged; read unflagged" : "all; unflagged";
+  const out = [`${name} rule precision (delivered by path, hidden/decoys: ${head}):`];
+  const sum = (a: number[]) => a[0]! + a[1]!;
+  for (const [w, a] of [...by].sort((x, y) => sum(y[1]) - sum(x[1]) || x[0].localeCompare(y[0]))) {
+    const worse = a[1]! > a[0]! ? "  decoys outnumber hidden" : "";
+    const read = pooled ? `; ${a[4]}/${a[5]}` : "";
+    out.push(`${name}   ${w} ${a[0]}/${a[1]}; ${a[2]}/${a[3]}${read}${worse}`);
+  }
+  return out;
+}
+
+/**
  * Planted coverage of the loaded intent replay: hidden and decoy items with a line, with a warning below 100% (their
  * requests are missing, so every intent screen runs them as if the card model wrote none). Null without `inReplay`.
  */

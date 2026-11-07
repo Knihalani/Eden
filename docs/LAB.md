@@ -481,6 +481,11 @@ in pool`; `--json` carries `surfacedBy` on each perTask row. The recipe above, 2
   pool and total surfaced (D165, D173). Gating on flagged plus rule path would drop the 46 listed-only decoys and
   loosen a precision guard, so it needs a new decision; the split says where a decoy came from, not that it is
   harmless.
+- **Per-rule precision (S2, reporting only).** After the split, `rule precision` lines give each rule path's planted
+  deliveries, hidden/decoys, three ways: all (flagged or not), unflagged (what the rule adds) and read unflagged (in
+  the request's reader pool and not flagged), marking a path whose decoys outnumber its hidden finds
+  (`rulePrecisionLines`, ask-coverage.ts). Recipe 2a, 2026-11-07: grounded-conflict 60/32; 12/28; 3/26, fallback
+  8/19; 3/19; 0/15, sources 10/9; 2/9; 2/7; the split above printed listed only 45 that day (46 on 2026-11-06) (the full table and what was tried on it: docs/research/fix-s2-rules.md).
 - **Planted coverage of the intent replay (D173).** With an intent file loaded, every run prints `planted items with
 an intent replay line: hidden H/N, decoys D/N` beside `replayed requests for X of Y items asked`, with a WARNING
   below 100%. Planted items are a few percent of the items asked but most of the file's holes: on 2026-11-06
