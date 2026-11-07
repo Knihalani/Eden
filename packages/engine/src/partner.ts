@@ -755,6 +755,7 @@ export class ContextPartner {
       return { injection, pending: pendingOf(s) };
     };
 
+    this.dropRemovedPending(s);
     const queued = s.pending.shift() ?? null;
     const lookup = wantsLookup(event, text, terms, s.vocab);
     if (!lookup) {
@@ -958,9 +959,28 @@ export class ContextPartner {
     // What the agent reads last about an item is its current copy (D232): a packet with a copy the cache has since
     // replaced goes before the packets that render current copies, and an update made stale by a packet of the batch
     // that renders the current copy is dropped. Queue order holds otherwise.
+    this.dropRemovedPending(s);
     const out = this.currentLast(s, this.withoutCoveredUpdates(s.pending.splice(0)));
     if (!options.shadow) for (const injection of out) this.handOut(s, injection);
     return out;
+  }
+
+  /**
+   * A queued packet that cites an item since removed at its source (`sourceRemoved`, D126) is not handed out: the agent
+   * would read a deleted item as current. Found by the engine fuzz harness (`fuzz.test.ts`, audit A5): the removal
+   * cleared the cache, the sync's records and held pages, but not packets already queued. The packet goes whole (its
+   * text cannot lose one item safely: folding and framing span items); what its delivery marked is undone where an undo
+   * was kept, as for a withdrawn packet, and otherwise its other items stay marked (silence over a repeat).
+   */
+  private dropRemovedPending(s: Session): void {
+    if (s.pending.length === 0) return;
+    const now = this.now();
+    for (let k = s.pending.length - 1; k >= 0; k--) {
+      const packet = s.pending[k]!;
+      if (!packet.citations.some((c) => this.deps.cache.isHeldGone(s.scope, c.itemId, now))) continue;
+      s.pending.splice(k, 1);
+      this.withdraw(s, packet);
+    }
   }
 
   // ── revisionNotice (D205) ──
@@ -3839,6 +3859,19 @@ export class ContextPartner {
    * listing read before the deletion cannot store them back), from the sync's bookkeeping and from held search pages.
    */
   private dropGone(scope: Scope, sourceId: string, ids: string[]): number {
+    // Packets queued for this user that cite a removed item go now: the hold that `dropRemovedPending` reads at
+    // hand-out lasts `GONE_HOLD_MS`, and a packet can wait longer than that in an idle session's queue.
+    const gone = new Set(ids);
+    const user = scopeKey(scope);
+    for (const s of this.sessions.values()) {
+      if (s.pending.length === 0 || scopeKey(s.scope) !== user) continue;
+      for (let k = s.pending.length - 1; k >= 0; k--) {
+        const packet = s.pending[k]!;
+        if (!packet.citations.some((c) => gone.has(c.itemId))) continue;
+        s.pending.splice(k, 1);
+        this.withdraw(s, packet);
+      }
+    }
     this.sync?.removed(scope, sourceId, ids);
     this.fanout.dropResults(scope, sourceId);
     const evicted = this.deps.cache.holdsEvicted(scope.tenantId);
