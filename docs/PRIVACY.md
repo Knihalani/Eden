@@ -73,11 +73,19 @@ and a statement on training (none).
 - **Prompt injection:** source text is wrapped and labelled as data; model prompts say item text is never
   instructions; the judge returns indexes only and its free text never reaches the agent, and ask answers are wrapped
   in the same data envelope, so a malicious item cannot add words of its own beyond being picked (D11, D19).
+  Source and event text on a line of the judge's prompt and of the MCP answer's Sources block goes through one
+  sanitiser (`safeLine`, D221): no line break of any kind, control, bidi or invisible tag character, and no tag
+  opener, so it cannot forge another item or candidate line or close a fence. Packets and answers (render.ts) still
+  collapse every line break and escape `<`, but keep other controls and `<` look-alikes until render.ts moves to it.
+  `injection.test.ts` checks 20 payloads through packets, answers and the judge prompt on every run.
   The agent still receives the item text: tenants should treat injections as untrusted input.
 - **Deletion:** `POST /v1/forget` drops a user's (or one source's) cache and map rows and the user's live sessions,
   aborting in-flight lookups so nothing is re-cached afterwards (D17), and closes the user's (or that source's) source
   connections (D108). It does not change the configuration: the next lookup reconnects if the directory still lists
   the source, so revoking access means removing it from the directory too.
+- **Secret gate gaps closed (D220):** a bare New Relic user key and a presigned or signed object URL's signature (S3,
+  GCS; plain, JSON-escaped or percent-encoded) are redacted. Not covered: CloudFront, SigV2 and Azure SAS signatures
+  (generic parameter names), and a Sentry DSN (public by Sentry's design).
 - **Fail-open client:** an Eden outage never blocks the tenant's agent.
 
 ## Open items

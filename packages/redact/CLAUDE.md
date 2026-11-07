@@ -9,7 +9,7 @@ first (D10). See [README.md](README.md).
 
 | File | Owns |
 |---|---|
-| `src/secrets.ts` | The rule set (`secretRules`, `RE2_RULES`, `GATE_ENGINES`), Go-to-JS/RE2 regex translation (`goRegex`, `re2Source`, `linearEngine`, `backtrackingEngine`), the gate (`gateOf`), `secretHits`, `sanitizeForStore`; Eden's extra rules (URL userinfo, `eden-aws-secret` D86, bare provider shapes such as `eden-discord-webhook`) |
+| `src/secrets.ts` | The rule set (`secretRules`, `RE2_RULES`, `GATE_ENGINES`), Go-to-JS/RE2 regex translation (`goRegex`, `re2Source`, `linearEngine`, `backtrackingEngine`), the gate (`gateOf`), `secretHits`, `sanitizeForStore`; Eden's extra rules (URL userinfo, `eden-aws-secret` D86, bare provider shapes such as `eden-discord-webhook`, `eden-new-relic` and `eden-presigned-url` D220) |
 | `src/redact.ts` | Structural redaction of JSON (`redact`, `redactString`, `isSecretKey`, PEM blocks), `REDACTED`/`CYCLE`/`TRUNCATED` markers |
 | `src/vendor/gitleaks/` | `gitleaks.toml` byte for byte, its LICENSE and pinned hash ([upgrade steps](src/vendor/gitleaks/README.md)) |
 

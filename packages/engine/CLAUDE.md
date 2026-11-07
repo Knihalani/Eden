@@ -17,6 +17,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `text.ts`, `situation.ts` | Cues with no model (entities, content terms, chatter); a coarse situation label for routing |
 | `render.ts`, `fold.ts` | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52) |
 | `judge.ts` | The judge's prompt and parser (indexes only, D19) |
+| `line.ts` | `safeLine`/`safeBlock`: the one sanitiser for packet, answer and prompt lines made from source or event text (D221); `injection.test.ts` is part D's probe as a standing test |
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50) |
 | `kg.ts`, `cards.ts`, `intent.ts`, `anticipate.ts`, `sync.ts` | Moonshot tracks (D56–D63, D87): graph walk, implication cards, intent index, anticipation, background sync |
 | `reader.ts` | Ask-time reader (D95, D96): a budgeted model call wired by the embedder |

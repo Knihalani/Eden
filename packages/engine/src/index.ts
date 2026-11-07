@@ -22,6 +22,7 @@ export { SyncManager, type SyncOptions, type SyncStats } from "./sync";
 export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
 export { Ledger } from "./ledger";
 export { inert, oneLine, renderAnswer, renderPacket } from "./render";
+export { safeBlock, safeLine } from "./line";
 export { classifySituation, type Situation } from "./situation";
 export { contentTerms, distinctTermIds, extractEntities, isChatter, termIds } from "./text";
 export {

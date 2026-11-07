@@ -101,6 +101,18 @@ add("sentry-user-token", j("sntr", "yu_", hex(64)));
 // A DSN's key is public by Sentry's design (it ships in browser code); no gitleaks rule covers it. Counted anyway.
 add("sentry-dsn", j("https://", hex(32), "@o", digits(6), ".ingest.sentry.io/", digits(7)), (v) => `SENTRY_DSN=${v}`);
 add("generic-api-key-assign", j(an(20), "x9", an(10)), (v) => `api_key = "${v}"`);
+// Added for D220 (fix-s6-privacy), after the original 50 so their seeded values do not change.
+const s3 = "https://b.s3.amazonaws.com/q.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600";
+add("s3-presigned-signature", hex(64), (v) => `download: ${s3}&${j("X-Amz-", "Signature=")}${v}`);
+add("s3-presigned-session-token", j(b64(40), "%2F", an(80)), (v) => `${s3}&${j("X-Amz-", "Security-Token=")}${v}&x=1`);
+add("gcs-signed-signature", hex(512), (v) => `https://storage.googleapis.com/b/o?${j("X-Goog-", "Signature=")}${v}`);
+// The review's shapes: JSON from a Go server (`&` as \u0026) and a URL percent-encoded inside another.
+add("s3-presigned-json-escaped", hex(64), (v) => `{"url":"${s3}\\u0026${j("X-Amz-", "Signature=")}${v}"}`);
+add(
+  "s3-presigned-percent-encoded",
+  hex(64),
+  (v) => `next=${encodeURIComponent(`${s3}&${j("X-Amz-", "Signature=")}${v}`)}`,
+);
 
 warmGate?.();
 const secretRows = SECRETS.map(([name, value, wrap]) => {
@@ -145,6 +157,10 @@ const SHAPES: Record<string, () => string> = {
   "aws-secret-near-miss": () => fill(j("AK", "IA") + "A".repeat(16) + " " + "Ab9+".repeat(10) + " "),
   "dash-run": () => fill("-"),
   "mixed-punct": () => fill("a=b;c:d@e/f?g&"),
+  // Added for D220's rules (fix-s6-privacy).
+  "presigned-param-repeat": () => fill(j("&X-Amz-", "Signature=0123456789abcde")),
+  "nrak-near-miss": () => fill(j("NR", "AK-", "ABCDEFGHIJKLMNOPQRSTUVWXYZ ")),
+  "presigned-encoded-repeat": () => fill(j("%26X-Amz-", "Signature%3D0123456789abcd")),
 };
 
 const time = (fn: () => void) => {
