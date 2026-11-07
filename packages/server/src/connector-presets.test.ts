@@ -35,8 +35,10 @@ describe("connector presets (D294)", () => {
       };
       const m = mapSearchArgs(at(p.searchTool.name), p.searchTool.fixed);
       expect([name, usable(m), m.text?.name]).toEqual([name, true, "query"]);
-      if (p.fetchTool) expect([name, fetchUsable(mapFetchArgs(at(p.fetchTool.name), p.fetchTool.fixed))]).toEqual([name, true]);
-      if (p.listTool) expect([name, listUsable(mapListArgs(at(p.listTool.name), p.listTool.fixed))]).toEqual([name, true]);
+      if (p.fetchTool)
+        expect([name, fetchUsable(mapFetchArgs(at(p.fetchTool.name), p.fetchTool.fixed))]).toEqual([name, true]);
+      if (p.listTool)
+        expect([name, listUsable(mapListArgs(at(p.listTool.name), p.listTool.fixed))]).toEqual([name, true]);
       // A fixed value must be one the schema allows.
       for (const t of [p.searchTool, p.fetchTool, p.listTool]) {
         for (const [k, v] of Object.entries(t?.fixed ?? {})) {
@@ -145,9 +147,9 @@ describe("connector presets (D294)", () => {
     });
     const scope = { tenantId: "t", userId: "u" };
     const [src] = await users.resolver(scope);
-    await expect(
-      src!.search({ scope, text: "x", entities: [], limit: 5 }, AbortSignal.timeout(2_000)),
-    ).rejects.toThrow(/search_threads/);
+    await expect(src!.search({ scope, text: "x", entities: [], limit: 5 }, AbortSignal.timeout(2_000))).rejects.toThrow(
+      /search_threads/,
+    );
     expect(g.calls).toEqual([]);
     await users.close();
   });

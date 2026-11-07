@@ -16,6 +16,22 @@ context the agent needs in front of it before it knows to ask. Most of the time 
 
 Start with [docs/VISION.md](docs/VISION.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## See it first (one command, no key, $0)
+
+```bash
+bun install && bun run demo
+```
+
+The demo builds a simulated user (about 1,500 items of mail, calendar, docs, CRM and chat with a few things planted
+that change what a good assistant should do), starts the real server on it with no model key, and sends a short day
+of requests through the client. For each one it prints what Eden put in front of the agent before its first model
+call, whether that was the fact the request needed but did not say ("Pay Dean's invoice to the new bank details" →
+Dean's warning that his inbox was compromised), and why, from `/v1/explain`; chatter gets nothing. With
+`OPENAI_API_KEY` (and `OPENAI_BASE_URL`, `AGENT_MODEL` for any OpenAI-compatible endpoint) an agent model answers
+each request without and with Eden's context. Its three requests are picked: across six training suites and two
+seeds the same no-key path caught the deciding item for 208 of 384 requests (D292). `bun run demo --trace demo.log
+&& bun run digest demo.log` shows the report you would give stakeholders from your own server's log (D293).
+
 ## Quick start (five minutes, no model key, $0)
 
 Needs [Bun](https://bun.sh) 1.4+ (`bun.lock` is lockfile format 2, which Bun 1.3.14 refuses), or Docker:
@@ -47,7 +63,7 @@ bun run trace-report server.log    # the server's output, saved by `tee` above
 ```
 
 Then point Eden at your users' real connectors (`EDEN_USER_SOURCES_FILE`, docs/INTEGRATION.md "Connect each user's
-own sources"), set `EDEN_API_KEYS` instead of `EDEN_DEV`, and optionally `OPENROUTER_API_KEY` for the background
+own sources"; presets such as `{"preset": "gmail", …}` name a common server's read tools for you, D294), set `EDEN_API_KEYS` instead of `EDEN_DEV`, and optionally `OPENROUTER_API_KEY` for the background
 cards and intent index. Developing Eden itself: `bun run check` (format, types, tests) and `bun run eval` (the
 no-model scenario metrics); `OPENROUTER_API_KEY=… bun run eval --live --usd-cap 0.05` is the shipped wiring with a
 hard spend cap (D128).
@@ -72,7 +88,9 @@ const answer = await eden.ask("What did Dana say about the renewal?");     // or
 
 Python agents use `packages/client-python` (`eden_client`: the same calls, standard library only, fail-open, D278).
 Debugging: `eden.explain()` (or `POST /v1/explain`) lists the session's last decisions with a sentence each on why
-Eden spoke or stayed silent, never content (D277); `bun run trace-report` summarises an `EDEN_TRACE=1` log.
+Eden spoke or stayed silent, never content (D277); `bun run trace-report` summarises an `EDEN_TRACE=1` log, and
+`bun run digest` turns it into a content-free "what Eden added and whether the agent used it" report (D293).
+Security review: [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md).
 MCP-capable agents can also use the `ask_context` tool: `bun packages/server/src/mcp-stdio.ts` serves it over stdio for
 one user (`EDEN_USER`, `EDEN_TENANT`), and `createMcpServer` attaches it to any other MCP transport. A full loop:
 [examples/personal-agent/agent.ts](examples/personal-agent/agent.ts), run with the dev server above; without
@@ -120,6 +138,7 @@ docs/INTEGRATION.md).
 | `packages/proxy`    | OpenAI-compatible proxy in front of the agent's model (`bun run proxy`)                            |
 | `packages/client-python` | The Python client (`eden_client`, standard library only)                                      |
 | `packages/eval`     | Scenario harness and metrics                                                                       |
+| `packages/sim`      | Simulated users and the lab; `bun run demo`                                                        |
 | `docs/`             | Vision, architecture, decisions, roadmap, cost, privacy, research                                  |
 | `archived/`         | Earlier products (passive memory for coding agents; compile era; observability). History, not code |
 

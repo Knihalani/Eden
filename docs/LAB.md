@@ -83,7 +83,7 @@ not strict yet.
 | Harness             | Command                                        | What it measures                                                                                                                                                                                                           |
 | ------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | No-model funnel     | `hidden-funnel.ts` (`bun run funnel` wraps it) | Per task: planted item returned, cached, delivered; with `--ask`, cited by an ask; decoy delivered on controls; source calls and ms per task. Deterministic at `--time 0`                                                  |
-| Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][+ask][@w<ms>]`, graded by a second model; per-task timelines; `--day K`; `--days D` (a user's mixed days, recipe 4c) |
+| Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][+ask][+nokey][@w<ms>]`, graded by a second model; per-task timelines; `--day K`; `--days D` (a user's mixed days, recipe 4c) |
 | Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`); same tasks, grader and results format as Pi                                                                                   |
 | In-house loop       | `agent-ab.ts`                                  | The pre-Pi loop; label any result from it as such (CLAUDE.md)                                                                                                                                                              |
 | Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load; `sim:perf memory --synced` backfills its users first (the default never syncs them)                                                    |
@@ -642,6 +642,18 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite heldout14 --
   --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 --push signals \
   --source-profile packages/sim/lab/before-after/market-profiles/direct.json --budget 1 \
   --spend-ledger .local/ledger.jsonl --spend-cap 4 --spend-headroom 0.3 --run-label day-41 --out .local/day-41.json
+```
+
+### 4b'. The server with no model key (`+nokey`, D291)
+
+`eden+nokey` (or `both+ask+nokey`) runs Eden as a server with no `OPENROUTER_API_KEY` builds it: the same
+`DEFAULT_CONFIG`, but no card enricher (no cards, no intent requests) and no reader. A harness flag like `+ask`, never
+sent to the engine; refused on `tools`, `none` and `-judge` bases; the report pairs it with `eden`. D291's run
+(`packages/sim/lab/a7/run.sh`, about $0.31 a seed for three arms on train with neutral, `--limit 12`):
+
+```bash
+packages/sim/lab/a7/run.sh a7-nokey-41 --seeds 41 --budget 0.4     # and 42; tools,eden,eden+nokey
+bun packages/sim/src/lab/pi-ab-report.ts .local/a7/runs/a7-nokey-4{1,2}.json
 ```
 
 ### 4c. A long horizon: one user's days (`--days`, H16, CL5)

@@ -84,9 +84,7 @@ export type PresetSpec = Omit<McpSpec, "kind" | "description" | "searchTool"> &
   Partial<Pick<McpSpec, "description" | "searchTool">> & { kind?: "mcp"; preset: string };
 
 /** One user's source specs. May be async (a vault). A throw is that user's configuration error. */
-export type SourceDirectory = (
-  scope: Scope,
-) => Promise<(SourceSpec | PresetSpec)[]> | (SourceSpec | PresetSpec)[];
+export type SourceDirectory = (scope: Scope) => Promise<(SourceSpec | PresetSpec)[]> | (SourceSpec | PresetSpec)[];
 
 /** A source configuration that cannot be used; the message names the field. */
 export class SourceConfigError extends Error {}

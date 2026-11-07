@@ -204,7 +204,10 @@ describe("recorded outcomes", () => {
     await p.observe({ ...b, at: 1, kind: "session_end" } as any); // recorded as unused, kept for later correction
     // Tenant A's traffic: 10,000 of its users each get one outcome recorded (what session_end/usage inference does).
     for (let i = 0; i < 10_000; i++)
-      (p as any).record({ tenantId: "tenant-a", userId: `u${i}` }, `inj-${i}`, [], "general", false);
+      (p as any).record({ tenantId: "tenant-a", userId: `u${i}` }, `inj-${i}`, [], "general", false, {
+        sessionId: "s",
+        how: "ended",
+      });
     expect(p.feedback({ ...b, injectionId, used: true, how: "explicit" } as any)).toBe(true);
   });
 });
