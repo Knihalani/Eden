@@ -398,6 +398,12 @@ export interface RunResult {
    * task ends this one's session, cutting off a judge call still running.
    */
   lateItems: number;
+  /**
+   * `pi-ab --day K --late` (A9, pi-late.ts): this request's planted item arrived after its answer; the verdicts on the
+   * agent's later replies that day (the next requests' answers and the recap), and how many replies those were.
+   */
+  lateFacts?: Record<string, boolean>;
+  lateTurns?: number;
   error?: string;
   facts?: Record<string, boolean>;
   leaked?: boolean;

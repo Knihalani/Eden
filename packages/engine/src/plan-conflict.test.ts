@@ -147,7 +147,7 @@ describe("planConflict (A9): a new item that bears on an earlier acting request 
     expect(plans(await say(t.partner, "Anything else on the canteen lunch?", "s1", t.now())).length).toBe(0);
   });
 
-  test("an item that bears on no acting request, or has no constraint in it, is not sent", async () => {
+  test("an item that ranks for no acting request, or in a pool with nothing constraint-like, is not sent", async () => {
     const t = await setup({ planConflict: true });
     await say(t.partner, BOOK, "s1", t.now());
     await t.arrive(UNRELATED);

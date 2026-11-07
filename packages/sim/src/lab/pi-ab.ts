@@ -61,6 +61,9 @@
  * `--replay DIR` replays the reader's and the grader's calls from DIR and appends new ones; `--reuse-arms F` copies the
  * `none` and `tools` arms from a matching earlier run instead of running them (both at their definitions below).
  *
+ * `--day K --late` (A9, pi-late.ts): each request's planted item arrives right after its answer; the agent's later
+ * replies that day are graded against that request (`lateFacts`).
+ *
  * `--templates a,b` runs only those hidden-context templates. Free models go through `free.ts` (above).
  *
  * --budget is a hard cap on everything this run spends (agent, Eden's judge, grader): each call reserves its
@@ -156,6 +159,7 @@ import {
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { sanitizeForStore } from "@eden/redact";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
+import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -215,6 +219,10 @@ const DAY = Number(opt("day", "0"));
 if (!Number.isInteger(DAY) || DAY < 0) throw new Error(`--day must be a whole number of requests, not ${DAY}`);
 /** Either day mode: `--day K` (fixed days per suite and variant) or `--days D` (a user's mixed days). */
 const DAYS_ON = DAY > 0 || USER_DAYS > 0;
+// `--late` (A9, pi-late.ts): each request's planted item arrives right after the agent answers it; what the agent
+// says later that day is graded against that request (`lateFacts`).
+const LATE = args.includes("--late");
+if (LATE && DAY === 0) throw new Error("--late needs --day K (fixed days per suite and variant)");
 /** Each day's summary, with the recap turn's own cost (a probe: no task's cost includes it). */
 const DAYS: (DaySummary & {
   seed: number;
@@ -588,6 +596,9 @@ async function runWorld(
   // `--day` changes items during the run: each stream gets its own copy of them, since every condition's stream reads
   // the same world concurrently.
   const world: World = DAYS_ON ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
+  // `--late`: the planted items are not at their sources until their requests are answered.
+  const lateHeld = LATE ? holdPlanted(world, baseTasks) : null;
+  let dayLate: { entry: LateEntry; r: RunResult }[] = [];
   const userPrefix = `w${seed}:user`;
   const tasks = daySizes
     ? withDayRecaps(baseTasks, daySizes, (t, d) => recapOf(t, `${userPrefix}:day${d}:recap`))
@@ -748,6 +759,40 @@ async function runWorld(
   let dayNo = -1;
   let newDay = true;
   let daySession = "";
+  /** Grades `answer` against `task`'s facts beside the next task, on `tl` (after its end); `set` gets the verdicts. */
+  const gradeInto = (task: Task, answer: string, tl: Timeline, set: (facts: Record<string, boolean>) => void) => {
+    grading.push(
+      (async () => {
+        const g = tl.begin("grading", "grading", "bg");
+        const est = worstCase(GRADER, 4_000 + answer.length + task.text.length, 2_000);
+        let reserved = false;
+        let cost = 0;
+        let failure = "";
+        try {
+          if (task.must.length > 0 && answer.trim()) {
+            reserve(est);
+            reserved = true;
+          }
+          const meter: Meter = { before: () => {}, after: (c) => (cost = c) };
+          const via = { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging };
+          // `--replay`: the same prompt through the replay cache (a replayed grade costs nothing).
+          const model = graderReplay ?? GRADER_MODEL;
+          set(
+            model
+              ? await gradeWith(model, task, answer, (c) => (cost = c))
+              : (await grade(KEY!, meter, GRADER, task, answer, via)).facts,
+          );
+        } catch (e) {
+          // A failed grading call leaves the result ungraded (reported), never scored as a miss. The status line
+          // only: an error body can quote the request.
+          failure = isCapError(e) ? "request cap reached" : e instanceof Error ? e.message.slice(0, 60) : "error";
+        } finally {
+          if (reserved) settle(est, cost, "grader");
+          tl.end(g, { cost, ...(failure ? { error: failure } : {}) });
+        }
+      })(),
+    );
+  };
   // A set: two requests planting one item must not move it twice.
   const dayPlanted = new Set<string>();
   let dayKind = "";
@@ -772,6 +817,7 @@ async function runWorld(
       dayMessages = [];
       dayPackets.length = 0;
       dayPlanted.clear();
+      dayLate = [];
       dayKind = task.kind;
     }
     const startsDay = newDay;
@@ -1204,8 +1250,19 @@ async function runWorld(
     record.firstTokenMs = record.requests[0]?.firstTokenMs ?? null;
     if (r.error) record.error = r.error.slice(0, 200);
     if (partner) Object.assign(record, uptake.fields());
+    // `--late`: every answer after a planted item arrived is one of its later replies; the recap closes the day and
+    // grades them against the planted request.
+    for (const l of dayLate) l.entry.after.push(r.error ? "" : r.answer);
+    if (LATE && isRecap(task)) {
+      for (const l of dayLate) {
+        l.r.lateTurns = l.entry.after.length;
+        gradeInto(l.entry.task, laterText(l.entry), tl, (f) => (l.r.lateFacts = f));
+      }
+      dayLate = [];
+    }
     if (DAYS_ON && day) {
-      if (!isRecap(task) && task.planted) dayPlanted.add(task.planted);
+      // `--late` moves no clock before the recap: the late arrival is the day's only change.
+      if (!LATE && !isRecap(task) && task.planted) dayPlanted.add(task.planted);
       if (isRecap(task)) {
         // The recap is measured, never graded or reported as a task; its cost is kept with the day.
         day.recap(r.error ? "" : r.answer);
@@ -1219,36 +1276,27 @@ async function runWorld(
     bg.tasks.push(r.task);
     records.push(record);
     // Grading runs beside the next task, on this task's timeline (after its end): the agent never waits for it.
-    if (!r.error) {
-      grading.push(
-        (async () => {
-          const g = tl.begin("grading", "grading", "bg");
-          const est = worstCase(GRADER, 4_000 + r.answer.length + task.text.length, 2_000);
-          let reserved = false;
-          let cost = 0;
-          let failure = "";
-          try {
-            if (task.must.length > 0 && r.answer.trim()) {
-              reserve(est);
-              reserved = true;
-            }
-            const meter: Meter = { before: () => {}, after: (c) => (cost = c) };
-            const via = { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging };
-            // `--replay`: the same prompt through the replay cache (a replayed grade costs nothing).
-            const model = graderReplay ?? GRADER_MODEL;
-            r.facts = model
-              ? await gradeWith(model, task, r.answer, (c) => (cost = c))
-              : (await grade(KEY!, meter, GRADER, task, r.answer, via)).facts;
-          } catch (e) {
-            // A failed grading call leaves the result ungraded (reported), never scored as a miss. The status line
-            // only: an error body can quote the request.
-            failure = isCapError(e) ? "request cap reached" : e instanceof Error ? e.message.slice(0, 60) : "error";
-          } finally {
-            if (reserved) settle(est, cost, "grader");
-            tl.end(g, { cost, ...(failure ? { error: failure } : {}) });
-          }
-        })(),
-      );
+    if (!r.error) gradeInto(task, r.answer, tl, (f) => (r.facts = f));
+    // `--late`: the planted item arrives now, after the answer, and is new at its source; the notice carries it.
+    const arrived = lateHeld && task.planted ? release(world, lateHeld, task.planted, clock) : null;
+    if (arrived) {
+      const src = sources.find((x) => x.id === arrived.sourceId);
+      src?.reindex();
+      if (partner && src && CONNECTORS.push === "payload") {
+        await partner.sourceItems(
+          scope,
+          src.id,
+          src.listAll().filter((i) => i.id === arrived.id),
+        );
+      } else if (partner && src && CONNECTORS.push === "signals") partner.sourceChanged(scope, src.id);
+      // The next request comes ten minutes later: the item's card (made as it was stored) is in by then. Bounded, so a
+      // hung enrichment cannot stall the stream.
+      if (cards) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([cards.idle(), new Promise((r) => (timer = setTimeout(r, 10_000)))]);
+        clearTimeout(timer);
+      }
+      dayLate.push({ entry: { task, after: [] }, r });
     }
     previous = { sessionId, r };
   }
@@ -1403,6 +1451,7 @@ writeFileSync(
       background,
       ...(REPLAY_DIR ? { replay: replaySummary() } : {}),
       ...(REUSE_FILE ? { reusedArms: { from: REUSE_FILE, conditions: reused.conditions } } : {}),
+      ...(LATE ? { late: true } : {}),
       ...(DAYS_ON ? { ...(DAY > 0 ? { day: DAY } : {}), days: DAYS, daysPooled: poolDays(DAYS) } : {}),
       ...(USER_DAYS > 0
         ? {

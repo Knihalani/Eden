@@ -475,9 +475,10 @@ export interface EngineConfig {
   /**
    * Trial (A9, owner: repo owner, ends 2026-12-07; docs/research/a9-ahead.md): plan-conflict proactivity. With the
    * push and the sync on, each session keeps its last `PLAN_REQUESTS` acting requests (those the push ran for); an
-   * item the sync then stores (a poll, a notice's payload) that would rank in such a request's pool (`askReaderPool`
-   * deep) and reads as a constraint (`readerGate`'s test) is queued for the agent's next take as a packet naming
-   * that request (`PLAN_LEAD`), whatever the agent asks then. Once per item per session; no source or model call. Off.
+   * item the sync then stores (a poll, a notice's payload) that would have been among such a request's candidates
+   * (`pushCandidates`' rule: the first of its pool, the pool holding something constraint-like) is queued for the
+   * agent's next take as a packet naming that request (`PLAN_LEAD`), whatever the agent asks then. Once per item per
+   * session; checked at the take, so its card can count; no source or model call. Off.
    */
   planConflict: boolean;
 }
