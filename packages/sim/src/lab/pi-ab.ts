@@ -96,7 +96,7 @@ import {
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
-import { ASK_CONTEXT_DESCRIPTION_TERSE, ASK_QUESTION_TERSE, type AgentEvent, type ContextItem } from "@eden/protocol";
+import { ASK_QUESTION_DESCRIPTION, type AgentEvent, type ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import type { World } from "../world";
@@ -523,9 +523,7 @@ const PROMPTS_HASH = armPromptsHash(
   TENANT_PROMPT ? { queryParams, tenant: TENANT_GUIDE } : { queryParams },
   VARIANTS.includes("neutral"),
 );
-const askParams = Type.Object({ question: Type.String() });
-/** `+terse` (D335, trial): the question described as a search. */
-const askParamsTerse = Type.Object({ question: Type.String({ description: ASK_QUESTION_TERSE }) });
+const askParams = Type.Object({ question: Type.String({ description: ASK_QUESTION_DESCRIPTION }) });
 
 /**
  * A model whose calls are charged to the task that started them (`owner()` read when the call starts): a call that
@@ -640,7 +638,6 @@ async function runWorld(
     firewall,
     config,
     noKey,
-    askTerse,
     packets: layout,
   } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
@@ -969,10 +966,9 @@ async function runWorld(
       if (askTool && partner) {
         tools.push({
           name: "ask_context",
-          // `+terse` (D335, trial): the same tool, asked for search-like questions and no narration.
-          description: askTerse ? ASK_CONTEXT_DESCRIPTION_TERSE : ASK_DESCRIPTION,
+          description: ASK_DESCRIPTION,
           label: "ask_context",
-          parameters: askTerse ? askParamsTerse : askParams,
+          parameters: askParams,
           prepareArguments: (a) => {
             const x = (a ?? {}) as { query?: unknown; question?: unknown };
             return { question: String(x.question ?? x.query ?? "") };

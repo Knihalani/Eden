@@ -40,6 +40,15 @@ export interface ProxyOptions {
    * `onShadow`'s counts.
    */
   shadow?: boolean;
+  /**
+   * Keep every packet the agent was shown where it was shown, on every later request of the conversation, as an agent
+   * that stored it in its transcript would (default on, D336). Off, only the current turn's packets are inserted:
+   * each new turn's request then no longer starts with the previous one, so a provider whose cache entries end at its
+   * breakpoints (Anthropic's) writes the history again (+$0.057 per 1,000 tasks over a user's days on Pi), and an item
+   * Eden showed earlier in the session, which it does not send twice, is gone from the agent's view
+   * (docs/research/a16-loop.md). Held per conversation up to `MAX_KEPT_BYTES`; past it newer packets are not kept.
+   */
+  keepPackets?: boolean;
   /** In shadow mode, per request Eden would have changed: the user, session and the packets' item ids (no text). */
   onShadow?: (record: { userId: string; sessionId: string; packets: number; itemIds: string[] }) => void;
   fetch?: typeof fetch;
@@ -67,6 +76,27 @@ interface Conversation {
   packets: Injection[];
   /** The last request's messages, as one hash: the same messages again are a retry, not a new turn. */
   last?: string;
+  /** `keepPackets` (D336): the packet text placed before each user message, by `userKey`; and its total size. */
+  placed?: Map<string, string>;
+  placedBytes?: number;
+}
+
+/**
+ * `keepPackets`: at most this many bytes of packet text are kept per conversation (newer packets past it are not):
+ * about 40 turns of packets, and at most 640 MB over the default 10,000 conversations (`maxSessions` lowers it).
+ */
+const MAX_KEPT_BYTES = 64_000;
+
+/** Each user message's key for `Conversation.placed`: its hash and which copy of it this is in the request. */
+function userKeys(messages: readonly Message[]): (string | null)[] {
+  const copies = new Map<string, number>();
+  return messages.map((m) => {
+    if (m.role !== "user") return null;
+    const h = hashOf(m);
+    const k = (copies.get(h) ?? 0) + 1;
+    copies.set(h, k);
+    return `${h}#${k}`;
+  });
 }
 
 /** Message hashes kept per conversation; the oldest go first (their messages may then be reported again). */
@@ -145,6 +175,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
   const upstream = options.upstream.replace(/\/$/, "");
   const doFetch = options.fetch ?? fetch;
   const maxSessions = options.maxSessions ?? 10_000;
+  const keepPackets = options.keepPackets ?? true;
   const conversations = new Map<string, Conversation>();
   const report = (e: unknown) => {
     try {
@@ -267,7 +298,8 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     await Promise.race([work, new Promise((r) => (timer = setTimeout(r, budget)))]);
     clearTimeout(timer);
     const packets = [...conv.packets];
-    if (packets.length === 0) return null;
+    // `keepPackets`: earlier turns' packets go back in place even when this turn has none.
+    if (packets.length === 0 && !(keepPackets && conv.placed?.size && !options.shadow)) return null;
     if (options.shadow) {
       const itemIds = packets.flatMap((p) => p.citations.map((c) => c.itemId));
       try {
@@ -277,6 +309,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       }
       return null;
     }
+    if (keepPackets) return keptInPlace(conv, messages as Message[], packets);
     return withContext(messages as { role: string; content: unknown }[], packets);
   };
 
@@ -326,6 +359,40 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       return openAiError(502, "eden proxy: upstream unreachable");
     }
   };
+}
+
+/**
+ * `keepPackets` (D336, the default): the messages with each user message preceded by the packet text placed before it on an earlier
+ * request, and the latest by this turn's packets (`withContext`'s place and form), which are kept for later requests
+ * while the conversation's kept text stays under `MAX_KEPT_BYTES`. Null when nothing is inserted.
+ */
+function keptInPlace(conv: Conversation, messages: Message[], packets: Injection[]): Message[] | null {
+  const placed = (conv.placed ??= new Map());
+  const keys = userKeys(messages);
+  const latest = keys.findLastIndex((k) => k !== null);
+  if (latest >= 0 && packets.length) {
+    const text = packets.map((p) => p.text).join("\n\n");
+    const key = keys[latest]!;
+    const before = placed.get(key)?.length ?? 0;
+    const bytes = (conv.placedBytes ?? 0) - before + text.length;
+    if (bytes <= MAX_KEPT_BYTES) {
+      placed.set(key, text);
+      conv.placedBytes = bytes;
+    }
+  }
+  const out: Message[] = [];
+  let inserted = false;
+  for (const [i, m] of messages.entries()) {
+    const key = keys[i];
+    const text =
+      i === latest && packets.length ? packets.map((p) => p.text).join("\n\n") : key ? placed.get(key) : undefined;
+    if (text) {
+      out.push({ role: "system", content: text });
+      inserted = true;
+    }
+    out.push(m);
+  }
+  return inserted ? out : null;
 }
 
 /**

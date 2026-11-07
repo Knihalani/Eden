@@ -1,8 +1,10 @@
 /**
  * Placing injections in an OpenAI-style message list. Context goes in a system message right before the latest
- * user message, so it reads as background for this turn, and the stable prefix (system prompt, earlier turns)
- * stays byte-identical for the model provider's prompt cache. Within a turn that calls tools it does not: a second
- * packet goes ahead of the turn's tool messages, so the cache misses from there (docs/INTEGRATION.md).
+ * user message, so it reads as background for this turn. Keep the returned list as the transcript: the packet then
+ * stays where it was on later turns, so each request starts with the previous one (the provider's prompt cache) and
+ * the agent keeps what Eden showed it, which Eden does not send twice in a session. Dropping it cost +$0.057 per
+ * 1,000 tasks over a user's days on Pi and lost the earlier packets' facts (D336). Within a turn that calls tools a
+ * second packet goes ahead of the turn's tool messages, so the cache misses from there (docs/INTEGRATION.md).
  */
 import type { Injection } from "@eden/protocol";
 

@@ -96,13 +96,22 @@ trip. Eden answers an ask in about 5 ms at p50 (D64), so the cost of asking is t
 
 ## Keep the provider's prompt cache warm
 
-- **Put Eden's packet after the stable prefix.** `withContext` inserts it as a system message just before the latest
-  user message, so the system prompt, tool definitions and earlier _turns_ stay byte-identical between requests. It
-  does not keep the cache within a turn that calls tools: a packet injected before the turn's next model call lands
-  before the user message, ahead of the assistant's tool call and the tool result, so the previous request is no
-  longer a prefix and the cache misses from that point on. To keep it, append a mid-turn packet at the end of the
-  messages (after the tool result) yourself, or accept the miss. Anything you place earlier than the end breaks the
-  cache from that point on.
+- **Keep each packet in your transcript, where you inserted it (D336).** `withContext` inserts the packet as a system
+  message just before the latest user message and returns a new list; it does not store anything. If you send the
+  next turn from your own transcript without that system message, the packet disappears from the middle of the
+  history, so the new request no longer starts with the previous one. On a provider whose cache entries end at its
+  breakpoints (Anthropic, and Anthropic models through OpenRouter's cache markers) the history after the dropped
+  packet is then written to the cache again on every turn: over a user's days on Pi that cost **+$0.057 per 1,000
+  tasks** (+0.039..+0.075) against keeping the packets, which put Eden at +$0.095 against the agent alone instead of
+  +$0.038 (**measured**, docs/research/a16-loop.md). It also loses facts: Eden does not send an item twice in a session,
+  so an item first shown in an earlier turn's packet is only in that packet (5 of 23 hidden facts over a user's days;
+  the agent raised 2 of the 5 with the packets kept, 0 without). So append the message `withContext` placed to your
+  stored transcript, or keep Eden's packets beside it and place them again before the same user messages.
+  `@eden/proxy` does this for you (`keepPackets`, on by default).
+- **Within a turn that calls tools**, a packet that arrives between the turn's model calls lands before the user
+  message, ahead of the assistant's tool call and the tool result, so the previous request is no longer a prefix and
+  the cache misses from that point on. To keep it, append a mid-turn packet at the end of the messages (after the tool
+  result) yourself, or accept the miss. Anything you place earlier than the end breaks the cache from that point on.
 - **Keep the prefix byte-stable.** No timestamps, request ids or reordered tool lists in the system prompt; serialise
   tool definitions deterministically.
 - **Pass a per-user cache key.** On OpenRouter, a `session_id` (or `x-session-id`) per end user starts sticky routing on

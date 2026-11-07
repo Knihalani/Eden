@@ -8,6 +8,7 @@
  *   EDEN_URL             Eden's HTTP API, default http://127.0.0.1:8790; EDEN_API_KEY its tenant key
  *   PROXY_PORT, PROXY_HOST  default 8791 on 127.0.0.1
  *   EDEN_PROXY_KEY       a secret callers send as x-eden-proxy-key; required unless PROXY_HOST is loopback
+ *   EDEN_PROXY_KEEP_PACKETS=0  insert only the current turn's packets (D336's default keeps earlier ones in place)
  *   EDEN_PROXY_SHADOW=1  report to Eden but inject nothing; one JSON line per request Eden would have changed
  */
 import { createProxy } from "./proxy";
@@ -36,6 +37,7 @@ const server = Bun.serve({
     edenUrl,
     ...(process.env.EDEN_API_KEY ? { edenApiKey: process.env.EDEN_API_KEY } : {}),
     ...(proxyKey ? { proxyKey } : {}),
+    ...(process.env.EDEN_PROXY_KEEP_PACKETS === "0" ? { keepPackets: false } : {}),
     ...(process.env.EDEN_PROXY_SHADOW === "1"
       ? { shadow: true, onShadow: (r) => console.log(JSON.stringify({ shadow: true, ...r })) }
       : {}),

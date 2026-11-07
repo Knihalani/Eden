@@ -12,4 +12,4 @@ export {
   MAX_QUESTION_CHARS,
   type Checked,
 } from "./validate";
-export { ASK_CONTEXT_DESCRIPTION, ASK_CONTEXT_DESCRIPTION_TERSE, ASK_QUESTION_TERSE } from "./describe";
+export { ASK_CONTEXT_DESCRIPTION, ASK_QUESTION_DESCRIPTION } from "./describe";

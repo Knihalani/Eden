@@ -17,6 +17,7 @@
  */
 import { Type, type Context } from "@earendil-works/pi-ai";
 import { anthropicCost, anthropicPrice } from "@eden/llm";
+import { ASK_QUESTION_DESCRIPTION } from "@eden/protocol";
 import { REALISTIC, simSources } from "../sources";
 import { ASK_DESCRIPTION, searchToolSpec, systemPrompt, userPrompt, worldOf } from "./ab-common";
 import { keyFor, labAccess, piAnthropicModel, piRegistry } from "./free";
@@ -38,7 +39,7 @@ const headers = { "content-type": "application/json", "x-api-key": key, "anthrop
 const { world, tasks } = worldOf(SEED, SUITE, "hidden", { maxTasks: 30, maxOffworld: 5 });
 const sources = simSources(world, REALISTIC, 0, SEED);
 const queryParams = Type.Object({ query: Type.String({ description: "What to search for" }) });
-const askParams = Type.Object({ question: Type.String() });
+const askParams = Type.Object({ question: Type.String({ description: ASK_QUESTION_DESCRIPTION }) });
 const noop = async () => ({ content: [], details: {} });
 const arms = {
   tools: sources.map((s) => ({ ...searchToolSpec(s), label: s.id, parameters: queryParams, execute: noop })),

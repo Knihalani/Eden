@@ -25,6 +25,7 @@
  */
 import { Type, type Context, type Message } from "@earendil-works/pi-ai";
 import { anthropicCost, anthropicPrice } from "@eden/llm";
+import { ASK_QUESTION_DESCRIPTION } from "@eden/protocol";
 import { ASK_DESCRIPTION, systemPrompt, userPrompt, worldOf } from "./ab-common";
 import { keyFor, labAccess, piAnthropicModel, piRegistry } from "./free";
 import { userTurnBreakpoint } from "./packet-layout";
@@ -43,7 +44,7 @@ const API = "https://api.anthropic.com/v1";
 const headers = { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" };
 
 const { world, tasks } = worldOf(41, "train1", "neutral", { maxTasks: 30, maxOffworld: 5 });
-const askParams = Type.Object({ question: Type.String() });
+const askParams = Type.Object({ question: Type.String({ description: ASK_QUESTION_DESCRIPTION }) });
 const noop = async () => ({ content: [], details: {} });
 const tools = [
   { name: "ask_context", description: ASK_DESCRIPTION, label: "ask", parameters: askParams, execute: noop },

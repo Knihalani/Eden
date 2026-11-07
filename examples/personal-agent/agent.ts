@@ -12,7 +12,7 @@
  * the whole loop (observe, injected context, ask) runs for free. OPENAI_BASE_URL / AGENT_MODEL point the agent at
  * any OpenAI-compatible endpoint (OpenRouter works); EDEN_URL at a server other than http://127.0.0.1:8790.
  */
-import { ASK_CONTEXT_DESCRIPTION, EdenClient, withContext } from "@eden/client";
+import { ASK_CONTEXT_DESCRIPTION, ASK_QUESTION_DESCRIPTION, EdenClient, withContext } from "@eden/client";
 
 // No key against the dev server; EDEN_API_KEY against one with EDEN_API_KEYS set. Eden fails open, so a wrong key
 // shows up only through onError.
@@ -38,7 +38,11 @@ const tools = [
       name: "ask_context",
       // The description the server's MCP `ask_context` gives (without `askGuard`), so this agent is told the same.
       description: ASK_CONTEXT_DESCRIPTION,
-      parameters: { type: "object", properties: { question: { type: "string" } }, required: ["question"] },
+      parameters: {
+        type: "object",
+        properties: { question: { type: "string", description: ASK_QUESTION_DESCRIPTION } },
+        required: ["question"],
+      },
     },
   },
 ];
