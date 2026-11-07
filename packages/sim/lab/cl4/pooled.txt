@@ -1,0 +1,2 @@
+eden+pushChecked − eden hidden   runs 3 n  188 diff -0.005 (-0.064..+0.053)
+eden+pushChecked − eden control  runs 3 n  183 diff -0.016 (-0.038..+0.000)

@@ -348,7 +348,11 @@ export interface EngineConfig {
    * items the prefilter rejects still read.
    */
   cardsLean: boolean;
-  /** With `cardsLean`: how old (days, by its date or its start) an unconstrained item may be and still be read. */
+  /**
+   * With `cardsLean`: how old (days, by its date or its start) an unconstrained item may be and still be read. 7 since
+   * D244 (30 before): a new user's enrichment cost 58% less ($0.0208 to $0.0088, 22 calls to 8) with hidden facts
+   * surfaced 313 to 321 and decoys 127 to 129 (train1-6, seeds 41-42, paid reader; docs/research/cl-cl3.md).
+   */
   cardsLeanDays: number;
   /**
    * Items the intent index may add to a request's candidates, best first. The default's 12/0.2/1 (with the two
@@ -445,6 +449,14 @@ export interface EngineConfig {
    * past the ask's wait leaves the ask answered without the reader, with no call.
    */
   readerReuse: boolean;
+  /**
+   * `pushChecked` (trial, D246, CL4 H8): when the push read the user's request and flagged nothing, a short note goes
+   * to the agent in the data envelope: Eden read the user's connected sources for this request and nothing in them
+   * bears on it (after a packet for the same request: nothing beyond it). Only when every source the push searched
+   * answered (D127) and its reading gave a verdict, or found no candidate to read. Meant to spare the agent an
+   * `ask_context` call and a model turn on requests Eden has nothing for. Needs `readerPush`.
+   */
+  pushChecked: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -538,7 +550,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   compactParts: true,
   intent: true,
   cardsLean: true,
-  cardsLeanDays: 30,
+  cardsLeanDays: 7,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,
@@ -560,4 +572,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerGateVisits: true,
   readerVerifyAfter: true,
   readerReuse: true,
+  pushChecked: false,
 };

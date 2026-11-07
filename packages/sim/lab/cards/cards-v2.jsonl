@@ -4994,3 +4994,160 @@
 {"h":"59cd53cf790f52d57c42ac98f1e59c64","c":null}
 {"h":"fe06d38befd9b3f8adb270121fc967c6","c":{"kind":"limit","actions":["book-food"],"entities":["staff meals and celebrations"],"statement":"from 1 Nov, staff meals and celebrations capped at £100 per person including drinks without extra sign-off","start":"2026-11-01","limit":100,"unit":""}}
 {"h":"3aa32f1a4c03dcd9520ffd47437afa09","c":{"kind":"status-change","actions":["travel"],"entities":["BA982 Berlin outbound"],"statement":"BA982 on Tue 17 Nov now departs LHR at 06:35 instead of 08:50","start":"2026-11-17"}}
+{"h":"5ab95266b971e204813fcc40b88d12dd","c":{"kind":"status-change","actions":["travel","attend"],"entities":["Great Western Railway","London Paddington","Bristol Temple Meads"],"statement":"Strike on 21 Nov 2026: no GWR services London Paddington to Bristol Temple Meads","start":"2026-11-21","end":"2026-11-21"}}
+{"h":"c00351f1a3961bef4d7e14fd6dc0ef31","c":{"kind":"dependency","actions":["travel"],"entities":["United States","ESTA"],"statement":"US travel authorization (ESTA) expired 18 Sep 2026; a new approved ESTA is needed before travel","end":"2026-09-18"}}
+{"h":"6f70aed4dce9e341091ebf8bd309c66c","c":{"kind":"prohibition","actions":["pay"],"entities":["Penalty Charge Notice IZ34395736"],"statement":"Do not pay penalty charge IZ34395736; the challenge is on hold","start":"2026-10-19"}}
+{"h":"763bc22d744e27ce6c89c46a48c64582","c":null}
+{"h":"4e1eb482b0fab635c7479d843efb87c1","c":{"kind":"preference","actions":["purchase","send-gift"],"entities":["Bugaboo Fox","baby gifts"],"statement":"Do not buy wheels/pram for the baby; the Bugaboo Fox is already covered"}}
+{"h":"a7724190ef79d629629a596dabf19d85","c":{"kind":"limit","actions":["travel","hire"],"entities":["VW Golf LK20 FWE","Direct Line"],"statement":"Motor policy covers only the policyholder Robin Carter; any other driver is not covered","start":"2026-08-01","end":"2027-07-31"}}
+{"h":"5e48fabd48547a98d33d770cc6cca968","c":{"kind":"dependency","actions":["share-external"],"entities":["Initech","mutual NDA"],"statement":"Mutual NDA with Initech expired 30 Sep 2026 and is not countersigned; do not share confidential pricing, plans or unreleased features","end":"2026-09-30"}}
+{"h":"a4c47ff5acb379ec06d4f3d8c497ef55","c":{"kind":"already-done","actions":["purchase","pay"],"entities":["Trainline","Expensify"],"statement":"Ticket for the 20 Oct trip already paid on the company Trainline account; do not submit via Expensify"}}
+{"h":"d12c803b28ed52de308c95eef91714a4","c":{"kind":"absence","actions":["contact","sign"],"entities":["Zoë Müller","Lucía Romero"],"statement":"Zoë Müller on parental leave until 1 Feb; Lucía Romero covers legal and contracts","start":"2026-10-26","end":"2027-02-01"}}
+{"h":"b70b2cc21ab08de7df420a218bac87e1","c":null}
+{"h":"5dbbdcc4d581e9ca145b7174cd66bdb1","c":{"kind":"absence","actions":["attend","travel","book-venue","schedule","send-gift"],"entities":["Mum","Ellie Carter"],"statement":"Mum's knee op 19 Nov, then no outings until December","start":"2026-11-19","end":"2026-12-01"}}
+{"h":"7d6422ca575de8f57b968efeb36d1775","c":{"kind":"preference","actions":["book-food","send-gift"],"entities":["Oscar"],"statement":"Oscar has severe peanut and tree nut allergy, no hazelnuts"}}
+{"h":"9dc4199a651acbdf4e3b5e141bc3063a","c":{"kind":"freeze","actions":["schedule","attend","hire"],"entities":["Holloway Primary"],"statement":"Holloway Primary closed for staff training 6 Nov, no breakfast or wraparound care","start":"2026-11-06","end":"2026-11-06"}}
+{"h":"bb0cf686bed912de6e95803c0069f40e","c":{"kind":"prohibition","actions":["book-food"],"entities":["fasting blood test","Whittington Hospital"],"statement":"Fasting blood test 5 Nov 08:40: no eating for 10 hours beforehand","start":"2026-11-05","end":"2026-11-05"}}
+{"h":"d9086efbcabe819c36697b5686c3b0fb","c":{"kind":"already-done","actions":["purchase"],"entities":["flu vaccination"],"statement":"Flu vaccine already given 14 Oct, no further one needed this season"}}
+{"h":"506273c9202e290d4512522c57e20969","c":{"kind":"prohibition","actions":["attend","travel"],"entities":["City Road appointment"],"statement":"Eye drops on 4 Nov: no driving for 6 hours afterwards","start":"2026-11-04","end":"2026-11-04"}}
+{"h":"98970c50ab09e88581417b70a0e1872e","c":{"kind":"status-change","actions":["pay","purchase"],"entities":["card ending 7187"],"statement":"Card 7187 frozen after reported lost; card payments declined","start":"2026-10-25"}}
+{"h":"5bfbd899e7cd1dd7d36f8d1a527cdcad","c":{"kind":"deadline","actions":["purchase"],"entities":["home insurance policy"],"statement":"Home insurance cancel free until 3 Nov, then £50 charge","end":"2026-11-03"}}
+{"h":"41fc04853b8c292905233eedb632bed3","c":{"kind":"deadline","actions":["purchase","travel"],"entities":["passport ending 569"],"statement":"Passport expires 30 Apr 2027; some countries need 6 months validity","end":"2027-04-30"}}
+{"h":"5079a1989bf6d946e7d3d13922773719","c":{"kind":"freeze","actions":["travel","book-venue"],"entities":["Great Western Railway","London Paddington to Bristol Temple Meads"],"statement":"Strike 21 Nov: no GWR trains London Paddington to Bristol","start":"2026-11-21","end":"2026-11-21"}}
+{"h":"3f704154da49120d8e40eaad8597612f","c":{"kind":"deadline","actions":["pay"],"entities":["Dana Whitfield","Crocus voucher"],"statement":"Robin's £15 share of the Dana Whitfield whip-round needs sending","end":"2026-10-23","limit":15,"unit":""}}
+{"h":"c441ad3e2e6521f8c07da3cf2d7b6d02","c":{"kind":"freeze","actions":["travel","attend","book-venue","book-food"],"entities":["Mum"],"statement":"Mum has knee op on 19 Nov; no outings for a fortnight after, until December","start":"2026-11-19","end":"2026-12-01"}}
+{"h":"9490af7211fad8d27a2abb26a9605921","c":{"kind":"preference","actions":["book-food","purchase"],"entities":["Oscar"],"statement":"Oscar has severe peanut and tree nut allergy (including hazelnuts); no nut-containing food"}}
+{"h":"b8ea11fff46b152946977855b0133d8e","c":{"kind":"freeze","actions":["attend","schedule","book-venue"],"entities":["Holloway Primary","pupils"],"statement":"Holloway Primary closed to pupils for staff training; no breakfast or wraparound care","start":"2026-11-06","end":"2026-11-06"}}
+{"h":"e6814315b69818b23ce6c0da16f44123","c":{"kind":"deadline","actions":["book-food"],"entities":["fasting blood test"],"statement":"Fasting blood test 05/11 at 08:40: no eating for 10 hours beforehand","start":"2026-11-05","end":"2026-11-05"}}
+{"h":"480c08e64ad323f7ac4b964ae64872be","c":null}
+{"h":"846a2989f360a11b6801e7ef967dc9a8","c":{"kind":"absence","actions":["travel","attend"],"entities":["City Road appointment"],"statement":"Eye drops on 04/11 at 10:00: must not drive for 6 hours afterwards, needs other transport","start":"2026-11-04","end":"2026-11-04"}}
+{"h":"79e555d0f93e55d0da94c53f06c95f34","c":{"kind":"status-change","actions":["pay","purchase"],"entities":["card ending 3650"],"statement":"Card ending 3650 frozen after being reported lost; card payments declined until replacement arrives","start":"2026-10-25"}}
+{"h":"efe595eb4936a7fe2e705f2f60cc23d4","c":{"kind":"deadline","actions":["pay"],"entities":["home insurance"],"statement":"Home insurance renewed; free cancellation until 03/11, then £50 charge","end":"2026-11-03","limit":312.4,"unit":""}}
+{"h":"0532930d724d374499e8c111e4f552d7","c":{"kind":"deadline","actions":["travel"],"entities":["passport"],"statement":"Passport expires 30/04/2027; some countries need 6 months' validity on arrival","end":"2027-04-30"}}
+{"h":"faa13b72b6ac0b5b140d3f1554cf9f5a","c":{"kind":"deadline","actions":["travel"],"entities":["US travel authorization","ESTA"],"statement":"US travel authorization (ESTA) expired 18 Sep 2026; new one needed before travel","end":"2026-09-18"}}
+{"h":"e3aa952fe83a16c014b0e524339c34bc","c":{"kind":"dependency","actions":["pay"],"entities":["Penalty Charge Notice IZ07371373"],"statement":"Do not pay penalty charge IZ07371373 while challenge is under consideration"}}
+{"h":"1a2e606f52122286e285fd67c70cf686","c":{"kind":"already-done","actions":["pay"],"entities":["TV Licence"],"statement":"TV Licence renewed by Direct Debit for 01/11/2026 to 31/10/2027","start":"2026-11-01","end":"2027-10-31"}}
+{"h":"1d6d163b40ae61a551735f12555981c4","c":{"kind":"preference","actions":["send-gift"],"entities":["baby wheels","Ellie Carter"],"statement":"Do not buy wheels/pram for the baby; a Bugaboo Fox is already given"}}
+{"h":"643899ae80b1fefe92e5a29ff1dddbae","c":null}
+{"h":"40899d59c44723759559e2632305331a","c":{"kind":"prohibition","actions":["travel"],"entities":["VW Golf LK21 CCA","motor insurance"],"statement":"Only Robin Carter may drive the VW Golf; any other driver is not covered","start":"2026-08-01","end":"2027-07-31"}}
+{"h":"39ac19c4bec2912260594c7f1ac661c3","c":{"kind":"dependency","actions":["share-external"],"entities":["Hooli","mutual NDA"],"statement":"Do not share confidential pricing, plans or unreleased features with Hooli until the NDA renewal is countersigned","end":"2026-09-30"}}
+{"h":"655a8b5e6dad33947aef44436c12b87e","c":{"kind":"already-done","actions":["pay"],"entities":["train ticket 20th","Expensify"],"statement":"Train ticket already paid on company Trainline account; do not submit via Expensify"}}
+{"h":"97a63cf3d2c94db2d5c82fb7977ae995","c":{"kind":"absence","actions":["contact"],"entities":["Bo Jensen","Oskar Lindgren"],"statement":"Bo Jensen on parental leave; Oskar Lindgren covers legal and contracts","start":"2026-10-26","end":"2027-02-01"}}
+{"h":"8d14df1e641ec1cde587526d8df2b424","c":{"kind":"already-done","actions":["travel"],"entities":["Copenhagen trip","Sanders hotel"],"statement":"Copenhagen hotel already booked 2-5 Dec on company account","start":"2026-12-02","end":"2026-12-05"}}
+{"h":"a5ac2dac6c3a6ebae3d6005dabafea77","c":{"kind":"deadline","actions":["travel"],"entities":["US travel","ESTA"],"statement":"US travel authorization (ESTA) expired 18 Sep 2026; new approval needed at least 72 hours before travel","end":"2026-09-18"}}
+{"h":"5a3bbf7d7bd4ec77b1c216d62654ba65","c":{"kind":"prohibition","actions":["pay"],"entities":["Penalty Charge Notice IZ29356501"],"statement":"do not pay penalty charge IZ29356501 while the challenge is on hold; payment closes the case"}}
+{"h":"37c56cdb3252fa7564a4d148b2682e5f","c":null}
+{"h":"ca9bfc51f916cfad1ea1ef201b64ca40","c":null}
+{"h":"812bd2006702d679a20075038769501f","c":{"kind":"prohibition","actions":["share-external"],"entities":["VW Golf LK19 PWK"],"statement":"motor policy covers policyholder only; any other driver is not covered","start":"2026-08-01","end":"2027-07-31"}}
+{"h":"9a00fa041a2a2706d387850757ed5e42","c":{"kind":"dependency","actions":["share-external"],"entities":["Stark Freight"],"statement":"do not share confidential pricing, plans or unreleased features with Stark Freight until mutual NDA is countersigned (renewal sent 12 Oct, not yet signed; prior"}}
+{"h":"d987288d3c3d12eb33de10e84b1792b8","c":{"kind":"already-done","actions":["purchase"],"entities":["train ticket up north 20 Oct"],"statement":"train ticket already paid on company Trainline account; do not submit through Expensify"}}
+{"h":"ea45e2fcea5e0419cef50e79fc6a56c5","c":{"kind":"absence","actions":["contact"],"entities":["Amara Okonkwo"],"statement":"Amara Okonkwo on parental leave until 1 Feb; Robert Haddad covers legal and contracts","start":"2026-10-26","end":"2027-02-01"}}
+{"h":"bb162362a9f5a697280be8cacc34dc58","c":null}
+{"h":"6e6178710927789f816014592314e428","c":null}
+{"h":"2c7206cbe7eec66fb2892d7b8441b9b6","c":{"kind":"freeze","actions":["attend","schedule","book-venue","travel"],"entities":["Mum","Ellie Carter"],"statement":"Mum's knee op 19 Nov; no outings until December per doctor's orders","start":"2026-11-19","end":"2026-12-01"}}
+{"h":"c7376ed8010753413c063368c3aab837","c":{"kind":"preference","actions":["book-food"],"entities":["Oscar"],"statement":"Oscar has severe peanut and tree nut allergy (hazelnuts included); carries EpiPen"}}
+{"h":"21bdf40406c6bf900080e5540eb071ee","c":{"kind":"freeze","actions":["schedule","attend"],"entities":["Holloway Primary"],"statement":"Holloway Primary closed to pupils 6 Nov for staff training; no breakfast or wraparound care","start":"2026-11-06","end":"2026-11-06"}}
+{"h":"3de4e2354be62a93e0b1580bd0c01727","c":{"kind":"prohibition","actions":["book-food"],"entities":["fasting blood test"],"statement":"No eating for 10 hours before fasting blood test on 5 Nov at 08:40","start":"2026-11-05","end":"2026-11-05"}}
+{"h":"84cbe8a52012376a6c991df7bf39723f","c":null}
+{"h":"6d23c81f1c28188a43c0fda68191475e","c":{"kind":"prohibition","actions":["travel","attend"],"entities":["City Road appointment"],"statement":"No driving for 6 hours after eye drops at 10:00 on 4 Nov; arrange other transport","start":"2026-11-04","end":"2026-11-04"}}
+{"h":"4b4a616bab925f62940e5c2e5d7e0a81","c":{"kind":"freeze","actions":["pay","purchase"],"entities":["card ending 9733"],"statement":"Card ending 9733 frozen; card payments declined until replacement arrives","start":"2026-10-25"}}
+{"h":"551dba13d7a09d35f9968ccc17c08cfa","c":{"kind":"deadline","actions":["purchase","pay"],"entities":["home insurance policy"],"statement":"Free cancellation of home insurance renewal ends 3 Nov; £50 charge after","end":"2026-11-03"}}
+{"h":"583f7db8dd4b563e451540067c80b2c4","c":{"kind":"deadline","actions":["travel"],"entities":["passport"],"statement":"Passport expires 30 Apr 2027; some countries need 6 months validity","end":"2027-04-30"}}
+{"h":"99cb90ebabcc406477cb48d905bc9662","c":{"kind":"freeze","actions":["travel"],"entities":["Great Western Railway"],"statement":"Strike: no GWR trains London Paddington to Bristol on 21 Nov","start":"2026-11-21","end":"2026-11-21"}}
+{"h":"7e202a42146c7fb75580ae357da2b304","c":{"kind":"absence","actions":["attend","schedule","book-venue","travel"],"entities":["mum","knee operation"],"statement":"Mum's knee op 19 Nov; she stays with E for a fortnight, no outings until December","start":"2026-11-19","end":"2026-12-31"}}
+{"h":"fbe7703a2555347f59c5431eab635369","c":{"kind":"preference","actions":["book-food","send-gift"],"entities":["Oscar","peanut allergy","tree nut allergy"],"statement":"Oscar has severe peanut and tree nut (incl. hazelnut) allergy; carries EpiPen"}}
+{"h":"c376a52b267f48ebfd18e9292b09fc6f","c":{"kind":"freeze","actions":["schedule","attend","book-venue"],"entities":["Holloway Primary","pupils","breakfast club","wraparound care"],"statement":"Holloway Primary closed to pupils 6 Nov for staff training; no breakfast or wraparound care","start":"2026-11-06","end":"2026-11-06"}}
+{"h":"185ab24024afb024632ff7ec4f875c6e","c":{"kind":"deadline","actions":["attend","schedule"],"entities":["Whittington Hospital","fasting blood test"],"statement":"Fasting blood test 5 Nov 08:40; no eating for 10 hours beforehand, bring request form","start":"2026-11-05","end":"2026-11-05"}}
+{"h":"cb3dedbca56039235710c94297c1cc1d","c":null}
+{"h":"48505e1502c86c0846012504b0403860","c":{"kind":"prohibition","actions":["attend","travel"],"entities":["City Road","driving"],"statement":"Eye appointment 4 Nov 10:00 with dilating drops; no driving for 6 hours after, arrange other transport","start":"2026-11-04","end":"2026-11-04"}}
+{"h":"19fc1e0c721243f8b0e005a38b5adf76","c":{"kind":"freeze","actions":["pay","purchase"],"entities":["card ending 2936"],"statement":"Card ending 2936 frozen after being reported lost; card payments declined until replacement","start":"2026-10-25"}}
+{"h":"143bbef1b23ac3761c1815732ad75609","c":{"kind":"deadline","actions":["purchase","pay"],"entities":["home insurance policy"],"statement":"Home insurance renewed 20 Oct (£312.40); free cancellation until 3 Nov, then £50 charge","end":"2026-11-03"}}
+{"h":"ef9c2d039b2a0246ae1193605b6a834e","c":{"kind":"deadline","actions":["travel","purchase"],"entities":["passport ending 739"],"statement":"Passport expires 30 Apr 2027; some countries need 6 months' validity on arrival","end":"2027-04-30"}}
+{"h":"8bdbe3100a49f8b1156fdb3a3ac1a23d","c":{"kind":"freeze","actions":["travel"],"entities":["Great Western Railway","London Paddington","Bristol Temple Meads"],"statement":"Strike 21 Nov: no GWR trains London Paddington to Bristol; refund available with no fee","start":"2026-11-21","end":"2026-11-21"}}
+{"h":"29fd158a166e74a6b5598fc0a3fcee80","c":{"kind":"deadline","actions":["travel"],"entities":["US travel authorization","ESTA"],"statement":"US travel authorization (ESTA) expired 18 Sep 2026; new approval needed before US travel","end":"2026-09-18"}}
+{"h":"2856dc6a377dff5c2864109dbf7c8da5","c":{"kind":"freeze","actions":["pay"],"entities":["Penalty Charge Notice IZ34981051"],"statement":"Penalty charge on hold after challenge; do not pay, as payment closes the case"}}
+{"h":"af76d8425e0b88ce77977b964b6a490c","c":{"kind":"already-done","actions":["pay"],"entities":["TV Licence"],"statement":"TV Licence renewed and paid by Direct Debit for 01/11/2026 to 31/10/2027","start":"2026-11-01","end":"2027-10-31"}}
+{"h":"e921a35766a90c396f3aa3637fe4fabe","c":{"kind":"preference","actions":["send-gift","purchase"],"entities":["baby wheels","Bugaboo Fox","John Lewis list"],"statement":"Do not buy wheels for the baby; Bugaboo Fox already given, use John Lewis list"}}
+{"h":"82dbceb25d76291b9c1cce84bcd517c3","c":{"kind":"prohibition","actions":["attend","travel","hire"],"entities":["VW Golf LK21 YNR","other drivers"],"statement":"Motor policy covers only Robin Carter as driver; any other driver is not covered","start":"2026-08-01","end":"2027-07-31"}}
+{"h":"7e2e1593bfb13926bf009463313fd29d","c":{"kind":"prohibition","actions":["share-external"],"entities":["Stark Freight","confidential pricing","plans","unreleased features"],"statement":"Mutual NDA expired 30 Sep 2026 and not countersigned; do not share confidential information with Stark Freight","end":"2026-09-30"}}
+{"h":"d9b683462b03ba7e2a1cdd1575e607a9","c":{"kind":"already-done","actions":["pay"],"entities":["trip ticket 20th","Trainline","Expensify"],"statement":"Train ticket for the 20th already paid on company Trainline account; do not expense it"}}
+{"h":"9ce96edee6cdc4fdf64f146244333b3d","c":{"kind":"absence","actions":["contact","schedule"],"entities":["Søren Kierkegaard","Sam Patel"],"statement":"Søren on parental leave 26/10 to 1 Feb; Sam Patel covers legal and contracts","start":"2026-10-26","end":"2027-02-01"}}
+{"h":"a9e39eeba147291e21008226ba8f3528","c":{"kind":"already-done","actions":["travel"],"entities":["Copenhagen trip","Sanders hotel"],"statement":"Copenhagen hotel already booked 2–5 Dec at conference rate","start":"2026-12-02","end":"2026-12-05"}}
+{"h":"a8f4aab718b0973ef92b08460b0241aa","c":{"kind":"status-change","actions":["pay"],"entities":["Crocus voucher","Søren Kierkegaard"],"statement":"Whip-round collection for Søren's leaving gift is complete; Robin's £15 contribution still to be sent"}}
+{"h":"5c882c1bebbd135e6bb61c7b9014ccbf","c":null}
+{"h":"492946ad3a5e637bae6ade92a635b626","c":{"kind":"deadline","actions":["pay"],"entities":["Penalty Charge Notice IZ07371373"],"statement":"discounted £65 payment on PCN IZ07371373 until 10/11/2026","end":"2026-11-10","limit":65,"unit":""}}
+{"h":"0cd3b38943b8f30f88d8ea750f9f98fc","c":null}
+{"h":"7392b361d262b00a751fa392e3329ec1","c":{"kind":"deadline","actions":["purchase"],"entities":["TV Licence"],"statement":"TV Licence ends 31/10/2026; renew online to stay covered","end":"2026-10-31"}}
+{"h":"70f3329ea91ee0bd4559ed243e7e093e","c":null}
+{"h":"be6616f0a57064d8b49fd4572600a08b","c":null}
+{"h":"ecdb98dab979087e2fe0f260a5907e80","c":null}
+{"h":"6663a72587ab41370e34732da4c5147a","c":null}
+{"h":"3a0dadd699d52e470ab0ee46ef856a62","c":null}
+{"h":"06e3d6a87a9b3327fddc86ba5b39c13c","c":null}
+{"h":"d047ea4572ee164173bd166db4d1fb40","c":{"kind":"absence","actions":["book-food","attend","schedule"],"entities":["Oscar","Hannah Okoro"],"statement":"Oscar can't attend Saturday (family in Kent); nut allergy no longer a concern for that plan","start":"2026-10-24","end":"2026-10-24"}}
+{"h":"5346df1571c40087493c02c2d436e0b6","c":{"kind":"freeze","actions":["schedule","attend"],"entities":["Holloway Primary","pupils"],"statement":"Holloway Primary closed to pupils 27 Nov 2026 for staff training; no breakfast or wraparound care","start":"2026-11-27","end":"2026-11-27"}}
+{"h":"744ad0064e9631654cdc20de13cfed4a","c":{"kind":"prohibition","actions":["book-food"],"entities":["Whittington Hospital"],"statement":"Fasting blood test 12 Nov 2026 08:40: no eating for 10 hours beforehand, water only","start":"2026-11-12","end":"2026-11-12"}}
+{"h":"25cce89dd9c7540f69ea14d827b49e06","c":null}
+{"h":"27ebbb9b6bc791b7b74b56ebf245707f","c":{"kind":"limit","actions":["pay"],"entities":["Maya Carter","Junior ISA"],"statement":"Junior ISA for Maya Carter: £8,500 paid in for 2026/27 against £9,000 limit","end":"2026-10-27","limit":9000,"unit":""}}
+{"h":"98d7dc57abf86fcf887957e48467d795","c":null}
+{"h":"2546293366595feae94d0a629a1435cb","c":{"kind":"deadline","actions":["purchase"],"entities":["home insurance"],"statement":"Home insurance renews 20 Jan 2027; can switch or cancel free before then","end":"2027-01-20"}}
+{"h":"fef9361e42dac881f21823ed4db2df33","c":null}
+{"h":"426dce1901074ac098d058ba460f3942","c":{"kind":"freeze","actions":["travel"],"entities":["Great Western Railway","London Paddington","Bristol Temple Meads"],"statement":"Strike 28 Nov 2026: no GWR trains London Paddington to Bristol Temple Meads; tickets refundable","start":"2026-11-28","end":"2026-11-28"}}
+{"h":"0f3a66fda3badf952369e2b50d75dc5d","c":null}
+{"h":"29666a9b311bccf94401d9a281035be1","c":{"kind":"freeze","actions":["attend","schedule","contact"],"entities":["Holloway Primary"],"statement":"Holloway Primary closed to pupils 27 Nov 2026 for staff training; no breakfast or wraparound care","start":"2026-11-27","end":"2026-11-27"}}
+{"h":"1ce32d2a44dbb63a6340f19114b743f4","c":{"kind":"prohibition","actions":["book-food"],"entities":["fasting blood test"],"statement":"No eating for 10 hours before fasting blood test 12 Nov 2026 at 08:40","start":"2026-11-12","end":"2026-11-12"}}
+{"h":"1134333c4dbab97a8e2cf69937e5f7ae","c":null}
+{"h":"7c48c0e09756c2145d6c8844661e5cc0","c":{"kind":"limit","actions":["pay"],"entities":["Junior ISA for Maya Carter"],"statement":"Junior ISA limit £9,000 for 2026/27; £8,500 already paid in","limit":9000,"unit":""}}
+{"h":"f7304c72c06ffa4804e8fb137636f3c1","c":null}
+{"h":"876649cb7b043fe226e55d61bf24b166","c":{"kind":"deadline","actions":["purchase"],"entities":["home insurance policy"],"statement":"Home insurance renews 20 Jan 2027; switch or cancel free before then","end":"2027-01-20"}}
+{"h":"8abd62a46dab7e592407b61fea1cd36d","c":null}
+{"h":"47df915c32d4681baa7d76917bda3da3","c":{"kind":"freeze","actions":["travel"],"entities":["Great Western Railway","London Paddington to Bristol Temple Meads"],"statement":"Strike: no GWR trains London Paddington to Bristol Temple Meads on 28 Nov 2026","start":"2026-11-28","end":"2026-11-28"}}
+{"h":"cd1e2a950c8ea06b4af6addc00db36d3","c":null}
+{"h":"41871bee308fd9a876e126fc3c0c6a52","c":null}
+{"h":"fe323b17dbb8b160dd31ef5646cfa544","c":{"kind":"deadline","actions":["pay"],"entities":["Penalty Charge Notice IZ34395736"],"statement":"discounted £65 payment for PCN IZ34395736 valid until 10 Nov 2026","end":"2026-11-10","limit":65,"unit":""}}
+{"h":"3470e863366953d594fda59b28a90008","c":{"kind":"dependency","actions":["attend"],"entities":["volunteering","readers"],"statement":"enhanced DBS certificate is already on file, so no further clearance needed to volunteer"}}
+{"h":"e548b435f38fac9ec3eda3f407d03a5a","c":{"kind":"deadline","actions":["purchase"],"entities":["TV Licence"],"statement":"TV Licence ends 31 Oct 2026; renewal needed to stay covered","end":"2026-10-31"}}
+{"h":"9ae3ae958f8a3409c0b720a61451c5a6","c":{"kind":"limit","actions":["contact"],"entities":["motor insurance","VW Golf LK20 FWE"],"statement":"motor policy covers only drivers aged 25 or over, with the policyholder's permission","start":"2026-08-01","end":"2027-07-31","limit":25,"unit":""}}
+{"h":"0b4932d2a685bf45251fb6c08e57d741","c":null}
+{"h":"c8c3b599723f07e5c59adb9694c3fc04","c":{"kind":"already-done","actions":["pay"],"entities":["Trainline ticket","Marcus Webb"],"statement":"trip ticket already paid on company Trainline account; do not submit via Expensify","start":"2026-10-20"}}
+{"h":"0c5452379ac57a102d31c2ceb2eda32b","c":{"kind":"already-done","actions":["travel","purchase"],"entities":["Copenhagen room","Sanders"],"statement":"Copenhagen hotel room 2-5 Dec cancelled and refunded","start":"2026-12-02","end":"2026-12-05"}}
+{"h":"2449292201772e5ae3b1a18ef7cbbb30","c":null}
+{"h":"1ca0cff6c141c1984725d298450285b0","c":{"kind":"absence","actions":["book-food","attend","schedule"],"entities":["Oscar","Hannah Okoro"],"statement":"Oscar cannot attend Saturday; family away in Kent; nut allergy no longer a concern for that visit","start":"2026-10-24"}}
+{"h":"fac7872e92f774096aec0096781872fb","c":{"kind":"freeze","actions":["attend","schedule"],"entities":["Holloway Primary"],"statement":"Holloway Primary closed to pupils 27 Nov 2026 for INSET; no breakfast or wraparound care","start":"2026-11-27","end":"2026-11-27"}}
+{"h":"90d469c04e0d96ecd588a01ae83a2abe","c":{"kind":"preference","actions":["book-food"],"entities":["fasting blood test"],"statement":"fasting blood test 12 Nov 08:40: no food for 10 hours beforehand","start":"2026-11-12","end":"2026-11-12"}}
+{"h":"cb23160b90ce5ffc8e98212b19460610","c":null}
+{"h":"13f2a61bc41a4eee6c45985da9754c73","c":null}
+{"h":"77cf6bc4a5f87e08c2a78c9f30c29d9c","c":{"kind":"status-change","actions":["pay"],"entities":["rent"],"statement":"rent unchanged for another year; no increase"}}
+{"h":"823bc76b398dc4c16757a54ebb5e6b34","c":{"kind":"deadline","actions":["purchase"],"entities":["home insurance"],"statement":"home insurance renews 20 Jan 2027; switch or cancel free before then","end":"2027-01-20"}}
+{"h":"6ef92f20c44746571933547313547411","c":null}
+{"h":"508fdcda39fcd4a4248b1aa52a07dd6a","c":{"kind":"freeze","actions":["travel"],"entities":["Great Western Railway","London Paddington","Bristol Temple Meads"],"statement":"strike 28 Nov 2026: no GWR trains London Paddington to Bristol Temple Meads","start":"2026-11-28","end":"2026-11-28"}}
+{"h":"a12f1506a8cc5ac0ce2e6bb9d0454dcb","c":null}
+{"h":"f16dfbc5f3c50b86ef1693fc11595135","c":null}
+{"h":"7aa40832912bdd3658cefffcc54bc52e","c":{"kind":"deadline","actions":["pay"],"entities":["Penalty Charge Notice IZ34981051"],"statement":"PCN IZ34981051 discounted £65 payable until 10 Nov 2026","end":"2026-11-10","limit":65,"unit":""}}
+{"h":"f8bbc9581d9e937f02296fde98617764","c":null}
+{"h":"e36fc6b281c4a3b10fb4c622a3ade583","c":{"kind":"limit","actions":["pay"],"entities":["Junior ISA","Maya Carter"],"statement":"Junior ISA limit £9,000 for 2026/27; £8,500 already paid in","end":"2027-04-05","limit":9000,"unit":""}}
+{"h":"6f0e6ab0a3970a1409a0d1791a63715d","c":null}
+{"h":"66a67ccf7247efb8f6e7327c08e3ab09","c":{"kind":"deadline","actions":["purchase"],"entities":["home insurance"],"statement":"home insurance renews 20/01/2027; switch or cancel free before then","end":"2027-01-20"}}
+{"h":"e66adfdc281136d32614669a6d132e95","c":null}
+{"h":"e5ed937d71f61eacd2d0a837091bdde5","c":{"kind":"freeze","actions":["travel"],"entities":["Great Western Railway","London Paddington","Bristol Temple Meads"],"statement":"strike: no GWR trains London Paddington to Bristol on 28 Nov 2026","start":"2026-11-28","end":"2026-11-28"}}
+{"h":"f04f58839e0e4b8894732efd02b83185","c":null}
+{"h":"018bd0a9eaecab3f76f4a48caef47754","c":null}
+{"h":"fb29dce18d2550d262db34e5fdc0b822","c":{"kind":"deadline","actions":["pay"],"entities":["Penalty Charge Notice IZ29356501"],"statement":"PCN challenge rejected; discounted £65 payment until 10/11/2026","end":"2026-11-10","limit":65,"unit":""}}
+{"h":"b3ecd7687f563c347bcc312afacd3c07","c":null}
+{"h":"b2afce567837b8e86cc963193b0ad47d","c":null}
+{"h":"a911272e7c12671a184ded0d9a3034f8","c":{"kind":"deadline","actions":["pay"],"entities":["TV Licence"],"statement":"TV Licence ends 31 Oct 2026; renew online","end":"2026-10-31"}}
+{"h":"e8fb71c88702f7133511e4a33289f548","c":{"kind":"limit","actions":["hire"],"entities":["motor policy","VW Golf LK21 YNR"],"statement":"Motor policy: only drivers aged 25 or over, with the policyholder's permission","start":"2026-08-01","end":"2027-07-31"}}
+{"h":"fd3a082a574371bc5a0fc82827c47f2a","c":null}
+{"h":"8011e51d001c8f2876e9f041a2611362","c":{"kind":"already-done","actions":["pay"],"entities":["Trainline ticket","Expensify"],"statement":"Trip-up-north ticket already paid on company Trainline account; do not submit through Expensify"}}
+{"h":"0e5f6ba52a8b238b30eca8acdcb4e322","c":{"kind":"already-done","actions":["travel","pay"],"entities":["Copenhagen room","Sanders"],"statement":"Copenhagen hotel room (2-5 Dec) already cancelled; refund to company account","start":"2026-12-02","end":"2026-12-05"}}
+{"h":"093379f62fbc5bd566895180965f671c","c":{"kind":"status-change","actions":["schedule"],"entities":["all-hands meeting"],"statement":"All-hands moved to 4pm today","start":"2026-10-23"}}
+{"h":"3de53864bac8de3e9cf8eac488ef0a6a","c":{"kind":"status-change","actions":["book-food","attend"],"entities":["Oscar","Hannah Okoro"],"statement":"Oscar can't come Saturday; family visiting his gran in Kent. Oscar has a nut allergy, so food must be nut-free","start":"2026-10-31"}}
+{"h":"73050cb5e3b3389f0d6d670d26e2702e","c":{"kind":"freeze","actions":["attend","book-venue"],"entities":["Holloway Primary","breakfast club","wraparound care"],"statement":"Holloway Primary closed to pupils 27 Nov 2026 for staff training; no breakfast or wraparound care","start":"2026-11-27","end":"2026-11-27"}}
+{"h":"1d38c2b2928b2858a5dd4bff16449a4a","c":{"kind":"deadline","actions":["attend","book-food"],"entities":["fasting blood test","Whittington Hospital"],"statement":"Fasting blood test 12 Nov 2026 at 08:40: no eating for 10 hours beforehand","start":"2026-11-12","end":"2026-11-12"}}
+{"h":"525c3f701a627b4596545775c361e93b","c":{"kind":"deadline","actions":["pay"],"entities":["TV Licence"],"statement":"TV Licence ends 31 Oct 2026; renew to stay covered","end":"2026-10-31"}}
+{"h":"6dc951e79153314d1ee0013d1fa8d2cd","c":null}
+{"h":"16fc227501cc48c058fbb60ba7683a76","c":{"kind":"dependency","actions":["share-external"],"entities":["Stark Freight"],"statement":"NDA countersigned 20 Oct 2026, valid to Oct 2028; plans and pricing may be shared","end":"2028-10-20"}}
+{"h":"fdda06567ab11dc2d59f5379926e08d5","c":{"kind":"already-done","actions":["pay"],"entities":["Trainline","company account"],"statement":"Ticket for 20th already paid on company Trainline account; do not submit via Expensify"}}
+{"h":"c58fee40ea404a37a2fbf2038382f391","c":{"kind":"status-change","actions":["contact"],"entities":["Amara Okonkwo"],"statement":"Amara back from parental leave; send legal and contracts to her","start":"2026-10-26"}}
+{"h":"f21f91089e5b38d0bd02bde5e12e86db","c":{"kind":"already-done","actions":["travel","purchase"],"entities":["Sanders Copenhagen"],"statement":"Copenhagen room at Sanders for 2-5 Dec cancelled; refund to company account","start":"2026-12-02","end":"2026-12-05"}}
+{"h":"218f4a9c961e6d57a5b1b689550793fa","c":null}

@@ -102,15 +102,20 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   state, and its held page would answer with the old copy. `sourceNotice` gives the reason a notice did not act
   ("push-off", "not-synced", "not-notifying"; no I/O, so an unknown id is "not-synced"). `sourceItems` redacts before
   storing (D10); `ingest` stores only items of that source.
+- **The enricher's drain timing is part of the default's behaviour.** In the funnel cards drain while tasks run, so a
+  change that adds an `await` or an async helper to `CardEnricher.drain`'s live path moves which items land before
+  which request (CL3 measured 822 calls becoming 732 and 86 reader replay misses from one extra async hop). Re-run the
+  default funnel after touching it (since D244: `cards use` 504 calls, recipe 2a 643 replayed, 0 misses). D242's
+  bulk round (Message Batches) and D243's request cap were deleted; their code is in commit 4e072585.
 - `ModelCardMaker` sends no reasoning field and has no option to send one (D149 made "off" the default, amending
   D59; D155 deleted the option): the request every lab card and intent figure measured (all 5,158 `eden.cards` ledger
   rows ran with thinking off). Effort "low" was 1.82x slower at p50 and 1.54x dearer on Haiku 5.5 (docs/COST-MODEL.md,
   run `close-cards-reasoning`). Sending it again needs a decision, as for the reader. The judge (`partner.ts`, lab-only:
   the servers wire none) still sends "low"; changing that needs a judge measurement (D155).
-- `cardsLean` (D125) only narrows what the intent index reads (`readForIntent`): constraint-worded items are carded
-  whatever their sender or age. `automated` reads a `From:` line in the text or a `meta.from`/`meta.sender` field
-  (connectors differ: `toItems` keeps whatever text the tool returned) and bulk footers; a connector giving neither
-  is judged on its footers alone.
+- `cardsLean` (D125; window `cardsLeanDays` 7 since D244, 30 before) only narrows what the intent index reads
+  (`readForIntent`): constraint-worded items are carded whatever their sender or age. `automated` reads a `From:` line
+  in the text or a `meta.from`/`meta.sender` field (connectors differ: `toItems` keeps whatever text the tool
+  returned) and bulk footers; a connector giving neither is judged on its footers alone.
 - **Deliveries go through `deliverChecked` (D126)** in every async path, so `verifyDelivery` can re-read copies a signal put in doubt;
   only the fast path calls `deliver` directly, and it hands a doubted item (`doubted`) to the slow path instead. The
   reader's push runs `verifyItems` itself, re-checks that no newer user message came during the re-reads, then calls
@@ -178,6 +183,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   the push flagged must still have the content it read, or the ask reads anew (`freshness-push.test.ts`). The fix-S1
   trials that failed (D190 evidence gate, D191 no wait on a weak pool, D194 short schema) are deleted: rebuilding one
   needs a new decision.
+- **`pushChecked` (D246, trial, off)** queues an injection that cites nothing (`citations: []`, reason `checked:`): a
+  harness or integration that counts items must not read an empty packet as a delivery, and a later reading that
+  delivers withdraws it if untaken. Its line starts `Eden: ` (`EDEN_NOTE`), which `shownText` drops; it is fixed text,
+  never source or event text. CL4's other path levers (speculation D248, re-reading ahead D249, `askFromPush` D247, a
+  packet closing line D250) were measured and deleted: an ask's time is its strict re-reads (D211) under signal-only
+  notices, not its search or its reader.
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read
