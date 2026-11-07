@@ -1,0 +1,539 @@
+{
+  "scenario": "memory",
+  "synced": false,
+  "readings": [
+    {
+      "users": 0,
+      "wallMs": 333,
+      "cpuPercent": 283.6,
+      "rssMb": 1130.8,
+      "heapUsedMb": 681,
+      "lagMs": {
+        "p50": 0,
+        "p99": 0,
+        "max": 0
+      },
+      "handlerMs": {
+        "p50": 0,
+        "p95": 0,
+        "p99": 0,
+        "max": 0
+      },
+      "handlerMsByKind": {},
+      "requests": 0,
+      "cachedUsers": 0,
+      "sessions": 0,
+      "worldsBuiltMs": 2373,
+      "sync": "off",
+      "decisions": {},
+      "modelCalls": 0,
+      "costUsd": 0,
+      "sourceCalls": 0,
+      "traces": 0,
+      "sources": {}
+    },
+    {
+      "users": 250,
+      "wallMs": 11637,
+      "cpuPercent": 42.1,
+      "rssMb": 1041.1,
+      "heapUsedMb": 704.4,
+      "lagMs": {
+        "p50": 0.11511400000017602,
+        "p99": 2.832321999999749,
+        "max": 328.23365699999977
+      },
+      "handlerMs": {
+        "p50": 0.06,
+        "p95": 0.59,
+        "p99": 1.88,
+        "max": 44.6
+      },
+      "handlerMsByKind": {
+        "session_start": {
+          "p50": 0.08,
+          "p95": 0.17,
+          "p99": 0.25,
+          "max": 40.3
+        },
+        "/v1/pending": {
+          "p50": 0.02,
+          "p95": 0.04,
+          "p99": 0.07,
+          "max": 0.23
+        },
+        "user_message": {
+          "p50": 0.34,
+          "p95": 0.64,
+          "p99": 1,
+          "max": 7.91
+        },
+        "external": {
+          "p50": 0.46,
+          "p95": 0.83,
+          "p99": 1.53,
+          "max": 2.51
+        },
+        "/v1/ask": {
+          "p50": 1.28,
+          "p95": 5.17,
+          "p99": 11.41,
+          "max": 44.6
+        },
+        "tool_call": {
+          "p50": 0.16,
+          "p95": 0.27,
+          "p99": 0.34,
+          "max": 0.64
+        },
+        "agent_message": {
+          "p50": 0.1,
+          "p95": 0.19,
+          "p99": 0.29,
+          "max": 4.21
+        },
+        "tool_result": {
+          "p50": 0.33,
+          "p95": 0.8,
+          "p99": 1.13,
+          "max": 5.4
+        },
+        "session_end": {
+          "p50": 0.09,
+          "p95": 0.15,
+          "p99": 0.2,
+          "max": 4.3
+        }
+      },
+      "requests": 12450,
+      "cachedUsers": 250,
+      "sessions": 0,
+      "worldsBuiltMs": 2373,
+      "sync": "off",
+      "decisions": {
+        "skipped": 3850,
+        "silent": 1977,
+        "answer": 372,
+        "repeat": 12
+      },
+      "modelCalls": 0,
+      "costUsd": 0,
+      "sourceCalls": 7791,
+      "traces": 6211,
+      "sources": {
+        "gmail": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "calendar": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "drive": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "crm": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "slack": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        }
+      }
+    },
+    {
+      "users": 500,
+      "wallMs": 25037,
+      "cpuPercent": 32.8,
+      "rssMb": 1054.6,
+      "heapUsedMb": 708.4,
+      "lagMs": {
+        "p50": 0.11167600000044331,
+        "p99": 2.7482249999993655,
+        "max": 328.23365699999977
+      },
+      "handlerMs": {
+        "p50": 0.06,
+        "p95": 0.54,
+        "p99": 1.63,
+        "max": 44.6
+      },
+      "handlerMsByKind": {
+        "session_start": {
+          "p50": 0.07,
+          "p95": 0.15,
+          "p99": 0.24,
+          "max": 40.3
+        },
+        "/v1/pending": {
+          "p50": 0.02,
+          "p95": 0.04,
+          "p99": 0.07,
+          "max": 3.48
+        },
+        "user_message": {
+          "p50": 0.32,
+          "p95": 0.57,
+          "p99": 0.85,
+          "max": 7.91
+        },
+        "external": {
+          "p50": 0.44,
+          "p95": 0.73,
+          "p99": 1.31,
+          "max": 2.51
+        },
+        "/v1/ask": {
+          "p50": 1.16,
+          "p95": 4.09,
+          "p99": 10.08,
+          "max": 44.6
+        },
+        "tool_call": {
+          "p50": 0.15,
+          "p95": 0.25,
+          "p99": 0.31,
+          "max": 0.64
+        },
+        "agent_message": {
+          "p50": 0.1,
+          "p95": 0.18,
+          "p99": 0.26,
+          "max": 4.21
+        },
+        "tool_result": {
+          "p50": 0.33,
+          "p95": 0.75,
+          "p99": 1.05,
+          "max": 5.4
+        },
+        "session_end": {
+          "p50": 0.09,
+          "p95": 0.14,
+          "p99": 0.2,
+          "max": 4.55
+        }
+      },
+      "requests": 24834,
+      "cachedUsers": 500,
+      "sessions": 0,
+      "worldsBuiltMs": 2373,
+      "sync": "off",
+      "decisions": {
+        "skipped": 7629,
+        "silent": 3994,
+        "answer": 746,
+        "repeat": 24
+      },
+      "modelCalls": 0,
+      "costUsd": 0,
+      "sourceCalls": 15712,
+      "traces": 12393,
+      "sources": {
+        "gmail": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "calendar": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "drive": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "crm": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "slack": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        }
+      }
+    },
+    {
+      "users": 1000,
+      "wallMs": 38603,
+      "cpuPercent": 35,
+      "rssMb": 1082.2,
+      "heapUsedMb": 722.8,
+      "lagMs": {
+        "p50": 0.11282399999618065,
+        "p99": 3.2098770000011427,
+        "max": 328.23365699999977
+      },
+      "handlerMs": {
+        "p50": 0.04,
+        "p95": 0.51,
+        "p99": 1.86,
+        "max": 57.25
+      },
+      "handlerMsByKind": {
+        "session_start": {
+          "p50": 0.07,
+          "p95": 0.14,
+          "p99": 0.22,
+          "max": 40.3
+        },
+        "/v1/pending": {
+          "p50": 0.01,
+          "p95": 0.04,
+          "p99": 0.06,
+          "max": 6.88
+        },
+        "user_message": {
+          "p50": 0.3,
+          "p95": 0.53,
+          "p99": 0.76,
+          "max": 7.91
+        },
+        "external": {
+          "p50": 0.42,
+          "p95": 0.71,
+          "p99": 0.99,
+          "max": 3.07
+        },
+        "/v1/ask": {
+          "p50": 1.09,
+          "p95": 9.73,
+          "p99": 27.54,
+          "max": 57.25
+        },
+        "tool_call": {
+          "p50": 0.14,
+          "p95": 0.24,
+          "p99": 0.31,
+          "max": 5.14
+        },
+        "agent_message": {
+          "p50": 0.09,
+          "p95": 0.17,
+          "p99": 0.24,
+          "max": 4.77
+        },
+        "tool_result": {
+          "p50": 0.31,
+          "p95": 0.78,
+          "p99": 1.05,
+          "max": 5.4
+        },
+        "session_end": {
+          "p50": 0.08,
+          "p95": 0.14,
+          "p99": 0.18,
+          "max": 4.55
+        }
+      },
+      "requests": 50244,
+      "cachedUsers": 1000,
+      "sessions": 293,
+      "worldsBuiltMs": 2373,
+      "sync": "off",
+      "decisions": {
+        "skipped": 13713,
+        "silent": 7038,
+        "answer": 1396,
+        "repeat": 45
+      },
+      "modelCalls": 0,
+      "costUsd": 0,
+      "sourceCalls": 28094,
+      "traces": 22192,
+      "sources": {
+        "gmail": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "calendar": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "drive": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "crm": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "slack": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        }
+      }
+    },
+    {
+      "users": 1981,
+      "wallMs": 54738,
+      "cpuPercent": 36.4,
+      "rssMb": 1136.6,
+      "heapUsedMb": 756.1,
+      "lagMs": {
+        "p50": 0.11956600000121398,
+        "p99": 3.778243000000657,
+        "max": 328.23365699999977
+      },
+      "handlerMs": {
+        "p50": 0.02,
+        "p95": 0.44,
+        "p99": 1.65,
+        "max": 125.76
+      },
+      "handlerMsByKind": {
+        "session_start": {
+          "p50": 0.05,
+          "p95": 0.13,
+          "p99": 0.21,
+          "max": 40.3
+        },
+        "/v1/pending": {
+          "p50": 0.01,
+          "p95": 0.04,
+          "p99": 0.06,
+          "max": 6.88
+        },
+        "user_message": {
+          "p50": 0.24,
+          "p95": 0.5,
+          "p99": 0.73,
+          "max": 13.72
+        },
+        "external": {
+          "p50": 0.36,
+          "p95": 0.65,
+          "p99": 0.88,
+          "max": 3.23
+        },
+        "/v1/ask": {
+          "p50": 0.88,
+          "p95": 13.17,
+          "p99": 102.72,
+          "max": 125.76
+        },
+        "tool_call": {
+          "p50": 0.11,
+          "p95": 0.22,
+          "p99": 0.31,
+          "max": 5.14
+        },
+        "agent_message": {
+          "p50": 0.07,
+          "p95": 0.16,
+          "p99": 0.22,
+          "max": 5.42
+        },
+        "tool_result": {
+          "p50": 0.25,
+          "p95": 0.71,
+          "p99": 0.96,
+          "max": 5.4
+        },
+        "session_end": {
+          "p50": 0.06,
+          "p95": 0.13,
+          "p99": 0.18,
+          "max": 4.55
+        }
+      },
+      "requests": 99342,
+      "cachedUsers": 1980,
+      "sessions": 1495,
+      "worldsBuiltMs": 2373,
+      "sync": "off",
+      "decisions": {
+        "skipped": 20935,
+        "silent": 10638,
+        "answer": 2179,
+        "repeat": 57
+      },
+      "modelCalls": 0,
+      "costUsd": 0,
+      "sourceCalls": 42809,
+      "traces": 33809,
+      "sources": {
+        "gmail": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "calendar": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "drive": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "crm": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        },
+        "slack": {
+          "calls": 0,
+          "errors": 0,
+          "limited": 0
+        }
+      }
+    }
+  ],
+  "edenOnly": {
+    "note": "readings minus the zero-user reading (the in-process sim worlds and sources)",
+    "baseline": {
+      "rssMb": 1130.8,
+      "heapUsedMb": 681
+    },
+    "rssMbPerUser": -0.019,
+    "heapMbPerUser": 0.04,
+    "readings": [
+      {
+        "users": 250,
+        "rssMb": -89.7,
+        "heapUsedMb": 23.4,
+        "rssMbPerUser": -0.359,
+        "heapMbPerUser": 0.094
+      },
+      {
+        "users": 500,
+        "rssMb": -76.2,
+        "heapUsedMb": 27.4,
+        "rssMbPerUser": -0.152,
+        "heapMbPerUser": 0.055
+      },
+      {
+        "users": 1000,
+        "rssMb": -48.6,
+        "heapUsedMb": 41.8,
+        "rssMbPerUser": -0.049,
+        "heapMbPerUser": 0.042
+      },
+      {
+        "users": 1981,
+        "rssMb": 5.8,
+        "heapUsedMb": 75.1,
+        "rssMbPerUser": 0.003,
+        "heapMbPerUser": 0.038
+      }
+    ]
+  }
+}
