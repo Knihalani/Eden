@@ -1506,18 +1506,7 @@ export class ContextPartner {
       const was = behind ? new Map(fresh.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
-      const verified = fresh.length > 0 && !s.closed && latest ? await this.verifyItems(s, fresh, cue) : [];
-      // `pushCandidateDedup` (D258 trial): a rule path that delivered a candidate in this request while the push looked
-      // (they run side by side; `fresh` was tested first) already showed it the agent: not repeated here.
-      const checked =
-        candidates && this.config.pushCandidateDedup
-          ? verified.filter(
-              (x) =>
-                withdrawn.has(x.item.id) ||
-                s.ledger.isFresh(x.item.id, s.turn) ||
-                (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
-            )
-          : verified;
+      const checked = fresh.length > 0 && !s.closed && latest ? await this.verifyItems(s, fresh, cue) : [];
       const still = internal.request === undefined || internal.request === s.requests;
       const injection =
         checked.length > 0 && !s.closed && still
@@ -1877,15 +1866,17 @@ export class ContextPartner {
           )
         : new Map<string, Card>();
     if (!pool.some((x) => this.constraintLike(x, cards))) return { items: [] };
-    return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) };
+    // `pushCandidatesLater` (D259 trial): fewer on a session's later requests, whose agent still holds earlier packets.
+    const later = this.config.pushCandidatesLater;
+    const k = later > 0 && s.requests > 1 ? Math.min(later, this.config.pushCandidates) : this.config.pushCandidates;
+    return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, k) };
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
   private candidateFrame(): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
-    // `pushCandidateBytes` (D258 trial): the candidates' own excerpt size, 0 for `compactItemBytes`.
-    const each = Math.min(this.config.pushCandidateBytes || this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
+    const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
       lead: CANDIDATES_LEAD,
       itemBytes: each,
@@ -3824,17 +3815,7 @@ export class ContextPartner {
     reason: string,
     cue: Cue,
   ): Promise<Injection | null> {
-    const verified = await this.verifyItems(s, scored, cue);
-    // `pushCandidateDedup` (D258 trial): the push's candidates may have gone out while this path looked (its ledger
-    // test ran first); what they showed the agent is not repeated. An action finding (the firewall's) is never cut.
-    const kept =
-      this.config.pushCandidateDedup && this.config.pushCandidates > 0 && !reason.startsWith("action-")
-        ? verified.filter(
-            (x) =>
-              s.ledger.isFresh(x.item.id, s.turn) ||
-              (this.config.syncPollBehind && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
-          )
-        : verified;
+    const kept = await this.verifyItems(s, scored, cue);
     if (kept.length === 0 || s.closed) return null;
     return this.deliver(s, kept, mode, reason, cue);
   }

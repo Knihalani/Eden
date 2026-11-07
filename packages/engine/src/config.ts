@@ -465,16 +465,11 @@ export interface EngineConfig {
    */
   pushCandidates: number;
   /**
-   * D258 trial (CL8, off at 0): with `pushCandidates`, each candidate's excerpt is at most this many bytes instead of
-   * `compactItemBytes` (still at most 2,000). The packet is most of the agent's extra input with Eden.
+   * D259 trial (CL8, off at 0): with `pushCandidates`, the number of candidates on a session's later requests (after
+   * its first). An agent keeps a session's earlier packets in its transcript and re-reads them on every later model
+   * request, so later packets cost more; a session's first request keeps `pushCandidates`. 0 is `pushCandidates`.
    */
-  pushCandidateBytes: number;
-  /**
-   * D258 trial (CL8, off): with `pushCandidates`, an item goes out in one packet a request. The push and the rule
-   * paths look side by side, each testing the ledger before its awaits, so one could deliver what the other just did:
-   * each tests it again just before delivering. A packet left empty is not sent; the firewall's finding is never cut.
-   */
-  pushCandidateDedup: boolean;
+  pushCandidatesLater: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -592,6 +587,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
-  pushCandidateBytes: 0,
-  pushCandidateDedup: false,
+  pushCandidatesLater: 0,
 };

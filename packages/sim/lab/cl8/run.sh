@@ -1,8 +1,9 @@
 #!/bin/bash
 # CL8 on Pi (docs/research/cl-cl8.md): LABEL PUSH CONDITIONS then pi-ab flags. CL7's run.sh with CL8's arms:
-# dd = pushCandidateDedup; k3 = pushCandidates 3 + dedup; b200 = pushCandidateBytes 200 + dedup (D258 trial).
+# dd = pushCandidateDedup; k3 = pushCandidates 3 + dedup; b200 = pushCandidateBytes 200 + dedup (D258 trial, the
+# switches are in commit f58aae41 only); late = pushCandidatesLater 3 (D259 trial).
 L=$1; PUSH=$2; CONDS=$3; shift 3
-VC='{"dd":{"pushCandidateDedup":true},"k3":{"pushCandidates":3,"pushCandidateDedup":true},"b200":{"pushCandidateBytes":200,"pushCandidateDedup":true}}'
+VC='{"dd":{"pushCandidateDedup":true},"k3":{"pushCandidates":3,"pushCandidateDedup":true},"b200":{"pushCandidateBytes":200,"pushCandidateDedup":true},"late":{"pushCandidatesLater":3}}'
 env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite train --conditions $CONDS --config default \
   --variant-config "$VC" \
   --cards .local/cl8/cards-all.jsonl --cards-out .local/cl8/runs/$L.cards.jsonl \
