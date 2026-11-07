@@ -63,15 +63,20 @@ async function warm(config: Record<string, unknown>) {
     for (let i = 0; i < 3; i++) await partner.sync!.tick();
     return src.lists - before;
   };
-  const pushed = (ref: string): ContextItem => ({
-    id: itemId("mail", ref),
-    sourceId: "mail",
-    ref,
-    title: `Pushed ${ref}`,
-    text: `A pushed message ${ref}`,
-    updatedAt: clock,
-  });
-  return { src, cache, partner, after, pushed, now: () => clock };
+  /** A new message at the source, as a notice carries it. */
+  const pushed = (ref: string): ContextItem => {
+    const item = {
+      id: itemId("mail", ref),
+      sourceId: "mail",
+      ref,
+      title: `Pushed ${ref}`,
+      text: `A pushed message ${ref}`,
+      updatedAt: clock,
+    };
+    src.items.unshift(item);
+    return item;
+  };
+  return { src, cache, partner, after, pushed, now: () => clock, advance: (ms: number) => (clock += ms) };
 }
 
 describe("syncCarriedSweepMs: sources whose notices carry their changes are swept less often (A8 trial)", () => {
@@ -123,5 +128,101 @@ describe("syncCarriedSweepMs: sources whose notices carry their changes are swep
     expect(cache.get(scope, itemId("mail", "m3"), now())).not.toBeNull(); // One miss: kept (D57).
     await after(2 * DAY + HOUR);
     expect(cache.get(scope, itemId("mail", "m3"), now())).toBeNull();
+  });
+
+  test("on: items after a bare signal do not lift the daily sweep it needs (review finding 1)", async () => {
+    const { src, partner, after, pushed, advance } = await warm({ syncCarriedSweepMs: 7 * DAY });
+    await partner.sourceItems(scope, "mail", [pushed("p0")]);
+    expect(await after(DAY + HOUR)).toBe(0); // Carried: no sweep a day on.
+    src.items = src.items.filter((i) => i.ref !== "m3"); // Deleted, and only signalled.
+    expect(partner.sourceChanged(scope, "mail")).toBe(true);
+    advance(HOUR);
+    await partner.sourceItems(scope, "mail", [pushed("p1")]);
+    // Over a day since the last sweep, and no sweep has run since the signal: the daily sweep is due.
+    expect(await after(HOUR)).toBeGreaterThan(0);
+  });
+
+  test("on: a bare signal while a notice's items are being redacted still wins (review finding 2)", async () => {
+    const { partner, after, pushed } = await warm({ syncCarriedSweepMs: 7 * DAY });
+    const items = partner.sourceItems(scope, "mail", [pushed("p1")]);
+    expect(partner.sourceChanged(scope, "mail")).toBe(true);
+    await items;
+    expect(await after(DAY + HOUR)).toBeGreaterThan(0);
+  });
+
+  test("on: a sweep that missed an item sweeps again daily until the second miss drops it", async () => {
+    const { src, partner, after, pushed, cache, now } = await warm({ syncCarriedSweepMs: 2 * DAY });
+    await partner.sourceItems(scope, "mail", [pushed("p1")]);
+    src.items = src.items.filter((i) => i.ref !== "m3"); // Deleted, and its removal lost.
+    await after(2 * DAY + HOUR); // The trial's sweep: one miss (two days here: the cache's TTL ends a week).
+    expect(cache.get(scope, itemId("mail", "m3"), now())).not.toBeNull();
+    expect(await after(DAY + HOUR)).toBeGreaterThan(0); // The next day, not the trial's cadence.
+    expect(cache.get(scope, itemId("mail", "m3"), now())).toBeNull();
+    expect(await after(DAY + HOUR)).toBe(0); // Nothing pending: back on the trial's cadence.
+  });
+
+  test("on: items sent while the source is still backfilling do not count as carrying (review finding 4)", async () => {
+    let clock = T0;
+    const src = new Mail();
+    const partner = new ContextPartner({
+      sources: async () => [src],
+      sourceMap: new SourceMap(":memory:"),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: {
+        ...CORE_CONFIG,
+        sync: true,
+        syncPush: true,
+        syncPageSize: 1,
+        syncCallsPerMin: 1,
+        syncSweepMs: DAY,
+        syncCarriedSweepMs: 7 * DAY,
+      },
+    });
+    partner.sync!.track(scope);
+    await partner.sync!.tick(); // One page a minute: not warm after the first.
+    expect(partner.sync!.warm(scope)).toBe(false);
+    // Not stored (the source is not synced yet), so it says nothing about how the integrator forwards changes.
+    expect(await partner.sourceItems(scope, "mail", [{ ...src.items[0]!, text: "changed" }])).toBe(0);
+    while (!partner.sync!.warm(scope)) {
+      clock += 60_000;
+      await partner.sync!.tick();
+    }
+    clock += DAY + HOUR;
+    partner.sync!.track(scope);
+    const before = src.lists;
+    for (let i = 0; i < 3; i++) {
+      clock += 60_000;
+      await partner.sync!.tick();
+    }
+    expect(src.lists - before).toBeGreaterThan(0); // The daily sweep.
+  });
+
+  test("per user: one user's carried notices leave another user's daily sweep alone (D9)", async () => {
+    let clock = T0;
+    const src = new Mail();
+    const partner = new ContextPartner({
+      sources: async () => [src],
+      sourceMap: new SourceMap(":memory:"),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { ...CORE_CONFIG, sync: true, syncPush: true, syncPageSize: 100, syncCarriedSweepMs: 7 * DAY },
+    });
+    const other: Scope = { tenantId: "t1", userId: "u2" };
+    for (const who of [scope, other]) {
+      partner.sync!.track(who);
+      while (!partner.sync!.warm(who)) await partner.sync!.tick();
+    }
+    await partner.sourceItems(scope, "mail", [{ ...src.items[0]!, text: "a pushed change" }]);
+    clock += DAY + HOUR;
+    partner.sync!.track(scope);
+    partner.sync!.track(other);
+    const before = src.lists;
+    for (let i = 0; i < 3; i++) await partner.sync!.tick();
+    expect(src.lists - before).toBe(1); // The other user's one-page sweep; none for the user whose notices carry.
   });
 });

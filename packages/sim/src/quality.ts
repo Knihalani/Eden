@@ -70,6 +70,11 @@ export interface QualityOptions {
    * on its own random stream, so the sessions and sources draw as without it. 0 (the default): none lost.
    */
   lostNotices?: number;
+  /**
+   * Sim sources fetch as an MCP connector does (A8): a null re-read does not prove the item gone (`fetchReportsGone`
+   * false), so a deleted item's re-read is "unverifiable" and only a sweep or a removal drops it.
+   */
+  nullProvesNothing?: boolean;
   agentToolRate?: number;
   /**
    * With no live model: "perfect" puts an oracle judge in the model's place (the ceiling of the model path),
@@ -555,6 +560,9 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
     relabel(sessions, asks, updates);
     const deletes = planDeletes(world, sessions.length, o.seed * 17_389 + u, o.deletes ?? 0);
     const sources = simSources(world, o.profiles, o.timeScale, o.seed + u);
+    // `nullProvesNothing` (A8): an MCP connector's fetch, whose null does not say the item is gone (D126).
+    if (o.nullProvesNothing)
+      for (const src of sources) Object.defineProperty(src, "fetchReportsGone", { value: false, enumerable: true });
     if ((o.push ?? "none") !== "none") for (const s of sources) s.notifies = true;
     return { world, sessions, asks, updates, deletes, sources };
   });

@@ -1,0 +1,6 @@
+== new
+short eden       control 0 -> 0 neutral 0 -> 0
+long eden       control 1 -> 1 neutral 0 -> 0
+== old
+short eden       control 0 -> 0 neutral 0 -> 0
+long eden       control 0 -> 0 neutral 1 -> 1

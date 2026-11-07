@@ -1,0 +1,4 @@
+tick      slack     list         2        0.009          0.13
+request-time 0.134 a request; background (tick + notice) 2.13 a user-day, 0.147 a request; steady 0.280 a request; backfill 18.0 a user
+  w41: verify {"checked":0,"confirmed":0,"changed":0,"gone":0,"failed":0,"calls":0,"holdsEvicted":0}; items re-read 0, more than once 0; moved 20, update packets 10, stale copies held 0
+  w42: verify {"checked":0,"confirmed":0,"changed":0,"gone":0,"failed":0,"calls":0,"holdsEvicted":0}; items re-read 0, more than once 0; moved 21, update packets 12, stale copies held 0
