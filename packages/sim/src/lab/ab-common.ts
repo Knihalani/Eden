@@ -488,6 +488,12 @@ export interface Background {
    */
   setupUsd?: number;
   setupCalls?: number;
+  /**
+   * Eden's connector calls in this stream (searches, fetches, listings: the backfill, the sync's ticks, request-time
+   * lookups and re-reads), and of them those before the first request (the one-time backfill). Absent before A3.
+   */
+  sourceCalls?: number;
+  setupSourceCalls?: number;
 }
 
 /**

@@ -603,10 +603,15 @@ async function runWorld(
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.
   let current: Timeline | null = null;
   const bySession = new Map<string, { r: RunResult; tl: Timeline }>();
+  // Every connector call Eden makes in this stream, in a task's window or not (the backfill, the sync's ticks between
+  // tasks): `Background.sourceCalls`, priced per connector plan by pi-cost-report.ts.
+  let edenCalls = 0;
   const edenSources = sources.map((s) =>
-    watched(s, (id, op, start, end, status, items) =>
-      current?.span("eden.source", "eden", "bg", start, end, { source: id, op, status, items }),
-    ),
+    watched(s, (id, op, start, end, status, items) => {
+      edenCalls++;
+      bg.sourceCalls = edenCalls;
+      current?.span("eden.source", "eden", "bg", start, end, { source: id, op, status, items });
+    }),
   );
   // What this stream's background calls (cards) cost: booked to Eden's total, charged to no task (Background).
   // Recorded in the results as the calls happen (below), so a stream that stops early (OverBudget, the request cap)
@@ -732,6 +737,8 @@ async function runWorld(
   // background spend is made while the user works (new and changed items).
   bg.setupUsd = bg.cardsUsd;
   bg.setupCalls = bg.calls;
+  bg.setupSourceCalls = edenCalls;
+  bg.sourceCalls = edenCalls;
   const out: RunResult[] = [];
   let previous: { sessionId: string; r: RunResult } | null = null;
   const closePrevious = async () => {
@@ -803,6 +810,8 @@ async function runWorld(
         // only `sourceItems`): no signal, so no other copy of the source is put in doubt. Before A3 (D272) this sent
         // a bare signal in every mode, so from each day's first recap on every push re-read its candidates from that
         // source on the agent's critical path (about 650 ms a task in CL5-CL8's long payload runs).
+        // A3's first fix moved items without naming them, and its notice went out empty: refuse that.
+        if (touched.size > 0 && movedIds.size === 0) throw new Error("recap moved items but named none");
         await recapNotice(partner, scope, sources, movedIds, CONNECTORS.push);
         // The change lands two hours before the recap: what the notice started in the background (`revisionNotice`'s
         // poll; nothing when that trial is off) has settled by then. Bounded, so a hung poll cannot stall the stream.
