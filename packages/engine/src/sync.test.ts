@@ -224,20 +224,30 @@ describe("background sync (D57)", () => {
         const stats = partner.sync!.stats;
         const calls0 = stats.demandCalls;
         await say(partner, "Did Zed Quinn sign the contract renewal?", scope, "s1", now());
-        let held = 0;
-        for (let i = 0; i < 250; i++) if (cache.isSynced(scope, itemId("mail", `new${i}`))) held++;
-        return { limits: src.limits.slice(before, before + 3), calls: stats.demandCalls - calls0, held };
+        const heldNow = () => {
+          let n = 0;
+          for (let i = 0; i < 250; i++) if (cache.isSynced(scope, itemId("mail", `new${i}`))) n++;
+          return n;
+        };
+        const held = heldNow();
+        // The rest is read in the background, from where the lookup's poll stopped (audit A5: it restarted from the
+        // top, met what the lookup had just stored, and marked the source current with 50 changes never read).
+        for (let i = 0; i < 200 && heldNow() < 250; i++) await new Promise((r) => setTimeout(r, 1));
+        const settled = { all: heldNow(), current: partner.sync!.current(scope, "mail") };
+        return { limits: src.limits.slice(before, before + 3), calls: stats.demandCalls - calls0, held, settled };
       };
-      // Full pages: two calls of 100, 200 of the 250 changes held when the lookup answers (the rest in the background).
+      // Full pages: two calls of 100, at least 200 of the 250 changes held when the lookup answers.
       const full = await run(0);
       expect(full.calls).toBe(2);
       expect(full.limits.slice(0, 2)).toEqual([100, 100]);
+      expect(full.held).toBeGreaterThanOrEqual(200);
+      expect(full.settled).toEqual({ all: 250, current: true });
       // Adaptive: 5, 95, 100 - the same 200 items in three calls, never the 5, 10, 20, 40, ... of doubling pages.
       const adaptive = await run(5);
       expect(adaptive.calls).toBe(3);
       expect(adaptive.limits).toEqual([5, 95, 100]);
-      expect(adaptive.held).toBeGreaterThanOrEqual(full.held);
       expect(adaptive.held).toBeGreaterThanOrEqual(200);
+      expect(adaptive.settled).toEqual({ all: 250, current: true });
     });
 
     test("off (0): a poll reads full pages; the backfill's page size is unchanged either way", async () => {

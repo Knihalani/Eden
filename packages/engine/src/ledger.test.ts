@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Ledger } from "./ledger";
+import { Ledger, MAX_LEDGER_ITEMS } from "./ledger";
 
 describe("Ledger", () => {
   test("an item is not fresh within its cooldown, and is after it", () => {
@@ -67,5 +67,16 @@ describe("Ledger", () => {
     for (let t = 2; t < 50; t++) l.mark([`i${t}`], t, [t]);
     expect(l.size).toBeLessThanOrEqual(2);
     expect(l.entry("a")).toBeUndefined();
+  });
+});
+
+describe("Ledger bound (audit A5)", () => {
+  test("a session whose turn never moves (ask-only) keeps at most MAX_LEDGER_ITEMS, the newest", () => {
+    const l = new Ledger();
+    for (let i = 0; i < MAX_LEDGER_ITEMS + 500; i++) l.mark([`docs:${i}`], 0, [i]);
+    expect(l.size).toBe(MAX_LEDGER_ITEMS);
+    expect(l.entry("docs:0")).toBeUndefined();
+    expect(l.entry(`docs:${MAX_LEDGER_ITEMS + 499}`)).toEqual({ turn: 0, version: MAX_LEDGER_ITEMS + 499 });
+    expect(l.isFresh(`docs:${MAX_LEDGER_ITEMS + 499}`, 0)).toBe(false);
   });
 });

@@ -696,7 +696,9 @@ export class AskReader {
     forgotten: AbortSignal,
   ): Promise<ReaderRead> {
     const items = input.items.slice(0, READER_MAX_ITEMS);
-    if (items.length === 0) return { verdict: null, costUsd: 0, called: false, overBudget: false };
+    // An aborted read (its session closed, or the user forgotten) reserves nothing: its session's tally was already
+    // ended (`endSession`), and a new one would stay on the Budget for good (audit A5).
+    if (items.length === 0 || signal.aborted) return { verdict: null, costUsd: 0, called: false, overBudget: false };
     const reservation = this.deps.budget.reserve(scopeKey(scope), session, this.limits.estimateUsd);
     if (!reservation) {
       this.stats.overBudget++;
