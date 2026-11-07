@@ -478,6 +478,8 @@ const STATUS_WORDS: Record<string, string> = {
   open: "failing, skipped",
   busy: "busy",
   limited: "rate-limited",
+  // The connector's own 429 (D212): the same words as our own limit's skip; to the agent both mean "try later".
+  throttled: "rate-limited",
 };
 
 interface Built {
@@ -1379,8 +1381,10 @@ export class ContextPartner {
       if (behind && cue.polled) this.pushAgain(s, request, internal, cue.polled, searched, injection);
       return { answer: "", citations: [], usedModel: reading?.called === true, costUsd, latencyMs };
     }
-    // `verifyDelivery`: what the answer cites is re-read first when its copy is old; gone items are left out.
-    const checked = await this.verifyItems(s, chosen, cue);
+    // `verifyDelivery`: what the answer cites is re-read first when a signal doubted its copy; gone items are left out,
+    // and so are doubted ones no re-read confirmed (D211), named in the answer.
+    const unconfirmed = new Map<string, number>();
+    const checked = await this.verifyItems(s, chosen, cue, { unconfirmed });
     const items = checked.map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
     const answering = this.answering(s, cue);
@@ -1388,7 +1392,13 @@ export class ContextPartner {
     const packet = items.length ? renderPacket(items, answering) : "";
     // D127: "nothing" is said only when the sources the ask chose answered; one that failed is named, in the text
     // (an MCP caller sees only the text) and in `sources`.
-    const answer = honestAnswer(packet, searched.sources, searched.unresolved === true, searched.closed === true);
+    const answer = honestAnswer(
+      packet,
+      searched.sources,
+      searched.unresolved === true,
+      searched.closed === true,
+      unconfirmed,
+    );
     if (rendering) spans!.close(rendering, { items: items.length });
     if (this.deps.onCandidates) {
       this.dump(
@@ -3493,8 +3503,19 @@ export class ContextPartner {
    * (already redacted by the fan-out) and replaces the item; one its source no longer has is dropped from the cache and
    * left out; one that could not be checked stays as held.
    * Each re-read is a connector call, traced as a "verify" decision (`sourceCalls`). Never throws.
+   *
+   * `strict` (an ask's citations, D211): a doubted item whose re-read failed with a plain error is read once more, and
+   * one still not confirmed is left out, counted by source in `strict.unconfirmed` for the answer to name. An ask's
+   * answer is taken as what the sources hold now, so a copy a signal doubted and nothing confirmed is not cited (one
+   * ask in 360 cited a deleted item that way in RealUse-1 part D). A source with no fetch tool, or whose null proves
+   * nothing, is cited as held.
    */
-  private async verifyItems(s: Session, scored: Scored[], cue: Cue): Promise<Scored[]> {
+  private async verifyItems(
+    s: Session,
+    scored: Scored[],
+    cue: Cue,
+    strict?: { unconfirmed: Map<string, number> },
+  ): Promise<Scored[]> {
     if (!this.config.verifyDelivery || scored.length === 0) return scored;
     const now = this.now();
     // Doubted now, or re-read just before (`checkAhead`): that re-read made the cached copy current, but the copy in
@@ -3503,13 +3524,23 @@ export class ContextPartner {
       const held = s.checks?.get(id);
       return held !== undefined && now - held.at <= CHECK_REUSE_MS;
     };
-    const due = scored.filter((x) => recent(x.item.id) || this.doubted(s, x.item));
+    const doubted = new Set<string>();
+    for (const x of scored) if (this.doubted(s, x.item)) doubted.add(x.item.id);
+    const due = scored.filter((x) => recent(x.item.id) || doubted.has(x.item.id));
     if (due.length === 0) return scored;
     const t0 = performance.now();
     const before = this.freshness.calls;
     const outcomes = new Map(
       await Promise.all(due.map(async (x) => [x.item.id, await this.check(s, x.item)] as const)),
     );
+    if (strict && !s.closed) {
+      // A plain error is often one bad call: one more read (`check` never reuses a failure), the others are not.
+      const again = due.filter((x) => doubted.has(x.item.id) && outcomes.get(x.item.id) === "flaked");
+      for (const [id, o] of await Promise.all(
+        again.map(async (x) => [x.item.id, await this.check(s, x.item)] as const),
+      ))
+        outcomes.set(id, o);
+    }
     this.trace({
       sessionId: s.id,
       turn: s.turn,
@@ -3527,6 +3558,10 @@ export class ContextPartner {
     return scored.flatMap((x) => {
       const o = outcomes.get(x.item.id);
       if (o === "gone") return [];
+      if (strict && doubted.has(x.item.id) && (o === "failed" || o === "flaked")) {
+        strict.unconfirmed.set(x.item.sourceId, (strict.unconfirmed.get(x.item.sourceId) ?? 0) + 1);
+        return [];
+      }
       if (o !== "changed") return [x];
       const copy = this.deps.cache.get(s.scope, x.item.id, this.now());
       return copy ? [{ ...x, item: copy }] : [x];
@@ -3547,6 +3582,7 @@ export class ContextPartner {
       held &&
       now - held.at <= CHECK_REUSE_MS &&
       held.settled !== "failed" &&
+      held.settled !== "flaked" &&
       this.sync?.signalledSince(s.scope, item.sourceId, held.mark) !== true
     )
       return held.outcome;
@@ -3572,7 +3608,7 @@ export class ContextPartner {
       const source = all.find((x) => x.id === item.sourceId);
       if (!source?.fetch) {
         this.freshness.failed++;
-        return "failed";
+        return "unverifiable";
       }
       this.freshness.calls++;
       const got = await this.fanout.fetchChecked(source, s.scope, item.ref, {
@@ -3581,7 +3617,10 @@ export class ContextPartner {
       });
       if (got.status === "failed" || s.closed) {
         this.freshness.failed++;
-        return "failed";
+        if (s.closed) return "failed";
+        // A null from a source whose null does not mean gone (an MCP tool) says nothing, and says it every time: like
+        // a source with no fetch, its items are cited as held (D126). A plain error is worth one more read.
+        return got.why === "null" ? "unverifiable" : got.why === "error" ? "flaked" : "failed";
       }
       if (got.status === "gone") {
         this.freshness.gone++;
@@ -4833,13 +4872,32 @@ function modelAttrs(res: {
  * An ask's answer text (D127): `packet` (empty when no item answers), with the sources the ask chose that did not
  * answer named. An empty answer reads "Nothing in the connected sources." only when every chosen source answered (or
  * none was chosen); otherwise it says which could not be reached and that this is not an all-clear. Source ids are the
- * operator's names for its connectors, not source text.
+ * operator's names for its connectors, not source text. Items left out because a change signal doubted them and no
+ * re-read confirmed them (`unconfirmed`, by source, D211) are named too: an answer short of them is not an all-clear.
  */
 function honestAnswer(
   packet: string,
   sources: readonly SourceStatus[] | undefined,
   unresolved = false,
   closed = false,
+  unconfirmed?: ReadonlyMap<string, number>,
+): string {
+  const told = reachAnswer(packet, sources, unresolved, closed);
+  if (!unconfirmed || unconfirmed.size === 0) return told;
+  const names = [...unconfirmed].map(([id, n]) => `${id} (${n})`).join(", ");
+  const left = `Left out items from ${names} that changed at the source and could not be re-checked`;
+  // An answer that would read as an all-clear says it is not one.
+  if (told === "Nothing in the connected sources.")
+    return `Nothing confirmed in the connected sources. ${left}, so this is not an all-clear.`;
+  return `${told}\n${left}.`;
+}
+
+/** `honestAnswer` without the unconfirmed items: the packet and the sources that did not answer (D127). */
+function reachAnswer(
+  packet: string,
+  sources: readonly SourceStatus[] | undefined,
+  unresolved: boolean,
+  closed: boolean,
 ): string {
   if (closed) {
     const none = "The session ended before the sources were searched, so this is not an all-clear.";
@@ -5102,7 +5160,12 @@ const MAX_PUSHED_ITEMS = 100;
 const READER_POOL_CAP = READER_MAX_ITEMS;
 
 /** What a re-read found (`verifyDelivery`). */
-type CheckOutcome = "confirmed" | "changed" | "gone" | "failed";
+/**
+ * A re-read's outcome. Three ways not to know (D211): "unverifiable" (the source has no fetch tool, or answered null
+ * and does not report gone: its items are delivered as held, D126), "flaked" (the call failed with a plain error,
+ * worth one retry) and "failed" (anything else: a timeout, a 429, a guard's skip, our gate).
+ */
+type CheckOutcome = "confirmed" | "changed" | "gone" | "failed" | "flaked" | "unverifiable";
 /** Re-reads a session keeps (`Session.checks`), and how long one is reused before an item is read again (ms). */
 const MAX_CHECKS = 64;
 const CHECK_REUSE_MS = 30_000;
