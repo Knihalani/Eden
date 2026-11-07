@@ -1317,6 +1317,20 @@ export class ContextPartner {
    * finding (the agent's informed choice). A finding is data in the usual envelope; what the integration does with it
    * is its own. With the flag off, every call proceeds and no state is touched. Never throws: a failure proceeds.
    */
+  /**
+   * What this process holds for a tenant (D326, `/v1/usage`): users with a cache (frozen ones counted apart, D325),
+   * their items, and users the sync keeps current. Counts only, no ids or content.
+   */
+  tenantUsage(tenantId: string): { users: number; frozenUsers: number; items: number; syncedUsers: number } {
+    const c = this.deps.cache.tenantStats(tenantId);
+    return {
+      users: c.users,
+      frozenUsers: c.frozen,
+      items: c.items,
+      syncedUsers: this.sync?.tenantUsers(tenantId) ?? 0,
+    };
+  }
+
   async checkAction(event: AgentEvent): Promise<ActionCheck> {
     const t0 = performance.now();
     const thawing = this.deps.cache.ready(event); // D325, as in `observe`.

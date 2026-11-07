@@ -400,6 +400,13 @@ export class SyncManager {
    * user backfill and sweeps, as each source's budget allows. Never runs twice at once, never throws.
    * Returns the listing calls it made.
    */
+  /** Users of the tenant this sync keeps current (D326). */
+  tenantUsers(tenantId: string): number {
+    let n = 0;
+    for (const u of this.users.values()) if (u.scope.tenantId === tenantId) n++;
+    return n;
+  }
+
   async tick(): Promise<number> {
     if (this.ticking) return 0;
     this.ticking = true;

@@ -1590,6 +1590,23 @@ export class ItemCache {
     return n;
   }
 
+  /** A tenant's users held, and how many of them are frozen (D325, D326: the usage report): a walk of every user. */
+  tenantStats(tenantId: string): { users: number; frozen: number; items: number } {
+    const prefix = `${tenantId}/`;
+    let users = 0;
+    let frozen = 0;
+    let items = 0;
+    for (const [key, x] of this.users) {
+      if (!key.startsWith(prefix)) continue;
+      users++;
+      if (x instanceof FrozenUser) {
+        frozen++;
+        items += x.size;
+      } else items += x.items.size;
+    }
+    return { users, frozen, items };
+  }
+
   /** Sliced jobs queued or running (D325; `pump`): 0 once the timer's freezes and every waited-on thaw are done. */
   get slicedPending(): number {
     return this.urgent.length + this.background.length;

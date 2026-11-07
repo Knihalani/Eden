@@ -3,7 +3,7 @@
  * thaw costs, and how long a cold-start storm takes (every user arriving at once).
  *
  * The shipped wiring as `ingest.bench.ts`'s `shipped` mode builds it (a `ContextPartner` on `DEFAULT_CONFIG`, no model,
- * an in-memory `SourceMap`), each user with their own in-memory connectors (mail, calendar, docs: the items split
+ * a `SourceMap` file in a temp directory, as the servers keep one), each user with their own in-memory connectors (mail, calendar, docs: the items split
  * three ways, listed newest first, instantly), synced by the partner's own `SyncManager`. Only capacity settings are
  * raised (`syncMaxItems`, users per tenant, calls per minute). The cache's timer is off; the bench runs its ticks.
  *
@@ -15,9 +15,14 @@
  * 3. thaw: each user's first read (a cache search) after the freeze, timed: p50, p99, max ms a user.
  * 4. events: one `observe` per user (a fresh session each) on the thawed caches, timed (the fast path, `waitMs` 0).
  *
- * Run: `bun packages/engine/bench/users.bench.ts [users=1000] [itemsPerUser=500] [--world] [--no-freeze]`.
+ * Run: `bun packages/engine/bench/users.bench.ts [users=1000] [itemsPerUser=500] [--world] [--no-freeze] [--waves=K]`.
+ * `--waves=K`: phase 1 brings the users in K waves, earlier ones frozen (unless `--no-freeze`) before the next: its
+ * memory line is then a steady state with 1/K of the users active; RSS there is what sizes a machine.
  * `--world` takes item text from the sim world (as `ingest.bench.ts --world`). No model, no network.
  */
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ContextItem, Scope } from "@eden/protocol";
 import { SourceMap } from "@eden/graph";
 import { Budget, DEFAULT_LIMITS } from "@eden/llm";
@@ -29,6 +34,7 @@ import { buildWorkload } from "./workload";
 
 const WORLD = process.argv.includes("--world");
 const NO_FREEZE = process.argv.includes("--no-freeze");
+const WAVES = Number(process.argv.find((a) => a.startsWith("--waves="))?.slice(8) ?? 1);
 const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const USERS = Number(args[0] ?? 1_000);
 const PER_USER = Number(args[1] ?? 500);
@@ -55,10 +61,14 @@ class ListSource implements Source {
   }
 }
 
+/**
+ * Memory after a full GC: the JS heap plus what it holds outside itself (`external`: typed arrays' stores, which are
+ * most of an index and every packed text, and which `heapUsed` leaves out), and RSS.
+ */
 const mem = () => {
   Bun.gc(true);
   const m = process.memoryUsage();
-  return { heap: m.heapUsed, rss: m.rss };
+  return { heap: m.heapUsed + m.external, rss: m.rss };
 };
 
 async function pool(): Promise<ContextItem[]> {
@@ -117,7 +127,8 @@ const cache = new ItemCache({ maxUsersPerTenant: USERS + 1, maxSyncedPerUser: Ma
 cache.close(); // The bench runs the expiry ticks itself.
 const partner = new ContextPartner({
   sources: async (scope) => byUser.get(scope.userId)!,
-  sourceMap: new SourceMap(),
+  // A file, as the servers open (in memory, its pages would count in RSS as user state; a file's page cache is bounded).
+  sourceMap: new SourceMap(join(mkdtempSync(join(tmpdir(), "eden-users-")), "source-map.db")),
   cache,
   budget: new Budget(DEFAULT_LIMITS),
   model: null,
@@ -128,14 +139,20 @@ const sync = partner.sync!;
 const synced = () => users.reduce((s, { scope }) => s + cache.syncedCount(scope), 0);
 const n = USERS * PER_USER;
 
-// 1. Backfill: every user at once.
+// 1. Backfill: every user at once, or (`--waves=K`) K waves one after another, each earlier wave left idle (and,
+// with freezing, frozen by two expiry ticks) before the next arrives: a steady state where 1/K of the users are active.
 const cpu0 = process.cpuUsage();
 const t0 = performance.now();
-for (const { scope } of users) sync.track(scope, clock);
-for (let i = 0; synced() < n; i++) {
-  if (i > 100_000) throw new Error(`the sync stopped at ${synced()} of ${n}`);
-  clock += 1_000; // The sync's per-source budget refills on the clock (a burst of a few pages, then 1e7 a minute).
-  await sync.tick();
+for (let w = 0; w < WAVES; w++) {
+  if (w > 0 && !NO_FREEZE) for (let t = 0; t < 2; t++) cache.expireIdle(clock);
+  const wave = users.slice(Math.floor((w * USERS) / WAVES), Math.floor(((w + 1) * USERS) / WAVES));
+  for (const { scope } of wave) sync.track(scope, clock);
+  const target = Math.floor(((w + 1) * USERS) / WAVES) * PER_USER;
+  for (let i = 0; synced() < target; i++) {
+    if (i > 100_000) throw new Error(`the sync stopped at ${synced()} of ${target}`);
+    clock += 1_000; // The sync's per-source budget refills on the clock (a burst of a few pages, then 1e7 a minute).
+    await sync.tick();
+  }
 }
 const stormMs = performance.now() - t0;
 const cpu = process.cpuUsage(cpu0);
@@ -237,7 +254,8 @@ console.log(
     `${f((cpu.user + cpu.system) / n, 1)} µs CPU/item, ${f(USERS / (stormMs / 1000), 1)} users/s`,
 );
 console.log(
-  `synced, live: ${f(live.heapMB)} MB heap/user (${f((live.heapMB * MB) / PER_USER, 0)} B/item), ` +
+  `${WAVES > 1 ? `after ${WAVES} waves (${NO_FREEZE ? "none frozen" : "earlier waves frozen"})` : "synced, live"}: ` +
+    `${f(live.heapMB)} MB heap/user (${f((live.heapMB * MB) / PER_USER, 0)} B/item), ` +
     `${f(live.rssMB)} MB RSS/user`,
 );
 if (!NO_FREEZE) {
@@ -263,6 +281,7 @@ console.log(`first event per user (fast path): p50 ${f(pct(events, 0.5))} ms, p9
 console.log(
   JSON.stringify({
     users: USERS,
+    waves: WAVES,
     perUser: PER_USER,
     world: WORLD,
     stormS: stormMs / 1000,

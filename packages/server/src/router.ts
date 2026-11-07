@@ -40,6 +40,8 @@ import { fileURLToPath } from "node:url";
 import { SourceMap } from "@eden/graph";
 import { fnv1a, mix32 } from "@eden/primitives";
 import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, MAX_PROCESSES, type ServerConfig } from "./config";
+import { usdPerTenantDayFromEnv } from "./models";
+import { isLeaseRequest, SpendLedger } from "./spend-lease";
 
 /** The child a tenant/user is served by: stable across restarts and router instances, spread by a mixed FNV-1a. */
 export function childFor(tenant: string, userId: string, children: number): number {
@@ -173,7 +175,7 @@ const MAX_RESTART_MS = 30_000;
 export interface RouterOptions {
   /** The router's own configuration (`loadConfig`): port, host, keys, dev, body cap, source-map base, processes. */
   config: Pick<ServerConfig, "port" | "host" | "keys" | "dev" | "sourceMapPath" | "processes"> &
-    Partial<Pick<ServerConfig, "maxBodyBytes">>;
+    Partial<Pick<ServerConfig, "maxBodyBytes" | "spendLeases">>;
   /** The environment each child starts from (default `process.env`); the router sets its own variables over it. */
   env?: Record<string, string | undefined>;
   /** The child entry (default `main.ts` beside this file). */
@@ -228,6 +230,9 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   const tooLarge = `body must be at most ${maxBodyBytes.toLocaleString("en-US")} bytes`;
   let stopping = false;
 
+  // Trial (D327, EDEN_SPEND_LEASES=1): one spend ledger per tenant and day, leased to the children.
+  const ledger = config.spendLeases === true ? new SpendLedger(usdPerTenantDayFromEnv(env), n) : null;
+
   const children: Child[] = Array.from({ length: n }, (_, index) => ({
     index,
     pid: 0,
@@ -250,6 +255,8 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         HOST: "127.0.0.1",
         EDEN_ROUTER_CHILD: `${c.index}/${n}`,
         EDEN_SOURCE_MAP: childSourceMapPath(config.sourceMapPath, c.index),
+        // The children lease their spend from this router's ledger exactly when it keeps one (D327).
+        EDEN_SPEND_LEASES: ledger ? "1" : "0",
       });
       let ready = false;
       let timedOut = false;
@@ -261,6 +268,15 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         stdout: options.onOutput ? "pipe" : "inherit",
         stderr: "inherit",
         ipc(message) {
+          if (ledger && isLeaseRequest(message)) {
+            // A child's spend lease (D327): granted from the tenant's one ledger, answered on the same channel.
+            try {
+              proc.send(ledger.lease(message.edenLease));
+            } catch {
+              // The child is exiting: it asks again after its restart.
+            }
+            return;
+          }
           const port = (message as { edenListening?: unknown } | null)?.edenListening;
           if (ready || typeof port !== "number") return;
           ready = true;
@@ -376,6 +392,31 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     return mine;
   };
 
+  // Usage (D326) is the tenant's across every child: their numbers summed (`processesDown` counts those that did not
+  // answer), the owner's answer when it is a 4xx (a bad body), 503 when no child answered.
+  const usageEverywhere = async (owner: Child, req: Request, url: URL, body: Uint8Array): Promise<Response> => {
+    const answers = await Promise.all(children.map((c) => forward(c, req, url, body)));
+    const mine = answers[owner.index]!;
+    if (mine.status >= 400 && mine.status < 500) {
+      for (const r of answers) if (r !== mine) void r.arrayBuffer().catch(() => {});
+      return mine;
+    }
+    const parts: Record<string, unknown>[] = [];
+    for (const r of answers) {
+      if (r.status < 200 || r.status >= 300) {
+        void r.arrayBuffer().catch(() => {});
+        continue;
+      }
+      try {
+        parts.push((await r.json()) as Record<string, unknown>);
+      } catch {
+        // A child that died mid-answer is left out, as a down one.
+      }
+    }
+    if (parts.length === 0) return fail(503, UNAVAILABLE);
+    return Response.json({ ...sumUsage(parts), processesDown: n - parts.length });
+  };
+
   // The router's own port can be taken (EADDRINUSE) after every child started: stop them before failing, as for a
   // child that could not start, so a failed start leaves no process behind.
   let server: ReturnType<typeof Bun.serve>;
@@ -424,12 +465,30 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         }
         const owner = children[childFor(tenant, userOf(body), n)]!;
         if (url.pathname === "/v1/forget") return forgetEverywhere(owner, req, url, body);
+        if (url.pathname === "/v1/usage") return usageEverywhere(owner, req, url, body);
         return forward(owner, req, url, body);
       },
       // Nothing above should throw; if it does, the caller gets the server's 503, never Bun's default 500.
       error: () => fail(503, UNAVAILABLE),
     });
   }
+}
+
+/**
+ * Children's `/v1/usage` answers summed (D326): every number added (nested records too, such as `requests` by route),
+ * every other field taken from the first answer (tenant, day).
+ */
+export function sumUsage(parts: Record<string, unknown>[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const p of parts) {
+    for (const [k, v] of Object.entries(p)) {
+      if (typeof v === "number") out[k] = ((out[k] as number | undefined) ?? 0) + v;
+      else if (v && typeof v === "object" && !Array.isArray(v)) {
+        out[k] = sumUsage([(out[k] as Record<string, unknown> | undefined) ?? {}, v as Record<string, unknown>]);
+      } else if (!(k in out)) out[k] = v;
+    }
+  }
+  return out;
 }
 
 /** `main.ts` with EDEN_PROCESSES above 1: starts the router, stops the children on SIGINT/SIGTERM. */

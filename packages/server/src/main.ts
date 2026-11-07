@@ -6,11 +6,12 @@
 import { warmGate } from "@eden/redact";
 import { loadConfig, type ServerConfig } from "./config";
 import { sourcesOrExit } from "./connectors";
-import { buildPartner, startGatePool } from "./build";
+import { buildPartner, startGatePool, tenantSpendFor } from "./build";
 import { engineConfig } from "./engine-config";
 import { createHandler } from "./http";
 import { modelRolesFromEnv } from "./models";
 import { rehomeSourceMaps, runRouter } from "./router";
+import { isLeaseGrant, LeasedSpend } from "./spend-lease";
 
 const started = performance.now();
 const config = loadConfig();
@@ -42,7 +43,14 @@ async function serve(config: ServerConfig): Promise<void> {
   const sources = sourcesOrExit();
   const gatePool = await startGatePool(config.gateWorkers);
   const models = modelRolesFromEnv();
+  const child = config.child;
+  // The cap every model role shares (D163): divided by N in a router child, or leased from the router (D327, trial).
+  const tenants =
+    child && config.spendLeases
+      ? leasedSpend(models.usdPerTenantDay, child.count)
+      : tenantSpendFor(models.usdPerTenantDay, child?.count ?? 1);
   const partner = buildPartner({
+    tenants,
     gatePool,
     sources: sources.resolver,
     sourceMapPath: config.sourceMapPath,
@@ -72,11 +80,10 @@ async function serve(config: ServerConfig): Promise<void> {
     hostname: config.host,
     // D100: Bun's default is 128 MB; the handler's content-length check cannot see chunked bodies, this cap can.
     maxRequestBodySize: config.maxBodyBytes,
-    fetch: createHandler(partner, config, sources.userSources),
+    fetch: createHandler(partner, config, sources.userSources, tenants),
   });
   const startupMs = Math.round(performance.now() - started);
   const keys = Object.keys(engine);
-  const child = config.child;
   console.log(
     `eden partner listening on http://${server.hostname}:${server.port}${config.dev ? " (dev, no auth)" : ""}` +
       ` (startup ${startupMs} ms; model roles ${process.env.OPENROUTER_API_KEY ? "on" : "off (no OPENROUTER_API_KEY)"}` +
@@ -84,8 +91,10 @@ async function serve(config: ServerConfig): Promise<void> {
       `${keys.length > 0 ? `; engine settings: ${keys.join(", ")}` : ""}` +
       (child
         ? `; router child ${child.index} of ${child.count}, per-tenant caps divided by ${child.count}:` +
-          ` $${round(models.usdPerTenantDay / child.count)}/day, ${round(config.tenantRatePerSec)} rps,` +
-          ` burst ${round(config.tenantBurst)}`
+          (config.spendLeases
+            ? ` model spend leased from the router (D327),`
+            : ` $${round(models.usdPerTenantDay / child.count)}/day,`) +
+          ` ${round(config.tenantRatePerSec)} rps, burst ${round(config.tenantBurst)}`
         : "") +
       ")",
   );
@@ -95,6 +104,18 @@ async function serve(config: ServerConfig): Promise<void> {
     // The router is gone (killed, crashed): nothing can reach this child any more, so it must not outlive it.
     process.on("disconnect", () => process.exit(0));
   }
+}
+
+/** A child's spend cap leased from the router over IPC (D327): requests go up, grants come back. */
+function leasedSpend(usdPerTenantDay: number, processes: number): LeasedSpend {
+  const spend = new LeasedSpend(usdPerTenantDay, processes, (r) => {
+    if (!process.send) throw new Error("no IPC channel");
+    process.send(r);
+  });
+  process.on("message", (m: unknown) => {
+    if (isLeaseGrant(m)) spend.grant(m.edenGrant);
+  });
+  return spend;
 }
 
 function round(n: number): number {
