@@ -100,7 +100,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import type { World } from "../world";
-import { connectorHeader, connectorOptions, pushNotifier, sourceFields } from "./connector-options";
+import { connectorHeader, connectorOptions, pushNotifier, recapNotice, sourceFields } from "./connector-options";
 import {
   armPromptsHash,
   ASK_DESCRIPTION,
@@ -794,6 +794,7 @@ async function runWorld(
         if (it.meta) it.meta = shiftMeta(it.meta, moved.moves);
         it.updatedAt = clock;
         touched.add(it.sourceId);
+        movedIds.add(it.id);
         day.changed(it.id, moved.moves);
       }
       for (const src of sources) if (touched.has(src.id)) src.reindex();
@@ -802,16 +803,7 @@ async function runWorld(
         // only `sourceItems`): no signal, so no other copy of the source is put in doubt. Before A3 (D272) this sent
         // a bare signal in every mode, so from each day's first recap on every push re-read its candidates from that
         // source on the agent's critical path (about 650 ms a task in CL5-CL8's long payload runs).
-        if (CONNECTORS.push === "payload") {
-          for (const src of sources) {
-            if (!touched.has(src.id)) continue;
-            await partner.sourceItems(
-              scope,
-              src.id,
-              src.listAll().filter((x) => movedIds.has(x.id)),
-            );
-          }
-        } else for (const id of touched) partner.sourceChanged(scope, id);
+        await recapNotice(partner, scope, sources, movedIds, CONNECTORS.push);
         // The change lands two hours before the recap: what the notice started in the background (`revisionNotice`'s
         // poll; nothing when that trial is off) has settled by then. Bounded, so a hung poll cannot stall the stream.
         let timer: ReturnType<typeof setTimeout> | undefined;

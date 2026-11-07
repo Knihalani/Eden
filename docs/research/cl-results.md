@@ -28,8 +28,8 @@ ledgers: **Anthropic-direct lab figures**, not the OpenRouter route the servers 
   the cache never served, while the tools agent's longer prompt was cached (CL8, D260). Re-priced as if cached (a
   counterfactual), the short mix is $0.362 vs $0.370. Real agent prompts are far longer than the cache minimum.
   **Superseded by A3 (D271, [a3-cost-speed.md](a3-cost-speed.md)):** with a cached prompt in every arm (train,
-  `--tenant-prompt`) the agent alone also changes, and Eden is +$0.060/1k one request at a time and +$0.074/1k over
-  days, 0.96 s and 0.44 s faster; the long payload runs above also carried ~650 ms of harness-caused re-reads (D272).
+  `--tenant-prompt`) the agent alone also changes, and Eden is +$0.060/1k one request at a time and +$0.080/1k over
+  days, 0.96 s and 0.42 s faster; the long payload runs above also carried ~650 ms of harness-caused re-reads (D272).
 
 ## What was tried, kept and deleted
 

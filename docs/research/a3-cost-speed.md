@@ -16,8 +16,8 @@ servers ship. Decisions D271–D273.
   set of ~550 tokens of a tenant's house rules added to every arm (`--tenant-prompt`), on Pi with payload notices:
   - **one request at a time:** +$0.060 per 1,000 tasks on the 1:1:8 mix (+0.042..+0.078), **0.96 s faster**
     (−1.16..−0.77), hidden facts raised 61% against 10%;
-  - **a user over 8 days:** +$0.074 per 1,000 tasks (+0.059..+0.087), **0.44 s faster** (−0.59..−0.29), hidden facts
-    14 of 23 against 1 of 23.
+  - **a user over 8 days:** +$0.080 per 1,000 tasks (+0.065..+0.095), **0.42 s faster** (−0.59..−0.26), hidden facts
+    15 of 23 against 1 of 23.
   - The extra dollars are almost all **the packet's tokens written to the agent's prompt cache** (about 370 more tokens
     written a task than the agent alone; Eden's own calls cost $0 a task). The house rules also made the agent alone
     terse and less inclined to search (0.76 tool calls a task over days, from 1.6–2.0 in CL8), which is why CL's "Eden is
@@ -25,7 +25,7 @@ servers ship. Decisions D271–D273.
 - **A lab bug made Eden look 650 ms slower than it is over days.** The long-horizon harness signalled a change at each
   day's recap even under `--push payload`; every later packet then re-read its mail items before going out. Fixed
   (the notice now carries its items, as the client sends it): Eden's time on the agent's path over days fell from
-  **646 ms to 7.5 ms** a task, and wall time against the agent alone went from +0.25 s to −0.44 s (D272). The CL5–CL8
+  **646 ms to 7.4 ms** a task, and wall time against the agent alone went from +0.25 s to −0.42 s (D272). The CL5–CL8
   long payload runs (and heldout16's long run) carried this overhead.
 - **No cheap packet cut is left.** Four ways to send fewer packet bytes were screened at $0 (only anchored packets,
   only anchored items, a constraint-like item among the five sent, filters on ask items): each either cut almost
@@ -45,13 +45,13 @@ reads 0.1×).
 
 | # | Driver | One request (short) | Over days (long) | Lever |
 | --- | --- | --- | --- | --- |
-| 1 | Packet tokens written to the agent's cache | Eden writes 865–965 tokens a task vs 318–357 (+$0.07/1k) | 614–674 vs 262–310 (+$0.044/1k) | none without recall loss (D258, D273) |
-| 2 | Earlier packets read back on later requests | +$0.0 (1.2–1.5 requests a task) | reads 5,750 vs 4,400 tokens (+$0.014/1k) | none: dropping them breaks the cache prefix |
-| 3 | Pi's uncached ~500-token prefix (lab only) | was +$0.08–0.12/1k in writes (CL8) | n/a (history is cached) | lab: `--tenant-prompt` (D271) |
-| 4 | Eden on the agent's path over days (lab only) | 10 ms | 646 ms → 7.5 ms | lab: payload recap notice (D272) |
-| 5 | `ask_context` turns | 0.33–0.70 asks a task, 816–964 B each | 0.04–0.06 | D257: discouraging asks lost hidden facts |
+| 1 | Packet tokens written to the agent's cache | Eden writes 865–965 tokens a task vs 318–357 (+$0.07/1k) | 629–651 vs 262–310 (+$0.045/1k) | none without recall loss (D258, D273) |
+| 2 | Earlier packets read back on later requests | −$0.01 (Eden makes fewer requests) | reads 5,596 vs 4,396 tokens a neutral task (+$0.012/1k) | none: dropping them breaks the cache prefix |
+| 3 | Pi's uncached ~500-token prefix (lab only) | was +$0.07–0.12/1k in writes (CL8's `short-pay-cache.txt`) | n/a (history is cached) | lab: `--tenant-prompt` (D271) |
+| 4 | Eden on the agent's path over days (lab only) | 10 ms | 646 ms → 7.4 ms | lab: payload recap notice (D272) |
+| 5 | `ask_context` turns | 0.33–0.70 asks a task, 816–964 B each | 0.04–0.05 | D257: discouraging asks lost hidden facts |
 | 6 | Eden's own model calls on the path | 0 | 0 | done (D237) |
-| 7 | Cards and intent in the background | $0.013–0.019/1k (in-run, both seeds) | same | D244 |
+| 7 | Cards and intent in the background | $0.018/1k (in-run, both seeds) | $0.018/1k | D244 |
 | 8 | Server and SDK overhead | ask p50 5 ms, p99 30 ms; observe p99 12 ms | same | none needed |
 
 Output tokens are the largest single share of every arm's bill ($0.13–0.16/1k short), and Eden lowers them (fewer
@@ -84,8 +84,10 @@ It is an assumed tenant prompt: a different prompt moves both arms differently.
 ## 3. Pi with the tenant prompt in every arm
 
 `packages/sim/lab/a3/run.sh` (CL8's with `--tenant-prompt`), tools and eden, payload notices, direct market
-profile, time scale 1. Ledger runs `a3-short-pay-41/42` ($0.268), `a3-long-pay-41/42` ($0.133), `a3-long2-pay-41/42`
-($0.075, eden only, after the D272 harness fix; paired with the earlier run's tools arm, which the fix does not touch).
+profile, time scale 1. Ledger runs `a3-short-pay-41/42` ($0.268), `a3-long-pay-41/42` ($0.133), `a3-long3-pay-41/42`
+($0.077, eden only, after the D272 harness fix; paired with the earlier run's tools arm, which the fix does not touch).
+`a3-long2-pay-41/42` ($0.075) are void: the first version of the fix sent an empty notice (the review found it), so
+they measured no recap notice at all (Eden's path 7.5 ms, $/1k +0.074, hidden 14/23).
 
 **Short** (`--limit 12`, hidden, control, neutral; n = 144 a kind; `short-pay-arms.txt`, `short-pay-cache.txt`):
 
@@ -103,10 +105,12 @@ profile, time scale 1. Ledger runs `a3-short-pay-41/42` ($0.268), `a3-long-pay-4
 
 | | tools | eden (fixed harness) | eden − tools |
 | --- | --- | --- | --- |
-| hidden raised | 1/23 | 14/23 | +56.5 points (+34.8..+78.3) |
-| $/1k mix | 0.166 | 0.240 | **+0.074 (+0.059..+0.087)** |
-| wall mean, mix | 1.75 s | 1.31 s | **−0.44 s (−0.59..−0.29)** |
-| Eden on the path | 0 | 7.5 ms | |
+| hidden raised | 1/23 | 15/23 | +60.9 points (+39.1..+82.6) |
+| control false concern (not regraded) | 0/23 | 1/23 | +4.3 (+0.0..+13.0) |
+| $/1k mix | 0.166 | 0.246 | **+0.080 (+0.065..+0.095)** |
+| wall mean, mix | 1.75 s | 1.33 s | **−0.42 s (−0.59..−0.26)** |
+| Eden on the path | 0 | 7.4 ms | |
+| tokens written a task (neutral) | 262 | 629 | |
 | agent tool calls / Eden connector calls a task | 0.76 / 0 | 0.05 / 0.16 | |
 
 Before the harness fix (`long-pay-before-fix-arms.txt`): Eden on the path 646 ms (observe 577–809 ms), 2.13 connector
@@ -124,7 +128,8 @@ unchanged: an integration that forwards notices with their items (D210's documen
 forwards bare signals pays it on every later delivery from that source, as D245 describes.
 
 Every long payload figure before this (CL5's `--days 8`, CL6–CL8's long runs, RealUse-3's heldout16 long run) carries
-the overhead: Eden's path there was 584–1,108 ms, not ~10 ms.
+the overhead: CL8's long payload run put Eden's path at 648–694 ms a task (`packages/sim/lab/cl8/long-pay-arms.txt`),
+not ~10 ms.
 
 ## 5. Levers screened at $0 and rejected (D273)
 
@@ -138,10 +143,10 @@ removes noise removes them too:
   (`askDedup` says in full what the packet no longer shows); hidden 305 → 307.
 - **A constraint-like item among the five sent** (not only in the 15-item pool): neutral packets 324 → 278, bytes
   −16%, ask answers +12%, push-delivered hidden 272 → 267. Projected saving on Pi's long horizon about 40 tokens a task
-  (≤ $0.006/1k of the +$0.074), for five planted facts moved from the packet to the ask; the lab's planted facts are
+  (≤ $0.006/1k of the +$0.080), for five planted facts moved from the packet to the ask; the lab's planted facts are
   all constraint-worded, so a real unworded fact would be lost more often. Not run live.
-- **Filters on ask-answer items** (entity, probe, two terms or a relative score floor 0.2–0.5): each keeps 219–233 of
-  the 303 planted items the ask cited on hidden tasks (−23 to −28%).
+- **Filters on ask-answer items** (entity, probe, two terms or a relative score floor 0.2–0.5): each keeps 219–230 of
+  the 303 planted items the ask cited on hidden tasks (−24 to −28%).
 
 The switch for the first two (`pushCandidatesAnchor`) was built and deleted with its code (D112); the third was an
 uncommitted screening hack.
@@ -153,8 +158,8 @@ the lead's wording is what kept look-alikes from being stated (D236); not worth 
 
 `bun packages/sim/src/perf-cli.ts steady [--synced]` (300 simulated users at real pacing and REALISTIC source
 latency, 90 s, no model key; `packages/sim/lab/a3/perf-steady.jsonl`). `--synced` (new) starts the server with
-`--sync on` and backfills the users before the measured run, as the shipped default serves them; without it the
-scenario never syncs and every ask is a live fan-out:
+`--sync on` and backfills the users before the measured run, as the shipped default serves them (296 of the 300
+were tracked and warmed; 4 were not), without it the scenario never syncs and every ask is a live fan-out:
 
 | | sync off (the old scenario) | synced (shipped shape) |
 | --- | --- | --- |
@@ -162,7 +167,7 @@ scenario never syncs and every ask is a live fan-out:
 | observe p50 / p99 | 0.86 / 6.6 ms | 0.86 / 12.1 ms |
 | observe (user message) p50 / p99 | 1.3 / 8.0 ms | 1.8 / 14.9 ms |
 | time to context p50 / p99 | 1,725 / 34,891 ms | 3.8 / 39.9 ms |
-| source calls in the measured run | 10,057 | 0 (backfill: 5,356 before it) |
+| lookups' source calls in the measured run (the sync's own polls not counted) | 10,068 | 0 (backfill: 5,356 before it) |
 
 Nothing here is on the agent's critical path at a size worth a lever; the synced run's observe p99 rise (6.6 → 12.1
 ms) is the sync's background work sharing the event loop.
@@ -193,8 +198,9 @@ its re-reads across Hermes's 1.9 model calls a task, the mechanism measured on P
 | cache probes (6) | 0.002 |
 | a3-short-pay-41, -42 | 0.268 |
 | a3-long-pay-41, -42 | 0.133 |
-| a3-long2-pay-41, -42 | 0.075 |
-| **Total** | **0.477** of $2 |
+| a3-long2-pay-41, -42 (void, empty notice) | 0.075 |
+| a3-long3-pay-41, -42 | 0.077 |
+| **Total** | **0.554** of $2 |
 
 ## 10. Reproduce
 
@@ -204,7 +210,7 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cache-probe.ts --suite train1
   --spend-ledger .local/a3/ledger.jsonl --spend-cap 2 --run-label a3-cache-probe
 L=packages/sim/lab/a3/run.sh
 $L a3-short-pay-41 payload tools,eden --seeds 41 --variants hidden,control,neutral --limit 12 --budget 0.3   # and 42
-$L a3-long2-pay-41 payload tools,eden --seeds 41 --days 8 --budget 0.25                                       # and 42
+$L a3-long3-pay-41 payload tools,eden --seeds 41 --days 8 --budget 0.25                                       # and 42
 R=.local/a3/runs
 python3 -I packages/sim/lab/cl7/arms.py --arms tools,eden $R/a3-short-pay-41 $R/a3-short-pay-42
 python3 -I packages/sim/lab/cl8/cache.py $R/a3-short-pay-41 $R/a3-short-pay-42

@@ -701,8 +701,8 @@ tokens on the wire, under Haiku 5.5's 512-token minimum, so it is never read; th
 adds a fixed ~550-token set of a tenant's house rules (`TENANT_GUIDE` in ab-common.ts) to every arm's system prompt,
 and both arms' prefixes cache. Cost comparisons against the agent alone quote a `--tenant-prompt` run (recipe:
 `packages/sim/lab/a3/run.sh`); the rules also change the agent alone (terser, fewer searches), so say the prompt is
-an assumption. Measured (docs/research/a3-cost-speed.md): short mix +$0.060/1k (+0.042..+0.078), long +$0.074/1k
-(+0.059..+0.087), Eden 0.96 s and 0.44 s faster.
+an assumption. Measured (docs/research/a3-cost-speed.md): short mix +$0.060/1k (+0.042..+0.078), long +$0.080/1k
+(+0.065..+0.095), Eden 0.96 s and 0.42 s faster.
 
 ```bash
 env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cache-probe.ts --suite train1 --seed 41 \

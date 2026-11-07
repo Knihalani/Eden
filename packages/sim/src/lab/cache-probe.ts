@@ -81,7 +81,11 @@ async function send(body: Record<string, unknown>) {
   const req = { ...body, stream: false, max_tokens: 1 };
   meter.reserve(0.001);
   const t0 = performance.now();
-  const r = await post("messages", req);
+  // A refused call is not billed: give its reservation back, so the ledger does not hold it.
+  const r = await post("messages", req).catch((e: unknown) => {
+    meter.release(0.001);
+    throw e;
+  });
   const u = r.usage as Record<string, number>;
   const usage = {
     inputTokens: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
