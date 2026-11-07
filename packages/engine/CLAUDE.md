@@ -193,9 +193,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   trims drop planted items (lean carding leaves most of them uncarded).
 - **No "nothing found" note after the push (D257).** `pushChecked` (D246) told the agent when the push's reading
   flagged nothing; it saved an ask and a model turn, but the agent then skipped the `ask_context` that finds what the
-  push missed (hidden −5.1 points pooled, CL7), so it was deleted with its code. CL4's other path levers (speculation
-  D248, re-reading ahead D249, `askFromPush` D247, a packet closing line D250) were measured and deleted too: an ask's
-  time is its strict re-reads (D211) under signal-only notices, not its search or its reader.
+  push missed (hidden −5.1 points pooled, −9.1..−1.2, about −1.9 of it the note's own; CL7), so it was deleted. CL4's
+  other path levers (speculation D248, re-reading ahead D249, `askFromPush` D247, a packet closing line D250) were
+  measured and deleted too: an ask's time is its strict re-reads (D211) under signal-only notices, not its search or
+  its reader.
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read

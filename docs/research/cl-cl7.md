@@ -11,8 +11,11 @@ regrades used `claude-sonnet-5-5`. **Anthropic-direct lab figures.** **Spent: $2
 - **`pushChecked` is deleted (D257).** When the push's reading found nothing for a request, the trial told the agent
   "Eden read your sources; nothing bears on this". The agent then asked Eden less often, which saved money and time
   where asking is slow, but it also stopped asking in the cases where the push had missed the fact and the ask would
-  have found it. Pooled over all eight paired runs, **hidden facts raised fell 5.1 points (95% −9.1..−1.2)**. D112
-  promotes a trial only without a significant hidden loss.
+  have found it. Pooled over all eight paired runs, **hidden facts raised fell 5.1 points (95% −9.1..−1.2)**, so the
+  trial fails D112's bar (no significant hidden loss). Not all of that is the note: hidden tasks the note never
+  reached drifted −4.2 points between arms that treated them alike (the runs' sampling noise), while tasks that got
+  the note lost 8 of 99 (−8.1 points, not significant alone). The note's own cost is about 2 points of all hidden
+  tasks; it was not shown neutral, and its mechanism (fewer asks) is real.
 - **What it saved.** With change signals (`--push signals`, where each ask re-reads items and takes about 1 s):
   about $0.03 per 1,000 tasks and 0.3–0.5 s a task on the assumed 1:1:8 traffic, both significant, short and long.
   With payload notices (D210's integration default, where the ask is already fast): nothing significant one request
@@ -163,7 +166,9 @@ neutral tasks an arm is not a difference to set against a significant hidden los
 D112: promote if better or neutral at no extra cost, without a significant hidden loss or a concern rise. The note is
 cheaper and faster where the ask is slow (signals) and over a user's days, never dearer, and its concerns did not rise;
 but hidden facts fell significantly, pooled (−5.1, −9.1..−1.2) and in the short signals run alone (−7.3, −13.6..−1.0),
-with a mechanism behind it. **Deleted** with its code and tests (commit `4a9a688e`): `config.ts` and
+so it was not shown neutral. Of the pooled loss, 14 of 22 tasks are ones the note never reached (sampling: exact
+McNemar p ≈ 0.08 for 34 against 20 discordant pairs) and 8 are note tasks (15 against 7, p ≈ 0.13): the note's own
+effect is about −8/429 ≈ −1.9 points of hidden tasks, with a mechanism (fewer asks after a missed reading). **Deleted** with its code and tests (commit `4a9a688e`): `config.ts` and
 `config-check.ts`'s switch, partner.ts's note path (`note`, `dropChecked`, `answeredAll`, `Session.builtRequest`,
 `ReadOpts.outcome`, the fast path's skip), render.ts's `CHECKED_NONE`, `CHECKED_MORE`, `renderNote`, `EDEN_NOTE` and
 `shownText`'s filter, `push-checked.test.ts`; the trials table row is gone. PARTS is unchanged (the switch was never
@@ -171,7 +176,8 @@ in it). A later "nothing found" signal would need a reading that rarely misses (
 D233) or wording that does not discourage the ask.
 
 `bun run eval`: unchanged in every quality metric (precision 0.8276, recall 0.48, falseFireRate 0); `plannedLookups`
-read 122 four times after and 121, 121, 122 before (a counter that varies run to run on the same tree).
+read 122 in every run after; before, this session read 121, 121, 122 and the reviewer 122 twice (a counter that varies
+run to run on the same tree; the 121 readings are this session's only).
 
 ## 5. Found, not fixed: a busy day runs out of reader calls
 
@@ -184,6 +190,8 @@ the per-session reader cap (`DEFAULT_LIMITS`) costs recall on busy days; a per-r
 may suit better. Not changed here (it is the budget's policy, not this trial's); flagged for the combine.
 
 ## 6. Reproduce
+
+On `dd11693cd` (the arm `eden+pushChecked` needs the switch, which this branch deletes):
 
 ```bash
 cat packages/sim/lab/cards/cards-v2.jsonl packages/sim/lab/cards/cards-train.jsonl \
