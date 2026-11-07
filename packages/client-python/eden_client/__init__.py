@@ -139,17 +139,18 @@ class EdenClient:
         session_id: str,
         api_key: Optional[str] = None,
         tenant_id: Optional[str] = None,
-        base_url: str = "http://127.0.0.1:8790",
-        timeout_s: float = 0.8,
+        base_url: Optional[str] = None,
+        timeout_s: Optional[float] = None,
         default_wait_ms: Optional[int] = None,
         on_error: Optional[Callable[[Exception], Any]] = None,
     ) -> None:
-        self._base = base_url.rstrip("/")
+        # None is the default, as `??` reads it in TypeScript: `base_url=os.environ.get(...)` when it is unset.
+        self._base = ("http://127.0.0.1:8790" if base_url is None else base_url).rstrip("/")
         self._key = api_key
         self._tenant = tenant_id
         self._user = user_id
         self._session = session_id
-        self._timeout = timeout_s
+        self._timeout = 0.8 if timeout_s is None else timeout_s
         self._default_wait = DEFAULT_WAIT_MS if default_wait_ms is None else default_wait_ms
         self._on_error = on_error
         bad = [f for f, v in (("tenantId", tenant_id), ("userId", user_id), ("sessionId", session_id))
@@ -234,13 +235,15 @@ class EdenClient:
         """``observe``'s injection plus anything pending, in one list."""
         return ([injection] if injection else []) + self.pending()
 
-    def ask(self, question: str, max_items: Optional[int] = None, timeout_s: float = 8.0) -> Optional[Dict[str, Any]]:
+    def ask(self, question: str, max_items: Optional[int] = None,
+            timeout_s: Optional[float] = None) -> Optional[Dict[str, Any]]:
         """Asks Eden (the ``ask_context`` tool); the answer with citations, or None."""
         body = {**self._who(), "question": question}
         if max_items is not None:
             body["maxItems"] = max_items
-        return self._post("/v1/ask", body, timeout_s, lambda v: isinstance(v, dict) and isinstance(
-            v.get("answer"), str) and isinstance(v.get("citations"), list))
+        return self._post("/v1/ask", body, 8.0 if timeout_s is None else timeout_s,
+                          lambda v: isinstance(v, dict) and isinstance(v.get("answer"), str)
+                          and isinstance(v.get("citations"), list))
 
     def check(self, tool: str, input: Any, timeout_s: Optional[float] = None) -> Dict[str, Any]:
         """The action firewall (a trial on the server); ``proceed`` on any failure."""

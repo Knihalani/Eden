@@ -148,6 +148,19 @@ class FailOpen(unittest.TestCase):
                 s.shutdown()
                 s.server_close()
 
+    def test_none_options_take_the_defaults(self):
+        # `base_url=os.environ.get("EDEN_URL")` is None when unset: the TypeScript client's `??` takes the default
+        # there, where this one threw (base_url) or made observe throw in the agent's loop (timeout_s).
+        stub = Stub(lambda p, b: (200, {"injection": None, "answer": "a", "citations": []}))
+        try:
+            self.assertEqual(EdenClient(user_id="u", session_id="s", base_url=None)._base, "http://127.0.0.1:8790")
+            c = EdenClient(user_id="u", session_id="s", base_url=stub.url, timeout_s=None, default_wait_ms=None)
+            self.assertEqual(c.observe({"kind": "user_message", "text": "hi"}), {"injection": None, "pending": False})
+            self.assertEqual(stub.seen[-1][0], "/v1/events?waitMs=3000")
+            self.assertEqual(c.ask("q", timeout_s=None)["answer"], "a")
+        finally:
+            stub.close()
+
     def test_bad_ids_reported_once_without_the_ids(self):
         errors = []
         EdenClient(user_id="alice+x@y.com", session_id="s", on_error=errors.append)
