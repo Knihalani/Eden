@@ -77,23 +77,9 @@ async function serve(config: ServerConfig): Promise<void> {
     maxRequestBodySize: config.maxBodyBytes,
     fetch: createHandler(partner, config, sources.userSources),
   });
-  const startupMs = Math.round(performance.now() - started);
-  const keys = Object.keys(engine);
-  const child = config.child;
-  console.log(
-    `eden partner listening on http://${server.hostname}:${server.port}${config.dev ? " (dev, no auth)" : ""}` +
-      ` (startup ${startupMs} ms; model roles ${process.env.OPENROUTER_API_KEY ? "on" : "off (no OPENROUTER_API_KEY)"}` +
-      `; sources ${sources.shared} shared${sources.userSources ? " + per user (EDEN_USER_SOURCES_FILE)" : ""}` +
-      `${keys.length > 0 ? `; engine settings: ${keys.join(", ")}` : ""}` +
-      (child
-        ? `; router child ${child.index} of ${child.count}, per-tenant caps divided by ${child.count}:` +
-          ` $${round(models.usdPerTenantDay / child.count)}/day, ${round(config.tenantRatePerSec)} rps,` +
-          ` burst ${round(config.tenantBurst)}`
-        : "") +
-      ")",
-  );
   // Stop on SIGTERM/SIGINT with the source map's last outcome batch written. Without a handler a container's PID 1
   // ignores SIGTERM (`docker stop` waited 10 s, then SIGKILL), and a router child died by the signal, batch unwritten.
+  // Installed before the listening line: whoever waits for that line may signal at once.
   let stopping = false;
   const shutdown = () => {
     if (stopping) return;
@@ -109,6 +95,21 @@ async function serve(config: ServerConfig): Promise<void> {
   };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
+  const startupMs = Math.round(performance.now() - started);
+  const keys = Object.keys(engine);
+  const child = config.child;
+  console.log(
+    `eden partner listening on http://${server.hostname}:${server.port}${config.dev ? " (dev, no auth)" : ""}` +
+      ` (startup ${startupMs} ms; model roles ${process.env.OPENROUTER_API_KEY ? "on" : "off (no OPENROUTER_API_KEY)"}` +
+      `; sources ${sources.shared} shared${sources.userSources ? " + per user (EDEN_USER_SOURCES_FILE)" : ""}` +
+      `${keys.length > 0 ? `; engine settings: ${keys.join(", ")}` : ""}` +
+      (child
+        ? `; router child ${child.index} of ${child.count}, per-tenant caps divided by ${child.count}:` +
+          ` $${round(models.usdPerTenantDay / child.count)}/day, ${round(config.tenantRatePerSec)} rps,` +
+          ` burst ${round(config.tenantBurst)}`
+        : "") +
+      ")",
+  );
   if (child) {
     // The router waits for this port before it routes here; the IPC channel exists only when the router spawned us.
     process.send?.({ edenListening: server.port });
