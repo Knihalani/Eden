@@ -194,6 +194,7 @@ const cli = flags(
         "candidates",
         "ask-diag",
         "pool-dump",
+        "corpus-dump",
         "label",
         "json",
         "rpm",
@@ -486,6 +487,11 @@ const ASK_DIAG = opt("ask-diag", "");
  * and flags (handed, automated sender, `readerGate`'s constraint test), and the planted item's (decoy's) place in it.
  */
 const POOL_DUMP = opt("pool-dump", "");
+/**
+ * `--corpus-dump FILE` (a diagnostic, docs/research/a2-quality.md): per suite world, its items (title, text head) and
+ * its tasks with their planted ids, for offline retrieval screens.
+ */
+const CORPUS_DUMP = opt("corpus-dump", "");
 if (ASK_DIAG) writeFileSync(ASK_DIAG, "");
 /**
  * Each `--ask-diag` row's variant, rank, cached flag and coverage facts (`ask-coverage.ts`), for the run's split of
@@ -638,6 +644,12 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
   const keep = new Set(planted.map((it) => it.id));
   for (const task of tasks) clearSlot(world, task.text, keep);
+  if (CORPUS_DUMP) {
+    // `--corpus-dump` (A2): the world's items as its sources hold them, with the tasks and their planted ids.
+    const items = world.items.map((it) => ({ id: it.id, title: it.title, text: it.text.slice(0, 1_200) }));
+    const asks = tasks.map((t, i) => ({ template: t.template, request: t.text, planted: planted[i]?.id ?? "" }));
+    appendFileSync(CORPUS_DUMP, `${JSON.stringify({ suite, seed, variant, tasks: asks, items })}\n`);
+  }
   const sources = simSources(world, REALISTIC, TIME, seed);
   const returned = new Set<string>();
   let served = 0;

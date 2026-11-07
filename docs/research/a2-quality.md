@@ -38,6 +38,12 @@ only (seeds 41–42); no held-out suite was run.
 - **A stronger agent:** Sonnet 5.5 as the Pi agent on 29 paired tasks raised the same hidden facts as Haiku (11 of 14),
   used the look-alike correctly on the one control its grader flagged, and cost about 30 times as much a task. The
   candidates hold with it; the sample is small.
+- **Bigger redesigns, screened at $0 (section 4):** the facts still missed mostly share no word with the request.
+  A small local embedding model as an extra retriever reaches some of them but more look-alikes (one extra candidate:
+  6–8 more hidden facts, 11–14 more decoys); matching the items' intent requests with the request's names taken out
+  reaches none. Not built. The next step is measurement: a Sonnet-graded, larger train run that can see 3 points.
+- **Connector pricing (section 5):** no A2 lever adds a connector call; one request at a time the default makes none
+  (payload notices), over a user's days about 2.3 a task, $1.03 per 1,000 tasks on Composio and $59.73 on Zapier MCP.
 - **Nothing in the shipped default changed**, so its cost is the CL wave's: the default's short 1:1:8 mix here was
   $0.374 per 1,000 tasks on seed 41 and $0.376 pooled over seeds 41–42 (CL's blind short figure was $0.378 on
   heldout16, another suite: a sanity check, not a pair).
@@ -113,23 +119,63 @@ same 11; control concerns 1/15 (Sonnet) against 0/15 (Haiku), the one being `rai
 the strike was suspended and the date is safe to book (a grader error by reading). Agent cost $0.3586 against $0.0120
 for the same 29 tasks (about 30×), output tokens 19,315 against 14,216.
 
-## 4. Decisions
+## 4. Redesigns from first principles (the parent's ask), screened at $0
+
+Each is a different answer to "the planted fact is not in front of the agent"; payoffs are upper bounds from the
+funnel (384 hidden tasks on train), marked **[EST]** where they are arithmetic, not a run.
+
+| # | Redesign | What it would change | Screen | Payoff seen | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| 1 | **Semantic retrieval**: a small local embedding model ranks the user's items against the request, beside BM25 and intent | reaches facts that share no word with the request (Velmara's "reseller in Poland" against "reselling in the Czech market") | `--corpus-dump` + `embscreen.py`, all-MiniLM-L6-v2 and bge-small-en-v1.5 over every item of the 24 train worlds (CPU, 6 and 11 min) | alone worse than Eden's pool (planted in its top 5: 163 and 159 against 254); as one extra candidate, 6–8 never-surfaced hidden facts and 11–14 decoys | not built: look-alikes are semantically closest by construction, so it brings more decoys than facts; a new model dependency (D22's bar) |
+| 2 | **Intent on the action, not the names**: match the items' model-written requests against the request with its names taken out | a general rule ("compensation after an outage") is not outweighed by the request's rare names | funnel, prototype switch (not committed) | +0 −0 hidden with the anchor check; +1 −1 hidden, +4 −2 decoys with it waived | not built: the stuck facts share no words with the request at all (semantic, as in 1) |
+| 3 | **Re-rank the candidates** (D266) | the 29 facts ranked 6th–15th in the pool | built, live | +11 in the funnel, +9 in packets live, raised −0.6 | deleted |
+| 4 | **An ask that pages past what the agent holds** (D267) | facts the agent asks for after the push | built, live | +17 in the funnel, raised −0.7, +$0.021/1k | deleted |
+| 5 | **Intent written before the request** (cards at sync, not at first sight) | the 16 never-surfaced facts whose requests existed but were not yet held at the request | `--ask-diag` bucket | at most +16 (4.2 points) **[EST]**, at the card cost D244 cut ($0.0088 → about $0.02 a user's cold start, D244's figures) | not built: smaller than 1 and dearer; a sim timing artefact in part (the planted item arrives with the request) |
+| 6 | **Check the agent's answer after it is written** against the user's sources, no model (the action firewall's grounds, D69, on the draft) | the in-packet misses that are real (about 8 of 140 targeted tasks once the grader's errors are taken out) | not screened | at most about 6% of hidden tasks **[EST]**, an extra agent turn whenever it fires | open: the firewall trial (D69, D72) is the vehicle; it needs its blind run first |
+| 7 | **Learn per user which kinds of item the agent uses** | the order of the candidates | not screened: the simulated agents use packets uniformly, so the lab cannot measure it | — | open, needs real traffic |
+
+What the screens say together: the facts Eden misses now are mostly ones that share no words with the request, and
+the cheap ways to reach them (lexical tricks, a small embedding model) reach as many look-alikes as facts. Since the
+agent is the filter (D237), a look-alike costs tokens and a false-concern risk, not a wrong action; even so, none of
+these clears the bar of "more hidden facts raised, no more concerns, no more cost" at the sizes this lab can run.
+
+## 5. Connector pricing (the owner's instruction)
+
+Priced on the plans in `packages/sim/lab/before-after/market.py` (`CONNECTORS`, $ per 1,000 calls), with the arms'
+connector calls a task (`arms.py`'s `conn`: the agent's own source tools plus Eden's request-time calls), on the
+1:1:8 mix. None of A2's levers adds a connector call (the lift moves which pooled items are handed; the ask past held
+items re-reads nothing new: the strict re-reads of D211 are per doubted citation, and none were doubted here).
+
+| arm | tokens $/1k | calls a task | Composio | Unified.to | Arcade.dev | Pipedream | Zapier MCP |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| default, short (seeds 41–42) | 0.376 | 0.00 | 0.38 | 0.38 | 0.38 | 0.38 | 0.38 |
+| default, long (`--days 8`) | 0.335 | 2.30 | 1.03 | 2.06 | 23.36 | 27.96 | 59.73 |
+| lift, long | 0.341 | 2.21 (−0.09, −0.22..+0.03) | 1.00 | 2.00 | 22.46 | 26.89 | 57.41 |
+
+Over a user's days Eden's arm makes about 2.3 calls a task, nearly all background re-reads (A6 found the same and
+handed it to A3 and A5); one request at a time, with payload notices, it makes none.
+
+## 6. Decisions
 
 - **D266** `pushCandidateLift` rejected and deleted.
 - **D267** `askPastShown` rejected and deleted.
 - **D268** `pushCandidateStress` rejected and deleted.
-- **D269** the attribution above, the lab's measurement changes (the candidates report, `--pool-dump`,
-  `--only-misses`, `--conditions`), and the rule that a funnel gain in packet reach of this size is screened live on
-  the tasks it changes (targeted `--templates`) before a full run.
+- **D269** the attribution above, the redesign screens (section 4: semantic retrieval and action-only intent not
+  built), the lab's measurement changes (`onPushPool`, `pushPoolAt`, `--pool-dump`, `--corpus-dump`, `--only-misses`,
+  `--conditions`), and the rule that a funnel gain in packet reach of this size is screened live on the tasks it
+  changes (targeted `--templates`) before a full run.
 - **D270** the Sonnet agent check: candidates hold with a stronger agent on this sample; no engine change.
 
 ## Next most valuable step
 
-The 50 planted items that are in no pool (13% of hidden tasks, shared with the reader setup) are larger than the gap
-these levers chased. Most have intent requests in the replay that were not yet held when the request arrived (the
-card lands one request later) or match under `intentMinCoverage`. A screen of intent coverage at request time
-(cards written at sync, not at first sight) is the next lever; it moves the funnel's pool, which the reader setup and
-the candidates both read.
+Measurement before levers. The live runs here cannot see a 3-point change (each run's interval is about ±6 points),
+and about half of the Haiku grader's in-packet misses are its own errors. A powered, Sonnet-graded hidden benchmark
+on train (the 91 targeted templates over seeds 41–44, Haiku agent, Sonnet grading only the hidden answers, about
+$1.5 **[EST]**) would tell a real 3-point lever from noise; with it, the funnel's +11 for the re-rank (D266) could be
+rejudged in one run. On the product side, the largest remaining loss is the 50 facts in no pool that share no word
+with the request: only a reader of the request's meaning reaches them, which since D237 is the agent itself, through
+`ask_context`; a nudge to ask when the packet does not settle the request's who, what and when (a fixed lead line,
+measured on asks a task and hidden raised) is the cheapest test of that.
 
 ## Reproduce
 
@@ -137,6 +183,9 @@ the candidates both read.
 cat packages/sim/lab/cards/cards-{v2,train,train-4344}.jsonl > .local/a2/cards-all.jsonl
 bun run funnel --json .local/a2/base.json                                         # and --set '{...}' on d096b7ba
 bun packages/sim/src/lab/funnel.ts --jobs 4 -- --pool-dump $PWD/.local/a2/pool.jsonl --packets $PWD/.local/a2/pk.jsonl
+bun packages/sim/src/lab/funnel.ts --jobs 4 -- --corpus-dump $PWD/.local/a2/corpus.jsonl   # then, in a venv:
+python3 packages/sim/lab/a2/embscreen.py .local/a2/corpus.jsonl .local/a2/base.json sentence-transformers/all-MiniLM-L6-v2 \
+  .local/a2/emb.json
 L=packages/sim/lab/a2/run.sh                                                      # the switches: commit d096b7ba
 $L a2-short-pay-41 payload eden,eden~lift,eden~past,eden~both --seeds 41 --variants hidden,control,neutral \
   --limit 12 --budget 0.45                                                        # and 42
