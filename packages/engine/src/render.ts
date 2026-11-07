@@ -149,6 +149,8 @@ export const PLAN_LEAD =
   `${EDEN_NOTE}new in the user's sources since an earlier request in this conversation, and may bear on it; nothing ` +
   "has checked it against that request. If it is about the same person, thing and date and changes what was done or " +
   "planned, tell the user; if not, ignore it and do not mention it. The earlier request:";
+
+/**
  * `askNudge` (D316, on in the default since D317): added after `CANDIDATES_LEAD` when no candidate holds every
  * person, thing and day the request names (`settle.ts`). The opposite of D257's "nothing found" note, which made the
  * agent skip the ask that finds what the push missed: here the agent is told the packet does not pin the request
