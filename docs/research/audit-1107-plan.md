@@ -46,3 +46,4 @@ Later waves start from what wave A finds.
 | A27 | Hermes cost with Eden: plugin context and the prompt cache, cards spend, Eden's connector calls |
 | A28 | Scale part 5: live searches of cut copies and noise cards at 1,000 sources |
 | A29 | The end-of-day blind confirmation on `heldout17` (Pi in a cloud session; Hermes on the coordinator machine) |
+| A30 | Close the first-party token gap heldout17 found (+$0.06–0.09/1k against the agent alone) |
