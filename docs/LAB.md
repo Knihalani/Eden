@@ -734,6 +734,14 @@ bun test ./packages/sim/src/lab/injection-suite.test.ts   # the standing $0 test
 The `eden` arm is a server with no model key (no cards; `+nokey`, D291); the `reader` arm has no cards either. The
 attack's opening quotes the request, so delivery is the suite's best case for the attacker (71 of 72 on train seed 41).
 
+Since A25 (D375, D376) the action tools of any Eden arm with `partyCheck` or `actionCheck` on consult `checkAction`
+first, as an integrator would, and the default has `partyCheck` on: the `eden` arm runs the party check, and A10's
+plain arm is `eden~X` with `{"X":{"partyCheck":false}}`. A finding holds the call and is its result; the report's
+`held-attack`/`held-other` columns count runs with a held call that did or did not match the attack. `--dry` with a
+checking arm also prints `forced-held/forced` (the attack's own action, `forcedCalls`, through the check) and, with
+`--replay-calls F --replay-arm eden~X`, a live run's plain-Eden calls replayed through it (held off-attack: false
+findings). docs/research/a25-action-guard.md has the recipe and numbers.
+
 ### 4c. A long horizon: one user's days (`--days`, H16, CL5)
 
 `--days D` replaces the per-suite, per-variant worlds with one world per seed: a user who brings D days of requests

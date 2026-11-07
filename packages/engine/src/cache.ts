@@ -29,6 +29,7 @@ import type { ListReuse } from "@eden/sources";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
 import { clearDecoded, packItem, repackLike } from "./packed-text";
 import { head, termIds } from "./text";
+import { orgLabel } from "./firewall";
 
 const NO_TERMS = new Uint32Array(0);
 
@@ -173,6 +174,12 @@ class UserCache {
   partied = 0;
   /** The parties' names and first names, lowercased (`isPerson`), computed on demand; reset as the tally changes. */
   personNames: Set<string> | undefined;
+  /**
+   * `partyCheck` (D375): the addresses in the items' party header lines (`PARTY_LINES`), lowercased, and their
+   * domains ("@globex.com"), with how many items carry each (`isCorrespondent`). Built on first use (about 26 ms at
+   * 1,500 items), then kept as items come and go (`tally`); a freeze does not carry it: a thawed user rebuilds it.
+   */
+  addresses: Map<string, number> | undefined;
 }
 
 /**
@@ -239,6 +246,20 @@ const fromUtf8 = new TextDecoder();
 
 /** Header lines naming who takes part in an item: a mail's From, To and Cc, an event's attendees, an owner. */
 const PARTY_LINES = /^(from|to|cc|attendees|owner|organi[sz]er):[^\n]*$/gim;
+/** An email address on a party header line (`isCorrespondent`); bounded repeats. */
+const ADDRESS = /[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,4}/g;
+/** The addresses on an item's party header lines and their domains ("@globex.com"), lowercased, each once. */
+function addressesOf(text: string): Set<string> {
+  const seen = new Set<string>();
+  for (const line of text.slice(0, 4_000).match(PARTY_LINES) ?? []) {
+    for (const m of line.matchAll(ADDRESS)) {
+      const a = m[0].toLowerCase();
+      seen.add(a);
+      seen.add(a.slice(a.indexOf("@")));
+    }
+  }
+  return seen;
+}
 /**
  * The people an item names as taking part: its `meta.people`, and its header lines (a mail's From, To and Cc, an
  * event's attendees, a record's owner), as full names of two or three capitalised words.
@@ -260,6 +281,13 @@ function partiesOf(item: ContextItem): string[] {
 
 /** Counts an item's people in or out of the user's tally (`selfOf`). */
 function tally(u: UserCache, item: ContextItem, by: 1 | -1): void {
+  if (u.addresses !== undefined) {
+    for (const a of addressesOf(item.text)) {
+      const c = (u.addresses.get(a) ?? 0) + by;
+      if (c > 0) u.addresses.set(a, c);
+      else u.addresses.delete(a);
+    }
+  }
   const names = partiesOf(item);
   if (names.length === 0) return;
   u.partied += by;
@@ -1225,6 +1253,31 @@ export class ItemCache {
     const want = name.trim().replace(/\s+/g, " ").toLowerCase();
     for (const [full, n] of u.parties) if (full.toLowerCase() === want) return n;
     return 0;
+  }
+
+  /**
+   * `partyCheck` (D375): whether `address` (an email address) is one of the user's correspondents: on a party header
+   * line (a mail's From, To or Cc, an event's attendees, an owner) of at least one cached item, or at an organisation
+   * whose domain is on such lines of two items or more. An address only an item's body names, at a domain only one
+   * item's headers carry, is not. Case-insensitive. The first call after a change reads every item's header lines.
+   */
+  isCorrespondent(scope: Scope, address: string): boolean {
+    const u = this.peek(scope);
+    if (!u) return false;
+    if (u.addresses === undefined) {
+      const found = new Map<string, number>();
+      for (const e of u.items.values()) {
+        for (const a of addressesOf(e.item.text)) found.set(a, (found.get(a) ?? 0) + 1);
+      }
+      u.addresses = found;
+    }
+    const want = address.trim().toLowerCase();
+    if ((u.addresses.get(want) ?? 0) > 0) return true;
+    // An organisation the user corresponds with: its domain on the header lines of two items or more ("invoices@" a
+    // client whose people write to the user). A free-mail domain names no organisation (`orgLabel`), and one item
+    // alone is not enough: an attacker's own mail puts its domain on one.
+    const domain = want.slice(want.indexOf("@"));
+    return want.includes("@") && orgLabel(domain.slice(1)) !== null && (u.addresses.get(domain) ?? 0) >= 2;
   }
 
   isPerson(scope: Scope, name: string): boolean {

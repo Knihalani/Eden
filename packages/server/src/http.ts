@@ -3,7 +3,7 @@
  *
  *   POST /v1/events    an AgentEvent              → ObserveResult  (?waitMs= to wait for the slow path)
  *   POST /v1/ask       an AskRequest              → AskResponse
- *   POST /v1/check     a tool_call AgentEvent     → ActionCheck   (the action firewall, `actionCheck`)
+ *   POST /v1/check     a tool_call AgentEvent     → ActionCheck   (the party check, D376; the firewall, `actionCheck`)
  *   POST /v1/pending   {tenantId,userId,sessionId} → {injections}
  *   POST /v1/whoami    {tenantId,userId,sessionId?} → {ok}  (checks the key, tenant and ids; changes nothing)
  *   POST /v1/explain   {tenantId,userId,sessionId} → {decisions}: the session's last decisions and why, no content

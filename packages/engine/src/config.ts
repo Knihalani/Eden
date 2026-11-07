@@ -544,6 +544,15 @@ export interface EngineConfig {
    */
   quarantineInstructions: boolean;
   /**
+   * On in the default (D375, D376, A25; part `parties`; `parties.ts`): `checkAction` holds a call that adds a party
+   * (an email address, a sort code, an account number, an IBAN, in any field but amounts, dates, titles, subjects and
+   * descriptions) found only in what Eden's own packets and answers showed this session: not in the user's request,
+   * and no correspondent of the user's (`ItemCache.isCorrespondent`). The finding asks the agent to confirm with the
+   * user; the same call made again proceeds. No model, no source call; the session keeps digests of its packets'
+   * identifiers (`MAX_PACKET_PARTIES`). Independent of `actionCheck`: with this on and that off, only this check runs.
+   */
+  partyCheck: boolean;
+  /**
    * D301 (A9, on in the default; docs/research/a9-ahead.md): plan-conflict proactivity. With the
    * push and the sync on, each session keeps its last `PLAN_REQUESTS` acting requests (those the push ran for); an
    * item the sync then stores (a poll, a notice's payload) that would have been among such a request's candidates
@@ -712,6 +721,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCandidates: 5,
   guardLine: false,
   quarantineInstructions: false,
+  partyCheck: true,
   planConflict: true,
   askNudge: true,
   pushReshow: false,

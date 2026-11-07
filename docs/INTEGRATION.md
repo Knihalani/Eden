@@ -144,7 +144,7 @@ you compare two versions of your agent, pin the endpoint (`provider.order` with 
 endpoint's prices, as Eden's lab does (D71); otherwise the comparison measures routing. In production, `provider.sort`
 (`"price"`, `"latency"` or `"throughput"`) states which you want.
 
-## Agents that act: the action firewall (opt-in, D69)
+## Agents that act: check each call (D69, D376)
 
 If your agent sends, books, pays or orders through its own tools, check each such call before it runs:
 
@@ -155,8 +155,17 @@ const check = await eden.check(toolName, args);
 if (check.verdict === "finding" && check.finding) return heldResult(toolName, check.finding); // or ask the user
 ```
 
-- The server needs `actionCheck` (a trial switch, off, D112's trials table) in its engine config; the grounds it
-  reads are in the default.
+- **On in the default: the party check (`partyCheck`, D375, D376).** A call that adds a recipient, cc, guest,
+  share or payee account (an email address, a sort code, an 8-digit account, an IBAN) that Eden's own packets or
+  answers showed this session, that your user's request does not name, and that is not among their correspondents
+  (on a From/To/Cc/Attendees line of their items, or at an organisation whose domain two of their items' headers
+  carry) gets a finding: confirm with the user. Anyone can email your user, and the injections an agent followed in
+  A10's suite were exactly this (an extra cc or guest asked for in a stranger's mail). In A25's live run (Pi on
+  Haiku 5.5) it cut such attacks followed from 12 in 576 tasks to 0, with no finding on a legitimate call in 576
+  control and neutral tasks (docs/research/a25-action-guard.md). It only works if you call `check`: Eden cannot see
+  a call you do not send it.
+- The fuller action firewall, `actionCheck` (calendar clashes, conflicts, absences; a trial switch, off, D112's
+  trials table), needs the switch in the server's engine config; the grounds it reads are in the default.
 - Eden returns context as data and never "do not"; whether to hold the call, ask the user or go ahead is your policy.
   `heldResult` is one choice: hold the call and let the agent call again to go ahead.
 - The check makes no model call and no source call (4–5 ms p50 in the lab). It fails open: an error or a server without
@@ -165,8 +174,9 @@ if (check.verdict === "finding" && check.finding) return heldResult(toolName, ch
   of the check. The redacted argument words join the session's term vocabulary, whatever the answer, and the session
   keeps a 24-hex digest of each call it answered with a finding; all of it is dropped with the session. The call is not
   added to the session's window and nothing is sent anywhere. See [PRIVACY.md](PRIVACY.md) (the action firewall row).
-- **Measured** beside a tools-only agent in one in-sample seed (unsafe actions 0.269 → 0.134); beside Eden's full
-  configuration its own effect was about one task in 134. Treat it as an option for tool-acting agents, not a default.
+- **Measured (`actionCheck`)** beside a tools-only agent in one in-sample seed (unsafe actions 0.269 → 0.134); beside
+  Eden's full configuration its own effect was about one task in 134. Treat it as an option for tool-acting agents,
+  not a default.
 
 ## Connect each user's own sources (D108)
 

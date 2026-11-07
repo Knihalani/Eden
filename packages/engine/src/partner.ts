@@ -123,7 +123,16 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import { ASK_NUDGE, CANDIDATES_LEAD, citationsOf, PLAN_LEAD, renderPacket, shownText } from "./render";
+import { ASK_NUDGE, CANDIDATES_LEAD, citationsOf, PLAN_LEAD, renderAnswer, renderPacket, shownText } from "./render";
+import {
+  callParties,
+  MAX_PACKET_PARTIES,
+  namesParty,
+  partiesIn,
+  partyFindingText,
+  partyKey,
+  type Party,
+} from "./parties";
 import { quarantineTitle } from "./shield";
 import { safeLine } from "./line";
 import { anchored, anchorsOf, settles, type Anchors } from "./settle";
@@ -306,6 +315,12 @@ interface Session {
    * `MAX_CHECKED`, oldest first). The same call made again is the agent's informed choice, and proceeds.
    */
   checked?: Set<string>;
+  /**
+   * With `partyCheck` (D375): digests (`partyKey`) of the email addresses and account details this session's packets
+   * and answers showed the agent, each with the id of the item that held it ("" when none of the cited items did),
+   * at most `MAX_PACKET_PARTIES` (oldest dropped first). The identifiers themselves are not kept.
+   */
+  packetParties?: Map<string, string>;
   /**
    * `verifyDelivery`: re-reads under way or just made, by item id (`check`): started ahead, beside the reader's call,
    * and taken by the delivery that follows. Bounded (`MAX_CHECKS`); dropped with the session.
@@ -1435,7 +1450,10 @@ export class ContextPartner {
       reason,
       latencyMs: Math.round(performance.now() - t0),
     });
-    if (!this.config.actionCheck || event.kind !== "tool_call") return proceed("off");
+    if ((!this.config.actionCheck && !this.config.partyCheck) || event.kind !== "tool_call") return proceed("off");
+    // The party check alone (the default, D376): a session Eden handed no identifier has nothing to hold, and none is
+    // opened for a call in a session Eden never saw.
+    if (!this.config.actionCheck && !this.sessions.get(sessionKey(event))?.packetParties?.size) return proceed("clear");
     try {
       const s = this.session(event);
       const key = actionKey(event.tool, event.input);
@@ -1443,6 +1461,26 @@ export class ContextPartner {
       // The request the call serves: the session's latest user message or arriving message, as remembered.
       const asked = [...s.window].reverse().find((w) => w.startsWith("user_message: ") || w.startsWith("external: "));
       const request = asked ? asked.slice(asked.indexOf(": ") + 2) : "";
+      if (this.config.partyCheck) {
+        const found = this.partyFinding(s, event, key, request);
+        if (found) {
+          const latencyMs = Math.round(performance.now() - t0);
+          this.trace(s, {
+            sessionId: s.id,
+            turn: s.turn,
+            event: "tool_call",
+            decision: "fast",
+            reason: "action-party",
+            latencyMs,
+            sourceCalls: 0,
+            modelCalls: 0,
+            costUsd: 0,
+            itemIds: found.citations.map((c) => c.itemId),
+          });
+          return { verdict: "finding", finding: found, reason: "party", latencyMs };
+        }
+        if (!this.config.actionCheck) return proceed("clear");
+      }
       // What the call commits to (its days, amounts, names, references), without what the agent wrote in it.
       const call = sanitizeForStore(actionText(event.tool, event.input, { prose: false }));
       // The call first: its time is the one the clash test reads (`requestedSpan` reads the first).
@@ -1561,6 +1599,75 @@ export class ContextPartner {
     } catch {
       return proceed("error");
     }
+  }
+
+  /**
+   * `partyCheck` (D375): a finding when the call adds a party (`callParties`) that this session's packets showed
+   * (`Session.packetParties`), that the request does not name, and that is no correspondent of the user's
+   * (`ItemCache.isCorrespondent`, addresses only: an account number has no header line to be on). Null otherwise.
+   * The call's key is remembered, so the same call made again proceeds.
+   */
+  private partyFinding(s: Session, event: AgentEvent & { kind: "tool_call" }, key: string, request: string) {
+    const shown = s.packetParties;
+    if (!shown || shown.size === 0) return null;
+    const flagged: Party[] = [];
+    const ids = new Set<string>();
+    for (const p of callParties(event.input)) {
+      const from = shown.get(partyKey(p.norm));
+      if (from === undefined) continue;
+      if (namesParty(request, p)) continue;
+      if (p.kind === "address" && this.deps.cache.isCorrespondent(s.scope, p.norm)) continue;
+      flagged.push(p);
+      if (from) ids.add(from);
+    }
+    if (flagged.length === 0) return null;
+    const items = [...ids]
+      .map((id) => this.deps.cache.get(s.scope, id, this.now()))
+      .filter((i): i is ContextItem => i !== null);
+    const citations = this.cited(items);
+    const text = renderAnswer(
+      partyFindingText(
+        event.tool,
+        flagged,
+        citations.map((c) => c.title),
+      ),
+    );
+    const checked = (s.checked ??= new Set());
+    checked.add(key);
+    while (checked.size > MAX_CHECKED) checked.delete(checked.values().next().value as string);
+    const finding: Injection = {
+      ...s.scope,
+      id: newId("inj", this.now()),
+      sessionId: s.id,
+      mode: "proactive",
+      text,
+      citations,
+      reason: "action-party",
+      score: 1,
+      createdAt: this.now(),
+    };
+    return finding;
+  }
+
+  /**
+   * `partyCheck` (D375): notes the identifiers a text handed to the agent showed (digests only), each with the cited
+   * item whose text holds it, so `partyFinding` can tell a party Eden's packets supplied. An ask's answer is the text
+   * the agent receives, not its injection's own rendering (`deliver`'s `shown`), so `ask` notes it itself.
+   */
+  private notePacketParties(s: Session, text: string, citations: readonly Citation[]): void {
+    const found = partiesIn(text);
+    if (found.length === 0) return;
+    const map = (s.packetParties ??= new Map());
+    const cited = citations
+      .map((c) => this.deps.cache.get(s.scope, c.itemId, this.now()))
+      .filter((i): i is ContextItem => i !== null);
+    for (const p of found) {
+      const k = partyKey(p.norm);
+      const holder = cited.find((i) => partiesIn(`${i.title}\n${i.text}`).some((q) => q.norm === p.norm));
+      map.delete(k);
+      map.set(k, holder?.id ?? "");
+    }
+    while (map.size > MAX_PACKET_PARTIES) map.delete(map.keys().next().value as string);
   }
 
   async ask(request: AskRequest, internal: AskInternal = {}): Promise<AskResponse> {
@@ -1828,6 +1935,7 @@ export class ContextPartner {
       );
       // The answer is handed out as it is returned: its items are noted as shown now.
       this.handOut(s, injection);
+      if (this.config.partyCheck) this.notePacketParties(s, answer, injection.citations);
       // A packet still queued for the agent whose every item this answer says in full is not handed out again; one it
       // covers only in part stays queued (its other items are news). Removed, never `withdraw`n: the agent now has
       // each of its items, so what its delivery marked stands.
@@ -2608,6 +2716,9 @@ export class ContextPartner {
   /** Starts usage tracking: from the moment the agent actually receives an injection, against what it had seen. */
   private handOut(s: Session, injection: Injection): void {
     const built = this.built.get(injection);
+    if (this.config.partyCheck && injection.reason !== "action-party" && injection.reason !== "ask") {
+      this.notePacketParties(s, injection.text, injection.citations);
+    }
     // Every path that gives the agent an injection comes through here: what it was shown is noted first, before the
     // usage tracking's early returns (an injection already tracked or recorded was still shown).
     if (built?.shown) {

@@ -458,6 +458,18 @@ result). The client's `check` fails open (an error, a timeout, a 4xx or 503, or 
 `proceed`); the route answers 400 for a malformed call and 503 when the engine fails. The default leaves the switch
 off: a trial turns it on through `EDEN_ENGINE_CONFIG` or an embedding's `buildPartner` `engine` settings.
 
+**The party check** (`partyCheck`, on in the default, part `parties`; D375, D376, `parties.ts`,
+[research/a25-action-guard.md](research/a25-action-guard.md)) runs in the same `checkAction`, first, whether or not
+`actionCheck` is on. Every injection handed to the agent (`handOut`) and every ask answer has its email addresses and
+bank account details noted as digests in the session (`Session.packetParties`, ≤ 256, each with the cited item that
+held it). A call whose arguments (all but `NOT_PARTY`'s fields: amounts, dates, titles, subjects, descriptions) add
+such an identifier that the request does not name and that is no correspondent of the user's
+(`ItemCache.isCorrespondent`: on a party header line of a cached item, or at a non-free-mail domain on such lines of
+two items) is answered with a finding in the data envelope naming the identifier and the item's title and asking the
+agent to confirm with the user; the same call made again proceeds. With only this check on, a call in a session Eden
+handed no identifier proceeds without opening a session. No model, no source call: about 8 µs to read a 1.2 KB packet,
+and the user's address tally takes about 26 ms to build at 1,500 items, once, then follows each item stored or removed.
+
 **Ask** always searches (live, or a current synced source locally with D57; more sources), ignores the not-twice
 ledger (the agent asked), and returns the cited items as they are, with no model call composing an answer: the asker
 is a model and reads them directly (D43; `askWithModel` and `EDEN_ASK_MODEL` were deleted by D112). The one model call
