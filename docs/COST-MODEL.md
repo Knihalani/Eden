@@ -461,7 +461,7 @@ at most one extra search per notification (not separately measured).
 
 ## Cards and intent over a user's lifetime (CL3, D242–D245)
 
-Anthropic-direct lab figures (Haiku 5.5, `cold-start.ts` through `buildPartner`; docs/research/cl-cl3.md §6). A
+Anthropic-direct lab figures (Haiku 5.5, `cold-start.ts` through `buildPartner`; docs/research/cl-cl3.md §7). A
 user's background enrichment is a one-time backfill plus a daily trickle:
 
 | | Default before D244 (30-day lean window) | Default since D244 (7 days) |

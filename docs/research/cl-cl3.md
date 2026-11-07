@@ -1,17 +1,19 @@
 # CL3: background cards and intent, and connector calls (H6, H7, H14)
 
-Status: 2026-11-07, branch `claude/cl3-background` (base `claude/lucid-hypatia-v9wqk5` at 2c65a6f9). Decisions
-D242–D245. Every paid call went to the Anthropic API with `HAIKU_API_KEY`, `claude-haiku-5-5` in every role (agent,
-grader, cards, intent, reader), through the lab provider (D97), `OPENROUTER_API_KEY` unset, on one spend ledger with a
-hard cap of $2: **Anthropic-direct lab figures**. Plan: [cost-latency-plan.md](cost-latency-plan.md), session CL3.
+Status: 2026-11-07, branch `claude/cl3-background` (base `claude/lucid-hypatia-v9wqk5` at 2c65a6f9; CL5's tip 05d145080
+merged in after the runs). Decisions D242–D245. Every paid call went to the Anthropic API with `HAIKU_API_KEY`,
+`claude-haiku-5-5` in every role (agent, grader, cards, intent, reader), through the lab provider (D97),
+`OPENROUTER_API_KEY` unset, on one spend ledger with a hard cap of $2: **Anthropic-direct lab figures**. Plan:
+[cost-latency-plan.md](cost-latency-plan.md), session CL3.
 
 ## In plain words
 
 - **A new user's background enrichment now costs less than half as much, with no measured quality loss** (D244,
   promoted). Only person-written items from the last 7 days, not 30, are read for intent requests. Constraint-worded
   items are still carded whatever their age. A new user costs $0.0088 instead of $0.0208, and the cards are ready in
-  about 41 s instead of 103 s. On the paid funnel it surfaced 321 of 384 hidden facts against 313 (+2.1 points,
-  +0.0..+4.4), decoys 129 against 127; on Pi it raised as many hidden facts on both horizons, with no false concerns.
+  about 41 s instead of 103 s. On a fresh-cache paid funnel pair (D177's gate) it surfaced 320 of 384 hidden facts
+  against 312 (+2.1 points, +0.0..+4.4), decoys 129 against 126; on Pi it raised as many hidden facts on both horizons,
+  with no false concerns.
 - **Anthropic's Batch API halves the price of what is left, but a new user waits 17+ minutes for cards, and that wait
   costs real recall** (D242, rejected and deleted). With cards and intent withheld (a user whose batch has not landed),
   the paid funnel raised 22.9 points fewer hidden facts and Pi 6.2 points fewer. The saving per user after D244 is about
@@ -78,9 +80,17 @@ Intent requests carry the whole pool gain of the card pass (minus-intent and min
 | default (30 days)            | 41–42 | 313/384         | 127/384         |                                    |                   |
 | 7 days (D244)                | 41–42 | 321/384         | 129/384         | +2.1 (+0.0..+4.4)                  | +0.5 (−2.1..+3.1) |
 
-D170/D177's gate for cutting request-only reads (hidden not lower, decoys not higher beyond ±3 tasks on a paid pair) is
-met on both seeds. D177's caveat stands: the planted facts are constraint-worded by design, so no screen here sees an
-unworded item 8–30 days old that bears on a request.
+D177's gate for cutting request-only reads is a **fresh-cache** paid pair (an empty reader cache per arm, so neither arm
+reuses the other's readings): hidden not lower, decoys not higher beyond ±3 tasks. Run so (ledger runs `cl3-fresh-base`,
+`cl3-fresh-l7`, $0.371): hidden 312 → 320 of 384 (+2.1 points, +0.0..+4.4), decoys 126 → 129 (+0.8, −1.8..+3.4; +3
+tasks, at the gate's edge). It passes. D177 also asked a future cut to wait for a screen that sees unworded bearing
+items; none exists (the planted facts are constraint-worded by design), so D244 amends D177 and accepts that blind spot:
+an unworded item 8–30 days old that bears on a request is the first thing a blind check should probe.
+
+**Cost screen** (LAB.md 2b, `-- --neutral`, $0): hidden and control rows replay fully and are unchanged, reader 0.84
+calls a task and 2.67–2.70 connector calls a task under both windows (the window does not touch the reader's gate). The
+neutral rows of the new default miss 590 reader prompts (re-rendered pools) and were not topped up (about $0.17, past
+this session's cap), so its neutral and mix figures are not quoted.
 
 **Cold start per new user** (`cold-start.ts`, the servers' `buildPartner`, train1:41, train3:42, train5:43; mean):
 
@@ -109,7 +119,7 @@ ran later in its own process (its pairs with `eden` are across runs, so their wa
 | long    | eden~cl3 (D244 + D243)        | 0.703 (45/64) | 0/64                     | 3.73 / 5.97 / 4.05               | 0.651 (0.277 + 0.310 + 0.064)                | 5.61                            | 0.98                | 1,768 (42%)             |
 
 Backfill is each arm's cold-start cost per user (the arms share one card cache in a run) over its 128 tasks for that one
-user: a short-horizon worst case (§6). Paired differences (bootstrap 95%, 5,000 draws over tasks):
+user: a short-horizon worst case (§7). Paired differences (bootstrap 95%, 5,000 draws over tasks):
 
 | Pair                          | Horizon | Hidden raised           | Wall s (hidden)      | All-in $/1k (hidden)    | All-in $/1k (control)   |
 | ----------------------------- | ------- | ----------------------- | -------------------- | ----------------------- | ----------------------- |
@@ -223,7 +233,17 @@ shares, so two asks verifying at once both count each other's re-reads (seen in 
 fetches). The connectors' own counts and the Pi spans are right; summed `sourceCalls` over traces overcount. A follow-up
 for whoever next owns partner.ts's verify path.
 
-## 6. The per-user lifetime model (for CL5)
+## 6. Lab fix: replayed request-only items no longer go live
+
+CL5 found that with `--cards` replayed most of a run's in-run backfill was still live (370 of 447 live lines were null
+cards). The cause: with intent on, an item the card prefilter rejects is sent for its requests, and the card files have
+no line for it, so `DiskCardMaker` made a live call, although the enricher ignores such an item's card and `make`
+returns the replayed requests over the live ones: the call's output was thrown away. `DiskCardMaker` now skips the live
+call for an item whose requests are replayed and which fails the looser prefilter (`worthCarding`, so the stricter one
+too), and counts it in `skipped` (`cards-disk.test.ts`). The funnel is unchanged (321/129, 504 calls, 0 misses); the
+saving in a live run's backfill was not re-measured here.
+
+## 7. The per-user lifetime model (for CL5)
 
 A user's enrichment is a one-time backfill plus a daily trickle.
 
