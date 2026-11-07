@@ -1,0 +1,461 @@
+{
+ "default": {
+  "hidden": 314,
+  "decoys": 132,
+  "poolHidden": 285,
+  "poolDecoys": 254,
+  "surfaced": {
+   "hidden": {
+    "flagged": 261,
+    "rulePath": 21,
+    "listedOnly": 32
+   },
+   "decoys": {
+    "flagged": 25,
+    "rulePath": 66,
+    "listedOnly": 41
+   }
+  },
+  "reader": {
+   "replayed": 643,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 3.185,
+  "askBytesPerTask": 810.3,
+  "packetBytesPerTask": 455.8
+ },
+ "minus-probes": {
+  "hidden": 308,
+  "decoys": 122,
+  "poolHidden": 279,
+  "poolDecoys": 247,
+  "surfaced": {
+   "hidden": {
+    "flagged": 253,
+    "rulePath": 23,
+    "listedOnly": 32
+   },
+   "decoys": {
+    "flagged": 21,
+    "rulePath": 64,
+    "listedOnly": 37
+   }
+  },
+  "reader": {
+   "replayed": 643,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 3.189,
+  "askBytesPerTask": 821.6,
+  "packetBytesPerTask": 392.7
+ },
+ "minus-grounds": {
+  "hidden": 311,
+  "decoys": 128,
+  "poolHidden": 283,
+  "poolDecoys": 254,
+  "surfaced": {
+   "hidden": {
+    "flagged": 259,
+    "rulePath": 12,
+    "listedOnly": 40
+   },
+   "decoys": {
+    "flagged": 24,
+    "rulePath": 66,
+    "listedOnly": 38
+   }
+  },
+  "reader": {
+   "replayed": 643,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 2.952,
+  "askBytesPerTask": 866.9,
+  "packetBytesPerTask": 283.3
+ },
+ "minus-fallback": {
+  "hidden": 314,
+  "decoys": 128,
+  "poolHidden": 285,
+  "poolDecoys": 254,
+  "surfaced": {
+   "hidden": {
+    "flagged": 261,
+    "rulePath": 21,
+    "listedOnly": 32
+   },
+   "decoys": {
+    "flagged": 25,
+    "rulePath": 62,
+    "listedOnly": 41
+   }
+  },
+  "reader": {
+   "replayed": 643,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 3.185,
+  "askBytesPerTask": 810.3,
+  "packetBytesPerTask": 453.6
+ },
+ "minus-compaction": {
+  "hidden": 314,
+  "decoys": 132,
+  "poolHidden": 285,
+  "poolDecoys": 254,
+  "surfaced": {
+   "hidden": {
+    "flagged": 261,
+    "rulePath": 21,
+    "listedOnly": 32
+   },
+   "decoys": {
+    "flagged": 25,
+    "rulePath": 66,
+    "listedOnly": 41
+   }
+  },
+  "reader": {
+   "replayed": 643,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 3.185,
+  "askBytesPerTask": 1496.1,
+  "packetBytesPerTask": 623.1
+ },
+ "minus-judge": {
+  "hidden": 314,
+  "decoys": 132,
+  "poolHidden": 285,
+  "poolDecoys": 254,
+  "surfaced": {
+   "hidden": {
+    "flagged": 261,
+    "rulePath": 21,
+    "listedOnly": 32
+   },
+   "decoys": {
+    "flagged": 25,
+    "rulePath": 66,
+    "listedOnly": 41
+   }
+  },
+  "reader": {
+   "replayed": 643,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 3.185,
+  "askBytesPerTask": 810.3,
+  "packetBytesPerTask": 455.8
+ },
+ "minus-graph": {
+  "hidden": 317,
+  "decoys": 131,
+  "poolHidden": 286,
+  "poolDecoys": 252,
+  "surfaced": {
+   "hidden": {
+    "flagged": 263,
+    "rulePath": 21,
+    "listedOnly": 33
+   },
+   "decoys": {
+    "flagged": 27,
+    "rulePath": 64,
+    "listedOnly": 40
+   }
+  },
+  "reader": {
+   "replayed": 643,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 3.125,
+  "askBytesPerTask": 807.2,
+  "packetBytesPerTask": 449.8
+ },
+ "minus-anticipate": {
+  "hidden": 315,
+  "decoys": 132,
+  "poolHidden": 285,
+  "poolDecoys": 253,
+  "surfaced": {
+   "hidden": {
+    "flagged": 262,
+    "rulePath": 21,
+    "listedOnly": 32
+   },
+   "decoys": {
+    "flagged": 24,
+    "rulePath": 67,
+    "listedOnly": 41
+   }
+  },
+  "reader": {
+   "replayed": 643,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 2.688,
+  "askBytesPerTask": 814.4,
+  "packetBytesPerTask": 435.1
+ },
+ "minus-sync": {
+  "hidden": 238,
+  "decoys": 114,
+  "poolHidden": 216,
+  "poolDecoys": 190,
+  "surfaced": {
+   "hidden": {
+    "flagged": 192,
+    "rulePath": 18,
+    "listedOnly": 28
+   },
+   "decoys": {
+    "flagged": 23,
+    "rulePath": 65,
+    "listedOnly": 26
+   }
+  },
+  "reader": {
+   "replayed": 626,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 14.779,
+  "askBytesPerTask": 805.8,
+  "packetBytesPerTask": 357.7
+ },
+ "minus-freshness": {
+  "hidden": 314,
+  "decoys": 132,
+  "poolHidden": 285,
+  "poolDecoys": 254,
+  "surfaced": {
+   "hidden": {
+    "flagged": 261,
+    "rulePath": 21,
+    "listedOnly": 32
+   },
+   "decoys": {
+    "flagged": 25,
+    "rulePath": 66,
+    "listedOnly": 41
+   }
+  },
+  "reader": {
+   "replayed": 643,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 3.185,
+  "askBytesPerTask": 810.3,
+  "packetBytesPerTask": 455.8
+ },
+ "minus-askVerdicts": {
+  "hidden": 312,
+  "decoys": 128,
+  "poolHidden": 282,
+  "poolDecoys": 249,
+  "surfaced": {
+   "hidden": {
+    "flagged": 254,
+    "rulePath": 24,
+    "listedOnly": 34
+   },
+   "decoys": {
+    "flagged": 24,
+    "rulePath": 67,
+    "listedOnly": 37
+   }
+  },
+  "reader": {
+   "replayed": 643,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 3.181,
+  "askBytesPerTask": 806.2,
+  "packetBytesPerTask": 448.3
+ },
+ "minus-cards": {
+  "hidden": 253,
+  "decoys": 132,
+  "poolHidden": 232,
+  "poolDecoys": 225,
+  "surfaced": {
+   "hidden": {
+    "flagged": 212,
+    "rulePath": 19,
+    "listedOnly": 22
+   },
+   "decoys": {
+    "flagged": 18,
+    "rulePath": 70,
+    "listedOnly": 44
+   }
+  },
+  "reader": {
+   "replayed": 619,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 3.152,
+  "askBytesPerTask": 555.2,
+  "packetBytesPerTask": 351.9
+ },
+ "minus-intent": {
+  "hidden": 244,
+  "decoys": 132,
+  "poolHidden": 230,
+  "poolDecoys": 229,
+  "surfaced": {
+   "hidden": {
+    "flagged": 203,
+    "rulePath": 20,
+    "listedOnly": 21
+   },
+   "decoys": {
+    "flagged": 20,
+    "rulePath": 68,
+    "listedOnly": 44
+   }
+  },
+  "reader": {
+   "replayed": 629,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 3.197,
+  "askBytesPerTask": 594.0,
+  "packetBytesPerTask": 406.2
+ },
+ "minus-reader": {
+  "hidden": 281,
+  "decoys": 256,
+  "poolHidden": 0,
+  "poolDecoys": 0,
+  "surfaced": {
+   "hidden": {
+    "flagged": 0,
+    "rulePath": 98,
+    "listedOnly": 183
+   },
+   "decoys": {
+    "flagged": 0,
+    "rulePath": 72,
+    "listedOnly": 184
+   }
+  },
+  "reader": {
+   "replayed": 0,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 3.122,
+  "askBytesPerTask": 1075.4,
+  "packetBytesPerTask": 276.9
+ },
+ "minus-slowPathQueue": {
+  "hidden": 314,
+  "decoys": 132,
+  "poolHidden": 285,
+  "poolDecoys": 254,
+  "surfaced": {
+   "hidden": {
+    "flagged": 261,
+    "rulePath": 21,
+    "listedOnly": 32
+   },
+   "decoys": {
+    "flagged": 25,
+    "rulePath": 66,
+    "listedOnly": 41
+   }
+  },
+  "reader": {
+   "replayed": 643,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 3.185,
+  "askBytesPerTask": 810.3,
+  "packetBytesPerTask": 455.8
+ },
+ "minus-probeGrace": {
+  "hidden": 314,
+  "decoys": 132,
+  "poolHidden": 285,
+  "poolDecoys": 254,
+  "surfaced": {
+   "hidden": {
+    "flagged": 261,
+    "rulePath": 21,
+    "listedOnly": 32
+   },
+   "decoys": {
+    "flagged": 25,
+    "rulePath": 66,
+    "listedOnly": 41
+   }
+  },
+  "reader": {
+   "replayed": 643,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 3.185,
+  "askBytesPerTask": 810.3,
+  "packetBytesPerTask": 455.8
+ },
+ "slim": {
+  "hidden": 313,
+  "decoys": 127,
+  "poolHidden": 282,
+  "poolDecoys": 249,
+  "surfaced": {
+   "hidden": {
+    "flagged": 255,
+    "rulePath": 24,
+    "listedOnly": 34
+   },
+   "decoys": {
+    "flagged": 24,
+    "rulePath": 66,
+    "listedOnly": 37
+   }
+  },
+  "reader": {
+   "replayed": 643,
+   "sent": 0,
+   "missed": 0,
+   "failed": 0
+  },
+  "connectorCallsPerTask": 2.688,
+  "askBytesPerTask": 805.7,
+  "packetBytesPerTask": 420.7
+ }
+}
