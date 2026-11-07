@@ -30,6 +30,15 @@ not measured; every other number comes from a command in this note.
   eden − tools on the mix is −1.44 s undressed against −1.46 s dressed. **The published comparisons are not an artefact
   of the missing records.** (A first, broader dresser, which also dressed ids, acronyms, places and holidays, read
   −0.16 asks; the review caught it, and it is superseded.)
+- **Connector pricing (the owner's instruction, §6).** Priced per call, Eden replacing the agent's source tools is the
+  largest saving in this note: one request at a time the tools agent makes 3.34 connector calls a task and Eden's
+  arm none (payload notices), so on the 1:1:8 mix the agent alone costs $1.37 per 1,000 tasks on Composio, $33.75 on
+  Arcade.dev and $86.51 on Zapier MCP against Eden's $0.38 on every plan (tokens alone: $0.364 against $0.379).
+  **Over a user's days it reverses:** Eden's arm makes 2.19 calls a task against the tools agent's 1.50, almost all of
+  them background re-reads of items it already holds (1.94 fetches a task, gmail and slack), so it costs $56.94
+  against $39.13 per 1,000 tasks on Zapier MCP. Those re-reads under payload notices are unexplained here and are
+  the first thing to fix for per-call platforms (handed to A3/A5). Background listings and the one-time backfill per
+  user are not in these figures.
 - **Rejected on paper with $0 evidence (D288):** a per-user standing brief in the agent's cached prefix (the cards it
   would be built from cover 37% of the planted facts that reach a packet, and 29% of look-alikes), an entity census
   line (fires on 4 of the 6 hidden pilot tasks whose fact the agent's own ask found: D257's failure again), usage
@@ -249,6 +258,32 @@ control 0 → 1, neutral 0 → 2. Read by hand, the four dressed eden neutral co
 "I couldn't confirm the migration is approved"); none cites a dressing message. **Reading:** missing records do not
 drive either arm's cost or time in this lab, and Eden's measured lead does not depend on them. Kept as a lab flag (no
 engine code) because idea 2 (answer-ahead) needs worlds where the first lookups can succeed.
+
+## 6. Connector pricing (`connector-price.txt`, `long-eden-calls.txt`)
+
+Token dollars (`arms.py`'s mix `usd`) plus connector dollars, $ per 1,000 tasks on the 1:1:8 mix, per plan
+(`packages/sim/lab/before-after/market.py` CONNECTORS, $ per 1,000 calls). Calls a task = the agent's own source-tool
+calls + Eden's request-time connector calls (`eden.source` spans in the task's timeline, which include background
+re-reads that land within the task). **Not included:** background sync listings between tasks and the one-time
+backfill per user (A3 is extending `pi-cost-report.ts` to count them).
+
+| Run (payload) | Arm | Tokens | Calls a task | First-party | Composio | Unified.to | Arcade.dev | Pipedream | Zapier MCP |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| short (merged tree) | tools | 0.364 | 3.34 | 0.364 | 1.366 | 2.868 | 33.754 | 40.432 | 86.510 |
+| short (merged tree) | eden | 0.379 | 0.00 | 0.379 | 0.379 | 0.379 | 0.379 | 0.379 | 0.379 |
+| short, dressed | tools | 0.379 | 3.40 | 0.379 | 1.398 | 2.928 | 34.359 | 41.155 | 88.047 |
+| short, dressed | eden | 0.390 | 0.00 | 0.390 | 0.390 | 0.390 | 0.390 | 0.390 | 0.390 |
+| long (`--days 8`) | tools | 0.303 | 1.50 | 0.303 | 0.754 | 1.432 | 15.353 | 18.363 | 39.132 |
+| long (`--days 8`) | eden | 0.332 | 2.19 | 0.332 | 0.990 | 1.978 | 22.272 | 26.660 | 56.937 |
+
+- **Replacing the agent's tools (idea 10) is worth more in connector dollars than in tokens on every paid plan:**
+  one request at a time, −3.34 calls a task, $1.0 (Composio) to $86 (Zapier MCP) per 1,000 tasks saved against a
+  token difference of +$0.015. The long horizon's tools agent searches less (1.50 a task: its day's transcript holds
+  earlier results).
+- **Eden's long-horizon calls are re-reads** (`long-eden-calls.txt`, 232 tasks): gmail fetch 1.71, slack fetch 0.22,
+  listings 0.27 a task. Under payload notices no copy should be in doubt (D210), so these look like a bug or a
+  harness effect (the days' recap moves planted items and notifies); not diagnosed in this session. Without them
+  Eden's arm would make about 0.25 calls a task over days, below the tools agent's 1.50 [EST].
 
 ## 5. Decisions
 
