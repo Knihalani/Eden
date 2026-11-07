@@ -6,7 +6,7 @@ import { StaticSource } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { CORE_CONFIG } from "./parts";
 import { ContextPartner, EXPLAIN_TRACES } from "./partner";
-import { explainTrace, type Trace } from "./trace";
+import { explainTrace, SILENT_REASONS, type Trace } from "./trace";
 
 // D277: `explain` keeps a session's last decisions (its traces), content-free, for "why this packet / why silent".
 
@@ -94,5 +94,18 @@ describe("explain (D277)", () => {
       "action firewall",
     );
     expect(explainTrace({ ...base, decision: "reader-push", readerCalls: 1 })).toContain("reader read it");
+  });
+
+  test("SILENT_REASONS names every silent reason partner.ts writes (trace-report and digest print only these)", async () => {
+    const src = await Bun.file(new URL("./partner.ts", import.meta.url)).text();
+    const written = [
+      ...src.matchAll(/(?:done|trace)\("silent", "([^"]+)"\)/g),
+      ...src.matchAll(/noModel\("([^"]+)"/g),
+      ...src.matchAll(/"(no model(?: budget)?)"/g),
+    ].map((m) => m[1]!);
+    expect(written.length).toBeGreaterThan(8);
+    for (const r of written) expect(SILENT_REASONS).toContain(r);
+    // A silent trace's reason is otherwise a variable (`why`): its values are the noModel calls' above.
+    expect([...src.matchAll(/done\("silent", (?!")([^)]+)\)/g)].map((m) => m[1])).toEqual(["why"]);
   });
 });

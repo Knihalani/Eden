@@ -10,7 +10,7 @@
  * request and leave no trace; their cost is in the model provider's bill, under `EDEN_MODEL_USD_PER_TENANT_DAY`.
  * `latencyMs` is Eden's time to its decision, not the network or the client's wait.
  */
-import type { Trace } from "@eden/engine";
+import { SILENT_REASONS, TRACE_DECISIONS, type Trace } from "@eden/engine";
 
 const SPOKE = new Set(["fast", "sources", "model", "answer", "reader-push"]);
 
@@ -44,17 +44,46 @@ export interface TraceReport {
   costUsdPer1kEvents: number;
 }
 
-function isTrace(v: unknown): v is Trace {
-  if (!v || typeof v !== "object") return false;
+const DECISIONS = new Set<string>(TRACE_DECISIONS);
+const SILENT = new Set(SILENT_REASONS);
+/** A count or a time as the engine writes it: a finite number, not negative (`1e999` parses to Infinity). */
+const isCount = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x) && x >= 0;
+
+/**
+ * A log line's trace, or null when the line is not one the engine wrote. Strict, because a log is often stdout and
+ * stderr together (a stdio connector's stderr, a proxy's lines) and only a trace's counts and fixed words may reach a
+ * report (D56, audit A11): a known decision, string ids, finite counts (a string count would concatenate).
+ */
+export function readTrace(line: string): Trace | null {
+  const at = line.indexOf("{");
+  if (at < 0) return null;
+  let v: unknown;
+  try {
+    v = JSON.parse(line.slice(at));
+  } catch {
+    return null;
+  }
+  if (!v || typeof v !== "object") return null;
   const t = v as Record<string, unknown>;
-  return (
+  const ok =
     typeof t.decision === "string" &&
+    DECISIONS.has(t.decision) &&
     typeof t.sessionId === "string" &&
+    typeof t.event === "string" &&
     typeof t.reason === "string" &&
-    typeof t.latencyMs === "number" &&
-    Array.isArray(t.itemIds)
-  );
+    typeof t.turn === "number" &&
+    Number.isFinite(t.turn) &&
+    isCount(t.latencyMs) &&
+    isCount(t.sourceCalls) &&
+    isCount(t.modelCalls) &&
+    isCount(t.costUsd) &&
+    Array.isArray(t.itemIds) &&
+    t.itemIds.every((id) => typeof id === "string");
+  return ok ? (t as unknown as Trace) : null;
 }
+
+/** A silent reason as a report may print it: the engine's fixed words, anything else "other". */
+export const silentReason = (reason: string) => (SILENT.has(reason) ? reason : "other");
 
 function percentiles(xs: number[]): Percentiles {
   const s = [...xs].sort((a, b) => a - b);
@@ -68,14 +97,8 @@ const round = (x: number, d = 6) => Math.round(x * 10 ** d) / 10 ** d;
 export function traceReport(lines: Iterable<string>): TraceReport {
   const traces: Trace[] = [];
   for (const line of lines) {
-    const at = line.indexOf("{");
-    if (at < 0) continue;
-    try {
-      const v: unknown = JSON.parse(line.slice(at));
-      if (isTrace(v)) traces.push(v);
-    } catch {
-      // Not a trace line.
-    }
+    const t = readTrace(line);
+    if (t) traces.push(t);
   }
   const decisions: Record<string, number> = {};
   const silentReasons: Record<string, number> = {};
@@ -102,15 +125,18 @@ export function traceReport(lines: Iterable<string>): TraceReport {
     // turn) every ask of a turn read as one that spoke (audit A11). A push keys to its request's user message.
     if (SPOKE.has(t.decision) && t.itemIds.length > 0 && !t.reason.startsWith("updated:"))
       spokeAt.add(t.event === "ask" ? `ask#${events}` : `${t.sessionId}#${t.turn}#${t.event}`);
-    if (t.decision === "silent") silentReasons[t.reason] = (silentReasons[t.reason] ?? 0) + 1;
+    if (t.decision === "silent") {
+      const why = silentReason(t.reason);
+      silentReasons[why] = (silentReasons[why] ?? 0) + 1;
+    }
     if (t.decision !== "skipped") {
       const xs = latencies.get(t.decision) ?? [];
       xs.push(t.latencyMs);
       latencies.set(t.decision, xs);
     }
-    sourceCalls += t.sourceCalls || 0;
-    modelCalls += t.modelCalls || 0;
-    costUsd += t.costUsd || 0;
+    sourceCalls += t.sourceCalls;
+    modelCalls += t.modelCalls;
+    costUsd += t.costUsd;
   }
   const per = (x: number) => (events > 0 ? x / events : 0);
   return {

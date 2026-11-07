@@ -20,7 +20,8 @@
  * the proxy's shadow mode reports events but injects nothing).
  */
 import { explainTrace, type Trace, type UsageRecord } from "@eden/engine";
-import { traceReport, type TraceReport } from "./trace-report";
+import { isId } from "@eden/protocol";
+import { readTrace, traceReport, type TraceReport } from "./trace-report";
 
 /** What kind of help a trace that spoke gave, in words a stakeholder reads. */
 export type Kind = "conflict" | "candidates" | "match" | "cached" | "answer" | "update" | "judged" | "firewall";
@@ -88,7 +89,14 @@ export interface Digest {
 function isUsage(v: unknown): v is { usage: UsageRecord } {
   if (!v || typeof v !== "object") return false;
   const u = (v as { usage?: Record<string, unknown> }).usage;
-  return !!u && typeof u.injectionId === "string" && typeof u.used === "boolean" && Array.isArray(u.sourceIds);
+  return (
+    !!u &&
+    typeof u.injectionId === "string" &&
+    typeof u.used === "boolean" &&
+    Array.isArray(u.sourceIds) &&
+    // Connector ids are configuration ids (`isId`): anything else in a line is not a connector id to print (A11).
+    u.sourceIds.every((s) => isId(s))
+  );
 }
 
 function kindOf(t: Trace): Kind | null {
@@ -110,12 +118,21 @@ function kindOf(t: Trace): Kind | null {
   }
 }
 
-/** A connector id from an item id (`itemId`: `<sourceId>:<ref>`); the ref is never kept. */
-const sourceOf = (itemId: string) => itemId.slice(0, Math.max(0, itemId.indexOf(":"))) || "unknown";
+/**
+ * A connector id from an item id (`itemId`: `<sourceId>:<ref>`); the ref is never kept. A connector id may itself
+ * hold a colon (`isId`), so the longest id the log names elsewhere (usage records, plans) that prefixes the item id
+ * wins over the first colon; whatever is not an id is "unknown" (audit A11).
+ */
+const sourceOf = (itemId: string, known: readonly string[]) => {
+  const named = known.find((k) => itemId.startsWith(`${k}:`));
+  const id = named ?? itemId.slice(0, Math.max(0, itemId.indexOf(":")));
+  return isId(id) ? id : "unknown";
+};
 
 export function digest(lines: Iterable<string>): Digest {
   const all = [...lines];
   const report = traceReport(all);
+  const traces: Trace[] = [];
   const kinds: Partial<Record<Kind, number>> = {};
   const sources: Record<string, number> = {};
   const asks = { total: 0, withItems: 0 };
@@ -142,6 +159,8 @@ export function digest(lines: Iterable<string>): Digest {
     if (
       sync &&
       typeof sync.backgroundCalls === "number" &&
+      Number.isFinite(sync.backgroundCalls) &&
+      sync.backgroundCalls >= 0 &&
       (typeof sync.run === "string" || typeof sync.pid === "number")
     ) {
       // Cumulative per process: within one run the last value is its total; a value below the last is a restart.
@@ -152,8 +171,21 @@ export function digest(lines: Iterable<string>): Digest {
       syncRuns.set(key, r);
       continue;
     }
-    const t = v as Trace;
-    if (!t || typeof t.decision !== "string" || !Array.isArray(t.itemIds) || typeof t.reason !== "string") continue;
+    // The same lines trace-report counts, no others (a line it rejects must not count here either).
+    const t = readTrace(line);
+    if (t) traces.push(t);
+  }
+  const records = [...usage.values()];
+  // Connector ids the log names whole, longest first, so "work:gmail" wins over "work" (see `sourceOf`).
+  const known = [
+    ...new Set([
+      ...records.flatMap((r) => r.sourceIds),
+      ...traces.flatMap((t) => (t.plans ?? []).map((p) => p.sourceId)),
+    ]),
+  ]
+    .filter((s) => isId(s))
+    .sort((a, b) => b.length - a.length);
+  for (const t of traces) {
     if (t.event === "agent_message" || t.event === "tool_call") agentEvents++;
     if (t.decision === "skipped" && t.reason !== "sync poll behind") nothingToLookUp++;
     if (t.decision === "answer") {
@@ -163,9 +195,11 @@ export function digest(lines: Iterable<string>): Digest {
     const k = kindOf(t);
     if (!k) continue;
     kinds[k] = (kinds[k] ?? 0) + 1;
-    for (const id of t.itemIds) sources[sourceOf(id)] = (sources[sourceOf(id)] ?? 0) + 1;
+    for (const id of t.itemIds) {
+      const s = sourceOf(id, known);
+      sources[s] = (sources[s] ?? 0) + 1;
+    }
   }
-  const records = [...usage.values()];
   const bySource: Digest["used"]["bySource"] = {};
   for (const r of records) {
     for (const s of new Set(r.sourceIds)) {
@@ -175,7 +209,7 @@ export function digest(lines: Iterable<string>): Digest {
     }
   }
   const explicit = records.filter((r) => r.how === "explicit").length;
-  const connectors = connectorCalls(all, syncRuns);
+  const connectors = connectorCalls(traces, syncRuns);
   return {
     events: report.events,
     sessionIds: report.sessionIds,
@@ -202,21 +236,12 @@ export function digest(lines: Iterable<string>): Digest {
 }
 
 /** Connector calls in a log: the agent's reported tool calls, Eden's lookups' calls and its sync's. */
-function connectorCalls(lines: string[], syncRuns: Map<string, { done: number; last: number }>): ConnectorCalls {
+function connectorCalls(traces: Trace[], syncRuns: Map<string, { done: number; last: number }>): ConnectorCalls {
   let requests = 0;
   let agent = 0;
   let edenRequest = 0;
-  for (const line of lines) {
-    const at = line.indexOf("{");
-    if (at < 0) continue;
-    let t: Trace;
-    try {
-      t = JSON.parse(line.slice(at)) as Trace;
-    } catch {
-      continue;
-    }
-    if (!t || typeof t.decision !== "string" || typeof t.reason !== "string") continue;
-    edenRequest += t.sourceCalls || 0;
+  for (const t of traces) {
+    edenRequest += t.sourceCalls;
     // One trace per observed event, follow-ups aside (trace-report's rule): count events by their kind once.
     const followUp =
       t.decision === "verify" ||

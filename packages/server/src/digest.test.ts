@@ -135,4 +135,39 @@ describe("digest (D293)", () => {
     ]);
     expect(d.connectors.agent).toBe(1);
   });
+
+  test("content-free whatever the log holds: known decisions and reasons, connector ids that are ids (audit A11)", () => {
+    // A log is often stdout and stderr together, with lines this server did not write (a stdio connector's stderr, a
+    // proxy). Words from such a line must not reach a report a stakeholder reads.
+    const lines = [
+      t({ reason: "Dana's salary is $200k\n# Raise" }),
+      t({ decision: "secret plan\n## Acme" as Trace["decision"], reason: "no candidates" }),
+      t({ decision: "sources", reason: "cue:1", itemIds: ["Dana fired [see](http://x)\n:1", "gmail:m1"] }),
+      t({ decision: "silent", reason: "no candidates", sourceCalls: "5" as unknown as number }), // not a count
+      '{"sessionId":"s","turn":1,"event":"user_message","decision":"silent","reason":"served","latencyMs":1e999,' +
+        '"sourceCalls":0,"modelCalls":0,"costUsd":0,"itemIds":[]}', // Infinity: not a time
+      JSON.stringify({
+        usage: { sessionId: "s", injectionId: "i", used: true, how: "explicit", sourceIds: ["#x\ny"] },
+      }),
+    ];
+    const d = digest(lines);
+    const out = [formatDigest(d), JSON.stringify(d)].join("\n");
+    for (const w of ["Dana", "Raise", "secret", "Acme", "http", "#x", "Infinity"]) expect(out).not.toContain(w);
+    expect(d.sources).toEqual({ unknown: 1, gmail: 1 });
+    expect(d.silent.reasons).toEqual({ other: 1 });
+    // What is not a trace is counted nowhere: two traces (the odd reason, the search), two requests, two calls.
+    expect(d.report.traces).toBe(2);
+    expect(d.connectors).toMatchObject({ requests: 2, edenRequest: 2 });
+    expect(Object.keys(d.used.bySource)).toEqual([]);
+  });
+
+  test("a connector id with a colon is named whole when the log names it (audit A11)", () => {
+    const d = digest([
+      t({ decision: "sources", reason: "cue:1", itemIds: ["work:gmail:m1", "crm:d1"] }),
+      t({ turn: 2, event: "agent_message", decision: "skipped", reason: "agent_message", sourceCalls: 0 }),
+      u("inj_1", true, "inferred", ["work:gmail"]),
+    ]);
+    expect(d.sources).toEqual({ "work:gmail": 1, crm: 1 });
+    expect(formatDigest(d)).toContain("- work:gmail: 1; used in 1 of 1 injections");
+  });
 });

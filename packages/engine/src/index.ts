@@ -30,7 +30,7 @@ export {
   type SpanStat,
 } from "./spans";
 export type { ShadowRecord, ShadowSink, Trace, TraceSink, UsageRecord, UsageSink } from "./trace";
-export { explainTrace } from "./trace";
+export { explainTrace, SILENT_REASONS, TRACE_DECISIONS } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";
 export { requestedRange } from "./probes";
