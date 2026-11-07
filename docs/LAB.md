@@ -788,7 +788,15 @@ minute on free models (hermes-lab.md, estimates).
   before each day's recap is sent as the moved items (`sourceItems`) under `payload` and as a bare signal under
   `signals` (D272; before it a bare signal in every mode, which put ~650 ms of re-reads on Eden's path in every long
   payload run).
+- `--push refs` (D347): the notices `signals` sends, each naming one ref (the source's newest item; its content is
+  unchanged), sent as `sourceRefs`; with `--days`, the recap's moved items named by ref.
 - The results header records both (`sourceProfile`, `push`).
+- **The same at $0 (A18):** `bun run funnel` takes them after `--`, with `--time 1`: `-- --time 1 --source-profile
+  F --push signals|payload|refs` (and `--fetch-gone false`: sources whose fetch null proves nothing, as an MCP tool's).
+  Add `--timeline T.jsonl` and `--json F.json` (`--jobs 1`) and read where the agent's wait went with
+  `bun packages/sim/src/lab/latency-report.ts T.jsonl --funnel F.json`: the request (observe with its push) and the
+  ask, p50/p90/p99, and each piece's share (`verify` is the re-reads). train1–6, seed 41, `--limit 16`: about 2–5 min a
+  profile (`.local/a18/run.sh` in docs/research/a18-latency.md).
 
 `market.py` (in `packages/sim/lab/before-after/`) prices a run's `tools` and `eden` arms per agent model and
 connector plan; `--reuse-arms` copies the `tools` arm of an earlier run on the same profile, so only Eden is paid for.
@@ -801,8 +809,11 @@ The quality runner (`quality-cli.ts`) changes the world during a run and counts 
   copy still showing the old time is `updates.staleDelivered` of `updatedDelivered`.
 - `--deletes RATE`: fact-stating items are deleted at the source before a later session (`planDeletes`); a packet
   item or an ask citation of one is `deletes.deletedDelivered` / `deletedCited`.
-- `--push none|signals|payload`: how changes reach Eden (signals call `sourceChanged`; payload calls `sourceItems` and
-  `sourceRemoved`). `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed, changed, gone, failed, calls).
+- `--push none|signals|payload|refs`: how changes reach Eden (signals call `sourceChanged`; payload calls
+  `sourceItems` and `sourceRemoved`; refs (D347) calls `sourceRefs` with the changed items' refs and `sourceRemoved`).
+  `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed, changed, gone, failed, calls) and the ref reads
+  (`refsRead`, `refsFallback`). `--fetch-gone false` (A18): every source's fetch null proves nothing, as an MCP
+  connector's (a deleted item's re-read is "unverifiable").
 
 D126's matrix: `bun packages/sim/src/quality-cli.ts --users 8 --sessions 20 --updates 0.6 --deletes 0.05
 [--push signals|payload] [--config '{"verifyDelivery":false}'] [--jobs 4]`, $0 (`verifyDelivery` is in the

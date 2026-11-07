@@ -10,7 +10,8 @@
  *   a CRM a few times a day). The world does not change during a run, so the poll a notification causes is a cost
  *   with nothing new to find. `payload`: notifications carry their items (a Slack event, a trigger's payload), which
  *   costs no source call, and the static world sends none. `refs` (D347): the notices `signals` sends, each naming
- *   one ref (the source's newest item), which Eden reads; content unchanged. `none` (the default): sources do not notify.
+ *   one ref (the source's newest item), which Eden reads; content unchanged. `none` (the default): sources do not
+ *   notify.
  */
 import { readFileSync } from "node:fs";
 import type { ContextItem, Scope } from "@eden/protocol";

@@ -233,7 +233,12 @@ a deleted item, from a notification or a re-read, is also dropped from the fan-o
 hold), so a page read before the deletion cannot bring it back. A re-read that is on the wire when a deletion
 notification lands does not revive the item (`recheck` checks `ItemCache.isHeldGone` before storing): it counts as
 gone.
-The re-reads are traced as "verify" decisions with their `sourceCalls`.
+The re-reads are traced as "verify" decisions with their `sourceCalls`, and their wait is a "verify" span (A18).
+A notice that names the refs it changed without their content (`ContextPartner.sourceRefs`, `POST /v1/sources/refs`,
+D347) doubts only those items: each is fetched in the background (two at a time, `REF_TIMEOUT_MS` 5 s, a guard's skip
+or a plain error tried again) and stored as synced under its call's read mark; until its read lands the item is in
+doubt and a delivery waits on that read (`refreshing`, no second call, at most `verifyTimeoutMs`). A ref that cannot
+be read turns the notice into the plain signal.
 
 **Poll behind the lookup** (D65, `syncPollBehind`, on in the default, D112; with `sync` and `syncOnDemand`): without it,
 a lookup that finds a synced source stale waits for that source's on-demand poll (`sync.freshen`, one or two listing
