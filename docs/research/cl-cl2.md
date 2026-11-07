@@ -7,7 +7,7 @@ grader, cards, intent, reader), through the lab provider (D97), `OPENROUTER_API_
 a hard cap (`--spend-ledger .local/cl2/ledger.jsonl --spend-cap 3 --spend-headroom 0.3`): **Anthropic-direct lab
 figures**. The servers ship the same model through OpenRouter (D12), which nothing here called.
 
-**Spent: $2.338** of the $3 cap (ledger labels and amounts in §7).
+**Spent: $2.796** of the $3 cap (ledger labels and amounts in §7).
 
 ## In plain words
 
@@ -16,6 +16,12 @@ figures**. The servers ship the same model through OpenRouter (D12), which nothi
   (172 → 91 tokens), each reading is about 0.26 s faster (p50 1,129 → 869 ms) and 14% cheaper. With Pi as the agent,
   Eden's per-task cost fell 10–20% and wall time 0.6–0.8 s on the short horizon, with no loss of hidden facts (+1.7
   and +1.0 points, both intervals across zero) and no rise in false concerns (3 → 1 of 120, 1 → 0 of 96).
+- **On CL5's long horizon (`--days 8`, one user per seed, 1:1:8 mix) the stop is a wash.** Eden's per-task cost fell
+  13% ($0.226 → $0.197 per 1,000) and each reading 242 ms (p50 1,052 → 810 ms), but the agent's own cost rose about as
+  much ($0.268 → $0.300; more agent tool calls, 0.25 → 0.37 a task), so steady cost is $0.505 against $0.506 and wall
+  time p50 2.94 against 2.96 s. Hidden facts 17/23 in both; concerns 1/23 control and 1/186 neutral against 0 and 0.
+  Bootstrap over tasks understates the noise here (tasks in a day share one transcript), so the agent's rise is read
+  as unexplained, not as an effect of the stop.
 - **The reader's latency is its output, not its input.** Over 2,544 live calls: 0.76 s + 2.9 ms per output token, and
   nothing per input token. So input diets only save money.
 - **Feeding the reader less costs recall.** Ten items instead of fifteen cuts its cost 22% a call but lost 3–7 points
@@ -209,6 +215,26 @@ against `eden`: any concern 1 against 0 of 32 (+3.1, 0.0..+9.4), wall −0.12 s 
 → $0.131 per 1,000 (−0.102, −0.156..−0.049), reader output 191 → 37 tokens (nothing binds, so the reply stops at its
 first entry), reader p50 1,083 → 737 ms, Eden on the critical path 2,366 → 2,184 ms. No stop-alone arm ran here.
 
+**CL5's long horizon (`--days 8`), on the tree merged with CL5 (seeds 41–42, `--push signals`, one user per seed,
+days of 12–20 requests mixed 1:1:8, Eden's partner kept across days, the agent's transcript reset daily; 232 graded
+tasks an arm: 23 hidden, 23 control, 186 neutral).** Arms: `eden` (the default, stop on) and `eden~nostop`
+(`readerStopEarly` false). `pi-cost-report.ts`, $ per 1,000 tasks:
+
+| arm | agent | Eden per task | bg run | steady | all-in | reader / task | Eden connector calls / task | agent tools / task | wall p50 / mean s | Eden on critical path ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| eden (stop) | 0.300 | 0.197 | 0.008 | 0.505 | 0.590 | 0.89 | 5.02 | 0.37 | 2.94 / 3.47 | 1,297 |
+| eden~nostop | 0.268 | 0.226 | 0.012 | 0.506 | 0.586 | 0.84 | 4.60 | 0.25 | 2.96 / 3.40 | 1,346 |
+
+Paired (nostop − stop): hidden 0.0 (−13.0..+13.0, n 23), control −4.3 (−13.0..0.0, n 23), neutral −0.5 (−1.6..0.0,
+n 186); Eden per task +0.029 (+0.017..+0.041), agent billed −0.032 (−0.048..−0.016), wall mean −0.08 s on neutral
+(−0.31..+0.12). Reader p50 810 ms (62 output tokens) against 1,052 (153). CL5's baseline of the same mode (its own
+run, before D244 and D240): tools steady $0.286, eden $0.575. Not measured, for want of budget: `--push payload`
+(D210's integration default), which CL3 and CL4 found cuts Eden's connector calls and the ask's time.
+
+**The merged tree's paid replay** (D244's 7-day lean window, CL1 and CL4 merged; the stop topped up live,
+`cl2-stop-topup-merged`, 546 calls, $0.136): the default 322/139, 91 output tokens and $0.000249 a call; the same
+with `readerStopEarly` false 321/129 (D244's figure).
+
 ## 6. Decisions
 
 - **D240 promoted**: `readerStopEarly` on in the default and in `PARTS.reader`; the committed reader cache topped up
@@ -234,6 +260,8 @@ env -u OPENROUTER_API_KEY bun run funnel --set '{"askReaderPool":10}' -- --reade
 CONDS=tools,eden,eden~diet packages/sim/lab/cl2/run.sh 41 cl2-short-41 train hidden,control 10          # and 42
 CONDS=eden~stop packages/sim/lab/cl2/run.sh 41 cl2-short-stop-41 train hidden,control 10               # and 42
 CONDS=tools,eden,eden~diet,eden~stop packages/sim/lab/cl2/run.sh 41 cl2-day-41 train hidden,control 8 --day 4
+packages/sim/lab/cl2/run8.sh cl2-long8-41 --seeds 41 --days 8 --budget 0.3                            # and 42
+bun packages/sim/src/lab/pi-cost-report.ts .local/cl2/long8/cl2-long8-4{1,2}.json
 packages/sim/lab/cl2/run.sh 41 cl2-h14n-41 heldout14 neutral 0
 python3 -I packages/sim/lab/cl2/arms.py .local/cl2/cl2-short-41 .local/cl2/cl2-short-42 .local/cl2/cl2-short-stop-4{1,2}
 bun packages/sim/src/lab/pi-ab-report.ts .local/cl2/cl2-day-41.json .local/cl2/cl2-day-42.json
@@ -257,5 +285,7 @@ Reports: `packages/sim/lab/cl2/` (`pi-*-report.txt`, `arms-*.txt`).
 | cl2-day-41, -42 | 384 + 384 runs | 0.2972 + 0.3062 |
 | cl2-h14n-41 | 96 runs | 0.0710 |
 | eval-live (three runs) | 18 | 0.0021 |
-| **Total** | | **2.338** |
+| cl2-long8-41, -42 (`--days 8`) | 228 + 236 runs | 0.1603 + 0.1619 |
+| cl2-stop-topup-merged | 546 | 0.1363 |
+| **Total** | | **2.796** |
 

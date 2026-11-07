@@ -425,8 +425,9 @@ reader cache at $0. The haiku-opt.md command sets `askReaderWaitMs: 60000` so la
 
 The reader cache of the shipped default (D158: cards and intent requests replayed; intent thresholds 0.2/1/12 since
 D179, `intentByKind` since D200) on train1–6, seeds 41–42, is checked in gzipped:
-`packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz`, 5,019 lines, all `claude-haiku-5-5`, plain md5
-`78f09e09d1c6462f64c5bf4b6bb53439` (4,377 lines, md5 `32c5fa518a67a2db657f35f981e3262a`, before D240's stop top-up;
+`packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz`, 6,623 lines, all `claude-haiku-5-5`, plain md5
+`cf07319d4be872b1412f8f2afa80a915` (its first 5,435 lines are D244's file below, then D240's two stop top-ups;
+4,377 lines, md5 `32c5fa518a67a2db657f35f981e3262a`, before D244 and D240;
 1,968 lines, md5 `d0ff788fa9cbad0f3c755f043b25d43b`, before fix-w2a's top-up;
 1,416 lines, md5 `47eb6393a75b49c14f0f7b802473fd59`, before D200's). It was recorded on 2026-11-06 from an empty cache by one metered live run (ledger
 run `ib-reader-intent-cache-default`: 652 calls, $0.18548, 418 s, TOTAL hidden 274/384, decoys 137/384, 0 misses),
@@ -468,9 +469,12 @@ intent file before that: 645 replayed, 5 missed, 273/137, pool 257/240). A chang
 misses (answered without the reader, fail open), which is why the recipe keeps `--allow-misses`; without it a miss
 exits 3.
 Since D240 the default's reader requests carry a stop sequence (`readerStopEarly`), so they key apart from the
-older lines: the default's 642 stopped readings were appended live (ledger run `cl2-stop-topup`, 642 calls, $0.157,
-docs/research/cl-cl2.md). Measured 2026-11-07: `merged reader replay {"replayed":643,"sent":0,"missed":0,"failed":0}`,
-TOTAL hidden 316/384, decoys 146/384, reader pool hidden 282/384, decoys 249/384, 91 output tokens a call. A preset
+older lines: the stopped readings were appended live, first for the 30-day window (ledger run `cl2-stop-topup`, 642
+calls, $0.157: `--set '{"cardsLeanDays":30}'` replays 316/146, 0 misses), then for D244's default
+(`cl2-stop-topup-merged`, 546 calls sent, $0.136; docs/research/cl-cl2.md). Measured 2026-11-07 on the merged tree:
+`merged reader replay {"replayed":643,"sent":0,"missed":0,"failed":0}`, TOTAL hidden 322/384, decoys 139/384, reader
+pool hidden 287/384, decoys 251/384, 91 output tokens a call (the same tree with `{"readerStopEarly":false}`: 321/129,
+D244's figure above). A preset
 whose stopped prompts the cache lacks (the `minus-<part>` presets) replays the line recorded without the stop, cut
 where the stop would have ended it (`stopLine`, reader-disk.ts; approximate in its tokens and times, exact in its
 text up to the stop): each shard prints `READER STOP-SIMULATED: n` and the JSON's `reader.stopSimulated`. It applies
