@@ -329,6 +329,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   left its path time unchanged (one live search of a cut copy that matters costs a connector's latency) and hidden
   50 → 46 of 72; the code is in commit def8c153. A fixed evidence threshold lost a planted fact behind a world source
   whose only evidence was its sketch. A lever for path time must take every live search off the push.
+- **The push never waits on a cut copy's live search (`pushCutBehind`, D405, D406, docs/research/b1-scale-path.md).**
+  On a `behind` lookup a cut copy answers from the index and `searchCutBehind` sends D264's search behind it, through
+  the planner (the raw query alone missed a planted fact), joining `cue.polled` so `afterPoll`/`pushAgain` run on what
+  it stored; a follow-up searches nothing again, the probes and explicit asks keep D264. A new consumer of a `behind`
+  lookup's `sources` must not read its "local" status as a whole copy (D127 holds only for asks, which never pass
+  `behind`). Its calls get their own trace ("cut search behind").
 - **Idle users are frozen (D325, docs/research/a14-scale-users.md).** `ItemCache` holds a user idle for
   `freezeIdleMs` (30 min) as one zstd blob (`FrozenUser`) and thaws them exactly on next use. Every reader of a
   user's state goes through `peek`/`touch` (which thaw and mark the user seen); only `revision` and `syncedCount`

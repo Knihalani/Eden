@@ -1,0 +1,3 @@
+  "precision": 0.65,
+  "recall": 0.52,
+  "falseFireRate": 0,
