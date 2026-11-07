@@ -3,7 +3,9 @@
  * The cost and latency split of pi-ab runs (H16, CL5; pi-cost.ts has the rules): per condition the agent's and Eden's
  * per-task cost, Eden's background while the user works, the one-time backfill per user, the steady state and all-in
  * totals (also on the 1:1:8 mix), reader and connector calls, wall; per kind the share raised; per day (long horizon,
- * `--days`) the per-task cost and wall, so the transcript's growth over a day shows.
+ * `--days`) the per-task cost and wall, so the transcript's growth over a day shows. Since A3: connector calls per task
+ * (the agent's, Eden's in the task's window and in the background) and per user (the backfill), and every total again
+ * with the connectors priced per plan (`CONNECTOR_PLANS`), with eden − tools per plan.
  *
  *   bun packages/sim/src/lab/pi-cost-report.ts run-41.json run-42.json [--lifetime cold.json[,cold2.json]] [--json F]
  *
@@ -15,11 +17,13 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type { Background, RunResult, Task } from "./ab-common";
 import {
+  CONNECTOR_PLANS,
   conditionCosts,
   costTasks,
   dayRows,
   kindRows,
   lifetimeFor,
+  planCosts,
   type CostTask,
   type Lifetime,
   type UserShape,
@@ -117,6 +121,49 @@ for (const c of costs) {
       `${pad(c.wallP50.toFixed(2), 9)} ${pad(c.wallMean.toFixed(2), 5)} ${pad(c.recapUsd.toFixed(4), 9)}`,
   );
 }
+console.log(
+  "\nconnector calls per task (agent's source tools; Eden's in the task's window; Eden's background while the user " +
+    "worked) and Eden's one-time backfill calls per user; streams recorded before A3 lack the background and backfill",
+);
+for (const c of costs) {
+  const x = c.connectorPerTask;
+  console.log(
+    `${c.condition.padEnd(14)} agent ${x.agent.toFixed(2)}  Eden ${x.eden.toFixed(2)}  background ` +
+      `${x.background.toFixed(2)}  mix ${c.mixConnectorPerTask === null ? "-" : c.mixConnectorPerTask.toFixed(2)}  ` +
+      `backfill ${c.backfillCallsPerUser.toFixed(0)}/user`,
+  );
+}
+console.log(
+  "\n$ per 1,000 tasks with the connectors priced per plan ($ per 1,000 calls; market.py, list prices, assumed): " +
+    "steady, all-in, and on the 1:1:8 mix",
+);
+const plans = Object.entries(CONNECTOR_PLANS);
+const priced = costs.map((c) => ({ c, by: plans.map(([plan, rate]) => ({ plan, ...planCosts(c, rate) })) }));
+const opt = (x: number | null) => (x === null ? "-" : k(x));
+for (const { c, by } of priced) {
+  for (const p of by) {
+    console.log(
+      `${c.condition.padEnd(14)} ${p.plan.padEnd(28)} steady ${pad(k(p.steady), 7)}  all-in ${pad(k(p.allIn), 7)}  ` +
+        `mix st ${pad(opt(p.mixSteady), 7)}  mix all ${pad(opt(p.mixAllIn), 7)}`,
+    );
+  }
+}
+const base = priced.find((x) => x.c.condition === "tools");
+if (base) {
+  console.log("\neden − tools per plan, $ per 1,000 tasks (each condition against `tools`)");
+  for (const { c, by } of priced) {
+    if (c === base.c) continue;
+    by.forEach((p, i) => {
+      const b = base.by[i]!;
+      const diff = (x: number | null, y: number | null) => (x === null || y === null ? "-" : k(x - y));
+      console.log(
+        `${c.condition.padEnd(14)} ${p.plan.padEnd(28)} steady ${pad(k(p.steady - b.steady), 7)}  all-in ` +
+          `${pad(k(p.allIn - b.allIn), 7)}  mix st ${pad(diff(p.mixSteady, b.mixSteady), 7)}  mix all ` +
+          `${pad(diff(p.mixAllIn, b.mixAllIn), 7)}`,
+      );
+    });
+  }
+}
 console.log("\nper kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s");
 for (const r of kindRows(tasks)) {
   console.log(
@@ -135,4 +182,4 @@ if (byDay.some((r) => r.day > 0)) {
   }
 }
 if (flag("json"))
-  writeFileSync(flag("json")!, JSON.stringify({ files, costs, kinds: kindRows(tasks), byDay }, null, 2));
+  writeFileSync(flag("json")!, JSON.stringify({ files, costs, plans: priced, kinds: kindRows(tasks), byDay }, null, 2));

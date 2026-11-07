@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { buildWorld } from "../world";
 import { REALISTIC, simSources } from "../sources";
-import { connectorHeader, connectorOptions, pushNotifier, sourceFields } from "./connector-options";
+import type { ContextItem } from "@eden/protocol";
+import { connectorHeader, connectorOptions, pushNotifier, recapNotice, sourceFields } from "./connector-options";
 
 const opts = (given: Record<string, string>) => (name: string, fallback: string) => given[name] ?? fallback;
 
@@ -58,5 +59,40 @@ describe("connector options (--source-profile, --push)", () => {
     // Every optional, non-call member of `Source` today: a new one must be added here and to `sourceFields`.
     const optional: (keyof typeof kept)[] = ["listsByTime", "notifies", "fetchReportsGone"];
     for (const k of optional) expect(k in kept).toBe(true);
+  });
+});
+
+describe("recapNotice (D272): the notice for a recap's moved items", () => {
+  const item = (id: string) => ({ id, sourceId: id.split(":")[0]!, title: id, text: id }) as ContextItem;
+  const sources = [
+    { id: "gmail", listAll: () => [item("gmail:a"), item("gmail:b")] },
+    { id: "slack", listAll: () => [item("slack:c")] },
+  ];
+  const fake = () => {
+    const calls: string[] = [];
+    return {
+      calls,
+      sourceChanged: (_s: unknown, id: string) => (calls.push(`signal ${id}`), true),
+      sourceItems: async (_s: unknown, id: string, items: ContextItem[]) => (
+        calls.push(`items ${id} ${items.map((x) => x.id).join(",")}`),
+        items.length
+      ),
+    };
+  };
+  const scope = { tenantId: "t", userId: "u" };
+
+  test("payload: the moved items themselves, no signal", async () => {
+    const p = fake();
+    expect(await recapNotice(p, scope, sources, new Set(["gmail:b"]), "payload")).toBe(1);
+    expect(p.calls).toEqual(["items gmail gmail:b"]);
+  });
+
+  test("signals: a bare signal per source with a moved item; none: nothing", async () => {
+    const p = fake();
+    await recapNotice(p, scope, sources, new Set(["gmail:a", "slack:c"]), "signals");
+    expect(p.calls).toEqual(["signal gmail", "signal slack"]);
+    const q = fake();
+    await recapNotice(q, scope, sources, new Set(["gmail:a"]), "none");
+    expect(q.calls).toEqual([]);
   });
 });

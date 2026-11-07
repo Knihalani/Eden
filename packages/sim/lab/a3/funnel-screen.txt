@@ -1,0 +1,14 @@
+A3 $0 screens (bun run funnel, train1-6 seeds 41-42, --neutral, reader replay of the committed train caches, 0 misses;
+.local/a3/cmp.py per kind: tasks with a packet, mean packet bytes and ask-answer bytes a task; funnel TOTAL lines).
+All on c7cfc8fc9 + the lever named; none kept (D273).
+
+default                         hidden surfaced 305/384 decoys 267/384; neutral: packet 324/384, 943 B packet, 468 B ask
+packet anchor (one candidate    neutral: packet 323/384, 939 B, 469 B ask; hidden/control identical (TOTAL unchanged)
+ with an entity/grounding/intent)
+item anchor (drop candidates     hidden surfaced 307/384 decoys 269/384; neutral 324/384, 913 B packet (-3%),
+ without entity/grounding/        515 B ask (+10%); hidden packet 1,529 -> 1,509 B, ask 581 -> 602 B
+ intent/2 terms)
+constraint-like item among the   hidden surfaced 305/384 (push-delivered 272 -> 267, listed only 33 -> 38), decoys 267;
+ 5 sent (not just the pool)       neutral packet 278/384, 792 B (-16%), 523 B ask (+12%)
+ask-item filters (offline, ask   planted items the ask cited kept: entity|probed|2 terms 219/303 hidden, 221/265 control;
+ diagnostics' facts)              relScore >= 0.2: 230/303; >= 0.3: 228/303 (every filter drops ~24% of planted ones)
