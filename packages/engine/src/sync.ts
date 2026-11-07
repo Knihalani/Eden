@@ -92,9 +92,9 @@ export interface SyncOptions {
   sketch?: boolean;
   /**
    * `syncUnusedSweepMs` (D356, on in the default at a week; 0 or absent: off): a source the user does not use
-   * (`engage`) whose connector can fetch by ref is swept this often (ms) instead of every `sweepMs`. The engine re-reads
-   * its copies a skipped sweep left unvouched for (`sweepLapsed`) or the last sweep missed (`sweepMissed`) before
-   * delivering them, since a deletion may be behind them.
+   * (`engage`) whose connector can fetch by ref is swept this often (ms) instead of every `sweepMs`. The engine
+   * re-reads its copies a skipped sweep left unvouched for (`sweepLapsed`) or the last sweep missed (`sweepMissed`)
+   * before delivering them, since a deletion may be behind them.
    */
   unusedSweepMs?: number;
   /**
