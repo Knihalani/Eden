@@ -167,7 +167,8 @@ describe("suite registry", () => {
       expect(HELDOUT17_LATE.every((n) => names.includes(n))).toBe(true);
     }
     expect(UNRUN_BLIND).toContain("heldout17");
-    expect(UNREAD_BLIND).toEqual(["heldout17"]);
+    // Read by A29 (D399): the funnel now warns that a run naming it was read before.
+    expect(UNREAD_BLIND).toEqual([]);
     expect(supportsNeutral("heldout17")).toBe(true);
     expect(parseSuites("all")).not.toContain("heldout17");
   });

@@ -20,6 +20,10 @@ ledgers: **Anthropic-direct lab figures**, not the OpenRouter route the servers 
     setup it gives up about 5 points (−4.9, −11.1..+1.4), the price of the cost and latency cut; the pre-registered
     rule kept it.
   - **No rise in false concerns** after regrading.
+- **Blind again on heldout17 (A29, D395, [a29-heldout17.md](a29-heldout17.md)), with the house rules on in every
+  arm (`--tenant-prompt`):** hidden facts 73.4% vs 4.7% (short), 7/8 vs 0/8 (long); 0.62 s and 0.45 s faster; no rise
+  in regraded concerns; but **dearer on the billed agent bill**, +$0.087/1k short and +$0.059 long (level
+  cache-neutral, cheaper on every priced connector plan). The heldout16 cost rows above ran without house rules.
 - **Against RealUse-1** (heldout14, different suite): Eden was +$0.50/1k and +0.6 s on the mix; now level or cheaper and
   faster.
 - **Hermes Agent** (heldout16, seeds 41–42): 71.9% vs 10.9% hidden facts, about 1 s faster on hidden tasks, but $0.077

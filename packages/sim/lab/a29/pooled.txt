@@ -1,0 +1,20 @@
+== eden tools
+eden − tools hidden   runs 4 n   72 diff +0.708 (+0.597..+0.819)
+eden − tools control  runs 4 n   72 diff +0.000 (+0.000..+0.000)
+eden − tools neutral  runs 4 n  112 diff +0.009 (-0.018..+0.036)
+== eden+nokey tools
+eden+nokey − tools hidden   runs 4 n   72 diff +0.486 (+0.361..+0.611)
+eden+nokey − tools control  runs 4 n   72 diff +0.000 (+0.000..+0.000)
+eden+nokey − tools neutral  runs 4 n  112 diff +0.000 (-0.027..+0.027)
+== eden~nonudge tools
+eden~nonudge − tools hidden   runs 4 n   72 diff +0.583 (+0.458..+0.708)
+eden~nonudge − tools control  runs 4 n   72 diff +0.000 (+0.000..+0.000)
+eden~nonudge − tools neutral  runs 4 n  112 diff +0.009 (-0.018..+0.036)
+== eden+nokey eden
+eden+nokey − eden hidden   runs 4 n   72 diff -0.222 (-0.347..-0.111)
+eden+nokey − eden control  runs 4 n   72 diff +0.000 (+0.000..+0.000)
+eden+nokey − eden neutral  runs 4 n  112 diff -0.009 (-0.045..+0.018)
+== eden~nonudge eden
+eden~nonudge − eden hidden   runs 4 n   72 diff -0.125 (-0.236..-0.014)
+eden~nonudge − eden control  runs 4 n   72 diff +0.000 (+0.000..+0.000)
+eden~nonudge − eden neutral  runs 4 n  112 diff +0.000 (-0.036..+0.036)
