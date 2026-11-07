@@ -85,7 +85,7 @@ not strict yet.
 | ------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | No-model funnel     | `hidden-funnel.ts` (`bun run funnel` wraps it) | Per task: planted item returned, cached, delivered; with `--ask`, cited by an ask; decoy delivered on controls; source calls and ms per task. Deterministic at `--time 0`                                                  |
 | Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][+ask][+nokey][@w<ms>]`, graded by a second model; per-task timelines; `--day K`; `--days D` (a user's mixed days, recipe 4c) |
-| Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`); same tasks, grader and results format as Pi                                                                                   |
+| Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`), or Eden in place of its source tools (`hermes-eden`, A16: Pi's `eden` shape); same tasks, grader and results format as Pi                                                                                   |
 | In-house loop       | `agent-ab.ts`                                  | The pre-Pi loop; label any result from it as such (CLAUDE.md)                                                                                                                                                              |
 | Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load; `sim:perf memory --synced` and `steady --synced` (A3) backfill their users first (the scenarios otherwise never sync)                  |
 | Connector lab       | `bun run sim:lab:build && bun run sim:lab`     | Real MCP servers in Docker over seeded backends                                                                                                                                                                            |
@@ -765,6 +765,27 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cache-probe.ts --suite train1
   --spend-ledger .local/a3/ledger.jsonl --spend-cap 2 --run-label a3-cache-probe
 ```
 
+**How packets stay across a session's requests (D336).** Pi keeps every request's packet in the day's transcript
+(`kept`); `withContext` and an agent that does not store the message it returns send only the current packet
+(`ephemeral`). On Anthropic's cache (entries end at breakpoints; pi-ai marks the last tool, the system prompt and the
+last message) a dropped packet changes every later request's prefix, so the history is written again. `+ephemeral` and
+`+ephemeralBp` (harness flags on a base with Eden, `--days` or `--day` only; `packet-layout.ts`) run those layouts, the
+second with a breakpoint on the request's user turn. `session-cache-probe.ts` (about $0.003) shows the mechanism on the
+wire over one session (`--dump` prints the bodies: pi-ai sends a system message placed before a user turn after it).
+`packages/sim/lab/a16/earlier.py` says where each hidden task's planted item reached the agent (this packet, an ask,
+only an earlier packet that day, nowhere). Measured (docs/research/a16-loop.md): ephemeral +$0.057/1k against kept over
+days; with the breakpoint −$0.038/1k, but both lose the items first shown in an earlier packet, which Eden does not send
+twice.
+
+```bash
+packages/sim/lab/a16/run.sh a16-long-41 payload tools,eden,eden+ephemeral,eden+ephemeralBp --seeds 41 --days 8 \
+  --budget 0.35                                                                       # and 42
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/session-cache-probe.ts --requests 6 \
+  --spend-ledger .local/a16/ledger.jsonl --spend-cap 2.5 --run-label a16-session-probe
+python3 -I packages/sim/lab/a16/earlier.py .local/a16/runs/a16-long-4{1,2}
+python3 -I packages/sim/lab/a16/turns.py .local/a16/runs/a16-long-4{1,2}   # output per tool turn and per final turn
+```
+
 ### 4b. Regrade with another grader, and cold-start cost
 
 - `regrade.ts --results F --graders claude-sonnet-5-5 --spend-ledger … --spend-cap …`: a `claude-*` grader goes
@@ -806,6 +827,10 @@ no ask_context"). Hermes' prompt is
 about 3× Pi's input tokens per request; on free models tasks after a stream's first averaged 22–26 s, and the full
 nine-suite bench was estimated at 2.6 h at concurrency 6 if the rate limit does not bind, 7.6 h at 18 requests a
 minute on free models (hermes-lab.md, estimates).
+
+`hermes-eden` (A16) gives Hermes Eden's `ask_context` and plugin with no `search_<source>` tools, as Pi's `eden` arm
+has none: `hermes+eden` keeps them (Pi's `both+ask`), so a "Hermes keeps searching" comparison against Pi's `eden`
+compares two arm shapes. The report pairs `hermes-eden` with `hermes` and with `hermes+eden`.
 
 ### 5b. Market connectors and change notifications (both harnesses)
 

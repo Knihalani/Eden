@@ -1,0 +1,10 @@
+arm    kind     n   req  tool  out/tool out/final out/task  write1st writeLater  asks  q.chars  ans.bytes
+eden   control  144  1.37  0.37      180       215      281       674        263  0.51      157        837
+eden   hidden   144  1.21  0.21      188       230      269       733        174  0.31      158        975
+eden   neutral  144  1.57  0.57      169       180      277       496        404  0.74      155        862
+eden+terse control  144  1.41  0.41      160       212      277       683        379  0.76       48        883
+eden+terse hidden   144  1.26  0.26      156       238      278       727        236  0.44       46        967
+eden+terse neutral  144  1.53  0.53      153       178      259       501        439  0.97       44        749
+tools  control  144  1.81  0.81      198       157      318        41        340  0.00        0          0
+tools  hidden   144  1.80  0.80      198       164      322        41        333  0.00        0          0
+tools  neutral  144  1.86  0.86      196       161      331        21        329  0.00        0          0

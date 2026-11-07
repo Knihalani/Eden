@@ -7,6 +7,8 @@
  * - hermes:      Hermes with one MCP server, `sources`: a read-only `search_<source>` tool per sim source (pi-ab's
  *                `tools`). Hermes' own toolsets (terminal, files, web, browser, code, memory, skills, delegation, cron)
  *                are all off: `enabled_toolsets` is the MCP toolsets only, so the agent is read-only.
+ * - hermes-eden: Eden only (A16), Pi's `eden` shape: `ask_context` and the plugin, no `search_<source>` tools (the
+ *                sources server runs, its toolset is not enabled). `~variant`, `+flag`, `@w<ms>` as for hermes+eden.
  * - hermes+eden: the same, plus Eden as two integration points, both Hermes' own extension surfaces:
  *                Eden's MCP server (`createMcpServer`: `ask_context` with the standard description), and the Eden
  *                plugin (packages/sim/lab/hermes/eden): `pre_llm_call` observes the turn and injects Eden's packet,
@@ -373,7 +375,7 @@ async function runWorld(
 ): Promise<RunResult[]> {
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
   const notify = pushNotifier(sources, CONNECTORS, seed);
-  const { name: condition, waitMs, withPartner, config, eden } = cond;
+  const { name: condition, waitMs, withPartner, config, eden, useTools } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
   let current: Timeline | null = null;
@@ -550,7 +552,8 @@ async function runWorld(
   mkdirSync(home, { recursive: true });
   writeFileSync(join(home, "config.yaml"), hermesConfig(id, eden));
   if (eden) cpSync(join(LAB_DIR, "eden"), join(home, "plugins/eden"), { recursive: true });
-  const toolsets = ["mcp-sources", ...(eden ? ["mcp-eden"] : [])];
+  // `hermes-eden` (A16): Eden in place of the per-source search tools, as Pi's `eden` arm.
+  const toolsets = [...(useTools ? ["mcp-sources"] : []), ...(eden ? ["mcp-eden"] : [])];
 
   const out: RunResult[] = [];
   let previous: { sessionId: string; r: RunResult } | null = null;

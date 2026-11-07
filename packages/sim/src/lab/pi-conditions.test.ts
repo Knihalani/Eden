@@ -167,4 +167,15 @@ describe("pi-ab conditions", () => {
       expect(() => parseCondition(n, { config: ALL })).toThrow(/nokey/);
     expect(pairedWith("eden+nokey")).toBe("eden");
   });
+  test("+ephemeral, +ephemeralBp: how earlier requests' packets are kept, a harness setting (D336)", () => {
+    const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+    expect(parseCondition("eden", { config: ALL }).packets).toBe("kept");
+    const e = parseCondition("eden+ephemeral", { config: ALL, defaults });
+    expect([e.packets, e.config]).toEqual(["ephemeral", ALL]);
+    expect(parseCondition("both+ask+ephemeralBp", { config: ALL, defaults }).packets).toBe("ephemeralBp");
+    // Without Eden there are no packets; both flags at once would be two layouts.
+    for (const n of ["tools+ephemeral", "none+ephemeralBp", "eden+ephemeral+ephemeralBp"])
+      expect(() => parseCondition(n, { config: ALL })).toThrow(/ephemeral/);
+    expect(pairedWith("eden+ephemeralBp")).toBe("eden");
+  });
 });
