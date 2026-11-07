@@ -11,7 +11,7 @@
  * do. Each source lists newest first with an offset cursor (so it is synced) and searches by entity and word.
  *
  *   bun packages/engine/bench/many-sources.bench.ts [sources=1000] [itemsPerSource=20] [events=300] [asks=40]
- *     [latencyMs=0]
+ *     [latencyMs=0] [--config=<json>]
  *
  * `latencyMs` > 0 makes every source call take that long (wall-time figures: cold start, ask latency); 0 measures
  * Eden's own CPU. Prints one JSON line with the figures (and a readable summary on stderr).
@@ -20,10 +20,13 @@ import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type SearchQuery, type Source } from "@eden/sources";
-import { ContextPartner, ItemCache, type Trace } from "../src/index";
+import { ContextPartner, ItemCache, type EngineConfig, type Trace } from "../src/index";
 import { buildWorkload, rng } from "./workload";
 
-const argv = process.argv.slice(2);
+// `--config=<json>`: engine settings over the default (a trial's arm).
+const configArg = process.argv.find((a) => a.startsWith("--config="));
+const config = configArg ? (JSON.parse(configArg.slice("--config=".length)) as Partial<EngineConfig>) : {};
+const argv = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const N = Number(argv[0] ?? 1_000);
 const itemsPerSource = Number(argv[1] ?? 20);
 const eventCount = Number(argv[2] ?? 300);
@@ -134,6 +137,7 @@ const partner = new ContextPartner({
   now,
   planner: new QueryPlanner({ seed: 1, store: sourceMap, mode: "serve" }),
   onTrace: (t) => traces.push(t),
+  config,
 });
 
 const cpu = () => {
@@ -247,6 +251,7 @@ const out = {
   sources: N,
   itemsPerSource,
   latencyMs,
+  config,
   cold,
   events,
   asks,

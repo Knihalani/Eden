@@ -29,6 +29,11 @@ export interface RouteRequest {
   /** All sources the user has; routing ranks them. */
   sourceIds: string[];
   limit: number;
+  /**
+   * Evidence from the user's own index, added to each source's score (`routeLocalHits`, D265): how many of the
+   * request's best local matches each source holds. Absent: none.
+   */
+  boost?: ReadonlyMap<string, number>;
 }
 
 export interface RankedSource {
@@ -219,7 +224,8 @@ export class SourceMap {
         const { shown, used } = known.get(sourceId) ?? NONE;
         const utility = (used + 1) / (shown + 2);
         const sampled = this.explore ? this.rng.beta(used + 1, shown - used + 1) : utility;
-        return { sourceId, entityHits, utility, sampled, score: entityHits + 2 * sampled };
+        const boost = request.boost?.get(sourceId) ?? 0;
+        return { sourceId, entityHits, utility, sampled, score: entityHits + boost + 2 * sampled };
       })
       .sort((a, b) => b.score - a.score || a.sourceId.localeCompare(b.sourceId))
       .slice(0, request.limit);
