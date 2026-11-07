@@ -139,14 +139,6 @@ export const CANDIDATES_LEAD =
   "not, ignore it and do not mention it.";
 
 /**
- * `pushAhead` (A9): the answer-ahead packet's framing line. It says what the records are and that nothing checked
- * them; it never says nothing else exists (D257: a "nothing found" note made the agent skip the ask that finds more).
- */
-export const AHEAD_LEAD =
-  `${EDEN_NOTE}records from the user's sources about who and what this request names (the newest record for each ` +
-  "person or firm named, and the calendar of the day it names), for reference; nothing has checked them against it.";
-
-/**
  * `planConflict` (A9): the framing line of a packet about an earlier request; the request's own words follow, quoted.
  * Like the candidates' lead, it asks the agent to check before using an item, and to say nothing of one that does not
  * bear on that request.

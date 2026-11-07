@@ -54,6 +54,25 @@ for kind in ("hidden", "control", "neutral", "all"):
     if da:
         print(f"{kind:8} n {len(da):4}  asks {'%+.2f (%+.2f..%+.2f)' % boot(da)}  out tok {'%+.0f (%+.0f..%+.0f)' % boot(do)}"
               f"  turns {'%+.2f (%+.2f..%+.2f)' % boot(dt)}")
+print(f"\n== {arm} − {base}, paired, every task; mix 1:1:8 (hidden:control:neutral, an assumption)")
+W = {"hidden": 0.1, "control": 0.1, "neutral": 0.8}
+mix = {"asks": 0.0, "out": 0.0, "turns": 0.0}
+for kind in ("hidden", "control", "neutral"):
+    da, do, dt = [], [], []
+    for (task, cond), x in T.items():
+        b = T.get((task, base))
+        if cond != arm or x["kind"] != kind or not b:
+            continue
+        da.append(len(x["asks"]) - len(b["asks"]))
+        do.append(x["out"] - b["out"])
+        dt.append(x["turns"] - b["turns"])
+    if da:
+        a, o, t = boot(da), boot(do), boot(dt)
+        print(f"{kind:8} n {len(da):4}  asks {'%+.3f (%+.3f..%+.3f)' % a}  out tok {'%+.1f (%+.1f..%+.1f)' % o}"
+              f"  turns {'%+.3f (%+.3f..%+.3f)' % t}")
+        for k, v in (("asks", a[0]), ("out", o[0]), ("turns", t[0])):
+            mix[k] += W[kind] * v
+print("mix (point estimates) " + "  ".join(f"{k} {v:+.3f}" for k, v in mix.items()))
 if show:
     for (task, cond), x in sorted(T.items()):
         if cond == arm and x["ahead"] and x["asks"]:

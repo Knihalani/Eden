@@ -14,3 +14,9 @@ hidden   n   37  asks -0.27 (-0.51..-0.05)  out tok -18 (-80..+33)  turns -0.16 
 control  n   36  asks -0.31 (-0.58..-0.03)  out tok +12 (-29..+52)  turns -0.25 (-0.42..-0.11)
 neutral  n   33  asks -0.33 (-0.73..+0.00)  out tok +7 (-46..+54)  turns -0.18 (-0.36..-0.03)
 all      n  106  asks -0.30 (-0.47..-0.14)  out tok -0 (-30..+28)  turns -0.20 (-0.29..-0.10)
+
+== eden~ahead − eden, paired, every task; mix 1:1:8 (hidden:control:neutral, an assumption)
+hidden   n  144  asks -0.083 (-0.188..+0.014)  out tok +2.0 (-22.1..+24.6)  turns -0.062 (-0.118..-0.007)
+control  n  144  asks -0.125 (-0.236..-0.021)  out tok +2.8 (-19.4..+24.9)  turns -0.069 (-0.139..+0.000)
+neutral  n  144  asks +0.056 (-0.104..+0.208)  out tok +13.9 (-15.5..+42.9)  turns +0.049 (-0.042..+0.139)
+mix (point estimates) asks +0.024  out +11.565  turns +0.026

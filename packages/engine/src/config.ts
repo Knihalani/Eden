@@ -465,14 +465,6 @@ export interface EngineConfig {
    */
   pushCandidates: number;
   /**
-   * Trial (A9, owner: repo owner, ends 2026-12-07; docs/research/a9-ahead.md): answer-ahead. With the push on, a
-   * request that names a person or firm, or a day, also gets the records the agent would otherwise look up first,
-   * from the pool the push ranked (no new source or model call): the newest item naming each of the first two people
-   * or firms it names, then the named day's calendar entries soonest first, at most `AHEAD_MAX` in all and none
-   * already among the candidates, as one more packet after a fixed line of Eden's own (`AHEAD_LEAD`). Off.
-   */
-  pushAhead: boolean;
-  /**
    * Trial (A9, owner: repo owner, ends 2026-12-07; docs/research/a9-ahead.md): plan-conflict proactivity. With the
    * push and the sync on, each session keeps its last `PLAN_REQUESTS` acting requests (those the push ran for); an
    * item the sync then stores (a poll, a notice's payload) that would have been among such a request's candidates
@@ -598,6 +590,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
-  pushAhead: false,
   planConflict: false,
 };

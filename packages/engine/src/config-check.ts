@@ -132,7 +132,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerReuse: PUSH,
   readerStopEarly: READER,
   pushCandidates: PUSH,
-  pushAhead: PUSH,
   planConflict: [...PUSH, "sync"],
 };
 
