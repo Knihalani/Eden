@@ -269,8 +269,10 @@ that (a poll, a notice's payload) wait, per session, for its next take (`takePen
 push): there each is checked against those requests by `candidatesOf`'s rule (among the first `pushCandidates` of the
 request's ranked pool, bulk mail out, the pool holding something constraint-like, cards included, which by then have
 been made), and one that qualifies, and that no packet has handed the session, is queued as a packet naming the
-earlier request (`PLAN_LEAD` and the request's own words, quoted on one line), whatever the agent asks now. Index
-lookups only, no source or model call; once per item per session (docs/research/a9-ahead.md).
+earlier request (`PLAN_LEAD` and the request's own words, quoted on one line, double quotes made single), whatever
+the agent asks now. A copy a change signal has put in doubt waits for a later take (D126). Index lookups only, no
+source or model call (under 3 ms a take in the $0 screen); once per item per session (`planSent`;
+docs/research/a9-ahead.md).
 
 **Deleted by D112:** `decideConflict` (D67), `judgeBehind`, push relaying (`syncPush`, `sourcePushes`,
 `sourceChanged`, D66) and the other switches D112 lists. The candidates' facts (`decide.ts`) still reach the lab only

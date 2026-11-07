@@ -211,8 +211,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   observe that starts no push run `checkPlans`, so a new item's card (made in the background as it was stored) can
   count; at the store it has none yet. The rule is
   `candidatesOf`'s (first `pushCandidates` of the ranked pool, a constraint-like pool), not "the item itself is a
-  constraint": most planted facts carry no constraint card or wording. Built from the cached copy, with no
-  `verifyItems` (the source just gave it). Answer-ahead (records about the request's names and day in the push, A9)
+  constraint": most planted facts carry no constraint card or wording. Built from the cached copy (the source just
+  gave it) with `deliver`, not `deliverChecked`: a copy a change signal has put in doubt (`doubted`) is not sent but
+  kept waiting for a later take, and `planSent` keeps each item to one plan packet a session, past the ledger's
+  cooldown. The lead quotes the user's own request (redacted, one line, double quotes made single, D301). Answer-ahead (records about the request's names and day in the push, A9)
   was measured and deleted (D300): it cut asks only on the quarter of requests it reached and moved no mix figure.
 - **The candidates' packet is not smaller (D258, D259; docs/research/cl-cl8.md).** 200-byte excerpts lost hidden facts
   (−12.8 points, with the no-repeat switch on: shorter excerpts keep the items but not the fact), k 3 saved only over a

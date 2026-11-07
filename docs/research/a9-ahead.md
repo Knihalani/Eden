@@ -1,10 +1,11 @@
 # A9: answer-ahead and plan-conflict proactivity
 
-Status: 2026-11-07, branch `claude/a9-ahead` (from `claude/lucid-hypatia-v9wqk5` at `ae5757b75`). Decisions D300–D302.
+Status: 2026-11-07, branch `claude/a9-ahead` (from `claude/lucid-hypatia-v9wqk5` at `ae5757b75`, with its tip at
+`598bd6eb` merged before the final check, §4). Decisions D300–D302.
 Every paid call went to the Anthropic API with `HAIKU_API_KEY` through the lab provider (D97), `claude-haiku-5-5` in
 every role (agent, grader, cards), `OPENROUTER_API_KEY` unset, one ledger (`.local/a9/ledger.jsonl`), hard cap $2.5;
 one regrade used `claude-sonnet-5-5`: **Anthropic-direct lab figures**. Train only (seeds 41–42); no held-out suite
-was run. **Spent: $1.859** (`packages/sim/lab/a9/spend.txt`). Intervals are paired bootstrap 95% (5,000 draws, seed
+was run. **Spent: $2.406** (`packages/sim/lab/a9/spend.txt`). Intervals are paired bootstrap 95% (5,000 draws, seed
 1). Every number comes from a command in this note; the 1:1:8 mix (hidden : control : nothing-to-add) is an assumption.
 
 ## In plain words
@@ -23,10 +24,14 @@ was run. **Spent: $1.859** (`packages/sim/lab/a9/spend.txt`). Intervals are pair
   at its next turn, whatever it is asked then. In a new lab test where each request's key fact arrives only after the
   agent answered it (D302), the agent's later replies that day raised the fact **59 times in 144 against 8 without
   it, +35.4 points (+27.1..+43.8)**, and 3 for the agent with its own tools. False alarms on look-alikes: 1 against 1
-  after a Sonnet regrade (Haiku had graded 8 against 1; read by hand, 2 are real and 1 borderline). It costs Eden
+  after a Sonnet regrade of the replies Haiku had called alarms (Haiku: 8 against 1; read by hand, 1 is real, 2
+  borderline and 5 not alarms). It costs Eden
   nothing (no model or connector call), and the agent about 3–8% more a task on days where every request's fact
   arrives late (it says the fact). On ordinary days it stayed silent: no plan packet reached a request over two users'
-  eight days, and with 2–5 unrelated background items arriving between requests it spoke before 1–8% of requests.
+  eight days, and with 2–5 unrelated background items arriving between requests it spoke before 1–8% of requests,
+  adding under a millisecond to the turn's take (0.6–0.9 ms mean, 2.8 ms at most). Re-run on the merged tree after
+  the review's fixes: +35.1 points (+25.2..+45.0), false alarms 1 against 0 after the Sonnet regrade, and no change in
+  cost or connector calls over a user's days.
 - **Connector pricing.** Neither idea adds a connector call. Per plan (market.py's CONNECTORS), answer-ahead's arm
   costs what `eden` costs on every plan; one request at a time both make no connector calls against the tools agent's
   3.46 a task ($89.65 against $0.41 per 1,000 tasks on Zapier MCP).
@@ -88,10 +93,12 @@ not better on its axis; deleted (D112).
 
 **Mechanism.** `planConflict` (on in the default, part `plans`). Each session keeps the cues of its last 12 acting
 requests (those the push ran for). The sync's `onStored` (a poll, a notice's payload) records, per such session, the
-ids it stored; at the session's next take (`takePending`, or an observe that starts no push, so `pending` says a
-packet waits) each id is checked against each acting request by `candidatesOf`'s rule: among the first
-`pushCandidates` of that request's ranked pool, bulk mail out, the pool holding something constraint-like (cards
-included). One that qualifies and that no packet has handed the session is queued as a packet:
+ids it stored; at the session's next take (`takePending`, or an observe, so `pending` says a packet waits) each id is
+checked against each acting request by `candidatesOf`'s rule: among the first `pushCandidates` of that request's
+ranked pool, bulk mail out, the pool holding something constraint-like (cards included). One that qualifies, that no
+packet has handed the session and no plan packet has sent before (`planSent`), is queued as a packet built from the
+cached copy; a copy a change signal has put in doubt since it was read (D126's `doubted`) waits for a later take,
+when the poll has stored the current one, so no stale copy goes out unchecked:
 
 ```
 Eden: new in the user's sources since an earlier request in this conversation, and may bear on it; nothing has
@@ -100,12 +107,18 @@ tell the user; if not, ignore it and do not mention it. The earlier request: "Mo
 - [gmail] We've received your ISA subscription: …
 ```
 
+The quoted request is the user's own redacted words on one line (`safeLine`), double quotes made single so the quote
+cannot be closed and the rest read as Eden's voice: the one event text an `Eden:` line carries (a departure from
+D237's fixed-words lead, stated in D301).
+
 Two design turns, both from the smoke: (1) checking at the store found no card yet for the new item, so the check
 moved to the take; (2) requiring the item itself to read as a constraint (A6's sketch) missed most facts (the ISA
 statement has no constraint wording and no card), so the rule is the candidates', which is how the same item would have
-reached the agent had it existed at request time. Nine tests (off in the core, the packet's words and envelope, once
-per item, no packet for an unrelated item or a pool with nothing constraint-like, none after an information question,
-isolation across users and sessions, a closed session forgotten, `pending` reported, the config check).
+reached the agent had it existed at request time. The review (§4) added the doubt rule, `planSent` and the quote
+guard. Thirteen tests (off in the core, the packet's words and envelope, once per item and past the ledger's
+cooldown, no packet for an unrelated item or a pool with nothing constraint-like, none after an information question,
+isolation across users, tenants and sessions, a closed session leaving the acting map, a doubted copy waiting for the
+re-stored one, the quote guard, `pending` reported, the config check).
 
 **The lab test (D302): `pi-ab --day 4 --late`.** Each request's planted item is held out of the world until the
 agent has answered that request, then arrives as a new item at its source (the notice carries it, `--push payload`);
@@ -128,6 +141,8 @@ alarms +2.8 (0.0..+6.2) in run 1 and +4.9 (+1.4..+9.0) in the replicate as grade
 last year's ISA subscription to this year's allowance (real, hedged: "confirm it relates to 2026/27"), keeping a review
 private on a People-team note about other reviews (borderline), a sister pub's refit mentioned as relevant (borderline
 at most), and five that state the look-alike correctly (an approved access ticket, a cancelled match, "not done").
+Sonnet regraded only the replies Haiku had called alarms (`--only-concerns`), so a Sonnet alarm Haiku missed is not
+counted.
 
 **Ordinary days.** The long-horizon run (`--days 8`, users 41–42, `eden~plan` against A9's `eden` and `tools`,
 `plong-arms.txt`) never put a plan packet in front of a graded request (the static worlds send nothing new); mix $/1k
@@ -137,8 +152,9 @@ items held back and arriving between requests, none of them a planted fact, so e
 
 | Background items per request gap | w41 | w42 |
 | --- | --- | --- |
-| 2 (228 / 236 arrivals) | 4 of 114 requests (3.5%), 0.50 items a day | 1 of 118 (0.8%), 0.13 a day |
+| 2 (228 / 236 arrivals) | 3 of 114 requests (2.6%), 0.38 items a day | 1 of 118 (0.8%), 0.13 a day |
 | 5 (570 / 590 arrivals) | 7 of 114 (6.1%), 0.88 a day | 9 of 118 (7.6%), 1.13 a day |
+| The take after arrivals (`checkPlans`, synchronous): mean / max | 0.77 / 1.88 ms (2), 0.87 / 2.82 ms (5) | 0.59 / 2.15 ms (2), 0.65 / 1.50 ms (5) |
 
 For scale, the candidates' packet goes out on about three requests in four. With one request per session (the funnel)
 nothing can arrive after the request: 1,152 of 1,152 tasks' packets are identical with it on, and `bun run eval` is
@@ -148,7 +164,31 @@ unchanged.
 agent cost that is the price of saying the fact; promoted (D301). It departs from D3 (an unasked packet about an
 earlier request) at the volume above.
 
-## 4. Decisions
+## 4. Review, and the merged tree
+
+The reviewer subagent asked for changes; all were made: a copy a change signal has put in doubt now waits for a later
+take instead of going out unchecked (D126; the first version built every plan packet with `deliver`), `planSent` keeps
+an item to one plan packet a session past the ledger's 40-turn cooldown, the quoted request's double quotes are made
+single, the docs' hand reading was made consistent, and a take's cost was timed (§3). The parent's tip (A1, A3's
+per-plan connector pricing and D272, A5, A7, the seeded fuzz test) was then merged and the shipped shape re-run there,
+`eden` (planConflict on) against `eden~noplan` (`'{"noplan":{"planConflict":false}}'`), Pi, payload:
+
+| Merged tree (`mlate.txt`, `mlong-arms.txt`, `mlong-cost.txt`) | eden~noplan | eden (on) | paired (on − off) |
+| --- | --- | --- | --- |
+| `--day 4 --late`, seeds 41–42: later replies raise the late fact | 12 / 128 | 50 / 115 | **+35.1 points (+25.2..+45.0)**, n 111 |
+| Look-alike raised, as Haiku graded | 1 / 123 | 5 / 123 | +4.5 (+0.9..+8.9), n 112 |
+| Look-alike raised, regraded by Sonnet (the replies Haiku called alarms) | 0 | 1 | |
+| Agent $/1k tasks (recaps excluded) | | | +0.006 (−0.009..+0.020) |
+| `--days 8`, user 41 (with `tools`): plan packets at a graded request | 0 | 0 | |
+| Mix $/1k / wall / Eden on the path | 0.360 / | 0.343 / | −0.002 (−0.016..+0.011) / +0.05 s (−0.04..+0.13) / +0.5 ms (0.0..+1.2) |
+| Connector calls a task (mix; backfill 18 a user both) | 0.16 | 0.16 | 0 |
+| All-in mix $/1k on Zapier MCP / Composio (`pi-cost-report`, A3's plans) | 8.447 / 0.454 | 8.433 / 0.440 | tools: 52.816 / 0.966 |
+
+The budget cut each late stream a little short (268 and 275 of 288 runs, a day's late grades lost with it); the pairs
+use only tasks graded in both arms. `bun run check` (2,071 tests, the fuzz test with planConflict on in the default)
+is green on the merged tree, and `bun run eval` gives identical metrics with planConflict on and off.
+
+## 5. Decisions
 
 - **D300**: trial `pushAhead` opened and closed the same day: measured not better, deleted with its code and tests.
 - **D301**: `planConflict` promoted into the default (part `plans`), with its D3 departure stated.
@@ -191,6 +231,12 @@ python3 -I $O/late.py eden~plan eden,tools $S/a9-late-4{1,2}
 python3 -I packages/sim/lab/cl7/arms.py --arms tools,eden,eden~plan $S/a9-long-41:tools,eden $S/a9-long-42:tools,eden \
   $S/a9-plong-4{1,2}
 bun packages/sim/lab/a9/arrivals.ts --cards .local/a9/cards-all.jsonl [--per-gap 5]
+# The merged tree (planConflict on in the default): the shipped shape against it off
+export A9_VC='{"noplan":{"planConflict":false}}'
+$R a9-mlate-41 payload eden,eden~noplan --seeds 41 --variants hidden,control --limit 12 --day 4 --late --budget 0.2
+$R a9-mlong-41 payload tools,eden,eden~noplan --seeds 41 --days 8 --budget 0.17
+python3 -I $O/late.py eden eden~noplan $S/a9-mlate-4{1,2}
+bun packages/sim/src/lab/pi-cost-report.ts $S/a9-mlong-41.json
 # Concern regrades: regrade.ts --only-concerns per run (Haiku); the replicate's later replies by Sonnet, from a copy
 # of its results with each planted request's `answer` set to its `lateText`.
 ```
@@ -206,4 +252,6 @@ bun packages/sim/lab/a9/arrivals.ts --cards .local/a9/cards-all.jsonl [--per-gap
 | plan-conflict: long, one arm, users 41–42 | 0.108 |
 | smokes | 0.034 |
 | regrades (Haiku; Sonnet on the replicate) | 0.029 |
-| **Total** | **1.859** |
+| merged tree: late days, two arms, seeds 41–42; long, three arms, user 41 | 0.527 |
+| merged tree: Sonnet regrade of the late alarms | 0.020 |
+| **Total** | **2.406** |
