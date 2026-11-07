@@ -197,6 +197,32 @@ describe("pushCandidates (D236, D237): the push hands the agent candidates, with
     expect(candidates(p)).toEqual([]);
   });
 
+  test("a candidate the slow path delivers during the push's re-reads is handed once (A11's re-check)", async () => {
+    const { p } = setup({ ...quiet, pushCandidates: 3, verifyDelivery: true });
+    type Scored = { item: ContextItem };
+    type Inner = {
+      verifyItems(s: unknown, scored: Scored[], cue: unknown): Promise<Scored[]>;
+      deliver(s: unknown, scored: Scored[], mode: string, reason: string, cue: unknown): AgentEvent;
+    };
+    const inner = p as unknown as Inner & { session(e: unknown): { pending: unknown[] } };
+    const real = inner.verifyItems.bind(p);
+    let raced: string | null = null;
+    inner.verifyItems = async (s, scored, cue) => {
+      const out = await real(s, scored, cue);
+      // While the push waited on its re-reads, this event's slow path delivered the first candidate and queued it.
+      if (raced === null && scored.length > 1) {
+        raced = scored[0]!.item.id;
+        (s as { pending: unknown[] }).pending.push(inner.deliver(s, [scored[0]!], "proactive", "slow:race", cue));
+      }
+      return out;
+    };
+    await say(p, REQUEST);
+    expect(raced).not.toBeNull();
+    const handed = p.takePending(ref()).flatMap((x) => x.citations.map((c) => c.itemId));
+    expect(handed.filter((id) => id === raced).length).toBe(1);
+    expect(handed.length).toBeGreaterThan(1); // The push's other candidates still go out.
+  });
+
   test("candidates of one session never reach another (isolation)", async () => {
     const { p } = setup({ ...quiet, pushCandidates: 3 });
     await say(p, REQUEST, "s1");

@@ -1726,7 +1726,15 @@ export class ContextPartner {
       );
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
+      // As `deliverChecked` (audit A11): an item whose ledger entry changed over the re-reads' await was handed out
+      // meanwhile (this event's slow path, a fast path), and `deliver` marks without testing again; it is left out. An
+      // entry gone meanwhile was swept, not handed out: kept.
+      const was = new Map(fresh.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
       let checked = fresh.length > 0 && !s.closed && latest ? await this.verifyItems(s, fresh, cue) : [];
+      checked = checked.filter((x) => {
+        const now = s.ledger.entry(x.item.id);
+        return now === undefined || sameEntry(was.get(x.item.id), now);
+      });
       const still = internal.request === undefined || internal.request === s.requests;
       const delivering = checked.length > 0 && !s.closed && still;
       if (replacing && (delivering || !candidates)) {
@@ -1746,7 +1754,7 @@ export class ContextPartner {
         }
       }
       // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
-      const was = behind ? new Map(checked.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
+      const undo = behind ? new Map(checked.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       const injection =
         delivering && checked.length > 0
           ? candidates
@@ -1761,7 +1769,7 @@ export class ContextPartner {
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
-      if (injection && was) this.keepUndo(s, injection, checked, was);
+      if (injection && undo) this.keepUndo(s, injection, checked, undo);
       if (injection) s.pending.push(injection);
       // `askNudge` (D316, D317): the ask the nudge asks for, in this request, may look past what was handed. A settled
       // packet (a `readerPushBehind` second pass replacing a nudged one) ends that look: the agent was not nudged.
