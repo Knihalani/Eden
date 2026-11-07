@@ -67,7 +67,7 @@ import {
   type Verdict,
 } from "./conflict";
 import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
-import { intentTerms, stemWord } from "./intent";
+import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
 import {
   READER_MAX_ITEMS,
   readerFocus,
@@ -4592,33 +4592,26 @@ export class ContextPartner {
   /**
    * `intent` (D87, docs/research/edge-intent.md): the user's cached items whose requests, written by the card call in
    * the background, best match the request, best first: item id → its place (0-based) and match. A hit holds at least
-   * `intentMinMatched` of the request's terms and `intentMinCoverage` of their idf; at most `intentHits` items. Only
-   * requests made before the request arrived count (as for cards). No model, no call: one BM25 search over the user's
-   * requests (at most four per carded item).
+   * `intentMinMatched` of the request's terms and `intentMinCoverage` of their idf; at most `intentHits` items
+   * (`keepIntents`, intent.ts; `intentByKind` treats constraint-carded hits apart, D200). Only requests made before the
+   * request arrived count (as for cards). No model, no call: one BM25 search over the user's requests (at most four
+   * per carded item).
    */
   private intentFinds(s: Session, cue: Cue): Map<string, IntentFind> {
-    const out = new Map<string, IntentFind>();
     const enricher = this.deps.cards;
-    if (!this.config.cards || !this.config.intent || !enricher) return out;
+    if (!this.config.cards || !this.config.intent || !enricher) return new Map();
     const now = this.now();
     const c = this.config;
     // The request as written (redacted), not its content terms: the requests the model wrote are whole sentences in
     // the user's words, verbs included ("approve", "book"), which the cue's terms may leave out.
-    const found = enricher.intentFinds(
-      s.scope,
-      cue.raw.slice(0, INTENT_QUERY_CHARS),
-      cue.arrived ?? now,
-      c.intentHits,
-      (id) => this.deps.cache.get(s.scope, id, now) !== null,
-    );
-    for (const { ids, hit } of found) {
-      if (hit.matched < c.intentMinMatched || hit.coverage < c.intentMinCoverage) continue;
-      for (const id of ids) {
-        if (out.size >= c.intentHits) return out;
-        if (!out.has(id)) out.set(id, { rank: out.size, coverage: hit.coverage, matched: hit.matched });
-      }
-    }
-    return out;
+    const cut = intentCut(c);
+    const text = cue.raw.slice(0, INTENT_QUERY_CHARS);
+    const accept = (id: string) => this.deps.cache.get(s.scope, id, now) !== null;
+    const found = enricher.intentFinds(s.scope, text, cue.arrived ?? now, c.intentHits, accept);
+    // `intentByKind`: a second, deeper search for the carded pass only (`intentReach`, intent.ts, says why apart).
+    const reach = intentReach(cut);
+    const deep = reach > 0 ? enricher.intentFinds(s.scope, text, cue.arrived ?? now, reach, accept) : found;
+    return keepIntents(found, cut, deep);
   }
 
   /**

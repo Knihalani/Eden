@@ -77,6 +77,8 @@ import {
   AskReader,
   CardEnricher,
   cardKey,
+  intentCut,
+  intentReach,
   ModelReaderMaker,
   type ReaderReport,
   ContextPartner,
@@ -801,17 +803,26 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     const replay = inReplay(item);
     const held = cards.requestsOf(scope, item.id, askAt).length;
     let intent: AskCoverage["intent"] = null;
+    // The card's kind is read inside the counted block (its read drops an expired card too); with no requests held,
+    // read here after it.
+    let cardKind: string | undefined;
     if (held > 0) {
-      // The engine's call (partner.ts intentFinds: k = `intentHits`, before the ask's arrival, thresholds after), and
-      // an unbounded one (every hash the user holds) so a passing hit past the engine's cut is still known. Each
-      // call drops the expired cards it passes (counted, a side effect read after the ask).
+      // The engine's calls (partner.ts intentFinds: k = `intentHits`, and with `intentByKind` k = `intentReach` for
+      // the carded pass; before the ask's arrival, thresholds after), and an unbounded one (every hash the user
+      // holds) so a passing hit past the engine's cut is still known. Each call drops the expired cards it passes
+      // (counted, a side effect read after the ask).
       const text = sanitizeForStore(question).slice(0, INTENT_QUERY_CHARS);
       const accept = (x: string) => cache.get(scope, x, clock) !== null;
       const size0 = cards.intentSize(scope);
-      const cut = cards.intentFinds(scope, text, askAt, RUN.intentHits, accept);
+      const rule = intentCut(RUN);
+      const cut = cards.intentFinds(scope, text, askAt, rule.hits, accept);
+      const reach = intentReach(rule);
+      const deep = reach > 0 ? cards.intentFinds(scope, text, askAt, reach, accept) : cut;
       const all = cards.intentFinds(scope, text, askAt, cards.intentSize(scope), accept);
+      const kind = cards.cardsOf(scope, [item.id], askAt).get(item.id)?.kind ?? "none";
       diagDropped += size0 - cards.intentSize(scope);
-      intent = intentPlace(cut, all, item.id, RUN.intentMinMatched, RUN.intentMinCoverage, RUN.intentHits);
+      intent = intentPlace(cut, all, item.id, rule.minMatched, rule.minCoverage, rule.hits, rule.byKind, deep);
+      cardKind = kind;
     }
     return {
       cardRead,
@@ -820,6 +831,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       // -1: the replay has no line for its content ("not in replay", told apart from a line with no requests).
       replayRequests: replay === null ? null : replay ? (cardMaker!.requests.get(hash)?.length ?? 0) : -1,
       heldRequests: held,
+      cardKind: cardKind ?? cards.cardsOf(scope, [item.id], askAt).get(item.id)?.kind ?? "none",
       intent,
     };
   };

@@ -370,7 +370,10 @@ automated mail (`automated`: a no-reply or list sender, a bulk category or foote
 or upcoming; constraint-worded items are read whatever their sender or age. They live in a per-user BM25 index apart
 from the item text, keyed by content hash and dropped with the card. At request time, with no model, the request's words
 are searched in it: the best hits join the lookup's candidates and one judge seat, and are fused into an `ask` by
-reciprocal rank after the verdict hits. An intent hit alone is never a no-model delivery.
+reciprocal rank after the verdict hits. An intent hit alone is never a no-model delivery. A hit whose item holds a
+constraint card (any kind but `none`) counts from a lower coverage floor (`intentCardCoverage`, 0.1, against 0.2), and
+up to `intentCardHits` (4) such hits the `intentHits` cut left out (read 3x as deep) are kept after the others
+(`intentByKind`, D200, `keepIntents`).
 
 **Deleted by D112:** guarded asks and answer-shaped packets (`askGuard`, `packetBearing`, D88)
 and the ALL5 preset (D92) with every other named preset; the lab's presets are only `default`,

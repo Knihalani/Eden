@@ -411,6 +411,20 @@ export interface EngineConfig {
   intentMinCoverage: number;
   /** ... and the least distinct request terms they must hold. */
   intentMinMatched: number;
+  /**
+   * On in the default (D200; docs/research/fix-s3a-intent.md): an intent hit whose item holds a constraint card (any
+   * kind but `none`) counts from `intentCardCoverage` of the request's idf instead of `intentMinCoverage`, and up to
+   * `intentCardHits` such hits left out by the `intentHits` cut (a second search, 3x `intentHits` deep) are kept
+   * after the others (`keepIntents`, intent.ts). On train, the hits under the thresholds or past the cut that held a
+   * constraint card were mostly hidden facts, the uncarded ones mostly decoys. Paid replay on train: hidden 311 to
+   * 315, decoys 137 to 133; Pi held-out 13+14: hidden raised +2.3 points (not significant), false concerns unchanged
+   * pooled.
+   */
+  intentByKind: boolean;
+  /** With `intentByKind`: the least share of the request's idf a constraint-carded item's requests must hold. */
+  intentCardCoverage: number;
+  /** With `intentByKind`: constraint-carded hits kept past the `intentHits` cut, at most. */
+  intentCardHits: number;
   /** The intent list's weight in an ask's reciprocal-rank fusion, against the lexical order's 1. */
   intentWeight: number;
   /** Judge seats kept for intent hits the lexical ranking did not seat (with a model). */
@@ -593,6 +607,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,
+  intentByKind: true,
+  intentCardCoverage: 0.1,
+  intentCardHits: 4,
   intentWeight: 1,
   intentSeats: 1,
   askReader: true,
