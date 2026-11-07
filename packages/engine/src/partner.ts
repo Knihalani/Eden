@@ -1485,31 +1485,46 @@ export class ContextPartner {
       // older copies, if the agent has not taken it, gives way to this one (its items count as undelivered here). One
       // the agent has taken stays taken: only what is new to it, or what the poll changed since, goes out again.
       const prev = internal.again?.prev;
-      const withdrawn = new Set<string>();
       // A candidates pass replaces the first packet only with candidates of its own (CL6 review).
-      if (prev && (reading?.read || (candidates?.items.length ?? 0) > 0) && !s.closed && latest) {
-        const at = s.pending.indexOf(prev);
-        if (at >= 0) {
-          s.pending.splice(at, 1);
-          for (const c of prev.citations) withdrawn.add(c.itemId);
-          // The agent never got it: what its delivery marked is undone before this reading delivers.
-          this.withdraw(s, prev);
-        }
-      }
+      const replacing = !!prev && (reading?.read || (candidates?.items.length ?? 0) > 0) && !s.closed && latest;
+      // The first packet's items count as undelivered for this reading while it is still queued. It is withdrawn only
+      // after the re-reads below, in the same step as its replacement is queued: withdrawn before them, a take while a
+      // re-read was on the wire found neither packet, and the push's context reached the agent a request late (audit
+      // A5); a candidates pass with nothing left to deliver keeps it.
+      const withdrawn = new Set<string>(
+        replacing && s.pending.includes(prev!) ? prev!.citations.map((c) => c.itemId) : [],
+      );
       const fresh = flagged.filter(
         (x) =>
           withdrawn.has(x.item.id) ||
           s.ledger.isFresh(x.item.id, s.turn) ||
           (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
       );
-      // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
-      const was = behind ? new Map(fresh.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
-      const checked = fresh.length > 0 && !s.closed && latest ? await this.verifyItems(s, fresh, cue) : [];
+      let checked = fresh.length > 0 && !s.closed && latest ? await this.verifyItems(s, fresh, cue) : [];
       const still = internal.request === undefined || internal.request === s.requests;
+      const delivering = checked.length > 0 && !s.closed && still;
+      if (replacing && (delivering || !candidates)) {
+        const at = s.pending.indexOf(prev!);
+        if (at >= 0) {
+          s.pending.splice(at, 1);
+          // The agent never got it: what its delivery marked is undone before this reading delivers.
+          this.withdraw(s, prev!);
+        } else if (withdrawn.size > 0) {
+          // The agent took it during the re-reads: its items are delivered after all, and go again only if revised.
+          checked = checked.filter(
+            (x) =>
+              !withdrawn.has(x.item.id) ||
+              s.ledger.isFresh(x.item.id, s.turn) ||
+              s.ledger.revised(x.item.id, versionOf(x.item), s.turn),
+          );
+        }
+      }
+      // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
+      const was = behind ? new Map(checked.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       const injection =
-        checked.length > 0 && !s.closed && still
+        delivering && checked.length > 0
           ? candidates
             ? this.deliver(s, checked, "proactive", `candidates:${cue.id}`, cue, undefined, this.candidateFrame())
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
