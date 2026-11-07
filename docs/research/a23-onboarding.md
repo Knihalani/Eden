@@ -47,7 +47,7 @@ findings were checked by hand where fixed. Every command ran with `OPENROUTER_AP
 | # | Path | Stumble (as observed) | Fix |
 | --- | --- | --- | --- |
 | 1 | a | `bun add …/packages/client`: `error: @eden/protocol@workspace:* failed to resolve`; npm 404 for `@eden/client` | `bun run pack:client` (D365); README and INTEGRATION.md say how to install from another repo |
-| 2 | a, b | Server down: `[eden] ECONNREFUSED: Unable to connect. Is the computer able to access the url?` (no URL, no route), on every call, from the TS client and the proxy | Both clients: `eden /v1/events: cannot reach http://127.0.0.1:8790 (…)`, `user:password@` removed; tested in TS and Python |
+| 2 | a, b | Server down: `[eden] ECONNREFUSED: Unable to connect. Is the computer able to access the url?` (no URL, no route), on every call, from the TS client and the proxy | Both clients: `eden /v1/events: cannot reach http://127.0.0.1:8790 (…)`; every URL in the line loses credentials, query and fragment (`redactUrls`), Node's own message included; tested in TS, Python and under Node |
 | 3 | a, c | `EDEN_API_KEYS` missing or short: 10 lines of config.ts source and a stack | `configOrExit`: one line, exit 2 |
 | 4 | a, c | Port in use: Bun's source excerpt, "Is port 8790 in use?" | `eden: 127.0.0.1:8790 is in use: stop the other server, or set PORT to a free port` |
 | 5 | c | `EDEN_USER_SOURCES_FILE=missing.json`: raw `ENOENT … stat` object | one line naming the file and the settings that name files |
@@ -88,8 +88,32 @@ before the router's; `x-api-key` is not accepted (Bearer only, now documented); 
 7. **Bun is required to run the server** (the image hides it; a Node-only ops team must accept the image). Fix: none
    cheap; the image is the answer, now with a smoke test of its command.
 
+## Review
+
+The reviewer subagent returned REQUEST_CHANGES with eight findings, all fixed:
+
+1. **The gate went red about one run in three** (`injection.test.ts` long-padding: `Buffer.from(text, "latin1")`
+   threw "TypedArray.from requires … a function", so that worker's global `Buffer` was not Node's). No single new file
+   caused it: each alone beside the engine passed 4 of 4, so it rode on how `bun test --parallel` scheduled files.
+   The pack now runs as its own process, as an adopter runs it, and `packed-text.ts` imports `Buffer` from
+   `node:buffer` instead of using the global (the same object normally; no engine behaviour change). After: `engine +
+   examples` 0 failures in 6 runs (1 in 3 before the import), `bun run check` green 3 of 3. The base branch passed 6
+   of 6 on the same subset, so the latent fault predates this branch but these files exposed it.
+   Running the pack as a process also found a real bug: run from another directory it could not find Bun's types
+   (type roots now come from the repository).
+2. **Credentials under Node:** Node's fetch refuses a URL with `user:password@` and quotes it whole in its message;
+   the first version printed that message. Every URL in the error line is now stripped of credentials, query and
+   fragment, and the smoke test checks it under Node. No `cause` is kept (it carried the same text).
+3. **Several processes:** a busy port or a child that exited before listening went around the one-line path; the
+   router now lets main.ts print it (`eden: …`, exit 2), tested with `EDEN_PROCESSES=2`.
+4. The proxy's own log lines redact `EDEN_URL` and the upstream the same way.
+5. The startup probe waits 5 s (not 800 ms), and an answer that arrived but could not be read is no longer "cannot
+   reach" (both clients).
+6. A malformed `EDEN_PROXY_UPSTREAM` (`https://`) is one line, exit 2, not a stack.
+7. The smoke tests take port 0 and read the listening line (no port race), and skip visibly without Node.
+8. A 178-column Dockerfile comment line (the line checker does not scan the Dockerfile).
+
 ## Checks
 
-`bun run check` green on the final tree; `bun run eval` (no-model) identical to the base branch's JSON (no engine
-change). The reviewer subagent reviewed the server, client and proxy changes; its findings and what was done are in
-the PR description the coordinator writes from this branch.
+`bun run check` green 3 of 3 on the final tree; `bun run eval` (no-model) identical to the base branch's JSON apart
+from latency (no engine behaviour change).

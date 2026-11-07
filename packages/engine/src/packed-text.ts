@@ -8,6 +8,9 @@
  * A small process-wide memo of recently decoded texts, keyed by the packed bytes (one item's own; never shared between
  * items, users or tenants), keeps the repeated reads of one candidate on the ask path from inflating each time.
  */
+// Imported, not the global: under `bun test --parallel` a reused worker was seen with a global `Buffer` whose `from`
+// was TypedArray.from (A23's review; no code here assigns it), so `Buffer.from(text, "latin1")` threw in 1 run of 3.
+import { Buffer } from "node:buffer";
 import type { ContextItem } from "@eden/protocol";
 
 /** Shorter text stays a plain string: its deflate header and the byte array's own cost would eat the saving. */

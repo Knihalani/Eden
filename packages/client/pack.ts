@@ -43,6 +43,8 @@ export async function packClient(out: string): Promise<string> {
     skipLibCheck: true,
     strict: true,
     types: ["bun"],
+    // From the repository, not the caller's directory: `bun packages/client/pack.ts` may run from anywhere.
+    typeRoots: [join(packages, "..", "node_modules", "@types")],
     paths: { "@eden/protocol": [join(packages, "protocol/src/index.ts")] },
   });
   const emitted = program.emit();

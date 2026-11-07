@@ -11,7 +11,7 @@
  *   EDEN_PROXY_KEEP_PACKETS=0  insert only the current turn's packets (D336's default keeps earlier ones in place)
  *   EDEN_PROXY_SHADOW=1  report to Eden but inject nothing; one JSON line per request Eden would have changed
  */
-import { EdenClient } from "@eden/client";
+import { EdenClient, redactUrls } from "@eden/client";
 import { createProxy } from "./proxy";
 
 const upstream = process.env.EDEN_PROXY_UPSTREAM;
@@ -19,15 +19,24 @@ if (!upstream || !/^https?:\/\//.test(upstream)) {
   console.error("eden proxy: set EDEN_PROXY_UPSTREAM to the model's base URL (https://api.openai.com/v1)");
   process.exit(2);
 }
+let upstreamUrl: URL;
+try {
+  upstreamUrl = new URL(upstream);
+} catch {
+  console.error(`eden proxy: EDEN_PROXY_UPSTREAM is not a URL: ${redactUrls(upstream)}`);
+  process.exit(2);
+}
 // A base URL with no path is almost always a missing version (`…/v1`): the upstream would get `/chat/completions` and
 // answer 404 at the agent's first call, far from this setting (D365).
-if (new URL(upstream).pathname.replace(/\/$/, "") === "") {
+if (upstreamUrl.pathname.replace(/\/$/, "") === "") {
   console.error(
-    `eden proxy: EDEN_PROXY_UPSTREAM=${new URL(upstream).origin} has no path; most providers need their version` +
+    `eden proxy: EDEN_PROXY_UPSTREAM=${upstreamUrl.origin} has no path; most providers need their version` +
       ` path (https://api.openai.com/v1, https://openrouter.ai/api/v1). Continuing as given.`,
   );
 }
 const edenUrl = process.env.EDEN_URL || "http://127.0.0.1:8790";
+// For log lines only: a credential or token in either URL never reaches the console (D365).
+const shownEden = redactUrls(edenUrl);
 const host = process.env.PROXY_HOST || "127.0.0.1";
 const proxyKey = process.env.EDEN_PROXY_KEY || undefined;
 // The proxy holds the tenant's Eden key and serves whichever user a caller names: beyond this machine, only callers
@@ -55,7 +64,7 @@ const server = Bun.serve({
   }),
 });
 console.log(
-  `eden proxy on http://${server.hostname}:${server.port}/v1 -> ${upstream} (Eden at ${edenUrl})` +
+  `eden proxy on http://${server.hostname}:${server.port}/v1 -> ${redactUrls(upstream)} (Eden at ${shownEden})` +
     (process.env.EDEN_PROXY_SHADOW === "1" ? " in shadow mode: nothing is injected" : ""),
 );
 // One probe of Eden at startup, so a server that is down or a key it refuses shows here once, not as a line per request
@@ -66,11 +75,12 @@ void new EdenClient({
   userId: "proxy-startup",
   sessionId: "probe",
 })
-  .health()
+  // Seconds, not the client's 800 ms: a server still warming up (its gate, a router's children) is not "unusable".
+  .health({ timeoutMs: 5_000 })
   .then((h) =>
     console.error(
       h.ok
-        ? `eden proxy: Eden at ${edenUrl} accepted ${process.env.EDEN_API_KEY ? "EDEN_API_KEY" : "a key-less request (dev)"}`
+        ? `eden proxy: Eden at ${shownEden} accepted ${process.env.EDEN_API_KEY ? "EDEN_API_KEY" : "a key-less request (dev)"}`
         : `eden proxy: Eden not usable yet (${h.error}); requests go upstream without context until it is` +
             (process.env.EDEN_API_KEY ? "" : " (set EDEN_API_KEY if the server has EDEN_API_KEYS)"),
     ),

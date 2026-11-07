@@ -21,7 +21,6 @@ import math
 import re
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 from typing import Any, Callable, Dict, List, Optional
 
@@ -138,15 +137,13 @@ class EdenError(Exception):
 
 
 
-def _without_userinfo(base: str) -> str:
-    """A base URL with any `user:password@` removed, so a credential in it never reaches a log."""
-    try:
-        parts = urllib.parse.urlsplit(base)
-    except ValueError:
-        return "the configured base_url"
-    if "@" not in parts.netloc:
-        return base
-    return urllib.parse.urlunsplit(parts._replace(netloc=parts.netloc.rsplit("@", 1)[1]))
+_URL = re.compile(r"\b([a-z][a-z0-9+.-]*://)(?:[^\s/@]*@)?([^\s?#)]*)(?:[?#][^\s)]*)?", re.I)
+
+
+def redact_urls(text: str) -> str:
+    """Text with every URL's credentials and query removed (`user:password@`, `?token=`), as the TS `redactUrls`."""
+    return _URL.sub(r"\1\2", text)
+
 
 class EdenClient:
     def __init__(
@@ -218,10 +215,13 @@ class EdenClient:
             return answer
         except urllib.error.HTTPError as e:
             err: Exception = EdenError(f"eden {route}: {e.code}{_server_error(e)}")
+        # An answer that arrived but could not be read is not "cannot reach" (D365).
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            err = EdenError(f"eden {route}: an unreadable answer ({type(e).__name__})")
         except Exception as e:  # noqa: BLE001 - fail open on anything (D14)
             # Where it was sending, so a server that is down or on another port is obvious (D365); never the key.
             err = e if isinstance(e, EdenError) else EdenError(
-                f"eden {route}: cannot reach {_without_userinfo(self._base)} ({type(e).__name__}: {e})")
+                f"eden {route}: cannot reach {redact_urls(self._base)} ({type(e).__name__}: {redact_urls(str(e))})")
         if failed is not None:
             failed(err)
         self._report(err)

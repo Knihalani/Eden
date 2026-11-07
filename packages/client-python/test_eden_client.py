@@ -74,6 +74,9 @@ class FailOpen(unittest.TestCase):
         c.ask("q")
         self.assertIn("cannot reach http://127.0.0.1:9 (", str(errors[0]))
         self.assertNotIn("secret", str(errors[0]))
+        c, errors = client("http://127.0.0.1:9/?token=secret")
+        c.ask("q")
+        self.assertNotIn("secret", str(errors[0]))
 
     def test_non_2xx_carries_the_server_reason(self):
         stub = Stub(lambda p, b: (401, {"error": "missing or unknown API key"}))

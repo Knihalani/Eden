@@ -456,14 +456,9 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
 /** `main.ts` with EDEN_PROCESSES above 1: starts the router, stops the children on SIGINT/SIGTERM. */
 export async function runRouter(config: ServerConfig): Promise<void> {
   const started = performance.now();
-  let router: Router;
-  try {
-    router = await startRouter({ config });
-  } catch (e) {
-    // A child's own message (a bad sources file, a bad variable) is already on stderr.
-    console.error(e instanceof Error ? e.message : String(e));
-    process.exit(2);
-  }
+  // A failure to start (a busy port, a child that exited before listening, whose own message is already on stderr)
+  // propagates to main.ts, which prints it as one `eden:` line and exits 2 (D365).
+  const router = await startRouter({ config });
   const stop = () => void router.stop().then(() => process.exit(0));
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);

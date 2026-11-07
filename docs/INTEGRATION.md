@@ -429,8 +429,8 @@ users' caches over (the background sync refills them) and loses nothing a user w
 container's CPU quota and read "Processes and per-tenant caps" below. Never run `EDEN_DEV=1` on a reachable port (the
 server warns when it listens beyond loopback). Generate each tenant's key with `openssl rand -hex 24`; requests send
 it as `Authorization: Bearer <key>` (no other header is read). A configuration mistake (a short key, a missing
-sources file, a busy port, an unwritable `EDEN_HOME`) stops the server with one line naming it and exit code 2
-(D365). Per-user connectors: mount the file and name its path inside the container
+sources file, a busy port, an unwritable `EDEN_HOME`) stops the server with an `eden:` line naming it and exit code 2
+(D365); with several processes a child's own line and the router's retry note come first. Per-user connectors: mount the file and name its path inside the container
 (`-v ./sources:/sources:ro -e EDEN_USER_SOURCES_FILE=/sources/users.json`), plus `-e` for each token variable the file
 names; the file is re-read when it changes, so adding a user needs no restart.
 

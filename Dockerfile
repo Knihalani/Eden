@@ -5,8 +5,9 @@
 # (keep the key: callers send it as Authorization: Bearer <key>; one tenant:key pair per tenant, comma-separated).
 # Add -e OPENROUTER_API_KEY=… for the model roles. Connectors: -v ./sources:/sources:ro
 # -e EDEN_USER_SOURCES_FILE=/sources/users.json (a path inside the container), plus -e for each token variable the
-# file names; it is re-read on change. A mistake stops startup with one line naming it (exit 2). Set EDEN_PROCESSES to the container's CPU quota: a quota the container cannot see
-# is not detected (docs/INTEGRATION.md, "Processes and per-tenant caps").
+# file names; it is re-read on change. A configuration mistake stops startup with an `eden:` line naming it (exit 2).
+# Set EDEN_PROCESSES to the container's CPU quota: a quota the container cannot see is not detected
+# (docs/INTEGRATION.md, "Processes and per-tenant caps").
 FROM oven/bun:1.4.4
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml tsconfig.json tsconfig.base.json ./

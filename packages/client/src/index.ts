@@ -2,6 +2,7 @@ export {
   DEFAULT_WAIT_MS,
   EdenClient,
   edenId,
+  redactUrls,
   type EdenClientOptions,
   type PushedItem,
   type SourceChange,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { MAX_PUSHED_ITEMS, isId, type ActionCheck, type Injection } from "@eden/protocol";
-import { DEFAULT_WAIT_MS, EdenClient, edenId } from "./client";
+import { DEFAULT_WAIT_MS, EdenClient, edenId, redactUrls } from "./client";
 import { heldResult, withContext } from "./messages";
 
 const inj = (text: string) => ({ id: "inj_1", text }) as Injection;
@@ -375,6 +375,13 @@ describe("explain (D277)", () => {
     await hidden.explain();
     expect(String(errors.at(-1))).toContain("cannot reach http://127.0.0.1:9 (");
     expect(String(errors.at(-1))).not.toContain("secret");
+    // A runtime message quoting the URL (Node's fetch does, for credentials) and a token in a query are removed too.
+    expect(
+      redactUrls("Request cannot be constructed from a URL that includes credentials: http://me:secret@h:9/v1/ask"),
+    ).toBe("Request cannot be constructed from a URL that includes credentials: http://h:9/v1/ask");
+    expect(redactUrls("cannot reach https://eden.example/base?token=abc#x (boom)")).toBe(
+      "cannot reach https://eden.example/base (boom)",
+    );
     const refused = new EdenClient({
       userId: "u",
       sessionId: "s",
