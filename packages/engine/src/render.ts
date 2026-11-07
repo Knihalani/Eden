@@ -138,6 +138,14 @@ export const CANDIDATES_LEAD =
   "Before using one, check it is about the same person, thing and date as the request and still current; if it is " +
   "not, ignore it and do not mention it.";
 
+/**
+ * `pushAhead` (A9): the answer-ahead packet's framing line. It says what the records are and that nothing checked
+ * them; it never says nothing else exists (D257: a "nothing found" note made the agent skip the ask that finds more).
+ */
+export const AHEAD_LEAD =
+  `${EDEN_NOTE}records from the user's sources about who and what this request names (the newest record for each ` +
+  "person or firm named, and the calendar of the day it names), for reference; nothing has checked them against it.";
+
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";
 const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;

@@ -464,6 +464,14 @@ export interface EngineConfig {
    * first (`CANDIDATES_LEAD`). 0 is the reader's push and asks (D95–D99).
    */
   pushCandidates: number;
+  /**
+   * Trial (A9, owner: repo owner, ends 2026-12-07; docs/research/a9-ahead.md): answer-ahead. With the push on, a
+   * request that names a person or firm, or a day, also gets the records the agent would otherwise look up first,
+   * from the pool the push ranked (no new source or model call): the newest item naming each of the first two people
+   * or firms it names, then the named day's calendar entries soonest first, at most `AHEAD_MAX` in all and none
+   * already among the candidates, as one more packet after a fixed line of Eden's own (`AHEAD_LEAD`). Off.
+   */
+  pushAhead: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -581,4 +589,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
+  pushAhead: false,
 };

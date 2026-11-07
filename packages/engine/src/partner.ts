@@ -122,7 +122,7 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import { CANDIDATES_LEAD, citationsOf, renderPacket, shownText } from "./render";
+import { AHEAD_LEAD, CANDIDATES_LEAD, citationsOf, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -1529,6 +1529,12 @@ export class ContextPartner {
           : null;
       if (injection && was) this.keepUndo(s, injection, checked, was);
       if (injection) s.pending.push(injection);
+      // `pushAhead` (A9): the records the agent would look up first, in a packet of their own after the candidates,
+      // on the first pass only (a second pass after the poll replaces candidates, not these).
+      const ahead =
+        this.config.pushAhead && internal.again === undefined && !s.closed && still
+          ? await this.pushAheadOf(s, cue, scored, injection, internal.request)
+          : null;
       const latencyMs = Math.round(performance.now() - t0);
       // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
       // trace carries it, since this response goes to no caller.
@@ -1549,7 +1555,7 @@ export class ContextPartner {
         costUsd,
         ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
         ...(candidates ? { candidates: true } : {}),
-        itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
+        itemIds: [...(injection?.citations ?? []), ...(ahead?.citations ?? [])].map((c) => c.itemId),
       });
       if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
       if (behind && cue.polled) this.pushAgain(s, request, internal, cue.polled, searched, injection);
@@ -1881,6 +1887,50 @@ export class ContextPartner {
         : new Map<string, Card>();
     if (!pool.some((x) => this.constraintLike(x, cards))) return { items: [] };
     return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) };
+  }
+
+  /**
+   * `pushAhead` (A9): the answer-ahead packet, queued after the candidates', or null. From `ranked` (the push's pool:
+   * lexical, probed and the named days' events, `rank`), bulk mail and the candidates' items out: the newest item
+   * naming each of the first `AHEAD_NAMES` people or firms the request names (a participant, or every word of the
+   * name in the item), then the named days' events soonest first, at most `AHEAD_MAX`. Re-read as the candidates are
+   * (`verifyItems`) and dropped if a newer user message arrived meanwhile. No source or model call of its own.
+   */
+  private async pushAheadOf(
+    s: Session,
+    cue: Cue,
+    ranked: readonly Scored[],
+    candidates: Injection | null,
+    request: number | undefined,
+  ): Promise<Injection | null> {
+    const taken = new Set((candidates?.citations ?? []).map((c) => c.itemId));
+    const pool = ranked.filter((x) => !bulkMail(x.item) && !taken.has(x.item.id));
+    const out: Scored[] = [];
+    const ids = new Set<string>();
+    const add = (x: Scored | undefined) => {
+      if (!x || ids.has(x.item.id) || out.length >= AHEAD_MAX || !s.ledger.isFresh(x.item.id, s.turn)) return;
+      ids.add(x.item.id);
+      out.push(x);
+    };
+    for (const name of cleanEntities(cue.entities).filter(aheadName).slice(0, AHEAD_NAMES)) {
+      const about = pool.filter((x) => namesParticipant(name, x.item) || mentions(name, x.item));
+      add(about.sort((a, b) => (b.item.updatedAt ?? 0) - (a.item.updatedAt ?? 0))[0]);
+    }
+    const days = cue.time?.days;
+    if (days && days.size > 0) {
+      const on = pool.filter((x) => days.has(startDay(x.item, cue.offset) ?? ""));
+      for (const x of on.sort((a, b) => startMs(a.item) - startMs(b.item))) add(x);
+    }
+    if (out.length === 0) return null;
+    const checked = await this.verifyItems(s, out, cue);
+    if (checked.length === 0 || s.closed || (request !== undefined && request !== s.requests)) return null;
+    const packet = this.deliver(s, checked, "proactive", `ahead:${cue.id}`, cue, undefined, {
+      lead: AHEAD_LEAD,
+      itemBytes: Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES),
+      maxBytes: Math.max(this.config.maxInjectionBytes, 400 + AHEAD_MAX * (MAX_CANDIDATE_BYTES + 120)),
+    });
+    s.pending.push(packet);
+    return packet;
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
@@ -4658,6 +4708,18 @@ function pendingOf(s: Session): boolean {
 
 /** `pushCandidates` (D236): the most of an item a candidate's excerpt says, whatever `compactItemBytes` is set to. */
 const MAX_CANDIDATE_BYTES = 2_000;
+
+/** `pushAhead` (A9): the most items the answer-ahead packet holds, and how many named people or firms it covers. */
+const AHEAD_MAX = 4;
+const AHEAD_NAMES = 2;
+
+/**
+ * `pushAhead` (A9): a name the request gives that a record can be about: an address, a name of two or more words
+ * ("Leon Ashby", "Brightwater Ltd"), or one word with an inner capital ("FreshCart"). A lone word is too common.
+ */
+function aheadName(e: string): boolean {
+  return e.includes("@") || e.trim().split(/\s+/).length >= 2 || /^[A-Z][a-z]+[A-Z]/.test(e.trim());
+}
 
 /** `pushCandidates` (D236): a candidates' packet's framing line and cut. */
 interface PacketFrame {
