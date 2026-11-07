@@ -931,13 +931,10 @@ export class ContextPartner {
   takePending(ref: Scope & { sessionId: string }): Injection[] {
     const s = this.sessions.get(sessionKey(ref));
     if (!s) return [];
-    // "updated:" packets last: an older packet queued behind its item's update would otherwise leave the agent's last
-    // word on the item the old one (and queue the same update again at its hand-out).
-    const batch = this.withoutCoveredUpdates(s.pending.splice(0));
-    const out = [
-      ...batch.filter((i) => !i.reason.startsWith(UPDATED)),
-      ...batch.filter((i) => i.reason.startsWith(UPDATED)),
-    ];
+    // What the agent reads last about an item is its current copy (D232): a packet with a copy the cache has since
+    // replaced goes before the packets that render current copies, and an update made stale by a packet of the batch
+    // that renders the current copy is dropped. Queue order holds otherwise.
+    const out = this.currentLast(s, this.withoutCoveredUpdates(s.pending.splice(0)));
     for (const injection of out) this.handOut(s, injection);
     return out;
   }
@@ -1005,6 +1002,38 @@ export class ContextPartner {
     return batch.filter(
       (i) => !i.reason.startsWith(UPDATED) || !this.built.get(i)?.copies?.every((c) => held.get(c.id) === c.version),
     );
+  }
+
+  /** `takePending`'s batch, packets with a replaced copy first and stale updates a current packet covers dropped. */
+  private currentLast(s: Session, batch: Injection[]): Injection[] {
+    if (!this.config.revisionNotice || batch.length < 2) return batch;
+    const now = this.now();
+    const current = new Map<string, number | null>();
+    const versionNow = (id: string) => {
+      let v = current.get(id);
+      if (v === undefined) {
+        const cur = this.deps.cache.get(s.scope, id, now);
+        current.set(id, (v = cur ? versionOf(cur) : null));
+      }
+      return v;
+    };
+    const stale = (i: Injection) =>
+      (this.built.get(i)?.copies ?? []).some((c) => {
+        const v = versionNow(c.id);
+        return v !== null && v !== c.version;
+      });
+    // Items some non-update packet of the batch renders in their current version.
+    const renderedNow = new Set<string>();
+    for (const i of batch) {
+      if (i.reason.startsWith(UPDATED)) continue;
+      for (const c of this.built.get(i)?.copies ?? []) if (versionNow(c.id) === c.version) renderedNow.add(c.id);
+    }
+    const kept = batch.filter(
+      (i) =>
+        !i.reason.startsWith(UPDATED) ||
+        !(this.built.get(i)?.copies ?? []).every((c) => versionNow(c.id) !== c.version && renderedNow.has(c.id)),
+    );
+    return [...kept.filter(stale), ...kept.filter((i) => !stale(i))];
   }
 
   private unwatch(s: Session): void {

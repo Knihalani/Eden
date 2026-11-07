@@ -123,12 +123,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `queueRevised`: the sync's `onStored` and `recheck`, for every watching session, the re-reading one too (its delivery
   may cut or fold the item). A packet queued untaken when its item is revised is checked at hand-out (`watchCopies`,
   D232): a copy the cache has since replaced is followed by an update; a withdrawn packet announces nothing;
-  `takePending` hands updates after the rest of its batch. A queued update is dropped only when a handed packet renders
-  the same version (`watchCopies`, `withoutCoveredUpdates`); never by citation alone (an ask's removal of covered
-  packets skips updates). A live search page's store (`store`) does not announce yet: a handed item a lookup's search
-  finds changed is delivered only if it ranks. Do not filter doubted copies in `queueRevised`: a later signal during the
-  poll would leave the stored copy unannounced forever (`revision-notice.test.ts`). `pollRevised` is the only I/O a
-  notice starts; keep it off the observe path.
+  `takePending` orders its batch by which copy is current (`currentLast`), so the last word on an item is current. A
+  queued update is dropped only when a handed packet renders the same version (`watchCopies`, `withoutCoveredUpdates`);
+  never by citation alone (an ask's removal of covered packets skips updates). A live search page's store (`store`) does
+  not announce yet: a handed item a lookup's search finds changed is delivered only if it ranks. Do not filter doubted
+  copies in `queueRevised`: a later signal during the poll would leave the stored copy unannounced forever
+  (`revision-notice.test.ts`). `pollRevised` is the only I/O a notice starts; keep it off the observe path.
 - **An ask says "Nothing in the connected sources." only when its sources answered (D127).** `searchLive` returns
   each chosen source's status (`sources`: the fan-out's, or "local" for a synced source answered from the index);
   `honestAnswer` names any that did not answer (error, timeout, circuit open, busy, limited, throttled: the

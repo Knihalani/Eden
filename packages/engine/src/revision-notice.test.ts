@@ -77,6 +77,7 @@ const seed = (src: Listed) => {
   src.docs.set("r1", { title: "Budget review", text: "The budget review with finance is at 14:00 on Friday." });
 };
 const REVIEW = itemId("notes", "r1");
+const moveText = (at: string) => `The quarterly offsite is in Lisbon at ${at} on 12 November.`;
 const move = (src: Listed, text = "The quarterly offsite is in Lisbon at 11:30 on 12 November.") =>
   src.docs.set("q1", { title: "Quarterly offsite", text });
 
@@ -578,4 +579,34 @@ test("stopSync: a notice starts no revision poll until startSync (D232)", async 
   await t.partner.revisionsSettled(scope);
   t.partner.stopSync();
   expect(lists()).toBeGreaterThan(before);
+});
+
+test("a stale update queued before a packet with the current copy: the current copy is the last word, sent once (D232)", async () => {
+  const t = await setup();
+  const P = t.partner as any;
+  const first = await say(t.partner, "Remind me where the quarterly offsite is", "s1", t.now());
+  expect(cites(first, OFFSITE)).toBe(true);
+  const s = P.sessions.get("t/u#s1");
+  t.advance(MIN);
+  // v2 announced (a notice's items): its update is queued.
+  await t.partner.sourceItems(scope, "notes", [
+    { id: OFFSITE, sourceId: "notes", ref: "q1", title: "Quarterly offsite", text: moveText("11:30") },
+  ]);
+  expect(s.pending.length).toBe(1);
+  t.advance(MIN);
+  // v3 stored by a live search page (not announced) and rendered by a slow-path packet.
+  P.store(
+    s,
+    [{ id: OFFSITE, sourceId: "notes", ref: "q1", title: "Quarterly offsite", text: moveText("15:00") }],
+    0,
+    false,
+    0,
+  );
+  const cur = P.deps.cache.get(scope, OFFSITE, t.now());
+  const cue = { raw: "offsite", terms: new Uint32Array(0), entities: [], span: 0 };
+  s.pending.push(P.build(s, [{ item: cur, score: 1 }], "proactive", "probe", cue, 0));
+  const a = t.partner.takePending({ ...scope, sessionId: "s1" });
+  const b = t.partner.takePending({ ...scope, sessionId: "s1" });
+  expect(a.filter((i) => cites([i], OFFSITE)).at(-1)!.text).toContain("15:00");
+  expect([...a, ...b].filter((i) => i.text.includes("15:00"))).toHaveLength(1);
 });
