@@ -620,6 +620,13 @@ an agent task plus Eden NEW is $0.79 per 1,000 hidden tasks in Pi, ALL3 $0.36 (h
 4 s a task. Free models: a 4-task smoke took 16 requests and 20.8 s (edge-freelab.md); add `--allow-logging
 --max-requests N` and free model ids.
 
+**Dressed worlds (`--dress`, D287).** Many requests name a person or firm no item of their generated world names, so
+the agent's first lookups cannot succeed (`bun packages/sim/lab/a6/census.ts [--dress]` counts absent names broadly).
+`pi-ab --dress` adds, per such person or firm, one ordinary message from it (no constraint wording, the same in every
+variant; ids, acronyms, places and holidays are left alone; `dress-entities.ts`); short horizon only (refused with
+`--days` and `--reuse-arms`). Measured on train seeds 41–42: neither arm changes significantly and eden − tools is the
+same (docs/research/a6-moonshots.md §4). Use it for levers on what the agent looks up first.
+
 ### 4a. Pi: the shipped shape (`both+ask`) and a day of requests (`--day`)
 
 - `both+ask` (fix-s3b): the agent's own source tools, Eden's injected context and `ask_context`, the shape
