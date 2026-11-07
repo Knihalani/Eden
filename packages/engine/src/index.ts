@@ -9,14 +9,7 @@ export {
 export { FACT_NAMES, vectorOf, type Facts } from "./decide";
 export { DEFAULT_CONFIG, type EngineConfig } from "./config";
 export { CORE_CONFIG, PARTS, withoutParts, type Part } from "./parts";
-export {
-  ANTICIPATE_PARTS,
-  checkEngineConfig,
-  NEEDS_DEP,
-  PARENTS,
-  type ConfigCheckOptions,
-  type ConfigDep,
-} from "./config-check";
+export { checkEngineConfig, NEEDS_DEP, PARENTS, type ConfigCheckOptions, type ConfigDep } from "./config-check";
 export { ItemCache, sanitizeItem, type CacheHit, type CacheLimits } from "./cache";
 export { SyncManager, type SyncOptions, type SyncStats } from "./sync";
 export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
@@ -40,7 +33,6 @@ export type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";
 export { requestedRange } from "./probes";
-export { extract, seedsOf, UserGraph, type Seed, type Walked } from "./kg";
 export {
   ACTIONS,
   CARD_KINDS,
@@ -77,7 +69,6 @@ export {
   type IntentKept,
   type IntentRow,
 } from "./intent";
-export { predict } from "./anticipate";
 export {
   AskReader,
   cardLine,

@@ -33,7 +33,7 @@
  * - `-- --neutral`: also the `neutral` variant of the suites that build it (neutral.ts, held-out 14): the same
  *   requests with nothing planted, reported on NEUTRAL lines and in the JSON's `neutral` block, never in the score.
  * - `-- --wait-ms N` (the observe's wait) prints the deliveries made before the agent's first model call;
- *   `-- --overlap` sends each request while another lookup is in flight (slowPathQueue's case; scores not
+ *   `-- --overlap` sends each request while another lookup is in flight (the slow path busy; scores not
  *   comparable). docs/LAB.md 1c.
  *
  * The default reads with the reader: with no `-- --reader` the screen uses `--reader stub` ($0); a real reading

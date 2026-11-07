@@ -31,7 +31,7 @@
  * at `--time` > 0 the hidden and control variants also run at once unless `--serial`.
  * `--wait-ms N` sets the request's observe wait (default 3,000 × max(1, `--time`)) and the run prints how many
  * deliveries an agent collecting before its first model call would hold; `--overlap` sends another request just before
- * each one, so it arrives while a lookup is in flight (what `slowPathQueue` acts on; not comparable scores).
+ * each one, so it arrives while a lookup is in flight (the slow path busy; not comparable scores).
  * With either, or `--timeline`, the process CPU of the suites' runs is printed to stderr.
  * `--config '{"sync":true,...}'` runs Eden's real background sync (`SyncManager`, D57) over the sim connectors: the
  * user's sources are backfilled through their list calls before the first task (the clock running), and the sync
@@ -49,12 +49,11 @@
  * stress test for rules that read an item by its age (docs/research/econ-background.md): every suite plants a
  * day-old item.
  * `--lead-in` gives each request a "user is typing" draft before it (`drafts.ts`: its first clause, or its first
- * half; a simulation assumption, since no suite carries one), sent as a draft user message (`anticipate` reads it, any
- * other configuration ignores it). With `--time 0` the request follows once the engine has settled (typing takes
- * seconds, a prefetch milliseconds of CPU); with `--time T` the connectors answer at their realistic latencies times T
- * and the request follows `--typing-ms` × T later. Each task then records when the planted item reached the agent
- * (`deliveryMs`, from the request), whether it came with the request's own reply (`immediate`), whether the session's
- * anticipation had prefetched it (`prefetched`), and the calls the lead-in made (`leadCalls`).
+ * half; a simulation assumption, since no suite carries one), sent as a draft user message (which the engine
+ * ignores). With `--time 0` the request follows once the engine has settled; with `--time T` the connectors answer at
+ * their realistic latencies times T and the request follows `--typing-ms` × T later. Each task then records when the
+ * planted item reached the agent (`deliveryMs`, from the request), whether it came with the request's own reply
+ * (`immediate`), and the calls the lead-in made (`leadCalls`).
  *
  * `--reader live|replay` (with `"askReader": true` in `--config` and `--ask`) gives Eden its ask-time reader (D95,
  * `reader.ts`) on `--reader-model` (default z-ai/glm-5.3-flash; `--reader-sort price` for the cheapest compliant
@@ -251,12 +250,12 @@ const WAIT_MS = Number(opt("wait-ms", String(WAIT_DEFAULT)));
 if (!(WAIT_MS >= 0)) throw new Error("--wait-ms must be a number of at least 0");
 /**
  * `--overlap`: before each request, another user message (the suite's next task's request) is sent in the same
- * session with no wait, so the request arrives while that lookup is in flight: what `slowPathQueue` acts on, which no
- * other funnel task shape reaches. Changes the task shape: its scores are not comparable with a run without it.
+ * session with no wait, so the request arrives while that lookup is in flight (the slow path busy), which no other
+ * funnel task shape reaches. Changes the task shape: its scores are not comparable with a run without it.
  */
 const OVERLAP = cli.has("overlap");
-/** Traces of a request that arrived while its session's slow path was busy (`--overlap`), and how many were queued. */
-const busyTraces = { busy: 0, queued: 0 };
+/** Traces of a request that arrived while its session's slow path was busy (`--overlap`). */
+const busyTraces = { busy: 0 };
 const SYNC = cli.has("sync");
 /** `--ask`: each request is also asked of Eden (`ask`), recording whether the answer cites the planted item. */
 const ASK = cli.has("ask");
@@ -585,7 +584,7 @@ interface TaskRow {
    * task.
    */
   calls: number;
-  /** The engine's traces' sum for the task (`sourceCalls` + `anticipateCalls`): a cross-check, fetches included. */
+  /** The engine's traces' sum for the task (`sourceCalls`): a cross-check, fetches included. */
   traced: number;
   /** The on-demand sync listings among `calls`. */
   listed: number;
@@ -600,9 +599,7 @@ interface TaskRow {
   deliveryMs?: number;
   /** It came with the request's own reply (the observe call), not later. */
   immediate?: boolean;
-  /** The session's anticipation had fetched or held it before the request (`Trace.prefetched`). */
-  prefetched?: boolean;
-  /** Source calls made between the lead-in and the request (the prefetch's). */
+  /** Source calls made between the lead-in and the request. */
   leadCalls?: number;
   /**
    * When delivered: the planted item came with the observe's reply or was pending right after it (within `--wait-ms`),
@@ -643,7 +640,6 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   let clock = world.now;
   const cache = new ItemCache();
   let calls = 0;
-  const prefetched = new Set<string>();
   const lane = `${suite}/${variant}/${seed}`;
   const dumps = new Map<string, CandidateDump[]>();
   const askDumps = new Map<string, CandidateDump>();
@@ -665,13 +661,9 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   const received = () => sources.reduce((n, s) => n + s.stats.calls, 0);
   const listed = () => sources.reduce((n, s) => n + s.stats.lists, 0);
   const countCalls = (t: Trace) => {
-    // The traces' count, a cross-check only. A prefetch's calls (`anticipate`) are the task's too.
-    calls += t.sourceCalls + (t.anticipateCalls ?? 0);
-    for (const id of t.prefetched ?? []) prefetched.add(id);
-    if (t.reason.startsWith("slow path busy")) {
-      busyTraces.busy++;
-      if (t.reason.endsWith("queued")) busyTraces.queued++;
-    }
+    // The traces' count, a cross-check only.
+    calls += t.sourceCalls;
+    if (t.reason.startsWith("slow path busy")) busyTraces.busy++;
     if (t.localSources !== undefined) {
       syncUse.lookups++;
       syncUse.localSources += t.localSources;
@@ -776,16 +768,16 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     ...(onCandidates ? { onCandidates } : {}),
   });
   // The harness may read the engine's session table (as `quality.ts` `settle` does; product code may not): whether a
-  // session's lookup, prefetch or work its lookup left running (`behind`: `syncPollBehind`'s poll and follow-up, the
+  // session's lookup or work its lookup left running (`behind`: `syncPollBehind`'s poll and follow-up, the
   // reader push's second reading) is still running.
   const table = (
     partner as unknown as {
-      sessions: Map<string, { inflight: unknown; ant?: { running: unknown }; behind?: unknown }>;
+      sessions: Map<string, { inflight: unknown; behind?: unknown }>;
     }
   ).sessions;
   const busy = (sessionId: string) => {
     const s = table.get(`${scope.tenantId}/${scope.userId}#${sessionId}`);
-    return !!(s?.inflight || s?.ant?.running || s?.behind);
+    return !!(s?.inflight || s?.behind);
   };
   const scope = { tenantId: "funnel", userId: `w${seed}` };
   /**
@@ -881,7 +873,6 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     const id = variant === "neutral" ? "" : planted[i]!.id;
     const sessionId = task.id;
     returned.clear();
-    prefetched.clear();
     const callsBefore = calls;
     const receivedBefore = received();
     const listedBefore = listed();
@@ -1138,7 +1129,6 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       ...(first
         ? { deliveryMs: Number(first.at.toFixed(2)), immediate: r.injection?.citations.some((c) => c.itemId === id) }
         : {}),
-      ...(prefetched.has(id) ? { prefetched: true } : {}),
       ...(LEAD ? { leadCalls } : {}),
     });
   }
@@ -1307,7 +1297,7 @@ if (NEUTRAL) {
 }
 if (OVERLAP) {
   console.log(
-    `overlap: slow path busy ${busyTraces.busy} times (${busyTraces.queued} queued by slowPathQueue); the task shape ` +
+    `overlap: slow path busy ${busyTraces.busy} times; the task shape ` +
       "differs, so these scores are not comparable with a run without --overlap",
   );
 }

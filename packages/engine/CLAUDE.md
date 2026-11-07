@@ -19,7 +19,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `judge.ts` | The judge's prompt and parser (indexes only, D19) |
 | `line.ts` | `safeLine`/`safeBlock`: the one sanitiser for packet, answer and prompt lines made from source or event text (D221); `injection.test.ts` is part D's probe as a standing test |
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50) |
-| `kg.ts`, `cards.ts`, `intent.ts`, `anticipate.ts`, `sync.ts` | Moonshot tracks (D56–D63, D87): graph walk, implication cards, intent index, anticipation, background sync |
+| `cards.ts`, `intent.ts`, `sync.ts` | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync |
 | `reader.ts` | Ask-time reader (D95, D96): a budgeted model call wired by the embedder |
 | `firewall.ts` | The action firewall's cue and grounds (D69) |
 | `decide.ts` | Per-candidate facts for the lab's candidate dump (`onCandidates`) |
@@ -38,7 +38,7 @@ user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`.
   (D41). A new per-event call needs a decision and a cost estimate in docs/COST-MODEL.md.
 - **Silence by default; precision over recall (D3, D6).** A change that raises recall by raising false fires needs a
   decision. Check `bun run eval` (falseFireRate 0 on main) and the lab's decoy counts.
-- **Isolation (D9, D17).** Cache, ledger, budgets, memos, graph, cards, intent and reader caches are keyed by
+- **Isolation (D9, D17).** Cache, ledger, budgets, memos, cards, intent and reader caches are keyed by
   tenant/user, session state by `tenant/user#session`. After any await, check the session is still live: nothing is
   cached, learned, charged or queued for a closed session. A new piece of state gets an isolation test.
 - **Redact (D10).** Item text is redacted before it is cached, indexed, rendered or sent to a model
@@ -107,10 +107,6 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   rows ran with thinking off). Effort "low" was 1.82x slower at p50 and 1.54x dearer on Haiku 5.5 (docs/COST-MODEL.md,
   run `close-cards-reasoning`). Sending it again needs a decision, as for the reader. The judge (`partner.ts`, lab-only:
   the servers wire none) still sends "low"; changing that needs a judge measurement (D155).
-- The graph reads an item's first `READ_CHARS` = 1,000 characters of text (D150; its title and `meta.people` are read
-  on their own). That cut D141's `+graph` ingest stage 2.1-2.3x with every train screen identical; a name past
-  character 1,000 is not a graph node (`kg.test.ts`). Raising it again re-runs `ingest.bench.ts` and the funnel
-  screens, and there is no `graphLite` switch: D150 closed it.
 - `cardsLean` (D125) only narrows what the intent index reads (`readForIntent`): constraint-worded items are carded
   whatever their sender or age. `automated` reads a `From:` line in the text or a `meta.from`/`meta.sender` field
   (connectors differ: `toItems` keeps whatever text the tool returned) and bulk footers; a connector giving neither
@@ -198,8 +194,6 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   1.2 s to 0.1-0.2 s, but one process's capacity inside a 100 ms p99 rose only 1.46x there and fell 3-15% on
   router-sim realistic, for 1.19x the CPU per item. The code is in commit b217ae1d (`ingest.ts`, `prepared.ts`,
   `ingest.test.ts`); building it again needs a decision that accepts those numbers.
-- **The graph's memo serves one put (D215).** `UserGraph.rest()` empties it after every put: a remembered sentence is
-  a substring that keeps its item's decoded text alive. Do not keep it across puts.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

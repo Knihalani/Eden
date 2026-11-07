@@ -15,7 +15,7 @@ performance claims cite this package alongside `bun run eval`.
 | `quality.ts`, `quality-cli.ts` | `runQuality`: sessions through a real `ContextPartner`, scored (`bun run sim`) |
 | `judge.ts` | The oracle judge (perfect or noisy) standing in for the model |
 | `server.ts`, `load.ts`, `perf-cli.ts` | The real server in its own process under simulated agents through the client SDK (`bun run sim:perf`) |
-| `drafts.ts`, `narrow.ts` | Typing lead-ins (anticipation) and narrowed ask questions: simulation assumptions |
+| `drafts.ts`, `narrow.ts` | Typing lead-ins and narrowed ask questions: simulation assumptions |
 | `lab/` | Benchmarks and A/B harnesses: see [src/lab/CLAUDE.md](src/lab/CLAUDE.md) and [docs/LAB.md](../../docs/LAB.md) |
 
 Outside `src/`: `lab/` holds the connector-lab Dockerfiles and `servers.json` (pinned MCP servers), replay caches

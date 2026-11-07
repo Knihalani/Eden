@@ -76,11 +76,8 @@ export const SPAN_NAMES = [
   "ask",
   "sync.freshen",
   "sync.list",
-  "graph.walk",
   "cards.match",
   "cards.make",
-  "anticipate.prefetch",
-  "anticipate.early",
 ] as const;
 
 const ORIGIN = performance.timeOrigin;

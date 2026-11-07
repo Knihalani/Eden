@@ -51,7 +51,6 @@ import {
   type Source,
   type SourceResolver,
 } from "@eden/sources";
-import { IntentPatterns, predict, PREDICT_NAMES } from "./anticipate";
 import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache, type Sketch } from "./cache";
 import { SyncManager } from "./sync";
 import { pooledSanitizer } from "./gate";
@@ -91,7 +90,6 @@ import {
 } from "./firewall";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { ProbeEconomy, type ProbeKind } from "./economy";
-import { seedsOf, tieWords, type Walked } from "./kg";
 import { judgeMessages, parseJudge } from "./judge";
 import {
   namesParticipant,
@@ -193,8 +191,8 @@ export interface PartnerDeps {
 export interface CandidateDump {
   sessionId: string;
   turn: number;
-  /** Where the decision was made: the fast path, anticipation's early decision, or the lookup. */
-  path: "fast" | "early" | "lookup" | "served" | "ask";
+  /** Where the decision was made: the fast path or the lookup. */
+  path: "fast" | "lookup" | "served" | "ask";
   candidates: { id: string; facts: Facts }[];
   delivered: string[];
   /**
@@ -269,16 +267,8 @@ interface Session {
   closed: boolean;
   /** The planner's shadow lookup in flight, if any (shadow mode). */
   shadowing?: Promise<void>;
-  /** With `anticipate`: the session's background prefetch, made on its first event. */
-  ant?: Anticipation;
   /** Work lookups left running behind their answers: a poll and its follow-up (`afterPoll`), a judge (`judgeLater`). */
   behind?: Promise<void> | null;
-  /**
-   * With `slowPathQueue`: the latest request that arrived while the slow path was busy, looked up once it settles
-   * (`drainQueued`), and whether that drain is under way.
-   */
-  queuedCue?: { cue: Cue; t0: number; eventKind: string } | null;
-  draining?: boolean;
   /**
    * With `actionCheck`: the keys of the calls the firewall answered with a finding (`actionKey`, bounded by
    * `MAX_CHECKED`, oldest first). The same call made again is the agent's informed choice, and proceeds.
@@ -309,25 +299,6 @@ interface Session {
 
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
-
-/** A session's anticipation (`anticipate`): its prefetch in flight, the next one waiting, and what it has fetched. */
-interface Anticipation {
-  /** Source calls this session's prefetches made, against `anticipateSessionCalls`. */
-  calls: number;
-  running: Promise<void> | null;
-  /** The latest event that arrived while a prefetch ran: only it is read next (older ones are superseded). */
-  queued: { kind: string; text: string; at: number; lookup: boolean } | null;
-  /** Item ids the prefetches fetched or held ready, newest last (bounded: `MAX_PREFETCHED`). */
-  prefetched: Set<string>;
-  /** Names and days already prefetched in this session (lower case), so each is fetched once per session. */
-  asked: Set<string>;
-}
-
-/** Item ids a session's anticipation remembers as prefetched, and names and days it remembers as asked. */
-const MAX_PREFETCHED = 256;
-/** `slowPathQueue`: a request kept while the slow path was busy is dropped once it has waited this long (ms). */
-const QUEUED_CUE_MAX_AGE_MS = 10_000;
-const MAX_ASKED = 64;
 
 interface Cue {
   text: string;
@@ -391,7 +362,7 @@ type ProbeSend = (
   keep?: boolean,
   onAnswer?: (sourceId: string, page: ContextItem[]) => void,
 ) => Promise<ContextItem[]>;
-/** How a probe run differs from a lookup's own (`Partner.probe`); `anticipate` uses every one. */
+/** How a probe run differs from a lookup's own (`Partner.probe`); the action firewall's reads offline. */
 interface ProbeOpts {
   /** Source calls it may make (default `probeCalls`). */
   budget?: number;
@@ -401,10 +372,6 @@ interface ProbeOpts {
   cls?: ActionClass | null;
   /** The class is read from what is cached, with no call. */
   classOffline?: boolean;
-  /** No topic probe (a prefetch has only an event's words, not a request's). */
-  noTopic?: boolean;
-  /** Waited for (at most `probeGraceMs`) before any probe goes out: a prefetch of the same names still running. */
-  after?: Promise<void>;
   /** Synced sources whose copy is current (`sync`, D57): they answer from the local index, at no call. */
   local?: ReadonlySet<string> | null;
   /** The lookup's deadline (`performance.now()` time, D140); absent: `sourceTimeoutMs` from when the probes start. */
@@ -419,8 +386,6 @@ const SELF_DOMAIN_SHARE = 0.1;
 
 /** Each cue's frame (`conflict.ts`), read once and dropped with the cue. */
 const FRAMES = new WeakMap<Cue, Frame>();
-/** A lookup's knowledge-graph finds (`graph`), by item id, kept with its cue for delivery's learning. */
-const WALKS = new WeakMap<Cue, Map<string, Walked>>();
 
 /** Requests that act on someone, where an item they take part in is context (D44). */
 const ACTING = new Set<string>(["scheduling", "communication", "task", "travel"]);
@@ -453,8 +418,6 @@ interface Scored {
   beyond?: number;
   /** The item's document in the user's cache index, when ranked from it (for whole-term checks, `judgeTied`). */
   doc?: number;
-  /** Ranked only because the knowledge graph reached it (`graph`): no path but the graph's reads it. */
-  walkedOnly?: true;
   /** A whole cue entity is in the item (`rank`'s entity bonus). */
   entity?: true;
   /**
@@ -493,8 +456,6 @@ interface Built {
   /** The delivered items, for the planner's delivery credit when the injection is handed out (D39). */
   items: { sourceId: string; id: string }[];
   text: string;
-  /** Edge types the knowledge graph reached the delivered items by (`graph`), learned from on use. */
-  graphMask: number;
   /**
    * With `askDedup`: the items and the text the agent is shown, noted as shown (`noteShown`) when the injection is
    * handed out, not when it is built: a queued packet the agent has not taken was shown nothing, and an ask before
@@ -560,13 +521,10 @@ export class ContextPartner {
    */
   readonly sync: SyncManager | null;
   private syncTimer: ReturnType<typeof setInterval> | null = null;
-  /** Which names followed which intents, per user (`anticipate`). */
-  private readonly patterns = new IntentPatterns();
 
   constructor(private readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
     this.now = deps.now ?? Date.now;
-    if (this.config.graph) deps.cache.enableGraph();
     const maxText = deps.cache.maxTextChars;
     const stats = this.config.spans ? new SpanStats() : null;
     const sink = deps.onSpan;
@@ -721,18 +679,11 @@ export class ContextPartner {
       if (root) spans!.close(root);
       return { injection: null, pending: false };
     }
-    // A draft the user is still typing is never a request, and moves no turn: with `anticipate` it is read ahead for
-    // what the sent message will need; otherwise it is ignored (no session is even opened for it).
+    // A draft the user is still typing is never a request, and moves no turn: it is ignored (no session is even
+    // opened for it).
     if (event.kind === "user_message" && event.draft === true) {
-      if (!this.config.anticipate) {
-        if (root) spans!.close(root, { decision: "draft" });
-        return { injection: null, pending: false };
-      }
-      const s = this.session(event);
-      const text = sanitizeForStore(head(event.text, this.config.maxEventChars));
-      if (text) this.anticipate(s, "draft", text, event.at, false);
-      if (root) spans!.close(root, { session: s.id, decision: "draft" });
-      return { injection: null, pending: pendingOf(s) };
+      if (root) spans!.close(root, { decision: "draft" });
+      return { injection: null, pending: false };
     }
     const s = this.session(event);
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
@@ -782,17 +733,6 @@ export class ContextPartner {
 
     const queued = s.pending.shift() ?? null;
     const lookup = wantsLookup(event, text, terms, s.vocab);
-    // `anticipate`: every event with words is read for what the agent will need next, in the background. A request's
-    // own names and days are its lookup's to probe; read from it are its intent's (class, learned names).
-    const tool = event.kind === "tool_call" || event.kind === "tool_result";
-    if (
-      this.config.anticipate &&
-      text &&
-      event.kind !== "agent_message" &&
-      !(tool && this.config.anticipateOff.includes("tools"))
-    ) {
-      this.anticipate(s, event.kind, text, event.at, lookup);
-    }
     if (!lookup) {
       trace("skipped", event.kind);
       return reply(queued);
@@ -802,16 +742,10 @@ export class ContextPartner {
     if (event.kind === "external") cue.external = true;
     cue.arrived = this.now();
     if (root) cue.span = root.id;
-    // `askReader`: the request's own cue, kept so an ask reads what its frame, graph walk and verdicts already hold.
+    // `askReader`: the request's own cue, kept so an ask reads what its frame already holds.
     if (event.kind === "user_message" && this.config.askReader) {
       s.request = cue;
     }
-    // The request's names are its own lookup's to probe: a later event naming them again prefetches nothing.
-    if (s.ant)
-      this.markAsked(
-        s.ant,
-        cue.entities.map((e) => `n:${e.toLowerCase()}`),
-      );
     const last = s.cues.get(cue.key);
     const repeat = last !== undefined && s.turn - last < this.config.cueCooldownTurns;
 
@@ -823,19 +757,14 @@ export class ContextPartner {
     if (sure) spans!.close(sure, { sure: fast.length });
     // A stale cached copy is not delivered from here: the slow path re-reads it first (D40). A cue in cooldown is not
     // looked up again, but the cache may hold something new for it (another question about the same person).
-    // `anticipate` warms the cache before the request, so the fast path meets what only the slow path met before. With
-    // a judge, the request then goes to the slow path, whose judge sees every candidate the live search adds: a lone
-    // sure item from the cache would end the lookup before the second one that makes it the judge's call.
-    const judges = this.config.anticipate && this.deps.model !== null;
-    const answers = fast.length > 0 && !this.stale(s, fast) && !judges;
+    const answers = fast.length > 0 && !this.stale(s, fast);
     if (this.deps.onCandidates && !this.deps.model) {
       this.dump(s, "fast", this.factsOf(s, cue, ranked, event.kind), answers ? fast : [], answers ? "sure" : "");
     }
     if (answers) {
       this.markCue(s, cue);
       const injection = this.deliver(s, fast, "proactive", `cache:${cue.id}`, cue);
-      const ids = fast.map((x) => x.item.id);
-      trace("fast", cue.id, { itemIds: ids, ...this.prefetchedOf(s, ids) });
+      trace("fast", cue.id, { itemIds: fast.map((x) => x.item.id) });
       if (queued) s.pending.unshift(queued);
       return reply(injection);
     }
@@ -845,43 +774,19 @@ export class ContextPartner {
     }
     if (s.inflight) {
       // The cue is not put in cooldown: it was not looked up, so the next event may look it up.
-      if (this.config.slowPathQueue) {
-        // One slot, the latest wins: looked up once the slow path settles, its answer queued (`drainQueued`).
-        s.queuedCue = { cue, t0, eventKind: event.kind };
-        trace("silent", "slow path busy: queued");
-        if (!s.draining) this.drainQueued(s);
-        return reply(queued);
-      }
       trace("silent", "slow path busy");
       return reply(queued);
     }
 
     this.markCue(s, cue);
-    // `anticipate`, with no model: the request is first decided from what is held (the cache, the answers the
-    // prefetches warmed), with no call, and what that delivers is returned now; the slow path runs behind it either way
-    // and, after such a delivery, adds only what is sure or grounded (`slowPath`'s `served`).
-    const early =
-      this.config.anticipate && !this.config.anticipateOff.includes("serve")
-        ? this.tracedEarly(s, cue, event.kind, t0).catch((): Injection | null => null)
-        : null;
-    const slow = (
-      early
-        ? early.then((pre) => (s.closed ? null : this.slowPath(s, cue, t0, event.kind, pre !== null)))
-        : this.slowPath(s, cue, t0, event.kind)
-    ).finally(() => {
+    const slow = this.slowPath(s, cue, t0, event.kind).finally(() => {
       s.inflight = null;
     });
     s.inflight = slow;
     if (this.config.syncPollBehind && this.sync && this.config.syncOnDemand) {
-      this.afterPoll(s, cue, t0, event.kind, slow, early);
+      this.afterPoll(s, cue, t0, event.kind, slow);
     }
     const queueLater = () => void slow.then((inj) => inj && !s.closed && s.pending.push(inj));
-    const pre = early ? await early : null;
-    if (pre && !s.closed) {
-      queueLater();
-      if (queued) s.pending.unshift(queued);
-      return reply(pre);
-    }
     const waitMs = options.waitMs ?? 0;
     if (queued || waitMs <= 0) {
       queueLater();
@@ -901,20 +806,13 @@ export class ContextPartner {
 
   /**
    * `syncPollBehind`: once a lookup that answered from the index as it stood is done, and the poll it left running
-   * stored something, the lookup is made again on the fresh index and what it delivers is queued. After a delivery
-   * (or an early one, `anticipate`), or with a model, it adds only what is sure or grounded (`served`), as a lookup
-   * behind an early delivery does, plus the corrected copy of anything delivered that the poll changed (`revised`);
-   * after silence with no model it decides as the lookup would have had it waited. Follow-ups run one at a time
-   * after any lookup in flight, so each request made while the poll was out gets one. Never throws.
+   * stored something, the lookup is made again on the fresh index and what it delivers is queued. After a delivery,
+   * or with a model, it adds only what is sure or grounded (`served`), plus the corrected copy of anything delivered
+   * that the poll changed (`revised`); after silence with no model it decides as the lookup would have had it waited.
+   * Follow-ups run one at a time after any lookup in flight, so each request made while the poll was out gets one.
+   * Never throws.
    */
-  private afterPoll(
-    s: Session,
-    cue: Cue,
-    t0: number,
-    eventKind: string,
-    first: Promise<Injection | null>,
-    early: Promise<Injection | null> | null,
-  ): void {
+  private afterPoll(s: Session, cue: Cue, t0: number, eventKind: string, first: Promise<Injection | null>): void {
     const chain = first
       .then(async (injection) => {
         // `cue.polled` is set while the first lookup runs (its search), so it is read once the lookup is done.
@@ -922,7 +820,7 @@ export class ContextPartner {
         if (!fresh || s.closed) return;
         // With a model the follow-up is decided as one behind a delivery, so it never makes the event's second judge
         // call: what is sure or grounded, and corrections.
-        const served = injection !== null || (early !== null && (await early) !== null) || this.deps.model !== null;
+        const served = injection !== null || this.deps.model !== null;
         // Another lookup still running (a later request, or another request's follow-up) may have read the index
         // before this poll stored anything, so this cue is not covered by it: wait, then look again. The ledger keeps
         // what an earlier lookup delivered from being sent twice. Nothing awaits between the last check and taking
@@ -940,71 +838,6 @@ export class ContextPartner {
       })
       .catch(() => {});
     this.addBehind(s, chain);
-  }
-
-  /**
-   * `slowPathQueue`: looks up the request kept while the slow path was busy, once nothing is in flight, one at a time
-   * (as `afterPoll`'s follow-ups are), and queues what it delivers. A request kept while this runs is looked up next.
-   * One whose session closed, whose cue went into cooldown meanwhile, or that waited over `QUEUED_CUE_MAX_AGE_MS` is
-   * dropped (traced). It runs the slow path alone, without `anticipate`'s early answer (nobody waits on it, so
-   * answering early gains nothing), and with `syncPollBehind` it gets `afterPoll`'s follow-up as any lookup does.
-   * Never throws, never blocks the caller.
-   */
-  private drainQueued(s: Session): void {
-    s.draining = true;
-    const work = (async () => {
-      for (;;) {
-        // Nothing awaits between the last check and taking `s.inflight` below, so a follow-up woken in the same tick
-        // and this lookup still run one at a time.
-        while (s.inflight && !s.closed) await s.inflight.catch(() => null);
-        const next = s.queuedCue;
-        s.queuedCue = null;
-        if (!next || s.closed) {
-          // Cleared in this same tick: a request kept after this point starts a drain of its own.
-          s.draining = false;
-          return;
-        }
-        const { cue, t0, eventKind } = next;
-        const dropped = (reason: string) =>
-          this.trace({
-            sessionId: s.id,
-            turn: s.turn,
-            event: eventKind,
-            decision: "silent",
-            reason,
-            latencyMs: Math.round(performance.now() - t0),
-            sourceCalls: 0,
-            modelCalls: 0,
-            costUsd: 0,
-            itemIds: [],
-          });
-        const last = s.cues.get(cue.key);
-        if (last !== undefined && s.turn - last < this.config.cueCooldownTurns) {
-          dropped("queued cue: repeat");
-          continue;
-        }
-        if (this.now() - (cue.arrived ?? this.now()) > QUEUED_CUE_MAX_AGE_MS) {
-          dropped("queued cue: stale");
-          continue;
-        }
-        this.markCue(s, cue);
-        const run = this.slowPath(s, cue, t0, eventKind);
-        const tracked = run.finally(() => {
-          if (s.inflight === tracked) s.inflight = null;
-        });
-        s.inflight = tracked;
-        // As for any lookup: a poll it left running gets a follow-up on the fresh index (run after this loop's next
-        // lookup if one takes `s.inflight` first; both wait on it in turn).
-        if (this.config.syncPollBehind && this.sync && this.config.syncOnDemand) {
-          this.afterPoll(s, cue, t0, eventKind, tracked, null);
-        }
-        const injection = await tracked.catch(() => null);
-        if (injection && !s.closed) s.pending.push(injection);
-      }
-    })().catch(() => {
-      s.draining = false;
-    });
-    this.addBehind(s, work);
   }
 
   /** Work a lookup left running behind its answer (`syncPollBehind`), for harnesses to wait on. */
@@ -1227,7 +1060,6 @@ export class ContextPartner {
       said.map((it) => versionOf(it)),
     );
     this.built.set(injection, {
-      graphMask: 0,
       sourceIds: [...new Set(said.map((i) => i.sourceId))],
       items: said.map((i) => ({ sourceId: i.sourceId, id: i.id })),
       text: shownText(text),
@@ -1330,8 +1162,8 @@ export class ContextPartner {
    * The action firewall (`actionCheck`; docs/research/econ-firewall.md): an agent's tool call, before it runs, checked
    * against what is held, with no model and no source call. The session's request and the call's arguments read as
    * words (`actionText`: its days written out, its amounts, names and references) make one cue; what the request's
-   * structure grounds against it (`grounded`: a clash at the time it books, a conflict the conflict test reads, the
-   * graph's, a card's, someone away that day; `FIREWALL_GROUNDS`) is the finding, delivered already or not: the agent
+   * structure grounds against it (`grounded`: a clash at the time it books, a conflict the conflict test reads, a
+   * card's, someone away that day; `FIREWALL_GROUNDS`) is the finding, delivered already or not: the agent
    * is about to act as if it were not there. Anything else proceeds, as does a call made again unchanged after a
    * finding (the agent's informed choice). A finding is data in the usual envelope; what the integration does with it
    * is its own. With the flag off, every call proceeds and no state is touched. Never throws: a failure proceeds.
@@ -1365,10 +1197,10 @@ export class ContextPartner {
       const own = timeWindow(call, event.at, offset);
       if (own && own.days.size > 0) cue.time = own;
       cue.arrived = this.now();
-      // The probes' last answers and the class's cached finds, with no call (as `early` reads them).
+      // The probes' last answers and the class's cached finds, with no call.
       const out: ProbeOut = { calls: 0, kept: [] };
       if (this.config.probes) {
-        const all = await within(this.deps.sources(s.scope), EARLY_SOURCES_MS);
+        const all = await within(this.deps.sources(s.scope), CHECK_SOURCES_MS);
         if (all && all.length > 0 && !s.closed) {
           await this.probe(s, cue, all, all, false, out, Promise.resolve(), undefined, {
             offline: true,
@@ -1379,15 +1211,10 @@ export class ContextPartner {
         }
       }
       if (s.closed) return proceed("closed");
-      const walked = this.config.graph ? this.walkGraph(s, cue) : new Map<string, Walked>();
       const carded = this.cardFinds(s, cue);
       const extra = [...out.kept, ...(out.consequence?.ids ?? []), ...carded.keys()];
       // Delivered already or not: what the agent is about to do is checked, not whether it was told.
-      const scored = this.rank(s, cue, {
-        ignoreLedger: true,
-        probed: extra,
-        ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
-      });
+      const scored = this.rank(s, cue, { ignoreLedger: true, probed: extra });
       const bridged = this.bridgedOf(scored, cue, out.consequence);
       const g = this.grounded(
         s,
@@ -1396,8 +1223,6 @@ export class ContextPartner {
         "action",
         bridged,
         out.consequence?.cls,
-        walked,
-        walked.size > 0 ? scored.filter((x) => walked.has(x.item.id)) : [],
         carded,
       );
       if (g.items.length === 0) return proceed("clear");
@@ -1408,7 +1233,7 @@ export class ContextPartner {
       // And only at a time the user asked for: a reminder or a task the agent placed at a slot of its own choosing
       // overlaps a meeting without clashing with anything the user asked (it would be held at every slot it tries).
       if (g.how === "clash" && requestedSpan(request) === null) return proceed("agent-timed");
-      // Read from shared words, a conflict (the conflict test's, the graph's, a card's) holds the action only on a tie
+      // Read from shared words, a conflict (the conflict test's, a card's) holds the action only on a tie
       // the words cannot fake (`structuralTie`: a span over its day, an expiry before it, a limit on its amount, a
       // statement binding a party it names), an identifier or qualified reference the call names, or the action
       // class's find about a party it names.
@@ -1506,33 +1331,21 @@ export class ContextPartner {
       this.config.syncPollBehind &&
       this.config.syncOnDemand;
     const searched = internal.again?.searched ?? (await this.searchLive(s, cue, this.config.askSources, behind));
-    const { calls: sourceCalls, plans, probed, local, syncCalls, consequence } = searched;
-    // `askVerdicts` (docs/research/gen-ask.md): an ask gathers what a lookup gathers (the consequence probe's finds,
-    // the graph walk's, the card finds), not only what shares the question's words, and reads each with the verdicts
-    // the lookup's rule paths read, so an item the question runs into answers it ahead of a merely similar one.
-    const verdicts = this.config.askVerdicts;
-    const consIds = verdicts ? (consequence?.ids ?? []) : [];
-    const walked = verdicts && this.config.graph ? this.walkGraph(s, cue) : new Map<string, Walked>();
-    const carded = verdicts ? this.cardFinds(s, cue) : new Map<string, CardFind>();
+    const { calls: sourceCalls, plans, probed, local, syncCalls } = searched;
     // `intent`: what the question would change, by the requests written for each item (no model, no call).
     const intentFound = this.intentFinds(s, cue);
-    const extra = [...consIds, ...carded.keys(), ...intentFound.keys()];
+    const extra = [...intentFound.keys()];
     const ranking = spans?.open("rank", cue.span);
     const scored = this.rank(s, cue, {
       ignoreLedger: true,
       probed: extra.length > 0 ? [...(probed ?? []), ...extra] : probed,
-      ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
     });
     if (ranking) spans!.close(ranking, { candidates: scored.length });
     // Only anchored intent hits are fused in (`anchoredIntents`); every hit still withholds the guard's line.
     const intents = this.anchoredIntents(s, cue, intentFound);
-    // The candidates' facts (`decide.ts`), read once: by `askVerdicts` for its hits, and by the lab's dump.
-    const facts =
-      verdicts || this.deps.onCandidates
-        ? this.askFacts(s, cue, scored, { probed, consIds, cls: consequence?.cls, walked, carded })
-        : [];
-    const hits = verdicts
-      ? facts.filter(({ facts: f }) => f.conflictHit || f.graphHit || f.bridged || f.cardViolated).map(({ x }) => x)
+    // The candidates' facts (`decide.ts`), for the lab's dump.
+    const facts = this.deps.onCandidates
+      ? this.factsOf(s, cue, scored, "ask", { probed: new Set(probed ?? []), bridged: new Set(), carded: new Map() })
       : [];
     const grounding = spans?.open("ground", cue.span);
     // What the question's people and days ground comes first (D44); a named day's other events only through it, so
@@ -1546,11 +1359,10 @@ export class ContextPartner {
     ).items;
     if (grounding) spans!.close(grounding, { grounded: grounded.length });
     const lexical = [
-      ...hits,
-      ...grounded.filter((x) => !hits.includes(x)),
-      ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x)),
+      ...grounded,
+      ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x)),
     ];
-    const order = intents.size > 0 ? this.fuseIntent(lexical, hits, scored, intents) : lexical;
+    const order = intents.size > 0 ? this.fuseIntent(lexical, scored, intents) : lexical;
     let chosen = order.slice(0, limit);
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
@@ -1720,47 +1532,6 @@ export class ContextPartner {
       latencyMs,
       ...(searched.sources ? { sources: searched.sources } : {}),
     };
-  }
-
-  /**
-   * The ask's candidates with their facts (`decide.ts`), best scored first, at most `decideCandidates`. `askVerdicts`
-   * answers first with those that carry a verdict the lookup's rule paths deliver on: a conflict with the question's
-   * frame that is about it and tied beyond a name (`groundConflict`'s test), a binding graph-walked item in conflict
-   * (the graph's ground), a consequence find in conflict tied by its class's words (`bridged`), or a card the
-   * question's actions violate. No model, no call: what is cached.
-   */
-  private askFacts(
-    s: Session,
-    cue: Cue,
-    scored: Scored[],
-    ctx: {
-      probed?: readonly string[];
-      consIds: readonly string[];
-      cls?: ActionClass;
-      walked: ReadonlyMap<string, Walked>;
-      carded: ReadonlyMap<string, CardFind>;
-    },
-  ): { x: Scored; facts: Facts }[] {
-    const cons = new Set(ctx.consIds);
-    const ties = ctx.cls ? classTies(ctx.cls) : undefined;
-    const bridged = new Set(
-      cons.size > 0
-        ? scored
-            .filter(
-              (x) =>
-                cons.has(x.item.id) &&
-                !unmeasuredLimit(this.frame(cue), x.item) &&
-                this.verdict(x.item, cue, ties) === "conflict",
-            )
-            .map((x) => x.item.id)
-        : [],
-    );
-    return this.factsOf(s, cue, scored, "ask", {
-      probed: new Set(ctx.probed ?? []),
-      bridged,
-      walked: ctx.walked,
-      carded: ctx.carded,
-    });
   }
 
   /**
@@ -2022,32 +1793,25 @@ export class ContextPartner {
   }
 
   /**
-   * `intent` (D87): an ask's pool with its intent hits fused in. Verdict hits keep the lead (a structural verdict
-   * outweighs any word overlap); the rest of the pool (its rule paths' order) and the intent hits (their requests'
-   * order) are fused by weighted reciprocal rank, 1/(k+rank) for the pool and `intentWeight`/(k+rank) for the intent
-   * list, ties in the pool's order. An item in both lists is kept once and scores both.
+   * `intent` (D87): an ask's pool with its intent hits fused in. The pool (its rule paths' order) and the intent hits
+   * (their requests' order) are fused by weighted reciprocal rank, 1/(k+rank) for the pool and `intentWeight`/(k+rank)
+   * for the intent list, ties in the pool's order. An item in both lists is kept once and scores both.
    */
-  private fuseIntent(
-    pool: Scored[],
-    lead: readonly Scored[],
-    scored: readonly Scored[],
-    intents: ReadonlyMap<string, IntentFind>,
-  ): Scored[] {
+  private fuseIntent(pool: Scored[], scored: readonly Scored[], intents: ReadonlyMap<string, IntentFind>): Scored[] {
     const k = ASK_FUSE_K;
     const w = this.config.intentWeight;
-    const rest = pool.filter((x) => !lead.includes(x));
     const fused = new Map<Scored, { score: number; first: number }>();
-    rest.forEach((x, i) => fused.set(x, { score: 1 / (k + i), first: i }));
+    pool.forEach((x, i) => fused.set(x, { score: 1 / (k + i), first: i }));
     for (const x of scored) {
       const f = intents.get(x.item.id);
-      if (!f || lead.includes(x)) continue;
+      if (!f) continue;
       const add = w / (k + f.rank);
       const e = fused.get(x);
       if (e) e.score += add;
-      else fused.set(x, { score: add, first: rest.length + f.rank });
+      else fused.set(x, { score: add, first: pool.length + f.rank });
     }
     const order = [...fused].sort((a, b) => b[1].score - a[1].score || a[1].first - b[1].first).map(([x]) => x);
-    return [...lead, ...order];
+    return order;
   }
 
   /**
@@ -2061,7 +1825,7 @@ export class ContextPartner {
     const o = s?.outstanding.get(f.injectionId);
     if (s && o) {
       s.outstanding.delete(f.injectionId);
-      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used, o.graphMask);
+      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used);
       return true;
     }
     // The session may have ended (and counted the injection unused): the user's record outlives it.
@@ -2141,8 +1905,8 @@ export class ContextPartner {
 
   /**
    * A deletion notification (`syncPush`): the source no longer has these refs (a message deleted or recalled, a doc
-   * removed, an event deleted). They are dropped at once from the cache, the sync's bookkeeping, their cards, the graph
-   * and held search pages, and held as gone for a while, so nothing delivers them again. Returns how many cached items
+   * removed, an event deleted). They are dropped at once from the cache, the sync's bookkeeping, their cards and held
+   * search pages, and held as gone for a while, so nothing delivers them again. Returns how many cached items
    * were dropped (ids held as gone but not cached count 0); 0 when push is off. No I/O.
    */
   sourceRemoved(scope: Scope, sourceId: string, refs: string[]): number {
@@ -2171,7 +1935,6 @@ export class ContextPartner {
     this.sync?.forget(scope, sourceId);
     // A source's forget drops only what its items brought: the user's other items keep their cards.
     this.deps.cards?.forget(scope, sourceId);
-    this.patterns.forget(scope, sourceId);
     // The reader's bearings are made from the items' text: any forget, of the user or of one source, drops them.
     this.deps.reader?.forget(scope);
   }
@@ -2241,7 +2004,7 @@ export class ContextPartner {
     s.closed = true;
     s.abort.abort();
     if (learn) {
-      for (const [id, o] of s.outstanding) this.record(s.scope, id, o.sourceIds, o.situation, false, o.graphMask);
+      for (const [id, o] of s.outstanding) this.record(s.scope, id, o.sourceIds, o.situation, false);
     }
     s.outstanding.clear();
     s.pending.length = 0;
@@ -2305,7 +2068,6 @@ export class ContextPartner {
         return distinctiveTokens(ids, n, s.seen, s.vocab);
       })(),
       deliveredTurn: s.turn,
-      ...(built.graphMask ? { graphMask: built.graphMask } : {}),
     });
     // Usage expires by turns, and only events move turns: a session that only asks would hold every answer forever.
     while (s.outstanding.size > MAX_OUTSTANDING) s.outstanding.delete(s.outstanding.keys().next().value as string);
@@ -2321,21 +2083,12 @@ export class ContextPartner {
       const expired = s.turn - o.deliveredTurn > this.config.usageWindowTurns;
       if (!used && !expired) continue;
       s.outstanding.delete(id);
-      this.record(s.scope, id, o.sourceIds, o.situation, used, o.graphMask);
+      this.record(s.scope, id, o.sourceIds, o.situation, used);
     }
   }
 
-  private record(
-    scope: Scope,
-    injectionId: string,
-    sourceIds: string[],
-    situation: string,
-    used: boolean,
-    graphMask = 0,
-  ): void {
+  private record(scope: Scope, injectionId: string, sourceIds: string[], situation: string, used: boolean): void {
     for (const sourceId of sourceIds) this.deps.sourceMap.recordOutcome(scope, situation, sourceId, used);
-    // The knowledge graph learns which edge types reach what the agent then uses (`graph`).
-    if (graphMask && this.config.graphLearn) this.deps.cache.learnGraph(scope, graphMask, used);
     const key = scopeKey(scope);
     const tenant = this.recorded.get(scope.tenantId) ?? new Map<string, Map<string, Recorded>>();
     this.recorded.set(scope.tenantId, tenant);
@@ -2357,11 +2110,7 @@ export class ContextPartner {
    * Scores cached items for a cue: idf-weighted query coverage, plus a bonus when the item names a cue entity as
    * whole terms ("Al" never matches "also"). Both come from the cache's index: the item's text is never rescanned.
    */
-  private rank(
-    s: Session,
-    cue: Cue,
-    options: { ignoreLedger?: boolean; probed?: string[]; walked?: string[] } = {},
-  ): Scored[] {
+  private rank(s: Session, cue: Cue, options: { ignoreLedger?: boolean; probed?: string[] } = {}): Scored[] {
     const cache = this.deps.cache;
     const vocab = cache.peekVocab(s.scope);
     if (!vocab) return []; // No cache for this user: nothing to rank, and nothing allocated.
@@ -2371,7 +2120,7 @@ export class ContextPartner {
     // Events on a day the request names are candidates whether or not they share its words (D44); they rank after
     // every item that does, so the judge, when there is one, sees them only if there is room.
     const timed = cue.time?.days.size ? cache.timed(s.scope, cue.time.days, this.now(), 30, cue.offset) : [];
-    if (query.length === 0 && timed.length === 0 && !options.probed?.length && !options.walked?.length) return [];
+    if (query.length === 0 && timed.length === 0 && !options.probed?.length) return [];
     const entities = cue.entities.map((e) => {
       // An entity with a term no cached item holds matches nothing (never intern it: that grows the cache's vocab).
       const all = termIds(e, s.vocab, true).n;
@@ -2405,14 +2154,6 @@ export class ContextPartner {
     // The probes' finds for the request's people, organisations and day are candidates whatever they share in words.
     const probed = options.probed?.length ? cache.hits(s.scope, options.probed, this.now()) : [];
     for (const h of probed) if (!found.some((f) => f.item.id === h.item.id)) found.push(h);
-    // So are the knowledge graph's finds (`graph`): reached through a name, an id or a day, not through words.
-    const walked = options.walked?.length ? cache.hits(s.scope, options.walked, this.now()) : [];
-    const walkedOnly = new Set<string>();
-    for (const h of walked) {
-      if (found.some((f) => f.item.id === h.item.id)) continue;
-      found.push(h);
-      walkedOnly.add(h.item.id);
-    }
     // `syncPollBehind`: an item delivered from a copy since edited at its source is news again, though the ledger has
     // it and its old words are near the new (D40: what the agent was given must not stand once superseded).
     const revised = new Set(
@@ -2436,7 +2177,6 @@ export class ContextPartner {
           const score = h.coverage + (entityHit ? this.config.entityBonus : 0);
           const scored: Scored = { item: h.item, matched: h.matched, score, sketch: h.sketch, doc: h.doc };
           if (people.length > 0) scored.beyond = beyondOf(h.doc);
-          if (walkedOnly.has(h.item.id)) scored.walkedOnly = true;
           if (entityHit) scored.entity = true;
           if (revised.has(h.item.id)) scored.revised = true;
           return scored;
@@ -2497,8 +2237,6 @@ export class ContextPartner {
     eventKind: string,
     bridged: ReadonlySet<string> = new Set(),
     cls?: ActionClass,
-    walked?: ReadonlyMap<string, Walked>,
-    graphPool: Scored[] = [],
     carded: ReadonlyMap<string, CardFind> = new Map(),
   ): { items: Scored[]; how: string } {
     const none = { items: [] as Scored[], how: "" };
@@ -2537,13 +2275,8 @@ export class ContextPartner {
     // With `groundConflict`: what would change the action (or the answer), tied to what the request names or asks
     // (`conflict.ts`): a hold over the day it acts on, a limit below its amount, a thing done already (D49).
     if (this.config.groundConflict) {
-      const { hits, best } = this.conflicts(cue, pool, acts, bridged, cls, walked, graphPool);
-      if (hits.length > 0) {
-        // With `graphMerge`, the walk's best conflict joins the request's own (it was found another way).
-        const extra = this.config.graphMerge ? best.slice(0, this.config.graphGround) : [];
-        return { items: [...hits.slice(0, this.max() - extra.length), ...extra], how: "conflict" };
-      }
-      if (best.length > 0) return { items: best.slice(0, this.config.graphGround), how: "graph" };
+      const hits = this.conflicts(cue, pool, bridged, cls);
+      if (hits.length > 0) return { items: hits.slice(0, this.max()), how: "conflict" };
       // `cards`: an item whose card the request violates (a freeze over its day, an expiry before it, a limit under
       // its amount, a standing constraint on what it names), read by the model when the item arrived. At most
       // `cardItems`, the best tied first: a card is a model's reading, and one wrong one is noise.
@@ -2625,18 +2358,9 @@ export class ContextPartner {
 
   /**
    * The conflict ground's finds (`groundConflict`, D49): candidates about what the request names, tied beyond a name,
-   * that `conflict.ts` says conflict with it (`hits`), with the conflicting consequence finds (`bridged`); and the
-   * graph's conflicts (`graph`), best walked first (`best`, those not among the hits).
+   * that `conflict.ts` says conflict with it, with the conflicting consequence finds (`bridged`).
    */
-  private conflicts(
-    cue: Cue,
-    pool: Scored[],
-    acts: boolean,
-    bridged: ReadonlySet<string>,
-    cls: ActionClass | undefined,
-    walked: ReadonlyMap<string, Walked> | undefined,
-    graphPool: Scored[],
-  ): { hits: Scored[]; best: Scored[] } {
+  private conflicts(cue: Cue, pool: Scored[], bridged: ReadonlySet<string>, cls: ActionClass | undefined): Scored[] {
     const hits = pool.filter(
       (x) => this.about(x, cue) && this.beyondName(x, cue) && this.verdict(x.item, cue) === "conflict",
     );
@@ -2649,32 +2373,7 @@ export class ContextPartner {
       if (!bridged.has(x.item.id) || hits.includes(x)) continue;
       if (cls?.scope === "general" || names.length === 0 || names.some((n) => mentions(n, x.item))) hits.push(x);
     }
-    // With `graph`: an item the knowledge graph reached from what the request names (a person's organisation, the
-    // name a colleague goes by, an identifier, a role) or from a day it names, though it shares none of its words,
-    // tied in the conflict test by the names it was reached through (`conflictTies`); its author speaks for them
-    // when the graph says the author is someone the request names or one of theirs.
-    const viaGraph: Scored[] = [];
-    // Only when the request's own words ground no conflict: the graph widens what is found, not what is said.
-    // Only for a request that acts or asks, or a message arriving: a remark that names someone ("haha Lucía sent me
-    // a meme") is no occasion to raise what binds them or their organisation.
-    const engaged = acts || this.imperative(cue) || isAction(cue.raw);
-    if (walked?.size && engaged && (hits.length === 0 || this.config.graphMerge)) {
-      for (const x of graphPool) {
-        const w = walked.get(x.item.id);
-        if (!w || !w.binds || bulkMail(x.item) || !this.beyondName(x, cue)) continue;
-        // A notification's status ("Status: Blocked") is no one's constraint on a person it names, unless the request
-        // names its reference.
-        if (w.automated && w.named && !w.byRef) continue;
-        // A limit on an amount ("travel over £500 needs pre-approval") binds a request that states no amount only
-        // perhaps: with no model's say, not raised on a name alone (as for the consequence probe, D54).
-        if (unmeasuredLimit(this.frame(cue), x.item)) continue;
-        if (this.verdict(x.item, cue, this.conflictTies(cue, w), w.speaks) === "conflict") viaGraph.push(x);
-      }
-    }
-    // The walk's best first: it is the one most tied to what the request names.
-    const by = (x: Scored) => walked!.get(x.item.id)!.score;
-    const best = viaGraph.filter((x) => !hits.includes(x)).sort((a, b) => by(b) - by(a));
-    return { hits, best };
+    return hits;
   }
 
   /**
@@ -2702,7 +2401,6 @@ export class ContextPartner {
     ctx: {
       probed?: ReadonlySet<string>;
       bridged?: ReadonlySet<string>;
-      walked?: ReadonlyMap<string, Walked>;
       carded?: ReadonlyMap<string, CardFind>;
     } = {},
   ): { x: Scored; facts: Facts }[] {
@@ -2718,7 +2416,6 @@ export class ContextPartner {
     const b = (v: boolean) => (v ? 1 : 0);
     return scored.slice(0, this.config.decideCandidates).map((x, rank) => {
       const item = x.item;
-      const w = ctx.walked?.get(item.id);
       const card = ctx.carded?.get(item.id);
       const day = startDay(item, cue.offset);
       const at = startMs(item);
@@ -2727,8 +2424,6 @@ export class ContextPartner {
       const beyondName = this.beyondName(x, cue);
       const about = this.about(x, cue);
       const unmeasured = unmeasuredLimit(frame, item);
-      const graphConflict =
-        w !== undefined && w.binds && this.verdict(item, cue, this.conflictTies(cue, w), w.speaks) === "conflict";
       const facts: Facts = {
         score: x.score,
         matched: x.matched,
@@ -2743,7 +2438,6 @@ export class ContextPartner {
         conflictHit: b(
           verdict === "conflict" && about && beyondName && !bulkMail(item) && !settled(item) && !unmeasured,
         ),
-        graphHit: b(graphConflict && beyondName && !bulkMail(item) && w.automated !== true),
         bulk: b(bulkMail(item)),
         settled: b(settled(item)),
         awayElsewhere: b(this.awayElsewhere(item, cue)),
@@ -2758,12 +2452,6 @@ export class ContextPartner {
         ),
         probed: b(ctx.probed?.has(item.id) === true),
         bridged: b(ctx.bridged?.has(item.id) === true),
-        walked: b(w !== undefined),
-        walkScore: w?.score ?? 0,
-        binds: b(w?.binds === true),
-        walkNamed: b(w?.named === true),
-        automated: b(w?.automated === true),
-        graphConflict: b(graphConflict),
         carded: b(card !== undefined),
         cardViolated: b(card?.violated === true),
         cardByName: b(card?.tied === "name"),
@@ -2816,40 +2504,8 @@ export class ContextPartner {
   }
 
   /** What an item says about the request's frame: conflict, clear or none (`conflict.ts` `assess`). */
-  private verdict(item: ContextItem, cue: Cue, ties?: ReadonlySet<string>, speaks = false): Verdict {
-    return assess(this.frame(cue), item, localNow(cue), ties, speaks);
-  }
-
-  /**
-   * The words that tie a graph-walked item's statements to the request (`graph`): the names of the nodes it was
-   * reached through ("umbrella", "health"); for one reached by a day alone, the request's action class's words
-   * (`consequence.ts`: "production" for a release), when it has one.
-   */
-  private conflictTies(cue: Cue, w: Walked): Set<string> {
-    const ties = tieWords(w.via);
-    if (!w.named) {
-      const cls = actionClass(cue.raw, isAction(cue.raw) || cue.external === true);
-      if (cls) for (const t of classTies(cls)) ties.add(t);
-    }
-    return ties;
-  }
-
-  /**
-   * The knowledge graph's finds for a request (`graph`): a walk from its names (as typed, and capitalised runs the
-   * user's items name), identifiers, roles and, with `graphDays`, days. The user's own name, addresses and
-   * organisation are kept out (`ItemCache.walk`): they are on everything. CPU only, bounded by `graphBudgetMs`.
-   */
-  private walkGraph(s: Session, cue: Cue): Map<string, Walked> {
-    const seeds = seedsOf(cue.raw, cleanEntities(cue.entities), this.config.graphDays ? (cue.time?.days ?? []) : []);
-    const found = this.deps.cache.walk(
-      s.scope,
-      seeds,
-      { budgetMs: this.config.graphBudgetMs, limit: this.config.graphItems, floor: this.config.graphFloor },
-      this.now(),
-    );
-    const out = new Map(found.map((w) => [w.id, w]));
-    WALKS.set(cue, out);
-    return out;
+  private verdict(item: ContextItem, cue: Cue, ties?: ReadonlySet<string>): Verdict {
+    return assess(this.frame(cue), item, localNow(cue), ties);
   }
 
   /**
@@ -3168,9 +2824,6 @@ export class ContextPartner {
     const sendTo = searchSpan ? (xs: Source[]) => xs.map((x) => this.traced(x, searchSpan.id)) : (xs: Source[]) => xs;
     // With `probeShare`: what the planner and the probes of this lookup send alike is sent once (`SharedCalls`).
     const shared: SharedCalls | undefined = this.config.probeShare ? new Map() : undefined;
-    // `anticipate`: what a prefetch already asked a source for the request's names answers the planner too (its
-    // query per name), as it answers the probes (`probe`'s `recent`).
-    if (shared && this.config.anticipate && s.ant) this.seedShared(s, shared, cue, all);
     // A planned source's calls, as counted where they reach the connector (`made`), by its index in `chosen`.
     const planned: CountedPlanCalls[] = [];
     const chosen =
@@ -3210,11 +2863,7 @@ export class ContextPartner {
     const settled = searching.catch(() => null);
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing = this.config.probes
-      ? this.probe(s, cue, routed, all, listing, probed, settled, shared, {
-          ...this.lookupOpts(s, cue),
-          local,
-          deadlineAt,
-        }).catch(() => {})
+      ? this.probe(s, cue, routed, all, listing, probed, settled, shared, { local, deadlineAt }).catch(() => {})
       : null;
     // The same query answered by the synced sources from the local index (D57): no call, nothing to store.
     const answeredHere = local
@@ -3319,14 +2968,6 @@ export class ContextPartner {
     shared?: SharedCalls,
     opts: ProbeOpts = {},
   ): Promise<void> {
-    if (opts.after) {
-      // A prefetch of the same names still running (`anticipate`): its answers, once in, stand in for these calls.
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const grace = new Promise<void>((done) => (timer = setTimeout(done, this.config.probeGraceMs)));
-      await Promise.race([opts.after.catch(() => {}), grace]);
-      clearTimeout(timer);
-      if (s.closed) return;
-    }
     // Before the probes' calls: what they store was read under it (D133).
     const readMark = this.sync?.mark() ?? 0;
     const lanes = new Map<string, Promise<unknown>>();
@@ -3377,10 +3018,7 @@ export class ContextPartner {
         }
         if (sources.length === 0) return here;
       }
-      // With `anticipate`, the same sources in another order are the same probe: an event's prefetch and the request
-      // route a name at different moments (the situation, the mentions recorded in between), and should share it.
       const ids = sources.map((x) => x.id);
-      if (this.config.anticipate) ids.sort();
       const key = `${text}|${window ? `${window.start}/${window.end}` : ""}|${ids.join(",")}`;
       // Probed recently by this user (any of their sessions): its finds at no call, while every one is still cached.
       const hits = this.deps.cache.probeHits(s.scope, key, this.config.probeMemoMs, this.now());
@@ -3392,8 +3030,8 @@ export class ContextPartner {
       // kind of probe has not been yielding, is not called; its last answer, while still cached, stands in.
       const asked = `${text}|${window ? `${window.start}/${window.end}` : ""}`;
       const reused: ContextItem[] = [];
-      // Offline (`anticipate`'s read at the request, and its class read): what each source last answered to this
-      // query, while still cached, and no call.
+      // Offline (the action firewall's read, and its class read): what each source last answered to this query,
+      // while still cached, and no call.
       if (offline) {
         const now = this.now();
         for (const source of sources) {
@@ -3404,18 +3042,13 @@ export class ContextPartner {
         return [...here, ...reused];
       }
       let live = sources;
-      if (this.config.probeFresh || this.config.probeYield || this.config.anticipate) {
+      if (this.config.probeFresh || this.config.probeYield) {
         live = [];
         const now = this.now();
         for (const source of sources) {
-          // `anticipate`: asked live at this source within the memo's age (an event's prefetch, most often), its last
-          // answer stands in as the memo's would; the memo itself keeps only answers every source gave in full.
-          const at = this.config.anticipate ? this.economy.askedAt(s.scope, source.id, asked) : null;
-          const recent = at !== null && now - at <= this.config.probeMemoMs;
           const unchanged =
-            recent ||
-            (this.config.probeFresh &&
-              this.economy.changeChance(s.scope, source.id, asked, now) < this.config.probeFreshFloor);
+            this.config.probeFresh &&
+            this.economy.changeChance(s.scope, source.id, asked, now) < this.config.probeFreshFloor;
           const idle =
             !unchanged &&
             this.config.probeYield &&
@@ -3491,9 +3124,7 @@ export class ContextPartner {
       // A page of the probe's own size from each source, even when the call was the planner's (8 items): more would
       // crowd the probes' seats with the judge (live, the judge passed fewer planted items with them).
       const items = outcomes.flatMap((o) => o.items.slice(0, window ? 20 : 5));
-      // `anticipate` with shared calls: the whole answer (the planner's page size) is cached and recorded, so it can
-      // stand in for the planner's own query of the name later (`seedShared`); the probe's finds stay its first five.
-      const whole = window ? 20 : this.config.anticipate && shared ? 8 : 5;
+      const whole = window ? 20 : 5;
       // A call the fan-out did not make (busy, limited, open, answered from its cache, joined in flight, past the
       // deadline) is no call.
       const unmade = to.length - outcomes.filter(reachedSource).length;
@@ -3501,8 +3132,7 @@ export class ContextPartner {
       if (own) extra -= unmade;
       // A consequence probe's answers are always recorded: which of its terms each source was asked, and when, is
       // what rotates them and what its later lookups recall (`consequence`).
-      const learn =
-        this.config.probeFresh || this.config.probeYield || this.config.consequenceProbe || this.config.anticipate;
+      const learn = this.config.probeFresh || this.config.probeYield || this.config.consequenceProbe;
       if (!s.closed && learn) {
         const now = this.now();
         for (const o of outcomes) {
@@ -3576,9 +3206,7 @@ export class ContextPartner {
     // `probeTopicAlone`: the topic only for a request that names no one (with people, their probes find what the topic
     // would: held-out funnels returned as many planted items without it, at fewer calls).
     const topic =
-      opts.noTopic || off.has("topic") || (c.probeTopicAlone && people.length > 0)
-        ? ""
-        : topicOf(cue.text.split(" "), cue.entities);
+      off.has("topic") || (c.probeTopicAlone && people.length > 0) ? "" : topicOf(cue.text.split(" "), cue.entities);
     // The organisations of the request's people, from what came back for them; what is said of someone's
     // organisation (a hold, a policy) applies to them.
     const byPeople = (async () => {
@@ -3611,7 +3239,7 @@ export class ContextPartner {
         : c.consequenceProbe && !off.has("consequence")
           ? actionClass(cue.raw, acts)
           : null;
-    // The class read with no call (`anticipate`): the class's queries an event's prefetch sent, as cached.
+    // The class read with no call (the action firewall's): the class's queries earlier lookups sent, as cached.
     const offlineSend: ProbeSend = (k, src, t, w, keep, on) => send(k, src, t, w, keep, on, true);
     await Promise.all([
       ...windows.map((w) => send("day", listers, "", w)),
@@ -4143,26 +3771,24 @@ export class ContextPartner {
     // An event on a day the request names is a candidate whatever it scores on words (D44).
     const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true;
     // A consequence find that does not conflict is no candidate: it shares nothing with the request but its class.
-    // A graph walk's own finds (`graph`) are not either: they have their seats and ground, and no other path.
     // An intent hit (`intent`) is: its requests say the request is one it would change. The rule paths still read
     // its own words (its lexical score and terms are unchanged), so it is delivered with no model's say only where a
     // structural verdict (the conflict test, a violated card) binds it.
     return scored.filter(
       (x) =>
-        !x.walkedOnly &&
-        (x.score >= this.config.candidateScore ||
-          onNamedDay(x) ||
-          probed.has(x.item.id) ||
-          bridged.has(x.item.id) ||
-          carded.has(x.item.id) ||
-          intents.has(x.item.id)),
+        x.score >= this.config.candidateScore ||
+        onNamedDay(x) ||
+        probed.has(x.item.id) ||
+        bridged.has(x.item.id) ||
+        carded.has(x.item.id) ||
+        intents.has(x.item.id),
     );
   }
 
   /**
-   * The consequence finds that conflict with the request (`consequenceProbe`, or `anticipate`'s class read): a freeze
-   * over the day a release is asked for, not one last month; and not a limit on an amount the request does not state
-   * ("travel over £500 needs pre-approval" for printer paper).
+   * The consequence finds that conflict with the request (`consequenceProbe`, or the action firewall's class read): a
+   * freeze over the day a release is asked for, not one last month; and not a limit on an amount the request does not
+   * state ("travel over £500 needs pre-approval" for printer paper).
    */
   private bridgedOf(scored: Scored[], cue: Cue, consequence?: { cls: ActionClass; ids: string[] }): Set<string> {
     if (!consequence || consequence.ids.length === 0) return new Set();
@@ -4190,295 +3816,6 @@ export class ContextPartner {
     return local.size > 0 ? local : null;
   }
 
-  // ── anticipation (`anticipate`, `anticipate.ts`) ──
-
-  /**
-   * Reads an event for what the agent will need next and prefetches it in the background (`prefetch`). One prefetch
-   * per session at a time: an event arriving meanwhile waits, and a later one replaces it (the newest is what the
-   * next request will be closest to). Never throws and never blocks the event.
-   */
-  private anticipate(s: Session, kind: string, text: string, at: number, lookup: boolean): void {
-    const ant = (s.ant ??= { calls: 0, running: null, queued: null, prefetched: new Set(), asked: new Set() });
-    if (s.closed || ant.calls >= this.config.anticipateSessionCalls) return;
-    if (ant.running) {
-      ant.queued = { kind, text, at, lookup };
-      return;
-    }
-    const spans = this.spans;
-    const sp = spans?.open("anticipate.prefetch", 0, { async: true, event: kind });
-    ant.running = this.prefetch(s, ant, kind, text, at, lookup, sp?.id)
-      .catch(() => {})
-      .finally(() => {
-        if (sp) spans!.close(sp, { session: s.id, calls: ant.calls });
-        ant.running = null;
-        const next = ant.queued;
-        ant.queued = null;
-        if (next && !s.closed) this.anticipate(s, next.kind, next.text, next.at, next.lookup);
-      });
-  }
-
-  /**
-   * One event's prefetch: the names it mentions and the days it schedules, as the request's own probes would send
-   * them (person, organisation and day probes, through `probe`, so their answers land in the user's probe memo and
-   * economy), the names the user's history says follow its intent, and its action class's constraint vocabulary.
-   * A request's own names and days are left to its lookup. At most `anticipateCalls` calls (the class query, one
-   * call to one source, on top), and `anticipateSessionCalls` for the session.
-   */
-  private async prefetch(
-    s: Session,
-    ant: Anticipation,
-    kind: string,
-    text: string,
-    at: number,
-    lookup: boolean,
-    span?: number,
-  ): Promise<void> {
-    const off = this.config.anticipateOff;
-    const offset = this.deps.cache.offsetOf(s.scope);
-    const p = predict(text, at, offset, kind === "external");
-    const fresh = (key: string) => !ant.asked.has(key);
-    // The user's own name is on everything of theirs: never a need. A tool's output names whoever its items do (the
-    // senders, a signature's colleagues, a company): only people the user's items have as parties are worth a call.
-    const self = this.deps.cache.selfOf(s.scope)?.toLowerCase();
-    const tool = kind === "tool_call" || kind === "tool_result";
-    const names =
-      lookup || off.includes("names")
-        ? []
-        : p.names.filter(
-            (n) =>
-              fresh(`n:${n.toLowerCase()}`) &&
-              n.toLowerCase() !== self &&
-              (!tool || this.deps.cache.isPerson(s.scope, n)),
-          );
-    if (!off.includes("learn")) {
-      for (const n of this.patterns.follows(s.scope, p.intent, 1, this.now())) {
-        if (names.length < PREDICT_NAMES && fresh(`n:${n.toLowerCase()}`) && !names.includes(n)) names.push(n);
-      }
-    }
-    const days = lookup || off.includes("days") ? [] : p.days.filter((d) => fresh(`d:${d}`));
-    // A class's vocabulary once per session: the draft and the message it becomes are one action.
-    const cls = off.includes("class") || !p.cls || !fresh(`c:${p.cls.id}`) ? null : p.cls;
-    if (names.length === 0 && days.length === 0 && !cls) return;
-    const all = await this.deps.sources(s.scope).catch((): Source[] => []);
-    if (all.length === 0 || s.closed) return;
-    this.markAsked(ant, [
-      ...names.map((n) => `n:${n.toLowerCase()}`),
-      ...days.map((d) => `d:${d}`),
-      ...(cls ? [`c:${cls.id}`] : []),
-    ]);
-    // A cue of the event's head, with only the names and days still to fetch: `probe` sends what a request with them
-    // would, so the request's own probes later find the same queries answered.
-    const cue = buildCue(p.head, distinctTermIds(p.head, s.vocab), s.vocab, at, offset, true);
-    cue.entities = names;
-    // Its probes are the `anticipate.prefetch` span's children: they reach the session through it (D56).
-    if (span !== undefined) cue.span = span;
-    if (days.length === 0) cue.time = null;
-    else if (cue.time) cue.time = { ...cue.time, days: new Set(days) };
-    // Only the class's query ranks sources by the lookup's routing; routing draws from the source map's sampler, so
-    // it is not consulted for nothing.
-    const found = cls ? this.routed(s, cue, all, this.config.lookupSources) : [];
-    const out: ProbeOut = { calls: 0, kept: [] };
-    const left = this.config.anticipateSessionCalls - ant.calls;
-    // A draft's names are the request's own, probed early: the request's probe budget. Any other event's are a guess.
-    const budget = kind === "draft" ? this.config.probeCalls : this.config.anticipateCalls;
-    await this.probe(
-      s,
-      cue,
-      found,
-      all,
-      false,
-      out,
-      Promise.resolve(),
-      this.config.probeShare ? new Map() : undefined,
-      { budget: Math.min(budget, left), cls, noTopic: true, local: this.localOf(s, all) },
-    );
-    // The session ended while the probes ran: nothing of it is learned or traced after its end (D17).
-    if (s.closed) return;
-    ant.calls += out.calls;
-    for (const id of [...out.kept, ...(out.consequence?.ids ?? [])]) {
-      ant.prefetched.delete(id);
-      ant.prefetched.add(id);
-    }
-    while (ant.prefetched.size > MAX_PREFETCHED) ant.prefetched.delete(ant.prefetched.values().next().value!);
-    this.trace({
-      sessionId: s.id,
-      turn: s.turn,
-      event: kind,
-      decision: "skipped",
-      reason: "anticipate",
-      latencyMs: 0,
-      sourceCalls: 0,
-      modelCalls: 0,
-      costUsd: 0,
-      itemIds: [],
-      anticipateCalls: out.calls,
-    });
-  }
-
-  /**
-   * Puts into a lookup's shared calls (`SharedCalls`, `probeShare`) the answers a source gave this user's prefetch
-   * for the request's names, while recent (within `probeMemoMs`) and still wholly cached: the planner's query for a
-   * name is then answered at no call, as the probe's is.
-   */
-  private seedShared(s: Session, shared: SharedCalls, cue: Cue, all: Source[]): void {
-    const now = this.now();
-    for (const name of cue.entities.slice(0, 2)) {
-      const asked = `${name}|`;
-      for (const source of all) {
-        const at = this.economy.askedAt(s.scope, source.id, asked);
-        if (at === null || now - at > this.config.probeMemoMs) continue;
-        const last = this.economy.lastIds(s.scope, source.id, asked);
-        const held = last ? this.deps.cache.hits(s.scope, last, now) : [];
-        if (!last || held.length < last.length) continue;
-        const key = sharedKey(source.id, { scope: s.scope, text: name, entities: [name], limit: 8 });
-        if (!shared.has(key)) shared.set(key, Promise.resolve(held.map((h) => h.item)));
-      }
-    }
-  }
-
-  /** Notes names ("n:…"), days ("d:…") and classes ("c:…") as fetched for the session (bounded: `MAX_ASKED`). */
-  private markAsked(ant: Anticipation, keys: readonly string[]): void {
-    for (const k of keys) {
-      ant.asked.delete(k);
-      ant.asked.add(k);
-    }
-    while (ant.asked.size > MAX_ASKED) ant.asked.delete(ant.asked.values().next().value!);
-  }
-
-  /** `early`, under an `anticipate.early` span when spans are on (its probes are that span's children). */
-  private async tracedEarly(s: Session, cue: Cue, eventKind: string, t0: number): Promise<Injection | null> {
-    const spans = this.spans;
-    if (!spans) return this.early(s, cue, eventKind, t0);
-    const sp = spans.open("anticipate.early", cue.span, { async: true });
-    let injection: Injection | null = null;
-    try {
-      injection = await this.early(s, { ...cue, span: sp.id }, eventKind, t0);
-      return injection;
-    } finally {
-      spans.close(sp, { delivered: injection !== null });
-    }
-  }
-
-  /**
-   * The request decided from what is held, with no call and no model (`anticipate`): the economy's last answers for
-   * its names and days at every source (which the prefetches warmed), the class's cached finds, and the cache. What is
-   * sure is delivered, else what the request's structure grounds (a conflict, a clash, an absence, the event it
-   * names). Never the fallback: its best guess among what happens to be held is no better than among what the live
-   * search returns. A stale copy is never delivered from here (D40). With a judge, nothing: the slow path decides.
-   */
-  private async early(s: Session, cue: Cue, eventKind: string, t0: number): Promise<Injection | null> {
-    // With a judge, the slow path decides (see the fast path): what is held only makes it faster.
-    if (this.deps.model !== null) return null;
-    // The observe call waits on this: a resolver doing I/O (an MCP connect, a token refresh) must not hold it. Past
-    // `EARLY_SOURCES_MS` the request goes to the slow path, which waits for the sources as it always has.
-    // (A resolver that fails throws here; `observe` reads that as no early answer, as it reads an empty list.)
-    const all = await within(this.deps.sources(s.scope), EARLY_SOURCES_MS);
-    if (all === null || all.length === 0 || s.closed) return null;
-    const out: ProbeOut = { calls: 0, kept: [] };
-    if (this.config.probes) {
-      const cls = this.config.anticipateOff.includes("class")
-        ? null
-        : actionClass(cue.raw, isImperative(cue.raw) || cue.external === true);
-      // Offline, every source's last answer is read (no routing: it would draw from the source map's sampler).
-      await this.probe(s, cue, all, all, false, out, Promise.resolve(), undefined, {
-        offline: true,
-        cls,
-        classOffline: true,
-        local: this.localOf(s, all),
-      });
-    }
-    if (s.closed) return null;
-    const probed = new Set(out.kept);
-    const scored = this.rank(s, cue, { probed: [...out.kept, ...(out.consequence?.ids ?? [])] });
-    const bridged = this.bridgedOf(scored, cue, out.consequence);
-    const sure = this.confident(scored, cue);
-    let items: Scored[] = [];
-    let how = "sure";
-    if (sure.length > 0) {
-      items = sure;
-    } else {
-      const g = this.grounded(
-        s,
-        cue,
-        this.eligible(scored, cue, probed, bridged),
-        eventKind,
-        bridged,
-        out.consequence?.cls,
-      );
-      items = g.items;
-      how = g.how;
-    }
-    const stale = items.length > 0 && this.stale(s, items);
-    if (this.deps.onCandidates) {
-      const facts = this.factsOf(s, cue, scored, eventKind, { probed, bridged });
-      this.dump(s, "early", facts, stale ? [] : items, items.length > 0 && !stale ? how : "");
-    }
-    if (items.length === 0 || stale) return null;
-    const ids = items.map((x) => x.item.id);
-    this.trace({
-      sessionId: s.id,
-      turn: s.turn,
-      event: eventKind,
-      decision: "fast",
-      reason: `anticipated-${how}`,
-      latencyMs: Math.round(performance.now() - t0),
-      sourceCalls: 0,
-      modelCalls: 0,
-      costUsd: 0,
-      itemIds: ids,
-      ...this.prefetchedOf(s, ids),
-    });
-    return await this.deliverChecked(s, items, "proactive", `anticipated-${how}:${cue.id}`, cue);
-  }
-
-  /**
-   * The options a lookup's own probes run with under `anticipate`: they first wait (at most `probeGraceMs`) for the
-   * session's running prefetch, whose answers they would otherwise ask again, and read the request's action class
-   * from what the prefetches cached, with no call (unless `consequenceProbe` sends it live).
-   */
-  private lookupOpts(s: Session, cue: Cue): ProbeOpts {
-    if (!this.config.anticipate) return {};
-    const cls =
-      this.config.consequenceProbe || this.config.anticipateOff.includes("class")
-        ? undefined
-        : actionClass(cue.raw, isImperative(cue.raw) || cue.external === true);
-    return {
-      ...(cls !== undefined ? { cls, classOffline: true } : {}),
-      ...(s.ant?.running ? { after: s.ant.running } : {}),
-    };
-  }
-
-  /** The delivered ids the session's anticipation had fetched or held ready (`Trace.prefetched`); {} when none. */
-  private prefetchedOf(s: Session, ids: readonly string[]): Partial<Trace> {
-    const pre = s.ant?.prefetched;
-    if (!pre || pre.size === 0) return {};
-    const hit = ids.filter((id) => pre.has(id));
-    return hit.length > 0 ? { prefetched: hit } : {};
-  }
-
-  /**
-   * Learns what followed the request's intent (`IntentPatterns`): the names in the titles of what was delivered for
-   * it, other than those it named itself. Its action class, else its situation.
-   */
-  private learnFollows(s: Session, cue: Cue, scored: Scored[]): void {
-    const own = new Set(cue.entities.map((e) => e.toLowerCase()));
-    const intent = actionClass(cue.raw, isImperative(cue.raw) || cue.external === true)?.id ?? s.situation;
-    for (const x of scored) {
-      const names = cleanEntities(extractEntities(x.item.title.slice(0, 200)))
-        .filter((n) => !own.has(n.toLowerCase()))
-        .slice(0, 2);
-      this.patterns.note(s.scope, intent, names, [x.item.sourceId], this.now());
-    }
-  }
-
-  /** The sources the source map ranks first for a cue's names and the session's situation. */
-  private routed(s: Session, cue: Cue, all: Source[], limit: number): Source[] {
-    return this.deps.sourceMap
-      .route({ scope: s.scope, entities: cue.entities, situation: s.situation, sourceIds: all.map((x) => x.id), limit })
-      .map((r) => all.find((x) => x.id === r.sourceId)!)
-      .filter(Boolean);
-  }
-
   private async lookup(s: Session, cue: Cue, t0: number, eventKind: string, served = false): Promise<Injection | null> {
     // The turn that triggered the lookup. Traces report it, not the turn current when the lookup finishes: later
     // events may arrive meanwhile, and evals attribute deliveries by this field.
@@ -4503,10 +3840,6 @@ export class ContextPartner {
         itemIds: items.map((i) => i.id),
         ...(plans ? { plans } : {}),
         ...(local !== undefined ? { localSources: local, syncCalls: syncCalls ?? 0 } : {}),
-        ...this.prefetchedOf(
-          s,
-          items.map((i) => i.id),
-        ),
       });
     try {
       let probedIds: string[] | undefined;
@@ -4532,10 +3865,6 @@ export class ContextPartner {
       const spans = this.spans;
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
       const consIds = new Set(consequence?.ids ?? []);
-      // With `graph`: what the user's knowledge graph reaches from the request, after the lookup's items are cached.
-      const walking = this.config.graph ? spans?.open("graph.walk", cue.span) : undefined;
-      const walked = this.config.graph ? this.walkGraph(s, cue) : new Map<string, Walked>();
-      if (walking) spans!.close(walking, { reached: walked.size });
       // `cards`: cached items whose implication card bears on the request's actions (no model, no call).
       const carding = this.config.cards && this.deps.cards ? spans?.open("cards.match", cue.span) : undefined;
       const carded = this.cardFinds(s, cue);
@@ -4548,7 +3877,6 @@ export class ContextPartner {
       const ranking = spans?.open("rank", cue.span);
       const scored = this.rank(s, cue, {
         probed: extra.length > 0 ? [...(probedIds ?? []), ...extra] : probedIds,
-        ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
       });
       if (ranking) spans!.close(ranking, { candidates: scored.length });
       // Only anchored intent hits are eligible as such, take seats or tie the judge (`anchoredIntents`).
@@ -4572,19 +3900,18 @@ export class ContextPartner {
       );
       if (conflicting) spans!.close(conflicting, { bridged: bridged.size });
       const confiding = spans?.open("confident", cue.span);
-      const sure = this.confident(walked.size > 0 ? scored.filter((x) => !x.walkedOnly) : scored, cue);
+      const sure = this.confident(scored, cue);
       if (confiding) spans!.close(confiding, { sure: sure.length });
       const probedSet = new Set(probedIds ?? []);
-      const factsNow = () =>
-        this.factsOf(s, cue, scored, eventKind, { probed: probedSet, bridged, walked, carded: carded });
+      const factsNow = () => this.factsOf(s, cue, scored, eventKind, { probed: probedSet, bridged, carded: carded });
       // The rule paths decide when no model does.
       const noModelSay = !this.deps.model;
       const dumped = (path: CandidateDump["path"], items: readonly Scored[], how: string, say = noModelSay) => {
         if (this.deps.onCandidates && say) this.dump(s, path, factsNow(), items, items.length > 0 ? how : "");
       };
-      // `anticipate`: the request was answered from what was held (`early`). The live search adds only what is sure,
-      // or with no model what the request's structure grounds: never the fallback's best guess or a judge call, which
-      // would have had that delivery among their candidates.
+      // `served`: the request was answered already (a follow-up behind a delivery, `afterPoll`). The live search adds
+      // only what is sure, or with no model what the request's structure grounds: never the fallback's best guess or
+      // a judge call, which would have had that delivery among their candidates.
       if (served) {
         // A follow-up (`afterPoll`) decides as with no model whatever is configured: its judge call would be the
         // event's second (docs/COST-MODEL.md).
@@ -4600,8 +3927,6 @@ export class ContextPartner {
                   eventKind,
                   bridged,
                   consequence?.cls,
-                  walked,
-                  walked.size > 0 ? scored.filter((x) => walked.has(x.item.id)) : [],
                   carded,
                 ).items;
         // A follow-up corrects: an item the agent was given whose words its poll changed goes out again, as it now
@@ -4615,12 +3940,12 @@ export class ContextPartner {
           noModelSay || cue.followUp === true,
         );
         if (items.length === 0) {
-          done("silent", "anticipated");
+          done("silent", "served");
           return null;
         }
         done(
           "sources",
-          `after-anticipated:${cue.id}`,
+          `after-served:${cue.id}`,
           items.map((x) => x.item),
         );
         return await this.deliverChecked(s, items, "proactive", `sources:${cue.id}`, cue);
@@ -4642,9 +3967,6 @@ export class ContextPartner {
       const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true;
       const probed = new Set(probedIds ?? []);
       const eligible = this.eligible(scored, cue, probed, bridged, carded, intents);
-      // The walk's finds (`graph`), whatever they score on words: they get seats and the graph's conflict ground,
-      // and no other path (what every other path reads stays as it was without the graph).
-      const graphPool = walked.size > 0 ? scored.filter((x) => walked.has(x.item.id)) : [];
       // With probes on, up to three of the probes' finds join the judge's candidates beyond the best scored: found for
       // the request's people, organisations or day, they share few of its words and would otherwise never be seen.
       const top = judgeSure
@@ -4675,12 +3997,7 @@ export class ContextPartner {
             .slice(0, this.config.intentSeats)
         : [];
       const seats = [...cardSeat, ...intentSeats, ...probeSeats];
-      // With `graph`, the walk's best finds the judge would not otherwise see take seats of their own.
-      const graphSeats = graphPool
-        .filter((x) => !top.includes(x) && !seats.includes(x))
-        .sort((a, b) => walked.get(b.item.id)!.score - walked.get(a.item.id)!.score)
-        .slice(0, this.config.graphSeats);
-      const unsure = [...top, ...seats, ...graphSeats];
+      const unsure = [...top, ...seats];
       // A probe that brought in what is seated for the judge did its part, whatever the judge then makes of it: the
       // judge rules on relevance, the probe only on finding (`probeYield`).
       if (this.config.probeYield && !s.closed) {
@@ -4709,17 +4026,7 @@ export class ContextPartner {
         }
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
         const grounding = spans?.open("ground", cue.span, { candidates: eligible.length });
-        const grounded = this.grounded(
-          s,
-          cue,
-          eligible,
-          eventKind,
-          bridged,
-          consequence?.cls,
-          walked,
-          graphPool,
-          carded,
-        );
+        const grounded = this.grounded(s, cue, eligible, eventKind, bridged, consequence?.cls, carded);
         if (grounding) spans!.close(grounding, { grounded: grounded.items.length });
         if (grounded.items.length > 0) {
           dumped("lookup", grounded.items, `grounded-${grounded.how}`, true);
@@ -4752,7 +4059,6 @@ export class ContextPartner {
         (x: Scored): boolean =>
           probed.has(x.item.id) ||
           bridged.has(x.item.id) ||
-          walked.has(x.item.id) ||
           carded.get(x.item.id)?.violated === true ||
           intents.has(x.item.id) ||
           onNamedDay(x) ||
@@ -5036,9 +4342,6 @@ export class ContextPartner {
     }
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
-    if (this.config.anticipate && mode === "proactive" && !this.config.anticipateOff.includes("learn")) {
-      this.learnFollows(s, cue, scored);
-    }
     // Every item counts as delivered, an echo folded out of the packet too: the agent has its occurrence.
     s.ledger.mark(
       scored.map((x) => x.item.id),
@@ -5085,11 +4388,7 @@ export class ContextPartner {
       createdAt: this.now(),
     };
     if (rendering) spans!.close(rendering);
-    const walks = WALKS.get(cue);
-    let graphMask = 0;
-    for (const x of scored) graphMask |= walks?.get(x.item.id)?.mask ?? 0;
     this.built.set(injection, {
-      graphMask,
       sourceIds: [...new Set(items.map((i) => i.sourceId))],
       items: items.map((i) => ({ sourceId: i.sourceId, id: i.id })),
       // Only the words the agent received: an item's text past the packet's cut is not evidence of use.
@@ -5331,13 +4630,12 @@ interface IntentFind {
   matched: number;
 }
 
-/** How long anticipation's early decision waits for the source resolver (ms): an answer held, or none at once. */
-const EARLY_SOURCES_MS = 5;
+/** How long the action firewall waits for the source resolver (ms): an answer held, or none at once. */
+const CHECK_SOURCES_MS = 5;
 
 /**
  * `p`'s value if it settles within `ms`, else null (it runs on; a rejection after the bound is swallowed). Not an
- * async function: an answer already in settles as soon as awaiting `p` itself would, so the early decision keeps its
- * place among the session's other work (the prefetch it races with).
+ * async function: an answer already in settles as soon as awaiting `p` itself would.
  */
 function within<T>(p: Promise<T>, ms: number): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;

@@ -12,7 +12,6 @@ import type { Trace } from "./trace";
 /** Every setting where the default and the core differ, with its value in the default (D112). */
 const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   fallbackAsks: true,
-  slowPathQueue: true,
   probes: true,
   compactInjection: true,
   probeGraceMs: 0,
@@ -22,12 +21,6 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   consequenceProbe: true,
   probeRoles: true,
   probeShare: true,
-  graph: true,
-  graphMerge: true,
-  anticipate: true,
-  judgeContested: true,
-  judgeTied: true,
-  judgeItemBytes: 200,
   quietSettled: true,
   groundAway: true,
   groundConflict: true,
@@ -44,7 +37,6 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   revisionNotice: true,
   cards: true,
   cardsEconomy: true,
-  askVerdicts: true,
   compactAsk: true,
   askDedup: true,
   compactParts: true,
@@ -92,11 +84,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(50);
+    expect(differ.length).toBe(42);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(50);
+    expect(partKeys.size).toBe(42);
   });
 });
 

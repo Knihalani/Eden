@@ -10,7 +10,26 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sanitizeForStore } from "@eden/redact";
 import { datesIn } from "./conflict";
-import { orgLabel } from "./kg";
+
+/** Free-mail domains name no organisation. */
+const FREE_MAIL = new Set(
+  "gmail googlemail icloud me mac outlook hotmail live msn yahoo aol proton protonmail hey fastmail gmx yandex".split(
+    " ",
+  ),
+);
+/** Labels of a domain that are not the organisation's name ("co" in "globex.co.uk"). */
+const SUFFIXES = new Set("com co org net gov edu ac io ai app inc ltd uk us de fr eu nz au ca".split(" "));
+
+/** A domain's organisation label: "umbrellahealth" for umbrellahealth.com, "globex" for mail.globex.co.uk. */
+export function orgLabel(domain: string): string | null {
+  const parts = domain.toLowerCase().split(".").filter(Boolean);
+  // The top-level label is never the name ("hooli.xyz" is Hooli); then any second-level one ("co" in ".co.uk").
+  if (parts.length > 1) parts.pop();
+  while (parts.length > 1 && SUFFIXES.has(parts.at(-1)!)) parts.pop();
+  const label = parts.at(-1);
+  if (!label || parts.length === 0 || FREE_MAIL.has(label) || label.length < 2) return null;
+  return label.replace(/[^a-z0-9]/g, "") || null;
+}
 
 /** Characters of one argument value read: a long email body's head says what it commits to. */
 const VALUE_CHARS = 400;
@@ -349,11 +368,11 @@ export function actionKey(tool: string, input: unknown): string {
 
 /**
  * The grounds a finding may stand on: what the request's and the call's structure says would change the action (a
- * clash in the calendar at the time it books, a conflict the conflict test reads, the graph's or a card's, someone
- * away on the day). Never "an item about the same thing" (the fallback, a person's latest thread, a day's events):
+ * clash in the calendar at the time it books, a conflict the conflict test reads or a card's, someone away on the
+ * day). Never "an item about the same thing" (the fallback, a person's latest thread, a day's events):
  * those inform a reply, but holding an action needs a reason.
  */
-export const FIREWALL_GROUNDS: ReadonlySet<string> = new Set(["clash", "conflict", "graph", "card", "away"]);
+export const FIREWALL_GROUNDS: ReadonlySet<string> = new Set(["clash", "conflict", "card", "away"]);
 
 /** Findings a session remembers (their calls' keys), so a call made again after a finding proceeds. */
 export const MAX_CHECKED = 32;

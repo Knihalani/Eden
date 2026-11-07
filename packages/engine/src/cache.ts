@@ -27,7 +27,6 @@ import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { ListReuse } from "@eden/sources";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
-import { squash, UserGraph, type Seed, type Walked, type WalkOptions } from "./kg";
 import { clearDecoded, packItem, repackLike } from "./packed-text";
 import { head, termIds } from "./text";
 
@@ -166,8 +165,6 @@ class UserCache {
   partied = 0;
   /** The parties' names and first names, lowercased (`isPerson`), computed on demand; reset as the tally changes. */
   personNames: Set<string> | undefined;
-  /** The user's knowledge graph (`kg.ts`), when the cache keeps one (`enableGraph`); built on first use. */
-  graph: UserGraph | undefined;
 }
 
 /** Header lines naming who takes part in an item: a mail's From, To and Cc, an event's attendees, an owner. */
@@ -496,8 +493,6 @@ export class ItemCache {
    */
   private holdSeqs = 0;
   private readonly limits: CacheLimits;
-  /** Whether each user's items are also put in a knowledge graph (`enableGraph`). */
-  private graphs = false;
   /** Told of every item that leaves (`onDropped`); null ids: the whole user. */
   private dropped: ((scope: Scope, ids: string[] | null) => void) | null = null;
   /** The last revision handed out: every user's revisions are drawn from it, so one never repeats. */
@@ -556,64 +551,12 @@ export class ItemCache {
   }
 
   /**
-   * Keeps a knowledge graph per user from now on (`kg.ts`, the engine's `graph` flag). A user's graph is built from
-   * their cached items on first use, then kept as items come and go; it is dropped with them and with the user.
-   */
-  enableGraph(): void {
-    this.graphs = true;
-  }
-
-  /**
    * Calls `fn` whenever items leave a user's cache (expired, evicted, replaced by a changed copy, deleted by the
    * sync, forgotten) with their ids, or null when the whole user goes: what is derived from an item (its implication
    * card) is held no longer than the item.
    */
   onDropped(fn: (scope: Scope, ids: string[] | null) => void): void {
     this.dropped = fn;
-  }
-
-  /** The user's graph, built from their live items if it does not exist yet; undefined without one. */
-  private graphOf(u: UserCache, now: number): UserGraph | undefined {
-    if (!this.graphs) return undefined;
-    if (!u.graph) {
-      u.graph = new UserGraph();
-      for (const e of u.items.values()) u.graph.add(e.item, e.fetchedAt || now);
-      u.graph.rest();
-    }
-    return u.graph;
-  }
-
-  /**
-   * Items the user's knowledge graph reaches from `seeds` (`UserGraph.walk`), fresh ones only. Empty without a graph.
-   * Reads never allocate a cache for a user who has none.
-   */
-  walk(scope: Scope, seeds: Seed[], opt: WalkOptions, now = Date.now()): Walked[] {
-    const u = this.peek(scope);
-    if (!u || seeds.length === 0) return [];
-    const g = this.graphOf(u, now);
-    if (!g) return [];
-    // The user themself is on nearly everything they hold: their name, addresses and organisation spread nothing.
-    const self = this.selfOf(scope);
-    if (self && !opt.exclude) opt = { ...opt, exclude: g.around(`n:${squash(self)}`) };
-    // Asked for a few more than wanted: an expired item is skipped, not counted.
-    return g
-      .walk(seeds, { ...opt, limit: opt.limit * 2 })
-      .filter((w) => {
-        const e = u.items.get(w.id);
-        // Its own time to live: a synced item's is `syncTtlMs`, as every other read has it.
-        return e !== undefined && this.alive(e, now);
-      })
-      .slice(0, opt.limit);
-  }
-
-  /** Teaches the user's graph an outcome of items reached through `mask`'s edge types (`UserGraph.learn`). */
-  learnGraph(scope: Scope, mask: number, used: boolean): void {
-    this.peek(scope)?.graph?.learn(mask, used);
-  }
-
-  /** Nodes in the user's graph (0 without one), for tests and bounds. */
-  graphSize(scope: Scope): number {
-    return this.peek(scope)?.graph?.size ?? 0;
   }
 
   /** The user's vocabulary (creating the user's cache if needed). */
@@ -728,10 +671,8 @@ export class ItemCache {
       if (old) this.drop(u, old);
       tallyOffset(u, item, 1);
       tally(u, item, 1);
-      // Added before the item is: a graph built on first use (`graphOf`) must not read it twice.
-      this.graphOf(u, now)?.add(item, now);
       const doc = this.index(u, item);
-      // The copy held: with `packText`, its text deflated (the tallies, graph and index above read the plain one).
+      // The copy held: with `packText`, its text deflated (the tallies and index above read the plain one).
       const stored = this.limits.packText ? packItem(item) : item;
       // `raw` always set (if undefined), so every entry has one shape.
       const entry: Entry = {
@@ -760,7 +701,6 @@ export class ItemCache {
       this.evictMixed(u);
     }
     if (this.vocabOverGrown(u)) this.rebuild(scope, u);
-    u.graph?.rest(); // The graph's memo serves one put (a page); kept longer it holds the text it read (D215).
     // Only what is still held: an item evicted by this same put is not new to the cache (its drop hook already ran,
     // so a card or a mention made from it now would outlive it).
     return changed.filter((item) => u.items.get(item.id)?.item === item);
@@ -822,7 +762,7 @@ export class ItemCache {
 
   /**
    * Drops items by id, synced or not: the source no longer has them (a deletion notification, a fetch that found the
-   * item gone). Their cards and graph entries go with them (`onDropped`). With `holdMs`, a later `put` of one of them
+   * item gone). Their cards go with them (`onDropped`). With `holdMs`, a later `put` of one of them
    * is ignored until `now + holdMs` (or `revive`): a search or listing that read it before the deletion cannot bring it
    * back. The hold is kept even for a user with no cache yet (their first lookup may be in flight), in the tenant's
    * holds (`TenantHolds`, bounded per user and per tenant): it allocates no user's cache and evicts no user. Returns
@@ -919,8 +859,6 @@ export class ItemCache {
     u.synced = old.synced;
     u.offsets = old.offsets;
     u.offset = old.offset;
-    // Keyed by item id, not doc number: the graph stands as it is.
-    u.graph = old.graph;
     this.users.set(scopeKey(scope), u); // Same key: the user's place in the eviction order is unchanged.
   }
 
@@ -959,7 +897,6 @@ export class ItemCache {
     if (u.byDoc[e.doc] === e) u.byDoc[e.doc] = undefined;
     tallyOffset(u, e.item, -1); // An event gone (evicted, expired, forgotten) may change the mode.
     tally(u, e.item, -1);
-    u.graph?.remove(e.item.id);
     this.dropped?.(u.scope, [e.item.id]);
   }
 

@@ -2,20 +2,18 @@
  * The background sync's ingest at scale (D57): memory held per synced user, and CPU per item on the two listings a
  * synced user costs — the backfill (every item new: redacted, tokenized, indexed) and a sweep that re-lists the whole
  * source unchanged (what every sweep and most of every poll is). An anchor for scale work: a change to the cache, the
- * index, the graph, redaction or the sync reports these numbers before and after.
+ * index, redaction or the sync reports these numbers before and after.
  *
  * Each user gets their own copy of the workload's items (text tagged per user, so no string is shared between users and
- * the memory is each user's own), listed newest first by an instant in-memory connector. Three modes, each run in its
+ * the memory is each user's own), listed newest first by an instant in-memory connector. Two modes, each run in its
  * own process so one's heap never shows in another's:
  * - `core`: the line this bench printed before (comparable with earlier reports): `SyncManager` → `SourceFanout.list`
- *   (redaction hook: `sanitizeItem`, as without a gate pool) → `ItemCache.put`, with no graph and no `onStored` hook.
- * - `graph`: `core` with the cache's knowledge graph on (`ItemCache.enableGraph`, what `config.graph` does).
+ *   (redaction hook: `sanitizeItem`, as without a gate pool) → `ItemCache.put`, with no `onStored` hook.
  * - `shipped`: what the servers run on this path (D112): a `ContextPartner` with `DEFAULT_CONFIG` and no model deps
- *   (graph on; `onStored` records each item's mentions in an in-memory `SourceMap`; no card maker, so cards queue
+ *   (`onStored` records each item's mentions in an in-memory `SourceMap`; no card maker, so cards queue
  *   nothing), with its own sync and fan-out. Only capacity settings are raised for the bench (`syncMaxItems`, users
  *   per tenant, calls per minute); the sweep comes after the default's `syncSweepMs`, so its due polls run too.
- * Per stage: the difference between modes, the graph's add (`graph` − `core`) and the partner's `onStored` work,
- * mostly mentions (`shipped` − `graph`).
+ * Per stage: the difference between modes, the partner's `onStored` work, mostly mentions (`shipped` − `core`).
  *
  * Memory is the heap after a full GC. "raw held" is after the backfill minus before it, with the sources' raw items
  * held throughout (the number earlier reports quote). "raw released" is after the sweep with every source's raw items
@@ -26,7 +24,7 @@
  * thread alone (`thread-cpu.ts`): work moved to a worker thread shows as the difference (D216 measured it so).
  *
  * Run: `bun packages/engine/bench/ingest.bench.ts [--world] [--plain] [users=200] [itemsPerUser=500]
- * [mode=all|core|graph|shipped]`, or `bun packages/engine/bench/ingest.bench.ts --quick [--world] [--plain]`. `--plain`
+ * [mode=all|core|shipped]`, or `bun packages/engine/bench/ingest.bench.ts --quick [--world] [--plain]`. `--plain`
  * holds item text as plain strings (`CacheLimits.packText` off), the layout before D188.
  *
  * Text: by default the bench workload's (`workload.ts`: names, topics and filler, all Latin-1, which the engine holds
@@ -60,7 +58,7 @@ if (QUICK && args.length > 0) throw new Error("--quick runs 40 × 500 in every m
 const USERS = QUICK ? 40 : Number(args[0] ?? 200);
 const PER_USER = QUICK ? 500 : Number(args[1] ?? 500);
 const MODE = args[2] ?? "all";
-const MODES = ["core", "graph", "shipped"] as const;
+const MODES = ["core", "shipped"] as const;
 type Mode = (typeof MODES)[number];
 const PAGE = 100;
 const HOUR = 3_600_000;
@@ -176,7 +174,6 @@ async function run(mode: Mode): Promise<Result> {
     sync = partner.sync;
     sweepAfter = DEFAULT_CONFIG.syncSweepMs;
   } else {
-    if (mode === "graph") cache.enableGraph();
     const maxText = cache.maxTextChars;
     const fanout = new SourceFanout({
       sanitize: (items) => items.map((i) => sanitizeItem(i, maxText)),
@@ -287,7 +284,7 @@ if (MODE !== "all") {
     if (child.exitCode !== 0) throw new Error(`mode ${mode} failed (exit ${child.exitCode})`);
     results.push(JSON.parse(child.stdout.toString().trim().split("\n").at(-1)!) as Result);
   }
-  const [core, graph, shipped] = results as [Result, Result, Result];
+  const [core, shipped] = results as [Result, Result];
   console.log(
     `${USERS} users × ${PER_USER} synced items (${WORLD ? "sim world" : "workload"} text, avg ${core.avgChars} chars), ` +
       `pages of ${PAGE}`,
@@ -301,8 +298,7 @@ if (MODE !== "all") {
   console.log(`mode      backfill (new)  sweep (unchanged)  memory: raw held  raw released`);
   for (const r of results) console.log(line(r.mode, r));
   console.log(`per stage (the difference between modes):`);
-  console.log(line("+graph", minus(graph, core, "+graph")));
-  console.log(line("+onStored", minus(shipped, graph, "+onStored")));
+  console.log(line("+onStored", minus(shipped, core, "+onStored")));
   const cpuOf = (r: Result) => `${r.mode} ${r.cpuUs.toFixed(1)} µs/item (main thread ${r.mainUs.toFixed(1)})`;
   console.log(`cpu (backfill): ${results.map(cpuOf).join(", ")}`);
   const ratio = (a: number, b: number) => (a / b).toFixed(2);
