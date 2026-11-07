@@ -15,7 +15,7 @@
 | `bun test ./packages/x/src/y.test.ts` | One file | Debugging; **from the repo root only** |
 
 **Screens, not tests: the retrieval screen (audit 2026-11-06 F25, docs/LAB.md recipe 1d).** Before the $0 funnel on all
-of train, a change to retrieval, ranking, intent, probes, the graph or sync can be screened on half of it: `bun
+of train, a change to retrieval, ranking, intent, probes or sync can be screened on half of it: `bun
 packages/sim/src/lab/retrieval-screen.ts run --set '{...}' --baseline .local/screen-base.json` (train1–6, seed 41;
 6.0–6.4 s against `bun run funnel`'s 10.0–10.5 s on 4 cores, 11.8–12.5 s against 22.1 s at `--jobs 1`; measured
 2026-11-06, load 1.4–3.4). Its rows equal the funnel's for the same tasks; its totals can show the wrong sign for a
@@ -54,6 +54,10 @@ eval), wall time of the whole command:
 About 1.9-2.0x on the engine inner loop; 991 + 71 = 1,062, so nothing is lost, only moved to `check`.
 
 ### The graph's differential test at 25 seeds in `test:changed` (D176, measured 2026-11-06, 4-core container)
+
+History: `kg.test.ts` and `kg-store.test.ts` were deleted with the knowledge graph (D225, 2026-11-07;
+docs/research/fix-w2a-parts.md), and `scripts/test-select.ts`'s `FAST_ENV` (`KG_DIFF_SEEDS=25` under
+`test:changed`) went with them. What follows is the record of the time it saved.
 
 `packages/engine/src/kg.test.ts` checks `UserGraph` against an in-file copy of the storage before D169
 (`PreviousGraph`) over `KG_DIFF_SEEDS` seeds, 200 by default. `test:changed` (and so `check:fast`) sets
@@ -264,7 +268,7 @@ Measured on the same machine: `bun run test:pkg sim` 12.3, 12.3, 12.3 s wall (33
 funnel-flags 8.6 s (15.4 s CPU, 10 tests, 48 `expect()`) → 5.4 s (12.8 s, 9 tests, 33), reader-stub 4.2 s
 (9.0 s, 12 tests, 76) → 5.1 s (8.4 s, 13 tests, 91). The package is CPU-bound now: a profile of one NEWL
 `hidden-funnel.ts` run (`bun --cpu-prof`, 2.3 s sampled) puts 0.9 s in the sync backfill (`sync.ts` `backfill` →
-`store` → `cache.put`, the knowledge graph's `extract` and the secret gate) and 0.36 s in building the simulated
+`store` → `cache.put`, the knowledge graph's `extract` (deleted by D225) and the secret gate) and 0.36 s in building the simulated
 sources, so running the funnel in-process would save only the start-up. `bun run test`, five runs in a row after
 the change: 1,489 pass, 0 fail, 1,206,716 `expect()` calls each, 18.7-22.3 s wall (load average 4-9 from other
 agents).
@@ -319,7 +323,7 @@ these changes save (the per-test differences above). The one failure seen in the
 | File | ms | Where the time goes | Proposal |
 |---|---|---|---|
 | packages/redact/src/linear.test.ts (before the split) | 9,541 | "every gitleaks rule outside RE2_RULES" 6.5 s; RE2 vs JS equivalence 3.7 s | Done: split into `linear.test.ts` + `redos.test.ts` |
-| packages/engine/src/kg.test.ts | 6,100 (200 seeds); 1,950 (`KG_DIFF_SEEDS=25`) (bun's [s], 2026-11-06) | "the same walks" against `PreviousGraph` (115,853 expects at 200 seeds, 15,819 at 25) | Done: 25 seeds in `test:changed`, 200 in `check` and `test:pkg` (D176, above) |
+| packages/engine/src/kg.test.ts (deleted by D225) | 6,100 (200 seeds); 1,950 (`KG_DIFF_SEEDS=25`) (bun's [s], 2026-11-06) | "the same walks" against `PreviousGraph` (115,853 expects at 200 seeds, 15,819 at 25) | Done: 25 seeds in `test:changed`, 200 in `check` and `test:pkg` (D176, above) |
 | packages/sim/src/sim.test.ts | 3,542 (6,625-7,246 on 2026-11-05, above) | "a run without updates scores exactly as before" 2.1 s (two `runQuality` runs) | Share one `runQuality` result between the tests that read it, or 3 sessions instead of 6 (it has a 20 s timeout now) |
 | packages/server/src/http.test.ts | 2,671 | the 60,000-deep body test 2.5 s | See validate below |
 | packages/protocol/src/validate.test.ts | 2,305 | 60,000-deep array: `JSON.stringify` throwing RangeError costs 2.3 s in JSC (20,000 deep: 2 ms, no throw) | Find the smallest depth that still overflows on Linux and macOS and use it; keep one deep case |
@@ -354,11 +358,12 @@ The default size (200 × 500) took 20 s wall and gave 1,794 KB per user, 153 µs
 before the change (a busier machine at the time). The reuse adds 43-44 B/item (measured); what makes it up (the
 hash field on each entry, a `madeFrom` WeakMap entry per held copy) is not measured apart.
 
-Since 2026-11-05 the bench runs three modes, each in its own process, and the table above is its `core` line: `graph`
-adds the cache's knowledge graph, and `shipped` runs a `ContextPartner` on `DEFAULT_CONFIG` with no model (graph and
-`onStored` mention recording on), which is what the servers run. It also prints the stages (the differences between
-modes) and the heap with the sources' raw items released; a fourth argument (`core`, `graph`, `shipped`) runs one
-mode. 200 × 500, two runs: `core` 66.1–73.4 µs/item, `shipped` 357.6–380.6 µs/item (5.2–5.4x) and 2.0x the heap
+The bench runs two modes, each in its own process, and the table above is its `core` line: `shipped` runs a
+`ContextPartner` on `DEFAULT_CONFIG` with no model (`onStored` mention recording on), which is what the servers run.
+It also prints the stages (the differences between modes) and the heap with the sources' raw items released; a fourth
+argument (`core`, `shipped`) runs one mode. Its `graph` mode went with the knowledge graph (D225, 2026-11-07); the
+figures below that name it, and the `shipped` figures before that date (graph on), are history. 200 × 500, two runs
+(2026-11-05): `core` 66.1–73.4 µs/item, `shipped` 357.6–380.6 µs/item (5.2–5.4x) and 2.0x the heap
 per item; about 75 s wall in all (docs/research/graph-ablation.md).
 
 `--quick` (2026-11-05) runs 40 × 500 for a screen while iterating; the default stays 200 × 500, the size every

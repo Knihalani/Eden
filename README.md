@@ -53,7 +53,7 @@ soon as the lookup ends; `defaultWaitMs: 0` (or `waitMs` per call) overrides it,
 [docs/INTEGRATION.md](docs/INTEGRATION.md).
 
 Both servers run the engine's one default (`DEFAULT_CONFIG`, D112), the best measured configuration: probes, the
-no-model grounds, the knowledge graph, anticipation, background sync, implication cards, the intent index and the
+no-model grounds, background sync, implication cards, the intent index and the
 ask-time reader. With `OPENROUTER_API_KEY` set, the cards, the intent index and the reader run on `EDEN_MODEL` (default
 `anthropic/claude-haiku-5.5`), each role under its own budget and all of a tenant's roles under one cap per UTC day
 (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25); no judge is wired. Without a key no role is built and the same default

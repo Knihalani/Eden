@@ -212,7 +212,7 @@ await eden.sourceChanged("gmail", {
   resource data, a connector platform's trigger payload, a Gmail push turned into messages with `history.list`:
   `client.sourceChanged(sourceId, { items, removed })`. Each item is `{ref, title?, text, url?, updatedAt?, meta?}`
   with the same `ref` the source's list tool returns, so a pushed item and the same item listed later are one item.
-  They pass the secret gate and are held as synced, deletions are dropped at once (their cards and graph entries
+  They pass the secret gate and are held as synced, deletions are dropped at once (their cards
   too), and **nothing is polled or re-read**: RealUse-1 part D measured 0.22 connector calls a lookup with payloads
   against 0.91 with bare signals, with no more stale or deleted items delivered (1 of 38 updated items stale, 0
   deleted). The client splits batches past 100 and never throws; if Eden does not take a part (unreachable, a refused
