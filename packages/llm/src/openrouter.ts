@@ -117,12 +117,21 @@ export class OpenRouterModel implements Model {
       latencyMs: Math.round(performance.now() - t0),
       truncated: data.choices?.[0]?.finish_reason === "length",
       // Only the provider's own reason tells a stop sequence from a natural end (OpenRouter's finish_reason says
-      // "stop" for both); unset when it is not reported.
-      ...(typeof data.choices?.[0]?.native_finish_reason === "string"
-        ? { stopped: data.choices[0].native_finish_reason === "stop_sequence" }
-        : {}),
+      // "stop" for both). Anthropic's is exact; others (OpenAI's "stop", Google's "STOP") say either, so they leave it
+      // unset, as an unreported reason does, and the reader may still close a cut reply (audit A5: `false` for them
+      // lost every stopped reading on an `EDEN_MODEL` that is not Anthropic's).
+      ...stoppedOf(data.choices?.[0]?.native_finish_reason),
     };
   }
+}
+
+/** Native finish reasons that are a natural end or a cap, never a stop sequence. */
+const NOT_STOPPED = new Set(["end_turn", "max_tokens", "length", "MAX_TOKENS", "tool_use", "tool_calls"]);
+
+function stoppedOf(native: unknown): { stopped?: boolean } {
+  if (typeof native !== "string") return {};
+  if (native === "stop_sequence") return { stopped: true };
+  return NOT_STOPPED.has(native) ? { stopped: false } : {};
 }
 
 /** Anthropic rejects a request with more than this many `cache_control` breakpoints. */
