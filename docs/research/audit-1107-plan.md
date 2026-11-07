@@ -45,3 +45,4 @@ Later waves start from what wave A finds.
 | A26 | Decide the `pushReshow` trial (D340) with a fresh paired run |
 | A27 | Hermes cost with Eden: plugin context and the prompt cache, cards spend, Eden's connector calls |
 | A28 | Scale part 5: live searches of cut copies and noise cards at 1,000 sources |
+| A29 | The end-of-day blind confirmation on `heldout17` (Pi in a cloud session; Hermes on the coordinator machine) |
