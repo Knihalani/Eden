@@ -96,6 +96,16 @@ const PRIOR_HOURS = 7 * 24;
 const RATE_MEMORY_HOURS = 14 * 24;
 /** Pages a background catch-up reads at most in one go. */
 const MAX_POLL_PAGES = 20;
+
+/** Where a lookup's poll stopped at its page cap, for the background read that finishes it as one poll. */
+interface PollResume {
+  cursor: string | undefined;
+  changed: number;
+  started: number;
+  notices: number;
+  pushSeq: number;
+}
+
 /** Background sync calls leave this many of the serving rate limit's tokens for lookups. */
 const SERVING_HEADROOM = 2;
 const HOUR = 3_600_000;
@@ -596,18 +606,22 @@ export class SyncManager {
     demand: boolean,
     signal?: AbortSignal,
     tally?: { fresh: number; calls: number },
+    resume?: PollResume,
   ): Promise<void> {
-    const started = this.deps.now();
-    const notices = s.notices;
-    const pushSeq = s.pushSeq;
-    let cursor: string | undefined;
-    let changed = 0;
+    // A background continuation of a lookup's poll goes on from where that poll stopped, as one poll: from the top,
+    // its first page held what the lookup had just stored, read as the boundary, and the source was marked current
+    // with the pages past the cap never read (audit A5).
+    const started = resume?.started ?? this.deps.now();
+    const notices = resume?.notices ?? s.notices;
+    const pushSeq = resume?.pushSeq ?? s.pushSeq;
+    let cursor: string | undefined = resume?.cursor;
+    let changed = resume?.changed ?? 0;
     // `pollPageSize`: the first page is sized to what changed, not to the backfill's page; each page after it tops the
     // items asked up to the next multiple of `pageSize` (5, then 95, then 100). So a poll lists no more items than
     // `maxPages` full pages would, catches up as far before the lookup goes on, and makes at most one more call.
     const adaptive = (this.o.pollPageSize ?? 0) > 0;
     const itemCap = maxPages * this.o.pageSize;
-    const first = adaptive ? Math.min(this.firstPage(s, started), itemCap) : this.o.pageSize;
+    const first = adaptive && !resume ? Math.min(this.firstPage(s, started), itemCap) : this.o.pageSize;
     let asked = 0;
     // A lookup's poll that stops because the lookup ran out of time (or ended): no evidence against the source, but
     // the next lookup within `demandTimeoutMs` searches it live rather than wait on its listing again (D140).
@@ -653,7 +667,10 @@ export class SyncManager {
     }
     // Not caught up in `maxPages`: a lookup goes on with the source stale; the rest is read in the background.
     if (demand && !u.gone) {
-      void Promise.resolve().then(() => this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false)));
+      const from: PollResume = { cursor, changed, started, notices, pushSeq };
+      void Promise.resolve().then(() =>
+        this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false, undefined, undefined, from)),
+      );
     }
   }
 
