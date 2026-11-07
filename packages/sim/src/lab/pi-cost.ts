@@ -126,8 +126,13 @@ export interface ConditionCost {
   agentToolsPerTask: number;
   /** Connector calls per task: the agent's, Eden's in the task's window, Eden's background while the user worked. */
   connectorPerTask: { agent: number; eden: number; background: number };
-  /** Eden's one-time backfill connector calls per user (before the first request). */
+  /**
+   * Eden's one-time backfill connector calls per user (before the first request): per stream, since every stream's
+   * partner backfills its own user (a short run's suites are separate users; a long run's seed is one).
+   */
   backfillCallsPerUser: number;
+  /** Streams that recorded their connector calls (A3 and later): the users the backfill is spread over. */
+  backfillUsers: number;
   /** The same per-task calls on the 1:1:8 mix (the background is per task already), when every kind has tasks. */
   mixConnectorPerTask: number | null;
   wallP50: number;
@@ -242,7 +247,8 @@ export function conditionCosts(
         eden: mean(ts.map((t) => t.edenSourceCalls)),
         background: bgConn,
       },
-      backfillCallsPerUser: seeds.length ? backfillCalls / seeds.length : 0,
+      backfillCallsPerUser: counted.length ? backfillCalls / counted.length : 0,
+      backfillUsers: counted.length,
       mixConnectorPerTask: mixed ? kinds.reduce((a, [k, w]) => a + w * perTaskConn(byKind(k)), 0) + bgConn : null,
       wallP50: p50(ts.map((t) => t.wallS)),
       wallMean: mean(ts.map((t) => t.wallS)),
@@ -309,7 +315,7 @@ export function dayRows(tasks: readonly CostTask[]) {
 export function planCosts(c: ConditionCost, perThousand: number) {
   const per = perThousand / 1_000;
   const conn = c.connectorPerTask.agent + c.connectorPerTask.eden + c.connectorPerTask.background;
-  const backfill = c.tasks ? (c.backfillCallsPerUser * c.users * per) / c.tasks : 0;
+  const backfill = c.tasks ? (c.backfillCallsPerUser * c.backfillUsers * per) / c.tasks : 0;
   const steady = c.steady + conn * per;
   const allIn = c.allIn + conn * per + backfill;
   const mixSteady =

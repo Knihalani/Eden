@@ -797,6 +797,9 @@ async function runWorld(
     // An hour between tasks: Eden's clock, for its caches and planner. `--days`: `--gap-min` between requests and
     // `--night-h` before each day after the first (the recap closed the day before).
     clock += daySizes ? (newDay && dayNo >= 0 ? NIGHT_MS : GAP_MS) : 3_600_000;
+    // Between tasks no task's timeline is current: the sync's tick, the notices and a recap's notice are background,
+    // counted in the stream's `sourceCalls` and not in the previous task's window (A3 review; before it they were).
+    current = null;
     if (sync) await sync.tick();
     notify(partner, scope);
     if (DAYS_ON && newDay) {
