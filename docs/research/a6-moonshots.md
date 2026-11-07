@@ -1,10 +1,10 @@
 # A6: moonshots, from first principles
 
 Status: 2026-11-07, branch `claude/a6-moonshots` (from `claude/lucid-hypatia-v9wqk5` at `c7cfc8fc9`), session A6 of
-the afternoon audit (docs/research/audit-1107-plan.md). Decisions D286–D287. Every paid call went to the Anthropic API
+the afternoon audit (docs/research/audit-1107-plan.md). Decisions D286–D288. Every paid call went to the Anthropic API
 with `HAIKU_API_KEY`, `claude-haiku-5-5` in every role (agent, grader, cards, intent), through the lab provider (D97),
 `OPENROUTER_API_KEY` unset, on one ledger (`.local/a6/ledger.jsonl`) with a hard cap of $3: **Anthropic-direct lab
-figures**. Train only (seeds 41–42): no held-out suite was run. Numbers marked **[EST]** are arithmetic or judgement,
+figures**. Train only (seeds 41–42): no held-out suite was run. **Spent: $1.387** (`packages/sim/lab/a6/spend.txt`). Numbers marked **[EST]** are arithmetic or judgement,
 not measured; every other number comes from a command in this note.
 
 ## In plain words
@@ -15,22 +15,28 @@ not measured; every other number comes from a command in this note.
   60% of tasks made an `ask_context` call, those taking 3.9 s against 2.5 s for tasks that did not (unpaired). There
   is no 2x left in Eden's own cost or time; a 2x has to come from what the agent does (turns, words, misses) or from
   recall.
-- **The biggest finding is about the benchmark, not the engine.** Most of the agent's questions are hunts for people
-  and things the simulated user's sources do not hold: in the train worlds, **77% of nothing-to-add requests (295
-  of 384) and 55% of hidden ones (211 of 384) name an entity no item of the world names**, and in the pilot **55% of
-  `ask_context` questions (35 of 63) named one**. Real users ask about people they correspond with. The lab's cost and
-  latency figures on the 1:1:8 mix, for both arms, are dominated by searches that cannot succeed; a lever that saves
-  them (an "entity census", idea 4) would look like a large win here and be small in real use. The first moonshot is
-  to give the worlds the records their requests assume (idea 1), before tuning anything on asks or turns.
-- **Built and measured: card tags on the push's candidates (`pushCandidateCards`, D286).** Each candidate that the
-  background card call read as a constraint is said with that reading first, in fixed words from the card's validated
-  fields ("Eden's card: freeze on pay; until 2026-11-30 | …"): the paid reader's per-request bearing (D95), which was
-  worth about 5 points of hidden facts (D237's −4.9), precomputed at ingest for $0 per request. Result: see
-  [§3](#3-built-and-measured-card-tags-on-the-candidates-d286); outcome D287.
-- **Rejected on paper with $0 evidence:** a per-user standing brief in the agent's cached prefix (the cards it would be
-  built from cover 37% of the planted facts that reach a packet, and as many look-alikes), an entity census line
-  (fires on 4 of the 6 hidden pilot tasks whose fact the agent's own ask found: D257's failure again), usage
+- **Built, measured, deleted: card tags on the push's candidates (trial `pushCandidateCards`, D286).** Each
+  candidate the background card call read as a constraint was said with that reading first, in fixed words from the
+  card's validated fields ("Eden's card: freeze on pay; until 2026-11-30 | …"): the paid reader's per-request bearing
+  (D95, worth about 5 points, D237's −4.9) precomputed at ingest for $0 a request. Pooled over the short and long runs,
+  **hidden facts +1.2 points (−4.8..+7.2), regraded concerns +0.0 (−1.2..+1.2), and dearer on both horizons** (+$0.036
+  per 1,000 tasks on the short 1:1:8 mix, +0.016..+0.056; +$0.015 over a user's days, +0.005..+0.025): not better on
+  its axis, so deleted (D112). Only 37% of the planted facts that reach a packet carry a constraint card, which caps it.
+- **Built and kept as a lab instrument: dressed worlds (`pi-ab --dress`, D287).** A request often names a person or
+  firm no item of its world names (77% of train's nothing-to-add requests, 55% of hidden ones); dressing gives each such
+  name one ordinary message. Measured against the same tasks undressed: **the tools agent does not change** (mix wall
+  −0.03 s, −0.27..+0.20; searches +0.02), while **Eden's agent asks 16% less** (−0.16 asks a task, −0.26..−0.06) and
+  answers **0.18 s sooner** (−0.31..−0.05). So the lab's absent records inflate Eden's own asks a little and understate
+  its lead: eden − tools wall on the mix is −1.64 s undressed and −1.78 s dressed; hidden facts and cost do not move
+  significantly. Today's figures stand; future work on asks (idea 2) should be screened dressed.
+- **Rejected on paper with $0 evidence (D288):** a per-user standing brief in the agent's cached prefix (the cards it
+  would be built from cover 37% of the planted facts that reach a packet, and 29% of look-alikes), an entity census
+  line (fires on 4 of the 6 hidden pilot tasks whose fact the agent's own ask found: D257's failure again), usage
   learning per item (relevance is per request; an item ignored on Monday is the fact on Thursday).
+- **What is left for a 2x.** Not Eden's own spend or time. The agent's turns (Eden's agent still asks 0.83 times a
+  nothing-to-add task with every record present: idea 2, answer-ahead, is the lever and is now measurable), its misses
+  (pool misses are A2's; agent inattention to a candidate it was given is the rest), and event-driven speech after the
+  agent acted (idea 5), which no suite measures yet.
 
 ## 1. Where the time and money go now
 
@@ -42,7 +48,7 @@ not measured; every other number comes from a command in this note.
 | Agent output share of its dollars | 75.4% | pilot below |
 | Tasks with an `ask_context` call | 43 of 72 (60%); wall mean 3.93 s vs 2.45 s without (unpaired) | pilot below |
 | Asks per task (pilot) | hidden 0.54, control 1.00, neutral 1.08 | pilot below |
-| Questions naming an entity the world lacks | neutral 15/26, control 13/24, hidden 7/13 | `asks-absent.ts` |
+| Questions naming an entity the world lacks | neutral 15/26, control 13/24, hidden 7/13 (approximate: entity extraction) | `asks-absent.ts` |
 
 Pilot: `packages/sim/lab/a6/run.sh a6-pilot-41 payload eden --seeds 41 --variants hidden,control,neutral --limit 4
 --budget 0.1` ($0.0339, 72 tasks). The ask questions (timeline `eden.ask` points) read like a person's first lookups:
@@ -60,13 +66,13 @@ Ranked by expected payoff on their axis times the chance the lab can show it hon
 
 | # | Idea | Axis | Payoff [EST] | Status |
 | --- | --- | --- | --- | --- |
-| 1 | Worlds that hold what their requests assume ("dressed" worlds) | measurement validity | changes every cost/latency comparison on the mix | proposed (lab) |
+| 1 | Worlds that hold what their requests assume ("dressed" worlds) | measurement validity | measured: Eden's asks −16%, its lead holds | **built (lab, D287)** |
 | 2 | Answer-ahead: the push carries the records the agent would ask for first | latency, cost | −0.5 asks/task, −0.7 s/task, −10–15% agent $ | proposed; needs 1 |
-| 3 | Precomputed bearings: card tags on candidates | hidden facts, false concerns | up to the reader's ~5 points | **built, measured (D286, D287)** |
-| 4 | Entity census ("no item names X") | latency | large in the lab, small in real use | rejected at $0 |
+| 3 | Precomputed bearings: card tags on candidates | hidden facts, false concerns | up to the reader's ~5 points | **built, measured, deleted (D286)** |
+| 4 | Entity census ("no item names X") | latency | large in the lab, small in real use | rejected at $0 (D288) |
 | 5 | Event-driven proactivity against a plan | hidden facts after the request | new capability | proposed; cheap test below |
-| 6 | Standing brief in the agent's cached prefix | turns, packets | negative short, ≤ neutral long | rejected on paper |
-| 7 | Usage-learned ranking (D18) | precision | small | rejected on paper |
+| 6 | Standing brief in the agent's cached prefix | turns, packets | negative short, ≤ neutral long | rejected on paper (D288) |
+| 7 | Usage-learned ranking (D18) | precision | small | rejected on paper (D288) |
 | 8 | Entity/time graph retrieval | recall | the pool's misses | owned by A2; graph part deleted (D225–D229) |
 | 9 | Card-derived fact lines instead of excerpts | bytes | small; facts lost | rejected (D258's evidence) |
 | 10 | Eden replaces the agent's source tools | cost, latency | already measured | it is the `eden` arm |
@@ -81,14 +87,13 @@ Ranked by expected payoff on their axis times the chance the lab can show it hon
   real user would have about what it names: a contact or signature line, a recent thread, an invoice, a calendar entry
   for the named day, none of them bearing on the request (written by a template author, checked by the same
   "no planted fact" rule the neutral variant uses).
-- **Payoff [EST].** Not a gain for Eden but a truer price for both arms: the tools agent searches 2–3 times for things
-  it cannot find, Eden's agent asks about them, and both write longer, hedged answers. Today's "Eden is level or
-  cheaper than the agent alone" (RealUse-3) rests on that traffic. Dressed worlds also let idea 2 be measured at all.
+- **Payoff (measured, §4).** A truer price for both arms, and the ground idea 2 needs. The expectation that the
+  hunts dominate both arms' cost was wrong: the tools agent searches as often in a dressed world; Eden's agent asks
+  16% less. Eden's measured lead over the agent alone is slightly larger in dressed worlds.
 - **Risks.** A dressing that echoes the planted fact's words turns a control into a hidden task; dressing must keep
   the decoy and hidden items the only constraint-worded items about the named entity.
-- **Cheap proof.** `census.ts` ($0) counts the requests naming an absent entity; after dressing it must read ~0. One
-  short Pi pair (tools vs eden, one seed, ~$0.25) on dressed vs undressed train shows how much of the 1:1:8 mix's cost
-  and wall the hunts were.
+- **Proof run.** `census.ts --dress` reads 0 absent names in every variant (undressed: 272, 267 and 421 of 626 names
+  in hidden, control and neutral); the Pi pair is §4.
 
 ### Idea 2: answer-ahead (the push carries the first lookups)
 
@@ -102,8 +107,9 @@ Ranked by expected payoff on their axis times the chance the lab can show it hon
   prefix, not the answer's bytes, D260).
 - **Risks.** More bytes on every request (CL8: bytes are cheap, turns are not); the D257 trap (anything that makes the
   agent ask less loses the hidden facts the ask finds: 2 of 18 in the pilot came only from asks).
-- **Cheap proof.** Only on dressed worlds (idea 1): at $0, the share of a pilot's ask citations already in the
-  extended push (today 51 of 273); live, asks per task and hidden facts on one paired short run.
+- **Cheap proof.** On dressed worlds (`--dress`, where Eden's agent still asks 0.66–0.83 times a control or
+  nothing-to-add task): at $0, the share of a run's ask citations already in the extended push (undressed pilot: 51
+  of 273); live, asks a task and hidden facts on one paired short run (~$0.15 for two arms, one seed).
 
 ### Idea 3: precomputed bearings (card tags), built and measured
 
@@ -166,6 +172,122 @@ existing rules already do (bulk mail is never a candidate). Payoff small; the ri
 - **Agent-side caching:** on Pi the Eden agent's short fixed prefix was not served from cache (D260); a real agent's
   prompt is far longer. Integration guidance (INTEGRATION.md): packets after the cached prefix, never inside it.
 
-## 3. Built and measured: card tags on the candidates (D286)
+## 3. Built and measured: card tags on the candidates (D286, deleted)
 
-(filled in below)
+**Mechanism (commit `7d254437`).** Trial switch `pushCandidateCards` (off): with `pushCandidates` and `cards`, each
+candidate whose card (`CardEnricher.cardsOf`, already read by `candidatesOf` for `readerGate`'s test) has a constraint
+kind is rendered `- [src] Eden's card: <kind> on <actions>; <start> to <end>; at most <unit><limit> | <title>: <excerpt>`,
+built only from the card's validated fields (`cardTag`: the kind and action vocabularies, ISO dates, a unit in
+`£$€%`; never the model's `statement` or `entities`), and `CANDIDATES_LEAD` gains one fixed sentence saying what the
+tag is ("as read when the item arrived; it is not a check against this request"). `shownText` drops the tag; the
+packet's byte cap grows by 110 bytes a candidate so a tag never cuts its excerpt. Seven tests (the tag's words, a
+hostile card's fields dropped, off by default, isolation, the config check).
+
+**$0 screen** (`bun run funnel … -- --neutral --packets`, train1–6 seeds 41–42, `tags.py`): the same items in every
+packet (empty task diff, as designed); per candidates' packet, tags 1.75 (hidden), 1.62 (control), 0.92 (neutral);
+bytes 1,509 → 1,761, 1,439 → 1,696, 1,084 → 1,282; **the planted fact tagged in 93 of the 253 hidden packets that
+hold it (37%), the look-alike in 63 of 217 (29%).**
+
+**Live** (Pi, `tools,eden,eden~cards`, payload notices, direct profile, time scale 1; short: `--variants
+hidden,control,neutral --limit 12`, 144 tasks a kind and arm over seeds 41–42; long: `--days 8`, users 41–42, 232
+tasks an arm; `short-pay-arms.txt`, `long-pay-arms.txt`, `long-pay-cost.txt`, `pooled.txt`, `concerns.txt`):
+
+| | eden | eden~cards | paired (cards − eden) |
+| --- | --- | --- | --- |
+| Short: hidden raised | 72.2% | 72.9% | +0.7 points (−6.2..+7.6) |
+| Short: mix $/1k (agent billed) | 0.404 | 0.440 | **+0.036 (+0.016..+0.056)** |
+| Short: mix wall mean | 3.15 s | 3.23 s | +0.09 s (−0.05..+0.23) |
+| Short: asks a task (hidden / control / neutral) | 0.53 / 0.89 / 0.99 | 0.46 / 0.84 / 1.07 | |
+| Long: hidden raised | 14/23 | 15/23 | +4.3 points (−13.0..+21.7) |
+| Long: mix $/1k steady | 0.332 | 0.343 | **+0.015 (+0.005..+0.025)** |
+| Pooled, 4 runs: hidden raised | | | +1.2 points (−4.8..+7.2), n 167 |
+| Pooled: concerns on control + neutral, regraded | | | +0.0 points (−1.2..+1.2), n 497 |
+
+Where the extra dollars went (`short-pay-cache.txt`): the tagged first prompt is about 80 tokens longer (hidden: 1,256
+read + written against 1,337), carried into each later turn, and it was read from the cache less often (first-request
+hit 14–24% against 35%: arms whose prompts match another arm's read them whole, D260's lab artefact, which here favours
+`eden`). Output tokens did not change (hidden 472 vs 466 a task). **Verdict:** no gain on its axis within ±6 points,
+dearer on both horizons: deleted with its code and tests (D112). The tag's ceiling is the card's coverage: 63% of the
+planted facts in packets carry no constraint card under lean carding (D244), and the agent already reads the
+excerpt.
+
+## 4. Dressed worlds (D287, kept as a lab flag)
+
+`worldOf(…, { dress: true })` (`dress-entities.ts`): for every name a suite's requests use (`requestNames`: typed
+entities without URLs or emails, a leading imperative verb and a possessive taken off) that no item of the base world
+(before planting) names, one message from it: a person's "Good to catch up" note with a direct line, or a firm's
+"your account" notice with a reference; 10–40 days old, no constraint wording (`mayConstrain` false, tested), the same
+in every variant. `pi-ab --dress` (short horizon only; refused with `--days` and `--reuse-arms`; results carry
+`dress: true`). 203 items over train seed 41's six worlds (the same in every variant). Eden's whole spend in the
+dressed runs was $0.0032 and $0.0043 (seeds 41, 42; run headers): dressing adds no material background cost.
+
+Pi, `tools,eden`, the same tasks as §3's short runs, dressed (`dress-short-pay-arms.txt`, `dress-pairs.txt`, paired by
+task id across the two runs, run at different times):
+
+| Mix 1:1:8 (dressed − undressed) | tools | eden |
+| --- | --- | --- |
+| Wall mean | −0.03 s (−0.27..+0.20) | **−0.18 s (−0.31..−0.05)** |
+| Agent $/1k | +0.011 (−0.007..+0.028) | +0.016 (−0.002..+0.033) |
+| Model turns | +0.01 (−0.08..+0.09) | **−0.13 (−0.20..−0.07)** |
+| Searches (tools) / asks (eden) | +0.02 (−0.23..+0.27) | **−0.16 (−0.26..−0.06)** |
+| Hidden raised | −1.4 points (−6.9..+4.2) | −2.8 points (−10.4..+4.9) |
+
+Within the dressed run, eden − tools: hidden +56.2 points (+47.2..+65.3), mix wall −1.78 s (−2.03..−1.53), mix
+$/1k +0.042 (+0.021..+0.063); undressed (§3's run) −1.64 s and +0.028. Regraded concerns, dressed eden: control 3 of
+144, neutral 1 of 144 (undressed: 1 and 1); too few to weigh, and the dressed messages carry no constraint, so a
+concern there is the agent's own reading (not inspected further). **Reading:** the tools agent's searches do not
+depend on whether the record exists (it searches about 3.4 times a task either way); Eden's agent asks less when the
+push's search finds the named person, so the artefact costs Eden's arm, not the agent alone, and the published
+comparisons are, if anything, conservative for Eden. Kept as a lab flag (no engine code) because idea 2 can only be
+screened on it.
+
+## 5. Decisions
+
+- **D286**: trial `pushCandidateCards` opened and closed the same day: measured not better (§3), deleted with its
+  code and tests (code in `7d254437`).
+- **D287**: lab only, `pi-ab --dress` (`dress-entities.ts`), kept: the absent-record artefact measured (§4); Eden's
+  published lead over the agent alone stands; work on asks or turns is screened dressed.
+- **D288**: not built, on $0 evidence: the entity census line (idea 4), the standing brief in the agent's prefix (idea
+  6), usage-learned ranking per item (idea 7).
+
+## Reproduce
+
+```bash
+cat packages/sim/lab/cards/cards-{v2,train,train-4344}.jsonl > .local/a6/cards-all.jsonl
+bun packages/sim/lab/a6/census.ts [--dress]                                   # absent names per kind, $0
+R=packages/sim/lab/a6/run.sh
+$R a6-pilot-41 payload eden --seeds 41 --variants hidden,control,neutral --limit 4 --budget 0.1
+bun packages/sim/lab/a6/asks-absent.ts .local/a6/runs/a6-pilot-41.tl/tasks.jsonl
+# Card tags (code in 7d254437):
+bun run funnel --json .local/a6/f-base.json -- --neutral --packets .local/a6/f-base.packets.jsonl
+bun run funnel --set '{"pushCandidateCards":true}' --baseline .local/a6/f-base.json --json .local/a6/f-cards.json \
+  -- --neutral --packets .local/a6/f-cards.packets.jsonl
+python3 -I packages/sim/lab/a6/tags.py .local/a6/f-base.packets.jsonl .local/a6/f-cards.packets.jsonl
+export A6_VC='{"cards":{"pushCandidateCards":true}}'; A=tools,eden,eden~cards
+$R a6-short-pay-41 payload $A --seeds 41 --variants hidden,control,neutral --limit 12 --budget 0.45   # and 42
+$R a6-long-pay-41 payload $A --seeds 41 --days 8 --budget 0.3                  # 42: --budget 0.35
+# Dressed worlds:
+$R a6-dress-short-pay-41 payload tools,eden --seeds 41 --variants hidden,control,neutral --limit 12 --dress \
+  --budget 0.35                                                                # and 42
+S=.local/a6/runs; O=packages/sim/lab/a6
+python3 -I packages/sim/lab/cl7/arms.py --arms tools,eden,eden~cards $S/a6-short-pay-4{1,2}   # long, dressed alike
+bun packages/sim/src/lab/pi-cost-report.ts $S/a6-long-pay-4{1,2}.json
+python3 -I packages/sim/lab/cl8/cache.py $S/a6-short-pay-4{1,2}
+python3 -I packages/sim/lab/cl8/pooled.py eden~cards eden $S/a6-short-pay-4{1,2} $S/a6-long-pay-4{1,2}
+python3 -I $O/dress-pairs.py eden $S/a6-short-pay-4{1,2} -- $S/a6-dress-short-pay-4{1,2}       # and tools
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/regrade.ts --results $S/a6-short-pay-41.json \
+  --graders claude-haiku-5-5 --only-concerns --spend-ledger .local/a6/ledger.jsonl --spend-cap 3 \
+  --spend-headroom 0.1 --run-label a6-regrade-short-pay-41 --out $S/regrade-short-pay-41.json   # each run
+python3 -I packages/sim/lab/cl8/concerns.py $S/regrade-*.json
+```
+
+## Spend (`packages/sim/lab/a6/spend.txt`, ledger `.local/a6/ledger.jsonl`, cap $3)
+
+| What | $ |
+| --- | --- |
+| pilot (eden, seed 41, 72 tasks) | 0.034 |
+| card tags, short, three arms, seeds 41–42 | 0.626 |
+| card tags, long, three arms, users 41–42 | 0.303 |
+| dressed, short, two arms, seeds 41–42 | 0.422 |
+| concern regrades (Haiku) | 0.002 |
+| **Total** | **1.387** |

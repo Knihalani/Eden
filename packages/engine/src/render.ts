@@ -37,8 +37,6 @@ export function renderPacket(
      * the agent reads it as Eden's reading and not the item's words. Validated and bounded by `parseReader`.
      */
     note?: (item: ContextItem) => string | undefined;
-    /** What starts a `note`: `READER_TAG` (the default) or `CARD_TAG` (`pushCandidateCards`, D286). */
-    noteTag?: typeof READER_TAG | typeof CARD_TAG;
     /**
      * `pushCandidates` (D236): a line of Eden's own (`EDEN_NOTE`, fixed words) after the header, framing the
      * items as candidates the agent checks against the request. Never source or event text.
@@ -90,7 +88,7 @@ export function renderPacket(
     const room = options.maxBytes - bytes - 1;
     if (room < 40) break;
     const note = options.note?.(item);
-    const said = note ? `${options.noteTag ?? READER_TAG}${safeLine(note).replace(/\|/g, "/")} | ` : "";
+    const said = note ? `${READER_TAG}${safeLine(note).replace(/\|/g, "/")} | ` : "";
     // One item, one line (D11, D221): `safeLine` removes every kind of line break, control and bidi character, so
     // source text cannot forge another item's `- [source]` line inside the envelope.
     const named = safeLine(item.title);
@@ -142,20 +140,7 @@ export const CANDIDATES_LEAD =
 
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";
-/**
- * `pushCandidateCards` (D286): how a candidate's card starts, made of the card's validated fields only (`cardTag`);
- * `shownText` drops it, as it drops the reader's bearing.
- */
-export const CARD_TAG = "Eden's card: ";
-const READER_PREFIX = /^Eden's (?:reader|card): [^|\n]*\| /;
-
-/**
- * `pushCandidateCards` (D286): the sentence the candidates' lead gains, saying what a card tag is and is not. Fixed
- * words of Eden's own (D11, D19), like `CANDIDATES_LEAD`.
- */
-export const CARD_LEAD =
-  ` An "${CARD_TAG.trim()}" note says what kind of constraint the item states, the actions and dates it covers, as ` +
-  "read when the item arrived; it is not a check against this request.";
+const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;
 
 /** What an item shown before says in its place when it has nothing new (`askDedup`): its title and source stay. */
 export const SHOWN = "(shown above)";
