@@ -236,6 +236,15 @@ it, so a listing that hangs and the search after it hold an ask back about 1.5 s
 With under 50 ms left, the live search is skipped and each chosen source reports "timeout" (no call). A source whose
 on-demand poll ran out of time is not polled again by a lookup for the next `sourceTimeoutMs`: it is searched live.
 
+**Revisions of what the agent was handed** (D205, `revisionNotice`, on in the default, part `freshness`): every packet
+the agent takes and every ask answer records in the session's ledger the version of each item whose line it rendered
+(`Ledger.noteShown`, past the not-twice cooldown). When a sync poll, a notice's items or a re-read stores one of those
+items with other words, each live session of that user that holds an older version gets an "updated:" packet with
+the new copy, once per revision, queued for its next take. A change notice for a source a live session holds a copy
+from is polled at once in the background (one listing call, at most one at a time and 30 s apart per user and
+source), so the packet is usually queued before the agent's next request; nothing on the observe path waits for it.
+Without it, a fact the agent already holds stays in its transcript in the old version (docs/research/fix-s7-revisions.md).
+
 **Deleted by D112:** `decideConflict` (D67), `judgeBehind`, push relaying (`syncPush`, `sourcePushes`,
 `sourceChanged`, D66) and the other switches D112 lists. The candidates' facts (`decide.ts`) still reach the lab only
 through the content-free `PartnerDeps.onCandidates` hook; the engine decides nothing from them.

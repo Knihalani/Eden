@@ -103,7 +103,9 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
   override, and `default` is `{}`. The harnesses wait 3,000 ms on the first observe (`@w<ms>` changes it; 1 s lost
   7.6–18.1 points, D98).
 - Pi's `both` arm gets no `ask_context` (only `eden` does); `both+ask` (fix-s3b) adds it, the shape integrators ship;
-  Hermes gets both. `--day K` runs K requests per agent session (`pi-day.ts`), with a recap turn that is never graded.
+  Hermes gets both. `--day K` runs K requests per agent session (`pi-day.ts`), with a recap turn that is never
+  graded. After the change notices before the recap it waits up to 10 s for `revisionsSettled` (D205's background
+  poll), standing in for the two hours between change and recap; `DaySummary.updatePackets` counts "updated:" packets.
 - **pi-ab and hermes-ab default to `--time-scale 1`** (since 2026-11-03): sources take their profiles' assumed
   latency, so the "Eden on the critical path" column includes the on-demand sync poll. Earlier results (every
   haiku-phase3 row) ran at 0, connectors instant; compare like with like. Use 0 only for a stated quality-only rerun.

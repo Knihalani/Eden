@@ -364,7 +364,7 @@ export interface EngineConfig {
    */
   actionCheck: boolean;
   /**
-   * Trial (D205, owner repo owner, ends 2026-12-07): an item this session was handed (a packet taken, an ask's answer)
+   * On in the default (D205; part `freshness`): an item this session was handed (a packet taken, an ask's answer)
    * that is stored again with other words (a sync poll, a notice carrying items, a re-read) is sent once more as an
    * "updated:" packet, once per revision, queued for the agent's next take. A change notice for a source a session
    * holds a handed copy from polls it at once in the background (no request waits on it), so the packet is usually
@@ -580,7 +580,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   decideCandidates: 64,
   maxEventChars: 32_000,
   actionCheck: false,
-  revisionNotice: false,
+  revisionNotice: true,
   compactAsk: true,
   askDedup: true,
   compactParts: true,
