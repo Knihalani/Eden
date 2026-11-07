@@ -1,0 +1,21 @@
+.local/a3/runs/a3-long2-pay-41.json: user w41, 8 days (14,13,16,16,12,12,15,16), 0 clashes
+.local/a3/runs/a3-long2-pay-42.json: user w42, 8 days (13,13,13,17,19,13,13,17), 0 clashes
+
+$ per 1,000 tasks (agent and Eden per task; bg run = Eden's cards and intent while the user worked, per task; one-time = backfill per user; steady = agent + Eden + bg run; all-in = steady + one-time spread over the user's tasks in this run). Recap turns are probes: not tasks, their $ apart.
+condition        n users   agent    Eden  bg run  steady  all-in  mix st  mix all   one-time $/user (from)  reader/t  Eden conn/t  agent tools/t  wall p50  mean  recaps $
+eden           232     2   0.227   0.000   0.010   0.237   0.240   0.238    0.240           0.0003 (in-run)      0.00         0.16           0.06      1.23  1.31    0.0064
+
+per kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s
+eden           hidden     23  raised 14/23 (60.9%)  $0.235/1k  p50 1.22
+eden           control    23  raised 0/23 (0.0%)  $0.244/1k  p50 1.39
+eden           neutral   186  raised 2/186 (1.1%)  $0.224/1k  p50 1.20
+
+per day (long horizon): n, agent and Eden $ per 1k tasks, wall p50 s
+eden           day 0   27  agent   0.219  Eden  0.000  p50 1.28
+eden           day 1   26  agent   0.190  Eden  0.000  p50 1.07
+eden           day 2   29  agent   0.236  Eden  0.000  p50 1.22
+eden           day 3   33  agent   0.243  Eden  0.000  p50 1.38
+eden           day 4   31  agent   0.216  Eden  0.000  p50 1.10
+eden           day 5   25  agent   0.250  Eden  0.000  p50 1.40
+eden           day 6   28  agent   0.224  Eden  0.000  p50 1.15
+eden           day 7   33  agent   0.237  Eden  0.000  p50 1.23

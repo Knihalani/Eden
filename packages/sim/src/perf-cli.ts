@@ -7,7 +7,8 @@
  *     [--tenant-rps 200]
  *
  * Scenarios:
- *   steady   production-like: 300 users at real pacing and real source latency for 90 s
+ *   steady   production-like: 300 users at real pacing and real source latency for 90 s; `--synced` (A3) runs the
+ *            server with `--sync on` and backfills the users first, as the shipped default serves them
  *   ramp     saturation: pacing compressed 10x, users doubling from 100 to 3,200, 20 s per step
  *   memory   server memory after warming 250, 500, 1,000 and 2,000 users (forced GC before each reading), and
  *            edenOnly: the readings minus the zero-user one (the in-process sim worlds), MB per user.
@@ -107,11 +108,25 @@ const load = (base: string, o: Partial<LoadOptions>) =>
 const brief = ({ windows: _w, ...rest }: Awaited<ReturnType<typeof runLoad>>) => rest;
 
 async function steady() {
-  const s = await startServer(["--time", "1"]);
+  const s = await startServer(["--time", "1", ...(SYNCED ? ["--sync", "on"] : [])]);
   try {
+    // `--synced` (A3): the shipped default syncs (D57), so an ask answers from the user's index, not a live fan-out.
+    // Each user first runs one quick session (the sync tracks users it has seen), then is backfilled before the run.
+    let warming: Record<string, unknown> | undefined;
+    if (SYNCED) {
+      await load(s.base, { users: 300, timeScale: 0.02, durationS: 600, rampS: 2, sessionsPerUser: 1 });
+      warming = await sim(s.base, "sync-warm", { maxTicks: 2_000 });
+      if (Number(warming.cold) > 0) throw new Error(`${warming.cold} users never warmed`);
+    }
     await sim(s.base, "reset");
     const report = await load(s.base, { users: 300, durationS: Number(arg("seconds", "90")), rampS: 10 });
-    return { scenario: "steady", client: brief(report), server: await sim(s.base, "stats") };
+    return {
+      scenario: "steady",
+      synced: SYNCED,
+      ...(warming ? { warming } : {}),
+      client: brief(report),
+      server: await sim(s.base, "stats"),
+    };
   } finally {
     s.stop();
   }
