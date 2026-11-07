@@ -1,0 +1,10 @@
+== by position in the day (pos 0 = the day's first request)
+-- eden
+ bucket   hidden raised   pk now    ask  earlier only   ctl concern   neu concern  asks/t agent $/1k  in tok wall p50
+    0-3     6/10 (0.60)        6      0             2   0/10 (0.00)  0/108 (0.00)    0.20      0.209    3360     2.31
+    4-7     7/14 (0.50)        8      0             4   0/10 (0.00)  1/104 (0.01)    0.00      0.219    5776     2.20
+   8-11     7/10 (0.70)        5      0             3   0/15 (0.00)  0/103 (0.00)    0.00      0.228    8116     2.04
+    12+     8/12 (0.67)        7      0             4   0/11 (0.00)   0/73 (0.00)    0.00      0.251   10886     1.87
+   hidden by way: packet-now 23/26 (0.88) ask-only 0/0 (0.00) earlier-only 5/13 (0.38) never 0/7 (0.00)
+== recaps (sums over days)
+  eden: delivered 1830 repeatDelivered 63 repeatChanged 63 updatePackets 40 changed 79 staleDeliveries 0 staleRecap 7 freshRecap 35 days 32 recapUsd 0.0152

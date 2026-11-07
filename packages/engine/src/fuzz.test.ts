@@ -39,6 +39,8 @@ const CONFIGS: Record<string, WorldOptions> = {
   // What ships, with tenant t1 behind the proxy's shadow mode (D282): its events and takes say `shadow`, so nothing
   // they return may be learned from; tenant t0 is live beside it.
   "default-shadow": { config: DEFAULT_CONFIG, shadowTenant: "t1", notTwice: true },
+  // The `pushReshow` trial (D340) on, with failures: re-handed at a later request, never twice in one.
+  "reshow-flaky": { config: { ...DEFAULT_CONFIG, pushReshow: true }, failRate: 0.1, notTwice: true },
   // Every part out (no sync, no push: a removal does not act, so the deletes check has nothing to hold).
   core: { config: CORE_CONFIG, notTwice: true },
 };

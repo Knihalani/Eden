@@ -111,6 +111,11 @@ and no connector call** but makes the agent ask more (`askNudge`: +0.20–0.38 a
 on the 1:1:8 mix as measured (0.374 → 0.435; Pi, Anthropic Haiku, the 91 targeted train templates, seeds 41–44 and
 41–42 for neutral; docs/research/a12-quality.md). A later check of the version after review came out at
 +$0.046–0.059 a kind against an earlier baseline, so read the trade as +$0.04–0.07 a kind and +0.3–0.6 s (D317).
+**With the D340 trial on (A17; off in the default)** a candidate handed for an earlier request of the session is
+handed again when it ranks for a later one: over a user's days the agent reads about 600-750 more input tokens a task (+$0.013 per 1,000 tasks on
+8-day days, +5% of the eden arm's $0.251 steady state; +$0.017 pooled with 40-request days), with no Eden model call;
+under signal-only notices a re-shown mail item is re-read (Eden connector calls 6.11 → 6.42 a task). One request a
+session it never acts (docs/research/a17-long-quality.md).
 
 Ask-time reader (D95, `askReader`, in the default since D112; `reader.ts`). One call per `ask` about an action (an
 imperative question, a question about blockers, or an ask while the session's latest request acts; any ask with

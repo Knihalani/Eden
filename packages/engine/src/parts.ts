@@ -63,9 +63,9 @@ export const PARTS = {
   routing: { routeLocalHits: false, routeSketch: false },
   /**
    * A delivered item its source signalled a change to since it was read is read again first (D126); a handed item
-   * changed at its source is sent again as an "updated:" packet (D205).
+   * changed at its source is sent again as an "updated:" packet (D205), naming the times it no longer has (D342).
    */
-  freshness: { verifyDelivery: false, readerVerifyAfter: false, revisionNotice: false },
+  freshness: { verifyDelivery: false, readerVerifyAfter: false, revisionNotice: false, revisionDiff: false },
   /** Implication cards (D59, D66), and with them the intent index, which their calls write. */
   cards: {
     cards: false,

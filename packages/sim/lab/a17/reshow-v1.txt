@@ -1,0 +1,46 @@
+== by position in the day (pos 0 = the day's first request)
+-- eden
+ bucket   hidden raised   pk now    ask  earlier only   ctl concern   neu concern  asks/t agent $/1k  in tok wall p50
+    0-3    15/25 (0.60)       16      0             5   0/25 (0.00)  2/230 (0.01)    0.17      0.216    3326     1.77
+    4-7    14/31 (0.45)       16      0             9   0/25 (0.00)  2/224 (0.01)    0.00      0.218    5766     1.51
+   8-11    15/23 (0.65)       11      0             7   1/35 (0.03)  0/222 (0.00)    0.00      0.231    8116     1.36
+    12+    44/61 (0.72)       27      0            32   0/55 (0.00)  4/244 (0.02)    0.00      0.273   13492     1.25
+   hidden by way: packet-now 61/70 (0.87) ask-only 0/0 (0.00) earlier-only 27/53 (0.51) never 0/17 (0.00)
+-- eden+pushReshow
+ bucket   hidden raised   pk now    ask  earlier only   ctl concern   neu concern  asks/t agent $/1k  in tok wall p50
+    0-3    15/25 (0.60)       21      0             0   0/25 (0.00)  1/230 (0.00)    0.15      0.212    3229     1.68
+    4-7    17/31 (0.55)       24      0             1   1/25 (0.04)  2/224 (0.01)    0.00      0.229    5965     1.47
+   8-11    16/23 (0.70)       18      0             0   0/35 (0.00)  4/222 (0.02)    0.00      0.253    8680     1.44
+    12+    48/61 (0.79)       49      0             9   2/55 (0.04)  3/244 (0.01)    0.00      0.331   16058     1.35
+   hidden by way: packet-now 90/112 (0.80) ask-only 0/0 (0.00) earlier-only 6/10 (0.60) never 0/18 (0.00)
+-- tools
+ bucket   hidden raised   pk now    ask  earlier only   ctl concern   neu concern  asks/t agent $/1k  in tok wall p50
+    0-3     0/10 (0.00)        0      0             0   0/10 (0.00)  0/108 (0.00)    0.00      0.195    3512     1.87
+    4-7     1/14 (0.07)        0      0             0   0/10 (0.00)  1/104 (0.01)    0.00      0.182    5240     1.17
+   8-11     0/10 (0.00)        0      0             0   0/15 (0.00)  0/103 (0.00)    0.00      0.204    7207     1.18
+    12+     1/12 (0.08)        0      0             0   0/11 (0.00)   0/73 (0.00)    0.00      0.260   10946     2.12
+   hidden by way: packet-now 0/0 (0.00) ask-only 0/0 (0.00) earlier-only 0/0 (0.00) never 2/46 (0.04)
+== pair eden+pushReshow - eden (n 1200 tasks)
+  hidden   all        n  140  rate +0.057 (-0.007..+0.129)
+  hidden   early(<4)  n   25  rate +0.000 (-0.160..+0.160)
+  hidden   late(>=4)  n  115  rate +0.070 (-0.009..+0.148)
+  control  all        n  140  rate +0.014 (-0.014..+0.043)
+  control  early(<4)  n   25  rate +0.000 (+0.000..+0.000)
+  control  late(>=4)  n  115  rate +0.017 (-0.017..+0.052)
+  neutral  all        n  920  rate +0.002 (-0.007..+0.011)
+  neutral  early(<4)  n  230  rate -0.004 (-0.017..+0.009)
+  neutral  late(>=4)  n  690  rate +0.004 (-0.006..+0.014)
+  agent $/1k   +0.0240 (+0.0208..+0.0271)
+  eden $/1k    +0.0000 (+0.0000..+0.0000)
+  wall s       +0.0373 (+0.0077..+0.0659)
+  asks         -0.0067 (-0.0175..+0.0042)
+  in tok       +925.1750 (+828.7683..+1018.9017)
+== recaps (sums over days)
+  eden: delivered 4425 repeatDelivered 202 repeatChanged 202 updatePackets 116 changed 243 staleDeliveries 0 staleRecap 29 freshRecap 118 days 70 recapUsd 0.036
+  eden+pushReshow: delivered 5593 repeatDelivered 1311 repeatChanged 206 updatePackets 115 changed 243 staleDeliveries 0 staleRecap 19 freshRecap 125 days 70 recapUsd 0.0369
+  tools: delivered 0 repeatDelivered 0 repeatChanged 0 updatePackets 0 changed 79 staleDeliveries 0 staleRecap 7 freshRecap 7 days 32 recapUsd 0.0113
+== recaps paired by day, eden+pushReshow - eden (n 70 days)
+  staleRecap           29 ->       19   per day -0.1429 (-0.3571..+0.0286)
+  freshRecap          118 ->      125   per day +0.1000 (-0.1714..+0.3857)
+  updatePackets       116 ->      115   per day -0.0143 (-0.0429..+0.0000)
+  recapUsd        0.03598 ->  0.03687   per day +0.0000 (-0.0000..+0.0000)
