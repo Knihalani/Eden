@@ -17,7 +17,7 @@
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import { DEFAULT_WAIT_MS, EdenClient, edenId, withContext } from "@eden/client";
-import type { Injection } from "@eden/protocol";
+import { MAX_TEXT_CHARS, type Injection } from "@eden/protocol";
 
 export interface ProxyOptions {
   /** The model's OpenAI-compatible base URL, with its version path (`https://api.openai.com/v1`). */
@@ -101,6 +101,16 @@ export function textOf(content: unknown): string {
     .join("\n");
 }
 
+/**
+ * Text cut to what Eden's API takes: past it the event was refused whole (a 400 the client swallows), so a large file
+ * read reached Eden as nothing; the engine reads only a text's head anyway (audit A11). No lone high surrogate is left.
+ */
+function capped(text: string): string {
+  if (text.length <= MAX_TEXT_CHARS) return text;
+  const cut = text.slice(0, MAX_TEXT_CHARS);
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+}
+
 /** A message's identity for "already reported": role, text, tool call ids and calls. */
 function hashOf(m: Message): string {
   const calls = Array.isArray(m.tool_calls) ? JSON.stringify(m.tool_calls) : "";
@@ -114,7 +124,7 @@ type EventInput = Parameters<EdenClient["observe"]>[0];
 
 /** Eden events for one message; `tools` maps a tool call id to its tool's name, for the results that follow. */
 export function eventsOf(m: Message, tools: Map<string, string>): EventInput[] {
-  const text = textOf(m.content);
+  const text = capped(textOf(m.content));
   if (m.role === "user") return text ? [{ kind: "user_message", text }] : [];
   if (m.role === "assistant") {
     const out: EventInput[] = text ? [{ kind: "agent_message", text }] : [];

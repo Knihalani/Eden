@@ -9,7 +9,8 @@ export type Checked<T> = { ok: true; value: T } | { ok: false; error: string };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 /** The longest text an event field may carry. */
-const MAX_TEXT_CHARS = 1_000_000;
+/** The longest event text the API takes (characters); an integration cuts longer text to it rather than lose the event. */
+export const MAX_TEXT_CHARS = 1_000_000;
 const isText = (v: unknown, max = MAX_TEXT_CHARS): v is string => typeof v === "string" && v.length <= max;
 /** The message for a field that is not a string of at most `max` characters: too long is named, not misread. */
 const textError = (field: string, max: number) =>

@@ -57,4 +57,44 @@ describe("audit A11: proxy (D280)", () => {
     expect(started).toBe(1);
     expect(aborted).toBe(1);
   }, 15_000);
+
+  test("a tool result or message past Eden's 1,000,000-character cap is reported cut, not dropped", async () => {
+    const events: { kind: string; length: number }[] = [];
+    const eden = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url);
+        if (url.pathname === "/v1/events") {
+          const e = (await req.json()) as { kind: string; text?: string; output?: string };
+          if ((e.text ?? e.output ?? "").length > 1_000_000)
+            return Response.json({ error: "too long" }, { status: 400 });
+          events.push({ kind: e.kind, length: (e.text ?? e.output ?? "").length });
+        }
+        return Response.json({ injection: null, injections: [] });
+      },
+    });
+    const upstream = Bun.serve({ port: 0, fetch: () => Response.json({ choices: [] }) });
+    servers.push(eden, upstream);
+    const proxy = createProxy({ upstream: `${upstream.url.href}v1`, edenUrl: eden.url.href, waitMs: 200 });
+    const big = "x".repeat(1_200_000);
+    await proxy(
+      new Request("http://proxy/v1/chat/completions", {
+        method: "POST",
+        headers: { "x-eden-user-id": "u2", "x-eden-session-id": "s2" },
+        body: JSON.stringify({
+          messages: [
+            { role: "user", content: `read the file ${big}` },
+            {
+              role: "assistant",
+              content: null,
+              tool_calls: [{ id: "c1", function: { name: "read", arguments: "{}" } }],
+            },
+            { role: "tool", tool_call_id: "c1", content: big },
+          ],
+        }),
+      }),
+    );
+    expect(events.map((e) => e.kind)).toEqual(["user_message", "tool_call", "tool_result"]);
+    expect(events.every((e) => e.length <= 1_000_000)).toBe(true);
+  }, 15_000);
 });
