@@ -64,7 +64,7 @@ export function createHandler(
   };
   /** A keyless (dev) request from a browser page on another site (audit A20: `keylessOriginAllowed`). */
   const foreignPage = (req: Request, tenant: string) =>
-    tenant === "dev" && !keylessOriginAllowed(req.headers.get("origin"));
+    tenant === "dev" && !keyOf(req) && !keylessOriginAllowed(req.headers.get("origin"));
   const badId = (body: Json, fields: string[]) => fields.find((f) => !isId(body[f]));
 
   return async function handle(req: Request): Promise<Response> {

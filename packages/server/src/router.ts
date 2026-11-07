@@ -427,7 +427,7 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
           return forward(children[childFor(tenant ?? "", "", n)]!, req, url, undefined);
         // The child never sees the Origin header (only the key and content type are forwarded): a keyless request from
         // another site's page is refused here, as one process refuses it (http.ts, audit A20).
-        if (tenant === "dev" && !keylessOriginAllowed(req.headers.get("origin")))
+        if (tenant === "dev" && !keyOf(req) && !keylessOriginAllowed(req.headers.get("origin")))
           return fail(403, "dev mode serves no key-less request from another site's page");
         const waitMs = limiter.take(tenant);
         if (waitMs > 0) {

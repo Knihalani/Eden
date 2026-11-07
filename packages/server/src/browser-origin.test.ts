@@ -43,6 +43,11 @@ describe("audit A20: keyless (dev) requests from a browser on another origin are
   test("an agent's client (no Origin) is served", async () => {
     expect((await dev(ask({}))).status).toBe(200);
   });
+  test("a real key whose tenant is named dev is keyed, not key-less (the review)", async () => {
+    const devTenant = createHandler(partner, { keys: new Map([["k_0123456789abcdef", "dev"]]), dev: true });
+    const res = await devTenant(ask({ origin: "https://app.example", authorization: "Bearer k_0123456789abcdef" }));
+    expect(res.status).toBe(200);
+  });
   test("a keyed request is unaffected: the key is the check", async () => {
     const res = await keyed(ask({ origin: "https://app.example", authorization: "Bearer k_0123456789abcdef" }));
     expect(res.status).toBe(200);
