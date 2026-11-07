@@ -122,7 +122,7 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import { CANDIDATES_LEAD, citationsOf, renderPacket, shownText } from "./render";
+import { CANDIDATES_COVERS, CANDIDATES_LEAD, citationsOf, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -1889,7 +1889,7 @@ export class ContextPartner {
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      lead: CANDIDATES_LEAD,
+      lead: this.config.pushCandidatesCovers ? `${CANDIDATES_LEAD} ${CANDIDATES_COVERS}` : CANDIDATES_LEAD,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),

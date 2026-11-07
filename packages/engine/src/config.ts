@@ -464,6 +464,11 @@ export interface EngineConfig {
    * first (`CANDIDATES_LEAD`). 0 is the reader's push and asks (D95–D99).
    */
   pushCandidates: number;
+  /**
+   * Trial (A3, D274; owner repo owner, ends 2026-11-21): with `pushCandidates`, the candidates' lead also says they
+   * are what an ask about this request would return (`CANDIDATES_COVERS`), so the agent asks only for something else.
+   */
+  pushCandidatesCovers: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -581,4 +586,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
+  pushCandidatesCovers: false,
 };

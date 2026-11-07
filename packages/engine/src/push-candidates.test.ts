@@ -8,7 +8,7 @@ import { checkEngineConfig } from "./config-check";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { AskReader, type ReaderInput, type ReaderMaker } from "./reader";
-import { CANDIDATES_LEAD, shownText } from "./render";
+import { CANDIDATES_COVERS, CANDIDATES_LEAD, shownText } from "./render";
 
 // CL6 (docs/research/cl-cl6.md, D236, D237): "the agent is the reader". The push makes no reader call; it hands the
 // agent the top of the pool the reader would have read, framed as candidates to check against the request. Unit tests
@@ -248,5 +248,28 @@ describe("pushCandidates with no reader dependency (D276: the no-key server)", (
     // … but not with the candidates off, and the reader's own settings still need a reader.
     expect(() => checkEngineConfig({ pushCandidates: 0, readerPushWaitMs: 1_000 }, { deps })).toThrow(/reader/);
     expect(() => checkEngineConfig({ askReaderWaitMs: 1_000 }, { deps })).toThrow(/reader/);
+  });
+});
+
+describe("pushCandidatesCovers (A3 trial, D274): the lead says the packet is what an ask would return", () => {
+  const quiet = { confidentScore: 99, fallbackMatchedTerms: 99 };
+  test("on, one fixed sentence after the lead, inside the envelope; off, the lead alone", async () => {
+    const on = setup({ ...quiet, pushCandidates: 3, pushCandidatesCovers: true });
+    await say(on.p, REQUEST);
+    const text = on.p.takePending(ref()).find((x) => x.reason.startsWith("candidates:"))!.text;
+    expect(text.split("\n")[1]).toBe(`${CANDIDATES_LEAD} ${CANDIDATES_COVERS}`);
+    expect(shownText(text)).not.toContain("ask_context");
+    expect(on.maker.calls.length).toBe(0);
+    const off = setup({ ...quiet, pushCandidates: 3 });
+    await say(off.p, REQUEST);
+    expect(off.p.takePending(ref()).find((x) => x.reason.startsWith("candidates:"))!.text).not.toContain(
+      CANDIDATES_COVERS,
+    );
+  });
+
+  test("checked like any setting: a boolean that needs the push", () => {
+    const deps = { reader: true, cards: true };
+    expect(() => checkEngineConfig({ pushCandidatesCovers: true }, { deps })).not.toThrow();
+    expect(() => checkEngineConfig({ pushCandidatesCovers: 1 as unknown as boolean }, { deps })).toThrow();
   });
 });
