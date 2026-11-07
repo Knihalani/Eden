@@ -211,8 +211,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   user's days and made the agent ask more one request at a time, k 3 after a session's first request lost hidden facts,
   and removing an item repeated within a request (the push and the rule paths race on the ledger) saved nothing. A
   smaller push makes a longer ask answer (`askDedup` says in full what a packet showed in part). On Pi, Eden's billed
-  cost above the agent alone is prompt-cache writes on a fixed prefix that was not cached (D260; why is open), not the
-  packet's bytes.
+  cost above the agent alone was prompt-cache writes on a fixed prefix too short to cache (D260; proven by D271: ~500
+  tokens on the wire, under Haiku 5.5's 512 minimum). With an agent prompt that caches in every arm (`--tenant-prompt`),
+  the gap is the packet's own tokens written to the cache (+$0.060/1k short, +$0.080/1k over days, Eden faster), and
+  no lexical cut of packet or ask bytes keeps the planted facts (D273).
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read

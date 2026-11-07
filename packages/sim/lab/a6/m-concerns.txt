@@ -1,0 +1,6 @@
+plain
+short eden       control 2 -> 2 neutral 2 -> 2
+short tools      control 0 -> 0 neutral 1 -> 0
+dress
+short eden       control 3 -> 3 neutral 6 -> 4
+short tools      control 1 -> 1 neutral 2 -> 2

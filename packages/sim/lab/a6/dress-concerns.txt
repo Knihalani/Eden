@@ -1,0 +1,2 @@
+short eden       control 4 -> 3 neutral 1 -> 1
+long eden       control 0 -> 0 neutral 0 -> 0
