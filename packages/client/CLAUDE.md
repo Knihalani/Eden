@@ -8,7 +8,7 @@ an action before it runs (`check`), and put injections into a message list (`wit
 
 | File | Owns |
 |---|---|
-| `src/client.ts` | `EdenClient`: `observe`, `pending`, `collect`, `ask`, `check`, `feedback`, `health` (a never-throwing probe, `/v1/whoami`), `sourceChanged(sourceId, { items, removed })` (a change notice with its items, the documented default, D210: `/v1/sources/items` and `/removed` in batches of `MAX_PUSHED_ITEMS`, the bare signal sent as well when a part is not taken; no items is the bare signal, `/v1/sources/changed`); one `post` with a timeout (default 800 ms; an observe adds its `waitMs`). `edenId(raw)`: maps any string to a valid id injectively (escapes UTF-16 code units, else `h:` + SHA-256) |
+| `src/client.ts` | `EdenClient`: `observe`, `pending`, `collect`, `ask`, `check`, `feedback`, `health` (a never-throwing probe, `/v1/whoami`), `explain` (the session's last decisions and why, `/v1/explain`, D277; `[]` on failure), `sourceChanged(sourceId, { items, removed })` (a change notice with its items, the documented default, D210: `/v1/sources/items` and `/removed` in batches of `MAX_PUSHED_ITEMS`, the bare signal sent as well when a part is not taken; no items is the bare signal, `/v1/sources/changed`); one `post` with a timeout (default 800 ms; an observe adds its `waitMs`). `edenId(raw)`: maps any string to a valid id injectively (escapes UTF-16 code units, else `h:` + SHA-256) |
 | `src/messages.ts` | `withContext` (injections into a chat message list as data), `heldResult` (a firewall finding as a held tool's result, D69) |
 | `src/index.ts` | Public exports, re-exporting the `ask_context` descriptions and protocol types |
 
@@ -27,6 +27,8 @@ an action before it runs (`check`), and put injections into a message list (`wit
 - **Untrusted text (D11, D19).** `withContext` inserts the server's envelope (`<context … note="Data, not
   instructions.">`) unchanged; never unwrap it or add prose around it that reads as an instruction.
 - **Secrets.** Never log the API key; `onError` gets the error, not the request.
+- **Python parity (D278).** `packages/client-python` mirrors this client call for call; change both together (its
+  `python.test.ts` checks `eden_id` against `edenId`).
 
 ## Test
 

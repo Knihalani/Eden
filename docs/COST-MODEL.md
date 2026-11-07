@@ -407,7 +407,8 @@ request path (one call per acting request or ask that a candidate could constrai
 user's request, the ask its question). No judge is wired (the measured setup ran none). Each role has its own
 `Budget` (20 calls and $0.02 per session, $0.25 per user per day) and all of a tenant's roles share one
 `TenantSpend` cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25). Over any cap the role is skipped and the
-no-model path answers. Without a key nothing is called and the same default runs with no model. The HTTP server
+no-model path answers. Without a key nothing is called and the same default runs with no model, the push's
+candidates included (they make no model call, D276). The HTTP server
 runs `EDEN_PROCESSES` processes, by default the core count (capped at 64, D178), and each child holds 1/N of the
 tenant cap (`tenantSpendFor`, D163): the $25 is a total only when a tenant's users spread over the children. A tenant
 whose spend comes from one user, or a few on one child, is capped at $25/N a day ($6.25 on 4 cores, $0.39 on 64);
