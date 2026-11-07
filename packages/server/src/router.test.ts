@@ -257,6 +257,40 @@ describe("router over real child processes", () => {
     expect(await feedback(b, ib)).toBe(true);
   });
 
+  test("usage (D326) is the tenant's summed over every child, and only that tenant's", async () => {
+    type Usage = {
+      tenantId: string;
+      processes: number;
+      processesDown: number;
+      capUsd: number;
+      modelUsd: number;
+      users: number;
+      requests: Record<string, number>;
+    };
+    const usage = async (key = KEY) => (await (await post("/v1/usage", {}, key)).json()) as Usage;
+    const before = await usage();
+    for (const userId of [a, b]) {
+      await post("/v1/events", { userId, sessionId: "u1", kind: "user_message", text: "Globex renewal" });
+    }
+    const after = await usage();
+    expect(after.tenantId).toBe("acme");
+    expect(after.processes).toBe(2);
+    expect(after.processesDown).toBe(0);
+    expect(after.capUsd).toBe(10); // $5 a child (D163), summed.
+    expect(after.modelUsd).toBe(0); // No model key.
+    expect(after.requests.events! - (before.requests.events ?? 0)).toBe(2); // One on each child.
+    expect(after.users).toBeGreaterThanOrEqual(2);
+    // Another tenant sees its own day only: none of acme's requests or users.
+    const other = await usage(OTHER_KEY);
+    expect(other.tenantId).toBe("globex");
+    expect(other.requests.events ?? 0).toBe(0);
+    expect(other.users).toBe(0);
+    expect((await post("/v1/usage", { tenantId: "globex" })).status).toBe(403);
+    // The router asks every child; only the owner counts the call: one usage request reads as one.
+    const again = await usage();
+    expect(again.requests.usage! - after.requests.usage!).toBe(1);
+  });
+
   test("auth, tenant checks and validation are still the child's answers", async () => {
     expect((await post("/v1/ask", { userId: a, sessionId: "s", question: "x" }, "wrong-key-0123456789")).status).toBe(
       401,

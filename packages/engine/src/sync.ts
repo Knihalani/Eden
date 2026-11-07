@@ -100,6 +100,11 @@ export interface SyncOptions {
    * the bound on a lost notification (`syncPushMaxStaleMs`); 0 or absent: `maxStaleMs`.
    */
   pushMaxStaleMs?: number;
+  /**
+   * `syncIngestTurns` (D328, trial): a background read's page (backfill, sweep, a poll's background pages) waits its
+   * `turn` before it is redacted and stored.
+   */
+  ingestTurns?: boolean;
 }
 
 export interface SyncDeps {
@@ -532,6 +537,13 @@ export class SyncManager {
     return !!u && u.sources.size > 0 && [...u.sources.values()].every((s) => s.phase === "warm");
   }
 
+  /** Users of the tenant this sync keeps current (D326). */
+  tenantUsers(tenantId: string): number {
+    let n = 0;
+    for (const u of this.users.values()) if (u.scope.tenantId === tenantId) n++;
+    return n;
+  }
+
   /**
    * One round of background work, for every synced user: drop the idle and those past the tenant's cap, then per
    * user backfill and sweeps, as each source's budget allows. Never runs twice at once, never throws.
@@ -664,6 +676,11 @@ export class SyncManager {
       this.stats.deleted += this.deps.cache.dropSynced(u.scope, s.ids);
     }
     const byId = new Map(listable.map((x) => [x.id, x]));
+    // D325: a frozen user is thawed in slices before a read that touches their items, not all at once inside it.
+    // Only when a thaw is pending: one more await on every step would move when pages land (the funnel's cards).
+    let thawing = [...u.sources.values()].some((s) => s.phase === "backfill") ? this.deps.cache.ready(u.scope) : null;
+    if (thawing) await thawing;
+    if (u.gone) return;
     await this.backfill(u, byId);
     if (this.o.engagedDeep) {
       await Promise.all(
@@ -683,6 +700,10 @@ export class SyncManager {
     const now = this.deps.now();
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
+    const due = (s: SourceSync) => s.phase === "warm" && (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs);
+    thawing = [...u.sources.values()].some(due) ? this.deps.cache.ready(u.scope) : null;
+    if (thawing) await thawing;
+    if (u.gone) return;
     await Promise.all(
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);
@@ -1184,7 +1205,12 @@ export class SyncManager {
     given: { timeoutMs: number; signal?: AbortSignal; reserve?: number },
   ): ReturnType<SourceFanout["list"]> {
     // Items the cache holds unchanged are not redacted again (most of a poll or a sweep re-lists what is held).
-    const options = { ...given, reuse: this.deps.cache.reuseFor(scope) };
+    const options = {
+      ...given,
+      reuse: this.deps.cache.reuseFor(scope),
+      // D328 (trial): background pages wait their turn; a lookup's own poll never waits behind them.
+      ...(this.o.ingestTurns && phase !== "demand" ? { turn: this.turn } : {}),
+    };
     const tracer = this.deps.tracer;
     if (!tracer) return this.deps.fanout.list(source, scope, cursor, limit, options);
     const sp = tracer.open("sync.list", 0, { async: true, phase, source: source.id });
@@ -1197,6 +1223,20 @@ export class SyncManager {
       throw e;
     }
   }
+
+  /** The last turn handed out (`turn`). */
+  private turns: Promise<void> = Promise.resolve();
+
+  /**
+   * `syncIngestTurns` (D328): resolves one turn of the event loop after the turn before it resolved, so the pages
+   * waiting on it are redacted and stored one per loop turn, in the order they arrived, with every request, timer
+   * and I/O callback that came meanwhile run in between. A page is a few milliseconds to ~15 ms of work (100 items).
+   */
+  private readonly turn = (): Promise<void> => {
+    const t = this.turns.then(() => new Promise<void>((resolve) => setImmediate(resolve)));
+    this.turns = t;
+    return t;
+  };
 
   /** One listing call, a lookup's (`demand`, also counted in its freshen's `tally`) or the background's. */
   private count(demand: boolean): void {

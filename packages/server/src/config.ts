@@ -29,6 +29,8 @@
  *                    serves in this process with no router. Above 1, each tenant/user is pinned to one child, each
  *                    child keeps its own source-map file (`childSourceMapPath`), and each divides the per-tenant
  *                    caps (rate, burst, model spend) by N: a tenant concentrated on few users needs higher caps or 1.
+ * EDEN_SPEND_LEASES=1 trial (D327, spend-lease.ts): the router grants each child a tenant's model spend in chunks
+ *                    from one ledger per tenant and day, instead of each child holding 1/N of the cap.
  * EDEN_ROUTER_CHILD  set by the router only ("i/N"): this process is child i of N.
  */
 import { createHash } from "node:crypto";
@@ -63,7 +65,15 @@ export interface ServerConfig {
    * burst above are already divided by `count`; `buildPartner`'s `processes` divides the model spend cap.
    */
   child: { index: number; count: number } | null;
+  /**
+   * Trial (D327, EDEN_SPEND_LEASES=1): with N > 1, each tenant's daily model spend is leased from the router's one
+   * ledger (spend-lease.ts) instead of divided by N. Off by default.
+   */
+  spendLeases: boolean;
 }
+
+/** The header the router puts on a fan-out's copies to children that do not own the user (not counted, D326). */
+export const FANOUT_COPY = "x-eden-fanout-copy";
 
 /** Most server processes the router starts (EDEN_PROCESSES); far above any core count the router helps on. */
 export const MAX_PROCESSES = 64;
@@ -116,6 +126,7 @@ export function loadConfig(env = process.env, cores = machineCores()): ServerCon
     // A child never starts a router of its own, whatever EDEN_PROCESSES it inherited.
     processes: child ? 1 : processCount(env.EDEN_PROCESSES, cores),
     child,
+    spendLeases: flag(env.EDEN_SPEND_LEASES, "EDEN_SPEND_LEASES"),
   };
 }
 
@@ -236,6 +247,13 @@ function bodyBytes(raw: string | undefined): number {
   const n = Number(raw);
   if (!Number.isSafeInteger(n) || n <= 0) throw new Error(`EDEN_MAX_BODY_BYTES must be a positive integer, got ${raw}`);
   return n;
+}
+
+/** An on/off variable: "1" on, "0" or unset off; anything else stops startup. */
+function flag(raw: string | undefined, name: string): boolean {
+  if (raw === undefined || raw === "" || raw === "0") return false;
+  if (raw === "1") return true;
+  throw new Error(`${name} must be 0 or 1, got ${raw}`);
 }
 
 /**

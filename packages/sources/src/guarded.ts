@@ -384,7 +384,14 @@ export class SourceFanout {
     scope: Scope,
     cursor: string | undefined,
     limit: number,
-    options: { timeoutMs: number; signal?: AbortSignal; reserve?: number; reuse?: ListReuse },
+    options: {
+      timeoutMs: number;
+      signal?: AbortSignal;
+      reserve?: number;
+      reuse?: ListReuse;
+      /** Awaited after the source answered and before its page is redacted (the sync's `syncIngestTurns`, D328). */
+      turn?: () => Promise<void>;
+    },
   ): Promise<ListPage | Exclude<FanoutStatus, "ok" | "cached" | "stale">> {
     if (!source.list) return "error";
     const timeout = AbortSignal.timeout(options.timeoutMs);
@@ -417,6 +424,7 @@ export class SourceFanout {
     s.limiter.release("ok");
     s.breaker.success(epoch);
     try {
+      if (options.turn) await options.turn(); // Only when asked: an await here moves the funnel's card batching.
       return { items: await this.redactListed(page.items, signal, options.reuse), next: page.next };
     } catch {
       // Our gate failed, not the source: no page, and nothing unredacted held.

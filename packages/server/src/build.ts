@@ -62,6 +62,11 @@ export interface BuildOptions {
    */
   processes?: number;
   /**
+   * The tenant spend cap every model role shares, when the caller holds it (main.ts, for `/v1/usage` and the spend
+   * leases, D326, D327); otherwise `tenantSpendFor(models.usdPerTenantDay, processes)`.
+   */
+  tenants?: TenantSpend;
+  /**
    * The partner's clock (default `Date.now`): an embedding replaying a fixed world, such as `bun run demo` over the
    * simulated user, whose items are dated around that world's own "now" (D292).
    */
@@ -105,7 +110,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
   const models = options.models ?? NO_MODELS;
   const now = options.now ?? Date.now;
   // One cap per tenant per UTC day shared by every role, besides each role's own per-session and per-user-day caps.
-  const tenants = tenantSpendFor(models.usdPerTenantDay, options.processes);
+  const tenants = options.tenants ?? tenantSpendFor(models.usdPerTenantDay, options.processes);
   const budget = () => new Budget(DEFAULT_LIMITS, undefined, tenants);
   const cards =
     models.cards && config.cards

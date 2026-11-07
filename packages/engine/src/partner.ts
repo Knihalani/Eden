@@ -666,6 +666,7 @@ export class ContextPartner {
             timeoutMs: Math.max(c.sourceTimeoutMs, 5_000),
             demandTimeoutMs: c.sourceTimeoutMs,
             push: c.syncPush,
+            ingestTurns: c.syncIngestTurns,
             pushMaxStaleMs: c.syncPushMaxStaleMs,
             keepCut: c.syncKeepCut,
             sketch: c.routeSketch,
@@ -707,6 +708,9 @@ export class ContextPartner {
    * trial taught the source map that every source it would have cited went unused).
    */
   async observe(event: AgentEvent, options: { waitMs?: number; shadow?: boolean } = {}): Promise<ObserveResult> {
+    // A user frozen while idle (D325) is thawed in slices first, so other users' events do not wait behind it.
+    const thawing = this.deps.cache.ready(event);
+    if (thawing) await thawing;
     // `readerPush`: a request that acts is also read by the ask-time reader, as an ask of the engine's own; what it
     // flags is queued as a packet. The observe waits for it within its own wait, so an agent that never calls
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
@@ -1330,6 +1334,9 @@ export class ContextPartner {
       const all = await this.deps.sources(scope).catch((): Source[] => []);
       const source = all.find((x) => x.id === sourceId);
       if (!source || signal.aborted) return;
+      // D325: the poll reads the user's held copies; a frozen user is thawed in slices first (only when frozen).
+      const thawing = this.deps.cache.ready(scope);
+      if (thawing) await thawing;
       await sync.freshen(scope, [source], signal);
     })()
       .catch(() => {})
@@ -1361,6 +1368,30 @@ export class ContextPartner {
   }
 
   /**
+   * What this process holds for a tenant (D326, `/v1/usage`): users with a cache (frozen ones counted apart, D325),
+   * their items, and users the sync keeps current. Counts only, no ids or content.
+   */
+  tenantUsage(tenantId: string): { users: number; frozenUsers: number; items: number; syncedUsers: number } {
+    const c = this.deps.cache.tenantStats(tenantId);
+    return {
+      users: c.users,
+      frozenUsers: c.frozen,
+      items: c.items,
+      syncedUsers: this.sync?.tenantUsers(tenantId) ?? 0,
+    };
+  }
+
+  /**
+   * Null when the user's cache is not frozen; else when it is thawed (D325, `ItemCache.ready`). Every entry point that
+   * serves a user's items awaits it first (`observe`, `ask`, `checkAction`, `sourceItems`, a notice's revision poll;
+   * the server before a removal), so a thaw runs in slices and other users' requests do not wait behind it. A bare
+   * change notice reads no items and leaves a frozen user frozen.
+   */
+  ready(scope: Scope): Promise<void> | null {
+    return this.deps.cache.ready(scope);
+  }
+
+  /**
    * The action firewall (`actionCheck`; docs/research/econ-firewall.md): an agent's tool call, before it runs, checked
    * against what is held, with no model and no source call. The session's request and the call's arguments read as
    * words (`actionText`: its days written out, its amounts, names and references) make one cue; what the request's
@@ -1372,6 +1403,8 @@ export class ContextPartner {
    */
   async checkAction(event: AgentEvent): Promise<ActionCheck> {
     const t0 = performance.now();
+    const thawing = this.deps.cache.ready(event); // D325, as in `observe`.
+    if (thawing) await thawing;
     const proceed = (reason: string): ActionCheck => ({
       verdict: "proceed",
       finding: null,
@@ -1508,6 +1541,8 @@ export class ContextPartner {
 
   async ask(request: AskRequest, internal: AskInternal = {}): Promise<AskResponse> {
     const t0 = performance.now();
+    const thawing = this.deps.cache.ready(request); // D325, as in `observe`.
+    if (thawing) await thawing;
     const spans = this.spans;
     const root = spans?.open("ask", 0, { async: true });
     const s = this.session(request);
@@ -2348,6 +2383,8 @@ export class ContextPartner {
    */
   async sourceItems(scope: Scope, sourceId: string, items: ContextItem[]): Promise<number> {
     if (!this.config.syncPush || !this.sync || items.length === 0) return 0;
+    const thawing = this.ready(scope); // D325: a frozen user is thawed in slices, not all at once on this put.
+    if (thawing) await thawing;
     const own = items.filter((it) => it.sourceId === sourceId).slice(0, MAX_PUSHED_ITEMS);
     // The removal holding each id gone before the redaction (0: none). These items came after that removal, so they
     // revive it (D160).

@@ -352,6 +352,17 @@ gain items (the sync ticking every minute, a working day of requests and asks, a
 budget) and prints listing, search and card calls per day: the instrument for the sweep, the polls and per-day card
 cost (docs/research/a13-scale.md). 1,000 sources × 20 items × 3 days runs in ~10 s; × 300 items in ~2 min.
 
+## Many users per process (2026-11-07, A14, D325–D329)
+
+`bun packages/engine/bench/users.bench.ts [users=1000] [itemsPerUser=500] [--world] [--no-freeze] [--waves=K]`: the
+shipped wiring over N users with three instant connectors each; backfill CPU, memory per user live and frozen (D325;
+JS heap plus `external`, which `heapUsed` alone leaves out: typed-array stores, most of an index and every packed
+text; and RSS read once it stops falling), thaw time per user, the sliced freeze and thaw's event-loop lag.
+`--waves=4` is the steady state where three quarters of the users are idle. `bun packages/engine/bench/storm.bench.ts
+[users=300] [itemsPerUser=1000] [--config=<json>]`: a cold-start storm on the wall clock with 20-80 ms connectors
+while warm users send events (open loop): storm time and their `observe` p99. Figures:
+docs/research/a14-scale-users.md. A change to the cache, the sync's ingest or per-user state reports both.
+
 ## Scale anchors: memory per user and ingest cost (2026-11-03, 4-core container shared with other agents, Bun 1.4.4)
 
 `bun packages/engine/bench/ingest.bench.ts [users=200] [itemsPerUser=500]` syncs that many users through the real path

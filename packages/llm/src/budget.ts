@@ -56,11 +56,31 @@ export class TenantSpend {
   /** The tally a call of `estimateUsd` for this user key would be charged to, or null past the tenant's cap. */
   tally(user: string, estimateUsd: number): Tally | null {
     const slash = user.indexOf("/");
-    const key = this.key(slash < 0 ? user : user.slice(0, slash));
+    const tenant = slash < 0 ? user : user.slice(0, slash);
+    const key = this.key(tenant);
     const t = this.days.get(key) ?? { calls: 0, usd: 0 };
-    if (t.usd + estimateUsd > this.usdPerTenantDay) return null;
+    if (t.usd + estimateUsd > this.capFor(tenant, key.slice(tenant.length + 1), t.usd)) return null;
     this.days.set(key, t);
     return t;
+  }
+
+  /**
+   * The tenant's cap today, read at every tally with what it has spent so far: `usdPerTenantDay` here. A subclass
+   * whose cap is granted from elsewhere (the server's spend leases across processes, D327) answers its own.
+   */
+  protected capFor(_tenant: string, _day: string, _spentUsd: number): number {
+    return this.usdPerTenantDay;
+  }
+
+  /** The tenant's model calls today. */
+  calls(tenant: string): number {
+    return this.days.get(this.key(tenant))?.calls ?? 0;
+  }
+
+  /** The tenant's cap today (`capFor`), for reports: what this process may spend for it. */
+  capOf(tenant: string): number {
+    const key = this.key(tenant);
+    return this.capFor(tenant, key.slice(tenant.length + 1), this.days.get(key)?.usd ?? 0);
   }
 
   /** What the tenant spent today (estimates until settled). */

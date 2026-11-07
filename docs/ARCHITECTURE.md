@@ -89,6 +89,13 @@ and 3.36x on the market `hosted` profile (4,126 against 1,229, lowest 3.20x); th
 by about 650 MB for about 100 users, against about 1,350 MB for all 400 in one process (RSS end minus start; every
 process also held about 490 MB of sim worlds that a real server does not). Size a box by children, not by users.
 
+`POST /v1/usage` (D326) reports a tenant's day: model spend and calls against the cap, requests by route, users held
+(frozen ones apart) and items; the router sends it to every child and sums the answers. Per-tenant spend caps are
+divided by N in each child (D163) unless the trial `EDEN_SPEND_LEASES=1` is on (D327, `spend-lease.ts`): the router
+then keeps one ledger per tenant and UTC day and grants each child its spend in chunks of cap/(4N), so a tenant's
+children together never pass the cap and one busy child can reach at least three quarters of it. The rate limit is
+still divided by N.
+
 ## The two speeds
 
 **Fast path** (every event, no network call and no model call, a few ms; it may write learning outcomes to the local
@@ -493,6 +500,18 @@ clear. Index and tallies are built from the plain text before it is packed; a re
 keeps the held bytes. Sim-world text, where one arrow or dash makes a whole JS string two bytes a character, costs
 about 1.6x less heap per synced user, for 1.2-1.3x the backfill CPU.
 
+A user neither read nor written for `freezeIdleMs` (30 minutes, at least two expiry ticks) is frozen at the next
+tick (D325, `FrozenUser`): their entries and tallies become one zstd-compressed JSON blob in memory (D8: never on
+disk) and their vocabulary, index, sketcher and entry objects are let go. Metadata reads (`revision`,
+`syncedCount`) answer from the frozen record; any other read or write thaws the user into the same state (items in
+the same order, docs indexed in their old insertion order so ties rank as before, the same revision, tallies,
+probes and sketches), so every answer is the same (`cache-freeze.test.ts` compares a freezing cache with a twin
+that never freezes). On the timer, freezes and the expiry of frozen users run as background jobs of one slice
+scheduler (`ItemCache.pump`: a few milliseconds of work per event-loop turn, one job at a time); the partner's
+`observe`, `ask` and `checkAction` first await `cache.ready(scope)`, which thaws a frozen user as an urgent job of the
+same scheduler, so a burst of returning users queues instead of stalling every other request. Figures:
+docs/research/a14-scale-users.md.
+
 Dates in items are read the same on every host: `parseWhen` (`grounding.ts`) reads a zone-less date or date-time (a
 `Date:` header without a zone, a calendar start with no offset, "14 Oct 2026") as UTC, not the server process's local
 zone, and leaves strings with a zone ("Z" in either case, "+01:00", "GMT+1") and ISO bare dates to `Date.parse`. An
@@ -517,4 +536,5 @@ tenant's. A shadow mode reports and decides but injects nothing.
 Per-user MCP connections with OAuth and a token vault; persistent session state;
 streaming delivery; a richer graph (entity resolution, relations, freshness);
 learned situation classification; per-agent (not just per-user) learning; multi-machine deployment (the router,
-D163, spreads users over processes on one machine; the caps it splits are per process, not shared).
+D163, spreads users over processes on one machine; its rate caps are split per process, and model spend is shared
+only under the D327 trial's leases).
