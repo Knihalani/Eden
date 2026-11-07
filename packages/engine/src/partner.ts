@@ -260,8 +260,8 @@ interface Session {
    * the latest: the agent's own events move `turn` within one request, a new user message moves this.
    */
   requests: number;
-  /** The session's turn when its latest user message arrived (`pushReshow`: what was handed before it is another request's). */
-  requestTurn: number;
+  /** `pushReshow` (D340): by item, the request (`requests`) it was last handed out in; at most `MAX_HANDED_IN`. */
+  handedIn: Map<string, number>;
   /** The session's last `EXPLAIN_TRACES` traces, oldest first (`explain`, D277). */
   traces: Trace[];
   lastActive: number;
@@ -322,6 +322,8 @@ interface Session {
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
 }
 
+/** Items whose hand-out request a session keeps (`pushReshow`, D340): far above what a day's packets cite. */
+const MAX_HANDED_IN = 512;
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
 
@@ -739,10 +741,7 @@ export class ContextPartner {
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
     this.sync?.track(s.scope, this.now());
     s.turn++;
-    if (event.kind === "user_message") {
-      s.requests++;
-      s.requestTurn = s.turn;
-    }
+    if (event.kind === "user_message") s.requests++;
     const prep = spans?.open("observe.prep", root!.id);
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
@@ -1985,13 +1984,17 @@ export class ContextPartner {
   }
 
   /**
-   * `pushReshow` (D340): the item was handed out in this session for an earlier request (its ledger entry is older than
-   * the latest user message), so this request's candidates may hand it again if it passes the constraint test (the
-   * caller checks). Never one handed for this request.
+   * `pushReshow` (D340): the item was handed out in this session for an earlier request (`handedIn`: the agent took it
+   * before the latest user message), so this request's candidates may hand it again if it passes the constraint test
+   * (the caller checks). Never one handed for this request, nor one still queued in a packet the agent has not taken.
    */
   private handedBefore(s: Session, id: string): boolean {
-    const at = s.ledger.entry(id)?.turn;
-    return at !== undefined && at < s.requestTurn;
+    // Handed out (taken by the agent) for an earlier request: a packet of the last request taken with this one's
+    // observe counts as this request's.
+    const handed = s.handedIn.get(id);
+    if (handed === undefined || handed >= s.requests) return false;
+    // Still queued in a packet the agent has not taken: it is handed with that one, not again.
+    return !s.pending.some((p) => p.citations.some((c) => c.itemId === id));
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
@@ -2249,7 +2252,7 @@ export class ContextPartner {
       key,
       turn: 0,
       requests: 0,
-      requestTurn: 0,
+      handedIn: new Map(),
       traces: [],
       lastActive: now,
       window: [],
@@ -2334,6 +2337,14 @@ export class ContextPartner {
     if (built?.copies) {
       this.watchCopies(s, built.copies);
       built.copies = undefined;
+    }
+    // `pushReshow` (D340): the request each item was last handed out in (what the agent holds, not what was queued).
+    if (this.config.pushReshow) {
+      for (const c of injection.citations) {
+        s.handedIn.delete(c.itemId);
+        s.handedIn.set(c.itemId, s.requests);
+      }
+      while (s.handedIn.size > MAX_HANDED_IN) s.handedIn.delete(s.handedIn.keys().next().value!);
     }
     if (!built || s.outstanding.has(injection.id)) return;
     if (this.recordedOf(s.scope)?.has(injection.id)) return;

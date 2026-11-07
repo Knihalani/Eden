@@ -293,9 +293,11 @@ interface SessionState {
   open: boolean;
   /** Turns the harness counted since the session (re)opened: events, as `observe` counts them. */
   turn: number;
+  /** User messages so far (`pushReshow`, D340: a later request may hand a candidate again). */
+  requests: number;
   lastActive: number;
-  /** Not-twice: `itemId \0 title` → the turn and op it was handed in, its reason, whether a candidates push. */
-  handed: Map<string, { turn: number; candidates: boolean; op: number; reason: string }>;
+  /** Not-twice: `itemId \0 title` → the turn, request and op it was handed in, its reason, if a candidates push. */
+  handed: Map<string, { turn: number; request: number; candidates: boolean; op: number; reason: string }>;
 }
 
 export interface WorldOptions {
@@ -386,7 +388,7 @@ export class World {
     const key = `${user.tag}#${sessionId}`;
     let st = this.sessions.get(key);
     if (!st) {
-      st = { open: false, turn: 0, lastActive: this.clock, handed: new Map() };
+      st = { open: false, turn: 0, requests: 0, lastActive: this.clock, handed: new Map() };
       this.sessions.set(key, st);
     }
     return st;
@@ -398,6 +400,7 @@ export class World {
     // A session idle past `sessionIdleMs` may have been swept: its ledger went with it.
     if (!st.open || this.clock - st.lastActive >= this.idleMs) {
       st.turn = 0;
+      st.requests = 0;
       st.handed.clear();
     }
     st.open = true;
@@ -487,7 +490,10 @@ export class World {
           // ledger before its awaits, and the slower one may deliver what the faster just did: a known race, kept
           // (docs/research/cl-cl8.md, "Repeats"; D258 deleted `pushCandidateDedup`, which saved nothing).
           const race = was.candidates !== candidates;
-          if (!race) {
+          // `pushReshow` (D340): a candidate handed for an earlier request may be handed again for a later one; never
+          // twice for one request (an untaken packet of the last request and the new push's in one take is a repeat).
+          const reshown = candidates && was.candidates && this.partner.config.pushReshow && was.request < st.requests;
+          if (!race && !reshown) {
             this.violate(
               "not-twice",
               `${own}/${h.sessionId}: ${c.itemId} "${c.title}" handed at op ${was.op} (turn ${was.turn}, ` +
@@ -495,7 +501,7 @@ export class World {
             );
           }
         }
-        st.handed.set(key, { turn: st.turn, candidates, op: h.op, reason });
+        st.handed.set(key, { turn: st.turn, request: st.requests, candidates, op: h.op, reason });
       }
     }
   }
@@ -618,7 +624,8 @@ export class World {
         kind === "tool_result"
           ? ({ ...ref, at: this.clock, kind, tool: "read_mail", output: text } as AgentEvent)
           : ({ ...ref, at: this.clock, kind, text } as AgentEvent);
-      this.touch(user, sessionId, true);
+      const st = this.touch(user, sessionId, true);
+      if (kind === "user_message") st.requests++;
       return this.partner
         .observe(e, waitMs === undefined ? {} : { waitMs })
         .then((r) => r.injection && this.injectionOut(user, sessionId, "observe", r.injection, k));

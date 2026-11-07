@@ -1,5 +1,6 @@
 {
   "verifyDelivery": false,
   "readerVerifyAfter": false,
-  "revisionNotice": false
+  "revisionNotice": false,
+  "revisionDiff": false
 }

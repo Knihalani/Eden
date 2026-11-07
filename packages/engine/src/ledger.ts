@@ -110,7 +110,10 @@ export class Ledger {
       if (at >= 0) all.splice(at, 1);
       all.push(t);
     }
-    this.shown.set(itemId, all.length ? { version, sourceId, times: all.slice(-MAX_SHOWN_TIMES) } : { version, sourceId });
+    this.shown.set(
+      itemId,
+      all.length ? { version, sourceId, times: all.slice(-MAX_SHOWN_TIMES) } : { version, sourceId },
+    );
     while (this.shown.size > MAX_SHOWN_COPIES) this.shown.delete(this.shown.keys().next().value as string);
   }
 

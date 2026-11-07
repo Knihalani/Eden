@@ -97,9 +97,9 @@ async function moved(text: string, config: Record<string, unknown> = {}) {
 
 describe("timesOf", () => {
   test("clock times, am/pm hours, day-month dates and weekdays, lowercased and distinct", () => {
-    expect(timesOf({ title: "Call", text: "Call at 9:15 or 14:00, else 3pm on Friday 12 November (Nov 14 too)." })).toEqual(
-      ["9:15", "14:00", "3pm", "friday", "12 november", "nov 14"],
-    );
+    expect(
+      timesOf({ title: "Call", text: "Call at 9:15 or 14:00, else 3pm on Friday 12 November (Nov 14 too)." }),
+    ).toEqual(["9:15", "14:00", "3pm", "friday", "12 november", "nov 14"]);
     expect(timesOf({ title: "Price", text: "It costs 3.45 and 12 units; version 2:1 ratio" })).toEqual([]);
   });
 });

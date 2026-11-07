@@ -22,8 +22,16 @@ const item = (id: string, title: string, text: string): ContextItem => ({
   text,
   updatedAt: NOW - 24 * HOUR,
 });
-const HOLD = item("hold", "Harlow venue", "Payments to Harlow are on hold until the dispute over the venue deposit ends.");
-const PLAIN = item("plain", "Harlow invoice", "Harlow invoice for the venue deposit: the PDF is attached, ref HV-1042.");
+const HOLD = item(
+  "hold",
+  "Harlow venue",
+  "Payments to Harlow are on hold until the dispute over the venue deposit ends.",
+);
+const PLAIN = item(
+  "plain",
+  "Harlow invoice",
+  "Harlow invoice for the venue deposit: the PDF is attached, ref HV-1042.",
+);
 const REQUEST = "Pay the Harlow invoice for the venue deposit today.";
 
 function setup(config: Record<string, unknown>) {
@@ -50,8 +58,9 @@ function setup(config: Record<string, unknown>) {
 }
 
 const ref = (sessionId = "s1") => ({ tenantId: "t", userId: "u1", sessionId });
-const ev = (kind: string, text: string, sessionId = "s1") =>
-  ({ ...ref(sessionId), at: NOW, kind, text }) as AgentEvent;
+const ev = (kind: string, text: string, sessionId = "s1") => ({ ...ref(sessionId), at: NOW, kind, text }) as AgentEvent;
+/** Long enough for a push started by an observe that did not wait to queue its packet. */
+const settle = () => new Promise((r) => setTimeout(r, 600));
 const say = (p: ContextPartner, text: string, sessionId = "s1") =>
   p.observe(ev("user_message", text, sessionId), { waitMs: 2_000 });
 const handed = (p: ContextPartner, sessionId = "s1") =>
@@ -97,6 +106,37 @@ describe("pushReshow (D340)", () => {
     await p.observe(ev("agent_message", "Looking into the Harlow venue deposit invoice now."));
     await p.observe(ev("tool_result", "Harlow invoice for the venue deposit: HV-1042, due today."));
     expect(handed(p)).toEqual([]);
+  });
+
+  test("on: a packet of the last request still untaken when the next arrives is not doubled by a re-show", async () => {
+    const p = setup({ pushReshow: true });
+    await say(p, REQUEST);
+    expect(handed(p)).toContain(HOLD.id);
+    // The second request's push re-shows it, queued; the agent has not taken it when the third arrives.
+    await p.observe(ev("user_message", `Also: ${REQUEST}`), { waitMs: 0 });
+    await settle();
+    // An integration that takes packets later (no wait on observe): the third push runs while the second's is queued.
+    const third = await p.observe(ev("user_message", `Then: ${REQUEST}`), { waitMs: 0 });
+    await settle();
+    const got = [third.injection, ...p.takePending(ref())].filter((x) => x !== null);
+    const holds = got.flatMap((x) => x!.citations.map((c) => c.itemId)).filter((id) => id === HOLD.id);
+    expect(holds.length).toBe(1);
+  });
+
+  test("on: a packet of the last request handed with this one's observe counts as this request's", async () => {
+    const p = setup({ pushReshow: true });
+    await say(p, REQUEST);
+    expect(handed(p)).toContain(HOLD.id);
+    await p.observe(ev("user_message", `Also: ${REQUEST}`), { waitMs: 0 });
+    await settle();
+    // Taken now, in the third request: the third request's push does not hand it again.
+    const third = p.observe(ev("user_message", `Then: ${REQUEST}`), { waitMs: 2_000 });
+    const early = p.takePending(ref());
+    const rest = await third;
+    await settle();
+    const got = [...early, rest.injection, ...p.takePending(ref())].filter((x) => x !== null);
+    const holds = got.flatMap((x) => x!.citations.map((c) => c.itemId)).filter((id) => id === HOLD.id);
+    expect(holds.length).toBe(1);
   });
 
   test("isolation: what one session was handed is not another's", async () => {

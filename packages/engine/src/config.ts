@@ -489,20 +489,22 @@ export interface EngineConfig {
    */
   pushCandidates: number;
   /**
-   * Trial (D340, A17; owner repo owner, ends 2026-12-07): with `pushCandidates`, a candidate handed out in this
-   * session for an earlier request is handed again when it ranks among this request's candidates and passes
-   * `readerGate`'s constraint test (a plain item is not repeated: it stays in the transcript), rather than kept back by
-   * the not-twice ledger. Over a user's day an item constraint-worded enough to rank for one request is often
-   * pushed first for another (where the agent was told to ignore what does not fit); at its own request the ledger then
-   * kept it back, and the agent rarely went back to it (docs/research/a17-long-quality.md). Never twice within one
-   * request. Off: the ledger's cooldown holds, as before.
+   * D340 (A17, promoted under D112; on in the default, part `candidates`): with `pushCandidates`, a candidate handed
+   * out in this session for an earlier request is handed again when it ranks among this request's candidates and
+   * passes `readerGate`'s constraint test (a plain item is not repeated: it stays in the transcript), rather than kept
+   * back by the not-twice ledger. Over a user's day an item constraint-worded enough to rank for one request is often
+   * pushed first for another (where the agent was told to ignore what does not fit); at its own request the ledger
+   * then kept it back, and the agent rarely went back to it. Never twice within one request. Off: the ledger's
+   * cooldown holds. Over a user's days: hidden facts raised +7.5 points pooled (+1.6..+14.0), concerns flat, agent
+   * tokens +$0.012-0.017 per 1k tasks (docs/research/a17-long-quality.md).
    */
   pushReshow: boolean;
   /**
-   * Trial (D342, A17; owner repo owner, ends 2026-12-07): with `revisionNotice`, an "updated:" line also names the
-   * times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier versions that
-   * the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update reached the
-   * agent and its recap still named the old time; this says outright which one no longer stands. No model, no call.
+   * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
+   * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
+   * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
+   * reached the agent and its recap still named the old time; this says outright which one no longer stands. No
+   * model, no call.
    */
   revisionDiff: boolean;
 }
@@ -626,6 +628,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
-  pushReshow: false,
-  revisionDiff: false,
+  pushReshow: true,
+  revisionDiff: true,
 };

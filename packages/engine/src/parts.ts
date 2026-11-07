@@ -58,9 +58,9 @@ export const PARTS = {
   routing: { routeLocalHits: false },
   /**
    * A delivered item its source signalled a change to since it was read is read again first (D126); a handed item
-   * changed at its source is sent again as an "updated:" packet (D205).
+   * changed at its source is sent again as an "updated:" packet (D205), naming the times it no longer has (D342).
    */
-  freshness: { verifyDelivery: false, readerVerifyAfter: false, revisionNotice: false },
+  freshness: { verifyDelivery: false, readerVerifyAfter: false, revisionNotice: false, revisionDiff: false },
   /** Implication cards (D59, D66), and with them the intent index, which their calls write. */
   cards: { cards: false, cardsEconomy: false, intent: false, cardsLean: false, intentByKind: false },
   /** The intent index (D87, D109), what it reads (`cardsLean`, D125) and its carded cut (`intentByKind`, D200). */
@@ -79,12 +79,13 @@ export const PARTS = {
     askReaderPool: 30,
     askReaderItemChars: 400,
     pushCandidates: 0,
+    pushReshow: false,
   },
   /**
    * The push's candidates for the agent to judge, in place of the reader's push and ask readings (D236, D237): out,
-   * the reader reads both again.
+   * the reader reads both again. With them, a candidate handed for an earlier request is handed again (D340).
    */
-  candidates: { pushCandidates: 0 },
+  candidates: { pushCandidates: 0, pushReshow: false },
   /** A lookup does not wait for its probes past its own search (D47's grace, 100 ms, taken out). */
   probeGrace: { probeGraceMs: 100 },
 } satisfies Record<string, Partial<EngineConfig>>;
