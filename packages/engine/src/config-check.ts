@@ -15,7 +15,7 @@
  *   the merged preset + override, never an override alone, so a child set under a preset that turns its parent on
  *   is accepted.
  */
-import { DEFAULT_CONFIG, RULE_PATHS, type EngineConfig } from "./config";
+import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { CORE_CONFIG } from "./parts";
 import { READER_KINDS } from "./reader";
 
@@ -53,8 +53,6 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerPushBehind: "reader",
   readerGate: "reader",
   readerGateVisits: "reader",
-  ruleVeto: "reader",
-  ruleVetoNamed: "reader",
 };
 
 /**
@@ -114,8 +112,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerPushKinds: PUSH,
   readerPushWaitMs: PUSH,
   readerPushBehind: [...PUSH, ...POLL_BEHIND],
-  ruleVeto: PUSH,
-  ruleVetoNamed: [...PUSH, "ruleVeto"],
   anticipateCalls: ["anticipate"],
   anticipateSessionCalls: ["anticipate"],
   anticipateOff: ["anticipate"],
@@ -189,7 +185,6 @@ export const ANTICIPATE_PARTS: readonly string[] = ["tools", "serve", "names", "
 const NAMES: Partial<Record<Key, readonly string[]>> = {
   anticipateOff: ANTICIPATE_PARTS,
   readerPushKinds: READER_KINDS,
-  rulesOff: RULE_PATHS,
 };
 
 export interface ConfigCheckOptions {

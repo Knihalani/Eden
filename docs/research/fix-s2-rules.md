@@ -2,7 +2,7 @@
 
 Status: results, 2026-11-07. Plan: [realuse-1-weak-points.md](realuse-1-weak-points.md) issue 2. Decisions D195–D197.
 
-**Spent: $SPENT** (ledger `.local/ledger.jsonl`, every label `s2-*`; Anthropic direct, `claude-haiku-5-5` in every
+**Spent: $3.0121** (ledger `.local/ledger.jsonl`, every label `s2-*`; Anthropic direct, `claude-haiku-5-5` in every
 role, `OPENROUTER_API_KEY` unset, `--spend-cap 4 --spend-headroom 0.3`). Lab transport (D97), not the shipped
 OpenRouter route.
 
@@ -89,11 +89,31 @@ false concerns: the agent was already dismissing those items. What it removes th
 reader rejected by name (foodbank-shift and teatime-visit lost on both seeds of held-out 10, one fewer item each), and
 the hold costs wall time where Eden has nothing to add. The label moved nothing measurable.
 
-FALLBACK_SECTION
+### The fallback retired, live
+
+`rulesOff: ["fallback"]` (the best $0 retirement) ran as one more arm, `eden~nofb`, in its own processes over
+held-out 10–14 seeds 41–42 (ledger `s2-nofb-*`), paired by task with the main runs' `eden` arm (another process, so
+the pair carries run-to-run noise as well; `nofb.json`):
+
+| suites (n per kind)        | measure                  | eden  | no fallback − eden       |
+| -------------------------- | ------------------------ | ----- | ------------------------ |
+| held-out 10–13, 41–42 (256) | hidden facts raised     | 72.3% | −2.3 (−6.6..+2.0)        |
+|                            | false concerns (control) | 3.5%  | 0.0 (−2.0..+2.0)         |
+|                            | items injected, control  | 0.75  | 0.61                     |
+| held-out 14, 41–42 (64)    | hidden facts raised      | 71.9% | −1.6 (−9.4..+6.3)        |
+|                            | false / neutral concerns | 0 / 0 | 0.0 / 0.0                |
 
 ## Outcomes
 
-OUTCOMES
+None of the three meets the bar (false concerns lower, no significant hidden loss, no extra paid cost), so none is
+promoted and all are deleted with their code and tests (D195 veto, D196 retirement, D197 label; the code is in
+commit 6659406b). What stays: the funnel's per-rule precision table (`rulePrecisionLines`), reporting only.
+
+What this says about issue 2: the rule paths do put most decoys in front of the agent, but the live agent sets them
+aside. Removing a fifth to a sixth of the decoy items on controls (veto, retirement) left false concerns where they
+were (3.1–3.5% on held-out 10–13), so the +2.5-point rise RealUse-1 measured is not explained by rule-path decoy
+items alone. Likelier sources to examine next, unmeasured here: what the reader itself flags on controls (23 decoys
+flagged on train), the ask's listed-only items (45), and the wording of the push packet. Held-out 15 was not run.
 
 ## Reproduce
 
