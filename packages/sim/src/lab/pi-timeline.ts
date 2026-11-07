@@ -177,15 +177,15 @@ export function bootstrap(xs: number[], next: () => number, rounds = 2_000): { m
 }
 /**
  * The engine's spans (`spans.ts`, D56 telemetry) as this harness's timeline names: `slow`, `search`, `probe:<kind>`,
- * `probe-wait`, `refresh`, `judge`, `answer`, `ask`, and the moonshot subsystems' own (`sync.*`, `graph.walk`,
- * `cards.*`, `anticipate.*`). Source calls are timed by the harness's own wrapper (`watched`), not from here.
+ * `probe-wait`, `refresh`, `judge`, `answer`, `ask`, and the moonshot subsystems' own (`sync.*`, `cards.*`). Source
+ * calls are timed by the harness's own wrapper (`watched`), not from here.
  */
 export function piName(sp: EdenSpan): string | null {
   if (sp.name.startsWith("probe.")) return `probe:${sp.name.slice(6)}`;
   if (sp.name === "probes.grace") return "probe-wait";
   if (sp.name === "model") return sp.attrs?.role === "answer" ? "answer" : "judge";
-  const kept = ["slow", "search", "refresh", "ask", "graph.walk", "cards.match", "cards.make"];
-  if (kept.includes(sp.name) || sp.name.startsWith("sync.") || sp.name.startsWith("anticipate.")) return sp.name;
+  const kept = ["slow", "search", "refresh", "ask", "cards.match", "cards.make"];
+  if (kept.includes(sp.name) || sp.name.startsWith("sync.")) return sp.name;
   return null;
 }
 

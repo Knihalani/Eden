@@ -5,6 +5,8 @@
   "readerGate": false,
   "readerGateVisits": false,
   "readerPushBehind": false,
+  "readerVerifyAfter": false,
+  "readerReuse": false,
   "askReaderPool": 30,
   "askReaderItemChars": 400
 }

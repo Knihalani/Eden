@@ -24,8 +24,8 @@ interface EventBase extends Scope {
 export type AgentEvent =
   | (EventBase & { kind: "session_start"; agent?: string; metadata?: Record<string, string> })
   /**
-   * `draft`: the user is still typing it (a chat box's text before it is sent). Never a request: Eden only reads it
-   * ahead for what the agent will need (`anticipate`), and ignores it otherwise. The sent message follows as usual.
+   * `draft`: the user is still typing it (a chat box's text before it is sent). Never a request: Eden ignores it. The
+   * sent message follows as usual.
    * Before this field existed the server stripped unknown fields, so a client that already sent `draft: true` had its
    * draft handled as a sent message; now it is dropped whatever the flags (D60, D63).
    */
@@ -94,8 +94,9 @@ export interface AskResponse {
   /**
    * How each source the ask chose to search fared (D127), in the order it was chosen. `status` is one of "ok",
    * "cached" or "stale" (answered from the fan-out's live or held result), "local" (answered from the user's synced
-   * index), or "error", "timeout", "open" (circuit open), "busy" or "limited" (not answered). A source the router did
-   * not choose is not listed. An empty answer is an all-clear only when every listed source answered; otherwise the
+   * index), or, not answered: "error", "timeout", "open" (circuit open), "busy", "limited" (Eden's own rate limit
+   * skipped the call) or "throttled" (the connector answered 429, D212). A source the router did not choose is not
+   * listed. An empty answer is an all-clear only when every listed source answered; otherwise the
    * answer text names the sources that did not (the text carries it too, since an MCP caller sees only the text).
    * Optional and additive: absent from older servers and from the engine's own push readings.
    */

@@ -396,9 +396,9 @@ describe("syncPollBehind: review regressions", () => {
     expect(ids(p.takePending({ ...scope, sessionId: "s1" }))).toContain(itemId("mail", "offsite"));
   });
 
-  test("follow-ups run one at a time, with anticipate on or off", async () => {
-    for (const anticipate of [false, true]) {
-      const { p, src, warm, advance, now } = mk({ syncPollBehind: true, anticipate });
+  test("follow-ups run one at a time", async () => {
+    {
+      const { p, src, warm, advance, now } = mk({ syncPollBehind: true });
       await warm();
       advance(5 * HOUR);
       const open = p as unknown as { slowPath: (...a: unknown[]) => Promise<unknown> };
@@ -484,7 +484,7 @@ describe("syncPollBehind: the poll's calls are traced", () => {
       await settle(p);
     }
     await Bun.sleep(5);
-    const traced = traces.reduce((n, t) => n + t.sourceCalls + (t.anticipateCalls ?? 0), 0);
+    const traced = traces.reduce((n, t) => n + t.sourceCalls, 0);
     return { received: received() - before, traced, traces };
   };
 

@@ -1,5 +1,6 @@
 import { truncateUtf8, utf8Length } from "@eden/primitives";
 import type { Citation, ContextItem } from "@eden/protocol";
+import { safeBlock, safeLine } from "./line";
 import { isStopword } from "./text";
 
 /**
@@ -82,14 +83,16 @@ export function renderPacket(
     const room = options.maxBytes - bytes - 1;
     if (room < 40) break;
     const note = options.note?.(item);
-    const said = note ? `${READER_TAG}${inert(oneLine(note).replace(/\|/g, "/"))} | ` : "";
-    const named = oneLine(item.title);
-    const title = said + (named ? `${inert(named)}: ` : "");
+    const said = note ? `${READER_TAG}${safeLine(note).replace(/\|/g, "/")} | ` : "";
+    // One item, one line (D11, D221): `safeLine` removes every kind of line break, control and bidi character, so
+    // source text cannot forge another item's `- [source]` line inside the envelope.
+    const named = safeLine(item.title);
+    const title = said + (named ? `${named}: ` : "");
     // Collapse whitespace only in a prefix that can fill the room (a char is at least one byte once collapsed), not
     // across an 8 KB item that is then cut to a few hundred bytes (9% of end-to-end CPU; pipeline.bench.ts).
     const prefix = item.text.length > room * 2 + 64 ? item.text.slice(0, room * 2 + 64) : item.text;
     const cut = prefix.length < item.text.length;
-    let line = `- [${item.sourceId}] ${title}${inert(oneLine(prefix))}`;
+    let line = `- [${item.sourceId}] ${title}${safeLine(prefix)}`;
     const size = utf8Length(line);
     if (size > room || cut) line = truncateUtf8(line, room - 3) + "…"; // "…" is 3 bytes
     lines.push(line);
@@ -128,7 +131,7 @@ function saysNew(parts: readonly Part[]): boolean {
 
 /** An ask answer composed by the model, in the same envelope: it is derived from source text, so it is data too. */
 export function renderAnswer(answer: string): string {
-  return `${HEADER}\n${inert(answer.trim())}\n</context>`;
+  return `${HEADER}\n${safeBlock(answer).trim()}\n</context>`;
 }
 
 /**

@@ -33,7 +33,7 @@
  * - `-- --neutral`: also the `neutral` variant of the suites that build it (neutral.ts, held-out 14): the same
  *   requests with nothing planted, reported on NEUTRAL lines and in the JSON's `neutral` block, never in the score.
  * - `-- --wait-ms N` (the observe's wait) prints the deliveries made before the agent's first model call;
- *   `-- --overlap` sends each request while another lookup is in flight (slowPathQueue's case; scores not
+ *   `-- --overlap` sends each request while another lookup is in flight (the slow path busy; scores not
  *   comparable). docs/LAB.md 1c.
  *
  * The default reads with the reader: with no `-- --reader` the screen uses `--reader stub` ($0); a real reading
@@ -56,7 +56,14 @@ import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { flags, labConfig, parseJson } from "./flags";
 import { INTENT_FILE, INTENT_PATH, intentUncovered } from "./cards-disk";
-import { coverageLines, plantedCoverageLine, surfacedLines, type AskCoverage, type SurfacedRow } from "./ask-coverage";
+import {
+  coverageLines,
+  plantedCoverageLine,
+  rulePrecisionLines,
+  surfacedLines,
+  type AskCoverage,
+  type SurfacedRow,
+} from "./ask-coverage";
 import {
   amortisedCalls,
   callMismatches,
@@ -560,6 +567,8 @@ console.log(`  ${beforeModelLine(rows, passValue("wait-ms") || "default")}`);
 // D173 (reporting only; the O7 gates stay decoys in pool and total surfaced, D165): how the surfaced items were
 // surfaced, and the planted items' intent replay coverage, over the merged rows (each process prints only its block).
 for (const l of surfacedLines("TOTAL", rows as SurfacedRow[])) console.log(`  ${l}${tag}${inert}`);
+// S2's per-rule precision table (reporting only): each rule path's planted deliveries, flagged or not.
+for (const l of rulePrecisionLines("TOTAL", rows as SurfacedRow[])) console.log(`  ${l}${tag}${inert}`);
 const plantedLine = plantedCoverageLine(rows as SurfacedRow[]);
 if (plantedLine) console.log(`  intent: ${plantedLine}`);
 // `--ask-diag`: the rank -1 split by intent coverage (ask-coverage.ts), from the merged file's rows, so it covers the

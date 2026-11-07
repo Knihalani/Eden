@@ -6,6 +6,7 @@ import {
   intentPlace,
   plantedCoverageLine,
   surfacedBy,
+  rulePrecisionLines,
   surfacedLines,
   surfacedSplit,
   type AskCoverage,
@@ -187,6 +188,21 @@ describe("intentPlace (partner.ts intentFinds' cut, applied lab-side)", () => {
     // The engine's call returned nothing for it (fewer accepted hashes in its 2k search): past the cut.
     expect(intentPlace([], finds, "x", 2, 0.35, 6)).toMatchObject({ passes: true, rank: -1, pastCut: true });
   });
+  test("intentByKind (D200): a carded hit under the shared floor passes at its own, and past the cut it is placed", () => {
+    const byKind = { cardCoverage: 0.1, cardHits: 2 };
+    const full = Array.from({ length: 6 }, (_, i) => ({ ids: [`f${i}`], hit: hit(3, 0.9) }));
+    const weak = { ids: ["x"], hit: hit(2, 0.15), carded: true };
+    // Off: under the shared 0.35, a failing hit.
+    expect(intentPlace([weak], [weak], "x", 2, 0.35, 6)).toMatchObject({ passes: false });
+    // On, inside the cut: placed by its own floor.
+    expect(intentPlace([weak], [weak], "x", 2, 0.35, 6, byKind)).toMatchObject({ passes: true, rank: 0 });
+    // On, behind 6 passing raw hits: one of the carded places after them, as the engine keeps it (keepIntents).
+    const rows = [...full, weak];
+    expect(intentPlace(rows, rows, "x", 2, 0.35, 6, byKind)).toMatchObject({ rank: 6, pastCut: false });
+    // The same hit uncarded stays under the shared floor.
+    const plain = [...full, { ...weak, carded: false }];
+    expect(intentPlace(plain, plain, "x", 2, 0.35, 6, byKind)).toMatchObject({ passes: false });
+  });
   test("past the cut lands in its own bucket, apart from over thresholds", () => {
     const past = { ...base, intent: { coverage: 0.8, matched: 3, passes: true, rank: -1, pastCut: true } };
     expect(coverageBucket({ rank: -1, cached: true, coverage: past })).toBe("past the intentHits cut");
@@ -239,6 +255,28 @@ describe("surfaced split (D173)", () => {
       "x decoys surfaced 1/1: flagged 0, rule path 1 (unknown 1), listed only 0",
     ]);
     expect(surfacedLines("x", [])).toEqual([]);
+  });
+  test("rule precision: every delivery by its path, flagged or not; the reader's own deliveries left out", () => {
+    const rows = [
+      t({ delivered: true, readerFlagged: true, poolHas: true, why: "reader" }),
+      t({ variant: "hidden", delivered: true, readerFlagged: true, poolHas: true, why: "grounded-conflict" }),
+      t({ variant: "hidden", delivered: true, poolHas: false, why: "grounded-conflict" }),
+      t({ delivered: true, poolHas: true, why: "grounded-conflict" }),
+      t({ delivered: true, poolHas: true, why: "fallback" }),
+      t({ delivered: true, poolHas: true, why: "fallback" }),
+      t({ askCited: true, poolHas: true }),
+    ];
+    expect(rulePrecisionLines("TOTAL", rows)).toEqual([
+      "TOTAL rule precision (delivered by path, hidden/decoys: all; unflagged; read unflagged):",
+      "TOTAL   grounded-conflict 2/1; 1/1; 0/1",
+      "TOTAL   fallback 0/2; 0/2; 0/2  decoys outnumber hidden",
+    ]);
+    expect(rulePrecisionLines("x", [t({ askCited: true })])).toEqual([]);
+    // No pool data (no reader): the read-unflagged column is left out rather than shown as 0/0.
+    expect(rulePrecisionLines("x", [t({ delivered: true, why: "fallback" })])).toEqual([
+      "x rule precision (delivered by path, hidden/decoys: all; unflagged):",
+      "x   fallback 0/1; 0/1  decoys outnumber hidden",
+    ]);
   });
   test("planted coverage: null without replay facts, a warning below 100%", () => {
     expect(plantedCoverageLine([t({})])).toBeNull();

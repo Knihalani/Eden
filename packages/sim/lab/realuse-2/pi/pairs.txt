@@ -1,0 +1,18 @@
+== counts: raised (hidden) / false concern (control) / any concern (neutral)
+tools     hidden 21/128  control 1/128  neutral 8/128  eden model calls/task 0.00
+eden      hidden 97/128  control 2/128  neutral 3/128  eden model calls/task 0.92
+both      hidden 76/128  control 4/128  neutral 6/128  eden model calls/task 0.75
+both+ask  hidden 88/128  control 1/128  neutral 6/128  eden model calls/task 0.76
+== paired differences a - b, bootstrap 95%
+eden - tools hidden n=128 rate +0.594 (+0.508..+0.680) wall s +0.220 (-0.145..+0.583)
+eden - tools control n=128 rate +0.008 (-0.016..+0.031) wall s +0.915 (+0.546..+1.274)
+eden - tools neutral n=128 rate -0.039 (-0.094..+0.008) wall s +1.000 (+0.650..+1.354)
+both+ask - tools hidden n=128 rate +0.523 (+0.438..+0.609) wall s +0.481 (+0.101..+0.850)
+both+ask - tools control n=128 rate +0.000 (-0.023..+0.023) wall s +0.729 (+0.401..+1.050)
+both+ask - tools neutral n=128 rate -0.016 (-0.062..+0.031) wall s +0.833 (+0.496..+1.174)
+both+ask - eden hidden n=128 rate -0.070 (-0.133..-0.008) wall s +0.261 (-0.078..+0.592)
+both+ask - eden control n=128 rate -0.008 (-0.023..+0.000) wall s -0.187 (-0.499..+0.113)
+both+ask - eden neutral n=128 rate +0.023 (-0.023..+0.070) wall s -0.167 (-0.495..+0.167)
+both - eden hidden n=128 rate -0.164 (-0.242..-0.094) wall s +0.525 (+0.192..+0.866)
+both - eden control n=128 rate +0.016 (-0.016..+0.047) wall s -0.073 (-0.422..+0.266)
+both - eden neutral n=128 rate +0.023 (-0.016..+0.062) wall s -0.323 (-0.634..-0.005)

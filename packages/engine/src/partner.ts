@@ -51,7 +51,6 @@ import {
   type Source,
   type SourceResolver,
 } from "@eden/sources";
-import { IntentPatterns, predict, PREDICT_NAMES } from "./anticipate";
 import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache, type Sketch } from "./cache";
 import { SyncManager } from "./sync";
 import { pooledSanitizer } from "./gate";
@@ -66,8 +65,8 @@ import {
   type Frame,
   type Verdict,
 } from "./conflict";
-import { cardVerdict, requestActions, STANDING_KINDS, type CardEnricher } from "./cards";
-import { intentTerms, stemWord } from "./intent";
+import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
+import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
 import {
   READER_MAX_ITEMS,
   readerFocus,
@@ -77,6 +76,7 @@ import {
   type ReaderInput,
   type ReaderRead,
   type ReaderKind,
+  type ReaderVerdict,
 } from "./reader";
 import {
   accounts,
@@ -90,7 +90,6 @@ import {
 } from "./firewall";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { ProbeEconomy, type ProbeKind } from "./economy";
-import { seedsOf, tieWords, type Walked } from "./kg";
 import { judgeMessages, parseJudge } from "./judge";
 import {
   namesParticipant,
@@ -192,8 +191,8 @@ export interface PartnerDeps {
 export interface CandidateDump {
   sessionId: string;
   turn: number;
-  /** Where the decision was made: the fast path, anticipation's early decision, or the lookup. */
-  path: "fast" | "early" | "lookup" | "served" | "ask";
+  /** Where the decision was made: the fast path or the lookup. */
+  path: "fast" | "lookup" | "served" | "ask";
   candidates: { id: string; facts: Facts }[];
   delivered: string[];
   /**
@@ -268,16 +267,8 @@ interface Session {
   closed: boolean;
   /** The planner's shadow lookup in flight, if any (shadow mode). */
   shadowing?: Promise<void>;
-  /** With `anticipate`: the session's background prefetch, made on its first event. */
-  ant?: Anticipation;
   /** Work lookups left running behind their answers: a poll and its follow-up (`afterPoll`), a judge (`judgeLater`). */
   behind?: Promise<void> | null;
-  /**
-   * With `slowPathQueue`: the latest request that arrived while the slow path was busy, looked up once it settles
-   * (`drainQueued`), and whether that drain is under way.
-   */
-  queuedCue?: { cue: Cue; t0: number; eventKind: string } | null;
-  draining?: boolean;
   /**
    * With `actionCheck`: the keys of the calls the firewall answered with a finding (`actionKey`, bounded by
    * `MAX_CHECKED`, oldest first). The same call made again is the agent's informed choice, and proceeds.
@@ -299,29 +290,15 @@ interface Session {
    * about it is read against what the user asked.
    */
   request?: Cue;
+  /**
+   * `readerReuse` (D193): the latest push's reading: the request it read (`requests` then), its pool's items
+   * with their content hashes, and its verdict (null when it gave none).
+   */
+  pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
 }
 
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
-
-/** A session's anticipation (`anticipate`): its prefetch in flight, the next one waiting, and what it has fetched. */
-interface Anticipation {
-  /** Source calls this session's prefetches made, against `anticipateSessionCalls`. */
-  calls: number;
-  running: Promise<void> | null;
-  /** The latest event that arrived while a prefetch ran: only it is read next (older ones are superseded). */
-  queued: { kind: string; text: string; at: number; lookup: boolean } | null;
-  /** Item ids the prefetches fetched or held ready, newest last (bounded: `MAX_PREFETCHED`). */
-  prefetched: Set<string>;
-  /** Names and days already prefetched in this session (lower case), so each is fetched once per session. */
-  asked: Set<string>;
-}
-
-/** Item ids a session's anticipation remembers as prefetched, and names and days it remembers as asked. */
-const MAX_PREFETCHED = 256;
-/** `slowPathQueue`: a request kept while the slow path was busy is dropped once it has waited this long (ms). */
-const QUEUED_CUE_MAX_AGE_MS = 10_000;
-const MAX_ASKED = 64;
 
 interface Cue {
   text: string;
@@ -385,7 +362,7 @@ type ProbeSend = (
   keep?: boolean,
   onAnswer?: (sourceId: string, page: ContextItem[]) => void,
 ) => Promise<ContextItem[]>;
-/** How a probe run differs from a lookup's own (`Partner.probe`); `anticipate` uses every one. */
+/** How a probe run differs from a lookup's own (`Partner.probe`); the action firewall's reads offline. */
 interface ProbeOpts {
   /** Source calls it may make (default `probeCalls`). */
   budget?: number;
@@ -395,10 +372,6 @@ interface ProbeOpts {
   cls?: ActionClass | null;
   /** The class is read from what is cached, with no call. */
   classOffline?: boolean;
-  /** No topic probe (a prefetch has only an event's words, not a request's). */
-  noTopic?: boolean;
-  /** Waited for (at most `probeGraceMs`) before any probe goes out: a prefetch of the same names still running. */
-  after?: Promise<void>;
   /** Synced sources whose copy is current (`sync`, D57): they answer from the local index, at no call. */
   local?: ReadonlySet<string> | null;
   /** The lookup's deadline (`performance.now()` time, D140); absent: `sourceTimeoutMs` from when the probes start. */
@@ -413,8 +386,6 @@ const SELF_DOMAIN_SHARE = 0.1;
 
 /** Each cue's frame (`conflict.ts`), read once and dropped with the cue. */
 const FRAMES = new WeakMap<Cue, Frame>();
-/** A lookup's knowledge-graph finds (`graph`), by item id, kept with its cue for delivery's learning. */
-const WALKS = new WeakMap<Cue, Map<string, Walked>>();
 
 /** Requests that act on someone, where an item they take part in is context (D44). */
 const ACTING = new Set<string>(["scheduling", "communication", "task", "travel"]);
@@ -447,8 +418,6 @@ interface Scored {
   beyond?: number;
   /** The item's document in the user's cache index, when ranked from it (for whole-term checks, `judgeTied`). */
   doc?: number;
-  /** Ranked only because the knowledge graph reached it (`graph`): no path but the graph's reads it. */
-  walkedOnly?: true;
   /** A whole cue entity is in the item (`rank`'s entity bonus). */
   entity?: true;
   /**
@@ -478,6 +447,8 @@ const STATUS_WORDS: Record<string, string> = {
   open: "failing, skipped",
   busy: "busy",
   limited: "rate-limited",
+  // The connector's own 429 (D212): the same words as our own limit's skip; to the agent both mean "try later".
+  throttled: "rate-limited",
 };
 
 interface Built {
@@ -485,8 +456,6 @@ interface Built {
   /** The delivered items, for the planner's delivery credit when the injection is handed out (D39). */
   items: { sourceId: string; id: string }[];
   text: string;
-  /** Edge types the knowledge graph reached the delivered items by (`graph`), learned from on use. */
-  graphMask: number;
   /**
    * With `askDedup`: the items and the text the agent is shown, noted as shown (`noteShown`) when the injection is
    * handed out, not when it is built: a queued packet the agent has not taken was shown nothing, and an ask before
@@ -494,6 +463,8 @@ interface Built {
    * noted.
    */
   shown?: { items: readonly ContextItem[]; text: string };
+  /** With `revisionNotice`: each item's version the agent holds once this is handed out (`noteShown`). */
+  copies?: { id: string; sourceId: string; version: number }[];
 }
 
 /**
@@ -514,6 +485,17 @@ export class ContextPartner {
   private readonly sessions = new Map<string, Session>();
   private readonly perTenant = new Map<string, number>();
   private readonly built = new WeakMap<Injection, Built>();
+  /**
+   * `revisionNotice`: by user scope key, the live sessions handed at least one item (`Ledger.noteShown`), so a store
+   * looks at those sessions alone; a session leaves on close. And the polls a change notice started for them
+   * (`revisionsSettled`).
+   */
+  private readonly watching = new Map<string, Set<Session>>();
+  private readonly revisionPolls = new Map<string, Promise<void>>();
+  /** By user and source: the notice poll's state (`pollRevised`), at most `MAX_REVISION_SOURCES`, idle ones dropped. */
+  private readonly revisionSources = new Map<string, RevisionSource>();
+  /** `stopSync` was called (and no `startSync` since): notices start no revision poll. */
+  private revisionsStopped = false;
   /**
    * `readerPushBehind`: what a push packet's delivery changed in its own session, so a second reading that withdraws
    * the packet untaken can undo it (`withdraw`). Keyed by the packet, so it goes with it.
@@ -541,13 +523,10 @@ export class ContextPartner {
    */
   readonly sync: SyncManager | null;
   private syncTimer: ReturnType<typeof setInterval> | null = null;
-  /** Which names followed which intents, per user (`anticipate`). */
-  private readonly patterns = new IntentPatterns();
 
   constructor(private readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
     this.now = deps.now ?? Date.now;
-    if (this.config.graph) deps.cache.enableGraph();
     const maxText = deps.cache.maxTextChars;
     const stats = this.config.spans ? new SpanStats() : null;
     const sink = deps.onSpan;
@@ -612,6 +591,7 @@ export class ContextPartner {
             onStored: (scope, items) => {
               this.enqueueCards(scope, items);
               this.recordMentions(scope, items);
+              this.queueRevised(scope, items);
             },
             tracer: spans,
           },
@@ -641,6 +621,7 @@ export class ContextPartner {
    * process alive, and a tick never overlaps another.
    */
   startSync(everyMs = 60_000): void {
+    this.revisionsStopped = false;
     if (!this.sync || this.syncTimer) return;
     const sync = this.sync;
     this.syncTimer = setInterval(() => void sync.tick(), everyMs);
@@ -650,6 +631,15 @@ export class ContextPartner {
   stopSync(): void {
     if (this.syncTimer) clearInterval(this.syncTimer);
     this.syncTimer = null;
+    // A revision poll held back by its gap would still list a source after the stop (wave-1 review). Its entry stays:
+    // its `at` keeps the gap for a later notice, and the map is bounded (`MAX_REVISION_SOURCES`).
+    // A poll still running starts no trailing one, and notices after the stop start none, until `startSync`.
+    this.revisionsStopped = true;
+    for (const st of this.revisionSources.values()) {
+      if (st.timer) clearTimeout(st.timer);
+      st.timer = null;
+      st.again = false;
+    }
   }
 
   async observe(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
@@ -701,18 +691,11 @@ export class ContextPartner {
       if (root) spans!.close(root);
       return { injection: null, pending: false };
     }
-    // A draft the user is still typing is never a request, and moves no turn: with `anticipate` it is read ahead for
-    // what the sent message will need; otherwise it is ignored (no session is even opened for it).
+    // A draft the user is still typing is never a request, and moves no turn: it is ignored (no session is even
+    // opened for it).
     if (event.kind === "user_message" && event.draft === true) {
-      if (!this.config.anticipate) {
-        if (root) spans!.close(root, { decision: "draft" });
-        return { injection: null, pending: false };
-      }
-      const s = this.session(event);
-      const text = sanitizeForStore(head(event.text, this.config.maxEventChars));
-      if (text) this.anticipate(s, "draft", text, event.at, false);
-      if (root) spans!.close(root, { session: s.id, decision: "draft" });
-      return { injection: null, pending: pendingOf(s) };
+      if (root) spans!.close(root, { decision: "draft" });
+      return { injection: null, pending: false };
     }
     const s = this.session(event);
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
@@ -762,17 +745,6 @@ export class ContextPartner {
 
     const queued = s.pending.shift() ?? null;
     const lookup = wantsLookup(event, text, terms, s.vocab);
-    // `anticipate`: every event with words is read for what the agent will need next, in the background. A request's
-    // own names and days are its lookup's to probe; read from it are its intent's (class, learned names).
-    const tool = event.kind === "tool_call" || event.kind === "tool_result";
-    if (
-      this.config.anticipate &&
-      text &&
-      event.kind !== "agent_message" &&
-      !(tool && this.config.anticipateOff.includes("tools"))
-    ) {
-      this.anticipate(s, event.kind, text, event.at, lookup);
-    }
     if (!lookup) {
       trace("skipped", event.kind);
       return reply(queued);
@@ -782,16 +754,10 @@ export class ContextPartner {
     if (event.kind === "external") cue.external = true;
     cue.arrived = this.now();
     if (root) cue.span = root.id;
-    // `askReader`: the request's own cue, kept so an ask reads what its frame, graph walk and verdicts already hold.
+    // `askReader`: the request's own cue, kept so an ask reads what its frame already holds.
     if (event.kind === "user_message" && this.config.askReader) {
       s.request = cue;
     }
-    // The request's names are its own lookup's to probe: a later event naming them again prefetches nothing.
-    if (s.ant)
-      this.markAsked(
-        s.ant,
-        cue.entities.map((e) => `n:${e.toLowerCase()}`),
-      );
     const last = s.cues.get(cue.key);
     const repeat = last !== undefined && s.turn - last < this.config.cueCooldownTurns;
 
@@ -803,19 +769,14 @@ export class ContextPartner {
     if (sure) spans!.close(sure, { sure: fast.length });
     // A stale cached copy is not delivered from here: the slow path re-reads it first (D40). A cue in cooldown is not
     // looked up again, but the cache may hold something new for it (another question about the same person).
-    // `anticipate` warms the cache before the request, so the fast path meets what only the slow path met before. With
-    // a judge, the request then goes to the slow path, whose judge sees every candidate the live search adds: a lone
-    // sure item from the cache would end the lookup before the second one that makes it the judge's call.
-    const judges = this.config.anticipate && this.deps.model !== null;
-    const answers = fast.length > 0 && !this.stale(s, fast) && !judges;
+    const answers = fast.length > 0 && !this.stale(s, fast);
     if (this.deps.onCandidates && !this.deps.model) {
       this.dump(s, "fast", this.factsOf(s, cue, ranked, event.kind), answers ? fast : [], answers ? "sure" : "");
     }
     if (answers) {
       this.markCue(s, cue);
       const injection = this.deliver(s, fast, "proactive", `cache:${cue.id}`, cue);
-      const ids = fast.map((x) => x.item.id);
-      trace("fast", cue.id, { itemIds: ids, ...this.prefetchedOf(s, ids) });
+      trace("fast", cue.id, { itemIds: fast.map((x) => x.item.id) });
       if (queued) s.pending.unshift(queued);
       return reply(injection);
     }
@@ -825,43 +786,19 @@ export class ContextPartner {
     }
     if (s.inflight) {
       // The cue is not put in cooldown: it was not looked up, so the next event may look it up.
-      if (this.config.slowPathQueue) {
-        // One slot, the latest wins: looked up once the slow path settles, its answer queued (`drainQueued`).
-        s.queuedCue = { cue, t0, eventKind: event.kind };
-        trace("silent", "slow path busy: queued");
-        if (!s.draining) this.drainQueued(s);
-        return reply(queued);
-      }
       trace("silent", "slow path busy");
       return reply(queued);
     }
 
     this.markCue(s, cue);
-    // `anticipate`, with no model: the request is first decided from what is held (the cache, the answers the
-    // prefetches warmed), with no call, and what that delivers is returned now; the slow path runs behind it either way
-    // and, after such a delivery, adds only what is sure or grounded (`slowPath`'s `served`).
-    const early =
-      this.config.anticipate && !this.config.anticipateOff.includes("serve")
-        ? this.tracedEarly(s, cue, event.kind, t0).catch((): Injection | null => null)
-        : null;
-    const slow = (
-      early
-        ? early.then((pre) => (s.closed ? null : this.slowPath(s, cue, t0, event.kind, pre !== null)))
-        : this.slowPath(s, cue, t0, event.kind)
-    ).finally(() => {
+    const slow = this.slowPath(s, cue, t0, event.kind).finally(() => {
       s.inflight = null;
     });
     s.inflight = slow;
     if (this.config.syncPollBehind && this.sync && this.config.syncOnDemand) {
-      this.afterPoll(s, cue, t0, event.kind, slow, early);
+      this.afterPoll(s, cue, t0, event.kind, slow);
     }
     const queueLater = () => void slow.then((inj) => inj && !s.closed && s.pending.push(inj));
-    const pre = early ? await early : null;
-    if (pre && !s.closed) {
-      queueLater();
-      if (queued) s.pending.unshift(queued);
-      return reply(pre);
-    }
     const waitMs = options.waitMs ?? 0;
     if (queued || waitMs <= 0) {
       queueLater();
@@ -881,20 +818,13 @@ export class ContextPartner {
 
   /**
    * `syncPollBehind`: once a lookup that answered from the index as it stood is done, and the poll it left running
-   * stored something, the lookup is made again on the fresh index and what it delivers is queued. After a delivery
-   * (or an early one, `anticipate`), or with a model, it adds only what is sure or grounded (`served`), as a lookup
-   * behind an early delivery does, plus the corrected copy of anything delivered that the poll changed (`revised`);
-   * after silence with no model it decides as the lookup would have had it waited. Follow-ups run one at a time
-   * after any lookup in flight, so each request made while the poll was out gets one. Never throws.
+   * stored something, the lookup is made again on the fresh index and what it delivers is queued. After a delivery,
+   * or with a model, it adds only what is sure or grounded (`served`), plus the corrected copy of anything delivered
+   * that the poll changed (`revised`); after silence with no model it decides as the lookup would have had it waited.
+   * Follow-ups run one at a time after any lookup in flight, so each request made while the poll was out gets one.
+   * Never throws.
    */
-  private afterPoll(
-    s: Session,
-    cue: Cue,
-    t0: number,
-    eventKind: string,
-    first: Promise<Injection | null>,
-    early: Promise<Injection | null> | null,
-  ): void {
+  private afterPoll(s: Session, cue: Cue, t0: number, eventKind: string, first: Promise<Injection | null>): void {
     const chain = first
       .then(async (injection) => {
         // `cue.polled` is set while the first lookup runs (its search), so it is read once the lookup is done.
@@ -902,7 +832,7 @@ export class ContextPartner {
         if (!fresh || s.closed) return;
         // With a model the follow-up is decided as one behind a delivery, so it never makes the event's second judge
         // call: what is sure or grounded, and corrections.
-        const served = injection !== null || (early !== null && (await early) !== null) || this.deps.model !== null;
+        const served = injection !== null || this.deps.model !== null;
         // Another lookup still running (a later request, or another request's follow-up) may have read the index
         // before this poll stored anything, so this cue is not covered by it: wait, then look again. The ledger keeps
         // what an earlier lookup delivered from being sent twice. Nothing awaits between the last check and taking
@@ -920,71 +850,6 @@ export class ContextPartner {
       })
       .catch(() => {});
     this.addBehind(s, chain);
-  }
-
-  /**
-   * `slowPathQueue`: looks up the request kept while the slow path was busy, once nothing is in flight, one at a time
-   * (as `afterPoll`'s follow-ups are), and queues what it delivers. A request kept while this runs is looked up next.
-   * One whose session closed, whose cue went into cooldown meanwhile, or that waited over `QUEUED_CUE_MAX_AGE_MS` is
-   * dropped (traced). It runs the slow path alone, without `anticipate`'s early answer (nobody waits on it, so
-   * answering early gains nothing), and with `syncPollBehind` it gets `afterPoll`'s follow-up as any lookup does.
-   * Never throws, never blocks the caller.
-   */
-  private drainQueued(s: Session): void {
-    s.draining = true;
-    const work = (async () => {
-      for (;;) {
-        // Nothing awaits between the last check and taking `s.inflight` below, so a follow-up woken in the same tick
-        // and this lookup still run one at a time.
-        while (s.inflight && !s.closed) await s.inflight.catch(() => null);
-        const next = s.queuedCue;
-        s.queuedCue = null;
-        if (!next || s.closed) {
-          // Cleared in this same tick: a request kept after this point starts a drain of its own.
-          s.draining = false;
-          return;
-        }
-        const { cue, t0, eventKind } = next;
-        const dropped = (reason: string) =>
-          this.trace({
-            sessionId: s.id,
-            turn: s.turn,
-            event: eventKind,
-            decision: "silent",
-            reason,
-            latencyMs: Math.round(performance.now() - t0),
-            sourceCalls: 0,
-            modelCalls: 0,
-            costUsd: 0,
-            itemIds: [],
-          });
-        const last = s.cues.get(cue.key);
-        if (last !== undefined && s.turn - last < this.config.cueCooldownTurns) {
-          dropped("queued cue: repeat");
-          continue;
-        }
-        if (this.now() - (cue.arrived ?? this.now()) > QUEUED_CUE_MAX_AGE_MS) {
-          dropped("queued cue: stale");
-          continue;
-        }
-        this.markCue(s, cue);
-        const run = this.slowPath(s, cue, t0, eventKind);
-        const tracked = run.finally(() => {
-          if (s.inflight === tracked) s.inflight = null;
-        });
-        s.inflight = tracked;
-        // As for any lookup: a poll it left running gets a follow-up on the fresh index (run after this loop's next
-        // lookup if one takes `s.inflight` first; both wait on it in turn).
-        if (this.config.syncPollBehind && this.sync && this.config.syncOnDemand) {
-          this.afterPoll(s, cue, t0, eventKind, tracked, null);
-        }
-        const injection = await tracked.catch(() => null);
-        if (injection && !s.closed) s.pending.push(injection);
-      }
-    })().catch(() => {
-      s.draining = false;
-    });
-    this.addBehind(s, work);
   }
 
   /** Work a lookup left running behind its answer (`syncPollBehind`), for harnesses to wait on. */
@@ -1066,17 +931,317 @@ export class ContextPartner {
   takePending(ref: Scope & { sessionId: string }): Injection[] {
     const s = this.sessions.get(sessionKey(ref));
     if (!s) return [];
-    const out = s.pending.splice(0);
+    // What the agent reads last about an item is its current copy (D232): a packet with a copy the cache has since
+    // replaced goes before the packets that render current copies, and an update made stale by a packet of the batch
+    // that renders the current copy is dropped. Queue order holds otherwise.
+    const out = this.currentLast(s, this.withoutCoveredUpdates(s.pending.splice(0)));
     for (const injection of out) this.handOut(s, injection);
     return out;
+  }
+
+  // ── revisionNotice (D205) ──
+
+  /**
+   * Resolves once the polls change notices started for this user's handed copies (`pollRevised`) have settled, with
+   * whatever "updated:" packets they queued. A poll held back by `REVISION_POLL_GAP_MS` is not waited for. For
+   * harnesses that stand in for the time between a change and the next request; an integration need not call it (the
+   * packet waits in the queue).
+   */
+  async revisionsSettled(scope: Scope): Promise<void> {
+    await this.revisionPolls.get(scopeKey(scope));
+  }
+
+  /** The agent now holds these versions: noted in the session's ledger, and the session watched for revisions. */
+  private watchCopies(s: Session, copies: readonly { id: string; sourceId: string; version: number }[]): void {
+    if (s.closed || copies.length === 0) return;
+    for (const c of copies) s.ledger.noteShown(c.id, c.version, c.sourceId);
+    // An update still queued whose every copy this hand-out rendered in the same version says nothing new.
+    const held = new Map(copies.map((c) => [c.id, c.version]));
+    for (let k = s.pending.length - 1; k >= 0; k--) {
+      const queued = this.built.get(s.pending[k]!);
+      if (s.pending[k]!.reason.startsWith(UPDATED) && queued?.copies?.every((c) => held.get(c.id) === c.version)) {
+        s.pending.splice(k, 1);
+      }
+    }
+    // A copy the cache has since replaced with other words (a revision stored while this packet waited in the queue)
+    // is announced now, behind it: the store found no session holding it yet (wave-1 review). Withdrawn packets are
+    // never handed, so nothing is announced for them; an update already queued for that version is the next take's.
+    if (this.config.revisionNotice) {
+      const now = this.now();
+      const queued = new Set<string>();
+      for (const p of s.pending) {
+        if (!p.reason.startsWith(UPDATED)) continue;
+        for (const c of this.built.get(p)?.copies ?? []) queued.add(`${c.id}\u0000${c.version}`);
+      }
+      const newer = copies.flatMap((c) => {
+        const cur = this.deps.cache.get(s.scope, c.id, now);
+        if (!cur) return [];
+        const v = versionOf(cur);
+        return v !== c.version && !queued.has(`${c.id}\u0000${v}`) ? [cur] : [];
+      });
+      this.queueUpdates(s, newer);
+    }
+    const key = scopeKey(s.scope);
+    let set = this.watching.get(key);
+    if (!set) this.watching.set(key, (set = new Set()));
+    set.add(s);
+  }
+
+  /**
+   * A batch about to be handed out, less each "updated:" packet whose every copy another packet of the batch renders in
+   * the same version (a re-read's update queued beside the delivery that re-read it).
+   */
+  private withoutCoveredUpdates(batch: Injection[]): Injection[] {
+    if (!this.config.revisionNotice || batch.length < 2) return batch;
+    const held = new Map<string, number>();
+    for (const i of batch) {
+      if (i.reason.startsWith(UPDATED)) continue;
+      for (const c of this.built.get(i)?.copies ?? []) held.set(c.id, c.version);
+    }
+    if (held.size === 0) return batch;
+    return batch.filter(
+      (i) => !i.reason.startsWith(UPDATED) || !this.built.get(i)?.copies?.every((c) => held.get(c.id) === c.version),
+    );
+  }
+
+  /** `takePending`'s batch, packets with a replaced copy first and stale updates a current packet covers dropped. */
+  private currentLast(s: Session, batch: Injection[]): Injection[] {
+    if (!this.config.revisionNotice || batch.length < 2) return batch;
+    const now = this.now();
+    const current = new Map<string, number | null>();
+    const versionNow = (id: string) => {
+      let v = current.get(id);
+      if (v === undefined) {
+        const cur = this.deps.cache.get(s.scope, id, now);
+        current.set(id, (v = cur ? versionOf(cur) : null));
+      }
+      return v;
+    };
+    const stale = (i: Injection) =>
+      (this.built.get(i)?.copies ?? []).some((c) => {
+        const v = versionNow(c.id);
+        return v !== null && v !== c.version;
+      });
+    // Items some non-update packet of the batch renders in their current version.
+    const renderedNow = new Set<string>();
+    for (const i of batch) {
+      if (i.reason.startsWith(UPDATED)) continue;
+      for (const c of this.built.get(i)?.copies ?? []) if (versionNow(c.id) === c.version) renderedNow.add(c.id);
+    }
+    const kept = batch.filter(
+      (i) =>
+        !i.reason.startsWith(UPDATED) ||
+        !(this.built.get(i)?.copies ?? []).every((c) => versionNow(c.id) !== c.version && renderedNow.has(c.id)),
+    );
+    // Within the rest, updates last: with no cached copy to compare (evicted, expired) an update is still the newest
+    // word the batch has on its items; a non-update packet that renders another version of a cached item is stale and
+    // already went first.
+    const isUpdate = (i: Injection) => i.reason.startsWith(UPDATED);
+    const fresh = kept.filter((i) => !stale(i));
+    return [...kept.filter(stale), ...fresh.filter((i) => !isUpdate(i)), ...fresh.filter(isUpdate)];
+  }
+
+  private unwatch(s: Session): void {
+    const key = scopeKey(s.scope);
+    const set = this.watching.get(key);
+    if (!set) return;
+    set.delete(s);
+    if (set.size === 0) this.watching.delete(key);
+  }
+
+  /**
+   * Items just stored with new or changed words (a sync poll or backfill page, a notice's items, a re-read): every
+   * live session of the user that was handed another version of one gets "updated:" packets with the stored copies,
+   * queued for its next take. The ledger then holds the new version, so each revision is sent once per session; an
+   * earlier update still queued for the same items is replaced. Only real words count (`versionOf`: title and text,
+   * not metadata). A copy stored under a later signal is sent all the same: it is newer than what the agent holds, and
+   * a newer one still is sent when stored. A re-read for a session's own delivery queues one there too: the delivery
+   * may not render the item (a size cut, a fold, a reader that does not pick it); one that does drops the update when
+   * it is handed out (`watchCopies`, `withoutCoveredUpdates`).
+   */
+  private queueRevised(scope: Scope, items: readonly ContextItem[]): void {
+    if (!this.config.revisionNotice || items.length === 0) return;
+    const sessions = this.watching.get(scopeKey(scope));
+    if (!sessions) return;
+    for (const s of sessions) {
+      if (s.closed) continue;
+      const changed = items.filter((it) => s.ledger.superseded(it.id, versionOf(it)));
+      this.queueUpdates(s, changed);
+    }
+  }
+
+  /**
+   * Queues "updated:" packets for these stored copies in one session: as many as the size cut needs, an earlier
+   * update still queued for the same items replaced, each copy noted as promised.
+   */
+  private queueUpdates(s: Session, changed: readonly ContextItem[]): void {
+    if (changed.length === 0) return;
+    const ids = new Set(changed.map((it) => it.id));
+    for (let k = s.pending.length - 1; k >= 0; k--) {
+      const p = s.pending[k]!;
+      if (p.reason.startsWith(UPDATED) && p.citations.every((c) => ids.has(c.itemId))) s.pending.splice(k, 1);
+    }
+    // As many packets as the size cut needs: an item cut from one is said in the next, never promised unsaid.
+    for (let rest = changed; rest.length > 0;) {
+      const { injection, items: said } = this.buildUpdate(s, rest);
+      rest = rest.slice(said.length);
+      // Promised now: a second store of the same version, before the agent takes this, queues nothing more.
+      for (const it of said) s.ledger.noteShown(it.id, versionOf(it), it.sourceId);
+      s.pending.push(injection);
+      this.trace({
+        sessionId: s.id,
+        turn: s.turn,
+        event: "source_change",
+        decision: "sources",
+        reason: injection.reason,
+        latencyMs: 0,
+        sourceCalls: 0,
+        modelCalls: 0,
+        costUsd: 0,
+        itemIds: said.map((it) => it.id),
+      });
+    }
+  }
+
+  /**
+   * One "updated:" packet: changed items under their titles, prefixed so the agent reads each as a newer version of
+   * something it was shown, in the same data envelope as any packet (D11, D19). Only the items the size cut left in
+   * are cited, marked delivered in the ledger (the normal paths do not send them again within the cooldown) and
+   * returned; at least the first always is. Registered for usage tracking like any packet, with its own copies, so
+   * handing out an older packet queued before it cannot leave the ledger at the older version.
+   */
+  private buildUpdate(s: Session, items: readonly ContextItem[]): { injection: Injection; items: ContextItem[] } {
+    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${UPDATED_NOTE}` }));
+    let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes });
+    let n = renderedCount(items, text);
+    if (n === 0) {
+      // Not even the first line fits a tiny `maxInjectionBytes`: it is said alone, under a cap that holds its line.
+      text = renderPacket(tagged.slice(0, 1), { maxBytes: Math.max(this.config.maxInjectionBytes, 512) });
+      n = 1;
+    }
+    const said = items.slice(0, n);
+    const id = newId("inj", this.now());
+    const injection: Injection = {
+      ...s.scope,
+      id,
+      sessionId: s.id,
+      mode: "proactive",
+      text,
+      citations: citationsOf(said),
+      reason: `${UPDATED}${id}`,
+      score: 1,
+      createdAt: this.now(),
+    };
+    s.ledger.mark(
+      said.map((it) => it.id),
+      s.turn,
+      said.map((it) => versionOf(it)),
+    );
+    this.built.set(injection, {
+      sourceIds: [...new Set(said.map((i) => i.sourceId))],
+      items: said.map((i) => ({ sourceId: i.sourceId, id: i.id })),
+      text: shownText(text),
+      ...(this.config.askDedup ? { shown: { items: said, text } } : {}),
+      copies: copiesOf(said),
+    });
+    return { injection, items: said };
+  }
+
+  /**
+   * A change notice for a source some live session of the user was handed a copy from: that source is polled in the
+   * background (no caller waits on it), so the "updated:" packet is queued before the next request rather than found
+   * by the lookup that request makes. The poll is the one the next lookup would make (`syncOnDemand`); it leaves the
+   * copy current, so that lookup makes no call of its own. A burst of notices costs at most one poll at a time per
+   * user and source, starts at least `REVISION_POLL_GAP_MS` apart (a notice during a poll, or too soon after one, gets
+   * one trailing poll), each bounded by its timeout as a whole. Never throws.
+   */
+  private pollRevised(scope: Scope, sourceId: string): void {
+    if (!this.config.revisionNotice || !this.sync || this.revisionsStopped) return;
+    const user = scopeKey(scope);
+    if (!this.holdsCopyFrom(user, sourceId)) return;
+    const key = `${user}\u0000${sourceId}`;
+    let st = this.revisionSources.get(key);
+    if (!st) {
+      st = { running: false, again: false, at: -Infinity, timer: null };
+      this.revisionSources.set(key, st);
+      for (const [k, v] of this.revisionSources) {
+        if (this.revisionSources.size <= MAX_REVISION_SOURCES) break;
+        if (!v.running && !v.timer) this.revisionSources.delete(k);
+      }
+    }
+    if (st.running) {
+      st.again = true;
+      return;
+    }
+    // An engine clock that stepped back (a replayed harness clock, an NTP step) waits at most one gap.
+    if (this.now() < st.at) st.at = this.now() - REVISION_POLL_GAP_MS;
+    const wait = Math.min(REVISION_POLL_GAP_MS, st.at + REVISION_POLL_GAP_MS - this.now());
+    if (st.timer) {
+      if (wait > 0) return;
+      // The engine's clock has passed the gap before the timer (a harness clock runs ahead of real time).
+      clearTimeout(st.timer);
+      st.timer = null;
+    }
+    if (wait > 0) {
+      const held = st;
+      held.timer = setTimeout(() => {
+        held.timer = null;
+        this.startRevisionPoll(scope, sourceId, held);
+      }, wait);
+      (held.timer as { unref?: () => void }).unref?.();
+      return;
+    }
+    this.startRevisionPoll(scope, sourceId, st);
+  }
+
+  private startRevisionPoll(scope: Scope, sourceId: string, st: RevisionSource): void {
+    const sync = this.sync;
+    const user = scopeKey(scope);
+    if (!sync || this.revisionsStopped || !this.holdsCopyFrom(user, sourceId)) return;
+    st.running = true;
+    st.at = this.now();
+    const ms = Math.max(this.config.sourceTimeoutMs, 5_000);
+    const signal = AbortSignal.timeout(ms);
+    const run = (async () => {
+      const all = await this.deps.sources(scope).catch((): Source[] => []);
+      const source = all.find((x) => x.id === sourceId);
+      if (!source || signal.aborted) return;
+      await sync.freshen(scope, [source], signal);
+    })()
+      .catch(() => {})
+      .finally(() => {
+        // One at a time: the next poll waits for this one's call to end, not for its timeout.
+        st.running = false;
+        if (st.again) {
+          st.again = false;
+          this.pollRevised(scope, sourceId);
+        }
+      });
+    // What `revisionsSettled` waits for is bounded, a hung resolver or listing included.
+    const poll = Promise.race([run, whenAborted(signal)]);
+    const before = this.revisionPolls.get(user);
+    const both = before ? Promise.all([before, poll]).then(() => {}) : poll;
+    const tracked: Promise<void> = both.finally(() => {
+      if (this.revisionPolls.get(user) === tracked) this.revisionPolls.delete(user);
+    });
+    this.revisionPolls.set(user, tracked);
+  }
+
+  /** Whether a live session of the user was handed a copy of an item from this source. */
+  private holdsCopyFrom(user: string, sourceId: string): boolean {
+    for (const s of this.watching.get(user) ?? []) {
+      if (s.closed) continue;
+      for (const [, c] of s.ledger.shownCopies()) if (c.sourceId === sourceId) return true;
+    }
+    return false;
   }
 
   /**
    * The action firewall (`actionCheck`; docs/research/econ-firewall.md): an agent's tool call, before it runs, checked
    * against what is held, with no model and no source call. The session's request and the call's arguments read as
    * words (`actionText`: its days written out, its amounts, names and references) make one cue; what the request's
-   * structure grounds against it (`grounded`: a clash at the time it books, a conflict the conflict test reads, the
-   * graph's, a card's, someone away that day; `FIREWALL_GROUNDS`) is the finding, delivered already or not: the agent
+   * structure grounds against it (`grounded`: a clash at the time it books, a conflict the conflict test reads, a
+   * card's, someone away that day; `FIREWALL_GROUNDS`) is the finding, delivered already or not: the agent
    * is about to act as if it were not there. Anything else proceeds, as does a call made again unchanged after a
    * finding (the agent's informed choice). A finding is data in the usual envelope; what the integration does with it
    * is its own. With the flag off, every call proceeds and no state is touched. Never throws: a failure proceeds.
@@ -1110,10 +1275,10 @@ export class ContextPartner {
       const own = timeWindow(call, event.at, offset);
       if (own && own.days.size > 0) cue.time = own;
       cue.arrived = this.now();
-      // The probes' last answers and the class's cached finds, with no call (as `early` reads them).
+      // The probes' last answers and the class's cached finds, with no call.
       const out: ProbeOut = { calls: 0, kept: [] };
       if (this.config.probes) {
-        const all = await within(this.deps.sources(s.scope), EARLY_SOURCES_MS);
+        const all = await within(this.deps.sources(s.scope), CHECK_SOURCES_MS);
         if (all && all.length > 0 && !s.closed) {
           await this.probe(s, cue, all, all, false, out, Promise.resolve(), undefined, {
             offline: true,
@@ -1124,15 +1289,10 @@ export class ContextPartner {
         }
       }
       if (s.closed) return proceed("closed");
-      const walked = this.config.graph ? this.walkGraph(s, cue) : new Map<string, Walked>();
       const carded = this.cardFinds(s, cue);
       const extra = [...out.kept, ...(out.consequence?.ids ?? []), ...carded.keys()];
       // Delivered already or not: what the agent is about to do is checked, not whether it was told.
-      const scored = this.rank(s, cue, {
-        ignoreLedger: true,
-        probed: extra,
-        ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
-      });
+      const scored = this.rank(s, cue, { ignoreLedger: true, probed: extra });
       const bridged = this.bridgedOf(scored, cue, out.consequence);
       const g = this.grounded(
         s,
@@ -1141,8 +1301,6 @@ export class ContextPartner {
         "action",
         bridged,
         out.consequence?.cls,
-        walked,
-        walked.size > 0 ? scored.filter((x) => walked.has(x.item.id)) : [],
         carded,
       );
       if (g.items.length === 0) return proceed("clear");
@@ -1153,7 +1311,7 @@ export class ContextPartner {
       // And only at a time the user asked for: a reminder or a task the agent placed at a slot of its own choosing
       // overlaps a meeting without clashing with anything the user asked (it would be held at every slot it tries).
       if (g.how === "clash" && requestedSpan(request) === null) return proceed("agent-timed");
-      // Read from shared words, a conflict (the conflict test's, the graph's, a card's) holds the action only on a tie
+      // Read from shared words, a conflict (the conflict test's, a card's) holds the action only on a tie
       // the words cannot fake (`structuralTie`: a span over its day, an expiry before it, a limit on its amount, a
       // statement binding a party it names), an identifier or qualified reference the call names, or the action
       // class's find about a party it names.
@@ -1251,33 +1409,21 @@ export class ContextPartner {
       this.config.syncPollBehind &&
       this.config.syncOnDemand;
     const searched = internal.again?.searched ?? (await this.searchLive(s, cue, this.config.askSources, behind));
-    const { calls: sourceCalls, plans, probed, local, syncCalls, consequence } = searched;
-    // `askVerdicts` (docs/research/gen-ask.md): an ask gathers what a lookup gathers (the consequence probe's finds,
-    // the graph walk's, the card finds), not only what shares the question's words, and reads each with the verdicts
-    // the lookup's rule paths read, so an item the question runs into answers it ahead of a merely similar one.
-    const verdicts = this.config.askVerdicts;
-    const consIds = verdicts ? (consequence?.ids ?? []) : [];
-    const walked = verdicts && this.config.graph ? this.walkGraph(s, cue) : new Map<string, Walked>();
-    const carded = verdicts ? this.cardFinds(s, cue) : new Map<string, CardFind>();
+    const { calls: sourceCalls, plans, probed, local, syncCalls } = searched;
     // `intent`: what the question would change, by the requests written for each item (no model, no call).
     const intentFound = this.intentFinds(s, cue);
-    const extra = [...consIds, ...carded.keys(), ...intentFound.keys()];
+    const extra = [...intentFound.keys()];
     const ranking = spans?.open("rank", cue.span);
     const scored = this.rank(s, cue, {
       ignoreLedger: true,
       probed: extra.length > 0 ? [...(probed ?? []), ...extra] : probed,
-      ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
     });
     if (ranking) spans!.close(ranking, { candidates: scored.length });
     // Only anchored intent hits are fused in (`anchoredIntents`); every hit still withholds the guard's line.
     const intents = this.anchoredIntents(s, cue, intentFound);
-    // The candidates' facts (`decide.ts`), read once: by `askVerdicts` for its hits, and by the lab's dump.
-    const facts =
-      verdicts || this.deps.onCandidates
-        ? this.askFacts(s, cue, scored, { probed, consIds, cls: consequence?.cls, walked, carded })
-        : [];
-    const hits = verdicts
-      ? facts.filter(({ facts: f }) => f.conflictHit || f.graphHit || f.bridged || f.cardViolated).map(({ x }) => x)
+    // The candidates' facts (`decide.ts`), for the lab's dump.
+    const facts = this.deps.onCandidates
+      ? this.factsOf(s, cue, scored, "ask", { probed: new Set(probed ?? []), bridged: new Set(), carded: new Map() })
       : [];
     const grounding = spans?.open("ground", cue.span);
     // What the question's people and days ground comes first (D44); a named day's other events only through it, so
@@ -1291,11 +1437,10 @@ export class ContextPartner {
     ).items;
     if (grounding) spans!.close(grounding, { grounded: grounded.length });
     const lexical = [
-      ...hits,
-      ...grounded.filter((x) => !hits.includes(x)),
-      ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x)),
+      ...grounded,
+      ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x)),
     ];
-    const order = intents.size > 0 ? this.fuseIntent(lexical, hits, scored, intents) : lexical;
+    const order = intents.size > 0 ? this.fuseIntent(lexical, scored, intents) : lexical;
     let chosen = order.slice(0, limit);
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
@@ -1309,6 +1454,10 @@ export class ContextPartner {
             chosen,
             limit,
             internal.push ? Infinity : this.config.askReaderWaitMs,
+            {
+              push: internal.push === true,
+              ...(internal.request !== undefined ? { request: internal.request } : {}),
+            },
           )
         : null;
     if (reading) chosen = reading.chosen;
@@ -1379,8 +1528,10 @@ export class ContextPartner {
       if (behind && cue.polled) this.pushAgain(s, request, internal, cue.polled, searched, injection);
       return { answer: "", citations: [], usedModel: reading?.called === true, costUsd, latencyMs };
     }
-    // `verifyDelivery`: what the answer cites is re-read first when its copy is old; gone items are left out.
-    const checked = await this.verifyItems(s, chosen, cue);
+    // `verifyDelivery`: what the answer cites is re-read first when a signal doubted its copy; gone items are left out,
+    // and so are doubted ones no re-read confirmed (D211), named in the answer.
+    const unconfirmed = new Map<string, number>();
+    const checked = await this.verifyItems(s, chosen, cue, { unconfirmed });
     const items = checked.map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
     const answering = this.answering(s, cue);
@@ -1388,7 +1539,14 @@ export class ContextPartner {
     const packet = items.length ? renderPacket(items, answering) : "";
     // D127: "nothing" is said only when the sources the ask chose answered; one that failed is named, in the text
     // (an MCP caller sees only the text) and in `sources`.
-    const answer = honestAnswer(packet, searched.sources, searched.unresolved === true, searched.closed === true);
+    const answer = honestAnswer(
+      packet,
+      searched.sources,
+      searched.unresolved === true,
+      // The session closing during the re-reads leaves nothing checked either (D127): not an all-clear.
+      searched.closed === true || s.closed,
+      unconfirmed,
+    );
     if (rendering) spans!.close(rendering, { items: items.length });
     if (this.deps.onCandidates) {
       this.dump(
@@ -1421,6 +1579,9 @@ export class ContextPartner {
       const cited = new Set(items.map((i) => i.id));
       for (let k = s.pending.length - 1; k >= 0; k--) {
         const queued = s.pending[k]!.citations;
+        // An "updated:" packet goes only when the answer rendered its items' new version (`watchCopies`, D205): an
+        // item cited but cut from the answer was not said.
+        if (s.pending[k]!.reason.startsWith(UPDATED)) continue;
         if (queued.length > 0 && queued.every((c) => cited.has(c.itemId))) s.pending.splice(k, 1);
       }
     }
@@ -1452,47 +1613,6 @@ export class ContextPartner {
   }
 
   /**
-   * The ask's candidates with their facts (`decide.ts`), best scored first, at most `decideCandidates`. `askVerdicts`
-   * answers first with those that carry a verdict the lookup's rule paths deliver on: a conflict with the question's
-   * frame that is about it and tied beyond a name (`groundConflict`'s test), a binding graph-walked item in conflict
-   * (the graph's ground), a consequence find in conflict tied by its class's words (`bridged`), or a card the
-   * question's actions violate. No model, no call: what is cached.
-   */
-  private askFacts(
-    s: Session,
-    cue: Cue,
-    scored: Scored[],
-    ctx: {
-      probed?: readonly string[];
-      consIds: readonly string[];
-      cls?: ActionClass;
-      walked: ReadonlyMap<string, Walked>;
-      carded: ReadonlyMap<string, CardFind>;
-    },
-  ): { x: Scored; facts: Facts }[] {
-    const cons = new Set(ctx.consIds);
-    const ties = ctx.cls ? classTies(ctx.cls) : undefined;
-    const bridged = new Set(
-      cons.size > 0
-        ? scored
-            .filter(
-              (x) =>
-                cons.has(x.item.id) &&
-                !unmeasuredLimit(this.frame(cue), x.item) &&
-                this.verdict(x.item, cue, ties) === "conflict",
-            )
-            .map((x) => x.item.id)
-        : [],
-    );
-    return this.factsOf(s, cue, scored, "ask", {
-      probed: new Set(ctx.probed ?? []),
-      bridged,
-      walked: ctx.walked,
-      carded: ctx.carded,
-    });
-  }
-
-  /**
    * `askReader` (D95, `reader.ts`): the reader's verdict on an ask about an action, over the first `askReaderPool`
    * distinct candidates of `ranked` (the ask's pool in its order, then the rest it scored). The items it says bind
    * lead the answer, at most `limit`, the usual `chosen` fill what is left. Null when the reader is not asked; `read`
@@ -1507,6 +1627,7 @@ export class ContextPartner {
     chosen: Scored[],
     limit: number,
     waitMs: number,
+    opts: ReadOpts = {},
   ): Promise<{
     chosen: Scored[];
     notes: Map<string, string>;
@@ -1530,7 +1651,7 @@ export class ContextPartner {
     }
     // Whether the reader is shown every candidate the ask has (none cut by the pool's cap or the prompt's), so a
     // rejection of all of them is a reading of everything found (D114).
-    const readsAll =
+    let readsAll =
       pool.length <= READER_MAX_ITEMS &&
       ranked.every((x) => seen.has(x.item.id)) &&
       chosen.every((x) => seen.has(x.item.id));
@@ -1560,25 +1681,20 @@ export class ContextPartner {
         : new Map();
     // `readerGate`: no call when none of the request's own candidates could constrain it: no card of a constraint kind
     // (or a state change or a thing done) and no constraint wording. Bulk mail never counts.
-    if (this.config.readerGate) {
-      const constraintLike = (x: Scored) => {
-        if (bulkMail(x.item)) return false;
-        const card = cards.get(x.item.id);
-        if (card && (STANDING_KINDS.has(card.kind) || card.kind === "status-change" || card.kind === "already-done")) {
-          return true;
-        }
-        const text = `${x.item.title}. ${x.item.text}`.toLowerCase();
-        return mayConstrain(text) || (this.config.readerGateVisits && arrangedVisit(text));
-      };
-      if (!pool.some(constraintLike)) {
-        report("gated");
-        return null;
-      }
+    if (this.config.readerGate && !pool.some((x) => this.constraintLike(x, cards))) {
+      report("gated");
+      return null;
     }
+    // `readerReuse` (D193): an ask in the push's request reads the push's verdict, with no call of its own.
+    const reuseAt = performance.now();
+    const reused = opts.push ? null : await this.reusePush(s, pool, main, waitMs);
+    // The ask's own read, when there was nothing to reuse, waits only what is left of its wait.
+    const readWaitMs = Number.isFinite(waitMs) ? waitMs - (performance.now() - reuseAt) : waitMs;
     // The likely deliveries are re-read while the reader reads (`verifyDelivery`): the delivery then waits on no call.
     // Only once the reader will read (D134): an empty pool or a gated ask has no reading to overlap, and its delivery
     // re-reads what it actually cites (`verifyItems`), so a re-read started ahead there is a connector call wasted.
-    this.checkAhead(s, pool);
+    // `readerVerifyAfter` (D192) starts none here: only what the reader names and a delivery cites is re-read.
+    if (!this.config.readerVerifyAfter && !reused) this.checkAhead(s, pool);
     const input: ReaderInput = {
       request: main,
       ...(request && cue.raw !== request ? { question: cue.raw } : {}),
@@ -1589,21 +1705,48 @@ export class ContextPartner {
     };
     // Who makes the call, for the accounting: a read that finds a verdict cached, or a call another read started
     // (an ask joining its push), makes none. Known before the read, for when this ask's wait runs out first.
-    const starts = reader.peek(s.scope, s.key, input) === undefined && !reader.inFlight(s.scope, s.key, input);
+    const fresh =
+      !reused && reader.peek(s.scope, s.key, input) === undefined && !reader.inFlight(s.scope, s.key, input);
+    // A paid call this ask could not wait for (the push's verdict came null with almost none of the wait left) is not
+    // started: it would only buy a cached verdict (wave-1 review). A cached or joined verdict is still read.
+    const tooLate = fresh && Number.isFinite(waitMs) && readWaitMs < Math.min(MIN_OWN_READ_MS, waitMs / 4);
+    const starts = fresh && !tooLate;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const reading = reader.read(s.scope, s.key, input, s.abort.signal);
+    const reading: Promise<ReaderRead> = reused
+      ? Promise.resolve(reused === "late" ? NO_READ : { ...NO_READ, verdict: reused.verdict })
+      : tooLate
+        ? Promise.resolve(NO_READ)
+        : reader.read(s.scope, s.key, input, s.abort.signal);
+    // The push's reading, for a later ask in the same request (`readerReuse`): its pool's items and their content.
+    if (opts.push && this.config.readerReuse) {
+      s.pushRead = {
+        request: opts.request ?? s.requests,
+        main,
+        hashes: new Map(input.items.map((it) => [it.id, it.hash])),
+        verdict: reading.then(
+          (r) => r.verdict,
+          () => null,
+        ),
+      };
+    }
     let got: ReaderRead | "late";
     try {
       // An explicit ask stops waiting at `waitMs`; the push (Infinity) waits for the reading, with no timer left
       // pending, bounded by the reader's call and the session's close.
-      got = Number.isFinite(waitMs)
-        ? await Promise.race([
-            reading,
-            new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), Math.max(0, waitMs)))),
-          ])
-        : await reading;
+      got = tooLate
+        ? "late"
+        : reused
+          ? reused === "late"
+            ? "late"
+            : await reading
+          : Number.isFinite(waitMs)
+            ? await Promise.race([
+                reading,
+                new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), Math.max(0, readWaitMs)))),
+              ])
+            : await reading;
     } catch {
-      got = { verdict: null, costUsd: 0, called: false, overBudget: false };
+      got = NO_READ;
     } finally {
       clearTimeout(timer);
     }
@@ -1650,6 +1793,8 @@ export class ContextPartner {
       return unchanged;
     }
     const verdict = got.verdict;
+    // A reused verdict read the push's pool: it read every candidate here only if each was in that pool, unchanged.
+    if (reused && reused !== "late" && !reused.all) readsAll = false;
     const byId = new Map(pool.map((x) => [x.item.id, x]));
     const notes = new Map<string, string>();
     const kinds = new Map<string, ReaderKind>();
@@ -1682,32 +1827,77 @@ export class ContextPartner {
   }
 
   /**
-   * `intent` (D87): an ask's pool with its intent hits fused in. Verdict hits keep the lead (a structural verdict
-   * outweighs any word overlap); the rest of the pool (its rule paths' order) and the intent hits (their requests'
-   * order) are fused by weighted reciprocal rank, 1/(k+rank) for the pool and `intentWeight`/(k+rank) for the intent
-   * list, ties in the pool's order. An item in both lists is kept once and scores both.
+   * `readerGate`'s test of one candidate: whether it could constrain a request (a card of a constraint kind, a state
+   * change or a thing done, or constraint wording; an arranged visit with `readerGateVisits`). Bulk mail never does.
    */
-  private fuseIntent(
-    pool: Scored[],
-    lead: readonly Scored[],
-    scored: readonly Scored[],
-    intents: ReadonlyMap<string, IntentFind>,
-  ): Scored[] {
+  private constraintLike(x: Scored, cards: ReadonlyMap<string, Card>): boolean {
+    if (bulkMail(x.item)) return false;
+    const card = cards.get(x.item.id);
+    if (card && (STANDING_KINDS.has(card.kind) || card.kind === "status-change" || card.kind === "already-done")) {
+      return true;
+    }
+    const text = `${x.item.title}. ${x.item.text}`.toLowerCase();
+    return mayConstrain(text) || (this.config.readerGateVisits && arrangedVisit(text));
+  }
+
+  /**
+   * `readerReuse` (D193): the push's verdict for an ask made in the same request (no newer user message), cut
+   * to the ask's pool: its bearings and rejections on items the push read with the same content. `all` says whether
+   * the push read every candidate of this pool. "late" when the push's reading is not in within `waitMs`; null when
+   * there is nothing to reuse (no push in this request, or it gave no verdict), and the ask reads as usual.
+   */
+  private async reusePush(
+    s: Session,
+    pool: readonly Scored[],
+    main: string,
+    waitMs: number,
+  ): Promise<{ verdict: ReaderVerdict; all: boolean } | "late" | null> {
+    if (!this.config.readerReuse || !this.config.readerPush) return null;
+    const prior = s.pushRead;
+    // Only an ask read against the push's own request: one that acts on its own is another request.
+    if (!prior || prior.request !== s.requests || prior.main !== main) return null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const v = await Promise.race([
+      prior.verdict,
+      new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), Math.max(0, waitMs)))),
+    ]).finally(() => clearTimeout(timer));
+    if (v === "late") return "late";
+    if (!v) return null;
+    // An item the push flagged whose copy changed since it read it (the push's own re-read, D192, or another): its
+    // bearing was of the old copy, so the ask reads the current one with a call of its own.
+    const now = new Map(pool.map((x) => [x.item.id, cardKey(x.item)]));
+    if (v.bears.some((b) => now.has(b.id) && now.get(b.id) !== prior.hashes.get(b.id))) return null;
+    const same = new Set(pool.filter((x) => prior.hashes.get(x.item.id) === cardKey(x.item)).map((x) => x.item.id));
+    return {
+      verdict: {
+        bears: v.bears.filter((b) => same.has(b.id)),
+        rejected: (v.rejected ?? []).filter((id) => same.has(id)),
+        checked: same.size,
+      },
+      all: same.size === pool.length,
+    };
+  }
+
+  /**
+   * `intent` (D87): an ask's pool with its intent hits fused in. The pool (its rule paths' order) and the intent hits
+   * (their requests' order) are fused by weighted reciprocal rank, 1/(k+rank) for the pool and `intentWeight`/(k+rank)
+   * for the intent list, ties in the pool's order. An item in both lists is kept once and scores both.
+   */
+  private fuseIntent(pool: Scored[], scored: readonly Scored[], intents: ReadonlyMap<string, IntentFind>): Scored[] {
     const k = ASK_FUSE_K;
     const w = this.config.intentWeight;
-    const rest = pool.filter((x) => !lead.includes(x));
     const fused = new Map<Scored, { score: number; first: number }>();
-    rest.forEach((x, i) => fused.set(x, { score: 1 / (k + i), first: i }));
+    pool.forEach((x, i) => fused.set(x, { score: 1 / (k + i), first: i }));
     for (const x of scored) {
       const f = intents.get(x.item.id);
-      if (!f || lead.includes(x)) continue;
+      if (!f) continue;
       const add = w / (k + f.rank);
       const e = fused.get(x);
       if (e) e.score += add;
-      else fused.set(x, { score: add, first: rest.length + f.rank });
+      else fused.set(x, { score: add, first: pool.length + f.rank });
     }
     const order = [...fused].sort((a, b) => b[1].score - a[1].score || a[1].first - b[1].first).map(([x]) => x);
-    return [...lead, ...order];
+    return order;
   }
 
   /**
@@ -1721,7 +1911,7 @@ export class ContextPartner {
     const o = s?.outstanding.get(f.injectionId);
     if (s && o) {
       s.outstanding.delete(f.injectionId);
-      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used, o.graphMask);
+      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used);
       return true;
     }
     // The session may have ended (and counted the injection unused): the user's record outlives it.
@@ -1738,7 +1928,8 @@ export class ContextPartner {
    * A change notification for one of the user's sources (`syncPush`; the source says it `notifies`): the integrator
    * forwards a Gmail watch, a Calendar or Drive channel, a Slack event, a Graph subscription, a connector platform's
    * trigger. The source's synced copy is behind until the next lookup that reads it polls it; until then, and between
-   * notifications, nothing polls it (at most `syncPushMaxStaleMs` apart). No I/O; false when push is off, or the source
+   * notifications, nothing polls it (at most `syncPushMaxStaleMs` apart). No I/O (but see `sourceNotice` for
+   * `revisionNotice`'s background poll); false when push is off, or the source
    * is not synced for the user or does not say it notifies (`sourceNotice` says which).
    */
   sourceChanged(scope: Scope, sourceId: string): boolean {
@@ -1749,13 +1940,16 @@ export class ContextPartner {
    * `sourceChanged` with the reason a notification did not act (`SourceChangedResult`). With push on, the source's held
    * search pages are dropped whatever the sync says: a search-only notifying source, or one no lookup has synced yet,
    * has no sync state, and its held page would otherwise keep answering with the copy from before the change. Costs
-   * at most one search on the next lookup that would have used the page. No I/O, O(1) beyond the drop.
+   * at most one search on the next lookup that would have used the page. No I/O, O(1) beyond the drop, except with
+   * `revisionNotice` (D205): a source a live session holds a handed copy from is polled in the background
+   * (`pollRevised`: one listing call, at most one at a time per user and source, 30 s apart).
    */
   sourceNotice(scope: Scope, sourceId: string): SourceChangedResult {
     if (!this.config.syncPush || !this.sync) return { synced: false, reason: "push-off" };
     const took = this.sync.changed(scope, sourceId);
     // A held search page predates the change: the next lookup asks the source again.
     this.fanout.dropResults(scope, sourceId);
+    if (took) this.pollRevised(scope, sourceId);
     return took ? { synced: true } : { synced: false, reason: this.sync.ignoredBecause(scope, sourceId) };
   }
 
@@ -1797,8 +1991,8 @@ export class ContextPartner {
 
   /**
    * A deletion notification (`syncPush`): the source no longer has these refs (a message deleted or recalled, a doc
-   * removed, an event deleted). They are dropped at once from the cache, the sync's bookkeeping, their cards, the graph
-   * and held search pages, and held as gone for a while, so nothing delivers them again. Returns how many cached items
+   * removed, an event deleted). They are dropped at once from the cache, the sync's bookkeeping, their cards and held
+   * search pages, and held as gone for a while, so nothing delivers them again. Returns how many cached items
    * were dropped (ids held as gone but not cached count 0); 0 when push is off. No I/O.
    */
   sourceRemoved(scope: Scope, sourceId: string, refs: string[]): number {
@@ -1827,7 +2021,6 @@ export class ContextPartner {
     this.sync?.forget(scope, sourceId);
     // A source's forget drops only what its items brought: the user's other items keep their cards.
     this.deps.cards?.forget(scope, sourceId);
-    this.patterns.forget(scope, sourceId);
     // The reader's bearings are made from the items' text: any forget, of the user or of one source, drops them.
     this.deps.reader?.forget(scope);
   }
@@ -1897,7 +2090,7 @@ export class ContextPartner {
     s.closed = true;
     s.abort.abort();
     if (learn) {
-      for (const [id, o] of s.outstanding) this.record(s.scope, id, o.sourceIds, o.situation, false, o.graphMask);
+      for (const [id, o] of s.outstanding) this.record(s.scope, id, o.sourceIds, o.situation, false);
     }
     s.outstanding.clear();
     s.pending.length = 0;
@@ -1907,6 +2100,7 @@ export class ContextPartner {
     // The reader reserves on a Budget of its own, by the same session key.
     this.deps.reader?.endSession(s.key);
     this.sessions.delete(s.key);
+    this.unwatch(s);
     const n = (this.perTenant.get(s.scope.tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(s.scope.tenantId);
     else this.perTenant.set(s.scope.tenantId, n);
@@ -1945,6 +2139,10 @@ export class ContextPartner {
       this.noteShown(s, built.shown.items, built.shown.text);
       built.shown = undefined;
     }
+    if (built?.copies) {
+      this.watchCopies(s, built.copies);
+      built.copies = undefined;
+    }
     if (!built || s.outstanding.has(injection.id)) return;
     if (this.recordedOf(s.scope)?.has(injection.id)) return;
     s.outstanding.set(injection.id, {
@@ -1956,7 +2154,6 @@ export class ContextPartner {
         return distinctiveTokens(ids, n, s.seen, s.vocab);
       })(),
       deliveredTurn: s.turn,
-      ...(built.graphMask ? { graphMask: built.graphMask } : {}),
     });
     // Usage expires by turns, and only events move turns: a session that only asks would hold every answer forever.
     while (s.outstanding.size > MAX_OUTSTANDING) s.outstanding.delete(s.outstanding.keys().next().value as string);
@@ -1972,21 +2169,12 @@ export class ContextPartner {
       const expired = s.turn - o.deliveredTurn > this.config.usageWindowTurns;
       if (!used && !expired) continue;
       s.outstanding.delete(id);
-      this.record(s.scope, id, o.sourceIds, o.situation, used, o.graphMask);
+      this.record(s.scope, id, o.sourceIds, o.situation, used);
     }
   }
 
-  private record(
-    scope: Scope,
-    injectionId: string,
-    sourceIds: string[],
-    situation: string,
-    used: boolean,
-    graphMask = 0,
-  ): void {
+  private record(scope: Scope, injectionId: string, sourceIds: string[], situation: string, used: boolean): void {
     for (const sourceId of sourceIds) this.deps.sourceMap.recordOutcome(scope, situation, sourceId, used);
-    // The knowledge graph learns which edge types reach what the agent then uses (`graph`).
-    if (graphMask && this.config.graphLearn) this.deps.cache.learnGraph(scope, graphMask, used);
     const key = scopeKey(scope);
     const tenant = this.recorded.get(scope.tenantId) ?? new Map<string, Map<string, Recorded>>();
     this.recorded.set(scope.tenantId, tenant);
@@ -2008,11 +2196,7 @@ export class ContextPartner {
    * Scores cached items for a cue: idf-weighted query coverage, plus a bonus when the item names a cue entity as
    * whole terms ("Al" never matches "also"). Both come from the cache's index: the item's text is never rescanned.
    */
-  private rank(
-    s: Session,
-    cue: Cue,
-    options: { ignoreLedger?: boolean; probed?: string[]; walked?: string[] } = {},
-  ): Scored[] {
+  private rank(s: Session, cue: Cue, options: { ignoreLedger?: boolean; probed?: string[] } = {}): Scored[] {
     const cache = this.deps.cache;
     const vocab = cache.peekVocab(s.scope);
     if (!vocab) return []; // No cache for this user: nothing to rank, and nothing allocated.
@@ -2022,7 +2206,7 @@ export class ContextPartner {
     // Events on a day the request names are candidates whether or not they share its words (D44); they rank after
     // every item that does, so the judge, when there is one, sees them only if there is room.
     const timed = cue.time?.days.size ? cache.timed(s.scope, cue.time.days, this.now(), 30, cue.offset) : [];
-    if (query.length === 0 && timed.length === 0 && !options.probed?.length && !options.walked?.length) return [];
+    if (query.length === 0 && timed.length === 0 && !options.probed?.length) return [];
     const entities = cue.entities.map((e) => {
       // An entity with a term no cached item holds matches nothing (never intern it: that grows the cache's vocab).
       const all = termIds(e, s.vocab, true).n;
@@ -2056,14 +2240,6 @@ export class ContextPartner {
     // The probes' finds for the request's people, organisations and day are candidates whatever they share in words.
     const probed = options.probed?.length ? cache.hits(s.scope, options.probed, this.now()) : [];
     for (const h of probed) if (!found.some((f) => f.item.id === h.item.id)) found.push(h);
-    // So are the knowledge graph's finds (`graph`): reached through a name, an id or a day, not through words.
-    const walked = options.walked?.length ? cache.hits(s.scope, options.walked, this.now()) : [];
-    const walkedOnly = new Set<string>();
-    for (const h of walked) {
-      if (found.some((f) => f.item.id === h.item.id)) continue;
-      found.push(h);
-      walkedOnly.add(h.item.id);
-    }
     // `syncPollBehind`: an item delivered from a copy since edited at its source is news again, though the ledger has
     // it and its old words are near the new (D40: what the agent was given must not stand once superseded).
     const revised = new Set(
@@ -2087,7 +2263,6 @@ export class ContextPartner {
           const score = h.coverage + (entityHit ? this.config.entityBonus : 0);
           const scored: Scored = { item: h.item, matched: h.matched, score, sketch: h.sketch, doc: h.doc };
           if (people.length > 0) scored.beyond = beyondOf(h.doc);
-          if (walkedOnly.has(h.item.id)) scored.walkedOnly = true;
           if (entityHit) scored.entity = true;
           if (revised.has(h.item.id)) scored.revised = true;
           return scored;
@@ -2148,8 +2323,6 @@ export class ContextPartner {
     eventKind: string,
     bridged: ReadonlySet<string> = new Set(),
     cls?: ActionClass,
-    walked?: ReadonlyMap<string, Walked>,
-    graphPool: Scored[] = [],
     carded: ReadonlyMap<string, CardFind> = new Map(),
   ): { items: Scored[]; how: string } {
     const none = { items: [] as Scored[], how: "" };
@@ -2188,13 +2361,8 @@ export class ContextPartner {
     // With `groundConflict`: what would change the action (or the answer), tied to what the request names or asks
     // (`conflict.ts`): a hold over the day it acts on, a limit below its amount, a thing done already (D49).
     if (this.config.groundConflict) {
-      const { hits, best } = this.conflicts(cue, pool, acts, bridged, cls, walked, graphPool);
-      if (hits.length > 0) {
-        // With `graphMerge`, the walk's best conflict joins the request's own (it was found another way).
-        const extra = this.config.graphMerge ? best.slice(0, this.config.graphGround) : [];
-        return { items: [...hits.slice(0, this.max() - extra.length), ...extra], how: "conflict" };
-      }
-      if (best.length > 0) return { items: best.slice(0, this.config.graphGround), how: "graph" };
+      const hits = this.conflicts(cue, pool, bridged, cls);
+      if (hits.length > 0) return { items: hits.slice(0, this.max()), how: "conflict" };
       // `cards`: an item whose card the request violates (a freeze over its day, an expiry before it, a limit under
       // its amount, a standing constraint on what it names), read by the model when the item arrived. At most
       // `cardItems`, the best tied first: a card is a model's reading, and one wrong one is noise.
@@ -2276,18 +2444,9 @@ export class ContextPartner {
 
   /**
    * The conflict ground's finds (`groundConflict`, D49): candidates about what the request names, tied beyond a name,
-   * that `conflict.ts` says conflict with it (`hits`), with the conflicting consequence finds (`bridged`); and the
-   * graph's conflicts (`graph`), best walked first (`best`, those not among the hits).
+   * that `conflict.ts` says conflict with it, with the conflicting consequence finds (`bridged`).
    */
-  private conflicts(
-    cue: Cue,
-    pool: Scored[],
-    acts: boolean,
-    bridged: ReadonlySet<string>,
-    cls: ActionClass | undefined,
-    walked: ReadonlyMap<string, Walked> | undefined,
-    graphPool: Scored[],
-  ): { hits: Scored[]; best: Scored[] } {
+  private conflicts(cue: Cue, pool: Scored[], bridged: ReadonlySet<string>, cls: ActionClass | undefined): Scored[] {
     const hits = pool.filter(
       (x) => this.about(x, cue) && this.beyondName(x, cue) && this.verdict(x.item, cue) === "conflict",
     );
@@ -2300,32 +2459,7 @@ export class ContextPartner {
       if (!bridged.has(x.item.id) || hits.includes(x)) continue;
       if (cls?.scope === "general" || names.length === 0 || names.some((n) => mentions(n, x.item))) hits.push(x);
     }
-    // With `graph`: an item the knowledge graph reached from what the request names (a person's organisation, the
-    // name a colleague goes by, an identifier, a role) or from a day it names, though it shares none of its words,
-    // tied in the conflict test by the names it was reached through (`conflictTies`); its author speaks for them
-    // when the graph says the author is someone the request names or one of theirs.
-    const viaGraph: Scored[] = [];
-    // Only when the request's own words ground no conflict: the graph widens what is found, not what is said.
-    // Only for a request that acts or asks, or a message arriving: a remark that names someone ("haha Lucía sent me
-    // a meme") is no occasion to raise what binds them or their organisation.
-    const engaged = acts || this.imperative(cue) || isAction(cue.raw);
-    if (walked?.size && engaged && (hits.length === 0 || this.config.graphMerge)) {
-      for (const x of graphPool) {
-        const w = walked.get(x.item.id);
-        if (!w || !w.binds || bulkMail(x.item) || !this.beyondName(x, cue)) continue;
-        // A notification's status ("Status: Blocked") is no one's constraint on a person it names, unless the request
-        // names its reference.
-        if (w.automated && w.named && !w.byRef) continue;
-        // A limit on an amount ("travel over £500 needs pre-approval") binds a request that states no amount only
-        // perhaps: with no model's say, not raised on a name alone (as for the consequence probe, D54).
-        if (unmeasuredLimit(this.frame(cue), x.item)) continue;
-        if (this.verdict(x.item, cue, this.conflictTies(cue, w), w.speaks) === "conflict") viaGraph.push(x);
-      }
-    }
-    // The walk's best first: it is the one most tied to what the request names.
-    const by = (x: Scored) => walked!.get(x.item.id)!.score;
-    const best = viaGraph.filter((x) => !hits.includes(x)).sort((a, b) => by(b) - by(a));
-    return { hits, best };
+    return hits;
   }
 
   /**
@@ -2353,7 +2487,6 @@ export class ContextPartner {
     ctx: {
       probed?: ReadonlySet<string>;
       bridged?: ReadonlySet<string>;
-      walked?: ReadonlyMap<string, Walked>;
       carded?: ReadonlyMap<string, CardFind>;
     } = {},
   ): { x: Scored; facts: Facts }[] {
@@ -2369,7 +2502,6 @@ export class ContextPartner {
     const b = (v: boolean) => (v ? 1 : 0);
     return scored.slice(0, this.config.decideCandidates).map((x, rank) => {
       const item = x.item;
-      const w = ctx.walked?.get(item.id);
       const card = ctx.carded?.get(item.id);
       const day = startDay(item, cue.offset);
       const at = startMs(item);
@@ -2378,8 +2510,6 @@ export class ContextPartner {
       const beyondName = this.beyondName(x, cue);
       const about = this.about(x, cue);
       const unmeasured = unmeasuredLimit(frame, item);
-      const graphConflict =
-        w !== undefined && w.binds && this.verdict(item, cue, this.conflictTies(cue, w), w.speaks) === "conflict";
       const facts: Facts = {
         score: x.score,
         matched: x.matched,
@@ -2394,7 +2524,6 @@ export class ContextPartner {
         conflictHit: b(
           verdict === "conflict" && about && beyondName && !bulkMail(item) && !settled(item) && !unmeasured,
         ),
-        graphHit: b(graphConflict && beyondName && !bulkMail(item) && w.automated !== true),
         bulk: b(bulkMail(item)),
         settled: b(settled(item)),
         awayElsewhere: b(this.awayElsewhere(item, cue)),
@@ -2409,12 +2538,6 @@ export class ContextPartner {
         ),
         probed: b(ctx.probed?.has(item.id) === true),
         bridged: b(ctx.bridged?.has(item.id) === true),
-        walked: b(w !== undefined),
-        walkScore: w?.score ?? 0,
-        binds: b(w?.binds === true),
-        walkNamed: b(w?.named === true),
-        automated: b(w?.automated === true),
-        graphConflict: b(graphConflict),
         carded: b(card !== undefined),
         cardViolated: b(card?.violated === true),
         cardByName: b(card?.tied === "name"),
@@ -2467,40 +2590,8 @@ export class ContextPartner {
   }
 
   /** What an item says about the request's frame: conflict, clear or none (`conflict.ts` `assess`). */
-  private verdict(item: ContextItem, cue: Cue, ties?: ReadonlySet<string>, speaks = false): Verdict {
-    return assess(this.frame(cue), item, localNow(cue), ties, speaks);
-  }
-
-  /**
-   * The words that tie a graph-walked item's statements to the request (`graph`): the names of the nodes it was
-   * reached through ("umbrella", "health"); for one reached by a day alone, the request's action class's words
-   * (`consequence.ts`: "production" for a release), when it has one.
-   */
-  private conflictTies(cue: Cue, w: Walked): Set<string> {
-    const ties = tieWords(w.via);
-    if (!w.named) {
-      const cls = actionClass(cue.raw, isAction(cue.raw) || cue.external === true);
-      if (cls) for (const t of classTies(cls)) ties.add(t);
-    }
-    return ties;
-  }
-
-  /**
-   * The knowledge graph's finds for a request (`graph`): a walk from its names (as typed, and capitalised runs the
-   * user's items name), identifiers, roles and, with `graphDays`, days. The user's own name, addresses and
-   * organisation are kept out (`ItemCache.walk`): they are on everything. CPU only, bounded by `graphBudgetMs`.
-   */
-  private walkGraph(s: Session, cue: Cue): Map<string, Walked> {
-    const seeds = seedsOf(cue.raw, cleanEntities(cue.entities), this.config.graphDays ? (cue.time?.days ?? []) : []);
-    const found = this.deps.cache.walk(
-      s.scope,
-      seeds,
-      { budgetMs: this.config.graphBudgetMs, limit: this.config.graphItems, floor: this.config.graphFloor },
-      this.now(),
-    );
-    const out = new Map(found.map((w) => [w.id, w]));
-    WALKS.set(cue, out);
-    return out;
+  private verdict(item: ContextItem, cue: Cue, ties?: ReadonlySet<string>): Verdict {
+    return assess(this.frame(cue), item, localNow(cue), ties);
   }
 
   /**
@@ -2819,9 +2910,6 @@ export class ContextPartner {
     const sendTo = searchSpan ? (xs: Source[]) => xs.map((x) => this.traced(x, searchSpan.id)) : (xs: Source[]) => xs;
     // With `probeShare`: what the planner and the probes of this lookup send alike is sent once (`SharedCalls`).
     const shared: SharedCalls | undefined = this.config.probeShare ? new Map() : undefined;
-    // `anticipate`: what a prefetch already asked a source for the request's names answers the planner too (its
-    // query per name), as it answers the probes (`probe`'s `recent`).
-    if (shared && this.config.anticipate && s.ant) this.seedShared(s, shared, cue, all);
     // A planned source's calls, as counted where they reach the connector (`made`), by its index in `chosen`.
     const planned: CountedPlanCalls[] = [];
     const chosen =
@@ -2861,11 +2949,7 @@ export class ContextPartner {
     const settled = searching.catch(() => null);
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing = this.config.probes
-      ? this.probe(s, cue, routed, all, listing, probed, settled, shared, {
-          ...this.lookupOpts(s, cue),
-          local,
-          deadlineAt,
-        }).catch(() => {})
+      ? this.probe(s, cue, routed, all, listing, probed, settled, shared, { local, deadlineAt }).catch(() => {})
       : null;
     // The same query answered by the synced sources from the local index (D57): no call, nothing to store.
     const answeredHere = local
@@ -2970,14 +3054,6 @@ export class ContextPartner {
     shared?: SharedCalls,
     opts: ProbeOpts = {},
   ): Promise<void> {
-    if (opts.after) {
-      // A prefetch of the same names still running (`anticipate`): its answers, once in, stand in for these calls.
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const grace = new Promise<void>((done) => (timer = setTimeout(done, this.config.probeGraceMs)));
-      await Promise.race([opts.after.catch(() => {}), grace]);
-      clearTimeout(timer);
-      if (s.closed) return;
-    }
     // Before the probes' calls: what they store was read under it (D133).
     const readMark = this.sync?.mark() ?? 0;
     const lanes = new Map<string, Promise<unknown>>();
@@ -3028,10 +3104,7 @@ export class ContextPartner {
         }
         if (sources.length === 0) return here;
       }
-      // With `anticipate`, the same sources in another order are the same probe: an event's prefetch and the request
-      // route a name at different moments (the situation, the mentions recorded in between), and should share it.
       const ids = sources.map((x) => x.id);
-      if (this.config.anticipate) ids.sort();
       const key = `${text}|${window ? `${window.start}/${window.end}` : ""}|${ids.join(",")}`;
       // Probed recently by this user (any of their sessions): its finds at no call, while every one is still cached.
       const hits = this.deps.cache.probeHits(s.scope, key, this.config.probeMemoMs, this.now());
@@ -3043,8 +3116,8 @@ export class ContextPartner {
       // kind of probe has not been yielding, is not called; its last answer, while still cached, stands in.
       const asked = `${text}|${window ? `${window.start}/${window.end}` : ""}`;
       const reused: ContextItem[] = [];
-      // Offline (`anticipate`'s read at the request, and its class read): what each source last answered to this
-      // query, while still cached, and no call.
+      // Offline (the action firewall's read, and its class read): what each source last answered to this query,
+      // while still cached, and no call.
       if (offline) {
         const now = this.now();
         for (const source of sources) {
@@ -3055,18 +3128,13 @@ export class ContextPartner {
         return [...here, ...reused];
       }
       let live = sources;
-      if (this.config.probeFresh || this.config.probeYield || this.config.anticipate) {
+      if (this.config.probeFresh || this.config.probeYield) {
         live = [];
         const now = this.now();
         for (const source of sources) {
-          // `anticipate`: asked live at this source within the memo's age (an event's prefetch, most often), its last
-          // answer stands in as the memo's would; the memo itself keeps only answers every source gave in full.
-          const at = this.config.anticipate ? this.economy.askedAt(s.scope, source.id, asked) : null;
-          const recent = at !== null && now - at <= this.config.probeMemoMs;
           const unchanged =
-            recent ||
-            (this.config.probeFresh &&
-              this.economy.changeChance(s.scope, source.id, asked, now) < this.config.probeFreshFloor);
+            this.config.probeFresh &&
+            this.economy.changeChance(s.scope, source.id, asked, now) < this.config.probeFreshFloor;
           const idle =
             !unchanged &&
             this.config.probeYield &&
@@ -3142,9 +3210,7 @@ export class ContextPartner {
       // A page of the probe's own size from each source, even when the call was the planner's (8 items): more would
       // crowd the probes' seats with the judge (live, the judge passed fewer planted items with them).
       const items = outcomes.flatMap((o) => o.items.slice(0, window ? 20 : 5));
-      // `anticipate` with shared calls: the whole answer (the planner's page size) is cached and recorded, so it can
-      // stand in for the planner's own query of the name later (`seedShared`); the probe's finds stay its first five.
-      const whole = window ? 20 : this.config.anticipate && shared ? 8 : 5;
+      const whole = window ? 20 : 5;
       // A call the fan-out did not make (busy, limited, open, answered from its cache, joined in flight, past the
       // deadline) is no call.
       const unmade = to.length - outcomes.filter(reachedSource).length;
@@ -3152,8 +3218,7 @@ export class ContextPartner {
       if (own) extra -= unmade;
       // A consequence probe's answers are always recorded: which of its terms each source was asked, and when, is
       // what rotates them and what its later lookups recall (`consequence`).
-      const learn =
-        this.config.probeFresh || this.config.probeYield || this.config.consequenceProbe || this.config.anticipate;
+      const learn = this.config.probeFresh || this.config.probeYield || this.config.consequenceProbe;
       if (!s.closed && learn) {
         const now = this.now();
         for (const o of outcomes) {
@@ -3227,9 +3292,7 @@ export class ContextPartner {
     // `probeTopicAlone`: the topic only for a request that names no one (with people, their probes find what the topic
     // would: held-out funnels returned as many planted items without it, at fewer calls).
     const topic =
-      opts.noTopic || off.has("topic") || (c.probeTopicAlone && people.length > 0)
-        ? ""
-        : topicOf(cue.text.split(" "), cue.entities);
+      off.has("topic") || (c.probeTopicAlone && people.length > 0) ? "" : topicOf(cue.text.split(" "), cue.entities);
     // The organisations of the request's people, from what came back for them; what is said of someone's
     // organisation (a hold, a policy) applies to them.
     const byPeople = (async () => {
@@ -3262,7 +3325,7 @@ export class ContextPartner {
         : c.consequenceProbe && !off.has("consequence")
           ? actionClass(cue.raw, acts)
           : null;
-    // The class read with no call (`anticipate`): the class's queries an event's prefetch sent, as cached.
+    // The class read with no call (the action firewall's): the class's queries earlier lookups sent, as cached.
     const offlineSend: ProbeSend = (k, src, t, w, keep, on) => send(k, src, t, w, keep, on, true);
     await Promise.all([
       ...windows.map((w) => send("day", listers, "", w)),
@@ -3493,8 +3556,19 @@ export class ContextPartner {
    * (already redacted by the fan-out) and replaces the item; one its source no longer has is dropped from the cache and
    * left out; one that could not be checked stays as held.
    * Each re-read is a connector call, traced as a "verify" decision (`sourceCalls`). Never throws.
+   *
+   * `strict` (an ask's citations, D211): a doubted item whose re-read failed with a plain error is read once more, and
+   * one still not confirmed is left out, counted by source in `strict.unconfirmed` for the answer to name. An ask's
+   * answer is taken as what the sources hold now, so a copy a signal doubted and nothing confirmed is not cited (one
+   * ask in 360 cited a deleted item that way in RealUse-1 part D). A source with no fetch tool, or whose null proves
+   * nothing, is cited as held.
    */
-  private async verifyItems(s: Session, scored: Scored[], cue: Cue): Promise<Scored[]> {
+  private async verifyItems(
+    s: Session,
+    scored: Scored[],
+    cue: Cue,
+    strict?: { unconfirmed: Map<string, number> },
+  ): Promise<Scored[]> {
     if (!this.config.verifyDelivery || scored.length === 0) return scored;
     const now = this.now();
     // Doubted now, or re-read just before (`checkAhead`): that re-read made the cached copy current, but the copy in
@@ -3503,13 +3577,25 @@ export class ContextPartner {
       const held = s.checks?.get(id);
       return held !== undefined && now - held.at <= CHECK_REUSE_MS;
     };
-    const due = scored.filter((x) => recent(x.item.id) || this.doubted(s, x.item));
+    const doubted = new Set<string>();
+    for (const x of scored) if (this.doubted(s, x.item)) doubted.add(x.item.id);
+    const due = scored.filter((x) => recent(x.item.id) || doubted.has(x.item.id));
     if (due.length === 0) return scored;
     const t0 = performance.now();
     const before = this.freshness.calls;
     const outcomes = new Map(
       await Promise.all(due.map(async (x) => [x.item.id, await this.check(s, x.item)] as const)),
     );
+    if (strict && !s.closed) {
+      // One more read (`check` reuses no failure) for a plain error, often one bad call, and for a read our own guard
+      // skipped while the others held the source's slots; two at a time, the fan-out's starting concurrency per source.
+      const again = due.filter((x) => doubted.has(x.item.id) && RETRIED.has(outcomes.get(x.item.id)!));
+      for (let k = 0; k < again.length && !s.closed; k += STRICT_RETRY_LANES) {
+        const batch = again.slice(k, k + STRICT_RETRY_LANES);
+        const read = await Promise.all(batch.map(async (x) => [x.item.id, await this.check(s, x.item)] as const));
+        for (const [id, o] of read) outcomes.set(id, o);
+      }
+    }
     this.trace({
       sessionId: s.id,
       turn: s.turn,
@@ -3527,6 +3613,10 @@ export class ContextPartner {
     return scored.flatMap((x) => {
       const o = outcomes.get(x.item.id);
       if (o === "gone") return [];
+      if (strict && doubted.has(x.item.id) && (o === "failed" || o === "flaked")) {
+        strict.unconfirmed.set(x.item.sourceId, (strict.unconfirmed.get(x.item.sourceId) ?? 0) + 1);
+        return [];
+      }
       if (o !== "changed") return [x];
       const copy = this.deps.cache.get(s.scope, x.item.id, this.now());
       return copy ? [{ ...x, item: copy }] : [x];
@@ -3547,6 +3637,8 @@ export class ContextPartner {
       held &&
       now - held.at <= CHECK_REUSE_MS &&
       held.settled !== "failed" &&
+      held.settled !== "flaked" &&
+      held.settled !== "skipped" &&
       this.sync?.signalledSince(s.scope, item.sourceId, held.mark) !== true
     )
       return held.outcome;
@@ -3572,7 +3664,7 @@ export class ContextPartner {
       const source = all.find((x) => x.id === item.sourceId);
       if (!source?.fetch) {
         this.freshness.failed++;
-        return "failed";
+        return "unverifiable";
       }
       this.freshness.calls++;
       const got = await this.fanout.fetchChecked(source, s.scope, item.ref, {
@@ -3581,7 +3673,18 @@ export class ContextPartner {
       });
       if (got.status === "failed" || s.closed) {
         this.freshness.failed++;
-        return "failed";
+        if (s.closed || got.status !== "failed") return "failed";
+        // A guard's skip made no call: not one the connector received. A busy permit or our rate limit's ordinary use
+        // is no evidence against the item and clears in moments (one retry). An open breaker, or a rate limit the
+        // connector's own 429 pushed back, says the source is in trouble now: the item could not be checked
+        // ("failed"), so a strict ask leaves it out and says so (D211, D232).
+        if (got.why === "refused") {
+          this.freshness.calls--;
+          return got.guard === "open" || got.pushedBack ? "failed" : "skipped";
+        }
+        // A null from a source whose null does not mean gone (an MCP tool) says nothing, and says it every time: like
+        // a source with no fetch, its items are cited as held (D126). A plain error is worth one more read.
+        return got.why === "null" ? "unverifiable" : got.why === "error" ? "flaked" : "failed";
       }
       if (got.status === "gone") {
         this.freshness.gone++;
@@ -3602,6 +3705,10 @@ export class ContextPartner {
       const changed = this.store(s, [copy], 0, synced, readMark) > 0;
       // A held search page may still show the old copy: a later lookup must not store it back.
       if (changed) this.fanout.dropResults(s.scope, item.sourceId);
+      if (changed) {
+        const stored = this.deps.cache.get(s.scope, item.id, this.now());
+        if (stored) this.queueRevised(s.scope, [stored]);
+      }
       if (changed) this.freshness.changed++;
       else this.freshness.confirmed++;
       return changed ? "changed" : "confirmed";
@@ -3753,26 +3860,24 @@ export class ContextPartner {
     // An event on a day the request names is a candidate whatever it scores on words (D44).
     const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true;
     // A consequence find that does not conflict is no candidate: it shares nothing with the request but its class.
-    // A graph walk's own finds (`graph`) are not either: they have their seats and ground, and no other path.
     // An intent hit (`intent`) is: its requests say the request is one it would change. The rule paths still read
     // its own words (its lexical score and terms are unchanged), so it is delivered with no model's say only where a
     // structural verdict (the conflict test, a violated card) binds it.
     return scored.filter(
       (x) =>
-        !x.walkedOnly &&
-        (x.score >= this.config.candidateScore ||
-          onNamedDay(x) ||
-          probed.has(x.item.id) ||
-          bridged.has(x.item.id) ||
-          carded.has(x.item.id) ||
-          intents.has(x.item.id)),
+        x.score >= this.config.candidateScore ||
+        onNamedDay(x) ||
+        probed.has(x.item.id) ||
+        bridged.has(x.item.id) ||
+        carded.has(x.item.id) ||
+        intents.has(x.item.id),
     );
   }
 
   /**
-   * The consequence finds that conflict with the request (`consequenceProbe`, or `anticipate`'s class read): a freeze
-   * over the day a release is asked for, not one last month; and not a limit on an amount the request does not state
-   * ("travel over £500 needs pre-approval" for printer paper).
+   * The consequence finds that conflict with the request (`consequenceProbe`, or the action firewall's class read): a
+   * freeze over the day a release is asked for, not one last month; and not a limit on an amount the request does not
+   * state ("travel over £500 needs pre-approval" for printer paper).
    */
   private bridgedOf(scored: Scored[], cue: Cue, consequence?: { cls: ActionClass; ids: string[] }): Set<string> {
     if (!consequence || consequence.ids.length === 0) return new Set();
@@ -3800,295 +3905,6 @@ export class ContextPartner {
     return local.size > 0 ? local : null;
   }
 
-  // ── anticipation (`anticipate`, `anticipate.ts`) ──
-
-  /**
-   * Reads an event for what the agent will need next and prefetches it in the background (`prefetch`). One prefetch
-   * per session at a time: an event arriving meanwhile waits, and a later one replaces it (the newest is what the
-   * next request will be closest to). Never throws and never blocks the event.
-   */
-  private anticipate(s: Session, kind: string, text: string, at: number, lookup: boolean): void {
-    const ant = (s.ant ??= { calls: 0, running: null, queued: null, prefetched: new Set(), asked: new Set() });
-    if (s.closed || ant.calls >= this.config.anticipateSessionCalls) return;
-    if (ant.running) {
-      ant.queued = { kind, text, at, lookup };
-      return;
-    }
-    const spans = this.spans;
-    const sp = spans?.open("anticipate.prefetch", 0, { async: true, event: kind });
-    ant.running = this.prefetch(s, ant, kind, text, at, lookup, sp?.id)
-      .catch(() => {})
-      .finally(() => {
-        if (sp) spans!.close(sp, { session: s.id, calls: ant.calls });
-        ant.running = null;
-        const next = ant.queued;
-        ant.queued = null;
-        if (next && !s.closed) this.anticipate(s, next.kind, next.text, next.at, next.lookup);
-      });
-  }
-
-  /**
-   * One event's prefetch: the names it mentions and the days it schedules, as the request's own probes would send
-   * them (person, organisation and day probes, through `probe`, so their answers land in the user's probe memo and
-   * economy), the names the user's history says follow its intent, and its action class's constraint vocabulary.
-   * A request's own names and days are left to its lookup. At most `anticipateCalls` calls (the class query, one
-   * call to one source, on top), and `anticipateSessionCalls` for the session.
-   */
-  private async prefetch(
-    s: Session,
-    ant: Anticipation,
-    kind: string,
-    text: string,
-    at: number,
-    lookup: boolean,
-    span?: number,
-  ): Promise<void> {
-    const off = this.config.anticipateOff;
-    const offset = this.deps.cache.offsetOf(s.scope);
-    const p = predict(text, at, offset, kind === "external");
-    const fresh = (key: string) => !ant.asked.has(key);
-    // The user's own name is on everything of theirs: never a need. A tool's output names whoever its items do (the
-    // senders, a signature's colleagues, a company): only people the user's items have as parties are worth a call.
-    const self = this.deps.cache.selfOf(s.scope)?.toLowerCase();
-    const tool = kind === "tool_call" || kind === "tool_result";
-    const names =
-      lookup || off.includes("names")
-        ? []
-        : p.names.filter(
-            (n) =>
-              fresh(`n:${n.toLowerCase()}`) &&
-              n.toLowerCase() !== self &&
-              (!tool || this.deps.cache.isPerson(s.scope, n)),
-          );
-    if (!off.includes("learn")) {
-      for (const n of this.patterns.follows(s.scope, p.intent, 1, this.now())) {
-        if (names.length < PREDICT_NAMES && fresh(`n:${n.toLowerCase()}`) && !names.includes(n)) names.push(n);
-      }
-    }
-    const days = lookup || off.includes("days") ? [] : p.days.filter((d) => fresh(`d:${d}`));
-    // A class's vocabulary once per session: the draft and the message it becomes are one action.
-    const cls = off.includes("class") || !p.cls || !fresh(`c:${p.cls.id}`) ? null : p.cls;
-    if (names.length === 0 && days.length === 0 && !cls) return;
-    const all = await this.deps.sources(s.scope).catch((): Source[] => []);
-    if (all.length === 0 || s.closed) return;
-    this.markAsked(ant, [
-      ...names.map((n) => `n:${n.toLowerCase()}`),
-      ...days.map((d) => `d:${d}`),
-      ...(cls ? [`c:${cls.id}`] : []),
-    ]);
-    // A cue of the event's head, with only the names and days still to fetch: `probe` sends what a request with them
-    // would, so the request's own probes later find the same queries answered.
-    const cue = buildCue(p.head, distinctTermIds(p.head, s.vocab), s.vocab, at, offset, true);
-    cue.entities = names;
-    // Its probes are the `anticipate.prefetch` span's children: they reach the session through it (D56).
-    if (span !== undefined) cue.span = span;
-    if (days.length === 0) cue.time = null;
-    else if (cue.time) cue.time = { ...cue.time, days: new Set(days) };
-    // Only the class's query ranks sources by the lookup's routing; routing draws from the source map's sampler, so
-    // it is not consulted for nothing.
-    const found = cls ? this.routed(s, cue, all, this.config.lookupSources) : [];
-    const out: ProbeOut = { calls: 0, kept: [] };
-    const left = this.config.anticipateSessionCalls - ant.calls;
-    // A draft's names are the request's own, probed early: the request's probe budget. Any other event's are a guess.
-    const budget = kind === "draft" ? this.config.probeCalls : this.config.anticipateCalls;
-    await this.probe(
-      s,
-      cue,
-      found,
-      all,
-      false,
-      out,
-      Promise.resolve(),
-      this.config.probeShare ? new Map() : undefined,
-      { budget: Math.min(budget, left), cls, noTopic: true, local: this.localOf(s, all) },
-    );
-    // The session ended while the probes ran: nothing of it is learned or traced after its end (D17).
-    if (s.closed) return;
-    ant.calls += out.calls;
-    for (const id of [...out.kept, ...(out.consequence?.ids ?? [])]) {
-      ant.prefetched.delete(id);
-      ant.prefetched.add(id);
-    }
-    while (ant.prefetched.size > MAX_PREFETCHED) ant.prefetched.delete(ant.prefetched.values().next().value!);
-    this.trace({
-      sessionId: s.id,
-      turn: s.turn,
-      event: kind,
-      decision: "skipped",
-      reason: "anticipate",
-      latencyMs: 0,
-      sourceCalls: 0,
-      modelCalls: 0,
-      costUsd: 0,
-      itemIds: [],
-      anticipateCalls: out.calls,
-    });
-  }
-
-  /**
-   * Puts into a lookup's shared calls (`SharedCalls`, `probeShare`) the answers a source gave this user's prefetch
-   * for the request's names, while recent (within `probeMemoMs`) and still wholly cached: the planner's query for a
-   * name is then answered at no call, as the probe's is.
-   */
-  private seedShared(s: Session, shared: SharedCalls, cue: Cue, all: Source[]): void {
-    const now = this.now();
-    for (const name of cue.entities.slice(0, 2)) {
-      const asked = `${name}|`;
-      for (const source of all) {
-        const at = this.economy.askedAt(s.scope, source.id, asked);
-        if (at === null || now - at > this.config.probeMemoMs) continue;
-        const last = this.economy.lastIds(s.scope, source.id, asked);
-        const held = last ? this.deps.cache.hits(s.scope, last, now) : [];
-        if (!last || held.length < last.length) continue;
-        const key = sharedKey(source.id, { scope: s.scope, text: name, entities: [name], limit: 8 });
-        if (!shared.has(key)) shared.set(key, Promise.resolve(held.map((h) => h.item)));
-      }
-    }
-  }
-
-  /** Notes names ("n:…"), days ("d:…") and classes ("c:…") as fetched for the session (bounded: `MAX_ASKED`). */
-  private markAsked(ant: Anticipation, keys: readonly string[]): void {
-    for (const k of keys) {
-      ant.asked.delete(k);
-      ant.asked.add(k);
-    }
-    while (ant.asked.size > MAX_ASKED) ant.asked.delete(ant.asked.values().next().value!);
-  }
-
-  /** `early`, under an `anticipate.early` span when spans are on (its probes are that span's children). */
-  private async tracedEarly(s: Session, cue: Cue, eventKind: string, t0: number): Promise<Injection | null> {
-    const spans = this.spans;
-    if (!spans) return this.early(s, cue, eventKind, t0);
-    const sp = spans.open("anticipate.early", cue.span, { async: true });
-    let injection: Injection | null = null;
-    try {
-      injection = await this.early(s, { ...cue, span: sp.id }, eventKind, t0);
-      return injection;
-    } finally {
-      spans.close(sp, { delivered: injection !== null });
-    }
-  }
-
-  /**
-   * The request decided from what is held, with no call and no model (`anticipate`): the economy's last answers for
-   * its names and days at every source (which the prefetches warmed), the class's cached finds, and the cache. What is
-   * sure is delivered, else what the request's structure grounds (a conflict, a clash, an absence, the event it
-   * names). Never the fallback: its best guess among what happens to be held is no better than among what the live
-   * search returns. A stale copy is never delivered from here (D40). With a judge, nothing: the slow path decides.
-   */
-  private async early(s: Session, cue: Cue, eventKind: string, t0: number): Promise<Injection | null> {
-    // With a judge, the slow path decides (see the fast path): what is held only makes it faster.
-    if (this.deps.model !== null) return null;
-    // The observe call waits on this: a resolver doing I/O (an MCP connect, a token refresh) must not hold it. Past
-    // `EARLY_SOURCES_MS` the request goes to the slow path, which waits for the sources as it always has.
-    // (A resolver that fails throws here; `observe` reads that as no early answer, as it reads an empty list.)
-    const all = await within(this.deps.sources(s.scope), EARLY_SOURCES_MS);
-    if (all === null || all.length === 0 || s.closed) return null;
-    const out: ProbeOut = { calls: 0, kept: [] };
-    if (this.config.probes) {
-      const cls = this.config.anticipateOff.includes("class")
-        ? null
-        : actionClass(cue.raw, isImperative(cue.raw) || cue.external === true);
-      // Offline, every source's last answer is read (no routing: it would draw from the source map's sampler).
-      await this.probe(s, cue, all, all, false, out, Promise.resolve(), undefined, {
-        offline: true,
-        cls,
-        classOffline: true,
-        local: this.localOf(s, all),
-      });
-    }
-    if (s.closed) return null;
-    const probed = new Set(out.kept);
-    const scored = this.rank(s, cue, { probed: [...out.kept, ...(out.consequence?.ids ?? [])] });
-    const bridged = this.bridgedOf(scored, cue, out.consequence);
-    const sure = this.confident(scored, cue);
-    let items: Scored[] = [];
-    let how = "sure";
-    if (sure.length > 0) {
-      items = sure;
-    } else {
-      const g = this.grounded(
-        s,
-        cue,
-        this.eligible(scored, cue, probed, bridged),
-        eventKind,
-        bridged,
-        out.consequence?.cls,
-      );
-      items = g.items;
-      how = g.how;
-    }
-    const stale = items.length > 0 && this.stale(s, items);
-    if (this.deps.onCandidates) {
-      const facts = this.factsOf(s, cue, scored, eventKind, { probed, bridged });
-      this.dump(s, "early", facts, stale ? [] : items, items.length > 0 && !stale ? how : "");
-    }
-    if (items.length === 0 || stale) return null;
-    const ids = items.map((x) => x.item.id);
-    this.trace({
-      sessionId: s.id,
-      turn: s.turn,
-      event: eventKind,
-      decision: "fast",
-      reason: `anticipated-${how}`,
-      latencyMs: Math.round(performance.now() - t0),
-      sourceCalls: 0,
-      modelCalls: 0,
-      costUsd: 0,
-      itemIds: ids,
-      ...this.prefetchedOf(s, ids),
-    });
-    return await this.deliverChecked(s, items, "proactive", `anticipated-${how}:${cue.id}`, cue);
-  }
-
-  /**
-   * The options a lookup's own probes run with under `anticipate`: they first wait (at most `probeGraceMs`) for the
-   * session's running prefetch, whose answers they would otherwise ask again, and read the request's action class
-   * from what the prefetches cached, with no call (unless `consequenceProbe` sends it live).
-   */
-  private lookupOpts(s: Session, cue: Cue): ProbeOpts {
-    if (!this.config.anticipate) return {};
-    const cls =
-      this.config.consequenceProbe || this.config.anticipateOff.includes("class")
-        ? undefined
-        : actionClass(cue.raw, isImperative(cue.raw) || cue.external === true);
-    return {
-      ...(cls !== undefined ? { cls, classOffline: true } : {}),
-      ...(s.ant?.running ? { after: s.ant.running } : {}),
-    };
-  }
-
-  /** The delivered ids the session's anticipation had fetched or held ready (`Trace.prefetched`); {} when none. */
-  private prefetchedOf(s: Session, ids: readonly string[]): Partial<Trace> {
-    const pre = s.ant?.prefetched;
-    if (!pre || pre.size === 0) return {};
-    const hit = ids.filter((id) => pre.has(id));
-    return hit.length > 0 ? { prefetched: hit } : {};
-  }
-
-  /**
-   * Learns what followed the request's intent (`IntentPatterns`): the names in the titles of what was delivered for
-   * it, other than those it named itself. Its action class, else its situation.
-   */
-  private learnFollows(s: Session, cue: Cue, scored: Scored[]): void {
-    const own = new Set(cue.entities.map((e) => e.toLowerCase()));
-    const intent = actionClass(cue.raw, isImperative(cue.raw) || cue.external === true)?.id ?? s.situation;
-    for (const x of scored) {
-      const names = cleanEntities(extractEntities(x.item.title.slice(0, 200)))
-        .filter((n) => !own.has(n.toLowerCase()))
-        .slice(0, 2);
-      this.patterns.note(s.scope, intent, names, [x.item.sourceId], this.now());
-    }
-  }
-
-  /** The sources the source map ranks first for a cue's names and the session's situation. */
-  private routed(s: Session, cue: Cue, all: Source[], limit: number): Source[] {
-    return this.deps.sourceMap
-      .route({ scope: s.scope, entities: cue.entities, situation: s.situation, sourceIds: all.map((x) => x.id), limit })
-      .map((r) => all.find((x) => x.id === r.sourceId)!)
-      .filter(Boolean);
-  }
-
   private async lookup(s: Session, cue: Cue, t0: number, eventKind: string, served = false): Promise<Injection | null> {
     // The turn that triggered the lookup. Traces report it, not the turn current when the lookup finishes: later
     // events may arrive meanwhile, and evals attribute deliveries by this field.
@@ -4113,10 +3929,6 @@ export class ContextPartner {
         itemIds: items.map((i) => i.id),
         ...(plans ? { plans } : {}),
         ...(local !== undefined ? { localSources: local, syncCalls: syncCalls ?? 0 } : {}),
-        ...this.prefetchedOf(
-          s,
-          items.map((i) => i.id),
-        ),
       });
     try {
       let probedIds: string[] | undefined;
@@ -4142,10 +3954,6 @@ export class ContextPartner {
       const spans = this.spans;
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
       const consIds = new Set(consequence?.ids ?? []);
-      // With `graph`: what the user's knowledge graph reaches from the request, after the lookup's items are cached.
-      const walking = this.config.graph ? spans?.open("graph.walk", cue.span) : undefined;
-      const walked = this.config.graph ? this.walkGraph(s, cue) : new Map<string, Walked>();
-      if (walking) spans!.close(walking, { reached: walked.size });
       // `cards`: cached items whose implication card bears on the request's actions (no model, no call).
       const carding = this.config.cards && this.deps.cards ? spans?.open("cards.match", cue.span) : undefined;
       const carded = this.cardFinds(s, cue);
@@ -4158,7 +3966,6 @@ export class ContextPartner {
       const ranking = spans?.open("rank", cue.span);
       const scored = this.rank(s, cue, {
         probed: extra.length > 0 ? [...(probedIds ?? []), ...extra] : probedIds,
-        ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
       });
       if (ranking) spans!.close(ranking, { candidates: scored.length });
       // Only anchored intent hits are eligible as such, take seats or tie the judge (`anchoredIntents`).
@@ -4182,19 +3989,18 @@ export class ContextPartner {
       );
       if (conflicting) spans!.close(conflicting, { bridged: bridged.size });
       const confiding = spans?.open("confident", cue.span);
-      const sure = this.confident(walked.size > 0 ? scored.filter((x) => !x.walkedOnly) : scored, cue);
+      const sure = this.confident(scored, cue);
       if (confiding) spans!.close(confiding, { sure: sure.length });
       const probedSet = new Set(probedIds ?? []);
-      const factsNow = () =>
-        this.factsOf(s, cue, scored, eventKind, { probed: probedSet, bridged, walked, carded: carded });
+      const factsNow = () => this.factsOf(s, cue, scored, eventKind, { probed: probedSet, bridged, carded: carded });
       // The rule paths decide when no model does.
       const noModelSay = !this.deps.model;
       const dumped = (path: CandidateDump["path"], items: readonly Scored[], how: string, say = noModelSay) => {
         if (this.deps.onCandidates && say) this.dump(s, path, factsNow(), items, items.length > 0 ? how : "");
       };
-      // `anticipate`: the request was answered from what was held (`early`). The live search adds only what is sure,
-      // or with no model what the request's structure grounds: never the fallback's best guess or a judge call, which
-      // would have had that delivery among their candidates.
+      // `served`: the request was answered already (a follow-up behind a delivery, `afterPoll`). The live search adds
+      // only what is sure, or with no model what the request's structure grounds: never the fallback's best guess or
+      // a judge call, which would have had that delivery among their candidates.
       if (served) {
         // A follow-up (`afterPoll`) decides as with no model whatever is configured: its judge call would be the
         // event's second (docs/COST-MODEL.md).
@@ -4210,8 +4016,6 @@ export class ContextPartner {
                   eventKind,
                   bridged,
                   consequence?.cls,
-                  walked,
-                  walked.size > 0 ? scored.filter((x) => walked.has(x.item.id)) : [],
                   carded,
                 ).items;
         // A follow-up corrects: an item the agent was given whose words its poll changed goes out again, as it now
@@ -4225,12 +4029,12 @@ export class ContextPartner {
           noModelSay || cue.followUp === true,
         );
         if (items.length === 0) {
-          done("silent", "anticipated");
+          done("silent", "served");
           return null;
         }
         done(
           "sources",
-          `after-anticipated:${cue.id}`,
+          `after-served:${cue.id}`,
           items.map((x) => x.item),
         );
         return await this.deliverChecked(s, items, "proactive", `sources:${cue.id}`, cue);
@@ -4252,9 +4056,6 @@ export class ContextPartner {
       const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true;
       const probed = new Set(probedIds ?? []);
       const eligible = this.eligible(scored, cue, probed, bridged, carded, intents);
-      // The walk's finds (`graph`), whatever they score on words: they get seats and the graph's conflict ground,
-      // and no other path (what every other path reads stays as it was without the graph).
-      const graphPool = walked.size > 0 ? scored.filter((x) => walked.has(x.item.id)) : [];
       // With probes on, up to three of the probes' finds join the judge's candidates beyond the best scored: found for
       // the request's people, organisations or day, they share few of its words and would otherwise never be seen.
       const top = judgeSure
@@ -4285,12 +4086,7 @@ export class ContextPartner {
             .slice(0, this.config.intentSeats)
         : [];
       const seats = [...cardSeat, ...intentSeats, ...probeSeats];
-      // With `graph`, the walk's best finds the judge would not otherwise see take seats of their own.
-      const graphSeats = graphPool
-        .filter((x) => !top.includes(x) && !seats.includes(x))
-        .sort((a, b) => walked.get(b.item.id)!.score - walked.get(a.item.id)!.score)
-        .slice(0, this.config.graphSeats);
-      const unsure = [...top, ...seats, ...graphSeats];
+      const unsure = [...top, ...seats];
       // A probe that brought in what is seated for the judge did its part, whatever the judge then makes of it: the
       // judge rules on relevance, the probe only on finding (`probeYield`).
       if (this.config.probeYield && !s.closed) {
@@ -4319,17 +4115,7 @@ export class ContextPartner {
         }
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
         const grounding = spans?.open("ground", cue.span, { candidates: eligible.length });
-        const grounded = this.grounded(
-          s,
-          cue,
-          eligible,
-          eventKind,
-          bridged,
-          consequence?.cls,
-          walked,
-          graphPool,
-          carded,
-        );
+        const grounded = this.grounded(s, cue, eligible, eventKind, bridged, consequence?.cls, carded);
         if (grounding) spans!.close(grounding, { grounded: grounded.items.length });
         if (grounded.items.length > 0) {
           dumped("lookup", grounded.items, `grounded-${grounded.how}`, true);
@@ -4362,7 +4148,6 @@ export class ContextPartner {
         (x: Scored): boolean =>
           probed.has(x.item.id) ||
           bridged.has(x.item.id) ||
-          walked.has(x.item.id) ||
           carded.get(x.item.id)?.violated === true ||
           intents.has(x.item.id) ||
           onNamedDay(x) ||
@@ -4465,33 +4250,26 @@ export class ContextPartner {
   /**
    * `intent` (D87, docs/research/edge-intent.md): the user's cached items whose requests, written by the card call in
    * the background, best match the request, best first: item id → its place (0-based) and match. A hit holds at least
-   * `intentMinMatched` of the request's terms and `intentMinCoverage` of their idf; at most `intentHits` items. Only
-   * requests made before the request arrived count (as for cards). No model, no call: one BM25 search over the user's
-   * requests (at most four per carded item).
+   * `intentMinMatched` of the request's terms and `intentMinCoverage` of their idf; at most `intentHits` items
+   * (`keepIntents`, intent.ts; `intentByKind` treats constraint-carded hits apart, D200). Only requests made before the
+   * request arrived count (as for cards). No model, no call: one BM25 search over the user's requests (at most four
+   * per carded item).
    */
   private intentFinds(s: Session, cue: Cue): Map<string, IntentFind> {
-    const out = new Map<string, IntentFind>();
     const enricher = this.deps.cards;
-    if (!this.config.cards || !this.config.intent || !enricher) return out;
+    if (!this.config.cards || !this.config.intent || !enricher) return new Map();
     const now = this.now();
     const c = this.config;
     // The request as written (redacted), not its content terms: the requests the model wrote are whole sentences in
     // the user's words, verbs included ("approve", "book"), which the cue's terms may leave out.
-    const found = enricher.intentFinds(
-      s.scope,
-      cue.raw.slice(0, INTENT_QUERY_CHARS),
-      cue.arrived ?? now,
-      c.intentHits,
-      (id) => this.deps.cache.get(s.scope, id, now) !== null,
-    );
-    for (const { ids, hit } of found) {
-      if (hit.matched < c.intentMinMatched || hit.coverage < c.intentMinCoverage) continue;
-      for (const id of ids) {
-        if (out.size >= c.intentHits) return out;
-        if (!out.has(id)) out.set(id, { rank: out.size, coverage: hit.coverage, matched: hit.matched });
-      }
-    }
-    return out;
+    const cut = intentCut(c);
+    const text = cue.raw.slice(0, INTENT_QUERY_CHARS);
+    const accept = (id: string) => this.deps.cache.get(s.scope, id, now) !== null;
+    const found = enricher.intentFinds(s.scope, text, cue.arrived ?? now, c.intentHits, accept);
+    // `intentByKind`: a second, deeper search for the carded pass only (`intentReach`, intent.ts, says why apart).
+    const reach = intentReach(cut);
+    const deep = reach > 0 ? enricher.intentFinds(s.scope, text, cue.arrived ?? now, reach, accept) : found;
+    return keepIntents(found, cut, deep);
   }
 
   /**
@@ -4653,9 +4431,6 @@ export class ContextPartner {
     }
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
-    if (this.config.anticipate && mode === "proactive" && !this.config.anticipateOff.includes("learn")) {
-      this.learnFollows(s, cue, scored);
-    }
     // Every item counts as delivered, an echo folded out of the packet too: the agent has its occurrence.
     s.ledger.mark(
       scored.map((x) => x.item.id),
@@ -4702,11 +4477,7 @@ export class ContextPartner {
       createdAt: this.now(),
     };
     if (rendering) spans!.close(rendering);
-    const walks = WALKS.get(cue);
-    let graphMask = 0;
-    for (const x of scored) graphMask |= walks?.get(x.item.id)?.mask ?? 0;
     this.built.set(injection, {
-      graphMask,
       sourceIds: [...new Set(items.map((i) => i.sourceId))],
       items: items.map((i) => ({ sourceId: i.sourceId, id: i.id })),
       // Only the words the agent received: an item's text past the packet's cut is not evidence of use.
@@ -4715,6 +4486,9 @@ export class ContextPartner {
       // its items' in order (not folded); a model's composed answer has no item lines and is attributed to none.
       ...(this.config.askDedup
         ? { shown: { items: shown === undefined ? items : scored.map((x) => x.item), text: shown ?? injection.text } }
+        : {}),
+      ...(this.config.revisionNotice
+        ? { copies: renderedCopies(shown === undefined ? items : scored.map((x) => x.item), shown ?? injection.text) }
         : {}),
     });
     return injection;
@@ -4802,6 +4576,50 @@ function pendingOf(s: Session): boolean {
   return s.inflight !== null || !!s.behind || s.pending.length > 0;
 }
 
+/** `revisionNotice`: an "updated:" packet's reason prefix, and what each of its items' titles starts with. */
+const UPDATED = "updated:";
+const UPDATED_TAG = "updated: ";
+const UPDATED_NOTE = " (changed at its source since shown earlier; this version replaces it)";
+
+/** `pollRevised`: the least time between two notice polls of one user's source, and how many sources it tracks. */
+const REVISION_POLL_GAP_MS = 30_000;
+const MAX_REVISION_SOURCES = 10_000;
+
+interface RevisionSource {
+  running: boolean;
+  /** A notice came while the poll ran: one more poll once it settles. */
+  again: boolean;
+  /** When the last poll started (engine clock). */
+  at: number;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+/** Resolves when `signal` aborts (at once if it has). */
+function whenAborted(signal: AbortSignal): Promise<void> {
+  return new Promise((r) => (signal.aborted ? r() : signal.addEventListener("abort", () => r(), { once: true })));
+}
+
+/** The version of each item a packet or answer hands the agent (`revisionNotice`). */
+function copiesOf(items: readonly ContextItem[]): { id: string; sourceId: string; version: number }[] {
+  return items.map((it) => ({ id: it.id, sourceId: it.sourceId, version: versionOf(it) }));
+}
+
+/**
+ * How many of `items`, in order, have their line in `text` (a packet or answer: one `- [source] …` line each, in
+ * the items' order, until the size cut), as `noteShown` reads them.
+ */
+function renderedCount(items: readonly ContextItem[], text: string): number {
+  const lines = text.split("\n").filter((line) => line.startsWith("- ["));
+  let n = 0;
+  while (n < items.length && n < lines.length && lines[n]!.startsWith(`- [${items[n]!.sourceId}] `)) n++;
+  return n;
+}
+
+/** The copies of the items whose lines the agent receives: one cut from the text was not shown. */
+function renderedCopies(items: readonly ContextItem[], text: string) {
+  return copiesOf(items.slice(0, renderedCount(items, text)));
+}
+
 /** An item's words as the ledger records them (`Ledger.revised`): a copy edited at its source hashes otherwise. */
 function versionOf(item: ContextItem): number {
   return hashString(`${item.title}\n${item.text}`, 0);
@@ -4833,13 +4651,32 @@ function modelAttrs(res: {
  * An ask's answer text (D127): `packet` (empty when no item answers), with the sources the ask chose that did not
  * answer named. An empty answer reads "Nothing in the connected sources." only when every chosen source answered (or
  * none was chosen); otherwise it says which could not be reached and that this is not an all-clear. Source ids are the
- * operator's names for its connectors, not source text.
+ * operator's names for its connectors, not source text. Items left out because a change signal doubted them and no
+ * re-read confirmed them (`unconfirmed`, by source, D211) are named too: an answer short of them is not an all-clear.
  */
 function honestAnswer(
   packet: string,
   sources: readonly SourceStatus[] | undefined,
   unresolved = false,
   closed = false,
+  unconfirmed?: ReadonlyMap<string, number>,
+): string {
+  const told = reachAnswer(packet, sources, unresolved, closed);
+  if (!unconfirmed || unconfirmed.size === 0) return told;
+  const names = [...unconfirmed].map(([id, n]) => `${id} (${n})`).join(", ");
+  const left = `Left out items from ${names}: their source reported changes and they could not be re-checked`;
+  // An answer that would read as an all-clear says it is not one.
+  if (told === "Nothing in the connected sources.")
+    return `Nothing confirmed in the connected sources. ${left}, so this is not an all-clear.`;
+  return `${told}\n${left}.`;
+}
+
+/** `honestAnswer` without the unconfirmed items: the packet and the sources that did not answer (D127). */
+function reachAnswer(
+  packet: string,
+  sources: readonly SourceStatus[] | undefined,
+  unresolved: boolean,
+  closed: boolean,
 ): string {
   if (closed) {
     const none = "The session ended before the sources were searched, so this is not an all-clear.";
@@ -4882,13 +4719,12 @@ interface IntentFind {
   matched: number;
 }
 
-/** How long anticipation's early decision waits for the source resolver (ms): an answer held, or none at once. */
-const EARLY_SOURCES_MS = 5;
+/** How long the action firewall waits for the source resolver (ms): an answer held, or none at once. */
+const CHECK_SOURCES_MS = 5;
 
 /**
  * `p`'s value if it settles within `ms`, else null (it runs on; a rejection after the bound is swallowed). Not an
- * async function: an answer already in settles as soon as awaiting `p` itself would, so the early decision keeps its
- * place among the session's other work (the prefetch it races with).
+ * async function: an answer already in settles as soon as awaiting `p` itself would.
  */
 function within<T>(p: Promise<T>, ms: number): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -4961,6 +4797,16 @@ interface AskInternal {
   /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
   again?: { searched: SearchedLive; prev: Injection | null };
 }
+
+/** `readAsk`'s options: whether it reads for the push, and the push's request. */
+interface ReadOpts {
+  push?: boolean;
+  /** The push's request (`AskInternal.request`), recorded with its reading for `readerReuse`. */
+  request?: number;
+}
+
+/** No reading: no verdict, no call, nothing spent. */
+const NO_READ: ReaderRead = { verdict: null, costUsd: 0, called: false, overBudget: false };
 
 const sessionKey = (e: Scope & { sessionId: string }) => `${scopeKey(e)}#${e.sessionId}`;
 
@@ -5102,9 +4948,22 @@ const MAX_PUSHED_ITEMS = 100;
 const READER_POOL_CAP = READER_MAX_ITEMS;
 
 /** What a re-read found (`verifyDelivery`). */
-type CheckOutcome = "confirmed" | "changed" | "gone" | "failed";
+/**
+ * A re-read's outcome. Four ways not to know (D211): "unverifiable" (the source has no fetch tool, or answered null
+ * and does not report gone: its items are delivered as held, D126), "skipped" (our own guard refused the call, most
+ * often the per-source concurrency limit while the other re-reads hold its slots: no call, no evidence), "flaked"
+ * (the call failed with a plain error, worth one retry) and "failed" (a timeout, a 429, the caller giving up, our
+ * gate).
+ */
+type CheckOutcome = "confirmed" | "changed" | "gone" | "failed" | "flaked" | "skipped" | "unverifiable";
 /** Re-reads a session keeps (`Session.checks`), and how long one is reused before an item is read again (ms). */
 const MAX_CHECKS = 64;
+/** Below this much of an ask's wait left (or a quarter of it, if less), the ask starts no reader call of its own. */
+const MIN_OWN_READ_MS = 250;
+
+/** A strict (ask) verification's outcomes worth one more read, and how many such reads run at once (D211). */
+const RETRIED: ReadonlySet<CheckOutcome> = new Set<CheckOutcome>(["flaked", "skipped"]);
+const STRICT_RETRY_LANES = 2;
 const CHECK_REUSE_MS = 30_000;
 /** How long an item its source said is gone is kept from being stored again (the fan-out's stale-result window). */
 const GONE_HOLD_MS = 10 * 60_000;

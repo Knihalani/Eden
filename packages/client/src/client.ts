@@ -12,6 +12,7 @@
  */
 import { createHash } from "node:crypto";
 import {
+  MAX_PUSHED_ITEMS,
   isId,
   type ActionCheck,
   type AgentEvent,
@@ -132,6 +133,26 @@ export interface EdenClientOptions {
    * request's timeout grows by the wait, as for an explicit one.
    */
   defaultWaitMs?: number;
+}
+
+/** One item a change notification carried, as the source gives it (`/v1/sources/items`). */
+export interface PushedItem {
+  /** The source's own id for the item (a message id, an event id): the same ref its listing gives. */
+  ref: string;
+  title?: string;
+  text: string;
+  url?: string;
+  /** Epoch milliseconds. */
+  updatedAt?: number;
+  meta?: Record<string, string>;
+}
+
+/** What changed at a source, when the notification says (`sourceChanged`'s second argument). */
+export interface SourceChange {
+  /** Items new or changed, in full. */
+  items?: PushedItem[];
+  /** Refs the source no longer has (deleted, recalled). */
+  removed?: string[];
 }
 
 /** The observe wait on a sent user message when `defaultWaitMs` is unset (D112): the measured default's wait. */
@@ -294,12 +315,38 @@ export class EdenClient {
   }
 
   /**
-   * Forwards a change notification for one of the user's sources (a Gmail watch, a Calendar or Drive channel, a
-   * webhook): with the server's `syncPush`, the source is polled at its next use instead of on a guess. Never throws;
-   * resolves false when the partner could not be reached or does not sync that source (`sourceNotice` says why).
+   * Forwards a change notification for one of the user's sources (a Gmail watch, a Calendar or Drive channel, a Slack
+   * event, a webhook). Never throws.
+   *
+   * - **With the changed items (`change.items`, deleted refs in `change.removed`): the recommended form (D210).** Eden
+   *   holds the items as synced and drops the removed ones at once, with no call to the source: a signal makes the
+   *   next lookup poll the source's listing, a payload does not (RealUse-1 part D: 0.22 connector calls a lookup
+   *   with payloads, 0.91 with signals). Batches past `MAX_PUSHED_ITEMS` are split. Resolves true when every part
+   *   reached the server and was taken, which is not the same as held: a server without `syncPush`, or a source not
+   *   synced yet, takes the items and stores none (`sourceItems` resolves 0; `sourceNotice` says why). When a part
+   *   did not reach it (unreachable, refused, an answer of another shape), the plain signal is sent as well, so Eden
+   *   polls the source rather than miss the change, and it resolves false.
+   * - **Without items (a signal):** with the server's `syncPush`, the source is polled at its next use instead of on a
+   *   guess. Resolves false when the partner could not be reached or does not sync that source (`sourceNotice` says
+   *   why).
    */
-  async sourceChanged(sourceId: string): Promise<boolean> {
-    return (await this.sourceNotice(sourceId))?.synced === true;
+  async sourceChanged(sourceId: string, change?: SourceChange): Promise<boolean> {
+    // A JS caller can pass anything: what is not an array sends nothing, so it is read as none (a plain signal).
+    const items = Array.isArray(change?.items) ? change.items : [];
+    const removed = Array.isArray(change?.removed) ? change.removed : [];
+    if (items.length === 0 && removed.length === 0) return (await this.sourceNotice(sourceId))?.synced === true;
+    let delivered = true;
+    for (let i = 0; i < items.length; i += MAX_PUSHED_ITEMS) {
+      if ((await this.sourceItemsReached(sourceId, items.slice(i, i + MAX_PUSHED_ITEMS))) === null) delivered = false;
+    }
+    for (let i = 0; i < removed.length; i += MAX_PUSHED_ITEMS) {
+      if ((await this.sourceRemovedReached(sourceId, removed.slice(i, i + MAX_PUSHED_ITEMS))) === null) {
+        delivered = false;
+      }
+    }
+    // A part Eden did not take: the signal, so the source's listing is read at its next use instead.
+    if (!delivered) await this.sourceNotice(sourceId);
+    return delivered;
   }
 
   /**
@@ -327,38 +374,40 @@ export class EdenClient {
    * 0 too when the partner could not be reached, which is reported to `onError`.
    */
   async sourceRemoved(sourceId: string, refs: string[]): Promise<number> {
+    return (await this.sourceRemovedReached(sourceId, refs)) ?? 0;
+  }
+
+  /** `/v1/sources/removed`: how many were dropped, or null when the server did not take the call. */
+  private async sourceRemovedReached(sourceId: string, refs: string[]): Promise<number | null> {
     const { tenantId, userId } = this.options;
-    const res = await this.post<{ removed?: number }>("/v1/sources/removed", {
-      ...(tenantId ? { tenantId } : {}),
-      userId,
-      sourceId,
-      refs,
-    });
-    return typeof res?.removed === "number" ? res.removed : 0;
+    const res = await this.post<{ removed: number }>(
+      "/v1/sources/removed",
+      { ...(tenantId ? { tenantId } : {}), userId, sourceId, refs },
+      undefined,
+      undefined,
+      (v) => isRecord(v) && typeof v.removed === "number",
+    );
+    return res ? res.removed : null;
   }
 
   /**
    * Forwards the items a change notification carried (a Slack event's message, a trigger's payload): held as synced,
    * with no source call. Never throws; resolves to how many were stored new or changed (0 when unreachable).
    */
-  async sourceItems(
-    sourceId: string,
-    items: {
-      ref: string;
-      title?: string;
-      text: string;
-      url?: string;
-      updatedAt?: number;
-      meta?: Record<string, string>;
-    }[],
-  ): Promise<number> {
+  async sourceItems(sourceId: string, items: PushedItem[]): Promise<number> {
+    return (await this.sourceItemsReached(sourceId, items)) ?? 0;
+  }
+
+  /** `/v1/sources/items`: how many were stored new or changed, or null when the server did not take the call. */
+  private async sourceItemsReached(sourceId: string, items: PushedItem[]): Promise<number | null> {
     const { tenantId, userId } = this.options;
-    const res = await this.post<{ stored?: number }>("/v1/sources/items", {
-      ...(tenantId ? { tenantId } : {}),
-      userId,
-      sourceId,
-      items,
-    });
-    return typeof res?.stored === "number" ? res.stored : 0;
+    const res = await this.post<{ stored: number }>(
+      "/v1/sources/items",
+      { ...(tenantId ? { tenantId } : {}), userId, sourceId, items },
+      undefined,
+      undefined,
+      (v) => isRecord(v) && typeof v.stored === "number",
+    );
+    return res ? res.stored : null;
   }
 }

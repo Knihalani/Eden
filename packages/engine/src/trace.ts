@@ -34,7 +34,7 @@ export interface Trace {
    * Calls the connectors received for this decision: a search answered by the fan-out's cache, one that joined another
    * lookup's call in flight (a "reader-push" lookup and the slow path search the same words at once), or one a guard
    * refused is not counted; a planner's cascade counts each call it sent. Fetches (refreshes) and on-demand sync
-   * listings are included. Summed over a task's traces, with `anticipateCalls`, it is the task's request-time calls.
+   * listings are included. Summed over a task's traces, it is the task's request-time calls.
    */
   sourceCalls: number;
   modelCalls: number;
@@ -58,13 +58,6 @@ export interface Trace {
    */
   localSources?: number;
   syncCalls?: number;
-  /**
-   * With `anticipate`: source calls an event's background prefetch made (a "skipped" trace with reason "anticipate";
-   * they are not `sourceCalls`, which count a lookup's own), and, on a delivery, the delivered item ids the session's
-   * anticipation had fetched or held ready before the request (ids only, as `itemIds`).
-   */
-  anticipateCalls?: number;
-  prefetched?: string[];
 }
 
 export type TraceSink = (trace: Trace) => void;

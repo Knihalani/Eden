@@ -80,6 +80,8 @@ export const INTENT_COVERS: Record<string, string[]> = {
   heldout13: ["41", "42", "43", "44"],
   // RealUse-1 (docs/research/realuse-1/A-heldout14.md): topped up on Haiku 5.5, 2026-11-06.
   heldout14: ["41", "42", "43", "44"],
+  // The weak-points plan's blind suite (docs/research/fix-s3b-lab.md): made on Haiku 5.5 on 2026-11-07, unrun.
+  heldout15: ["41", "42", "43", "44"],
 };
 
 /** The suite × seed shards INTENT_FILE was not made for. */

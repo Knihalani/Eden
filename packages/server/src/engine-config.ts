@@ -6,18 +6,17 @@
  *
  * Every key is checked at startup against `DEFAULT_CONFIG`: an unknown key (a typo, a flag from another version) or a
  * value of the wrong type stops the server with a message naming it, rather than running silently on the default.
- * So does a number outside the key's range (`RANGES`) or an `anticipateOff` part the engine does not have. The
+ * So does a number outside the key's range (`RANGES`) or a list entry the engine does not know. The
  * servers wire both model-role dependencies (cards and the reader, build.ts) whenever OPENROUTER_API_KEY is set, so
  * no card or reader key is refused for want of a dependency: without a key those parts are inert by design and the
  * default runs its no-model path (D112), whatever the file says. Sync is accepted: static sources list nothing, and
  * per-user MCP sources with a list tool (D108) are synced (engine-config.test.ts, `sync over per-user sources`).
  */
 import { readFileSync } from "node:fs";
-import { ANTICIPATE_PARTS, checkEngineConfig, type EngineConfig } from "@eden/engine";
+import { checkEngineConfig, type EngineConfig } from "@eden/engine";
 
-// The checks themselves (keys, types, `RANGES`, `anticipateOff` parts, `NEEDS_DEP`) live in @eden/engine's
-// config-check.ts, shared with the lab's CLIs; re-exported for engine-config.test.ts.
-export { ANTICIPATE_PARTS };
+// The checks themselves (keys, types, `RANGES`, list entries, `NEEDS_DEP`) live in @eden/engine's config-check.ts,
+// shared with the lab's CLIs.
 
 /** The engine settings EDEN_ENGINE_CONFIG names, validated; `{}` when it is unset or empty. Throws on a bad file. */
 export function engineConfig(env: Record<string, string | undefined> = process.env): Partial<EngineConfig> {

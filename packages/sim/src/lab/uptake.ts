@@ -12,12 +12,24 @@ interface Cited {
 export const PACKETS_CHARS = 6_000;
 /** The longest an agent's recorded `ask_context` question gets. */
 export const QUESTION_CHARS = 500;
+/** The longest a recorded `ask_context` answer's text gets: past the engine's 4,000-byte answer and its last lines. */
+export const ANSWER_CHARS = 5_000;
 
-/** One `ask_context` call: the agent's question, the ids its answer cited, and the answer's size in bytes. */
+/**
+ * One `ask_context` call: the agent's question, the ids its answer cited, the answer's size in bytes and its text
+ * (cut), whose "Eden's reader:" lines tell a reader-flagged item from one only listed.
+ */
 export interface AskRecord {
   question: string;
   cited: string[];
   bytes: number;
+  text?: string;
+}
+
+/** One proactive packet's way: the kind of its reason (`reader`, `grounded`, `fallback`, …) and the ids it cited. */
+export interface PacketWay {
+  why: string;
+  ids: string[];
 }
 
 /** One pi-ab task's packets, the item ids they cited, and the ids `ask_context` answers cited, in arrival order. */
@@ -26,11 +38,14 @@ export class UptakeLog {
   readonly packets: string[] = [];
   private readonly cited: string[] = [];
   private readonly askCited: string[] = [];
+  private readonly ways: PacketWay[] = [];
 
-  /** A proactive packet that reached the agent. */
-  packet(i: Cited & { text: string }): void {
+  /** A proactive packet that reached the agent; with its `reason`, the way it came is kept for attribution. */
+  packet(i: Cited & { text: string; reason?: string }): void {
     this.packets.push(i.text);
-    this.cited.push(...i.citations.map((c) => c.itemId));
+    const ids = i.citations.map((c) => c.itemId);
+    this.cited.push(...ids);
+    if (i.reason !== undefined) this.ways.push({ why: i.reason.split(":")[0]!, ids });
   }
 
   /**
@@ -55,6 +70,7 @@ export class UptakeLog {
         question: question.slice(0, QUESTION_CHARS),
         cited: ids,
         bytes: Buffer.byteLength(a.answer ?? ""),
+        ...(a.answer ? { text: a.answer.slice(0, ANSWER_CHARS) } : {}),
       });
     }
   }
@@ -62,12 +78,13 @@ export class UptakeLog {
   private readonly asks: AskRecord[] = [];
 
   /**
-   * The task line's fields: the joined packets (when any, cut), each way's cited ids, deduplicated, and the asks
-   * (when any were recorded with their question).
+   * The task line's fields: the joined packets (when any, cut), each way's cited ids, deduplicated, each packet's way
+   * (when recorded with its reason), and the asks (when any were recorded with their question).
    */
-  fields(): { packets?: string; cited: string[]; askCited: string[]; asks?: AskRecord[] } {
+  fields(): { packets?: string; ways?: PacketWay[]; cited: string[]; askCited: string[]; asks?: AskRecord[] } {
     return {
       ...(this.packets.length ? { packets: this.packets.join("\n").slice(0, PACKETS_CHARS) } : {}),
+      ...(this.ways.length ? { ways: this.ways } : {}),
       cited: [...new Set(this.cited)],
       askCited: [...new Set(this.askCited)],
       ...(this.asks.length ? { asks: this.asks } : {}),

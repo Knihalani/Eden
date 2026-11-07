@@ -5,7 +5,8 @@
  * Per (user, source):
  * - a circuit breaker: a failing connector is skipped (status "open") instead of costing a timeout per lookup;
  * - an adaptive concurrency limit (AIMD): a saturated connector is skipped ("busy") rather than queued;
- * - a GCRA rate limit, pushed back by rate-limit errors (429 / "rate limit" / Retry-After) ("limited");
+ * - a GCRA rate limit, pushed back by rate-limit errors (429 / "rate limit" / Retry-After) ("limited" when our own
+ *   limit skips the call; "throttled" when the connector itself refused it as rate-limited, D212);
  * - a rolling latency histogram, for observability and (later) adaptive deadlines.
  * Across calls:
  * - singleflight: identical concurrent searches (same user, source, query) share one call;
@@ -41,7 +42,12 @@ export function sharedKey(sourceId: string, q: SearchQuery): string {
   return `${sourceId}|${text}|${q.window ? `${q.window.start}..${q.window.end}` : ""}`;
 }
 
-export type FanoutStatus = "ok" | "cached" | "stale" | "error" | "timeout" | "open" | "busy" | "limited";
+/**
+ * How a source answered a call. "limited" is our own rate limit skipping the call (no call went out); "throttled" is
+ * the connector's own rate-limit refusal (a 429, "rate limit", "too many requests"): the call reached it, and its
+ * answer was "not now" (D212). Before D212 a 429 was an "error".
+ */
+export type FanoutStatus = "ok" | "cached" | "stale" | "error" | "throttled" | "timeout" | "open" | "busy" | "limited";
 
 export interface FanoutOutcome {
   sourceId: string;
@@ -51,6 +57,22 @@ export interface FanoutOutcome {
   error?: string;
   /** The outcome of a call already in flight for the same query, joined: the connector received no call of its own. */
   joined?: true;
+}
+
+/**
+ * Why `fetchChecked` could not say (D211): the source has no fetch tool ("no-fetch"), a guard skipped the call
+ * ("refused"), the caller gave up ("aborted"), the call failed ("error", "timeout") or the connector refused it as
+ * rate-limited ("throttled"), the source answered null without `fetchReportsGone` ("null"), or our gate failed
+ * ("gate"). Only "error" is worth one immediate retry: the others would be refused or answered the same way again.
+ * A refusal names its guard (`guard`): "open" (the breaker) says the source is in trouble now; "limited" is our rate
+ * limit, which is in trouble too only when the connector's own rate-limit error pushed it back (`pushedBack`); without
+ * that, like "busy" (no free permit), it is ordinary use that clears in moments.
+ */
+export interface FetchFailed {
+  status: "failed";
+  why: "no-fetch" | "refused" | "aborted" | "error" | "timeout" | "throttled" | "null" | "gate";
+  guard?: "open" | "limited" | "busy";
+  pushedBack?: boolean;
 }
 
 /** Statuses of a call a guard refused before it went out (no rate token, no call). */
@@ -119,6 +141,8 @@ interface PerSource {
    * the first one: most (user, source) pairs never see the planner.
    */
   callLatency?: RollingHistogram;
+  /** Until when the rate limit is pushed back by the connector's own rate-limit error (engine clock), if it was. */
+  pushedBackUntil?: number;
 }
 
 /**
@@ -292,15 +316,18 @@ export class SourceFanout {
     scope: Scope,
     ref: string,
     options: { timeoutMs: number; signal?: AbortSignal },
-  ): Promise<{ status: "ok"; item: ContextItem } | { status: "gone" } | { status: "failed" }> {
-    const failed = { status: "failed" } as const;
-    if (!source.fetch) return failed;
+  ): Promise<{ status: "ok"; item: ContextItem } | { status: "gone" } | FetchFailed> {
+    const failed = (why: FetchFailed["why"]): FetchFailed => ({ status: "failed", why });
+    if (!source.fetch) return failed("no-fetch");
     const timeout = AbortSignal.timeout(options.timeoutMs);
     const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
     const key = `${scopeKey(scope)}|${source.id}`;
     const s = this.state(key);
     const epoch = this.admit(key, s);
-    if (typeof epoch !== "number") return failed;
+    if (typeof epoch !== "number") {
+      const pushedBack = epoch === "limited" && (s.pushedBackUntil ?? -Infinity) > this.now();
+      return { status: "failed", why: "refused", guard: epoch, ...(pushedBack ? { pushedBack } : {}) };
+    }
     const started = performance.now();
     let raw: ContextItem | null;
     try {
@@ -309,13 +336,16 @@ export class SourceFanout {
       const message = String(e);
       if (signal.aborted && !timeout.aborted) {
         s.limiter.release("ignored"); // The caller gave up: no evidence against the source.
-        return failed;
+        return failed("aborted");
       }
       s.latency.record(performance.now() - started);
       s.limiter.release("dropped");
       s.breaker.failure(epoch);
-      if (RATE_LIMITED.test(message)) this.rate.penalize(key, retryAfterMs(message) ?? 5_000);
-      return failed;
+      if (RATE_LIMITED.test(message)) {
+        this.pushBack(key, s, retryAfterMs(message) ?? 5_000);
+        return failed("throttled");
+      }
+      return failed(timeout.aborted ? "timeout" : "error");
     }
     // The source answered: its permit and breaker are settled once, here. Gating is ours, not the source's: a gate
     // that fails or runs out of time drops the item and says nothing against the source.
@@ -324,12 +354,12 @@ export class SourceFanout {
     s.breaker.success(epoch);
     // Null is "no such item" only from a source that says so (`fetchReportsGone`); from another (an MCP tool's
     // reply without the asked-for row could be an error worded as prose) it says nothing either way.
-    if (!raw) return source.fetchReportsGone === true ? { status: "gone" } : failed;
+    if (!raw) return source.fetchReportsGone === true ? { status: "gone" } : failed("null");
     try {
       const [item] = await this.options.sanitize([raw], signal);
-      return item ? { status: "ok", item } : failed;
+      return item ? { status: "ok", item } : failed("gate");
     } catch {
-      return failed;
+      return failed("gate");
     }
   }
 
@@ -338,7 +368,8 @@ export class SourceFanout {
    * breaker, rate limit and concurrency limit as a search, within `timeoutMs`, sanitized before it is returned. Not
    * cached here: a listing wants the source's current page. `reserve` rate tokens must be left after this call's own
    * (background syncing leaves serving its headroom; a lookup's own sync call reserves none). Returns the page, or why
-   * there is none: the guard that skipped the call ("open", "limited", "busy"), or "error"/"timeout". Never throws.
+   * there is none: the guard that skipped the call ("open", "limited", "busy"), the connector's own rate-limit refusal
+   * ("throttled", D212), or "error"/"timeout". Never throws.
    */
   async list(
     source: Source,
@@ -368,7 +399,10 @@ export class SourceFanout {
       s.latency.record(performance.now() - started);
       s.limiter.release("dropped");
       s.breaker.failure(epoch);
-      if (RATE_LIMITED.test(message)) this.rate.penalize(key, retryAfterMs(message) ?? 5_000);
+      if (RATE_LIMITED.test(message)) {
+        this.pushBack(key, s, retryAfterMs(message) ?? 5_000);
+        if (!timeout.aborted) return "throttled";
+      }
       return timeout.aborted ? "timeout" : "error";
     }
     s.latency.record(performance.now() - started);
@@ -587,8 +621,15 @@ export class SourceFanout {
     if (!RATE_LIMITED.test(message)) return;
     const key = `${scopeKey(scope)}|${sourceId}`;
     const ms = retryAfterMs(message) ?? 5_000;
-    this.rate.penalize(key, ms);
+    this.pushBack(key, this.per.get(key), ms);
     this.shadowRate.penalize(key, ms);
+  }
+
+  /** Pushes the rate limit back after the connector's own rate-limit error, and notes until when (`FetchFailed`). */
+  private pushBack(key: string, s: PerSource | undefined, ms: number): void {
+    // Until the bucket is full again, not until the Retry-After ends: the refusals in between are the penalty's too.
+    const until = this.rate.penalize(key, ms);
+    if (s && until >= 0) s.pushedBackUntil = Math.max(s.pushedBackUntil ?? 0, until);
   }
 
   /** The source's recent latency quantile in ms (NaN if no calls yet), for observability. */
@@ -672,7 +713,7 @@ export class SourceFanout {
       try {
         return { ...done("ok", await this.flights.run(flight, () => Promise.resolve([]), deadline)), joined: true };
       } catch (e) {
-        return { ...fallback(timeout.aborted ? "timeout" : "error", String(e)), joined: true };
+        return { ...fallback(failure(timeout.aborted, String(e)), String(e)), joined: true };
       }
     }
     const s = this.state(sourceKey);
@@ -730,8 +771,8 @@ export class SourceFanout {
       s.latency.record(performance.now() - started);
       s.limiter.release("dropped");
       s.breaker.failure(epoch);
-      if (RATE_LIMITED.test(message)) this.rate.penalize(sourceKey, retryAfterMs(message) ?? 5_000);
-      return fallback(timedOut ? "timeout" : "error", message);
+      if (RATE_LIMITED.test(message)) this.pushBack(sourceKey, s, retryAfterMs(message) ?? 5_000);
+      return fallback(failure(timedOut, message), message);
     } finally {
       this.leave(sourceKey, drops);
     }
@@ -759,6 +800,12 @@ function sizeOf(key: string, items: ContextItem[]): number {
   let n = ENTRY_OVERHEAD + key.length * 2;
   for (const it of items) n += ITEM_OVERHEAD + it.title.length + it.text.length;
   return n;
+}
+
+/** A call that reached the source and failed: "timeout", the connector's rate-limit refusal ("throttled"), "error". */
+function failure(timedOut: boolean, message: string): "timeout" | "throttled" | "error" {
+  if (timedOut) return "timeout";
+  return RATE_LIMITED.test(message) ? "throttled" : "error";
 }
 
 /** A Retry-After hint in an error message ("retry after 30", "Retry-After: 12"), in ms. */

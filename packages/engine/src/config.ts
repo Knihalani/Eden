@@ -41,15 +41,6 @@ export interface EngineConfig {
   ledgerCooldownTurns: number;
   /** Turns before the same cue is looked up again. */
   cueCooldownTurns: number;
-  /**
-   * A request that arrives while the session's slow path is busy (a judge call, a slow source) is kept, not dropped:
-   * one slot per session, the latest wins, looked up once the slow path settles, and its answer queued as pending.
-   * Dropped instead if the session closed, its cue is in cooldown by then, or it waited over 10 s. At most one extra
-   * slow path (so one judge call, under the budget) per busy window. The kept request runs the slow path alone (no
-   * `anticipate` early answer); with `syncPollBehind` it gets the follow-up on the fresh index as any lookup does.
-   * Off: such a request is not looked up. Proposed D102.
-   */
-  slowPathQueue: boolean;
   /** Turns an injection has to show use before it counts as unused. */
   usageWindowTurns: number;
   /**
@@ -264,8 +255,8 @@ export interface EngineConfig {
    */
   syncPushMaxStaleMs: number;
   /**
-   * Every item about to be delivered (a packet or an `ask` answer, from the slow path, the reader's push, anticipation
-   * or the action firewall) whose source signalled a change after the copy was read (`Sync.signalledSince`, with
+   * Every item about to be delivered (a packet or an `ask` answer, from the slow path, the reader's push or the
+   * action firewall) whose source signalled a change after the copy was read (`Sync.signalledSince`, with
    * `syncPush`) is fetched again by its ref first (`SourceFanout.fetchChecked`, within `verifyTimeoutMs`, in parallel;
    * a reader's likely picks are re-read beside its call). A changed copy is stored and delivered in its place; one the
    * source no longer has (`gone`, only from a source with `fetchReportsGone`) is dropped from the cache and not
@@ -275,34 +266,6 @@ export interface EngineConfig {
   verifyDelivery: boolean;
   /** With `verifyDelivery`: each re-read's deadline (ms); past it the item is delivered as held. */
   verifyTimeoutMs: number;
-  /**
-   * A per-user knowledge graph over every cached item (`kg.ts`; docs/research/moon-graph.md): people, organisations,
-   * projects and systems, identifiers, channels, roles and days, joined by typed edges. A lookup walks it from the
-   * request's names, ids, roles and days (spreading activation, `graphBudgetMs` at most, no model, no source call);
-   * what it reaches with zero shared words ("Ahmed Hassan" to "Umbrella Health" through his address) is a candidate:
-   * `graphSeats` seats with the judge, a tie for `judgeTied`, and, with `groundConflict`, the conflict test with the
-   * names it was reached through as ties. Edge-type weights are learned per user from delivered items' use.
-   */
-  graph: boolean;
-  /** Items a graph walk returns at most. */
-  graphItems: number;
-  /** Judge seats for the walk's finds, beyond the best scored and the probes'. */
-  graphSeats: number;
-  /** Items the conflict ground delivers from the walk at most, with no model's say (the best walked first). */
-  graphGround: number;
-  /**
-   * The walk's best conflict is delivered beside the request's own conflicts too, not only when there are none
-   * (`graphGround` of them, within `maxItemsPerInjection`).
-   */
-  graphMerge: boolean;
-  /** The user's edge-type weights learn from whether what the graph reached was used (`UserGraph.learn`). */
-  graphLearn: boolean;
-  /** A walk's hard time bound (ms): past it, it returns what it has. */
-  graphBudgetMs: number;
-  /** The least activation a walked item needs. */
-  graphFloor: number;
-  /** The walk starts from the days the request names too (reaching items whose blocking statements cover them). */
-  graphDays: boolean;
   /**
    * Implication cards (`cards.ts`; needs `PartnerDeps.cards`): items entering the cache are read in the background by a
    * cheap model into small structured cards (the constraint, the actions it affects, its span and limit); at request
@@ -319,35 +282,12 @@ export interface EngineConfig {
    * and how many per call, change.
    */
   cardsEconomy: boolean;
-  /**
-   * An ask gathers the lookup's candidates (consequence probe, graph walk, card finds) and answers first with those
-   * carrying a rule path's verdict: a conflict about the question, a binding graph conflict, a consequence find in
-   * conflict, a violated card (D73, docs/research/gen-ask.md). Off by default.
-   */
-  askVerdicts: boolean;
   /** With `compactAsk`: each item of an ask's answer at most this many bytes. */
   askItemBytes: number;
   /** The ranked candidates whose facts the lab's candidate dump holds (`onCandidates`), best first. */
   decideCandidates: number;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
-  /**
-   * Anticipation (`anticipate.ts`; docs/research/moon-anticipate.md): each event (a user message, a draft the user is
-   * still typing, a tool call or result, an arriving message) is read, with no model, for what the agent will need next
-   * (the names it mentions, the days it schedules, its action class, the names that followed that intent before for
-   * this user), and those are fetched in the background through the probes' own queries, so the request's probes find
-   * them in the memo at no call. A request is then first decided from the cache, on the critical path and with no
-   * call (what is sure, or with no model what the request's structure grounds); the live search still runs behind it
-   * and adds only what is sure or grounded. The action class's constraint vocabulary is fetched off the critical path
-   * and read from the cache at the request (`consequence.ts`), whatever `consequenceProbe` says.
-   */
-  anticipate: boolean;
-  /** Source calls one event's anticipation may make (the class query, one call, is counted on top). */
-  anticipateCalls: number;
-  /** Source calls a session's anticipation may make in all. */
-  anticipateSessionCalls: number;
-  /** Anticipation parts switched off, for ablations: "serve", "class", "learn", "names", "days". */
-  anticipateOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
   estimatedCallUsd: number;
   /**
@@ -359,10 +299,19 @@ export interface EngineConfig {
   /**
    * The action firewall (`checkAction`, `firewall.ts`; docs/research/econ-firewall.md): an agent's tool call is checked
    * before it runs, with no model and no source call, against what is held: the request and the call's structured
-   * arguments (their days, times, amounts, names and references) read as one cue through the conflict test, the graph,
-   * the cards and the calendar. A finding is returned as data; otherwise `proceed`. Off: `checkAction` always proceeds.
+   * arguments (their days, times, amounts, names and references) read as one cue through the conflict test, the cards
+   * and the calendar. A finding is returned as data; otherwise `proceed`. Off: `checkAction` always proceeds.
    */
   actionCheck: boolean;
+  /**
+   * On in the default (D205; part `freshness`): an item this session was handed (a packet taken, an ask's answer)
+   * that is stored again with other words (a sync poll, a notice carrying items, a re-read) is sent once more as an
+   * "updated:" packet, once per revision, queued for the agent's next take. A change notice for a source a session
+   * holds a handed copy from polls it at once in the background (no request waits on it), so the packet is usually
+   * queued before the next request. Off: the agent keeps the version it was handed until a lookup happens to deliver
+   * the new one.
+   */
+  revisionNotice: boolean;
   /**
    * `ask` answers compacted as packets are (D76; docs/research/gen-tokens.md): each item cut to the parts that bear on
    * the question (`compactText`), at most `askItemBytes`, rather than said whole up to the answer's 4 KB. The items and
@@ -411,6 +360,20 @@ export interface EngineConfig {
   intentMinCoverage: number;
   /** ... and the least distinct request terms they must hold. */
   intentMinMatched: number;
+  /**
+   * On in the default (D200; docs/research/fix-s3a-intent.md): an intent hit whose item holds a constraint card (any
+   * kind but `none`) counts from `intentCardCoverage` of the request's idf instead of `intentMinCoverage`, and up to
+   * `intentCardHits` such hits left out by the `intentHits` cut (a second search, 3x `intentHits` deep) are kept
+   * after the others (`keepIntents`, intent.ts). On train, the hits under the thresholds or past the cut that held a
+   * constraint card were mostly hidden facts, the uncarded ones mostly decoys. Paid replay on train: hidden 311 to
+   * 315, decoys 137 to 133; Pi held-out 13+14: hidden raised +2.3 points (not significant), false concerns unchanged
+   * pooled.
+   */
+  intentByKind: boolean;
+  /** With `intentByKind`: the least share of the request's idf a constraint-carded item's requests must hold. */
+  intentCardCoverage: number;
+  /** With `intentByKind`: constraint-carded hits kept past the `intentHits` cut, at most. */
+  intentCardHits: number;
   /** The intent list's weight in an ask's reciprocal-rank fusion, against the lexical order's 1. */
   intentWeight: number;
   /** Judge seats kept for intent hits the lexical ranking did not seat (with a model). */
@@ -469,6 +432,19 @@ export interface EngineConfig {
    * kind or constraint word reads (R3-19; on in the default, D124, amending D122).
    */
   readerGateVisits: boolean;
+  /**
+   * D192 (on in the default; reopens D134): with `verifyDelivery`, no doubted candidate is re-read beside the reader's
+   * call (`checkAhead`); a delivery re-reads only the items it cites, after the reader named them (`verifyItems`).
+   */
+  readerVerifyAfter: boolean;
+  /**
+   * D193 (on in the default): with `readerPush`, an ask in the same request as the push (no newer user message), read
+   * against that same request (not an action of its own), reuses the push's reading instead of a call of its own: the
+   * push's verdicts on the items both pools hold, unchanged in content, lead the answer; an item the push did not read
+   * keeps its rule order. A push that gave no verdict (gated, failed) leaves the ask to read as usual; one still out
+   * past the ask's wait leaves the ask answered without the reader, with no call.
+   */
+  readerReuse: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -489,7 +465,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   windowEvents: 12,
   ledgerCooldownTurns: 40,
   cueCooldownTurns: 6,
-  slowPathQueue: true,
   usageWindowTurns: 6,
   maxSessionsPerTenant: 5_000,
   sessionIdleMs: 2 * 3_600_000,
@@ -515,20 +490,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probeRoles: true,
   probeShare: true,
   probeSecondSources: 3,
-  graph: true,
-  graphItems: 16,
-  graphSeats: 1,
-  graphGround: 1,
-  graphMerge: true,
-  graphLearn: true,
-  graphBudgetMs: 2,
-  graphFloor: 0.15,
-  graphDays: true,
   probeOff: [],
-  anticipate: true,
-  anticipateCalls: 4,
-  anticipateSessionCalls: 24,
-  anticipateOff: [],
   judgeContested: true,
   judgeTied: true,
   judgeTiedShare: 0.03,
@@ -566,11 +528,11 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cards: true,
   cardsEconomy: true,
   cardItems: 1,
-  askVerdicts: true,
   askItemBytes: 320,
   decideCandidates: 64,
   maxEventChars: 32_000,
   actionCheck: false,
+  revisionNotice: true,
   compactAsk: true,
   askDedup: true,
   compactParts: true,
@@ -580,6 +542,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,
+  intentByKind: true,
+  intentCardCoverage: 0.1,
+  intentCardHits: 4,
   intentWeight: 1,
   intentSeats: 1,
   askReader: true,
@@ -593,4 +558,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerPushBehind: true,
   readerGate: true,
   readerGateVisits: true,
+  readerVerifyAfter: true,
+  readerReuse: true,
 };

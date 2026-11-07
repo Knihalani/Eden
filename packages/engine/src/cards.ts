@@ -1094,11 +1094,11 @@ export class CardEnricher {
     before: number,
     k: number,
     accept: (id: string) => boolean,
-  ): { ids: string[]; hit: IntentHit }[] {
+  ): { ids: string[]; hit: IntentHit; carded: boolean }[] {
     const u = this.users.get(scopeKey(scope));
     if (!u?.intent || k <= 0) return [];
     const now = this.deps.now();
-    const out: { ids: string[]; hit: IntentHit }[] = [];
+    const out: { ids: string[]; hit: IntentHit; carded: boolean }[] = [];
     // A few more than wanted: a hash made too late, past its time to live or with no cached item is skipped.
     for (const hit of u.intent.search(text, k * 2)) {
       const s = u.byHash.get(hit.hash);
@@ -1109,7 +1109,8 @@ export class CardEnricher {
       }
       const ids = [...(u.holders.get(hit.hash) ?? [])].filter(accept);
       if (ids.length === 0) continue;
-      out.push({ ids, hit });
+      // `carded`: the content holds a constraint card (a `none` card is held as no card), for `intentByKind`.
+      out.push({ ids, hit, carded: !!s.card });
       if (out.length >= k) break;
     }
     return out;

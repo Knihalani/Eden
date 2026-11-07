@@ -8,6 +8,7 @@
  * (`AskResponse.sources`): an ask where a chosen source did not answer (status not ok/cached/stale/local) is honest
  * when its text says "Could not reach" (or "not an all-clear"); a false all-clear is the text "Nothing in the
  * connected sources." with such a source. Recall@5 of the asks' must facts is reported beside, as quality-cli does.
+ * `rateLimitedAsks`/`saidRateLimited` (added for D212): asks with a rate-limited source, and those whose text says so.
  *
  *   bun packages/sim/lab/realuse-1/D/probes/ask-honesty-probe.ts [--users 8] [--json out.json]
  */
@@ -51,7 +52,12 @@ interface Row {
   silentAboutFailure: number;
   allClearWhenHealthy: number;
   statuses: Record<string, number>;
+  /** Asks where a source was rate-limited (the connector's 429, "throttled" since D212, or Eden's own "limited"). */
+  rateLimitedAsks: number;
+  /** ... whose text says "rate-limited" (before D212 a connector's 429 read "failed"). */
+  saidRateLimited: number;
   example?: string;
+  rateExample?: string;
 }
 
 const rows: Row[] = [];
@@ -69,6 +75,8 @@ for (const [name, over] of Object.entries(FAULTS)) {
     silentAboutFailure: 0,
     allClearWhenHealthy: 0,
     statuses: {},
+    rateLimitedAsks: 0,
+    saidRateLimited: 0,
   };
   let must = 0;
   let hits = 0;
@@ -111,6 +119,13 @@ for (const [name, over] of Object.entries(FAULTS)) {
         else row.silentAboutFailure++;
         if (!row.example && saysUnreached) row.example = res.answer.split("\n").at(-1);
       } else if (allClear) row.allClearWhenHealthy++;
+      if (st.some((s) => s.status === "throttled" || s.status === "limited")) {
+        row.rateLimitedAsks++;
+        if (/rate-limited/.test(res.answer)) {
+          row.saidRateLimited++;
+          row.rateExample ??= res.answer.split("\n").at(-1);
+        }
+      }
     }
   }
   row.recallAt5 = Math.round((hits / Math.max(1, must)) * 1000) / 1000;
