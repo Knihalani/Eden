@@ -41,6 +41,8 @@ const DAY = 24 * HOUR;
 /** Monday 2 November 2026, 09:00 UTC. */
 export const T0 = Date.UTC(2026, 10, 2, 9);
 const SOURCE = "mail";
+/** How long a removal holds its ids gone (`partner.ts`'s `GONE_HOLD_MS`). */
+const GONE_HOLD_MS = 10 * MIN;
 
 // Secret-shaped strings, assembled from parts so no scanner reads this file as holding one.
 export const AWS_KEY = "AK" + "IA" + "QWERTYUIOPASDFGH";
@@ -350,7 +352,10 @@ export class World {
   private readonly sched: () => number;
   private readonly sessions = new Map<string, SessionState>();
   /** By item id: the op after whose settle a removal stands; cleared when the plan re-adds the ref. */
-  private readonly removed = new Map<string, { op: number; at: number; settledAfter: number | null }>();
+  private readonly removed = new Map<
+    string,
+    { op: number; at: number; settledAfter: number | null; outlived?: boolean }
+  >();
   private readonly inflight = new Set<Promise<unknown>>();
   private opIndex = -1;
   /** Draws for the read-only checks run after each op (`explain`), apart from the plan and the scheduling. */
@@ -503,7 +508,7 @@ export class World {
     // "deletes-queued", fixed by `dropRemovedPending` and `dropGone`'s queue pass (see `fuzz.test.ts`).
     for (const c of h.citations) {
       const r = this.removed.get(c.itemId);
-      if (r && r.settledAfter !== null && h.op > r.settledAfter) {
+      if (r && r.settledAfter !== null && !r.outlived && h.op > r.settledAfter) {
         const queued = h.injection !== undefined && h.injection.createdAt < r.at;
         this.violate(
           queued ? "deletes-queued" : "deletes",
@@ -705,7 +710,15 @@ export class World {
       for (const u of this.users) await this.partner.revisionsSettled(u.scope);
       for (let n = 0; n < 5; n++) await new Promise<void>((r) => setImmediate(r));
     }
-    for (const r of this.removed.values()) if (r.settledAfter === null) r.settledAfter = k;
+    for (const r of this.removed.values()) {
+      if (r.settledAfter !== null) continue;
+      r.settledAfter = k;
+      // A page read before the removal and stored after its hold ended (`GONE_HOLD_MS`) brings the item back: the
+      // engine bounds that race by time (a call's timeout, seconds, against a ten-minute hold, D126), and only the
+      // harness's clock can jump past the hold while a page is between its call and its store (audit A11: default
+      // seeds 9648, 19657). Not checked for such a removal.
+      if (this.clock - r.at >= GONE_HOLD_MS) r.outlived = true;
+    }
   }
 
   private start(op: Op, k: number): Promise<unknown> {
