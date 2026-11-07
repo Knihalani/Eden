@@ -1,8 +1,8 @@
+# Patterns here match from the context root only (unlike .gitignore): anything that may sit in a subdirectory too
+# needs "**/", or `COPY packages`/`COPY examples` puts it in an image layer.
 **/node_modules
 archived
 .git
-.local
-.eden-local
 native
 bench
 docs
@@ -10,5 +10,11 @@ docs
 **/*.db
 **/*.db-wal
 **/*.db-shm
-.env
-.env.*
+# Secrets and local data at any depth: Bun loads .env from the directory it runs in, and lab runs write .local/.
+**/.env
+**/.env.*
+**/.local
+**/.eden-local
+**/.eden
+**/.tmp-*
+**/.probe
