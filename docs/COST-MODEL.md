@@ -524,7 +524,12 @@ a nothing-to-add request, 1.4–1.6 KB on one with something to add) and `ask_co
 once (1.25x input) and read back on later requests (0.1x). Measured on Pi with a prompt that caches in every arm
 (train, Anthropic Haiku, lab figures; docs/research/a3-cost-speed.md): Eden writes 865 vs 318 tokens a nothing-to-add
 task one request at a time and 629 vs 262 over days; $ per 1,000 tasks on the 1:1:8 mix +0.060 (+0.042..+0.078) and
-+0.080 (+0.065..+0.095) against the agent alone, while Eden saves model turns (wall −0.96 s and −0.42 s). Cuts of
++0.080 (+0.065..+0.095) against the agent alone, while Eden saves model turns (wall −0.96 s and −0.42 s); rerun on
+the tree merged with A4/A6, +0.047 (+0.029..+0.065) and +0.050 (+0.035..+0.065), −0.95 s and −0.65 s. **With the
+connectors' own per-call fees counted** (`pi-cost-report.ts`, `CONNECTOR_PLANS`), Eden is cheaper than the agent
+alone on every paid plan, because it replaces the agent's 1.0–2.2 tool calls a task with 0–0.16 of its own: over a
+user's days, all-in, −$0.17 per 1,000 tasks on Composio, −$0.50 on Unified.to, −$7.2 on Arcade.dev, −$18.7 on Zapier
+MCP (docs/research/a3-cost-speed.md §12). Cuts of
 packet or ask bytes by lexical anchoring drop planted facts or move the bytes into the ask (D258, D273): the packet's
 bytes are what recall costs. An agent with a fixed prompt under the provider's cache minimum (512 tokens on Haiku 5.5)
 pays its whole prompt as a cache write on every task; Pi's minimal Eden agent did (D260, D271).

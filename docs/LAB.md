@@ -702,6 +702,14 @@ input and output per arm and kind, from the timelines; `--prefix` adds the count
 labelled so) beside billed figures, and compare arms within one run: an arm sending a task's identical prompt after
 another arm reads it whole.
 
+**Connector pricing (A3).** `pi-cost-report.ts` also counts every connector call (the agent's `tool.search_*`
+calls, Eden's in each task's window, Eden's background calls between tasks and its one-time backfill, from
+`Background.sourceCalls`/`setupSourceCalls`, recorded since A3) and prints every total again per plan
+(`CONNECTOR_PLANS`: first-party 0, Composio 0.30, Unified.to 0.75, Arcade.dev 10, Pipedream 12, Zapier MCP 25.8 $ per
+1,000 calls, from `before-after/market.py`) with eden − tools per plan. Runs recorded before it lack the background
+and backfill counts (printed 0). Quote the long horizon's all-in: a short run spreads each stream's backfill over its
+few tasks.
+
 **Why, and the fix (D271).** `cache-probe.ts` (a few calls, $0.0003 an arm) sends each arm's first request as pi-ai
 builds it, twice, the second with another task's user turn: the `eden` arm's tools-and-system prefix is about 500
 tokens on the wire, under Haiku 5.5's 512-token minimum, so it is never read; the tools arm's 867 is. `--tenant-prompt`

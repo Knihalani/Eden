@@ -4,9 +4,17 @@ Status: 2026-11-07, branch `claude/a3-cost-speed` (from `claude/lucid-hypatia-v9
 the afternoon audit (docs/research/audit-1107-plan.md). Every paid call went to Anthropic (`claude-haiku-5-5`,
 `HAIKU_API_KEY`, the lab provider, D97) on this session's ledger (`.local/a3/ledger.jsonl`, cap $2), so every dollar
 figure here is an **Anthropic-direct lab figure** on the **train** suites (in-sample), not the OpenRouter route the
-servers ship. Decisions D271–D273.
+servers ship. Decisions D271–D274. Final figures (§11) are on the tree merged with A4/A6 (`ae5757b75`).
 
 ## In plain words
+
+**Final, on the merged tree (§11):** against the agent alone with its own search tools, both given the same tenant
+prompt, Eden costs **+$0.047 per 1,000 tasks one request at a time** (+0.029..+0.065) and **+$0.050 over a user's
+days** (+0.035..+0.065) in model tokens, is **0.95 s and 0.65 s faster** a task, and raises the hidden fact on 67% of
+hidden tasks against 8% (13 of 23 against 1 of 23 over days). **Priced with the connectors' own per-call fees, Eden
+is cheaper on every paid plan** (it replaces the agent's 1.0–2.2 tool calls a task with 0–0.16 of its own): over days
+−$0.17 per 1,000 tasks on Composio to −$18.7 on Zapier MCP all-in, backfill included (§12). The rest of this section
+is the first, pre-merge pass.
 
 - **Why Pi showed Eden dearer one request at a time is now proven, and it was hiding the real gap.** Pi's agent with
   Eden has a fixed prompt of about 500 tokens on the wire; Anthropic caches nothing shorter than 512 on Haiku 5.5. So
@@ -190,6 +198,84 @@ its re-reads across Hermes's 1.9 model calls a task, the mechanism measured on P
 - **D272**: the long-horizon harness sends payload notices under `--push payload`; long payload latencies before it
   carry ~650 ms of re-reads.
 - **D273**: four packet- and ask-byte cuts rejected at $0; the switch deleted.
+- **D274**: `pushCandidatesCovers` (the lead says the packet is what an ask would return) measured live and deleted:
+  no change in asks, cost or time.
+
+## 11. Final runs on the merged tree
+
+Tree `ae5757b75` (A4's no-key candidates, D276; A6) merged into this branch, the same recipe (`--tenant-prompt`,
+payload, train1–6 seeds 41–42), with pi-ab now counting Eden's connector calls per stream. Ledger runs
+`a3m-short-pay-41/42` ($0.406, three arms: tools, eden, `eden~cov` for D274) and `a3m-long-pay-41/42` ($0.136).
+Summaries `packages/sim/lab/a3/merged-*`.
+
+| | short: tools | short: eden | eden − tools | long: tools | long: eden | eden − tools |
+| --- | --- | --- | --- | --- | --- | --- |
+| hidden raised | 8.3% | 66.7% | +58.3 pts (+50.0..+66.7) | 1/23 | 13/23 | +52.2 pts (+30.4..+73.9) |
+| false concern, mix (not regraded) | 0.0% | 1.8% | +1.8 (+0.1..+4.0) | 0.4% | 1.3% | +0.9 (−0.9..+2.6) |
+| $/1k mix, model tokens | 0.226 | 0.273 | **+0.047 (+0.029..+0.065)** | 0.189 | 0.239 | **+0.050 (+0.035..+0.065)** |
+| wall mean, mix | 2.96 s | 2.01 s | **−0.95 s (−1.13..−0.76)** | 1.92 s | 1.27 s | **−0.65 s (−0.81..−0.49)** |
+| turns a task (mix) | 1.81 | 1.47 | | 1.39 | 1.03 | |
+| `ask_context` a task (mix) | 0 | 0.62 | | 0 | 0.03 | |
+| connector calls a task (mix) | 2.18 | 0 | | 1.04 | 0.16 | |
+| Eden's backfill, calls a user | | 18 | | | 18 | |
+
+The false-concern rise one request at a time is the control and neutral answers Haiku graded as a concern (2 and 3
+of 144), not regraded; earlier regrades found most such concerns were grader errors (fix-w2b), so read it as
+unresolved, not as harm.
+
+## 12. Connector pricing (the owner's instruction)
+
+`pi-cost-report.ts` now prices every connector call per plan (`CONNECTOR_PLANS`, from `before-after/market.py`; list
+prices, assumed): the agent's own search tool calls, Eden's calls in each task's window, Eden's background calls
+while the user worked, and the one-time backfill per user (booked like cards: in all-in, not steady). eden − tools,
+$ per 1,000 tasks on the 1:1:8 mix (`merged-*-cost.txt`):
+
+| plan ($ per 1,000 calls) | short, steady | short, all-in | long, steady | long, all-in |
+| --- | --- | --- | --- | --- |
+| first-party (0) | +0.038 | +0.049 | +0.048 | +0.050 |
+| Composio (0.30) | −0.614 | −0.154 | −0.217 | −0.168 |
+| Unified.to (0.75) | −1.594 | −0.458 | −0.615 | −0.496 |
+| Arcade.dev (10) | −21.72 | −6.71 | −8.79 | −7.23 |
+| Pipedream Connect (12) | −26.07 | −8.06 | −10.55 | −8.69 |
+| Zapier MCP (25.8) | −56.10 | −17.38 | −22.75 | −18.74 |
+
+The short runs' all-in is pessimistic for Eden: each of their 36 streams is a separate user whose 18 backfill calls
+are spread over only its 12 tasks; the long runs (one user over 232 tasks) are the shape to quote. (The report's
+first-party row differs slightly from §11's arms.py figure: the report weights the mix per kind before adding the
+background; arms.py adds each run's background per task.) Eden's background sync during the run made no connector
+calls in these runs: with payload notices nothing was polled. A signal-only integration would add listings and
+re-reads (D245) at its plan's rate, which is where a per-call plan makes D210's payload advice worth money.
+
+A lever that saves tokens by adding connector calls must be judged on these plans: at Composio's $0.30 per 1,000
+calls, one extra call a task costs $0.30 per 1,000 tasks, six times Eden's whole token gap.
+
+## 13. First-principles redesigns (the parent's ask)
+
+What a task costs, from §11: the agent's output tokens ($0.08–0.16 of $0.19–0.28 per 1,000), cache writes of what is
+new in the prompt, the agent's turns (each `ask_context` costs a model request), and connector calls (§12). Eden's
+own spend is $0 a request and ~$0.02 per 1,000 in the background. Five redesigns, estimated:
+
+1. **Eden as the agent's whole retrieval layer** (no source tools; the packet and one ask). Already the `eden` arm:
+   it is why Eden is 0.65–0.95 s faster and saves 1.0–2.2 connector calls a task (−$0.2 to −$56 per 1,000 on paid
+   plans, §12). Remaining: make it the integration default in INTEGRATION.md's words (a product step, not code).
+2. **Packets that make the ask unnecessary** (answer ahead: the push says it is what an ask would return). Tasks with
+   an ask cost ~$0.19 per 1,000 more and 1.3 s longer (unpaired, §3), so the ceiling was about −$0.11 and −0.8 s on the
+   mix. **Built and measured (D274, `pushCandidatesCovers`): asks 0.615 → 0.600 a task, no change**; the agent asks
+   for what the packet does not hold (contact details, the thread), not to re-check it. A real answer-ahead would have
+   to predict those working facts; D257 showed that discouraging the ask loses hidden facts.
+3. **Zero bytes when nothing binds.** Needs a verdict that rarely misses; four lexical forms failed at $0 (D273), the
+   paid reader costs more than the bytes it saves (D237), cards cover 37% of planted facts (A6). Ceiling: the packet's
+   writes, about $0.045 per 1,000 over days. Not buildable without a better no-model verdict.
+4. **A standing per-user brief in the agent's cached prefix** (refreshed in the background, read at 0.1x). Rejected on
+   $0 evidence by A6 (D288): the cards it would be built from cover too little, and a brief that changes busts the
+   tenant's cache for every turn after it.
+5. **Spend the agent's output less** (75% of its dollars, A6). The tenant prompt alone moved the tools agent from
+   $0.37 to $0.22 per 1,000 tasks one request at a time (CL8 vs §3: output 560 → 310 tokens a task). Not Eden's
+   lever, but the largest one measured here: INTEGRATION.md's "spend fewer output tokens" is where a tenant saves.
+
+So for cost the remaining Eden-side gap (+$0.05 per 1,000 in tokens) is the price of the packet, and on any per-call
+connector plan Eden is already cheaper than the agent alone; for speed Eden is ~10 ms on the path and 0.65–0.95 s
+faster than the agent alone.
 
 ## 9. Spend
 
@@ -200,7 +286,9 @@ its re-reads across Hermes's 1.9 model calls a task, the mechanism measured on P
 | a3-long-pay-41, -42 | 0.133 |
 | a3-long2-pay-41, -42 (void, empty notice) | 0.075 |
 | a3-long3-pay-41, -42 | 0.077 |
-| **Total** | **0.554** of $2 |
+| a3m-short-pay-41, -42 (merged tree, with D274's arm) | 0.406 |
+| a3m-long-pay-41, -42 (merged tree) | 0.136 |
+| **Total** | **1.096** of $2 |
 
 ## 10. Reproduce
 

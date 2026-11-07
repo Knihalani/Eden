@@ -138,15 +138,6 @@ export const CANDIDATES_LEAD =
   "Before using one, check it is about the same person, thing and date as the request and still current; if it is " +
   "not, ignore it and do not mention it.";
 
-/**
- * Trial `pushCandidatesCovers` (A3, D274): said after `CANDIDATES_LEAD`. The candidates are the top of the pool an ask
- * about this request ranks, so an ask that repeats the request returns them again; the sentence tells the agent so,
- * to spare the model turn an ask costs (on Pi a task with an ask cost about $0.19 per 1,000 more and 1.3 s longer,
- * unpaired). It names no tool, so it reads the same beside any integration's ask tool or none.
- */
-export const CANDIDATES_COVERS =
-  "These are what asking Eden about this request would return; ask only for something they do not cover.";
-
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";
 const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;
