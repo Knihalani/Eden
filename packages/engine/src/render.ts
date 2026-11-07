@@ -139,7 +139,7 @@ export const CANDIDATES_LEAD =
   "not, ignore it and do not mention it.";
 
 /**
- * `planConflict` (A9): the framing line of a packet about an earlier request; the request's own words follow, quoted.
+ * `planConflict` (D301): the framing line of a packet about an earlier request; the request's own words follow, quoted.
  * Like the candidates' lead, it asks the agent to check before using an item, and to say nothing of one that does not
  * bear on that request.
  */

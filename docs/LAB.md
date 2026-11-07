@@ -651,6 +651,21 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite heldout14 --
   --spend-ledger .local/ledger.jsonl --spend-cap 4 --spend-headroom 0.3 --run-label day-41 --out .local/day-41.json
 ```
 
+- `--day K --late` (A9, `pi-late.ts`; docs/research/a9-ahead.md): each request's planted item (the hidden fact, or the
+  control's look-alike) is held out of the world until the agent has answered that request, then arrives at its
+  source as a new item (with `--push payload` its notice carries it: `sourceItems`; with `signals`, a notice), and the
+  day goes on. The harness then waits for the item's card (up to 10 s, standing in for the ten minutes before the next
+  request). No clock is moved before the recap. Each planted request's result gains `lateFacts` (the grader on its
+  later replies that day, the next requests' answers and the recap, joined in `lateText`) and `lateTurns`: on a hidden
+  day a true verdict is the agent correcting course, on a control day a false alarm. The request's own grade is
+  expected to miss (the item did not exist yet). `packages/sim/lab/a9/late.py ARM BASE[,BASE] STEM…` reports it, paired.
+
+```bash
+A9_VC='{"plan":{"planConflict":true}}' packages/sim/lab/a9/run.sh a9-late-41 payload tools,eden,eden~plan \
+  --seeds 41 --variants hidden,control --limit 12 --day 4 --late --budget 0.35    # ~$0.30 a seed
+python3 -I packages/sim/lab/a9/late.py eden~plan eden,tools .local/a9/runs/a9-late-41
+```
+
 ### 4c. A long horizon: one user's days (`--days`, H16, CL5)
 
 `--days D` replaces the per-suite, per-variant worlds with one world per seed: a user who brings D days of requests

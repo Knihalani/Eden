@@ -112,8 +112,8 @@ const plans = (got: Injection[]) => got.filter((i) => i.reason.startsWith("plan:
 const CANCEL_ID = itemId("notes", "c1");
 
 describe("planConflict (A9): a new item that bears on an earlier acting request is sent at the next take", () => {
-  test("off in the default and in the core: nothing", async () => {
-    expect(DEFAULT_CONFIG.planConflict).toBe(false);
+  test("on in the default (D301); off in the core: nothing", async () => {
+    expect(DEFAULT_CONFIG.planConflict).toBe(true);
     const t = await setup();
     await say(t.partner, BOOK, "s1", t.now());
     t.advance(30 * MIN);
@@ -136,6 +136,21 @@ describe("planConflict (A9): a new item that bears on an earlier acting request 
     expect(text).toContain(PLAN_LEAD);
     expect(text).toContain("Book my flights to Lisbon");
     expect(text).toContain("cancelled");
+  });
+
+  test("a message that starts no push still reports the packet as pending", async () => {
+    const t = await setup({ planConflict: true });
+    await say(t.partner, BOOK, "s1", t.now());
+    await t.arrive(CANCEL);
+    const r = await t.partner.observe({
+      ...scope,
+      sessionId: "s1",
+      at: t.now(),
+      kind: "user_message",
+      text: "thanks, that's all for now",
+    } as AgentEvent);
+    expect(r.pending).toBe(true);
+    expect(plans(t.partner.takePending({ ...scope, sessionId: "s1" })).length).toBe(1);
   });
 
   test("once: the same item stored again queues nothing more", async () => {

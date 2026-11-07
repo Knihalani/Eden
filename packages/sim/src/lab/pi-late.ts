@@ -24,7 +24,7 @@ export function holdPlanted(world: World, tasks: readonly Task[]): Map<string, W
   return held;
 }
 
-/** Releases `id` into `world` at time `at` (it is new at its source then); null when it is not held (or already out). */
+/** Releases `id` into `world` at time `at` (new at its source then); null when it is not held (or already out). */
 export function release(world: World, held: Map<string, WorldItem>, id: string, at: number): WorldItem | null {
   const it = held.get(id);
   if (!it) return null;

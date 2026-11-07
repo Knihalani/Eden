@@ -298,9 +298,9 @@ interface Session {
    * with their content hashes, and its verdict (null when it gave none).
    */
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
-  /** `planConflict` (A9): the session's last `PLAN_REQUESTS` acting requests (the push's cues), oldest first. */
+  /** `planConflict` (D301): the session's last `PLAN_REQUESTS` acting requests (the push's cues), oldest first. */
   acted?: Cue[];
-  /** `planConflict` (A9): ids the sync stored since the last take, at most `PLAN_WAITING`, oldest first. */
+  /** `planConflict` (D301): ids the sync stored since the last take, at most `PLAN_WAITING`, oldest first. */
   planNew?: Set<string>;
 }
 
@@ -498,7 +498,7 @@ export class ContextPartner {
    * (`revisionsSettled`).
    */
   private readonly watching = new Map<string, Set<Session>>();
-  /** `planConflict` (A9): by user scope key, the live sessions with acting requests; a session leaves on close. */
+  /** `planConflict` (D301): by user scope key, the live sessions with acting requests; a session leaves on close. */
   private readonly acting = new Map<string, Set<Session>>();
   private readonly revisionPolls = new Map<string, Promise<void>>();
   /** By user and source: the notice poll's state (`pollRevised`), at most `MAX_REVISION_SOURCES`, idle ones dropped. */
@@ -679,7 +679,12 @@ export class ContextPartner {
     // `observeEvent` counts the request before its first await, so the session's count now names this request.
     if (push) internal.request = this.sessions.get(sessionKey(event))?.requests;
     const result = await observing;
-    if (!push) return result;
+    if (!push) {
+      // `planConflict` (D301): what arrived since the last take, checked now, so `pending` says a packet waits.
+      const live = this.config.planConflict ? this.sessions.get(sessionKey(event)) : undefined;
+      if (live) this.checkPlans(live);
+      return live && live.pending.length > 0 && !result.pending ? { ...result, pending: true } : result;
+    }
     let settled = false;
     void push.then(() => (settled = true));
     const left = Math.min(options.waitMs ?? 0, this.config.readerPushWaitMs) - (performance.now() - t0);
@@ -1895,7 +1900,7 @@ export class ContextPartner {
     return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) };
   }
 
-  /** `planConflict` (A9): the request the push ran for, kept so items stored later are checked against it. */
+  /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */
   private noteActed(s: Session, cue: Cue): void {
     if (s.closed) return;
     const acted = (s.acted ??= []);
@@ -1916,7 +1921,7 @@ export class ContextPartner {
   }
 
   /**
-   * `planConflict` (A9): items the sync just stored (a poll, a backfill page, a notice's payload) wait, per live session
+   * `planConflict` (D301): items the sync just stored (a poll, a backfill page, a notice's payload) wait, per session
    * of their user with acting requests, for the session's next take (`checkPlans`): by then the item's card, made in
    * the background as it was stored, can say whether it constrains. No index or card work here, on the store's path.
    */
@@ -1937,7 +1942,7 @@ export class ContextPartner {
   }
 
   /**
-   * `planConflict` (A9), at a take: the items stored since the last one, checked against the session's acting
+   * `planConflict` (D301), at a take: the items stored since the last one, checked against the session's acting
    * requests. An item no packet has handed the session that would have been among such a request's candidates (the
    * first `pushCandidates` of its pool, `rank`'s first `askReaderPool` distinct items, bulk mail out, a pool with an
    * item that passes `readerGate`'s constraint test, its card included: `candidatesOf`'s rule) is queued, one packet
@@ -4780,7 +4785,7 @@ function pendingOf(s: Session): boolean {
 /** `pushCandidates` (D236): the most of an item a candidate's excerpt says, whatever `compactItemBytes` is set to. */
 const MAX_CANDIDATE_BYTES = 2_000;
 
-/** `planConflict` (A9): acting requests a session keeps, and how much of one its packet quotes. */
+/** `planConflict` (D301): acting requests a session keeps, and how much of one its packet quotes. */
 const PLAN_REQUESTS = 12;
 const PLAN_QUOTE_CHARS = 200;
 const PLAN_WAITING = 64;

@@ -80,6 +80,11 @@ export const PARTS = {
    * the reader reads both again.
    */
   candidates: { pushCandidates: 0 },
+  /**
+   * An item stored after a request the push acted on, that would have been among its candidates, is sent at the next
+   * take whatever the agent asks then (D301).
+   */
+  plans: { planConflict: false },
   /** A lookup does not wait for its probes past its own search (D47's grace, 100 ms, taken out). */
   probeGrace: { probeGraceMs: 100 },
 } satisfies Record<string, Partial<EngineConfig>>;
