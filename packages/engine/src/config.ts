@@ -348,23 +348,12 @@ export interface EngineConfig {
    * items the prefilter rejects still read.
    */
   cardsLean: boolean;
-  /** With `cardsLean`: how old (days, by its date or its start) an unconstrained item may be and still be read. */
+  /**
+   * With `cardsLean`: how old (days, by its date or its start) an unconstrained item may be and still be read. 7 since
+   * D244 (30 before): a new user's enrichment cost 58% less ($0.0208 to $0.0088, 22 calls to 8) with hidden facts
+   * surfaced 313 to 321 and decoys 127 to 129 (train1-6, seeds 41-42, paid reader; docs/research/cl-cl3.md).
+   */
   cardsLeanDays: number;
-  /**
-   * Trial (D242, CL3, ends 2026-11-21): with `cards`, a user's card queue of at least `cardsBatchFrom` items (a
-   * backfill, a sweep) goes to the embedder's bulk card maker (`CardEnricher`'s `bulk` dep: a batch API at half the
-   * price, answering within hours) instead of the live one. New items arriving later stay live. Inert without a bulk
-   * maker: the servers wire none (OpenRouter has no batch API; the lab's is Anthropic's, D97).
-   */
-  cardsBatch: boolean;
-  /** With `cardsBatch`: the queue length (items) from which a user's queue goes to the bulk maker. */
-  cardsBatchFrom: number;
-  /**
-   * With `intent`: requests asked for and kept per item, at most `MAX_REQUESTS` (4, the default). Below 4 (trial
-   * D243, CL3, ends 2026-11-21) the prompt asks for that many short requests, and requests a replay or an earlier
-   * call stored beyond it are cut, so a $0 replay screens it.
-   */
-  intentRequests: number;
   /**
    * Items the intent index may add to a request's candidates, best first. The default's 12/0.2/1 (with the two
    * below) is D159's arm, promoted by D179 on a Pi held-out 13 pair with intent replayed
@@ -553,10 +542,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   compactParts: true,
   intent: true,
   cardsLean: true,
-  cardsLeanDays: 30,
-  cardsBatch: false,
-  cardsBatchFrom: 20,
-  intentRequests: 4,
+  cardsLeanDays: 7,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,
