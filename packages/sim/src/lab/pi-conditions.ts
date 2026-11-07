@@ -13,6 +13,9 @@
  * - `~variant`: the settings `--variant-config` gives that name, over `--config`, so a configuration's A/B runs both
  *   arms in one process, concurrently and paired task by task (the machine's load falls on both alike);
  * - `+flag`: shorthand for one engine flag on, `eden+askDedup`; it stacks on a variant (`eden~ALL2+slowPathQueue`);
+ * - `+ask` (fix-s3b, weak point 4): not an engine flag but the harness's, and only on a `both` base: the agent also
+ *   gets `ask_context` beside its own source tools and Eden's injected context, the shape integrators ship
+ *   (`both+ask`). `eden` has the tool already, so `eden+ask` throws rather than run `eden` under another name;
  * - `@w<ms>`: how long the first observe waits for Eden's slow path (default 3000, the client's `withContext`).
  *
  * An unknown base throws: a typo must not run Eden under another condition's name.
@@ -36,8 +39,13 @@ export interface Condition {
   /** A `ContextPartner` runs in this condition: Eden's context, or the firewall alone. */
   withPartner: boolean;
   useTools: boolean;
+  /** The agent gets `ask_context`: `eden` bases, and `both` bases with `+ask`. */
+  askTool: boolean;
   judge: boolean;
 }
+
+/** The harness flag `+ask`: `ask_context` beside the tools, never sent to the engine as a setting. */
+const ASK_FLAG = "ask";
 
 const BASES = ["none", "tools", "eden", "both", "eden-judge", "both-judge"] as const;
 const SHAPE = /^([a-z-]+?)(-act(?:-firewall)?)?(?:~([A-Za-z0-9_.-]+))?((?:\+[^+@~]+)*)(?:@(.*))?$/;
@@ -74,8 +82,13 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
   }
   const [, , actTag, variant, flagPart, wait] = m;
   if (actTag && !options.act) throw new Error(`condition ${name}: -act conditions run only with --act`);
-  const flags = flagPart ? flagPart.slice(1).split("+") : [];
-  for (const f of flags) if (!/^[a-zA-Z]+$/.test(f)) throw new Error(`bad flag in ${name}: use +flagName`);
+  const allFlags = flagPart ? flagPart.slice(1).split("+") : [];
+  for (const f of allFlags) if (!/^[a-zA-Z]+$/.test(f)) throw new Error(`bad flag in ${name}: use +flagName`);
+  const askFlag = allFlags.includes(ASK_FLAG);
+  if (askFlag && !base.startsWith("both")) {
+    throw new Error(`condition ${name}: +ask adds ask_context beside the tools, so only a both base takes it`);
+  }
+  const flags = allFlags.filter((f) => f !== ASK_FLAG);
   let extra: Record<string, unknown> = {};
   if (variant !== undefined) {
     const v = options.variants?.[variant];
@@ -116,6 +129,7 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
     useEden,
     withPartner: useEden || firewall,
     useTools: base === "tools" || base.startsWith("both"),
+    askTool: base.startsWith("eden") || askFlag,
     judge: base.endsWith("-judge"),
   };
 }

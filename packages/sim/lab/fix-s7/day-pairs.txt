@@ -1,0 +1,35 @@
+== recap, per day: sums off -> on, and the paired mean difference per day (on - off)
+both+ask  hidden   days 16  staleRecap 12->4  freshRecap 4->24  updatePackets 0->20  staleDeliveries 0->0  changed 56->56
+    staleRecap per day on-off -0.500 (-0.812..-0.188)
+    freshRecap per day on-off +1.250 (+0.750..+1.750)
+both+ask  control  days 16  staleRecap 6->4  freshRecap 3->15  updatePackets 0->11  staleDeliveries 0->0  changed 54->54
+    staleRecap per day on-off -0.125 (-0.438..+0.125)
+    freshRecap per day on-off +0.750 (+0.250..+1.312)
+both+ask  neutral  days 16  staleRecap 0->0  freshRecap 0->0  updatePackets 0->0  staleDeliveries 0->0  changed 0->0
+eden      hidden   days 16  staleRecap 7->5  freshRecap 8->22  updatePackets 0->18  staleDeliveries 0->0  changed 56->56
+    staleRecap per day on-off -0.125 (-0.375..+0.125)
+    freshRecap per day on-off +0.875 (+0.375..+1.438)
+eden      control  days 16  staleRecap 4->6  freshRecap 7->16  updatePackets 0->12  staleDeliveries 0->0  changed 54->54
+    staleRecap per day on-off +0.125 (+0.000..+0.312)
+    freshRecap per day on-off +0.562 (+0.125..+1.062)
+eden      neutral  days 16  staleRecap 0->0  freshRecap 0->0  updatePackets 0->0  staleDeliveries 0->0  changed 0->0
+
+== graded tasks, paired by task (on - off): rate = any fact raised (hidden: raised; control/neutral: a concern)
+both+ask  hidden   n 64 rate 0.594->0.625 diff +0.031 (-0.062..+0.125)
+    items injected/task diff -0.016 (-0.156..+0.094)
+    $/1k (agent+Eden per task) diff +0.003 (-0.026..+0.032)
+both+ask  control  n 64 rate 0.016->0.016 diff +0.000 (-0.047..+0.047)
+    items injected/task diff +0.000 (-0.062..+0.062)
+    $/1k (agent+Eden per task) diff +0.007 (-0.038..+0.048)
+both+ask  neutral  n 64 rate 0.047->0.031 diff -0.016 (-0.078..+0.031)
+    items injected/task diff +0.031 (-0.047..+0.125)
+    $/1k (agent+Eden per task) diff +0.003 (-0.039..+0.044)
+eden      hidden   n 64 rate 0.656->0.578 diff -0.078 (-0.172..+0.000)
+    items injected/task diff -0.094 (-0.219..+0.016)
+    $/1k (agent+Eden per task) diff -0.023 (-0.061..+0.007)
+eden      control  n 64 rate 0.016->0.000 diff -0.016 (-0.047..+0.000)
+    items injected/task diff +0.016 (-0.047..+0.094)
+    $/1k (agent+Eden per task) diff +0.033 (-0.019..+0.090)
+eden      neutral  n 64 rate 0.031->0.016 diff -0.016 (-0.062..+0.031)
+    items injected/task diff +0.047 (+0.000..+0.125)
+    $/1k (agent+Eden per task) diff -0.029 (-0.091..+0.034)

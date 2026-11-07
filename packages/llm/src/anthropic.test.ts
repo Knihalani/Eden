@@ -73,6 +73,19 @@ describe("AnthropicModel", () => {
     expect(body.thinking).toEqual({ type: "disabled" });
   });
 
+  test("Sonnet 5.5 turns thinking off with between_tools (disabled is a 400 there) and is priced as listed", () => {
+    const req = { messages: [{ role: "user" as const, content: "a" }], maxTokens: 100 };
+    const sonnet = anthropicBody({ apiKey: "k", model: "claude-sonnet-5-5" }, req, false);
+    expect(sonnet.thinking).toEqual({ type: "between_tools" });
+    expect(
+      anthropicBody({ apiKey: "k", model: "claude-sonnet-5-5", thinking: "adaptive" }, req, false).thinking,
+    ).toEqual({ type: "adaptive" });
+    expect(anthropicBody({ apiKey: "k", model: "claude-haiku-5-5" }, req, false).thinking).toEqual({
+      type: "disabled",
+    });
+    expect(anthropicPrice("claude-sonnet-5-5")).toMatchObject({ input: 2, output: 10 });
+  });
+
   test("a user message marked cache ends a cached prefix at its own block", () => {
     const body = anthropicBody(
       { apiKey: "k" },

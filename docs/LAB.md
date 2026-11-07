@@ -30,8 +30,9 @@ per suite for train1–6 and held-out 10–12.
 | `heldout10`, `heldout11`                   | Blind                                                                                                 | Run in D80, D85, and several times in the Haiku campaign's funnel (haiku-benchmark.md) |
 | `heldout12`                                | Blind                                                                                                 | First run with a strong model in D98                                                   |
 | `heldout14`                                | Blind, RealUse-1's (benchmark-realuse-1.md); 32 templates over 8 life areas, with a `neutral` variant | Run once for RealUse-1 (realuse-1/A-heldout14.md)                                      |
+| `heldout15`                                | Blind, the weak-points plan's (fix-s3b-lab.md); 32 new templates, same areas, with `neutral`          | **Unrun.** Reserved for wave 2's final blind check; cards and intent cached, seeds 41–44 |
 
-**The `neutral` variant** (held-out 14 only; `neutral.ts`, `NEUTRAL_SUITES`): the same request as `hidden` and
+**The `neutral` variant** (held-out 14 and 15; `neutral.ts`, `NEUTRAL_SUITES`): the same request as `hidden` and
 `control` with nothing planted. `bun run funnel ... -- --neutral` prints NEUTRAL lines (any packet delivered, items,
 bytes, ask items, calls, ms per task) and a JSON `neutral` block, never mixed into the score; `pi-ab.ts` and
 `hermes-ab.ts` take `--variants hidden,control,neutral` (other suites skip neutral), the grader counts any concern on
@@ -40,9 +41,9 @@ a neutral task as a false one, and `pi-ab-report.ts` adds a `neutral` table and 
 
 - **Never tune on `heldout*`.** `bun run funnel` refuses them without `--blind`. A new blind round needs a new suite
   written by an author who saw no engine code.
-- `UNRUN_BLIND` (held-out 9–13) keeps them out of `--suite all` so a tuning command cannot spend them, but all five
-  have been read (D72, D80, D85, D98, D112): treat the list as "not in `all`", not as "fresh". A blind round needs a
-  new suite.
+- `UNRUN_BLIND` (held-out 9–15) keeps them out of `--suite all` so a tuning command cannot spend them, but all five
+  have been read (D72, D80, D85, D98, D112), and 14 by RealUse-1: treat the list as "not in `all`", not as "fresh".
+  Held-out 15 is the one unread suite: running it at all (funnel or agent) spends it.
 - Seeds: 41–44 for funnel work (41–42 on train), 41–48 for the Haiku benchmark. Same seed, same world, same tasks.
 
 ## Configurations (`presets.ts`)
@@ -78,10 +79,10 @@ not strict yet.
 | Harness             | Command                                        | What it measures                                                                                                                                                          |
 | ------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | No-model funnel     | `hidden-funnel.ts` (`bun run funnel` wraps it) | Per task: planted item returned, cached, delivered; with `--ask`, cited by an ask; decoy delivered on controls; source calls and ms per task. Deterministic at `--time 0` |
-| Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][@w<ms>]`, graded by a second model; per-task timelines              |
+| Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][+ask][@w<ms>]`, graded by a second model; per-task timelines; `--day K` |
 | Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`); same tasks, grader and results format as Pi                                  |
 | In-house loop       | `agent-ab.ts`                                  | The pre-Pi loop; label any result from it as such (CLAUDE.md)                                                                                                             |
-| Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load                                                                                        |
+| Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load; `sim:perf memory --synced` backfills its users first (the default never syncs them)   |
 | Connector lab       | `bun run sim:lab:build && bun run sim:lab`     | Real MCP servers in Docker over seeded backends                                                                                                                           |
 
 Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too), `agent-ab-report.ts` (shared tables,
@@ -542,6 +543,38 @@ Expectations from past runs: on glm-5.3-flash, one seed over dev and held-out 1�
 an agent task plus Eden NEW is $0.79 per 1,000 hidden tasks in Pi, ALL3 $0.36 (haiku-benchmark.md); wall p50 about
 4 s a task. Free models: a 4-task smoke took 16 requests and 20.8 s (edge-freelab.md); add `--allow-logging
 --max-requests N` and free model ids.
+
+### 4a. Pi: the shipped shape (`both+ask`) and a day of requests (`--day`)
+
+- `both+ask` (fix-s3b): the agent's own source tools, Eden's injected context and `ask_context`, the shape
+  integrators ship. `+ask` is a harness flag, not an engine setting, and only a `both` base takes it (`eden` already
+  has the tool). The report pairs it with `both`.
+- `--day K`: one agent transcript and one Eden session per K requests of a stream (template order), and a recap turn
+  closing each day ("anything to watch out for, with the times"; measured, never graded). Just before the recap the
+  day's planted items change (`shiftClocks` moves their clock times, `shiftMeta` their structured start; the sources
+  reindexed and, with `--push`, signalled): only then, so a moved item cannot land in a later graded request's slot.
+  A changed item misses the replay caches (its content hash changed) and is carded live; `lateItems` is not measured
+  (a late packet goes to the day's next request). The
+  results gain `days` and `daysPooled` (`pi-day.ts`): repeat deliveries (and those of a changed item), `(shown
+  above)` marks, asks citing an item a packet already gave, stale deliveries after a change, and recaps naming a
+  changed item's old time (`staleRecap`) or its new one (`freshRecap`). Each request is still graded as a task.
+
+```bash
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite heldout14 --seeds 41 \
+  --variants hidden,control,neutral --conditions tools,eden,both+ask --day 4 --config default \
+  --cards packages/sim/lab/cards/cards-v2.jsonl --model claude-haiku-5-5 --grader claude-haiku-5-5 \
+  --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 --push signals \
+  --source-profile packages/sim/lab/before-after/market-profiles/direct.json --budget 1 \
+  --spend-ledger .local/ledger.jsonl --spend-cap 4 --spend-headroom 0.3 --run-label day-41 --out .local/day-41.json
+```
+
+### 4b. Regrade with another grader, and cold-start cost
+
+- `regrade.ts --results F --graders claude-sonnet-5-5 --spend-ledger … --spend-cap …`: a `claude-*` grader goes
+  through the lab provider on the ledger (no OpenRouter key needed); the summary adds `byKind` (agreement with the
+  run's grader on hidden, control and neutral, and which way each disagreement went).
+- `cold-start.ts --users train1:41,…`: a new user's cards and intent from an empty cache through the servers'
+  `buildPartner` (default configuration and budgets), the card role on Anthropic Haiku; calls, tokens and $ per user.
 
 ### 5. Live A/B on Hermes
 

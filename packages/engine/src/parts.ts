@@ -57,8 +57,11 @@ export const PARTS = {
     verifyDelivery: false,
     readerVerifyAfter: false,
   },
-  /** A delivered item its source signalled a change to since it was read is read again first (D126). */
-  freshness: { verifyDelivery: false, readerVerifyAfter: false },
+  /**
+   * A delivered item its source signalled a change to since it was read is read again first (D126); a handed item
+   * changed at its source is sent again as an "updated:" packet (D205).
+   */
+  freshness: { verifyDelivery: false, readerVerifyAfter: false, revisionNotice: false },
   /** The rule verdicts an ask gathers (D73). */
   askVerdicts: { askVerdicts: false },
   /** Implication cards (D59, D66), and with them the intent index, which their calls write. */

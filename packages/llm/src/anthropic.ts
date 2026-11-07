@@ -27,7 +27,15 @@ export interface AnthropicPrice {
 /** From the Claude API reference bundled with Claude Code, 2026-10-06: Haiku 5.5 is $0.10 / $0.50 up to 100K. */
 export const ANTHROPIC_PRICES: Record<string, AnthropicPrice> = {
   "claude-haiku-5-5": { input: 0.1, output: 0.5, longAbove: 100_000, longMultiplier: 5 },
+  // The same reference, 2026-10-06: Sonnet 5.5 is $2 / $10 at every length (1M context). Lab regrade only (fix-s3b).
+  "claude-sonnet-5-5": { input: 2, output: 10 },
 };
+
+/**
+ * Models that reject `thinking: {type: "disabled"}` with a 400 and turn thinking off with `between_tools` instead
+ * (accepted at their default effort, high). Sonnet 5.5, per the Claude API reference of 2026-10-06.
+ */
+const OFF_IS_BETWEEN_TOOLS = new Set(["claude-sonnet-5-5"]);
 
 export interface AnthropicUsage extends Usage {
   /** Prompt tokens written to the cache this call (priced at 1.25x or 2x input). */
@@ -135,13 +143,15 @@ export function anthropicBody(options: AnthropicOptions, request: ChatRequest, s
   }
   if (messages[0]?.role !== "user") messages.unshift({ role: "user", content: "(begin)" });
   const thinking = options.thinking ?? "off";
+  const model = options.model ?? "claude-haiku-5-5";
+  const off = OFF_IS_BETWEEN_TOOLS.has(model) ? { type: "between_tools" } : { type: "disabled" };
   return {
-    model: options.model ?? "claude-haiku-5-5",
+    model,
     max_tokens: request.maxTokens,
     ...(system.length ? { system } : {}),
     messages,
     // Haiku 5.5 rejects non-default sampling parameters, so temperature is never sent.
-    thinking: thinking === "off" ? { type: "disabled" } : { type: "adaptive" },
+    thinking: thinking === "off" ? off : { type: "adaptive" },
     ...(thinking === "adaptive" && request.reasoning ? { output_config: { effort: request.reasoning } } : {}),
     ...(stream ? { stream: true } : {}),
   };

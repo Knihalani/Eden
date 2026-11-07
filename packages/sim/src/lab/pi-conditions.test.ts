@@ -131,4 +131,26 @@ describe("pi-ab conditions", () => {
     expect(pairedWith("both@w0")).toBe("both");
     expect(pairedWith("eden")).toBeNull();
   });
+
+  test("both+ask: own tools, Eden's context and ask_context; +ask is the harness's, never an engine setting", () => {
+    const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+    const c = parseCondition("both+ask", { config: ALL, defaults });
+    expect([c.useTools, c.useEden, c.askTool, c.judge]).toEqual([true, true, true, false]);
+    expect(c.config).toEqual(ALL);
+    expect(c.base).toBe("both");
+    // Stacks with an engine flag and a wait; the engine flag still goes to the config.
+    const d = parseCondition("both+ask+judgeTied@w0", { config: ALL, defaults });
+    expect([d.askTool, d.config.judgeTied, "ask" in d.config, d.waitMs]).toEqual([true, true, false, 0]);
+    expect(parseCondition("both-judge+ask", { config: ALL }).askTool).toBe(true);
+    // The plain arms keep their tool sets: both has no ask, eden has it, tools and none neither.
+    expect(parseCondition("both", { config: ALL }).askTool).toBe(false);
+    expect(parseCondition("eden", { config: ALL }).askTool).toBe(true);
+    expect(parseCondition("tools", { config: ALL }).askTool).toBe(false);
+    expect(parseCondition("none", { config: ALL }).askTool).toBe(false);
+    // eden already asks, and tools has no Eden: +ask there would run another arm under a new name.
+    for (const n of ["eden+ask", "tools+ask", "none+ask"]) {
+      expect(() => parseCondition(n, { config: ALL })).toThrow(/\+ask/);
+    }
+    expect(pairedWith("both+ask")).toBe("both");
+  });
 });

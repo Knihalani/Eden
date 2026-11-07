@@ -122,6 +122,15 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   cached copy current, so `verifyItems` also applies a session's recent re-reads, not only doubted items. A new
   delivery path uses `deliverChecked`, never `deliver`, or it can send a stale copy. `deliverChecked` itself calls
   `deliver` (a bulk rename of `return this.deliver(` once made it call itself forever: the tests hung, not failed).
+- **`revisionNotice` (D205) notes copies in `handOut`, from what the text rendered** (`renderedCount`, as
+  `noteShown` reads lines): an item the size cut left out was not shown and gets no update. Stores that announce a changed
+  copy call `queueRevised`: the sync's `onStored` and `recheck`, for every watching session, the re-reading one too
+  (its delivery may cut or fold the item). A queued update is dropped only when a handed packet renders the same
+  version (`watchCopies`, `withoutCoveredUpdates`); never by citation alone (an ask's removal of covered packets skips
+  updates). A live search page's store (`store`) does not announce yet: a handed item a lookup's search finds changed
+  is delivered only if it ranks. Do not filter doubted copies in `queueRevised`: a later signal during the poll would
+  leave the stored copy unannounced forever (`revision-notice.test.ts`).
+  `pollRevised` is the only I/O a notice starts; keep it off the observe path.
 - **An ask says "Nothing in the connected sources." only when its sources answered (D127).** `searchLive` returns
   each chosen source's status (`sources`: the fan-out's, or "local" for a synced source answered from the index);
   `honestAnswer` names any that did not answer (error, timeout, circuit open, busy, limited, throttled: the
