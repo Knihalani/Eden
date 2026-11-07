@@ -122,16 +122,7 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import {
-  CANDIDATES_LEAD,
-  CANDIDATES_NONE,
-  CHECKED_MORE,
-  CHECKED_NONE,
-  citationsOf,
-  renderNote,
-  renderPacket,
-  shownText,
-} from "./render";
+import { CANDIDATES_LEAD, citationsOf, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -304,8 +295,6 @@ interface Session {
    * with their content hashes, and its verdict (null when it gave none).
    */
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
-  /** The request count (`requests`) when a packet or answer was last built (`pushChecked`'s wording). */
-  builtRequest?: number;
 }
 
 /** Items whose shown words a session keeps (`askDedup`). */
@@ -712,11 +701,7 @@ export class ContextPartner {
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
     this.sync?.track(s.scope, this.now());
     s.turn++;
-    if (event.kind === "user_message") {
-      s.requests++;
-      // `pushChecked` (D246): a note speaks for the request it read; one the agent never took says nothing of this one.
-      dropChecked(s);
-    }
+    if (event.kind === "user_message") s.requests++;
     const prep = spans?.open("observe.prep", root!.id);
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
@@ -792,8 +777,7 @@ export class ContextPartner {
       this.markCue(s, cue);
       const injection = this.deliver(s, fast, "proactive", `cache:${cue.id}`, cue);
       trace("fast", cue.id, { itemIds: fast.map((x) => x.item.id) });
-      // A "nothing found" note this delivery supersedes is not put back (`pushChecked`, D246).
-      if (queued && !queued.reason.startsWith(CHECKED)) s.pending.unshift(queued);
+      if (queued) s.pending.unshift(queued);
       return reply(injection);
     }
     if (repeat) {
@@ -1476,7 +1460,10 @@ export class ContextPartner {
             chosen,
             limit,
             internal.push ? Infinity : this.config.askReaderWaitMs,
-            readOpts,
+            {
+              push: internal.push === true,
+              ...(internal.request !== undefined ? { request: internal.request } : {}),
+            },
           )
         : null;
     if (reading) chosen = reading.chosen;
@@ -1528,35 +1515,7 @@ export class ContextPartner {
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
       if (injection && was) this.keepUndo(s, injection, checked, was);
-      // A delivery takes back an untaken "nothing found" note itself (`build`, D246).
       if (injection) s.pending.push(injection);
-      else if (
-        this.config.pushChecked &&
-        internal.again === undefined &&
-        (flagged.length === 0 || fresh.length === 0) &&
-        !s.closed &&
-        still &&
-        // A verdict, or no candidate at all: a gated pool was read by no one, so it is no all-clear (D127).
-        (reading === null ? readOpts.outcome === "empty" : reading.read) &&
-        answeredAll(searched)
-      ) {
-        // `pushChecked` (D246): the reading found nothing to add, from sources that all answered: the agent is told so.
-        const line = flagged.length > 0 || s.builtRequest === s.requests ? CHECKED_MORE : CHECKED_NONE;
-        s.pending.push(this.note(s, line, `${CHECKED}${cue.id}`));
-      } else if (
-        candidates &&
-        internal.again === undefined &&
-        flagged.length === 0 &&
-        s.builtRequest !== s.requests &&
-        !s.closed &&
-        still &&
-        answeredAll(searched)
-      ) {
-        // `pushCandidates` (D236): nothing in the pool could constrain the request, from sources that all answered. Not
-        // a reading (D246 gives its note only after one): a departure D237 records, measured live as no rise in
-        // concerns on nothing-to-add requests.
-        s.pending.push(this.note(s, CANDIDATES_NONE, `${CHECKED}${cue.id}`));
-      }
       const latencyMs = Math.round(performance.now() - t0);
       // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
       // trace carries it, since this response goes to no caller.
@@ -1721,7 +1680,6 @@ export class ContextPartner {
       });
     if (pool.length === 0) {
       report("none");
-      opts.outcome = "empty";
       return null;
     }
     const main = request ?? cue.raw;
@@ -1738,7 +1696,6 @@ export class ContextPartner {
     // (or a state change or a thing done) and no constraint wording. Bulk mail never counts.
     if (this.config.readerGate && !pool.some((x) => this.constraintLike(x, cards))) {
       report("gated");
-      opts.outcome = "gated";
       return null;
     }
     // `readerReuse` (D193): an ask in the push's request reads the push's verdict, with no call of its own.
@@ -1758,6 +1715,7 @@ export class ContextPartner {
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
       // Sticky routing to the provider that holds the user's cached prefix, as the judge, answer and cards calls do.
       cacheKey: userCacheKey(s.scope),
+      ...(this.config.readerStopEarly ? { stopEarly: true } : {}),
     };
     // Who makes the call, for the accounting: a read that finds a verdict cached, or a call another read started
     // (an ask joining its push), makes none. Known before the read, for when this ask's wait runs out first.
@@ -1913,9 +1871,9 @@ export class ContextPartner {
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
   private candidateFrame(): PacketFrame {
-    // At most the pool's items (`candidatesOf`), each bounded (`RANGES`): the packet's size is bounded too.
+    // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
-    const each = this.config.compactItemBytes;
+    const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
       lead: CANDIDATES_LEAD,
       itemBytes: each,
@@ -4491,21 +4449,6 @@ export class ContextPartner {
     while (shown.size > MAX_SHOWN) shown.delete(shown.keys().next().value!);
   }
 
-  /** An injection of Eden's own words, citing nothing (`pushChecked`). Not built: no usage, ledger or copies. */
-  private note(s: Session, line: string, reason: string): Injection {
-    return {
-      ...s.scope,
-      id: newId("inj", this.now()),
-      sessionId: s.id,
-      mode: "proactive",
-      text: renderNote(line),
-      citations: [],
-      reason,
-      score: 0,
-      createdAt: this.now(),
-    };
-  }
-
   /**
    * `shown` is what the agent receives when it is not the injection's own text (an ask's answer). With
    * `compactInjection`, each item is cut to what bears on `cue` (`compactText`) rather than to its first bytes.
@@ -4544,9 +4487,6 @@ export class ContextPartner {
         scored.map((x) => x.item.id),
       );
     }
-    s.builtRequest = s.requests;
-    // `pushChecked` (D246): a packet or answer built for the session supersedes an untaken "nothing found" note.
-    dropChecked(s);
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
     // Every item counts as delivered, an echo folded out of the packet too: the agent has its occurrence.
@@ -4695,35 +4635,14 @@ function pendingOf(s: Session): boolean {
   return s.inflight !== null || !!s.behind || s.pending.length > 0;
 }
 
+/** `pushCandidates` (D236): the most of an item a candidate's excerpt says, whatever `compactItemBytes` is set to. */
+const MAX_CANDIDATE_BYTES = 2_000;
+
 /** `pushCandidates` (D236): a candidates' packet's framing line and cut. */
 interface PacketFrame {
   lead: string;
   itemBytes: number;
   maxBytes: number;
-}
-
-/** `pushChecked` (D246): a "nothing found" note's reason prefix. */
-const CHECKED = "checked:";
-
-/**
- * Every source a search chose answered (D127): at least one source, no failure, no unresolved list, no closed session.
- * A user with no sources connected has nothing read, so no note says it was.
- */
-function answeredAll(searched: SearchedLive): boolean {
-  const sources = searched.sources ?? [];
-  return (
-    searched.unresolved !== true &&
-    searched.closed !== true &&
-    sources.length > 0 &&
-    sources.every((x) => ANSWERED.has(x.status))
-  );
-}
-
-/** `pushChecked` (D246): untaken "nothing found" notes leave the session's queue. */
-function dropChecked(s: Session): void {
-  for (let k = s.pending.length - 1; k >= 0; k--) {
-    if (s.pending[k]!.reason.startsWith(CHECKED)) s.pending.splice(k, 1);
-  }
 }
 
 /** `revisionNotice`: an "updated:" packet's reason prefix, and what each of its items' titles starts with. */
@@ -4951,8 +4870,6 @@ interface AskInternal {
 /** `readAsk`'s options: whether it reads for the push, and the push's request. */
 interface ReadOpts {
   push?: boolean;
-  /** Set by `readAsk` when it returns null without reading: no candidate, or `readerGate` read none (D246). */
-  outcome?: "empty" | "gated";
   /** The push's request (`AskInternal.request`), recorded with its reading for `readerReuse`. */
   request?: number;
 }

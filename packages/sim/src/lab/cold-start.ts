@@ -25,6 +25,7 @@ import { buildPartner } from "@eden/server";
 import { REALISTIC, simSources } from "../sources";
 import { worldOf } from "./ab-common";
 import { parseJson } from "./flags";
+import type { UserShape } from "./pi-cost";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf } from "./pi-user";
 import { parseSuites } from "./suites";
 import { labAccess, labModel } from "./free";
@@ -48,14 +49,15 @@ const OUT = opt("out", "");
 // value stops the run, rather than running the default under the setting's name. Cards are wired, the reader is not.
 const SET = checkEngineConfig(parseJson(opt("set", "{}"), "--set"), { where: "--set", deps: { cards: true } });
 /** `user:SEED`'s world, as `pi-ab --days` plans it. */
+const USER_SHAPE: UserShape = {
+  suites: parseSuites(opt("suite", "train")),
+  days: Number(opt("days", "8")),
+  daySize: parseDaySize(opt("day-size", "12-20")),
+  mix: parseMix(opt("mix", "1:1:8")),
+};
 const userWorld = (seed: number) => {
-  const suites = parseSuites(opt("suite", "train"));
-  const plan = planUser(seed, suiteTemplates(seed, suites), {
-    days: Number(opt("days", "8")),
-    size: parseDaySize(opt("day-size", "12-20")),
-    mix: parseMix(opt("mix", "1:1:8")),
-  });
-  return userWorldOf(seed, plan).world;
+  const { suites, days, daySize: size, mix } = USER_SHAPE;
+  return userWorldOf(seed, planUser(seed, suiteTemplates(seed, suites), { days, size, mix })).world;
 };
 const ACCESS = labAccess(args, [MODEL]);
 
@@ -147,6 +149,8 @@ const out = {
   meanUsd: Math.round(mean("usd") * 1e6) / 1e6,
   meanCalls: mean("cardCalls"),
   meanItems: mean("itemsAtSources"),
+  // `pi-cost-report.ts --lifetime` books a cold start only against runs of the same user shape (pi-cost.ts).
+  ...(USERS.some((u) => u.suite === "user") ? { userShape: USER_SHAPE } : {}),
 };
 console.log(JSON.stringify(out, null, 2));
 if (OUT) writeFileSync(OUT, JSON.stringify(out, null, 2));

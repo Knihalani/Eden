@@ -70,6 +70,7 @@ export const PARTS = {
     readerPushBehind: false,
     readerVerifyAfter: false,
     readerReuse: false,
+    readerStopEarly: false,
     askReaderPool: 30,
     askReaderItemChars: 400,
     pushCandidates: 0,

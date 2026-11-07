@@ -347,6 +347,9 @@ with no new source call and read again (a reader cache hit when its pool is unch
 queued and the agent has not taken is replaced, its ledger entries restored. The push itself is not cut at
 `askReaderWaitMs`: it waits for
 the reading (bounded by the reader's model call and the session's close), and `observe` reports `pending` while it runs.
+The reader's reply stops at the first entry the model says is not about the request's own thing (`readerStopEarly`,
+D240, a `"same":false` stop sequence): binding entries come first, so what is cut is the later look-alikes'
+rejections; the stopped entry is read as rejected.
 With `readerReuse` (on in the default, D193), an `ask` made before the next user message and read against the push's
 own request (not an ask that acts on its own) takes the push's verdict on the items both pools hold unchanged, with no
 reader call of its own (`Session.pushRead`); it was read against the user's request, not the agent's question. A push

@@ -58,7 +58,7 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerGateVisits: "reader",
   readerVerifyAfter: "reader",
   readerReuse: "reader",
-  pushChecked: "reader",
+  readerStopEarly: "reader",
   pushCandidates: "reader",
 };
 
@@ -116,7 +116,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerPushBehind: [...PUSH, ...POLL_BEHIND],
   readerVerifyAfter: [...READER, "verifyDelivery"],
   readerReuse: PUSH,
-  pushChecked: PUSH,
+  readerStopEarly: READER,
   pushCandidates: PUSH,
 };
 

@@ -216,13 +216,15 @@ describe("eval harness: --live wires what ships (D128)", () => {
     expect(made[0]!.options).toMatchObject({ model: DEFAULT_ROLE_MODEL, sort: "throughput", zdr: true });
     expect(live.readerModel).toBe(made[0]!);
     // The shipped default (D237) makes no reader call: the push hands the agent candidates.
-    await runScenarios([freeze], {
+    const shipped = await runScenarios([freeze], {
       model: live.model,
       waitMs: 1_000,
       readerModel: live.readerModel,
       spend: live.spend,
     });
     expect(made[0]!.calls.length).toBe(0);
+    // The push ran and read nothing: its traces are there, with no model call.
+    expect(shipped.decisions["reader-push"]).toBeGreaterThan(0);
     const m = await runScenarios([freeze], {
       model: live.model,
       waitMs: 1_000,

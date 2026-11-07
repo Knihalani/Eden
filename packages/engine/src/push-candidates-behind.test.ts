@@ -6,7 +6,6 @@ import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import { AskReader, type ReaderInput, type ReaderKind, type ReaderMaker } from "./reader";
-import { CANDIDATES_NONE } from "./render";
 import type { Trace } from "./trace";
 import { CORE_CONFIG } from "./parts";
 
@@ -156,20 +155,6 @@ describe("pushCandidates under readerPushBehind (D236)", () => {
     await Bun.sleep(20);
     const packets = p.takePending({ ...user, sessionId: "s1" });
     expect(cited(packets)).toContain(HOLD);
-  });
-
-  test("pushCandidateNone: a pool with nothing constraint-like gets the note, citing nothing", async () => {
-    const { p, src, warm, advance, now } = setup({ pushCandidates: 2, readerGate: true });
-    src.items = src.items.filter((x) => x.id !== HOLD);
-    await warm(user);
-    advance(5 * HOUR);
-    await say(p, now());
-    await Bun.sleep(20);
-    const got = p.takePending({ ...user, sessionId: "s1" });
-    expect(got.length).toBe(1);
-    expect(got[0]!.citations).toEqual([]);
-    expect(got[0]!.reason.startsWith("checked:")).toBe(true);
-    expect(got[0]!.text).toContain(CANDIDATES_NONE);
   });
 
   test("a candidates push is traced with no model call", async () => {

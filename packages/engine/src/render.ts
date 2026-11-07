@@ -120,33 +120,23 @@ export function shownText(rendered: string): string {
 }
 
 /**
- * Eden's own lines about a reading (`pushChecked`, D246), never an item's: fixed words with no source or event text in
- * them, inside the data envelope (D11, D19). `shownText` drops them (they are no item's words), and no line starts
- * `- [`, so they are counted as no item (`renderedCount`).
+ * Eden's own lines, never an item's: fixed words with no source or event text in them, inside the data envelope (D11,
+ * D19). `shownText` drops them (they are no item's words), and no line starts `- [`, so they are counted as no item
+ * (`renderedCount`).
  */
 export const EDEN_NOTE = "Eden: ";
-export const CHECKED_NONE =
-  `${EDEN_NOTE}read the user's connected sources for this request; nothing in them conflicts with it, constrains it ` +
-  "or changes it.";
-export const CHECKED_MORE = `${EDEN_NOTE}read the user's connected sources for this request; nothing beyond the context above bears on it.`;
 
 /**
  * `pushCandidates` (D236, D237; CL6 H19): the push hands the agent the top of its pool with no reader call, after this
  * line: the items may bear on the request, and the agent checks each against the request's who, what and when first
  * (D96's why-before-binds moved into the agent's packet; without the check, look-alikes were raised 4 times in 48).
- * `CANDIDATES_NONE`: no candidate could constrain the request, from sources that all answered. Fixed words, inside
- * the data envelope (D11, D19): the instruction is Eden's own, to the agent, about the items around it.
+ * Fixed words, inside the data envelope (D11, D19): an instruction of Eden's own to the agent about the items around
+ * it, never source text (a departure D237 records).
  */
 export const CANDIDATES_LEAD =
   `${EDEN_NOTE}items from the user's sources that may bear on this request; nothing has checked them against it. ` +
   "Before using one, check it is about the same person, thing and date as the request and still current; if it is " +
   "not, ignore it and do not mention it.";
-export const CANDIDATES_NONE = `${EDEN_NOTE}searched the user's connected sources for this request; nothing in them looks like it constrains it.`;
-
-/** A note of Eden's own in the envelope (`CHECKED_NONE`, `CHECKED_MORE`): no item, nothing from a source. */
-export function renderNote(line: string): string {
-  return `${HEADER}\n${line}\n</context>`;
-}
 
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";

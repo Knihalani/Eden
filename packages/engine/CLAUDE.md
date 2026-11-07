@@ -183,18 +183,27 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   the push flagged must still have the content it read, or the ask reads anew (`freshness-push.test.ts`). The fix-S1
   trials that failed (D190 evidence gate, D191 no wait on a weak pool, D194 short schema) are deleted: rebuilding one
   needs a new decision.
-- **`pushChecked` (D246, trial, off)** queues an injection that cites nothing (`citations: []`, reason `checked:`): a
-  harness or integration that counts items must not read an empty packet as a delivery, and a later reading that
-  delivers withdraws it if untaken. Its line starts `Eden: ` (`EDEN_NOTE`), which `shownText` drops; it is fixed text,
-  never source or event text. CL4's other path levers (speculation D248, re-reading ahead D249, `askFromPush` D247, a
-  packet closing line D250) were measured and deleted: an ask's time is its strict re-reads (D211) under signal-only
-  notices, not its search or its reader.
+- **The reader's reply stops early (D240, `readerStopEarly`, on in the default).** `ModelReaderMaker` sends
+  `READER_STOP` (`"same":false`) as a stop sequence; a stopped reply is closed by `closeStopped` (the entry being
+  written reads as rejected) only when it does not parse on its own. Rejections after the first look-alike are lost by
+  design, so `askReaderDrop` keeps those items in ask answers (funnel decoys listed rise; live false concerns did
+  not, docs/research/cl-cl2.md). A stopped reading is another verdict: `readerKey` adds "stop" when on. A smaller pool
+  (`askReaderPool` 10), a 160-character item window, compact item fences, trimming the pool by `constraintLike` or by
+  the card pass's `none` mark, and a per-user cached item prefix were measured and not taken (D238, D239, D241): the
+  trims drop planted items (lean carding leaves most of them uncarded).
+- **No "nothing found" note after the push (D257).** `pushChecked` (D246) told the agent when the push's reading
+  flagged nothing; it saved an ask and a model turn, but the agent then skipped the `ask_context` that finds what the
+  push missed (hidden −5.1 points pooled, −9.1..−1.2, about −1.9 of it the note's own; CL7), so it was deleted. CL4's
+  other path levers (speculation D248, re-reading ahead D249, `askFromPush` D247, a packet closing line D250) were
+  measured and deleted too: an ask's time is its strict re-reads (D211) under signal-only notices, not its search or
+  its reader.
 - **`pushCandidates` (D236, D237: 5 in the default) skips `readAsk` on the push and on every ask:** no reader call,
   so no `pushRead` (D193 has nothing to reuse), no `onReader` report and no `checkAhead`. The push's candidates go
-  through `verifyItems` and `deliver` (reason `candidates:`), framed by `CANDIDATES_LEAD`; `CANDIDATES_NONE` is a
-  `checked:` note citing nothing (dropped untaken like D246's). A `readerPushBehind` second pass replaces an untaken
-  first packet only with candidates of its own. Tests of the reader's own wiring set `pushCandidates: 0` (the core,
-  the `reader` and `candidates` parts all do); the lab's reader screens run `--preset minus-candidates`.
+  through `verifyItems` and `deliver` (reason `candidates:`), framed by `CANDIDATES_LEAD`, with no "nothing found"
+  note when there are none (D257). A `readerPushBehind` second pass replaces an untaken first packet only with
+  candidates of its own. It needs the reader dependency, though it makes no call (a no-key server runs no push). Tests
+  of the reader's own wiring set `pushCandidates: 0` (the core, the `reader` and `candidates` parts all do); the lab's
+  reader screens run `--preset minus-candidates`.
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read

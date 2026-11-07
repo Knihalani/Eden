@@ -8,7 +8,7 @@ import { checkEngineConfig } from "./config-check";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { AskReader, type ReaderInput, type ReaderMaker } from "./reader";
-import { CANDIDATES_LEAD, CANDIDATES_NONE, shownText } from "./render";
+import { CANDIDATES_LEAD, shownText } from "./render";
 
 // CL6 (docs/research/cl-cl6.md, D236, D237): "the agent is the reader". The push makes no reader call; it hands the
 // agent the top of the pool the reader would have read, framed as candidates to check against the request. Unit tests
@@ -141,22 +141,24 @@ describe("pushCandidates (D236, D237): the push hands the agent candidates, with
     }
   });
 
-  test("a pool with nothing constraint-like gives no packet but a note, citing nothing", async () => {
-    const { p } = setup({ ...quiet, pushCandidates: 3 }, { items: PLAIN });
+  test("a pool with nothing constraint-like gives no packet and no note (D257)", async () => {
+    const { p, maker } = setup({ ...quiet, pushCandidates: 3 }, { items: PLAIN });
     const o = await say(p, REQUEST);
     expect(o.injection).toBeNull();
-    const got = p.takePending(ref());
-    expect(got.length).toBe(1);
-    expect(got[0]!.citations).toEqual([]);
-    expect(got[0]!.reason.startsWith("checked:")).toBe(true);
-    expect(got[0]!.text).toContain(CANDIDATES_NONE);
-    expect(shownText(got[0]!.text).trim()).toBe("");
+    expect(p.takePending(ref())).toEqual([]);
+    expect(maker.calls.length).toBe(0);
   });
 
-  test("with candidates to send, no note", async () => {
-    const { p } = setup({ ...quiet, pushCandidates: 3 });
+  test("an excerpt is cut at 2,000 bytes whatever compactItemBytes says", async () => {
+    const words = "Venue deposit invoice words. ".repeat(400);
+    const long = item("long", "Harlow hold", `Payments to Harlow are on hold. ${words}`);
+    const { p } = setup({ ...quiet, pushCandidates: 1, compactItemBytes: 1_000_000 }, { items: [long, ...PLAIN] });
     await say(p, REQUEST);
-    expect(p.takePending(ref()).some((x) => x.text.includes(CANDIDATES_NONE))).toBe(false);
+    const got = candidates(p);
+    expect(got.length).toBe(1);
+    for (const line of got[0]!.text.split("\n").filter((l) => l.startsWith("- ["))) {
+      expect(Buffer.byteLength(line)).toBeLessThanOrEqual(2_000 + 60);
+    }
   });
 
   test("a newer user message keeps an older push's packet out", async () => {
@@ -165,12 +167,6 @@ describe("pushCandidates (D236, D237): the push hands the agent candidates, with
     await p.observe({ ...ref(), at: NOW, kind: "user_message", text: "thanks" } as AgentEvent);
     await first;
     expect(candidates(p)).toEqual([]);
-  });
-
-  test("a source that did not answer is no all-clear: no note", async () => {
-    const { p } = setup({ ...quiet, pushCandidates: 3 }, { fail: true });
-    await say(p, REQUEST);
-    expect(p.takePending(ref())).toEqual([]);
   });
 
   test("an explicit ask calls no reader either", async () => {

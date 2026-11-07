@@ -141,6 +141,13 @@ a call, and since D192 (`readerVerifyAfter`) no doubted item is re-read beside a
 (lab provider, cached), heldout13+14, seeds 41-42, both on against the old default: reader calls a neutral task
 1.78 → 0.88, Eden's per-task $ on neutral tasks $0.465 → $0.218 per 1,000, the 1:1:8 mix all-in $0.856 → $0.628
 per 1,000 tasks (−$0.228, CI −0.292..−0.165) and 2.45 fewer connector calls a task (docs/research/fix-s1-reader.md).
+Since D240 (`readerStopEarly`) the reply stops at the first entry the model says is not the request's own thing
+(lab provider, cached; train1–6 seeds 41–42, 643 calls each, docs/research/cl-cl2.md): 2,834 tokens in, output 172 →
+91, $0.000284 → $0.000244 a call (−14%), reader p50 1,129 → 869 ms. Its latency is output: over 2,544 live calls,
+759 ms + 2.89 ms per output token, flat in input. Pi (train, n 120 a kind short, 96 on `--day 4`): Eden's per-task $
+−18% (short) and −10..−20% (day), wall −0.61..−0.77 s short. Smaller pools (`askReaderPool` 10: −22% $ a call) and
+narrower items (160 characters) cost recall and were not taken (D238); compact item fences save 2% of tokens (D239);
+a per-user cached item prefix would cost more to read than it saves (D241).
 
 **Reader reasoning (D144): the default sends none.** Until D144 `ModelReaderMaker` defaulted to reasoning "low", which
 the servers send to OpenRouter, while every lab figure above (and D96's, D98's and D125's quality) ran with thinking

@@ -450,21 +450,18 @@ export interface EngineConfig {
    */
   readerReuse: boolean;
   /**
-   * `pushChecked` (trial, D246, CL4 H8): when the push read the user's request and flagged nothing, a short note goes
-   * to the agent in the data envelope: Eden read the user's connected sources for this request and nothing in them
-   * bears on it (after a packet for the same request: nothing beyond it). Only when every source the push searched
-   * answered (D127) and its reading gave a verdict, or found no candidate to read. Meant to spare the agent an
-   * `ask_context` call and a model turn on requests Eden has nothing for. Needs `readerPush`.
+   * D240 (on in the default): with `askReader`, the reader's reply stops at the first entry the model says is not
+   * about the request's own thing (`READER_STOP`). Binding entries come first, so what is cut is the look-alikes after
+   * the first one, which it would only reject: half the output tokens, about 250 ms less per reading.
    */
-  pushChecked: boolean;
+  readerStopEarly: boolean;
   /**
    * `pushCandidates` (D236, promoted by D237; CL6 H19 "the agent is the reader"): with `readerPush`, the push makes no
    * reader call, and neither does an `ask`. The push hands the agent the first `pushCandidates` items of the pool the
-   * reader would have read (the ask's order, `askReaderPool` deep, bulk mail out), each a focused excerpt of
-   * `compactItemBytes`, after a fixed line of Eden's own framing them as items that may bear on the request, to be
-   * checked against its who, what and when first (`CANDIDATES_LEAD`). A pool with no constraint-like item
-   * (`readerGate`'s test) gives no packet but a note saying nothing looks like it constrains the request
-   * (`CANDIDATES_NONE`), when every source searched answered (D127). 0 is the reader's push (D95–D99).
+   * reader would have read (the ask's order, `askReaderPool` deep, bulk mail out; none when no pooled item passes
+   * `readerGate`'s constraint test), each a focused excerpt of `compactItemBytes` (at most 2,000), after a fixed line
+   * of Eden's own framing them as items that may bear on the request, to be checked against its who, what and when
+   * first (`CANDIDATES_LEAD`). 0 is the reader's push and asks (D95–D99).
    */
   pushCandidates: number;
 }
@@ -582,6 +579,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerGateVisits: true,
   readerVerifyAfter: true,
   readerReuse: true,
-  pushChecked: false,
+  readerStopEarly: true,
   pushCandidates: 5,
 };

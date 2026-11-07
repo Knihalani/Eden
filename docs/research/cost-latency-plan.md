@@ -69,3 +69,8 @@ seeds 41–42, 1:1:8 mix, steady $/1k: short 0.338 (tools 0.368, old default 0.6
 
 Every lever enters as a trial switch (D112), is screened at $0 where possible (paid reader replay, `gate-traffic`),
 then measured live on Pi on train suites, **short and long horizon**, and is promoted or deleted with its code.
+
+**CL7 outcome (2026-11-07, [cl-cl7.md](cl-cl7.md)):** H8's note (`pushChecked`, D246) deleted (D257): hidden −5.1
+points pooled (−9.1..−1.2; about −1.9 attributable to the note, the rest sampling), not shown neutral, for
+−$0.02–0.03/1k and −0.2–0.5 s where asks are slow. Current default vs `tools` on the
+1:1:8 mix: steady $0.580–0.597 (short) and $0.470–0.515 (long) per 1,000 tasks against $0.383 and $0.301.
