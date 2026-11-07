@@ -23,8 +23,8 @@
   },
   "modelCallsPerTurn": 0,
   "costPerTurnUsd": 0,
-  "latencyP50Ms": 0.3185149999999908,
-  "latencyP95Ms": 7.923393000000033,
+  "latencyP50Ms": 0.42396199999998885,
+  "latencyP95Ms": 7.279648000000066,
   "decisions": {
     "skipped": 80,
     "silent": 49,

@@ -1,7 +1,7 @@
 # A8: Eden's connector calls on per-call connector platforms
 
 Status: 2026-11-07, branch `claude/a8-connector-calls` (from `claude/lucid-hypatia-v9wqk5` at `ae5757b75`, then merged
-with its tips `8274294f` (A3's D272) and `07e881cd` (A5's D283)). Decisions D296–D299. Paid calls: Anthropic API only,
+with its tips `8274294f` (A3's D272), `07e881cd` (A5's D283) and `598bd6eb` (A1's D262–D265)). Decisions D296–D299. Paid calls: Anthropic API only,
 `HAIKU_API_KEY`, `claude-haiku-5-5` in every role, lab provider (D97), `OPENROUTER_API_KEY` unset, own ledger
 (`.local/a8/ledger.jsonl`, hard cap $1.5): **Anthropic-direct lab figures**. Train only, seeds 41–42. **Spent:
 $0.939.** Numbers marked **[EST]** are arithmetic, not measured; every other number comes from a command in this note.
@@ -186,10 +186,13 @@ Eden against the agent alone's $43.9 (its calls do not depend on the clock), at 
 
 ## 7. Checks
 
-- `bun run eval` (no model) on the final code: identical to the parent tip `07e881cd` (precision 0.5909, recall
+- `bun run eval` (no model) on the final code: identical to the parent tip `598bd6eb` (precision 0.5909, recall
   0.52, falseFireRate 0; `eval-final.txt`).
 - `bun run funnel --jobs 3` on the final code: hidden 305/384, decoys 267/384, `+0 −0` task by task against the parent
   tip (`funnel-final.txt`).
+- After merging A1 (`598bd6eb`, D262–D265): `days-calls` identical under payload and none, signals 2.487 → 2.483
+  calls a request (one slack fetch fewer in 2,307 calls; `days-calls-*-a1.txt`); D264's live searches of a cut copy
+  made no request-time search at this source count (A13 owns 1,000 sources).
 - After merging A5 (`07e881cd`): `days-calls` identical (`days-calls-*-a5.txt`); live, the long payload eden arm on
   the merged tree against the fixed-recap run above, same 232 tasks (`long-pay-a5-pair.txt`, `long-pay-a5-cost.txt`):
   connector calls 0.16 → 0.16 a task (all listings), hidden 14/23 → 16/23 (+0.087, −0.087..+0.261), mix $/1k tokens
