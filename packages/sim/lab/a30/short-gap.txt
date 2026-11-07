@@ -1,0 +1,21 @@
+tokens a task:
+arm         kind     n   req  multi |  read1 write1 plain1   out1  readN writeN plainN   outN
+eden        control   144 1.54  0.53 |   1201    524      2    187    909    361      1    121
+eden        hidden    144 1.35  0.35 |   1179    577      2    212    603    257      1     91
+eden        neutral   144 1.74  0.72 |   1244    327      2    169   1154    494      1    144
+eden~few2   control   144 1.56  0.56 |   1247    407      2    181    905    380      1    128
+eden~few2   hidden    144 1.39  0.39 |   1242    424      2    208    657    297      1    104
+eden~few2   neutral   144 1.69  0.69 |   1173    369      2    166   1076    459      1    134
+tools       control   144 1.86  0.78 |   1495     27      4    182   1341    347      2    148
+tools       hidden    144 1.80  0.74 |   1491     30      4    178   1239    348      2    142
+tools       neutral   144 1.81  0.75 |   1462     59      4    176   1253    308      2    131
+
+$/1k tasks by class, 1:1:8 mix:
+arm         |  read1 write1 plain1   out1  readN writeN plainN   outN  total | lever1 delta
+eden        |  0.012  0.046  0.000  0.088  0.011  0.057  0.000  0.068  0.283 | +0.021
+eden~few2   |  0.012  0.047  0.000  0.086  0.010  0.054  0.000  0.065  0.275 | +0.022
+tools       |  0.015  0.007  0.000  0.088  0.013  0.039  0.000  0.067  0.229 | +0.004
+
+gap to tools, $/1k on the mix, by class (positive: the arm pays more):
+eden        | -0.002 +0.040 -0.000 -0.001 -0.002 +0.018 -0.000 +0.001 +0.054
+eden~few2   | -0.003 +0.041 -0.000 -0.002 -0.002 +0.015 -0.000 -0.002 +0.046

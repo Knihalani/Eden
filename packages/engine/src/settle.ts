@@ -94,7 +94,7 @@ export function anchorsOf(
   return { entities, days: set, named, offset };
 }
 
-const hasDay = (a: Anchors) => a.days.size > 0 || a.named.length > 0;
+export const hasDay = (a: Anchors) => a.days.size > 0 || a.named.length > 0;
 
 /** The calendar days of the time window as `NamedDay`s, so an item that writes the date out ("Fri 13 Nov") matches. */
 function windowDays(a: Anchors): NamedDay[] {

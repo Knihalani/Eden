@@ -258,3 +258,36 @@ describe("askNudge (D316): a nudge to ask when the candidates do not settle the 
     expect(() => checkEngineConfig({ askNudge: 1 })).toThrow();
   });
 });
+
+describe("pushCandidatesSettled (D400, D404): fewer candidates when they settle the request", () => {
+  const handed = async (config: Record<string, unknown>, request: string) => {
+    const pools: PushPoolReport[] = [];
+    const p = setup({ pushCandidates: 4, ...config }, (r) => pools.push(r));
+    await say(p, request);
+    return pools.at(-1)!.handed;
+  };
+
+  test("2 in the default; settled: the first ones through the first that settles it", async () => {
+    expect(DEFAULT_CONFIG.pushCandidatesSettled).toBe(2);
+    const all = await handed({}, UNDATED_REQUEST);
+    expect(all.length).toBe(4);
+    const few = await handed({ pushCandidatesSettled: 1 }, UNDATED_REQUEST);
+    expect(few.length).toBeGreaterThanOrEqual(1);
+    expect(few.length).toBeLessThan(4);
+    expect(few).toEqual(all.slice(0, few.length));
+    // The last one kept settles the request (it names Harlow).
+    const kept = [HOLD, PLAIN, DATED, OTHER].find((x) => x.id === few.at(-1));
+    expect(kept!.title + kept!.text).toContain("Harlow");
+  });
+
+  test("unsettled: all the candidates (the nudge's case)", async () => {
+    const all = await handed({}, DATED_REQUEST);
+    expect(await handed({ pushCandidatesSettled: 1 }, DATED_REQUEST)).toEqual(all);
+    expect(all.length).toBe(4);
+  });
+
+  test("the config check: a whole number, acting only with the push", () => {
+    expect(checkEngineConfig({ pushCandidatesSettled: 2 })).toEqual({ pushCandidatesSettled: 2 });
+    expect(() => checkEngineConfig({ pushCandidatesSettled: 1.5 })).toThrow();
+  });
+});

@@ -1,0 +1,6 @@
+a30-long-41          0.0549
+a30-long-42          0.0501
+a30-short-41         0.2082
+a30-short-42         0.2095
+regrades             0.0104
+total 0.5331 calls 4272

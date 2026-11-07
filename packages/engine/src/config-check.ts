@@ -144,6 +144,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCandidates: PUSH,
   planConflict: [...PUSH, "sync"],
   askNudge: PUSH,
+  pushCandidatesSettled: PUSH,
   revisionDiff: ["revisionNotice"],
 };
 
@@ -203,6 +204,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   intentSeats: COUNT,
   askReaderPool: COUNT,
   pushCandidates: { integer: true, max: 40 },
+  pushCandidatesSettled: { integer: true, max: 40 },
 };
 
 /** String-list keys whose entries must come from a known list. */

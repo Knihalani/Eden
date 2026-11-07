@@ -246,6 +246,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   the gap is the packet's own tokens written to the cache (+$0.047/1k short, +$0.050/1k over days on the merged tree, Eden 0.65–0.95 s faster;
   cheaper than the agent alone on every per-call connector plan), and
   no lexical cut of packet or ask bytes keeps the planted facts (D273).
+- **A settled request gets fewer candidates (`pushCandidatesSettled` 2, D400, D404; part `fewer`).** Only when the
+  request names an anchor and the handed candidates settle it (`settles`); the first one that settles it is always
+  kept. The packet's bytes are what the agent's prompt cache is written with (D403); the cut moves 11 funnel hidden
+  items from the packet to the ask, so measure any change to it live (`eden~V` on Pi), not on the funnel alone.
 - **The candidates' order, a longer ask and constraint-first excerpts were measured and deleted (D266–D268, A2;
   docs/research/a2-quality.md; code in commit d096b7ba).** A no-model re-rank (one item per title, the request's date
   lifted) put the planted item in the packet more often (+11 of 384 at $0, +9 of 182 live) and raised no more facts
