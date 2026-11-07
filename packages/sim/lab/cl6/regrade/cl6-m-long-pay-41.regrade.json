@@ -1,0 +1,112 @@
+{
+ "results": ".local/cl6/runs/cl6-m-long-pay-41.json",
+ "runGrader": "claude-haiku-5-5",
+ "summary": [
+  {
+   "grader": "claude-haiku-5-5",
+   "answers": 6,
+   "readable": 6,
+   "errors": 0,
+   "msMedian": 748,
+   "factsTrue": 5,
+   "agreeWithRun": {
+    "same": 5,
+    "of": 6
+   },
+   "agreeWith": {},
+   "usd": 0.00039690000000000005,
+   "byKind": {
+    "neutral": {
+     "answers": 6,
+     "facts": 6,
+     "same": 5,
+     "onlyMine": 0,
+     "onlyRun": 1,
+     "trueMine": 5,
+     "trueRun": 6
+    }
+   }
+  }
+ ],
+ "requests": {
+  "sent": 6,
+  "retried": 0,
+  "refused": 0,
+  "statuses": {},
+  "cap": 0
+ },
+ "graded": [
+  {
+   "task": "w41:train3-neutral:contractor-msa-lapsed",
+   "condition": "eden",
+   "grader": "claude-haiku-5-5",
+   "usd": 8.33e-05,
+   "facts": {
+    "contractor-msa-lapsed": false
+   },
+   "readable": true,
+   "reply": "{\"1\": false, \"2\": false}",
+   "ms": 612
+  },
+  {
+   "task": "w41:train2-neutral:nursery-collection-list",
+   "condition": "eden",
+   "grader": "claude-haiku-5-5",
+   "usd": 5.9300000000000005e-05,
+   "facts": {
+    "nursery-collection-list": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 840
+  },
+  {
+   "task": "w41:train1-neutral:joint-account-dual-approval",
+   "condition": "eden",
+   "grader": "claude-haiku-5-5",
+   "usd": 6.670000000000001e-05,
+   "facts": {
+    "joint-account-dual-approval": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 591
+  },
+  {
+   "task": "w41:train4-neutral:unreleased-feature-promise",
+   "condition": "eden~rd",
+   "grader": "claude-haiku-5-5",
+   "usd": 5.440000000000001e-05,
+   "facts": {
+    "unreleased-feature-promise": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 726
+  },
+  {
+   "task": "w41:train3-neutral:pooled-accounts-banned",
+   "condition": "eden~rd",
+   "grader": "claude-haiku-5-5",
+   "usd": 7e-05,
+   "facts": {
+    "pooled-accounts-banned": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 748
+  },
+  {
+   "task": "w41:train4-neutral:deal-desk-discount-ceiling",
+   "condition": "eden~rd",
+   "grader": "claude-haiku-5-5",
+   "usd": 6.32e-05,
+   "facts": {
+    "deal-desk-discount-ceiling": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 787
+  }
+ ]
+}

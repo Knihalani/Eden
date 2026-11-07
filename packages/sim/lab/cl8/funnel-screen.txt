@@ -1,0 +1,82 @@
+# CL8 $0 screen: bun run funnel --suite train --seeds 41,42 --set '<arm>' -- --neutral --packets F (D258 code at f58aae41;
+# the floor arms ran an uncommitted pushCandidateFloor, relative to the best candidate's score, deleted before any live run).
+# packetB/askB = bytes a task of packets and of the funnel's one ask; dups = tasks with an item in two packets; keep = planted
+# item's candidate line: mean share of the task's detail words it holds, and lines holding all of them (bytes.py, dups.py, keep.py)
+== default (TOTAL hidden 305/384, decoys 267/384; delivered before the first model call: hidden 272, decoys 234)
+hidden n384 packetB 1529 items 4.93 askB 581 askItems 4.84 delivered 272 askCited 303 | control n384 packetB 1427 items 4.83 askB 534 askItems 4.75 delivered 234 askCited 265 | neutral n384 packetB 943 items 4.29 askB 468 askItems 4.87 delivered 0 askCited 0
+hidden tasks 384 withDup 139 dupItems 164 packets 554 candTasks 317
+control tasks 384 withDup 117 dupItems 132 packets 546 candTasks 318
+neutral tasks 384 withDup 43 dupItems 51 packets 405 candTasks 309
+n 253 mean share of detail words 0.929 all words 189 mean line B 309
+== b200
+  TOTAL      hidden 305/384  decoys 267/384
+  delivered before first model call (observe wait default ms): hidden 272 of 272 delivered (384 tasks), decoys 234 of 234 delivered (384 tasks)
+hidden n384 packetB 1286 items 4.93 askB 776 askItems 4.84 delivered 272 askCited 303 | control n384 packetB 1231 items 4.83 askB 694 askItems 4.75 delivered 234 askCited 265 | neutral n384 packetB 901 items 4.29 askB 503 askItems 4.87 delivered 0 askCited 0
+hidden tasks 384 withDup 139 dupItems 164 packets 554 candTasks 317
+control tasks 384 withDup 117 dupItems 132 packets 546 candTasks 318
+neutral tasks 384 withDup 43 dupItems 51 packets 405 candTasks 309
+n 253 mean share of detail words 0.702 all words 86 mean line B 206
+== b160
+  TOTAL      hidden 305/384  decoys 267/384
+  delivered before first model call (observe wait default ms): hidden 272 of 272 delivered (384 tasks), decoys 234 of 234 delivered (384 tasks)
+hidden n384 packetB 1184 items 4.93 askB 854 askItems 4.84 delivered 272 askCited 303 | control n384 packetB 1135 items 4.83 askB 768 askItems 4.75 delivered 234 askCited 265 | neutral n384 packetB 856 items 4.29 askB 541 askItems 4.87 delivered 0 askCited 0
+hidden tasks 384 withDup 139 dupItems 164 packets 554 candTasks 317
+control tasks 384 withDup 117 dupItems 132 packets 546 candTasks 318
+neutral tasks 384 withDup 43 dupItems 51 packets 405 candTasks 309
+n 253 mean share of detail words 0.626 all words 55 mean line B 171
+== b120
+  TOTAL      hidden 305/384  decoys 267/384
+  delivered before first model call (observe wait default ms): hidden 272 of 272 delivered (384 tasks), decoys 234 of 234 delivered (384 tasks)
+hidden n384 packetB 1067 items 4.93 askB 939 askItems 4.84 delivered 272 askCited 303 | control n384 packetB 1013 items 4.83 askB 857 askItems 4.75 delivered 234 askCited 265 | neutral n384 packetB 780 items 4.29 askB 603 askItems 4.87 delivered 0 askCited 0
+hidden tasks 384 withDup 139 dupItems 164 packets 554 candTasks 317
+control tasks 384 withDup 117 dupItems 132 packets 546 candTasks 318
+neutral tasks 384 withDup 43 dupItems 51 packets 405 candTasks 309
+n 253 mean share of detail words 0.483 all words 24 mean line B 135
+== k4
+  TOTAL      hidden 305/384  decoys 267/384
+  delivered before first model call (observe wait default ms): hidden 266 of 266 delivered (384 tasks), decoys 227 of 227 delivered (384 tasks)
+hidden n384 packetB 1351 items 4.11 askB 690 askItems 4.84 delivered 266 askCited 303 | control n384 packetB 1260 items 4.00 askB 638 askItems 4.75 delivered 227 askCited 265 | neutral n384 packetB 825 items 3.49 askB 542 askItems 4.87 delivered 0 askCited 0
+hidden tasks 384 withDup 133 dupItems 156 packets 554 candTasks 317
+control tasks 384 withDup 115 dupItems 127 packets 546 candTasks 318
+neutral tasks 384 withDup 43 dupItems 50 packets 405 candTasks 309
+n 247 mean share of detail words 0.928 all words 184 mean line B 309
+== k3
+  TOTAL      hidden 305/384  decoys 267/384
+  delivered before first model call (observe wait default ms): hidden 254 of 254 delivered (384 tasks), decoys 215 of 215 delivered (384 tasks)
+hidden n384 packetB 1169 items 3.28 askB 800 askItems 4.84 delivered 254 askCited 303 | control n384 packetB 1085 items 3.17 askB 745 askItems 4.75 delivered 215 askCited 265 | neutral n384 packetB 715 items 2.69 askB 610 askItems 4.87 delivered 0 askCited 0
+hidden tasks 384 withDup 132 dupItems 147 packets 554 candTasks 317
+control tasks 384 withDup 112 dupItems 119 packets 546 candTasks 318
+neutral tasks 384 withDup 43 dupItems 48 packets 405 candTasks 309
+n 235 mean share of detail words 0.93 all words 175 mean line B 309
+== dedup
+  TOTAL      hidden 305/384  decoys 267/384
+  delivered before first model call (observe wait default ms): hidden 272 of 272 delivered (384 tasks), decoys 234 of 234 delivered (384 tasks)
+hidden n384 packetB 1386 items 4.50 askB 581 askItems 4.84 delivered 272 askCited 303 | control n384 packetB 1318 items 4.48 askB 534 askItems 4.75 delivered 234 askCited 265 | neutral n384 packetB 911 items 4.16 askB 468 askItems 4.87 delivered 0 askCited 0
+hidden tasks 384 withDup 0 dupItems 0 packets 435 candTasks 317
+control tasks 384 withDup 0 dupItems 0 packets 440 candTasks 318
+neutral tasks 384 withDup 0 dupItems 0 packets 365 candTasks 309
+n 253 mean share of detail words 0.929 all words 189 mean line B 309
+== fl3
+  TOTAL      hidden 305/384  decoys 267/384
+  delivered before first model call (observe wait default ms): hidden 223 of 223 delivered (384 tasks), decoys 209 of 209 delivered (384 tasks)
+hidden n384 packetB 1163 items 3.34 askB 816 askItems 4.84 delivered 223 askCited 303 | control n384 packetB 1096 items 3.24 askB 742 askItems 4.75 delivered 209 askCited 265 | neutral n384 packetB 765 items 3.04 askB 583 askItems 4.87 delivered 0 askCited 0
+hidden tasks 384 withDup 131 dupItems 153 packets 554 candTasks 317
+control tasks 384 withDup 114 dupItems 129 packets 544 candTasks 316
+neutral tasks 384 withDup 42 dupItems 50 packets 405 candTasks 309
+n 202 mean share of detail words 0.928 all words 150 mean line B 305
+== fl5
+  TOTAL      hidden 305/384  decoys 267/384
+  delivered before first model call (observe wait default ms): hidden 218 of 218 delivered (384 tasks), decoys 197 of 197 delivered (384 tasks)
+hidden n384 packetB 1102 items 3.08 askB 845 askItems 4.84 delivered 218 askCited 303 | control n384 packetB 1033 items 2.96 askB 774 askItems 4.75 delivered 197 askCited 265 | neutral n384 packetB 741 items 2.88 askB 594 askItems 4.87 delivered 0 askCited 0
+hidden tasks 384 withDup 129 dupItems 146 packets 554 candTasks 317
+control tasks 384 withDup 110 dupItems 122 packets 544 candTasks 316
+neutral tasks 384 withDup 39 dupItems 46 packets 405 candTasks 309
+n 197 mean share of detail words 0.927 all words 146 mean line B 307
+== fl7
+  TOTAL      hidden 305/384  decoys 267/384
+  delivered before first model call (observe wait default ms): hidden 204 of 204 delivered (384 tasks), decoys 189 of 189 delivered (384 tasks)
+hidden n384 packetB 1011 items 2.69 askB 899 askItems 4.84 delivered 204 askCited 303 | control n384 packetB 941 items 2.54 askB 829 askItems 4.75 delivered 189 askCited 265 | neutral n384 packetB 706 items 2.64 askB 614 askItems 4.87 delivered 0 askCited 0
+hidden tasks 384 withDup 124 dupItems 131 packets 554 candTasks 317
+control tasks 384 withDup 97 dupItems 104 packets 544 candTasks 316
+neutral tasks 384 withDup 37 dupItems 43 packets 405 candTasks 309
+n 183 mean share of detail words 0.927 all words 135 mean line B 309

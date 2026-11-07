@@ -12,7 +12,7 @@
 import { appendFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
-import { cardKey, ItemCache, type Card, type CardMaker } from "@eden/engine";
+import { cardKey, ItemCache, worthCarding, type Card, type CardMaker } from "@eden/engine";
 import type { ContextItem } from "@eden/protocol";
 import { INTENT_INERT } from "./reader-stub";
 import { parseSuites } from "./suites";
@@ -82,6 +82,8 @@ export const INTENT_COVERS: Record<string, string[]> = {
   heldout14: ["41", "42", "43", "44"],
   // The weak-points plan's blind suite (docs/research/fix-s3b-lab.md): made on Haiku 5.5 on 2026-11-07, unrun.
   heldout15: ["41", "42", "43", "44"],
+  // The CL wave's blind suite (docs/research/cl-cl5.md): made on Haiku 5.5 on 2026-11-07, unrun.
+  heldout16: ["41", "42", "43", "44"],
 };
 
 /** The suite × seed shards INTENT_FILE was not made for. */
@@ -178,6 +180,14 @@ export class DiskCardMaker implements CardMaker {
   readonly inflight: Inflight;
   hits = 0;
   misses = 0;
+  /**
+   * Items not sent live because the call would buy nothing (CL3, after CL5's finding that most in-run backfill stayed
+   * live with cards replayed): asked for requests, its requests replayed, and rejected by the card prefilter (the
+   * looser one, so the stricter `cardsEconomy` one too). The enricher reads such an item for its requests only and
+   * ignores its card (`only` in `CardEnricher`), and `make` returns the replayed requests over a live call's, so the
+   * call's output would be thrown away.
+   */
+  skipped = 0;
 
   private readonly out: string;
   /**
@@ -244,6 +254,10 @@ export class DiskCardMaker implements CardMaker {
       } else if (pending) {
         if (!retry) this.hits++;
         waiting.push([i, pending]);
+      } else if (intent && this.requests.has(h) && !worthCarding(it)) {
+        if (!retry) this.skipped++;
+        // Covered by its replayed requests: a none card, as `make` gives an item with requests and no card.
+        out[i] = NONE;
       } else {
         if (!retry) this.misses++;
         if (!this.live) return;

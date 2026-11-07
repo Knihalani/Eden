@@ -113,7 +113,10 @@ const load = (id: string) =>
   JSON.parse(readFileSync(join(import.meta.dir, "..", "scenarios", `${id}.json`), "utf8")) as Scenario;
 // NEW's reader flags (packages/sim/src/lab/presets.ts); the eval wires no cards, so the rest of NEW is beside the
 // point here.
-const READER = { askReader: true, askReaderDrop: true, readerPush: true };
+// The reader's own wiring: the default's push hands the agent candidates with no reader call (D237), so these tests
+// run the reader's push (`pushCandidates` 0).
+const READER = { askReader: true, askReaderDrop: true, readerPush: true, pushCandidates: 0 };
+const READS = { pushCandidates: 0 };
 
 describe("eval harness: the reader family (--reader stub|oracle)", () => {
   const freeze = load("large-vendor-freeze");
@@ -212,11 +215,22 @@ describe("eval harness: --live wires what ships (D128)", () => {
     expect((live.readerModel as FakeRoleModel).options).toEqual((roles.reader as FakeRoleModel).options);
     expect(made[0]!.options).toMatchObject({ model: DEFAULT_ROLE_MODEL, sort: "throughput", zdr: true });
     expect(live.readerModel).toBe(made[0]!);
+    // The shipped default (D237) makes no reader call: the push hands the agent candidates.
+    const shipped = await runScenarios([freeze], {
+      model: live.model,
+      waitMs: 1_000,
+      readerModel: live.readerModel,
+      spend: live.spend,
+    });
+    expect(made[0]!.calls.length).toBe(0);
+    // The push ran and read nothing: its traces are there, with no model call.
+    expect(shipped.decisions["reader-push"]).toBeGreaterThan(0);
     const m = await runScenarios([freeze], {
       model: live.model,
       waitMs: 1_000,
       readerModel: live.readerModel,
       spend: live.spend,
+      config: READS,
     });
     const calls = made[0]!.calls;
     expect(calls.length).toBeGreaterThan(0);
@@ -266,7 +280,13 @@ describe("eval harness: --live wires what ships (D128)", () => {
       .filter((f) => f.endsWith(".json"))
       .sort()
       .map((f) => JSON.parse(readFileSync(join(dir, f), "utf8")) as Scenario);
-    const wide = { model: null, waitMs: 1_000, readerModel: uncapped.readerModel, spend: uncapped.spend };
+    const wide = {
+      model: null,
+      waitMs: 1_000,
+      readerModel: uncapped.readerModel,
+      spend: uncapped.spend,
+      config: READS,
+    };
     await runScenarios(every, wide);
     expect(free.made[0]!.calls.length).toBeGreaterThan(1);
     // $0.002 a call (the reader's reservation estimate) under a $0.003 cap: one call, then refusals.
@@ -277,6 +297,7 @@ describe("eval harness: --live wires what ships (D128)", () => {
       waitMs: 1_000,
       readerModel: capped.readerModel,
       spend: capped.spend,
+      config: READS,
     });
     expect(paid.made[0]!.calls.length).toBe(1);
     expect(capped.spend.spent(EVAL_TENANT)).toBeCloseTo(0.002, 10);
@@ -293,13 +314,14 @@ describe("eval harness: --live wires what ships (D128)", () => {
       readerModel: live.readerModel,
       spend: live.spend,
       onReaderFailure: (e) => told.push(e),
+      config: READS,
     });
     const calls = refused.made[0]!.calls.length;
     expect(calls).toBeGreaterThan(0);
     expect(m.readerPool).toMatchObject({ calls, failures: calls });
     expect(told.length).toBe(calls);
     // Delivered what the stub run delivers: a failed reading changes nothing the rules deliver.
-    const stub = await runScenarios([freeze], { model: null, waitMs: 1_000, reader: "stub" });
+    const stub = await runScenarios([freeze], { model: null, waitMs: 1_000, reader: "stub", config: READS });
     expect(m.counts).toEqual(stub.counts);
   });
 

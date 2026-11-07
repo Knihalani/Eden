@@ -159,7 +159,9 @@ describe("the funnel with a no-model reader (end to end, small)", () => {
   });
   // NEWL with its sync capped at 100 items a user (3,000 by default): the sync still backfills, polls and counts its
   // items, but storing 3,000 items was 0.8 s of each run's 2.5 s CPU (bun --cpu-prof), and no check here needs them.
-  const config = JSON.stringify({ ...PRESETS.default, syncMaxItems: 100 });
+  // The reader's push (`pushCandidates` 0): the default's push (D237) makes no reader call, and these runs check
+  // the reader.
+  const config = JSON.stringify({ ...PRESETS.default, syncMaxItems: 100, pushCandidates: 0 });
   /** One small funnel run in its own process. The runs below go out together: each is CPU-bound, single-threaded. */
   const start = async (reader: string, extra: string[] = []): Promise<Run> => {
     const out = join(scratch(), "f.json");

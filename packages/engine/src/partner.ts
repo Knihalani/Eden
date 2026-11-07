@@ -122,7 +122,7 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import { citationsOf, renderPacket, shownText } from "./render";
+import { CANDIDATES_LEAD, citationsOf, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -1445,8 +1445,14 @@ export class ContextPartner {
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
     // it stops waiting at `readerPushWaitMs`), bounded by the reader's call and the session's close.
+    const readOpts: ReadOpts = {
+      push: internal.push === true,
+      ...(internal.request !== undefined ? { request: internal.request } : {}),
+    };
+    // `pushCandidates` (D236, D237): no reader call, on the push or on an ask (the agent reads the candidates).
+    const candidating = this.config.pushCandidates > 0;
     const reading =
-      this.config.askReader && this.deps.reader
+      this.config.askReader && this.deps.reader && !candidating
         ? await this.readAsk(
             s,
             cue,
@@ -1466,9 +1472,13 @@ export class ContextPartner {
     if (internal.push) {
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
-      const flagged = reading
-        ? chosen.filter((x) => reading.notes.has(x.item.id) && pushes.has(reading.kinds.get(x.item.id) ?? ""))
-        : [];
+      // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
+      const candidates = candidating ? this.candidatesOf(s, cue, [...order, ...scored]) : null;
+      const flagged = candidates
+        ? candidates.items
+        : reading
+          ? chosen.filter((x) => reading.notes.has(x.item.id) && pushes.has(reading.kinds.get(x.item.id) ?? ""))
+          : [];
       // A reading that lands after a newer user message answers a request the agent has moved past: not queued.
       const latest = internal.request === undefined || internal.request === s.requests;
       // `readerPushBehind`'s second reading, on the index the poll refreshed: the packet the first queued from the
@@ -1476,7 +1486,8 @@ export class ContextPartner {
       // the agent has taken stays taken: only what is new to it, or what the poll changed since, goes out again.
       const prev = internal.again?.prev;
       const withdrawn = new Set<string>();
-      if (prev && reading?.read && !s.closed && latest) {
+      // A candidates pass replaces the first packet only with candidates of its own (CL6 review).
+      if (prev && (reading?.read || (candidates?.items.length ?? 0) > 0) && !s.closed && latest) {
         const at = s.pending.indexOf(prev);
         if (at >= 0) {
           s.pending.splice(at, 1);
@@ -1499,7 +1510,9 @@ export class ContextPartner {
       const still = internal.request === undefined || internal.request === s.requests;
       const injection =
         checked.length > 0 && !s.closed && still
-          ? this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
+          ? candidates
+            ? this.deliver(s, checked, "proactive", `candidates:${cue.id}`, cue, undefined, this.candidateFrame())
+            : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
       if (injection && was) this.keepUndo(s, injection, checked, was);
       if (injection) s.pending.push(injection);
@@ -1702,6 +1715,7 @@ export class ContextPartner {
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
       // Sticky routing to the provider that holds the user's cached prefix, as the judge, answer and cards calls do.
       cacheKey: userCacheKey(s.scope),
+      ...(this.config.readerStopEarly ? { stopEarly: true } : {}),
     };
     // Who makes the call, for the accounting: a read that finds a verdict cached, or a call another read started
     // (an ask joining its push), makes none. Known before the read, for when this ask's wait runs out first.
@@ -1823,6 +1837,48 @@ export class ContextPartner {
       read: true,
       called,
       costUsd,
+    };
+  }
+
+  /**
+   * `pushCandidates` (D236): the push's candidates for the agent to judge, with no model call. The pool `readAsk` would
+   * read (the first `askReaderPool` distinct items of `ranked`) in its own order, bulk mail out; the first
+   * `pushCandidates` of them. A pool with no constraint-like item (`readerGate`'s test, cards included) gives none, as
+   * `readerGate` would read none. (Constraint-like items first lost 27 points of hidden facts live: D236.)
+   */
+  private candidatesOf(s: Session, cue: Cue, ranked: readonly Scored[]): { items: Scored[] } {
+    const pool: Scored[] = [];
+    const seen = new Set<string>();
+    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
+    for (const x of ranked) {
+      if (pool.length >= cap) break;
+      if (seen.has(x.item.id)) continue;
+      seen.add(x.item.id);
+      pool.push(x);
+    }
+    if (pool.length === 0) return { items: [] };
+    const cards =
+      this.config.cards && this.deps.cards
+        ? this.deps.cards.cardsOf(
+            s.scope,
+            pool.map((x) => x.item.id),
+            cue.arrived ?? this.now(),
+          )
+        : new Map<string, Card>();
+    if (!pool.some((x) => this.constraintLike(x, cards))) return { items: [] };
+    return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) };
+  }
+
+  /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
+  private candidateFrame(): PacketFrame {
+    // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
+    const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
+    const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
+    return {
+      lead: CANDIDATES_LEAD,
+      itemBytes: each,
+      // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
+      maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
     };
   }
 
@@ -4404,10 +4460,11 @@ export class ContextPartner {
     reason: string,
     cue: Cue,
     shown?: string,
+    frame?: PacketFrame,
   ): Injection {
     const spans = this.spans;
     const sp = spans?.open("deliver", cue.span, { items: scored.length });
-    const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown);
+    const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown, frame);
     if (sp) spans!.close(sp, { bytes: injection.text.length });
     return injection;
   }
@@ -4420,6 +4477,7 @@ export class ContextPartner {
     cue: Cue,
     parent: number,
     shown?: string,
+    frame?: PacketFrame,
   ): Injection {
     const spans = this.spans;
     // Whatever path delivered them, a probe that first brought one in paid for its call (`probeYield`).
@@ -4453,11 +4511,12 @@ export class ContextPartner {
     const items = shownItems.map((x) => x.item);
     const rendering = spans?.open("render", parent, { items: items.length });
     const options: Parameters<typeof renderPacket>[1] = {
-      maxBytes: this.config.maxInjectionBytes,
-      ...(this.config.compactInjection
+      maxBytes: frame?.maxBytes ?? this.config.maxInjectionBytes,
+      ...(frame ? { lead: frame.lead } : {}),
+      ...(this.config.compactInjection || frame
         ? {
             focus: focusOf(cue),
-            itemBytes: this.config.compactItemBytes,
+            itemBytes: frame?.itemBytes ?? this.config.compactItemBytes,
             year: new Date(this.now()).getUTCFullYear(),
             self,
             dense,
@@ -4574,6 +4633,16 @@ const NO_TERMS = new Uint32Array(0);
  */
 function pendingOf(s: Session): boolean {
   return s.inflight !== null || !!s.behind || s.pending.length > 0;
+}
+
+/** `pushCandidates` (D236): the most of an item a candidate's excerpt says, whatever `compactItemBytes` is set to. */
+const MAX_CANDIDATE_BYTES = 2_000;
+
+/** `pushCandidates` (D236): a candidates' packet's framing line and cut. */
+interface PacketFrame {
+  lead: string;
+  itemBytes: number;
+  maxBytes: number;
 }
 
 /** `revisionNotice`: an "updated:" packet's reason prefix, and what each of its items' titles starts with. */

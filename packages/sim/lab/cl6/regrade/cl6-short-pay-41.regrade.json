@@ -1,0 +1,132 @@
+{
+ "runGrader": "claude-haiku-5-5",
+ "summary": [
+  {
+   "grader": "claude-haiku-5-5",
+   "answers": 7,
+   "readable": 7,
+   "errors": 0,
+   "msMedian": 654,
+   "factsTrue": 5,
+   "agreeWithRun": {
+    "same": 5,
+    "of": 7
+   },
+   "agreeWith": {},
+   "usd": 0.0005359,
+   "byKind": {
+    "neutral": {
+     "answers": 3,
+     "facts": 3,
+     "same": 3,
+     "onlyMine": 0,
+     "onlyRun": 0,
+     "trueMine": 3,
+     "trueRun": 3
+    },
+    "control": {
+     "answers": 4,
+     "facts": 4,
+     "same": 2,
+     "onlyMine": 0,
+     "onlyRun": 2,
+     "trueMine": 2,
+     "trueRun": 4
+    }
+   }
+  }
+ ],
+ "requests": {
+  "sent": 7,
+  "retried": 0,
+  "refused": 0,
+  "statuses": {},
+  "cap": 0
+ },
+ "graded": [
+  {
+   "task": "w41:train1-neutral:energy-fix-exit-fees",
+   "condition": "tools",
+   "grader": "claude-haiku-5-5",
+   "usd": 7.25e-05,
+   "facts": {
+    "energy-fix-exit-fees": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 658
+  },
+  {
+   "task": "w41:train3-neutral:restricted-datastore-grant",
+   "condition": "tools",
+   "grader": "claude-haiku-5-5",
+   "usd": 7.37e-05,
+   "facts": {
+    "restricted-datastore-grant": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 617
+  },
+  {
+   "task": "w41:train3-control:repo-app-needs-vendor-review",
+   "condition": "eden",
+   "grader": "claude-haiku-5-5",
+   "usd": 8.54e-05,
+   "facts": {
+    "repo-app-needs-vendor-review": false
+   },
+   "readable": true,
+   "reply": "{\"1\": false}",
+   "ms": 823
+  },
+  {
+   "task": "w41:train3-control:restricted-datastore-grant",
+   "condition": "eden~cand",
+   "grader": "claude-haiku-5-5",
+   "usd": 6.740000000000001e-05,
+   "facts": {
+    "restricted-datastore-grant": false
+   },
+   "readable": true,
+   "reply": "{\"1\": false}",
+   "ms": 863
+  },
+  {
+   "task": "w41:train3-control:commitment-already-purchased",
+   "condition": "eden~cand",
+   "grader": "claude-haiku-5-5",
+   "usd": 9e-05,
+   "facts": {
+    "commitment-already-purchased": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 573
+  },
+  {
+   "task": "w41:train6-control:support-cover-clash",
+   "condition": "eden",
+   "grader": "claude-haiku-5-5",
+   "usd": 7.560000000000001e-05,
+   "facts": {
+    "support-cover-clash": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 549
+  },
+  {
+   "task": "w41:train6-neutral:offer-above-band",
+   "condition": "eden~cand",
+   "grader": "claude-haiku-5-5",
+   "usd": 7.13e-05,
+   "facts": {
+    "offer-above-band": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true, \"2\": false}",
+   "ms": 654
+  }
+ ]
+}

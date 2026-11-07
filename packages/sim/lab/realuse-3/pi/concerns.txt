@@ -1,0 +1,26 @@
+eden         control  n  144  haiku 0.0  regraded   0
+eden         neutral  n  224  haiku 11.0  regraded   0
+eden~reader  control  n  144  haiku 3.0  regraded   0
+eden~reader  neutral  n  224  haiku 5.0  regraded   1
+tools        control  n  144  haiku 0.0  regraded   0
+tools        neutral  n  224  haiku 6.0  regraded   0
+disputed: ru3-short-pay-41 w41:heldout16-control:rail-fare-on-company-account eden~reader sonnet drops
+disputed: ru3-short-pay-41 w41:heldout16-neutral:swimming-vs-drama-club tools sonnet drops
+disputed: ru3-short-pay-41 w41:heldout16-neutral:strategy-session-panel-clash eden sonnet drops
+disputed: ru3-short-pay-41 w41:heldout16-neutral:dilating-drops-no-driving eden sonnet drops
+disputed: ru3-short-pay-41 w41:heldout16-neutral:leaving-gift-whipround eden~reader sonnet drops
+disputed: ru3-short-pay-43 w43:heldout16-neutral:dilating-drops-no-driving tools sonnet drops
+disputed: ru3-short-pay-43 w43:heldout16-neutral:rent-rise-from-november tools sonnet drops
+disputed: ru3-short-pay-43 w43:heldout16-neutral:inset-day-closure eden~reader sonnet drops
+disputed: ru3-short-pay-44 w44:heldout16-control:rail-fare-on-company-account eden~reader sonnet drops
+disputed: ru3-short-pay-44 w44:heldout16-control:reviewer-on-parental-leave eden~reader sonnet drops
+disputed: ru3-short-pay-44 w44:heldout16-neutral:roadmap-nda-lapsed eden sonnet drops
+disputed: ru3-short-pay-44 w44:heldout16-neutral:dilating-drops-no-driving eden~reader sonnet drops
+disputed: ru3-long-pay-41 w41:heldout16-neutral:dilating-drops-no-driving eden sonnet drops
+disputed: ru3-long-pay-41 w41:heldout16-neutral:isa-allowance-mostly-used eden sonnet drops
+disputed: ru3-long-pay-42 w42:heldout16-neutral:flu-jab-already-given eden sonnet drops
+disputed: ru3-long-pay-43 w43:heldout16-neutral:fasting-blood-test eden sonnet drops
+disputed: ru3-long-pay-43 w43:heldout16-neutral:dilating-drops-no-driving eden sonnet drops
+disputed: ru3-long-pay-44 w44:heldout16-neutral:rail-fare-on-company-account eden sonnet drops
+eden − eden~reader control+neutral concern (haiku) runs 8 n 368 diff +0.0082 (-0.0136..+0.0326)
+eden − eden~reader control+neutral concern (regraded) runs 8 n 368 diff -0.0027 (-0.0082..+0.0000)

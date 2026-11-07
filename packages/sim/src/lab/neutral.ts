@@ -8,8 +8,22 @@
  * the grader asks whether the answer raises any concern, which counts like a false concern on a control task.
  */
 
-/** Suites whose planting function builds the `neutral` variant (plants nothing, same request text). */
-export const NEUTRAL_SUITES: readonly string[] = ["heldout14", "heldout15"];
+/**
+ * Suites whose planting function builds the `neutral` variant (plants nothing, same request text). The train suites
+ * build it through suites.ts's `withNeutral` (CL5), so tuning can measure nothing-to-add turns without a held-out
+ * suite.
+ */
+export const NEUTRAL_SUITES: readonly string[] = [
+  "heldout14",
+  "heldout15",
+  "heldout16",
+  "train1",
+  "train2",
+  "train3",
+  "train4",
+  "train5",
+  "train6",
+];
 
 export const supportsNeutral = (suite: string) => NEUTRAL_SUITES.includes(suite);
 

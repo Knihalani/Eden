@@ -6,16 +6,19 @@ part: exactly that part's entry in `PARTS` (`packages/engine/src/parts.ts`), che
 compare against the default, or to switch a part off in a deployment that must (for example `minus-reader` and
 `minus-cards` send no item text to a model even with a key set). None is recommended over the default.
 
-| Profile | Funnel hidden / decoys (of 384) | Eval precision | Eval recall | Eval falseFireRate | Eval p95 ms |
-|---|---:|---:|---:|---:|---:|
-| (none: the default) | 214 / 211 | 0.8 | 0.48 | 0.0147 | 12.4 |
-| [`minus-reader.json`](minus-reader.json) | 214 / 211 | 0.8 | 0.48 | 0.0147 | 11.4 |
-| [`minus-cards.json`](minus-cards.json) | 214 / 210 | 0.8 | 0.48 | 0.0147 | 10.7 |
-| [`minus-sync.json`](minus-sync.json) | 197 / 190 | 0.8 | 0.48 | 0.0147 | 12.1 |
-| [`minus-grounds.json`](minus-grounds.json) | 210 / 210 | 0.893 | 0.5 | 0 | 8.6 |
-| [`minus-freshness.json`](minus-freshness.json) (2026-11-05) | 214 / 211 | as the default | as the default | as the default | — |
+| Profile                                                             |                                                                                                                     Funnel hidden / decoys (of 384) |                                              Eval precision |    Eval recall | Eval falseFireRate | Eval p95 ms |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------: | ----------------------------------------------------------: | -------------: | -----------------: | ----------: |
+| (none: the default)                                                 |                                                                                                                                           214 / 211 |                                                         0.8 |           0.48 |             0.0147 |        12.4 |
+| [`minus-reader.json`](minus-reader.json)                            |                                                                                                                                           214 / 211 |                                                         0.8 |           0.48 |             0.0147 |        11.4 |
+| [`minus-candidates.json`](minus-candidates.json) (2026-11-07, D237) | not on this table's basis (2026-11-03, reader stub); with recipe 2a's paid reader replayed: 321 / 129 (the default then: 305 / 267, no reader call) | as the default (no model: candidates and reader both inert) | as the default |     as the default |           — |
+| [`minus-cards.json`](minus-cards.json)                              |                                                                                                                                           214 / 210 |                                                         0.8 |           0.48 |             0.0147 |        10.7 |
+| [`minus-sync.json`](minus-sync.json)                                |                                                                                                                                           197 / 190 |                                                         0.8 |           0.48 |             0.0147 |        12.1 |
+| [`minus-grounds.json`](minus-grounds.json)                          |                                                                                                                                           210 / 210 |                                                       0.893 |            0.5 |                  0 |         8.6 |
+| [`minus-freshness.json`](minus-freshness.json) (2026-11-05)         |                                                                                                                                           214 / 211 |                                              as the default | as the default |     as the default |           — |
 
-Measured 2026-11-03, $0, no model key:
+Measured 2026-11-03, $0, no model key (rows without a date). Since D237 the default makes no reader call, so
+`minus-reader` no longer changes what the request path sends to a model; it still turns the push off (its
+candidates need the reader's `readerPush`).
 
 ```bash
 bun run funnel --jobs 4 --preset minus-<part>      # train1–6, seeds 41–42, cards replayed, reader stub

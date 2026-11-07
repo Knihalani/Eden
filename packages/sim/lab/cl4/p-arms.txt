@@ -1,0 +1,4 @@
+arm              kind      n  rate   wall p50/p90/mean s  all-in $/1k (agent, Eden)  Eden path ms (obs, ask)  turns  asks  reader  conn  restarts
+eden             neutral   32 0.000   4.25/ 5.38/ 4.13   0.541 (0.328, 0.212)       831 ( 626,  205)   1.78  1.12  0.88   0.56  0.00
+
+== paired differences per kind (a − b), bootstrap 95%; * the interval excludes zero

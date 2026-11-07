@@ -1,0 +1,15 @@
+short eden       control 2 -> 2 neutral 1 -> 1
+short eden~b200  control 1 -> 1 neutral 1 -> 1
+short eden~dd    control 2 -> 2 neutral 0 -> 0
+short eden~k3    control 5 -> 5 neutral 2 -> 1
+short tools      control 0 -> 0 neutral 3 -> 3
+long eden       control 1 -> 1 neutral 1 -> 1
+long eden~b200  control 1 -> 1 neutral 2 -> 1
+long eden~dd    control 1 -> 0 neutral 5 -> 4
+long eden~k3    control 0 -> 0 neutral 6 -> 2
+long tools      control 0 -> 0 neutral 2 -> 1
+-- second runs (short2: eden, eden~k3; long2: eden, eden~late)
+short eden       control 4 -> 4 neutral 1 -> 1
+short eden~k3    control 4 -> 4 neutral 1 -> 1
+long eden       control 1 -> 1 neutral 2 -> 2
+long eden~late  control 1 -> 0 neutral 2 -> 2

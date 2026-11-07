@@ -11,13 +11,23 @@
  *     --spend-ledger .local/ledger.jsonl --spend-cap 4 --spend-headroom 0.3 --run-label cold [--out cold.json]
  *
  * Each user is a hidden-variant world of a train suite (`worldOf`, as pi-ab builds it), its connectors the realistic
- * profile at time scale 0. One user at a time, so each user's calls and dollars are its own.
+ * profile at time scale 0. One user at a time, so each user's calls and dollars are its own. `user:SEED` is instead
+ * the long-horizon user `pi-ab --days` builds for that seed (pi-user.ts, over `--suite`, default train, with `--days`,
+ * `--day-size` and `--mix` as pi-ab takes them): the one-time backfill `pi-cost-report.ts --lifetime` books for it.
+ *
+ * `--set JSON`: engine settings over the default (e.g. `{"cardsLeanDays":30}`, CL3's comparison with D244). The
+ * deleted trial `cardsBatch` (D242) added `--bulk` here: commit 4e072585.
  */
 import { writeFileSync } from "node:fs";
-import type { CardEnricher } from "@eden/engine";
+import { checkEngineConfig, type CardEnricher } from "@eden/engine";
+import type { Model } from "@eden/llm";
 import { buildPartner } from "@eden/server";
 import { REALISTIC, simSources } from "../sources";
 import { worldOf } from "./ab-common";
+import { parseJson } from "./flags";
+import type { UserShape } from "./pi-cost";
+import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf } from "./pi-user";
+import { parseSuites } from "./suites";
 import { labAccess, labModel } from "./free";
 import { warmAll } from "../server";
 
@@ -35,6 +45,20 @@ const USERS = opt("users", "train1:41")
     return { suite, seed: Number(seed) };
   });
 const OUT = opt("out", "");
+// Checked as the servers check EDEN_ENGINE_CONFIG: an unknown key (a deleted trial's), a wrong type or an out-of-range
+// value stops the run, rather than running the default under the setting's name. Cards are wired, the reader is not.
+const SET = checkEngineConfig(parseJson(opt("set", "{}"), "--set"), { where: "--set", deps: { cards: true } });
+/** `user:SEED`'s world, as `pi-ab --days` plans it. */
+const USER_SHAPE: UserShape = {
+  suites: parseSuites(opt("suite", "train")),
+  days: Number(opt("days", "8")),
+  daySize: parseDaySize(opt("day-size", "12-20")),
+  mix: parseMix(opt("mix", "1:1:8")),
+};
+const userWorld = (seed: number) => {
+  const { suites, days, daySize: size, mix } = USER_SHAPE;
+  return userWorldOf(seed, planUser(seed, suiteTemplates(seed, suites), { days, size, mix })).world;
+};
 const ACCESS = labAccess(args, [MODEL]);
 
 interface Row {
@@ -46,30 +70,40 @@ interface Row {
 }
 const rows: Row[] = [];
 for (const { suite, seed } of USERS) {
-  const { world } = worldOf(seed, suite, "hidden", { maxTasks: 30, maxOffworld: 5 });
+  const world =
+    suite === "user" ? userWorld(seed) : worldOf(seed, suite, "hidden", { maxTasks: 30, maxOffworld: 5 }).world;
   const sources = simSources(world, REALISTIC, 0, seed);
   let calls = 0;
   let usd = 0;
   let inTok = 0;
   let outTok = 0;
+  let cachedTok = 0;
   const model = labModel(ACCESS, { apiKey: "", model: MODEL }, "eden.cards");
   // Counted here as well as on the ledger, so each user's row is its own.
-  const counted = {
-    id: model.id,
-    chat: async (req: Parameters<typeof model.chat>[0]) => {
-      const res = await model.chat(req);
+  const count = (m: Model): Model => ({
+    id: m.id,
+    chat: async (req) => {
+      const res = await m.chat(req);
       calls++;
       usd += res.costUsd ?? 0;
       inTok += res.usage.inputTokens;
       outTok += res.usage.outputTokens;
+      cachedTok += res.usage.cachedInputTokens;
       return res;
     },
-  };
+  });
+  const counted = count(model);
   const partner = buildPartner({
     sources: async () => sources,
     sourceMapPath: ":memory:",
     queryPlanner: "off",
-    models: { reader: null, cards: counted, cardsRetry: null, usdPerTenantDay: 25 },
+    models: {
+      reader: null,
+      cards: counted,
+      cardsRetry: null,
+      usdPerTenantDay: 25,
+    },
+    engine: SET,
   });
   // The harness ticks the sync itself (until the user is warm), not the server's minute timer.
   partner.stopSync();
@@ -86,6 +120,7 @@ for (const { suite, seed } of USERS) {
   const synced = sources.reduce((n, s) => n + s.listAll().length, 0);
   const row = {
     user: `${suite}:${seed}`,
+    seed,
     itemsAtSources: synced,
     syncTicks: warm.ticks,
     syncCalls: warm.calls,
@@ -94,7 +129,9 @@ for (const { suite, seed } of USERS) {
     enrichMs: Math.round(ms - syncMs),
     cardCalls: calls,
     inputTokens: inTok,
+    cachedTokens: cachedTok,
     outputTokens: outTok,
+    outPerCall: Math.round(outTok / Math.max(1, calls)),
     usd: Math.round(usd * 1e6) / 1e6,
     stats: { ...cards.stats },
   };
@@ -107,10 +144,13 @@ const out = {
   provider: "anthropic-direct (lab, D97)",
   model: MODEL,
   wiring: "buildPartner (DEFAULT_CONFIG, DEFAULT_LIMITS, tenant cap $25/day)",
+  set: SET,
   users: rows,
   meanUsd: Math.round(mean("usd") * 1e6) / 1e6,
   meanCalls: mean("cardCalls"),
   meanItems: mean("itemsAtSources"),
+  // `pi-cost-report.ts --lifetime` books a cold start only against runs of the same user shape (pi-cost.ts).
+  ...(USERS.some((u) => u.suite === "user") ? { userShape: USER_SHAPE } : {}),
 };
 console.log(JSON.stringify(out, null, 2));
 if (OUT) writeFileSync(OUT, JSON.stringify(out, null, 2));

@@ -7,10 +7,12 @@ import { ItemCache } from "./cache";
 import { ContextPartner, type ReaderReport, userCacheKey } from "./partner";
 import {
   AskReader,
+  closeStopped,
   ModelReaderMaker,
   parseReader,
   parseReaderFull,
   READER_ITEM_CHARS,
+  READER_STOP,
   READER_SYSTEM,
   READER_MAX_ITEMS,
   READER_WHY_WORDS,
@@ -339,6 +341,84 @@ describe("the reader's prompt and output (reader.ts)", () => {
     const got = await new ModelReaderMaker(model).read(input(), new AbortController().signal);
     expect(got.usage).toEqual(usage);
     expect(got.costUsd).toBe(0.0004);
+  });
+});
+
+describe("readerStopEarly (D240): the reply stops at the first entry not about the request's thing", () => {
+  const binding = '{"bears":[{"i":2,"why":"frozen until Friday","same":true,"binds":true,"k":"blocks"},';
+  test("a reply cut at the stop is closed so the entry it was writing reads as a rejection", () => {
+    expect(parseReaderFull(closeStopped(`${binding}{"i":1,"why":"another account",`), 3)).toEqual({
+      bears: [{ i: 2, kind: "blocks", why: "frozen until Friday" }],
+      rejected: [1],
+    });
+    // Cut on the first entry: nothing binds, its index is still read as rejected.
+    expect(parseReaderFull(closeStopped('{"bears":[{"i":0,"why":"lifted on Monday",'), 3)).toEqual({
+      bears: [],
+      rejected: [0],
+    });
+    expect(parseReaderFull(closeStopped('{"bears":[{"i":0,"why":"lifted" '), 3)?.rejected).toEqual([0]);
+    // A route that leaves the stop sequence in the text: the key is written twice, which JSON reads as one.
+    expect(parseReaderFull(closeStopped(`${binding}{"i":1,"why":"other",${READER_STOP}`), 3)?.rejected).toEqual([1]);
+  });
+
+  test("only text that ends where the stop fires is closed: a reply cut anywhere else stays unreadable", () => {
+    const entry = '{"bears":[{"i":2,"why":"frozen until Friday"';
+    // Cut after the verdict began (a dropped stream, not the stop): before D240's review fix this read item 2 as
+    // rejected, and askReaderDrop would then leave the binding item out of the answer.
+    for (const cut of [
+      `${entry},"same":true`,
+      `${entry},"same":true,"binds":true,"k":"blocks"`,
+      `${entry},"same":true,"binds":true,"k":"blocks"}`,
+      '{"bears":[{"i":2,"why":"frozen until Fri',
+      '{"bears":[{"i":2,',
+      '{"bears":[',
+    ]) {
+      expect(parseReaderFull(closeStopped(cut), 3)).toBeNull();
+    }
+    expect(parseReaderFull(closeStopped(`${entry},`), 3)?.rejected).toEqual([2]);
+  });
+
+  test("the maker closes no reply its provider says ended another way", async () => {
+    const cut = `${binding}{"i":1,"why":"another account",`;
+    const model: Model = {
+      id: "stub",
+      chat: async () => ({
+        text: cut,
+        usage: { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0 },
+        costUsd: 0,
+        model: "stub",
+        latencyMs: 0,
+        stopped: false,
+      }),
+    };
+    const got = await new ModelReaderMaker(model).read({ ...input(), stopEarly: true }, new AbortController().signal);
+    expect(got.bears).toBeNull();
+  });
+
+  test("a brace inside the stopped entry's why does not hide the entry (review of the CL wave)", () => {
+    expect(parseReaderFull(closeStopped(`${binding}{"i":1,"why":"the {Q3} account, not this",`), 3)).toEqual({
+      bears: [{ i: 2, kind: "blocks", why: "frozen until Friday" }],
+      rejected: [1],
+    });
+    expect(parseReaderFull(closeStopped(`${binding}{"i":1,"why":"a \\"quoted\\" {x}",`), 3)?.rejected).toEqual([1]);
+  });
+
+  test("the maker sends the stop only when asked, and closes a cut reply only then", async () => {
+    const cut = `${binding}{"i":1,"why":"another account",`;
+    const model = new FakeModel(() => cut);
+    const on = await new ModelReaderMaker(model).read({ ...input(), stopEarly: true }, new AbortController().signal);
+    expect(model.calls[0]!.stop).toEqual([READER_STOP]);
+    expect(on.bears).toEqual([{ i: 2, kind: "blocks", why: "frozen until Friday" }]);
+    expect(on.rejected).toEqual([1]);
+    const off = await new ModelReaderMaker(model).read(input(), new AbortController().signal);
+    expect("stop" in model.calls[1]!).toBe(false);
+    // Without the stop a cut reply is not the model's whole answer: unreadable, as before.
+    expect(off.bears).toBeNull();
+  });
+
+  test("a stopped reading is cached under its own key; other keys are unchanged", () => {
+    expect(readerKey({ ...input(), stopEarly: true })).not.toBe(readerKey(input()));
+    expect(readerKey({ ...input(), stopEarly: false })).toBe(readerKey(input()));
   });
 });
 
@@ -1004,6 +1084,26 @@ describe("the reader in the engine (config.askReader)", () => {
     expect(model.calls[0]!.cacheKey).not.toBe(model.calls[1]!.cacheKey);
     // The key is for routing only: the verdict's cache key does not hold it.
     expect(readerKey({ ...input(), cacheKey: "a" })).toBe(readerKey({ ...input(), cacheKey: "b" }));
+  });
+
+  test("readerStopEarly (D240): the engine asks for the stop with the switch on, and not by default", async () => {
+    const model = new FakeModel(() => '{"bears":[]}');
+    const make = (readerStopEarly: boolean) =>
+      new ContextPartner({
+        sources: async () => [source()],
+        sourceMap: new SourceMap(),
+        cache: new ItemCache(),
+        budget: new Budget(),
+        model: null,
+        now: () => NOW,
+        config: { ...CORE_CONFIG, askReader: true, askReaderWaitMs: 1_000, readerStopEarly },
+        reader: new AskReader({ maker: new ModelReaderMaker(model), budget: new Budget(), now: () => NOW }),
+      });
+    await make(true).ask({ tenantId: "t", userId: "u", sessionId: "s", question: REQUEST });
+    await make(false).ask({ tenantId: "t", userId: "u", sessionId: "s", question: REQUEST });
+    expect(model.calls.length).toBe(2);
+    expect(model.calls[0]!.stop).toEqual([READER_STOP]);
+    expect("stop" in model.calls[1]!).toBe(false);
   });
 });
 

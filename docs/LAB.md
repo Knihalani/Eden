@@ -20,20 +20,24 @@ Every suite plants one item per template into a seeded world (~1,500 items); the
 agent should raise, the control variant a near-miss decoy (resolved, another entity, prerequisite met). 32 templates
 per suite for train1–6 and held-out 10–12.
 
-| Name                                       | Use                                                                                                   | Status                                                                                 |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `train` = `train1`–`train6`                | **Tune here.** Six authors, written blind, one life area each (broad-set.md)                          | Tuning set                                                                             |
-| `dev6a`, `dev6b`                           | Development suites (after D72); two authors, so rules overfit their wording (broad-set.md)            | Tuning, with care                                                                      |
-| `hidden`, `heldout`, `heldout2`–`heldout4` | The old in-sample suites; every configuration since D47 was tuned on them                             | In-sample                                                                              |
-| `heldout5`–`heldout8`                      | Blind, measurement only                                                                               | Run many times; contaminated by dev6a/6b templates (D80)                               |
-| `heldout9`                                 | Blind (econ tracks)                                                                                   | Run in D72; contaminated (D80)                                                         |
-| `heldout10`, `heldout11`                   | Blind                                                                                                 | Run in D80, D85, and several times in the Haiku campaign's funnel (haiku-benchmark.md) |
-| `heldout12`                                | Blind                                                                                                 | First run with a strong model in D98                                                   |
-| `heldout14`                                | Blind, RealUse-1's (benchmark-realuse-1.md); 32 templates over 8 life areas, with a `neutral` variant | Run once for RealUse-1 (realuse-1/A-heldout14.md)                                      |
+| Name                                       | Use                                                                                                   | Status                                                                                  |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `train` = `train1`–`train6`                | **Tune here.** Six authors, written blind, one life area each (broad-set.md)                          | Tuning set                                                                              |
+| `dev6a`, `dev6b`                           | Development suites (after D72); two authors, so rules overfit their wording (broad-set.md)            | Tuning, with care                                                                       |
+| `hidden`, `heldout`, `heldout2`–`heldout4` | The old in-sample suites; every configuration since D47 was tuned on them                             | In-sample                                                                               |
+| `heldout5`–`heldout8`                      | Blind, measurement only                                                                               | Run many times; contaminated by dev6a/6b templates (D80)                                |
+| `heldout9`                                 | Blind (econ tracks)                                                                                   | Run in D72; contaminated (D80)                                                          |
+| `heldout10`, `heldout11`                   | Blind                                                                                                 | Run in D80, D85, and several times in the Haiku campaign's funnel (haiku-benchmark.md)  |
+| `heldout12`                                | Blind                                                                                                 | First run with a strong model in D98                                                    |
+| `heldout14`                                | Blind, RealUse-1's (benchmark-realuse-1.md); 32 templates over 8 life areas, with a `neutral` variant | Run once for RealUse-1 (realuse-1/A-heldout14.md)                                       |
 | `heldout15`                                | Blind, the weak-points plan's (fix-s3b-lab.md); 32 new templates, same areas, with `neutral`          | **Read** (RealUse-2, 2026-11-07: Pi seeds 41–44, Hermes 41–42, the blind funnel); spent |
+| `heldout16`                                | Blind, the CL wave's (cl-cl5.md); 32 new templates over the same 8 areas, with `neutral`              | **Read** (RealUse-3 Pi, 2026-11-07, realuse-3/pi-heldout16.md): no longer blind; cards and intent cached for seeds 41–44 |
 
-**The `neutral` variant** (held-out 14 and 15; `neutral.ts`, `NEUTRAL_SUITES`): the same request as `hidden` and
-`control` with nothing planted. `bun run funnel ... -- --neutral` prints NEUTRAL lines (any packet delivered, items,
+**The `neutral` variant** (held-out 14–16 and, since CL5, train1–6; `neutral.ts`, `NEUTRAL_SUITES`): the same request
+as `hidden` and `control` with nothing planted. The train suites get it from `withNeutral` in suites.ts (the control
+planted and taken out again, ids `<suite>-neutral`), so tuning can measure nothing-to-add turns without a held-out
+suite; their neutral worlds add no item the hidden and control worlds lack, so the card and intent replays cover them
+as they cover the rest, and the paid reader replay covers seeds 41–42 (recipe 2a). `bun run funnel ... -- --neutral` prints NEUTRAL lines (any packet delivered, items,
 bytes, ask items, calls, ms per task) and a JSON `neutral` block, never mixed into the score; `pi-ab.ts` and
 `hermes-ab.ts` take `--variants hidden,control,neutral` (other suites skip neutral), the grader counts any concern on
 a neutral task as a false one, and `pi-ab-report.ts` adds a `neutral` table and the RealUse-1 traffic mix (1 hidden,
@@ -41,9 +45,9 @@ a neutral task as a false one, and `pi-ab-report.ts` adds a `neutral` table and 
 
 - **Never tune on `heldout*`.** `bun run funnel` refuses them without `--blind`. A new blind round needs a new suite
   written by an author who saw no engine code.
-- `UNRUN_BLIND` (held-out 9–15) keeps them out of `--suite all` so a tuning command cannot spend them, but all five
-  have been read (D72, D80, D85, D98, D112), and 14 by RealUse-1: treat the list as "not in `all`", not as "fresh".
-  Held-out 15 is the one unread suite: running it at all (funnel or agent) spends it.
+- `UNRUN_BLIND` (held-out 9–16) keeps them out of `--suite all` so a tuning command cannot spend them, but all five
+  have been read (D72, D80, D85, D98, D112), 14 by RealUse-1 and 15 by RealUse-2: treat the list as "not in `all`",
+  not as "fresh". Held-out 16 is the one unread suite: running it at all (funnel or agent) spends it.
 - Seeds: 41–44 for funnel work (41–42 on train), 41–48 for the Haiku benchmark. Same seed, same world, same tasks.
 
 ## Configurations (`presets.ts`)
@@ -51,11 +55,11 @@ a neutral task as a false one, and `pi-ab-report.ts` adds a `neutral` table and 
 One product (D112): the engine's `DEFAULT_CONFIG` is the configuration, and the presets are made from it, never
 written by hand.
 
-| Preset         | What                                                                                                                                                                                                                                                                                                              |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Preset         | What                                                                                                                                                                                                                                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `default`      | The unified default: NEWL (D99) plus poll behind, small poll pages, no probe grace, the push's reader not waiting for the poll (D112). Cards, intent and the reader need their dependencies (`--cards`, `--intent`, a reader); without them they are inert, as in a server with no model key |
-| `minus-<part>` | The default with one of `PARTS` (`packages/engine/src/parts.ts`) taken out: probes, grounds, fallback, compaction, sync, freshness, cards, intent, reader, probeGrace (D229; graph, askVerdicts, anticipate and slowPathQueue were deleted by D225–D228, and judge left `PARTS`)                                                                                       |
-| `minus-all`    | The default with every part taken out: `CORE_CONFIG`, the no-feature core (the old production default; since D229 it keeps the judge's settings at their default values, which only a lab run with a judge wired reads)                                                                                                                                                                                                            |
+| `minus-<part>` | The default with one of `PARTS` (`packages/engine/src/parts.ts`) taken out: probes, grounds, fallback, compaction, sync, freshness, cards, intent, reader, probeGrace (D229; graph, askVerdicts, anticipate and slowPathQueue were deleted by D225–D228, and judge left `PARTS`)             |
+| `minus-all`    | The default with every part taken out: `CORE_CONFIG`, the no-feature core (the old production default; since D229 it keeps the judge's settings at their default values, which only a lab run with a judge wired reads)                                                                      |
 
 A trial (DECISIONS.md, "Trial switches") is measured as `--set '{...}'` over `default` (funnel) or
 `--variant-config '{"X":{...}}' --conditions eden,eden~X` (pi-ab, hermes-ab, whose `--config` defaults to `default`);
@@ -76,14 +80,14 @@ not strict yet.
 
 ## Harnesses
 
-| Harness             | Command                                        | What it measures                                                                                                                                                          |
-| ------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No-model funnel     | `hidden-funnel.ts` (`bun run funnel` wraps it) | Per task: planted item returned, cached, delivered; with `--ask`, cited by an ask; decoy delivered on controls; source calls and ms per task. Deterministic at `--time 0` |
-| Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][+ask][@w<ms>]`, graded by a second model; per-task timelines; `--day K` |
-| Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`); same tasks, grader and results format as Pi                                  |
-| In-house loop       | `agent-ab.ts`                                  | The pre-Pi loop; label any result from it as such (CLAUDE.md)                                                                                                             |
-| Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load; `sim:perf memory --synced` backfills its users first (the default never syncs them)   |
-| Connector lab       | `bun run sim:lab:build && bun run sim:lab`     | Real MCP servers in Docker over seeded backends                                                                                                                           |
+| Harness             | Command                                        | What it measures                                                                                                                                                                                                           |
+| ------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No-model funnel     | `hidden-funnel.ts` (`bun run funnel` wraps it) | Per task: planted item returned, cached, delivered; with `--ask`, cited by an ask; decoy delivered on controls; source calls and ms per task. Deterministic at `--time 0`                                                  |
+| Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][+ask][@w<ms>]`, graded by a second model; per-task timelines; `--day K`; `--days D` (a user's mixed days, recipe 4c) |
+| Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`); same tasks, grader and results format as Pi                                                                                   |
+| In-house loop       | `agent-ab.ts`                                  | The pre-Pi loop; label any result from it as such (CLAUDE.md)                                                                                                                                                              |
+| Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load; `sim:perf memory --synced` backfills its users first (the default never syncs them)                                                    |
+| Connector lab       | `bun run sim:lab:build && bun run sim:lab`     | Real MCP servers in Docker over seeded backends                                                                                                                                                                            |
 
 Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too), `agent-ab-report.ts` (shared tables,
 `--record <label>` into the ledger), `act-report.ts` (`--act` runs), `timeline-report.ts` (funnel timelines),
@@ -419,10 +423,18 @@ reader cache at $0. The haiku-opt.md command sets `askReaderWaitMs: 60000` so la
 
 ### 2a. The default's paid Haiku reading, replayed at $0
 
+**Since D237 (CL6) the default makes no reader call** (`pushCandidates` 5): its funnel replays nothing from this cache
+(TOTAL hidden 305/384, decoys 267/384, 0 reader calls, train seeds 41–42 with `--neutral`). Every recipe below that
+screens the reader (2a, 2b, the `minus-<part>` replays) now runs `--preset minus-candidates`, which reproduces the
+pre-D237 default exactly (322/139 with D240 on, 643 replayed, 0 misses; 321/129 with `{"readerStopEarly":false}`). The neutral top-up no longer covers that
+preset's neutral prompts at this tip (590 misses, answered without the reader).
+
 The reader cache of the shipped default (D158: cards and intent requests replayed; intent thresholds 0.2/1/12 since
 D179, `intentByKind` since D200) on train1–6, seeds 41–42, is checked in gzipped:
-`packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz`, 4,377 lines, all `claude-haiku-5-5`, plain md5
-`32c5fa518a67a2db657f35f981e3262a` (1,968 lines, md5 `d0ff788fa9cbad0f3c755f043b25d43b`, before fix-w2a's top-up;
+`packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz`, 6,623 lines, all `claude-haiku-5-5`, plain md5
+`cf07319d4be872b1412f8f2afa80a915` (its first 5,435 lines are D244's file below, then D240's two stop top-ups;
+4,377 lines, md5 `32c5fa518a67a2db657f35f981e3262a`, before D244 and D240;
+1,968 lines, md5 `d0ff788fa9cbad0f3c755f043b25d43b`, before fix-w2a's top-up;
 1,416 lines, md5 `47eb6393a75b49c14f0f7b802473fd59`, before D200's). It was recorded on 2026-11-06 from an empty cache by one metered live run (ledger
 run `ib-reader-intent-cache-default`: 652 calls, $0.18548, 418 s, TOTAL hidden 274/384, decoys 137/384, 0 misses),
 then topped up the same day for the completed intent file (ledger run `r2-intent-reader-topup`: 73 calls, $0.02102;
@@ -441,11 +453,19 @@ The cache is plain JSONL that a live reader appends to, so it is unpacked under 
 
 ```bash
 gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz > .local/reader-haiku-train-4142-intent.jsonl
-bun run funnel --jobs 4 --allow-misses --json .local/haiku-default.json -- --reader replay \
+bun run funnel --jobs 4 --allow-misses --preset minus-candidates --json .local/haiku-default.json -- --reader replay \
   --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl
 ```
 
-Measured on 2026-11-07 after the deletions (D225–D228), from the committed file (no ledger flag, so no spend):
+**Topped up for D244 (CL3, 2026-11-07; docs/research/cl-cl3.md):** the default's lean window became 7 days, which
+re-renders most reader pools, so the cache was topped up for it (ledger runs `cl3-topup-l7`, `cl3-topup-l7-42`, and
+the CL3 arms `cl3-topup-l7r2`, `cl3-topup-l7r2b`, `cl3-topup-nocards`; $0.303 in all). It now has 5,435 lines (plain
+md5 `087bd902247caa5fd883f45aa04d4018`; its first 4,377 lines are the file above, unchanged). The D244 default (since D237, `--preset minus-candidates`) replays
+643 prompts with 0 misses: TOTAL hidden 321/384, decoys 129/384, reader pool hidden 287/384 and decoys 251/384
+(`--set '{"cardsLeanDays":30}'` replays the old default's 313/127 with 0 misses). The `--preset minus-<part>` runs of
+the new default were not topped up: expect misses (answered without the reader, `--allow-misses`).
+
+Before D244 (the old cache and the 30-day window), measured on 2026-11-07 after the deletions (D225–D228), from the committed file (no ledger flag, so no spend):
 `merged reader replay {"replayed":643,"sent":0,"missed":0,"failed":0}`, TOTAL hidden 313/384, decoys 127/384, reader
 pool hidden 282/384 and decoys 249/384 (before the deletions, the same day: 314/132, pool 285/254). After D200's
 top-up (2026-11-07, about 10 s): 654 replayed, 0 missed, TOTAL hidden 315/384, decoys 133/384, reader pool hidden
@@ -454,7 +474,55 @@ top-up (2026-11-07, about 10 s): 654 replayed, 0 missed, TOTAL hidden 315/384, d
 intent file before that: 645 replayed, 5 missed, 273/137, pool 257/240). A change upstream of the reader can leave
 misses (answered without the reader, fail open), which is why the recipe keeps `--allow-misses`; without it a miss
 exits 3.
+Since D240 the default's reader requests carry a stop sequence (`readerStopEarly`), so they key apart from the
+older lines: the stopped readings were appended live, first for the 30-day window (ledger run `cl2-stop-topup`, 642
+calls, $0.157: `--set '{"cardsLeanDays":30}'` replays 316/146, 0 misses), then for D244's default
+(`cl2-stop-topup-merged`, 546 calls sent, $0.136; docs/research/cl-cl2.md). Measured 2026-11-07 on the merged tree:
+`merged reader replay {"replayed":643,"sent":0,"missed":0,"failed":0}`, TOTAL hidden 322/384, decoys 139/384, reader
+pool hidden 287/384, decoys 251/384, 91 output tokens a call (the same tree with `{"readerStopEarly":false}`: 321/129,
+D244's figure above). A preset
+whose stopped prompts the cache lacks (the `minus-<part>` presets) replays the line recorded without the stop, cut
+where the stop would have ended it (`stopLine`, reader-disk.ts; approximate in its tokens and times, exact in its
+text up to the stop): each shard prints `READER STOP-SIMULATED: n` and the JSON's `reader.stopSimulated`. It applies
+only with no live model: a live run makes the stopped call for real.
 A `--baseline .local/haiku-default.json` then screens a change against the paid reading at $0.
+
+**Neutral tasks (CL5).** The train suites' `neutral` variant (seeds 41–42) has its own top-up,
+`packages/sim/lab/distilled/reader-haiku-train-4142-neutral.jsonl.gz` (306 lines, plain md5
+`aefb37aac34e826279f2e25db8d68b39`; ledger run `cl5-neutral-reader-topup`, $0.0765, 2026-11-07). Concatenated after the
+main file it replays `-- --neutral` with 0 misses (without it, 608 neutral reader misses):
+
+```bash
+(gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz; \
+ gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-neutral.jsonl.gz) > .local/reader-train.jsonl
+bun run funnel --jobs 4 --allow-misses --preset minus-candidates --json .local/h18.json -- --neutral --reader replay \
+  --reader-model claude-haiku-5-5 --reader-cache .local/reader-train.jsonl
+```
+
+### 2b. The cost screen: Eden's per-task spend at $0 (H18, CL5)
+
+The command above, with the neutral rows, ends with `COST SCREEN` lines (`cost-screen.ts`): per kind (hidden,
+control, neutral) and on the assumed 1:1:8 mix, the reader's calls a task and their dollars as made (each funnel row's
+`readerCalls` and `readerUsd`: a replayed call at what it cost when it was recorded), connector calls a task and the
+ask's mean wall. It is the combination search's first gate for a lever that changes how often or how expensively Eden
+reads: no live agent, no grader, about 12 s at `--jobs 4`. Measured on 2026-11-07 for the shipped default (the tree
+at `2c65a6f9a`):
+
+```
+COST SCREEN hidden  n 384: reader 0.84 calls/task, $0.2378/1k tasks (as made), 2.67 connector calls/task, ask 6.7 ms
+COST SCREEN control n 384: reader 0.84 calls/task, $0.2422/1k tasks (as made), 2.70 connector calls/task, ask 5.8 ms
+COST SCREEN neutral n 384: reader 0.80 calls/task, $0.1999/1k tasks (as made), 2.59 connector calls/task, ask 4.7 ms
+COST SCREEN mix 1:1:8: reader 0.807 calls/task, $0.2079/1k tasks (Eden per-task, as made; no agent, no backfill), 2.61 connector calls/task
+```
+
+What it does not see, so what still needs the live A/B (recipe 4c's report): the agent's own tokens (a lever that
+changes what the agent reads or how often it asks, H8–H13), the background cards and intent (replayed at $0; a
+user's one-time backfill), and wall time beyond the recorded reader latency. The funnel asks once per task (`--ask`)
+where a Pi agent asks when it chooses, so its reader calls a task are the funnel's, not Pi's (Pi's eden arm read
+0.92 a task on heldout15, cost-latency-plan.md). A change upstream of the reader's input misses the cache: the top-up is metered
+(`--reader live`, about $0.00029 a call), and a screen with misses says so (`COST SCREEN: N reader prompts missed`),
+since a missed prompt costs $0 here and understates. A lever that changes the reader's request itself (H3–H5)
+always misses: screen its token counts with a small live top-up, then replay.
 
 **The older, intent-inert cache.** `reader-haiku-train-4142.jsonl.gz` (866 lines, plain md5
 `9a492c00cf9724306e3e4743e2882982`) is D141's first paid default run (docs/research/graph-ablation.md, committed in
@@ -564,7 +632,7 @@ an agent task plus Eden NEW is $0.79 per 1,000 hidden tasks in Pi, ALL3 $0.36 (h
   A changed item misses the replay caches (its content hash changed) and is carded live; `lateItems` is not measured
   (a late packet goes to the day's next request). The
   results gain `days` and `daysPooled` (`pi-day.ts`): repeat deliveries (and those of a changed item), `(shown
-  above)` marks, asks citing an item a packet already gave, stale deliveries after a change, and recaps naming a
+above)` marks, asks citing an item a packet already gave, stale deliveries after a change, and recaps naming a
   changed item's old time (`staleRecap`) or its new one (`freshRecap`). Each request is still graded as a task.
 
 ```bash
@@ -576,6 +644,57 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite heldout14 --
   --spend-ledger .local/ledger.jsonl --spend-cap 4 --spend-headroom 0.3 --run-label day-41 --out .local/day-41.json
 ```
 
+### 4c. A long horizon: one user's days (`--days`, H16, CL5)
+
+`--days D` replaces the per-suite, per-variant worlds with one world per seed: a user who brings D days of requests
+(`--day-size`, default 12–20 a day), each day mixing hidden, control and neutral requests in `--mix` proportion
+(default 1:1:8: a day of 12 has one hidden and one control request, a day of 20 two of each). The requests are the
+named suites' templates (every suite must build `neutral`: train1–6, held-out 14–16), each used once per user, drawn
+and ordered by the seed (`pi-user.ts`); every hidden request's item and every control request's decoy is planted in
+the one world (refs renumbered so two suites' items cannot share an id), slots cleared as worldOf does, and the
+header counts slot clashes (a planted item in another request's calendar slot; 0 on train seeds 41–42).
+
+- **What persists.** Eden: one partner per user stream, so its sync, cache, cards and intent live across the days;
+  one Eden session per day (`w<seed>:user:day<d>`). The agent: its transcript **resets each day** (a new conversation
+  each morning; within a day it keeps every request, tool result and packet; nothing is compacted). Each day ends with
+  pi-day.ts's recap turn (never graded, its cost kept apart) after the day's planted items change their times.
+- **Clock.** The world's "now" is fixed, so Eden's clock moves `--gap-min` (10) minutes a request and `--night-h` (2)
+  hours between days: 8 days of about 15 requests span about a day and a half of Eden's clock, close to the short
+  horizon's 32 hours a world, instead of aging every item a week against requests written for that fixed now.
+- **Cost accounting** (`pi-cost.ts`, `pi-cost-report.ts`, also for any short-horizon run): per task, the agent and
+  Eden's per-task calls (the reader); Eden's background while the user works (cards and intent for new and changed
+  items, `Background.cardsUsd` less `setupUsd`) spread over the user's tasks; the one-time backfill per user (the
+  enrichment before the first request, `setupUsd`, or, with `--lifetime`, a measured cold start from
+  `cold-start.ts --users user:41,user:42`, which builds the same users with no replay). Two totals: **steady state per
+  task** (no one-time backfill) and **all-in over the run** (the backfill spread over the user's tasks in the run);
+  both also weighted 1:1:8 for a short-horizon run. Plus reader and Eden connector calls a task (timeline spans), the
+  agent's tool calls, wall p50 and mean, and a per-day table (the transcript's growth within a day).
+- `--limit N` keeps the first N requests (the days cut to match); `--day`, `--variants`, `--templates` and
+  `--reuse-arms` are refused with `--days`. One seed per process.
+
+```bash
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite train --seeds 41 --days 8 \
+  --conditions tools,eden --config default --cards .local/cards-all.jsonl \
+  --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 \
+  --source-profile packages/sim/lab/before-after/market-profiles/direct.json --push signals --budget 0.35 \
+  --spend-ledger .local/ledger.jsonl --spend-cap 2 --spend-headroom 0.1 --run-label long-41 --out .local/long-41.json
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cold-start.ts --users user:41,user:42 --days 8 \
+  --spend-ledger .local/ledger.jsonl --spend-cap 2 --spend-headroom 0.1 --run-label cold --out .local/cold-user.json
+bun packages/sim/src/lab/pi-cost-report.ts .local/long-41.json .local/long-42.json --lifetime .local/cold-user.json
+```
+
+`.local/cards-all.jsonl` is the checked-in card caches concatenated (`cards-v2`, `cards-train`, `cards-train-4344`),
+as `bun run funnel --cards default` merges them. The CL baseline's figures and command lines are in
+docs/research/cl-cl5.md.
+
+**The agent's prompt cache (D260).** Billed agent cost on Anthropic depends on what the cache holds: Pi's agent with
+Eden has a ~565-token fixed prefix that was not cached across tasks in CL8's runs (cause not established), the tools
+agent an 867-token one that was, so one request at a time Eden's first prompt is written at 1.25x while the tools
+agent's is read at 0.1x. Quote `python3 -I packages/sim/lab/cl8/cache.py [--prefix 565] STEM ...` (reads, writes, plain
+input and output per arm and kind, from the timelines; `--prefix` adds the counterfactual with that prefix cached,
+labelled so) beside billed figures, and compare arms within one run: an arm sending a task's identical prompt after
+another arm reads it whole.
+
 ### 4b. Regrade with another grader, and cold-start cost
 
 - `regrade.ts --results F --graders claude-sonnet-5-5 --spend-ledger … --spend-cap …`: a `claude-*` grader goes
@@ -586,9 +705,10 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite heldout14 --
 - **Where a false concern came from** (fix-w2b): each pi-ab task line keeps its packets' ways (`ways`: the reason's
   kind and cited ids; `reader` is the reader push) and its asks' answer text (`asks[].text`, cut at 5,000
   characters; an `Eden's reader:` line is a flagged item). `python3 -I packages/sim/lab/fix-w2b/attribute.py out.json
-  RUN.json …` attributes each concern's decoy to push-flagged, rule-path, ask-flagged, ask-listed or none.
+RUN.json …` attributes each concern's decoy to push-flagged, rule-path, ask-flagged, ask-listed or none.
 - `cold-start.ts --users train1:41,…`: a new user's cards and intent from an empty cache through the servers'
   `buildPartner` (default configuration and budgets), the card role on Anthropic Haiku; calls, tokens and $ per user.
+  `user:SEED` is recipe 4c's long-horizon user (with its `--suite`, `--days`, `--day-size`, `--mix`).
 
 ### 5. Live A/B on Hermes
 

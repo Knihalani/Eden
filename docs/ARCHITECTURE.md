@@ -325,7 +325,12 @@ index); otherwise its answer names the sources that failed (error, timeout, circ
 the connector's own 429, worded "rate-limited", D212) and says it
 is not an all-clear, and `AskResponse.sources` carries each chosen source's status. With `readerPush` (on in the default), a
 user request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
-flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. Its question
+flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. **Since D237 the default does not call the reader there or on an ask (`pushCandidates` 5, CL6):** the push hands
+the agent the first five items of the pool the reader would have read (the ask's order, bulk mail out), each a focused
+excerpt, after a fixed line of Eden's own saying they may bear on the request and must be checked against its who,
+what and when first; a pool with nothing constraint-like (`readerGate`'s test) gets a one-line "nothing looks like it
+constrains it" note instead, when every source answered. An ask answers in rule order with no reading.
+`pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search
 that joined another lookup's call in flight (the push and the slow path search the same words at once), was answered by
@@ -342,6 +347,9 @@ with no new source call and read again (a reader cache hit when its pool is unch
 queued and the agent has not taken is replaced, its ledger entries restored. The push itself is not cut at
 `askReaderWaitMs`: it waits for
 the reading (bounded by the reader's model call and the session's close), and `observe` reports `pending` while it runs.
+The reader's reply stops at the first entry the model says is not about the request's own thing (`readerStopEarly`,
+D240, a `"same":false` stop sequence): binding entries come first, so what is cut is the later look-alikes'
+rejections; the stopped entry is read as rejected.
 With `readerReuse` (on in the default, D193), an `ask` made before the next user message and read against the push's
 own request (not an ask that acts on its own) takes the push's verdict on the items both pools hold unchanged, with no
 reader call of its own (`Session.pushRead`); it was read against the user's request, not the agent's question. A push
@@ -354,8 +362,8 @@ between (tool calls, its replies) do not make it stale.
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four requests
 the item would change, in a user's words (validated, at most 120 characters each, redacted); items the card prefilter
 rejects are read for their requests only, and with `cardsLean` (D125) only when a person wrote them recently: not
-automated mail (`automated`: a no-reply or list sender, a bulk category or footer) and dated within `cardsLeanDays` (30)
-or upcoming; constraint-worded items are read whatever their sender or age. They live in a per-user BM25 index apart
+automated mail (`automated`: a no-reply or list sender, a bulk category or footer) and dated within `cardsLeanDays`
+(7 since D244; 30 before) or upcoming; constraint-worded items are read whatever their sender or age. They live in a per-user BM25 index apart
 from the item text, keyed by content hash and dropped with the card. At request time, with no model, the request's words
 are searched in it: the best hits join the lookup's candidates and one judge seat, and are fused into an `ask` by
 reciprocal rank after the verdict hits. An intent hit alone is never a no-model delivery. A hit whose item holds a
