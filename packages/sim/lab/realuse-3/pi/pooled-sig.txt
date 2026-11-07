@@ -1,0 +1,3 @@
+eden − eden~reader hidden   runs 2 n   64 diff +0.062 (-0.031..+0.172)
+eden − eden~reader control  runs 2 n   64 diff +0.016 (+0.000..+0.047)
+eden − eden~reader neutral  runs 2 n   64 diff -0.016 (-0.078..+0.047)

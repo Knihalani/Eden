@@ -76,3 +76,9 @@ then measured live on Pi on train suites, **short and long horizon**, and is pro
 points pooled (−9.1..−1.2; about −1.9 attributable to the note, the rest sampling), not shown neutral, for
 −$0.02–0.03/1k and −0.2–0.5 s where asks are slow. Current default vs `tools` on the
 1:1:8 mix: steady $0.580–0.597 (short) and $0.470–0.515 (long) per 1,000 tasks against $0.383 and $0.301.
+
+**Blind check (2026-11-07, [realuse-3/pi-heldout16.md](realuse-3/pi-heldout16.md)), heldout16 on Pi, payload notices:**
+steady $/1k on the 1:1:8 mix eden 0.378 against tools 0.357 (short, paired +0.021, −0.000..+0.043) and 0.352 against
+0.391 (long, two days, −0.049, −0.069..−0.029); wall mean −2.0 s (short) and −0.9 s (long); hidden 80% against 11%;
+against the reader (`pushCandidates` 0) hidden −4.9 points pooled (−11.1..+1.4), regraded concerns −0.3 (−0.8..0.0).
+The pre-registered rule keeps `pushCandidates` 5. heldout16 is read.
