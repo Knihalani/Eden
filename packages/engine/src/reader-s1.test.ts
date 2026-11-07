@@ -165,6 +165,26 @@ describe("readerReuse (D193): an ask in the push's request reads the push's verd
     expect(a.citations[0]!.itemId).toBe("mail:hold");
   });
 
+  test("the push's reading fails near the end of the ask's wait: no paid call the ask could not wait for", async () => {
+    const maker = new Reader(true);
+    maker.failFirst = true;
+    const { p, traces } = partner(
+      { readerPush: true, readerReuse: true, readerPushWaitMs: 0, askReaderWaitMs: 400 },
+      maker,
+    );
+    await say(p, REQUEST, 0);
+    await until(() => maker.calls.length === 1);
+    // The push's call fails with about 50 ms of the ask's 400 ms left: under min(250, 400 / 4) = 100 ms.
+    const release = setTimeout(() => maker.release(), 350);
+    const a = await p.ask({ ...ref(), question: QUESTION, maxItems: 3 });
+    clearTimeout(release);
+    maker.release();
+    await Bun.sleep(20);
+    expect(maker.calls.length).toBe(1);
+    expect(a.usedModel).toBe(false);
+    expect(traces.filter((t) => t.decision === "reader-late")).toHaveLength(0);
+  });
+
   test("a push still out past the ask's wait: the ask answers without the reader, and makes no call", async () => {
     const maker = new Reader(true);
     const { p, reports } = partner(

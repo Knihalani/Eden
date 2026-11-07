@@ -494,6 +494,8 @@ export class ContextPartner {
   private readonly revisionPolls = new Map<string, Promise<void>>();
   /** By user and source: the notice poll's state (`pollRevised`), at most `MAX_REVISION_SOURCES`, idle ones dropped. */
   private readonly revisionSources = new Map<string, RevisionSource>();
+  /** `stopSync` was called (and no `startSync` since): notices start no revision poll. */
+  private revisionsStopped = false;
   /**
    * `readerPushBehind`: what a push packet's delivery changed in its own session, so a second reading that withdraws
    * the packet untaken can undo it (`withdraw`). Keyed by the packet, so it goes with it.
@@ -619,6 +621,7 @@ export class ContextPartner {
    * process alive, and a tick never overlaps another.
    */
   startSync(everyMs = 60_000): void {
+    this.revisionsStopped = false;
     if (!this.sync || this.syncTimer) return;
     const sync = this.sync;
     this.syncTimer = setInterval(() => void sync.tick(), everyMs);
@@ -630,9 +633,12 @@ export class ContextPartner {
     this.syncTimer = null;
     // A revision poll held back by its gap would still list a source after the stop (wave-1 review). Its entry stays:
     // its `at` keeps the gap for a later notice, and the map is bounded (`MAX_REVISION_SOURCES`).
+    // A poll still running starts no trailing one, and notices after the stop start none, until `startSync`.
+    this.revisionsStopped = true;
     for (const st of this.revisionSources.values()) {
       if (st.timer) clearTimeout(st.timer);
       st.timer = null;
+      st.again = false;
     }
   }
 
@@ -954,6 +960,24 @@ export class ContextPartner {
         s.pending.splice(k, 1);
       }
     }
+    // A copy the cache has since replaced with other words (a revision stored while this packet waited in the queue)
+    // is announced now, behind it: the store found no session holding it yet (wave-1 review). Withdrawn packets are
+    // never handed, so nothing is announced for them; an update already queued for that version is the next take's.
+    if (this.config.revisionNotice) {
+      const now = this.now();
+      const queued = new Set<string>();
+      for (const p of s.pending) {
+        if (!p.reason.startsWith(UPDATED)) continue;
+        for (const c of this.built.get(p)?.copies ?? []) queued.add(`${c.id}\u0000${c.version}`);
+      }
+      const newer = copies.flatMap((c) => {
+        const cur = this.deps.cache.get(s.scope, c.id, now);
+        if (!cur) return [];
+        const v = versionOf(cur);
+        return v !== c.version && !queued.has(`${c.id}\u0000${v}`) ? [cur] : [];
+      });
+      this.queueUpdates(s, newer);
+    }
     const key = scopeKey(s.scope);
     let set = this.watching.get(key);
     if (!set) this.watching.set(key, (set = new Set()));
@@ -1001,41 +1025,41 @@ export class ContextPartner {
     if (!sessions) return;
     for (const s of sessions) {
       if (s.closed) continue;
-      // A packet still queued with another version counts as handed: taking it later notes the old copy, and no
-      // later store would announce the one stored now (wave-1 review).
-      const queued = new Map<string, number>();
-      for (const p of s.pending) for (const c of this.built.get(p)?.copies ?? []) queued.set(c.id, c.version);
-      const changed = items.filter((it) => {
-        const v = versionOf(it);
-        const held = queued.get(it.id);
-        return s.ledger.superseded(it.id, v) || (held !== undefined && held !== v);
+      const changed = items.filter((it) => s.ledger.superseded(it.id, versionOf(it)));
+      this.queueUpdates(s, changed);
+    }
+  }
+
+  /**
+   * Queues "updated:" packets for these stored copies in one session: as many as the size cut needs, an earlier
+   * update still queued for the same items replaced, each copy noted as promised.
+   */
+  private queueUpdates(s: Session, changed: readonly ContextItem[]): void {
+    if (changed.length === 0) return;
+    const ids = new Set(changed.map((it) => it.id));
+    for (let k = s.pending.length - 1; k >= 0; k--) {
+      const p = s.pending[k]!;
+      if (p.reason.startsWith(UPDATED) && p.citations.every((c) => ids.has(c.itemId))) s.pending.splice(k, 1);
+    }
+    // As many packets as the size cut needs: an item cut from one is said in the next, never promised unsaid.
+    for (let rest = changed; rest.length > 0;) {
+      const { injection, items: said } = this.buildUpdate(s, rest);
+      rest = rest.slice(said.length);
+      // Promised now: a second store of the same version, before the agent takes this, queues nothing more.
+      for (const it of said) s.ledger.noteShown(it.id, versionOf(it), it.sourceId);
+      s.pending.push(injection);
+      this.trace({
+        sessionId: s.id,
+        turn: s.turn,
+        event: "source_change",
+        decision: "sources",
+        reason: injection.reason,
+        latencyMs: 0,
+        sourceCalls: 0,
+        modelCalls: 0,
+        costUsd: 0,
+        itemIds: said.map((it) => it.id),
       });
-      if (changed.length === 0) continue;
-      const ids = new Set(changed.map((it) => it.id));
-      for (let k = s.pending.length - 1; k >= 0; k--) {
-        const p = s.pending[k]!;
-        if (p.reason.startsWith(UPDATED) && p.citations.every((c) => ids.has(c.itemId))) s.pending.splice(k, 1);
-      }
-      // As many packets as the size cut needs: an item cut from one is said in the next, never promised unsaid.
-      for (let rest = changed; rest.length > 0;) {
-        const { injection, items: said } = this.buildUpdate(s, rest);
-        rest = rest.slice(said.length);
-        // Promised now: a second store of the same version, before the agent takes this, queues nothing more.
-        for (const it of said) s.ledger.noteShown(it.id, versionOf(it), it.sourceId);
-        s.pending.push(injection);
-        this.trace({
-          sessionId: s.id,
-          turn: s.turn,
-          event: "source_change",
-          decision: "sources",
-          reason: injection.reason,
-          latencyMs: 0,
-          sourceCalls: 0,
-          modelCalls: 0,
-          costUsd: 0,
-          itemIds: said.map((it) => it.id),
-        });
-      }
     }
   }
 
@@ -1092,7 +1116,7 @@ export class ContextPartner {
    * one trailing poll), each bounded by its timeout as a whole. Never throws.
    */
   private pollRevised(scope: Scope, sourceId: string): void {
-    if (!this.config.revisionNotice || !this.sync) return;
+    if (!this.config.revisionNotice || !this.sync || this.revisionsStopped) return;
     const user = scopeKey(scope);
     if (!this.holdsCopyFrom(user, sourceId)) return;
     const key = `${user}\u0000${sourceId}`;
@@ -1133,7 +1157,7 @@ export class ContextPartner {
   private startRevisionPoll(scope: Scope, sourceId: string, st: RevisionSource): void {
     const sync = this.sync;
     const user = scopeKey(scope);
-    if (!sync || !this.holdsCopyFrom(user, sourceId)) return;
+    if (!sync || this.revisionsStopped || !this.holdsCopyFrom(user, sourceId)) return;
     st.running = true;
     st.at = this.now();
     const ms = Math.max(this.config.sourceTimeoutMs, 5_000);
@@ -3610,12 +3634,13 @@ export class ContextPartner {
       if (got.status === "failed" || s.closed) {
         this.freshness.failed++;
         if (s.closed || got.status !== "failed") return "failed";
-        // A guard's skip made no call: not one the connector received. A busy permit is no evidence against the item
-        // and clears in moments (one retry). An open breaker or a rate limit pushed back by a 429 says the source is in
-        // trouble now: the item could not be checked ("failed"), so a strict ask leaves it out and says so (D211).
+        // A guard's skip made no call: not one the connector received. A busy permit or our rate limit's ordinary use
+        // is no evidence against the item and clears in moments (one retry). An open breaker, or a rate limit the
+        // connector's own 429 pushed back, says the source is in trouble now: the item could not be checked
+        // ("failed"), so a strict ask leaves it out and says so (D211, D232).
         if (got.why === "refused") {
           this.freshness.calls--;
-          return got.guard === "busy" ? "skipped" : "failed";
+          return got.guard === "open" || got.pushedBack ? "failed" : "skipped";
         }
         // A null from a source whose null does not mean gone (an MCP tool) says nothing, and says it every time: like
         // a source with no fetch, its items are cited as held (D126). A plain error is worth one more read.
@@ -4893,10 +4918,10 @@ const READER_POOL_CAP = READER_MAX_ITEMS;
 type CheckOutcome = "confirmed" | "changed" | "gone" | "failed" | "flaked" | "skipped" | "unverifiable";
 /** Re-reads a session keeps (`Session.checks`), and how long one is reused before an item is read again (ms). */
 const MAX_CHECKS = 64;
-/** A strict (ask) verification's outcomes worth one more read, and how many such reads run at once (D211). */
 /** Below this much of an ask's wait left (or a quarter of it, if less), the ask starts no reader call of its own. */
 const MIN_OWN_READ_MS = 250;
 
+/** A strict (ask) verification's outcomes worth one more read, and how many such reads run at once (D211). */
 const RETRIED: ReadonlySet<CheckOutcome> = new Set<CheckOutcome>(["flaked", "skipped"]);
 const STRICT_RETRY_LANES = 2;
 const CHECK_REUSE_MS = 30_000;

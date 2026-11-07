@@ -206,9 +206,10 @@ fewer fetches a task). With the switch off, `checkAhead` runs only once the read
 copy is stored
 and delivered instead; one the source no longer has (`gone`, only from a source with `Source.fetchReportsGone`) is
 dropped from the cache and left out; one that cannot be checked is delivered as held, except in an ask's answer
-(D211): there a re-read that failed with a plain error, or that our own guard skipped, is tried once more, and a copy
-still not confirmed is left out and named in the answer (a source with no fetch tool, or whose null proves nothing, is
-still cited as held). With no signal nothing is
+(D211): there a re-read that failed with a plain error, or that our own guard skipped in ordinary use (a busy permit,
+the rate limit's normal spend), is tried once more, and a copy still not confirmed is left out and named in the answer;
+a re-read refused by an open breaker or by a rate limit the connector's 429 pushed back is not tried again and is left
+out at once (D232). A source with no fetch tool, or whose null proves nothing, is still cited as held. With no signal nothing is
 re-read: a copy's age alone is no doubt (re-reading by age was measured live and deleted, D126), and a silent source's
 changes arrive through polls and the daily sweep. The fast path, which may not call a source, sends a doubted item to
 the slow path. Deletion notifications (`ContextPartner.sourceRemoved`, `POST /v1/sources/removed`) drop items at once;
@@ -240,7 +241,9 @@ on-demand poll ran out of time is not polled again by a lookup for the next `sou
 the agent takes and every ask answer records in the session's ledger the version of each item whose line it rendered
 (`Ledger.noteShown`, past the not-twice cooldown). When a sync poll, a notice's items or a re-read stores one of those
 items with other words, each live session of that user that holds an older version gets an "updated:" packet with
-the new copy, once per revision, queued for its next take. A change notice for a source a live session holds a copy
+the new copy, once per revision, queued for its next take. A packet still queued when its item is revised is checked
+when the agent takes it: a copy the cache has since replaced is followed by an update (D232); a packet withdrawn
+untaken (the push's second reading) announces nothing. A change notice for a source a live session holds a copy
 from is polled at once in the background (one listing call, at most one at a time and 30 s apart per user and
 source), so the packet is usually queued before the agent's next request; nothing on the observe path waits for it.
 Without it, a fact the agent already holds stays in its transcript in the old version (docs/research/fix-s7-revisions.md).

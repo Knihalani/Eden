@@ -121,13 +121,13 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **`revisionNotice` (D205) notes copies in `handOut`, from what the text rendered** (`renderedCount`, as `noteShown`
   reads lines): an item the size cut left out was not shown and gets no update. Stores that announce a changed copy call
   `queueRevised`: the sync's `onStored` and `recheck`, for every watching session, the re-reading one too (its delivery
-  may cut or fold the item). A packet still queued with another version of a stored item counts as handed:
-  `queueRevised` queues the update behind it (wave-1 review). A queued update is dropped only when a handed packet
-  renders the same version (`watchCopies`, `withoutCoveredUpdates`); never by citation alone (an ask's removal of
-  covered packets skips updates). A live search page's store (`store`) does not announce yet: a handed item a lookup's
-  search finds changed is delivered only if it ranks. Do not filter doubted copies in `queueRevised`: a later signal
-  during the poll would leave the stored copy unannounced forever (`revision-notice.test.ts`). `pollRevised` is the only
-  I/O a notice starts; keep it off the observe path.
+  may cut or fold the item). A packet queued untaken when its item is revised is checked at hand-out (`watchCopies`,
+  D232): a copy the cache has since replaced is followed by an update; a withdrawn packet announces nothing. A queued
+  update is dropped only when a handed packet renders the same version (`watchCopies`, `withoutCoveredUpdates`); never
+  by citation alone (an ask's removal of covered packets skips updates). A live search page's store (`store`) does not
+  announce yet: a handed item a lookup's search finds changed is delivered only if it ranks. Do not filter doubted
+  copies in `queueRevised`: a later signal during the poll would leave the stored copy unannounced forever
+  (`revision-notice.test.ts`). `pollRevised` is the only I/O a notice starts; keep it off the observe path.
 - **An ask says "Nothing in the connected sources." only when its sources answered (D127).** `searchLive` returns
   each chosen source's status (`sources`: the fan-out's, or "local" for a synced source answered from the index);
   `honestAnswer` names any that did not answer (error, timeout, circuit open, busy, limited, throttled: the
@@ -144,10 +144,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   named in the answer ("Left out items from mail (1): their source reported changes and they could not be re-checked"),
   never an all-clear. A re-read our own guard skipped ("skipped": the per-source concurrency limit while the other re-
   reads hold its slots) is retried too, two at a time, and cited as held if still skipped. A refusal by an open breaker
-  or a rate limit (pushed back by a 429) is "failed", not "skipped" (`FetchFailed.guard`): the source is in trouble, so
-  the item is left out and named (wave-1 review: a deleted item was cited on the ask after a 429). "unverifiable" (no
-  fetch tool, or a null from a source without `fetchReportsGone`) is cited as held, as D126 delivers it. Proactive
-  deliveries keep D126's rule (a failed re-read is delivered as held).
+  or by a rate limit the connector's 429 pushed back is "failed", not "skipped" (`FetchFailed.guard`, `pushedBack`,
+  D232): the item is left out and named. The rate limit's ordinary spend stays "skipped". "unverifiable" (no fetch tool,
+  or a null from a source without `fetchReportsGone`) is cited as held, as D126 delivers it. Proactive deliveries keep
+  D126's rule (a failed re-read is delivered as held).
 - **Shown means handed out.** With `askDedup`, what an injection showed is noted (`noteShown`) in `handOut`, which
   every path that gives the agent an injection calls (observe's reply, `takePending`, the firewall's finding, the
   ask's own answer), not when `deliver` builds it: a queued packet the agent has not taken was shown nothing, so an

@@ -64,13 +64,15 @@ export interface FanoutOutcome {
  * ("refused"), the caller gave up ("aborted"), the call failed ("error", "timeout") or the connector refused it as
  * rate-limited ("throttled"), the source answered null without `fetchReportsGone` ("null"), or our gate failed
  * ("gate"). Only "error" is worth one immediate retry: the others would be refused or answered the same way again.
- * A refusal names its guard (`guard`): "busy" (no free permit, which clears in moments) differs from "open" (the
- * breaker) and "limited" (the rate limit, pushed back by a 429), which say the source is in trouble right now.
+ * A refusal names its guard (`guard`): "open" (the breaker) says the source is in trouble now; "limited" is our rate
+ * limit, which is in trouble too only when the connector's own rate-limit error pushed it back (`pushedBack`); without
+ * that, like "busy" (no free permit), it is ordinary use that clears in moments.
  */
 export interface FetchFailed {
   status: "failed";
   why: "no-fetch" | "refused" | "aborted" | "error" | "timeout" | "throttled" | "null" | "gate";
   guard?: "open" | "limited" | "busy";
+  pushedBack?: boolean;
 }
 
 /** Statuses of a call a guard refused before it went out (no rate token, no call). */
@@ -139,6 +141,8 @@ interface PerSource {
    * the first one: most (user, source) pairs never see the planner.
    */
   callLatency?: RollingHistogram;
+  /** Until when the rate limit is pushed back by the connector's own rate-limit error (engine clock), if it was. */
+  pushedBackUntil?: number;
 }
 
 /**
@@ -320,7 +324,10 @@ export class SourceFanout {
     const key = `${scopeKey(scope)}|${source.id}`;
     const s = this.state(key);
     const epoch = this.admit(key, s);
-    if (typeof epoch !== "number") return { status: "failed", why: "refused", guard: epoch };
+    if (typeof epoch !== "number") {
+      const pushedBack = epoch === "limited" && (s.pushedBackUntil ?? -Infinity) > this.now();
+      return { status: "failed", why: "refused", guard: epoch, ...(pushedBack ? { pushedBack } : {}) };
+    }
     const started = performance.now();
     let raw: ContextItem | null;
     try {
@@ -335,7 +342,7 @@ export class SourceFanout {
       s.limiter.release("dropped");
       s.breaker.failure(epoch);
       if (RATE_LIMITED.test(message)) {
-        this.rate.penalize(key, retryAfterMs(message) ?? 5_000);
+        this.pushBack(key, s, retryAfterMs(message) ?? 5_000);
         return failed("throttled");
       }
       return failed(timeout.aborted ? "timeout" : "error");
@@ -393,7 +400,7 @@ export class SourceFanout {
       s.limiter.release("dropped");
       s.breaker.failure(epoch);
       if (RATE_LIMITED.test(message)) {
-        this.rate.penalize(key, retryAfterMs(message) ?? 5_000);
+        this.pushBack(key, s, retryAfterMs(message) ?? 5_000);
         if (!timeout.aborted) return "throttled";
       }
       return timeout.aborted ? "timeout" : "error";
@@ -614,8 +621,14 @@ export class SourceFanout {
     if (!RATE_LIMITED.test(message)) return;
     const key = `${scopeKey(scope)}|${sourceId}`;
     const ms = retryAfterMs(message) ?? 5_000;
-    this.rate.penalize(key, ms);
+    this.pushBack(key, this.per.get(key), ms);
     this.shadowRate.penalize(key, ms);
+  }
+
+  /** Pushes the rate limit back after the connector's own rate-limit error, and notes until when (`FetchFailed`). */
+  private pushBack(key: string, s: PerSource | undefined, ms: number): void {
+    this.rate.penalize(key, ms);
+    if (s && ms >= 0) s.pushedBackUntil = Math.max(s.pushedBackUntil ?? 0, this.now() + ms);
   }
 
   /** The source's recent latency quantile in ms (NaN if no calls yet), for observability. */
@@ -757,7 +770,7 @@ export class SourceFanout {
       s.latency.record(performance.now() - started);
       s.limiter.release("dropped");
       s.breaker.failure(epoch);
-      if (RATE_LIMITED.test(message)) this.rate.penalize(sourceKey, retryAfterMs(message) ?? 5_000);
+      if (RATE_LIMITED.test(message)) this.pushBack(sourceKey, s, retryAfterMs(message) ?? 5_000);
       return fallback(failure(timedOut, message), message);
     } finally {
       this.leave(sourceKey, drops);

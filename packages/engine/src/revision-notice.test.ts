@@ -498,3 +498,29 @@ test("stopSync clears a revision poll held back by its gap (wave-1 review)", asy
   await new Promise((r) => setTimeout(r, 20));
   expect(fired).toBe(false);
 });
+
+test("a session's first packet, queued untaken when its item is revised: the update follows it (wave-1 review)", async () => {
+  const t = await setup();
+  const P = t.partner as any;
+  // Nothing handed yet: the session is not watching.
+  await t.partner.observe(
+    { ...scope, sessionId: "s1", at: t.now(), kind: "user_message", text: "ok thanks" } as AgentEvent,
+    { waitMs: 2_000 },
+  );
+  t.partner.takePending({ ...scope, sessionId: "s1" });
+  const s = P.sessions.get("t/u#s1");
+  const v1 = P.deps.cache.get(scope, OFFSITE, t.now());
+  const cue = { raw: "offsite", terms: new Uint32Array(0), entities: [], span: 0 };
+  s.pending.push(P.build(s, [{ item: v1, score: 1 }], "proactive", "probe", cue, 0));
+  t.advance(MIN);
+  const moved = "The quarterly offsite is in Lisbon at 11:30 on 12 November.";
+  await t.partner.sourceItems(scope, "notes", [
+    { id: OFFSITE, sourceId: "notes", ref: "q1", title: "Quarterly offsite", text: moved },
+  ]);
+  const taken = t.partner.takePending({ ...scope, sessionId: "s1" });
+  t.advance(5 * MIN);
+  const next = await say(t.partner, "Anything for the budget review with finance", "s1", t.now());
+  const all = [...taken, ...next];
+  expect(all.some((i) => i.text.includes("09:30"))).toBe(true);
+  expect(updates(all).filter((i) => i.text.includes("11:30"))).toHaveLength(1);
+});

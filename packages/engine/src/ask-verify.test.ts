@@ -225,3 +225,26 @@ describe("D211 under our own guards (wave-1 review)", () => {
     for (let i = 0; i < 6; i++) expect(citedIds(await ask())).not.toContain(HOLD);
   });
 });
+
+test("our rate limit's ordinary use (no 429) leaves no live item out of quick asks after a signal (wave-1 review)", async () => {
+  const src = new Mail();
+  const topics = ["freight", "catering", "scaffolding", "licensing", "printing", "cleaning"];
+  const people = ["Priya Shah", "Tom Okafor", "Lena Berg", "Marco Ruiz", "Ada Novak", "Sam Lowe"];
+  topics.forEach((t, i) =>
+    src.add(
+      `h${i}`,
+      `Harlow invoice ${4100 + i} (${t}) on hold`,
+      `${people[i]} says the Harlow ${t} invoice ${4100 + i} is on hold until ${t} receipts arrive in week ${i + 2}`,
+      T0 - (10 + i) * HOUR,
+    ),
+  );
+  const { p, user, ask } = await setup(src);
+  const before = (await ask()).citations.length;
+  expect(before).toBeGreaterThan(1);
+  for (let k = 0; k < 4; k++) {
+    expect(p.sourceChanged(user, "mail")).toBe(true);
+    const r = await ask();
+    expect(r.answer).not.toContain("Left out");
+    expect(r.citations.length).toBe(before);
+  }
+});

@@ -65,10 +65,12 @@ any packet 24/128 (heldout14 in RealUse-1: 100/128, 84/128, 55/128).
 | 11 | Parts with no measured value | Every part ablated with the paid reader replayed: graph, askVerdicts, anticipate and slowPathQueue deleted (53 files, about 6,080 lines); judge out of `PARTS`; the rest kept with reasons. Live: no significant loss | D225–D229 |
 | 12 | Benchmark gaps | heldout15 written blind and run here; Sonnet regrade agreed 370/384; synced `sim:perf` memory (4.1 MB RSS per user); a multi-day mode (`--day`) that found stale recaps, fixed by revision notices (D205); cold start $0.021 a user. Not done: the OpenRouter route (the owner tests on Anthropic only) | D205 |
 
-The wave-1 review (an independent reviewer on the merged diff) found five defects, all fixed with tests before wave 2
-merged: the strict ask's gap above (high), a revision missed while a packet waited in the queue (medium), revision
+The wave-1 review (an independent reviewer on the merged diff) found five defects, all fixed with tests: the strict ask's gap above (high), a revision missed while a packet waited in the queue (medium), revision
 polls outliving `stopSync`, a reader call an ask could not wait for, and the client reporting success on malformed
-items (low).
+items (low). A second review of those fixes, after the heldout15 runs, found that the first two went too far or not far
+enough (ordinary rate-limit spend left live items out of quick asks; an update could follow a packet the push withdrew;
+a session handed nothing before missed its update). They were reworked as D232 with four more tests; the eval and the
+paid-reader replay (313/127) are unchanged, so the heldout15 figures stand for the final tree.
 
 ## What is still open
 

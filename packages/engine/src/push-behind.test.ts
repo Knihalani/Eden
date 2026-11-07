@@ -477,3 +477,40 @@ describe("syncPollBehind: a lookup waiting on another's poll", () => {
     }
   });
 });
+
+describe("revisionNotice beside the push's second reading (wave-1 review)", () => {
+  test("an item of a packet the second reading withdraws gets no update, though the poll behind revised it", async () => {
+    const N0 = itemId("mail", "n0");
+    const { p, src, maker, warm, advance, now } = setup({ revisionNotice: true }, [NEW, HOLD, N0]);
+    await warm(user);
+    advance(10 * 60_000);
+    await say(p, now(), user, "s1", "Order the lunch orders for the team");
+    p.takePending({ ...user, sessionId: "s1" });
+    // The session watches for revisions (it was handed a copy of something else).
+    const P = p as any;
+    P.watchCopies(P.sessions.get("t1/u1#s1"), [{ id: N0, sourceId: "mail", version: 1 }]);
+    advance(5 * HOUR);
+    src.items = src.items.filter((i) => i.ref !== "hold");
+    src.add(
+      "hold",
+      "Harlow invoice on hold",
+      "Harlow invoice payments are on hold until the audit on 3 December ends",
+      now(),
+    );
+    src.add(
+      "new",
+      "Harlow dispute settled",
+      "Harlow dispute settled: the invoice may be paid, new bank details",
+      now(),
+    );
+    const calls0 = maker.calls.length;
+    src.hold();
+    await say(p, now());
+    src.release();
+    await until(() => maker.calls.length >= calls0 + 2);
+    await Bun.sleep(30);
+    const got = p.takePending({ ...user, sessionId: "s1" });
+    const updated = got.filter((g) => g.reason.startsWith("updated:"));
+    expect(cited(updated)).not.toContain(HOLD);
+  });
+});
