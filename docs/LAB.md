@@ -785,7 +785,10 @@ The quality runner (`quality-cli.ts`) changes the world during a run and counts 
   item or an ask citation of one is `deletes.deletedDelivered` / `deletedCited`.
 - `--push none|signals|payload`: how changes reach Eden (signals call `sourceChanged`; payload calls `sourceItems` and
   `sourceRemoved`). `--lost-notices P` (A8) loses each source's notice for a change with chance P (its own random
-  stream; `lostNotices` counts them), for what a backstop such as the sweep must catch. `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed, changed, gone, failed, calls).
+  stream; `lostNotices` counts them), for what a backstop such as the sweep must catch (D297).
+  `--null-proves-nothing` (A8) makes the sim sources fetch as MCP connectors do: a null re-read does not prove the
+  item gone (`fetchReportsGone` false, D298). `freshness` reports `verifyDelivery`'s re-reads (checked, confirmed,
+  changed, gone, failed, calls).
 
 D126's matrix: `bun packages/sim/src/quality-cli.ts --users 8 --sessions 20 --updates 0.6 --deletes 0.05
 [--push signals|payload] [--config '{"verifyDelivery":false}'] [--jobs 4]`, $0 (`verifyDelivery` is in the

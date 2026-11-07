@@ -154,7 +154,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   or by a rate limit the connector's 429 pushed back is "failed", not "skipped" (`FetchFailed.guard`, `pushedBack`,
   D232): the item is left out and named. The rate limit's ordinary spend stays "skipped". "unverifiable" (no fetch tool,
   or a null from a source without `fetchReportsGone`) is cited as held, as D126 delivers it. Proactive deliveries keep
-  D126's rule (a failed re-read is delivered as held).
+  D126's rule (a failed re-read is delivered as held). A null "unverifiable" outcome is held per user
+  (`ContextPartner.unverifiable`, the read mark the re-read began under) and `doubted` is false for the item until
+  the source's next signal (D298): before, every delivery past `CHECK_REUSE_MS` and every other session re-fetched an
+  MCP item for the same held answer. `forget` drops it; a failed or skipped re-read is never held.
 - **Shown means handed out.** With `askDedup`, what an injection showed is noted (`noteShown`) in `handOut`, which
   every path that gives the agent an injection calls (observe's reply, `takePending`, the firewall's finding, the
   ask's own answer), not when `deliver` builds it: a queued packet the agent has not taken was shown nothing, so an
