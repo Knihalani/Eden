@@ -1581,15 +1581,9 @@ export class ContextPartner {
       report("gated");
       return null;
     }
-    // `readerEvidence` (trial, D190) gates the call on the request's own evidence; `readerPushWeakNoWait` (D191) only
-    // stops the observe's wait for a push below the same bar.
-    const evidence = this.config.readerEvidence || (opts.push === true && this.config.readerPushWeakNoWait);
-    if (evidence && !this.evidenceClears(pool, cards, opts.intents)) {
+    // `readerPushWeakNoWait` (trial, D191): a push whose pool is weak stops the observe's wait; it still reads.
+    if (opts.push === true && this.config.readerPushWeakNoWait && !this.evidenceClears(pool, cards, opts.intents)) {
       opts.weak?.();
-      if (this.config.readerEvidence) {
-        report("gated");
-        return null;
-      }
     }
     // `readerReuse` (trial, D193): an ask in the push's request reads the push's verdict, with no call of its own.
     const reuseAt = performance.now();
@@ -1739,7 +1733,7 @@ export class ContextPartner {
   }
 
   /**
-   * `readerEvidence`'s bar (trial, D190): one of the pool's first `readerEvidenceTop` candidates, not bulk mail, is an
+   * `readerPushWeakNoWait`'s bar (trial, D191): one of the pool's first `readerWeakTop` candidates, not bulk mail, is an
    * anchored intent hit with enough of the request in its requests, or is constraint-like with a high enough no-model
    * score. No model, no call.
    */
@@ -1749,11 +1743,11 @@ export class ContextPartner {
     intents: ReadonlyMap<string, IntentFind> | undefined,
   ): boolean {
     const c = this.config;
-    for (const x of pool.slice(0, c.readerEvidenceTop)) {
+    for (const x of pool.slice(0, c.readerWeakTop)) {
       if (bulkMail(x.item)) continue;
       const f = intents?.get(x.item.id);
-      if (f && f.coverage >= c.readerEvidenceCoverage && f.matched >= c.readerEvidenceMatched) return true;
-      if (x.score >= c.readerEvidenceScore && this.constraintLike(x, cards)) return true;
+      if (f && f.coverage >= c.readerWeakCoverage && f.matched >= c.readerWeakMatched) return true;
+      if (x.score >= c.readerWeakScore && this.constraintLike(x, cards)) return true;
     }
     return false;
   }

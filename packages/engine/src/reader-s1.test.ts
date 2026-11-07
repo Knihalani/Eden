@@ -10,9 +10,9 @@ import { CORE_CONFIG } from "./parts";
 import { AskReader, type ReaderInput, type ReaderKind, type ReaderMaker } from "./reader";
 import type { Trace } from "./trace";
 
-// The S1 reader trials (D190-D193, docs/research/fix-s1-reader.md): the evidence gate, no observe wait on a weak pool,
-// re-reads after the reader names an item (freshness-push.test.ts), and the ask reusing the push's reading. The short
-// output schema (D194) was measured and deleted.
+// The S1 reader trials (D191-D193, docs/research/fix-s1-reader.md): no observe wait on a weak pool,
+// re-reads after the reader names an item (freshness-push.test.ts), and the ask reusing the push's reading. The evidence
+// gate (D190) and the short output schema (D194) were measured and deleted.
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -91,38 +91,16 @@ const ref = (sessionId = "s1", userId = "u1") => ({ tenantId: "t", userId, sessi
 const say = (p: ContextPartner, text: string, waitMs = 2_000, sessionId = "s1") =>
   p.observe({ ...ref(sessionId), at: NOW, kind: "user_message", text } as AgentEvent, { waitMs });
 
-describe("readerEvidence (D190): the reader reads only when the request's evidence clears a bar", () => {
-  test("below the bar: no call, the ask answers as gated; at the bar: one call", async () => {
-    const quiet = new Reader();
-    const below = partner({ readerEvidence: true, readerEvidenceScore: 1_000, readerEvidenceCoverage: 1 }, quiet);
-    const a = await below.p.ask({ ...ref(), question: REQUEST, maxItems: 3 });
-    expect(quiet.calls.length).toBe(0);
-    expect(below.reports.map((r) => r.outcome)).toEqual(["gated"]);
-    expect(a.usedModel).toBe(false);
-    const loud = new Reader();
-    const above = partner({ readerEvidence: true, readerEvidenceScore: 0, readerEvidenceTop: 10 }, loud);
-    const b = await above.p.ask({ ...ref(), question: REQUEST, maxItems: 3 });
-    expect(loud.calls.length).toBe(1);
-    expect(b.citations[0]!.itemId).toBe("mail:hold");
-  });
-
-  test("only the pool's first readerEvidenceTop candidates count", async () => {
-    // The pool is ranked; with a top of 1, only its first item can clear the bar (here it is the deposit PDF, whose
-    // wording constrains nothing), so the score floor of 0 alone does not open the gate.
-    const maker = new Reader();
-    const { reports, p } = partner({ readerEvidence: true, readerEvidenceScore: 0, readerEvidenceTop: 1 }, maker);
-    await p.ask({ ...ref(), question: REQUEST, maxItems: 3 });
-    const first = reports[0]!.pool[0]!;
-    const opened = maker.calls.length === 1;
-    // Whichever way it went, it went by the first item alone.
-    expect(opened).toBe(first === "mail:hold");
-  });
-
-  test("the config check takes its keys only with a reader and askReader on", () => {
-    expect(() => checkEngineConfig({ readerEvidence: true }, { deps: { reader: false } })).toThrow();
-    expect(() => checkEngineConfig({ askReader: false, readerEvidence: true }, { deps: { reader: true } })).toThrow();
-    expect(() => checkEngineConfig({ readerEvidenceTop: 0 }, { deps: { reader: true } })).toThrow();
-    expect(() => checkEngineConfig({ readerEvidence: true }, { deps: { reader: true } })).not.toThrow();
+describe("readerPushWeakNoWait's bar: the config check", () => {
+  test("its keys are taken only with a reader, the push and the flag on", () => {
+    expect(() => checkEngineConfig({ readerPushWeakNoWait: true }, { deps: { reader: false } })).toThrow();
+    expect(() => checkEngineConfig({ readerWeakTop: 5 }, { deps: { reader: true } })).toThrow();
+    expect(() =>
+      checkEngineConfig({ readerPushWeakNoWait: true, readerWeakTop: 0 }, { deps: { reader: true } }),
+    ).toThrow();
+    expect(() =>
+      checkEngineConfig({ readerPushWeakNoWait: true, readerWeakTop: 5 }, { deps: { reader: true } }),
+    ).not.toThrow();
   });
 });
 
@@ -130,7 +108,7 @@ describe("readerPushWeakNoWait (D191): no blocking wait when the push's pool is 
   test("a weak pool: observe returns at once; the reading runs on and its packet is queued for the next request", async () => {
     const maker = new Reader(true);
     const { p } = partner(
-      { readerPush: true, readerPushWeakNoWait: true, readerEvidenceScore: 1_000, readerEvidenceCoverage: 1 },
+      { readerPush: true, readerPushWeakNoWait: true, readerWeakScore: 1_000, readerWeakCoverage: 1 },
       maker,
     );
     const t0 = performance.now();
@@ -146,7 +124,7 @@ describe("readerPushWeakNoWait (D191): no blocking wait when the push's pool is 
   test("a pool that clears the bar is waited for, as without the flag", async () => {
     const maker = new Reader(true);
     const { p } = partner(
-      { readerPush: true, readerPushWeakNoWait: true, readerEvidenceScore: 0, readerEvidenceTop: 10 },
+      { readerPush: true, readerPushWeakNoWait: true, readerWeakScore: 0, readerWeakTop: 10 },
       maker,
     );
     let done = false;
