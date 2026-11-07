@@ -3668,16 +3668,20 @@ export class ContextPartner {
       itemIds: due.map((x) => x.item.id),
     });
     if (s.closed) return [];
+    const after = this.now();
     return scored.flatMap((x) => {
       const o = outcomes.get(x.item.id);
       if (o === "gone") return [];
+      // A removal that landed while the other re-reads ran (audit A5): the item is gone whatever its own outcome said.
+      if (this.deps.cache.isHeldGone(s.scope, x.item.id, after)) return [];
       if (strict && doubted.has(x.item.id) && (o === "failed" || o === "flaked")) {
         strict.unconfirmed.set(x.item.sourceId, (strict.unconfirmed.get(x.item.sourceId) ?? 0) + 1);
         return [];
       }
       if (o !== "changed") return [x];
-      const copy = this.deps.cache.get(s.scope, x.item.id, this.now());
-      return copy ? [{ ...x, item: copy }] : [x];
+      // The copy in hand is the one the re-read found superseded: with no current copy cached, nothing is cited.
+      const copy = this.deps.cache.get(s.scope, x.item.id, after);
+      return copy ? [{ ...x, item: copy }] : [];
     });
   }
 
