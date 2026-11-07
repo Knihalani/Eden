@@ -258,6 +258,25 @@ MCP rotation waiting for in-flight asks, ARCHITECTURE.md. It probed the `readerP
 reader paths, a packet taken during the re-reads, an item revised meanwhile) and the `PollResume` continuation and
 found them sound.
 
+## Second review
+
+The `reviewer` ran on the second half (proxy, fuzz harness, connector calls): REQUEST_CHANGES, all taken:
+
+- **High: the sweep's cut marked an empty source current and stored none of its new items.** `oldestSynced` gave
+  Infinity for a source with nothing synced, so its first page stored nothing and still counted as a poll. It now
+  reads such a source as before (`sync-calls.test.ts`, "nothing synced").
+- **A lookup's listing that outlived its deadline was in no trace** (traces must sum to the calls connectors
+  received): a demand call is now counted when it is sent and taken back on a guard's skip, and the ask path no
+  longer races its own 0 against `freshen`'s count (`freshen` bounds the wait itself).
+- **A retry with a changing system prompt read as a new turn** in the proxy: `Conversation.last` now leaves out
+  system and developer messages, as the conversation key does.
+- **A listing that never answers held its source busy for good** once neither the fan-out nor the lookup cut it: `run`
+  lets the source go after (20 pages + 1) × the sync's call timeout, by a timer (no await on the listing path), and
+  `busy` is a promise the watchdog can settle, so waiters are freed too.
+- Documented: shadow skips `watchCopies` too, so shadow counts miss "updated:" packets (D282); `withMessages` misses
+  a `\u`-escaped `messages` key after a plain one (it fails open: the request goes without Eden's context);
+  `dropGone`'s queue pass scans every session, as `forget` already does (a per-user session index is A1's to weigh).
+
 ## Checked and rejected (one line each)
 
 Budgets across UTC midnight (pruned per day, settle books to its own tally); concurrent reserves overshooting a cap

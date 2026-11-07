@@ -458,7 +458,7 @@ export class World {
     }
     // 4. Deletes (D126): a removal that stood and settled before this call started is never cited. A packet built
     // before the removal (its `createdAt` is earlier: the removal moves the clock 1 ms) and handed out after it is
-    // "deletes-queued": `dropGone` leaves queued packets as they are (see the report in `fuzz.test.ts`).
+    // "deletes-queued", fixed by `dropRemovedPending` and `dropGone`'s queue pass (see `fuzz.test.ts`).
     for (const c of h.citations) {
       const r = this.removed.get(c.itemId);
       if (r && r.settledAfter !== null && h.op > r.settledAfter) {

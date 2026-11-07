@@ -211,8 +211,15 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     // its latest turn or whose window slid past the first copy) is still a new turn unless it repeats the last
     // request's messages exactly (a retry): counting copies alone dropped it, and re-inserted the previous turn's
     // packets into it (audit A5).
+    // System and developer messages left out, as from the conversation's key: one carrying today's date changes every
+    // request, and a retry would then read as a new turn and lose its packets (the review).
     const all = createHash("sha256")
-      .update((messages as Message[]).map(hashOf).join(","))
+      .update(
+        (messages as Message[])
+          .filter((m) => m.role !== "system" && m.role !== "developer")
+          .map(hashOf)
+          .join(","),
+      )
       .digest("hex");
     const end = (messages as Message[]).at(-1)!;
     if (known && end.role === "user" && fresh.at(-1) !== end && conv.last !== undefined && conv.last !== all) {

@@ -1,7 +1,7 @@
 /**
- * A5 connector-call repro (bug hunt, per-call pricing): an on-demand poll (`Sync.freshen`) ignores the back-off a
- * failed listing set (`SourceSync.retryAt`), so a source whose list tool fails is listed again by every lookup, on
- * top of the live search that lookup then makes anyway.
+ * Audit A5, connector calls (priced per call): the sync's listings counted against what a lookup, a back-off and the
+ * daily sweep should cost (docs/research/a5-bugs.md, "Wasted connector calls", D283). Each test failed before its fix;
+ * the "Before the fix" comments record what the code did then.
  */
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
@@ -9,6 +9,7 @@ import { Budget } from "@eden/llm";
 import { itemId, type ContextItem, type Scope } from "@eden/protocol";
 import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
+import type { Trace } from "./trace";
 import { CORE_CONFIG } from "./parts";
 import { ContextPartner } from "./partner";
 
@@ -105,9 +106,8 @@ describe("audit A5, connector calls: sync", () => {
       statuses.push(r.sources?.[0]?.status ?? "none");
     }
     // Expected (the back-off doubles 30 s, 60 s, 2 min, ... 30 min): 4 listings over these 6 minutes (at 31, 62, 124,
-    // 248 s).
-    // Observed: 12 failing listings, one per ask, each beside the search the ask makes anyway (breaker never opens
-    // at this spacing: too few calls per window).
+    // 248 s). Before the fix: 12 failing listings, one per ask, each beside the search the ask makes anyway (breaker
+    // never opens at this spacing: too few calls per window).
     expect({ lists: src.lists - 1, searches: src.searches, open: statuses.filter((x) => x === "open").length }).toEqual(
       {
         lists: 4,
@@ -153,12 +153,13 @@ describe("audit A5, connector calls: sync", () => {
     const docsSweep = docs.lists - before;
     const docsSyncedAfter = docs.items.filter((it) => cache.isSynced(scope, it.id)).length;
     // Expected: the sweep pages docs only past the oldest item kept from it (ceil(kept / 5) + 1 pages at most), and
-    // syncs nothing the backfill's cut left out. Observed: 4 pages (20 items) and the synced docs grow to 20.
+    // syncs nothing the backfill's cut left out. Before the fix: 4 pages (20 items) and the synced docs grow to 20.
     expect(docsSweep).toBeLessThanOrEqual(Math.ceil(docsKept / 5) + 1);
     expect(docsSyncedAfter).toBe(docsKept);
   });
 
   test("a listing slower than the lookup's deadline is cut off by every lookup and never brings the source current", async () => {
+    const traces: Trace[] = [];
     // `sourceTimeoutMs` 100 stands in for the default 1.5 s; the listing takes 250 ms (a per-call platform's 2-3 s).
     // The sync's own call timeout is max(sourceTimeoutMs, 5 s), so the listing would finish if it were let.
     const src = new Counted("mail", 4);
@@ -183,6 +184,7 @@ describe("audit A5, connector calls: sync", () => {
       budget: new Budget(),
       model: null,
       now: () => clock,
+      onTrace: (t) => traces.push(t),
       config: {
         ...CORE_CONFIG,
         sync: true,
@@ -206,9 +208,47 @@ describe("audit A5, connector calls: sync", () => {
       if (partner.sync!.current(scope, "mail")) current++;
     }
     // Expected: the first poll's call (made and billed) is let finish under the sync's own 5 s timeout, the source is
-    // current, and the next three lookups list nothing. Observed: 4 listings, each cut off at the lookup's deadline;
-    // the source never becomes current (only the daily sweep would make it so).
+    // current, and the next three lookups list nothing. Before the fix: 4 listings, each cut off at the lookup's
+    // deadline; the source never becomes current (only the daily sweep would make it so).
     expect({ lists: started - lists0, current }).toEqual({ lists: 1, current: 4 });
+    // The listing outlived the lookup that sent it; its trace still holds the call (the review: it was counted only
+    // when it answered, after the lookup had returned, so the traces summed to 0 calls against 1 received).
+    expect(traces.reduce((n, t) => n + (t.syncCalls ?? 0), 0)).toBe(started - lists0);
+  });
+
+  test("a source with nothing synced is still read by the sweep (the review)", async () => {
+    // An empty source warms; an item lands there later. With no timed polls, the daily sweep is how it is read in the
+    // background: a cut of "nothing older than what is synced" with nothing synced stored nothing and marked it
+    // current.
+    const mail = new Counted("mail", 4);
+    const docs = new Counted("docs", 0);
+    let clock = T0;
+    const cache = new ItemCache();
+    const partner = new ContextPartner({
+      sources: async () => [mail, docs],
+      sourceMap: new SourceMap(":memory:", { seed: 1 }),
+      cache,
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { ...CORE_CONFIG, sync: true, syncPageSize: 5, syncCallsPerMin: 6000, syncSweepMs: 24 * HOUR },
+    });
+    partner.sync!.track(scope);
+    while (!partner.sync!.warm(scope)) await partner.sync!.tick();
+    clock += 25 * HOUR;
+    docs.items = [
+      {
+        id: itemId("docs", "d1"),
+        sourceId: "docs",
+        ref: "d1",
+        title: "Plan",
+        text: "The plan",
+        updatedAt: clock - HOUR,
+      },
+    ];
+    partner.sync!.track(scope);
+    for (let i = 0; i < 5; i++) await partner.sync!.tick();
+    expect(cache.isSynced(scope, itemId("docs", "d1"))).toBe(true);
   });
   test("the same, for event lookups that do not wait for the poll (syncPollBehind)", async () => {
     // `sourceTimeoutMs` 100 stands in for the default 1.5 s; the listing takes 250 ms (a per-call platform's 2-3 s).
@@ -267,8 +307,46 @@ describe("audit A5, connector calls: sync", () => {
       if (partner.sync!.current(scope, "mail")) current++;
     }
     // Expected: the first poll's call (made and billed) is let finish under the sync's own 5 s timeout, the source is
-    // current, and the next three lookups list nothing. Observed: 4 listings, each cut off at the lookup's deadline;
-    // the source never becomes current (only the daily sweep would make it so).
+    // current, and the next three lookups list nothing. Before the fix: 4 listings, each cut off at the lookup's
+    // deadline; the source never becomes current (only the daily sweep would make it so).
     expect({ lists: started - lists0, current }).toEqual({ lists: 1, current: 4 });
   });
+});
+
+test("a listing that never answers (its signal ignored) does not hold the source busy for good (the review)", async () => {
+  const src = new Counted("mail", 4);
+  let hang = false;
+  const list = src.list.bind(src);
+  src.list = (sc, cursor, limit) => (hang ? new Promise<ListPage>(() => {}) : list(sc, cursor, limit));
+  let clock = T0;
+  const partner = new ContextPartner({
+    sources: async () => [src],
+    sourceMap: new SourceMap(":memory:", { seed: 1 }),
+    cache: new ItemCache(),
+    budget: new Budget(),
+    model: null,
+    now: () => clock,
+    // The sync's call timeout is max(sourceTimeoutMs, 5 s); a read is let go after (20 pages + 1) of them.
+    config: { ...CORE_CONFIG, sync: true, syncOnDemand: true, syncPageSize: 10, syncCallsPerMin: 600 },
+  });
+  partner.sync!.track(scope);
+  while (!partner.sync!.warm(scope)) await partner.sync!.tick();
+  const s = (partner.sync as unknown as { users: Map<string, { sources: Map<string, { busy: unknown }> }> }).users
+    .get("t1/u1")!
+    .sources.get("mail")!;
+  hang = true;
+  clock += 7 * HOUR;
+  const realTimeout = globalThis.setTimeout;
+  const timers: (() => void)[] = [];
+  // The watchdog's timer fires at once here (its delay is 105 s of real time); every other timer runs as usual.
+  globalThis.setTimeout = ((fn: () => void, ms?: number) =>
+    ms !== undefined && ms >= 100_000 ? (timers.push(fn), 0) : realTimeout(fn, ms)) as typeof setTimeout;
+  try {
+    await partner.ask({ ...scope, sessionId: "s1", question: "quarterly plan note?" });
+  } finally {
+    globalThis.setTimeout = realTimeout;
+  }
+  expect(s.busy).not.toBeNull(); // the hung listing holds it
+  for (const fn of timers) fn();
+  expect(s.busy).toBeNull();
 });

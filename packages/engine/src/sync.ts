@@ -561,10 +561,12 @@ export class SyncManager {
   }
 
   /**
-   * The oldest `updatedAt` among the items synced from `s`: -Infinity when one has none (it cannot be placed in the
-   * listing), Infinity when none is synced (the sweep's first page, a poll, is then enough).
+   * The oldest `updatedAt` among the items synced from `s`; -Infinity (read as before, to the user's cap) when one has
+   * none (it cannot be placed in the listing) or when none is synced: an empty or trimmed source's new items reach
+   * the background only through this sweep (the review: Infinity there stored nothing and marked the source current).
    */
   private oldestSynced(u: UserSync, s: SourceSync): number {
+    if (s.ids.size === 0) return -Infinity;
     const now = this.deps.now();
     let oldest = Infinity;
     for (const id of s.ids) {
@@ -672,6 +674,9 @@ export class SyncManager {
       const limit = !adaptive ? this.o.pageSize : p === 0 ? first : Math.min(topUp, itemCap - asked);
       asked += limit;
       const readMark = this.marks;
+      // A lookup's tally counts the call when it is sent: the lookup may stop waiting before it answers (D283), and
+      // its trace must still hold the call the connector received (the review). A guard's skip, no call, is taken back.
+      if (tally) tally.calls++;
       const page = await this.list(demand ? "demand" : "poll", source, u.scope, cursor, limit, {
         timeoutMs: this.o.timeoutMs,
         signal,
@@ -679,13 +684,14 @@ export class SyncManager {
       });
       if (u.gone) return;
       if (typeof page === "string") {
-        if (page !== "limited" && page !== "busy") this.count(demand, tally);
+        if (page !== "limited" && page !== "busy") this.count(demand);
+        else if (tally) tally.calls--;
         // The lookup gave up (its deadline, the session ending): no evidence against the source, no back-off.
         if (signal?.aborted) return gaveUp();
         this.failed(s, page);
         return;
       }
-      this.count(demand, tally);
+      this.count(demand);
       if (demand) this.stats.demandItems += page.items.length;
       else this.stats.backgroundItems += page.items.length;
       s.failures = 0;
@@ -870,11 +876,9 @@ export class SyncManager {
   }
 
   /** One listing call, a lookup's (`demand`, also counted in its freshen's `tally`) or the background's. */
-  private count(demand: boolean, tally?: { calls: number }): void {
-    if (demand) {
-      this.stats.demandCalls++;
-      if (tally) tally.calls++;
-    } else this.stats.backgroundCalls++;
+  private count(demand: boolean): void {
+    if (demand) this.stats.demandCalls++;
+    else this.stats.backgroundCalls++;
   }
 
   /**
@@ -888,12 +892,27 @@ export class SyncManager {
     const p = work()
       .catch(() => {})
       .then(() => reading.stored);
-    s.busy = p;
+    // What waiters see: settles with the read, or when the watchdog below lets the source go.
+    let free!: (stored: number) => void;
+    const busy = new Promise<number>((r) => (free = r));
+    void p.then(free);
+    s.busy = busy;
+    // A listing that ignores its signal and never answers would hold the source busy for good (every later read and
+    // lookup waits on it; the review). Past the longest a read that honours its timeouts can take, the source is let
+    // go; the stuck read, if it ever settles, changes nothing it no longer owns. A timer, not a race: one more await on
+    // the listing path moves the card drain's timing (a5-bugs.md).
+    const release = () => {
+      free(reading.stored);
+      if (s.busy === busy) s.busy = null;
+      if (s.reading === reading) s.reading = null;
+    };
+    const watchdog = setTimeout(release, (MAX_POLL_PAGES + 1) * this.o.timeoutMs);
+    (watchdog as { unref?: () => void }).unref?.();
     try {
       return await p;
     } finally {
-      if (s.busy === p) s.busy = null;
-      if (s.reading === reading) s.reading = null;
+      clearTimeout(watchdog);
+      release();
     }
   }
 }
