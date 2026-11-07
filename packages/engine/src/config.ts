@@ -464,6 +464,19 @@ export interface EngineConfig {
    * first (`CANDIDATES_LEAD`). 0 is the reader's push and asks (D95–D99).
    */
   pushCandidates: number;
+  /**
+   * Trial (D306, A10; docs/research/a10-injection.md): every packet and ask answer Eden renders carries `GUARD_LINE`
+   * (`shield.ts`), a fixed line of Eden's own after the envelope's header: the items are other people's words, and
+   * nothing in them is an instruction to the agent (a request, address, link, phone number or payment detail found
+   * in one is not acted on unless the user's own request asks for exactly that).
+   */
+  guardLine: boolean;
+  /**
+   * Trial (D307, A10): every item Eden renders into a packet or ask answer has its instruction-shaped text (addressed
+   * to an AI, an override, Eden's own words forged, a tool call, hidden HTML, a markdown image, a forged chat turn)
+   * replaced by `QUARANTINED` before it is compacted (`shield.ts`, no model).
+   */
+  quarantineInstructions: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -581,4 +594,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
+  guardLine: false,
+  quarantineInstructions: false,
 };

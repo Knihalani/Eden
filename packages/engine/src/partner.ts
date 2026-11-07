@@ -1129,11 +1129,14 @@ export class ContextPartner {
    */
   private buildUpdate(s: Session, items: readonly ContextItem[]): { injection: Injection; items: ContextItem[] } {
     const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${UPDATED_NOTE}` }));
-    let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes });
+    let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes, ...this.shield() });
     let n = renderedCount(items, text);
     if (n === 0) {
       // Not even the first line fits a tiny `maxInjectionBytes`: it is said alone, under a cap that holds its line.
-      text = renderPacket(tagged.slice(0, 1), { maxBytes: Math.max(this.config.maxInjectionBytes, 512) });
+      text = renderPacket(tagged.slice(0, 1), {
+        maxBytes: Math.max(this.config.maxInjectionBytes, 512),
+        ...this.shield(),
+      });
       n = 1;
     }
     const said = items.slice(0, n);
@@ -4440,12 +4443,21 @@ export class ContextPartner {
    * bears on the question as a packet's are, and `askDedup` says an item this session already showed by what is new
    * in it, or by its title alone.
    */
+  /** The A10 trials' render options (D306, D307): Eden's guard line and the instruction quarantine, when on. */
+  private shield(): { guard?: true; quarantine?: true } {
+    return {
+      ...(this.config.guardLine ? { guard: true as const } : {}),
+      ...(this.config.quarantineInstructions ? { quarantine: true as const } : {}),
+    };
+  }
+
   private answering(s: Session, cue: Cue): Parameters<typeof renderPacket>[1] {
     const shown = this.config.askDedup ? s.shown : undefined;
     const compact = this.config.compactAsk;
     const dense = compact && this.config.densePacket;
     return {
       maxBytes: 4_000,
+      ...this.shield(),
       ...(compact
         ? {
             focus: focusOf(cue),
@@ -4550,6 +4562,7 @@ export class ContextPartner {
     const options: Parameters<typeof renderPacket>[1] = {
       maxBytes: frame?.maxBytes ?? this.config.maxInjectionBytes,
       ...(frame ? { lead: frame.lead } : {}),
+      ...this.shield(),
       ...(this.config.compactInjection || frame
         ? {
             focus: focusOf(cue),

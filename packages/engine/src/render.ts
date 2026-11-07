@@ -1,6 +1,7 @@
 import { truncateUtf8, utf8Length } from "@eden/primitives";
 import type { Citation, ContextItem } from "@eden/protocol";
 import { safeBlock, safeLine } from "./line";
+import { GUARD_LINE, quarantineItem } from "./shield";
 import { isStopword } from "./text";
 
 /**
@@ -42,8 +43,13 @@ export function renderPacket(
      * items as candidates the agent checks against the request. Never source or event text.
      */
     lead?: string;
+    /** `guardLine` (D306): `GUARD_LINE`, Eden's fixed words, after the header (before `lead`). */
+    guard?: boolean;
+    /** `quarantineInstructions` (D307): each item's instruction-shaped text replaced by Eden's marker first. */
+    quarantine?: boolean;
   },
 ): string {
+  if (options.quarantine) items = items.map(quarantineItem);
   const before = options.shownBefore;
   if (before && !options.focus) {
     // Not compacted: an item shown before keeps its message's parts with something new, in its own words and order.
@@ -81,11 +87,13 @@ export function renderPacket(
       return { ...item, text };
     });
   }
-  const lines = options.lead ? [HEADER, options.lead] : [HEADER];
+  const lines = [HEADER, ...(options.guard ? [GUARD_LINE] : []), ...(options.lead ? [options.lead] : [])];
   const footer = "</context>";
   let bytes = utf8Length(lines.join("\n")) + utf8Length(footer) + 2;
+  // The guard is Eden's own line: it takes no room from the items (D306).
+  const maxBytes = options.maxBytes + (options.guard ? utf8Length(GUARD_LINE) + 1 : 0);
   for (const item of items) {
-    const room = options.maxBytes - bytes - 1;
+    const room = maxBytes - bytes - 1;
     if (room < 40) break;
     const note = options.note?.(item);
     const said = note ? `${READER_TAG}${safeLine(note).replace(/\|/g, "/")} | ` : "";
