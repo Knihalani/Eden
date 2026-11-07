@@ -1,0 +1,14 @@
+short
+eden         control  n  128  haiku 0.0  regraded   0
+eden         neutral  n  128  haiku 4.0  regraded   0
+eden~reader  control  n  128  haiku 3.0  regraded   0
+eden~reader  neutral  n  128  haiku 3.0  regraded   0
+tools        control  n  128  haiku 0.0  regraded   0
+tools        neutral  n  128  haiku 3.0  regraded   0
+long
+eden         control  n   16  haiku 0.0  regraded   0
+eden         neutral  n   96  haiku 7.0  regraded   0
+eden~reader  control  n   16  haiku 0.0  regraded   0
+eden~reader  neutral  n   96  haiku 2.0  regraded   1
+tools        control  n   16  haiku 0.0  regraded   0
+tools        neutral  n   96  haiku 3.0  regraded   0
