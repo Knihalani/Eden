@@ -28,3 +28,7 @@ fresh both    hidden: +5    hidden: -23    control: +9    control: -19
 fresh byKind    hidden: +0    hidden: -3    control: +1    control: -2
 fresh cardsLean    hidden: +5    hidden: -18    control: +9    control: -19
 fresh nonudge    hidden: +0    hidden: -3    control: +0    control: -6
+
+== draw2 coverage (cards-enrich.ts --intent, train seeds 41-42): 3,541 unique items asked, 3,538 with a line after the
+first pass and three top-ups (two at --batch 3). The first pass alone covered 345 of 384 planted hidden items and read
+289/272 in the funnel (not used).

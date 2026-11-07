@@ -13,3 +13,17 @@ eden+linkLine − eden: -1.3 points (-4.5..+1.9), n 531
 eden+linkLine − eden  hidden raised                        runs 8 n  531  -2.3 points (-5.8..+1.3)
 eden+linkLine − eden  concerns (control+neutral), graded   runs 8 n  861  +0.3 points (-0.2..+0.9)
 eden+linkLine − eden  concerns, regraded                   runs 8 n  861  +0.0 points (+0.0..+0.0)
+
+== cl8/pooled.py per set (Haiku-graded hidden and concerns; the per-set Haiku columns of a22-quality.md §1)
+-- short
+eden+linkLine − eden  hidden raised                        runs 2 n  144  -2.1 points (-9.0..+4.9)
+eden+linkLine − eden  concerns (control+neutral), graded   runs 2 n  288  +0.3 points (-0.7..+1.7)
+eden+linkLine − eden  concerns, regraded                   runs 2 n  288  +0.0 points (+0.0..+0.0)
+-- targeted
+eden+linkLine − eden  hidden raised                        runs 4 n  364  -1.4 points (-5.5..+3.0)
+eden+linkLine − eden  concerns (control+neutral), graded   runs 4 n  364  +0.0 points (-0.8..+0.8)
+eden+linkLine − eden  concerns, regraded                   runs 4 n  364  +0.0 points (+0.0..+0.0)
+-- long
+eden+linkLine − eden  hidden raised                        runs 2 n   23  -17.4 points (-39.1..+0.0)
+eden+linkLine − eden  concerns (control+neutral), graded   runs 2 n  209  +1.0 points (+0.0..+2.4)
+eden+linkLine − eden  concerns, regraded                   runs 2 n  209  +0.0 points (+0.0..+0.0)

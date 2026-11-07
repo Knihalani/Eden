@@ -147,4 +147,15 @@ python3 -I packages/sim/lab/a15/score.py BASE.json OUT.json
 - "Sonnet-corrected" keeps Haiku's "raised" unchecked (A12's sample agreed 172 of 180).
 - The link's wording was chosen once, not tuned; a line that also said what the request turns on would need the
   item's meaning, which is the reader's job (D237 removed it from the push).
+- **Review findings on the measured trial code (commit `3a3e51b9`), recorded rather than re-run:** (1) the link was
+  computed on the candidate's compacted excerpt, not the whole item (`renderPacket` cuts the text before calling
+  `link`), so an item naming the request's entity only past the cut got no line, and the 153/253 and 145/217 counts
+  are over excerpts; `askNudge`'s `settles` reads whole items. (2) "names 30 Oct" came from `namesDay`, which also
+  matches a bare ordinal ("the 30th") and ignores the year, so the line could claim a date the item does not name in
+  Eden's own voice. (3) The comment's byte bound was wrong: three 40-character entities of multi-byte text can make
+  the line 500+ bytes, past the packet's 400-byte slack (the measured mean was +75 bytes a packet). None of these
+  could turn the measured shape around (more links would, if anything, suppress more asks), but a revival computes
+  the link on the whole item, claims only a written day and month in the right year, and bounds the line in bytes.
+- Haiku-graded per-set intervals in §1 are `cl8/pooled.py`'s bootstrap (`pooled.txt`); `cl4/arms.py`'s tables use
+  their own (targeted hidden −1.4, −5.8..+3.0, in `tgt-arms.txt`).
 - The intent spread is one re-draw: two samples bound the noise, they do not measure its distribution.
