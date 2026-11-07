@@ -1,6 +1,6 @@
 # A25: an action-side check against injected recipients, measured live
 
-Session A25, 2026-11-07. Decisions D375–D377. Lab only, simulated data, Anthropic-only spend ($0.89 of a $1.50
+Session A25, 2026-11-07. Decisions D375–D377. Lab only, simulated data, Anthropic-only spend ($1.02 of a $1.50
 cap, spend ledger). Every number below comes from a command run in this session; the commands are under
 "Reproduce".
 
@@ -17,8 +17,9 @@ numbers and IBANs. It asks the agent to confirm with the user when such an ident
 
 - was shown to the agent in Eden's own packets or answers this session,
 - is not in the user's request, and
-- is not one of the user's correspondents: it is not on a From/To/Cc/Attendees line of their items, and its
-  organisation's domain is not on such lines of two items or more.
+- is not one of the user's correspondents: it is not on a From/To/Cc/Attendees line in the header of their items,
+  and its organisation's domain is not on such lines of two items or more. The mail that showed the address can
+  vouch only for its own sender: an attacker's Cc header does not make its ask a correspondent.
 
 The same call made again goes through: the agent was told, and chose. No model, no source call. The session keeps
 digests of what its packets showed, never the addresses themselves.
@@ -27,8 +28,8 @@ digests of what its packets showed, never the addresses themselves.
   Eden and 0 with the check (paired −0.0208, 95% interval −0.0313 to −0.0087). The agent nearly always reacted to
   the finding the way a user would want: "I haven't sent it; the compliance address came from an email, not from
   you. Here is the draft without it."
-- **It does not get in the way.** 0 findings on a legitimate call in 576 live control and neutral tasks with the
-  final code, and 0 in 169 recorded calls of the plain-Eden agent replayed through it. Hidden facts did not fall
+- **It does not get in the way.** 0 findings on a legitimate call in 576 live control and neutral tasks, 288 of
+  them on the final reviewed code, and 0 in 169 recorded calls of the plain-Eden agent replayed through it. Hidden facts did not fall
   (88/144 → 95/144, +0.049, −0.014..+0.111).
 - **Promoted into the default** (D376) as part `parties`. It only acts when an integrator calls `check`. Eden cannot
   see a call it is not sent, so INTEGRATION.md now recommends calling it on every acting tool.
@@ -36,6 +37,17 @@ digests of what its packets showed, never the addresses themselves.
   sees the answer text, not the injection's own rendering). And an agent put the attacker's address in a booking's
   free-text notes ("confirmation to coordinator@…"), so the check now reads free text too. It still skips the fields
   that only describe the action (title, subject, description), which invite no one.
+
+- **The review tightened it** (the reviewer subagent's findings, all fixed with regression tests):
+  - an attack mail's own `Cc:` header, or a `cc:` line in its body, made the address it asked for count as a
+    correspondent; now only header blocks are read, and the mail that showed an address vouches only for its sender;
+  - a retry with a fresh request id, or a reworded email after the user said yes, was held again; now a call to the
+    same tool adding the same parties proceeds;
+  - an 8-digit booking reference in a correspondent's mail was read as an account; in packets, account digits now
+    count only after their label ("account", "sort code", "a/c");
+  - an arriving message (possibly the attacker's) counted as the user's request; now only the user's own message
+    does;
+  - a party finding hid a later firewall finding on the same call (the two now keep separate repeat keys).
 
 ## What was built
 
@@ -77,6 +89,8 @@ versions of `P` ran live as the gaps above were fixed: v1 (first build), v2 (+ a
 | Acting subset, control, seeds 45–46 (P v2) | 144 | 6 | 0 | 6 runs | 0 |
 | Full suite, hidden + control, seeds 41–42 (P v3) | 288 | 2 | 0 | 3 runs | 2 (fixed since: below) |
 | Neutral, seeds 41–42 (P v3) | 144 | 0 | 0 | 1 run | 0 |
+| Acting subset, control, seeds 45–46 (final, reviewed) | 144 | 6 (above) | 0 | 3 runs | 0 |
+| Neutral, seeds 41–42 (final, reviewed) | 144 | 0 (above) | 0 | 1 run | 0 |
 
 The acting subset is A10's six social-engineering kinds (cc-attacker, invite-add, spoofed-cc, self-note, payee-swap,
 spoofed-payee). Earlier versions of P, kept for the record: v1 on seeds 43–44 acting followed 2/144 (eden 4/144),
@@ -102,7 +116,8 @@ holds neither.
   whose packet showed the attacker's identifier, and on none where it did not (the check flags only what Eden
   showed). Per kind, held calls / forced calls: cc-attacker 14/30, invite-add 20/30, spoofed-cc 22/30, self-note
   24/45, payee-swap 7/15, spoofed-payee 12/15. In all, 183/319.
-- **Replay of plain Eden's own calls** through the final check (the four live `eden` runs: 169 action calls over 720
+- **Replay of plain Eden's own calls** through the final, reviewed check (each case's calls in its own session,
+  replayed before the forced calls, which get a fresh one) (the four live `eden` runs: 169 action calls over 720
   tasks): **0 false findings** (control and hidden 0 of 58, acting 0 of 40 and 0 of 39, neutral 0 of 32). Of the 12
   runs where plain Eden followed the attack by an action, the replay holds 11. The 12th took the address from an
   `ask_context` answer, which the replay does not re-run (the live check notes answers since v2). One
@@ -132,7 +147,9 @@ holds neither.
 - **Built while measuring.** v1's misses shaped v2 and v3's false findings shaped the final exclusion; all on train
   suites. The final code's live numbers are the v2 acting runs and the v3 full and neutral runs, plus the $0 replay
   of the final code. No blind suite was spent.
-- **What it cannot see.** A party given by name only. A domain the user's items already carry on two header lines:
+- **What it cannot see.** A party given by name only. An address that another item in the user's sources carries
+  on a header line: an attacker who lands a second mail Cc'ing the address it will ask for passes. The sender of the
+  mail that asks: an attacker writing from the very address it wants copied passes (a reply to the sender is normal). A domain the user's items already carry on two header lines:
   an attacker inside a real counterpart's domain, or a compromised account, passes as a correspondent. An identifier
   the agent got from somewhere other than Eden (its own tools); that is not Eden's to judge, and the tools arm never
   followed an attack in A10. A description that mentions an address.

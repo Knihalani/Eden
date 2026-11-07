@@ -35,7 +35,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { Agent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { AskReader, DEFAULT_CONFIG, ModelReaderMaker, QUARANTINED, type EngineConfig } from "@eden/engine";
+import { AskReader, DEFAULT_CONFIG, ModelReaderMaker, QUARANTINED, type EngineConfig, type Trace } from "@eden/engine";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, type Model } from "@eden/llm";
 import type { Injection } from "@eden/protocol";
 import {
@@ -196,29 +196,27 @@ async function runOne(job: Job, arm: string): Promise<InjectionRun> {
     hidden: null,
     costUsd: 0,
   };
-  const set = await setUpCase(
-    job,
-    useEden
-      ? {
-          config: configOf(arm),
-          ...(base === "reader" && ACCESS
-            ? {
-                reader: (now: () => number) =>
-                  new AskReader({
-                    maker: new ModelReaderMaker(
-                      labModel(ACCESS, { apiKey: "", model: "claude-haiku-5-5", timeoutMs: 60_000 }, "eden.reader"),
-                    ),
-                    budget: new Budget(),
-                    now,
-                  }),
-              }
-            : {}),
-          onTrace: (t) => {
-            run.costUsd += t.readerCostUsd ?? 0;
-          },
-        }
-      : null,
-  );
+  const edenOpts = useEden
+    ? {
+        config: configOf(arm),
+        ...(base === "reader" && ACCESS
+          ? {
+              reader: (now: () => number) =>
+                new AskReader({
+                  maker: new ModelReaderMaker(
+                    labModel(ACCESS, { apiKey: "", model: "claude-haiku-5-5", timeoutMs: 60_000 }, "eden.reader"),
+                  ),
+                  budget: new Budget(),
+                  now,
+                }),
+            }
+          : {}),
+        onTrace: (t: Trace) => {
+          run.costUsd += t.readerCostUsd ?? 0;
+        },
+      }
+    : null;
+  const set = await setUpCase(job, edenOpts);
   const { world, task, attackIds, sources, partner, scope, sessionId } = set;
   run.task = task.id;
   const ev = set.event;
@@ -240,15 +238,8 @@ async function runOne(job: Job, arm: string): Promise<InjectionRun> {
   const checks = useEden && partner !== null && (cfg.partyCheck || cfg.actionCheck);
   if (DRY) {
     if (checks) {
-      // The attack followed, forced: the action a followed attack takes, with its parties (A25's $0 recall screen).
-      const forced = forcedCalls(job.attack, world, task);
-      run.forced = { n: forced.length, held: 0 };
-      for (const call of forced) {
-        const c = await partner!.checkAction(ev({ kind: "tool_call", tool: call.tool, input: call.args }));
-        if (c.verdict === "finding") run.forced.held++;
-      }
-      // The agent's own calls from a live run of the `eden` arm, replayed: a finding on one is a false finding unless
-      // the call matched the attack.
+      // The agent's own calls from a live run of the plain arm, replayed in order: a finding on one is a false finding
+      // unless the call matched the attack.
       const calls = replayed.get(`${job.suite}|${job.seed}|${job.variant}|${task.id}|${job.attack.kind}`) ?? [];
       run.replayed = { n: calls.length, held: 0, heldAttack: 0 };
       for (const call of calls) {
@@ -259,6 +250,15 @@ async function runOne(job: Job, arm: string): Promise<InjectionRun> {
           run.replayed.held++;
           run.held.push({ ...call, reason: c.reason, attack: false });
         }
+      }
+      // The attack followed, forced: the action a followed attack takes, with its parties (A25's $0 recall screen). In
+      // a session of its own when calls were replayed: a party the check already named proceeds when added again.
+      const forced = forcedCalls(job.attack, world, task);
+      run.forced = { n: forced.length, held: 0 };
+      const own = calls.length > 0 && forced.length > 0 ? await setUpCase(job, edenOpts) : set;
+      for (const call of forced) {
+        const c = await own.partner!.checkAction(own.event({ kind: "tool_call", tool: call.tool, input: call.args }));
+        if (c.verdict === "finding") run.forced.held++;
       }
     }
     return run;

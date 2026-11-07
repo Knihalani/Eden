@@ -246,12 +246,20 @@ const fromUtf8 = new TextDecoder();
 
 /** Header lines naming who takes part in an item: a mail's From, To and Cc, an event's attendees, an owner. */
 const PARTY_LINES = /^(from|to|cc|attendees|owner|organi[sz]er):[^\n]*$/gim;
+/** A mail's From header line (`isCorrespondent`'s `except`). */
+const FROM_LINE = /^from:[^\n]*$/gim;
 /** An email address on a party header line (`isCorrespondent`); bounded repeats. */
 const ADDRESS = /[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,4}/g;
-/** The addresses on an item's party header lines and their domains ("@globex.com"), lowercased, each once. */
-function addressesOf(text: string): Set<string> {
+/**
+ * The addresses on an item's party header lines and their domains ("@globex.com"), lowercased, each once. Only the
+ * header block (the lines before the first blank line) is read: a "cc: x@…" line in a mail's body is the sender's
+ * text, not a header (A25's review).
+ */
+function addressesOf(text: string, lines = PARTY_LINES): Set<string> {
   const seen = new Set<string>();
-  for (const line of text.slice(0, 4_000).match(PARTY_LINES) ?? []) {
+  const head = text.slice(0, 4_000);
+  const blank = head.search(/\n[ \t]*\n/);
+  for (const line of (blank >= 0 ? head.slice(0, blank) : head).match(lines) ?? []) {
     for (const m of line.matchAll(ADDRESS)) {
       const a = m[0].toLowerCase();
       seen.add(a);
@@ -1258,10 +1266,11 @@ export class ItemCache {
   /**
    * `partyCheck` (D375): whether `address` (an email address) is one of the user's correspondents: on a party header
    * line (a mail's From, To or Cc, an event's attendees, an owner) of at least one cached item, or at an organisation
-   * whose domain is on such lines of two items or more. An address only an item's body names, at a domain only one
+   * whose domain is on such lines of two items or more; `except` (the item that showed it) counts only for its own
+   * From line. Only an item's header block is read. An address only an item's body names, at a domain only one other
    * item's headers carry, is not. Case-insensitive. The first call after a change reads every item's header lines.
    */
-  isCorrespondent(scope: Scope, address: string): boolean {
+  isCorrespondent(scope: Scope, address: string, except?: string): boolean {
     const u = this.peek(scope);
     if (!u) return false;
     if (u.addresses === undefined) {
@@ -1272,12 +1281,18 @@ export class ItemCache {
       u.addresses = found;
     }
     const want = address.trim().toLowerCase();
-    if ((u.addresses.get(want) ?? 0) > 0) return true;
-    // An organisation the user corresponds with: its domain on the header lines of two items or more ("invoices@" a
-    // client whose people write to the user). A free-mail domain names no organisation (`orgLabel`), and one item
-    // alone is not enough: an attacker's own mail puts its domain on one.
+    // `except`: the item that showed the address vouches for its own sender (a reply goes there) and for nothing
+    // else on its header lines (an attacker's mail can carry the address it asks for on its Cc line).
+    const own = except === undefined ? undefined : u.items.get(except)?.item;
+    const mine = own ? addressesOf(own.text) : new Set<string>();
+    if (own) for (const a of addressesOf(own.text, FROM_LINE)) mine.delete(a);
+    const count = (k: string) => (u.addresses!.get(k) ?? 0) - (mine.has(k) ? 1 : 0);
+    if (count(want) > 0) return true;
+    // An organisation the user corresponds with: its domain on the header lines of two other items or more
+    // ("invoices@" a client whose people write to the user). A free-mail domain names no organisation (`orgLabel`),
+    // and one item alone is not enough: an attacker's own mail puts its domain on one.
     const domain = want.slice(want.indexOf("@"));
-    return want.includes("@") && orgLabel(domain.slice(1)) !== null && (u.addresses.get(domain) ?? 0) >= 2;
+    return want.includes("@") && orgLabel(domain.slice(1)) !== null && count(domain) >= 2;
   }
 
   isPerson(scope: Scope, name: string): boolean {

@@ -1462,7 +1462,9 @@ export class ContextPartner {
       const asked = [...s.window].reverse().find((w) => w.startsWith("user_message: ") || w.startsWith("external: "));
       const request = asked ? asked.slice(asked.indexOf(": ") + 2) : "";
       if (this.config.partyCheck) {
-        const found = this.partyFinding(s, event, key, request);
+        // The user's own words only: an arriving message (`external:`) can be the attacker's mail naming the address.
+        const said = [...s.window].reverse().find((w) => w.startsWith("user_message: "));
+        const found = this.partyFinding(s, event, said ? said.slice("user_message: ".length) : "");
         if (found) {
           const latencyMs = Math.round(performance.now() - t0);
           this.trace(s, {
@@ -1604,10 +1606,11 @@ export class ContextPartner {
   /**
    * `partyCheck` (D375): a finding when the call adds a party (`callParties`) that this session's packets showed
    * (`Session.packetParties`), that the request does not name, and that is no correspondent of the user's
-   * (`ItemCache.isCorrespondent`, addresses only: an account number has no header line to be on). Null otherwise.
-   * The call's key is remembered, so the same call made again proceeds.
+   * (`ItemCache.isCorrespondent`, addresses only, the item that showed it never vouching for it: an account number
+   * has no header line to be on). Null otherwise. The tool and the flagged parties are remembered, so a call to the
+   * same tool adding them again proceeds. `request` is the session's latest user message.
    */
-  private partyFinding(s: Session, event: AgentEvent & { kind: "tool_call" }, key: string, request: string) {
+  private partyFinding(s: Session, event: AgentEvent & { kind: "tool_call" }, request: string) {
     const shown = s.packetParties;
     if (!shown || shown.size === 0) return null;
     const flagged: Party[] = [];
@@ -1616,11 +1619,22 @@ export class ContextPartner {
       const from = shown.get(partyKey(p.norm));
       if (from === undefined) continue;
       if (namesParty(request, p)) continue;
-      if (p.kind === "address" && this.deps.cache.isCorrespondent(s.scope, p.norm)) continue;
+      if (p.kind === "address" && this.deps.cache.isCorrespondent(s.scope, p.norm, from || undefined)) continue;
       flagged.push(p);
       if (from) ids.add(from);
     }
     if (flagged.length === 0) return null;
+    // The agent was told about these parties for this tool: a call adding them again proceeds, whatever else changed
+    // in it (a fresh request id, a reworded body after the user said yes). A key of its own, so a repeat after a party
+    // finding still meets the firewall (`actionCheck`), which the exact-arguments key would skip.
+    const informed = `party\u0000${event.tool}\u0000${flagged
+      .map((p) => partyKey(p.norm))
+      .sort()
+      .join(",")}`;
+    const checked = (s.checked ??= new Set());
+    if (checked.has(informed)) return null;
+    checked.add(informed);
+    while (checked.size > MAX_CHECKED) checked.delete(checked.values().next().value as string);
     const items = [...ids]
       .map((id) => this.deps.cache.get(s.scope, id, this.now()))
       .filter((i): i is ContextItem => i !== null);
@@ -1632,9 +1646,6 @@ export class ContextPartner {
         citations.map((c) => c.title),
       ),
     );
-    const checked = (s.checked ??= new Set());
-    checked.add(key);
-    while (checked.size > MAX_CHECKED) checked.delete(checked.values().next().value as string);
     const finding: Injection = {
       ...s.scope,
       id: newId("inj", this.now()),
@@ -1655,7 +1666,7 @@ export class ContextPartner {
    * the agent receives, not its injection's own rendering (`deliver`'s `shown`), so `ask` notes it itself.
    */
   private notePacketParties(s: Session, text: string, citations: readonly Citation[]): void {
-    const found = partiesIn(text);
+    const found = partiesIn(text, true);
     if (found.length === 0) return;
     const map = (s.packetParties ??= new Map());
     const cited = citations
