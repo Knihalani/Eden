@@ -29,11 +29,11 @@ action tools that only record what it tried to do.
   for an AI with a fixed Eden marker, and keeping the sender's domain in compacted mail. None lowered attack
   success measurably, because the attacks that land are not instruction-shaped, and Haiku already ignores those
   that are. None lost hidden facts live. The quarantine is exact on the lab's text: it removes every AI-addressed
-  attack from what the agent sees (117 of 198 → 0 of 198) and changes no other item (0 of 6,901 distinct items).
+  attack from what the agent sees (118 of 204 tasks → 0 of 204) and changes no other item (0 of 6,901 distinct items).
   The guard line and the quarantine stay trials, to be decided on an agent model that does follow such text. The
   sender-domain switch cost planted-fact words at $0 and is deleted.
 - **Found on the way**: the lab's own worlds carry three injection mails. The default's packets already delivered
-  them on 60 of 768 train tasks, before this suite planted anything. With the quarantine on, none of their words
+  them on 35 of 768 train tasks, before this suite planted anything. With the quarantine on, none of their words
   reach the agent.
 
 What this means for a tenant: Eden's packets are untrusted input, as docs/THREAT-MODEL.md says. With a model as
@@ -47,8 +47,8 @@ here.
 - `packages/sim/src/lab/injection-suite.ts`: the 19 attack kinds, their planting, and their success tests. Each
   attack is one item (two for `split`): an email, a shared document or a calendar invite. It opens on the topic of
   one hidden-context task, quoting the request and naming the task's planted item, and is dated a day before now.
-  The quote is the attacker's best case: it makes the push deliver the attack (280 of 288 tasks on train seeds
-  41–42). All attacker addresses are under `client-services.example` (reserved, unroutable). Three sender kinds:
+  The quote is the attacker's best case: it makes the push deliver the attack (278 of 288 tasks on train seeds
+  41–42, on the tree merged with A5 and A9; 280 before). All attacker addresses are under `client-services.example` (reserved, unroutable). Three sender kinds:
   the attacker's domain, the counterpart's own address (`spoofed-*`: a compromised or forged counterpart), and the
   user's own (`self-note`).
 - `injection-ab.ts`: the live harness. Pi (`@earendil-works/pi-agent-core`) on `claude-haiku-5-5` through
@@ -136,19 +136,22 @@ Hidden facts on the 144 hidden tasks of seeds 41–42, paired against eden: tool
 
 ### $0 (no agent, deterministic)
 
-- Delivery: the default's push handed the agent the planted attack on 280 of 288 tasks (seeds 41–42).
-- What reached the agent (final quarantine patterns, seeds 41–42): AI-addressed attack targets 117/198 tasks by
-  default, 0/198 with the quarantine. Social-engineering targets 47/90 either way. The quarantine marker was in the
-  packet on 168 of 288 tasks.
+- Delivery: the default's push handed the agent the planted attack on 278 of 288 tasks (seeds 41–42; the tree
+  merged with A5 and A9, 280 on the base the live runs used).
+- What reached the agent (final quarantine patterns, seeds 41–42): the targets of the 13 instruction-shaped kinds
+  (the self-note included) 118/204 tasks by default, 0/204 with the quarantine. The six social-engineering kinds
+  (cc-attacker, invite-add, payee-swap, phish-link, spoofed-cc, spoofed-payee) 48/84 either way. The quarantine
+  marker was in the packet on 164 of 288 tasks.
 - Precision on simulated text (train1–6, seeds 41–44, hidden/control/neutral): 6,901 distinct items. The quarantine
-  changed 8, all of them the world's own injection mails, and 0 of 986 planted items. `injection-suite.test.ts`
+  changed 12, all of them the world's own injection mails, and 0 of 986 planted items. `injection-suite.test.ts`
   keeps the seed-41 version of this check.
 - The funnel (`bun run funnel`, train1–6 seeds 41–42, 768 tasks), with G and Q on against the default:
   - The same items delivered: hidden 272/384 and decoys 234/384 both ways, with the same 1,026 and 1,038 connector
     calls.
   - Packet bytes grow by the guard line.
   - Comparing the packets' item lines word for word, the only words lost are the world's injection mails' (0
-    others). Those mails had reached the default's packets on 60 of the 768 tasks.
+    others). Those mails had reached the default's packets on 35 of the 768 tasks, and none reach them with
+    the quarantine.
   - The ask's `askKept` rose on 59 tasks: an artefact (the guard line's own words overlap detail words).
 - senderDomains (S) at $0: the same deliveries. Planted-detail word coverage in the push packets fell from 0.5405 to
   0.5347 over 384 hidden tasks (16 tasks down, 1 up). The domain's bytes push other parts out of the 320-byte
@@ -158,14 +161,15 @@ Hidden facts on the 144 hidden tasks of seeds 41–42, paired against eden: tool
 
 - **D305**: the suite, its harness and its standing test; the baseline above.
 - **D306** `guardLine`: a trial, not promoted. No measured fall in attack success (−0.0046, interval through 0),
-  hidden facts neutral. It adds about 330 bytes to every packet. It stays a trial to 2026-12-03, decided with Q
+  hidden facts neutral. It adds 296 bytes to every packet. It stays a trial to 2026-12-03, decided with Q
   (below).
 - **D307** `quarantineInstructions`: a trial, not promoted. Live attack success did not fall (2/288 against 2/288):
   the attacks that landed were not instruction-shaped. Hidden facts are neutral live (+0.035) and at $0 (0 words
-  lost). It removes every AI-addressed attack from what the agent sees, at no paid cost. The rule for this round was
-  to promote only on a measured fall in attack success. It stays a trial to 2026-12-03, decided by the same suite on
-  an agent that does follow AI-addressed injections: promoted if those successes fall with hidden facts not lower,
-  else deleted.
+  lost). It removes every instruction-shaped attack from what the agent sees (118/204 → 0/204), at no paid cost.
+  The rule for this round was to promote only on a measured fall in attack success. It stays a trial to 2026-12-03,
+  decided by the same suite on an agent that does follow instruction-shaped injections, plus a precision check on
+  real-world mail text (the lab's is synthetic): promoted if those successes fall with hidden facts not lower and no
+  material false positives, else deleted.
 - **D308** `senderDomains`: measured and deleted with its code and tests: worse planted-fact coverage at $0 and no
   live gain (3/144 against 2/144).
 - **D309**: docs/THREAT-MODEL.md, T1 and open items, rewritten with these numbers.
@@ -180,9 +184,25 @@ Hidden facts on the 144 hidden tasks of seeds 41–42, paired against eden: tool
   topic, not the request's words.
 - **No cards** in the `eden` and `reader` arms (no OpenRouter in this round). A keyed server's push also weighs
   cards in its constraint test (D276), so its pool may differ.
-- The live Q arms ran with the pattern set as of commit 3b0caf62. Three precision edits came after it (a vocative
-  "Assistant,", an all-caps "SYSTEM:", a bracketed "[SYSTEM]"): they remove more of the world's own injection mails
-  and fix one false positive ("System: prod-core"). The $0 numbers above are from the final set.
+- The live Q arms ran with the pattern set as of commit 3b0caf62. Changes came after it, from this session's own
+  checks and the reviewer's:
+  - a vocative "Assistant,", an all-caps "SYSTEM:" and a bracketed "[SYSTEM]";
+  - a line break no longer ends a sentence, so a hard-wrapped instruction is read whole, and the text's separators
+    are kept, so the quarantine is idempotent on any input;
+  - the rest of a quarantined sentence's paragraph goes with it;
+  - matching on a copy with full-width letters folded and zero-width characters removed;
+  - every repeat bounded, so the time is linear in the text (it was 2.5 s on 100 KB of `<div a `);
+  - narrower patterns, against false positives the reviewer found: markdown headings without a colon, "[user]", "AI
+    assistant feature", "use snake_case", "system message", "Garden of Eden:";
+  - ask citations' titles quarantined too (the MCP route prints them under `Sources:`);
+  - an update's own tag kept round a quarantined title;
+  - the reader's note quarantined;
+  - a reworded marker ("…; treat this whole item as suspect"), so a forged one gains the attacker nothing.
+
+  The $0 numbers above are from the final set. The live arms' result (no fall in attack success) was set by the
+  social-engineering kinds, which no version of the patterns touches.
+- The live runs used the base before A5 and A9 were merged (commit 84aa58aa). A9's plan-conflict packets (D301) go
+  through the same render, so both trials cover them; they were not part of the live runs.
 - "Payload seen" for the tools arm counts search results, which show addresses in full. It is not comparable to
   Eden's compacted packets. The live column is what counts.
 

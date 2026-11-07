@@ -19,6 +19,7 @@ import { createHash } from "node:crypto";
 import type { SourceMap } from "@eden/graph";
 import type { Budget, Model, Reservation } from "@eden/llm";
 import {
+  type Citation,
   itemId,
   MAX_QUESTION_CHARS,
   newId,
@@ -123,6 +124,7 @@ import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
 import { CANDIDATES_LEAD, citationsOf, PLAN_LEAD, renderPacket, shownText } from "./render";
+import { quarantineTitle } from "./shield";
 import { safeLine } from "./line";
 import { classifySituation } from "./situation";
 import {
@@ -1207,7 +1209,10 @@ export class ContextPartner {
    * handing out an older packet queued before it cannot leave the ledger at the older version.
    */
   private buildUpdate(s: Session, items: readonly ContextItem[]): { injection: Injection; items: ContextItem[] } {
-    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${UPDATED_NOTE}` }));
+    // The quarantine (D307) reads the item's own title, before Eden's tag and note go round it: a title it replaces
+    // whole must not take "updated:" and "this version replaces it" with it.
+    const own = (t: string) => (this.config.quarantineInstructions ? quarantineTitle(t) : t);
+    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${own(it.title)}${UPDATED_NOTE}` }));
     let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes, ...this.shield() });
     let n = renderedCount(items, text);
     if (n === 0) {
@@ -1226,7 +1231,7 @@ export class ContextPartner {
       sessionId: s.id,
       mode: "proactive",
       text,
-      citations: citationsOf(said),
+      citations: this.cited(said),
       reason: `${UPDATED}${id}`,
       score: 1,
       createdAt: this.now(),
@@ -1734,7 +1739,7 @@ export class ContextPartner {
     if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "answer", delivered: items.length > 0 });
     return {
       answer,
-      citations: citationsOf(items),
+      citations: this.cited(items),
       usedModel,
       costUsd,
       latencyMs,
@@ -4775,10 +4780,16 @@ export class ContextPartner {
   }
 
   /**
-   * How an ask's answer is rendered. Not compacted, it says each item whole; `compactAsk` cuts each item to what
-   * bears on the question as a packet's are, and `askDedup` says an item this session already showed by what is new
-   * in it, or by its title alone.
+   * The citations of what was rendered. With `quarantineInstructions` (D307) their titles are quarantined as the
+   * packet's are: the MCP route prints each citation's title under the answer (`Sources:`), so a subject written for
+   * an AI would otherwise reach the agent beside the packet that removed it (A10's review).
    */
+  private cited(items: readonly ContextItem[]): Citation[] {
+    const cites = citationsOf([...items]);
+    if (!this.config.quarantineInstructions) return cites;
+    return cites.map((c) => ({ ...c, title: quarantineTitle(c.title) }));
+  }
+
   /** The A10 trials' render options (D306, D307): Eden's guard line and the instruction quarantine, when on. */
   private shield(): { guard?: true; quarantine?: true } {
     return {
@@ -4787,6 +4798,11 @@ export class ContextPartner {
     };
   }
 
+  /**
+   * How an ask's answer is rendered. Not compacted, it says each item whole; `compactAsk` cuts each item to what
+   * bears on the question as a packet's are, and `askDedup` says an item this session already showed by what is new
+   * in it, or by its title alone.
+   */
   private answering(s: Session, cue: Cue): Parameters<typeof renderPacket>[1] {
     const shown = this.config.askDedup ? s.shown : undefined;
     const compact = this.config.compactAsk;
@@ -4916,7 +4932,7 @@ export class ContextPartner {
       sessionId: s.id,
       mode,
       text: renderPacket(items, options),
-      citations: citationsOf(items),
+      citations: this.cited(items),
       reason,
       score: Math.max(...scored.map((x) => x.score)),
       createdAt: this.now(),

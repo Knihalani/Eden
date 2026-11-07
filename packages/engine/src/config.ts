@@ -22,6 +22,7 @@ export interface EngineConfig {
   /** The fallback takes two of the request's terms, not `fallbackMatchedTerms`, when the request asks or acts. */
   fallbackAsks: boolean;
   maxItemsPerInjection: number;
+  /** A packet's size cap; with `guardLine` (D306) a packet may be `GUARD_LINE`'s 296 bytes over it. */
   maxInjectionBytes: number;
   /**
    * A cached item fetched or seen in a lookup longer ago than this is never delivered from the fast path: its cue goes

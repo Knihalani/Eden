@@ -7,7 +7,8 @@ import { CORE_CONFIG } from "./parts";
 // adds, deletes with their notices, session ends, forgets and clock jumps over 2 tenants × 2 users × 2 sessions,
 // with source calls answering after seeded microtask or timer turns. After every op and at the end it checks
 // isolation (D9; packets, answers, citations and `explain`'s traces), redaction (D10), the data envelope (D11),
-// settled deletions (D126), closed sessions, inertness of injection payloads (A10, `hostile` worlds), fail-open and not-twice (D13). Each failure prints its seed and op log.
+// settled deletions (D126), closed sessions, inertness of injection payloads (A10, `hostile` worlds), fail-open
+// and not-twice (D13). Each failure prints its seed and op log.
 //
 //   FUZZ_SEEDS=2000 FUZZ_OPS=60 bun test ./packages/engine/src/fuzz.test.ts    # scale up (FUZZ_FROM: first seed)
 //   FUZZ_MINIMIZE=1 …                                                           # shrink a failing seed's plan

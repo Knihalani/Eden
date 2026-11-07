@@ -1,7 +1,7 @@
 import { truncateUtf8, utf8Length } from "@eden/primitives";
 import type { Citation, ContextItem } from "@eden/protocol";
 import { safeBlock, safeLine } from "./line";
-import { GUARD_LINE, quarantineItem } from "./shield";
+import { GUARD_LINE, quarantine, quarantineItem } from "./shield";
 import { isStopword } from "./text";
 
 /**
@@ -97,7 +97,9 @@ export function renderPacket(
   for (const item of items) {
     const room = maxBytes - bytes - 1;
     if (room < 40) break;
-    const note = options.note?.(item);
+    // The reader's bearing is model text read from the item (bounded by `parseReader`): quarantined like it (D307).
+    const read = options.note?.(item);
+    const note = read && options.quarantine ? quarantine(read) : read;
     const said = note ? `${READER_TAG}${safeLine(note).replace(/\|/g, "/")} | ` : "";
     // One item, one line (D11, D221): `safeLine` removes every kind of line break, control and bidi character, so
     // source text cannot forge another item's `- [source]` line inside the envelope.
