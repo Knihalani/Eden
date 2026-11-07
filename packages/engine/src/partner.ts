@@ -53,7 +53,7 @@ import {
 } from "@eden/sources";
 import { IntentPatterns, predict, PREDICT_NAMES } from "./anticipate";
 import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache, type Sketch } from "./cache";
-import { maxAgeMs, SyncManager } from "./sync";
+import { SyncManager } from "./sync";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import {
@@ -633,8 +633,6 @@ export class ContextPartner {
             demandTimeoutMs: c.sourceTimeoutMs,
             push: c.syncPush,
             pushMaxStaleMs: c.syncPushMaxStaleMs,
-            coalesceMs: c.syncCoalesceMs,
-            maxAgeMs: maxAgeMs(c.syncMaxAgeDays, c.syncMaxAgeBySource),
           },
         )
       : null;

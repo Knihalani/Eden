@@ -134,3 +134,4 @@ D112: the lab's presets are only `default`, `minus-<part>` and `minus-all` (`pac
 
 Not in this directory: [../RESEARCH.md](../RESEARCH.md) (the Meta PMA paper and open questions),
 [../plans/](../plans/) (the query-planner plan and `next.md`), [../LAB.md](../LAB.md) (how to run the lab).
+| [fix-s4-connectors.md](fix-s4-connectors.md) | 2026-11-07 | D210–D214 | RealUse-1 weak points 5, 8, 9 (session S4): payload notices the documented default via `client.sourceChanged(id, {items, removed})` (sim: 6.87 → 5.28 connector calls a session, re-reads 575 → 0); an ask leaves out a doubted citation no re-read confirmed (deleted cited under signals 1 → 0); a connector 429 is `throttled` / "rate-limited" (1,064 of 1,064 rate-limited asks say so); trials `syncCoalesceMs` and per-source recency caps measured on funnel, quality-cli and Pi heldout14 (seeds 41–42, $0.48) and deleted |
