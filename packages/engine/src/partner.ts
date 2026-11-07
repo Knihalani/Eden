@@ -674,6 +674,9 @@ export class ContextPartner {
           },
         )
       : null;
+    // D370: with `syncIngestTurns`, the card drain gathers what waits for its turn, so its batches follow the items.
+    const sync = this.sync;
+    if (sync && c.syncIngestTurns && c.cards && deps.cards) deps.cards.gather = () => sync.pending();
   }
 
   /**

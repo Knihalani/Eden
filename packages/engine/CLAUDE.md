@@ -303,10 +303,17 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   derived and rebuilt), and `cache-freeze.test.ts`'s twin snapshot extended to read it. A new entry point that serves
   a user awaits `cache.ready(scope)` first, as `observe`, `ask` and `checkAction` do, or its first read thaws
   synchronously (~110-190 ms at 3,000 items) with every other request waiting. Bench: `bench/users.bench.ts`;
-  `heapUsed` alone misses typed arrays (`external`): use both, and RSS, for memory per user.
-- **`syncIngestTurns` (D328, trial, off).** A background sync page waits its turn (one per event-loop turn) before it
-  is redacted and stored: a cold-start storm no longer stalls every request (`bench/storm.bench.ts`), but the card
-  drain then runs on smaller batches (funnel card calls 428 to 549, the same items carded), so it is not promoted.
+  on Bun 1.4 `heapUsed` already counts typed arrays' stores and `external` counts them again (D372): report each
+  on its own, and RSS, never their sum.
+- **`syncIngestTurns` (D328, on in the default since D370).** A background sync page waits its turn (one per
+  event-loop turn) before it is redacted and stored, so a cold-start storm no longer stalls every request
+  (`bench/storm.bench.ts`). The card drain gathers what still waits its turn before calling (`CardEnricher.gather`,
+  wired by the partner, at most `GATHER_MS` 250 ms): without it the drain ran on one page at a time (funnel card calls
+  446 to 567); with it 376, the same items carded. A new await between a page's turn and its store, or in the drain's
+  no-gather path, moves those batches: re-run the funnel's `merged cards use` after touching either.
+- **The sync's per-source ids are an `IdSet` (D371, `@eden/primitives`).** Typed arrays, not one string per id: they
+  outlive a frozen user's cache. `has` is ~90 ns and iterating 3,000 ~0.2 ms (against ~6 ns and ~5 µs for a `Set`):
+  keep iteration off per-item paths.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

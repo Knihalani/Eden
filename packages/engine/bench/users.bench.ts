@@ -16,7 +16,8 @@
  * 3. thaw: each user's first read (a cache search) after the freeze, timed: p50, p99, max ms a user.
  * 4. events: one `observe` per user (a fresh session each) on the thawed caches, timed (the fast path, `waitMs` 0).
  *
- * Run: `bun packages/engine/bench/users.bench.ts [users=1000] [itemsPerUser=500] [--world] [--no-freeze] [--waves=K]`.
+ * Run: `bun packages/engine/bench/users.bench.ts [users=1000] [itemsPerUser=500] [--world] [--no-freeze] [--waves=K]
+ * [--config=<EngineConfig JSON>]`.
  * `--waves=K`: phase 1 brings the users in K waves, earlier ones frozen (unless `--no-freeze`) before the next: its
  * memory line is then a steady state with 1/K of the users active; RSS there is what sizes a machine.
  * `--world` takes item text from the sim world (as `ingest.bench.ts --world`). No model, no network.
@@ -29,12 +30,17 @@ import { SourceMap } from "@eden/graph";
 import { Budget, DEFAULT_LIMITS } from "@eden/llm";
 import type { ListPage, Source } from "@eden/sources";
 import { ItemCache } from "../src/cache";
+import type { EngineConfig } from "../src/config";
 import { ContextPartner } from "../src/partner";
 import { termIds } from "../src/text";
 import { buildWorkload } from "./workload";
 
 const WORLD = process.argv.includes("--world");
 const NO_FREEZE = process.argv.includes("--no-freeze");
+/** `--config=<EngineConfig JSON>`: settings over the default (as `storm.bench.ts`), e.g. a switch's off arm. */
+const CONFIG = JSON.parse(
+  process.argv.find((a) => a.startsWith("--config="))?.slice(9) ?? "{}",
+) as Partial<EngineConfig>;
 const WAVES = Number(process.argv.find((a) => a.startsWith("--waves="))?.slice(8) ?? 1);
 const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const USERS = Number(args[0] ?? 1_000);
@@ -63,8 +69,9 @@ class ListSource implements Source {
 }
 
 /**
- * Memory after a full GC: the JS heap plus what it holds outside itself (`external`: typed arrays' stores, which are
- * most of an index and every packed text, and which `heapUsed` leaves out), and RSS.
+ * Memory after a full GC: `heapUsed`, `external` and RSS, each on its own. On Bun 1.4 `heapUsed` already counts typed
+ * arrays' and Buffers' stores (JSC's extra memory), and `external` counts them again: their sum, which A14 reported,
+ * counts every typed array twice (D372). RSS is what sizes a machine.
  */
 const mem = async () => {
   // RSS comes down some seconds after a storm's garbage is collected (the allocator returns pages lazily): read it
@@ -79,7 +86,7 @@ const mem = async () => {
   }
   Bun.gc(true);
   const m = process.memoryUsage();
-  return { heap: m.heapUsed + m.external, rss: Math.min(rss, m.rss) };
+  return { heap: m.heapUsed, ext: m.external, rss: Math.min(rss, m.rss) };
 };
 
 async function pool(): Promise<ContextItem[]> {
@@ -145,7 +152,7 @@ const partner = new ContextPartner({
   budget: new Budget(DEFAULT_LIMITS),
   model: null,
   now,
-  config: { syncMaxItems: PER_USER, syncMaxUsersPerTenant: USERS + 1, syncCallsPerMin: 1e7 },
+  config: { ...CONFIG, syncMaxItems: PER_USER, syncMaxUsersPerTenant: USERS + 1, syncCallsPerMin: 1e7 },
 });
 const sync = partner.sync!;
 const synced = () => users.reduce((s, { scope }) => s + cache.syncedCount(scope), 0);
@@ -170,15 +177,16 @@ const stormMs = performance.now() - t0;
 const cpu = process.cpuUsage(cpu0);
 for (const { sources } of users) for (const s of sources) s.items = [];
 const m2 = await mem();
-type Mem = { heap: number; rss: number };
+type Mem = { heap: number; ext: number; rss: number };
 const perUser = (a: Mem, b: Mem) => ({
   heapMB: (a.heap - b.heap) / USERS / MB,
+  extMB: (a.ext - b.ext) / USERS / MB,
   rssMB: (a.rss - b.rss) / USERS / MB,
 });
 const live = perUser(m2, m0);
 
 // 2. Freeze: ticks with no use.
-let frozen = { heapMB: Number.NaN, rssMB: Number.NaN };
+let frozen = { heapMB: Number.NaN, extMB: Number.NaN, rssMB: Number.NaN };
 let freezeMs = 0;
 let blobBytes = 0;
 if (!NO_FREEZE) {
@@ -268,13 +276,13 @@ console.log(
 );
 console.log(
   `${WAVES > 1 ? `after ${WAVES} waves (${NO_FREEZE ? "none frozen" : "earlier waves frozen"})` : "synced, live"}: ` +
-    `${f(live.heapMB)} MB heap/user (${f((live.heapMB * MB) / PER_USER, 0)} B/item), ` +
-    `${f(live.rssMB)} MB RSS/user`,
+    `${f(live.heapMB)} MB heapUsed/user (${f((live.heapMB * MB) / PER_USER, 0)} B/item), ` +
+    `${f(live.extMB)} MB external/user (counted in heapUsed too), ${f(live.rssMB)} MB RSS/user`,
 );
 if (!NO_FREEZE) {
   console.log(
-    `frozen: ${f(frozen.heapMB)} MB heap/user (${f((frozen.heapMB * MB) / PER_USER, 0)} B/item), ` +
-      `${f(frozen.rssMB)} MB RSS/user; ${f(live.heapMB / frozen.heapMB)}x smaller heap; ` +
+    `frozen: ${f(frozen.heapMB)} MB heapUsed/user (${f((frozen.heapMB * MB) / PER_USER, 0)} B/item), ` +
+      `${f(frozen.extMB)} MB external/user, ${f(frozen.rssMB)} MB RSS/user; ${f(live.heapMB / frozen.heapMB)}x smaller heap; ` +
       `freeze ${f(freezeMs / USERS, 2)} ms/user; blobs ${f(blobBytes / n, 0)} B/item, the rest ` +
       `${f((frozen.heapMB * MB - blobBytes / USERS) / 1024, 1)} KB/user`,
   );

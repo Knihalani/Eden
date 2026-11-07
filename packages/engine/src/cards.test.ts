@@ -245,6 +245,39 @@ describe("the enricher (CardEnricher)", () => {
     expect(e.cardsOf(scope, ["chat:other"], NOW + 1).size).toBe(1);
   });
 
+  test("gather (D370): stores still waiting their turn fill a batch before the drain calls", async () => {
+    // Ten pages of three items, one stored per turn of the event loop, as `syncIngestTurns` stores them.
+    const run = async (gather: boolean) => {
+      const maker = new TableMaker(table);
+      const e = new CardEnricher({ maker, budget: new Budget(), now: () => NOW });
+      let left = 10;
+      let tail: Promise<void> = Promise.resolve();
+      if (gather) e.gather = () => (left > 0 ? tail : null);
+      for (let p = 0; p < 10; p++) {
+        tail = tail.then(
+          () =>
+            new Promise<void>((r) =>
+              setImmediate(() => {
+                e.enqueue(scope, [frozen(3 * p), frozen(3 * p + 1), frozen(3 * p + 2)]);
+                left--;
+                r();
+              }),
+            ),
+        );
+      }
+      await tail;
+      await e.idle();
+      return { calls: maker.calls, carded: e.stats.carded };
+    };
+    const without = await run(false);
+    const withGather = await run(true);
+    expect(withGather.carded).toBe(30);
+    expect(without.carded).toBe(30);
+    // Without it, the drain takes the first page alone, then whatever landed while that call ran.
+    expect(without.calls.length).toBeGreaterThan(3);
+    expect(withGather.calls).toEqual([10, 10, 10]);
+  });
+
   test("a card is used only by requests that arrive after it was made", async () => {
     const e = new CardEnricher({ maker: new TableMaker(table), budget: new Budget(), now: () => NOW });
     e.enqueue(scope, [frozen(0)]);

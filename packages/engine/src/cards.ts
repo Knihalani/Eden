@@ -609,6 +609,12 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   leanDays: 0,
 };
 
+/**
+ * How long (ms, wall time) a drain with less than a batch queued waits for stores still waiting their turn
+ * (`CardEnricher.gather`, D370). A page is a few ms to ~15 ms of work, so this covers a few dozen pages.
+ */
+const GATHER_MS = 250;
+
 /** The queue bound with `intent` (`CardEnricher.intend`), unless one was given. */
 const INTENT_MAX_QUEUE = 2_000;
 
@@ -734,6 +740,13 @@ export class CardEnricher {
    * The partner sets it from its cache; 0 (UTC) when unset.
    */
   offsetOf: ((scope: Scope) => number) | null = null;
+  /**
+   * `syncIngestTurns` (D370): the stores still waiting their turn, or null when none waits. The partner sets it from
+   * its sync. A drain with less than a batch queued waits on it (for at most `GATHER_MS`) before calling the model,
+   * so a batch is what the pages that arrived together hold, as when they were stored back to back: the card calls
+   * follow the items, not the timing of the stores.
+   */
+  gather: (() => Promise<void> | null) | null = null;
 
   constructor(
     private readonly deps: { maker: CardMaker; budget: Budget; now: () => number },
@@ -925,6 +938,12 @@ export class CardEnricher {
     // Background work: let the caller's turn finish first.
     await Promise.resolve();
     while (u.queue.length > 0 && !u.abort.signal.aborted) {
+      // No await unless stores wait their turn: an extra hop here moves the default's cards (CL3).
+      const waiting = this.gather !== null && u.queue.length < this.limits.batch ? this.gather() : null;
+      if (waiting) {
+        await this.gathered(u, waiting);
+        if (u.abort.signal.aborted) return;
+      }
       // With `sentenceReuse`: an item whose constraint sentences a card already says takes that card; one whose
       // sentences another item of this batch says waits for that item's card (`followers`), with no call of its own.
       const batch: Queued[] = [];
@@ -1033,6 +1052,31 @@ export class CardEnricher {
         this.stats.failures++;
         if (u.abort.signal.aborted) return;
       }
+    }
+  }
+
+  /**
+   * Waits while stores are queued for their turn (`gather`) and the user has less than a batch waiting, up to
+   * `GATHER_MS` of wall time: a storm's queue of turns does not empty for minutes, and cards must still flow.
+   */
+  private async gathered(u: UserCards, first: Promise<void>): Promise<void> {
+    const until = performance.now() + GATHER_MS;
+    let waiting: Promise<void> | null = first;
+    // The queue of turns is the process's, not the user's: in a storm its tail can be seconds away, so the wait is
+    // cut at `until` whatever it is waiting on.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<"late">((r) => {
+      timer = setTimeout(() => r("late"), GATHER_MS);
+      timer.unref?.();
+    });
+    try {
+      while (waiting) {
+        if ((await Promise.race([waiting, deadline])) === "late") return;
+        if (u.queue.length >= this.limits.batch || u.abort.signal.aborted || performance.now() >= until) return;
+        waiting = this.gather?.() ?? null;
+      }
+    } finally {
+      clearTimeout(timer);
     }
   }
 

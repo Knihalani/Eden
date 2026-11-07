@@ -52,6 +52,7 @@ export const PARTS = {
     readerVerifyAfter: false,
     syncPollWidth: 0,
     syncBackfillLanes: 1,
+    syncIngestTurns: false,
     syncLocalComplete: false,
     syncKeepCut: false,
     syncEngagedDeep: false,
