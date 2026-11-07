@@ -305,6 +305,14 @@ export interface EngineConfig {
    * tick. At 1,000 sources the daily sweep was ~1,100 listing calls a user a day (D324).
    */
   syncUnusedSweepMs: number;
+  /**
+   * Trial (D390, 0: off; owner A28, ends 2026-12-07). With `sync` and `syncOnDemand`, over `syncPollWidth` sources:
+   * of the warm copies the user's cap cut (D264) of sources the user does not use (D320), a lookup polls and searches
+   * live at most this many, those with the most routing evidence (name mentions + `routeLocalHits` + `routeSketch`),
+   * and only with some; the others answer from their partial copy, as before D264. At 1,000 sources the prior's draw
+   * filled lookups and probes with such copies, each a live search (A21: 26 a task).
+   */
+  syncCutLive: number;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
   syncMaxUsersPerTenant: number;
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
@@ -677,6 +685,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   routeSketch: true,
   syncEngagedDeep: true,
   syncUnusedSweepMs: 7 * 24 * 3_600_000,
+  syncCutLive: 0,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncPush: true,
