@@ -1,0 +1,30 @@
+# A22 (D361): the funnel (train, seeds 41-42, reader stub) on two independent draws of the intent requests: the shipped
+# intent-v2.jsonl.gz and draw2 (the shipped prompt again, claude-haiku-5-5, intent-v2-draw2.jsonl.gz). score.py rows,
+# then per lever: hidden +/-, control (decoys) +/- against that sample's default.
+== shipped
+base.json                     hidden 314/384 decoys 273/384 | in packet: planted 253 decoy 219 | ask bytes (hidden) 245316
+scr-shipped-both.json         hidden 302/384 decoys 263/384 | in packet: planted 241 decoy 207 | ask bytes (hidden) 218089
+scr-shipped-byKind.json       hidden 311/384 decoys 273/384 | in packet: planted 253 decoy 212 | ask bytes (hidden) 221541
+scr-shipped-cardsLean.json    hidden 305/384 decoys 265/384 | in packet: planted 245 decoy 213 | ask bytes (hidden) 235947
+scr-shipped-nonudge.json      hidden 305/384 decoys 267/384 | in packet: planted 253 decoy 219 | ask bytes (hidden) 223165
+== fresh
+redraw.json                   hidden 307/384 decoys 281/384 | in packet: planted 247 decoy 223 | ask bytes (hidden) 248912
+scr-fresh-both.json           hidden 289/384 decoys 271/384 | in packet: planted 226 decoy 212 | ask bytes (hidden) 220851
+scr-fresh-byKind.json         hidden 304/384 decoys 280/384 | in packet: planted 247 decoy 218 | ask bytes (hidden) 223567
+scr-fresh-cardsLean.json      hidden 294/384 decoys 271/384 | in packet: planted 232 decoy 217 | ask bytes (hidden) 239359
+scr-fresh-nonudge.json        hidden 304/384 decoys 275/384 | in packet: planted 247 decoy 223 | ask bytes (hidden) 227123
+== draw2 against shipped (default)
+base.json                     hidden 314/384 decoys 273/384 | in packet: planted 253 decoy 219 | ask bytes (hidden) 245316
+redraw.json                   hidden 307/384 decoys 281/384 | in packet: planted 247 decoy 223 | ask bytes (hidden) 248912
+   hidden: +18 ['babysitter-mocks/41', 'entebbe-yellow-fever-shortage/42', 'extended-terms-credit-check/41', 'festive-dinner-already-booked/41', 'festive-dinner-already-booked/42', 'free-school-meals-awarded/41', 'free-school-meals-awarded/42', 'hosted-travel-preapproval/41', 'nursery-collection-list/42', 'po-threshold-demo-kit/41', 'po-threshold-demo-kit/42', 'repo-app-needs-vendor-review/42', 'sla-compensation-rule/41', 'sla-compensation-rule/42', 'theatre-friend-on-crutches/41', 'travel-needs-preapproval/42', 'wildcard-cert-already-renewed/41', 'wildcard-cert-already-renewed/42']
+   hidden: -25 ['balance-via-tax-code/41', 'balance-via-tax-code/42', 'boiler-claim-covered/41', 'breakfast-club-inset-day/42', 'bristol-stay-already-arranged/41', 'bristol-stay-already-arranged/42', 'conference-hotel-already-booked/42', 'dinner-guests-vegetarian/41', 'hosted-travel-preapproval/42', 'month-end-change-freeze/41', 'month-end-change-freeze/42', 'mum-hospital-transport-booked/42', 'physio-claim-allowance-used/41', 'piano-fee-already-paid/41', 'piano-fee-already-paid/42', 'proposal-already-accepted/41', 'recruitment-pause/41', 'rejection-before-feedback/41', 'signing-authority-limit/41', 'sofa-on-landlord-inventory/41', 'tennis-membership-lapsed/42', 'term-time-leave-rules/41', 'term-time-leave-rules/42', 'travel-needs-preapproval/41', 'unreleased-feature-promise/41']
+   control: +21 ['account-credit-hold/42', 'approver-off-sick/42', 'babysitter-mocks/42', 'cleaner-lockbox-changed/42', 'commitment-already-purchased/41', 'commitment-already-purchased/42', 'dehumidifier-already-ordered/41', 'dpa-third-party-disclosure/42', 'dublin-airport-runway-closure/41', 'eu-hosting-condition/42', 'expenses-need-signoff/41', 'five-a-side-spanish-class/41', 'five-a-side-spanish-class/42', 'hospitality-per-head-cap/42', 'hosted-travel-preapproval/41', 'overdue-invoice-already-paid/42', 'provider-maintenance-saturday/41', 'provider-maintenance-saturday/42', 'territory-reseller-exclusivity/41', 'territory-reseller-exclusivity/42', 'training-q1-budget-freeze/42']
+   control: -13 ['babysitter-mocks/41', 'breakfast-club-inset-day/42', 'bristol-stay-already-arranged/41', 'conference-hotel-already-booked/42', 'deal-desk-discount-ceiling/41', 'deal-desk-discount-ceiling/42', 'freelancer-invoice-already-paid/41', 'freelancer-invoice-already-paid/42', 'moving-premises-no-furniture/41', 'mum-no-ibuprofen/41', 'mum-no-ibuprofen/42', 'neighbour-away-for-parcel/42', 'supplier-bank-not-verified/41']
+shipped both    hidden: +6    hidden: -18    control: +9    control: -19
+shipped byKind    hidden: +1    hidden: -4    control: +1    control: -1
+shipped cardsLean    hidden: +7    hidden: -16    control: +8    control: -16
+shipped nonudge    hidden: +0    hidden: -9    control: +0    control: -6
+fresh both    hidden: +5    hidden: -23    control: +9    control: -19
+fresh byKind    hidden: +0    hidden: -3    control: +1    control: -2
+fresh cardsLean    hidden: +5    hidden: -18    control: +9    control: -19
+fresh nonudge    hidden: +0    hidden: -3    control: +0    control: -6

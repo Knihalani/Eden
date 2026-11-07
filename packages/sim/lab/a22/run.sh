@@ -1,6 +1,6 @@
 #!/bin/bash
 # A22 on Pi (docs/research/a22-quality.md): LABEL PUSH CONDITIONS then pi-ab flags. A15's run.sh with A22's ledger and
-# the tenant's house rules in every arm (`--tenant-prompt`, D271); the trial is `eden+linkLine` (D360).
+# the tenant's house rules in every arm (`--tenant-prompt`, D271); the trial was `eden+linkLine` (D360, rejected; the switch is in commit 3a3e51b9 only).
 L=$1; PUSH=$2; CONDS=$3; shift 3
 MODEL=${A22_MODEL:-claude-haiku-5-5}
 env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite train --conditions $CONDS --config default \

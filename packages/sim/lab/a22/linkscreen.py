@@ -1,4 +1,4 @@
-"""A22 (D360): how often the planted item (hidden) or its look-alike (control) carries the link line in the push's
+"""A22 (D360; the switch is in commit 3a3e51b9 only, check it out to rerun): how often the planted item (hidden) or its look-alike (control) carries the link line in the push's
 candidates packet, from `bun run funnel -- --packets FILE` with `linkLine` on. Usage: linkscreen.py packets.jsonl"""
 import json, sys, collections
 

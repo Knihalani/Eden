@@ -543,13 +543,6 @@ export interface EngineConfig {
    * unchanged, +0.3 asks and +$0.04–0.07 per 1,000 tasks a kind, no connector call (docs/research/a12-quality.md).
    */
   askNudge: boolean;
-  /**
-   * `linkLine` (D360, trial; A22, docs/research/a22-quality.md): with `pushCandidates`, each candidate in the push's
-   * packet starts with what it shares with the request (`LINK_TAG`, `settle.ts` `linkOf`): the request's people and
-   * things it names, and the request's day it is on, names or holds inside a span it writes out. No model; the words
-   * are the request's. Off by default until measured (trials table).
-   */
-  linkLine: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -677,5 +670,4 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCandidates: 5,
   planConflict: true,
   askNudge: true,
-  linkLine: false,
 };

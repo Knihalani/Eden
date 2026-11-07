@@ -350,6 +350,11 @@ A baseline written before the field existed, with intent configured, is `unknown
 with stub and oracle too: one line per read (task, the prompt a model would have read, the verdict); NEWL stub on
 train1 seed 41 wrote 54 lines for its 54 reader calls.
 
+A second, independent draw of train seeds 41–42's requests with the shipped prompt is checked in as
+`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 314/273 on the shipped sample and
+307/281 on it, with 43 hidden tasks moving between them. Screen a lever on the intent index on both (`zcat` it, then
+`--intent FILE`) and do not report a delta under about 10 tasks from one sample.
+
 ### 1c. Lab-only measurements of first-turn delivery, overlapping requests and sync items
 
 - **`-- --wait-ms N`** sets the request observe's wait (the client's `waitMs`; default 3,000 × max(1, `--time`), as

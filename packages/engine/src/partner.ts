@@ -124,7 +124,7 @@ import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
 import { ASK_NUDGE, CANDIDATES_LEAD, citationsOf, PLAN_LEAD, renderPacket, shownText } from "./render";
 import { safeLine } from "./line";
-import { anchored, anchorsOf, linkOf, settles, type Anchors } from "./settle";
+import { anchored, anchorsOf, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -1676,7 +1676,7 @@ export class ContextPartner {
                 `candidates:${cue.id}`,
                 cue,
                 undefined,
-                this.candidateFrame(candidates.unsettled !== undefined, candidates.anchors),
+                this.candidateFrame(candidates.unsettled !== undefined),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -2032,7 +2032,7 @@ export class ContextPartner {
     s: Session,
     cue: Cue,
     ranked: readonly Scored[],
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; anchors?: Anchors } {
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
@@ -2055,19 +2055,11 @@ export class ContextPartner {
     const items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
-    const anchors =
-      (this.config.askNudge || this.config.linkLine) && items.length > 0
-        ? anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset)
-        : undefined;
-    if (
-      this.config.askNudge &&
-      anchors &&
-      !settles(
-        items.map((x) => x.item),
-        anchors,
-      )
-    )
-      unsettled = anchors;
+    if (this.config.askNudge && items.length > 0) {
+      const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+      const handed = items.map((x) => x.item);
+      if (!settles(handed, anchors)) unsettled = anchors;
+    }
     this.deps.onPushPool?.({
       sessionId: s.id,
       pool: pool.map((x) => x.item.id),
@@ -2075,12 +2067,7 @@ export class ContextPartner {
       handed: items.map((x) => x.item.id),
       ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
     });
-    return {
-      items,
-      pool,
-      ...(unsettled ? { unsettled } : {}),
-      ...(this.config.linkLine && anchors ? { anchors } : {}),
-    };
+    return { items, pool, ...(unsettled ? { unsettled } : {}) };
   }
 
   /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */
@@ -2208,7 +2195,7 @@ export class ContextPartner {
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
-  private candidateFrame(nudge = false, anchors?: Anchors): PacketFrame {
+  private candidateFrame(nudge = false): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
@@ -2217,9 +2204,6 @@ export class ContextPartner {
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
-      // `linkLine` (D360): each candidate says which of the request's people, things and days it shares (at most
-      // three names of 40 characters and a day: under 200 bytes, inside the 120 a line's frame is allowed plus slack).
-      ...(anchors ? { link: (item: ContextItem) => linkOf(item, anchors) } : {}),
     };
   }
 
@@ -5068,7 +5052,6 @@ export class ContextPartner {
     const options: Parameters<typeof renderPacket>[1] = {
       maxBytes: frame?.maxBytes ?? this.config.maxInjectionBytes,
       ...(frame ? { lead: frame.lead } : {}),
-      ...(frame?.link ? { link: frame.link } : {}),
       ...(this.config.compactInjection || frame
         ? {
             focus: focusOf(cue),
@@ -5217,8 +5200,6 @@ const PLAN_SENT = 256;
 /** `pushCandidates` (D236): a candidates' packet's framing line and cut. */
 interface PacketFrame {
   lead: string;
-  /** `linkLine` (D360): what a candidate shares with the request, said before its title. */
-  link?: (item: ContextItem) => string | undefined;
   itemBytes: number;
   maxBytes: number;
 }
