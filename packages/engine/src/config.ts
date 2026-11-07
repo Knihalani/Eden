@@ -500,11 +500,6 @@ export interface EngineConfig {
    * past the ask's wait leaves the ask answered without the reader, with no call.
    */
   readerReuse: boolean;
-  /**
-   * Trial (D194, S1, off): with `askReader`, the reader replies in a shorter schema (item indexes with a one-letter
-   * kind code, and the lookalikes' indexes; no bearing words), `READER_SYSTEM_SHORT`.
-   */
-  readerShort: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -637,5 +632,4 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerPushWeakNoWait: false,
   readerVerifyAfter: false,
   readerReuse: false,
-  readerShort: false,
 };

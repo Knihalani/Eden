@@ -61,7 +61,6 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerPushWeakNoWait: "reader",
   readerVerifyAfter: "reader",
   readerReuse: "reader",
-  readerShort: "reader",
 };
 
 /**
@@ -129,7 +128,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerPushWeakNoWait: PUSH,
   readerVerifyAfter: [...READER, "verifyDelivery"],
   readerReuse: PUSH,
-  readerShort: READER,
   anticipateCalls: ["anticipate"],
   anticipateSessionCalls: ["anticipate"],
   anticipateOff: ["anticipate"],

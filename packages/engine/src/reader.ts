@@ -100,11 +100,6 @@ export interface ReaderInput {
    * where their cached prefix is. Routing only: not part of `readerKey`, and never sent as prompt text.
    */
   cacheKey?: string;
-  /**
-   * `readerShort` (trial, D194): the reply in the short schema (`READER_SYSTEM_SHORT`: indexes and a kind code, no
-   * bearing). Part of `readerKey` only when set, so the usual prompt's keys and replay caches are unchanged.
-   */
-  short?: boolean;
 }
 
 /**
@@ -272,7 +267,6 @@ export function readerKey(input: ReaderInput): string {
   h.update(head(input.question ?? "").toLowerCase()).update("\n");
   // The standing count and each item's text as read: the same items rendered another way are another prompt.
   h.update(`standing ${input.standing ?? 0}\n`);
-  if (input.short) h.update("short\n");
   for (const it of input.items.slice(0, READER_MAX_ITEMS)) h.update(`${it.id}\t${it.hash}\t${it.text}\n`);
   return h.digest("hex").slice(0, 32);
 }
@@ -292,14 +286,14 @@ export function readerMessages(input: ReaderInput): ChatMessage[] {
   const ask = `<request>${inert(head(input.request))}</request>${question}\n<items>\n${items.slice(k).join("\n")}\n</items>`;
   if (k === 0) {
     return [
-      { role: "system", content: input.short ? READER_SYSTEM_SHORT : READER_SYSTEM },
+      { role: "system", content: READER_SYSTEM },
       { role: "user", content: `<today>${inert(input.today)}</today>\n${ask}` },
     ];
   }
   // The day and the standing constraints change slowly: they lead the user turn as a cached prefix, the request and
   // its candidates follow it.
   return [
-    { role: "system", content: input.short ? READER_SYSTEM_SHORT : READER_SYSTEM },
+    { role: "system", content: READER_SYSTEM },
     {
       role: "user",
       content: `<today>${inert(input.today)}</today>\n<standing>\n${items.slice(0, k).join("\n")}\n</standing>`,
@@ -351,57 +345,6 @@ export const READER_SYSTEM =
   'request>","same":true|false,"binds":true|false,"k":"blocks"|"limits"|"changes"|"done"|"lookalike"}]}, ' +
   'binding items first, most decisive first, at most 4 entries. Reply {"bears":[]} when nothing looks relevant.';
 
-/**
- * `readerShort` (trial, D194): the same instructions with a shorter reply: the binding items' indexes with a one-letter
- * kind, and the lookalikes' indexes, with no words of bearing or per-entry reasoning fields. Output tokens set most of
- * a call's time (docs/research/realuse-1/E-speed-scale.md: about 2.55 ms each over a 896 ms floor), and v4/v5's
- * `why`/`same`/`binds` fields are most of them; whether the decision holds without writing them out is the trial.
- */
-export const READER_SYSTEM_SHORT =
-  READER_SYSTEM.slice(0, READER_SYSTEM.indexOf("For each entry first write")) +
-  "Before you list an item, check that it is about the very thing the request acts on or needs (the same fine or " +
-  "reference, account or card, class or activity, system or service, booking, person, place and dates), not another " +
-  "of the same kind, and that it stops, limits, changes or makes unnecessary the request as written today; an item " +
-  "that lifts, allows, approves, restores or confirms is a lookalike.\n" +
-  'Reply with JSON only: {"b":[[<item index>,"B"|"L"|"C"|"D"]],"r":[<item index>]}. b: the binding items, most ' +
-  "decisive first, at most 4, each with its kind: B blocks, L limits, C changes, D done. r: the lookalikes among the " +
-  'items that looked relevant. Reply {"b":[],"r":[]} when nothing looks relevant.';
-
-/** The short schema's kind codes (`READER_SYSTEM_SHORT`). */
-const SHORT_KIND: Record<string, ReaderKind> = { B: "blocks", L: "limits", C: "changes", D: "done" };
-
-/**
- * The short schema's reply (`READER_SYSTEM_SHORT`), or null when `v` is not one: `b` a list of `[index, code]` pairs,
- * `r` a list of indexes. A pair's code outside the set reads as "changes", as `parseReaderFull` reads an unknown kind.
- */
-function parseShort(
-  v: Record<string, unknown>,
-  count: number,
-): { bears: { i: number; kind: ReaderKind; why: string }[]; rejected: number[] } | null {
-  if (!Array.isArray(v.b) || (v.r !== undefined && !Array.isArray(v.r))) return null;
-  const index = (x: unknown) => {
-    const i = typeof x === "string" && /^\d+$/.test(x) ? Number(x) : x;
-    return typeof i === "number" && Number.isInteger(i) && i >= 0 && i < count ? i : null;
-  };
-  const out: { i: number; kind: ReaderKind; why: string }[] = [];
-  const binding = new Set<number>();
-  for (const raw of (v.b as unknown[]).slice(0, 20)) {
-    const pair = Array.isArray(raw) ? raw : [raw];
-    const i = index(pair[0]);
-    if (i === null) continue;
-    binding.add(i);
-    if (out.some((x) => x.i === i) || out.length >= 5) continue;
-    const code = typeof pair[1] === "string" ? pair[1].trim() : "";
-    out.push({ i, kind: SHORT_KIND[code.toUpperCase()] ?? kindOf(code) ?? "changes", why: "" });
-  }
-  const rejected: number[] = [];
-  for (const raw of ((v.r as unknown[] | undefined) ?? []).slice(0, 20)) {
-    const i = index(raw);
-    if (i !== null && !binding.has(i) && !rejected.includes(i)) rejected.push(i);
-  }
-  return { bears: out, rejected };
-}
-
 /** A bearing as the agent may read it: words of letters, digits and a few signs, bounded, redacted. */
 function cleanWhy(raw: unknown): string {
   if (typeof raw !== "string") return "";
@@ -425,7 +368,6 @@ export function parseReader(text: string, count: number): { i: number; kind: Rea
 export function parseReaderFull(
   text: string,
   count: number,
-  short = false,
 ): { bears: { i: number; kind: ReaderKind; why: string }[]; rejected: number[] } | null {
   let v: Record<string, unknown>;
   try {
@@ -436,8 +378,6 @@ export function parseReaderFull(
     return null;
   }
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
-  // `readerShort`'s schema, only for a short prompt's reply: a usual reply shaped otherwise stays unreadable.
-  if (short) return parseShort(v, count);
   // The list asked for is "bears"; a model sometimes names it otherwise ("items", or a kind: {"blocks": [...]}). The
   // one array the object holds is read as the list, and a kind its key names is the entries' default kind.
   let key = "bears";
@@ -543,7 +483,7 @@ export class ModelReaderMaker implements ReaderMaker {
       signal,
     });
     const n = Math.min(input.items.length, READER_MAX_ITEMS);
-    const parsed = res.truncated ? null : parseReaderFull(res.text, n, input.short === true);
+    const parsed = res.truncated ? null : parseReaderFull(res.text, n);
     return { bears: parsed?.bears ?? null, rejected: parsed?.rejected ?? [], costUsd: res.costUsd, usage: res.usage };
   }
 }

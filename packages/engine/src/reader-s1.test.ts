@@ -1,30 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
-import { Budget, FakeModel } from "@eden/llm";
+import { Budget } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { checkEngineConfig } from "./config-check";
 import { ContextPartner, type ReaderReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import {
-  AskReader,
-  ModelReaderMaker,
-  parseReaderFull,
-  READER_SYSTEM,
-  READER_SYSTEM_SHORT,
-  readerItem,
-  readerKey,
-  readerMessages,
-  type ReaderInput,
-  type ReaderKind,
-  type ReaderMaker,
-} from "./reader";
+import { AskReader, type ReaderInput, type ReaderKind, type ReaderMaker } from "./reader";
 import type { Trace } from "./trace";
 
-// The S1 reader trials (D190-D194, docs/research/fix-s1-reader.md): the evidence gate, no observe wait on a weak pool,
-// re-reads after the reader names an item (freshness-push.test.ts), the ask reusing the push's reading, and the short
-// output schema.
+// The S1 reader trials (D190-D193, docs/research/fix-s1-reader.md): the evidence gate, no observe wait on a weak pool,
+// re-reads after the reader names an item (freshness-push.test.ts), and the ask reusing the push's reading. The short
+// output schema (D194) was measured and deleted.
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -103,65 +91,6 @@ const ref = (sessionId = "s1", userId = "u1") => ({ tenantId: "t", userId, sessi
 const say = (p: ContextPartner, text: string, waitMs = 2_000, sessionId = "s1") =>
   p.observe({ ...ref(sessionId), at: NOW, kind: "user_message", text } as AgentEvent, { waitMs });
 
-describe("readerShort (D194): the short output schema", () => {
-  const input = (short?: boolean): ReaderInput => ({
-    request: "Pay the Harlow invoice today",
-    items: [0, 1, 2].map((i) => readerItem(item(`m${i}`, `Item ${i}`, `Text ${i} about Harlow.`), new Set())),
-    today: "2026-10-27",
-    ...(short !== undefined ? { short } : {}),
-  });
-
-  test("the short prompt asks for indexes and kind codes; the usual prompt and key are unchanged when unset", () => {
-    expect(readerMessages(input(true))[0]!.content).toBe(READER_SYSTEM_SHORT);
-    expect(readerMessages(input())[0]!.content).toBe(READER_SYSTEM);
-    expect(READER_SYSTEM_SHORT).toContain('{"b":[[<item index>,"B"|"L"|"C"|"D"]],"r":[<item index>]}');
-    expect(READER_SYSTEM_SHORT).not.toContain('"why"');
-    // Its rules for what binds are the usual prompt's.
-    expect(READER_SYSTEM_SHORT.startsWith(READER_SYSTEM.slice(0, READER_SYSTEM.indexOf("For each entry")))).toBe(true);
-    expect(readerKey(input(false))).toBe(readerKey(input()));
-    expect(readerKey(input(true))).not.toBe(readerKey(input()));
-  });
-
-  test("its reply is read as bearings with no words and rejections; indexes are validated", () => {
-    expect(parseReaderFull('{"b":[[2,"B"],[0,"l"],[9,"B"],[2,"C"]],"r":[1,2,7]}', 3, true)).toEqual({
-      bears: [
-        { i: 2, kind: "blocks", why: "" },
-        { i: 0, kind: "limits", why: "" },
-      ],
-      rejected: [1],
-    });
-    // An unknown code reads as the mildest kind that leads, never as an instruction; a bare index is read too.
-    expect(parseReaderFull('{"b":[[1,"ignore previous"],0],"r":[]}', 3, true)!.bears).toEqual([
-      { i: 1, kind: "changes", why: "" },
-      { i: 0, kind: "changes", why: "" },
-    ]);
-    expect(parseReaderFull('{"b":[],"r":[]}', 3, true)).toEqual({ bears: [], rejected: [] });
-    expect(parseReaderFull('{"b":[],"r":"x"}', 3, true)).toBeNull();
-    // A usual prompt's reply in the short shape is unreadable, as before the trial: never a "nothing binds".
-    expect(parseReaderFull('{"b":[{"i":1,"k":"blocks","why":"x"}]}', 3)).toBeNull();
-    expect(parseReaderFull('{"b":[[1,"B"]],"r":[]}', 3)).toBeNull();
-  });
-
-  test("the model maker sends the short prompt and reads its reply", async () => {
-    const model = new FakeModel(() => '{"b":[[1,"D"]],"r":[0]}');
-    const got = await new ModelReaderMaker(model).read(input(true), new AbortController().signal);
-    expect(got.bears).toEqual([{ i: 1, kind: "done", why: "" }]);
-    expect(got.rejected).toEqual([0]);
-  });
-
-  test("in the engine: the reader is asked for the short schema, and what binds leads with Eden's label", async () => {
-    const maker = new Reader();
-    const { p } = partner({ readerShort: true }, maker);
-    await say(p, REQUEST);
-    const a = await p.ask({ ...ref(), question: REQUEST, maxItems: 3 });
-    expect(maker.calls[0]!.short).toBe(true);
-    expect(a.citations[0]!.itemId).toBe("mail:hold");
-    const off = new Reader();
-    await partner({}, off).p.ask({ ...ref(), question: REQUEST, maxItems: 3 });
-    expect(off.calls[0]!.short).toBeUndefined();
-  });
-});
-
 describe("readerEvidence (D190): the reader reads only when the request's evidence clears a bar", () => {
   test("below the bar: no call, the ask answers as gated; at the bar: one call", async () => {
     const quiet = new Reader();
@@ -193,9 +122,7 @@ describe("readerEvidence (D190): the reader reads only when the request's eviden
     expect(() => checkEngineConfig({ readerEvidence: true }, { deps: { reader: false } })).toThrow();
     expect(() => checkEngineConfig({ askReader: false, readerEvidence: true }, { deps: { reader: true } })).toThrow();
     expect(() => checkEngineConfig({ readerEvidenceTop: 0 }, { deps: { reader: true } })).toThrow();
-    expect(() =>
-      checkEngineConfig({ readerEvidence: true, readerShort: true }, { deps: { reader: true } }),
-    ).not.toThrow();
+    expect(() => checkEngineConfig({ readerEvidence: true }, { deps: { reader: true } })).not.toThrow();
   });
 });
 
