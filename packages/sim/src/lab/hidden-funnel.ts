@@ -104,6 +104,7 @@ import { DiskCardMaker } from "./cards-disk";
 import {
   allMissedHint,
   cacheModels,
+  costAsMade,
   DEFAULT_READER_MODEL,
   missGate,
   overBudgetLine,
@@ -610,6 +611,9 @@ interface TaskRow {
    * Searches the connectors served for this task, counted by a wrapper on `search` (`calls` less `listed`).
    */
   served: number;
+  /** With a model reader (live or replayed): its calls in the task's window and their cost as made (H18). */
+  readerCalls?: number;
+  readerUsd?: number;
 }
 
 /** One suite's tasks in one seed's world, in order, as one user would bring them. */
@@ -692,6 +696,10 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   // run can say what a wait of `askReaderWaitMs` would have cut.
   let readerMs: number | undefined;
   let readerTask = "";
+  // The lane's model reader calls and their cost as made (a replayed call at what it cost when recorded): read around
+  // each task for its `readerCalls` and `readerUsd` (H18's cost screen, cost-screen.ts).
+  let laneReaderCalls = 0;
+  let laneReaderUsd = 0;
   const laneModel: Model | null = readerModel && {
     id: readerModel.id,
     chat: async (request) => {
@@ -715,6 +723,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
         throw e;
       }
       readerMs = res.latencyMs;
+      laneReaderCalls++;
+      laneReaderUsd += costAsMade(res);
       log(res.text, res.latencyMs);
       return res;
     },
@@ -878,6 +888,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     const listedBefore = listed();
     const servedBefore = served;
     const c0 = cpuNow();
+    const readerCalls0 = laneReaderCalls;
+    const readerUsd0 = laneReaderUsd;
     // Named before the first observe: `readerPush` reads the request inside it.
     readerTask = `${suite}/${variant}/${seed}/${task.template}/${id}`;
     if (stub instanceof OracleReaderMaker) {
@@ -1124,6 +1136,9 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       traced: calls - callsBefore,
       listed: taskListed,
       served: served - servedBefore,
+      ...(laneModel
+        ? { readerCalls: laneReaderCalls - readerCalls0, readerUsd: Number((laneReaderUsd - readerUsd0).toFixed(7)) }
+        : {}),
       ms: Number(ms.toFixed(2)),
       ...(got.includes(id) ? { beforeModel: beforeModel.has(id) } : {}),
       ...(first

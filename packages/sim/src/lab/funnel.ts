@@ -78,6 +78,7 @@ import {
   type PartOut,
 } from "./funnel-merge";
 import { effective, PRESETS } from "./presets";
+import { costScreen, costScreenLines, type CostRow } from "./cost-screen";
 import { mergeNeutral, neutralLine, type NeutralOut } from "./neutral";
 import { allMissedHint, cacheModels, missGate, MISS_EXIT } from "./reader-disk";
 import {
@@ -601,6 +602,14 @@ if (screen.length) {
   }
 }
 if (readerReplay) console.log(`  reader replay misses: ${readerReplay.missed}`);
+// H18's cost screen (cost-screen.ts, docs/LAB.md 2b): Eden's per-task reader calls and $ as made, per kind and on the
+// 1:1:8 mix, from the replayed reading; the neutral rows' own misses count too (they are outside the miss gate).
+if (readerReplay) {
+  const neutralOut = (outJson as { neutral?: NeutralOut }).neutral;
+  const screened = costScreen(rows as unknown as CostRow[], (neutralOut?.perTask ?? []) as unknown as CostRow[]);
+  const misses = readerReplay.missed + (neutralOut?.use?.reader?.missed ?? 0);
+  for (const l of costScreenLines(screened, misses)) console.log(`  ${l}${inert}`);
+}
 if (readerReplay?.subset) {
   console.log(
     `  APPROXIMATE: ${readerReplay.subset} reader prompts answered from a recorded superset pool (--reader-subset), ` +
