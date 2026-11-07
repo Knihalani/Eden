@@ -245,6 +245,9 @@ proxy bugs were fixed (`proxy/src/proxy-a5.test.ts`, `with-messages.test.ts`):
   three sessions (a reading of the whole megabyte is slower on every try, so the bound still catches it).
 - `shapes.test.ts` "fuzz: every built query is inert, …": 0.6–0.9 s alone, past bun's 5 s default under a loaded
   `bun run check`; an explicit 30 s timeout (fewer assertions per query were tried and saved nothing).
+- `sources/src/regressions.test.ts` "50,000 empty pages … under a 4 MB cache budget": the heap was read while some of
+  the 50,000 searches' real-time 1 s deadline timers were still pending, a share that depends on load. It now waits
+  for them to lapse and takes the least of three collections; the bounds are unchanged (3 of 3 under 16 busy loops).
 
 ## Review
 
