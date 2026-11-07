@@ -209,8 +209,11 @@ class GatedSource implements Source {
 describe("the default after D227 and D228", () => {
   const scope = { tenantId: "t1", userId: "u1", sessionId: "s1" };
   const at = Date.UTC(2026, 9, 20, 9);
+  // The push's candidates (D237) run with no reader since D276 and search the request at observe; these tests are
+  // about the event's own lookup, so they take the push out.
   const build = (source: Source, traces: Trace[]) =>
     new ContextPartner({
+      config: { pushCandidates: 0 },
       sources: async () => [source],
       sourceMap: new SourceMap(":memory:", { seed: 1 }),
       cache: new ItemCache(),

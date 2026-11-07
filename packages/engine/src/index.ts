@@ -18,7 +18,7 @@ export { Ledger } from "./ledger";
 export { inert, oneLine, renderAnswer, renderPacket } from "./render";
 export { safeBlock, safeLine } from "./line";
 export { classifySituation, type Situation } from "./situation";
-export { contentTerms, distinctTermIds, extractEntities, isChatter, termIds } from "./text";
+export { contentTerms, distinctTermIds, extractEntities, extractTypedEntities, isChatter, termIds } from "./text";
 export {
   cpuNow,
   SPAN_NAMES,
@@ -31,6 +31,7 @@ export {
   type SpanStat,
 } from "./spans";
 export type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
+export { explainTrace } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";
 export { requestedRange } from "./probes";
@@ -95,3 +96,4 @@ export {
   type ReaderStats,
   type ReaderVerdict,
 } from "./reader";
+export { mayConstrain } from "./conflict";

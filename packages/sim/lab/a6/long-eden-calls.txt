@@ -1,0 +1,8 @@
+eden long (a6-long-pay-41,42), 232 tasks: connector calls a task by source and op (eden.source spans)
+  gmail     fetch  1.711
+  slack     fetch  0.224
+  gmail     list   0.181
+  slack     list   0.052
+  calendar  list   0.009
+  crm       list   0.009
+  drive     list   0.009

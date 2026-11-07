@@ -14,6 +14,11 @@ import { rehomeSourceMaps, runRouter } from "./router";
 
 const started = performance.now();
 const config = loadConfig();
+// Dev mode takes requests with no key as tenant "dev": say so loudly when anything but this machine can reach it (a
+// container listens on 0.0.0.0; publish its port on 127.0.0.1 for local use).
+if (config.dev && !config.child && !["127.0.0.1", "localhost", "::1"].includes(config.host)) {
+  console.error(`eden: EDEN_DEV=1 on ${config.host}: anyone who can reach this port is served without a key`);
+}
 if (config.processes > 1) {
   await runRouter(config);
 } else {

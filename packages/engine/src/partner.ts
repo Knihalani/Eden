@@ -256,6 +256,8 @@ interface Session {
    * the latest: the agent's own events move `turn` within one request, a new user message moves this.
    */
   requests: number;
+  /** The session's last `EXPLAIN_TRACES` traces, oldest first (`explain`, D277). */
+  traces: Trace[];
   lastActive: number;
   window: string[];
   /**
@@ -669,7 +671,9 @@ export class ContextPartner {
     const push =
       this.config.readerPush &&
       this.config.askReader &&
-      this.deps.reader &&
+      // The candidates (D237) make no reader call, so they run without a reader too: a server with no model key
+      // delivers them (D276). Only the reader's own push needs the dependency.
+      (this.deps.reader || this.config.pushCandidates > 0) &&
       event.kind === "user_message" &&
       event.draft !== true &&
       isImperative(event.text, MORE_VERBS)
@@ -732,7 +736,7 @@ export class ContextPartner {
 
     const trace = (decision: Trace["decision"], reason: string, extra: Partial<Trace> = {}) => {
       decided = decision;
-      this.trace({
+      this.trace(s, {
         sessionId: s.id,
         turn: s.turn,
         event: event.kind,
@@ -944,6 +948,15 @@ export class ContextPartner {
     s.behind = tracked;
   }
 
+  /**
+   * The session's last decisions (at most `EXPLAIN_TRACES`, oldest first), the traces `onTrace` receives: why Eden
+   * spoke or stayed silent, with no content (D56, D277). Reads only; a session that ended or was forgotten has none.
+   * Copies: changing one changes nothing held.
+   */
+  explain(ref: Scope & { sessionId: string }): Trace[] {
+    return (this.sessions.get(sessionKey(ref))?.traces ?? []).map((t) => ({ ...t, itemIds: [...t.itemIds] }));
+  }
+
   /** Injections the slow path queued for a session, oldest first. Integrations that poll call this. */
   takePending(ref: Scope & { sessionId: string }): Injection[] {
     const s = this.sessions.get(sessionKey(ref));
@@ -1105,7 +1118,7 @@ export class ContextPartner {
       // Promised now: a second store of the same version, before the agent takes this, queues nothing more.
       for (const it of said) s.ledger.noteShown(it.id, versionOf(it), it.sourceId);
       s.pending.push(injection);
-      this.trace({
+      this.trace(s, {
         sessionId: s.id,
         turn: s.turn,
         event: "source_change",
@@ -1381,7 +1394,7 @@ export class ContextPartner {
       // Every item the finding rested on is gone at its source (`verifyDelivery`): nothing stands in the way.
       if (!finding) return proceed("gone");
       this.handOut(s, finding);
-      this.trace({
+      this.trace(s, {
         sessionId: s.id,
         turn: s.turn,
         event: "tool_call",
@@ -1537,7 +1550,7 @@ export class ContextPartner {
       // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
       // trace carries it, since this response goes to no caller.
       const costUsd = reading?.costUsd ?? 0;
-      this.trace({
+      this.trace(s, {
         sessionId: s.id,
         turn: s.turn,
         event: "user_message",
@@ -1552,6 +1565,7 @@ export class ContextPartner {
         modelCalls: reading?.called ? 1 : 0,
         costUsd,
         ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
+        ...(candidates ? { candidates: true } : {}),
         itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
       });
       if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
@@ -1616,7 +1630,7 @@ export class ContextPartner {
       }
     }
     const latencyMs = Math.round(performance.now() - t0);
-    this.trace({
+    this.trace(s, {
       sessionId: s.id,
       turn: s.turn,
       event: "ask",
@@ -1791,7 +1805,7 @@ export class ContextPartner {
       void reading.then(
         (r) => {
           if (!r.called) return;
-          this.trace({
+          this.trace(s, {
             sessionId: s.id,
             turn,
             event: "ask",
@@ -2141,6 +2155,7 @@ export class ContextPartner {
       key,
       turn: 0,
       requests: 0,
+      traces: [],
       lastActive: now,
       window: [],
       agentHas: [],
@@ -2928,7 +2943,7 @@ export class ContextPartner {
           cue.polled = polled
             .then((calls) => {
               if (calls > 0) {
-                this.trace({
+                this.trace(s, {
                   sessionId: s.id,
                   turn,
                   event: "sync",
@@ -3676,7 +3691,7 @@ export class ContextPartner {
         for (const [id, o] of read) outcomes.set(id, o);
       }
     }
-    this.trace({
+    this.trace(s, {
       sessionId: s.id,
       turn: s.turn,
       event: "verify",
@@ -3996,7 +4011,7 @@ export class ContextPartner {
     let local: number | undefined;
     let syncCalls: number | undefined;
     const done = (decision: Trace["decision"], reason: string, items: ContextItem[] = []) =>
-      this.trace({
+      this.trace(s, {
         sessionId: s.id,
         turn,
         event: eventKind,
@@ -4639,7 +4654,10 @@ export class ContextPartner {
     };
   }
 
-  private trace(t: Trace): void {
+  private trace(s: Session, t: Trace): void {
+    // The session's last decisions, for `explain` (D277): content-free like the trace itself, dropped with the session.
+    s.traces.push(t);
+    if (s.traces.length > EXPLAIN_TRACES) s.traces.shift();
     try {
       this.deps.onTrace?.(t);
     } catch {
@@ -4649,6 +4667,9 @@ export class ContextPartner {
 }
 
 const NO_TERMS = new Uint32Array(0);
+
+/** How many of a session's decisions `explain` keeps (D277): a few turns of a task, about 200 bytes each. */
+export const EXPLAIN_TRACES = 32;
 
 /**
  * `ObserveResult.pending`: slower work may still queue an injection. That is a lookup in flight, work a lookup left

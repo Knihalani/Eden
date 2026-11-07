@@ -43,7 +43,8 @@ const run = async (
     budget: opts.budget ?? new Budget(),
     model: opts.model ?? null,
     now: () => NOW,
-    config: { probes: true, probeGraceMs: 1_000, ...config },
+    // The candidates push (D237, with no reader since D276) dumps its own rows; these tests are the lookup's.
+    config: { probes: true, probeGraceMs: 1_000, pushCandidates: 0, ...config },
     ...(opts.onCandidates ? { onCandidates: opts.onCandidates } : {}),
   });
   const out: Record<string, string[]> = {};
