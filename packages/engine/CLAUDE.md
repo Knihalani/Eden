@@ -24,7 +24,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
 | `ledger.ts`, `usage.ts`                                                    | Not-twice ledger; usage inference for learning (D13, D18)                                                                                                                                                                     |
-| `spans.ts`, `trace.ts`                                                     | Span tracing (off by default, content-free, D56); decision traces                                                                                                                                                             |
+| `spans.ts`, `trace.ts`                                                     | Span tracing (off by default, content-free, D56); decision traces, `explainTrace` (a sentence per trace, D277); `ContextPartner.explain` keeps a session's last `EXPLAIN_TRACES` (32) |
 | `gate.ts`                                                                  | Redaction off the event loop through the worker pool (D25, D26)                                                                                                                                                               |
 
 `bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `ingest.bench.ts` (memory per synced
@@ -202,7 +202,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   so no `pushRead` (D193 has nothing to reuse), no `onReader` report and no `checkAhead`. The push's candidates go
   through `verifyItems` and `deliver` (reason `candidates:`), framed by `CANDIDATES_LEAD`, with no "nothing found"
   note when there are none (D257). A `readerPushBehind` second pass replaces an untaken first packet only with
-  candidates of its own. It needs the reader dependency, though it makes no call (a no-key server runs no push). Tests
+  candidates of its own. It does not need the reader dependency (D276): with no reader wired (a no-key server) the
+  push still runs when `pushCandidates` > 0; only the reader's own push (`pushCandidates: 0`) needs one. Tests
   of the reader's own wiring set `pushCandidates: 0` (the core, the `reader` and `candidates` parts all do); the lab's
   reader screens run `--preset minus-candidates`.
 - **The candidates' packet is not smaller (D258, D259; docs/research/cl-cl8.md).** 200-byte excerpts lost hidden facts

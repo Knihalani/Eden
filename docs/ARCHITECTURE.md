@@ -328,8 +328,10 @@ user request that acts is read the same way when it is observed, as an ask of th
 flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. **Since D237 the default does not call the reader there or on an ask (`pushCandidates` 5, CL6):** the push hands
 the agent the first five items of the pool the reader would have read (the ask's order, bulk mail out), each a focused
 excerpt, after a fixed line of Eden's own saying they may bear on the request and must be checked against its who,
-what and when first; a pool with nothing constraint-like (`readerGate`'s test) gets a one-line "nothing looks like it
-constrains it" note instead, when every source answered. An ask answers in rule order with no reading.
+what and when first; a pool with nothing constraint-like (`readerGate`'s test) gets nothing (no note: D237 did not
+build it, D257 deleted the push's other one). An ask answers in rule order with no reading. The candidates need no
+reader, so a server with no model key runs them too (D276). `ContextPartner.explain` returns a session's last 32
+traces for `POST /v1/explain` (D277), each with `explainTrace`'s sentence; content-free like every trace (D56).
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search
@@ -454,9 +456,18 @@ event's start (`startMs`) and the order of a day's events (`ItemCache.timed`, un
 it. Tests run with TZ=UTC (`scripts/test-preload.ts`);
 `tz.test.ts` checks the same answers under Asia/Tokyo and America/Los_Angeles.
 
+## The proxy (D280)
+
+`@eden/proxy` (`bun run proxy`) is an OpenAI-compatible endpoint in front of the agent's model for agents that cannot
+add the SDK: it turns each chat request's new messages (by content, so compacted and sliding histories work) into
+events through `@eden/client`, inserts the turn's packets with `withContext`, and streams the upstream's answer back.
+It fails open under one deadline per request (the observe's wait plus 800 ms), keeps per-conversation state in memory
+(bounded, keyed by user and session), and off loopback needs its own key (`EDEN_PROXY_KEY`), since it holds the
+tenant's. A shadow mode reports and decides but injects nothing.
+
 ## What is deliberately missing (see ROADMAP.md)
 
 Per-user MCP connections with OAuth and a token vault; persistent session state;
-streaming delivery; the OpenAI-compatible injecting proxy; a richer graph (entity resolution, relations, freshness);
+streaming delivery; a richer graph (entity resolution, relations, freshness);
 learned situation classification; per-agent (not just per-user) learning; multi-machine deployment (the router,
 D163, spreads users over processes on one machine; the caps it splits are per process, not shared).
