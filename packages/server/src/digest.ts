@@ -152,7 +152,10 @@ export function digest(lines: Iterable<string>): Digest {
       continue;
     }
     if (isUsage(v)) {
-      usage.set(v.usage.injectionId, v.usage);
+      // The last word per injection, except that the integration's explicit outcome is never replaced by the engine's
+      // own: the engine sends nothing after it, so one that comes later in the log is a line out of order (A11).
+      const was = usage.get(v.usage.injectionId);
+      if (!(was?.how === "explicit" && v.usage.how !== "explicit")) usage.set(v.usage.injectionId, v.usage);
       continue;
     }
     const sync = (v as { sync?: { run?: unknown; pid?: unknown; backgroundCalls?: unknown } } | null)?.sync;

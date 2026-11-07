@@ -170,4 +170,9 @@ describe("digest (D293)", () => {
     expect(d.sources).toEqual({ "work:gmail": 1, crm: 1 });
     expect(formatDigest(d)).toContain("- work:gmail: 1; used in 1 of 1 injections");
   });
+
+  test("an explicit outcome is the last word even when the log's lines are out of order (audit A11)", () => {
+    const d = digest([u("inj_1", true, "explicit"), u("inj_1", false, "ended"), t({ event: "agent_message" })]);
+    expect(d.used).toMatchObject({ injections: 1, used: 1, explicit: 1 });
+  });
 });
