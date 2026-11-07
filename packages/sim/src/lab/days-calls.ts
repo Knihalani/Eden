@@ -10,7 +10,7 @@
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
  *
- * `--recap-notice signal` announces the recap as pi-ab did before A8: a bare `sourceChanged` whatever `--push` says.
+ * `--recap-notice signal` announces the recap as pi-ab did before D272: a bare `sourceChanged` whatever `--push` says.
  * `--cards FILE` replays cards and the checked-in intent requests with no live call (a miss gets no card); without it
  * the no-key path. `--night-h 20` with the default day sizes puts about 24 hours of Eden's clock in a day (pi-ab's
  * 2 h nights compress eight days into about 36 hours, so a daily sweep runs about once a user).
@@ -22,7 +22,7 @@ import type { AgentEvent } from "@eden/protocol";
 import { CardEnricher, ContextPartner, ItemCache, type EngineConfig } from "@eden/engine";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
-import { announceChanged, sourceFields, type PushMode } from "./connector-options";
+import { recapNotice, sourceFields, type PushMode } from "./connector-options";
 import { DiskCardMaker, INTENT_PATH } from "./cards-disk";
 import { isRecap, recapOf, shiftClocks, shiftMeta, UPDATED_MARK, type ClockMove } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
@@ -37,7 +37,7 @@ export interface DaysCallsOptions {
   push: PushMode;
   /** One `ask` per request after its push (the eden arm's agent asks about once a request one at a time). */
   ask?: boolean;
-  /** pi-ab's recap before A8: a bare signal whatever `push` says. */
+  /** pi-ab's recap before D272: a bare signal whatever `push` says. */
   recapSignal?: boolean;
   cards?: DiskCardMaker | null;
   config?: Partial<EngineConfig>;
@@ -183,7 +183,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
       phase = "notice";
       if (o.push !== "none") {
         if (o.recapSignal) for (const id of touched) partner.sourceChanged(scope, id);
-        else await announceChanged(partner, scope, sources, o.push, changed);
+        else await recapNotice(partner, scope, sources, changed, o.push);
         await partner.revisionsSettled(scope);
       }
     }

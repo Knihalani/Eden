@@ -1,0 +1,33 @@
+.local/a3/runs/a3-long-pay-41.json: user w41, 8 days (14,13,16,16,12,12,15,16), 0 clashes
+.local/a3/runs/a3-long-pay-42.json: user w42, 8 days (13,13,13,17,19,13,13,17), 0 clashes
+
+$ per 1,000 tasks (agent and Eden per task; bg run = Eden's cards and intent while the user worked, per task; one-time = backfill per user; steady = agent + Eden + bg run; all-in = steady + one-time spread over the user's tasks in this run). Recap turns are probes: not tasks, their $ apart.
+condition        n users   agent    Eden  bg run  steady  all-in  mix st  mix all   one-time $/user (from)  reader/t  Eden conn/t  agent tools/t  wall p50  mean  recaps $
+tools          232     2   0.166   0.000   0.000   0.166   0.166   0.166    0.166           0.0000 (none)      0.00         0.00           0.76      1.07  1.75    0.0056
+eden           232     2   0.226   0.000   0.019   0.245   0.248   0.245    0.248           0.0003 (in-run)      0.00         2.13           0.05      1.91  2.00    0.0073
+
+per kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s
+tools          hidden     23  raised 1/23 (4.3%)  $0.190/1k  p50 1.19
+tools          control    23  raised 0/23 (0.0%)  $0.196/1k  p50 1.95
+tools          neutral   186  raised 2/186 (1.1%)  $0.159/1k  p50 1.04
+eden           hidden     23  raised 13/23 (56.5%)  $0.241/1k  p50 1.95
+eden           control    23  raised 0/23 (0.0%)  $0.236/1k  p50 2.33
+eden           neutral   186  raised 0/186 (0.0%)  $0.223/1k  p50 1.85
+
+per day (long horizon): n, agent and Eden $ per 1k tasks, wall p50 s
+tools          day 0   27  agent   0.116  Eden  0.000  p50 1.02
+tools          day 1   26  agent   0.134  Eden  0.000  p50 1.04
+tools          day 2   29  agent   0.193  Eden  0.000  p50 1.26
+tools          day 3   33  agent   0.222  Eden  0.000  p50 2.10
+tools          day 4   31  agent   0.153  Eden  0.000  p50 0.95
+tools          day 5   25  agent   0.182  Eden  0.000  p50 1.11
+tools          day 6   28  agent   0.119  Eden  0.000  p50 1.01
+tools          day 7   33  agent   0.192  Eden  0.000  p50 1.25
+eden           day 0   27  agent   0.222  Eden  0.000  p50 1.26
+eden           day 1   26  agent   0.207  Eden  0.000  p50 1.92
+eden           day 2   29  agent   0.249  Eden  0.000  p50 2.00
+eden           day 3   33  agent   0.228  Eden  0.000  p50 1.98
+eden           day 4   31  agent   0.214  Eden  0.000  p50 1.78
+eden           day 5   25  agent   0.212  Eden  0.000  p50 1.79
+eden           day 6   28  agent   0.229  Eden  0.000  p50 2.31
+eden           day 7   33  agent   0.239  Eden  0.000  p50 2.01

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { callsWhere, daysCalls } from "./days-calls";
 
-// A8: over a user's days with item-carrying notices, the recap's change re-reads nothing else (pi-ab once sent it as a
-// bare signal, which doubted every copy of the source and cost 1.6-2.0 gmail fetches a request).
+// A8: over a user's days with item-carrying notices, the recap's change re-reads nothing else (before D272 pi-ab sent
+// it as a bare signal, which doubted every copy of the source and cost 1.6-2.0 gmail fetches a request).
 describe("days-calls: connector calls over a user's days (A8)", () => {
   const fetchesAtRequest = (counts: Record<string, number>) =>
     callsWhere(counts, (phase, _source, op) => phase === "request" && op === "fetch");

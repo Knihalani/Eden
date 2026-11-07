@@ -101,7 +101,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import type { World } from "../world";
-import { announceChanged, connectorHeader, connectorOptions, pushNotifier, sourceFields } from "./connector-options";
+import { connectorHeader, connectorOptions, pushNotifier, recapNotice, sourceFields } from "./connector-options";
 import {
   armPromptsHash,
   ASK_DESCRIPTION,
@@ -115,6 +115,7 @@ import {
   reusableArms,
   searchToolSpec,
   systemPrompt,
+  TENANT_GUIDE,
   TOOL_ITEMS,
   userPrompt,
   worldOf,
@@ -185,7 +186,7 @@ const MIX = parseMix(opt("mix", "1:1:8"));
 const GAP_MS = Number(opt("gap-min", "10")) * 60_000;
 const NIGHT_MS = Number(opt("night-h", "2")) * 3_600_000;
 // `--recap-notice push|signal` (A8): how the day's recap announces its moved items. `push` (the default) follows
-// `--push`; `signal` sends a bare `sourceChanged` whatever `--push` says, as every run before A8 did.
+// `--push` (D272); `signal` sends a bare `sourceChanged` whatever `--push` says, as every run before D272 did.
 const RECAP_NOTICE = opt("recap-notice", "push");
 if (RECAP_NOTICE !== "push" && RECAP_NOTICE !== "signal") throw new Error("--recap-notice must be push or signal");
 const RECAP_SIGNAL = RECAP_NOTICE === "signal";
@@ -197,9 +198,7 @@ if (USER_DAYS > 0) {
 }
 // `neutral` (neutral.ts) runs only on the suites that build it; the others run their hidden and control variants.
 const VARIANTS = (USER_DAYS > 0 ? "hidden,control,neutral" : opt("variants", "hidden,control")).split(",") as (
-  | "hidden"
-  | "control"
-  | "neutral"
+  "hidden" | "control" | "neutral"
 )[];
 const ACT = args.includes("--act");
 // `--dress` (A6, D287): one ordinary message per person or firm a request names that no item of its world names.
@@ -516,7 +515,12 @@ function meteredModel(
 /** The tool parameter every search tool and `ask_context` takes: one string, as agent-ab declares it. */
 const queryParams = Type.Object({ query: Type.String({ description: "What to search for" }) });
 // What the Eden-free arms see and how they are graded, recorded with the results so `--reuse-arms` can check it.
-const PROMPTS_HASH = armPromptsHash({ queryParams }, VARIANTS.includes("neutral"));
+/** `--tenant-prompt` (A3, D271): the tenant's house rules (`TENANT_GUIDE`) in every arm's system prompt. */
+const TENANT_PROMPT = args.includes("--tenant-prompt");
+const PROMPTS_HASH = armPromptsHash(
+  TENANT_PROMPT ? { queryParams, tenant: TENANT_GUIDE } : { queryParams },
+  VARIANTS.includes("neutral"),
+);
 const askParams = Type.Object({ question: Type.String() });
 
 /**
@@ -610,10 +614,15 @@ async function runWorld(
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.
   let current: Timeline | null = null;
   const bySession = new Map<string, { r: RunResult; tl: Timeline }>();
+  // Every connector call Eden makes in this stream, in a task's window or not (the backfill, the sync's ticks between
+  // tasks): `Background.sourceCalls`, priced per connector plan by pi-cost-report.ts.
+  let edenCalls = 0;
   const edenSources = sources.map((s) =>
-    watched(s, (id, op, start, end, status, items) =>
-      current?.span("eden.source", "eden", "bg", start, end, { source: id, op, status, items }),
-    ),
+    watched(s, (id, op, start, end, status, items) => {
+      edenCalls++;
+      bg.sourceCalls = edenCalls;
+      current?.span("eden.source", "eden", "bg", start, end, { source: id, op, status, items });
+    }),
   );
   // What this stream's background calls (cards) cost: booked to Eden's total, charged to no task (Background).
   // Recorded in the results as the calls happen (below), so a stream that stops early (OverBudget, the request cap)
@@ -739,6 +748,8 @@ async function runWorld(
   // background spend is made while the user works (new and changed items).
   bg.setupUsd = bg.cardsUsd;
   bg.setupCalls = bg.calls;
+  bg.setupSourceCalls = edenCalls;
+  bg.sourceCalls = edenCalls;
   const out: RunResult[] = [];
   let previous: { sessionId: string; r: RunResult } | null = null;
   const closePrevious = async () => {
@@ -791,7 +802,7 @@ async function runWorld(
       // text, and a notifying source says so (`--push`), as plans moved during the day would. Only before the recap,
       // which is never graded: a moved item could otherwise land in a later request's slot and change its grade.
       const touched = new Set<string>();
-      const changedIds = new Set<string>();
+      const movedIds = new Set<string>();
       for (const id of dayPlanted) {
         const it = world.items.find((x) => x.id === id);
         if (!it) continue;
@@ -801,15 +812,20 @@ async function runWorld(
         if (it.meta) it.meta = shiftMeta(it.meta, moved.moves);
         it.updatedAt = clock;
         touched.add(it.sourceId);
-        changedIds.add(it.id);
+        movedIds.add(it.id);
         day.changed(it.id, moved.moves);
       }
       for (const src of sources) if (touched.has(src.id)) src.reindex();
       if (partner && CONNECTORS.push !== "none") {
-        // As `--push` says an integrator would (A8): under `payload` the changed items themselves, so no other copy
-        // is put in doubt; `--recap-notice signal` keeps the bare signals every run sent before A8.
+        // `payload`: the notice carries the moved items, as the client sends one (`sourceChanged` with items calls
+        // only `sourceItems`): no signal, so no other copy of the source is put in doubt. Before A3 (D272) this sent
+        // a bare signal in every mode, so from each day's first recap on every push re-read its candidates from that
+        // source on the agent's critical path (about 650 ms a task in CL5-CL8's long payload runs).
+        // A3's first fix moved items without naming them, and its notice went out empty: refuse that.
+        if (touched.size > 0 && movedIds.size === 0) throw new Error("recap moved items but named none");
+        // `--recap-notice signal` (A8): the bare signals every run sent before D272, to reproduce its re-reads.
         if (RECAP_SIGNAL) for (const id of touched) partner.sourceChanged(scope, id);
-        else await announceChanged(partner, scope, sources, CONNECTORS.push, changedIds);
+        else await recapNotice(partner, scope, sources, movedIds, CONNECTORS.push);
         // The change lands two hours before the recap: what the notice started in the background (`revisionNotice`'s
         // poll; nothing when that trial is off) has settled by then. Bounded, so a hung poll cannot stall the stream.
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -983,7 +999,12 @@ async function runWorld(
       let ledgerEst = 0;
       const agent = new Agent({
         initialState: {
-          systemPrompt: systemPrompt(world, { lookups: LOOKUPS, data: useTools || useEden, act }),
+          systemPrompt: systemPrompt(world, {
+            lookups: LOOKUPS,
+            data: useTools || useEden,
+            act,
+            tenant: TENANT_PROMPT,
+          }),
           // `--day`: the day's transcript so far (its earlier requests, tool calls and answers).
           ...(DAYS_ON && !startsDay ? { messages: dayMessages } : {}),
           model: piModel,

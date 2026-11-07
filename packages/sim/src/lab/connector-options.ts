@@ -99,27 +99,30 @@ export function pushNotifier(
 }
 
 /**
- * A change at the sources announced as `--push` says an integrator would (A8): `signals`, one bare `sourceChanged` per
- * touched source; `payload`, the changed items themselves (`sourceItems`, D210's documented default), which doubts
- * nothing else the source holds. Before A8, pi-ab's recap sent bare signals under `payload` too, so every copy of a
- * touched source read before the recap was in doubt and re-read when next delivered (1.7 gmail fetches a task over a
- * user's days, docs/research/a8-connector-calls.md). `changed` is the changed items' ids.
+ * `--days` (pi-ab): the notice for the items a day's recap moved, as the push mode says an integration sends it. A
+ * `payload` notice carries the moved items (`sourceItems`, what `EdenClient.sourceChanged(id, { items })` sends: no
+ * signal, so no other copy of the source is put in doubt); `signals` is a bare signal per source. Before A3 (D272)
+ * every mode sent the bare signal, so from each day's first recap on every push re-read its candidates from that source
+ * on the agent's critical path (about 650 ms a task in CL5-CL8's long payload runs). Returns the items sent.
  */
-export async function announceChanged(
+export async function recapNotice(
   partner: {
     sourceChanged(scope: Scope, sourceId: string): boolean;
     sourceItems(scope: Scope, sourceId: string, items: ContextItem[]): Promise<number>;
   },
   scope: Scope,
-  sources: readonly SimSource[],
+  sources: readonly Pick<SimSource, "id" | "listAll">[],
+  moved: ReadonlySet<string>,
   push: PushMode,
-  changed: ReadonlySet<string>,
-): Promise<void> {
-  if (push === "none") return;
-  for (const s of sources) {
-    const items = s.listAll().filter((i) => changed.has(i.id));
-    if (items.length === 0) continue;
-    if (push === "signals") partner.sourceChanged(scope, s.id);
-    else await partner.sourceItems(scope, s.id, items);
+): Promise<number> {
+  let sent = 0;
+  for (const src of sources) {
+    const items = src.listAll().filter((x) => moved.has(x.id));
+    if (items.length === 0 || push === "none") continue;
+    if (push === "payload") {
+      await partner.sourceItems(scope, src.id, items);
+      sent += items.length;
+    } else partner.sourceChanged(scope, src.id);
   }
+  return sent;
 }
