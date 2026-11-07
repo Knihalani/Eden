@@ -13,8 +13,8 @@
  * - `~variant`: the settings `--variant-config` gives that name, over `--config`, so a configuration's A/B runs both
  *   arms in one process, concurrently and paired task by task (the machine's load falls on both alike);
  * - `+flag`: shorthand for one engine flag on, `eden+askDedup`; it stacks on a variant (`eden~ALL2+slowPathQueue`);
- * - `+ask` (fix-s3b, weak point 4): not an engine flag but the harness's, and only on a `both` base: the agent also gets
- *   `ask_context` beside its own source tools and Eden's injected context, the shape integrators ship
+ * - `+ask` (fix-s3b, weak point 4): not an engine flag but the harness's, and only on a `both` base: the agent also
+ *   gets `ask_context` beside its own source tools and Eden's injected context, the shape integrators ship
  *   (`both+ask`). `eden` has the tool already, so `eden+ask` throws rather than run `eden` under another name;
  * - `@w<ms>`: how long the first observe waits for Eden's slow path (default 3000, the client's `withContext`).
  *

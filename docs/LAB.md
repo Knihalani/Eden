@@ -540,9 +540,12 @@ an agent task plus Eden NEW is $0.79 per 1,000 hidden tasks in Pi, ALL3 $0.36 (h
 - `both+ask` (fix-s3b): the agent's own source tools, Eden's injected context and `ask_context`, the shape
   integrators ship. `+ask` is a harness flag, not an engine setting, and only a `both` base takes it (`eden` already
   has the tool). The report pairs it with `both`.
-- `--day K`: one agent transcript and one Eden session per K requests of a stream (template order), the planted
-  item's clock times moved after each request (`shiftClocks`; the source reindexed and, with `--push`, signalled),
-  and a recap turn closing each day ("anything to watch out for, with the times"; measured, never graded). The
+- `--day K`: one agent transcript and one Eden session per K requests of a stream (template order), and a recap turn
+  closing each day ("anything to watch out for, with the times"; measured, never graded). Just before the recap the
+  day's planted items change (`shiftClocks` moves their clock times, `shiftMeta` their structured start; the sources
+  reindexed and, with `--push`, signalled): only then, so a moved item cannot land in a later graded request's slot.
+  A changed item misses the replay caches (its content hash changed) and is carded live; `lateItems` is not measured
+  (a late packet goes to the day's next request). The
   results gain `days` and `daysPooled` (`pi-day.ts`): repeat deliveries (and those of a changed item), `(shown
   above)` marks, asks citing an item a packet already gave, stale deliveries after a change, and recaps naming a
   changed item's old time (`staleRecap`) or its new one (`freshRecap`). Each request is still graded as a task.

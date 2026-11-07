@@ -37,7 +37,14 @@ const USERS = opt("users", "train1:41")
 const OUT = opt("out", "");
 const ACCESS = labAccess(args, [MODEL]);
 
-const rows = [];
+interface Row {
+  user: string;
+  itemsAtSources: number;
+  cardCalls: number;
+  usd: number;
+  [k: string]: unknown;
+}
+const rows: Row[] = [];
 for (const { suite, seed } of USERS) {
   const { world } = worldOf(seed, suite, "hidden", { maxTasks: 30, maxOffworld: 5 });
   const sources = simSources(world, REALISTIC, 0, seed);

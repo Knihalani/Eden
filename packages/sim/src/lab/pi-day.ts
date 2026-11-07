@@ -4,9 +4,15 @@
  * agent keeps its transcript (and the packets Eden gave it, where they were) from one request to the next, Eden sees
  * one session per day, and the day ends with a recap turn ("anything to watch out for, with the times").
  *
- * Between turns the world changes: after a request's turn, every clock time in its planted item moves (`shiftClocks`),
- * the source serves the new text and, with `--push` on, signals the change, as a meeting moved later that day would.
- * The recap and every later turn then show whether Eden and the agent carry the new version or the old one.
+ * The world changes once a day, before the recap: every clock time in the day's planted items moves (`shiftClocks`,
+ * and `shiftMeta` for a calendar item's structured start), the sources serve the new text and, with `--push` on,
+ * signal the change, as plans moved during the day would. Only then, because the recap is never graded: a moved item
+ * could land in a later request's slot and change that request's grade. The recap then shows whether Eden and the
+ * agent carry the new version or the old one they saw earlier that day.
+ *
+ * Caveats: a changed item's content hash changes, so it misses the `--cards` and `--intent` replay files and is
+ * carded live (booked to background spend) or left without requests; `lateItems` is not measured (a packet that
+ * arrives after an answer is given at the next request of the day, as an agent loop would).
  *
  * `DayLog` measures, per day:
  * - repeat deliveries: an item a packet delivered that a packet of an earlier turn that day already delivered, and of
@@ -59,6 +65,26 @@ export function shiftClocks(text: string, hours = 2): { text: string; moves: Clo
   };
 }
 
+/**
+ * A structured start or end (`meta.start`, `meta.end`: ISO instants) moved as the text's clock time it shows (its
+ * UTC hour and minute) moved, so a calendar item's text and its structure agree after a change.
+ */
+export function shiftMeta(meta: Record<string, string>, moves: readonly ClockMove[]): Record<string, string> {
+  const out = { ...meta };
+  for (const key of ["start", "end"]) {
+    const v = out[key];
+    const t = v ? Date.parse(v) : NaN;
+    if (!Number.isFinite(t)) continue;
+    const hhmm = new Date(t).toISOString().slice(11, 16);
+    const m = moves.find((x) => x.from === hhmm);
+    if (!m) continue;
+    const mins = (x: string) => Number(x.slice(0, 2)) * 60 + Number(x.slice(3));
+    const delta = (((mins(m.to) - mins(m.from)) % 1_440) + 1_440) % 1_440;
+    out[key] = new Date(t + delta * 60_000).toISOString();
+  }
+  return out;
+}
+
 /** The tasks of a stream with a recap turn after every `size` of them (and after the last). */
 export function withRecaps(tasks: readonly Task[], size: number): Task[] {
   if (!(size > 0)) return [...tasks];
@@ -66,7 +92,15 @@ export function withRecaps(tasks: readonly Task[], size: number): Task[] {
   tasks.forEach((t, i) => {
     out.push(t);
     if (i % size === size - 1 || i === tasks.length - 1) {
-      out.push({ ...t, id: recapId(t.id, Math.floor(i / size)), text: RECAP_TEXT, must: [], type: "recap" });
+      // A user's turn whatever the day's last task was (an arriving message would be observed as one otherwise).
+      out.push({
+        ...t,
+        id: recapId(t.id, Math.floor(i / size)),
+        text: RECAP_TEXT,
+        must: [],
+        type: "recap",
+        event: "user_message",
+      });
       delete (out[out.length - 1] as { planted?: string }).planted;
     }
   });
@@ -111,7 +145,7 @@ interface Delivery {
 export class DayLog {
   private turnNo = -1;
   private readonly deliveries: Delivery[] = [];
-  /** item id → the turn after which it changed, and its moves. */
+  /** item id → the turn after which it changed, and its moves (every change, if it moved more than once). */
   private readonly changes = new Map<string, { turn: number; moves: ClockMove[] }>();
   private recapText: string | null = null;
 
@@ -132,8 +166,12 @@ export class DayLog {
     this.deliveries.push({ turn: this.turnNo, ids: [...ids], text, ask: true });
   }
 
+  /** The item changed at the start of the current turn, before anything that turn delivered. */
   changed(id: string, moves: readonly ClockMove[]): void {
-    if (moves.length) this.changes.set(id, { turn: this.turnNo, moves: [...moves] });
+    if (!moves.length) return;
+    // A second change keeps the first one's moves too: an old time from either is stale.
+    const before = this.changes.get(id);
+    this.changes.set(id, { turn: this.turnNo, moves: [...(before?.moves ?? []), ...moves] });
   }
 
   recap(answer: string): void {
@@ -154,7 +192,7 @@ export class DayLog {
       if (d.text.includes(SHOWN_MARK)) shownMarks++;
       for (const id of d.ids) {
         const change = this.changes.get(id);
-        if (change && d.turn > change.turn && oldOnly(d.text, change.moves)) staleDeliveries++;
+        if (change && d.turn >= change.turn && oldOnly(d.text, change.moves)) staleDeliveries++;
         const earlier = firstPacket.get(id);
         if (d.ask) {
           if (earlier !== undefined && earlier < d.turn) askRepeat++;
@@ -163,7 +201,7 @@ export class DayLog {
         delivered++;
         if (earlier !== undefined && earlier < d.turn) {
           repeatDelivered++;
-          if (change && change.turn >= earlier && change.turn < d.turn) repeatChanged++;
+          if (change && change.turn > earlier && change.turn <= d.turn) repeatChanged++;
         }
       }
       if (!d.ask) for (const id of d.ids) if (!firstPacket.has(id)) firstPacket.set(id, d.turn);

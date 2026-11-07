@@ -141,7 +141,17 @@ import { effective, PRESETS } from "./presets";
 import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Budgeted } from "./reader-disk";
 import { parseSuites } from "./suites";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
-import { DayLog, dayId, isRecap, placePackets, poolDays, shiftClocks, withRecaps, type DaySummary } from "./pi-day";
+import {
+  DayLog,
+  dayId,
+  isRecap,
+  placePackets,
+  poolDays,
+  shiftClocks,
+  shiftMeta,
+  withRecaps,
+  type DaySummary,
+} from "./pi-day";
 import { sanitizeForStore } from "@eden/redact";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 
@@ -178,7 +188,7 @@ const LIMIT = Number(opt("limit", "0"));
 // a recap turn closing each day; 0 (the default) is one session per request.
 const DAY = Number(opt("day", "0"));
 if (!Number.isInteger(DAY) || DAY < 0) throw new Error(`--day must be a whole number of requests, not ${DAY}`);
-const DAYS: (DaySummary & { seed: number; kind: string })[] = [];
+const DAYS: (DaySummary & { seed: number; kind: string; partial?: boolean })[] = [];
 // `--templates a,b`: only the hidden-context tasks of these templates (both variants), for a small targeted smoke.
 const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
 
@@ -692,6 +702,8 @@ async function runWorld(
   let day: DayLog | null = null;
   let dayNo = -1;
   let newDay = true;
+  let daySession = "";
+  const dayPlanted: string[] = [];
   let dayMessages: AgentMessage[] = [];
   const dayPackets: string[][] = [];
   for (const task of tasks) {
@@ -705,14 +717,36 @@ async function runWorld(
     notify(partner, scope);
     if (DAY > 0 && newDay) {
       dayNo++;
-      day = new DayLog(dayId(task.id, dayNo), condition);
+      // One Eden session per day, named once: a suite whose ids do not share a prefix keeps it too.
+      daySession = dayId(task.id, dayNo);
+      day = new DayLog(daySession, condition);
       dayMessages = [];
       dayPackets.length = 0;
+      dayPlanted.length = 0;
     }
     const startsDay = newDay;
     newDay = DAY > 0 && isRecap(task);
     day?.turn();
-    const sessionId = DAY > 0 ? dayId(task.id, dayNo) : task.id;
+    const sessionId = DAY > 0 ? daySession : task.id;
+    if (DAY > 0 && day && isRecap(task)) {
+      // The world changes before the recap: the times of the day's planted items move, the sources serve the new
+      // text, and a notifying source says so (`--push`), as plans moved during the day would. Only before the recap,
+      // which is never graded: a moved item could otherwise land in a later request's slot and change its grade.
+      const touched = new Set<string>();
+      for (const id of dayPlanted) {
+        const it = world.items.find((x) => x.id === id);
+        if (!it) continue;
+        const moved = shiftClocks(it.text);
+        if (!moved.moves.length) continue;
+        it.text = moved.text;
+        if (it.meta) it.meta = shiftMeta(it.meta, moved.moves);
+        it.updatedAt = clock;
+        touched.add(it.sourceId);
+        day.changed(it.id, moved.moves);
+      }
+      for (const src of sources) if (touched.has(src.id)) src.reindex();
+      if (partner && CONNECTORS.push !== "none") for (const id of touched) partner.sourceChanged(scope, id);
+    }
     const ev = (e: Record<string, unknown>) => ({ ...scope, sessionId, at: clock, ...e }) as AgentEvent;
     const r: RunResult = emptyResult(task.id, condition);
     if (startsDay) await closePrevious();
@@ -1114,23 +1148,12 @@ async function runWorld(
     if (r.error) record.error = r.error.slice(0, 200);
     if (partner) Object.assign(record, uptake.fields());
     if (DAY > 0 && day) {
-      // The world changes after the request: its planted item's times move, the source serves the new text, and a
-      // notifying source says so (`--push`), as a meeting moved later that day would.
-      const it = task.planted && !isRecap(task) ? world.items.find((x) => x.id === task.planted) : undefined;
-      if (it) {
-        const moved = shiftClocks(it.text);
-        if (moved.moves.length) {
-          it.text = moved.text;
-          it.updatedAt = clock;
-          for (const src of sources) if (src.id === it.sourceId) src.reindex();
-          if (partner && CONNECTORS.push !== "none") partner.sourceChanged(scope, it.sourceId);
-          day.changed(it.id, moved.moves);
-        }
-      }
+      if (!isRecap(task) && task.planted) dayPlanted.push(task.planted);
       if (isRecap(task)) {
         // The recap is measured, never graded or reported as a task.
         day.recap(r.error ? "" : r.answer);
         DAYS.push({ ...day.summary(), seed, kind: task.kind });
+        day = null;
         previous = { sessionId, r };
         continue;
       }
@@ -1172,6 +1195,8 @@ async function runWorld(
     }
     previous = { sessionId, r };
   }
+  // A day cut short (budget, request cap) is still reported, marked partial.
+  if (day) DAYS.push({ ...day.summary(), seed, kind: tasks[0]?.kind ?? "", partial: true });
   await closePrevious();
   current = null;
   return out;

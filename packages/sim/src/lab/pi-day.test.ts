@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import type { Task } from "./ab-common";
-import { DayLog, dayId, isRecap, placePackets, poolDays, RECAP_TEXT, shiftClocks, withRecaps } from "./pi-day";
+import {
+  DayLog,
+  dayId,
+  isRecap,
+  placePackets,
+  poolDays,
+  RECAP_TEXT,
+  shiftClocks,
+  shiftMeta,
+  withRecaps,
+} from "./pi-day";
 
 const task = (id: string, planted?: string): Task => ({
   id,
@@ -52,8 +62,8 @@ describe("pi-ab --day (fix-s3b)", () => {
     const log = new DayLog("d", "eden");
     log.turn(); // 0
     log.packet(["A", "B"], "A at 12:30; B");
-    log.changed("A", [{ from: "12:30", to: "14:30" }]);
     log.turn(); // 1
+    log.changed("A", [{ from: "12:30", to: "14:30" }]); // at the turn's start, before its deliveries
     log.packet(["A"], "A at 12:30"); // repeat, changed since, and stale
     log.packet(["B"], "B (shown above)"); // repeat, unchanged
     log.answer(["B"], "B again"); // ask repeat
@@ -89,5 +99,24 @@ describe("pi-ab --day (fix-s3b)", () => {
     const msgs = [m("user", "u0"), m("assistant", "a0"), m("user", "u1"), m("toolResult", "t"), m("user", "u2")];
     const out = placePackets(msgs, [["p0"], []], ["p2a", "p2b"], (t) => m("system", t));
     expect(out.map((x) => x.c)).toEqual(["p0", "u0", "a0", "u1", "t", "p2a", "p2b", "u2"]);
+  });
+});
+
+describe("pi-ab --day, review fixes", () => {
+  test("the recap is a user's turn even after an arriving message, and shiftMeta moves a start with its text", () => {
+    const arrival = { ...task("w41:s7:2", "x"), event: "external" as const };
+    expect(withRecaps([arrival], 4)[1]!.event).toBe("user_message");
+    const meta = { start: "2026-10-30T14:30:00.000Z", people: "a" };
+    expect(shiftMeta(meta, [{ from: "14:30", to: "16:30" }])).toEqual({
+      start: "2026-10-30T16:30:00.000Z",
+      people: "a",
+    });
+    // Past midnight the date moves too; a start no move names stays.
+    expect(shiftMeta({ start: "2026-10-30T23:15:00.000Z" }, [{ from: "23:15", to: "01:15" }]).start).toBe(
+      "2026-10-31T01:15:00.000Z",
+    );
+    expect(shiftMeta({ start: "2026-10-30T09:00:00.000Z" }, [{ from: "14:30", to: "16:30" }]).start).toBe(
+      "2026-10-30T09:00:00.000Z",
+    );
   });
 });
