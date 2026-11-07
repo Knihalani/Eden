@@ -181,8 +181,9 @@ class EdenClient:
               failed: Optional[Callable[[Exception], Any]] = None) -> Any:
         """POSTs JSON; the parsed answer, or None on any failure (reported to ``failed`` and ``on_error``).
 
-        ``timeout_s`` bounds each socket operation (``urllib``'s timeout), not the whole request as the TypeScript
-        client's ``AbortSignal.timeout`` does: a server that trickles bytes can hold a call longer.
+        ``timeout_s`` bounds the connect, each socket read, and the body as a whole (the TypeScript client's
+        ``AbortSignal.timeout`` bounds the whole request). Not bounded: name resolution (``getaddrinfo`` takes no
+        timeout) and a status line and headers trickled a byte at a time, each read within the timeout.
         """
         route = path.split("?")[0]
         headers = {"content-type": "application/json"}
@@ -192,8 +193,10 @@ class EdenClient:
             # Inside the try: a body that cannot be serialised (a datetime in a tool's input) is no context.
             data = json.dumps(body).encode()
             req = urllib.request.Request(self._base + path, data=data, method="POST", headers=headers)
-            with _OPENER.open(req, timeout=self._timeout if timeout_s is None else timeout_s) as res:
-                answer = json.loads(res.read().decode())
+            timeout = self._timeout if timeout_s is None else timeout_s
+            deadline = time.monotonic() + timeout
+            with _OPENER.open(req, timeout=timeout) as res:
+                answer = json.loads(_read_by(res, deadline).decode())
             if valid is not None and not valid(answer):
                 name = route[len("/v1/"):]
                 raise EdenError(f"eden {route}: not {'an' if name[:1] in 'aeiou' else 'a'} {name} answer")
@@ -316,6 +319,19 @@ class EdenClient:
         res = self._post(path, {**self._who(session=False), "sourceId": source_id, field: part},
                          valid=lambda v: isinstance(v, dict) and _count(v.get(count)))
         return None if res is None else int(res[count])
+
+
+def _read_by(res: Any, deadline: float) -> bytes:
+    """The body, read a chunk at a time until ``deadline``: urllib's timeout bounds one read, so a server sending a
+    byte at a time would otherwise hold the call for as long as it likes."""
+    chunks: List[bytes] = []
+    while True:
+        if time.monotonic() > deadline:
+            raise TimeoutError("timed out")
+        chunk = res.read1(65_536)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
 
 
 def _count(v: Any) -> bool:

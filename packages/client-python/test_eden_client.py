@@ -3,6 +3,7 @@
 
 import json
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -147,6 +148,39 @@ class FailOpen(unittest.TestCase):
             for s in (redirect, other):
                 s.shutdown()
                 s.server_close()
+
+    def test_a_trickled_body_is_cut_at_the_timeout(self):
+        # urllib's timeout bounds each socket read: a body sent a byte every 0.1 s held a 0.3 s call for its whole
+        # length (10 s here); the TypeScript client's AbortSignal.timeout bounds the body too.
+        class Trickle(BaseHTTPRequestHandler):
+            def do_POST(self):  # noqa: N802
+                self.rfile.read(int(self.headers["content-length"]))
+                self.send_response(200)
+                self.send_header("content-length", "100")
+                self.end_headers()
+                try:
+                    for _ in range(100):
+                        self.wfile.write(b" ")
+                        self.wfile.flush()
+                        time.sleep(0.1)
+                except OSError:
+                    pass
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Trickle)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            c, errors = client(f"http://127.0.0.1:{server.server_port}")
+            c._timeout = 0.3
+            started = time.monotonic()
+            self.assertIsNone(c.ask("q", timeout_s=0.3))
+            self.assertLess(time.monotonic() - started, 1.5)
+            self.assertIn("timed out", str(errors[0]))
+        finally:
+            server.shutdown()
+            server.server_close()
 
     def test_none_options_take_the_defaults(self):
         # `base_url=os.environ.get("EDEN_URL")` is None when unset: the TypeScript client's `??` takes the default
