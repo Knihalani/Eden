@@ -10,5 +10,6 @@
   "readerStopEarly": false,
   "askReaderPool": 30,
   "askReaderItemChars": 400,
-  "pushCandidates": 0
+  "pushCandidates": 0,
+  "askNudge": false
 }

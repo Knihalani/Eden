@@ -106,7 +106,10 @@ per-task model spend is $0; the agent reads about 300–600 more input tokens a 
 Haiku (lab provider), train seeds 41–42, 1:1:8 mix, steady state per 1,000 tasks: short 0.338 (signals) and 0.415
 (payload, billed; cache hits vary between runs) against the old default's 0.631 and 0.665 and the agent alone's
 0.368; long 0.326 and 0.338 against 0.568 and 0.529 and the agent alone's 0.317 (docs/research/cl-cl6.md). The reader
-figures below hold for `pushCandidates: 0` (`--preset minus-candidates`).
+figures below hold for `pushCandidates: 0` (`--preset minus-candidates`). **D317 (A12) adds no model call of Eden's
+and no connector call** but makes the agent ask more (`askNudge`: +0.20–0.38 asks a task): +$0.061 per 1,000 tasks
+on the 1:1:8 mix (0.374 → 0.435, Pi, Anthropic Haiku, the 91 targeted train templates, seeds 41–44 and 41–42 for
+neutral; docs/research/a12-quality.md).
 
 Ask-time reader (D95, `askReader`, in the default since D112; `reader.ts`). One call per `ask` about an action (an
 imperative question, a question about blockers, or an ask while the session's latest request acts; any ask with

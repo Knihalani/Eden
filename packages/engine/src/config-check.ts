@@ -132,6 +132,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerReuse: PUSH,
   readerStopEarly: READER,
   pushCandidates: PUSH,
+  askNudge: PUSH,
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */

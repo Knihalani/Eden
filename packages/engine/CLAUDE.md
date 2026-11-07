@@ -19,6 +19,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `judge.ts`                                                                 | The judge's prompt and parser (indexes only, D19)                                                                                                                                                                             |
 | `line.ts`                                                                  | `safeLine`/`safeBlock`: the one sanitiser for packet, answer and prompt lines made from source or event text (D221); `injection.test.ts` is part D's probe as a standing test                                                 |
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
+| `settle.ts`                                                                | `askNudge`'s no-model test of whether the candidates settle a request's people, things and days (D316, D317)                                                                                                                  |
 | `cards.ts`, `intent.ts`, `sync.ts`                                         | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync                                                                                                                                              |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
@@ -206,6 +207,14 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   push still runs when `pushCandidates` > 0; only the reader's own push (`pushCandidates: 0`) needs one. Tests
   of the reader's own wiring set `pushCandidates: 0` (the core, the `reader` and `candidates` parts all do); the lab's
   reader screens run `--preset minus-candidates`.
+- **The candidates nudge an ask when they do not settle the request (`askNudge`, D316, D317: on in the default;
+  `settle.ts`).** When no handed candidate holds one of the request's entities and (if it names a day) one of its
+  days, the lead adds `ASK_NUDGE`, and `Session.nudged` keeps the push pool's ids past the handed ones for that
+  request (`internal.request`): an ask before the next user message adds up to `maxItems` of them that hold an anchor,
+  read from the cache as current copies. The nudge asks, never discourages (D257's lesson): hidden +9.2 points
+  Sonnet-graded, the gain all through the agent's asks (A12, docs/research/a12-quality.md). A wording that tells the
+  agent the candidates are wrong ("none of them matches") was not measured: it risks the agent dropping a planted fact
+  already in the packet (it is there in 322 of 422 nudged hidden tasks at $0). Its unit tests are `ask-nudge.test.ts`.
 - **The candidates' packet is not smaller (D258, D259; docs/research/cl-cl8.md).** 200-byte excerpts lost hidden facts
   (−12.8 points, with the no-repeat switch on: shorter excerpts keep the items but not the fact), k 3 saved only over a
   user's days and made the agent ask more one request at a time, k 3 after a session's first request lost hidden facts,

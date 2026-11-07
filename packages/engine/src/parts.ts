@@ -74,12 +74,18 @@ export const PARTS = {
     askReaderPool: 30,
     askReaderItemChars: 400,
     pushCandidates: 0,
+    askNudge: false,
   },
   /**
    * The push's candidates for the agent to judge, in place of the reader's push and ask readings (D236, D237): out,
    * the reader reads both again.
    */
-  candidates: { pushCandidates: 0 },
+  candidates: { pushCandidates: 0, askNudge: false },
+  /**
+   * The candidates' nudge to ask when they do not settle the request's people, things and day, and the ask's look past
+   * the handed items (D316, D317).
+   */
+  nudge: { askNudge: false },
   /** A lookup does not wait for its probes past its own search (D47's grace, 100 ms, taken out). */
   probeGrace: { probeGraceMs: 100 },
 } satisfies Record<string, Partial<EngineConfig>>;
