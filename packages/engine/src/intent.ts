@@ -177,9 +177,9 @@ export interface IntentCut {
   minCoverage: number;
   minMatched: number;
   /**
-   * `intentByKind` (D200, a trial): a constraint-carded hit counts from `cardCoverage` of the request's idf rather than
-   * `minCoverage`, and up to `cardHits` such hits past the first `hits` raw hits (or past the `hits` ids) are kept
-   * after the others. Null: one threshold for every hit, as before.
+   * `intentByKind` (D200, on in the default): a constraint-carded hit counts from `cardCoverage` of the request's idf
+   * rather than `minCoverage`, and up to `cardHits` such hits past the first `hits` raw hits (or past the `hits` ids)
+   * are kept after the others. Null: one threshold for every hit, as before.
    */
   byKind: { cardCoverage: number; cardHits: number } | null;
 }
@@ -213,20 +213,29 @@ export function intentCut(
  */
 const CARD_REACH = 3;
 
-/** How many raw hits to ask the store for under `cut`: a constraint card's extra seats read further down. */
+/**
+ * How many raw hits the carded pass asks the store for under `cut` (0: no carded pass). The shared pass always reads
+ * its own call of `hits`: the store skips hashes no longer cached or made too late before it cuts, so the first `hits`
+ * rows of a deeper call are not the rows a call of `hits` returns, and reading them would widen the uncarded cut too.
+ */
 export function intentReach(cut: IntentCut): number {
-  return cut.byKind && cut.byKind.cardHits > 0 ? cut.hits * CARD_REACH : cut.hits;
+  return cut.byKind && cut.byKind.cardHits > 0 ? cut.hits * CARD_REACH : 0;
 }
 
 /**
- * The raw hits (best first) that count as intent hits, item id → place. A hit counts with at least `minMatched` of
- * the request's terms and its threshold's share of their idf; its ids take the next places until `hits` ids are
- * placed, over the first `hits` raw hits only. With `byKind`, a constraint-carded hit's threshold is `cardCoverage`,
- * and carded hits left out by either cut take up to `cardHits` places after the others: a stated constraint is what
- * the reader is there to judge, and on train the carded misses were mostly hidden facts, the uncarded mostly decoys
- * (docs/research/fix-s3a-intent.md). Pure; no model, no call.
+ * The raw hits (best first) that count as intent hits, item id → place. `rows` is the store's call of `hits`; `deep`,
+ * with `byKind`, its call of `intentReach` (default `rows`). A hit counts with at least `minMatched` of the request's
+ * terms and its threshold's share of their idf; its ids take the next places until `hits` ids are placed, over the
+ * first `hits` of `rows` only. With `byKind`, a constraint-carded hit's threshold is `cardCoverage`, and carded hits
+ * of `deep` left out by either cut take up to `cardHits` places after the others (an uncarded hit is read from `rows`
+ * alone, as before D200): a stated constraint is what the reader is there to judge, and on train the carded misses
+ * were mostly hidden facts, the uncarded mostly decoys (docs/research/fix-s3a-intent.md). Pure; no model, no call.
  */
-export function keepIntents(rows: readonly IntentRow[], cut: IntentCut): Map<string, IntentKept> {
+export function keepIntents(
+  rows: readonly IntentRow[],
+  cut: IntentCut,
+  deep: readonly IntentRow[] = rows,
+): Map<string, IntentKept> {
   const out = new Map<string, IntentKept>();
   const by = cut.byKind;
   const passes = (r: IntentRow) =>
@@ -243,7 +252,7 @@ export function keepIntents(rows: readonly IntentRow[], cut: IntentCut): Map<str
   }
   if (!by || by.cardHits <= 0) return out;
   const until = out.size + by.cardHits;
-  for (const r of rows) {
+  for (const r of deep) {
     if (out.size >= until) break;
     if (r.carded && passes(r)) place(r, until);
   }

@@ -4478,14 +4478,13 @@ export class ContextPartner {
     // The request as written (redacted), not its content terms: the requests the model wrote are whole sentences in
     // the user's words, verbs included ("approve", "book"), which the cue's terms may leave out.
     const cut = intentCut(c);
-    const found = enricher.intentFinds(
-      s.scope,
-      cue.raw.slice(0, INTENT_QUERY_CHARS),
-      cue.arrived ?? now,
-      intentReach(cut),
-      (id) => this.deps.cache.get(s.scope, id, now) !== null,
-    );
-    return keepIntents(found, cut);
+    const text = cue.raw.slice(0, INTENT_QUERY_CHARS);
+    const accept = (id: string) => this.deps.cache.get(s.scope, id, now) !== null;
+    const found = enricher.intentFinds(s.scope, text, cue.arrived ?? now, c.intentHits, accept);
+    // `intentByKind`: a second, deeper search for the carded pass only (`intentReach`, intent.ts, says why apart).
+    const reach = intentReach(cut);
+    const deep = reach > 0 ? enricher.intentFinds(s.scope, text, cue.arrived ?? now, reach, accept) : found;
+    return keepIntents(found, cut, deep);
   }
 
   /**

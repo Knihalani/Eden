@@ -34,7 +34,8 @@ describe("keepIntents (intentByKind, D200)", () => {
     // Ids past `hits` are cut even inside the first raw hits.
     const wide: IntentRow = { ids: ["x", "y", "z", "w"], hit: { coverage: 0.9, matched: 3 } };
     expect([...keepIntents([wide], OFF).keys()]).toEqual(["x", "y", "z"]);
-    expect(intentReach(OFF)).toBe(3);
+    // No carded pass: no second, deeper search.
+    expect(intentReach(OFF)).toBe(0);
   });
 
   test("on: a carded hit counts from `cardCoverage`; an uncarded one still needs `minCoverage`", () => {
@@ -50,7 +51,16 @@ describe("keepIntents (intentByKind, D200)", () => {
     expect(kept.get("e")!.rank).toBe(4);
     // Read 3x `hits` deep for them.
     expect(intentReach(ON)).toBe(9);
-    expect(intentReach({ ...ON, byKind: { cardCoverage: 0.1, cardHits: 0 } })).toBe(3);
+    expect(intentReach({ ...ON, byKind: { cardCoverage: 0.1, cardHits: 0 } })).toBe(0);
+  });
+
+  test("on: the shared pass reads only the store's call of `hits`; the deep call adds carded hits alone", () => {
+    // The store skips hashes no longer cached before it cuts, so a deeper call's first rows can be uncarded hits the
+    // call of `hits` never returned (review of D200): they must not count.
+    const rows = [row("a", 0.5)];
+    const deep = [row("a", 0.5), row("u1", 0.9), row("u2", 0.9), row("c", 0.12, true)];
+    expect([...keepIntents(rows, ON, deep).keys()]).toEqual(["a", "c"]);
+    expect([...keepIntents(rows, OFF, deep).keys()]).toEqual(["a"]);
   });
 
   test("intentCut reads the engine's keys; the default has it on (D200), the core off", () => {
