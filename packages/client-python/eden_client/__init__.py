@@ -235,6 +235,9 @@ class EdenClient:
 
     def observe(self, event: Dict[str, Any], wait_ms: Optional[float] = None) -> Dict[str, Any]:
         """Reports an event; ``{"injection": ... or None, "pending": bool}``. A sent user message waits by default."""
+        # Not a dict (a caller's slip): sent as an empty event, which the server refuses and this reports, never raises.
+        if not isinstance(event, dict):
+            event = {}
         sent = event.get("kind") == "user_message" and not event.get("draft")
         asked = wait_ms if wait_ms is not None else (self._default_wait if sent else 0)
         try:

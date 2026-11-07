@@ -106,6 +106,16 @@ class FailOpen(unittest.TestCase):
             finally:
                 stub.close()
 
+    def test_observe_with_a_non_dict_event_does_not_raise(self):
+        stub = Stub(lambda p, b: (400, {"error": "bad event"}))
+        try:
+            c, errors = client(stub.url)
+            for event in (None, "user_message", ["kind"]):
+                self.assertEqual(c.observe(event)["injection"], None)
+            self.assertTrue(errors)
+        finally:
+            stub.close()
+
     def test_refs_not_taken_send_the_signal(self):
         stub = Stub(lambda p, b: (200, {"ok": True, "synced": False, "reason": "not-synced"}))
         try:

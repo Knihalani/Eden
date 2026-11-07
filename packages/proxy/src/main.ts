@@ -50,6 +50,8 @@ const server = Bun.serve({
   hostname: host,
   // Model calls take seconds to minutes; Bun's 10 s idle default would cut a slow stream.
   idleTimeout: 255,
+  // A chat body can carry images, so the cap is wide, but explicit: Bun's 128 MB default parsed and hashed whole.
+  maxRequestBodySize: Number(process.env.EDEN_PROXY_MAX_BODY_BYTES || 64 * 1024 * 1024),
   fetch: createProxy({
     upstream,
     edenUrl,
