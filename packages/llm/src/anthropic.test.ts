@@ -73,6 +73,27 @@ describe("AnthropicModel", () => {
     expect(body.thinking).toEqual({ type: "disabled" });
   });
 
+  test("reports a reply its stop sequence ended; a stream cut with no stop reason is an error", async () => {
+    const stopped = okEvents('{"a":1').map((e) =>
+      e.type === "message_delta" ? { ...e, delta: { stop_reason: "stop_sequence" } } : e,
+    );
+    const req = { messages: [{ role: "user" as const, content: "q" }], maxTokens: 50, stop: ["X"] };
+    expect((await new AnthropicModel({ apiKey: "k", fetch: streamFetch(stopped) }).chat(req)).stopped).toBe(true);
+    const cut = okEvents('{"a":1').filter((e) => e.type !== "message_delta");
+    // A cut stream's text could pass for a stopped reply (D240's closeStopped) and lose the entries after it.
+    await expect(new AnthropicModel({ apiKey: "k", fetch: streamFetch(cut) }).chat(req)).rejects.toThrow(
+      "without a stop reason",
+    );
+  });
+
+  test("sends stop sequences only when asked", () => {
+    const req = { messages: [{ role: "user" as const, content: "a" }], maxTokens: 10 };
+    expect("stop_sequences" in anthropicBody({ apiKey: "k" }, req, false)).toBe(false);
+    expect(anthropicBody({ apiKey: "k" }, { ...req, stop: ['"same":false'] }, false).stop_sequences).toEqual([
+      '"same":false',
+    ]);
+  });
+
   test("Sonnet 5.5 turns thinking off with between_tools (disabled is a 400 there) and is priced as listed", () => {
     const req = { messages: [{ role: "user" as const, content: "a" }], maxTokens: 100 };
     const sonnet = anthropicBody({ apiKey: "k", model: "claude-sonnet-5-5" }, req, false);
@@ -130,6 +151,7 @@ describe("AnthropicModel", () => {
     expect(res.usage).toEqual({ inputTokens: 640, cachedInputTokens: 600, cacheWriteTokens: 0, outputTokens: 12 });
     expect(res.ttftMs).toBeGreaterThanOrEqual(0);
     expect(res.truncated).toBe(false);
+    expect(res.stopped).toBe(false);
     expect(seen.headers?.get("x-api-key")).toBe("secret");
     expect(seen.body?.stream).toBe(true);
     expect(reserved.length).toBe(1);

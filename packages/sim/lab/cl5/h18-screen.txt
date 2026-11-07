@@ -1,0 +1,12 @@
+TOTAL      hidden in pool 70/96, decoy in pool 68/96, mean pool items 11.9
+TOTAL      hidden in pool 71/96, decoy in pool 68/96, mean pool items 12.1
+TOTAL      hidden in pool 70/96, decoy in pool 59/96, mean pool items 12.6
+TOTAL      hidden in pool 71/96, decoy in pool 54/96, mean pool items 12.6
+merged NEUTRAL TOTAL: any packet 114/384; 0.52 items, 0.35 packets, 109 packet bytes/task; ask 4.10 items/task; reader flagged any 41/384; 2.59 calls/task; 8.0 ms/task
+merged reader replay (summed): {"replayed":643,"sent":0,"missed":0,"failed":0}
+  TOTAL      hidden 313/384  decoys 127/384
+  TOTAL      hidden in pool 282/384, decoy in pool 249/384, mean pool items 12.3
+  COST SCREEN hidden  n 384: reader 0.84 calls/task, $0.2378/1k tasks (as made), 2.67 connector calls/task, ask 6.7 ms
+  COST SCREEN control n 384: reader 0.84 calls/task, $0.2422/1k tasks (as made), 2.70 connector calls/task, ask 5.8 ms
+  COST SCREEN neutral n 384: reader 0.80 calls/task, $0.1999/1k tasks (as made), 2.59 connector calls/task, ask 4.7 ms
+  COST SCREEN mix 1:1:8: reader 0.807 calls/task, $0.2079/1k tasks (Eden per-task, as made; no agent, no backfill), 2.61 connector calls/task

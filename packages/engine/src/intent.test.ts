@@ -553,4 +553,21 @@ describe("cardsLean: what the prefilter rejects is read for intent only when a p
     expect(base.calls.reduce((a, c) => a + c.n, 0)).toBe(7);
     expect(b.stats.leanSkipped).toBe(0);
   });
+  test("the default's window is 7 days (D244): a person's unworded mail of 10 days is skipped, constraint wording is not", async () => {
+    expect(DEFAULT_CONFIG.cardsLeanDays).toBe(7);
+    const tenDays = mail("t", "Sam Lee <sam@acme.com>", "Notes from the planning call", 10);
+    const tenDaysWorded = mail("w", "Sam Lee <sam@acme.com>", "Invoices must be approved by Dana before payment", 10);
+    expect(readForIntent(tenDays, NOW, DEFAULT_CONFIG.cardsLeanDays)).toBe(false);
+    // The same mail was read under D125's 30 days.
+    expect(readForIntent(tenDays, NOW, 30)).toBe(true);
+    const maker = new IntentMaker({});
+    const e = new CardEnricher({ maker, budget: new Budget(), now: () => NOW });
+    e.intend();
+    e.lean(DEFAULT_CONFIG.cardsLeanDays);
+    e.enqueue(scope, [human, tenDays, tenDaysWorded]);
+    await e.idle();
+    // The 3-day mail and the constraint-worded one are read; the unworded 10-day mail is not.
+    expect(maker.calls.reduce((a, c) => a + c.n, 0)).toBe(2);
+    expect(e.stats.leanSkipped).toBe(1);
+  });
 });

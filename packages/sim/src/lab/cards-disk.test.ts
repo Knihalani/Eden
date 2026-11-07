@@ -212,6 +212,46 @@ describe("samePath", () => {
     expect(asked).toEqual(["i5", "i6", "i7"]);
   });
 
+  test("an item read for requests only, its requests replayed, is not sent live (its card would be thrown away)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const reqFile = join(dir, "intent.jsonl");
+    const plain: ContextItem = { id: "p", sourceId: "gmail", ref: "p", title: "Lunch", text: "Lunch on Friday?" };
+    const worded: ContextItem = {
+      id: "w",
+      sourceId: "gmail",
+      ref: "w",
+      title: "Policy",
+      text: "Invoices must be approved by Dana before payment.",
+    };
+    const fresh: ContextItem = { id: "f", sourceId: "gmail", ref: "f", title: "Notes", text: "Notes from the call." };
+    writeFileSync(
+      reqFile,
+      [plain, worded].map((it) => JSON.stringify({ h: cardKey(it), r: [`about ${it.id}`] })).join("\n") + "\n",
+    );
+    const { maker, asked } = liveMaker();
+    const disk = new DiskCardMaker(join(dir, "cards.jsonl"), maker, {
+      out: join(dir, "out.jsonl"),
+      requests: [reqFile],
+    });
+    const got = await disk.make([plain, worded, fresh], "d", signal, false, true);
+    // The plain item has replayed requests and no constraint wording: covered with no call. The worded one may get a
+    // card; the third has no replayed requests: both live.
+    expect(asked).toEqual(["w", "f"]);
+    expect(disk.skipped).toBe(1);
+    expect(got.cards[0]?.kind).toBe("none");
+    expect(reqs(got)).toEqual([["about p"], ["about w"], null]);
+    // Without intent nothing is skipped: the card itself is what the call is for.
+    const { maker: m2, asked: a2 } = liveMaker();
+    await new DiskCardMaker(join(dir, "c2.jsonl"), m2, { out: join(dir, "o2.jsonl"), requests: [reqFile] }).make(
+      [plain],
+      "d",
+      signal,
+      false,
+      false,
+    );
+    expect(a2).toEqual(["p"]);
+  });
+
   test("an explicit requests file wins over requests in the card files, and a .gz one is read as is", async () => {
     const dir = mkdtempSync(join(tmpdir(), "cards-"));
     const replay = join(dir, "cards.jsonl");
@@ -308,10 +348,10 @@ describe("the harnesses' intent replay (D158)", () => {
 
   // Own timeout: four worlds built and listed take about 5 s under `bun run check`'s parallel run, past bun's default
   // 5 s (one of three timed checks failed on it, 5,410 ms; RealUse-1 part E).
-  test("the checked-in file covers held-out 13, 14 and 15 items (the shards INTENT_COVERS claims)", () => {
+  test("the checked-in file covers held-out 13, 14, 15 and 16 items (the shards INTENT_COVERS claims)", () => {
     const requests = loadRequests(INTENT_PATH);
     for (const [suite, seed] of [41, 44].flatMap((s) =>
-      (["heldout13", "heldout14", "heldout15"] as const).map((x) => [x, s] as const),
+      (["heldout13", "heldout14", "heldout15", "heldout16"] as const).map((x) => [x, s] as const),
     )) {
       for (const variant of ["hidden", "control"] as const) {
         // As hidden-funnel.ts and ab-common's worldOf build each world.
@@ -332,5 +372,5 @@ describe("the harnesses' intent replay (D158)", () => {
         expect(mine.found).toBe(mine.of);
       }
     }
-  }, 90_000); // Twelve worlds now (held-out 13, 14 and 15), three times the earlier four.
+  }, 120_000); // Sixteen worlds now (held-out 13 to 16), four times the earlier four.
 });

@@ -32,7 +32,9 @@ afterAll(() => {
 const noKey = { ...process.env, OPENROUTER_API_KEY: "" };
 // Every run below has the preset's sync capped at 100 items a user (3,000 by default): it still backfills, polls and
 // counts, but storing 3,000 items was 0.8 s of each run's 2.5 s CPU (bun --cpu-prof), and no check here needs them.
-const smallSync = { syncMaxItems: 100 };
+// The reader's push (`pushCandidates` 0): these runs check the reader's outputs and its replay, which the default's
+// candidates push (D237) does not call.
+const smallSync = { syncMaxItems: 100, pushCandidates: 0 };
 
 type Run = { status: number | null; stdout: string; stderr: string; out: string };
 /** `bun args…` in a child process without blocking this one, so the runs below can go out together. */

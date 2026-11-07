@@ -1,0 +1,58 @@
+{
+  "provider": "anthropic-direct (lab, D97)",
+  "model": "claude-haiku-5-5",
+  "wiring": "buildPartner (DEFAULT_CONFIG, DEFAULT_LIMITS, tenant cap $25/day)",
+  "set": {
+    "intentRequests": 2,
+    "cardsLeanDays": 7
+  },
+  "bulk": true,
+  "users": [
+    {
+      "user": "train5:43",
+      "itemsAtSources": 1525,
+      "syncTicks": 36,
+      "syncCalls": 18,
+      "warm": true,
+      "syncMs": 8152,
+      "enrichMs": 1280002,
+      "cardCalls": 8,
+      "bulkCalls": 7,
+      "inputTokens": 26604,
+      "cachedTokens": 10624,
+      "outputTokens": 10030,
+      "outPerCall": 1254,
+      "batches": [
+        {
+          "id": "msgbatch_0156hWUGx5ZsdjpdhsZK9iEh",
+          "requests": 7,
+          "ms": 1276570,
+          "succeeded": 7,
+          "failed": 0
+        }
+      ],
+      "usd": 0.004066,
+      "stats": {
+        "enqueued": 1525,
+        "prefiltered": 1400,
+        "leanSkipped": 1352,
+        "reused": 16,
+        "carded": 97,
+        "sent": 145,
+        "sentenceReused": 12,
+        "calls": 8,
+        "retries": 0,
+        "costUsd": 0.004065510000000001,
+        "failures": 0,
+        "overBudget": 0,
+        "unanchored": 0,
+        "implausible": 0,
+        "requestOnly": 48,
+        "requested": 105
+      }
+    }
+  ],
+  "meanUsd": 0.004066,
+  "meanCalls": 8,
+  "meanItems": 1525
+}

@@ -1,0 +1,10 @@
+arm         kind     n    req   read  write  plain   out | $/1k read write plain  out  total | 1st req read write hit% | cf total
+eden        control    23  1.09   6199    799      2   346 | 0.062 0.100 0.000 0.173 0.335 |   6077   737   96 | 0.332
+eden        hidden     23  1.00   7248    759      2   345 | 0.072 0.095 0.000 0.172 0.340 |   7248   759   96 | 0.337
+eden        neutral   186  1.08   6345    791      2   313 | 0.063 0.099 0.000 0.157 0.319 |   6164   734   96 | 0.316
+eden~late   control    23  1.09   5719    741      2   352 | 0.057 0.093 0.000 0.176 0.326 |   5539   689   91 | 0.320
+eden~late   hidden     23  1.00   6663    674      2   341 | 0.067 0.084 0.000 0.171 0.322 |   6663   674   96 | 0.319
+eden~late   neutral   186  1.10   5918    707      3   330 | 0.059 0.088 0.000 0.165 0.313 |   5737   634   97 | 0.311
+1:1:8 mix, agent billed $/1k (counterfactual cached prefix)
+  eden        0.323  0.320
+  eden~late   0.315  0.313

@@ -11,6 +11,7 @@ import {
   overBudgetLine,
   promptKey,
   ReplayModel,
+  stopLine,
   SubsetReplay,
   systemHash,
 } from "./reader-disk";
@@ -34,6 +35,43 @@ describe("ReplayModel misses (--reader replay)", () => {
     expect(m.missed).toBe(3);
     expect(m.replayed).toBe(0);
     expect(m.calls.length).toBe(0);
+  });
+});
+
+describe("ReplayModel stop sequences (D240's screen)", () => {
+  const text = '{"bears":[{"i":2,"why":"held","same":true,"binds":true},{"i":1,"why":"other","same":false}]}';
+  const usage = { inputTokens: 2_000, outputTokens: 100, cachedInputTokens: 900 };
+  const line = { text, usage, costUsd: 0.0002, latencyMs: 1_000, ttftMs: 400, model: "claude-haiku-5-5" };
+
+  test("stopLine cuts at the first stop and scales tokens, time and output cost by characters kept", () => {
+    const cut = stopLine(line, ['"same":false'])!;
+    const at = text.indexOf('"same":false');
+    expect(cut.text).toBe(text.slice(0, at));
+    expect(cut.usage.outputTokens).toBe(Math.round((100 * at) / text.length));
+    expect(cut.latencyMs).toBe(Math.round(400 + 600 * (at / text.length)));
+    expect(cut.costUsd).toBeCloseTo(0.0002 - ((100 - cut.usage.outputTokens) * 0.5) / 1e6, 12);
+    expect(stopLine(line, ["absent"])).toBeNull();
+  });
+
+  test("a request with a stop keys apart, replays a line recorded without it cut, and counts it", async () => {
+    const file = join(mkdtempSync(join(tmpdir(), "reader-")), "stop.jsonl");
+    const plain = request(1);
+    const k = promptKey("claude-haiku-5-5", plain);
+    writeFileSync(file, `${JSON.stringify({ k, ...line })}\n`);
+    expect(promptKey("claude-haiku-5-5", { ...plain, stop: ['"same":false'] })).not.toBe(k);
+    const m = new ReplayModel(file, null, "claude-haiku-5-5");
+    const res = await m.chat({ ...plain, stop: ['"same":false'] });
+    expect(res.text).toBe(text.slice(0, text.indexOf('"same":false')));
+    expect(m.stopSimulated).toBe(1);
+    // Without the stop the recorded reply replays whole.
+    expect((await m.chat(plain)).text).toBe(text);
+    expect(m.stopSimulated).toBe(1);
+    // With a live model the stopped request is made for real, never simulated.
+    let sent: ChatRequest | undefined;
+    const live = new ReplayModel(file, { id: "claude-haiku-5-5", chat: async (r) => ((sent = r), { ...line }) });
+    await live.chat({ ...plain, stop: ['"same":false'] });
+    expect(sent?.stop).toEqual(['"same":false']);
+    expect(live.stopSimulated).toBe(0);
   });
 });
 

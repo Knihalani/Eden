@@ -1,0 +1,15 @@
+.local/cl4/f-default.log:TOTAL      hidden in pool 140/192, decoy in pool 127/192, mean pool items 12.3
+.local/cl4/f-default.log:TOTAL      hidden in pool 142/192, decoy in pool 122/192, mean pool items 12.3
+.local/cl4/f-default.log:  TOTAL      hidden 313/384  decoys 127/384
+.local/cl4/f-default.log:reader screen (pool: the ids the reader was given for the request, a measurement of pool content, not a bound; top-K: the ask's ranked candidates; draft: the draft's pool against the request's first read):
+.local/cl4/f-default.log:  TOTAL      hidden in pool 282/384, decoy in pool 249/384, mean pool items 12.3
+.local/cl4/f-cl4b.log:TOTAL      hidden in pool 282/384, decoy in pool 249/384, mean pool items 12.3
+.local/cl4/f-cl4b.log:  TOTAL      hidden 313/384  decoys 127/384
+.local/cl4/f-cl4b.log:reader screen (pool: the ids the reader was given for the request, a measurement of pool content, not a bound; top-K: the ask's ranked candidates; draft: the draft's pool against the request's first read):
+.local/cl4/f-cl4b.log:  TOTAL      hidden in pool 282/384, decoy in pool 249/384, mean pool items 12.3
+.local/cl4/f-cl4b.log:against .local/cl4/f-default.json: hidden +0 −0, decoys +0 −0
+.local/cl4/f-afp.log:TOTAL      hidden in pool 282/384, decoy in pool 249/384, mean pool items 12.3
+.local/cl4/f-afp.log:  TOTAL      hidden 313/384  decoys 127/384
+.local/cl4/f-afp.log:reader screen (pool: the ids the reader was given for the request, a measurement of pool content, not a bound; top-K: the ask's ranked candidates; draft: the draft's pool against the request's first read):
+.local/cl4/f-afp.log:  TOTAL      hidden in pool 282/384, decoy in pool 249/384, mean pool items 12.3
+.local/cl4/f-afp.log:against .local/cl4/f-default.json: hidden +0 −0, decoys +0 −0

@@ -1,0 +1,9 @@
+arm              kind      n  rate   wall p50/p90/mean s  all-in $/1k (agent, Eden)  Eden path ms (obs, ask)  turns  asks  reader  conn  restarts
+eden             hidden    48 0.646   3.75/ 5.64/ 4.08   0.607 (0.291, 0.269)      1629 (1405,  224)   1.12  0.23  0.94   5.19  0.00
+eden             control   48 0.000   5.07/ 8.04/ 5.01   0.693 (0.377, 0.269)      1960 (1113,  847)   1.56  0.88  0.92   6.52  0.00
+eden+pushChecked hidden    48 0.667   3.79/ 5.65/ 4.04   0.603 (0.289, 0.266)      1613 (1350,  263)   1.12  0.23  0.92   5.35  0.00
+eden+pushChecked control   48 0.000   3.39/ 6.22/ 3.79   0.570 (0.270, 0.253)      1445 (1149,  296)   1.21  0.35  0.88   4.77  0.00
+
+== paired differences per kind (a − b), bootstrap 95%; * the interval excludes zero
+eden+pushChecked − eden   hidden   rate +0.021 (-0.083..+0.125)  wall s -0.038 (-0.388..+0.289)  $/1k -0.005 (-0.052..+0.042)  Eden ms -17 (-210..+179) turns +0.000 (-0.062..+0.062) 
+eden+pushChecked − eden   control  rate +0.000 (+0.000..+0.000)  wall s -1.224 (-1.744..-0.671)* $/1k -0.123 (-0.175..-0.068)* Eden ms -515 (-825..-215) turns -0.354 (-0.500..-0.208)*

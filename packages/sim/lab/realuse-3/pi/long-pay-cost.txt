@@ -1,0 +1,29 @@
+.local/ru3/runs/ru3-long-pay-41.json: user w41, 2 days (16,16), 0 clashes
+.local/ru3/runs/ru3-long-pay-42.json: user w42, 2 days (16,16), 0 clashes
+.local/ru3/runs/ru3-long-pay-43.json: user w43, 2 days (16,16), 0 clashes
+.local/ru3/runs/ru3-long-pay-44.json: user w44, 2 days (16,16), 0 clashes
+
+$ per 1,000 tasks (agent and Eden per task; bg run = Eden's cards and intent while the user worked, per task; one-time = backfill per user; steady = agent + Eden + bg run; all-in = steady + one-time spread over the user's tasks in this run). Recap turns are probes: not tasks, their $ apart.
+condition        n users   agent    Eden  bg run  steady  all-in  mix st  mix all   one-time $/user (from)  reader/t  Eden conn/t  agent tools/t  wall p50  mean  recaps $
+tools          128     4   0.390   0.000   0.000   0.390   0.390   0.391    0.391           0.0000 (none)      0.00         0.00           2.58      3.56  3.48    0.0047
+eden           128     4   0.331   0.000   0.021   0.352   0.554   0.352    0.554           0.0065 (cold-start)      0.00         1.08           0.07      2.45  2.56    0.0059
+eden~reader    128     4   0.293   0.215   0.000   0.508   0.710   0.510    0.712           0.0065 (cold-start)      1.01         0.96           0.39      3.02  3.49    0.0056
+
+per kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s
+tools          hidden     16  raised 4/16 (25.0%)  $0.347/1k  p50 3.12
+tools          control    16  raised 0/16 (0.0%)  $0.382/1k  p50 3.27
+tools          neutral    96  raised 3/96 (3.1%)  $0.398/1k  p50 3.59
+eden           hidden     16  raised 12/16 (75.0%)  $0.306/1k  p50 2.49
+eden           control    16  raised 0/16 (0.0%)  $0.342/1k  p50 2.35
+eden           neutral    96  raised 7/96 (7.3%)  $0.334/1k  p50 2.45
+eden~reader    hidden     16  raised 13/16 (81.3%)  $0.455/1k  p50 2.93
+eden~reader    control    16  raised 0/16 (0.0%)  $0.507/1k  p50 2.91
+eden~reader    neutral    96  raised 2/96 (2.1%)  $0.518/1k  p50 3.06
+
+per day (long horizon): n, agent and Eden $ per 1k tasks, wall p50 s
+tools          day 0   64  agent   0.376  Eden  0.000  p50 3.37
+tools          day 1   64  agent   0.403  Eden  0.000  p50 3.62
+eden           day 0   64  agent   0.370  Eden  0.000  p50 2.28
+eden           day 1   64  agent   0.292  Eden  0.000  p50 2.81
+eden~reader    day 0   64  agent   0.255  Eden  0.244  p50 2.75
+eden~reader    day 1   64  agent   0.332  Eden  0.186  p50 3.70

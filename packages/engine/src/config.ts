@@ -348,7 +348,11 @@ export interface EngineConfig {
    * items the prefilter rejects still read.
    */
   cardsLean: boolean;
-  /** With `cardsLean`: how old (days, by its date or its start) an unconstrained item may be and still be read. */
+  /**
+   * With `cardsLean`: how old (days, by its date or its start) an unconstrained item may be and still be read. 7 since
+   * D244 (30 before): a new user's enrichment cost 58% less ($0.0208 to $0.0088, 22 calls to 8) with hidden facts
+   * surfaced 313 to 321 and decoys 127 to 129 (train1-6, seeds 41-42, paid reader; docs/research/cl-cl3.md).
+   */
   cardsLeanDays: number;
   /**
    * Items the intent index may add to a request's candidates, best first. The default's 12/0.2/1 (with the two
@@ -445,6 +449,21 @@ export interface EngineConfig {
    * past the ask's wait leaves the ask answered without the reader, with no call.
    */
   readerReuse: boolean;
+  /**
+   * D240 (on in the default): with `askReader`, the reader's reply stops at the first entry the model says is not
+   * about the request's own thing (`READER_STOP`). Binding entries come first, so what is cut is the look-alikes after
+   * the first one, which it would only reject: half the output tokens, about 250 ms less per reading.
+   */
+  readerStopEarly: boolean;
+  /**
+   * `pushCandidates` (D236, promoted by D237; CL6 H19 "the agent is the reader"): with `readerPush`, the push makes no
+   * reader call, and neither does an `ask`. The push hands the agent the first `pushCandidates` items of the pool the
+   * reader would have read (the ask's order, `askReaderPool` deep, bulk mail out; none when no pooled item passes
+   * `readerGate`'s constraint test), each a focused excerpt of `compactItemBytes` (at most 2,000), after a fixed line
+   * of Eden's own framing them as items that may bear on the request, to be checked against its who, what and when
+   * first (`CANDIDATES_LEAD`). 0 is the reader's push and asks (D95–D99).
+   */
+  pushCandidates: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -538,7 +557,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   compactParts: true,
   intent: true,
   cardsLean: true,
-  cardsLeanDays: 30,
+  cardsLeanDays: 7,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,
@@ -560,4 +579,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerGateVisits: true,
   readerVerifyAfter: true,
   readerReuse: true,
+  readerStopEarly: true,
+  pushCandidates: 5,
 };

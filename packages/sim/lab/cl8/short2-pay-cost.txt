@@ -1,0 +1,13 @@
+
+$ per 1,000 tasks (agent and Eden per task; bg run = Eden's cards and intent while the user worked, per task; one-time = backfill per user; steady = agent + Eden + bg run; all-in = steady + one-time spread over the user's tasks in this run). Recap turns are probes: not tasks, their $ apart.
+condition        n users   agent    Eden  bg run  steady  all-in  mix st  mix all   one-time $/user (from)  reader/t  Eden conn/t  agent tools/t  wall p50  mean  recaps $
+eden           432     2   0.428   0.000   0.000   0.428   0.440   0.421    0.433           0.0026 (in-run)      0.00         0.00           0.77      3.18  3.47    0.0000
+eden~k3        432     2   0.403   0.000   0.000   0.403   0.411   0.418    0.426           0.0016 (in-run)      0.00         0.00           0.78      3.38  3.59    0.0000
+
+per kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s
+eden           hidden    144  raised 101/144 (70.1%)  $0.422/1k  p50 2.81
+eden           control   144  raised 4/144 (2.8%)  $0.444/1k  p50 3.25
+eden           neutral   144  raised 1/144 (0.7%)  $0.418/1k  p50 3.43
+eden~k3        hidden    144  raised 99/144 (68.8%)  $0.390/1k  p50 2.78
+eden~k3        control   144  raised 4/144 (2.8%)  $0.396/1k  p50 3.34
+eden~k3        neutral   144  raised 1/144 (0.7%)  $0.425/1k  p50 3.66

@@ -1,0 +1,10 @@
+eden         control  n   64  haiku 1.0  regraded   1
+eden         neutral  n   64  haiku 2.0  regraded   0
+eden~reader  control  n   64  haiku 0.0  regraded   0
+eden~reader  neutral  n   64  haiku 3.0  regraded   0
+disputed: ru3-short-sig-41 w41:heldout16-neutral:inset-day-closure eden sonnet drops
+disputed: ru3-short-sig-41 w41:heldout16-neutral:fasting-blood-test eden~reader sonnet drops
+disputed: ru3-short-sig-42 w42:heldout16-neutral:ellie-pram-sorted eden sonnet drops
+disputed: ru3-short-sig-42 w42:heldout16-neutral:dilating-drops-no-driving eden~reader sonnet drops
+eden − eden~reader control+neutral concern (haiku) runs 2 n 128 diff +0.0000 (-0.0391..+0.0391)
+eden − eden~reader control+neutral concern (regraded) runs 2 n 128 diff +0.0078 (+0.0000..+0.0234)

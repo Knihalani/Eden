@@ -1,0 +1,99 @@
+{
+  "provider": "anthropic-direct (lab, D97)",
+  "model": "claude-haiku-5-5",
+  "wiring": "buildPartner (DEFAULT_CONFIG, DEFAULT_LIMITS, tenant cap $25/day)",
+  "set": {},
+  "users": [
+    {
+      "user": "user:41",
+      "seed": 41,
+      "itemsAtSources": 1501,
+      "syncTicks": 45,
+      "syncCalls": 18,
+      "warm": true,
+      "syncMs": 10073,
+      "enrichMs": 37059,
+      "cardCalls": 7,
+      "inputTokens": 23774,
+      "cachedTokens": 9240,
+      "outputTokens": 13644,
+      "outPerCall": 1949,
+      "usd": 0.008368,
+      "stats": {
+        "enqueued": 1501,
+        "prefiltered": 1391,
+        "leanSkipped": 1341,
+        "reused": 10,
+        "carded": 82,
+        "sent": 133,
+        "sentenceReused": 17,
+        "calls": 7,
+        "retries": 0,
+        "costUsd": 0.0083678,
+        "failures": 0,
+        "overBudget": 0,
+        "unanchored": 0,
+        "implausible": 1,
+        "requestOnly": 50,
+        "requested": 130
+      }
+    },
+    {
+      "user": "user:42",
+      "seed": 42,
+      "itemsAtSources": 1495,
+      "syncTicks": 46,
+      "syncCalls": 18,
+      "warm": true,
+      "syncMs": 10212,
+      "enrichMs": 27114,
+      "cardCalls": 7,
+      "inputTokens": 21756,
+      "cachedTokens": 9240,
+      "outputTokens": 10378,
+      "outPerCall": 1483,
+      "usd": 0.006533,
+      "stats": {
+        "enqueued": 1495,
+        "prefiltered": 1389,
+        "leanSkipped": 1353,
+        "reused": 14,
+        "carded": 76,
+        "sent": 115,
+        "sentenceReused": 13,
+        "calls": 7,
+        "retries": 0,
+        "costUsd": 0.006533000000000001,
+        "failures": 0,
+        "overBudget": 0,
+        "unanchored": 0,
+        "implausible": 3,
+        "requestOnly": 36,
+        "requested": 93
+      }
+    }
+  ],
+  "meanUsd": 0.007451,
+  "meanCalls": 7,
+  "meanItems": 1498,
+  "userShape": {
+    "suites": [
+      "train1",
+      "train2",
+      "train3",
+      "train4",
+      "train5",
+      "train6"
+    ],
+    "days": 8,
+    "daySize": [
+      12,
+      20
+    ],
+    "mix": {
+      "hidden": 1,
+      "control": 1,
+      "neutral": 8
+    }
+  }
+}

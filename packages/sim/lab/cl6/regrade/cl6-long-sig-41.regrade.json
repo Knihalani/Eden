@@ -1,0 +1,144 @@
+{
+ "runGrader": "claude-haiku-5-5",
+ "summary": [
+  {
+   "grader": "claude-haiku-5-5",
+   "answers": 8,
+   "readable": 8,
+   "errors": 0,
+   "msMedian": 670,
+   "factsTrue": 5,
+   "agreeWithRun": {
+    "same": 5,
+    "of": 8
+   },
+   "agreeWith": {},
+   "usd": 0.0005340999999999999,
+   "byKind": {
+    "neutral": {
+     "answers": 7,
+     "facts": 7,
+     "same": 4,
+     "onlyMine": 0,
+     "onlyRun": 3,
+     "trueMine": 4,
+     "trueRun": 7
+    },
+    "control": {
+     "answers": 1,
+     "facts": 1,
+     "same": 1,
+     "onlyMine": 0,
+     "onlyRun": 0,
+     "trueMine": 1,
+     "trueRun": 1
+    }
+   }
+  }
+ ],
+ "requests": {
+  "sent": 8,
+  "retried": 0,
+  "refused": 0,
+  "statuses": {},
+  "cap": 0
+ },
+ "graded": [
+  {
+   "task": "w41:train4-neutral:new-supplier-three-quotes",
+   "condition": "tools",
+   "grader": "claude-haiku-5-5",
+   "usd": 6.6e-05,
+   "facts": {
+    "new-supplier-three-quotes": false
+   },
+   "readable": true,
+   "reply": "{\"1\": false}",
+   "ms": 904
+  },
+  {
+   "task": "w41:train3-neutral:preprod-pentest-window",
+   "condition": "tools",
+   "grader": "claude-haiku-5-5",
+   "usd": 6.47e-05,
+   "facts": {
+    "preprod-pentest-window": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true, \"2\": false}",
+   "ms": 670
+  },
+  {
+   "task": "w41:train4-neutral:uncapped-liability-redline",
+   "condition": "tools",
+   "grader": "claude-haiku-5-5",
+   "usd": 7.2e-05,
+   "facts": {
+    "uncapped-liability-redline": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 621
+  },
+  {
+   "task": "w41:train4-neutral:unreleased-feature-promise",
+   "condition": "eden",
+   "grader": "claude-haiku-5-5",
+   "usd": 5.77e-05,
+   "facts": {
+    "unreleased-feature-promise": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 1366
+  },
+  {
+   "task": "w41:train4-neutral:extended-terms-credit-check",
+   "condition": "eden",
+   "grader": "claude-haiku-5-5",
+   "usd": 6.57e-05,
+   "facts": {
+    "extended-terms-credit-check": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 670
+  },
+  {
+   "task": "w41:train4-neutral:uncapped-liability-redline",
+   "condition": "eden",
+   "grader": "claude-haiku-5-5",
+   "usd": 7.23e-05,
+   "facts": {
+    "uncapped-liability-redline": false
+   },
+   "readable": true,
+   "reply": "{\"1\": false}",
+   "ms": 579
+  },
+  {
+   "task": "w41:train3-neutral:preprod-pentest-window",
+   "condition": "eden~cand",
+   "grader": "claude-haiku-5-5",
+   "usd": 7.120000000000001e-05,
+   "facts": {
+    "preprod-pentest-window": false
+   },
+   "readable": true,
+   "reply": "{\"1\": false}",
+   "ms": 622
+  },
+  {
+   "task": "w41:train4-control:publicity-consent-register",
+   "condition": "eden~cand",
+   "grader": "claude-haiku-5-5",
+   "usd": 6.45e-05,
+   "facts": {
+    "publicity-consent-register": true
+   },
+   "readable": true,
+   "reply": "{\"1\": true}",
+   "ms": 749
+  }
+ ]
+}

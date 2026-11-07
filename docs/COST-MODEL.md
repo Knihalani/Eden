@@ -100,6 +100,14 @@ rows, $0.0453 ($0.0172 off, $0.0281 low). It used a scratch script outside the r
 
 The bridging query (D89) was deleted by D112; its cost notes are in git history.
 
+**Since D237 (CL6, 2026-11-07) the default makes no reader call** (`pushCandidates` 5: the push hands the agent its
+pool's first five items to judge, about 950 bytes a task in the $0 funnel; an ask reads nothing either). Eden's
+per-task model spend is $0; the agent reads about 300–600 more input tokens a task on the short horizon. Pi, Anthropic
+Haiku (lab provider), train seeds 41–42, 1:1:8 mix, steady state per 1,000 tasks: short 0.338 (signals) and 0.415
+(payload, billed; cache hits vary between runs) against the old default's 0.631 and 0.665 and the agent alone's
+0.368; long 0.326 and 0.338 against 0.568 and 0.529 and the agent alone's 0.317 (docs/research/cl-cl6.md). The reader
+figures below hold for `pushCandidates: 0` (`--preset minus-candidates`).
+
 Ask-time reader (D95, `askReader`, in the default since D112; `reader.ts`). One call per `ask` about an action (an
 imperative question, a question about blockers, or an ask while the session's latest request acts; any ask with
 `askReaderQuestions`), never per event, never on the fast path, cached per user and session by request and pool, so a
@@ -133,6 +141,13 @@ a call, and since D192 (`readerVerifyAfter`) no doubted item is re-read beside a
 (lab provider, cached), heldout13+14, seeds 41-42, both on against the old default: reader calls a neutral task
 1.78 → 0.88, Eden's per-task $ on neutral tasks $0.465 → $0.218 per 1,000, the 1:1:8 mix all-in $0.856 → $0.628
 per 1,000 tasks (−$0.228, CI −0.292..−0.165) and 2.45 fewer connector calls a task (docs/research/fix-s1-reader.md).
+Since D240 (`readerStopEarly`) the reply stops at the first entry the model says is not the request's own thing
+(lab provider, cached; train1–6 seeds 41–42, 643 calls each, docs/research/cl-cl2.md): 2,834 tokens in, output 172 →
+91, $0.000284 → $0.000244 a call (−14%), reader p50 1,129 → 869 ms. Its latency is output: over 2,544 live calls,
+759 ms + 2.89 ms per output token, flat in input. Pi (train, n 120 a kind short, 96 on `--day 4`): Eden's per-task $
+−18% (short) and −10..−20% (day), wall −0.61..−0.77 s short. Smaller pools (`askReaderPool` 10: −22% $ a call) and
+narrower items (160 characters) cost recall and were not taken (D238); compact item fences save 2% of tokens (D239);
+a per-user cached item prefix would cost more to read than it saves (D241).
 
 **Reader reasoning (D144): the default sends none.** Until D144 `ModelReaderMaker` defaulted to reasoning "low", which
 the servers send to OpenRouter, while every lab figure above (and D96's, D98's and D125's quality) ran with thinking
@@ -458,6 +473,24 @@ at most one extra search per notification (not separately measured).
   about 10 reads per session, past which a long session's later requests take the no-model path.
 - Reader calls are about 2,800 input tokens ($0.00028 priced uncached) and 200 output tokens ($0.0001) each on Haiku
   5.5 (haiku-phase3.md, lab provider, thinking off; D144 made "off" the shipped default); the budget reserves $0.002 a call (`DEFAULT_READER_LIMITS.estimateUsd`).
+
+## Cards and intent over a user's lifetime (CL3, D242–D245)
+
+Anthropic-direct lab figures (Haiku 5.5, `cold-start.ts` through `buildPartner`; docs/research/cl-cl3.md §7). A
+user's background enrichment is a one-time backfill plus a daily trickle:
+
+| | Default before D244 (30-day lean window) | Default since D244 (7 days) |
+| --- | --- | --- |
+| One-time backfill, measured (3 users) | $0.0208, 21.7 calls, 103 s to idle | $0.0088, 8 calls, 41 s to idle |
+| Per day, estimate (≈ 36 new items a day, ≈ 10 sent to the card model) | ≈ $0.0005–0.0006 | the same (the window bounds only the backlog) |
+| 30 days of use, estimate | ≈ $0.038 | ≈ $0.026 |
+| Per 1,000 tasks at 12–20 requests a day for 30 days, estimate | ≈ $0.06–0.10 | ≈ $0.04–0.07 |
+
+Short-horizon benchmarks that spread one user's backfill over that user's run overstate it: one user over 128 Pi tasks
+is $0.162 per 1,000 tasks before D244 and $0.069 after. Not taken: the Message Batches API for the backlog (D242:
+−45% of what is left, about $0.004 per user, at a 17–22 minute wait without cards, the state that costs most recall)
+and two intent requests instead of four (D243: −7%, hidden facts lost). Prompt caching saves 10–28% of a card call
+and about 23% of a reader call on the Anthropic transport; on OpenRouter the cache is off until D145's probe.
 
 ## Budget defaults (`packages/llm/src/budget.ts`)
 
