@@ -12,12 +12,13 @@ the $1.20 cap.
   fact once more. A17 measured +6.8 points of hidden facts raised, but its interval reached below zero, so it set a
   rule (written down here before running): one fresh run on new users decides.
 - **The fresh run did not confirm it.** On four new users over eight days each, both notice modes, the fix raised
-  hidden facts by **+2.7 points (−1.8..+7.3, n 110)**: positive, but less than half of A17's gain. Pooled with A17, **+3.8
-  (−0.01..+7.71)**: the interval still touches zero. A stronger grader (Sonnet 5.5) confirmed one more false concern
+  hidden facts by **+2.7 points (−1.8..+7.3, n 110)**: positive, but less than half of A17's gain. Pooled with A17, **+3.9
+  (+0.01..+7.72)**: the interval clears zero by a hair (on the rounded bounds it touches it). A stronger grader (Sonnet 5.5) confirmed one more false concern
   with the fix than without (1 against 0, all from 16 Haiku-flagged answers).
 - The fix also costs: +$0.018 per 1,000 tasks of agent tokens under payload notices, and extra connector reads under
   signal notices (5.48 → 5.56 Eden calls a task).
-- **Decision: deleted (D380, under D112).** Two of the three pre-registered conditions failed. The switch, its session
+- **Decision: deleted (D380, under D112).** The concern condition failed as pre-registered; the pooled-interval
+  condition sits on its edge (passes on exact bounds, fails on rounded ones), so the deletion rests on the concerns. The switch, its session
   state, its tests and its fuzz variant are gone; the default is unchanged (it was off).
 - **One caveat.** The new users' cards had to be made in-run and no intent requests exist for them (the checked-in
   ones cover users 41–44 only), so both arms ran with intent inert; the comparison is paired, but it is not the exact
@@ -71,7 +72,8 @@ python3 -I packages/sim/lab/a17/days.py --pair eden,eden+pushReshow .local/a26/r
 env -u OPENROUTER_API_KEY bun packages/sim/src/lab/regrade.ts --results .local/a26/runs/a26-pay-61.json \
   --graders claude-sonnet-5-5 --only-concerns --spend-ledger .local/a26/ledger.jsonl --spend-cap 1.2 ...  # each run
 python3 -I packages/sim/lab/a26/concerns.py .local/a26/runs/a26-rg-*.json
-python3 -I packages/sim/lab/a26/pool.py 2.7 -1.8 7.3
+python3 -I packages/sim/lab/a17/reshown.py .local/a26/runs/a26-{pay,sig}-6{1,2,3,4}       # reshown.txt
+python3 -I packages/sim/lab/a26/pool.py 2.727 -1.818 7.273                               # pool.txt
 bun packages/sim/src/lab/pi-cost-report.ts .local/a26/runs/a26-pay-6{1,2,3,4}.json      # and the sig runs
 ```
 
@@ -79,7 +81,7 @@ Users w61–w64: 8 days of 12–20 requests (1:1:8), 523 tasks an arm a mode (55
 nothing-to-add) and 32 recap days; Pi harness, Haiku 5.5 in every role, `--tenant-prompt`, direct market profile.
 The payload runs made the 1,085 cards the checked-in files lacked (in-run, both arms alike); the signals runs replayed
 them. Intent requests: none cover seeds 61–64, so both arms ran `[intent inert: no replay]`. Outputs in
-`packages/sim/lab/a26/` (`days-pay.txt`, `days-sig.txt`, `days-all.txt`, `cost-*.txt`, `concerns.txt`, `pool.txt`).
+`packages/sim/lab/a26/` (`days-pay.txt`, `days-sig.txt`, `days-all.txt`, `cost-*.txt`, `concerns.txt`, `pool.txt`, `reshown.txt`).
 
 ## 2. Results
 
@@ -90,7 +92,11 @@ Paired task by task (eden+pushReshow − eden, bootstrap 95%; each mode has its 
 | payload | 55 | +0.0 (−7.3..+7.3) | +0.0 | +0.7 (−0.2..+1.9) | +0.018 (+0.013..+0.022) | +0.05 |
 | signals | 55 | +5.5 (+0.0..+12.7) | +1.8 (+0.0..+5.5) | +0.5 (−0.7..+1.9) | −0.000 (−0.004..+0.004) | −0.02 |
 | **both (fresh)** | 110 | **+2.7 (−1.8..+7.3)** | +0.9 (+0.0..+2.7) | +0.6 (−0.2..+1.5) | +0.009 (+0.006..+0.012) | +0.01 |
-| **A17 + fresh, pooled (§0)** | 330 | **+3.8 (−0.01..+7.71)** | | | | |
+| **A17 + fresh, pooled (§0)** | 330 | **+3.9 (+0.01..+7.72)**¹ | | | | |
+
+¹ From the fresh bootstrap's exact bounds (+0.0273, −0.0182..+0.0727: multiples of 1/110); on the bounds rounded as
+`days.py` prints them, +3.8 (−0.01..+7.71). A17's own interval is rounded to 0.1, so (b) is on the rounding edge
+(`pool.txt`).
 
 - **By position.** Requests 1–4: +13.6 (+0.0..+27.3, n 22); requests 5 onward: +0.0 (−4.5..+4.5, n 88). A17 put the
   gain in requests 5 onward; here it is not there.
@@ -105,8 +111,10 @@ Paired task by task (eden+pushReshow − eden, bootstrap 95%; each mode has its 
   0.352 → 0.362. Signals: agent tokens flat, Eden connector calls 5.48 → 5.56 a task (plus 0.31 in the background in
   both), Composio 1.976 → 1.999, Zapier MCP 149.66 → 151.64; first-party 0.239 both.
 
-**Rule:** (a) +2.7 ≥ 0, holds. (b) pooled +3.8 (−0.01..+7.71), the interval includes zero: fails. (c) Sonnet-confirmed
-concerns 0 → 1: fails. **Delete** (D380).
+**Rule:** (a) +2.7 ≥ 0, holds. (b) pooled +3.9 (+0.01..+7.72) on exact inputs, (−0.01..) on rounded ones: on the
+edge, not a clear pass. (c) Sonnet-confirmed concerns 0 → 1, against a pre-registered bar of "not up": fails. **Delete**
+(D380), on (c). The first draft of this note read (b) from the rounded inputs and called it failed; the review
+caught it.
 
 ## 3. What was deleted
 
