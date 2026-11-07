@@ -19,7 +19,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `judge.ts`                                                                 | The judge's prompt and parser (indexes only, D19)                                                                                                                                                                             |
 | `line.ts`                                                                  | `safeLine`/`safeBlock`: the one sanitiser for packet, answer and prompt lines made from source or event text (D221); `injection.test.ts` is part D's probe as a standing test                                                 |
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
-| `cards.ts`, `intent.ts`, `sync.ts`                                         | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync                                                                                                                                              |
+| `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
@@ -29,7 +29,9 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 
 `bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `ingest.bench.ts` (memory per synced
 user, ingest µs/item; the scale anchor, docs/TESTING.md), `index-memory` (the per-user index's heap per item and per
-user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`.
+user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`; `many-sources` (one user, ~1,000
+connectors, a session) and `source-days` (the same over whole days with changing sources: listing and card calls per
+user per day, D324).
 
 ## Invariants (with the decisions)
 
@@ -255,6 +257,16 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   once, before the poll, and searches the head of that ranking: a second route would draw apart, and an ask must
   never answer a stale copy it did not poll (D127, D263's review). Per-(user, source) state is multiplied by
   the source count: keep it lazy (the fan-out's histograms were 8 KB a pair before D261).
+- **Used sources (D320–D323, docs/research/a13-scale.md).** `Sync.engage` marks a source used when a lookup routes to
+  it on evidence of its items (`entityHits`, or `routeLocalHits`), never on the prior's draw or a sketch match alone
+  (counted, sketch matches doubled card calls for no hidden fact). Used sources drive two things: their cut copies are
+  read whole again and kept first by the trim (`syncEngagedDeep`), and, past 32 sources, only their items (and items
+  naming a name the user's requests named) reach the card model (`cardsSourceAware`; `CardEnricher.enqueue`'s
+  `defer`). A new path that stores synced items must pass `cardDefer`, or a 1,000-source user's cards go back to every
+  item. `syncKeepCut` filters only background stores: a lookup's on-demand poll still stores past the cut (filtering it
+  lost 2 of 96 hidden facts: what it stores is routing evidence), and the trim waits for 1.5x the cap (trimming the
+  backfill's overshoot back to the cap also lost 2). The sketch (`sketch.ts`) is per (user, source) in `SourceSync`,
+  filled from every listed item in `store`, folded at `warmUp`.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

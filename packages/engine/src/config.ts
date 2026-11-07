@@ -262,7 +262,7 @@ export interface EngineConfig {
    */
   routeLocalHits: boolean;
   /**
-   * Trial (D321, off). The sync keeps each user to `syncMaxItems` after the backfill too: polls and sweeps store no
+   * On in the default (D321). The sync keeps each user to `syncMaxItems` after the backfill too: polls and sweeps store no
    * dated item older than the user's cut (that source's copy is then cut, D264), the user's synced items are trimmed
    * back to the cap once a page past it, and a sweep stops once it has listed every id it holds for the source. Off:
    * a sweep of a source the cap emptied lists it to `syncMaxItems` and stores it all, and polls store past the cap, so
@@ -270,7 +270,7 @@ export interface EngineConfig {
    */
   syncKeepCut: boolean;
   /**
-   * Trial (D322, off). With `sync`, each source keeps a vocabulary sketch of what the sync listed from it (a Bloom
+   * On in the default (D322). With `sync`, each source keeps a vocabulary sketch of what the sync listed from it (a Bloom
    * filter of its terms, 128 B to 4 KB, `sketch.ts`), kept after the cap trims the items; a lookup over more sources
    * than it searches adds, per source, log2(1 + the request's terms the sketch holds, weighted by how few sources hold
    * each) to routing (`RouteRequest.boost`, beside `routeLocalHits`). For requests that name no one at 1,000 sources,
@@ -278,7 +278,7 @@ export interface EngineConfig {
    */
   routeSketch: boolean;
   /**
-   * Trial (D323, off). With `sync`: a source a lookup of the user's searched whose copy the cap cut is read again from
+   * On in the default (D323). With `sync`: a source a lookup of the user's searched whose copy the cap cut is read again from
    * the top (two pages a tick, up to half `syncMaxItems`), and the user's trim keeps the items of such sources before
    * any other's, so the copy of a source the user uses becomes whole and answers from the index (D264). With 1,000
    * connectors the cap is filled by the newest items across all of them, and the user's own mailbox kept a handful.
@@ -402,7 +402,7 @@ export interface EngineConfig {
    */
   cardsLeanDays: number;
   /**
-   * Trial (D320, off). With `cards` and `sync`, for a user with more than `SOURCE_AWARE_MIN` (32) synced sources: a
+   * On in the default (D320). With `cards` and `sync`, for a user with more than `SOURCE_AWARE_MIN` (32) synced sources: a
    * synced item is read by the card model only when a lookup of the user's has searched its source, or it names a
    * person (or other name) the user's own requests named. The rest stay unread, uncovered, until a lookup searches
    * their source, when the source's held items are read. With 1,000 connectors most of what the sync stores is from
@@ -597,9 +597,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncBackfillLanes: 8,
   syncLocalComplete: true,
   routeLocalHits: true,
-  syncKeepCut: false,
-  routeSketch: false,
-  syncEngagedDeep: false,
+  syncKeepCut: true,
+  routeSketch: true,
+  syncEngagedDeep: true,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncPush: true,
@@ -620,7 +620,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intent: true,
   cardsLean: true,
   cardsLeanDays: 7,
-  cardsSourceAware: false,
+  cardsSourceAware: true,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,

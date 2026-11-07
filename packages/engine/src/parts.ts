@@ -53,16 +53,28 @@ export const PARTS = {
     syncPollWidth: 0,
     syncBackfillLanes: 1,
     syncLocalComplete: false,
+    syncKeepCut: false,
+    syncEngagedDeep: false,
   },
-  /** Routing by the user's own index: sources holding the request's best local matches first (D265). */
-  routing: { routeLocalHits: false },
+  /**
+   * Routing by the user's own index: sources holding the request's best local matches first (D265), and by each
+   * source's vocabulary sketch (D322).
+   */
+  routing: { routeLocalHits: false, routeSketch: false },
   /**
    * A delivered item its source signalled a change to since it was read is read again first (D126); a handed item
    * changed at its source is sent again as an "updated:" packet (D205).
    */
   freshness: { verifyDelivery: false, readerVerifyAfter: false, revisionNotice: false },
   /** Implication cards (D59, D66), and with them the intent index, which their calls write. */
-  cards: { cards: false, cardsEconomy: false, intent: false, cardsLean: false, intentByKind: false },
+  cards: {
+    cards: false,
+    cardsEconomy: false,
+    intent: false,
+    cardsLean: false,
+    intentByKind: false,
+    cardsSourceAware: false,
+  },
   /** The intent index (D87, D109), what it reads (`cardsLean`, D125) and its carded cut (`intentByKind`, D200). */
   intent: { intent: false, cardsLean: false, intentByKind: false },
   /** The ask-time reader and its push (D95, D96, D99). */

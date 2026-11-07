@@ -2994,8 +2994,9 @@ export class ContextPartner {
     // `routeLocalHits` (D265): which sources hold the request's best local matches, for routing. Only past the
     // lookup's own width: with as few sources as it searches, every one is searched whatever the order.
     const wide = all.length > Math.min(limit, this.config.lookupSources);
+    const localHits = this.config.routeLocalHits && wide ? this.localRouteHits(s, cue) : undefined;
     const boost = addBoosts(
-      this.config.routeLocalHits && wide ? this.localRouteHits(s, cue) : undefined,
+      localHits,
       // `routeSketch` (D322): the sources whose sketches hold the request's rarer terms, read or trimmed.
       this.config.routeSketch && wide ? this.sketchRouteHits(s, cue) : undefined,
     );
@@ -3085,12 +3086,14 @@ export class ContextPartner {
     if (routing) this.spans!.close(routing, { sources: ranked.length, local: local?.size ?? 0, syncCalls });
     const byId = sourcesById(all);
     const routed = ranked.map((r) => byId.get(r.sourceId)!).filter(Boolean);
-    // A source routed on evidence (a name it mentioned, the request's words in its items or sketch), not on the prior's
-    // draw alone: what `cardsSourceAware` and `syncEngagedDeep` count as one the user uses.
+    // A source routed on evidence of its items (a name it mentioned, the request's words among its held items), not on
+    // the prior's draw or its sketch alone: what `cardsSourceAware` and `syncEngagedDeep` count as one the user uses.
+    // A sketch match routes a search but engages no source: counted, it doubled the card calls at 1,000 sources for
+    // no more hidden facts (a13-scale.md).
     this.engageSources(
       s,
       cue,
-      ranked.filter((r) => r.score - 2 * r.sampled > 0).map((r) => r.sourceId),
+      ranked.filter((r) => r.entityHits > 0 || (localHits?.get(r.sourceId) ?? 0) > 0).map((r) => r.sourceId),
     );
     // Only the sources not answered locally are searched live; the local ones answer the same query below.
     const found = local ? routed.filter((x) => !local.has(x.id)) : routed;

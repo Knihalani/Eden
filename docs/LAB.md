@@ -418,6 +418,24 @@ about half a full one (324 of 649 calls, about $0.09 at recipe 2a's $0.185 for 6
 answer what F25's unordered subset replay would: no recorded reading is reused for a pool it was not given (D117 is
 unchanged).
 
+### 1e. Many sources per user: 1,000 connectors at $0 (A1, A13)
+
+The lab's worlds have five sources and fit the sync's cap, so the usual screen cannot see a user with hundreds. Add
+995 noise connectors per simulated user (`packages/sim/src/lab/noise-sources.ts`: real `SimSource`s with their own
+work vocabulary, ~3% of items naming one of the world's people) and screen 16 tasks a suite:
+
+```bash
+bun run funnel --jobs 2 --suite train1,train2,train3,train4,train5,train6 --seeds 41 --json n995.json \
+  -- --noise-sources 995 --limit 16     # ~45 s; --jobs 2: memory. --set '<arm>' for a trial
+bun run funnel --jobs 2 --suite train1,train2,train3,train4,train5,train6 --seeds 41 -- --limit 16   # five sources
+bun packages/engine/bench/source-days.bench.ts 1000 300 3 --config='<arm>'   # listing and card calls a day
+```
+
+Read hidden/decoys, `calls/task`, and the `merged cards use` line's `calls` and `sent` (card calls are stub-counted:
+noise items are not in the replay; price them at $0.000181 a call, A1). Compare task by task against the same seed
+without the arm (the JSON's `perTask`). The "hidden returned" count falls when sources answer from the index instead
+of a live search: read "hidden surfaced" (`TOTAL hidden`), not it. Figures for the shipped default: a13-scale.md.
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash
