@@ -208,7 +208,10 @@ that lands while a call is on the wire doubts what it brings, and items a notifi
 started, do not; a reader's likely picks are re-read beside its call, so the delivery seldom waits (only once the
 reader will be called: an empty pool or a `readerGate`d ask starts none, D134). A changed copy is stored
 and delivered instead; one the source no longer has (`gone`, only from a source with `Source.fetchReportsGone`) is
-dropped from the cache and left out; one that cannot be checked is delivered as held. With no signal nothing is
+dropped from the cache and left out; one that cannot be checked is delivered as held, except in an ask's answer
+(D211): there a re-read that failed with a plain error, or that our own guard skipped, is tried once more, and a copy
+still not confirmed is left out and named in the answer (a source with no fetch tool, or whose null proves nothing, is
+still cited as held). With no signal nothing is
 re-read: a copy's age alone is no doubt (re-reading by age was measured live and deleted, D126), and a silent source's
 changes arrive through polls and the daily sweep. The fast path, which may not call a source, sends a doubted item to
 the slow path. Deletion notifications (`ContextPartner.sourceRemoved`, `POST /v1/sources/removed`) drop items at once;
@@ -327,7 +330,8 @@ made only when the reader was shown every candidate the ask had (none cut by `as
 cap; D114): otherwise "Nothing in the connected sources" would be a false all-clear over items it never read (D93's
 guard). A source outage is the other false all-clear (D127, audit 2026-11-05 `ask-false-all-clear`): an ask says
 "Nothing in the connected sources." only when every source it chose answered (ok, cached, stale, or from the synced
-index); otherwise its answer names the sources that failed (error, timeout, circuit open, busy, limited) and says it
+index); otherwise its answer names the sources that failed (error, timeout, circuit open, busy, limited, throttled:
+the connector's own 429, worded "rate-limited", D212) and says it
 is not an all-clear, and `AskResponse.sources` carries each chosen source's status. With `readerPush` (on in the default), a
 user request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
 flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. Its question

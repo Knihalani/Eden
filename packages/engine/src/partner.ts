@@ -1396,7 +1396,8 @@ export class ContextPartner {
       packet,
       searched.sources,
       searched.unresolved === true,
-      searched.closed === true,
+      // The session closing during the re-reads leaves nothing checked either (D127): not an all-clear.
+      searched.closed === true || s.closed,
       unconfirmed,
     );
     if (rendering) spans!.close(rendering, { items: items.length });
@@ -3534,12 +3535,14 @@ export class ContextPartner {
       await Promise.all(due.map(async (x) => [x.item.id, await this.check(s, x.item)] as const)),
     );
     if (strict && !s.closed) {
-      // A plain error is often one bad call: one more read (`check` never reuses a failure), the others are not.
-      const again = due.filter((x) => doubted.has(x.item.id) && outcomes.get(x.item.id) === "flaked");
-      for (const [id, o] of await Promise.all(
-        again.map(async (x) => [x.item.id, await this.check(s, x.item)] as const),
-      ))
-        outcomes.set(id, o);
+      // One more read (`check` reuses no failure) for a plain error, often one bad call, and for a read our own guard
+      // skipped while the others held the source's slots; two at a time, the fan-out's starting concurrency per source.
+      const again = due.filter((x) => doubted.has(x.item.id) && RETRIED.has(outcomes.get(x.item.id)!));
+      for (let k = 0; k < again.length && !s.closed; k += STRICT_RETRY_LANES) {
+        const batch = again.slice(k, k + STRICT_RETRY_LANES);
+        const read = await Promise.all(batch.map(async (x) => [x.item.id, await this.check(s, x.item)] as const));
+        for (const [id, o] of read) outcomes.set(id, o);
+      }
     }
     this.trace({
       sessionId: s.id,
@@ -3583,6 +3586,7 @@ export class ContextPartner {
       now - held.at <= CHECK_REUSE_MS &&
       held.settled !== "failed" &&
       held.settled !== "flaked" &&
+      held.settled !== "skipped" &&
       this.sync?.signalledSince(s.scope, item.sourceId, held.mark) !== true
     )
       return held.outcome;
@@ -3618,6 +3622,11 @@ export class ContextPartner {
       if (got.status === "failed" || s.closed) {
         this.freshness.failed++;
         if (s.closed || got.status !== "failed") return "failed";
+        // A guard's skip made no call: not one the connector received, and no evidence against the item.
+        if (got.why === "refused") {
+          this.freshness.calls--;
+          return "skipped";
+        }
         // A null from a source whose null does not mean gone (an MCP tool) says nothing, and says it every time: like
         // a source with no fetch, its items are cited as held (D126). A plain error is worth one more read.
         return got.why === "null" ? "unverifiable" : got.why === "error" ? "flaked" : "failed";
@@ -4885,7 +4894,7 @@ function honestAnswer(
   const told = reachAnswer(packet, sources, unresolved, closed);
   if (!unconfirmed || unconfirmed.size === 0) return told;
   const names = [...unconfirmed].map(([id, n]) => `${id} (${n})`).join(", ");
-  const left = `Left out items from ${names} that changed at the source and could not be re-checked`;
+  const left = `Left out items from ${names}: their source reported changes and they could not be re-checked`;
   // An answer that would read as an all-clear says it is not one.
   if (told === "Nothing in the connected sources.")
     return `Nothing confirmed in the connected sources. ${left}, so this is not an all-clear.`;
@@ -5161,13 +5170,18 @@ const READER_POOL_CAP = READER_MAX_ITEMS;
 
 /** What a re-read found (`verifyDelivery`). */
 /**
- * A re-read's outcome. Three ways not to know (D211): "unverifiable" (the source has no fetch tool, or answered null
- * and does not report gone: its items are delivered as held, D126), "flaked" (the call failed with a plain error,
- * worth one retry) and "failed" (anything else: a timeout, a 429, a guard's skip, our gate).
+ * A re-read's outcome. Four ways not to know (D211): "unverifiable" (the source has no fetch tool, or answered null
+ * and does not report gone: its items are delivered as held, D126), "skipped" (our own guard refused the call, most
+ * often the per-source concurrency limit while the other re-reads hold its slots: no call, no evidence), "flaked"
+ * (the call failed with a plain error, worth one retry) and "failed" (a timeout, a 429, the caller giving up, our
+ * gate).
  */
-type CheckOutcome = "confirmed" | "changed" | "gone" | "failed" | "flaked" | "unverifiable";
+type CheckOutcome = "confirmed" | "changed" | "gone" | "failed" | "flaked" | "skipped" | "unverifiable";
 /** Re-reads a session keeps (`Session.checks`), and how long one is reused before an item is read again (ms). */
 const MAX_CHECKS = 64;
+/** A strict (ask) verification's outcomes worth one more read, and how many such reads run at once (D211). */
+const RETRIED: ReadonlySet<CheckOutcome> = new Set<CheckOutcome>(["flaked", "skipped"]);
+const STRICT_RETRY_LANES = 2;
 const CHECK_REUSE_MS = 30_000;
 /** How long an item its source said is gone is kept from being stored again (the fan-out's stale-result window). */
 const GONE_HOLD_MS = 10 * 60_000;

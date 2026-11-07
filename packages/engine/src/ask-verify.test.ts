@@ -89,7 +89,11 @@ async function setup(src = new Mail()) {
   });
   const user = { tenantId: "t1", userId: "u1" };
   p.sync!.track(user, clock);
-  while (!p.sync!.warm(user)) await p.sync!.tick();
+  // A second a tick: the fan-out's rate limit (a burst of 10, two kept for serving) refills between backfill pages.
+  while (!p.sync!.warm(user)) {
+    clock += 1_000;
+    await p.sync!.tick();
+  }
   clock += 10 * 60_000;
   const ask = () => p.ask({ ...user, sessionId: "s1", question: "Is the Harlow invoice on hold?" });
   /** The source deletes HOLD and says only that it changed (a signal, D131). */
@@ -148,6 +152,29 @@ describe("an ask never cites a deleted item a signal put in doubt (D211)", () =>
     const r = await ask();
     expect(citedIds(r)).toContain(HOLD);
     expect(src.fetches).toBe(2);
+  });
+
+  test("more doubted citations than the fan-out's concurrency: none is left out for a skipped re-read", async () => {
+    const src = new Mail();
+    // Six more Harlow items, so the ask cites five and re-reads them all at once, past the per-source limit of 2-4.
+    const topics = ["freight", "catering", "scaffolding", "licensing", "printing", "cleaning"];
+    const people = ["Priya Shah", "Tom Okafor", "Lena Berg", "Marco Ruiz", "Ada Novak", "Sam Lowe"];
+    topics.forEach((t, i) =>
+      src.add(
+        `h${i}`,
+        `Harlow invoice ${4100 + i} (${t}) on hold`,
+        `${people[i]} says the Harlow ${t} invoice ${4100 + i} is on hold until ${t} receipts arrive in week ${i + 2}`,
+        T0 - (10 + i) * HOUR,
+      ),
+    );
+    const { p, user, ask } = await setup(src);
+    const before = await ask();
+    expect(before.citations.length).toBe(5);
+    expect(p.sourceChanged(user, "mail")).toBe(true);
+    const r = await ask();
+    // Every item is still there: every one is confirmed and cited, and nothing is said to be left out.
+    expect(citedIds(r).sort()).toEqual(citedIds(before).sort());
+    expect(r.answer).not.toContain("Left out");
   });
 
   test("a source with no fetch tool cannot be re-read: its items are cited as held, as before (D126)", async () => {

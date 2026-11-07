@@ -134,8 +134,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   beside a chosen source's own search, whose outcome gives the source's status.
 - **An ask cites no doubted copy that no re-read confirmed (D211).** The ask's `verifyItems` runs `strict`: a doubted
   item whose re-read failed with a plain error ("flaked") is read once more, and one still not confirmed is left out
-  and named in the answer ("Left out items from mail (1) that changed at the source and could not be re-checked"),
-  never an all-clear. "unverifiable" (no fetch tool, or a null from a source without `fetchReportsGone`) is cited as
+  and named in the answer ("Left out items from mail (1): their source reported changes and they could not be
+  re-checked"), never an all-clear. A re-read our own guard skipped ("skipped": the per-source concurrency limit while
+  the other re-reads hold its slots) is retried too, two at a time, and cited as held if still skipped. "unverifiable" (no fetch tool, or a null from a source without `fetchReportsGone`) is cited as
   held, as D126 delivers it. Proactive deliveries keep D126's rule (a failed re-read is delivered as held).
 - **Shown means handed out.** With `askDedup`, what an injection showed is noted (`noteShown`) in `handOut`, which
   every path that gives the agent an injection calls (observe's reply, `takePending`, the firewall's finding, the

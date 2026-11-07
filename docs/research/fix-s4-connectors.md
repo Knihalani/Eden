@@ -27,16 +27,20 @@ Instrumenting the freshness run located the one bad citation:
 
 The fix applies to asks only:
 
-- A re-read that fails with a plain error is tried once more.
-- A doubted item still not confirmed is left out, and the answer names it ("Left out items from gmail (1) that changed
-  at the source and could not be re-checked"). An answer that would otherwise be empty is never worded as an
+- A re-read that fails with a plain error is tried once more, and so is one our own guard skipped ("skipped": the
+  per-source concurrency limit, 2–4 calls, while the ask's other re-reads hold its slots). Retries run two at a time;
+  one still skipped is cited as held, since no call was made.
+- A doubted item still not confirmed is left out, and the answer names it ("Left out items from gmail (1): their
+  source reported changes and they could not be re-checked"). An answer that would otherwise be empty is never worded as an
   all-clear.
 - A source with no fetch tool, or one whose null proves nothing (MCP), is still cited as held. Such a source answers
   the same way every time, so leaving its items out would remove all of its doubted items from every ask.
 - Proactive deliveries keep D126's rule. The ask's answer is what the agent takes as the sources' current word.
 
 To support this, `fetchChecked`'s failure now says why (`no-fetch`, `refused`, `aborted`, `error`, `timeout`,
-`throttled`, `null`, `gate`).
+`throttled`, `null`, `gate`). The reviewer found that the first version left out healthy citations whose re-reads the
+concurrency limit refused (an ask citing five doubted items cited four and said one was left out); the "skipped" retry
+fixes it, and `ask-verify.test.ts` covers it. The freshness numbers below were re-run after that fix.
 
 **Freshness matrix** (part D's T3: `quality-cli.ts --users 8 --sessions 20 --updates 0.6 --deletes 0.05 --jobs 4
 --push P`, plus signals with `verifyDelivery` off). Stale and deleted counts are delivered / cited.
@@ -49,12 +53,14 @@ To support this, `fetchChecked`'s failure now says why (`no-fetch`, `refused`, `
 | payload | 1 / 38 | 0 / 0 | 0 | 0.581 | 0.442 | 0.836 |
 | signals, `verifyDelivery` off | 7 / 44 | 7 / 12 | 0 | 0.576 | 0.460 | 0.847 |
 
-- The fix costs 4 retried re-reads in 1,210 turns.
+- The fix costs 4 retried re-reads in 1,210 turns (579 connector calls against 575; 583 checks, the 4 more being
+  reads our own guard skipped and the retry made, which are not calls).
 - The none, payload and verify-off rows match part D's.
 - False fires are 2 of 253 in every row.
 
-Tests: `packages/engine/src/ask-verify.test.ts` has six fix tests (four failed before the fix: a transient failure,
-a persistent failure, a 429, and a doubted item still present) and two 429-wording tests. `freshness.test.ts`'s ask
+Tests: `packages/engine/src/ask-verify.test.ts` has seven fix tests (four failed before the fix: a transient failure,
+a persistent failure, a 429, and a doubted item still present; the seventh is five doubted citations past the
+concurrency limit) and two 429-wording tests. `freshness.test.ts`'s ask
 case is split into the null case (cited as held) and the failed-re-read case (left out and named, still delivered
 unasked).
 
@@ -105,7 +111,7 @@ untouched tree.
 | main, signals | 6.86 | 0.750 | 696 | 571 | 0.588 / 0.454 | 0.836 |
 | branch, signals | 6.87 | 0.754 | 696 | 575 | 0.588 / 0.454 | 0.836 |
 | branch, payload | **5.28** | **0.217** | 698 | 0 | 0.581 / 0.442 | 0.836 |
-| `gmail:30` cap, signals / payload | 5.54 / 3.84 | 0.679 / 0.214 | 459 / 463 | 470 / 0 | 0.629 / 0.463 | 0.858 |
+| `gmail:30` cap, signals / payload | 5.54 / 3.84 | 0.679 / 0.214 | 459 / 463 | 470 / 0 | 0.629 / 0.463 (payload 0.626 / 0.457) | 0.858 |
 | coalesce 30 s, signals / payload | 6.87 / 5.28 | as branch | as branch | as branch | as branch | 0.836 |
 
 **Pi** (heldout14 with neutral tasks, seeds 41–42, `--push signals`, direct market profile, time scale 1, Haiku 5.5 in
@@ -177,4 +183,8 @@ Paired differences from `eden`, bootstrap 95% CI:
 - `bun run check`: green on the final tree.
 - `bun run eval`: precision 0.828, recall 0.48, false-fire rate 0 (31 scenarios, 104 scored turns), the same as part
   D's T2.
-- The `reviewer` subagent ran on the diff (see the branch's last commit).
+- The `reviewer` subagent ran on the diff and returned REQUEST_CHANGES: a concurrency-limit skip dropped healthy
+  citations (high), the left-out wording claimed the items changed, ARCHITECTURE.md and the `AskResponse.sources`
+  comment missed D211 and "throttled", this line claimed a review before one existed, and `sourceChanged`'s true did
+  not say it can mean "taken, none held". All are fixed in the last commit; the session-closed-during-re-reads false
+  all-clear it noted (pre-existing) is fixed too: that answer now says it is not an all-clear.

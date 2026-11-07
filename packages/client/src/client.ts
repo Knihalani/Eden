@@ -322,8 +322,10 @@ export class EdenClient {
    *   holds the items as synced and drops the removed ones at once, with no call to the source: a signal makes the
    *   next lookup poll the source's listing, a payload does not (RealUse-1 part D: 0.22 connector calls a lookup
    *   with payloads, 0.91 with signals). Batches past `MAX_PUSHED_ITEMS` are split. Resolves true when every part
-   *   reached the server; when one did not (unreachable, refused, an answer of another shape), the plain signal is
-   *   sent as well, so Eden polls the source rather than miss the change, and it resolves false.
+   *   reached the server and was taken, which is not the same as held: a server without `syncPush`, or a source not
+   *   synced yet, takes the items and stores none (`sourceItems` resolves 0; `sourceNotice` says why). When a part
+   *   did not reach it (unreachable, refused, an answer of another shape), the plain signal is sent as well, so Eden
+   *   polls the source rather than miss the change, and it resolves false.
    * - **Without items (a signal):** with the server's `syncPush`, the source is polled at its next use instead of on a
    *   guess. Resolves false when the partner could not be reached or does not sync that source (`sourceNotice` says
    *   why).
