@@ -122,7 +122,16 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import { CHECKED_MORE, CHECKED_NONE, citationsOf, COVERED, renderNote, renderPacket, shownText, withNote } from "./render";
+import {
+  CHECKED_MORE,
+  CHECKED_NONE,
+  citationsOf,
+  COVERED,
+  renderNote,
+  renderPacket,
+  shownText,
+  withNote,
+} from "./render";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -297,7 +306,9 @@ interface Session {
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
   /** `askFromPush` (D247): the latest push's search, for an ask in its request (`request`, `main` as `pushRead`'s). */
   pushSearch?: { request: number; main: string; searched: SearchedLive };
-  /** The request count (`requests`) when a packet or answer was last built for this session (`pushChecked`'s wording). */
+  /** The push the latest request started (`readerPush`), settled or not: `requestSettled` waits on it. */
+  pushing?: Promise<void>;
+  /** The request count (`requests`) when a packet or answer was last built (`pushChecked`'s wording). */
   builtRequest?: number;
 }
 
@@ -669,7 +680,11 @@ export class ContextPartner {
     const t0 = performance.now();
     const observing = this.observeEvent(event, options);
     // `observeEvent` counts the request before its first await, so the session's count now names this request.
-    if (push) internal.request = this.sessions.get(sessionKey(event))?.requests;
+    if (push) {
+      const live = this.sessions.get(sessionKey(event));
+      internal.request = live?.requests;
+      if (live) live.pushing = push.then(() => undefined);
+    }
     const result = await observing;
     if (!push) return result;
     let settled = false;
@@ -929,6 +944,24 @@ export class ContextPartner {
       if (s.behind === tracked) s.behind = null;
     });
     s.behind = tracked;
+  }
+
+  /**
+   * Resolves once what the session's latest request started, and could still queue a packet from, has settled: its
+   * lookup in flight and its push's reading (`readerPush`). Not the work a lookup leaves behind it (`behind`). For an
+   * integration that sends the agent's first model request without waiting and restarts it when a packet comes
+   * (speculation, D248). At once for an unknown session; never rejects.
+   */
+  async requestSettled(ref: Scope & { sessionId: string }): Promise<void> {
+    const s = this.sessions.get(sessionKey(ref));
+    if (!s) return;
+    await Promise.all([s.inflight?.catch(() => null), s.pushing]);
+  }
+
+  /** The items the session's queued packets cite, counted without taking them (0 for notes alone, D246). */
+  pendingItems(ref: Scope & { sessionId: string }): number {
+    const s = this.sessions.get(sessionKey(ref));
+    return s ? s.pending.reduce((n, p) => n + p.citations.length, 0) : 0;
   }
 
   /** Injections the slow path queued for a session, oldest first. Integrations that poll call this. */
@@ -1532,6 +1565,11 @@ export class ContextPartner {
         // `pushChecked` (D246): the reading found nothing to add, from sources that all answered: the agent is told so.
         const line = flagged.length > 0 || s.builtRequest === s.requests ? CHECKED_MORE : CHECKED_NONE;
         s.pending.push(this.note(s, line, `${CHECKED}${cue.id}`));
+      }
+      // `pushVerifyAhead` (D249): what an ask in this request would most likely cite is re-read now, behind the
+      // packet, so the ask's strict re-reads (D211) find them done. Only doubted copies; nothing for a stale request.
+      if (this.config.pushVerifyAhead && internal.again === undefined && !s.closed && still) {
+        this.checkAhead(s, chosen, chosen.length);
       }
       const latencyMs = Math.round(performance.now() - t0);
       // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
@@ -3767,11 +3805,11 @@ export class ContextPartner {
    * them, so the delivery that follows finds them done (`check`) instead of waiting a connector's round trip. The
    * reader reads the copies it was given; a delivery shows the re-read ones.
    */
-  private checkAhead(s: Session, pool: readonly Scored[]): void {
+  private checkAhead(s: Session, pool: readonly Scored[], cap = VERIFY_AHEAD): void {
     if (!this.config.verifyDelivery) return;
     let n = 0;
     for (const x of pool) {
-      if (n >= VERIFY_AHEAD) break;
+      if (n >= cap) break;
       if (!this.doubted(s, x.item)) continue;
       n++;
       void this.check(s, x.item);

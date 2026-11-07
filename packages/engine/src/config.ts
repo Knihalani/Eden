@@ -446,11 +446,11 @@ export interface EngineConfig {
    */
   readerReuse: boolean;
   /**
-   * `pushChecked` (trial, D246, CL4 H8): when the push read the user's request and flagged nothing, a short note goes to
-   * the agent in the data envelope: Eden read the user's connected sources for this request and nothing in them bears
-   * on it (after a packet for the same request: nothing beyond it). Only when every source the push searched answered
-   * (D127) and its reading gave a verdict, or found no candidate to read. Meant to spare the agent an `ask_context` call
-   * and a model turn on requests Eden has nothing for. Needs `readerPush`.
+   * `pushChecked` (trial, D246, CL4 H8): when the push read the user's request and flagged nothing, a short note goes
+   * to the agent in the data envelope: Eden read the user's connected sources for this request and nothing in them
+   * bears on it (after a packet for the same request: nothing beyond it). Only when every source the push searched
+   * answered (D127) and its reading gave a verdict, or found no candidate to read. Meant to spare the agent an
+   * `ask_context` call and a model turn on requests Eden has nothing for. Needs `readerPush`.
    */
   pushChecked: boolean;
   /**
@@ -464,6 +464,12 @@ export interface EngineConfig {
    * (or reuses) the reader and re-reads what it cites as usual.
    */
   askFromPush: boolean;
+  /**
+   * `pushVerifyAhead` (trial, D249, CL4): once the push has read the request, the doubted copies among the items it
+   * ranked first (what an ask in the request would most likely cite) are re-read in the background, so the ask's strict
+   * re-reads (D211) reuse them instead of waiting on connector calls. Costs those re-reads on requests with no ask.
+   */
+  pushVerifyAhead: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -582,4 +588,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushChecked: false,
   pushCovered: false,
   askFromPush: false,
+  pushVerifyAhead: false,
 };

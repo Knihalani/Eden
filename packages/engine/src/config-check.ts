@@ -61,6 +61,7 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   pushChecked: "reader",
   pushCovered: "reader",
   askFromPush: "reader",
+  pushVerifyAhead: "reader",
 };
 
 /**
@@ -120,6 +121,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushChecked: PUSH,
   pushCovered: PUSH,
   askFromPush: PUSH,
+  pushVerifyAhead: [...PUSH, "verifyDelivery"],
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */

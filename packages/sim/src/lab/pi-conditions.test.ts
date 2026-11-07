@@ -154,3 +154,14 @@ describe("pi-ab conditions", () => {
     expect(pairedWith("both+ask")).toBe("both");
   });
 });
+
+describe("+spec (CL4, D248): speculation on the first model request is the harness's", () => {
+  test("on an Eden base it is no engine setting; on tools or none it throws", () => {
+    const c = parseCondition("eden~X+spec", { config: {}, variants: { X: { readerPush: true } } });
+    expect(c.speculate).toBe(true);
+    expect(c.config).toEqual({ readerPush: true });
+    expect(parseCondition("both+ask+spec", { config: {} }).speculate).toBe(true);
+    expect(parseCondition("eden", { config: {} }).speculate).toBe(false);
+    expect(() => parseCondition("tools+spec", { config: {} })).toThrow(/only an Eden base/);
+  });
+});

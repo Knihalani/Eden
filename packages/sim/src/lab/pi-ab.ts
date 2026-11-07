@@ -82,7 +82,13 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Agent, type AgentEvent as PiEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
-import { Type, type Model as PiModel } from "@earendil-works/pi-ai";
+import {
+  createAssistantMessageEventStream,
+  Type,
+  type AssistantMessage,
+  type AssistantMessageEvent,
+  type Model as PiModel,
+} from "@earendil-works/pi-ai";
 import { heldResult } from "@eden/client";
 import {
   CardEnricher,
@@ -556,6 +562,7 @@ async function runWorld(
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
   const notify = pushNotifier(sources, CONNECTORS, seed);
   const { name: condition, waitMs, useEden, withPartner, useTools, askTool, judge, act, firewall, config } = cond;
+  const { speculate } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.
@@ -783,6 +790,9 @@ async function runWorld(
     // With the ids each packet and `ask_context` answer cited, so the line tells delivery from uptake (uptake.ts).
     const uptake = new UptakeLog();
     const packets = uptake.packets;
+    // `+spec` (D248): what the first model request speculates on, and the items a restart would bring.
+    let specUntil: Promise<void> | null = null;
+    let specItems: () => number = () => 0;
     const takeEden = () => {
       // `tools-act-firewall`: Eden only checks actions; what it would have delivered never reaches the agent.
       if (!partner || !useEden) return;
@@ -806,8 +816,21 @@ async function runWorld(
         }
         const arriving = task.event === "external" ? { source: "gmail" } : {};
         const o2 = tl.begin("eden.observe", "eden", "path", { event: task.event });
-        const first = await partner.observe(ev({ kind: task.event, text: task.text, ...arriving }), { waitMs });
+        // `+spec` (D248): the observe does not wait; the first model request goes out now and is restarted if a packet
+        // lands before it is done, or within what is left of the wait after it.
+        const first = await partner.observe(ev({ kind: task.event, text: task.text, ...arriving }), {
+          waitMs: speculate ? 0 : waitMs,
+        });
         tl.end(o2, { injected: first.injection?.citations.length ?? 0, pending: first.pending });
+        if (speculate && useEden) {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const who = { ...scope, sessionId };
+          specUntil = Promise.race([
+            partner.requestSettled(who),
+            new Promise<void>((r) => (timer = setTimeout(r, waitMs))),
+          ]).finally(() => clearTimeout(timer));
+          specItems = () => partner.pendingItems(who);
+        }
         if (first.injection && useEden) {
           r.injectedItems += first.injection.citations.length;
           r.injectedChars += first.injection.text.length;
@@ -918,9 +941,112 @@ async function runWorld(
         costed: boolean;
         cached: number;
         cacheWrite: number;
+        /** What this request reserved (`est`, `ledgerEst` when it was sent): a restarted request settles its own. */
+        est: number;
+        ledgerEst: number;
       } | null = null;
       let est = 0;
       let ledgerEst = 0;
+      // One model request through the lab's access, metered and timed (`request`).
+      type StreamArgs = Parameters<typeof models.streamSimple>;
+      const send = (model: StreamArgs[0], context: StreamArgs[1], options: StreamArgs[2]) => {
+        const chars = JSON.stringify(context.messages).length;
+        est = worstCase(MODEL, chars, AGENT_MAX_TOKENS);
+        reserve(est);
+        if (AGENT_METER) {
+          ledgerEst = anthropicWorstCase(MODEL, chars, AGENT_MAX_TOKENS);
+          try {
+            AGENT_METER.reserve(ledgerEst);
+          } catch (e) {
+            settle(est, 0, "agent");
+            throw e;
+          }
+        }
+        const at = performance.now();
+        request = {
+          id: tl.begin("model.request", "model", "path", { turn: turns + 1 }),
+          at,
+          first: null,
+          in: 0,
+          out: 0,
+          cost: 0,
+          costed: false,
+          cached: 0,
+          cacheWrite: 0,
+          est,
+          ledgerEst,
+        };
+        activeRequests++;
+        const mine = request;
+        if (AGENT_ANTHROPIC) {
+          // Anthropic's events: the first content block's start is the first token; usage comes on message_end.
+          return models.streamSimple(model, context, {
+            ...options,
+            maxTokens: AGENT_MAX_TOKENS,
+            fetch: ACCESS.fetch,
+            maxRetries: 0,
+            timeoutMs: 90_000,
+            cacheRetention: "short",
+            onProviderStreamEvent: (event) => {
+              const e = event as { type?: string };
+              if (mine.first === null && (e.type === "content_block_start" || e.type === "content_block_delta")) {
+                mine.first = performance.now();
+                tl.point("model.first-token", { turn: turns + 1 }, mine.first);
+              }
+            },
+          });
+        }
+        return models.streamSimple(model, context, {
+          ...options,
+          temperature: 0,
+          maxTokens: AGENT_MAX_TOKENS,
+          // The pacer retries 429 and 5xx (honouring Retry-After) and counts each attempt against the cap.
+          fetch: ACCESS.fetch,
+          maxRetries: 0,
+          timeoutMs: 90_000,
+          // OpenRouter's own cost on the final chunk: what agent-ab books, not pi-ai's catalog estimate.
+          onPayload: (payload) => ({ ...(payload as object), usage: { include: true }, ...providerPrefs(ACCESS) }),
+          onProviderStreamEvent: (chunk) => {
+            const c = chunk as {
+              choices?: { delta?: { content?: string; tool_calls?: unknown[]; reasoning?: string } }[];
+              usage?: {
+                prompt_tokens?: number;
+                completion_tokens?: number;
+                cost?: number;
+                prompt_tokens_details?: { cached_tokens?: number };
+              };
+            };
+            const d = c.choices?.[0]?.delta;
+            if (mine.first === null && d && (d.content || d.tool_calls?.length || d.reasoning)) {
+              mine.first = performance.now();
+              tl.point("model.first-token", { turn: turns + 1 }, mine.first);
+            }
+            if (c.usage) {
+              mine.in = c.usage.prompt_tokens ?? 0;
+              mine.out = c.usage.completion_tokens ?? 0;
+              mine.cost = c.usage.cost ?? 0;
+              mine.costed = c.usage.cost !== undefined;
+              // Billed at the endpoint's cache-read price: re-pricing needs them (reprice.ts).
+              mine.cached = c.usage.prompt_tokens_details?.cached_tokens ?? 0;
+            }
+          },
+        });
+      };
+      // Before every model request: Eden's packets queued since the last one join those already placed, all before
+      // the user turn (agent-ab's `withContext` placement), never stored in the agent's own transcript.
+      const transform = async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
+        takeEden();
+        // `--day`: the packets of the day's earlier turns stay where the agent saw them, before their requests.
+        if (DAY > 0 && dayPackets.some((p) => p.length)) {
+          const asSystem = (text: string) =>
+            ({ role: "system", content: text, timestamp: Date.now() }) as unknown as AgentMessage;
+          return placePackets(messages, dayPackets, packets, asSystem);
+        }
+        if (!packets.length) return messages;
+        const at = messages.map((m) => m.role).lastIndexOf("user");
+        const sys = packets.map((text) => ({ role: "system" as const, content: text, timestamp: Date.now() }));
+        return [...messages.slice(0, at), ...sys, ...messages.slice(at)];
+      };
       const agent = new Agent({
         initialState: {
           systemPrompt: systemPrompt(world, { lookups: LOOKUPS, data: useTools || useEden, act }),
@@ -931,102 +1057,9 @@ async function runWorld(
           tools,
         },
         toolExecution: TOOL_EXEC,
-        // Before every model request: Eden's packets queued since the last one join those already placed, all before
-        // the user turn (agent-ab's `withContext` placement), never stored in the agent's own transcript.
-        transformContext: async (messages) => {
-          takeEden();
-          // `--day`: the packets of the day's earlier turns stay where the agent saw them, before their requests.
-          if (DAY > 0 && dayPackets.some((p) => p.length)) {
-            const asSystem = (text: string) =>
-              ({ role: "system", content: text, timestamp: Date.now() }) as unknown as AgentMessage;
-            return placePackets(messages, dayPackets, packets, asSystem);
-          }
-          if (!packets.length) return messages;
-          const at = messages.map((m) => m.role).lastIndexOf("user");
-          const sys = packets.map((text) => ({ role: "system" as const, content: text, timestamp: Date.now() }));
-          return [...messages.slice(0, at), ...sys, ...messages.slice(at)];
-        },
-        streamFn: (model, context, options) => {
-          const chars = JSON.stringify(context.messages).length;
-          est = worstCase(MODEL, chars, AGENT_MAX_TOKENS);
-          reserve(est);
-          if (AGENT_METER) {
-            ledgerEst = anthropicWorstCase(MODEL, chars, AGENT_MAX_TOKENS);
-            try {
-              AGENT_METER.reserve(ledgerEst);
-            } catch (e) {
-              settle(est, 0, "agent");
-              throw e;
-            }
-          }
-          const at = performance.now();
-          request = {
-            id: tl.begin("model.request", "model", "path", { turn: turns + 1 }),
-            at,
-            first: null,
-            in: 0,
-            out: 0,
-            cost: 0,
-            costed: false,
-            cached: 0,
-            cacheWrite: 0,
-          };
-          activeRequests++;
-          const mine = request;
-          if (AGENT_ANTHROPIC) {
-            // Anthropic's events: the first content block's start is the first token; usage comes on message_end.
-            return models.streamSimple(model, context, {
-              ...options,
-              maxTokens: AGENT_MAX_TOKENS,
-              fetch: ACCESS.fetch,
-              maxRetries: 0,
-              timeoutMs: 90_000,
-              cacheRetention: "short",
-              onProviderStreamEvent: (event) => {
-                const e = event as { type?: string };
-                if (mine.first === null && (e.type === "content_block_start" || e.type === "content_block_delta")) {
-                  mine.first = performance.now();
-                  tl.point("model.first-token", { turn: turns + 1 }, mine.first);
-                }
-              },
-            });
-          }
-          return models.streamSimple(model, context, {
-            ...options,
-            temperature: 0,
-            maxTokens: AGENT_MAX_TOKENS,
-            // The pacer retries 429 and 5xx (honouring Retry-After) and counts each attempt against the cap.
-            fetch: ACCESS.fetch,
-            maxRetries: 0,
-            timeoutMs: 90_000,
-            // OpenRouter's own cost on the final chunk: what agent-ab books, not pi-ai's catalog estimate.
-            onPayload: (payload) => ({ ...(payload as object), usage: { include: true }, ...providerPrefs(ACCESS) }),
-            onProviderStreamEvent: (chunk) => {
-              const c = chunk as {
-                choices?: { delta?: { content?: string; tool_calls?: unknown[]; reasoning?: string } }[];
-                usage?: {
-                  prompt_tokens?: number;
-                  completion_tokens?: number;
-                  cost?: number;
-                  prompt_tokens_details?: { cached_tokens?: number };
-                };
-              };
-              const d = c.choices?.[0]?.delta;
-              if (mine.first === null && d && (d.content || d.tool_calls?.length || d.reasoning)) {
-                mine.first = performance.now();
-                tl.point("model.first-token", { turn: turns + 1 }, mine.first);
-              }
-              if (c.usage) {
-                mine.in = c.usage.prompt_tokens ?? 0;
-                mine.out = c.usage.completion_tokens ?? 0;
-                mine.cost = c.usage.cost ?? 0;
-                mine.costed = c.usage.cost !== undefined;
-                // Billed at the endpoint's cache-read price: re-pricing needs them (reprice.ts).
-                mine.cached = c.usage.prompt_tokens_details?.cached_tokens ?? 0;
-              }
-            },
-          });
-        },
+        transformContext: transform,
+        streamFn: (model, context, options) =>
+          specUntil && turns === 0 ? speculative(model, context, options) : send(model, context, options),
         // The firewall: an action call goes to Eden before it runs; a finding holds it and is the tool's result.
         ...(firewall && partner
           ? {
@@ -1064,57 +1097,147 @@ async function runWorld(
           return turns >= MAX_STEPS ? { action: "end" } : undefined;
         },
       });
+      // A model request's end, booked: the agent's message (`message_end`) or one `+spec` dropped (D248).
+      const book = (q: NonNullable<typeof request>, message: AssistantMessage, end: number) => {
+        if (AGENT_METER) {
+          // pi-ai's usage splits the prompt: uncached input, cache reads, cache writes.
+          const u = message.usage;
+          q.in = u.input + u.cacheRead + u.cacheWrite;
+          q.out = u.output;
+          q.cached = u.cacheRead;
+          q.cacheWrite = u.cacheWrite;
+          const usage = {
+            inputTokens: q.in,
+            cachedInputTokens: q.cached,
+            cacheWriteTokens: q.cacheWrite,
+            outputTokens: q.out,
+          };
+          q.cost = anthropicCost(usage, anthropicPrice(MODEL));
+          q.costed = true;
+          AGENT_METER.release(q.ledgerEst);
+          ACCESS.ledger!.write("agent", {
+            model: MODEL,
+            usage,
+            costUsd: q.cost,
+            latencyMs: Math.round(end - q.at),
+            ttftMs: q.first === null ? null : Math.round(q.first - q.at),
+            stopReason: message.stopReason ?? null,
+          });
+        }
+        // A usage chunk with no cost (it should not happen on OpenRouter) is priced at the list price; a reported
+        // cost stands, a free model's $0 included.
+        const cost = q.costed ? q.cost : q.in || q.out ? worstCase(MODEL, q.in * 4, q.out) : 0;
+        settle(q.est, cost, "agent");
+        r.modelCalls++;
+        r.promptTokens += q.in;
+        r.completionTokens += q.out;
+        r.costUsd += cost;
+        tl.end(q.id, { in: q.in, out: q.out, cost, stop: message.stopReason });
+        record.requests.push({
+          startMs: tl.at(q.at),
+          firstTokenMs: q.first === null ? null : Math.round(q.first - q.at),
+          endMs: tl.at(end),
+          in: q.in,
+          out: q.out,
+          cost,
+          ...(q.cached ? { cached: q.cached } : {}),
+          ...(q.cacheWrite ? { cacheWrite: q.cacheWrite } : {}),
+        });
+      };
+      // `+spec` (D248): the first request goes out before Eden's work for the request has settled. Its events are held
+      // until then; with no packet citing items queued by that time it is passed on as it is, else it is dropped (its
+      // cost booked as a request of the task) and sent again with the packet placed. The dropped call is stopped as
+      // soon as the packet lands, or, when it ended first, when the work settles (within the observe's wait).
+      const speculative = (model: StreamArgs[0], context: StreamArgs[1], options: StreamArgs[2]) => {
+        const until = specUntil!;
+        specUntil = null;
+        const out = createAssistantMessageEventStream();
+        const failed = (e: unknown): AssistantMessage =>
+          ({
+            role: "assistant",
+            content: [],
+            api: model.api,
+            provider: model.provider,
+            model: model.id,
+            usage: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+            stopReason: "error",
+            errorMessage: e instanceof Error ? e.message : String(e),
+            timestamp: Date.now(),
+          }) as AssistantMessage;
+        void (async () => {
+          const stop = new AbortController();
+          options?.signal?.addEventListener("abort", () => stop.abort(), { once: true });
+          let mode = "hold" as "hold" | "pipe" | "drop";
+          const held: AssistantMessageEvent[] = [];
+          let q: NonNullable<typeof request> | null = null;
+          let reading: Promise<AssistantMessage | null>;
+          try {
+            const first = send(model, context, { ...options, signal: stop.signal });
+            q = request;
+            reading = (async () => {
+              for await (const ev of first) {
+                if (mode === "pipe") out.push(ev);
+                else if (mode === "hold") held.push(ev);
+              }
+              return await first.result();
+            })().catch(() => null);
+          } catch (e) {
+            out.push({ type: "error", reason: "error", error: failed(e) });
+            return;
+          }
+          let settled = false;
+          void until.then(() => (settled = true));
+          await Promise.race([reading, until]);
+          if (!settled) await until;
+          const items = specItems();
+          if (items === 0 || options?.signal?.aborted) {
+            // Nothing to restart for: what was held goes out, and the rest of the call streams through.
+            for (const ev of held) out.push(ev);
+            mode = "pipe";
+            return;
+          }
+          mode = "drop";
+          stop.abort();
+          const dropped = await reading;
+          tl.point("spec.restart", { items });
+          if (q && request === q) {
+            request = null;
+            activeRequests--;
+            if (dropped) book(q, dropped, performance.now());
+            else {
+              tl.end(q.id, { error: true });
+              settle(q.est, 0, "agent");
+              AGENT_METER?.release(q.ledgerEst);
+            }
+          }
+          try {
+            const again = {
+              ...context,
+              messages: (await transform(
+                context.messages.filter((m) => (m.role as string) !== "system") as AgentMessage[],
+              )) as typeof context.messages,
+            };
+            for await (const ev of send(model, again, options)) out.push(ev);
+          } catch (e) {
+            out.push({ type: "error", reason: "error", error: failed(e) });
+          }
+        })();
+        return out;
+      };
       const toolSpans = new Map<string, number>();
       agent.subscribe((e: PiEvent) => {
         if (e.type === "message_end" && e.message.role === "assistant" && request) {
           const q = request;
           request = null;
           activeRequests--;
-          const end = performance.now();
-          if (AGENT_METER) {
-            // pi-ai's usage splits the prompt: uncached input, cache reads, cache writes.
-            const u = e.message.usage;
-            q.in = u.input + u.cacheRead + u.cacheWrite;
-            q.out = u.output;
-            q.cached = u.cacheRead;
-            q.cacheWrite = u.cacheWrite;
-            const usage = {
-              inputTokens: q.in,
-              cachedInputTokens: q.cached,
-              cacheWriteTokens: q.cacheWrite,
-              outputTokens: q.out,
-            };
-            q.cost = anthropicCost(usage, anthropicPrice(MODEL));
-            q.costed = true;
-            AGENT_METER.release(ledgerEst);
-            ACCESS.ledger!.write("agent", {
-              model: MODEL,
-              usage,
-              costUsd: q.cost,
-              latencyMs: Math.round(end - q.at),
-              ttftMs: q.first === null ? null : Math.round(q.first - q.at),
-              stopReason: e.message.stopReason ?? null,
-            });
-          }
-          // A usage chunk with no cost (it should not happen on OpenRouter) is priced at the list price; a reported
-          // cost stands, a free model's $0 included.
-          const cost = q.costed ? q.cost : q.in || q.out ? worstCase(MODEL, q.in * 4, q.out) : 0;
-          settle(est, cost, "agent");
-          r.modelCalls++;
-          r.promptTokens += q.in;
-          r.completionTokens += q.out;
-          r.costUsd += cost;
-          tl.end(q.id, { in: q.in, out: q.out, cost, stop: e.message.stopReason });
-          record.requests.push({
-            startMs: tl.at(q.at),
-            firstTokenMs: q.first === null ? null : Math.round(q.first - q.at),
-            endMs: tl.at(end),
-            in: q.in,
-            out: q.out,
-            cost,
-            ...(q.cached ? { cached: q.cached } : {}),
-            ...(q.cacheWrite ? { cacheWrite: q.cacheWrite } : {}),
-          });
+          book(q, e.message, performance.now());
         } else if (e.type === "tool_execution_start") {
           r.toolCalls++;
           const id = tl.begin(`tool.${e.toolName}`, e.toolName === "ask_context" ? "eden" : "tool", "path", {

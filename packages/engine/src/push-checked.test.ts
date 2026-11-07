@@ -48,7 +48,12 @@ const PLAIN = [
   // Constraint wording, so the reader's gate lets the pool through to a reading.
   item("n2", "Harlow deadline", "The Harlow venue deposit must be paid before Friday or the hall is released.", 4),
 ];
-const HOLD = item("hold", "Harlow venue", "Payments to Harlow are on hold until the dispute over their numbers ends.", 200);
+const HOLD = item(
+  "hold",
+  "Harlow venue",
+  "Payments to Harlow are on hold until the dispute over their numbers ends.",
+  200,
+);
 
 function setup(config: Record<string, unknown>, opts: { items?: ContextItem[]; fail?: boolean } = {}) {
   const maker = new Reader();
@@ -204,5 +209,139 @@ describe("askFromPush (D247): an ask in the push's request ranks on the push's s
     const before = calls.search;
     await p.ask({ ...ref(), question: QUESTION, maxItems: 3 });
     expect(calls.search).toBeGreaterThan(before);
+  });
+});
+
+/** A notifying, listing mail source that counts its fetches (re-reads). */
+class Mail implements Source {
+  readonly id = "mail";
+  readonly kind = "test";
+  readonly description = "mail";
+  readonly notifies = true;
+  readonly fetchReportsGone = true;
+  fetches = 0;
+  readonly items = new Map<string, ContextItem>();
+  constructor() {
+    for (let i = 0; i < 3; i++) {
+      const it = item(`n${i}`, `Lunch order ${i}`, `Lunch order ${i} for the team must arrive before noon.`, 1 + i);
+      this.items.set(it.ref!, it);
+    }
+  }
+  async search(q: { text: string }): Promise<ContextItem[]> {
+    const words = q.text
+      .toLowerCase()
+      .split(/\W+/)
+      .filter((w) => w.length > 3);
+    return [...this.items.values()].filter((i) => words.some((w) => i.text.toLowerCase().includes(w)));
+  }
+  async list(_scope: unknown, cursor: string | undefined, limit: number) {
+    const sorted = [...this.items.values()].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+    const at = cursor ? Number(cursor) : 0;
+    return { items: sorted.slice(at, at + limit), next: at + limit < sorted.length ? String(at + limit) : null };
+  }
+  async fetch(ref: string): Promise<ContextItem | null> {
+    this.fetches++;
+    return this.items.get(ref) ?? null;
+  }
+}
+
+async function mailPartner(config: Record<string, unknown>) {
+  let clock = NOW;
+  const src = new Mail();
+  const maker = new Reader();
+  const p = new ContextPartner({
+    sources: async () => [src],
+    sourceMap: new SourceMap(":memory:", { seed: 1 }),
+    cache: new ItemCache(),
+    budget: new Budget(),
+    model: null,
+    now: () => clock,
+    reader: new AskReader({ maker, budget: new Budget(), now: () => clock }),
+    config: {
+      ...CORE_CONFIG,
+      sync: true,
+      syncPush: true,
+      syncPageSize: 1,
+      syncPollPageSize: 1,
+      verifyDelivery: true,
+      askReader: true,
+      readerPush: true,
+      readerVerifyAfter: true,
+      confidentScore: 99,
+      fallbackMatchedTerms: 99,
+      syncCallsPerMin: 600,
+      ...config,
+    },
+  });
+  const user = { tenantId: "t", userId: "u1" };
+  p.sync!.track(user, clock);
+  while (!p.sync!.warm(user)) await p.sync!.tick();
+  clock += 10 * 60_000;
+  const sayAt = (text: string) =>
+    p.observe({ ...ref(), at: clock, kind: "user_message", text } as AgentEvent, { waitMs: 2_000 });
+  return { p, src, user, sayAt, advance: (ms: number) => (clock += ms) };
+}
+
+describe("pushVerifyAhead (D249): the push re-reads what an ask would cite, behind its reading", () => {
+  const LUNCH = "Order the team lunch for today before noon.";
+  const QUESTION = "Which lunch orders must arrive before noon?";
+
+  test("the ask in the request then waits on no re-read of its own", async () => {
+    const { p, src, user, sayAt, advance } = await mailPartner({ pushVerifyAhead: true });
+    await sayAt("Order the team lunch for tomorrow.");
+    advance(60_000);
+    expect(p.sourceChanged(user, "mail")).toBe(true);
+    advance(60_000);
+    await sayAt(LUNCH);
+    await p.requestSettled(ref());
+    for (let n = 0; n < 50; n++) await new Promise((r) => setTimeout(r, 0));
+    const ahead = src.fetches;
+    expect(ahead).toBeGreaterThan(0);
+    const a = await p.ask({ ...ref(), question: QUESTION, maxItems: 3 });
+    expect(a.citations.length).toBeGreaterThan(0);
+    expect(src.fetches).toBe(ahead);
+  });
+
+  test("off, the ask's own strict re-reads make the calls", async () => {
+    const { p, src, user, sayAt, advance } = await mailPartner({});
+    await sayAt("Order the team lunch for tomorrow.");
+    advance(60_000);
+    expect(p.sourceChanged(user, "mail")).toBe(true);
+    advance(60_000);
+    await sayAt(LUNCH);
+    await p.requestSettled(ref());
+    const before = src.fetches;
+    const a = await p.ask({ ...ref(), question: QUESTION, maxItems: 3 });
+    expect(a.citations.length).toBeGreaterThan(0);
+    expect(src.fetches).toBeGreaterThan(before);
+  });
+});
+
+describe("requestSettled and pendingItems (D248): what a speculating integration waits on", () => {
+  test("settles once the push has read, with its packet's items counted and left queued", async () => {
+    const { p } = setup({}, { items: [...PLAIN, HOLD] });
+    await p.observe({ ...ref(), at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 0 });
+    await p.requestSettled(ref());
+    const n = p.pendingItems(ref());
+    expect(n).toBeGreaterThan(0);
+    expect(p.pendingItems(ref())).toBe(n);
+    const taken = p.takePending(ref());
+    expect(taken.reduce((k, i) => k + i.citations.length, 0)).toBe(n);
+    expect(taken.flatMap((i) => i.citations.map((c) => c.itemId))).toContain("mail:hold");
+    expect(p.pendingItems(ref())).toBe(0);
+    // Another session, or one never seen, has nothing and settles at once.
+    expect(p.pendingItems(ref("s2"))).toBe(0);
+    await p.requestSettled(ref("none"));
+  });
+
+  test("a note cites nothing, so it is no reason to restart", async () => {
+    const { p } = setup({ pushChecked: true });
+    await p.observe({ ...ref(), at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 0 });
+    await p.requestSettled(ref());
+    // What the observe's own lookup queued may cite items; the note adds none to the count.
+    const n = p.pendingItems(ref());
+    const taken = p.takePending(ref());
+    expect(taken.filter((i) => i.citations.length === 0).length).toBe(1);
+    expect(taken.reduce((k, i) => k + i.citations.length, 0)).toBe(n);
   });
 });
