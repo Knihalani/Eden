@@ -74,7 +74,10 @@ class PickHold implements ReaderMaker {
   }
 }
 
-async function setup() {
+async function setup(
+  extra: Record<string, unknown> = {},
+  maker: ReaderMaker & { calls: ReaderInput[] } = new PickHold(),
+) {
   let clock = T0;
   const src = new Mail();
   // The oldest item, so a poll's newest page does not read it again: only a fetch can.
@@ -85,7 +88,6 @@ async function setup() {
     T0 - 9 * HOUR,
   );
   for (let i = 0; i < 3; i++) src.add(`n${i}`, `Note ${i}`, `Note ${i} about lunch orders`, T0 - (1 + i) * HOUR);
-  const maker = new PickHold();
   const p = new ContextPartner({
     sources: async () => [src],
     sourceMap: new SourceMap(":memory:", { seed: 1 }),
@@ -106,6 +108,7 @@ async function setup() {
       readerPush: true,
       confidentScore: 99,
       fallbackMatchedTerms: 99,
+      ...extra,
     },
   });
   const user = { tenantId: "t1", userId: "u1" };
@@ -253,5 +256,41 @@ describe("a change notice drops held search pages (search-only notifying source)
       synced: false,
       reason: "not-synced",
     });
+  });
+});
+
+/** Names nothing: every reading binds nothing. */
+class PickNone implements ReaderMaker {
+  calls: ReaderInput[] = [];
+  async read(input: ReaderInput) {
+    this.calls.push(input);
+    return { bears: [], costUsd: 0.0002, usage: { inputTokens: 100, outputTokens: 10, cachedInputTokens: 0 } };
+  }
+}
+
+describe("readerVerifyAfter (trial, D192): re-reads start only once the reader names an item", () => {
+  test("the named item is re-read at delivery, once, and the push delivers the current copy", async () => {
+    const { p, src, maker, user, say } = await setup({ readerVerifyAfter: true });
+    src.add("hold", "Harlow invoice on hold", "Harlow dispute settled: the invoice may be paid now", T0 - 9 * HOUR);
+    expect(p.sourceChanged(user, "mail")).toBe(true);
+    await say("Pay the Harlow invoice today");
+    expect(maker.calls.length).toBeGreaterThanOrEqual(1);
+    const packets = p.takePending({ ...user, sessionId: "s1" });
+    expect(cited(packets)).toContain(HOLD);
+    expect(packets.map((x) => x.text).join("\n")).toContain("dispute settled");
+    expect(src.fetches).toBe(1);
+  });
+
+  test("a doubted pool item the reader does not name is never re-read (one re-read without the flag)", async () => {
+    for (const [after, fetches] of [
+      [false, 1],
+      [true, 0],
+    ] as const) {
+      const { p, src, user, say } = await setup({ readerVerifyAfter: after }, new PickNone());
+      expect(p.sourceChanged(user, "mail")).toBe(true);
+      await say("Pay the Harlow invoice today");
+      for (let n = 0; n < 50; n++) await tick();
+      expect(src.fetches).toBe(fetches);
+    }
   });
 });

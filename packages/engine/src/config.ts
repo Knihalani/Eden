@@ -469,6 +469,41 @@ export interface EngineConfig {
    * kind or constraint word reads (R3-19; on in the default, D124, amending D122).
    */
   readerGateVisits: boolean;
+  /**
+   * Trial (D190, S1, off): with `askReader`, the reader reads only when the request's own evidence clears a bar: one of
+   * the pool's first `readerEvidenceTop` candidates (not bulk mail) is an anchored intent hit holding at least
+   * `readerEvidenceCoverage` of the request's idf in at least `readerEvidenceMatched` terms, or is constraint-like (a
+   * constraint card kind, a state change, a thing done, or constraint wording: `readerGate`'s test) with a no-model
+   * score of at least `readerEvidenceScore`. Below it the ask answers as when gated.
+   */
+  readerEvidence: boolean;
+  readerEvidenceTop: number;
+  readerEvidenceCoverage: number;
+  readerEvidenceMatched: number;
+  readerEvidenceScore: number;
+  /**
+   * Trial (D191, S1, off): with `readerPush`, `observe` stops waiting for the push as soon as its pool falls below
+   * `readerEvidence`'s bar (the bar's numbers, whether or not `readerEvidence` gates calls): the reading still runs and
+   * its packet is queued for the agent's next model request. A pool that clears the bar is waited for as before.
+   */
+  readerPushWeakNoWait: boolean;
+  /**
+   * Trial (D192, S1, off): with `verifyDelivery`, no doubted candidate is re-read beside the reader's call
+   * (`checkAhead`); a delivery re-reads only the items it cites, after the reader named them (`verifyItems`).
+   */
+  readerVerifyAfter: boolean;
+  /**
+   * Trial (D193, S1, off): with `readerPush`, an ask in the same request as the push (no newer user message) reuses the
+   * push's reading instead of a call of its own: the push's verdicts on the items both pools hold, unchanged in content,
+   * lead the answer; an item the push did not read keeps its rule order. A push gated, failed or late leaves the ask
+   * to read as usual.
+   */
+  readerReuse: boolean;
+  /**
+   * Trial (D194, S1, off): with `askReader`, the reader replies in a shorter schema (item indexes with a one-letter kind
+   * code, and the lookalikes' indexes; no bearing words), `READER_SYSTEM_SHORT`.
+   */
+  readerShort: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -593,4 +628,13 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerPushBehind: true,
   readerGate: true,
   readerGateVisits: true,
+  readerEvidence: false,
+  readerEvidenceTop: 3,
+  readerEvidenceCoverage: 0.3,
+  readerEvidenceMatched: 2,
+  readerEvidenceScore: 0.5,
+  readerPushWeakNoWait: false,
+  readerVerifyAfter: false,
+  readerReuse: false,
+  readerShort: false,
 };
