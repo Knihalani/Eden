@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { sanitizeForStore } from "./secrets";
 
-// Audit A5 (fixed). A multi-word password in quotes under `password` (and, after another credential field, under any credential key).
-// KEYWORD_RULE (secrets.ts:88) redacts only `"correct` (`\S{6,}` starts at the quote, stops at the space), and the
-// structural pass that would take the whole quoted value then sees the unquoted sentinel and skips it (redact.ts:332).
-// Also: a passphrase with spaces as the value of a credential key, in JSON a connector returns. Alone, the structural pass
-// (`redact`, scanAssignments) redacts the whole quoted value. After another credential field, the keyword rule's span
-// (`\S{6,}` from the first value) runs over the next field's key, so the structural pass no longer sees that key and
-// the rest of the passphrase is stored in the clear.
+// Audit A5 (fixed). A multi-word password in quotes under `password` (and, after another credential field, under any
+// credential key). KEYWORD_RULE (secrets.ts:88) redacts only `"correct` (`\S{6,}` starts at the quote, stops at the
+// space), and the structural pass that would take the whole quoted value then sees the unquoted sentinel and skips it
+// (redact.ts:332). Also: a passphrase with spaces as the value of a credential key, in JSON a connector returns. Alone,
+// the structural pass (`redact`, scanAssignments) redacts the whole quoted value. After another credential field, the
+// keyword rule's span (`\S{6,}` from the first value) runs over the next field's key, so the structural pass no longer
+// sees that key and the rest of the passphrase is stored in the clear.
 const phrase = ["correct", "horse", "battery", "staple"].join(" ");
 
 describe("audit A5: a quoted multi-word credential is redacted whole", () => {

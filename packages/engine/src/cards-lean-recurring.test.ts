@@ -3,11 +3,11 @@ import { Budget } from "@eden/llm";
 import type { ContextItem } from "@eden/protocol";
 import { CardEnricher, type Card, type CardMaker } from "./cards";
 
-// Audit A5, fixed (D244 `cardsLeanDays`, D125 `cardsLean`): the lean decision depends on an item's DATE (`readForIntent`), but
-// its outcome is cached by CONTENT hash (`cardKey`: title + text). An old item that the lean window skips stores a
-// `card: null` under its hash; a later item with the same title and text but an upcoming date (the next occurrence
-// of a recurring event: same summary and description, another `meta.start`) is then "known" and reused, so it is
-// never read for its requests, though `readForIntent` says it should be.
+// Audit A5, fixed (D244 `cardsLeanDays`, D125 `cardsLean`): the lean decision depends on an item's DATE
+// (`readForIntent`), but its outcome is cached by CONTENT hash (`cardKey`: title + text). An old item that the lean
+// window skips stores a `card: null` under its hash; a later item with the same title and text but an upcoming date
+// (the next occurrence of a recurring event: same summary and description, another `meta.start`) is then "known" and
+// reused, so it is never read for its requests, though `readForIntent` says it should be.
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");
 const DAY = 86_400_000;

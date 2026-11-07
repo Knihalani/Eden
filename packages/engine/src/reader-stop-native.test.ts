@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { OpenRouterModel } from "@eden/llm";
 import { ModelReaderMaker, READER_STOP } from "./reader";
 
-// Audit A5, fixed (D240, unverified provider behaviour): OpenRouter's `native_finish_reason` is the upstream provider's own
-// word. Anthropic says "stop_sequence" for a stop hit, but OpenAI-style providers say "stop" for both a stop sequence
-// and a natural end (and Google says "STOP"). `OpenRouterModel` maps any reason other than "stop_sequence" to
+// Audit A5, fixed (D240, unverified provider behaviour): OpenRouter's `native_finish_reason` is the upstream provider's
+// own word. Anthropic says "stop_sequence" for a stop hit, but OpenAI-style providers say "stop" for both a stop
+// sequence and a natural end (and Google says "STOP"). `OpenRouterModel` maps any reason other than "stop_sequence" to
 // `stopped: false`, so with an `EDEN_MODEL` override on such a provider every reply the stop cut is never closed by
 // `closeStopped`: the reader's whole verdict (its binding entries included) is lost as "unreadable".
 

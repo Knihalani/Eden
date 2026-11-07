@@ -8,8 +8,8 @@ import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { AskReader, type ReaderInput, type ReaderKind, type ReaderMaker } from "./reader";
 
-// Audit A5 (long-running leak, fixed): an ask waiting on the push's verdict (`reusePush`) when its session closes goes on to
-// `reader.read` for the closed session, which reserves on the reader's Budget under the closed session key. The
+// Audit A5 (long-running leak, fixed): an ask waiting on the push's verdict (`reusePush`) when its session closes goes
+// on to `reader.read` for the closed session, which reserves on the reader's Budget under the closed session key. The
 // partner's `close` already called `reader.endSession`, so that tally is never deleted.
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");

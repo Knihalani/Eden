@@ -124,9 +124,9 @@ export class McpSource implements Source {
   }
 
   /**
-   * `connect`, given up when `signal` aborts: the SDK's `connect` and `tools/list` take no signal and wait up to its own
-   * 60 s request timeout, so a server that never answers held a listing or re-read past the lookup's deadline (audit
-   * A5). The connect itself goes on, shared by the next call.
+   * `connect`, given up when `signal` aborts: the SDK's `connect` and `tools/list` take no signal and wait up to its
+   * own 60 s request timeout, so a server that never answers held a listing or re-read past the lookup's deadline
+   * (audit A5). The connect itself goes on, shared by the next call.
    */
   private connectFor(signal?: AbortSignal): Promise<Client> {
     return signal ? untilAborted(this.connect(), signal) : this.connect();

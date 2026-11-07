@@ -7,9 +7,9 @@ import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 
-// Audit A5 (fixed): an ask's strict re-read (D211) of item A says "changed" (and stores the new copy); while another cited
-// item's re-read is still on the wire, a deletion notice (`sourceRemoved`) for A lands. `verifyItems` then finds no
-// cached copy for A (`cache.get` is null: held gone) and falls back to `[x]`: the OLD, pre-change copy of a deleted
+// Audit A5 (fixed): an ask's strict re-read (D211) of item A says "changed" (and stores the new copy); while another
+// cited item's re-read is still on the wire, a deletion notice (`sourceRemoved`) for A lands. `verifyItems` then finds
+// no cached copy for A (`cache.get` is null: held gone) and falls back to `[x]`: the OLD, pre-change copy of a deleted
 // item is cited.
 
 const HOUR = 3_600_000;
