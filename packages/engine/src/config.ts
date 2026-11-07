@@ -22,6 +22,7 @@ export interface EngineConfig {
   /** The fallback takes two of the request's terms, not `fallbackMatchedTerms`, when the request asks or acts. */
   fallbackAsks: boolean;
   maxItemsPerInjection: number;
+  /** A packet's size cap; with `guardLine` (D306) a packet may be `GUARD_LINE`'s 296 bytes over it. */
   maxInjectionBytes: number;
   /**
    * A cached item fetched or seen in a lookup longer ago than this is never delivered from the fast path: its cue goes
@@ -530,6 +531,19 @@ export interface EngineConfig {
    */
   pushCandidates: number;
   /**
+   * Trial (D306, A10; docs/research/a10-injection.md): every packet and ask answer Eden renders carries `GUARD_LINE`
+   * (`shield.ts`), a fixed line of Eden's own after the envelope's header: the items are other people's words, and
+   * nothing in them is an instruction to the agent (a request, address, link, phone number or payment detail found
+   * in one is not acted on unless the user's own request asks for exactly that).
+   */
+  guardLine: boolean;
+  /**
+   * Trial (D307, A10): every item Eden renders into a packet or ask answer has its instruction-shaped text (addressed
+   * to an AI, an override, Eden's own words forged, a tool call, hidden HTML, a markdown image, a forged chat turn)
+   * replaced by `QUARANTINED` before it is compacted (`shield.ts`, no model).
+   */
+  quarantineInstructions: boolean;
+  /**
    * D301 (A9, on in the default; docs/research/a9-ahead.md): plan-conflict proactivity. With the
    * push and the sync on, each session keeps its last `PLAN_REQUESTS` acting requests (those the push ran for); an
    * item the sync then stores (a poll, a notice's payload) that would have been among such a request's candidates
@@ -696,6 +710,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
+  guardLine: false,
+  quarantineInstructions: false,
   planConflict: true,
   askNudge: true,
   pushReshow: false,

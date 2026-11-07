@@ -7,7 +7,8 @@ import { CORE_CONFIG } from "./parts";
 // adds, deletes with their notices, session ends, forgets and clock jumps over 2 tenants × 2 users × 2 sessions,
 // with source calls answering after seeded microtask or timer turns. After every op and at the end it checks
 // isolation (D9; packets, answers, citations and `explain`'s traces), redaction (D10), the data envelope (D11),
-// settled deletions (D126), closed sessions, fail-open, not-twice (D13) and a packet handed out once. After every op,
+// settled deletions (D126), closed sessions, inertness of injection payloads (A10, `hostile` worlds), fail-open,
+// not-twice (D13) and a packet handed out once. After every op,
 // `explain` (D277) for a random session, often another user's ids or one never opened: isolation, bounded, empty for
 // a closed session, content-free (no item, title, secret or question words). The shadow configuration (D282) checks
 // that nothing a shadow call returned is tracked for usage. Each failure prints its seed and op log.
@@ -41,6 +42,14 @@ const CONFIGS: Record<string, WorldOptions> = {
   "default-shadow": { config: DEFAULT_CONFIG, shadowTenant: "t1", notTwice: true },
   // The `pushReshow` trial (D340) on, with failures: re-handed at a later request, never twice in one.
   "reshow-flaky": { config: { ...DEFAULT_CONFIG, pushReshow: true }, failRate: 0.1, notTwice: true },
+  // A10 (D305): every item carries an injection payload; the inert invariant runs. With the trials of D306 and D307
+  // on, no payload's instruction words reach a handout.
+  "default-hostile": { config: DEFAULT_CONFIG, hostile: true, notTwice: true },
+  "default-hostile-shielded": {
+    config: { ...DEFAULT_CONFIG, guardLine: true, quarantineInstructions: true },
+    hostile: true,
+    notTwice: true,
+  },
   // Every part out (no sync, no push: a removal does not act, so the deletes check has nothing to hold).
   core: { config: CORE_CONFIG, notTwice: true },
 };
