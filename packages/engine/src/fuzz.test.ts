@@ -7,7 +7,10 @@ import { CORE_CONFIG } from "./parts";
 // adds, deletes with their notices, session ends, forgets and clock jumps over 2 tenants × 2 users × 2 sessions,
 // with source calls answering after seeded microtask or timer turns. After every op and at the end it checks
 // isolation (D9; packets, answers, citations and `explain`'s traces), redaction (D10), the data envelope (D11),
-// settled deletions (D126), closed sessions, fail-open and not-twice (D13). Each failure prints its seed and op log.
+// settled deletions (D126), closed sessions, fail-open, not-twice (D13) and a packet handed out once. After every op,
+// `explain` (D277) for a random session, often another user's ids or one never opened: isolation, bounded, empty for
+// a closed session, content-free (no item, title, secret or question words). The shadow configuration (D282) checks
+// that nothing a shadow call returned is tracked for usage. Each failure prints its seed and op log.
 //
 //   FUZZ_SEEDS=2000 FUZZ_OPS=60 bun test ./packages/engine/src/fuzz.test.ts    # scale up (FUZZ_FROM: first seed)
 //   FUZZ_MINIMIZE=1 …                                                           # shrink a failing seed's plan
@@ -28,6 +31,9 @@ const CONFIGS: Record<string, WorldOptions> = {
   "default-no-key": { config: DEFAULT_CONFIG, noReader: true, notTwice: true },
   // What ships, with one source call in ten failing: every path must fail open.
   "default-flaky": { config: DEFAULT_CONFIG, failRate: 0.1, notTwice: true },
+  // What ships, with tenant t1 behind the proxy's shadow mode (D282): its events and takes say `shadow`, so nothing
+  // they return may be learned from; tenant t0 is live beside it.
+  "default-shadow": { config: DEFAULT_CONFIG, shadowTenant: "t1", notTwice: true },
   // Every part out (no sync, no push: a removal does not act, so the deletes check has nothing to hold).
   core: { config: CORE_CONFIG, notTwice: true },
 };
