@@ -20,7 +20,7 @@ flaw in their design (below); nothing from those runs is reported.
   from Eden beside tools, so the follow-up fix ("tell the agent what the packet covers") was not needed.
 - **Across a day, Eden does not repeat itself, but nothing corrects what it said earlier.** In one agent session of
   four requests and a recap, with the day's planted items moved two hours before the recap, Eden never re-delivered
-  an item and never delivered a stale copy. But the agent's recap named the old time of a changed item 14 times
+  an item, and in the recap turn (the only turn after the change) it delivered no stale copy. But the agent's recap named the old time of a changed item 14 times
   (eden) and 15 times (both+ask) against 5 and 2 times the new one: the stale fact comes from the agent's own
   transcript, and Eden does not push the revision on a general "recap" request. Recall per request also fell within a
   day (both+ask −10.9 points, interval −20.3..−3.1).
@@ -97,7 +97,9 @@ Run details:
 $/1k and tool calls are hidden-task figures; Eden on path is the mean over all 192 tasks of a condition. Background
 spend (cards) adds $0.075/1k to every Eden arm.
 
-**Paired differences** (bootstrap 95%; a difference is called only when its interval excludes zero):
+**Paired differences** (bootstrap 95%; a difference is called only when its interval excludes zero). both+ask − both
+is the report's (`both-ask-report.txt`); the other three rows are `fix-s3b/pair.py` over the same results
+(`both-ask-pairs.txt`; its own bootstrap gives both+ask − both +0.125, +0.031..+0.234):
 
 | pair            | hidden                      | control                 | neutral                 | hidden wall s            |
 | --------------- | --------------------------- | ----------------------- | ----------------------- | ------------------------ |
@@ -146,7 +148,7 @@ The regrade covered seed 41 of section 2's run: 384 answers, all readable, 0 err
 | neutral | 122 / 128 | 4                | 2               | 4 / 2                 |
 | all     | 370 / 384 | 9                | 5               |                       |
 
-By condition, Sonnet would change the hidden rates by one answer for eden (+1 of 32), tools (+1) and both+ask (−1),
+By condition (`regrade-by-condition.txt`, from `regrade-by-condition.py`), Sonnet would change the hidden rates by one answer for eden (+1 of 32), tools (+1) and both+ask (−1),
 and by three for both (+3). For eden on neutral it finds 3 answers of 32 raising a concern where Haiku found none.
 The Haiku grader errs slightly toward strictness on hidden and neutral; no comparison of arms changes direction.
 
@@ -198,14 +200,16 @@ Eden-only memory is each reading minus the zero-user reading (the in-process sim
 - **Why only then.** The reviewer showed that moving an item after each request could put it into a later request's
   slot and change that request's grade. The two runs made with that first design were stopped and are not reported
   ($0.378, `s3b-day-41`, `s3b-day-42`).
-- **Caveats.** A changed item misses the replay caches and is carded live. `lateItems` is not measured.
+- **Caveats.** A changed item misses the replay caches and is carded live. `lateItems` is not measured. The change
+  lands after the recap hour's `sync.tick()`, so without `--push` Eden sees it before the recap only through an
+  on-demand poll, which would lean a no-push day run toward stale; the runs here used `--push signals`.
 
 ```bash
 .local/ab/run.sh 41 s3b-day2-41 tools,eden,both+ask --day 4    # and 42; the same flags as section 2 plus --day 4
 ```
 
 heldout14 seeds 41–42, hidden, control and neutral, 16 days of 4 requests per condition and kind (576 graded runs, 0
-errors, 0 ungraded, 96 recaps), **$0.412**. Summaries are in `packages/sim/lab/fix-s3b/` (`days.json`,
+errors, 0 ungraded, 144 recaps), **$0.412**. Summaries are in `packages/sim/lab/fix-s3b/` (`days.json`,
 `day-report.txt`, `day-vs-single.txt`). Sums over 16 days per cell:
 
 | condition | kind    | delivered | repeat (of changed) | `(shown above)` | ask repeats | changed | stale deliveries | recap old / new time |
@@ -219,7 +223,8 @@ errors, 0 ungraded, 96 recaps), **$0.412**. Summaries are in `packages/sim/lab/f
 | tools     | hidden  | –         | –                   | –               | –           | 56      | –                | 0 / 0                |
 | tools     | control | –         | –                   | –               | –           | 54      | –                | 0 / 1                |
 
-- **Repeats.** Eden never delivered an item twice in a day, and it never delivered a changed item's old text.
+- **Repeats.** Eden never delivered an item twice in a day, and in the recap turn, the only turn after the change,
+  it delivered no changed item's old text (it barely re-delivered changed items at all).
   `(shown above)` appeared 6–9 times per cell for eden: its ask answers deduplicate against earlier packets.
 - **Stale facts.** On hidden days the recap names a changed item's old time far more often than its new one, under
   both Eden arms. The tools agent never named either: it rarely raised the planted item in the first place (rate

@@ -703,7 +703,9 @@ async function runWorld(
   let dayNo = -1;
   let newDay = true;
   let daySession = "";
-  const dayPlanted: string[] = [];
+  // A set: two requests planting one item must not move it twice.
+  const dayPlanted = new Set<string>();
+  let dayKind = "";
   let dayMessages: AgentMessage[] = [];
   const dayPackets: string[][] = [];
   for (const task of tasks) {
@@ -722,7 +724,8 @@ async function runWorld(
       day = new DayLog(daySession, condition);
       dayMessages = [];
       dayPackets.length = 0;
-      dayPlanted.length = 0;
+      dayPlanted.clear();
+      dayKind = task.kind;
     }
     const startsDay = newDay;
     newDay = DAY > 0 && isRecap(task);
@@ -1148,7 +1151,7 @@ async function runWorld(
     if (r.error) record.error = r.error.slice(0, 200);
     if (partner) Object.assign(record, uptake.fields());
     if (DAY > 0 && day) {
-      if (!isRecap(task) && task.planted) dayPlanted.push(task.planted);
+      if (!isRecap(task) && task.planted) dayPlanted.add(task.planted);
       if (isRecap(task)) {
         // The recap is measured, never graded or reported as a task.
         day.recap(r.error ? "" : r.answer);
@@ -1196,7 +1199,7 @@ async function runWorld(
     previous = { sessionId, r };
   }
   // A day cut short (budget, request cap) is still reported, marked partial.
-  if (day) DAYS.push({ ...day.summary(), seed, kind: tasks[0]?.kind ?? "", partial: true });
+  if (day) DAYS.push({ ...day.summary(), seed, kind: dayKind, partial: true });
   await closePrevious();
   current = null;
   return out;
