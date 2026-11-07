@@ -578,6 +578,7 @@ export class ItemCache {
     if (!u.graph) {
       u.graph = new UserGraph();
       for (const e of u.items.values()) u.graph.add(e.item, e.fetchedAt || now);
+      u.graph.rest();
     }
     return u.graph;
   }
@@ -759,6 +760,7 @@ export class ItemCache {
       this.evictMixed(u);
     }
     if (this.vocabOverGrown(u)) this.rebuild(scope, u);
+    u.graph?.rest(); // The graph's memo serves one put (a page); kept longer it holds the text it read (D215).
     // Only what is still held: an item evicted by this same put is not new to the cache (its drop hook already ran,
     // so a card or a mention made from it now would outlive it).
     return changed.filter((item) => u.items.get(item.id)?.item === item);

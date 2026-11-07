@@ -192,6 +192,14 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   spreads and `JSON` see the text, but a memo that keeps `item.text` keeps a decoded copy. Decode Latin-1 bytes with
   `latin1`, never `TextDecoder`: its output for an accented letter is a two-byte string, and every regex over it ran
   1.17x slower (`pipeline.bench.ts`). Text a new path reads in a loop should be read once into a local.
+- **Ingest off the event loop was built and rejected (D216).** A worker that redacted each source page and read it for
+  the cache (terms with hash lanes, graph reading, mentions, deflated text; the cache applying the reading with the
+  same stored state) cut a synced item's main-thread cost 3.5x and the concurrent bench's cold-start stall from about
+  1.2 s to 0.1-0.2 s, but one process's capacity inside a 100 ms p99 rose only 1.46x there and fell 3-15% on
+  router-sim realistic, for 1.19x the CPU per item. The code is in commit b217ae1d (`ingest.ts`, `prepared.ts`,
+  `ingest.test.ts`); building it again needs a decision that accepts those numbers.
+- **The graph's memo serves one put (D215).** `UserGraph.rest()` empties it after every put: a remembered sentence is
+  a substring that keeps its item's decoded text alive. Do not keep it across puts.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

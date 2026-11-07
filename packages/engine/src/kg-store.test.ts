@@ -708,6 +708,41 @@ describe("squash against the reference", () => {
 });
 
 describe("UserGraph bounds and memory", () => {
+  test("the memo serves one put: emptied after it, so no remembered sentence keeps an item's text (D215)", () => {
+    const memoSize = (g: UserGraph | undefined) => {
+      const m = (g as unknown as { memo: { sentences: Map<string, unknown>; people: Map<string, unknown> } }).memo;
+      return m.sentences.size + m.people.size;
+    };
+    const mail = (k: number): ContextItem => ({
+      id: `gmail:m${k}`,
+      sourceId: "gmail",
+      ref: `m${k}`,
+      title: `Update ${k}`,
+      text: `From: Dana Lee <dana@globex.com>\n\nThe Globex review moved. Kind regards, Dana Lee, Globex.`,
+    });
+    const g = new UserGraph();
+    g.add(mail(1), at);
+    g.add(mail(2), at);
+    expect(memoSize(g)).toBeGreaterThan(0);
+    g.rest();
+    expect(memoSize(g)).toBe(0);
+    // The cache empties it after each put, and after a graph built from the items it holds.
+    const scope = { tenantId: "t", userId: "u" };
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    cache.put(scope, [mail(1)], at);
+    cache.enableGraph();
+    expect(
+      cache.walk(scope, [{ key: "n:danalee", weight: 1 }], { budgetMs: 1e9, limit: 5, floor: 0 }, at),
+    ).toHaveLength(1);
+    const graphOf = () => (cache as unknown as { users: Map<string, { graph?: UserGraph }> }).users.get("t/u")?.graph;
+    expect(memoSize(graphOf())).toBe(0);
+    cache.put(scope, [mail(2), mail(3)], at);
+    expect(memoSize(graphOf())).toBe(0);
+    expect(
+      cache.walk(scope, [{ key: "n:danalee", weight: 1 }], { budgetMs: 1e9, limit: 5, floor: 0 }, at),
+    ).toHaveLength(3);
+  });
+
   const chat = (id: string, speakers: string[]): ContextItem => ({
     id,
     sourceId: "slack",

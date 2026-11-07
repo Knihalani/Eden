@@ -22,6 +22,9 @@
  * dropped, minus the heap before the users were built: the text the cache keeps is counted. The source map's SQLite
  * pages live outside the JS heap and are not counted.
  *
+ * The `cpu` line prints each mode's CPU per backfilled item for the whole process (every thread) and for the main
+ * thread alone (`thread-cpu.ts`): work moved to a worker thread shows as the difference (D216 measured it so).
+ *
  * Run: `bun packages/engine/bench/ingest.bench.ts [--world] [--plain] [users=200] [itemsPerUser=500]
  * [mode=all|core|graph|shipped]`, or `bun packages/engine/bench/ingest.bench.ts --quick [--world] [--plain]`. `--plain`
  * holds item text as plain strings (`CacheLimits.packText` off), the layout before D188.
@@ -45,6 +48,7 @@ import { ItemCache, sanitizeItem } from "../src/cache";
 import { DEFAULT_CONFIG } from "../src/config";
 import { ContextPartner } from "../src/partner";
 import { SyncManager, type SyncOptions } from "../src/sync";
+import { mainThreadCpuUs } from "./thread-cpu";
 import { buildWorkload } from "./workload";
 
 const QUICK = process.argv.includes("--quick");
@@ -70,6 +74,10 @@ interface Result {
   releasedB: number;
   backfillMs: number;
   sweepMs: number;
+  /** Whole-process CPU (every thread) per item over the backfill, µs. */
+  cpuUs: number;
+  /** The main thread's CPU per item over the backfill, µs (`thread-cpu.ts`). */
+  mainUs: number;
 }
 
 /** A connector that lists a fixed set of items newest first, instantly. */
@@ -210,7 +218,11 @@ async function run(mode: Mode): Promise<Result> {
   const synced = () => users.reduce((s, { scope }) => s + cache.syncedCount(scope), 0);
   const before = heap();
   for (const { scope } of users) sync.track(scope, clock);
+  const cpu0 = process.cpuUsage();
+  const main0 = mainThreadCpuUs();
   const backfillMs = await listAll(n);
+  const cpu = process.cpuUsage(cpu0);
+  const mainUs = (mainThreadCpuUs() - main0) / n;
   const after = heap();
   if (synced() !== n) throw new Error(`synced ${synced()} items, expected ${n}`);
 
@@ -233,6 +245,8 @@ async function run(mode: Mode): Promise<Result> {
     releasedB: (released - base) / n,
     backfillMs,
     sweepMs,
+    cpuUs: (cpu.user + cpu.system) / n,
+    mainUs,
   };
 }
 
@@ -250,6 +264,8 @@ const minus = (a: Result, b: Result, label: string): Result => ({
   releasedB: a.releasedB - b.releasedB,
   backfillMs: a.backfillMs - b.backfillMs,
   sweepMs: a.sweepMs - b.sweepMs,
+  cpuUs: a.cpuUs - b.cpuUs,
+  mainUs: a.mainUs - b.mainUs,
 });
 
 if (MODE !== "all") {
@@ -287,6 +303,8 @@ if (MODE !== "all") {
   console.log(`per stage (the difference between modes):`);
   console.log(line("+graph", minus(graph, core, "+graph")));
   console.log(line("+onStored", minus(shipped, graph, "+onStored")));
+  const cpuOf = (r: Result) => `${r.mode} ${r.cpuUs.toFixed(1)} µs/item (main thread ${r.mainUs.toFixed(1)})`;
+  console.log(`cpu (backfill): ${results.map(cpuOf).join(", ")}`);
   const ratio = (a: number, b: number) => (a / b).toFixed(2);
   console.log(
     `shipped / core: backfill ${ratio(shipped.backfillUs, core.backfillUs)}x, memory ` +

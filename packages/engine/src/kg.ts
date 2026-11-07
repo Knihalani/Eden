@@ -1230,6 +1230,20 @@ export class UserGraph {
     }
   }
 
+  /**
+   * Forgets what the memo read (`Memo`), once a batch of adds is done (`ItemCache.put` calls it after each put). A
+   * remembered sentence or person is cut from an item's text, and in JSC such a substring keeps that whole text
+   * alive: kept between puts, 256 of them held about 190-310 B an item of a synced user (ingest.bench.ts; D215). The
+   * memo pays within a batch, a listing page of one user's mail with its shared footers and senders: emptied after
+   * every 100 adds, the graph's add took the same time as with it kept (52-59 against 51-56 µs an item, workload;
+   * 35-36 against 35-39, sim world; scratch runs, 20 users x 500 items). The same nodes either way: it only saves
+   * reading a sentence again.
+   */
+  rest(): void {
+    this.memo.sentences.clear();
+    this.memo.people.clear();
+  }
+
   /** Takes an item out: its edges, the links it stated, and nodes nothing else holds. */
   remove(id: string): void {
     const slot = this.slots.get(id, hashOf(id));
