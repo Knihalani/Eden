@@ -445,13 +445,6 @@ export interface EngineConfig {
    * past the ask's wait leaves the ask answered without the reader, with no call.
    */
   readerReuse: boolean;
-  /**
-   * D233 (trial, off; owner CL1, ends 2026-12-07): read at ingest, not per request. With `cards` and an applicability
-   * maker wired (`CardEnricher.applicable`), each item the reader could flag gets, in the background, a record of the
-   * requests it binds and when (`applicability.ts`); at request time a no-model matcher calls each pooled item binding
-   * nothing, unrelated or ambiguous, and the reader is called only when an item is ambiguous or has no record yet.
-   */
-  readAtIngest: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -567,5 +560,4 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerGateVisits: true,
   readerVerifyAfter: true,
   readerReuse: true,
-  readAtIngest: false,
 };

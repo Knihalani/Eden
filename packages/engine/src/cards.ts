@@ -27,7 +27,6 @@ import { createHash } from "node:crypto";
 import type { Budget, ChatMessage, Model } from "@eden/llm";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
-import type { Applicability, ApplyMaker } from "./applicability";
 import type { Frame } from "./conflict";
 import { CLASSES, hasWord } from "./consequence";
 import { parseWhen } from "./grounding";
@@ -628,11 +627,6 @@ interface Stored {
   requests?: string[];
   /** When the card was made (the partner's clock): a lookup uses only cards made before it began. */
   at: number;
-  /** `readAtIngest` (D233): what the item binds and when (`applicability.ts`), and when that was made. */
-  apply?: Applicability;
-  applyAt?: number;
-  /** `readAtIngest`: false when no record is wanted for this content (the item binds nothing: bulk, or inert). */
-  applyWanted?: boolean;
   /** When an item last linked to it (made, or an item with this content enqueued): its time to live runs from here. */
   seenAt: number;
 }
@@ -657,8 +651,6 @@ class UserCards {
    */
   readonly holders = new Map<string, Set<string>>();
   readonly queue: Queued[] = [];
-  /** `readAtIngest`: carded items waiting for their applicability record (one more call per batch). */
-  readonly applyQueue: Queued[] = [];
   /** With `intent`: the user's requests, indexed (`intent.ts`); created with the first. */
   intent: IntentIndex | undefined;
   /** Sentence key → the content hash whose card says it (`sentenceReuse`). */
@@ -666,8 +658,6 @@ class UserCards {
   /** Content hash → its sentence key in `bySentence`: the entry goes when the card does (held no longer, D8). */
   readonly sentenceOf = new Map<string, string>();
   draining: Promise<void> | null = null;
-  /** `readAtIngest`: the applicability drain in flight (`startApplying`). */
-  applying: Promise<void> | null = null;
   readonly abort = new AbortController();
 }
 
@@ -697,13 +687,6 @@ export interface CardStats {
   requestOnly: number;
   /** With `intent`: items given one request or more. */
   requested: number;
-  /** `readAtIngest` (D233): applicability calls, items sent, their cost, records kept (binding ones), failures. */
-  applyCalls: number;
-  applySent: number;
-  applyCostUsd: number;
-  applyMade: number;
-  applyBinding: number;
-  applyFailures: number;
 }
 
 /**
@@ -732,18 +715,7 @@ export class CardEnricher {
     implausible: 0,
     requestOnly: 0,
     requested: 0,
-    applyCalls: 0,
-    applySent: 0,
-    applyCostUsd: 0,
-    applyMade: 0,
-    applyBinding: 0,
-    applyFailures: 0,
   };
-  /** `readAtIngest`: the applicability maker, and which kept items get a record (`applicable`). */
-  private applier: {
-    maker: ApplyMaker;
-    wants: (item: ContextItem, card: Card | null, read: boolean) => boolean;
-  } | null = null;
   /**
    * Span tracing (`spans.ts`): each enrichment call is a `cards.make` span (counts only, D19). The partner sets it
    * when its spans are on; null otherwise.
@@ -794,16 +766,6 @@ export class CardEnricher {
    */
   lean(days: number): void {
     this.limits = { ...this.limits, leanDays: Math.max(0, days) };
-  }
-
-  /**
-   * Turns on applicability records (`readAtIngest`, D233; `applicability.ts`): each kept item that `wants` accepts
-   * (`read`: the card model read it; the partner wants every such item but bulk mail, and of the rest those the
-   * reader gate's test calls constraint-like) is queued for one more background call, through the same budget, that
-   * writes what it binds and when. An item not wanted is marked inert (`appliesOf` gives it null).
-   */
-  applicable(maker: ApplyMaker, wants: (item: ContextItem, card: Card | null, read: boolean) => boolean): void {
-    this.applier = { maker, wants };
   }
 
   private user(scope: Scope): UserCards {
@@ -889,7 +851,6 @@ export class CardEnricher {
         } else {
           if (this.limits.intent) this.stats.leanSkipped++;
           this.keep(u, hash, { card: null, at: now, seenAt: now });
-          if (this.applier) this.wantApply(u, item, hash, null, false);
         }
         continue;
       }
@@ -899,7 +860,6 @@ export class CardEnricher {
     if (u.queue.length > 0 && !u.draining) {
       u.draining = this.drain(scope, u).finally(() => (u.draining = null));
     }
-    this.startApplying(scope, u);
   }
 
   /** Queues an item for the model, or gives it the card of an item saying the same constraint (`sentenceReuse`). */
@@ -920,42 +880,6 @@ export class CardEnricher {
   private enlist(u: UserCards, q: Queued): void {
     u.queue.push(q);
     if (u.queue.length > this.limits.maxQueue) u.queue.shift();
-  }
-
-  /** Whether a kept item wants a record (`applicable`'s test); queues it if so, else marks it inert. */
-  private wantApply(u: UserCards, item: ContextItem, hash: string, card: Card | null, read: boolean): boolean {
-    const wanted = this.applier!.wants(item, card, read);
-    const s = u.byHash.get(hash);
-    if (s) s.applyWanted = wanted;
-    if (wanted) this.enlistApply(u, { item, hash });
-    return wanted;
-  }
-
-  /** Queues a kept item for its applicability record (bounded as the card queue; the oldest wait is dropped). */
-  private enlistApply(u: UserCards, q: Queued): void {
-    if (u.applyQueue.some((x) => x.hash === q.hash)) return;
-    u.applyQueue.push({ item: q.item, hash: q.hash });
-    if (u.applyQueue.length > this.limits.maxQueue) u.applyQueue.shift();
-  }
-
-  /**
-   * The applicability drain (`readAtIngest`): its own loop beside the card drain, so a card never waits on an
-   * applicability call (a card made late is not read by a request that arrived before it).
-   */
-  private startApplying(scope: Scope, u: UserCards): void {
-    if (!this.applier || u.applyQueue.length === 0 || u.applying) return;
-    const key = scopeKey(scope);
-    const session = `apply:${key}`;
-    u.applying = (async () => {
-      await Promise.resolve();
-      while (u.applyQueue.length > 0 && !u.abort.signal.aborted) {
-        if (!(await this.applyBatch(scope, key, session, u))) return;
-      }
-    })().finally(() => {
-      u.applying = null;
-      // Items queued while the last call ran (a card kept meanwhile) start the loop again.
-      if (u.applyQueue.length > 0 && !u.abort.signal.aborted && this.users.get(key) === u) this.startApplying(scope, u);
-    });
   }
 
   private keep(u: UserCards, hash: string, s: Stored): void {
@@ -1056,9 +980,6 @@ export class CardEnricher {
             seenAt: at,
             ...(asked?.length ? { requests: asked } : {}),
           });
-          if (this.applier && this.wantApply(u, b.item, b.hash, card.kind === "none" ? null : card, true)) {
-            this.startApplying(scope, u);
-          }
           if (b.skey !== undefined) {
             u.bySentence.set(b.skey, b.hash);
             u.sentenceOf.set(b.hash, b.skey);
@@ -1085,52 +1006,6 @@ export class CardEnricher {
         if (u.abort.signal.aborted) return;
       }
     }
-  }
-
-  /**
-   * One applicability call (`readAtIngest`) for the next batch of the user's queue. False when the drain should stop
-   * (over budget: what waits stays uncovered and is dropped; the user forgotten or dropped).
-   */
-  private async applyBatch(scope: Scope, key: string, session: string, u: UserCards): Promise<boolean> {
-    const batch = u.applyQueue.splice(0, this.limits.batch).filter((q) => u.holders.has(q.hash));
-    if (batch.length === 0) return true;
-    const reservation = this.deps.budget.reserve(key, session, this.limits.estimatedCallUsd);
-    this.deps.budget.endSession(session);
-    if (!reservation) {
-      this.stats.overBudget += batch.length + u.applyQueue.length;
-      u.applyQueue.length = 0;
-      return false;
-    }
-    const today = new Date(this.deps.now() + (this.offsetOf?.(scope) ?? 0) * 60_000).toISOString().slice(0, 10);
-    try {
-      const made = await this.applier!.maker.make(
-        batch.map((b) => b.item),
-        today,
-        u.abort.signal,
-      );
-      this.deps.budget.settle(reservation, made.costUsd);
-      this.stats.applyCalls++;
-      this.stats.applySent += batch.length;
-      this.stats.applyCostUsd += made.costUsd;
-      this.stats.costUsd += made.costUsd;
-      if (u.abort.signal.aborted || this.users.get(key) !== u) return false;
-      const at = this.deps.now();
-      batch.forEach((b, i) => {
-        const a = made.applies[i];
-        const s = u.byHash.get(b.hash);
-        // Unread, or the item (or its card) went while the call ran: nothing is kept for content no longer held.
-        if (!a || !s || !u.holders.has(b.hash)) return;
-        s.apply = a;
-        s.applyAt = at;
-        this.stats.applyMade++;
-        if (a.binds.length > 0) this.stats.applyBinding++;
-      });
-    } catch {
-      this.deps.budget.settle(reservation, 0);
-      this.stats.applyFailures++;
-      if (u.abort.signal.aborted) return false;
-    }
-    return true;
   }
 
   /**
@@ -1179,9 +1054,7 @@ export class CardEnricher {
   /** Waits for every user's enrichment in flight (tests and the lab). */
   async idle(): Promise<void> {
     for (;;) {
-      const busy = [...this.users.values()]
-        .flatMap((u) => [u.draining, u.applying])
-        .filter((d): d is Promise<void> => d !== null);
+      const busy = [...this.users.values()].map((u) => u.draining).filter((d): d is Promise<void> => d !== null);
       if (busy.length === 0) return;
       await Promise.all(busy);
     }
@@ -1243,26 +1116,6 @@ export class CardEnricher {
     return out;
   }
 
-  /**
-   * `readAtIngest` (D233): the applicability records of the user's items made before `before` (ms, the partner's
-   * clock), for the ids given; null for an item kept as needing none (inert). An item with no record yet (pending, a
-   * failed call, its card not made) is not returned: the matcher leaves it to the reader.
-   */
-  appliesOf(scope: Scope, ids: Iterable<string>, before: number): Map<string, Applicability | null> {
-    const out = new Map<string, Applicability | null>();
-    const u = this.users.get(scopeKey(scope));
-    if (!u) return out;
-    const now = this.deps.now();
-    for (const id of ids) {
-      const hash = u.byItem.get(id);
-      const s = hash ? u.byHash.get(hash) : undefined;
-      if (!s || !(s.at < before) || now - s.seenAt > this.limits.ttlMs) continue;
-      if (s.applyWanted === false) out.set(id, null);
-      else if (s.apply && s.applyAt! < before) out.set(id, s.apply);
-    }
-    return out;
-  }
-
   /** The requests written for an item's content before `before` (ms); none when unread, unmade or past its TTL. */
   requestsOf(scope: Scope, id: string, before: number): readonly string[] {
     const u = this.users.get(scopeKey(scope));
@@ -1310,9 +1163,6 @@ export class CardEnricher {
     const prefix = `${sourceId}:`;
     for (const id of [...u.byItem.keys()]) if (id.startsWith(prefix)) unlink(u, id);
     for (let i = u.queue.length - 1; i >= 0; i--) if (u.queue[i]!.item.sourceId === sourceId) u.queue.splice(i, 1);
-    for (let i = u.applyQueue.length - 1; i >= 0; i--) {
-      if (u.applyQueue[i]!.item.sourceId === sourceId) u.applyQueue.splice(i, 1);
-    }
   }
 
   get userCount(): number {
@@ -1342,13 +1192,7 @@ function unlink(u: UserCards, id: string): void {
 
 /** A card made for one item, taken by another saying the same constraint sentences (`sentenceReuse`). */
 function reused(made: Stored, seenAt: number): Stored {
-  return {
-    card: made.card,
-    at: made.at,
-    seenAt,
-    ...(made.requests ? { requests: made.requests } : {}),
-    ...(made.apply ? { apply: made.apply, applyAt: made.applyAt! } : {}),
-  };
+  return { card: made.card, at: made.at, seenAt, ...(made.requests ? { requests: made.requests } : {}) };
 }
 
 /** The card of an item read for its requests only: the prefilter found no constraint language in it. */

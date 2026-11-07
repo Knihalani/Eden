@@ -58,7 +58,6 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerGateVisits: "reader",
   readerVerifyAfter: "reader",
   readerReuse: "reader",
-  readAtIngest: "reader",
 };
 
 /**
@@ -115,7 +114,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerPushBehind: [...PUSH, ...POLL_BEHIND],
   readerVerifyAfter: [...READER, "verifyDelivery"],
   readerReuse: PUSH,
-  readAtIngest: [...READER, "cards"],
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
