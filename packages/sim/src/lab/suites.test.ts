@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildWorld } from "../world";
+import { HELDOUT17_LATE } from "./hidden-heldout17";
 import { supportsNeutral } from "./neutral";
 import { parseSuites, SUITE_NAMES, SUITES, UNRUN_BLIND } from "./suites";
 
@@ -127,5 +128,45 @@ describe("suite registry", () => {
     expect(UNRUN_BLIND).toContain("heldout16");
     expect(supportsNeutral("heldout16")).toBe(true);
     expect(parseSuites("all")).not.toContain("heldout16");
+  });
+
+  // D350 (docs/research/a19-heldout17.md): counts, ids and refs only; its templates' text is not read here.
+  test("heldout17 builds 32 tasks per variant with neutral, unrun, out of `all`, and its refs name no template", () => {
+    for (const seed of [41, 44]) {
+      const by = Object.fromEntries(
+        (["hidden", "control", "neutral"] as const).map((v) => {
+          const world = buildWorld({ seed: seed * 1_000 });
+          const before = world.items.length;
+          const tasks = SUITES.heldout17!(world, seed, v);
+          return [v, { tasks, items: world.items.slice(before) }];
+        }),
+      );
+      expect([by.hidden!.items.length, by.control!.items.length, by.neutral!.items.length]).toEqual([32, 32, 0]);
+      const same = (t: { text: string; detail: string; template: string }) => [t.text, t.detail, t.template];
+      for (const v of ["control", "neutral"]) {
+        expect(by[v]!.tasks.map(same)).toEqual(by.hidden!.tasks.map(same));
+        expect(by[v]!.tasks.every((t: { id: string }) => t.id.startsWith(`w${seed}:heldout17-${v}:`))).toBe(true);
+      }
+      expect(by.hidden!.tasks.every((t: { id: string }) => t.id.startsWith(`w${seed}:heldout17:`))).toBe(true);
+      // The tools arm sees refs and ids (A5/CL5 review): the base world's `<kind>-<index>` shape, the same in hidden
+      // and control, and no template name, suite name or "planted" marker anywhere in an item's ref, id or title.
+      const names: string[] = by.hidden!.tasks.map((t: { template: string }) => t.template);
+      const refs = (v: string) => by[v]!.items.map((it: { ref: string }) => it.ref);
+      expect(refs("control")).toEqual(refs("hidden"));
+      for (const v of ["hidden", "control"]) {
+        for (const it of by[v]!.items as { ref: string; id: string; title: string }[]) {
+          expect(it.ref).toMatch(/^[a-z]+-\d+$/);
+          const seen = `${it.ref} ${it.id} ${it.title}`.toLowerCase();
+          expect(names.filter((n) => seen.includes(n))).toEqual([]);
+          expect(/heldout|h17|planted|decoy/.test(seen)).toBe(false);
+        }
+      }
+      // Eight late-arrival templates (one per life area), each a template of the suite (`pi-ab --late --templates`).
+      expect(HELDOUT17_LATE.length).toBe(8);
+      expect(HELDOUT17_LATE.every((n) => names.includes(n))).toBe(true);
+    }
+    expect(UNRUN_BLIND).toContain("heldout17");
+    expect(supportsNeutral("heldout17")).toBe(true);
+    expect(parseSuites("all")).not.toContain("heldout17");
   });
 });
