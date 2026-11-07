@@ -505,6 +505,13 @@ export interface EngineConfig {
    * past the ask's wait leaves the ask answered without the reader, with no call.
    */
   readerReuse: boolean;
+  /**
+   * Trial (fix-w2b, D230; off, owner repo owner, ends 2026-12-07): with `askReader`, an ask answer whose reader read
+   * its pool says before each listed item the reader read and did not flag that it was not flagged and shares words
+   * only (`UNFLAGGED_NOTE`), as a flagged item carries its bearing. Items the reader did not read (past the pool, or
+   * no reading at all) say nothing. No call, no item dropped: only the answer's wording.
+   */
+  askUnflaggedNote: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -635,4 +642,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerGateVisits: true,
   readerVerifyAfter: true,
   readerReuse: true,
+  askUnflaggedNote: false,
 };

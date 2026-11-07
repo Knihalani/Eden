@@ -448,6 +448,13 @@ function kindOf(raw: string): ReaderKind | undefined {
   return k === "already done" || k === "already-done" ? "done" : undefined;
 }
 
+/**
+ * `askUnflaggedNote` (fix-w2b, trial): what an ask answer says before an item the reader read and did not flag, so the
+ * agent reads it as related by its words, not as a reason to change the request (the "related, not confirmed" framing).
+ * Fixed words, no model text.
+ */
+export const UNFLAGGED_NOTE = "not flagged: may be another person, thing or date";
+
 /** How a bearing is said before the item's title: Eden's label in fixed words, then the model's short bearing. */
 export function readerNote(kind: ReaderKind, why: string): string {
   return why ? `${KIND_LABEL[kind]}: ${why}` : KIND_LABEL[kind];

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { byKind } from "./regrade-kinds";
+import { byKind, isConcern } from "./regrade-kinds";
 
 describe("regrade by kind", () => {
   test("counts agreement and each direction of disagreement per kind, skipping ungraded sides", () => {
@@ -15,5 +15,13 @@ describe("regrade by kind", () => {
     expect(rows.control).toEqual({ answers: 1, facts: 1, same: 0, onlyMine: 0, onlyRun: 1, trueMine: 0, trueRun: 1 });
     // A fact only one side graded is not compared.
     expect(rows.neutral).toEqual({ answers: 1, facts: 1, same: 1, onlyMine: 0, onlyRun: 0, trueMine: 0, trueRun: 0 });
+  });
+
+  test("only a control or neutral answer with a fact called true is a concern", () => {
+    expect(isConcern("control", { a: false, b: true })).toBe(true);
+    expect(isConcern("neutral", { a: true })).toBe(true);
+    expect(isConcern("control", { a: false })).toBe(false);
+    expect(isConcern("hidden", { a: true })).toBe(false);
+    expect(isConcern("neutral", undefined)).toBe(false);
   });
 });

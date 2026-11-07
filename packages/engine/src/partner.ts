@@ -73,6 +73,7 @@ import {
   readerFocus,
   readerItem,
   readerNote,
+  UNFLAGGED_NOTE,
   type AskReader,
   type ReaderInput,
   type ReaderRead,
@@ -1645,7 +1646,11 @@ export class ContextPartner {
     const items = checked.map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
     const answering = this.answering(s, cue);
-    if (reading?.notes.size) answering.note = (item) => reading.notes.get(item.id);
+    // `askUnflaggedNote` (trial): an item the reader read and did not flag says so, in fixed words (`UNFLAGGED_NOTE`).
+    const unflagged = this.config.askUnflaggedNote && reading?.read ? reading.readIds : null;
+    if (reading?.notes.size || unflagged?.size) {
+      answering.note = (item) => reading!.notes.get(item.id) ?? (unflagged?.has(item.id) ? UNFLAGGED_NOTE : undefined);
+    }
     const packet = items.length ? renderPacket(items, answering) : "";
     // D127: "nothing" is said only when the sources the ask chose answered; one that failed is named, in the text
     // (an MCP caller sees only the text) and in `sources`.
@@ -1784,6 +1789,8 @@ export class ContextPartner {
     notes: Map<string, string>;
     kinds: Map<string, ReaderKind>;
     read: boolean;
+    /** The pool items the reading read (empty when `read` is false): what `askUnflaggedNote` may call unflagged. */
+    readIds: ReadonlySet<string>;
     called: boolean;
     costUsd: number;
   } | null> {
@@ -1928,6 +1935,7 @@ export class ContextPartner {
       notes: new Map<string, string>(),
       kinds: new Map<string, ReaderKind>(),
       read: false,
+      readIds: new Set<string>(),
       called,
       costUsd,
     };
@@ -1959,11 +1967,16 @@ export class ContextPartner {
     // A drop that would leave the answer empty is made only when the reader read every candidate (D114): otherwise
     // the empty answer ("Nothing in the connected sources") would be a false all-clear over items it never read (D93).
     if (lead.length === 0 && rest.length === 0 && !readsAll) rest = chosen.filter((x) => !lead.includes(x));
+    // What the reading read: the pool as the prompt shows it (at most `READER_MAX_ITEMS`), or, for a reused verdict,
+    // the items the push read with the same content.
+    const readIds =
+      reused && reused !== "late" ? reused.ids : new Set(pool.slice(0, READER_MAX_ITEMS).map((x) => x.item.id));
     return {
       chosen: [...lead, ...rest].slice(0, limit),
       notes,
       kinds,
       read: true,
+      readIds,
       called,
       costUsd,
     };
@@ -1994,7 +2007,7 @@ export class ContextPartner {
     pool: readonly Scored[],
     main: string,
     waitMs: number,
-  ): Promise<{ verdict: ReaderVerdict; all: boolean } | "late" | null> {
+  ): Promise<{ verdict: ReaderVerdict; all: boolean; ids: ReadonlySet<string> } | "late" | null> {
     if (!this.config.readerReuse || !this.config.readerPush) return null;
     const prior = s.pushRead;
     // Only an ask read against the push's own request: one that acts on its own is another request.
@@ -2018,6 +2031,7 @@ export class ContextPartner {
         checked: same.size,
       },
       all: same.size === pool.length,
+      ids: same,
     };
   }
 

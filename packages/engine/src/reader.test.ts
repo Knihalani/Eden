@@ -22,8 +22,9 @@ import {
   type ReaderInput,
   type ReaderKind,
   type ReaderMaker,
+  UNFLAGGED_NOTE,
 } from "./reader";
-import { shownText } from "./render";
+import { READER_TAG, shownText } from "./render";
 import type { Trace } from "./trace";
 import { CORE_CONFIG } from "./parts";
 
@@ -657,6 +658,35 @@ describe("the reader in the engine (config.askReader)", () => {
       { maker: new ScriptedReader(flags("mail:hold"), { reject, fail: true }) },
     );
     expect(failed.answers.u1![0]!.ids).toContain("mail:n0");
+  });
+
+  test("askUnflaggedNote (fix-w2b): an item the reader read and did not flag says so; unread items say nothing", async () => {
+    const lines = (answer: string) => answer.split("\n").filter((l) => l.startsWith("- ["));
+    const on = await run({ askReader: true, askUnflaggedNote: true });
+    const a = on.answers.u1![0]!;
+    const shown = lines(a.answer);
+    expect(a.ids[0]).toBe("mail:hold");
+    // The flagged item keeps its bearing; every other item the reader read carries the unflagged note.
+    expect(shown[0]).toContain(`${READER_TAG}blocks`);
+    expect(shown.length).toBeGreaterThan(1);
+    for (const l of shown.slice(1)) expect(l).toContain(`${READER_TAG}${UNFLAGGED_NOTE} | `);
+    // Off (the default), the other items carry no note.
+    const off = await run({ askReader: true });
+    for (const l of lines(off.answers.u1![0]!.answer).slice(1)) expect(l).not.toContain(READER_TAG);
+    // With the pool cut to 2, only the second item was read with the flagged one: the rest say nothing.
+    const cut = await run({ askReader: true, askUnflaggedNote: true, askReaderPool: 2 });
+    const read = new Set(cut.reports[0]!.pool);
+    const cutLines = lines(cut.answers.u1![0]!.answer);
+    cut.answers.u1![0]!.ids.forEach((id, k) => {
+      if (id === "mail:hold" || k >= cutLines.length) return;
+      expect(cutLines[k]!.includes(UNFLAGGED_NOTE)).toBe(read.has(id));
+    });
+    // No reading (the reader failed): nothing is said to be unflagged.
+    const failed = await run(
+      { askReader: true, askUnflaggedNote: true },
+      { maker: new ScriptedReader(flags("mail:hold"), { fail: true }) },
+    );
+    expect(failed.answers.u1![0]!.answer).not.toContain(UNFLAGGED_NOTE);
   });
 
   test("readerPush: an acting request is read on observe and what binds is queued as a packet", async () => {
