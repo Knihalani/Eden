@@ -1,3 +1,5 @@
+# CL8 $0 screen: tasks with an item in two packets of the same request, from hidden-funnel --packets.
+# usage: python3 -I dups.py PACKETS.jsonl ...
 import json,sys,collections
 for f in sys.argv[1:]:
     by=collections.defaultdict(lambda:[0,0,0,0,0,0])  # tasks, tasksWithDup, dupItems, packets, candTasks, leadBytes

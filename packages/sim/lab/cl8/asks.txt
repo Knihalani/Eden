@@ -1,0 +1,20 @@
+== short, five arms
+eden       control  n  117  packet chars/task  1456  asks/task 0.85  answer bytes/task  765  bytes/ask  895
+eden       hidden   n  110  packet chars/task  1591  asks/task 0.60  answer bytes/task  587  bytes/ask  978
+eden       neutral  n  118  packet chars/task   952  asks/task 1.04  answer bytes/task  876  bytes/ask  840
+eden~b200  control  n  108  packet chars/task  1144  asks/task 0.91  answer bytes/task  844  bytes/ask  931
+eden~b200  hidden   n  118  packet chars/task  1207  asks/task 0.75  answer bytes/task  746  bytes/ask 1000
+eden~b200  neutral  n  112  packet chars/task   877  asks/task 1.04  answer bytes/task  918  bytes/ask  879
+eden~dd    control  n  106  packet chars/task  1367  asks/task 0.89  answer bytes/task  757  bytes/ask  853
+eden~dd    hidden   n  111  packet chars/task  1444  asks/task 0.64  answer bytes/task  625  bytes/ask  978
+eden~dd    neutral  n  129  packet chars/task   927  asks/task 0.99  answer bytes/task  812  bytes/ask  818
+eden~k3    control  n  125  packet chars/task  1025  asks/task 0.73  answer bytes/task  653  bytes/ask  897
+eden~k3    hidden   n  130  packet chars/task  1087  asks/task 0.56  answer bytes/task  541  bytes/ask  964
+eden~k3    neutral  n  109  packet chars/task   684  asks/task 1.14  answer bytes/task  941  bytes/ask  827
+== short, clean pair
+eden       control  n  144  packet chars/task  1473  asks/task 0.83  answer bytes/task  709  bytes/ask  857
+eden       hidden   n  144  packet chars/task  1612  asks/task 0.51  answer bytes/task  507  bytes/ask  987
+eden       neutral  n  144  packet chars/task   972  asks/task 0.97  answer bytes/task  778  bytes/ask  806
+eden~k3    control  n  144  packet chars/task  1022  asks/task 0.75  answer bytes/task  656  bytes/ask  875
+eden~k3    hidden   n  144  packet chars/task  1104  asks/task 0.49  answer bytes/task  518  bytes/ask 1050
+eden~k3    neutral  n  144  packet chars/task   705  asks/task 1.10  answer bytes/task  898  bytes/ask  818

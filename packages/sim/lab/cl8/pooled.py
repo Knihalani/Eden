@@ -44,7 +44,9 @@ for stem in stems:
     for out, v in ((hidden, h), (graded, c), (regraded, c2)):
         if v:
             out.append(v)
-for name, per in (("hidden raised", hidden), ("concerns (control+neutral), graded", graded), ("concerns, regraded", regraded)):
+ROWS = (("hidden raised", hidden), ("concerns (control+neutral), graded", graded), ("concerns, regraded", regraded))
+for name, per in ROWS:
     if per:
         n, m, lo, hi = boot(per)
-        print(f"{arm} − {base}  {name:36s} runs {len(per)} n {n:4d}  {100*m:+.1f} points ({100*lo:+.1f}..{100*hi:+.1f})")
+        ci = f"({100*lo:+.1f}..{100*hi:+.1f})"
+        print(f"{arm} − {base}  {name:36s} runs {len(per)} n {n:4d}  {100*m:+.1f} points {ci}")

@@ -12,30 +12,34 @@ with a hard cap of $2.5: **Anthropic-direct lab figures**. **Spent: $1.983.** Tr
   packet (up to 5 excerpts of ≤320 bytes) and `ask_context` answers. Can a smaller packet cut that without losing
   hidden facts?
 - **No.** Four ways of making the packet smaller were tried; none is cheaper overall without a loss, so the default
-  stays as it is (`pushCandidates` 5, 320-byte excerpts):
-  - **Shorter excerpts** (200 bytes) lose the fact: the agent raised **12.8 points fewer hidden facts** (−20.5..−5.1).
-    At $0 the planted item's excerpt keeps 93% of the fact's words at 320 bytes, 70% at 200, 63% at 160, 48% at 120.
-  - **Three candidates instead of five** is cheaper over a user's days (−$0.029/1k on the 1:1:8 mix, −0.038..−0.020)
-    but not one request at a time (−$0.003/1k, −0.019..+0.014), where it is **0.26 s slower** (+0.04..+0.50): with
-    fewer items on a nothing-to-add request the agent calls `ask_context` more, and that extra model turn costs what
-    the bytes saved.
+  stays as it is (`pushCandidates` 5, 320-byte excerpts). The 200-byte and three-candidate arms also had the
+  no-repeat switch on (below), which on its own changed nothing measurable:
+  - **Shorter excerpts** (200 bytes, with no-repeat) lose the fact: the agent raised **12.8 points fewer hidden
+    facts** (−20.5..−5.1; against no-repeat alone −10.7, −18.0..−3.3). At $0 the planted item's excerpt keeps 93% of
+    the fact's words at 320 bytes, 70% at 200, 63% at 160, 48% at 120.
+  - **Three candidates instead of five** (with no-repeat) is cheaper over a user's days (−$0.029/1k on the 1:1:8
+    mix, −0.038..−0.020) but not one request at a time (−$0.003/1k, −0.019..+0.014), where it is **0.26 s slower**
+    (+0.04..+0.50): with fewer items on a nothing-to-add request the agent calls `ask_context` more, and that extra
+    model turn costs what the bytes saved.
   - **Five on a session's first request, three after** (aimed at the long-horizon saving) saved $0.008/1k
     (−0.017..+0.002) and lost 3 of 23 hidden facts (−13.0 points, −26.1..0.0).
   - **Not repeating an item another packet already gave in the same request** (36% of hidden tasks had one; a real
     race between the push and the rule paths) saved nothing measurable (−$0.003/1k long, +$0.002 short).
   - A **score floor** on the weak tail was dropped at $0: it took the planted item out of 49–68 of 272 packets.
-- **What Eden's extra cost actually is, on Pi.** Not bytes: **prompt-cache writes.** Pi's agent with Eden has a short
-  fixed prefix (the system prompt and one `ask_context` tool, about 565 tokens), which Anthropic never served from
-  its cache across tasks in these runs (1,765 of 2,257 first requests read nothing from the cache); the agent with
-  search tools has an 867-token prefix that it read on all but 1 of 366 tasks. So each Eden task writes its whole first prompt to
-  the cache at 1.25 times the input price, where the tools agent reads most of its prompt at 0.1 times: **$0.14–0.19
-  per 1,000 tasks in cache writes against $0.06–0.07**, more than the whole gap. Re-priced as if the Eden agent's
-  prefix were cached (as it would be for any agent whose system prompt is longer; a counterfactual, not a run), the
-  short horizon's 1:1:8 mix is **$0.362 for Eden against $0.370 for the agent alone** (billed: $0.399 against $0.370).
-  Over a user's days the day's transcript is cached for both arms; it keeps the day's packets, which is why two
-  fewer candidates a packet saved there (about 940 fewer cached tokens read a request).
-- **Ask answers** are 820–1,000 bytes each and come 0.6–1.1 times a task (short), about as many bytes as the packet;
-  their cost is the extra model turn an ask takes, not the answer's bytes. Not screened further.
+- **What Eden's extra cost actually is, on Pi.** Not bytes: **prompt-cache writes.** Pi's agent with Eden has a
+  short fixed prefix (the system prompt and one `ask_context` tool, about 565 tokens) that was never served from the
+  cache across tasks in these runs (1,765 of 2,257 first requests read nothing); the agent with search tools has an
+  867-token prefix that was. Why the shorter one was not cached is not established (the stated minimum for Haiku 5.5
+  may be 512 tokens, below 565; pi-ai's breakpoint placement or how `in` is counted may explain it). The effect is
+  measured: each Eden task writes most of its first prompt to the cache at 1.25 times the input price, where the
+  tools agent reads most of its prompt at 0.1 times: **$0.14–0.19 per 1,000 tasks in cache writes against
+  $0.06–0.07**, more than the whole gap. Re-priced as if the Eden agent's prefix were read from the cache (a
+  counterfactual, not a run), the short horizon's 1:1:8 mix is **$0.362 for Eden against $0.370 for the agent
+  alone** (billed: $0.399 against $0.370). Over a user's days the day's transcript is cached for both arms; it keeps
+  the day's packets, which is why two fewer candidates a packet saved there (about 830 fewer cached tokens read a
+  nothing-to-add task).
+- **Ask answers** are about 800–1,050 bytes each and come 0.5–1.1 times a task (short), about as many bytes as the
+  packet; their cost is the extra model turn an ask takes, not the answer's bytes. Not screened further.
 
 ## 1. Where the agent's extra cost goes (token accounting)
 
@@ -50,22 +54,27 @@ pair (`short2-pay-cache.txt`) and the five-arm run (`short-pay-cache.txt`), per 
 | eden (clean) | neutral | 1.68 | 749 / 1,440 | 0.007 + 0.180 + 0.230 = 0.418 | 80 / 941, 12% |
 | eden (clean) | control | 1.53 | 726 / 1,540 | 0.007 + 0.192 + 0.244 = 0.444 | 101 / 1,108, 14% |
 
-- **The first request.** Of 2,257 first requests in the Eden arms (both short runs), 1,765 read nothing from the cache,
-  454 read the whole prompt (another arm had sent the same task's identical prompt: a lab artifact that lowers Eden's
-  billed cost), and 38 read a ~610-token prefix that included the same task's user turn. None read only the fixed
-  prefix (tools + system, about 565 tokens: no-packet first prompts are 599–627 tokens with the user turn). The tools
-  arm read its 867-token fixed prefix on 140 first requests and the whole prompt on 225; 1 of 366 missed. So, on this
-  evidence, a ~565-token prefix is not cached across tasks for Haiku 5.5 here and an 867-token one is (we have not
-  found Anthropic's stated minimum for this model; it is the measured behaviour).
+- **The first request.** Of 2,257 first requests in the Eden arms (both short runs), 1,765 read nothing from the
+  cache, 454 read the whole prompt (another arm had sent the same task's identical prompt), and 38 read a ~610-token
+  prefix that included the same task's user turn. None read only the fixed prefix (tools + system, about 565 tokens:
+  no-packet first prompts are 599–627 tokens with the user turn). The tools arm read its 867-token fixed prefix on
+  140 first requests and the whole prompt on 225 (the same task's hidden, control and neutral variants share the
+  request, so their prompts match); 1 of 366 missed. Whole-prompt reads are a lab artifact in both arms (several arms
+  and variants send the same prompt); they lower both arms' billed cost. So a ~565-token prefix was not cached across
+  tasks here and an 867-token one was. The cause is not established: the minimum cacheable prefix stated for Haiku
+  5.5 may be 512 tokens, below 565; the ~565 is inferred from billed input (which may count tokens the API adds for
+  tools), and pi-ai places its breakpoints on the last tool, the system prompt and the last user turn. A $0
+  `count_tokens` check and a run with a longer prompt would settle it.
 - **Counterfactual** (`cache.py --prefix 565`: a first request that read nothing reads 565 tokens instead of writing
   them; labelled, not measured): short mix $0.399 → **0.362** (five-arm run; tools 0.370) and $0.421 → **0.364**
   (clean run). Long: 0.326 → 0.323 (the day's transcript is already cached).
-- **The packet** itself, written once: about 950 characters (neutral) to 1,450–1,600 (control, hidden) of packets a
-  task, roughly 240–400 tokens: $0.03–0.05/1k at 1.25× on the first request, then 0.1× on each later one. Long horizon:
-  the agent's transcript keeps the day's packets, so k 3 read 5,184 cached tokens a neutral task against 6,120
-  (`long-pay-cache.txt`).
-- **Asks.** Short, per task: eden neutral 1.04 asks, 876 bytes of answers (840 an ask); hidden 0.60, 587 bytes;
-  control 0.85, 765 (five-arm run, `uptake` records). Each ask is one more agent model request over the whole prompt.
+- **The packet** itself, written once: about 950 characters (neutral) to 1,450–1,600 (control, hidden) of packets
+  a task (`asks.txt`), roughly 240–400 tokens: $0.03–0.05/1k at 1.25× on the first request, then 0.1× on each later
+  one. Long horizon: the agent's transcript keeps the day's packets, so k 3 read 5,459 cached tokens a neutral task
+  against the default's 6,286 (`long-pay-cache.txt`).
+- **Asks** (`asks.txt`, from the `uptake` records). Short, per task, default: neutral 0.97–1.04 asks and 778–876 bytes
+  of answers, hidden 0.51–0.60 and 507–587, control 0.83–0.85 and 709–765; 806–987 bytes an ask. Each ask is one more
+  agent model request over the whole prompt.
 
 ## 2. The $0 screen (funnel, train seeds 41–42, `--neutral`, `--packets`)
 
@@ -108,20 +117,25 @@ quote for k3 and for wall time.
 
 ### Short horizon (one request per session)
 
-| Arm (run) | Hidden | Control | Neutral | Mix steady $/1k: agent + Eden + bg | Agent in tokens, neutral | Wall p50 / p90 mix s |
+Cost here is `pi-ab-report.ts`'s 1:1:8 mix (agent + Eden per task; background 0 while working, cards replayed).
+
+| Arm (run) | Hidden | Control | Neutral | Mix $/1k: agent + Eden | Agent in tokens, neutral | Wall p50 / p90 mix s |
 | --- | --- | --- | --- | --- | --- | --- |
-| tools (5-arm) | 14/124 | 0/120 | 3/118 [3] | 0.372 + 0 + 0 | 2,699 | 5.23 / 10.10 |
-| eden (5-arm) | 76/106 | 2/117 [2] | 1/118 [1] | 0.400 + 0 + 0 | 2,278 | 3.80 / 9.74 |
+| tools (5-arm) | 14/124 | 0/120 | 3/118 [3] | 0.372 + 0 | 2,699 | 5.23 / 10.10 |
+| eden (5-arm) | 76/106 | 2/117 [2] | 1/118 [1] | 0.400 + 0 | 2,278 | 3.80 / 9.74 |
 | dd (5-arm) | 78/110 | 2/105 [2] | 0/129 | 0.399 | 2,179 | 3.69 / 9.05 |
 | k3 (5-arm) | 94/130 | 5/125 [5] | 2/108 [1] | 0.416 | 2,118 | 3.94 / 9.45 |
 | b200 (5-arm) | 72/117 | 1/108 [1] | 1/111 [1] | 0.418 | 2,217 | 3.80 / 8.36 |
-| eden (clean) | 101/144 | 4/144 [4] | 1/144 [1] | 0.421 + 0 + 0 | 2,193 | 3.40 / 5.71 |
+| eden (clean) | 101/144 | 4/144 [4] | 1/144 [1] | 0.421 + 0 | 2,193 | 3.40 / 5.71 |
 | k3 (clean) | 99/144 | 4/144 [4] | 1/144 [1] | 0.418 | 2,131 | 3.57 / 6.23 |
 
 (Eden's per-task spend is $0 in every Eden arm: no reader call. Cards were replayed; the few made live count as
 one-time, $0.0005–0.0026 a user.)
 
 ### Long horizon (eight days a user, Eden kept, the agent's transcript reset daily)
+
+Cost here is `pi-cost-report.ts`'s steady state (the run's tasks, close to 1:1:8). The paired rows below use
+`arms.py`, which spreads background over Eden runs differently: k3 − eden is −0.024 from this table, −0.029 paired.
 
 | Arm (run) | Hidden | Control | Neutral | Mix steady $/1k: agent + Eden + bg | Agent in tokens, neutral | Wall p50 / p90 mix s |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -138,16 +152,20 @@ one-time, $0.0005–0.0026 a user.)
 Mix pairs from `arms.py` (1:1:8; $/1k agent + Eden + the run's background spread over its Eden runs); hidden and
 concerns pooled by task over the runs named (`pooled.py`, `pooled.txt`).
 
+k3 and b200 had `pushCandidateDedup` on too; their rows against `dd` isolate k and the excerpt size.
+
 | Pair | Horizon (runs) | $/1k mix | Wall mean s, mix | Hidden (points) | Concerns ctl+neu, regraded |
 | --- | --- | --- | --- | --- | --- |
 | k3 − eden | short, clean | −0.003 (−0.019..+0.014) | **+0.26 (+0.04..+0.50)\*** | −1.4 (−9.0..+6.2) | 0.0 (−1.7..+1.7) |
 | k3 − eden | short, 5-arm | +0.023 (−0.005..+0.050) | −0.05 (−1.31..+1.24) | | |
 | k3 − eden | long | **−0.029 (−0.038..−0.020)\*** | −0.08 (−0.19..+0.04) | | |
 | k3 − eden | all six runs | | | −3.0 (−9.0..+3.0) | +0.3 (−0.8..+1.4) |
+| k3 − dd | short + long, 5-arm | | | −1.6 (−9.6..+5.6) | +0.2 (−1.2..+2.0) |
 | late − eden | long, second run | −0.008 (−0.017..+0.002) | −0.02 (−0.12..+0.08) | −13.0 (−26.1..0.0) | −0.5 (−2.4..+1.0) |
 | b200 − eden | short, 5-arm | **+0.025 (+0.001..+0.050)\*** | −0.16 (−1.55..+1.27) | | |
 | b200 − eden | long | **−0.012 (−0.021..−0.002)\*** | +0.01 (−0.10..+0.11) | | |
 | b200 − eden | short + long | | | **−12.8 (−20.5..−5.1)\*** | −0.2 (−1.7..+1.2) |
+| b200 − dd | short + long | | | **−10.7 (−18.0..−3.3)\*** | −0.5 (−1.9..+1.0) |
 | dd − eden | short, 5-arm | +0.002 (−0.025..+0.028) | −0.01 (−1.71..+1.69) | | |
 | dd − eden | long | −0.003 (−0.013..+0.008) | +0.05 (−0.05..+0.15) | | |
 | dd − eden | short + long | | | −2.5 (−10.2..+5.1) | +0.2 (−1.2..+1.7) |
@@ -177,13 +195,16 @@ lookups); only the latency fields differ. The engine on this branch is the base 
 
 ## 4. Decisions
 
-- **D258:** the excerpt size for candidates (`pushCandidateBytes`), not repeating an item within a request
+- **D258:** the excerpt size for candidates (`pushCandidateBytes`, measured with the no-repeat switch on), not
+  repeating an item within a request
   (`pushCandidateDedup`) and a score floor on the candidates are deleted with their code and tests (code in commit
   `f58aae41`).
-- **D259:** `pushCandidates` stays 5: k 3 and `pushCandidatesLater` 3 are rejected (code in `f459db44`).
+- **D259:** `pushCandidates` stays 5: k 3 (measured with the no-repeat switch on) and `pushCandidatesLater` 3 are
+  rejected (code in `f459db44`).
 - **D260:** on Pi, Eden's billed cost above the agent alone on the short horizon is the cache-write premium on a
-  prefix too short to be cached, not the packet's bytes. No engine change. The lab quotes the cache split
-  (`cache.py`) beside billed figures in cost comparisons on Pi, and its counterfactual only as a counterfactual.
+  ~565-token prefix that was not cached across tasks in these runs (why is not established), not the packet's
+  bytes. No engine change. The lab quotes the cache split (`cache.py`) beside billed figures in cost comparisons on
+  Pi, and its counterfactual only as a counterfactual.
 
 ## Reproduce
 
@@ -227,8 +248,8 @@ python3 -I $O/concerns.py $R/regrade-*.json
 - The five-arm short run is partial (budget stops) and its wall times carry 358 rate-limit retries; its cost and
   quality pairs are by task over what both arms finished.
 - The long horizon's hidden and control rates rest on 23 tasks of each a run.
-- The cache finding is about Pi's minimal agent on Haiku 5.5 through Anthropic's API: the threshold is observed
-  (565 tokens not cached across tasks, 867 cached), not documented here. An agent with a longer system prompt caches
-  its prefix, and then the packet costs its own tokens written once and read cheaply after.
+- The cache finding is about Pi's minimal agent on Haiku 5.5 through Anthropic's API: what was cached is observed (a
+  ~565-token prefix not across tasks, an 867-token one yes), its cause is not (the stated minimum may be 512). Where an
+  agent's fixed prefix is cached, the packet costs its own tokens, written once and read cheaply after.
 - Billed figures move with cache hits between runs, including hits from another arm sending the same prompt (454 of
   Eden's first requests): compare arms within a run.

@@ -15,4 +15,5 @@ for f in sys.argv[1:]:
         c[(hz, g["condition"], kind, "kept")] += any(g["facts"].values())
 for hz in ("short", "long"):
     for arm in sorted(arms):
-        print(hz, f"{arm:10s}", " ".join(f"{k} {c[(hz, arm, k, 'run')]} -> {c[(hz, arm, k, 'kept')]}" for k in ("control", "neutral")))
+        cells = [f"{k} {c[(hz, arm, k, 'run')]} -> {c[(hz, arm, k, 'kept')]}" for k in ("control", "neutral")]
+        print(hz, f"{arm:10s}", " ".join(cells))

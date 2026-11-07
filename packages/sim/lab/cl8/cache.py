@@ -1,6 +1,7 @@
 # CL8 (docs/research/cl-cl8.md): the agent's billed cost per arm and kind split by Anthropic token class, from pi-ab
 # timelines (STEM.tl/tasks.jsonl): cache reads (0.1x input), cache writes (1.25x), plain input, output; per task, and
-# the first request's cache read and write (the prefix the next task can reuse). Haiku 5.5 prices: $0.1/M in, $0.5/M out.
+# the first request's cache read and write (the prefix the next task can reuse).
+# Haiku 5.5 prices: $0.1/M in, $0.5/M out.
 # `--prefix P` adds a counterfactual column, labelled so: an Eden arm's first request that read nothing from the cache
 # reads its first P tokens instead of writing them (P = the arm's stable prefix, tools + system prompt, which on Pi's
 # minimal Eden agent is too short for Anthropic to cache; any agent with a longer prompt caches it).
@@ -37,7 +38,8 @@ for stem in args:
                 if PREFIX and d["condition"] != "tools" and cr == 0:
                     a["moved"] += min(PREFIX, cw)
 cf = " | cf total" if PREFIX else ""
-print("arm         kind     n    req   read  write  plain   out | $/1k read write plain  out  total | 1st req read write hit%" + cf)
+HEAD = "arm         kind     n    req   read  write  plain   out | $/1k read write plain  out  total | 1st req read write hit%"
+print(HEAD + cf)
 MIX = {"hidden": 0.1, "control": 0.1, "neutral": 0.8}
 mix = collections.defaultdict(lambda: [0.0, 0.0])
 for (arm, kind), a in sorted(agg.items()):

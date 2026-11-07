@@ -18,3 +18,15 @@ eden~late − eden  concerns, regraded                   runs 2 n  209  -0.5 poi
 eden − tools  hidden raised                        runs 4 n  121  +61.2 points (+51.2..+70.2)
 eden − tools  concerns (control+neutral), graded   runs 4 n  427  +0.0 points (-1.4..+1.4)
 eden − tools  concerns, regraded                   runs 4 n  427  +0.2 points (-1.2..+1.6)
+== eden~k3 − eden over: short2-pay-41 short2-pay-42
+eden~k3 − eden  hidden raised                        runs 2 n  144  -1.4 points (-9.0..+6.2)
+eden~k3 − eden  concerns (control+neutral), graded   runs 2 n  288  +0.0 points (-1.7..+1.7)
+eden~k3 − eden  concerns, regraded                   runs 2 n  288  +0.0 points (-1.7..+1.7)
+== eden~k3 − eden~dd over: short-pay-41 short-pay-42 long-pay-41 long-pay-42
+eden~k3 − eden~dd  hidden raised                        runs 4 n  125  -1.6 points (-9.6..+5.6)
+eden~k3 − eden~dd  concerns (control+neutral), graded   runs 4 n  410  +1.0 points (-0.7..+2.9)
+eden~k3 − eden~dd  concerns, regraded                   runs 4 n  410  +0.2 points (-1.2..+2.0)
+== eden~b200 − eden~dd over: short-pay-41 short-pay-42 long-pay-41 long-pay-42
+eden~b200 − eden~dd  hidden raised                        runs 4 n  122  -10.7 points (-18.0..-3.3)
+eden~b200 − eden~dd  concerns (control+neutral), graded   runs 4 n  415  -0.7 points (-2.4..+1.0)
+eden~b200 − eden~dd  concerns, regraded                   runs 4 n  415  -0.5 points (-1.9..+1.0)

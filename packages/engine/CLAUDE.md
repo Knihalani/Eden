@@ -206,11 +206,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   of the reader's own wiring set `pushCandidates: 0` (the core, the `reader` and `candidates` parts all do); the lab's
   reader screens run `--preset minus-candidates`.
 - **The candidates' packet is not smaller (D258, D259; docs/research/cl-cl8.md).** 200-byte excerpts lost hidden facts
-  (−12.8 points: shorter excerpts keep the items but not the fact), k 3 saved only over a user's days and made the
-  agent ask more one request at a time, k 3 after a session's first request lost hidden facts, and removing an item
-  repeated within a request (the push and the rule paths race on the ledger) saved nothing. A smaller push makes a
-  longer ask answer (`askDedup` says in full what a packet showed in part). On Pi, Eden's billed cost above the agent
-  alone is prompt-cache writes on a prefix too short to cache (D260), not the packet's bytes.
+  (−12.8 points, with the no-repeat switch on: shorter excerpts keep the items but not the fact), k 3 saved only over a
+  user's days and made the agent ask more one request at a time, k 3 after a session's first request lost hidden facts,
+  and removing an item repeated within a request (the push and the rule paths race on the ledger) saved nothing. A
+  smaller push makes a longer ask answer (`askDedup` says in full what a packet showed in part). On Pi, Eden's billed
+  cost above the agent alone is prompt-cache writes on a fixed prefix that was not cached (D260; why is open), not the
+  packet's bytes.
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read
