@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildWorld } from "../world";
 import { REALISTIC, simSources } from "../sources";
-import { connectorHeader, connectorOptions, pushNotifier, sourceFields } from "./connector-options";
+import { announceChanged, connectorHeader, connectorOptions, pushNotifier, sourceFields } from "./connector-options";
 
 const opts = (given: Record<string, string>) => (name: string, fallback: string) => given[name] ?? fallback;
 
@@ -58,5 +58,35 @@ describe("connector options (--source-profile, --push)", () => {
     // Every optional, non-call member of `Source` today: a new one must be added here and to `sourceFields`.
     const optional: (keyof typeof kept)[] = ["listsByTime", "notifies", "fetchReportsGone"];
     for (const k of optional) expect(k in kept).toBe(true);
+  });
+
+  test("announceChanged: payload sends the changed items alone, signals a bare signal per touched source, none nothing", async () => {
+    const world = buildWorld({ seed: 41_000 });
+    const sources = simSources(world, REALISTIC, 0, 41);
+    const mail = sources
+      .find((s) => s.id === "gmail")!
+      .listAll()
+      .slice(0, 2);
+    const changed = new Set(mail.map((i) => i.id));
+    const sent = async (push: "none" | "signals" | "payload") => {
+      const log: string[] = [];
+      await announceChanged(
+        {
+          sourceChanged: (_s, id) => (log.push(`signal ${id}`), true),
+          sourceItems: async (_s, id, items) => (
+            log.push(`items ${id} ${items.map((i) => i.id).join(",")}`),
+            items.length
+          ),
+        },
+        { tenantId: "t", userId: "u" },
+        sources,
+        push,
+        changed,
+      );
+      return log;
+    };
+    expect(await sent("payload")).toEqual([`items gmail ${mail.map((i) => i.id).join(",")}`]);
+    expect(await sent("signals")).toEqual(["signal gmail"]);
+    expect(await sent("none")).toEqual([]);
   });
 });

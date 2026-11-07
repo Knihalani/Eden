@@ -12,7 +12,7 @@
  *   costs no source call, and the static world sends none. `none` (the default): sources do not notify.
  */
 import { readFileSync } from "node:fs";
-import type { Scope } from "@eden/protocol";
+import type { ContextItem, Scope } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { Rng } from "../rng";
 import { REALISTIC, withOverrides, type ProfileSet, type SimSource, type SourceProfile } from "../sources";
@@ -96,4 +96,30 @@ export function pushNotifier(
     for (const s of sources)
       if (rng.chance(1 - Math.exp(-(o.pushRates[s.id] ?? 0)))) partner.sourceChanged(scope, s.id);
   };
+}
+
+/**
+ * A change at the sources announced as `--push` says an integrator would (A8): `signals`, one bare `sourceChanged` per
+ * touched source; `payload`, the changed items themselves (`sourceItems`, D210's documented default), which doubts
+ * nothing else the source holds. Before A8, pi-ab's recap sent bare signals under `payload` too, so every copy of a
+ * touched source read before the recap was in doubt and re-read when next delivered (1.7 gmail fetches a task over a
+ * user's days, docs/research/a8-connector-calls.md). `changed` is the changed items' ids.
+ */
+export async function announceChanged(
+  partner: {
+    sourceChanged(scope: Scope, sourceId: string): boolean;
+    sourceItems(scope: Scope, sourceId: string, items: ContextItem[]): Promise<number>;
+  },
+  scope: Scope,
+  sources: readonly SimSource[],
+  push: PushMode,
+  changed: ReadonlySet<string>,
+): Promise<void> {
+  if (push === "none") return;
+  for (const s of sources) {
+    const items = s.listAll().filter((i) => changed.has(i.id));
+    if (items.length === 0) continue;
+    if (push === "signals") partner.sourceChanged(scope, s.id);
+    else await partner.sourceItems(scope, s.id, items);
+  }
 }
