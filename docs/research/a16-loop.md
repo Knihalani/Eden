@@ -228,7 +228,7 @@ says (the trial's code is in `166b622c`, where it had been promoted before the r
 
 Run by the coordinator on A16's `hermes-eden` condition: Hermes Agent (claude-haiku-5-5, Anthropic-direct lab
 provider), train1–6 × 6 templates, hidden/control/neutral, seeds 41–42, payload notices, direct profile, time scale 1,
-tip 9b0a… of 2026-11-07 15:27 UTC; recipe `packages/sim/lab/audit-1107/hermes/run3.sh`; reports
+tip b615c7b28 (worktree, started 15:27 UTC); recipe `packages/sim/lab/audit-1107/hermes/run3.sh`; reports
 `hermes3-train-report.txt` and `hermes3-train-cost.txt` beside it. Spend $0.465.
 
 | | hermes | hermes-eden | hermes+eden |
