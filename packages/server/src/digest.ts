@@ -122,7 +122,9 @@ export function digest(lines: Iterable<string>): Digest {
   const usage = new Map<string, UsageRecord>();
   let agentEvents = 0;
   let nothingToLookUp = 0;
-  const syncByPid = new Map<number, number>();
+  // Per process run: the counter's segments (a drop starts a new one, for a log written before `run` existed or a
+  // restart that kept its pid) and the latest value of the current one.
+  const syncRuns = new Map<string, { done: number; last: number }>();
   for (const line of all) {
     const at = line.indexOf("{");
     if (at < 0) continue;
@@ -136,10 +138,18 @@ export function digest(lines: Iterable<string>): Digest {
       usage.set(v.usage.injectionId, v.usage);
       continue;
     }
-    const sync = (v as { sync?: { pid?: unknown; backgroundCalls?: unknown } } | null)?.sync;
-    if (sync && typeof sync.pid === "number" && typeof sync.backgroundCalls === "number") {
-      // Cumulative per process: the largest value seen is its total (a restart starts a new pid).
-      syncByPid.set(sync.pid, Math.max(syncByPid.get(sync.pid) ?? 0, sync.backgroundCalls));
+    const sync = (v as { sync?: { run?: unknown; pid?: unknown; backgroundCalls?: unknown } } | null)?.sync;
+    if (
+      sync &&
+      typeof sync.backgroundCalls === "number" &&
+      (typeof sync.run === "string" || typeof sync.pid === "number")
+    ) {
+      // Cumulative per process: within one run the last value is its total; a value below the last is a restart.
+      const key = typeof sync.run === "string" ? `run:${sync.run}` : `pid:${String(sync.pid)}`;
+      const r = syncRuns.get(key) ?? { done: 0, last: 0 };
+      if (sync.backgroundCalls < r.last) r.done += r.last;
+      r.last = sync.backgroundCalls;
+      syncRuns.set(key, r);
       continue;
     }
     const t = v as Trace;
@@ -165,7 +175,7 @@ export function digest(lines: Iterable<string>): Digest {
     }
   }
   const explicit = records.filter((r) => r.how === "explicit").length;
-  const connectors = connectorCalls(all, syncByPid);
+  const connectors = connectorCalls(all, syncRuns);
   return {
     events: report.events,
     sessionIds: report.sessionIds,
@@ -192,7 +202,7 @@ export function digest(lines: Iterable<string>): Digest {
 }
 
 /** Connector calls in a log: the agent's reported tool calls, Eden's lookups' calls and its sync's. */
-function connectorCalls(lines: string[], syncByPid: Map<number, number>): ConnectorCalls {
+function connectorCalls(lines: string[], syncRuns: Map<string, { done: number; last: number }>): ConnectorCalls {
   let requests = 0;
   let agent = 0;
   let edenRequest = 0;
@@ -213,12 +223,14 @@ function connectorCalls(lines: string[], syncByPid: Map<number, number>): Connec
       t.decision === "reader-late" ||
       t.decision === "reader-push" ||
       (t.decision === "skipped" && t.reason === "sync poll behind") ||
-      t.reason.startsWith("updated:");
+      t.reason.startsWith("updated:") ||
+      // The firewall's finding on a tool call the agent also reported: the same call, traced twice (`checkAction`).
+      t.reason.startsWith("action-");
     if (followUp) continue;
     if (t.event === "user_message") requests++;
     if (t.event === "tool_call") agent++;
   }
-  const background = syncByPid.size > 0 ? [...syncByPid.values()].reduce((a, b) => a + b, 0) : null;
+  const background = syncRuns.size > 0 ? [...syncRuns.values()].reduce((a, r) => a + r.done + r.last, 0) : null;
   return { requests, agent, edenRequest, edenBackground: background };
 }
 
@@ -324,9 +336,9 @@ export function formatDigest(d: Digest): string {
   for (const [plan, price] of Object.entries(CONNECTOR_PLANS)) {
     const usd = (calls: number) => `$${((calls * price) / 1_000).toFixed(2)}`;
     const request = c.agent + c.edenRequest;
-    out.push(
-      `| ${plan} (${price}) | ${b ? `${usd(b.agent)} | ` : ""}${usd(request)} | ${usd(request + c.edenBackground)} |`,
-    );
+    // Unknown background is n/a, not the request-time figure again (which would read as no background calls).
+    const all = d.connectors.edenBackground === null ? "n/a" : usd(request + c.edenBackground);
+    out.push(`| ${plan} (${price}) | ${b ? `${usd(b.agent)} | ` : ""}${usd(request)} | ${all} |`);
   }
   out.push(
     "",

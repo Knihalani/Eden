@@ -2,7 +2,7 @@
 
 Session A7 of the afternoon audit ([audit-1107-plan.md](audit-1107-plan.md)), following A4
 ([a4-adoption.md](a4-adoption.md)). Decisions D291–D295. Branch `claude/a7-adoption2` from
-`claude/lucid-hypatia-v9wqk5` (a750f5f22). Spend: $0.626 on the ledger (Pi runs and regrades, Anthropic Haiku 5.5)
+`claude/lucid-hypatia-v9wqk5` (a750f5f22). Spend: $0.629 on the ledger (Pi runs, regrades and two one-task checks, Anthropic Haiku 5.5)
 plus at most $0.012 off the ledger (the demo's optional agent, Haiku 5.5 through Anthropic's OpenAI-compatible
 endpoint: three demo runs, 7,992 input and 9,140 output tokens, $0.0054 at `pricing.ts`'s rates, plus about six
 debugging calls whose usage was not all recorded, bounded at $0.006). Every figure below is from a command run in this session.
@@ -72,7 +72,12 @@ background calls, which no timeline holds (no task is current during the backfil
 `packages/sim/lab/a7/connector-calls.ts` replays exactly that part of each stream at $0: 18 listing calls per
 simulated user to backfill, 0 between tasks; `connectors.py` prices them on market.py's plans
 (`packages/sim/lab/a7/connectors.txt`; the backfill is spread over this run's 12-task streams, an upper bound for a
-real user whose backfill is spread over far more requests).
+real user whose backfill is spread over far more requests). The base's merged `pi-cost-report.ts` (8274294f0)
+gives the same steady figures on these runs (`cost-report.txt`: Zapier mix 87.558, 0.426, 0.416) but no backfill,
+since the runs predate its recording; a one-task live check after the merge (`a7-validate2-41`, $0.0015) recorded
+18 backfill calls and 0 after it per no-key stream, as the replay counts. pi-ab used to book a stream's background
+only when it had cards, so a no-key stream's connector calls were dropped: it now books them, marked `noModels`
+so the card spend each seed spreads is unchanged (`ab-replay.test.ts`).
 
 | Plan ($ per 1,000 calls) | tools: model + connectors, $/1k tasks | eden, steady / all-in | eden+nokey, steady / all-in |
 | --- | --- | --- | --- |
@@ -169,13 +174,17 @@ revoked grant becomes that user's configuration error only. It recommends read-o
 
 - `bun run eval`: identical to the base tree on every field but latency (precision 0.5909, recall 0.52,
   falseFireRate 0); the engine change is a sink that is off unless wired, and the fetch fix is not on the eval's path.
-- `bun run check` green (1,980 tests after the review fixes).
+- `bun run check` green: 1,980 tests after the first review's fixes, 1,995 after merging the base tip 8274294f0 and
+  the second review's fixes.
 - Reviewer subagent on the diff: REQUEST_CHANGES with six findings, all fixed: (1) the Gmail preset's fetch would
   report unchanged threads as changed: no preset names a fetch tool now; (2) the 208 of 384 had no file behind it:
   `demo-sweep.ts` and its output are checked in; (3) Google's annotations were not captured: said so in the presets and
   docs; (4) the OAuth example kept tokens forever: dropped on expiry, a failed refresh or `forget`, and THREAT-MODEL T7
   says what it holds; (5) a correction's usage record named the feedback's session, not the delivery's: `Recorded`
-  keeps it; (6) the demo's chatter comment.
+  keeps it; (6) the demo's chatter comment. A second pass over the fixes found two digest counting bugs, fixed and
+  tested: the sync counter was taken once per pid, so a container restart (pid 1 again) or two replicas lost counts
+  (each server run now logs a random `run` id, and a counter drop starts a new segment); and the firewall's finding
+  on a tool call counted as a second agent call. Unknown background calls print n/a, not zero.
 
 ## What is left (next steps, in order)
 

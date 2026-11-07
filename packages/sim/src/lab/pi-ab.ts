@@ -669,7 +669,13 @@ async function runWorld(
       ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   if (cards) budgeted.cards.push(cards);
+  // A stream with Eden but no cards (`+nokey`, D291) is booked too, for its connector calls (the backfill, ticks); it
+  // has no model spend, and `noModels` keeps it out of the card backfill each seed's model reports spread.
   if (cards) background.push(bg);
+  else if (withPartner) {
+    bg.noModels = true;
+    background.push(bg);
+  }
   // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
   let readerTask: RunResult | null = null;
   const reader =

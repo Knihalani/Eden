@@ -111,6 +111,28 @@ describe("digest (D293)", () => {
     expect(formatDigest(d)).toContain("| Zapier MCP (10k tasks) (25.8) | $51.60 | $77.40 | $619.20 |");
     // No sync lines: background is unknown, not zero.
     expect(digest([t({})]).connectors.edenBackground).toBeNull();
+    expect(formatDigest(digest([t({})]))).toContain("| Zapier MCP (10k tasks) (25.8) | $25.80 | n/a |");
     expect(formatDigest(digest([t({})]))).toContain("not in this log");
+  });
+
+  test("a restart under the same pid (a container's pid 1) or run id adds its counts; the firewall's finding is no second call", () => {
+    const line = (backgroundCalls: number, run?: string) =>
+      JSON.stringify({ sync: { ...(run ? { run } : {}), pid: 1, backgroundCalls } });
+    // pid only (a log from before `run`): 50, then a restart counting 10, 20: 70 in all.
+    expect(digest([line(50), line(10), line(20)]).connectors.edenBackground).toBe(70);
+    // Two replicas, both pid 1, told apart by run.
+    expect(digest([line(5, "a"), line(7, "b"), line(9, "a")]).connectors.edenBackground).toBe(16);
+    const d = digest([
+      t({ turn: 2, event: "tool_call", decision: "skipped", reason: "tool_call", sourceCalls: 0 }),
+      t({
+        turn: 2,
+        event: "tool_call",
+        decision: "fast",
+        reason: "action-person",
+        itemIds: ["crm:d1"],
+        sourceCalls: 0,
+      }),
+    ]);
+    expect(d.connectors.agent).toBe(1);
   });
 });

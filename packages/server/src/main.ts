@@ -59,9 +59,11 @@ async function serve(config: ServerConfig): Promise<void> {
   });
   // The background sync's own connector calls (backfill, sweeps) are made outside any request, so no trace has them:
   // with EDEN_TRACE=1 its cumulative counters are logged once a minute, per process, for `bun run digest` (D293).
+  // `run` tells processes apart where a pid cannot: a container restart is pid 1 again, and replicas share it.
   const sync = partner.sync;
   if (process.env.EDEN_TRACE === "1" && sync) {
-    setInterval(() => console.log(JSON.stringify({ sync: { pid: process.pid, ...sync.stats } })), 60_000).unref();
+    const run = crypto.randomUUID();
+    setInterval(() => console.log(JSON.stringify({ sync: { run, pid: process.pid, ...sync.stats } })), 60_000).unref();
   }
   // The secret gate compiles its rules on first use; doing it here keeps that stall off the first request.
   warmGate();
