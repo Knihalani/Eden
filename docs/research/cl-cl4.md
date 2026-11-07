@@ -4,7 +4,7 @@ Status: 2026-11-07, branch `claude/cl4-path-latency` (from `claude/lucid-hypatia
 CL4 of the cost-and-latency wave ([cost-latency-plan.md](cost-latency-plan.md), hypotheses H8–H13), decisions
 D246–D250. Every paid call went to the Anthropic API with `HAIKU_API_KEY`, `claude-haiku-5-5` in every role (agent,
 grader, cards, intent, reader), through the lab provider (D97), with `OPENROUTER_API_KEY` unset, on one spend ledger
-capped at $3: **Anthropic-direct lab figures**. Spent: **$2.281**.
+capped at $3: **Anthropic-direct lab figures**. Spent: **$2.699**.
 
 ## In plain words
 
@@ -19,14 +19,14 @@ capped at $3: **Anthropic-direct lab figures**. Spent: **$2.281**.
   from 2.3 s to 0.83 s a task, and connector calls from 8.3 to 0.6 a task (one seed, a separate run, not paired). The
   lab's `signals` setting is the slow case; the ask path itself is fast.
 - **Five levers were tried; one survives as a trial.**
-  - **H8, "nothing found" (`pushChecked`, D246), survives as a trial switch, off.** When the push read the request and
-    flagged nothing, the agent gets one line in the data envelope saying Eden read the user's sources for this request
-    and nothing in them bears on it. Over a day of requests it saved the agent a turn on look-alike tasks: control
-    wall −0.74 s (−1.18..−0.29) and −$0.068 per 1,000 tasks (−0.112..−0.023), asks 0.75 → 0.31 a task. One request
-    per session it did nothing measurable, and the agent still asks for information it needs on neutral tasks (1.25 →
-    1.11 asks). Pooled over three paired runs, hidden facts raised −4.2 points (−10.4..+2.1, not significant) and
-    false concerns on look-alikes −2.6 points (−5.2..−0.5). The combine stage should measure it with more hidden
-    tasks before promoting it.
+  - **H8, "nothing found" (`pushChecked`, D246), survives as a trial switch, off, recommended for the combine.** When
+    the push's reader read the request and flagged nothing, the agent gets one line in the data envelope saying Eden
+    read the user's sources for this request and nothing in them bears on it. After the review's fixes (§3a), alone,
+    over a day of requests: look-alike tasks **−1.22 s (−1.74..−0.67) and −$0.123 per 1,000 tasks (−0.175..−0.068)**,
+    asks 0.88 → 0.35 a task; one request per session, no significant change (look-alikes −0.33 s, −0.75..+0.09).
+    Pooled over its three runs alone, hidden facts raised −0.5 points (−6.4..+5.3). Neutral turns were not re-measured
+    after the fixes (that run hit the spend cap); before them, with `pushCovered` on too, they did not move, and the
+    agent still asked for information it needed (1.25 → 1.11 asks).
   - **H13, a closing line on the push's packet (`pushCovered`, D250): deleted.** Nothing measurable on its own.
   - **H9, the ask answering from the push's search (`askFromPush`, D247): deleted.** The ask's search was already
     0.1–0.3 s, and ranking without it changed a few ask pools (6 new reader prompts in the replay), so it bought no
@@ -64,10 +64,13 @@ for every decision; heldout14 (read before, RealUse-1) only for the cost and lat
 | `d-h14n41` | heldout14 neutral, 41, `--day 4` | long | the same | 32 | 0.080 |
 | `d2-train41` | train1–6, 41, first 8, `--day 4` | long | eden, eden+pushChecked, eden+pushCovered, eden~note | 48 | 0.300 |
 | `p-h14n41` | heldout14 neutral, 41, `--push payload` | short | eden | 32 | 0.020 |
+| `r-train41` | train1–6, 41, first 16 (after the fixes) | short | eden, eden+pushChecked | 87–92 paired | 0.244 |
+| `rd-train41` | train1–6, 41, first 8, `--day 4` (after the fixes) | long | the same | 48 | 0.153 |
+| `rn-h14n` | heldout14 neutral, 42 (after the fixes) | short | the same | void (cap) | 0.020 |
 
 `note` = `pushChecked` + `pushCovered`; `path` = `askFromPush` + `pushVerifyAhead`; `+spec`/`+specend` were pi-ab
 harness flags (speculation, deleted with D248). Screens and smokes: $0.334 (n = 24/16, not quoted). 0 errors and 0
-ungraded in every run.
+ungraded in every run except `r-train41` (12 refused at the cap, 2 ungraded) and `rn-h14n` (void).
 
 ## 2. Short horizon (one request per session)
 
@@ -98,9 +101,12 @@ Mix (1 hidden : 1 control : 8 neutral, an assumption; each kind resampled on its
 | pair | raised | wrong | all-in $/1k | wall mean s | Eden path ms | conn |
 | --- | --- | --- | --- | --- | --- | --- |
 | eden − tools | **+0.056 (+0.046..+0.067)** | +0.038 (+0.000..+0.086) | **+0.263 (+0.219..+0.307)** | **+0.56 (+0.09..+1.02)** | **+2,228** | **+4.64** |
-| eden~note − eden | −0.002 (−0.009..+0.005) | **−0.039 (−0.080..−0.001)** | +0.004 (−0.030..+0.038) | −0.09 (−0.42..+0.24) | −87 (−280..+98) | −0.54 (−1.18..+0.08) |
+| eden~note − eden (`note` = pushChecked + pushCovered) | −0.002 (−0.009..+0.005) | **−0.039 (−0.080..−0.001)** | +0.004 (−0.030..+0.038) | −0.09 (−0.42..+0.24) | −87 (−280..+98) | −0.54 (−1.18..+0.08) |
 | eden~path − eden | −0.002 (−0.010..+0.006) | −0.025 (−0.076..+0.024) | **+0.036 (+0.000..+0.075)** | −0.07 (−0.40..+0.27) | −98 (−310..+113) | **+1.49 (+0.79..+2.30)** |
 | eden~path+spec − eden | +0.001 (−0.005..+0.007) | −0.026 (−0.076..+0.023) | **+0.058 (+0.022..+0.098)** | −0.14 (−0.52..+0.28) | **−1,007 (−1,272..−726)** | **+1.57 (+0.80..+2.38)** |
+
+`eden~note` cost +$0.031/1k on hidden tasks (+0.002..+0.063), −$0.018 on control (−0.057..+0.021) and +$0.003 on
+neutral (−0.040..+0.044); its mix is neutral (above).
 
 Restart-at-the-end speculation (`s2-arms.txt`, train 41 n = 72 and heldout14 neutral 41 n = 32): eden+specend − eden
 mix $/1k **+0.118 (+0.055..+0.183)**, wall +0.05 (−0.37..+0.53); hidden asks 0.50 → 1.61, hidden wall **+1.14 s
@@ -134,7 +140,7 @@ tasks; the per-task Eden spend is the comparable column in the files.
 | pair (paired by task) | hidden rate | control rate | hidden wall s | control wall s | control $/1k |
 | --- | --- | --- | --- | --- | --- |
 | eden~note − eden (d) | −0.062 (−0.188..+0.062) | −0.042 (−0.104..+0.000) | **−0.43 (−0.83..−0.05)** | **−0.61 (−1.05..−0.20)** | **−0.094 (−0.170..−0.026)** |
-| eden+pushChecked − eden (d2) | −0.062 (−0.208..+0.083) | −0.042 (−0.104..+0.000) | −0.00 (−0.44..+0.44) | **−0.74 (−1.18..−0.29)** | **−0.068 (−0.112..−0.023)** |
+| eden+pushChecked − eden (d2, before the fixes) | −0.062 (−0.208..+0.083) | −0.042 (−0.104..+0.000) | −0.00 (−0.44..+0.44) | **−0.74 (−1.18..−0.29)** | **−0.068 (−0.112..−0.023)** |
 | eden+pushCovered − eden (d2) | +0.000 (−0.125..+0.125) | −0.021 (−0.062..+0.000) | −0.01 (−0.41..+0.42) | +0.28 (−0.09..+0.68) | +0.029 (−0.012..+0.076) |
 | eden~note − eden (d2) | −0.042 (−0.188..+0.104) | −0.021 (−0.062..+0.000) | −0.30 (−0.71..+0.08) | −0.28 (−0.67..+0.11) | −0.019 (−0.069..+0.030) |
 
@@ -145,6 +151,26 @@ eden~note − eden wall +0.04 s (−0.57..+0.65), $/1k +0.023 (−0.044..+0.088)
 **`pushChecked`'s recall, pooled** (paired by task over `m-train41` note, `d-train42` note and `d2-train41`
 pushChecked; 5,000 draws, each run resampled on its own): hidden −0.042 (−0.104..+0.021), n = 192; control false
 concerns **−0.026 (−0.052..−0.005)**, n = 192.
+
+## 3a. `pushChecked` alone, after the review's fixes
+
+The review found four faults in the first version (an untaken note handed out as the reply to the next request; a note
+after a pool the reader's gate let no one read, D127; a note with no sources connected; a note left queued after a
+later packet or answer). All four were fixed (commit `3cf92828`) and the trial re-measured alone (`r-arms.txt`,
+`rd-arms.txt`, `pooled.txt`). The short run lost its last 12 of 384 tasks to the ledger's headroom guard (n = 92
+hidden, 87 control paired); the neutral re-run (`rn-h14n`, heldout14 seed 42) lost 61 of 64 and is void.
+
+| pair (train 41, paired by task) | hidden rate | control rate | hidden wall s | control wall s | control $/1k | control asks |
+| --- | --- | --- | --- | --- | --- | --- |
+| short (`r-train41`) | +0.011 (−0.065..+0.087) | −0.011 (−0.034..+0.000) | −0.08 (−0.42..+0.27) | −0.33 (−0.75..+0.09) | −0.011 (−0.058..+0.034) | 1.02 → 0.85 |
+| day (`rd-train41`, `--day 4`) | +0.021 (−0.083..+0.125) | +0.000 | −0.04 (−0.39..+0.29) | **−1.22 (−1.74..−0.67)** | **−0.123 (−0.175..−0.068)** | 0.88 → 0.35 |
+
+Pooled (`pooled.py`, paired by task, each run resampled on its own) over the three `pushChecked`-alone runs (d2 before
+the fixes, r and rd after): hidden **−0.005 (−0.064..+0.053)**, n = 188; control −0.016 (−0.038..+0.000), n = 183. The
+two runs of `note` (pushChecked with pushCovered; m-train41, d-train42) pool to hidden −0.035 (−0.097..+0.028) and
+control −0.021 (−0.049..+0.000), n = 144 (`pooled-note.txt`). Reading: the note saves a model turn and an ask on
+look-alike requests over a day, where the transcript already holds the earlier packets; one request per session the
+agent mostly asks anyway. The first version's hidden drift (−6.2 in d2) is not seen after the fixes.
 
 ## 4. Latency per piece, before and after
 
@@ -176,16 +202,18 @@ where it was; its re-sent first calls are where the time went.
 
 | # | Lever | Outcome |
 | --- | --- | --- |
-| D246 | H8 `pushChecked`: "nothing found" note | trial switch, off; for the combine stage |
+| D246 | H8 `pushChecked`: "nothing found" note | trial switch, off; recommended for the combine stage (§3a) |
 | D247 | H9 `askFromPush` | deleted |
 | D248 | H10 speculation (`+spec`, `+specend` in pi-ab; `requestSettled`, `pendingItems`) | deleted (commits `deaf9df2`, `238ead4a`, `71f6b372`) |
 | D249 | `pushVerifyAhead` (own) | deleted (commit `deaf9df2`) |
 | D250 | H13 `pushCovered` | deleted |
 
 `pushChecked` (partner.ts, the push branch of `ask`; render.ts `CHECKED_NONE`, `CHECKED_MORE`, `renderNote`,
-`EDEN_NOTE`): an injection citing nothing, queued like a packet, only when the push's reading gave a verdict (or found
-no candidate) from sources that all answered (D127), only for the request's own session and only while it is the
-latest; a later reading that delivers (`readerPushBehind`) withdraws it if untaken. Its words are fixed (no source or
+`EDEN_NOTE`): an injection citing nothing, queued like a packet, only when the push's reader gave a verdict (or the
+pool was empty; a gated pool is no all-clear) from at least one source, all of which answered (D127), only for the
+request's own session and only while it is the latest. The next user message, and any packet or answer built for the
+session, drop it if untaken (`dropChecked`). With `readerPushBehind` the first reading reads a synced copy the poll may
+then change: an agent that takes the note before the second reading delivers gets "nothing", then the packet. Its words are fixed (no source or
 event text), inside the data envelope (D11, D19), and `shownText` drops them. Tests: `push-checked.test.ts`.
 
 ## 7. Reproduce
@@ -200,5 +228,6 @@ bun run funnel --jobs 2 --allow-misses --set '{"pushChecked":true}' --baseline .
 
 ## Spend
 
-`packages/sim/lab/cl4/spend.txt` (ledger `.local/cl4/ledger.jsonl`): main runs $1.946, screens and smokes $0.334,
-top-up $0.002; **total $2.281** of the $3 cap.
+`packages/sim/lab/cl4/spend.txt` (ledger `.local/cl4/ledger.jsonl`): main runs $1.946, the re-measure after the
+review $0.418 (`r-train41` $0.244, `rd-train41` $0.153, `rn-h14n` $0.020, void), screens and smokes $0.334, top-up
+$0.002; **total $2.699** of the $3 cap (the ledger keeps $0.30 headroom, which stopped the last runs).

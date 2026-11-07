@@ -1,4 +1,4 @@
-TOTAL 2.2814
+TOTAL 2.6991
 smoke-h14n 0.0325
 smoke-train 0.0707
 scr1-train 0.0713
@@ -17,3 +17,6 @@ d-train42 0.3425
 s2-h14n41 0.0691
 d2-train41 0.2996
 p-h14n41 0.0197
+rn-h14n 0.0204
+r-train41 0.244
+rd-train41 0.1532
