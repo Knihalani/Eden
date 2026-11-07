@@ -219,6 +219,23 @@ describe("keepPackets: placement survives windows, new turns and overlap (the re
     expect(shape(seen.at(-1)!.messages)).toEqual(["q2", "r2", "[P3-xxxxxxx]", "q3", "r3", "q4"]);
   });
 
+  test("a packet larger than the whole budget is shown but evicts nothing and is not kept", async () => {
+    const p = scripted(15);
+    const h = { "x-eden-user-id": "w6", "x-eden-session-id": "w6-s" };
+    Object.assign(script, { k1: "P1-xxxxxxx", k2: "P2-much-longer-than-the-budget", k3: "" });
+    await chat(p, [u("k1")], h);
+    await chat(p, [u("k1"), a("r1"), u("k2")], h);
+    expect(shape(seen.at(-1)!.messages)).toEqual([
+      "[P1-xxxxxxx]",
+      "k1",
+      "r1",
+      "[P2-much-longer-than-the-budget]",
+      "k2",
+    ]);
+    await chat(p, [u("k1"), a("r1"), u("k2"), a("r2"), u("k3")], h);
+    expect(shape(seen.at(-1)!.messages)).toEqual(["[P1-xxxxxxx]", "k1", "r1", "k2", "r2", "k3"]);
+  });
+
   test("a request with no user message still gets this turn's packets, where withContext puts them", async () => {
     const p = scripted();
     // Only system and assistant messages: the packet comes from pending, and goes at the end as withContext puts it.

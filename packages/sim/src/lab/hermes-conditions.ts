@@ -3,7 +3,8 @@
  *
  *   hermes                                   Hermes with a read-only search tool per sim source, over MCP
  *   hermes-eden[~variant][+flag ...][@w<ms>] Eden only, Pi's `eden` arm (A16): `ask_context` and the plugin, no
- *                                            source tools; paired with `hermes` by name in the report scripts
+ *                                            source tools; pi-ab-report.ts's PAIRS put it against `hermes` and
+ *                                            `hermes+eden`
  *   hermes+eden[~variant][+flag ...][@w<ms>] the same tools, plus Eden: its `ask_context` MCP server and the Eden
  *                                            plugin (packets before the turn and after tool results)
  *

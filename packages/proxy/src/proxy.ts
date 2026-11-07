@@ -409,9 +409,11 @@ function keptInPlace(
       placed.delete(key);
       conv.placedBytes = (conv.placedBytes ?? 0) - old.bytes;
     }
-    // Over the budget, placements whose message this request no longer holds go first, then the oldest.
+    // Over the budget, placements whose message this request no longer holds go first, then the oldest. A packet larger
+    // than the whole budget is shown but neither kept nor allowed to evict the others (the review).
+    const fits = bytes <= maxBytes;
     const live = new Set(keys.filter((k): k is string => k !== null));
-    for (const pass of [false, true]) {
+    for (const pass of fits ? [false, true] : []) {
       for (const [k, v] of placed) {
         if ((conv.placedBytes ?? 0) + bytes <= maxBytes) break;
         if (!pass && live.has(k)) continue;

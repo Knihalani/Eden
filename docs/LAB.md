@@ -84,7 +84,7 @@ not strict yet.
 | ------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | No-model funnel     | `hidden-funnel.ts` (`bun run funnel` wraps it) | Per task: planted item returned, cached, delivered; with `--ask`, cited by an ask; decoy delivered on controls; source calls and ms per task. Deterministic at `--time 0`                                                  |
 | Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][+ask][+nokey][@w<ms>]`, graded by a second model; per-task timelines; `--day K`; `--days D` (a user's mixed days, recipe 4c) |
-| Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`); same tasks, grader and results format as Pi                                                                                   |
+| Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`), or Eden in place of its source tools (`hermes-eden`, A16: Pi's `eden` shape); same tasks, grader and results format as Pi                                                                                   |
 | In-house loop       | `agent-ab.ts`                                  | The pre-Pi loop; label any result from it as such (CLAUDE.md)                                                                                                                                                              |
 | Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load; `sim:perf memory --synced` and `steady --synced` (A3) backfill their users first (the scenarios otherwise never sync)                                                    |
 | Connector lab       | `bun run sim:lab:build && bun run sim:lab`     | Real MCP servers in Docker over seeded backends                                                                                                                                                                            |
@@ -794,6 +794,10 @@ no ask_context"). Hermes' prompt is
 about 3× Pi's input tokens per request; on free models tasks after a stream's first averaged 22–26 s, and the full
 nine-suite bench was estimated at 2.6 h at concurrency 6 if the rate limit does not bind, 7.6 h at 18 requests a
 minute on free models (hermes-lab.md, estimates).
+
+`hermes-eden` (A16) gives Hermes Eden's `ask_context` and plugin with no `search_<source>` tools, as Pi's `eden` arm
+has none: `hermes+eden` keeps them (Pi's `both+ask`), so a "Hermes keeps searching" comparison against Pi's `eden`
+compares two arm shapes. The report pairs `hermes-eden` with `hermes` and with `hermes+eden`.
 
 ### 5b. Market connectors and change notifications (both harnesses)
 
