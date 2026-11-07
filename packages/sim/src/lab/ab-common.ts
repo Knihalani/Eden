@@ -448,6 +448,12 @@ export interface Background {
   cardsUsd: number;
   bridgeUsd: number;
   calls: number;
+  /**
+   * Of `cardsUsd` and `calls`, what was spent before the stream's first request: the user's one-time backfill (H16).
+   * Absent in results files from before CL5.
+   */
+  setupUsd?: number;
+  setupCalls?: number;
 }
 
 /**

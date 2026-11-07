@@ -88,24 +88,21 @@ export function shiftMeta(meta: Record<string, string>, moves: readonly ClockMov
   return out;
 }
 
+/** The recap turn closing a day whose last task was `t`: never graded, planting nothing. */
+export function recapOf(t: Task, id: string): Task {
+  // A user's turn whatever the day's last task was (an arriving message would be observed as one otherwise).
+  const out: Task = { ...t, id, text: RECAP_TEXT, must: [], type: "recap", event: "user_message" };
+  delete (out as { planted?: string }).planted;
+  return out;
+}
+
 /** The tasks of a stream with a recap turn after every `size` of them (and after the last). */
 export function withRecaps(tasks: readonly Task[], size: number): Task[] {
   if (!(size > 0)) return [...tasks];
   const out: Task[] = [];
   tasks.forEach((t, i) => {
     out.push(t);
-    if (i % size === size - 1 || i === tasks.length - 1) {
-      // A user's turn whatever the day's last task was (an arriving message would be observed as one otherwise).
-      out.push({
-        ...t,
-        id: recapId(t.id, Math.floor(i / size)),
-        text: RECAP_TEXT,
-        must: [],
-        type: "recap",
-        event: "user_message",
-      });
-      delete (out[out.length - 1] as { planted?: string }).planted;
-    }
+    if (i % size === size - 1 || i === tasks.length - 1) out.push(recapOf(t, recapId(t.id, Math.floor(i / size))));
   });
   return out;
 }

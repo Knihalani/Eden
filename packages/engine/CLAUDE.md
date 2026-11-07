@@ -186,6 +186,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   (`askReaderPool` 10), a 160-character item window, compact item fences, trimming the pool by `constraintLike` or by
   the card pass's `none` mark, and a per-user cached item prefix were measured and not taken (D238, D239, D241): the
   trims drop planted items (lean carding leaves most of them uncarded).
+- **`pushChecked` (D246, trial, off)** queues an injection that cites nothing (`citations: []`, reason `checked:`): a
+  harness or integration that counts items must not read an empty packet as a delivery, and a later reading that
+  delivers withdraws it if untaken. Its line starts `Eden: ` (`EDEN_NOTE`), which `shownText` drops; it is fixed text,
+  never source or event text. CL4's other path levers (speculation D248, re-reading ahead D249, `askFromPush` D247, a
+  packet closing line D250) were measured and deleted: an ask's time is its strict re-reads (D211) under signal-only
+  notices, not its search or its reader.
 - **Framing an ask answer does not move false concerns (D230, D231).** A note on items the reader read and did not
   flag, and a closing line on answers no reading checked, were measured live and deleted: the agent reads the caveat
   and still states the item. Every listed-only false concern came from an information ask `readAsk` does not read

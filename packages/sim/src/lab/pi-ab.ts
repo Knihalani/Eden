@@ -149,9 +149,11 @@ import {
   poolDays,
   shiftClocks,
   shiftMeta,
+  recapOf,
   withRecaps,
   type DaySummary,
 } from "./pi-day";
+import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { sanitizeForStore } from "@eden/redact";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 
@@ -171,8 +173,26 @@ const BUDGET = Number(opt("budget", "0.6"));
 const SUITE = opt("suite", "heldout");
 const LOOKUPS = SUITE === "lookups";
 const SUITE_LIST = LOOKUPS ? ["lookups"] : parseSuites(SUITE);
+// `--days D` (H16, pi-user.ts): one user per seed over D days of `--day-size` requests (12-20), each day mixing
+// hidden, control and neutral requests in `--mix` proportion (1:1:8); the agent's transcript resets each day, Eden
+// persists. Eden's clock moves `--gap-min` minutes a request and `--night-h` hours between days (the world's now is
+// fixed). 0 (the default) keeps one world per suite and variant.
+const USER_DAYS = Number(opt("days", "0"));
+if (!Number.isInteger(USER_DAYS) || USER_DAYS < 0) throw new Error(`--days must be a whole number, not ${USER_DAYS}`);
+const DAY_SIZE = parseDaySize(opt("day-size", "12-20"));
+const MIX = parseMix(opt("mix", "1:1:8"));
+const GAP_MS = Number(opt("gap-min", "10")) * 60_000;
+const NIGHT_MS = Number(opt("night-h", "2")) * 3_600_000;
+if (USER_DAYS > 0) {
+  for (const f of ["day", "variants", "templates", "reuse-arms"]) {
+    if (args.includes(`--${f}`)) throw new Error(`--days plans the user's requests itself: it cannot take --${f}`);
+  }
+  if (!(GAP_MS > 0) || !(NIGHT_MS >= 0)) throw new Error("--gap-min must be > 0 and --night-h ≥ 0");
+}
 // `neutral` (neutral.ts) runs only on the suites that build it; the others run their hidden and control variants.
-const VARIANTS = opt("variants", "hidden,control").split(",") as ("hidden" | "control" | "neutral")[];
+const VARIANTS = (USER_DAYS > 0 ? "hidden,control,neutral" : opt("variants", "hidden,control")).split(",") as (
+  "hidden" | "control" | "neutral"
+)[];
 const ACT = args.includes("--act");
 const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden,eden-act-firewall" : "none,tools,eden,both").split(",");
 const OUT = opt("out", "pi-ab.json");
@@ -188,7 +208,16 @@ const LIMIT = Number(opt("limit", "0"));
 // a recap turn closing each day; 0 (the default) is one session per request.
 const DAY = Number(opt("day", "0"));
 if (!Number.isInteger(DAY) || DAY < 0) throw new Error(`--day must be a whole number of requests, not ${DAY}`);
-const DAYS: (DaySummary & { seed: number; kind: string; partial?: boolean })[] = [];
+/** Either day mode: `--day K` (fixed days per suite and variant) or `--days D` (a user's mixed days). */
+const DAYS_ON = DAY > 0 || USER_DAYS > 0;
+/** Each day's summary, with the recap turn's own cost (a probe: no task's cost includes it). */
+const DAYS: (DaySummary & {
+  seed: number;
+  kind: string;
+  partial?: boolean;
+  recapUsd?: number;
+  recapEdenUsd?: number;
+})[] = [];
 // `--templates a,b`: only the hidden-context tasks of these templates (both variants), for a small targeted smoke.
 const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
 
@@ -548,11 +577,18 @@ async function runWorld(
   cond: Condition,
   records: TaskRecord[],
   grading: Promise<void>[],
+  /** `--days`: the user's requests per day, in order. */
+  daySizes?: readonly number[],
 ): Promise<RunResult[]> {
   // `--day` changes items during the run: each stream gets its own copy of them, since every condition's stream reads
   // the same world concurrently.
-  const world: World = DAY > 0 ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
-  const tasks = DAY > 0 ? withRecaps(baseTasks, DAY) : baseTasks;
+  const world: World = DAYS_ON ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
+  const userPrefix = `w${seed}:user`;
+  const tasks = daySizes
+    ? withDayRecaps(baseTasks, daySizes, (t, d) => recapOf(t, `${userPrefix}:day${d}:recap`))
+    : DAY > 0
+      ? withRecaps(baseTasks, DAY)
+      : baseTasks;
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
   const notify = pushNotifier(sources, CONNECTORS, seed);
   const { name: condition, waitMs, useEden, withPartner, useTools, askTool, judge, act, firewall, config } = cond;
@@ -686,6 +722,10 @@ async function runWorld(
       throw new Error(`sync never warmed for ${scope.userId}: a run without it is not this config`);
   }
   if (cards) await cards.idle();
+  // What the backfill's enrichment cost before the first request (one-time per user, H16): the rest of the stream's
+  // background spend is made while the user works (new and changed items).
+  bg.setupUsd = bg.cardsUsd;
+  bg.setupCalls = bg.calls;
   const out: RunResult[] = [];
   let previous: { sessionId: string; r: RunResult } | null = null;
   const closePrevious = async () => {
@@ -714,13 +754,15 @@ async function runWorld(
       capStopped++;
       break;
     }
-    clock += 3_600_000; // an hour between tasks: Eden's clock, for its caches and planner
+    // An hour between tasks: Eden's clock, for its caches and planner. `--days`: `--gap-min` between requests and
+    // `--night-h` before each day after the first (the recap closed the day before).
+    clock += daySizes ? (newDay && dayNo >= 0 ? NIGHT_MS : GAP_MS) : 3_600_000;
     if (sync) await sync.tick();
     notify(partner, scope);
-    if (DAY > 0 && newDay) {
+    if (DAYS_ON && newDay) {
       dayNo++;
       // One Eden session per day, named once: a suite whose ids do not share a prefix keeps it too.
-      daySession = dayId(task.id, dayNo);
+      daySession = daySizes ? `${userPrefix}:day${dayNo}` : dayId(task.id, dayNo);
       day = new DayLog(daySession, condition);
       dayMessages = [];
       dayPackets.length = 0;
@@ -728,10 +770,10 @@ async function runWorld(
       dayKind = task.kind;
     }
     const startsDay = newDay;
-    newDay = DAY > 0 && isRecap(task);
+    newDay = DAYS_ON && isRecap(task);
     day?.turn();
-    const sessionId = DAY > 0 ? daySession : task.id;
-    if (DAY > 0 && day && isRecap(task)) {
+    const sessionId = DAYS_ON ? daySession : task.id;
+    if (DAYS_ON && day && isRecap(task)) {
       // The world changes before the recap: the times of the day's planted items move, the sources serve the new
       // text, and a notifying source says so (`--push`), as plans moved during the day would. Only before the recap,
       // which is never graded: a moved item could otherwise land in a later request's slot and change its grade.
@@ -925,7 +967,7 @@ async function runWorld(
         initialState: {
           systemPrompt: systemPrompt(world, { lookups: LOOKUPS, data: useTools || useEden, act }),
           // `--day`: the day's transcript so far (its earlier requests, tool calls and answers).
-          ...(DAY > 0 && !startsDay ? { messages: dayMessages } : {}),
+          ...(DAYS_ON && !startsDay ? { messages: dayMessages } : {}),
           model: piModel,
           thinkingLevel: "off",
           tools,
@@ -936,7 +978,7 @@ async function runWorld(
         transformContext: async (messages) => {
           takeEden();
           // `--day`: the packets of the day's earlier turns stay where the agent saw them, before their requests.
-          if (DAY > 0 && dayPackets.some((p) => p.length)) {
+          if (DAYS_ON && dayPackets.some((p) => p.length)) {
             const asSystem = (text: string) =>
               ({ role: "system", content: text, timestamp: Date.now() }) as unknown as AgentMessage;
             return placePackets(messages, dayPackets, packets, asSystem);
@@ -1127,7 +1169,7 @@ async function runWorld(
         }
       });
       await agent.prompt(userPrompt(task));
-      if (DAY > 0) {
+      if (DAYS_ON) {
         dayMessages = [...agent.state.messages];
         dayPackets.push([...packets]);
       }
@@ -1157,12 +1199,12 @@ async function runWorld(
     record.firstTokenMs = record.requests[0]?.firstTokenMs ?? null;
     if (r.error) record.error = r.error.slice(0, 200);
     if (partner) Object.assign(record, uptake.fields());
-    if (DAY > 0 && day) {
+    if (DAYS_ON && day) {
       if (!isRecap(task) && task.planted) dayPlanted.add(task.planted);
       if (isRecap(task)) {
-        // The recap is measured, never graded or reported as a task.
+        // The recap is measured, never graded or reported as a task; its cost is kept with the day.
         day.recap(r.error ? "" : r.answer);
-        DAYS.push({ ...day.summary(), seed, kind: task.kind });
+        DAYS.push({ ...day.summary(), seed, kind: task.kind, recapUsd: r.costUsd, recapEdenUsd: r.edenCostUsd });
         day = null;
         previous = { sessionId, r };
         continue;
@@ -1212,15 +1254,26 @@ async function runWorld(
   return out;
 }
 
-const worlds = SEEDS.flatMap((seed) =>
-  SUITE_LIST.flatMap((suite) =>
-    (LOOKUPS ? ["hidden" as const] : variantsFor(suite, VARIANTS)).map((variant) => {
-      const w = worldOf(seed, suite, variant, LIMITS);
-      const picked = TEMPLATES ? { ...w, tasks: w.tasks.filter((t) => TEMPLATES.has(t.type)) } : w;
-      return LIMIT > 0 ? { ...picked, tasks: picked.tasks.slice(0, LIMIT) } : picked;
-    }),
-  ),
-);
+/** `--limit` on a user: the first N requests, the day sizes cut to match. */
+const cutDays = (sizes: number[], n: number) =>
+  sizes.map((k, d) => Math.max(0, Math.min(k, n - sizes.slice(0, d).reduce((a, b) => a + b, 0)))).filter((k) => k > 0);
+const worlds: { seed: number; world: World; tasks: Task[]; daySizes?: number[]; clashes?: number }[] =
+  USER_DAYS > 0
+    ? SEEDS.map((seed) => {
+        if (LOOKUPS) throw new Error("--days needs hidden-context suites, not lookups");
+        const plan = planUser(seed, suiteTemplates(seed, SUITE_LIST), { days: USER_DAYS, size: DAY_SIZE, mix: MIX });
+        const u = userWorldOf(seed, plan);
+        return LIMIT > 0 ? { ...u, tasks: u.tasks.slice(0, LIMIT), daySizes: cutDays(u.daySizes, LIMIT) } : u;
+      })
+    : SEEDS.flatMap((seed) =>
+        SUITE_LIST.flatMap((suite) =>
+          (LOOKUPS ? ["hidden" as const] : variantsFor(suite, VARIANTS)).map((variant) => {
+            const w = worldOf(seed, suite, variant, LIMITS);
+            const picked = TEMPLATES ? { ...w, tasks: w.tasks.filter((t) => TEMPLATES.has(t.type)) } : w;
+            return LIMIT > 0 ? { ...picked, tasks: picked.tasks.slice(0, LIMIT) } : picked;
+          }),
+        ),
+      );
 // What the intent index will have: the requests replayed for the items the run's sources hold (`intent: replayed n of
 // m items`), counted before anything is spent so `--dry` shows it.
 const intentCount =
@@ -1243,6 +1296,16 @@ console.error(
     (REPLAY_DIR ? `, replay ${REPLAY_DIR}${REPLAY_ONLY ? " (only)" : ""}${REPLAY_TIMING ? " (timed)" : ""}` : ""),
 );
 console.error(`pi-ab: ${INTENT_LINE}`);
+if (USER_DAYS > 0) {
+  for (const w of worlds) {
+    const kinds = ["hidden", "control", "neutral"].map((k) => w.tasks.filter((t) => t.kind === k).length);
+    console.error(
+      `pi-ab: user w${w.seed}: ${w.daySizes!.length} days (${w.daySizes!.join(",")} requests), hidden/control/neutral ` +
+        `${kinds.join("/")}, ${w.clashes} slot clashes; agent transcript reset per day, Eden kept; clock +` +
+        `${GAP_MS / 60_000} min a request, +${NIGHT_MS / 3_600_000} h a night`,
+    );
+  }
+}
 /** The arms `--reuse-arms` copies (checked before anything is spent, `--dry` included), with their timeline lines. */
 const reused: { conditions: string[]; results: RunResult[]; records: TaskRecord[] } = {
   conditions: [],
@@ -1294,7 +1357,7 @@ const results: RunResult[] = [...reused.results];
 const t0 = performance.now();
 const streams = worlds.flatMap((w) =>
   CONDITIONS.filter((c) => !reused.conditions.includes(c.name)).map((c) =>
-    runWorld(w.world, w.seed, w.tasks, c, records, grading),
+    runWorld(w.world, w.seed, w.tasks, c, records, grading, w.daySizes),
   ),
 );
 for (const settled of await Promise.allSettled(streams)) {
@@ -1334,7 +1397,20 @@ writeFileSync(
       background,
       ...(REPLAY_DIR ? { replay: replaySummary() } : {}),
       ...(REUSE_FILE ? { reusedArms: { from: REUSE_FILE, conditions: reused.conditions } } : {}),
-      ...(DAY > 0 ? { day: DAY, days: DAYS, daysPooled: poolDays(DAYS) } : {}),
+      ...(DAYS_ON ? { ...(DAY > 0 ? { day: DAY } : {}), days: DAYS, daysPooled: poolDays(DAYS) } : {}),
+      ...(USER_DAYS > 0
+        ? {
+            user: {
+              days: USER_DAYS,
+              daySize: DAY_SIZE,
+              mix: MIX,
+              gapMin: GAP_MS / 60_000,
+              nightH: NIGHT_MS / 3_600_000,
+              transcript: "reset per day (not compacted)",
+              worlds: worlds.map((w) => ({ seed: w.seed, daySizes: w.daySizes, clashes: w.clashes })),
+            },
+          }
+        : {}),
       overBudget: overBudget(budgeted),
       timeline: TIMELINE,
       wallSeconds: Math.round((performance.now() - t0) / 100) / 10,
