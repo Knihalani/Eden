@@ -364,8 +364,13 @@ export class SimSource implements Source {
   readonly kind = "sim";
   /** Whether the lab forwards this source's change notifications (`--push`, the engine's `syncPush`). */
   notifies = false;
-  /** The world is the source: a ref it no longer has was deleted. */
-  readonly fetchReportsGone = true;
+  /**
+   * The world is the source: a ref it no longer has was deleted. The lab's `--fetch-gone false` (A18) sets it false, as
+   * an MCP connector is (a null fetch proves nothing), for the re-read paths that depend on it (D126, D345).
+   */
+  fetchReportsGone = true;
+  /** Fetches by ref (`--null-proves-nothing` makes its null prove nothing; it still finds what exists, D356). */
+  readonly fetchesById = true;
   /** The calendar lists by time, as its list call does (D44). */
   get listsByTime(): boolean {
     return this.id === "calendar";
@@ -390,7 +395,9 @@ export class SimSource implements Source {
   /** The items newest first, for `list`; rebuilt after a reindex. */
   private byRecency: WorldItem[] | null = null;
   private tokens: number;
-  private lastRefill = performance.now();
+  /** The rate bucket's clock (ms); a test sets its own so the bucket does not depend on the box's load. */
+  clock: () => number = () => performance.now();
+  private lastRefill: number | undefined;
 
   constructor(
     private index: SimIndex,
@@ -538,8 +545,8 @@ export class SimSource implements Source {
   private take(rate: number): boolean {
     if (this.timeScale === 0) return true; // Instant runs have no real time to rate-limit over.
     if (rate <= 0) return false; // A rate of 0 is an outage of 429s, not a bucket of one.
-    const now = performance.now();
-    const simSeconds = (now - this.lastRefill) / 1_000 / this.timeScale;
+    const now = this.clock();
+    const simSeconds = (now - (this.lastRefill ?? now)) / 1_000 / this.timeScale;
     // The bucket holds at least one token: with `rate` as its size, a rate under 1/s never reached the one token a
     // call takes, and refused every call (RealUse-1 D: perf-cli's 0.2/s CRM storm was a full outage).
     this.tokens = Math.min(Math.max(1, rate), this.tokens + simSeconds * rate);

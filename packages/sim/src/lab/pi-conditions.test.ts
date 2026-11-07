@@ -153,4 +153,29 @@ describe("pi-ab conditions", () => {
     }
     expect(pairedWith("both+ask")).toBe("both");
   });
+  test("+nokey: the server with no model key (no card or reader role, the same default config), D291", () => {
+    const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+    const c = parseCondition("eden+nokey", { config: ALL, defaults });
+    expect([c.noKey, c.useEden, c.askTool, c.withPartner]).toEqual([true, true, true, true]);
+    // A harness flag like +ask: the engine's settings are the condition's own, untouched.
+    expect(c.config).toEqual(ALL);
+    expect("nokey" in c.config).toBe(false);
+    expect(parseCondition("both+ask+nokey", { config: ALL, defaults }).noKey).toBe(true);
+    expect(parseCondition("eden", { config: ALL }).noKey).toBe(false);
+    // Without Eden there is no key to take away: refused rather than run tools under another name.
+    for (const n of ["tools+nokey", "none+nokey", "eden-judge+nokey"])
+      expect(() => parseCondition(n, { config: ALL })).toThrow(/nokey/);
+    expect(pairedWith("eden+nokey")).toBe("eden");
+  });
+  test("+ephemeral, +ephemeralBp: how earlier requests' packets are kept, a harness setting (D336)", () => {
+    const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+    expect(parseCondition("eden", { config: ALL }).packets).toBe("kept");
+    const e = parseCondition("eden+ephemeral", { config: ALL, defaults });
+    expect([e.packets, e.config]).toEqual(["ephemeral", ALL]);
+    expect(parseCondition("both+ask+ephemeralBp", { config: ALL, defaults }).packets).toBe("ephemeralBp");
+    // Without Eden there are no packets; both flags at once would be two layouts.
+    for (const n of ["tools+ephemeral", "none+ephemeralBp", "eden+ephemeral+ephemeralBp"])
+      expect(() => parseCondition(n, { config: ALL })).toThrow(/ephemeral/);
+    expect(pairedWith("eden+ephemeralBp")).toBe("eden");
+  });
 });

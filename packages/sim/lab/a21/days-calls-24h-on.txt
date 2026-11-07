@@ -1,0 +1,20 @@
+days-calls: seeds 41,42, 8 days, 232 requests, push payload, one ask a request, cards replayed, night 20 h
+phase     source    op       calls   per request  per user-day
+backfill  calendar  list         2                 1.0 a user
+backfill  crm       list         2                 1.0 a user
+backfill  drive     list         2                 1.0 a user
+backfill  gmail     list        26                13.0 a user
+backfill  slack     list         4                 2.0 a user
+request   calendar  list         4        0.017          0.25
+request   crm       list         4        0.017          0.25
+request   drive     list         4        0.017          0.25
+request   gmail     list         5        0.022          0.31
+request   slack     list         4        0.017          0.25
+tick      calendar  list        10        0.043          0.63
+tick      crm       list        11        0.047          0.69
+tick      drive     list        11        0.047          0.69
+tick      gmail     list       135        0.582          8.44
+tick      slack     list        20        0.086          1.25
+request-time 0.091 a request; background (tick + notice) 11.69 a user-day, 0.806 a request; steady 0.897 a request; backfill 18.0 a user
+  w41: verify {"checked":0,"confirmed":0,"changed":0,"gone":0,"failed":0,"calls":0,"holdsEvicted":0}; items re-read 0, more than once 0; moved 20, update packets 11, stale copies held 0
+  w42: verify {"checked":0,"confirmed":0,"changed":0,"gone":0,"failed":0,"calls":0,"holdsEvicted":0}; items re-read 0, more than once 0; moved 21, update packets 12, stale copies held 0

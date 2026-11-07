@@ -19,6 +19,7 @@ import { createHash } from "node:crypto";
 import type { SourceMap } from "@eden/graph";
 import type { Budget, Model, Reservation } from "@eden/llm";
 import {
+  type Citation,
   itemId,
   MAX_QUESTION_CHARS,
   newId,
@@ -122,7 +123,19 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import { CANDIDATES_LEAD, citationsOf, renderPacket, shownText } from "./render";
+import { ASK_NUDGE, CANDIDATES_LEAD, citationsOf, PLAN_LEAD, renderAnswer, renderPacket, shownText } from "./render";
+import {
+  callParties,
+  MAX_PACKET_PARTIES,
+  namesParty,
+  partiesIn,
+  partyFindingText,
+  partyKey,
+  type Party,
+} from "./parties";
+import { quarantineTitle } from "./shield";
+import { safeLine } from "./line";
+import { anchored, anchorsOf, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -135,8 +148,9 @@ import {
   PERSISTABLE_KINDS,
   termIds,
 } from "./text";
+import { sketchTerms, termHashes } from "./sketch";
 import { SpanStats, Tracer, type SpanSink, type SpanStat } from "./spans";
-import type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
+import type { ShadowRecord, ShadowSink, Trace, TraceSink, UsageRecord, UsageSink } from "./trace";
 import { distinctiveTokens, showsUse, type Outstanding } from "./usage";
 
 export interface PartnerDeps {
@@ -148,6 +162,8 @@ export interface PartnerDeps {
   model: Model | null;
   config?: Partial<EngineConfig>;
   onTrace?: TraceSink;
+  /** Whether the agent used each injection, once known (D293): content-free, for an integrator's digest. */
+  onUsage?: UsageSink;
   now?: () => number;
   /**
    * A worker pool (`WorkerPool` started on `GATE_MODULE`) that redacts lookup results off the event loop (D26). The
@@ -185,7 +201,26 @@ export interface PartnerDeps {
    * (`decide.ts`) and what was delivered. Ids and numbers only, no content. Absent: no facts are computed for it.
    */
   onCandidates?: CandidateSink;
+  /**
+   * A lab hook (`hidden-funnel.ts --pool-dump`, D269): each `pushCandidates` pass's pool and what it handed, ids and
+   * flags only. Apart from `onReader`, whose consumers count reader readings.
+   */
+  onPushPool?: PushPoolSink;
 }
+
+/** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
+export interface PushPoolReport {
+  sessionId: string;
+  /** The push's pool in order (the ids the reader would have read). */
+  pool: string[];
+  /** Per pool item, `readerGate`'s constraint test (cards included). */
+  constraintLike: boolean[];
+  /** The candidates handed (none when no pooled item is constraint-like). */
+  handed: string[];
+  /** `askNudge` (D316): whether the handed candidates leave the request unsettled (the packet then nudges an ask). */
+  unsettled?: boolean;
+}
+export type PushPoolSink = (report: PushPoolReport) => void;
 
 /** One no-model decision's candidates, for `PartnerDeps.onCandidates`. */
 export interface CandidateDump {
@@ -226,6 +261,8 @@ interface Recorded {
   sourceIds: string[];
   situation: string;
   used: boolean;
+  /** The session the injection was delivered in: a later correction's usage record names it (D293). */
+  sessionId: string;
 }
 
 interface Session {
@@ -239,6 +276,8 @@ interface Session {
    * the latest: the agent's own events move `turn` within one request, a new user message moves this.
    */
   requests: number;
+  /** The session's last `EXPLAIN_TRACES` traces, oldest first (`explain`, D277). */
+  traces: Trace[];
   lastActive: number;
   window: string[];
   /**
@@ -275,6 +314,12 @@ interface Session {
    */
   checked?: Set<string>;
   /**
+   * With `partyCheck` (D375): digests (`partyKey`) of the email addresses and account details this session's packets
+   * and answers showed the agent, each with the id of the item that held it ("" when none of the cited items did),
+   * at most `MAX_PACKET_PARTIES` (oldest dropped first). The identifiers themselves are not kept.
+   */
+  packetParties?: Map<string, string>;
+  /**
    * `verifyDelivery`: re-reads under way or just made, by item id (`check`): started ahead, beside the reader's call,
    * and taken by the delivery that follows. Bounded (`MAX_CHECKS`); dropped with the session.
    */
@@ -286,6 +331,11 @@ interface Session {
    */
   shown?: Map<string, Set<string>>;
   /**
+   * `askNudge` (D316, D317): the request a nudged candidates packet was queued for (`requests` then), its anchors,
+   * and the ids of the push pool's items past those handed, for the ask's deeper look in that request.
+   */
+  nudged?: { request: number; anchors: Anchors; deeper: string[] };
+  /**
    * With `askReader`: the cue of the session's latest user request (its redacted words, names and days), so an ask
    * about it is read against what the user asked.
    */
@@ -295,6 +345,12 @@ interface Session {
    * with their content hashes, and its verdict (null when it gave none).
    */
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
+  /** `planConflict` (D301): the session's last `PLAN_REQUESTS` acting requests (the push's cues), oldest first. */
+  acted?: Cue[];
+  /** `planConflict` (D301): ids the sync stored since the last take, at most `PLAN_WAITING`, oldest first. */
+  planNew?: Set<string>;
+  /** `planConflict` (D301): ids a plan packet has sent, at most `PLAN_SENT`: each is said once per session. */
+  planSent?: Set<string>;
 }
 
 /** Items whose shown words a session keeps (`askDedup`). */
@@ -376,6 +432,8 @@ interface ProbeOpts {
   local?: ReadonlySet<string> | null;
   /** The lookup's deadline (`performance.now()` time, D140); absent: `sourceTimeoutMs` from when the probes start. */
   deadlineAt?: number;
+  /** `routeLocalHits` (D265): the lookup's local evidence per source, for the probes' routing. */
+  boost?: ReadonlyMap<string, number>;
 }
 /** `intent`'s reciprocal-rank constant: rank 0 scores 1/k (the usual 60 flattens a five-item list to a tie). */
 const ASK_FUSE_K = 2;
@@ -483,6 +541,8 @@ const MAX_OUTSTANDING = 64;
 export class ContextPartner {
   readonly config: EngineConfig;
   private readonly sessions = new Map<string, Session>();
+  /** By user scope key, that user's live sessions (no larger than `sessions`); a session leaves on close. */
+  private readonly userSessions = new Map<string, Set<Session>>();
   private readonly perTenant = new Map<string, number>();
   private readonly built = new WeakMap<Injection, Built>();
   /**
@@ -491,11 +551,18 @@ export class ContextPartner {
    * (`revisionsSettled`).
    */
   private readonly watching = new Map<string, Set<Session>>();
+  /** `planConflict` (D301): by user scope key, the live sessions with acting requests; a session leaves on close. */
+  private readonly acting = new Map<string, Set<Session>>();
   private readonly revisionPolls = new Map<string, Promise<void>>();
   /** By user and source: the notice poll's state (`pollRevised`), at most `MAX_REVISION_SOURCES`, idle ones dropped. */
   private readonly revisionSources = new Map<string, RevisionSource>();
   /** `stopSync` was called (and no `startSync` since): notices start no revision poll. */
   private revisionsStopped = false;
+  /**
+   * `sourceRefs` (D347): by user and item, the re-read a ref notice started and has not finished. The item is in doubt
+   * until it lands (`doubted`), and a delivery's re-read waits on it rather than make a second call (`check`).
+   */
+  private readonly refreshing = new Map<string, { mark: number; outcome: Promise<CheckOutcome> }>();
   /**
    * `readerPushBehind`: what a push packet's delivery changed in its own session, so a second reading that withdraws
    * the packet untaken can undo it (`withdraw`). Keyed by the packet, so it goes with it.
@@ -509,7 +576,28 @@ export class ContextPartner {
    * `verifyDelivery`'s outcomes since start: items checked, confirmed, changed, gone, unverifiable, calls made; and
    * gone-holds the cache's caps dropped while still live (`ItemCache.holdsEvicted`), which reopen D126's race.
    */
-  readonly freshness = { checked: 0, confirmed: 0, changed: 0, gone: 0, failed: 0, calls: 0, holdsEvicted: 0 };
+  readonly freshness = {
+    checked: 0,
+    confirmed: 0,
+    changed: 0,
+    gone: 0,
+    failed: 0,
+    calls: 0,
+    holdsEvicted: 0,
+    /** `sourceRefs` (D347): refs read, and notices that fell back to the plain signal. */
+    refsRead: 0,
+    refsFallback: 0,
+  };
+  /**
+   * Re-reads that came back "unverifiable" because the source's null proves nothing (an MCP fetch, `fetchReportsGone`
+   * false, whose reply lacked the record), by user, then item id: the read mark the re-read began under and when. The
+   * item is delivered and cited as held either way (D126, D211), so until the source signals again, and for at most
+   * `UNVERIFIABLE_HOLD_MS`, a fetch would most likely say the same: `doubted` is false for it. Without this every later
+   * delivery past `CHECK_REUSE_MS`, and every other session of the user, fetched it again (A5's lead, A8, D298). An
+   * error result (`FetchErrorResult`, "error-result") is never held: it may pass, and a changed copy behind it must
+   * be read at the next delivery. Least recently noted first; `MAX_UNVERIFIABLE` per user, `MAX_UNVERIFIABLE_USERS`.
+   */
+  private readonly unverifiable = new Map<string, Map<string, { mark: number; at: number }>>();
   /** The secret gate every item passes before it is held (D10): the fanout's, and `sourceItems`'. */
   private readonly redact: (items: ContextItem[]) => ContextItem[] | Promise<ContextItem[]>;
   /** What each user's probes bring back (`probeFresh`, `probeYield`). */
@@ -589,15 +677,18 @@ export class ContextPartner {
               if (this.config.cards) this.deps.cards?.touch(scope, ids);
             },
             onStored: (scope, items) => {
-              this.enqueueCards(scope, items);
-              this.recordMentions(scope, items);
+              const mentions = mentionsOf(items);
+              this.enqueueCards(scope, items, this.cardDefer(scope, items, mentions));
+              this.recordMentions(scope, items, 0, mentions);
               this.queueRevised(scope, items);
+              this.queuePlanConflicts(scope, items);
             },
             tracer: spans,
           },
           {
             maxItems: c.syncMaxItems,
             pageSize: c.syncPageSize,
+            backfillLanes: c.syncBackfillLanes,
             pollPageSize: c.syncPollPageSize,
             staleChance: c.syncStaleChance,
             maxStaleMs: c.syncMaxStaleMs,
@@ -610,10 +701,19 @@ export class ContextPartner {
             timeoutMs: Math.max(c.sourceTimeoutMs, 5_000),
             demandTimeoutMs: c.sourceTimeoutMs,
             push: c.syncPush,
+            ingestTurns: c.syncIngestTurns,
             pushMaxStaleMs: c.syncPushMaxStaleMs,
+            keepCut: c.syncKeepCut,
+            sketch: c.routeSketch,
+            engagedDeep: c.syncEngagedDeep,
+            // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
+            unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
           },
         )
       : null;
+    // D370: with `syncIngestTurns`, the card drain gathers what waits for its turn, so its batches follow the items.
+    const sync = this.sync;
+    if (sync && c.syncIngestTurns && c.cards && deps.cards) deps.cards.gather = () => sync.pending();
   }
 
   /**
@@ -642,17 +742,30 @@ export class ContextPartner {
     }
   }
 
-  async observe(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
+  /**
+   * `shadow` (an integration trying Eden without injecting: the proxy's shadow mode, D280): what is returned is not
+   * handed out to an agent, so nothing is noted as shown and no usage outcome is learned from it (audit A5: a shadow
+   * trial taught the source map that every source it would have cited went unused).
+   */
+  async observe(event: AgentEvent, options: { waitMs?: number; shadow?: boolean } = {}): Promise<ObserveResult> {
+    // A user frozen while idle (D325) is thawed in slices first, so other users' events do not wait behind it. A
+    // session's end and a draft read no item (`observeEvent` returns before any): they start no thaw, but wait on one
+    // an earlier event of theirs waits on, or they would run before it (A24 and its review).
+    const reads = event.kind !== "session_end" && !(event.kind === "user_message" && event.draft === true);
+    const thawing = reads ? this.deps.cache.ready(event) : this.deps.cache.pendingThaw(event);
+    if (thawing) await thawing;
     // `readerPush`: a request that acts is also read by the ask-time reader, as an ask of the engine's own; what it
     // flags is queued as a packet. The observe waits for it within its own wait, so an agent that never calls
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
     // not cut at `askReaderWaitMs` (that bounds an explicit ask): a reading that lands later is still queued, while its
     // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
-    const internal: { push: true; request?: number } = { push: true };
+    const internal: { push: true; request?: number; turn?: number } = { push: true };
     const push =
       this.config.readerPush &&
       this.config.askReader &&
-      this.deps.reader &&
+      // The candidates (D237) make no reader call, so they run without a reader too: a server with no model key
+      // delivers them (D276). Only the reader's own push needs the dependency.
+      (this.deps.reader || this.config.pushCandidates > 0) &&
       event.kind === "user_message" &&
       event.draft !== true &&
       isImperative(event.text, MORE_VERBS)
@@ -665,9 +778,19 @@ export class ContextPartner {
     const t0 = performance.now();
     const observing = this.observeEvent(event, options);
     // `observeEvent` counts the request before its first await, so the session's count now names this request.
-    if (push) internal.request = this.sessions.get(sessionKey(event))?.requests;
+    // Its turn too: the push's trace names its request's turn, as a lookup's does, not the one current when it settles.
+    if (push) {
+      const s = this.sessions.get(sessionKey(event));
+      internal.request = s?.requests;
+      internal.turn = s?.turn;
+    }
     const result = await observing;
-    if (!push) return result;
+    if (!push) {
+      // `planConflict` (D301): what arrived since the last take, checked now, so `pending` says a packet waits.
+      const live = this.config.planConflict ? this.sessions.get(sessionKey(event)) : undefined;
+      if (live) this.checkPlans(live);
+      return live && live.pending.length > 0 && !result.pending ? { ...result, pending: true } : result;
+    }
     let settled = false;
     void push.then(() => (settled = true));
     const left = Math.min(options.waitMs ?? 0, this.config.readerPushWaitMs) - (performance.now() - t0);
@@ -677,11 +800,16 @@ export class ContextPartner {
       clearTimeout(timer);
     }
     // A push still running, or one that queued its packet, is pending work the integration should poll for.
-    const queued = (this.sessions.get(sessionKey(event))?.pending.length ?? 0) > 0;
+    const live = this.sessions.get(sessionKey(event));
+    if (live) this.checkPlans(live);
+    const queued = (live?.pending.length ?? 0) > 0;
     return { ...result, pending: result.pending || !settled || queued };
   }
 
-  private async observeEvent(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
+  private async observeEvent(
+    event: AgentEvent,
+    options: { waitMs?: number; shadow?: boolean } = {},
+  ): Promise<ObserveResult> {
     const t0 = performance.now();
     const spans = this.spans;
     const root = spans?.open("observe", 0, { kind: event.kind });
@@ -715,7 +843,7 @@ export class ContextPartner {
 
     const trace = (decision: Trace["decision"], reason: string, extra: Partial<Trace> = {}) => {
       decided = decision;
-      this.trace({
+      this.trace(s, {
         sessionId: s.id,
         turn: s.turn,
         event: event.kind,
@@ -730,7 +858,7 @@ export class ContextPartner {
       });
     };
     const reply = (injection: Injection | null): ObserveResult => {
-      if (injection) this.handOut(s, injection);
+      if (injection && !options.shadow) this.handOut(s, injection);
       if (root) {
         spans!.close(root, {
           session: s.id,
@@ -743,6 +871,7 @@ export class ContextPartner {
       return { injection, pending: pendingOf(s) };
     };
 
+    this.dropRemovedPending(s);
     const queued = s.pending.shift() ?? null;
     const lookup = wantsLookup(event, text, terms, s.vocab);
     if (!lookup) {
@@ -874,7 +1003,12 @@ export class ContextPartner {
         // The calls were the first reading's; the second makes none (nor any plan) of its own.
         const { plans: _plans, ...rest } = searched;
         const again = { ...rest, calls: 0, ...(rest.syncCalls !== undefined ? { syncCalls: 0 } : {}) };
-        await this.ask(request, { push: true, request: internal.request, again: { searched: again, prev } });
+        await this.ask(request, {
+          push: true,
+          request: internal.request,
+          turn: internal.turn,
+          again: { searched: again, prev },
+        });
       })
       .catch(() => {});
     this.addBehind(s, work);
@@ -927,16 +1061,53 @@ export class ContextPartner {
     s.behind = tracked;
   }
 
-  /** Injections the slow path queued for a session, oldest first. Integrations that poll call this. */
-  takePending(ref: Scope & { sessionId: string }): Injection[] {
+  /**
+   * The session's last decisions (at most `EXPLAIN_TRACES`, oldest first), the traces `onTrace` receives: why Eden
+   * spoke or stayed silent, with no content (D56, D277). Reads only; a session that ended or was forgotten has none.
+   * Copies: changing one changes nothing held.
+   */
+  explain(ref: Scope & { sessionId: string }): Trace[] {
+    return (this.sessions.get(sessionKey(ref))?.traces ?? []).map((t) => ({
+      ...t,
+      itemIds: [...t.itemIds],
+      // A plan's shapes are an array of their own: a shallow copy shared them with the held trace (audit A11).
+      ...(t.plans ? { plans: t.plans.map((p) => ({ ...p, shapes: [...p.shapes] })) } : {}),
+    }));
+  }
+
+  /**
+   * Injections the slow path queued for a session, oldest first. Integrations that poll call this. `shadow`: taken but
+   * not handed to an agent (see `observe`).
+   */
+  takePending(ref: Scope & { sessionId: string }, options: { shadow?: boolean } = {}): Injection[] {
     const s = this.sessions.get(sessionKey(ref));
     if (!s) return [];
+    this.checkPlans(s);
     // What the agent reads last about an item is its current copy (D232): a packet with a copy the cache has since
     // replaced goes before the packets that render current copies, and an update made stale by a packet of the batch
     // that renders the current copy is dropped. Queue order holds otherwise.
+    this.dropRemovedPending(s);
     const out = this.currentLast(s, this.withoutCoveredUpdates(s.pending.splice(0)));
-    for (const injection of out) this.handOut(s, injection);
+    if (!options.shadow) for (const injection of out) this.handOut(s, injection);
     return out;
+  }
+
+  /**
+   * A queued packet that cites an item since removed at its source (`sourceRemoved`, D126) is not handed out: the agent
+   * would read a deleted item as current. Found by the engine fuzz harness (`fuzz.test.ts`, audit A5): the removal
+   * cleared the cache, the sync's records and held pages, but not packets already queued. The packet goes whole (its
+   * text cannot lose one item safely: folding and framing span items); what its delivery marked is undone where an undo
+   * was kept, as for a withdrawn packet, and otherwise its other items stay marked (silence over a repeat).
+   */
+  private dropRemovedPending(s: Session): void {
+    if (s.pending.length === 0) return;
+    const now = this.now();
+    for (let k = s.pending.length - 1; k >= 0; k--) {
+      const packet = s.pending[k]!;
+      if (!packet.citations.some((c) => this.deps.cache.isHeldGone(s.scope, c.itemId, now))) continue;
+      s.pending.splice(k, 1);
+      this.withdraw(s, packet);
+    }
   }
 
   // ── revisionNotice (D205) ──
@@ -952,9 +1123,9 @@ export class ContextPartner {
   }
 
   /** The agent now holds these versions: noted in the session's ledger, and the session watched for revisions. */
-  private watchCopies(s: Session, copies: readonly { id: string; sourceId: string; version: number }[]): void {
+  private watchCopies(s: Session, copies: readonly Copy[]): void {
     if (s.closed || copies.length === 0) return;
-    for (const c of copies) s.ledger.noteShown(c.id, c.version, c.sourceId);
+    for (const c of copies) s.ledger.noteShown(c.id, c.version, c.sourceId, c.times);
     // An update still queued whose every copy this hand-out rendered in the same version says nothing new.
     const held = new Map(copies.map((c) => [c.id, c.version]));
     for (let k = s.pending.length - 1; k >= 0; k--) {
@@ -1086,9 +1257,10 @@ export class ContextPartner {
       const { injection, items: said } = this.buildUpdate(s, rest);
       rest = rest.slice(said.length);
       // Promised now: a second store of the same version, before the agent takes this, queues nothing more.
+      // Its times are noted when it is handed out (`watchCopies`): one superseded in the queue was never shown.
       for (const it of said) s.ledger.noteShown(it.id, versionOf(it), it.sourceId);
       s.pending.push(injection);
-      this.trace({
+      this.trace(s, {
         sessionId: s.id,
         turn: s.turn,
         event: "source_change",
@@ -1111,12 +1283,18 @@ export class ContextPartner {
    * handing out an older packet queued before it cannot leave the ledger at the older version.
    */
   private buildUpdate(s: Session, items: readonly ContextItem[]): { injection: Injection; items: ContextItem[] } {
-    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${UPDATED_NOTE}` }));
-    let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes });
+    // The quarantine (D307) reads the item's own title, before Eden's tag and note go round it: a title it replaces
+    // whole must not take "updated:" and "this version replaces it" with it.
+    const own = (t: string) => (this.config.quarantineInstructions ? quarantineTitle(t) : t);
+    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${own(it.title)}${this.updatedNote(s, it)}` }));
+    let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes, ...this.shield() });
     let n = renderedCount(items, text);
     if (n === 0) {
       // Not even the first line fits a tiny `maxInjectionBytes`: it is said alone, under a cap that holds its line.
-      text = renderPacket(tagged.slice(0, 1), { maxBytes: Math.max(this.config.maxInjectionBytes, 512) });
+      text = renderPacket(tagged.slice(0, 1), {
+        maxBytes: Math.max(this.config.maxInjectionBytes, 512),
+        ...this.shield(),
+      });
       n = 1;
     }
     const said = items.slice(0, n);
@@ -1127,7 +1305,7 @@ export class ContextPartner {
       sessionId: s.id,
       mode: "proactive",
       text,
-      citations: citationsOf(said),
+      citations: this.cited(said),
       reason: `${UPDATED}${id}`,
       score: 1,
       createdAt: this.now(),
@@ -1142,9 +1320,20 @@ export class ContextPartner {
       items: said.map((i) => ({ sourceId: i.sourceId, id: i.id })),
       text: shownText(text),
       ...(this.config.askDedup ? { shown: { items: said, text } } : {}),
-      copies: copiesOf(said),
+      copies: copiesOf(said, this.config.revisionDiff),
     });
     return { injection, items: said };
+  }
+
+  /**
+   * How an update's title ends: `UPDATED_NOTE`, and with `revisionDiff` (D342) the times and dates the agent was shown
+   * for the item that this version no longer has ("no longer: 09:30"), read before the ledger notes the new copy.
+   */
+  private updatedNote(s: Session, item: ContextItem): string {
+    if (!this.config.revisionDiff) return UPDATED_NOTE;
+    const now = new Set(timesOf(item));
+    const gone = s.ledger.seenTimes(item.id).filter((t) => !now.has(t));
+    return gone.length ? `${UPDATED_NOTE.slice(0, -1)}; no longer: ${gone.join(", ")})` : UPDATED_NOTE;
   }
 
   /**
@@ -1206,6 +1395,9 @@ export class ContextPartner {
       const all = await this.deps.sources(scope).catch((): Source[] => []);
       const source = all.find((x) => x.id === sourceId);
       if (!source || signal.aborted) return;
+      // D325: the poll reads the user's held copies; a frozen user is thawed in slices first (only when frozen).
+      const thawing = this.deps.cache.ready(scope);
+      if (thawing) await thawing;
       await sync.freshen(scope, [source], signal);
     })()
       .catch(() => {})
@@ -1237,6 +1429,30 @@ export class ContextPartner {
   }
 
   /**
+   * What this process holds for a tenant (D326, `/v1/usage`): users with a cache (frozen ones counted apart, D325),
+   * their items, and users the sync keeps current. Counts only, no ids or content.
+   */
+  tenantUsage(tenantId: string): { users: number; frozenUsers: number; items: number; syncedUsers: number } {
+    const c = this.deps.cache.tenantStats(tenantId);
+    return {
+      users: c.users,
+      frozenUsers: c.frozen,
+      items: c.items,
+      syncedUsers: this.sync?.tenantUsers(tenantId) ?? 0,
+    };
+  }
+
+  /**
+   * Null when the user's cache is not frozen; else when it is thawed (D325, `ItemCache.ready`). Every entry point that
+   * serves a user's items awaits it first (`observe`, `ask`, `checkAction`, `sourceItems`, a notice's revision poll;
+   * the server before a removal), so a thaw runs in slices and other users' requests do not wait behind it. A bare
+   * change notice reads no items and leaves a frozen user frozen.
+   */
+  ready(scope: Scope): Promise<void> | null {
+    return this.deps.cache.ready(scope);
+  }
+
+  /**
    * The action firewall (`actionCheck`; docs/research/econ-firewall.md): an agent's tool call, before it runs, checked
    * against what is held, with no model and no source call. The session's request and the call's arguments read as
    * words (`actionText`: its days written out, its amounts, names and references) make one cue; what the request's
@@ -1248,13 +1464,18 @@ export class ContextPartner {
    */
   async checkAction(event: AgentEvent): Promise<ActionCheck> {
     const t0 = performance.now();
+    const thawing = this.deps.cache.ready(event); // D325, as in `observe`.
+    if (thawing) await thawing;
     const proceed = (reason: string): ActionCheck => ({
       verdict: "proceed",
       finding: null,
       reason,
       latencyMs: Math.round(performance.now() - t0),
     });
-    if (!this.config.actionCheck || event.kind !== "tool_call") return proceed("off");
+    if ((!this.config.actionCheck && !this.config.partyCheck) || event.kind !== "tool_call") return proceed("off");
+    // The party check alone (the default, D376): a session Eden handed no identifier has nothing to hold, and none is
+    // opened for a call in a session Eden never saw.
+    if (!this.config.actionCheck && !this.sessions.get(sessionKey(event))?.packetParties?.size) return proceed("clear");
     try {
       const s = this.session(event);
       const key = actionKey(event.tool, event.input);
@@ -1262,6 +1483,28 @@ export class ContextPartner {
       // The request the call serves: the session's latest user message or arriving message, as remembered.
       const asked = [...s.window].reverse().find((w) => w.startsWith("user_message: ") || w.startsWith("external: "));
       const request = asked ? asked.slice(asked.indexOf(": ") + 2) : "";
+      if (this.config.partyCheck) {
+        // The user's own words only: an arriving message (`external:`) can be the attacker's mail naming the address.
+        const said = [...s.window].reverse().find((w) => w.startsWith("user_message: "));
+        const found = this.partyFinding(s, event, said ? said.slice("user_message: ".length) : "");
+        if (found) {
+          const latencyMs = Math.round(performance.now() - t0);
+          this.trace(s, {
+            sessionId: s.id,
+            turn: s.turn,
+            event: "tool_call",
+            decision: "fast",
+            reason: "action-party",
+            latencyMs,
+            sourceCalls: 0,
+            modelCalls: 0,
+            costUsd: 0,
+            itemIds: found.citations.map((c) => c.itemId),
+          });
+          return { verdict: "finding", finding: found, reason: "party", latencyMs };
+        }
+        if (!this.config.actionCheck) return proceed("clear");
+      }
       // What the call commits to (its days, amounts, names, references), without what the agent wrote in it.
       const call = sanitizeForStore(actionText(event.tool, event.input, { prose: false }));
       // The call first: its time is the one the clash test reads (`requestedSpan` reads the first).
@@ -1364,7 +1607,7 @@ export class ContextPartner {
       // Every item the finding rested on is gone at its source (`verifyDelivery`): nothing stands in the way.
       if (!finding) return proceed("gone");
       this.handOut(s, finding);
-      this.trace({
+      this.trace(s, {
         sessionId: s.id,
         turn: s.turn,
         event: "tool_call",
@@ -1382,8 +1625,88 @@ export class ContextPartner {
     }
   }
 
+  /**
+   * `partyCheck` (D375): a finding when the call adds a party (`callParties`) that this session's packets showed
+   * (`Session.packetParties`), that the request does not name, and that is no correspondent of the user's
+   * (`ItemCache.isCorrespondent`, addresses only, the item that showed it never vouching for it: an account number
+   * has no header line to be on). Null otherwise. The tool and the flagged parties are remembered, so a call to the
+   * same tool adding them again proceeds. `request` is the session's latest user message.
+   */
+  private partyFinding(s: Session, event: AgentEvent & { kind: "tool_call" }, request: string) {
+    const shown = s.packetParties;
+    if (!shown || shown.size === 0) return null;
+    const flagged: Party[] = [];
+    const ids = new Set<string>();
+    for (const p of callParties(event.input)) {
+      const from = shown.get(partyKey(p.norm));
+      if (from === undefined) continue;
+      if (namesParty(request, p)) continue;
+      if (p.kind === "address" && this.deps.cache.isCorrespondent(s.scope, p.norm, from || undefined)) continue;
+      flagged.push(p);
+      if (from) ids.add(from);
+    }
+    if (flagged.length === 0) return null;
+    // The agent was told about these parties for this tool: a call adding them again proceeds, whatever else changed
+    // in it (a fresh request id, a reworded body after the user said yes). A key of its own, so a repeat after a party
+    // finding still meets the firewall (`actionCheck`), which the exact-arguments key would skip.
+    const informed = `party\u0000${event.tool}\u0000${flagged
+      .map((p) => partyKey(p.norm))
+      .sort()
+      .join(",")}`;
+    const checked = (s.checked ??= new Set());
+    if (checked.has(informed)) return null;
+    checked.add(informed);
+    while (checked.size > MAX_CHECKED) checked.delete(checked.values().next().value as string);
+    const items = [...ids]
+      .map((id) => this.deps.cache.get(s.scope, id, this.now()))
+      .filter((i): i is ContextItem => i !== null);
+    const citations = this.cited(items);
+    const text = renderAnswer(
+      partyFindingText(
+        event.tool,
+        flagged,
+        citations.map((c) => c.title),
+      ),
+    );
+    const finding: Injection = {
+      ...s.scope,
+      id: newId("inj", this.now()),
+      sessionId: s.id,
+      mode: "proactive",
+      text,
+      citations,
+      reason: "action-party",
+      score: 1,
+      createdAt: this.now(),
+    };
+    return finding;
+  }
+
+  /**
+   * `partyCheck` (D375): notes the identifiers a text handed to the agent showed (digests only), each with the cited
+   * item whose text holds it, so `partyFinding` can tell a party Eden's packets supplied. An ask's answer is the text
+   * the agent receives, not its injection's own rendering (`deliver`'s `shown`), so `ask` notes it itself.
+   */
+  private notePacketParties(s: Session, text: string, citations: readonly Citation[]): void {
+    const found = partiesIn(text, true);
+    if (found.length === 0) return;
+    const map = (s.packetParties ??= new Map());
+    const cited = citations
+      .map((c) => this.deps.cache.get(s.scope, c.itemId, this.now()))
+      .filter((i): i is ContextItem => i !== null);
+    for (const p of found) {
+      const k = partyKey(p.norm);
+      const holder = cited.find((i) => partiesIn(`${i.title}\n${i.text}`).some((q) => q.norm === p.norm));
+      map.delete(k);
+      map.set(k, holder?.id ?? "");
+    }
+    while (map.size > MAX_PACKET_PARTIES) map.delete(map.keys().next().value as string);
+  }
+
   async ask(request: AskRequest, internal: AskInternal = {}): Promise<AskResponse> {
     const t0 = performance.now();
+    const thawing = this.deps.cache.ready(request); // D325, as in `observe`.
+    if (thawing) await thawing;
     const spans = this.spans;
     const root = spans?.open("ask", 0, { async: true });
     const s = this.session(request);
@@ -1467,9 +1790,28 @@ export class ContextPartner {
           )
         : null;
     if (reading) chosen = reading.chosen;
+    // `askNudge` (D316, D317): an ask in the request a nudged packet went out for also lists the push pool's items past
+    // those handed that hold one of the request's anchors (its current copies). They take at most half the answer's
+    // seats (rounded up), from the end, and never the ask's own first: the answer still cites at most `maxItems` (the
+    // protocol's bound) and keeps its best match for the question (none are added at `maxItems` 1).
+    if (!internal.push && this.config.askNudge && s.nudged?.request === s.requests) {
+      const { anchors, deeper } = s.nudged;
+      const have = new Set(chosen.map((x) => x.item.id));
+      const extra: Scored[] = [];
+      const seats = Math.min(Math.ceil(limit / 2), limit - 1);
+      for (const id of deeper) {
+        if (extra.length >= seats) break;
+        if (have.has(id)) continue;
+        const item = this.deps.cache.get(s.scope, id, this.now());
+        if (item && !bulkMail(item) && anchored(item, anchors))
+          extra.push({ item, score: 0, matched: 0, sketch: null });
+      }
+      chosen = [...chosen.slice(0, Math.max(0, limit - extra.length)), ...extra];
+    }
     // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
     // a proactive packet (queued, taken before its next model request); nothing else is answered or handed out.
     if (internal.push) {
+      if (this.config.planConflict && internal.again === undefined) this.noteActed(s, cue);
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
@@ -1485,44 +1827,86 @@ export class ContextPartner {
       // older copies, if the agent has not taken it, gives way to this one (its items count as undelivered here). One
       // the agent has taken stays taken: only what is new to it, or what the poll changed since, goes out again.
       const prev = internal.again?.prev;
-      const withdrawn = new Set<string>();
       // A candidates pass replaces the first packet only with candidates of its own (CL6 review).
-      if (prev && (reading?.read || (candidates?.items.length ?? 0) > 0) && !s.closed && latest) {
-        const at = s.pending.indexOf(prev);
-        if (at >= 0) {
-          s.pending.splice(at, 1);
-          for (const c of prev.citations) withdrawn.add(c.itemId);
-          // The agent never got it: what its delivery marked is undone before this reading delivers.
-          this.withdraw(s, prev);
-        }
-      }
+      const replacing = !!prev && (reading?.read || (candidates?.items.length ?? 0) > 0) && !s.closed && latest;
+      // The first packet's items count as undelivered for this reading while it is still queued. It is withdrawn only
+      // after the re-reads below, in the same step as its replacement is queued: withdrawn before them, a take while a
+      // re-read was on the wire found neither packet, and the push's context reached the agent a request late (audit
+      // A5); a candidates pass with nothing left to deliver keeps it.
+      const withdrawn = new Set<string>(
+        replacing && s.pending.includes(prev!) ? prev!.citations.map((c) => c.itemId) : [],
+      );
       const fresh = flagged.filter(
         (x) =>
           withdrawn.has(x.item.id) ||
           s.ledger.isFresh(x.item.id, s.turn) ||
           (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
       );
-      // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
-      const was = behind ? new Map(fresh.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
-      const checked = fresh.length > 0 && !s.closed && latest ? await this.verifyItems(s, fresh, cue) : [];
+      // As `deliverChecked` (audit A11): an item whose ledger entry changed over the re-reads' await was handed out
+      // meanwhile (this event's slow path, a fast path), and `deliver` marks without testing again; it is left out. An
+      // entry gone meanwhile was swept, not handed out: kept.
+      const was = new Map(fresh.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
+      let checked = fresh.length > 0 && !s.closed && latest ? await this.verifyItems(s, fresh, cue) : [];
+      checked = checked.filter((x) => {
+        const now = s.ledger.entry(x.item.id);
+        return now === undefined || sameEntry(was.get(x.item.id), now);
+      });
       const still = internal.request === undefined || internal.request === s.requests;
+      const delivering = checked.length > 0 && !s.closed && still;
+      if (replacing && (delivering || !candidates)) {
+        const at = s.pending.indexOf(prev!);
+        if (at >= 0) {
+          s.pending.splice(at, 1);
+          // The agent never got it: what its delivery marked is undone before this reading delivers.
+          this.withdraw(s, prev!);
+        } else if (withdrawn.size > 0) {
+          // The agent took it during the re-reads: its items are delivered after all, and go again only if revised.
+          checked = checked.filter(
+            (x) =>
+              !withdrawn.has(x.item.id) ||
+              s.ledger.isFresh(x.item.id, s.turn) ||
+              s.ledger.revised(x.item.id, versionOf(x.item), s.turn),
+          );
+        }
+      }
+      // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
+      const undo = behind ? new Map(checked.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       const injection =
-        checked.length > 0 && !s.closed && still
+        delivering && checked.length > 0
           ? candidates
-            ? this.deliver(s, checked, "proactive", `candidates:${cue.id}`, cue, undefined, this.candidateFrame())
+            ? this.deliver(
+                s,
+                checked,
+                "proactive",
+                `candidates:${cue.id}`,
+                cue,
+                undefined,
+                this.candidateFrame(candidates.unsettled !== undefined),
+              )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
-      if (injection && was) this.keepUndo(s, injection, checked, was);
+      if (injection && undo) this.keepUndo(s, injection, checked, undo);
       if (injection) s.pending.push(injection);
+      // `askNudge` (D316, D317): the ask the nudge asks for, in this request, may look past what was handed. A settled
+      // packet (a `readerPushBehind` second pass replacing a nudged one) ends that look: the agent was not nudged.
+      if (injection && candidates && !candidates.unsettled) s.nudged = undefined;
+      if (injection && candidates?.unsettled && internal.request !== undefined) {
+        const handed = new Set(candidates.items.map((x) => x.item.id));
+        s.nudged = {
+          request: internal.request,
+          anchors: candidates.unsettled,
+          deeper: candidates.pool.filter((x) => !handed.has(x.item.id)).map((x) => x.item.id),
+        };
+      }
       const latencyMs = Math.round(performance.now() - t0);
       // Most of the reader's spend with `readerPush` is this read (a later ask over the same input is cached): its
       // trace carries it, since this response goes to no caller.
       const costUsd = reading?.costUsd ?? 0;
-      this.trace({
+      this.trace(s, {
         sessionId: s.id,
-        turn: s.turn,
+        turn: internal.turn ?? s.turn,
         event: "user_message",
         decision: "reader-push",
         reason: cue.id,
@@ -1535,16 +1919,19 @@ export class ContextPartner {
         modelCalls: reading?.called ? 1 : 0,
         costUsd,
         ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
+        ...(candidates ? { candidates: true } : {}),
         itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
       });
-      if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
+      const turn = internal.turn ?? s.turn;
+      if (root) spans!.close(root, { session: s.id, turn, decision: "reader-push", delivered: !!injection });
       if (behind && cue.polled) this.pushAgain(s, request, internal, cue.polled, searched, injection);
       return { answer: "", citations: [], usedModel: reading?.called === true, costUsd, latencyMs };
     }
     // `verifyDelivery`: what the answer cites is re-read first when a signal doubted its copy; gone items are left out,
     // and so are doubted ones no re-read confirmed (D211), named in the answer.
     const unconfirmed = new Map<string, number>();
-    const checked = await this.verifyItems(s, chosen, cue, { unconfirmed });
+    const unswept = new Map<string, number>();
+    const checked = await this.verifyItems(s, chosen, cue, { unconfirmed, unswept });
     const items = checked.map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
     const answering = this.answering(s, cue);
@@ -1559,6 +1946,7 @@ export class ContextPartner {
       // The session closing during the re-reads leaves nothing checked either (D127): not an all-clear.
       searched.closed === true || s.closed,
       unconfirmed,
+      unswept,
     );
     if (rendering) spans!.close(rendering, { items: items.length });
     if (this.deps.onCandidates) {
@@ -1586,10 +1974,12 @@ export class ContextPartner {
       );
       // The answer is handed out as it is returned: its items are noted as shown now.
       this.handOut(s, injection);
+      if (this.config.partyCheck) this.notePacketParties(s, answer, injection.citations);
       // A packet still queued for the agent whose every item this answer says in full is not handed out again; one it
       // covers only in part stays queued (its other items are news). Removed, never `withdraw`n: the agent now has
       // each of its items, so what its delivery marked stands.
-      const cited = new Set(items.map((i) => i.id));
+      // Only what the answer's text rendered: an item its size cap cut was not said (audit A5).
+      const cited = new Set(items.slice(0, renderedCount(items, injection.text)).map((i) => i.id));
       for (let k = s.pending.length - 1; k >= 0; k--) {
         const queued = s.pending[k]!.citations;
         // An "updated:" packet goes only when the answer rendered its items' new version (`watchCopies`, D205): an
@@ -1599,7 +1989,7 @@ export class ContextPartner {
       }
     }
     const latencyMs = Math.round(performance.now() - t0);
-    this.trace({
+    this.trace(s, {
       sessionId: s.id,
       turn: s.turn,
       event: "ask",
@@ -1617,7 +2007,7 @@ export class ContextPartner {
     if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "answer", delivered: items.length > 0 });
     return {
       answer,
-      citations: citationsOf(items),
+      citations: this.cited(items),
       usedModel,
       costUsd,
       latencyMs,
@@ -1701,6 +2091,8 @@ export class ContextPartner {
     // `readerReuse` (D193): an ask in the push's request reads the push's verdict, with no call of its own.
     const reuseAt = performance.now();
     const reused = opts.push ? null : await this.reusePush(s, pool, main, waitMs);
+    // The session can close while the ask waits on the push's verdict: no call for it (audit A5).
+    if (s.closed) return null;
     // The ask's own read, when there was nothing to reuse, waits only what is left of its wait.
     const readWaitMs = Number.isFinite(waitMs) ? waitMs - (performance.now() - reuseAt) : waitMs;
     // The likely deliveries are re-read while the reader reads (`verifyDelivery`): the delivery then waits on no call.
@@ -1774,7 +2166,7 @@ export class ContextPartner {
       void reading.then(
         (r) => {
           if (!r.called) return;
-          this.trace({
+          this.trace(s, {
             sessionId: s.id,
             turn,
             event: "ask",
@@ -1846,7 +2238,11 @@ export class ContextPartner {
    * `pushCandidates` of them. A pool with no constraint-like item (`readerGate`'s test, cards included) gives none, as
    * `readerGate` would read none. (Constraint-like items first lost 27 points of hidden facts live: D236.)
    */
-  private candidatesOf(s: Session, cue: Cue, ranked: readonly Scored[]): { items: Scored[] } {
+  private candidatesOf(
+    s: Session,
+    cue: Cue,
+    ranked: readonly Scored[],
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
@@ -1856,7 +2252,7 @@ export class ContextPartner {
       seen.add(x.item.id);
       pool.push(x);
     }
-    if (pool.length === 0) return { items: [] };
+    if (pool.length === 0) return { items: [], pool };
     const cards =
       this.config.cards && this.deps.cards
         ? this.deps.cards.cardsOf(
@@ -1865,17 +2261,163 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    if (!pool.some((x) => this.constraintLike(x, cards))) return { items: [] };
-    return { items: pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) };
+    const like = pool.map((x) => this.constraintLike(x, cards));
+    let items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
+    // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
+    let unsettled: Anchors | undefined;
+    const fewer = this.config.pushCandidatesSettled;
+    if ((this.config.askNudge || fewer > 0) && items.length > 0) {
+      const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+      const handed = items.map((x) => x.item);
+      if (!settles(handed, anchors)) {
+        if (this.config.askNudge) unsettled = anchors;
+      } else if (fewer > 0) {
+        // `pushCandidatesSettled` (D400, D404): a request its anchors settle gets fewer candidates, never losing the
+        // first one that settles it.
+        items = items.slice(0, settledCut(handed, anchors, fewer));
+      }
+    }
+    this.deps.onPushPool?.({
+      sessionId: s.id,
+      pool: pool.map((x) => x.item.id),
+      constraintLike: like,
+      handed: items.map((x) => x.item.id),
+      ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
+    });
+    return { items, pool, ...(unsettled ? { unsettled } : {}) };
+  }
+
+  /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */
+  private noteActed(s: Session, cue: Cue): void {
+    if (s.closed) return;
+    const acted = (s.acted ??= []);
+    acted.push(cue);
+    if (acted.length > PLAN_REQUESTS) acted.shift();
+    const key = scopeKey(s.scope);
+    let set = this.acting.get(key);
+    if (!set) this.acting.set(key, (set = new Set()));
+    set.add(s);
+  }
+
+  private unact(s: Session): void {
+    const key = scopeKey(s.scope);
+    const set = this.acting.get(key);
+    if (!set) return;
+    set.delete(s);
+    if (set.size === 0) this.acting.delete(key);
+  }
+
+  /**
+   * `planConflict` (D301): items the sync just stored (a poll, a backfill page, a notice's payload) wait, per session
+   * of their user with acting requests, for the session's next take (`checkPlans`): by then the item's card, made in
+   * the background as it was stored, can say whether it constrains. No index or card work here, on the store's path.
+   */
+  private queuePlanConflicts(scope: Scope, items: readonly ContextItem[]): void {
+    if (!this.config.planConflict || items.length === 0) return;
+    const sessions = this.acting.get(scopeKey(scope));
+    if (!sessions) return;
+    for (const s of sessions) {
+      if (s.closed) continue;
+      const waiting = (s.planNew ??= new Set());
+      for (const it of items) {
+        if (bulkMail(it)) continue;
+        waiting.delete(it.id);
+        waiting.add(it.id);
+        if (waiting.size > PLAN_WAITING) waiting.delete(waiting.values().next().value as string);
+      }
+    }
+  }
+
+  /**
+   * `planConflict` (D301), at a take: the items stored since the last one, checked against the session's acting
+   * requests. An item no packet has handed the session that would have been among such a request's candidates (the
+   * first `pushCandidates` of its pool, `rank`'s first `askReaderPool` distinct items, bulk mail out, a pool with an
+   * item that passes `readerGate`'s constraint test, its card included: `candidatesOf`'s rule) is queued, one packet
+   * per request. Built at once from the cached copy, the one the source just gave
+   * (nothing to re-read), except a copy a change signal has put in doubt, which waits for a later take. Said once per
+   * session (`planSent`). Index lookups only: at most
+   * `PLAN_REQUESTS` a take, and only when something new was stored.
+   */
+  private checkPlans(s: Session): void {
+    const waiting = s.planNew;
+    if (!this.config.planConflict || s.closed || !s.acted || !waiting || waiting.size === 0) return;
+    const now = this.now();
+    const sent = (s.planSent ??= new Set());
+    // A copy a change signal has put in doubt since it was read (D126's `doubted`) waits for a later take, when the
+    // poll the signal starts has stored the current one; a held-gone id is not in the cache. Once sent, never again.
+    const fresh = new Set<string>();
+    const later: string[] = [];
+    for (const id of waiting) {
+      const it = this.deps.cache.get(s.scope, id, now);
+      if (!it || sent.has(id) || !s.ledger.isFresh(id, s.turn)) continue;
+      if (this.config.verifyDelivery && this.doubted(s, it)) later.push(id);
+      else fresh.add(id);
+    }
+    waiting.clear();
+    for (const id of later) waiting.add(id);
+    if (fresh.size === 0) return;
+    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
+    const said = new Set<string>();
+    for (const cue of s.acted) {
+      const pool: Scored[] = [];
+      const seen = new Set<string>();
+      for (const x of this.rank(s, cue, { ignoreLedger: true })) {
+        if (pool.length >= cap) break;
+        if (seen.has(x.item.id)) continue;
+        seen.add(x.item.id);
+        pool.push(x);
+      }
+      // The candidates' rule (`candidatesOf`): the pool holds something that could constrain the request, and the new
+      // item is among its first `pushCandidates` (bulk mail out), as it would have been had it been there then.
+      const top = pool.filter((x) => !bulkMail(x.item)).slice(0, Math.max(1, this.config.pushCandidates));
+      const hits = top.filter((x) => fresh.has(x.item.id) && !said.has(x.item.id));
+      if (hits.length === 0) continue;
+      const cards =
+        this.config.cards && this.deps.cards
+          ? this.deps.cards.cardsOf(
+              s.scope,
+              pool.map((x) => x.item.id),
+              now,
+            )
+          : new Map<string, Card>();
+      if (!pool.some((x) => this.constraintLike(x, cards))) continue;
+      const bearing = hits;
+      for (const x of bearing) {
+        said.add(x.item.id);
+        sent.add(x.item.id);
+        if (sent.size > PLAN_SENT) sent.delete(sent.values().next().value as string);
+      }
+      // The user's own (redacted) words, on one line, their double quotes made single so the quote cannot be closed
+      // and the rest read as Eden's voice.
+      const lead = `${PLAN_LEAD} "${safeLine(head(cue.raw, PLAN_QUOTE_CHARS)).replace(/["“”]/g, "'")}"`;
+      const packet = this.deliver(s, bearing, "proactive", `plan:${cue.id}`, cue, undefined, {
+        lead,
+        itemBytes: Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES),
+        maxBytes: Math.max(this.config.maxInjectionBytes, 400 + PLAN_QUOTE_CHARS + bearing.length * 2_120),
+      });
+      s.pending.push(packet);
+      this.trace(s, {
+        sessionId: s.id,
+        turn: s.turn,
+        event: "source_change",
+        decision: "sources",
+        reason: packet.reason,
+        latencyMs: 0,
+        sourceCalls: 0,
+        modelCalls: 0,
+        costUsd: 0,
+        itemIds: packet.citations.map((c) => c.itemId),
+      });
+    }
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
-  private candidateFrame(): PacketFrame {
+  private candidateFrame(nudge = false): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      lead: CANDIDATES_LEAD,
+      lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
@@ -1967,7 +2509,7 @@ export class ContextPartner {
     const o = s?.outstanding.get(f.injectionId);
     if (s && o) {
       s.outstanding.delete(f.injectionId);
-      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used);
+      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used, { sessionId: f.sessionId, how: "explicit" });
       return true;
     }
     // The session may have ended (and counted the injection unused): the user's record outlives it.
@@ -1976,6 +2518,13 @@ export class ContextPartner {
     if (r.used !== f.used) {
       for (const sourceId of r.sourceIds) this.deps.sourceMap.correctOutcome(scope, r.situation, sourceId, f.used);
       r.used = f.used;
+      this.usage({
+        sessionId: r.sessionId,
+        injectionId: f.injectionId,
+        used: f.used,
+        how: "explicit",
+        sourceIds: r.sourceIds,
+      });
     }
     return true;
   }
@@ -2016,6 +2565,8 @@ export class ContextPartner {
    */
   async sourceItems(scope: Scope, sourceId: string, items: ContextItem[]): Promise<number> {
     if (!this.config.syncPush || !this.sync || items.length === 0) return 0;
+    const thawing = this.ready(scope); // D325: a frozen user is thawed in slices, not all at once on this put.
+    if (thawing) await thawing;
     const own = items.filter((it) => it.sourceId === sourceId).slice(0, MAX_PUSHED_ITEMS);
     // The removal holding each id gone before the redaction (0: none). These items came after that removal, so they
     // revive it (D160).
@@ -2061,6 +2612,119 @@ export class ContextPartner {
   }
 
   /**
+   * A change notification that names what changed but carries no content (D347, A18): the refs the source changed or
+   * added (a Gmail history's message ids, a Graph or HubSpot webhook's resource id, a Drive changes list). Each ref is
+   * re-read by its fetch in the background (within `REF_TIMEOUT_MS`; a guard's skip or a plain error goes again), a
+   * lane of two at a time, and stored as synced under the read mark its call
+   * began with; one the source no longer has (`gone`) is dropped. No other item of the source is put in doubt, so no
+   * delivery re-reads them and no lookup polls the source for it: the same effect as a payload notice
+   * (`sourceItems`), with the connector call made here instead of by the integrator. Until its re-read lands a named
+   * cached item is in doubt (`doubted`), and a delivery waits on that read (`check`). A ref that could not be read
+   * (no fetch tool, an error, a timeout, a guard's skip, a null that proves nothing) turns the notice into a plain
+   * signal (`sourceNotice`): the source's copy is polled and its items re-read before delivery, as before (D126).
+   * A source that is not synced and notifying takes the plain signal at once, with its reason. `settled` resolves to
+   * how many items were stored new or changed.
+   */
+  sourceRefs(scope: Scope, sourceId: string, refs: string[]): SourceChangedResult & { settled: Promise<number> } {
+    const sync = this.sync;
+    if (!this.config.syncPush || !sync) return { synced: false, reason: "push-off", settled: Promise.resolve(0) };
+    if (refs.length === 0 || !sync.notifying(scope, sourceId))
+      return { ...this.sourceNotice(scope, sourceId), settled: Promise.resolve(0) };
+    // A held search page predates the change: the next lookup asks the source again.
+    this.fanout.dropResults(scope, sourceId);
+    const user = scopeKey(scope);
+    const named = [...new Set(refs)].slice(0, MAX_PUSHED_ITEMS).map((ref) => ({
+      ref,
+      id: sanitizedId({ id: itemId(sourceId, ref), sourceId, ref, title: "", text: "" }),
+    }));
+    // The read mark when the notice came: a signal after it makes a delivery read the item itself rather than reuse
+    // this read (`check`), which may have answered before that newer change.
+    const noticeMark = sync.mark();
+    const settle = new Map<string, (o: CheckOutcome) => void>();
+    for (const { id } of named) {
+      const key = `${user}|${id}`;
+      const outcome = new Promise<CheckOutcome>((r) => settle.set(key, r));
+      const entry = { mark: noticeMark, outcome };
+      this.refreshing.set(key, entry);
+      void outcome.then(() => {
+        if (this.refreshing.get(key) === entry) this.refreshing.delete(key);
+      });
+    }
+    let signalled = false;
+    // What could not be read is left to the plain signal, raised at its first failure and before that item's doubt
+    // is lifted: the source is polled and its copies (that one included) re-read on delivery, as under D126.
+    const fallback = () => {
+      if (signalled) return;
+      signalled = true;
+      this.freshness.refsFallback++;
+      this.sourceNotice(scope, sourceId);
+    };
+    // Still synced for this user (not forgotten, the sync not stopped): else the reads stop, storing nothing.
+    const live = () => sync.notifying(scope, sourceId);
+    const settled = (async (): Promise<number> => {
+      let stored = 0;
+      const done = (id: string, o: CheckOutcome, mark = noticeMark) => {
+        if (o === "failed" || o === "flaked" || o === "skipped" || o === "unverifiable") fallback();
+        // Only a changed copy: a pool's copy of a confirmed item is the cached one already.
+        else if (o === "changed") this.noteRefReads(scope, [{ id, outcome: o, mark }]);
+        settle.get(`${user}|${id}`)?.(o);
+      };
+      try {
+        const source = (await this.deps.sources(scope).catch((): Source[] => [])).find((x) => x.id === sourceId);
+        for (let k = 0; k < named.length; k += REF_LANES) {
+          const lane = named.slice(k, k + REF_LANES);
+          await Promise.all(
+            lane.map(async ({ ref, id }) => {
+              if (!source?.fetch) return done(id, "unverifiable");
+              if (!live()) return done(id, "failed");
+              let mark = sync.mark();
+              let seq = this.deps.cache.heldGoneSeq(scope, id, this.now());
+              let got = await this.fanout.fetchChecked(source, scope, ref, { timeoutMs: REF_TIMEOUT_MS });
+              // Off the agent's path, a read our own guard skipped (the source's slots or rate tokens in use by a
+              // lookup) waits and goes again, as does one plain error; an open breaker or a 429 does not.
+              for (let t = 0; t < REF_TRIES && got.status === "failed" && refTryAgain(got) && live(); t++) {
+                await Bun.sleep(REF_RETRY_MS * (t + 1));
+                if (!live()) break;
+                mark = sync.mark();
+                seq = this.deps.cache.heldGoneSeq(scope, id, this.now());
+                got = await this.fanout.fetchChecked(source, scope, ref, { timeoutMs: REF_TIMEOUT_MS });
+              }
+              this.freshness.refsRead++;
+              if (got.status === "failed") return done(id, "failed");
+              // D325: the drop or store below reads the user's items; a user frozen while the read was on the wire
+              // is thawed in slices first, never inside the store (A24). The removal check below runs after it.
+              const thawing = this.deps.cache.ready(scope);
+              if (thawing) await thawing;
+              if (!live()) return done(id, "failed");
+              if (got.status === "gone") {
+                this.dropGone(scope, sourceId, [id]);
+                return done(id, "gone");
+              }
+              // A removal that landed while the fetch was on the wire wins (D160, D176): not revived, not stored.
+              const now = this.now();
+              const held = this.deps.cache.heldGoneSeq(scope, id, now);
+              if (held !== 0 && held !== seq) return done(id, "gone");
+              // The source's id and our id; the ref as the fan-out's gate left it (a raw ref may hold a secret, D10).
+              const copy = { ...got.item, id, sourceId };
+              this.deps.cache.revive(scope, [id]);
+              const n = sync.ingest(scope, sourceId, [copy], mark);
+              stored += n;
+              return done(id, n > 0 ? "changed" : "confirmed", mark);
+            }),
+          );
+        }
+      } catch {
+        fallback();
+      } finally {
+        // Anything not settled above (a throw) reads as not re-read, after the signal is raised.
+        for (const { id } of named) settle.get(`${user}|${id}`)?.("failed");
+      }
+      return stored;
+    })();
+    return { synced: true, settled };
+  }
+
+  /**
    * Drops everything held for a user, or for one of their sources (a revoked connector): cached items, source-map
    * rows, and the user's live sessions (their windows and queued injections hold content). In-flight lookups are
    * aborted, and their results discarded.
@@ -2070,6 +2734,8 @@ export class ContextPartner {
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
     this.recorded.get(scope.tenantId)?.delete(key);
     this.deps.cache.forget(scope, sourceId);
+    // Any forget drops the user's held outcomes (one source's ids are not told apart from the rest here).
+    this.unverifiable.delete(key);
     this.deps.sourceMap.forget(scope, sourceId);
     this.fanout.forget(scope, sourceId);
     this.deps.planner?.forget(scope, sourceId);
@@ -2117,6 +2783,7 @@ export class ContextPartner {
       key,
       turn: 0,
       requests: 0,
+      traces: [],
       lastActive: now,
       window: [],
       agentHas: [],
@@ -2133,6 +2800,10 @@ export class ContextPartner {
       closed: false,
     };
     this.sessions.set(key, s);
+    const user = scopeKey(s.scope);
+    let mine = this.userSessions.get(user);
+    if (!mine) this.userSessions.set(user, (mine = new Set()));
+    mine.add(s);
     this.perTenant.set(e.tenantId, (this.perTenant.get(e.tenantId) ?? 0) + 1);
     return s;
   }
@@ -2146,7 +2817,9 @@ export class ContextPartner {
     s.closed = true;
     s.abort.abort();
     if (learn) {
-      for (const [id, o] of s.outstanding) this.record(s.scope, id, o.sourceIds, o.situation, false);
+      for (const [id, o] of s.outstanding) {
+        this.record(s.scope, id, o.sourceIds, o.situation, false, { sessionId: s.id, how: "ended" });
+      }
     }
     s.outstanding.clear();
     s.pending.length = 0;
@@ -2156,7 +2829,11 @@ export class ContextPartner {
     // The reader reserves on a Budget of its own, by the same session key.
     this.deps.reader?.endSession(s.key);
     this.sessions.delete(s.key);
+    const user = scopeKey(s.scope);
+    const mine = this.userSessions.get(user);
+    if (mine?.delete(s) && mine.size === 0) this.userSessions.delete(user);
     this.unwatch(s);
+    this.unact(s);
     const n = (this.perTenant.get(s.scope.tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(s.scope.tenantId);
     else this.perTenant.set(s.scope.tenantId, n);
@@ -2189,6 +2866,9 @@ export class ContextPartner {
   /** Starts usage tracking: from the moment the agent actually receives an injection, against what it had seen. */
   private handOut(s: Session, injection: Injection): void {
     const built = this.built.get(injection);
+    if (this.config.partyCheck && injection.reason !== "action-party" && injection.reason !== "ask") {
+      this.notePacketParties(s, injection.text, injection.citations);
+    }
     // Every path that gives the agent an injection comes through here: what it was shown is noted first, before the
     // usage tracking's early returns (an injection already tracked or recorded was still shown).
     if (built?.shown) {
@@ -2225,11 +2905,20 @@ export class ContextPartner {
       const expired = s.turn - o.deliveredTurn > this.config.usageWindowTurns;
       if (!used && !expired) continue;
       s.outstanding.delete(id);
-      this.record(s.scope, id, o.sourceIds, o.situation, used);
+      const how = used ? "inferred" : "expired";
+      this.record(s.scope, id, o.sourceIds, o.situation, used, { sessionId: s.id, how });
     }
   }
 
-  private record(scope: Scope, injectionId: string, sourceIds: string[], situation: string, used: boolean): void {
+  private record(
+    scope: Scope,
+    injectionId: string,
+    sourceIds: string[],
+    situation: string,
+    used: boolean,
+    report: { sessionId: string; how: UsageRecord["how"] },
+  ): void {
+    this.usage({ sessionId: report.sessionId, injectionId, used, how: report.how, sourceIds });
     for (const sourceId of sourceIds) this.deps.sourceMap.recordOutcome(scope, situation, sourceId, used);
     const key = scopeKey(scope);
     const tenant = this.recorded.get(scope.tenantId) ?? new Map<string, Map<string, Recorded>>();
@@ -2237,7 +2926,7 @@ export class ContextPartner {
     const mine = tenant.get(key) ?? new Map<string, Recorded>();
     tenant.delete(key); // Re-insert: Map order is least recently recorded user first.
     tenant.set(key, mine);
-    mine.set(injectionId, { sourceIds, situation, used });
+    mine.set(injectionId, { sourceIds, situation, used, sessionId: report.sessionId });
     while (mine.size > MAX_RECORDED) mine.delete(mine.keys().next().value as string);
     while (tenant.size > MAX_RECORDED_USERS) tenant.delete(tenant.keys().next().value as string);
   }
@@ -2873,6 +3562,15 @@ export class ContextPartner {
     if (unresolved) return { calls: 0, sources: [], unresolved: true };
     if (s.closed) return { calls: 0, sources: [], closed: true };
     if (all.length === 0) return { calls: 0, sources: [] };
+    // `routeLocalHits` (D265): which sources hold the request's best local matches, for routing. Only past the
+    // lookup's own width: with as few sources as it searches, every one is searched whatever the order.
+    const wide = all.length > Math.min(limit, this.config.lookupSources);
+    const localHits = this.config.routeLocalHits && wide ? this.localRouteHits(s, cue) : undefined;
+    const boost = addBoosts(
+      localHits,
+      // `routeSketch` (D322): the sources whose sketches hold the request's rarer terms, read or trimmed.
+      this.config.routeSketch && wide ? this.sketchRouteHits(s, cue) : undefined,
+    );
     // One deadline for the whole lookup (D140): the on-demand poll, the live search, the planner's cascade and the
     // probes share it. An ask waits for its poll, so a poll and a search with deadlines of their own could hold the
     // reader back twice `sourceTimeoutMs` (a listing that hangs, then the search that follows it).
@@ -2882,12 +3580,31 @@ export class ContextPartner {
     // call; with `syncOnDemand`, a stale one is polled first (one listing call, rather than its search and probes).
     let local: Set<string> | null = null;
     let syncCalls = 0;
+    let preRanked: ReturnType<SourceMap["route"]> | null = null;
+    let pollable: Set<string> | null = null;
     if (this.sync) {
+      // `syncPollWidth` (D263): over that many sources, only the best routed are polled. The lookup is routed once,
+      // here, before its poll, and searches the head of the same ranking, so every source it searches was polled
+      // (two routes would draw apart: an ask then answered unpolled stale copies as "nothing", review of D263). Under
+      // the width nothing changes: the route runs after the poll, as before, and draws as before.
+      const width = this.config.syncOnDemand ? this.config.syncPollWidth : 0;
+      if (width > 0 && all.length > width) {
+        preRanked = this.deps.sourceMap.route({
+          scope: s.scope,
+          entities: cue.entities,
+          situation: s.situation,
+          sourceIds: all.map((x) => x.id),
+          limit: Math.max(width, limit),
+          ...(boost ? { boost } : {}),
+        });
+        pollable = new Set(preRanked.map((r) => r.sourceId));
+      }
       if (this.config.syncOnDemand) {
         const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(left())]);
         const freshening = this.spans?.open("sync.freshen", cue.span, { async: true });
         const tally = { fresh: 0 };
-        const polled = this.sync.freshen(s.scope, all, signal, tally).then((calls) => {
+        const toPoll = pollable ? all.filter((x) => pollable!.has(x.id)) : all;
+        const polled = this.sync.freshen(s.scope, toPoll, signal, tally, s.abort.signal).then((calls) => {
           if (freshening) this.spans!.close(freshening, { calls, fresh: tally.fresh, ...(behind ? { behind } : {}) });
           return calls;
         });
@@ -2904,7 +3621,7 @@ export class ContextPartner {
           cue.polled = polled
             .then((calls) => {
               if (calls > 0) {
-                this.trace({
+                this.trace(s, {
                   sessionId: s.id,
                   turn,
                   event: "sync",
@@ -2921,21 +3638,34 @@ export class ContextPartner {
               return tally.fresh > 0;
             })
             .catch(() => false);
-        } else syncCalls = await polled;
+        } else syncCalls = await polled; // `freshen` stops waiting at the deadline itself (D140, D283)
         if (s.closed) return { calls: syncCalls, syncCalls, sources: [], closed: true };
       }
       local = this.localOf(s, all, behind);
     }
     const routing = this.spans?.open("route", cue.span);
-    const ranked = this.deps.sourceMap.route({
-      scope: s.scope,
-      entities: cue.entities,
-      situation: s.situation,
-      sourceIds: all.map((x) => x.id),
-      limit,
-    });
+    const ranked =
+      preRanked?.slice(0, limit) ??
+      this.deps.sourceMap.route({
+        scope: s.scope,
+        entities: cue.entities,
+        situation: s.situation,
+        sourceIds: all.map((x) => x.id),
+        limit,
+        ...(boost ? { boost } : {}),
+      });
     if (routing) this.spans!.close(routing, { sources: ranked.length, local: local?.size ?? 0, syncCalls });
-    const routed = ranked.map((r) => all.find((x) => x.id === r.sourceId)!).filter(Boolean);
+    const byId = sourcesById(all);
+    const routed = ranked.map((r) => byId.get(r.sourceId)!).filter(Boolean);
+    // A source routed on evidence of its items (a name it mentioned, the request's words among its held items), not on
+    // the prior's draw or its sketch alone: what `cardsSourceAware` and `syncEngagedDeep` count as one the user uses.
+    // A sketch match routes a search but engages no source: counted, it doubled the card calls at 1,000 sources for
+    // no more hidden facts (a13-scale.md).
+    this.engageSources(
+      s,
+      cue,
+      ranked.filter((r) => r.entityHits > 0 || (localHits?.get(r.sourceId) ?? 0) > 0).map((r) => r.sourceId),
+    );
     // Only the sources not answered locally are searched live; the local ones answer the same query below.
     const found = local ? routed.filter((x) => !local.has(x.id)) : routed;
     // Serving through the planner only in "serve" mode; in "shadow" the lookup is served as without one.
@@ -3005,7 +3735,11 @@ export class ContextPartner {
     const settled = searching.catch(() => null);
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing = this.config.probes
-      ? this.probe(s, cue, routed, all, listing, probed, settled, shared, { local, deadlineAt }).catch(() => {})
+      ? this.probe(s, cue, routed, all, listing, probed, settled, shared, {
+          local,
+          deadlineAt,
+          ...(boost ? { boost } : {}),
+        }).catch(() => {})
       : null;
     // The same query answered by the synced sources from the local index (D57): no call, nothing to store.
     const answeredHere = local
@@ -3331,6 +4065,8 @@ export class ContextPartner {
     const listers = all.filter((x) => x.listsByTime === true);
     // A person or organisation goes to the sources most likely to hold them, by the source map's own record of which
     // sources mention which names (any source may, not only the lookup's): three per name, not every source.
+    const byId = sourcesById(all);
+    const allIds = all.map((x) => x.id);
     const routeFor = (name: string, limit = c.probePeopleSources) =>
       opts.offline
         ? all
@@ -3339,10 +4075,11 @@ export class ContextPartner {
               scope: s.scope,
               entities: [name],
               situation: s.situation,
-              sourceIds: all.map((x) => x.id),
+              sourceIds: allIds,
               limit,
+              ...(opts.boost ? { boost: opts.boost } : {}),
             })
-            .map((r) => all.find((x) => x.id === r.sourceId)!)
+            .map((r) => byId.get(r.sourceId)!)
             .filter(Boolean);
     const people = off.has("people") ? [] : cue.entities.slice(0, 2);
     // `probeTopicAlone`: the topic only for a request that names no one (with people, their probes find what the topic
@@ -3503,8 +4240,59 @@ export class ContextPartner {
   }
 
   /** `cards`: what is new to the cache (looked up or synced) is read for constraints in the background, off-path. */
-  private enqueueCards(scope: Scope, added: ContextItem[]): void {
-    if (this.config.cards && this.deps.cards && added.length > 0) this.deps.cards.enqueue(scope, added);
+  private enqueueCards(scope: Scope, added: ContextItem[], defer?: (item: ContextItem) => boolean): void {
+    if (this.config.cards && this.deps.cards && added.length > 0) this.deps.cards.enqueue(scope, added, defer);
+  }
+
+  /**
+   * `cardsSourceAware` (D320): for a user with more than `SOURCE_AWARE_MIN` synced sources, which synced items wait
+   * unread: those of a source no lookup of the user's has searched that name none of the names the user's requests
+   * named (`mentions`: each item's names, as the source map records them). Undefined (read all) otherwise.
+   */
+  private cardDefer(
+    scope: Scope,
+    items: readonly ContextItem[],
+    mentions: readonly { entities: string[] }[],
+  ): ((item: ContextItem) => boolean) | undefined {
+    const sync = this.sync;
+    if (!this.config.cardsSourceAware || !sync || sync.sourceCount(scope) <= SOURCE_AWARE_MIN) return undefined;
+    const people = sync.peopleOf(scope);
+    const keep = new Set<string>();
+    items.forEach((item, i) => {
+      if (sync.engaged(scope, item.sourceId)) keep.add(item.id);
+      else if (people.size > 0 && mentions[i]!.entities.some((e) => people.has(e.toLowerCase()))) keep.add(item.id);
+    });
+    return (item) => !keep.has(item.id);
+  }
+
+  /**
+   * `cardsSourceAware` (D320), `syncEngagedDeep` (D323): the sources a lookup searched (or answered from the index)
+   * are the user's in use (`Sync.engage`). With `cardsSourceAware`, the first time one is, its held synced items are
+   * read by the card model, and the request's names are noted as the user's people.
+   */
+  private engageSources(s: Session, cue: Cue, searched: readonly string[]): void {
+    const sync = this.sync;
+    const cards = this.config.cardsSourceAware && this.config.cards && this.deps.cards !== undefined;
+    if (!sync || (!cards && !this.config.syncEngagedDeep && !(this.config.syncUnusedSweepMs > 0))) return;
+    if (cards && cue.entities.length > 0) {
+      sync.notePeople(
+        s.scope,
+        cue.entities.map((e) => e.toLowerCase()),
+      );
+    }
+    const fresh = sync.engage(s.scope, searched);
+    // Whatever the user's source count now: items deferred while it was past `SOURCE_AWARE_MIN` are read (the review: a
+    // count that fell to 32 first left them unread for good).
+    if (!cards || fresh.length === 0) return;
+    const now = this.now();
+    const held: ContextItem[] = [];
+    for (const id of fresh) {
+      for (const itemId of sync.syncedIds(s.scope, id)) {
+        const item = this.deps.cache.get(s.scope, itemId, now);
+        if (item) held.push(item);
+      }
+    }
+    this.enqueueCards(s.scope, held);
   }
 
   /**
@@ -3559,17 +4347,16 @@ export class ContextPartner {
   }
 
   /** Records the entity mentions of items new to the user's cache or changed (lookups and the sync, D57). */
-  private recordMentions(scope: Scope, added: ContextItem[], parent = 0): void {
+  private recordMentions(
+    scope: Scope,
+    added: ContextItem[],
+    parent = 0,
+    given?: { sourceId: string; entities: string[] }[],
+  ): void {
     if (added.length === 0) return;
     const spans = this.spans;
     const noting = spans?.open("mentions", parent, { items: added.length });
-    const mentions = added.map((item) => ({
-      sourceId: item.sourceId,
-      entities: extractTypedEntities(`${item.title}. ${item.text}`)
-        .filter((e) => PERSISTABLE_KINDS.has(e.kind))
-        .slice(0, 20)
-        .map((e) => e.text),
-    }));
+    const mentions = given ?? mentionsOf(added);
     if (mentions.length > 0) this.deps.sourceMap.recordMentionsMany(scope, mentions, this.now());
     if (noting) spans!.close(noting);
   }
@@ -3596,6 +4383,29 @@ export class ContextPartner {
   }
 
   /**
+   * Ref notices' reads that landed (D347), noted as recent re-reads in each live session of the user
+   * (`Session.checks`, as `check` keeps its own): a pool a session built before they landed holds the older copies, and
+   * `verifyItems` then applies these outcomes to them (a changed item goes out as the cache now holds it). Called for
+   * changed copies only, before their doubt is lifted: one walk of that user's sessions per changed ref
+   * (`userSessions`; a walk of the whole process's sessions was refs × sessions on a busy process).
+   */
+  private noteRefReads(scope: Scope, landed: readonly { id: string; outcome: CheckOutcome; mark: number }[]): void {
+    if (landed.length === 0) return;
+    const sessions = this.userSessions.get(scopeKey(scope));
+    if (!sessions) return;
+    const now = this.now();
+    for (const s of sessions) {
+      if (s.closed) continue;
+      const checks = (s.checks ??= new Map());
+      for (const { id, outcome, mark } of landed) {
+        checks.delete(id);
+        checks.set(id, { at: now, mark, outcome: Promise.resolve(outcome), settled: outcome });
+      }
+      while (checks.size > MAX_CHECKS) checks.delete(checks.keys().next().value as string);
+    }
+  }
+
+  /**
    * Whether an item must be re-read before it is delivered (`verifyDelivery`): its source signalled a change since the
    * copy's read began (`Sync.signalledSince` on its `ItemCache.readMark`; D133: not since it was stored, which a
    * signal while the call was on the wire precedes) and no listing or notification has brought it again since. A
@@ -3603,8 +4413,47 @@ export class ContextPartner {
    * no measured gain; a silent source's changes reach Eden through the sync's polls and sweeps).
    */
   private doubted(s: Session, item: ContextItem): boolean {
+    // A ref notice's re-read still on the wire (D347): the copy held is from before the change.
+    if (this.refreshing.size > 0 && this.refreshing.has(`${scopeKey(s.scope)}|${item.id}`)) return true;
+    if (this.unswept(s.scope, item)) return true;
     const mark = this.deps.cache.readMark(s.scope, item.id);
-    return mark !== undefined && this.sync?.signalledSince(s.scope, item.sourceId, mark) === true;
+    if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark) !== true) return false;
+    // A re-read since that signal could not tell (a null that proves nothing): another says the same until it signals.
+    const held = this.unverifiable.get(scopeKey(s.scope))?.get(item.id);
+    if (held === undefined || this.now() - held.at > UNVERIFIABLE_HOLD_MS) return true;
+    return this.sync.signalledSince(s.scope, item.sourceId, held.mark);
+  }
+
+  /**
+   * `syncUnusedSweepMs` (D356): the item's source is one the user does not use, swept less often, and neither a sweep
+   * nor any other read has seen this copy for longer than the daily sweep would have allowed (`syncSweepMs`): a
+   * deletion the sweep has not seen yet may be behind it, so it is re-read before it is delivered or cited. O(1).
+   */
+  private unswept(scope: Scope, item: ContextItem): boolean {
+    const every = this.config.syncSweepMs;
+    if (!(this.config.syncUnusedSweepMs > 0) || !this.sync) return false;
+    const at = this.deps.cache.fetchedAt(scope, item.id);
+    if (at === undefined) return false;
+    const now = this.now();
+    // A copy the last sweep did not list: the second miss that drops it may be a week away (on the longer sweep), and
+    // a withheld copy's own early sweep is such a first miss (the MCP worst case cited 3 against 1). Whatever its age:
+    // listed since, it would not be missed.
+    if (this.sync.sweepMissed(scope, item.sourceId, item.id)) return true;
+    return now - at > every && this.sync.sweepLapsed(scope, item.sourceId, now);
+  }
+
+  /** Notes an "unverifiable" re-read of a user's item under the read mark it began with (`unverifiable`). */
+  private noteUnverifiable(scope: Scope, id: string, readMark: number): void {
+    const key = scopeKey(scope);
+    let user = this.unverifiable.get(key);
+    if (user) this.unverifiable.delete(key);
+    else user = new Map();
+    this.unverifiable.set(key, user);
+    user.delete(id);
+    user.set(id, { mark: readMark, at: this.now() });
+    while (user.size > MAX_UNVERIFIABLE) user.delete(user.keys().next().value as string);
+    while (this.unverifiable.size > MAX_UNVERIFIABLE_USERS)
+      this.unverifiable.delete(this.unverifiable.keys().next().value as string);
   }
 
   /**
@@ -3617,13 +4466,14 @@ export class ContextPartner {
    * one still not confirmed is left out, counted by source in `strict.unconfirmed` for the answer to name. An ask's
    * answer is taken as what the sources hold now, so a copy a signal doubted and nothing confirmed is not cited (one
    * ask in 360 cited a deleted item that way in RealUse-1 part D). A source with no fetch tool, or whose null proves
-   * nothing, is cited as held.
+   * nothing, is cited as held. A copy only a sweep could vouch for (`unswept`, D356) is cited only if a re-read
+   * confirms it; one left out is counted in `strict.unswept`, named in the answer with its own reason.
    */
   private async verifyItems(
     s: Session,
     scored: Scored[],
     cue: Cue,
-    strict?: { unconfirmed: Map<string, number> },
+    strict?: { unconfirmed: Map<string, number>; unswept: Map<string, number> },
   ): Promise<Scored[]> {
     if (!this.config.verifyDelivery || scored.length === 0) return scored;
     const now = this.now();
@@ -3634,25 +4484,36 @@ export class ContextPartner {
       return held !== undefined && now - held.at <= CHECK_REUSE_MS;
     };
     const doubted = new Set<string>();
-    for (const x of scored) if (this.doubted(s, x.item)) doubted.add(x.item.id);
+    // `syncUnusedSweepMs` (D356): copies only the sweep could vouch for, delivered only if a re-read confirms them.
+    const unswept = new Set<string>();
+    for (const x of scored) {
+      if (this.unswept(s.scope, x.item)) unswept.add(x.item.id);
+      if (unswept.has(x.item.id) || this.doubted(s, x.item)) doubted.add(x.item.id);
+    }
     const due = scored.filter((x) => recent(x.item.id) || doubted.has(x.item.id));
     if (due.length === 0) return scored;
     const t0 = performance.now();
-    const before = this.freshness.calls;
+    // The calls of the re-reads this delivery started, counted by them: the engine-wide counter's change over the
+    // awaits took in other sessions' and tenants' re-reads, and could go negative (audit A11's fuzz).
+    const made = { calls: 0 };
+    // The re-reads' wait as its own span (A18): counts only, under the delivery or ask that waits on it.
+    const verifying = this.spans?.open("verify", cue.span, { async: true, due: due.length });
     const outcomes = new Map(
-      await Promise.all(due.map(async (x) => [x.item.id, await this.check(s, x.item)] as const)),
+      await Promise.all(due.map(async (x) => [x.item.id, await this.check(s, x.item, made)] as const)),
     );
+    let rounds = 1;
     if (strict && !s.closed) {
       // One more read (`check` reuses no failure) for a plain error, often one bad call, and for a read our own guard
       // skipped while the others held the source's slots; two at a time, the fan-out's starting concurrency per source.
       const again = due.filter((x) => doubted.has(x.item.id) && RETRIED.has(outcomes.get(x.item.id)!));
       for (let k = 0; k < again.length && !s.closed; k += STRICT_RETRY_LANES) {
         const batch = again.slice(k, k + STRICT_RETRY_LANES);
-        const read = await Promise.all(batch.map(async (x) => [x.item.id, await this.check(s, x.item)] as const));
+        const read = await Promise.all(batch.map(async (x) => [x.item.id, await this.check(s, x.item, made)] as const));
         for (const [id, o] of read) outcomes.set(id, o);
+        rounds++;
       }
     }
-    this.trace({
+    this.trace(s, {
       sessionId: s.id,
       turn: s.turn,
       event: "verify",
@@ -3660,31 +4521,64 @@ export class ContextPartner {
       reason: cue.id,
       latencyMs: Math.round(performance.now() - t0),
       // Calls this delivery waited on that were made for it (a re-read started ahead is counted where it began).
-      sourceCalls: this.freshness.calls - before,
+      sourceCalls: made.calls,
       modelCalls: 0,
       costUsd: 0,
       itemIds: due.map((x) => x.item.id),
     });
+    if (verifying) {
+      let skipped = 0;
+      for (const o of outcomes.values()) if (o === "skipped") skipped++;
+      this.spans!.close(verifying, { calls: made.calls, rounds, skipped, strict: !!strict });
+    }
     if (s.closed) return [];
+    const after = this.now();
     return scored.flatMap((x) => {
       const o = outcomes.get(x.item.id);
       if (o === "gone") return [];
+      // A removal that landed while the other re-reads ran (audit A5): the item is gone whatever its own outcome said.
+      if (this.deps.cache.isHeldGone(s.scope, x.item.id, after)) return [];
+      // An unswept copy no re-read confirmed (a null that proves nothing, an error, a skip): the sweep it was waiting
+      // for is due now, and until it or a re-read vouches for the copy, it is not delivered nor cited.
+      if (unswept.has(x.item.id) && o !== "confirmed" && o !== "changed") {
+        // Only a null (the source could not say) is left to the sweep; an error or our own guard's skip is not worth
+        // a whole listing: the next delivery re-reads it (the review).
+        if (o === "unverifiable") this.sync?.sweepSoon(s.scope, x.item.sourceId);
+        if (strict) strict.unswept.set(x.item.sourceId, (strict.unswept.get(x.item.sourceId) ?? 0) + 1);
+        return [];
+      }
       if (strict && doubted.has(x.item.id) && (o === "failed" || o === "flaked")) {
         strict.unconfirmed.set(x.item.sourceId, (strict.unconfirmed.get(x.item.sourceId) ?? 0) + 1);
         return [];
       }
       if (o !== "changed") return [x];
-      const copy = this.deps.cache.get(s.scope, x.item.id, this.now());
-      return copy ? [{ ...x, item: copy }] : [x];
+      // The copy in hand is the one the re-read found superseded: with no current copy cached (evicted meanwhile, not
+      // removed), nothing is cited, and a strict ask names it as not re-checked, not an all-clear (D127).
+      const copy = this.deps.cache.get(s.scope, x.item.id, after);
+      if (copy) return [{ ...x, item: copy }];
+      if (strict) strict.unconfirmed.set(x.item.sourceId, (strict.unconfirmed.get(x.item.sourceId) ?? 0) + 1);
+      return [];
     });
   }
 
   /**
    * One item's re-read (`verifyDelivery`), shared by every delivery of the session that wants it while it runs or for
    * `CHECK_REUSE_MS` after: started ahead (`checkAhead`, beside the reader's call) or by `verifyItems`. A changed copy
-   * is stored, a gone item dropped from the cache and the sync's bookkeeping. Never throws.
+   * is stored, a gone item dropped from the cache and the sync's bookkeeping. Never throws. `made` counts the call of
+   * a re-read this starts (not one it joins).
    */
-  private check(s: Session, item: ContextItem): Promise<CheckOutcome> {
+  private check(s: Session, item: ContextItem, made?: { calls: number }): Promise<CheckOutcome> {
+    // A ref notice is re-reading this item now (D347): its outcome, with no second call.
+    const refreshing = this.refreshing.size > 0 ? this.refreshing.get(`${scopeKey(s.scope)}|${item.id}`) : undefined;
+    // Not past a signal that came after the notice: that read may have answered before the newer change.
+    if (refreshing && this.sync?.signalledSince(s.scope, item.sourceId, refreshing.mark) !== true) {
+      // Waited on no longer than a re-read of its own would be (`verifyTimeoutMs`): past it, not confirmed.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<CheckOutcome>(
+        (r) => (timer = setTimeout(() => r("failed"), this.config.verifyTimeoutMs)),
+      );
+      return Promise.race([refreshing.outcome, late]).finally(() => clearTimeout(timer));
+    }
     const checks = (s.checks ??= new Map());
     const now = this.now();
     const held = checks.get(item.id);
@@ -3704,7 +4598,7 @@ export class ContextPartner {
     const entry: { at: number; mark: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome } = {
       at: now,
       mark,
-      outcome: this.recheck(s, item, mark).then((o) => (entry.settled = o)),
+      outcome: this.recheck(s, item, mark, made).then((o) => (entry.settled = o)),
     };
     const outcome = entry.outcome;
     checks.delete(item.id);
@@ -3713,7 +4607,12 @@ export class ContextPartner {
     return outcome;
   }
 
-  private async recheck(s: Session, item: ContextItem, readMark: number): Promise<CheckOutcome> {
+  private async recheck(
+    s: Session,
+    item: ContextItem,
+    readMark: number,
+    made: { calls: number } = { calls: 0 },
+  ): Promise<CheckOutcome> {
     this.freshness.checked++;
     try {
       const all = await this.deps.sources(s.scope).catch((): Source[] => []);
@@ -3723,6 +4622,7 @@ export class ContextPartner {
         return "unverifiable";
       }
       this.freshness.calls++;
+      made.calls++;
       const got = await this.fanout.fetchChecked(source, s.scope, item.ref, {
         timeoutMs: this.config.verifyTimeoutMs,
         signal: s.abort.signal,
@@ -3736,11 +4636,15 @@ export class ContextPartner {
         // ("failed"), so a strict ask leaves it out and says so (D211, D232).
         if (got.why === "refused") {
           this.freshness.calls--;
+          made.calls--;
           return got.guard === "open" || got.pushedBack ? "failed" : "skipped";
         }
         // A null from a source whose null does not mean gone (an MCP tool) says nothing, and says it every time: like
         // a source with no fetch, its items are cited as held (D126). A plain error is worth one more read.
-        return got.why === "null" ? "unverifiable" : got.why === "error" ? "flaked" : "failed";
+        // A null whose reply lacked the record says the same next time: held (D298). An error result may pass: not.
+        if (got.why === "null" && !s.closed) this.noteUnverifiable(s.scope, item.id, readMark);
+        if (got.why === "null" || got.why === "error-result") return "unverifiable";
+        return got.why === "error" ? "flaked" : "failed";
       }
       if (got.status === "gone") {
         this.freshness.gone++;
@@ -3756,6 +4660,8 @@ export class ContextPartner {
       }
       const copy = { ...got.item, id: item.id, sourceId: item.sourceId, ref: item.ref };
       this.deps.cache.revive(s.scope, [item.id]);
+      // Found at its source: a sweep that missed it skipped it (an offset listing shifts), D356's doubt is answered.
+      this.sync?.vouched(s.scope, item.sourceId, item.id);
       const synced = this.deps.cache.isSynced(s.scope, item.id);
       // Stored as read now (its fetch time moves), as synced when the sync held it; carded and noted like any read.
       const changed = this.store(s, [copy], 0, synced, readMark) > 0;
@@ -3780,6 +4686,19 @@ export class ContextPartner {
    * listing read before the deletion cannot store them back), from the sync's bookkeeping and from held search pages.
    */
   private dropGone(scope: Scope, sourceId: string, ids: string[]): number {
+    // Packets queued for this user that cite a removed item go now: the hold that `dropRemovedPending` reads at
+    // hand-out lasts `GONE_HOLD_MS`, and a packet can wait longer than that in an idle session's queue.
+    const gone = new Set(ids);
+    const user = scopeKey(scope);
+    for (const s of this.sessions.values()) {
+      if (s.pending.length === 0 || scopeKey(s.scope) !== user) continue;
+      for (let k = s.pending.length - 1; k >= 0; k--) {
+        const packet = s.pending[k]!;
+        if (!packet.citations.some((c) => gone.has(c.itemId))) continue;
+        s.pending.splice(k, 1);
+        this.withdraw(s, packet);
+      }
+    }
     this.sync?.removed(scope, sourceId, ids);
     this.fanout.dropResults(scope, sourceId);
     const evicted = this.deps.cache.holdsEvicted(scope.tenantId);
@@ -3812,7 +4731,16 @@ export class ContextPartner {
     reason: string,
     cue: Cue,
   ): Promise<Injection | null> {
-    const kept = await this.verifyItems(s, scored, cue);
+    // The items were ranked against the ledger before the re-reads' await; a delivery during it (the next request's
+    // fast path from the cache) may have handed some out since, and `build` marks without testing again: an item
+    // whose ledger entry changed over the await is left out (audit A11's fuzz, default seed 2577; core seed 704). An
+    // entry gone meanwhile was swept (past the cooldown, or past `MAX_LEDGER_ITEMS`), not handed out: kept (review).
+    const was = new Map(scored.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
+    const verified = await this.verifyItems(s, scored, cue);
+    const kept = verified.filter((x) => {
+      const now = s.ledger.entry(x.item.id);
+      return now === undefined || sameEntry(was.get(x.item.id), now);
+    });
     if (kept.length === 0 || s.closed) return null;
     return this.deliver(s, kept, mode, reason, cue);
   }
@@ -3951,12 +4879,46 @@ export class ContextPartner {
     );
   }
 
+  /**
+   * `routeLocalHits` (D265): for each source, log2(1 + how many of the request's best matches in the user's own index
+   * it holds), from one search of the cache (no call); undefined when the user has nothing cached or nothing matches.
+   */
+  private localRouteHits(s: Session, cue: Cue): Map<string, number> | undefined {
+    const cache = this.deps.cache;
+    const vocab = cache.peekVocab(s.scope);
+    if (!vocab) return undefined;
+    const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
+    const query: number[] = [];
+    for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
+    if (query.length === 0) return undefined;
+    const counts = new Map<string, number>();
+    for (const h of cache.search(s.scope, query, query.length, LOCAL_ROUTE_HITS, this.now())) {
+      counts.set(h.item.sourceId, (counts.get(h.item.sourceId) ?? 0) + 1);
+    }
+    if (counts.size === 0) return undefined;
+    for (const [id, n] of counts) counts.set(id, Math.log2(1 + n));
+    return counts;
+  }
+
+  /** `routeSketch` (D322): each source's match of the request's terms against its vocabulary sketch (no call). */
+  private sketchRouteHits(s: Session, cue: Cue): Map<string, number> | undefined {
+    if (!this.sync) return undefined;
+    const terms = sketchTerms(`${cue.text} ${cue.entities.join(" ")}`).slice(0, MAX_SKETCH_TERMS);
+    return this.sync.sketchScores(s.scope, terms.map(termHashes));
+  }
+
   /** The sources whose synced copy is current (`sync`, D57), which answer from the local index; null when none. */
   private localOf(s: Session, all: readonly Source[], behind = false): Set<string> | null {
     if (!this.sync) return null;
     const now = this.now();
-    // `behind`: a warm copy answers while its poll runs (`syncPollBehind`), never one still in its backfill.
-    const ok = (id: string) => this.sync!.current(s.scope, id, now) || (behind && this.sync!.isWarm(s.scope, id));
+    // `behind`: a warm copy answers while its poll runs (`syncPollBehind`), never one still in its backfill; so does a
+    // warm copy past `syncPollWidth` that the lookup did not poll (D263). An ask never passes `behind`: a stale copy
+    // it did not poll is searched live (D127), within the probes' call budget.
+    // With `syncLocalComplete`, only a copy that holds the whole source answers for it (D264): one the user's cap cut
+    // is searched live, or a lookup would miss what is older than the cut.
+    const whole = (id: string) => !this.config.syncLocalComplete || this.sync!.complete(s.scope, id);
+    const ok = (id: string) =>
+      whole(id) && (this.sync!.current(s.scope, id, now) || (behind && this.sync!.isWarm(s.scope, id)));
     const local = new Set(all.filter((x) => ok(x.id)).map((x) => x.id));
     return local.size > 0 ? local : null;
   }
@@ -3972,7 +4934,7 @@ export class ContextPartner {
     let local: number | undefined;
     let syncCalls: number | undefined;
     const done = (decision: Trace["decision"], reason: string, items: ContextItem[] = []) =>
-      this.trace({
+      this.trace(s, {
         sessionId: s.id,
         turn,
         event: eventKind,
@@ -4399,6 +5361,25 @@ export class ContextPartner {
   }
 
   /**
+   * The citations of what was rendered. With `quarantineInstructions` (D307) their titles are quarantined as the
+   * packet's are: the MCP route prints each citation's title under the answer (`Sources:`), so a subject written for
+   * an AI would otherwise reach the agent beside the packet that removed it (A10's review).
+   */
+  private cited(items: readonly ContextItem[]): Citation[] {
+    const cites = citationsOf([...items]);
+    if (!this.config.quarantineInstructions) return cites;
+    return cites.map((c) => ({ ...c, title: quarantineTitle(c.title) }));
+  }
+
+  /** The A10 trials' render options (D306, D307): Eden's guard line and the instruction quarantine, when on. */
+  private shield(): { guard?: true; quarantine?: true } {
+    return {
+      ...(this.config.guardLine ? { guard: true as const } : {}),
+      ...(this.config.quarantineInstructions ? { quarantine: true as const } : {}),
+    };
+  }
+
+  /**
    * How an ask's answer is rendered. Not compacted, it says each item whole; `compactAsk` cuts each item to what
    * bears on the question as a packet's are, and `askDedup` says an item this session already showed by what is new
    * in it, or by its title alone.
@@ -4409,6 +5390,7 @@ export class ContextPartner {
     const dense = compact && this.config.densePacket;
     return {
       maxBytes: 4_000,
+      ...this.shield(),
       ...(compact
         ? {
             focus: focusOf(cue),
@@ -4513,6 +5495,7 @@ export class ContextPartner {
     const options: Parameters<typeof renderPacket>[1] = {
       maxBytes: frame?.maxBytes ?? this.config.maxInjectionBytes,
       ...(frame ? { lead: frame.lead } : {}),
+      ...this.shield(),
       ...(this.config.compactInjection || frame
         ? {
             focus: focusOf(cue),
@@ -4530,7 +5513,7 @@ export class ContextPartner {
       sessionId: s.id,
       mode,
       text: renderPacket(items, options),
-      citations: citationsOf(items),
+      citations: this.cited(items),
       reason,
       score: Math.max(...scored.map((x) => x.score)),
       createdAt: this.now(),
@@ -4547,7 +5530,13 @@ export class ContextPartner {
         ? { shown: { items: shown === undefined ? items : scored.map((x) => x.item), text: shown ?? injection.text } }
         : {}),
       ...(this.config.revisionNotice
-        ? { copies: renderedCopies(shown === undefined ? items : scored.map((x) => x.item), shown ?? injection.text) }
+        ? {
+            copies: renderedCopies(
+              shown === undefined ? items : scored.map((x) => x.item),
+              shown ?? injection.text,
+              this.config.revisionDiff,
+            ),
+          }
         : {}),
     });
     return injection;
@@ -4574,6 +5563,7 @@ export class ContextPartner {
       ...(source.listsByTime !== undefined ? { listsByTime: source.listsByTime } : {}),
       ...(source.notifies !== undefined ? { notifies: source.notifies } : {}),
       ...(source.fetchReportsGone !== undefined ? { fetchReportsGone: source.fetchReportsGone } : {}),
+      ...(source.fetchesById !== undefined ? { fetchesById: source.fetchesById } : {}),
       // A listing (the sync, D57) is traced by the sync itself (`sync.list`): passed through as it is.
       ...(source.list ? { list: source.list.bind(source) } : {}),
       // One `then`, no async frame of its own: a source call is the most frequent span (tracing overhead).
@@ -4615,7 +5605,18 @@ export class ContextPartner {
     };
   }
 
-  private trace(t: Trace): void {
+  private usage(u: UsageRecord): void {
+    try {
+      this.deps.onUsage?.({ ...u, sourceIds: [...u.sourceIds] });
+    } catch {
+      // A broken sink never breaks learning or feedback.
+    }
+  }
+
+  private trace(s: Session, t: Trace): void {
+    // The session's last decisions, for `explain` (D277): content-free like the trace itself, dropped with the session.
+    s.traces.push(t);
+    if (s.traces.length > EXPLAIN_TRACES) s.traces.shift();
     try {
       this.deps.onTrace?.(t);
     } catch {
@@ -4625,6 +5626,9 @@ export class ContextPartner {
 }
 
 const NO_TERMS = new Uint32Array(0);
+
+/** How many of a session's decisions `explain` keeps (D277): a few turns of a task, about 200 bytes each. */
+export const EXPLAIN_TRACES = 32;
 
 /**
  * `ObserveResult.pending`: slower work may still queue an injection. That is a lookup in flight, work a lookup left
@@ -4637,6 +5641,12 @@ function pendingOf(s: Session): boolean {
 
 /** `pushCandidates` (D236): the most of an item a candidate's excerpt says, whatever `compactItemBytes` is set to. */
 const MAX_CANDIDATE_BYTES = 2_000;
+
+/** `planConflict` (D301): acting requests a session keeps, and how much of one its packet quotes. */
+const PLAN_REQUESTS = 12;
+const PLAN_QUOTE_CHARS = 200;
+const PLAN_WAITING = 64;
+const PLAN_SENT = 256;
 
 /** `pushCandidates` (D236): a candidates' packet's framing line and cut. */
 interface PacketFrame {
@@ -4668,9 +5678,61 @@ function whenAborted(signal: AbortSignal): Promise<void> {
   return new Promise((r) => (signal.aborted ? r() : signal.addEventListener("abort", () => r(), { once: true })));
 }
 
-/** The version of each item a packet or answer hands the agent (`revisionNotice`). */
-function copiesOf(items: readonly ContextItem[]): { id: string; sourceId: string; version: number }[] {
-  return items.map((it) => ({ id: it.id, sourceId: it.sourceId, version: versionOf(it) }));
+/** What a packet hands the agent of an item (`revisionNotice`): its version and, for `revisionDiff`, its times. */
+interface Copy {
+  id: string;
+  sourceId: string;
+  version: number;
+  times?: string[];
+}
+
+/** Each item's copy; its times only with `revisionDiff` (`withTimes`), so the switch off reads no text for them. */
+function copiesOf(items: readonly ContextItem[], withTimes: boolean): Copy[] {
+  return items.map((it) =>
+    withTimes
+      ? { id: it.id, sourceId: it.sourceId, version: versionOf(it), times: timesOf(it) }
+      : { id: it.id, sourceId: it.sourceId, version: versionOf(it) },
+  );
+}
+
+/** A clock time ("9:15", "14:00", "3pm"), a day and month either way round, or a weekday (`revisionDiff`). */
+const MONTH =
+  "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|" +
+  "nov(?:ember)?|dec(?:ember)?)";
+const TIME_OR_DATE = new RegExp(
+  "\\b(?:([01]?\\d|2[0-3]):([0-5]\\d)(?:\\s?([ap]m))?|(1[0-2]|0?[1-9])\\s?([ap]m)|" +
+    `(\\d{1,2})(?:st|nd|rd|th)?\\s${MONTH}|${MONTH}\\s(\\d{1,2})(?:st|nd|rd|th)?|` +
+    "((?:mon|tues|wednes|thurs|fri|satur|sun)day))\\b",
+  "gi",
+);
+/** At most this many times are read from one item (`revisionDiff`). */
+const MAX_ITEM_TIMES = 16;
+
+/** A 12-hour clock's hour in 24-hour form. */
+const hour24 = (h: number, ampm: string | undefined) =>
+  ampm === undefined ? h : (h % 12) + (ampm.toLowerCase() === "pm" ? 12 : 0);
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * `revisionDiff` (D342): the distinct times and dates in an item's title and text, in order, each in one form so a
+ * reworded time is the same time: a clock as 24-hour "HH:MM" ("9:30am", "09:30" and "9:30" are "09:30"; "3pm" is
+ * "15:00"), a date as "<day> <3-letter month>" ("Oct 4th" and "4 October" are "4 oct"), a weekday lowercased. No
+ * model: a pattern over the words, so "3.45" (a price) is no time and "decision 2" no date. An unmarked clock is read
+ * as 24-hour: "9:30" then "9:30pm" says 09:30 is gone, the honest reading of an ambiguous edit. Exported for tests.
+ */
+export function timesOf(item: Pick<ContextItem, "title" | "text">): string[] {
+  const out: string[] = [];
+  for (const m of `${item.title}\n${item.text}`.matchAll(TIME_OR_DATE)) {
+    let t: string;
+    if (m[1] !== undefined) t = `${pad(hour24(Number(m[1]), m[3]))}:${m[2]}`;
+    else if (m[4] !== undefined) t = `${pad(hour24(Number(m[4]), m[5]))}:00`;
+    else if (m[6] !== undefined) t = `${Number(m[6])} ${m[7]!.slice(0, 3).toLowerCase()}`;
+    else if (m[8] !== undefined) t = `${Number(m[9])} ${m[8].slice(0, 3).toLowerCase()}`;
+    else t = m[10]!.toLowerCase();
+    if (!out.includes(t)) out.push(t);
+    if (out.length >= MAX_ITEM_TIMES) break;
+  }
+  return out;
 }
 
 /**
@@ -4685,8 +5747,8 @@ function renderedCount(items: readonly ContextItem[], text: string): number {
 }
 
 /** The copies of the items whose lines the agent receives: one cut from the text was not shown. */
-function renderedCopies(items: readonly ContextItem[], text: string) {
-  return copiesOf(items.slice(0, renderedCount(items, text)));
+function renderedCopies(items: readonly ContextItem[], text: string, withTimes: boolean) {
+  return copiesOf(items.slice(0, renderedCount(items, text)), withTimes);
 }
 
 /** An item's words as the ledger records them (`Ledger.revised`): a copy edited at its source hashes otherwise. */
@@ -4729,11 +5791,22 @@ function honestAnswer(
   unresolved = false,
   closed = false,
   unconfirmed?: ReadonlyMap<string, number>,
+  unswept?: ReadonlyMap<string, number>,
 ): string {
   const told = reachAnswer(packet, sources, unresolved, closed);
-  if (!unconfirmed || unconfirmed.size === 0) return told;
-  const names = [...unconfirmed].map(([id, n]) => `${id} (${n})`).join(", ");
-  const left = `Left out items from ${names}: their source reported changes and they could not be re-checked`;
+  const notes: string[] = [];
+  const list = (m: ReadonlyMap<string, number>) => [...m].map(([id, n]) => `${id} (${n})`).join(", ");
+  if (unconfirmed && unconfirmed.size > 0) {
+    const why = "their source reported changes and they could not be re-checked";
+    notes.push(`Left out items from ${list(unconfirmed)}: ${why}`);
+  }
+  // D356: a source swept weekly whose copies no listing has seen for a day; nothing was reported about them.
+  if (unswept && unswept.size > 0) {
+    const why = "no recent listing of their source confirms them and they could not be re-checked";
+    notes.push(`Left out items from ${list(unswept)}: ${why}`);
+  }
+  if (notes.length === 0) return told;
+  const left = notes.join(". ");
   // An answer that would read as an all-clear says it is not one.
   if (told === "Nothing in the connected sources.")
     return `Nothing confirmed in the connected sources. ${left}, so this is not an all-clear.`;
@@ -4863,6 +5936,8 @@ interface AskInternal {
   push?: boolean;
   /** The session's request count when the push's request was counted: a later request makes it stale. */
   request?: number;
+  /** The session's turn when the push's request was counted: the push's trace reports it (audit A11). */
+  turn?: number;
   /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
   again?: { searched: SearchedLive; prev: Injection | null };
 }
@@ -5012,6 +6087,21 @@ const ASKS_BLOCKERS =
 
 /** Items one `sourceItems` call stores at most (a notification carries a few; a bigger batch is a listing's job). */
 const MAX_PUSHED_ITEMS = 100;
+/** A ref notice's re-reads run this many at a time (D347): the fan-out's starting concurrency per source. */
+const REF_LANES = 2;
+/** A ref read the guard skipped or that hit one plain error goes again up to this many times, this far apart (×k). */
+const REF_TRIES = 4;
+const REF_RETRY_MS = 150;
+/**
+ * A ref read's deadline: it runs off the agent's path, so it may wait out a connector's slow tail (a hosted
+ * connector passed 1.5 s on about one fetch in five, D347) rather than fall back to the source-wide signal.
+ */
+const REF_TIMEOUT_MS = 5_000;
+/** Whether a failed ref read is worth another: our own guard's skip that clears in moments, or a plain error. */
+function refTryAgain(got: { why: string; guard?: string; pushedBack?: boolean }): boolean {
+  if (got.why === "error") return true;
+  return got.why === "refused" && got.guard !== "open" && got.pushedBack !== true;
+}
 
 /** The most candidates an ask's reader reads, whatever `askReaderPool` says. */
 const READER_POOL_CAP = READER_MAX_ITEMS;
@@ -5034,6 +6124,11 @@ const MIN_OWN_READ_MS = 250;
 const RETRIED: ReadonlySet<CheckOutcome> = new Set<CheckOutcome>(["flaked", "skipped"]);
 const STRICT_RETRY_LANES = 2;
 const CHECK_REUSE_MS = 30_000;
+/** `unverifiable`: items held per user, and users held (least recently noted dropped first). */
+const MAX_UNVERIFIABLE = 512;
+const MAX_UNVERIFIABLE_USERS = 4_096;
+/** `unverifiable`: how long a held null stands at most, signal or not (a reply lacking the record may be transient). */
+const UNVERIFIABLE_HOLD_MS = 10 * 60_000;
 /** How long an item its source said is gone is kept from being stored again (the fan-out's stale-result window). */
 const GONE_HOLD_MS = 10 * 60_000;
 /** A lookup with less of its deadline left than this sends no live search (D140): no call could answer in time. */
@@ -5053,4 +6148,45 @@ function localDay(at: number, offsetMin: number): string {
 function bulkMail(item: ContextItem): boolean {
   const category = item.meta?.category;
   return (category !== undefined && BULK_CATEGORY.test(category)) || BULK_TITLE.test(item.title);
+}
+
+/** The names each item mentions, as the source map records them (D57): at most 20 an item, persistable kinds. */
+function mentionsOf(items: readonly ContextItem[]): { sourceId: string; entities: string[] }[] {
+  return items.map((item) => ({
+    sourceId: item.sourceId,
+    entities: extractTypedEntities(`${item.title}. ${item.text}`)
+      .filter((e) => PERSISTABLE_KINDS.has(e.kind))
+      .slice(0, 20)
+      .map((e) => e.text),
+  }));
+}
+
+/** `routeSketch`: a request's terms matched against the sources' sketches, at most (its first). */
+const MAX_SKETCH_TERMS = 16;
+
+/** Two routing boosts summed per source; either may be absent. */
+function addBoosts(
+  a: Map<string, number> | undefined,
+  b: Map<string, number> | undefined,
+): Map<string, number> | undefined {
+  if (!a || !b) return a ?? b;
+  const out = new Map(a);
+  for (const [id, x] of b) out.set(id, (out.get(id) ?? 0) + x);
+  return out;
+}
+
+/** `cardsSourceAware` (D320): users with at most this many synced sources have every synced item read, as before. */
+const SOURCE_AWARE_MIN = 32;
+
+/** `routeLocalHits`: the user's best local matches for a request that routing counts per source (D265). */
+const LOCAL_ROUTE_HITS = 40;
+
+/**
+ * A user's sources by id, the first of any repeated id (as `Array.find` gave): a lookup maps routed ids back to sources
+ * through it, which was a scan of every source per routed one (quadratic for a user with 1,000 connectors, D261).
+ */
+function sourcesById(all: readonly Source[]): Map<string, Source> {
+  const byId = new Map<string, Source>();
+  for (const x of all) if (!byId.has(x.id)) byId.set(x.id, x);
+  return byId;
 }

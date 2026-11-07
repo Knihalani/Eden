@@ -1,0 +1,142 @@
+== n995-base-41
+TOTAL                                7/48     33/48                    34/48         49.8     44.6
+calls: connectors received 4804 in the tasks' windows (1521 of them on-demand listings); traces summed 4804 (cross-check, fetches included)
+cards use: {"enqueued":138326,"prefiltered":8551,"leanSkipped":7437,"reused":60,"carded":494,"sent":2173,"sentenceReused":102,"calls":229,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":1,"implausible":1,"requestOnly":1114,"requested":1558,"deferred":128554,"users":6}
+TOTAL                               15/48     35/48                    24/48         47.2     52.4
+calls: connectors received 4508 in the tasks' windows (1287 of them on-demand listings); traces summed 4508 (cross-check, fetches included)
+cards use: {"enqueued":137763,"prefiltered":8963,"leanSkipped":7749,"reused":60,"carded":555,"sent":2855,"sentenceReused":102,"calls":279,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":2,"implausible":2,"requestOnly":1214,"requested":1630,"deferred":126997,"users":6}
+  TOTAL      hidden 77/96  decoys 69/96
+== n995-base-42
+TOTAL                                6/48     33/48                    34/48         51.1     50.2
+calls: connectors received 4923 in the tasks' windows (1519 of them on-demand listings); traces summed 4923 (cross-check, fetches included)
+cards use: {"enqueued":138241,"prefiltered":8699,"leanSkipped":7414,"reused":85,"carded":476,"sent":2507,"sentenceReused":78,"calls":250,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1285,"requested":1656,"deferred":128157,"users":6}
+TOTAL                               15/48     35/48                    23/48         47.6     57.6
+calls: connectors received 4580 in the tasks' windows (1311 of them on-demand listings); traces summed 4580 (cross-check, fetches included)
+cards use: {"enqueued":137631,"prefiltered":9048,"leanSkipped":7710,"reused":84,"carded":538,"sent":3035,"sentenceReused":78,"calls":284,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1338,"requested":1727,"deferred":126724,"users":6}
+  TOTAL      hidden 76/96  decoys 64/96
+== n995-g0.01-41
+TOTAL                                7/48     33/48                    34/48         31.5     43.2
+calls: connectors received 3024 in the tasks' windows (949 of them on-demand listings); traces summed 3024 (cross-check, fetches included)
+cards use: {"enqueued":134997,"prefiltered":8534,"leanSkipped":7415,"reused":60,"carded":494,"sent":2193,"sentenceReused":102,"calls":233,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":1,"implausible":1,"requestOnly":1119,"requested":1558,"deferred":125227,"users":6}
+TOTAL                               16/48     35/48                    24/48         27.6     42.7
+calls: connectors received 2653 in the tasks' windows (802 of them on-demand listings); traces summed 2653 (cross-check, fetches included)
+cards use: {"enqueued":134859,"prefiltered":8852,"leanSkipped":7655,"reused":60,"carded":555,"sent":2673,"sentenceReused":102,"calls":259,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":2,"implausible":2,"requestOnly":1197,"requested":1630,"deferred":124369,"users":6}
+  TOTAL      hidden 77/96  decoys 69/96
+against .local/a28/n995-base-41.json: hidden +0 −0, decoys +0 −0
+== n995-g0.5-41
+TOTAL                                7/48     33/48                    34/48         28.7     40.6
+calls: connectors received 2765 in the tasks' windows (841 of them on-demand listings); traces summed 2765 (cross-check, fetches included)
+cards use: {"enqueued":134336,"prefiltered":8501,"leanSkipped":7397,"reused":60,"carded":494,"sent":2140,"sentenceReused":102,"calls":225,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":1,"implausible":1,"requestOnly":1104,"requested":1558,"deferred":124637,"users":6}
+TOTAL                               16/48     35/48                    24/48         26.6     46.9
+calls: connectors received 2560 in the tasks' windows (770 of them on-demand listings); traces summed 2560 (cross-check, fetches included)
+cards use: {"enqueued":134677,"prefiltered":8852,"leanSkipped":7655,"reused":60,"carded":555,"sent":2673,"sentenceReused":102,"calls":259,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":2,"implausible":2,"requestOnly":1197,"requested":1630,"deferred":124187,"users":6}
+  TOTAL      hidden 77/96  decoys 69/96
+against .local/a28/n995-base-41.json: hidden +0 −0, decoys +0 −0
+== n995-g0.5-42
+TOTAL                                6/48     33/48                    34/48         29.1     45.4
+calls: connectors received 2802 in the tasks' windows (894 of them on-demand listings); traces summed 2802 (cross-check, fetches included)
+cards use: {"enqueued":134906,"prefiltered":8569,"leanSkipped":7312,"reused":84,"carded":452,"sent":2379,"sentenceReused":78,"calls":217,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1257,"requested":1610,"deferred":125053,"users":6}
+TOTAL                               15/48     35/48                    23/48         25.6     46.6
+calls: connectors received 2478 in the tasks' windows (697 of them on-demand listings); traces summed 2478 (cross-check, fetches included)
+cards use: {"enqueued":134542,"prefiltered":8977,"leanSkipped":7653,"reused":86,"carded":539,"sent":2934,"sentenceReused":78,"calls":264,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1324,"requested":1728,"deferred":123791,"users":6}
+  TOTAL      hidden 76/96  decoys 64/96
+against .local/a28/n995-base-42.json: hidden +0 −0, decoys +0 −0
+== n995-g0.75-41
+TOTAL                                6/48     33/48                    34/48         11.3     30.0
+calls: connectors received 1099 in the tasks' windows (353 of them on-demand listings); traces summed 1099 (cross-check, fetches included)
+cards use: {"enqueued":131586,"prefiltered":8457,"leanSkipped":7357,"reused":60,"carded":494,"sent":2007,"sentenceReused":102,"calls":191,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":1,"implausible":1,"requestOnly":1100,"requested":1558,"deferred":122060,"users":6}
+TOTAL                               17/48     34/48                    24/48         16.7     39.4
+calls: connectors received 1604 in the tasks' windows (478 of them on-demand listings); traces summed 1604 (cross-check, fetches included)
+cards use: {"enqueued":133099,"prefiltered":8903,"leanSkipped":7707,"reused":62,"carded":555,"sent":2616,"sentenceReused":102,"calls":246,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":2,"implausible":2,"requestOnly":1196,"requested":1630,"deferred":122612,"users":6}
+  TOTAL      hidden 76/96  decoys 69/96
+against .local/a28/n995-base-41.json: hidden +0 −1, decoys +0 −0
+  - hidden  train5|hidden|41|us-travel-authorisation-refused
+== n995-g0.75-42
+TOTAL                                6/48     33/48                    34/48         12.5     30.8
+calls: connectors received 1209 in the tasks' windows (410 of them on-demand listings); traces summed 1209 (cross-check, fetches included)
+cards use: {"enqueued":132057,"prefiltered":8570,"leanSkipped":7314,"reused":84,"carded":475,"sent":2223,"sentenceReused":78,"calls":183,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1256,"requested":1655,"deferred":122358,"users":6}
+TOTAL                               14/48     35/48                    23/48         15.4     43.9
+calls: connectors received 1488 in the tasks' windows (452 of them on-demand listings); traces summed 1488 (cross-check, fetches included)
+cards use: {"enqueued":133076,"prefiltered":8968,"leanSkipped":7641,"reused":84,"carded":539,"sent":2911,"sentenceReused":78,"calls":260,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1327,"requested":1728,"deferred":122362,"users":6}
+  TOTAL      hidden 76/96  decoys 64/96
+against .local/a28/n995-base-42.json: hidden +0 −0, decoys +0 −0
+== n995-g1-41
+TOTAL                                6/48     33/48                    34/48          6.7     31.9
+calls: connectors received 691 in the tasks' windows (269 of them on-demand listings); traces summed 691 (cross-check, fetches included)
+cards use: {"enqueued":131105,"prefiltered":8408,"leanSkipped":7314,"reused":60,"carded":494,"sent":1899,"sentenceReused":102,"calls":173,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":1,"implausible":1,"requestOnly":1094,"requested":1558,"deferred":121730,"users":6}
+TOTAL                               15/48     34/48                    24/48         11.2     34.1
+calls: connectors received 1073 in the tasks' windows (367 of them on-demand listings); traces summed 1073 (cross-check, fetches included)
+cards use: {"enqueued":132556,"prefiltered":8880,"leanSkipped":7684,"reused":62,"carded":555,"sent":2606,"sentenceReused":102,"calls":240,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":2,"implausible":2,"requestOnly":1196,"requested":1630,"deferred":122102,"users":6}
+  TOTAL      hidden 76/96  decoys 69/96
+against .local/a28/n995-base-41.json: hidden +0 −1, decoys +0 −0
+  - hidden  train5|hidden|41|us-travel-authorisation-refused
+== n995-g1-42
+TOTAL                                7/48     33/48                    34/48          8.4     34.7
+calls: connectors received 838 in the tasks' windows (321 of them on-demand listings); traces summed 838 (cross-check, fetches included)
+cards use: {"enqueued":131596,"prefiltered":8580,"leanSkipped":7327,"reused":85,"carded":475,"sent":2197,"sentenceReused":78,"calls":184,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1253,"requested":1655,"deferred":121909,"users":6}
+TOTAL                               15/48     35/48                    23/48         10.8     39.2
+calls: connectors received 1068 in the tasks' windows (353 of them on-demand listings); traces summed 1068 (cross-check, fetches included)
+cards use: {"enqueued":132544,"prefiltered":8947,"leanSkipped":7625,"reused":84,"carded":539,"sent":2868,"sentenceReused":78,"calls":253,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1322,"requested":1728,"deferred":121889,"users":6}
+  TOTAL      hidden 76/96  decoys 65/96
+against .local/a28/n995-base-42.json: hidden +0 −0, decoys +1 −0
+  + control train2|control|42|nursery-collection-list
+== n995-e1-41
+TOTAL                                6/48     33/48                    34/48          7.1     27.7
+calls: connectors received 742 in the tasks' windows (269 of them on-demand listings); traces summed 742 (cross-check, fetches included)
+cards use: {"enqueued":131105,"prefiltered":8408,"leanSkipped":7314,"reused":60,"carded":494,"sent":1899,"sentenceReused":102,"calls":173,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":1,"implausible":1,"requestOnly":1094,"requested":1558,"deferred":121730,"users":6}
+TOTAL                               15/48     34/48                    24/48         13.1     31.0
+calls: connectors received 1245 in the tasks' windows (374 of them on-demand listings); traces summed 1245 (cross-check, fetches included)
+cards use: {"enqueued":132566,"prefiltered":8889,"leanSkipped":7693,"reused":62,"carded":555,"sent":2607,"sentenceReused":102,"calls":241,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":2,"implausible":2,"requestOnly":1196,"requested":1630,"deferred":122102,"users":6}
+  TOTAL      hidden 76/96  decoys 69/96
+against .local/a28/n995-base-41.json: hidden +0 −1, decoys +0 −0
+  - hidden  train5|hidden|41|us-travel-authorisation-refused
+== n995-e1-42
+TOTAL                                7/48     33/48                    34/48          9.2     30.9
+calls: connectors received 915 in the tasks' windows (325 of them on-demand listings); traces summed 915 (cross-check, fetches included)
+cards use: {"enqueued":131596,"prefiltered":8580,"leanSkipped":7327,"reused":85,"carded":475,"sent":2197,"sentenceReused":78,"calls":184,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1253,"requested":1655,"deferred":121909,"users":6}
+TOTAL                               15/48     35/48                    23/48         12.8     36.8
+calls: connectors received 1256 in the tasks' windows (357 of them on-demand listings); traces summed 1256 (cross-check, fetches included)
+cards use: {"enqueued":132580,"prefiltered":8959,"leanSkipped":7637,"reused":84,"carded":539,"sent":2888,"sentenceReused":78,"calls":255,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1322,"requested":1728,"deferred":121893,"users":6}
+  TOTAL      hidden 76/96  decoys 65/96
+against .local/a28/n995-base-42.json: hidden +0 −0, decoys +1 −0
+  + control train2|control|42|nursery-collection-list
+== n995-b2-41
+TOTAL                                9/48     33/48                    34/48         16.1     36.1
+calls: connectors received 1603 in the tasks' windows (509 of them on-demand listings); traces summed 1603 (cross-check, fetches included)
+cards use: {"enqueued":132700,"prefiltered":8519,"leanSkipped":7401,"reused":60,"carded":494,"sent":2070,"sentenceReused":102,"calls":215,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":1,"implausible":1,"requestOnly":1118,"requested":1558,"deferred":123067,"users":6}
+TOTAL                               17/48     34/48                    24/48         19.0     39.3
+calls: connectors received 1796 in the tasks' windows (503 of them on-demand listings); traces summed 1796 (cross-check, fetches included)
+cards use: {"enqueued":133131,"prefiltered":8834,"leanSkipped":7654,"reused":60,"carded":555,"sent":2554,"sentenceReused":102,"calls":266,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":2,"implausible":2,"requestOnly":1180,"requested":1630,"deferred":122761,"users":6}
+  TOTAL      hidden 76/96  decoys 69/96
+against .local/a28/n995-base-41.json: hidden +0 −1, decoys +0 −0
+  - hidden  train5|hidden|41|us-travel-authorisation-refused
+== n995-b2-42
+TOTAL                                7/48     33/48                    34/48         14.8     33.9
+calls: connectors received 1468 in the tasks' windows (511 of them on-demand listings); traces summed 1468 (cross-check, fetches included)
+cards use: {"enqueued":132817,"prefiltered":8615,"leanSkipped":7342,"reused":84,"carded":475,"sent":2233,"sentenceReused":78,"calls":199,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1273,"requested":1655,"deferred":123080,"users":6}
+TOTAL                               17/48     35/48                    23/48         18.4     36.8
+calls: connectors received 1781 in the tasks' windows (504 of them on-demand listings); traces summed 1781 (cross-check, fetches included)
+cards use: {"enqueued":133002,"prefiltered":8861,"leanSkipped":7560,"reused":84,"carded":537,"sent":2601,"sentenceReused":78,"calls":268,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1301,"requested":1726,"deferred":122679,"users":6}
+  TOTAL      hidden 76/96  decoys 65/96
+against .local/a28/n995-base-42.json: hidden +0 −0, decoys +1 −0
+  + control train2|control|42|nursery-collection-list
+== n995-b4-41
+TOTAL                                6/48     33/48                    34/48         22.1     40.6
+calls: connectors received 2193 in the tasks' windows (736 of them on-demand listings); traces summed 2193 (cross-check, fetches included)
+cards use: {"enqueued":133955,"prefiltered":8511,"leanSkipped":7390,"reused":60,"carded":494,"sent":2136,"sentenceReused":102,"calls":215,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":1,"implausible":1,"requestOnly":1121,"requested":1558,"deferred":124267,"users":6}
+TOTAL                               22/48     35/48                    24/48         25.0     43.1
+calls: connectors received 2433 in the tasks' windows (677 of them on-demand listings); traces summed 2433 (cross-check, fetches included)
+cards use: {"enqueued":134248,"prefiltered":8891,"leanSkipped":7697,"reused":60,"carded":555,"sent":2656,"sentenceReused":102,"calls":263,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":2,"implausible":2,"requestOnly":1194,"requested":1630,"deferred":123733,"users":6}
+  TOTAL      hidden 77/96  decoys 69/96
+against .local/a28/n995-base-41.json: hidden +0 −0, decoys +0 −0
+== n995-b4-42
+TOTAL                                6/48     33/48                    34/48         22.5     46.1
+calls: connectors received 2221 in the tasks' windows (783 of them on-demand listings); traces summed 2221 (cross-check, fetches included)
+cards use: {"enqueued":134288,"prefiltered":8672,"leanSkipped":7389,"reused":84,"carded":475,"sent":2316,"sentenceReused":78,"calls":212,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1283,"requested":1655,"deferred":124421,"users":6}
+TOTAL                               21/48     36/48                    23/48         24.9     43.9
+calls: connectors received 2397 in the tasks' windows (651 of them on-demand listings); traces summed 2397 (cross-check, fetches included)
+cards use: {"enqueued":134021,"prefiltered":8958,"leanSkipped":7640,"reused":86,"carded":538,"sent":2804,"sentenceReused":78,"calls":263,"retries":0,"costUsd":0,"failures":0,"overBudget":0,"unanchored":7,"implausible":1,"requestOnly":1318,"requested":1727,"deferred":123413,"users":6}
+  TOTAL      hidden 77/96  decoys 65/96
+against .local/a28/n995-base-42.json: hidden +1 −0, decoys +1 −0
+  + control train2|control|42|nursery-collection-list
+  + hidden  train5|hidden|42|us-travel-authorisation-refused

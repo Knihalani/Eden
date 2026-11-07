@@ -1,4 +1,4 @@
-export type { ListPage, SearchQuery, Source, SourceResolver } from "./source";
+export { FetchErrorResult, type ListPage, type SearchQuery, type Source, type SourceResolver } from "./source";
 export { StaticSource, type StaticDoc } from "./static-source";
 export {
   ArgumentMappingError,

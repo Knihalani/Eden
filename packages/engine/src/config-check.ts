@@ -37,6 +37,7 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   intent: "cards",
   cardsLean: "cards",
   cardsLeanDays: "cards",
+  cardsSourceAware: "cards",
   intentHits: "cards",
   intentMinCoverage: "cards",
   intentMinMatched: "cards",
@@ -59,8 +60,22 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerVerifyAfter: "reader",
   readerReuse: "reader",
   readerStopEarly: "reader",
-  pushCandidates: "reader",
+  // `pushCandidates` is not here: the candidates make no reader call and act without one (D276).
 };
+
+/**
+ * Reader keys the push's candidates read with no reader wired (D276: partner.ts `observe` starts the push,
+ * `candidatesOf` cuts the pool by `askReaderPool` and tests it with the constraint test, `readerGateVisits`
+ * included). Accepted off their default without a reader while `pushCandidates` > 0.
+ */
+const CANDIDATES_WITHOUT_READER: ReadonlySet<Key> = new Set<Key>([
+  "askReader",
+  "readerPush",
+  "readerPushWaitMs",
+  "readerPushBehind",
+  "askReaderPool",
+  "readerGateVisits",
+]);
 
 /**
  * Keys that act only while every flag listed is on (config.ts's "with X", "applies only with it on", and the gates in
@@ -86,9 +101,17 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncOnDemand: SYNC,
   syncPollBehind: ["sync", "syncOnDemand"],
   syncPush: SYNC,
+  syncIngestTurns: SYNC,
   syncPushMaxStaleMs: ["sync", "syncPush"],
   verifyTimeoutMs: ["verifyDelivery"],
   syncCatchupPages: SYNC,
+  syncPollWidth: ["sync", "syncOnDemand"],
+  syncBackfillLanes: SYNC,
+  syncLocalComplete: SYNC,
+  syncKeepCut: SYNC,
+  routeSketch: SYNC,
+  syncEngagedDeep: SYNC,
+  syncUnusedSweepMs: ["sync", "verifyDelivery"],
   syncMaxUsersPerTenant: SYNC,
   syncLocalAll: SYNC,
   cardItems: ["cards"],
@@ -96,6 +119,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   intent: ["cards"],
   cardsLean: ["cards", "intent"],
   cardsLeanDays: ["cards", "intent", "cardsLean"],
+  cardsSourceAware: ["cards", "sync"],
   intentHits: ["cards", "intent"],
   intentMinCoverage: ["cards", "intent"],
   intentMinMatched: ["cards", "intent"],
@@ -118,6 +142,10 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerReuse: PUSH,
   readerStopEarly: READER,
   pushCandidates: PUSH,
+  planConflict: [...PUSH, "sync"],
+  askNudge: PUSH,
+  pushCandidatesSettled: PUSH,
+  revisionDiff: ["revisionNotice"],
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
@@ -163,6 +191,8 @@ const RANGES: Partial<Record<Key, Range>> = {
   syncStaleChance: SHARE,
   syncCallsPerMin: COUNT,
   syncCatchupPages: COUNT,
+  syncPollWidth: COUNT,
+  syncBackfillLanes: SIZE,
   syncMaxUsersPerTenant: SIZE,
   cardItems: COUNT,
   decideCandidates: COUNT,
@@ -174,6 +204,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   intentSeats: COUNT,
   askReaderPool: COUNT,
   pushCandidates: { integer: true, max: 40 },
+  pushCandidatesSettled: { integer: true, max: 40 },
 };
 
 /** String-list keys whose entries must come from a known list. */
@@ -211,7 +242,10 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
   for (const [key, given] of Object.entries(value)) {
     checkKey(where, key, given);
     const dep = NEEDS_DEP[key as Key];
-    if (dep !== undefined && options.deps?.[dep] !== true && !isInert(key as Key, given)) {
+    // With the push's candidates on (the default), the push and its pool act with no reader (D276).
+    const candidates = Number((value as Record<string, unknown>).pushCandidates ?? DEFAULT_CONFIG.pushCandidates) > 0;
+    const actsWithout = dep === "reader" && candidates && CANDIDATES_WITHOUT_READER.has(key as Key);
+    if (dep !== undefined && !actsWithout && options.deps?.[dep] !== true && !isInert(key as Key, given)) {
       throw new Error(
         `${where}: "${key}" needs the partner's ${dep} dependency, ` +
           `${options.depNote ?? "which this caller does not wire"}, so only its default ` +

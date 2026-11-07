@@ -1,0 +1,8 @@
+{
+  "name": "@eden/client-python",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Python client for Eden (stdlib only, fail-open like @eden/client). Its bun test runs the Python unit tests and an end-to-end check against the real handler.",
+  "type": "module",
+  "devDependencies": { "@eden/server": "workspace:*", "@eden/sources": "workspace:*", "@eden/client": "workspace:*" }
+}

@@ -52,6 +52,12 @@ export interface Source {
    * other reasons): a null fetch proves nothing, and a freshness check keeps the item (labelled with its age).
    */
   readonly fetchReportsGone?: boolean;
+  /**
+   * Whether `fetch` can find an item by its ref at all (an MCP connector with a get tool wired; static and sim
+   * sources). An MCP source without a fetch tool still has a `fetch` that answers null to everything, with no call.
+   * Absent: read as `fetchReportsGone`. Only a source that can confirm an item by ref may be swept less often (D356).
+   */
+  readonly fetchesById?: boolean;
   /** One item by its source ref, for refreshing a cached item. */
   fetch?(ref: string, scope: Scope, signal: AbortSignal): Promise<ContextItem | null>;
   /**
@@ -65,3 +71,13 @@ export interface Source {
 
 /** The sources one user's partner may read. Resolved per user, since each user connects their own accounts. */
 export type SourceResolver = (scope: Scope) => Promise<Source[]>;
+
+/**
+ * A fetch the source answered with an error result (an MCP tool's `isError`: a 5xx, a quota message, often "not
+ * found"), thrown by `fetch` rather than returned as null (A8, D298): it says nothing about the item, as a null from
+ * a source without `fetchReportsGone` does, but unlike a reply that simply lacks the record it may be transient, so
+ * Eden never holds it as the item's state. Not a failure of the source's: `SourceFanout` settles it as answered.
+ */
+export class FetchErrorResult extends Error {
+  override readonly name = "FetchErrorResult";
+}

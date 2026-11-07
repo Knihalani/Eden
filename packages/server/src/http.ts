@@ -3,9 +3,11 @@
  *
  *   POST /v1/events    an AgentEvent              → ObserveResult  (?waitMs= to wait for the slow path)
  *   POST /v1/ask       an AskRequest              → AskResponse
- *   POST /v1/check     a tool_call AgentEvent     → ActionCheck   (the action firewall, `actionCheck`)
+ *   POST /v1/check     a tool_call AgentEvent     → ActionCheck   (the party check, D376; the firewall, `actionCheck`)
  *   POST /v1/pending   {tenantId,userId,sessionId} → {injections}
  *   POST /v1/whoami    {tenantId,userId,sessionId?} → {ok}  (checks the key, tenant and ids; changes nothing)
+ *   POST /v1/explain   {tenantId,userId,sessionId} → {decisions}: the session's last decisions and why, no content
+ *                                                    (D277; reads only)
  *   POST /v1/feedback  a Feedback (used: boolean)  → {ok, applied}
  *   POST /v1/forget    {tenantId,userId,sourceId?} → {ok}  (also closes the user's source connections, D108)
  *   POST /v1/sources   {tenantId,userId}           → {sources:[{id,kind}]}; 422 {error} when the user's source
@@ -14,6 +16,11 @@
  *   POST /v1/sources/items   {tenantId,userId,sourceId,items:[{ref,title?,text,url?,updatedAt?,meta?}]}
  *                                                    → {ok, stored}: the items a notification carried (`syncPush`)
  *   POST /v1/sources/removed {tenantId,userId,sourceId,refs:[…]} → {ok, removed}: refs the source deleted (`syncPush`)
+ *   POST /v1/sources/refs    {tenantId,userId,sourceId,refs:[…]} → {ok, synced, reason?}: refs the source changed or
+ *                            added, read by Eden in the background (`syncPush`, D347)
+ *   POST /v1/usage     {tenantId}                  → the tenant's usage today (D326): modelUsd, modelCalls, capUsd,
+ *                                                    requests by route, users (frozenUsers, syncedUsers), items; the
+ *                                                    router sums its children's
  *   GET  /healthz
  *
  * Auth: `Authorization: Bearer <key>`; the key fixes the tenant, and a body naming another tenant is refused.
@@ -23,33 +30,83 @@
  * before the body is read; `main.ts` passes the same cap to Bun.serve, which also covers bodies sent without one.
  * Errors are `{error}` with a 4xx for the caller's mistakes; nothing the caller sends can produce a 500.
  */
-import type { ContextPartner } from "@eden/engine";
+import { explainTrace, type ContextPartner } from "@eden/engine";
 import { Gcra } from "@eden/primitives";
-import { checkAsk, checkEvent, checkSourceChanged, checkSourceItems, checkSourceRemoved, isId } from "@eden/protocol";
-import { DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
+import {
+  bodyShapeUnder,
+  checkAsk,
+  checkEvent,
+  checkSourceChanged,
+  checkSourceItems,
+  checkSourceRefs,
+  checkSourceRemoved,
+  isId,
+  keylessOriginAllowed,
+} from "@eden/protocol";
+import type { TenantSpend } from "@eden/llm";
+import { DEFAULT_MAX_BODY_BYTES, FANOUT_COPY, type ServerConfig } from "./config";
+import { keyOf } from "./auth";
 import type { UserSources } from "./user-sources";
 
 type Json = Record<string, unknown>;
+const decoder = new TextDecoder();
+const ROUTES = new Set(
+  [
+    "events",
+    "check",
+    "ask",
+    "pending",
+    "whoami",
+    "explain",
+    "feedback",
+    "usage",
+    "forget",
+    "sources/changed",
+    "sources/items",
+    "sources/refs",
+    "sources/removed",
+    "sources",
+  ].map((r) => `/v1/${r}`),
+);
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const fail = (status: number, error: string) => json({ error }, status);
 
 export function createHandler(
   partner: ContextPartner,
   config: Pick<ServerConfig, "keys" | "dev"> &
-    Partial<Pick<ServerConfig, "tenantRatePerSec" | "tenantBurst" | "maxBodyBytes">>,
+    Partial<Pick<ServerConfig, "tenantRatePerSec" | "tenantBurst" | "maxBodyBytes" | "child">>,
   /** Per-user sources (D108): forget closes the user's connections, and `/v1/sources` reports their config. */
   userSources?: UserSources,
+  /** The tenant spend cap the partner's model roles share, for `/v1/usage` (D326); omitted, spend reads 0. */
+  spend?: TenantSpend,
 ) {
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const tooLarge = `body must be at most ${maxBodyBytes.toLocaleString("en-US")} bytes`;
   const limiter = new Gcra({ ratePerSec: config.tenantRatePerSec ?? 200, burst: config.tenantBurst ?? 400 });
   const tenantOf = (req: Request): string | null => {
-    const key = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    const key = keyOf(req);
     if (key && config.keys.has(key)) return config.keys.get(key)!;
     // Dev mode accepts a missing key, never a wrong one: a typo'd production key must not land in tenant "dev".
     return config.dev && !key ? "dev" : null;
   };
+  /** A keyless (dev) request from a browser page on another site (audit A20: `keylessOriginAllowed`). */
+  const foreignPage = (req: Request, tenant: string) =>
+    tenant === "dev" && !keyOf(req) && !keylessOriginAllowed(req.headers.get("origin"));
   const badId = (body: Json, fields: string[]) => fields.find((f) => !isId(body[f]));
+  // Requests per tenant and UTC day, by route (D326's usage report): counts only, today's alone (yesterday's dropped at
+  // the first request of a new day), one small record per tenant.
+  let countedDay = "";
+  const counted = new Map<string, Record<string, number>>();
+  const count = (tenant: string, route: string) => {
+    const day = new Date().toISOString().slice(0, 10);
+    if (day !== countedDay) {
+      counted.clear();
+      countedDay = day;
+    }
+    let c = counted.get(tenant);
+    if (!c) counted.set(tenant, (c = {}));
+    c[route] = (c[route] ?? 0) + 1;
+  };
 
   return async function handle(req: Request): Promise<Response> {
     const url = new URL(req.url);
@@ -57,7 +114,16 @@ export function createHandler(
     if (req.method !== "POST") return fail(405, "method not allowed");
     const tenant = tenantOf(req);
     if (!tenant) return fail(401, "missing or unknown API key");
-    const waitMs = limiter.take(tenant);
+    if (foreignPage(req, tenant)) return fail(403, "dev mode serves no key-less request from another site's page");
+    // A router's fan-out copy (forget, usage) to a child that does not own the user: the owner's copy spends the
+    // tenant's token and is counted; the copies do neither, or a usage read would spend N tokens and a limited child
+    // would read as down (A24). Honoured only in a router child and on the routes the router copies: in a single
+    // process, or on any other route, the header means nothing.
+    const copy =
+      config.child != null &&
+      (url.pathname === "/v1/forget" || url.pathname === "/v1/usage") &&
+      req.headers.get(FANOUT_COPY) === "1";
+    const waitMs = copy ? 0 : limiter.take(tenant);
     if (waitMs > 0) {
       return Response.json(
         { error: "rate limited" },
@@ -70,7 +136,10 @@ export function createHandler(
     if (declared > maxBodyBytes) return fail(413, tooLarge);
     let body: Json;
     try {
-      const parsed: unknown = await req.json();
+      const bytes = new Uint8Array(await req.arrayBuffer());
+      // Before the parse, which is where a padded body's cost lies (D100's cap bounds bytes, not values or depth).
+      if (!bodyShapeUnder(bytes)) return fail(400, "body holds too many values or nests too deep");
+      const parsed: unknown = JSON.parse(decoder.decode(bytes));
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return fail(400, "body must be an object");
       body = parsed as Json;
     } catch {
@@ -79,13 +148,17 @@ export function createHandler(
     body.tenantId ??= tenant;
     if (body.tenantId !== tenant) return fail(403, "tenantId does not match the API key");
 
+    // Known routes only (a bounded record), and not a router's fan-out copy (counted once, by the owning child).
+    if (ROUTES.has(url.pathname) && !copy) count(tenant, url.pathname.slice(4));
     try {
       switch (url.pathname) {
         case "/v1/events": {
           const checked = checkEvent(body);
           if (!checked.ok) return fail(400, checked.error);
           const waitMs = Math.max(0, Math.min(5_000, Number(url.searchParams.get("waitMs") ?? 0) || 0));
-          return json(await partner.observe(checked.value, { waitMs }));
+          // `?shadow=1`: an integration trying Eden without injecting (the proxy's shadow mode): nothing is learned.
+          const shadow = url.searchParams.get("shadow") === "1";
+          return json(await partner.observe(checked.value, { waitMs, ...(shadow ? { shadow } : {}) }));
         }
         case "/v1/check": {
           // The action firewall: a tool call the agent is about to make, checked against what is held (no model).
@@ -103,7 +176,10 @@ export function createHandler(
           const bad = badId(body, ["userId", "sessionId"]);
           if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
           const who = { tenantId: tenant, userId: body.userId as string, sessionId: body.sessionId as string };
-          return json({ injections: partner.takePending(who) });
+          const shadow = url.searchParams.get("shadow") === "1";
+          // D325: the take checks new items against the session's plans (`checkPlans`), which reads the user's items.
+          await partner.ready(who);
+          return json({ injections: partner.takePending(who, shadow ? { shadow } : {}) });
         }
         case "/v1/whoami": {
           // The client's `health()`: the key, the tenant and the ids are checked as any route checks them, and nothing
@@ -114,6 +190,25 @@ export function createHandler(
             return fail(400, "sessionId must be 1-128 characters of [A-Za-z0-9._:@-]");
           }
           return json({ ok: true });
+        }
+        case "/v1/explain": {
+          // Why Eden spoke or stayed silent in this session (D277): its traces, content-free (D56), a sentence each.
+          const bad = badId(body, ["userId", "sessionId"]);
+          if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
+          const who = { tenantId: tenant, userId: body.userId as string, sessionId: body.sessionId as string };
+          const decisions = partner.explain(who).map((t) => ({
+            turn: t.turn,
+            event: t.event,
+            decision: t.decision,
+            reason: t.reason,
+            why: explainTrace(t),
+            latencyMs: t.latencyMs,
+            sourceCalls: t.sourceCalls,
+            modelCalls: t.modelCalls,
+            costUsd: t.costUsd,
+            itemIds: t.itemIds,
+          }));
+          return json({ decisions });
         }
         case "/v1/feedback": {
           const bad = badId(body, ["userId", "sessionId", "injectionId"]);
@@ -129,10 +224,28 @@ export function createHandler(
           });
           return json({ ok: true, applied });
         }
+        case "/v1/usage": {
+          // The tenant's own usage today in this process (D326): model spend and calls against the cap this process
+          // holds, requests by route, users held. The router sums its children's (router.ts); counts only.
+          const day = new Date().toISOString().slice(0, 10);
+          return json({
+            tenantId: tenant,
+            day,
+            processes: 1,
+            modelUsd: spend?.spent(tenant) ?? 0,
+            modelCalls: spend?.calls(tenant) ?? 0,
+            capUsd: spend?.capOf(tenant) ?? 0,
+            requests: day === countedDay ? { ...counted.get(tenant) } : {},
+            ...partner.tenantUsage(tenant),
+          });
+        }
         case "/v1/forget": {
           if (badId(body, ["userId"])) return fail(400, "userId must be 1-128 characters of [A-Za-z0-9._:@-]");
           if (body.sourceId !== undefined && !isId(body.sourceId)) return fail(400, "sourceId is malformed");
           const scope = { tenantId: tenant, userId: body.userId as string };
+          // D325: one source's forget drops its items from the user's cache, a read; the whole user's forget reads
+          // nothing (a frozen user's record is simply dropped).
+          if (body.sourceId !== undefined) await partner.ready(scope);
           partner.forget(scope, body.sourceId as string | undefined);
           userSources?.forget(scope, body.sourceId as string | undefined);
           return json({ ok: true });
@@ -152,11 +265,22 @@ export function createHandler(
           const { userId, sourceId, items } = checked.value;
           return json({ ok: true, stored: await partner.sourceItems({ tenantId: tenant, userId }, sourceId, items) });
         }
+        case "/v1/sources/refs": {
+          // What changed, named but not carried (a Gmail history's ids, a webhook's resource id): Eden reads those
+          // refs itself in the background (D347). 200 at once; `reason` when it acts as a plain signal could not.
+          const checked = checkSourceRefs(body);
+          if (!checked.ok) return fail(400, checked.error);
+          const { userId, sourceId, refs } = checked.value;
+          const { settled, ...result } = partner.sourceRefs({ tenantId: tenant, userId }, sourceId, refs);
+          void settled.catch(() => 0);
+          return json({ ok: true, ...result });
+        }
         case "/v1/sources/removed": {
           // A deletion the integrator was told of (a recalled message, a deleted doc or event): dropped at once.
           const checked = checkSourceRemoved(body);
           if (!checked.ok) return fail(400, checked.error);
           const { userId, sourceId, refs } = checked.value;
+          await partner.ready({ tenantId: tenant, userId }); // D325, as above.
           return json({ ok: true, removed: partner.sourceRemoved({ tenantId: tenant, userId }, sourceId, refs) });
         }
         case "/v1/sources": {

@@ -1,0 +1,9 @@
+run        arm          tokens calls/t first-party    Composio  Unified.to  Arcade.dev   Pipedream  Zapier MCP
+short      tools         0.237    2.30       0.237       0.927       1.961      23.227      27.825      59.551
+short      eden          0.279    0.00       0.279       0.279       0.279       0.279       0.279       0.279
+short      eden+terse    0.279    0.00       0.279       0.279       0.279       0.279       0.279       0.279
+long       tools         0.203    1.14       0.203       0.545       1.057      11.593      13.871      29.589
+long       eden          0.241    0.15       0.241       0.287       0.357       1.791       2.101       4.240
+long       eden+ephemeral   0.298    0.15       0.298       0.344       0.414       1.848       2.158       4.297
+long       eden+ephemeralBp   0.204    0.15       0.204       0.251       0.320       1.754       2.064       4.203
+long       eden+terse    0.226    0.15       0.226       0.273       0.342       1.776       2.086       4.225

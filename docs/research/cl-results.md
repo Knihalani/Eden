@@ -20,6 +20,10 @@ ledgers: **Anthropic-direct lab figures**, not the OpenRouter route the servers 
     setup it gives up about 5 points (−4.9, −11.1..+1.4), the price of the cost and latency cut; the pre-registered
     rule kept it.
   - **No rise in false concerns** after regrading.
+- **Blind again on heldout17 (A29, D395, [a29-heldout17.md](a29-heldout17.md)), with the house rules on in every
+  arm (`--tenant-prompt`):** hidden facts 73.4% vs 4.7% (short), 7/8 vs 0/8 (long); 0.62 s and 0.45 s faster; no rise
+  in regraded concerns; but **dearer on the billed agent bill**, +$0.087/1k short and +$0.059 long (level
+  cache-neutral, cheaper on every priced connector plan). The heldout16 cost rows above ran without house rules.
 - **Against RealUse-1** (heldout14, different suite): Eden was +$0.50/1k and +0.6 s on the mix; now level or cheaper and
   faster.
 - **Hermes Agent** (heldout16, seeds 41–42): 71.9% vs 10.9% hidden facts, about 1 s faster on hidden tasks, but $0.077
@@ -27,6 +31,9 @@ ledgers: **Anthropic-direct lab figures**, not the OpenRouter route the servers 
 - **What is left on short horizons is mostly a lab artefact:** Pi's agent with Eden has a ~565-token fixed prompt that
   the cache never served, while the tools agent's longer prompt was cached (CL8, D260). Re-priced as if cached (a
   counterfactual), the short mix is $0.362 vs $0.370. Real agent prompts are far longer than the cache minimum.
+  **Superseded by A3 (D271, [a3-cost-speed.md](a3-cost-speed.md)):** with a cached prompt in every arm (train,
+  `--tenant-prompt`) the agent alone also changes, and Eden is +$0.060/1k one request at a time and +$0.080/1k over
+  days, 0.96 s and 0.42 s faster; the long payload runs above also carried ~650 ms of harness-caused re-reads (D272).
 
 ## What was tried, kept and deleted
 

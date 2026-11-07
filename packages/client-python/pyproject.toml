@@ -1,0 +1,13 @@
+[project]
+name = "eden-client"
+version = "0.0.0"
+description = "Python client for the Eden context partner: report agent events, collect injections, ask. Standard library only; fails open."
+requires-python = ">=3.9"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["eden_client"]

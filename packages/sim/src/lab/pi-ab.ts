@@ -54,12 +54,16 @@
  *     [--conditions none,tools,eden,both] [--config H|'{"probes":true}'] [--model z-ai/glm-5.3-flash]
  *     [--grader anthropic/claude-haiku-5.5] [--budget 0.6] [--out pi-ab.json] [--timeline dir] [--time-scale 1]
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
- *     [--variant-config '{"name":{...}}'] [--act] [--cards FILE [--cards-out FILE]] [--card-sort price]
+ *     [--variant-config '{"name":{...}}'] [--act] [--dress] [--cards FILE [--cards-out FILE]] [--card-sort price]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent default|none|FILE[,FILE]]
  *     [--replay DIR [--replay-timing] [--replay-only]] [--reuse-arms earlier.json]
+ *     [--recap-notice push|signal] [--noise-sources N [--noise-items 20]]
  *
  * `--replay DIR` replays the reader's and the grader's calls from DIR and appends new ones; `--reuse-arms F` copies the
  * `none` and `tools` arms from a matching earlier run instead of running them (both at their definitions below).
+ *
+ * `--day K --late` (A9, pi-late.ts): each request's planted item arrives right after its answer; the agent's later
+ * replies that day are graded against that request (`lateFacts`).
  *
  * `--templates a,b` runs only those hidden-context templates. Free models go through `free.ts` (above).
  *
@@ -99,8 +103,9 @@ import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, ty
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
+import { noiseSources } from "./noise-sources";
 import type { World } from "../world";
-import { connectorHeader, connectorOptions, pushNotifier, sourceFields } from "./connector-options";
+import { connectorHeader, connectorOptions, pushNotifier, recapNotice, sourceFields } from "./connector-options";
 import {
   armPromptsHash,
   ASK_DESCRIPTION,
@@ -114,6 +119,7 @@ import {
   reusableArms,
   searchToolSpec,
   systemPrompt,
+  TENANT_GUIDE,
   TOOL_ITEMS,
   userPrompt,
   worldOf,
@@ -127,6 +133,7 @@ import { variantsFor } from "./neutral";
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
 import { DiskCardMaker, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
 import {
+  anthropicThinkingOff,
   isAnthropic,
   isCapError,
   labAccess,
@@ -141,6 +148,7 @@ import { effective, PRESETS } from "./presets";
 import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Budgeted } from "./reader-disk";
 import { parseSuites } from "./suites";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
+import { earlierPackets, userTurnBreakpoint } from "./packet-layout";
 import {
   DayLog,
   dayId,
@@ -156,6 +164,7 @@ import {
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { sanitizeForStore } from "@eden/redact";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
+import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -183,6 +192,11 @@ const DAY_SIZE = parseDaySize(opt("day-size", "12-20"));
 const MIX = parseMix(opt("mix", "1:1:8"));
 const GAP_MS = Number(opt("gap-min", "10")) * 60_000;
 const NIGHT_MS = Number(opt("night-h", "2")) * 3_600_000;
+// `--recap-notice push|signal` (A8): how the day's recap announces its moved items. `push` (the default) follows
+// `--push` (D272); `signal` sends a bare `sourceChanged` whatever `--push` says, as every run before D272 did.
+const RECAP_NOTICE = opt("recap-notice", "push");
+if (RECAP_NOTICE !== "push" && RECAP_NOTICE !== "signal") throw new Error("--recap-notice must be push or signal");
+const RECAP_SIGNAL = RECAP_NOTICE === "signal";
 if (USER_DAYS > 0) {
   for (const f of ["day", "variants", "templates", "reuse-arms"]) {
     if (args.includes(`--${f}`)) throw new Error(`--days plans the user's requests itself: it cannot take --${f}`);
@@ -194,6 +208,11 @@ const VARIANTS = (USER_DAYS > 0 ? "hidden,control,neutral" : opt("variants", "hi
   "hidden" | "control" | "neutral"
 )[];
 const ACT = args.includes("--act");
+// `--dress` (A6, D287): one ordinary message per person or firm a request names that no item of its world names.
+const DRESS = args.includes("--dress");
+if (DRESS && (USER_DAYS > 0 || args.includes("--reuse-arms"))) {
+  throw new Error("--dress dresses the per-suite worlds only: not with --days or --reuse-arms");
+}
 const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden,eden-act-firewall" : "none,tools,eden,both").split(",");
 const OUT = opt("out", "pi-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
@@ -208,8 +227,19 @@ const LIMIT = Number(opt("limit", "0"));
 // a recap turn closing each day; 0 (the default) is one session per request.
 const DAY = Number(opt("day", "0"));
 if (!Number.isInteger(DAY) || DAY < 0) throw new Error(`--day must be a whole number of requests, not ${DAY}`);
+// `--noise-sources N` (A21): N unrelated connectors beside the world's five in Eden's arms only (`noise-sources.ts`,
+// `--noise-items` items each, default 20), as the funnel's flag (A1): a user with ~1,000 connected sources. The tools
+// arm keeps the world's sources (its agent's tools); every connector call Eden makes, noise ones too, is counted.
+const NOISE_SOURCES = Number(opt("noise-sources", "0"));
+const NOISE_ITEMS = Number(opt("noise-items", "20"));
+if (!Number.isInteger(NOISE_SOURCES) || NOISE_SOURCES < 0 || !Number.isInteger(NOISE_ITEMS) || NOISE_ITEMS < 1)
+  throw new Error("--noise-sources and --noise-items take whole numbers (--noise-items at least 1)");
 /** Either day mode: `--day K` (fixed days per suite and variant) or `--days D` (a user's mixed days). */
 const DAYS_ON = DAY > 0 || USER_DAYS > 0;
+// `--late` (A9, pi-late.ts): each request's planted item arrives right after the agent answers it; what the agent
+// says later that day is graded against that request (`lateFacts`).
+const LATE = args.includes("--late");
+if (LATE && DAY === 0) throw new Error("--late needs --day K (fixed days per suite and variant)");
 /** Each day's summary, with the recap turn's own cost (a probe: no task's cost includes it). */
 const DAYS: (DaySummary & {
   seed: number;
@@ -235,15 +265,19 @@ const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
   act: ACT,
   defaults: DEFAULT_CONFIG as unknown as Record<string, unknown>,
 });
+// D336's layouts differ only where a session holds several requests; on one request they would rerun `eden`.
+if (!DAYS_ON && CONDITIONS.some((c) => c.packets !== "kept")) {
+  throw new Error("+ephemeral and +ephemeralBp change how earlier requests' packets are kept: use --days or --day");
+}
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
-const USES_READER = CONDITIONS.some((c) => c.withPartner && effective(c.config).askReader);
+const USES_READER = CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).askReader);
 // Every model a role of this run calls, once: the pacer and spend ledger are set up for them, and the key check below
 // reads the same list, so a role added here cannot go unchecked.
 const RUN_MODELS = [
   MODEL,
   GRADER,
-  ...(CONDITIONS.some((c) => c.withPartner && effective(c.config).cards) ? [CARD_MODEL] : []),
+  ...(CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).cards) ? [CARD_MODEL] : []),
   ...(USES_READER ? [READER_MODEL] : []),
 ];
 // Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
@@ -274,7 +308,9 @@ if (CARDS_FILE && !existsSync(CARDS_FILE)) throw new Error(`--cards ${CARDS_FILE
 // The intent requests (D158): with cards replayed the card model writes requests only for the items it cards live,
 // so the checked-in requests are replayed by default where they cover the run, as the funnel does (`--intent none`
 // opts out; a list of files replays those). A run they do not cover is labelled intent inert in its header.
-const INTENT_WANTED = CONDITIONS.some((c) => c.withPartner && effective(c.config).intent && effective(c.config).cards);
+const INTENT_WANTED = CONDITIONS.some(
+  (c) => c.withPartner && !c.noKey && effective(c.config).intent && effective(c.config).cards,
+);
 const INTENT = harnessIntent(opt("intent", "default"), {
   wanted: INTENT_WANTED,
   cardsReplayed: !!CARDS_FILE,
@@ -503,7 +539,12 @@ function meteredModel(
 /** The tool parameter every search tool and `ask_context` takes: one string, as agent-ab declares it. */
 const queryParams = Type.Object({ query: Type.String({ description: "What to search for" }) });
 // What the Eden-free arms see and how they are graded, recorded with the results so `--reuse-arms` can check it.
-const PROMPTS_HASH = armPromptsHash({ queryParams }, VARIANTS.includes("neutral"));
+/** `--tenant-prompt` (A3, D271): the tenant's house rules (`TENANT_GUIDE`) in every arm's system prompt. */
+const TENANT_PROMPT = args.includes("--tenant-prompt");
+const PROMPTS_HASH = armPromptsHash(
+  TENANT_PROMPT ? { queryParams, tenant: TENANT_GUIDE } : { queryParams },
+  VARIANTS.includes("neutral"),
+);
 const askParams = Type.Object({ question: Type.String() });
 
 /**
@@ -548,6 +589,11 @@ interface TaskRecord {
     cached?: number;
     /** Of `in`, the tokens written to the prompt cache (Anthropic: billed at 1.25x input). */
     cacheWrite?: number;
+    /** A16: the reply's visible text (characters) and its tool calls, so a report can split a turn's output. */
+    textChars?: number;
+    calls?: number;
+    /** A16: the text of a reply that called a tool (sim data, first `SAY_CHARS`): what the agent says before asking. */
+    say?: string;
   }[];
   events: Timeline["events"];
   dropped: number;
@@ -569,6 +615,17 @@ const textOf = (m: AgentMessage | undefined) =>
         .join("")
     : "";
 
+/** A16: how much of a tool turn's text a timeline keeps (sim data). */
+const SAY_CHARS = 400;
+
+/** A16: a reply's shape for the timeline: its text's length, its tool calls and, when it called one, its text. */
+function turnShape(m: AgentMessage): { textChars: number; calls: number; say?: string } {
+  if (m.role !== "assistant") return { textChars: 0, calls: 0 };
+  const text = textOf(m);
+  const calls = m.content.filter((c) => c.type === "toolCall").length;
+  return { textChars: text.length, calls, ...(calls && text ? { say: text.slice(0, SAY_CHARS) } : {}) };
+}
+
 /** One world under one condition: a fresh Eden (if any) sees the world's tasks in order, as in agent-ab. */
 async function runWorld(
   shared: World,
@@ -583,6 +640,9 @@ async function runWorld(
   // `--day` changes items during the run: each stream gets its own copy of them, since every condition's stream reads
   // the same world concurrently.
   const world: World = DAYS_ON ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
+  // `--late`: the planted items are not at their sources until their requests are answered.
+  const lateHeld = LATE ? holdPlanted(world, baseTasks) : null;
+  let dayLate: { entry: LateEntry; r: RunResult }[] = [];
   const userPrefix = `w${seed}:user`;
   const tasks = daySizes
     ? withDayRecaps(baseTasks, daySizes, (t, d) => recapOf(t, `${userPrefix}:day${d}:recap`))
@@ -590,17 +650,37 @@ async function runWorld(
       ? withRecaps(baseTasks, DAY)
       : baseTasks;
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
-  const notify = pushNotifier(sources, CONNECTORS, seed);
-  const { name: condition, waitMs, useEden, withPartner, useTools, askTool, judge, act, firewall, config } = cond;
+  const notify = pushNotifier(sources, CONNECTORS, seed, world.now);
+  const {
+    name: condition,
+    waitMs,
+    useEden,
+    withPartner,
+    useTools,
+    askTool,
+    judge,
+    act,
+    firewall,
+    config,
+    noKey,
+    packets: layout,
+  } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.
   let current: Timeline | null = null;
   const bySession = new Map<string, { r: RunResult; tl: Timeline }>();
-  const edenSources = sources.map((s) =>
-    watched(s, (id, op, start, end, status, items) =>
-      current?.span("eden.source", "eden", "bg", start, end, { source: id, op, status, items }),
-    ),
+  // Every connector call Eden makes in this stream, in a task's window or not (the backfill, the sync's ticks between
+  // tasks): `Background.sourceCalls`, priced per connector plan by pi-cost-report.ts.
+  let edenCalls = 0;
+  const noise =
+    NOISE_SOURCES > 0 && cond.withPartner ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME_SCALE, seed) : [];
+  const edenSources = [...sources, ...noise].map((s) =>
+    watched(s, (id, op, start, end, status, items) => {
+      edenCalls++;
+      bg.sourceCalls = edenCalls;
+      current?.span("eden.source", "eden", "bg", start, end, { source: id, op, status, items });
+    }),
   );
   // What this stream's background calls (cards) cost: booked to Eden's total, charged to no task (Background).
   // Recorded in the results as the calls happen (below), so a stream that stops early (OverBudget, the request cap)
@@ -634,15 +714,22 @@ async function runWorld(
   const cardMaker = (): CardMaker =>
     diskCards ? new DiskCardMaker(CARDS_FILE, liveCards(), { out: CARDS_OUT, shared: diskCards }) : liveCards();
   const cards =
-    withPartner && effective(config).cards
+    // `+nokey` (D291): a server with no model key builds no card enricher and no reader (models.ts NO_MODELS).
+    withPartner && !noKey && effective(config).cards
       ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   if (cards) budgeted.cards.push(cards);
+  // A stream with Eden but no cards (`+nokey`, D291) is booked too, for its connector calls (the backfill, ticks); it
+  // has no model spend, and `noModels` keeps it out of the card backfill each seed's model reports spread.
   if (cards) background.push(bg);
+  else if (withPartner) {
+    bg.noModels = true;
+    background.push(bg);
+  }
   // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
   let readerTask: RunResult | null = null;
   const reader =
-    withPartner && effective(config).askReader
+    withPartner && !noKey && effective(config).askReader
       ? new AskReader({
           maker: new ModelReaderMaker(
             meteredModel(
@@ -726,6 +813,8 @@ async function runWorld(
   // background spend is made while the user works (new and changed items).
   bg.setupUsd = bg.cardsUsd;
   bg.setupCalls = bg.calls;
+  bg.setupSourceCalls = edenCalls;
+  bg.sourceCalls = edenCalls;
   const out: RunResult[] = [];
   let previous: { sessionId: string; r: RunResult } | null = null;
   const closePrevious = async () => {
@@ -743,6 +832,40 @@ async function runWorld(
   let dayNo = -1;
   let newDay = true;
   let daySession = "";
+  /** Grades `answer` against `task`'s facts beside the next task, on `tl` (after its end); `set` gets the verdicts. */
+  const gradeInto = (task: Task, answer: string, tl: Timeline, set: (facts: Record<string, boolean>) => void) => {
+    grading.push(
+      (async () => {
+        const g = tl.begin("grading", "grading", "bg");
+        const est = worstCase(GRADER, 4_000 + answer.length + task.text.length, 2_000);
+        let reserved = false;
+        let cost = 0;
+        let failure = "";
+        try {
+          if (task.must.length > 0 && answer.trim()) {
+            reserve(est);
+            reserved = true;
+          }
+          const meter: Meter = { before: () => {}, after: (c) => (cost = c) };
+          const via = { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging };
+          // `--replay`: the same prompt through the replay cache (a replayed grade costs nothing).
+          const model = graderReplay ?? GRADER_MODEL;
+          set(
+            model
+              ? await gradeWith(model, task, answer, (c) => (cost = c))
+              : (await grade(KEY!, meter, GRADER, task, answer, via)).facts,
+          );
+        } catch (e) {
+          // A failed grading call leaves the result ungraded (reported), never scored as a miss. The status line
+          // only: an error body can quote the request.
+          failure = isCapError(e) ? "request cap reached" : e instanceof Error ? e.message.slice(0, 60) : "error";
+        } finally {
+          if (reserved) settle(est, cost, "grader");
+          tl.end(g, { cost, ...(failure ? { error: failure } : {}) });
+        }
+      })(),
+    );
+  };
   // A set: two requests planting one item must not move it twice.
   const dayPlanted = new Set<string>();
   let dayKind = "";
@@ -757,6 +880,9 @@ async function runWorld(
     // An hour between tasks: Eden's clock, for its caches and planner. `--days`: `--gap-min` between requests and
     // `--night-h` before each day after the first (the recap closed the day before).
     clock += daySizes ? (newDay && dayNo >= 0 ? NIGHT_MS : GAP_MS) : 3_600_000;
+    // Between tasks no task's timeline is current: the sync's tick, the notices and a recap's notice are background,
+    // counted in the stream's `sourceCalls` and not in the previous task's window (A3 review; before it they were).
+    current = null;
     if (sync) await sync.tick();
     notify(partner, scope);
     if (DAYS_ON && newDay) {
@@ -767,6 +893,7 @@ async function runWorld(
       dayMessages = [];
       dayPackets.length = 0;
       dayPlanted.clear();
+      dayLate = [];
       dayKind = task.kind;
     }
     const startsDay = newDay;
@@ -778,6 +905,7 @@ async function runWorld(
       // text, and a notifying source says so (`--push`), as plans moved during the day would. Only before the recap,
       // which is never graded: a moved item could otherwise land in a later request's slot and change its grade.
       const touched = new Set<string>();
+      const movedIds = new Set<string>();
       for (const id of dayPlanted) {
         const it = world.items.find((x) => x.id === id);
         if (!it) continue;
@@ -787,11 +915,20 @@ async function runWorld(
         if (it.meta) it.meta = shiftMeta(it.meta, moved.moves);
         it.updatedAt = clock;
         touched.add(it.sourceId);
+        movedIds.add(it.id);
         day.changed(it.id, moved.moves);
       }
       for (const src of sources) if (touched.has(src.id)) src.reindex();
       if (partner && CONNECTORS.push !== "none") {
-        for (const id of touched) partner.sourceChanged(scope, id);
+        // `payload`: the notice carries the moved items, as the client sends one (`sourceChanged` with items calls
+        // only `sourceItems`): no signal, so no other copy of the source is put in doubt. Before A3 (D272) this sent
+        // a bare signal in every mode, so from each day's first recap on every push re-read its candidates from that
+        // source on the agent's critical path (about 650 ms a task in CL5-CL8's long payload runs).
+        // A3's first fix moved items without naming them, and its notice went out empty: refuse that.
+        if (touched.size > 0 && movedIds.size === 0) throw new Error("recap moved items but named none");
+        // `--recap-notice signal` (A8): the bare signals every run sent before D272, to reproduce its re-reads.
+        if (RECAP_SIGNAL) for (const id of touched) partner.sourceChanged(scope, id);
+        else await recapNotice(partner, scope, sources, movedIds, CONNECTORS.push);
         // The change lands two hours before the recap: what the notice started in the background (`revisionNotice`'s
         // poll; nothing when that trial is off) has settled by then. Bounded, so a hung poll cannot stall the stream.
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -965,7 +1102,12 @@ async function runWorld(
       let ledgerEst = 0;
       const agent = new Agent({
         initialState: {
-          systemPrompt: systemPrompt(world, { lookups: LOOKUPS, data: useTools || useEden, act }),
+          systemPrompt: systemPrompt(world, {
+            lookups: LOOKUPS,
+            data: useTools || useEden,
+            act,
+            tenant: TENANT_PROMPT,
+          }),
           // `--day`: the day's transcript so far (its earlier requests, tool calls and answers).
           ...(DAYS_ON && !startsDay ? { messages: dayMessages } : {}),
           model: piModel,
@@ -981,7 +1123,8 @@ async function runWorld(
           if (DAYS_ON && dayPackets.some((p) => p.length)) {
             const asSystem = (text: string) =>
               ({ role: "system", content: text, timestamp: Date.now() }) as unknown as AgentMessage;
-            return placePackets(messages, dayPackets, packets, asSystem);
+            // `+ephemeral`, `+ephemeralBp` (D336): earlier requests' packets gone, as `withContext` and the proxy send.
+            return placePackets(messages, earlierPackets(layout, dayPackets), packets, asSystem);
           }
           if (!packets.length) return messages;
           const at = messages.map((m) => m.role).lastIndexOf("user");
@@ -1024,6 +1167,12 @@ async function runWorld(
               maxRetries: 0,
               timeoutMs: 90_000,
               cacheRetention: "short",
+              onPayload: (payload) => {
+                const p = anthropicThinkingOff(MODEL, payload);
+                // `+ephemeralBp` (D336): the request's user turn gets a breakpoint, so its entry outlives the packet.
+                if (layout === "ephemeralBp") userTurnBreakpoint(p as { messages?: unknown });
+                return p;
+              },
               onProviderStreamEvent: (event) => {
                 const e = event as { type?: string };
                 if (mine.first === null && (e.type === "content_block_start" || e.type === "content_block_delta")) {
@@ -1156,6 +1305,7 @@ async function runWorld(
             cost,
             ...(q.cached ? { cached: q.cached } : {}),
             ...(q.cacheWrite ? { cacheWrite: q.cacheWrite } : {}),
+            ...turnShape(e.message),
           });
         } else if (e.type === "tool_execution_start") {
           r.toolCalls++;
@@ -1199,8 +1349,21 @@ async function runWorld(
     record.firstTokenMs = record.requests[0]?.firstTokenMs ?? null;
     if (r.error) record.error = r.error.slice(0, 200);
     if (partner) Object.assign(record, uptake.fields());
+    // `--late`: every answer after a planted item arrived is one of its later replies; the recap closes the day and
+    // grades them against the planted request.
+    for (const l of dayLate) l.entry.after.push(r.error ? "" : r.answer);
+    if (LATE && isRecap(task)) {
+      for (const l of dayLate) {
+        l.r.lateTurns = l.entry.after.length;
+        // Kept with the verdicts, so a regrade (or a reader) sees what was graded.
+        l.r.lateText = laterText(l.entry);
+        gradeInto(l.entry.task, l.r.lateText, tl, (f) => (l.r.lateFacts = f));
+      }
+      dayLate = [];
+    }
     if (DAYS_ON && day) {
-      if (!isRecap(task) && task.planted) dayPlanted.add(task.planted);
+      // `--late` moves no clock before the recap: the late arrival is the day's only change.
+      if (!LATE && !isRecap(task) && task.planted) dayPlanted.add(task.planted);
       if (isRecap(task)) {
         // The recap is measured, never graded or reported as a task; its cost is kept with the day.
         day.recap(r.error ? "" : r.answer);
@@ -1214,36 +1377,27 @@ async function runWorld(
     bg.tasks.push(r.task);
     records.push(record);
     // Grading runs beside the next task, on this task's timeline (after its end): the agent never waits for it.
-    if (!r.error) {
-      grading.push(
-        (async () => {
-          const g = tl.begin("grading", "grading", "bg");
-          const est = worstCase(GRADER, 4_000 + r.answer.length + task.text.length, 2_000);
-          let reserved = false;
-          let cost = 0;
-          let failure = "";
-          try {
-            if (task.must.length > 0 && r.answer.trim()) {
-              reserve(est);
-              reserved = true;
-            }
-            const meter: Meter = { before: () => {}, after: (c) => (cost = c) };
-            const via = { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging };
-            // `--replay`: the same prompt through the replay cache (a replayed grade costs nothing).
-            const model = graderReplay ?? GRADER_MODEL;
-            r.facts = model
-              ? await gradeWith(model, task, r.answer, (c) => (cost = c))
-              : (await grade(KEY!, meter, GRADER, task, r.answer, via)).facts;
-          } catch (e) {
-            // A failed grading call leaves the result ungraded (reported), never scored as a miss. The status line
-            // only: an error body can quote the request.
-            failure = isCapError(e) ? "request cap reached" : e instanceof Error ? e.message.slice(0, 60) : "error";
-          } finally {
-            if (reserved) settle(est, cost, "grader");
-            tl.end(g, { cost, ...(failure ? { error: failure } : {}) });
-          }
-        })(),
-      );
+    if (!r.error) gradeInto(task, r.answer, tl, (f) => (r.facts = f));
+    // `--late`: the planted item arrives now, after the answer, and is new at its source; the notice carries it.
+    const arrived = lateHeld && task.planted ? release(world, lateHeld, task.planted, clock) : null;
+    if (arrived) {
+      const src = sources.find((x) => x.id === arrived.sourceId);
+      src?.reindex();
+      if (partner && src && CONNECTORS.push === "payload") {
+        await partner.sourceItems(
+          scope,
+          src.id,
+          src.listAll().filter((i) => i.id === arrived.id),
+        );
+      } else if (partner && src && CONNECTORS.push === "signals") partner.sourceChanged(scope, src.id);
+      // The next request comes ten minutes later: the item's card (made as it was stored) is in by then. Bounded, so a
+      // hung enrichment cannot stall the stream.
+      if (cards) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([cards.idle(), new Promise((r) => (timer = setTimeout(r, 10_000)))]);
+        clearTimeout(timer);
+      }
+      dayLate.push({ entry: { task, after: [] }, r });
     }
     previous = { sessionId, r };
   }
@@ -1268,7 +1422,7 @@ const worlds: { seed: number; world: World; tasks: Task[]; daySizes?: number[]; 
     : SEEDS.flatMap((seed) =>
         SUITE_LIST.flatMap((suite) =>
           (LOOKUPS ? ["hidden" as const] : variantsFor(suite, VARIANTS)).map((variant) => {
-            const w = worldOf(seed, suite, variant, LIMITS);
+            const w = worldOf(seed, suite, variant, LIMITS, { dress: DRESS });
             const picked = TEMPLATES ? { ...w, tasks: w.tasks.filter((t) => TEMPLATES.has(t.type)) } : w;
             return LIMIT > 0 ? { ...picked, tasks: picked.tasks.slice(0, LIMIT) } : picked;
           }),
@@ -1383,6 +1537,7 @@ writeFileSync(
       config: CONFIG,
       ...(Object.keys(CONFIG_VARIANTS).length ? { variantConfig: CONFIG_VARIANTS } : {}),
       ...(ACT ? { act: true } : {}),
+      ...(DRESS ? { dress: true } : {}),
       ...(CARDS_FILE ? { cards: { replay: CARDS_FILE, out: CARDS_OUT } } : {}),
       ...(INTENT_WANTED ? { intent: { line: INTENT_LINE, files: INTENT_FILES, ...intentCount } } : {}),
       timeScale: TIME_SCALE,
@@ -1397,7 +1552,10 @@ writeFileSync(
       background,
       ...(REPLAY_DIR ? { replay: replaySummary() } : {}),
       ...(REUSE_FILE ? { reusedArms: { from: REUSE_FILE, conditions: reused.conditions } } : {}),
-      ...(DAYS_ON ? { ...(DAY > 0 ? { day: DAY } : {}), days: DAYS, daysPooled: poolDays(DAYS) } : {}),
+      ...(LATE ? { late: true } : {}),
+      ...(DAYS_ON
+        ? { ...(DAY > 0 ? { day: DAY } : {}), days: DAYS, daysPooled: poolDays(DAYS), recapNotice: RECAP_NOTICE }
+        : {}),
       ...(USER_DAYS > 0
         ? {
             user: {

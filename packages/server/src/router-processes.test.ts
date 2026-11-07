@@ -55,6 +55,34 @@ function rowsByFile(dir: string, scope: string): Record<string, number> {
   return out;
 }
 
+describe("audit A20: dev mode behind the router", () => {
+  test.concurrent(
+    "a keyless request from another site's page is refused by the router (the child never sees Origin)",
+    async () => {
+      const dir = tempDir("eden-router-origin-");
+      const env = { ...process.env, EDEN_HOME: dir, EDEN_DEV: "1" };
+      const config = { ...loadConfig(env), port: 0, processes: 2 };
+      const router = await startRouter({ config, env, log: () => {}, onOutput: () => {} });
+      try {
+        const whoami = (headers: Record<string, string>) =>
+          fetch(`http://127.0.0.1:${router.port}/v1/whoami`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ userId: "me" }),
+          }).then((r) => r.status);
+        expect(await whoami({ origin: "http://evil.example:8790" })).toBe(403);
+        // An Authorization that parses to no key is no key (the review: "Bearer" and a no-break space).
+        expect(await whoami({ origin: "http://evil.example:8790", authorization: "Bearer \u00a0" })).toBe(403);
+        expect(await whoami({ origin: "http://localhost:3000" })).toBe(200);
+        expect(await whoami({})).toBe(200);
+      } finally {
+        await router.stop();
+      }
+    },
+    30_000,
+  );
+});
+
 describe("router rate limit, divided", () => {
   test.concurrent(
     "a tenant's burst is split across children: one child holds burst / N",
@@ -81,6 +109,95 @@ describe("router rate limit, divided", () => {
         }
         // One process would allow all 4; the user's child holds a burst of 2.
         expect(statuses).toEqual([200, 200, 429, 429]);
+      } finally {
+        await router.stop();
+      }
+    },
+    30_000,
+  );
+
+  test.concurrent(
+    "past the tenant's whole rate the router answers 429 before reading the body, as one process does",
+    async () => {
+      const dir = tempDir("eden-router-over-");
+      const env = {
+        ...process.env,
+        EDEN_HOME: dir,
+        EDEN_API_KEYS: keys,
+        EDEN_TENANT_RPS: "0.01",
+        EDEN_TENANT_BURST: "2",
+      };
+      const config = { ...loadConfig(env), port: 0, processes: 2 };
+      const router = await startRouter({ config, env, log: () => {}, onOutput: () => {} });
+      try {
+        // The tenant's whole burst, over two users (one per child or both on one: either way the tenant's 2).
+        for (const userId of ["u-a", "u-b"]) {
+          await fetch(`http://127.0.0.1:${router.port}/v1/whoami`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${KEY}` },
+            body: JSON.stringify({ userId }),
+          });
+        }
+        // A third request whose body never arrives: the router used to wait on it (each such request holding up to a
+        // body's worth of buffer and a parse on the router's one thread) before any child could refuse it.
+        const started = performance.now();
+        const head = await new Promise<string>((resolve) => {
+          let got = "";
+          void Bun.connect({
+            hostname: "127.0.0.1",
+            port: router.port,
+            socket: {
+              open(s) {
+                s.write(
+                  `POST /v1/whoami HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer ${KEY}\r\nContent-Length: 64\r\n\r\n`,
+                );
+              },
+              data(s, d) {
+                got += new TextDecoder().decode(d);
+                resolve(got);
+                s.end();
+              },
+              close() {
+                resolve(got);
+              },
+            },
+          });
+        });
+        expect(head.split("\r\n")[0]).toBe("HTTP/1.1 429 Too Many Requests");
+        expect(head.toLowerCase()).toContain("retry-after:");
+        expect(performance.now() - started).toBeLessThan(2_000);
+        // The other tenant is unaffected.
+        const other = await fetch(`http://127.0.0.1:${router.port}/v1/whoami`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${OTHER_KEY}` },
+          body: JSON.stringify({ userId: "u-a" }),
+        });
+        expect(other.status).toBe(200);
+      } finally {
+        await router.stop();
+      }
+    },
+    30_000,
+  );
+
+  test.concurrent(
+    "with EDEN_SPEND_LEASES=1 each child holds its lease start (cap/4N), not cap/N (D327)",
+    async () => {
+      const dir = tempDir("eden-router-lease-");
+      const env = { ...process.env, EDEN_HOME: dir, EDEN_API_KEYS: keys, EDEN_MODEL_USD_PER_TENANT_DAY: "8" };
+      const config = { ...loadConfig(env), port: 0, processes: 2, spendLeases: true };
+      let out = "";
+      const router = await startRouter({ config, env, log: () => {}, onOutput: (_i, t) => (out += t) });
+      try {
+        const res = await fetch(`http://127.0.0.1:${router.port}/v1/usage`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${KEY}` },
+          body: "{}",
+        });
+        const usage = (await res.json()) as { capUsd: number; processes: number };
+        expect(usage.processes).toBe(2);
+        expect(usage.capUsd).toBe(2); // 8 / (4 x 2) a child, before any lease.
+        expect(out).toContain("model spend leased from the router (D327)");
       } finally {
         await router.stop();
       }

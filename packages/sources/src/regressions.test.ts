@@ -353,10 +353,35 @@ describe("results cache: real bytes, group drops, drops across state eviction", 
     const empty = src("mail-connector", async () => []);
     const users = Array.from({ length: 50 }, (_, i) => ({ tenantId: `tenant-${i}`, userId: `user-${i}-abcdefgh` }));
     const pad = "x".repeat(60);
+    // The heap once every search's 1 s deadline timer (`AbortSignal.timeout`, real time) has lapsed, the least of three
+    // collections: how many of the 50,000 timers were still pending decided the reading, and under a loaded parallel
+    // run the bound failed once with nothing wrong (audit A5). The bounds are unchanged.
+    // Under heavy load (a parallel Hermes run) timers fire late, so one fixed wait was not enough (audit A11): the
+    // reading is taken again, 250 ms apart, until it stops falling by more than 64 KB (at most 8 s), with no pending
+    // timer left to free.
+    const settled = async () => {
+      await Bun.sleep(1_100);
+      const least3 = () => {
+        let least = Infinity;
+        for (let k = 0; k < 3; k++) {
+          Bun.gc(true);
+          least = Math.min(least, heapStats().heapSize);
+        }
+        return least;
+      };
+      let least = least3();
+      for (let k = 0; k < 32; k++) {
+        await Bun.sleep(250);
+        const next = least3();
+        const fell = least - next;
+        least = Math.min(least, next);
+        if (fell < 64_000) break;
+      }
+      return least;
+    };
     // Warm up (state per user, JIT) before the baseline.
     for (const u of users) await f.search([empty], q(u, "warm"), { timeoutMs: 1_000 });
-    Bun.gc(true);
-    const before = heapStats().heapSize;
+    const before = await settled();
     // One page every 30 simulated ms: 1,500 s, past the 600 s expiry for most pages, and far past the byte budget
     // (every page held would be ~17 MB at the pre-fix ~345 B each).
     for (let i = 0; i < 50_000; i++) {
@@ -365,18 +390,16 @@ describe("results cache: real bytes, group drops, drops across state eviction", 
       const [out] = await f.search([empty], q(users[i % 50]!, text), { timeoutMs: 1_000 });
       if (out!.status !== "ok") throw new Error(out!.status);
     }
-    Bun.gc(true);
-    const grew = heapStats().heapSize - before;
+    const grew = (await settled()) - before;
     const inner = f as unknown as { results: { bytes: number; size: number } | null };
     expect(inner.results!.bytes).toBeLessThanOrEqual(4_000_000);
     expect(inner.results!.size).toBeLessThan(10_000); // before the fix: 50,050 (an empty page cost 1 byte)
     // The heap the cache holds: growth minus what is left once the cache itself is let go.
     inner.results = null;
-    Bun.gc(true);
-    const heldByCache = grew - (heapStats().heapSize - before);
+    const heldByCache = grew - ((await settled()) - before);
     expect(heldByCache).toBeLessThan(4_000_000); // before the fix: ~17 MB (~345 B per entry, every entry held)
     expect(grew).toBeLessThan(5_000_000); // the rest is the fan-out's own state, ~0.25 MB
-  }, 30_000);
+  }, 90_000);
 
   test("dropResults(a, 's') removes only that pair's pages, lookups and planner calls alike", async () => {
     const f = new SourceFanout({ sanitize: (x) => x, ratePerSec: 1_000, burst: 1_000 });

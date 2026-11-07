@@ -1,0 +1,18 @@
+A2 $0 funnel, train1-6 seeds 41-42 (384 hidden, 384 control), cards and intent replayed, reader stub; surfaced = in a
+packet or cited by the ask. `bun run funnel --set '{...}' --baseline .local/a2/base.json`; keep = keep.py on --packets.
+
+arm                                   hidden surfaced  decoys surfaced  vs default        candidates' line keeps the fact
+default (pushCandidates 5)            305/384          267/384          -                 0.929 mean, 189/253 all words
+reader default (--preset minus-candidates, Haiku reader replayed, recipe 2a)
+                                      322/384          139/384          reader-only 24, candidates-only 7
+pushCandidateLift (D266)              316/384          273/384          hidden +11 -0, decoys +6 -0
+askPastShown (D267)                   322/384          281/384          hidden +17 -0, decoys +14 -0; ask bytes 581 -> 1,220 (hidden)
+lift + past                           328/384          284/384          hidden +23 -0, decoys +17 -0
+pushCandidateStress (D268, weight 1.5) 305/384         267/384          -                 0.940 mean, 197/253 (14 up, 6 down)
+  weight 1 / 2 / 3                                                                        0.929 / 0.937 / 0.938
+
+Where the default loses planted items (hidden, 384): never surfaced 79 = in the push's 15-item pool past the first
+five 29 (the reader read and flagged 24 of them) + not in the pool 50 (intent: requests in the replay but not yet
+held at the request, under the intent thresholds, no shared term; fix-s3a's buckets); ask-only 33.
+Planted rank in the reader's pool (hidden): 0:154 1:63 2:21 3:12 4:6 5:4 6:5 7:8 8:3 9:4 10:4 12:3, not in pool 35,
+no pool 62.

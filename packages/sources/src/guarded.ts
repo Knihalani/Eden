@@ -27,7 +27,8 @@ import {
 } from "@eden/primitives";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { PlannedSource, type PlanCalls } from "./planner";
-import type { ListPage, SearchQuery, Source } from "./source";
+import { untilAborted } from "./abort";
+import { FetchErrorResult, type ListPage, type SearchQuery, type Source } from "./source";
 
 /**
  * One lookup's queries in flight or answered, by source and text (`sharedKey`): what the query planner and the probes
@@ -70,7 +71,7 @@ export interface FanoutOutcome {
  */
 export interface FetchFailed {
   status: "failed";
-  why: "no-fetch" | "refused" | "aborted" | "error" | "timeout" | "throttled" | "null" | "gate";
+  why: "no-fetch" | "refused" | "aborted" | "error" | "timeout" | "throttled" | "null" | "error-result" | "gate";
   guard?: "open" | "limited" | "busy";
   pushedBack?: boolean;
 }
@@ -331,7 +332,7 @@ export class SourceFanout {
     const started = performance.now();
     let raw: ContextItem | null;
     try {
-      raw = await source.fetch(ref, scope, signal);
+      raw = await untilAborted(source.fetch(ref, scope, signal), signal);
     } catch (e) {
       const message = String(e);
       if (signal.aborted && !timeout.aborted) {
@@ -339,6 +340,13 @@ export class SourceFanout {
         return failed("aborted");
       }
       s.latency.record(performance.now() - started);
+      if (e instanceof FetchErrorResult) {
+        // The source answered, with an error result (`isError`): settled as answered, as its null was before D298;
+        // it says nothing either way about the item, and is not held (`error-result`, not `null`).
+        s.limiter.release("ok");
+        s.breaker.success(epoch);
+        return failed("error-result");
+      }
       s.limiter.release("dropped");
       s.breaker.failure(epoch);
       if (RATE_LIMITED.test(message)) {
@@ -376,7 +384,14 @@ export class SourceFanout {
     scope: Scope,
     cursor: string | undefined,
     limit: number,
-    options: { timeoutMs: number; signal?: AbortSignal; reserve?: number; reuse?: ListReuse },
+    options: {
+      timeoutMs: number;
+      signal?: AbortSignal;
+      reserve?: number;
+      reuse?: ListReuse;
+      /** Awaited after the source answered and before its page is redacted (the sync's `syncIngestTurns`, D328). */
+      turn?: () => Promise<void>;
+    },
   ): Promise<ListPage | Exclude<FanoutStatus, "ok" | "cached" | "stale">> {
     if (!source.list) return "error";
     const timeout = AbortSignal.timeout(options.timeoutMs);
@@ -409,6 +424,7 @@ export class SourceFanout {
     s.limiter.release("ok");
     s.breaker.success(epoch);
     try {
+      if (options.turn) await options.turn(); // Only when asked: an await here moves the funnel's card batching.
       return { items: await this.redactListed(page.items, signal, options.reuse), next: page.next };
     } catch {
       // Our gate failed, not the source: no page, and nothing unredacted held.

@@ -1,0 +1,16 @@
+a22-tgt-41 eden packet 56/69 ask 5/8 none 0/14
+a22-tgt-41 eden+linkLine packet 59/69 ask 2/6 none 0/16
+a22-tgt-42 eden packet 55/71 ask 4/4 none 0/16
+a22-tgt-42 eden+linkLine packet 55/71 ask 3/5 none 0/15
+a22-tgt-43 eden packet 55/67 ask 4/7 none 0/17
+a22-tgt-43 eden+linkLine packet 54/67 ask 3/6 none 0/18
+a22-tgt-44 eden packet 60/68 ask 6/7 none 0/16
+a22-tgt-44 eden+linkLine packet 59/68 ask 5/6 none 0/17
+a22-short-41 eden packet 43/53 ask 6/6 none 0/13
+a22-short-41 eden+linkLine packet 45/53 ask 5/5 none 0/14
+a22-short-42 eden packet 44/55 ask 6/6 none 0/11
+a22-short-42 eden+linkLine packet 41/55 ask 5/5 none 0/12
+a22-long-41 eden packet 5/6 ask 1/1 none 2/5
+a22-long-41 eden+linkLine packet 5/5 ask 0/0 none 2/7
+a22-long-42 eden packet 6/7 ask 0/0 none 2/4
+a22-long-42 eden+linkLine packet 4/6 ask 0/0 none 1/5

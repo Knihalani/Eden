@@ -609,6 +609,12 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   leanDays: 0,
 };
 
+/**
+ * How long (ms, wall time) a drain with less than a batch queued waits for stores still waiting their turn
+ * (`CardEnricher.gather`, D370). A page is a few ms to ~15 ms of work, so this covers a few dozen pages.
+ */
+const GATHER_MS = 250;
+
 /** The queue bound with `intent` (`CardEnricher.intend`), unless one was given. */
 const INTENT_MAX_QUEUE = 2_000;
 
@@ -629,6 +635,8 @@ interface Stored {
   at: number;
   /** When an item last linked to it (made, or an item with this content enqueued): its time to live runs from here. */
   seenAt: number;
+  /** Kept with no card because `cardsLean` skipped it by its date, not by its words (`readForIntent`). */
+  leanSkipped?: true;
 }
 
 /** An item waiting for the model. `only`: rejected by the prefilter, read for its requests only (`intent`). */
@@ -687,6 +695,11 @@ export interface CardStats {
   requestOnly: number;
   /** With `intent`: items given one request or more. */
   requested: number;
+  /**
+   * `cardsSourceAware`: items left unread because their source is one of many the user's lookups have not used and
+   * they name none of the user's people (read once a lookup uses the source: `enqueue` again).
+   */
+  deferred: number;
 }
 
 /**
@@ -715,6 +728,7 @@ export class CardEnricher {
     implausible: 0,
     requestOnly: 0,
     requested: 0,
+    deferred: 0,
   };
   /**
    * Span tracing (`spans.ts`): each enrichment call is a `cards.make` span (counts only, D19). The partner sets it
@@ -726,6 +740,13 @@ export class CardEnricher {
    * The partner sets it from its cache; 0 (UTC) when unset.
    */
   offsetOf: ((scope: Scope) => number) | null = null;
+  /**
+   * `syncIngestTurns` (D370): the stores still waiting their turn, or null when none waits. The partner sets it from
+   * its sync. A drain with less than a batch queued waits on it (for at most `GATHER_MS`) before calling the model,
+   * so a batch is what the pages that arrived together hold, as when they were stored back to back: the card calls
+   * follow the items, not the timing of the stores.
+   */
+  gather: (() => Promise<void> | null) | null = null;
 
   constructor(
     private readonly deps: { maker: CardMaker; budget: Budget; now: () => number },
@@ -821,7 +842,11 @@ export class CardEnricher {
     }
   }
 
-  enqueue(scope: Scope, items: readonly ContextItem[]): void {
+  /**
+   * `defer` (`cardsSourceAware`): an item it holds is left unread for now, with no card and no entry (uncovered, as an
+   * item not yet read), unless its content already has one; enqueued again later, it is read as any new item.
+   */
+  enqueue(scope: Scope, items: readonly ContextItem[], defer?: (item: ContextItem) => boolean): void {
     if (items.length === 0) return;
     const u = this.user(scope);
     const now = this.deps.now();
@@ -838,7 +863,18 @@ export class CardEnricher {
       }
       const known = u.byHash.get(hash);
       if (known) known.seenAt = now;
-      if (known || u.queue.some((q) => q.hash === hash)) {
+      const queued = u.queue.some((q) => q.hash === hash);
+      if (!known && !queued && defer?.(item)) {
+        this.stats.deferred++;
+        continue;
+      }
+      // Lean skipping is by date, and the key is the content: a recurring event's upcoming occurrence says what its old
+      // one said, and was never read for its requests because the old one was skipped first (audit A5).
+      if (known?.leanSkipped && !queued && readForIntent(item, now, this.limits.leanDays)) {
+        this.enlist(u, { item, hash, only: true });
+        continue;
+      }
+      if (known || queued) {
         this.stats.reused++;
         continue;
       }
@@ -850,7 +886,12 @@ export class CardEnricher {
           this.enlist(u, { item, hash, only: true });
         } else {
           if (this.limits.intent) this.stats.leanSkipped++;
-          this.keep(u, hash, { card: null, at: now, seenAt: now });
+          this.keep(u, hash, {
+            card: null,
+            at: now,
+            seenAt: now,
+            ...(this.limits.intent ? { leanSkipped: true } : {}),
+          });
         }
         continue;
       }
@@ -897,6 +938,12 @@ export class CardEnricher {
     // Background work: let the caller's turn finish first.
     await Promise.resolve();
     while (u.queue.length > 0 && !u.abort.signal.aborted) {
+      // No await unless stores wait their turn: an extra hop here moves the default's cards (CL3).
+      const waiting = this.gather !== null && u.queue.length < this.limits.batch ? this.gather() : null;
+      if (waiting) {
+        await this.gathered(u, waiting);
+        if (u.abort.signal.aborted) return;
+      }
       // With `sentenceReuse`: an item whose constraint sentences a card already says takes that card; one whose
       // sentences another item of this batch says waits for that item's card (`followers`), with no call of its own.
       const batch: Queued[] = [];
@@ -1005,6 +1052,36 @@ export class CardEnricher {
         this.stats.failures++;
         if (u.abort.signal.aborted) return;
       }
+    }
+  }
+
+  /**
+   * Waits while stores are queued for their turn (`gather`) and the user has less than a batch waiting, up to
+   * `GATHER_MS` of wall time: a storm's queue of turns does not empty for minutes, and cards must still flow.
+   */
+  private async gathered(u: UserCards, first: Promise<void>): Promise<void> {
+    const until = performance.now() + GATHER_MS;
+    let waiting: Promise<void> | null = first;
+    // The queue of turns is the process's, not the user's: in a storm its tail can be seconds away, so the wait is
+    // cut at `until` whatever it is waiting on.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stop: (() => void) | undefined;
+    // A forgotten or dropped user's drain stops waiting at once (review of A24), as at the deadline.
+    const deadline = new Promise<"late">((r) => {
+      timer = setTimeout(() => r("late"), GATHER_MS);
+      timer.unref?.();
+      stop = () => r("late");
+      u.abort.signal.addEventListener("abort", stop, { once: true });
+    });
+    try {
+      while (waiting) {
+        if ((await Promise.race([waiting, deadline])) === "late") return;
+        if (u.queue.length >= this.limits.batch || u.abort.signal.aborted || performance.now() >= until) return;
+        waiting = this.gather?.() ?? null;
+      }
+    } finally {
+      clearTimeout(timer);
+      if (stop) u.abort.signal.removeEventListener("abort", stop);
     }
   }
 

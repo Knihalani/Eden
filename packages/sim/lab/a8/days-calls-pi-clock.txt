@@ -1,0 +1,35 @@
+days-calls: seeds 41,42, 8 days, 232 requests, push payload (recap: bare signal), one ask a request, cards replayed, night 2 h
+phase     source    op       calls   per request  per user-day
+backfill  calendar  list         2                 1.0 a user
+backfill  crm       list         2                 1.0 a user
+backfill  drive     list         2                 1.0 a user
+backfill  gmail     list        26                13.0 a user
+backfill  slack     list         4                 2.0 a user
+notice    gmail     list        16        0.069          1.00
+notice    slack     list         8        0.034          0.50
+request   gmail     fetch      458        1.974         28.63
+request   slack     fetch       76        0.328          4.75
+tick      calendar  list         2        0.009          0.13
+tick      crm       list         2        0.009          0.13
+tick      drive     list         2        0.009          0.13
+tick      gmail     list        26        0.112          1.63
+tick      slack     list         4        0.017          0.25
+request-time 2.302 a request; background (tick + notice) 3.75 a user-day, 0.259 a request; steady 2.560 a request; backfill 18.0 a user
+  w41: verify {"checked":266,"confirmed":256,"changed":0,"gone":0,"failed":10,"calls":259,"holdsEvicted":0}; items re-read 181, more than once 51; moved 20, update packets 10, stale copies held 0
+  w42: verify {"checked":288,"confirmed":272,"changed":0,"gone":0,"failed":16,"calls":275,"holdsEvicted":0}; items re-read 180, more than once 62; moved 21, update packets 12, stale copies held 0
+
+days-calls: seeds 41,42, 8 days, 232 requests, push payload, one ask a request, cards replayed, night 2 h
+phase     source    op       calls   per request  per user-day
+backfill  calendar  list         2                 1.0 a user
+backfill  crm       list         2                 1.0 a user
+backfill  drive     list         2                 1.0 a user
+backfill  gmail     list        26                13.0 a user
+backfill  slack     list         4                 2.0 a user
+tick      calendar  list         2        0.009          0.13
+tick      crm       list         2        0.009          0.13
+tick      drive     list         2        0.009          0.13
+tick      gmail     list        26        0.112          1.63
+tick      slack     list         4        0.017          0.25
+request-time 0.000 a request; background (tick + notice) 2.25 a user-day, 0.155 a request; steady 0.155 a request; backfill 18.0 a user
+  w41: verify {"checked":0,"confirmed":0,"changed":0,"gone":0,"failed":0,"calls":0,"holdsEvicted":0}; items re-read 0, more than once 0; moved 20, update packets 10, stale copies held 0
+  w42: verify {"checked":0,"confirmed":0,"changed":0,"gone":0,"failed":0,"calls":0,"holdsEvicted":0}; items re-read 0, more than once 0; moved 21, update packets 12, stale copies held 0

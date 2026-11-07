@@ -11,6 +11,24 @@
         "typescript": "5.9.3",
       },
     },
+    "examples/oauth-directory": {
+      "name": "@eden/example-oauth-directory",
+      "version": "0.0.0",
+      "dependencies": {
+        "@eden/protocol": "workspace:*",
+        "@eden/server": "workspace:*",
+      },
+    },
+    "examples/onboarding": {
+      "name": "@eden/example-onboarding",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@eden/client": "workspace:*",
+        "@eden/proxy": "workspace:*",
+        "@eden/server": "workspace:*",
+        "@eden/sources": "workspace:*",
+      },
+    },
     "examples/personal-agent": {
       "name": "@eden/example-personal-agent",
       "version": "0.0.0",
@@ -23,6 +41,15 @@
       "version": "0.0.0",
       "dependencies": {
         "@eden/protocol": "workspace:*",
+      },
+    },
+    "packages/client-python": {
+      "name": "@eden/client-python",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@eden/client": "workspace:*",
+        "@eden/server": "workspace:*",
+        "@eden/sources": "workspace:*",
       },
     },
     "packages/engine": {
@@ -68,6 +95,19 @@
     "packages/protocol": {
       "name": "@eden/protocol",
       "version": "0.0.0",
+    },
+    "packages/proxy": {
+      "name": "@eden/proxy",
+      "version": "0.0.0",
+      "dependencies": {
+        "@eden/client": "workspace:*",
+        "@eden/protocol": "workspace:*",
+      },
+      "devDependencies": {
+        "@eden/graph": "workspace:*",
+        "@eden/server": "workspace:*",
+        "@eden/sources": "workspace:*",
+      },
     },
     "packages/redact": {
       "name": "@eden/redact",
@@ -176,9 +216,15 @@
 
     "@eden/client": ["@eden/client@workspace:packages/client"],
 
+    "@eden/client-python": ["@eden/client-python@workspace:packages/client-python"],
+
     "@eden/engine": ["@eden/engine@workspace:packages/engine"],
 
     "@eden/eval": ["@eden/eval@workspace:packages/eval"],
+
+    "@eden/example-oauth-directory": ["@eden/example-oauth-directory@workspace:examples/oauth-directory"],
+
+    "@eden/example-onboarding": ["@eden/example-onboarding@workspace:examples/onboarding"],
 
     "@eden/example-personal-agent": ["@eden/example-personal-agent@workspace:examples/personal-agent"],
 
@@ -189,6 +235,8 @@
     "@eden/primitives": ["@eden/primitives@workspace:packages/primitives"],
 
     "@eden/protocol": ["@eden/protocol@workspace:packages/protocol"],
+
+    "@eden/proxy": ["@eden/proxy@workspace:packages/proxy"],
 
     "@eden/redact": ["@eden/redact@workspace:packages/redact"],
 

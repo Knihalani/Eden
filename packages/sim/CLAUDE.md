@@ -16,6 +16,7 @@ performance claims cite this package alongside `bun run eval`.
 | `judge.ts` | The oracle judge (perfect or noisy) standing in for the model |
 | `server.ts`, `load.ts`, `perf-cli.ts` | The real server in its own process under simulated agents through the client SDK (`bun run sim:perf`) |
 | `drafts.ts`, `narrow.ts` | Typing lead-ins and narrowed ask questions: simulation assumptions |
+| `demo.ts` | `bun run demo` (D292): one simulated user through the shipped server and client with no key, what Eden added and why per request; optional agent (`OPENAI_API_KEY`), `--trace` for `bun run digest` |
 | `lab/` | Benchmarks and A/B harnesses: see [src/lab/CLAUDE.md](src/lab/CLAUDE.md) and [docs/LAB.md](../../docs/LAB.md) |
 
 Outside `src/`: `lab/` holds the connector-lab Dockerfiles and `servers.json` (pinned MCP servers), replay caches

@@ -3,21 +3,68 @@
  * Starts the partner's HTTP API. `bun run dev` from the repo root. With EDEN_PROCESSES above 1 this process is the
  * router (router.ts, D163) and each of its children runs this file again as one server process (EDEN_ROUTER_CHILD).
  */
+import { dirname } from "node:path";
+import { SourceMap } from "@eden/graph";
 import { warmGate } from "@eden/redact";
 import { loadConfig, type ServerConfig } from "./config";
 import { sourcesOrExit } from "./connectors";
-import { buildPartner, startGatePool } from "./build";
+import { buildPartner, startGatePool, tenantSpendFor } from "./build";
 import { engineConfig } from "./engine-config";
 import { createHandler } from "./http";
 import { modelRolesFromEnv } from "./models";
 import { rehomeSourceMaps, runRouter } from "./router";
+import { isLeaseGrant, LeasedSpend } from "./spend-lease";
 
 const started = performance.now();
-const config = loadConfig();
-if (config.processes > 1) {
-  await runRouter(config);
-} else {
-  await serve(config);
+const config = configOrExit();
+// Dev mode takes requests with no key as tenant "dev": say so loudly when anything but this machine can reach it (a
+// container listens on 0.0.0.0; publish its port on 127.0.0.1 for local use).
+if (config.dev && !config.child && !["127.0.0.1", "localhost", "::1"].includes(config.host)) {
+  console.error(`eden: EDEN_DEV=1 on ${config.host}: anyone who can reach this port is served without a key`);
+}
+try {
+  if (config.processes > 1) {
+    await runRouter(config);
+  } else {
+    await serve(config);
+  }
+} catch (e) {
+  startupFailed(e, config);
+}
+
+/**
+ * A configuration mistake as one line naming the setting, exit 2 (D365). Uncaught, Bun printed ten lines of
+ * config.ts's source and a stack with the message buried in them, the first thing an operator saw for a short key.
+ */
+function configOrExit(): ServerConfig {
+  try {
+    return loadConfig();
+  } catch (e) {
+    const code = (e as { code?: unknown } | null)?.code;
+    const home =
+      code === "ENOENT" || code === "EACCES" || code === "EROFS" ? " (EDEN_HOME must be a writable directory)" : "";
+    console.error(`eden: ${e instanceof Error ? e.message : String(e)}${home}`);
+    process.exit(2);
+  }
+}
+
+/** A startup failure after the configuration parsed (a busy port, an unwritable EDEN_HOME) as one line, exit 2. */
+function startupFailed(e: unknown, config: ServerConfig): never {
+  const code = (e as { code?: unknown } | null)?.code;
+  const message = e instanceof Error ? e.message : String(e);
+  if (code === "EADDRINUSE") {
+    console.error(`eden: ${config.host}:${config.port} is in use: stop the other server, or set PORT to a free port`);
+  } else if (code === "ENOENT" || code === "EACCES" || code === "EROFS") {
+    const path = (e as { path?: unknown }).path;
+    console.error(
+      `eden: cannot start: ${message}${typeof path === "string" ? ` (${path})` : ""}: a file a setting names` +
+        ` (EDEN_SOURCES_FILE, EDEN_USER_SOURCES_FILE, EDEN_ENGINE_CONFIG) is missing or unreadable, or EDEN_HOME` +
+        ` (${dirname(config.sourceMapPath)}) is not writable`,
+    );
+  } else {
+    console.error(`eden: cannot start: ${message}`);
+  }
+  process.exit(2);
 }
 
 async function serve(config: ServerConfig): Promise<void> {
@@ -37,10 +84,19 @@ async function serve(config: ServerConfig): Promise<void> {
   const sources = sourcesOrExit();
   const gatePool = await startGatePool(config.gateWorkers);
   const models = modelRolesFromEnv();
+  // Held here so a shutdown can write its last outcome batch (`SourceMap.close` flushes).
+  const sourceMap = new SourceMap(config.sourceMapPath);
+  const child = config.child;
+  // The cap every model role shares (D163): divided by N in a router child, or leased from the router (D327, trial).
+  const tenants =
+    child && config.spendLeases
+      ? leasedSpend(models.usdPerTenantDay, child.count)
+      : tenantSpendFor(models.usdPerTenantDay, child?.count ?? 1);
   const partner = buildPartner({
+    tenants,
     gatePool,
     sources: sources.resolver,
-    sourceMapPath: config.sourceMapPath,
+    sourceMap,
     queryPlanner: config.queryPlanner,
     engine,
     // Cards, intent and the reader on OPENROUTER_API_KEY's model (D112); without a key, the default's no-model path.
@@ -49,7 +105,17 @@ async function serve(config: ServerConfig): Promise<void> {
     processes: config.child?.count ?? 1,
     onShadow: process.env.EDEN_TRACE === "1" ? (r) => console.log(JSON.stringify({ shadow: r })) : undefined,
     onTrace: process.env.EDEN_TRACE === "1" ? (t) => console.log(JSON.stringify(t)) : undefined,
+    // Whether the agent used each injection (D293), for `bun run digest`; content-free like the traces.
+    onUsage: process.env.EDEN_TRACE === "1" ? (u) => console.log(JSON.stringify({ usage: u })) : undefined,
   });
+  // The background sync's own connector calls (backfill, sweeps) are made outside any request, so no trace has them:
+  // with EDEN_TRACE=1 its cumulative counters are logged once a minute, per process, for `bun run digest` (D293).
+  // `run` tells processes apart where a pid cannot: a container restart is pid 1 again, and replicas share it.
+  const sync = partner.sync;
+  if (process.env.EDEN_TRACE === "1" && sync) {
+    const run = crypto.randomUUID();
+    setInterval(() => console.log(JSON.stringify({ sync: { run, pid: process.pid, ...sync.stats } })), 60_000).unref();
+  }
   // The secret gate compiles its rules on first use; doing it here keeps that stall off the first request.
   warmGate();
   const server = Bun.serve({
@@ -57,11 +123,28 @@ async function serve(config: ServerConfig): Promise<void> {
     hostname: config.host,
     // D100: Bun's default is 128 MB; the handler's content-length check cannot see chunked bodies, this cap can.
     maxRequestBodySize: config.maxBodyBytes,
-    fetch: createHandler(partner, config, sources.userSources),
+    fetch: createHandler(partner, config, sources.userSources, tenants),
   });
+  // Stop on SIGTERM/SIGINT with the source map's last outcome batch written. Without a handler a container's PID 1
+  // ignores SIGTERM (`docker stop` waited 10 s, then SIGKILL), and a router child died by the signal, batch unwritten.
+  // Installed before the listening line: whoever waits for that line may signal at once.
+  let stopping = false;
+  const shutdown = () => {
+    if (stopping) return;
+    stopping = true;
+    void server.stop(true);
+    partner.stopSync();
+    try {
+      sourceMap.close();
+    } catch (e) {
+      console.error(`eden: source map not closed cleanly: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    process.exit(0);
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
   const startupMs = Math.round(performance.now() - started);
   const keys = Object.keys(engine);
-  const child = config.child;
   console.log(
     `eden partner listening on http://${server.hostname}:${server.port}${config.dev ? " (dev, no auth)" : ""}` +
       ` (startup ${startupMs} ms; model roles ${process.env.OPENROUTER_API_KEY ? "on" : "off (no OPENROUTER_API_KEY)"}` +
@@ -69,8 +152,10 @@ async function serve(config: ServerConfig): Promise<void> {
       `${keys.length > 0 ? `; engine settings: ${keys.join(", ")}` : ""}` +
       (child
         ? `; router child ${child.index} of ${child.count}, per-tenant caps divided by ${child.count}:` +
-          ` $${round(models.usdPerTenantDay / child.count)}/day, ${round(config.tenantRatePerSec)} rps,` +
-          ` burst ${round(config.tenantBurst)}`
+          (config.spendLeases
+            ? ` model spend leased from the router (D327),`
+            : ` $${round(models.usdPerTenantDay / child.count)}/day,`) +
+          ` ${round(config.tenantRatePerSec)} rps, burst ${round(config.tenantBurst)}`
         : "") +
       ")",
   );
@@ -78,8 +163,20 @@ async function serve(config: ServerConfig): Promise<void> {
     // The router waits for this port before it routes here; the IPC channel exists only when the router spawned us.
     process.send?.({ edenListening: server.port });
     // The router is gone (killed, crashed): nothing can reach this child any more, so it must not outlive it.
-    process.on("disconnect", () => process.exit(0));
+    process.on("disconnect", shutdown);
   }
+}
+
+/** A child's spend cap leased from the router over IPC (D327): requests go up, grants come back. */
+function leasedSpend(usdPerTenantDay: number, processes: number): LeasedSpend {
+  const spend = new LeasedSpend(usdPerTenantDay, processes, (r) => {
+    if (!process.send) throw new Error("no IPC channel");
+    process.send(r);
+  });
+  process.on("message", (m: unknown) => {
+    if (isLeaseGrant(m)) spend.grant(m.edenGrant);
+  });
+  return spend;
 }
 
 function round(n: number): number {

@@ -1,0 +1,6 @@
+what                                tokens calls/t first-party    Composio  Unified.to  Arcade.dev   Pipedream  Zapier MCP
+short payload, eden, parent tip      0.416   0.000       0.416       0.416       0.416       0.416       0.416       0.416
+short payload, eden, this branch     0.433   0.000       0.433       0.433       0.433       0.433       0.433       0.433
+short signals, eden, parent tip      0.370   8.770       0.370       3.001       6.947      88.070     105.610     226.636
+short signals, eden, this branch     0.352   8.450       0.352       2.887       6.689      84.852     101.752     218.362
+short payload, tools (A6, cross-run)   0.364   3.340       0.364       1.366       2.869      33.764      40.444      86.536

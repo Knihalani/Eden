@@ -5,7 +5,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { checkEngineConfig } from "./config-check";
-import { ContextPartner } from "./partner";
+import { ContextPartner, type PushPoolReport, type ReaderReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { AskReader, type ReaderInput, type ReaderMaker } from "./reader";
 import { CANDIDATES_LEAD, shownText } from "./render";
@@ -60,7 +60,16 @@ const DEADLINE = item(
   4,
 );
 
-function setup(config: Record<string, unknown>, opts: { items?: ContextItem[]; fail?: boolean } = {}) {
+function setup(
+  config: Record<string, unknown>,
+  opts: {
+    items?: ContextItem[];
+    fail?: boolean;
+    noReader?: boolean;
+    onReader?: (r: ReaderReport) => void;
+    onPushPool?: (r: PushPoolReport) => void;
+  } = {},
+) {
   const maker = new Reader();
   const source: Source = {
     id: "mail",
@@ -86,7 +95,9 @@ function setup(config: Record<string, unknown>, opts: { items?: ContextItem[]; f
       readerGate: true,
       ...config,
     },
-    reader: new AskReader({ maker, budget: new Budget(), now: () => NOW }),
+    ...(opts.noReader ? {} : { reader: new AskReader({ maker, budget: new Budget(), now: () => NOW }) }),
+    ...(opts.onReader ? { onReader: opts.onReader } : {}),
+    ...(opts.onPushPool ? { onPushPool: opts.onPushPool } : {}),
   });
   return { p, maker };
 }
@@ -186,6 +197,32 @@ describe("pushCandidates (D236, D237): the push hands the agent candidates, with
     expect(candidates(p)).toEqual([]);
   });
 
+  test("a candidate the slow path delivers during the push's re-reads is handed once (A11's re-check)", async () => {
+    const { p } = setup({ ...quiet, pushCandidates: 3, verifyDelivery: true });
+    type Scored = { item: ContextItem };
+    type Inner = {
+      verifyItems(s: unknown, scored: Scored[], cue: unknown): Promise<Scored[]>;
+      deliver(s: unknown, scored: Scored[], mode: string, reason: string, cue: unknown): AgentEvent;
+    };
+    const inner = p as unknown as Inner & { session(e: unknown): { pending: unknown[] } };
+    const real = inner.verifyItems.bind(p);
+    let raced: string | null = null;
+    inner.verifyItems = async (s, scored, cue) => {
+      const out = await real(s, scored, cue);
+      // While the push waited on its re-reads, this event's slow path delivered the first candidate and queued it.
+      if (raced === null && scored.length > 1) {
+        raced = scored[0]!.item.id;
+        (s as { pending: unknown[] }).pending.push(inner.deliver(s, [scored[0]!], "proactive", "slow:race", cue));
+      }
+      return out;
+    };
+    await say(p, REQUEST);
+    expect(raced).not.toBeNull();
+    const handed = p.takePending(ref()).flatMap((x) => x.citations.map((c) => c.itemId));
+    expect(handed.filter((id) => id === raced).length).toBe(1);
+    expect(handed.length).toBeGreaterThan(1); // The push's other candidates still go out.
+  });
+
   test("candidates of one session never reach another (isolation)", async () => {
     const { p } = setup({ ...quiet, pushCandidates: 3 });
     await say(p, REQUEST, "s1");
@@ -199,5 +236,81 @@ describe("pushCandidates (D236, D237): the push hands the agent candidates, with
     expect(() => checkEngineConfig({ pushCandidates: 2.5 }, { deps })).toThrow();
     expect(() => checkEngineConfig({ pushCandidates: 41 }, { deps })).toThrow();
     expect(() => checkEngineConfig({ pushCandidates: 3, readerPush: false }, { deps })).toThrow(/readerPush/);
+  });
+
+  test("the lab's view (onPushPool, D269): the pool in order, its constraint test, the handed ids; no content", async () => {
+    const pools: PushPoolReport[] = [];
+    const readings: ReaderReport[] = [];
+    const { p } = setup(
+      { ...quiet, pushCandidates: 2 },
+      { onPushPool: (r) => pools.push(r), onReader: (r) => readings.push(r) },
+    );
+    await say(p, REQUEST);
+    const handed = candidates(p)[0]!.citations.map((c) => c.itemId);
+    expect(pools.length).toBe(1);
+    expect(pools[0]!.sessionId).toBe("s1");
+    expect(pools[0]!.pool.length).toBe(4);
+    expect(pools[0]!.constraintLike.length).toBe(4);
+    expect(pools[0]!.constraintLike.filter(Boolean).length).toBe(2);
+    expect(pools[0]!.handed).toEqual(handed);
+    // Ids and flags only: no item's words travel in the report.
+    expect(JSON.stringify(pools[0])).not.toContain("Harlow");
+    // The reader's consumers see nothing: no reading was made.
+    expect(readings).toEqual([]);
+  });
+
+  test("onPushPool: a pool with nothing constraint-like is reported with nothing handed", async () => {
+    const pools: PushPoolReport[] = [];
+    const { p } = setup({ ...quiet, pushCandidates: 3 }, { items: PLAIN, onPushPool: (r) => pools.push(r) });
+    await say(p, REQUEST);
+    expect(pools.length).toBe(1);
+    expect(pools[0]!.constraintLike).toEqual([false, false]);
+    expect(pools[0]!.handed).toEqual([]);
+  });
+});
+
+// D276 (A4): the candidates make no model call, so they need no reader. A server with no model key (no reader built)
+// delivers them too; before D276 it ran no push at all.
+describe("pushCandidates with no reader dependency (D276: the no-key server)", () => {
+  const quiet = { confidentScore: 99, fallbackMatchedTerms: 99 };
+  const candidates = (p: ContextPartner) => p.takePending(ref()).filter((x) => x.reason.startsWith("candidates:"));
+
+  test("no reader wired: the push still hands the agent its candidates", async () => {
+    const { p, maker } = setup({ ...quiet, pushCandidates: 3 }, { noReader: true });
+    await say(p, REQUEST);
+    expect(maker.calls.length).toBe(0);
+    const got = candidates(p);
+    expect(got.length).toBe(1);
+    expect(got[0]!.citations.length).toBe(3);
+    expect(got[0]!.text.split("\n")[1]).toBe(CANDIDATES_LEAD);
+  });
+
+  test("no reader and pushCandidates 0: no push, as before (the reader's push needs a reader)", async () => {
+    const { p } = setup({ ...quiet }, { noReader: true });
+    await say(p, REQUEST);
+    expect(p.takePending(ref())).toEqual([]);
+  });
+
+  test("no reader: an explicit ask still answers with no model", async () => {
+    const { p } = setup({ ...quiet, pushCandidates: 3 }, { noReader: true });
+    const answer = await p.ask({ ...ref(), question: "Pay the Harlow invoice: is anything in the way?" });
+    expect(answer.usedModel).toBe(false);
+    expect(answer.citations.length).toBeGreaterThan(0);
+  });
+
+  test("no reader: nothing constraint-like in the pool gives no packet", async () => {
+    const { p } = setup({ ...quiet, pushCandidates: 3 }, { noReader: true, items: PLAIN });
+    await say(p, REQUEST);
+    expect(candidates(p)).toEqual([]);
+  });
+
+  test("the config check accepts candidates with no reader wired", () => {
+    const deps = { reader: false, cards: false };
+    expect(() => checkEngineConfig({ pushCandidates: 3 }, { deps })).not.toThrow();
+    // The push's own settings act on the candidates too (review of D276) …
+    expect(() => checkEngineConfig({ readerPushWaitMs: 1_000, askReaderPool: 10 }, { deps })).not.toThrow();
+    // … but not with the candidates off, and the reader's own settings still need a reader.
+    expect(() => checkEngineConfig({ pushCandidates: 0, readerPushWaitMs: 1_000 }, { deps })).toThrow(/reader/);
+    expect(() => checkEngineConfig({ askReaderWaitMs: 1_000 }, { deps })).toThrow(/reader/);
   });
 });

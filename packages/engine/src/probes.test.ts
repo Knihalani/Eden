@@ -642,7 +642,10 @@ describe("more of D48's settings, through the engine", () => {
       model,
       now: () => at,
       ...(planner ? { planner } : {}),
-      config: { ...CORE_CONFIG, probeGraceMs: 1_000, ...config },
+      // A generous source deadline: the static sources answer at once, and under a loaded parallel run the default
+      // 1.5 s deadline cut the search, so nothing reached the judge (judgeItemBytes read an empty `model.calls`; a
+      // 1 ms deadline reproduces it).
+      config: { ...CORE_CONFIG, probeGraceMs: 1_000, sourceTimeoutMs: 30_000, ...config },
     });
   const logged = (id: string, items: { ref: string; title: string; text: string }[], log: string[]): Source => {
     const s = new StaticSource(id, id, items);
@@ -709,6 +712,9 @@ describe("more of D48's settings, through the engine", () => {
       model,
     );
     await say(p, "What is the latest on the Globex renewal pricing?");
+    // The judge may run behind the event's answer (a lookup past its wait on a loaded box answers first): wait for its
+    // call, bounded, rather than read `model.calls` at once (failed in 11 ms under a parallel Hermes run).
+    for (let k = 0; k < 2_000 && model.calls.length === 0; k++) await Bun.sleep(5);
     const user = model.calls[0]!.messages.at(-1)!.content;
     const line = user.split("\n").find((l) => l.startsWith("[0]"))!;
     expect(new TextEncoder().encode(line).length).toBeLessThan(120 + 40); // the item, its title and its source tag

@@ -5,7 +5,8 @@
 # `--prefix P` adds a counterfactual column, labelled so: an Eden arm's first request that read nothing from the cache
 # reads its first P tokens instead of writing them (P = the arm's stable prefix, tools + system prompt, which on Pi's
 # minimal Eden agent is too short for Anthropic to cache; any agent with a longer prompt caches it).
-# usage: python3 -I cache.py [--prefix P] STEM [STEM ...]
+# usage: python3 -I cache.py [--prefix P] STEM [STEM ...]   (a STEM ending in .jsonl is read as the tasks file itself:
+# hermes-ab writes it to <out>.timeline/tasks.jsonl, A27)
 import json, sys, collections
 
 args = sys.argv[1:]
@@ -18,7 +19,7 @@ if "--prefix" in args:
 IN, OUT = 0.1e-6, 0.5e-6
 agg = collections.defaultdict(collections.Counter)
 for stem in args:
-    for line in open(stem + ".tl/tasks.jsonl"):
+    for line in open(stem if stem.endswith(".jsonl") else stem + ".tl/tasks.jsonl"):
         d = json.loads(line)
         if not d["requests"] or d.get("kind") is None:
             continue

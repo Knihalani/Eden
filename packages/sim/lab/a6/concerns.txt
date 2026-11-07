@@ -1,0 +1,6 @@
+short eden       control 1 -> 1 neutral 1 -> 1
+short eden~cards control 2 -> 2 neutral 1 -> 1
+short tools      control 0 -> 0 neutral 1 -> 1
+long eden       control 1 -> 1 neutral 4 -> 3
+long eden~cards control 0 -> 0 neutral 4 -> 3
+long tools      control 1 -> 1 neutral 3 -> 3

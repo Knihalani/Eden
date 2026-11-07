@@ -30,11 +30,12 @@
 | `packages/protocol` | Wire types (`AgentEvent`, `ContextItem`, `Injection`, `AskRequest`…), ids, input validation. |
 | `packages/primitives` | Benchmarked building blocks: hashing, tokenizer + interner, multi-pattern matcher, top-k, BM25F sparse index, S3-FIFO cache, deadline, singleflight, GCRA, circuit breaker, AIMD limiter, histogram, reply stripping and near-duplicate sketches, calibration and certification statistics, Thompson sampling, budgeted packing, worker pool (D25, D26) ([research/primitives.md](research/primitives.md)). |
 | `packages/redact` | The secret gate (salvaged): gitleaks rules plus extras, prefiltered by one Aho–Corasick pass; the rules that backtrack in JavaScript and every allowlist run on RE2 (re2js, D24). Runs on everything stored, indexed or sent to a model. |
-| `packages/sources` | `Source` interface; `McpSource` (any MCP server's read tools, read-only enforced; arguments from the tool's schema when no mapping is given; an optional fetch tool that reads one record by id, D35, not called by the engine since D121 deleted the fetch refresh; reconnects after a dropped connection, re-checking read-only, and waits 30 s after one that closes within 5 s of connecting; reads every page of `tools/list`); `StaticSource`; `QueryPlanner` (what each lookup sends to each connector, learned per user; D28, on by default in the server since D33); `SourceFanout`: per-source deadlines, coalescing, a result cache that serves stale on failure, rate limits, circuit breakers and adaptive concurrency, redacting before anything is held. A call is admitted only when every guard allows it, so a skip spends no rate token and no half-open probe; a failure of our own redaction says nothing against the source; a breaker ignores reports from calls allowed before it last opened. |
+| `packages/sources` | `Source` interface; `McpSource` (any MCP server's read tools, read-only enforced; arguments from the tool's schema when no mapping is given; an optional fetch tool that reads one record by id, D35, not called by the engine since D121 deleted the fetch refresh; reconnects after a dropped connection, re-checking read-only, and waits 30 s after one that closes within 5 s of connecting; reads every page of `tools/list`); `StaticSource`; `QueryPlanner` (what each lookup sends to each connector, learned per user; D28, on by default in the server since D33); `SourceFanout`: per-source deadlines, coalescing, a result cache that serves stale on failure, rate limits, circuit breakers and adaptive concurrency, redacting before anything is held. A call is admitted only when every guard allows it, so a skip spends no rate token and no half-open probe; a failure of our own redaction says nothing against the source; a breaker ignores reports from calls allowed before it last opened. A search or re-read returns at its deadline even when the source ignores its signal (the call is abandoned, its permit settled); a lookup waits for its on-demand listing only until its deadline. |
 | `packages/graph` | The source map (knowledge graph layer 1): which sources mention which entities, and learned usefulness per situation. SQLite. |
 | `packages/llm` | `Model` interface, OpenRouter client (ZDR, no data collection), pricing, `Budget` (per session and per user-day) and `TenantSpend` (one cap per tenant per UTC day across roles), `FakeModel`. |
 | `packages/engine` | `ContextPartner`: cues, a per-user BM25F item cache (title, body), near-duplicate suppression, ledger, two-speed pipeline, the default's parts (`DEFAULT_CONFIG`, `PARTS` in `parts.ts`, D112), an optional model judge, usage inference, traces; span tracing of every phase in wall and CPU time, off by default (`spans.ts`, `onSpan`, `config.spans`; content-free; an observability toggle, not a product switch, D121; [research/moon-telemetry.md](research/moon-telemetry.md)). Each event is tokenized once, into a per-session vocabulary. |
-| `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), the multi-process router (`EDEN_PROCESSES`, default the core count, D163, D178), MCP server exposing `ask_context`, config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). Runs `DEFAULT_CONFIG` (D112; `EDEN_ENGINE_CONFIG` overrides keys, D103). Model roles (`models.ts`): with `OPENROUTER_API_KEY`, cards and intent (background, price-routed) and the ask-time reader (request path) run on `EDEN_MODEL` (default `anthropic/claude-haiku-5.5`, D12's ZDR routing), each with its own `Budget`, all of a tenant's roles under one cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25); no judge is wired. Without a key no role is built and the same default runs its no-model path. |
+| `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), the multi-process router (`EDEN_PROCESSES`, default the core count, D163, D178), `?shadow=1` on events and pending for a trial that injects nothing (nothing learned from it, D282), MCP server
+exposing `ask_context` (it moves to a new session after 2 h with no ask or at UTC midnight, ending the old one once its asks in flight return, D281), config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). Runs `DEFAULT_CONFIG` (D112; `EDEN_ENGINE_CONFIG` overrides keys, D103). Model roles (`models.ts`): with `OPENROUTER_API_KEY`, cards and intent (background, price-routed) and the ask-time reader (request path) run on `EDEN_MODEL` (default `anthropic/claude-haiku-5.5`, D12's ZDR routing), each with its own `Budget`, all of a tenant's roles under one cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25); no judge is wired. Without a key no role is built and the same default runs its no-model path. |
 | `packages/client` | SDK for agent builders: `EdenClient` (fail-open) and `withContext` for message lists. |
 | `packages/eval` | Scenario harness over 26 hand-written scenarios (docs/research/eval-suite.md): precision, recall, false-fire rate, overall and per category; a privacy check (planted secrets, inert framing); direct asks; model calls and cost per turn, latency. |
 | `packages/sim` | Simulation: generated worlds and sessions with fact-level ground truth, connectors that behave like real ones, an oracle judge, and the real server under simulated agents over HTTP ([research/simulation.md](research/simulation.md)); the connector lab, open-source MCP servers over seeded backends in isolated containers ([research/connector-lab.md](research/connector-lab.md)). Not product code. |
@@ -87,6 +88,13 @@ and 3.36x on the market `hosted` profile (4,126 against 1,229, lowest 3.20x); th
 (router over 1 child 0.98-1.05x). Memory is the price: each child keeps its own heap, and its users' state grew it
 by about 650 MB for about 100 users, against about 1,350 MB for all 400 in one process (RSS end minus start; every
 process also held about 490 MB of sim worlds that a real server does not). Size a box by children, not by users.
+
+`POST /v1/usage` (D326) reports a tenant's day: model spend and calls against the cap, requests by route, users held
+(frozen ones apart) and items; the router sends it to every child and sums the answers. Per-tenant spend caps are
+divided by N in each child (D163) unless the trial `EDEN_SPEND_LEASES=1` is on (D327, `spend-lease.ts`): the router
+then keeps one ledger per tenant and UTC day and grants each child its spend in chunks of cap/(4N), so a tenant's
+children together never pass the cap and one busy child can reach at least three quarters of it. The rate limit is
+still divided by N.
 
 ## The two speeds
 
@@ -168,7 +176,9 @@ two request words, a rare word or a consequence find.
 (`Source.list`; `McpSource.listTool`, checked like the search tool) are read into each active user's cache in the
 background: a backfill of the newest items across sources, polls when a lookup finds a source stale by its learned
 change rate (no timed polls, D121), a daily sweep that drops what a source has not listed in two sweeps in a row (about
-48 h). Synced items have their own cap and TTL in the cache. The servers sync per-user MCP sources that name a list tool
+48 h), reading each source back to the oldest item synced from it (D283). A lookup stops waiting for its on-demand
+listing at its deadline without cancelling it, and skips a listing that failed twice running while it backs off (D283).
+Synced items have their own cap and TTL in the cache. The servers sync per-user MCP sources that name a list tool
 (D108); static sources list nothing. A lookup answers every current synced source (its own search and every probe) from
 that local index at no call, and calls live only the sources that are not synced or still stale. The tick runs on a
 timer, never on the fast path, which only marks the user active. A listing redacts only what it brings new or changed:
@@ -182,6 +192,42 @@ while no page reaches what was already synced, the next tops the items asked up 
 (5, then 95, then 100). A poll then lists no more items than full pages would and catches up as far, in at most one more
 call (an on-demand poll: one to three calls, against one or two). Backfill and sweeps keep `syncPageSize`. `SyncStats`
 counts the items listed (`demandItems`, `backgroundItems`) beside the calls.
+
+**Many sources** (A1, D261–D265, all in the default; docs/research/a1-scale.md). A user's newest `syncMaxItems` are
+kept across all their sources, so with many busy connectors a source's synced copy can be cut to its newest few items.
+Such a copy (`Sync.complete` false: its backfill stopped at the user's cut before its listing ended, or a trim dropped
+some of its items) does not answer for its source (`syncLocalComplete`, D264): the source is searched live like an
+unsynced one, so what is older than the cut is still found. A lookup polls at most its `syncPollWidth` (8) best-routed
+stale sources (D263); a warm source past them answers from its copy as it stands, as under `syncPollBehind`. Routing
+(`SourceMap.route`) adds, per source, log2(1 + its items among the request's 40 best matches in the user's own index)
+(`routeLocalHits`, D265), so a request that names no one still reaches the sources whose items share its words. The
+backfill reads 8 sources' pages at once, newest unread first (`syncBackfillLanes`, D262); first pages sized to a
+source's share of the cap were measured and deleted (D262). With no more sources than the lookup searches, and none cut,
+none of this changes anything.
+
+A13 (D320–D324, all in the default; docs/research/a13-scale.md) adds what a user with many sources needs past A1. A
+source a lookup routed to on evidence of its items (a name it mentioned, or the request's words among its held items:
+`Sync.engage`) is one the user uses. Such a source's copy, if the cap cut it, is read again from the top, two pages a
+tick, up to half `syncMaxItems` (`syncEngagedDeep`, D323), and the user's trim keeps the items of used sources before
+any other's, so the user's own mailbox is whole and answers from the index instead of a handful of its newest items
+among 1,000 connectors' newest. Each source keeps a vocabulary sketch of everything the sync listed from it (a Bloom
+filter, 128 B to 4 KB, `sketch.ts`), kept after the trim; routing adds, per source, log2(1 + the request's terms the
+sketch holds, each weighted by how few sources hold it) (`routeSketch`, D322). A sketch match routes a search but does
+not by itself make a source used. For a user with more than 32 synced sources, the card model reads only items of used
+sources or items naming a name the user's own requests named; the rest wait, uncovered, and are read when their source
+is first used (`cardsSourceAware`, D320). After the backfill the sync keeps to its cap: sweeps and background polls store
+no dated item older than the user's cut (the copy is then cut), the user's items are trimmed back to the cap at 1.5x it,
+and a sweep stops once it has listed every id it holds for the source (`syncKeepCut`, D321). The daily sweep still lists
+every source once a day (deletes need it): about 1,000 listing calls a user a day at 1,000 sources (D324).
+
+A21 (D356, in the default; docs/research/a21-scale.md) sweeps a source the user does not use, and whose connector can
+find an item by id (`Source.fetchesById`: an MCP connector with a get tool), once a week instead
+(`syncUnusedSweepMs`); any other keeps the daily sweep. What
+the skipped sweeps would have vouched for is checked at delivery instead: a copy older than `syncSweepMs` of a source
+whose daily sweep was skipped, or such a source's copy the last sweep did not list, is `doubted`, so every delivery and citation
+re-reads it by id first (D126, D211). A copy no re-read confirms is not delivered and makes its source's sweep due at
+the next tick. At 1,000 sources the sweep falls from ~1,114 to ~282 listing calls a user a day; a five-source user uses
+all their sources and keeps the daily sweep.
 
 **Change notifications** (D125, `syncPush`; `Source.notifies`, `ContextPartner.sourceChanged` and `sourceItems`,
 `POST /v1/sources/changed` and `/v1/sources/items`, the client's `sourceChanged`/`sourceItems`): a source whose
@@ -209,7 +255,10 @@ dropped from the cache and left out; one that cannot be checked is delivered as 
 (D211): there a re-read that failed with a plain error, or that our own guard skipped in ordinary use (a busy permit,
 the rate limit's normal spend), is tried once more, and a copy still not confirmed is left out and named in the answer;
 a re-read refused by an open breaker or by a rate limit the connector's 429 pushed back is not tried again and is left
-out at once (D232). A source with no fetch tool, or whose null proves nothing, is still cited as held. With no signal nothing is
+out at once (D232). A source with no fetch tool, or whose null proves nothing, is still cited as held; such a null
+("unverifiable", a reply that lacked the record) stands for the user until the source signals again or 10 minutes
+pass (`unverifiable`, D298), so later deliveries and other sessions do not fetch it again for the same answer; an MCP
+error result (`FetchErrorResult`, "error-result") is unverifiable too but never held. With no signal nothing is
 re-read: a copy's age alone is no doubt (re-reading by age was measured live and deleted, D126), and a silent source's
 changes arrive through polls and the daily sweep. The fast path, which may not call a source, sends a doubted item to
 the slow path. Deletion notifications (`ContextPartner.sourceRemoved`, `POST /v1/sources/removed`) drop items at once;
@@ -218,7 +267,12 @@ a deleted item, from a notification or a re-read, is also dropped from the fan-o
 hold), so a page read before the deletion cannot bring it back. A re-read that is on the wire when a deletion
 notification lands does not revive the item (`recheck` checks `ItemCache.isHeldGone` before storing): it counts as
 gone.
-The re-reads are traced as "verify" decisions with their `sourceCalls`.
+The re-reads are traced as "verify" decisions with their `sourceCalls`, and their wait is a "verify" span (A18).
+A notice that names the refs it changed without their content (`ContextPartner.sourceRefs`, `POST /v1/sources/refs`,
+D347) doubts only those items: each is fetched in the background (two at a time, `REF_TIMEOUT_MS` 5 s, a guard's skip
+or a plain error tried again) and stored as synced under its call's read mark; until its read lands the item is in
+doubt and a delivery waits on that read (`refreshing`, no second call, at most `verifyTimeoutMs`). A ref that cannot
+be read turns the notice into the plain signal.
 
 **Poll behind the lookup** (D65, `syncPollBehind`, on in the default, D112; with `sync` and `syncOnDemand`): without it,
 a lookup that finds a synced source stale waits for that source's on-demand poll (`sync.freshen`, one or two listing
@@ -247,6 +301,24 @@ untaken (the push's second reading) announces nothing. A change notice for a sou
 from is polled at once in the background (one listing call, at most one at a time and 30 s apart per user and
 source), so the packet is usually queued before the agent's next request; nothing on the observe path waits for it.
 Without it, a fact the agent already holds stays in its transcript in the old version (docs/research/fix-s7-revisions.md).
+Since D342 (`revisionDiff`, part `freshness`) an update also names the times and dates the session was shown for the
+item that the new version no longer has ("…; this version replaces it; no longer: 09:30"): the ledger keeps every
+handed version's times (`Ledger.seenTimes`, `timesOf`, no model).
+
+**No re-show across requests** (D340's trial, deleted by D380): the not-twice ledger (D13) keeps a push candidate
+back within its cooldown even when the agent took it for an earlier, unrelated request of the session; a fresh paired
+run did not show re-showing it better (docs/research/a26-reshow.md).
+
+**New items against what the agent already acted on** (D301, `planConflict`, on in the default, part `plans`): each
+session keeps the cues of its last 12 requests the push ran for (the acting requests). Items the sync stores after
+that (a poll, a notice's payload) wait, per session, for its next take (`takePending`, or an observe that starts no
+push): there each is checked against those requests by `candidatesOf`'s rule (among the first `pushCandidates` of the
+request's ranked pool, bulk mail out, the pool holding something constraint-like, cards included, which by then have
+been made), and one that qualifies, and that no packet has handed the session, is queued as a packet naming the
+earlier request (`PLAN_LEAD` and the request's own words, quoted on one line, double quotes made single), whatever
+the agent asks now. A copy a change signal has put in doubt waits for a later take (D126). Index lookups only, no
+source or model call (under 3 ms a take in the $0 screen); once per item per session (`planSent`;
+docs/research/a9-ahead.md).
 
 **Deleted by D112:** `decideConflict` (D67), `judgeBehind`, push relaying (`syncPush`, `sourcePushes`,
 `sourceChanged`, D66) and the other switches D112 lists. The candidates' facts (`decide.ts`) still reach the lab only
@@ -328,8 +400,16 @@ user request that acts is read the same way when it is observed, as an ask of th
 flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. **Since D237 the default does not call the reader there or on an ask (`pushCandidates` 5, CL6):** the push hands
 the agent the first five items of the pool the reader would have read (the ask's order, bulk mail out), each a focused
 excerpt, after a fixed line of Eden's own saying they may bear on the request and must be checked against its who,
-what and when first; a pool with nothing constraint-like (`readerGate`'s test) gets a one-line "nothing looks like it
-constrains it" note instead, when every source answered. An ask answers in rule order with no reading.
+what and when first; a pool with nothing constraint-like (`readerGate`'s test) gets nothing (no note: D237 did not
+build it, D257 deleted the push's other one). When no handed item holds the request's named person or thing and,
+if it names one, its day (`settle.ts`, no model), the line adds a nudge to call `ask_context` with those specifics, and
+an ask in that request also lists the pool's deeper items that hold one of them (`askNudge`, D317: hidden +9.2 points
+on Pi, through the agent's asks). When the request names a person, thing or day and a handed item settles it, the push
+hands only the first two, through the first that settles it (`pushCandidatesSettled` 2, D404: fewer packet tokens
+written to the agent's prompt cache, hidden facts not lower, A30). An ask answers in rule order with no reading. The
+candidates need no
+reader, so a server with no model key runs them too (D276). `ContextPartner.explain` returns a session's last 32
+traces for `POST /v1/explain` (D277), each with `explainTrace`'s sentence; content-free like every trace (D56).
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search
@@ -393,6 +473,19 @@ result). The client's `check` fails open (an error, a timeout, a 4xx or 503, or 
 `proceed`); the route answers 400 for a malformed call and 503 when the engine fails. The default leaves the switch
 off: a trial turns it on through `EDEN_ENGINE_CONFIG` or an embedding's `buildPartner` `engine` settings.
 
+**The party check** (`partyCheck`, on in the default, part `parties`; D375, D376, `parties.ts`,
+[research/a25-action-guard.md](research/a25-action-guard.md)) runs in the same `checkAction`, first, whether or not
+`actionCheck` is on. Every injection handed to the agent (`handOut`) and every ask answer has its email addresses and
+bank account details noted as digests in the session (`Session.packetParties`, ≤ 256, each with the cited item that
+held it; in packets, account digits count only after their label). A call whose arguments (all but `NOT_PARTY`'s
+fields: amounts, dates, titles, subjects, descriptions) add such an identifier that the session's latest user message
+does not name and that is no correspondent of the user's (`ItemCache.isCorrespondent`: on a party line in the header
+block of a cached item, or at a non-free-mail domain on such lines of two items; the item that showed it vouches only
+for its own From line) is answered with a finding in the data envelope naming the identifier and the item's title and
+asking the agent to confirm with the user; a call to the same tool adding the same parties again proceeds. With only this check on, a call in a session Eden
+handed no identifier proceeds without opening a session. No model, no source call: about 8 µs to read a 1.2 KB packet,
+and the user's address tally takes about 26 ms to build at 1,500 items, once, then follows each item stored or removed.
+
 **Ask** always searches (live, or a current synced source locally with D57; more sources), ignores the not-twice
 ledger (the agent asked), and returns the cited items as they are, with no model call composing an answer: the asker
 is a model and reads them directly (D43; `askWithModel` and `EDEN_ASK_MODEL` were deleted by D112). The one model call
@@ -444,6 +537,18 @@ clear. Index and tallies are built from the plain text before it is packed; a re
 keeps the held bytes. Sim-world text, where one arrow or dash makes a whole JS string two bytes a character, costs
 about 1.6x less heap per synced user, for 1.2-1.3x the backfill CPU.
 
+A user neither read nor written for `freezeIdleMs` (30 minutes, at least two expiry ticks) is frozen at the next
+tick (D325, `FrozenUser`): their entries and tallies become one zstd-compressed JSON blob in memory (D8: never on
+disk) and their vocabulary, index, sketcher and entry objects are let go. Metadata reads (`revision`,
+`syncedCount`) answer from the frozen record; any other read or write thaws the user into the same state (items in
+the same order, docs indexed in their old insertion order so ties rank as before, the same revision, tallies,
+probes and sketches), so every answer is the same (`cache-freeze.test.ts` compares a freezing cache with a twin
+that never freezes). On the timer, freezes and the expiry of frozen users run as background jobs of one slice
+scheduler (`ItemCache.pump`: a few milliseconds of work per event-loop turn, one job at a time); the partner's
+`observe`, `ask` and `checkAction` first await `cache.ready(scope)`, which thaws a frozen user as an urgent job of the
+same scheduler, so a burst of returning users queues instead of stalling every other request. Figures:
+docs/research/a14-scale-users.md.
+
 Dates in items are read the same on every host: `parseWhen` (`grounding.ts`) reads a zone-less date or date-time (a
 `Date:` header without a zone, a calendar start with no offset, "14 Oct 2026") as UTC, not the server process's local
 zone, and leaves strings with a zone ("Z" in either case, "+01:00", "GMT+1") and ISO bare dates to `Date.parse`. An
@@ -454,9 +559,19 @@ event's start (`startMs`) and the order of a day's events (`ItemCache.timed`, un
 it. Tests run with TZ=UTC (`scripts/test-preload.ts`);
 `tz.test.ts` checks the same answers under Asia/Tokyo and America/Los_Angeles.
 
+## The proxy (D280)
+
+`@eden/proxy` (`bun run proxy`) is an OpenAI-compatible endpoint in front of the agent's model for agents that cannot
+add the SDK: it turns each chat request's new messages (by content, so compacted and sliding histories work) into
+events through `@eden/client`, inserts the turn's packets with `withContext`, and streams the upstream's answer back.
+It fails open under one deadline per request (the observe's wait plus 800 ms), keeps per-conversation state in memory
+(bounded, keyed by user and session), and off loopback needs its own key (`EDEN_PROXY_KEY`), since it holds the
+tenant's. A shadow mode reports and decides but injects nothing.
+
 ## What is deliberately missing (see ROADMAP.md)
 
 Per-user MCP connections with OAuth and a token vault; persistent session state;
-streaming delivery; the OpenAI-compatible injecting proxy; a richer graph (entity resolution, relations, freshness);
+streaming delivery; a richer graph (entity resolution, relations, freshness);
 learned situation classification; per-agent (not just per-user) learning; multi-machine deployment (the router,
-D163, spreads users over processes on one machine; the caps it splits are per process, not shared).
+D163, spreads users over processes on one machine; its rate caps are split per process, and model spend is shared
+only under the D327 trial's leases).

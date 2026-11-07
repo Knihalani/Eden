@@ -16,10 +16,18 @@
  * - `+ask` (fix-s3b, weak point 4): not an engine flag but the harness's, and only on a `both` base: the agent also
  *   gets `ask_context` beside its own source tools and Eden's injected context, the shape integrators ship
  *   (`both+ask`). `eden` has the tool already, so `eden+ask` throws rather than run `eden` under another name;
+ * - `+nokey` (D291): also the harness's: Eden runs as a server with no model key builds it (`buildPartner` with
+ *   `NO_MODELS`): the same engine settings, but no card enricher (so no cards and no intent requests) and no reader.
+ *   Only a base with Eden takes it;
+ * - `+ephemeral`, `+ephemeralBp` (A16, D336): also the harness's, on a base with Eden: how earlier requests' packets
+ *   stay in the transcript (`packet-layout.ts`): only the current request's, as `withContext` and the proxy send them,
+ *   and with a cache breakpoint on the request's user turn. Only multi-request sessions (`--day`, `--days`) differ;
  * - `@w<ms>`: how long the first observe waits for Eden's slow path (default 3000, the client's `withContext`).
  *
  * An unknown base throws: a typo must not run Eden under another condition's name.
  */
+
+import type { PacketLayout } from "./packet-layout";
 
 /** The settings each variant name adds over `--config`. */
 export type Variants = Record<string, Record<string, unknown>>;
@@ -42,10 +50,18 @@ export interface Condition {
   /** The agent gets `ask_context`: `eden` bases, and `both` bases with `+ask`. */
   askTool: boolean;
   judge: boolean;
+  /** `+nokey`: no card enricher and no reader are built, as on a server without a model key (D291). */
+  noKey: boolean;
+  /** `+ephemeral`, `+ephemeralBp` (D336): how earlier requests' packets stay in the transcript; else `kept`. */
+  packets: PacketLayout;
 }
 
 /** The harness flag `+ask`: `ask_context` beside the tools, never sent to the engine as a setting. */
 const ASK_FLAG = "ask";
+/** The harness flag `+nokey`: the partner gets no model roles, never sent to the engine as a setting. */
+const NOKEY_FLAG = "nokey";
+/** The harness flags of D336's packet layouts, never sent to the engine. */
+const LAYOUT_FLAGS: readonly PacketLayout[] = ["ephemeral", "ephemeralBp"];
 
 const BASES = ["none", "tools", "eden", "both", "eden-judge", "both-judge"] as const;
 const SHAPE = /^([a-z-]+?)(-act(?:-firewall)?)?(?:~([A-Za-z0-9_.-]+))?((?:\+[^+@~]+)*)(?:@(.*))?$/;
@@ -88,7 +104,19 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
   if (askFlag && !base.startsWith("both")) {
     throw new Error(`condition ${name}: +ask adds ask_context beside the tools, so only a both base takes it`);
   }
-  const flags = allFlags.filter((f) => f !== ASK_FLAG);
+  const noKey = allFlags.includes(NOKEY_FLAG);
+  if (noKey && (base === "none" || base === "tools" || base.endsWith("-judge"))) {
+    throw new Error(
+      `condition ${name}: +nokey takes Eden's model roles away, so only eden or both (no judge, which needs a model) takes it`,
+    );
+  }
+  const askTool = base.startsWith("eden") || askFlag;
+  const layouts = LAYOUT_FLAGS.filter((f) => allFlags.includes(f));
+  if (layouts.length > 1) throw new Error(`condition ${name}: +ephemeral and +ephemeralBp are two layouts; name one`);
+  if (layouts.length && (base === "none" || base === "tools")) {
+    throw new Error(`condition ${name}: +${layouts[0]} places Eden's packets, so only a base with Eden takes it`);
+  }
+  const flags = allFlags.filter((f) => f !== ASK_FLAG && f !== NOKEY_FLAG && !(LAYOUT_FLAGS as string[]).includes(f));
   let extra: Record<string, unknown> = {};
   if (variant !== undefined) {
     const v = options.variants?.[variant];
@@ -129,8 +157,10 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
     useEden,
     withPartner: useEden || firewall,
     useTools: base === "tools" || base.startsWith("both"),
-    askTool: base.startsWith("eden") || askFlag,
+    askTool,
     judge: base.endsWith("-judge"),
+    noKey,
+    packets: layouts[0] ?? "kept",
   };
 }
 

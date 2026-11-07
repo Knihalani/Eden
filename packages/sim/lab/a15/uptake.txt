@@ -1,0 +1,12 @@
+a15-short-pay-41 eden packet 44/52 ask 8/8 none 0/12
+a15-short-pay-41 eden+pushReach packet 43/56 ask 5/6 none 0/10
+a15-short-pay-42 eden packet 44/54 ask 7/7 none 0/11
+a15-short-pay-42 eden+pushReach packet 47/56 ask 6/7 none 0/9
+a15-tgt-pay-41 eden packet 5/5 ask 2/2 none 0/5
+a15-tgt-pay-41 eden+pushReach packet 7/10 ask 0/1 none 0/1
+a15-tgt-pay-42 eden packet 7/8 ask 0/0 none 0/4
+a15-tgt-pay-42 eden+pushReach packet 7/10 ask 0/0 none 0/2
+a15-long-pay-41 eden packet 6/6 ask 0/0 none 2/6
+a15-long-pay-41 eden+pushReach packet 5/6 ask 0/0 none 2/6
+a15-long-pay-42 eden packet 7/7 ask 0/0 none 2/4
+a15-long-pay-42 eden+pushReach packet 5/7 ask 0/0 none 2/4

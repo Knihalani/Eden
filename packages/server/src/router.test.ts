@@ -73,6 +73,15 @@ describe("routing key", () => {
       expect(userOf(enc(bad))).toBe("");
     }
   });
+
+  test("userOf does not parse a padded body on the router's one thread: it goes to the child's 400 unparsed", () => {
+    const half = 4 * 1024 * 1024 - 64;
+    const nested = new TextEncoder().encode(`{"userId":"u1","junk":${"[".repeat(half)}${"]".repeat(half)}}`);
+    const t0 = performance.now();
+    expect(userOf(nested)).toBe("");
+    // The parse took 453-665 ms on such a body; the scan stops at the first bracket past the depth bound.
+    expect(performance.now() - t0).toBeLessThan(100);
+  });
 });
 
 describe("per-child caps and files (D163)", () => {
@@ -246,6 +255,40 @@ describe("router over real child processes", () => {
     expect(await feedback(a, ia)).toBe(false);
     expect(await feedback(a, ia, router.children[home]!.port)).toBe(false);
     expect(await feedback(b, ib)).toBe(true);
+  });
+
+  test("usage (D326) is the tenant's summed over every child, and only that tenant's", async () => {
+    type Usage = {
+      tenantId: string;
+      processes: number;
+      processesDown: number;
+      capUsd: number;
+      modelUsd: number;
+      users: number;
+      requests: Record<string, number>;
+    };
+    const usage = async (key = KEY) => (await (await post("/v1/usage", {}, key)).json()) as Usage;
+    const before = await usage();
+    for (const userId of [a, b]) {
+      await post("/v1/events", { userId, sessionId: "u1", kind: "user_message", text: "Globex renewal" });
+    }
+    const after = await usage();
+    expect(after.tenantId).toBe("acme");
+    expect(after.processes).toBe(2);
+    expect(after.processesDown).toBe(0);
+    expect(after.capUsd).toBe(10); // $5 a child (D163), summed.
+    expect(after.modelUsd).toBe(0); // No model key.
+    expect(after.requests.events! - (before.requests.events ?? 0)).toBe(2); // One on each child.
+    expect(after.users).toBeGreaterThanOrEqual(2);
+    // Another tenant sees its own day only: none of acme's requests or users.
+    const other = await usage(OTHER_KEY);
+    expect(other.tenantId).toBe("globex");
+    expect(other.requests.events ?? 0).toBe(0);
+    expect(other.users).toBe(0);
+    expect((await post("/v1/usage", { tenantId: "globex" })).status).toBe(403);
+    // The router asks every child; only the owner counts the call: one usage request reads as one.
+    const again = await usage();
+    expect(again.requests.usage! - after.requests.usage!).toBe(1);
   });
 
   test("auth, tenant checks and validation are still the child's answers", async () => {

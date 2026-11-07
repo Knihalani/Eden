@@ -4,6 +4,7 @@ export {
   type CandidateSink,
   type PartnerDeps,
   type ReaderReport,
+  type PushPoolReport,
   type ReaderSink,
 } from "./partner";
 export { FACT_NAMES, vectorOf, type Facts } from "./decide";
@@ -16,8 +17,10 @@ export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
 export { Ledger } from "./ledger";
 export { inert, oneLine, renderAnswer, renderPacket } from "./render";
 export { safeBlock, safeLine } from "./line";
+export { GUARD_LINE, QUARANTINED, quarantine, quarantineItem } from "./shield";
+export { callParties, partiesIn, type Party } from "./parties";
 export { classifySituation, type Situation } from "./situation";
-export { contentTerms, distinctTermIds, extractEntities, isChatter, termIds } from "./text";
+export { contentTerms, distinctTermIds, extractEntities, extractTypedEntities, isChatter, termIds } from "./text";
 export {
   cpuNow,
   SPAN_NAMES,
@@ -29,7 +32,8 @@ export {
   type SpanSink,
   type SpanStat,
 } from "./spans";
-export type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
+export type { ShadowRecord, ShadowSink, Trace, TraceSink, UsageRecord, UsageSink } from "./trace";
+export { explainTrace, SILENT_REASONS, TRACE_DECISIONS } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";
 export { requestedRange } from "./probes";
@@ -49,6 +53,7 @@ export {
   worthCardingStrict,
   sentenceKey,
   STANDING_KINDS,
+  automated,
   ECONOMY_CARD_LIMITS,
   type Action,
   type Card,
@@ -93,3 +98,4 @@ export {
   type ReaderStats,
   type ReaderVerdict,
 } from "./reader";
+export { mayConstrain } from "./conflict";

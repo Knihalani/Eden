@@ -106,7 +106,16 @@ per-task model spend is $0; the agent reads about 300–600 more input tokens a 
 Haiku (lab provider), train seeds 41–42, 1:1:8 mix, steady state per 1,000 tasks: short 0.338 (signals) and 0.415
 (payload, billed; cache hits vary between runs) against the old default's 0.631 and 0.665 and the agent alone's
 0.368; long 0.326 and 0.338 against 0.568 and 0.529 and the agent alone's 0.317 (docs/research/cl-cl6.md). The reader
-figures below hold for `pushCandidates: 0` (`--preset minus-candidates`).
+figures below hold for `pushCandidates: 0` (`--preset minus-candidates`). **D317 (A12) adds no model call of Eden's
+and no connector call** but makes the agent ask more (`askNudge`: +0.20–0.38 asks a task): +$0.061 per 1,000 tasks
+on the 1:1:8 mix as measured (0.374 → 0.435; Pi, Anthropic Haiku, the 91 targeted train templates, seeds 41–44 and
+41–42 for neutral; docs/research/a12-quality.md). A later check of the version after review came out at
++$0.046–0.059 a kind against an earlier baseline, so read the trade as +$0.04–0.07 a kind and +0.3–0.6 s (D317).
+**With the D340 trial on (A17; off in the default)** a candidate handed for an earlier request of the session is
+handed again when it ranks for a later one: over a user's days the agent reads about 600-750 more input tokens a task (+$0.013 per 1,000 tasks on
+8-day days, +5% of the eden arm's $0.251 steady state; +$0.017 pooled with 40-request days), with no Eden model call;
+under signal-only notices a re-shown mail item is re-read (Eden connector calls 6.11 → 6.42 a task). One request a
+session it never acts (docs/research/a17-long-quality.md).
 
 Ask-time reader (D95, `askReader`, in the default since D112; `reader.ts`). One call per `ask` about an action (an
 imperative question, a question about blockers, or an ask while the session's latest request acts; any ask with
@@ -407,7 +416,8 @@ request path (one call per acting request or ask that a candidate could constrai
 user's request, the ask its question). No judge is wired (the measured setup ran none). Each role has its own
 `Budget` (20 calls and $0.02 per session, $0.25 per user per day) and all of a tenant's roles share one
 `TenantSpend` cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25). Over any cap the role is skipped and the
-no-model path answers. Without a key nothing is called and the same default runs with no model. The HTTP server
+no-model path answers. Without a key nothing is called and the same default runs with no model, the push's
+candidates included (they make no model call, D276). The HTTP server
 runs `EDEN_PROCESSES` processes, by default the core count (capped at 64, D178), and each child holds 1/N of the
 tenant cap (`tenantSpendFor`, D163): the $25 is a total only when a tenant's users spread over the children. A tenant
 whose spend comes from one user, or a few on one child, is capped at $25/N a day ($6.25 on 4 cores, $0.39 on 64);
@@ -514,6 +524,24 @@ What a tenant's own agent costs depends mostly on the agent: in D64, 85% of its 
 `ask_context` round trip is one more model request. Removing the ask (D70, rejected) saved $0.070 per 1,000 tasks
 (−27%) but lost 0.12 of hidden facts raised (in-sample). docs/INTEGRATION.md collects the agent-side levers; they are
 unmeasured advice.
+
+## The agent's extra tokens under the candidates default (A3, D271–D273)
+
+With no reader call on the path (D237), Eden's per-task cost to a tenant is the agent's own: the packet (about 1 KB on
+a nothing-to-add request, 1.4–1.6 KB on one with something to add) and `ask_context` answers (816–964 bytes an ask,
+0.33–0.70 asks a task one request at a time, 0.04–0.06 over days) enter the agent's prompt, are written to its cache
+once (1.25x input) and read back on later requests (0.1x). Measured on Pi with a prompt that caches in every arm
+(train, Anthropic Haiku, lab figures; docs/research/a3-cost-speed.md): Eden writes 865 vs 318 tokens a nothing-to-add
+task one request at a time and 629 vs 262 over days; $ per 1,000 tasks on the 1:1:8 mix +0.060 (+0.042..+0.078) and
++0.080 (+0.065..+0.095) against the agent alone, while Eden saves model turns (wall −0.96 s and −0.42 s); rerun on
+the tree merged with A4/A6, +0.047 (+0.029..+0.065) and +0.050 (+0.035..+0.065), −0.95 s and −0.65 s. **With the
+connectors' own per-call fees counted** (`pi-cost-report.ts`, `CONNECTOR_PLANS`), Eden is cheaper than the agent
+alone on every paid plan, because it replaces the agent's 1.0–2.2 tool calls a task with 0–0.16 of its own: over a
+user's days, all-in, −$0.17 per 1,000 tasks on Composio, −$0.50 on Unified.to, −$7.2 on Arcade.dev, −$18.7 on Zapier
+MCP (docs/research/a3-cost-speed.md §12). Cuts of
+packet or ask bytes by lexical anchoring drop planted facts or move the bytes into the ask (D258, D273): the packet's
+bytes are what recall costs. An agent with a fixed prompt under the provider's cache minimum (512 tokens on Haiku 5.5)
+pays its whole prompt as a cache write on every task; Pi's minimal Eden agent did (D260, D271).
 
 ## Levers, in order of leverage
 

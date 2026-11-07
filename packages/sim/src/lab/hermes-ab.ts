@@ -7,6 +7,8 @@
  * - hermes:      Hermes with one MCP server, `sources`: a read-only `search_<source>` tool per sim source (pi-ab's
  *                `tools`). Hermes' own toolsets (terminal, files, web, browser, code, memory, skills, delegation, cron)
  *                are all off: `enabled_toolsets` is the MCP toolsets only, so the agent is read-only.
+ * - hermes-eden: Eden only (A16), Pi's `eden` shape: `ask_context` and the plugin, no `search_<source>` tools (the
+ *                sources server runs, its toolset is not enabled). `~variant`, `+flag`, `@w<ms>` as for hermes+eden.
  * - hermes+eden: the same, plus Eden as two integration points, both Hermes' own extension surfaces:
  *                Eden's MCP server (`createMcpServer`: `ask_context` with the standard description), and the Eden
  *                plugin (packages/sim/lab/hermes/eden): `pre_llm_call` observes the turn and injects Eden's packet,
@@ -372,16 +374,21 @@ async function runWorld(
   grading: Promise<void>[],
 ): Promise<RunResult[]> {
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
-  const notify = pushNotifier(sources, CONNECTORS, seed);
-  const { name: condition, waitMs, withPartner, config, eden } = cond;
+  const notify = pushNotifier(sources, CONNECTORS, seed, world.now);
+  const { name: condition, waitMs, withPartner, config, eden, useTools } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
   let current: Timeline | null = null;
   const bySession = new Map<string, { r: RunResult; tl: Timeline }>();
+  // Every connector call Eden makes in this stream, in a task's window or not (the backfill, the sync's ticks between
+  // tasks): `Background.sourceCalls`, priced per connector plan by pi-cost-report.ts, as pi-ab records it (A27).
+  let edenCalls = 0;
   const edenSources = sources.map((s) =>
-    watched(s, (op, start, end, status) =>
-      current?.span("eden.source", "eden", "bg", start, end, { source: s.id, op, status }),
-    ),
+    watched(s, (op, start, end, status) => {
+      edenCalls++;
+      bg.sourceCalls = edenCalls;
+      current?.span("eden.source", "eden", "bg", start, end, { source: s.id, op, status });
+    }),
   );
   // What this stream's background calls (cards) cost: booked to Eden's total, charged to no task (Background).
   // Recorded in the results as the calls happen (below), so a stream that stops early (OverBudget, the request cap)
@@ -414,6 +421,12 @@ async function runWorld(
       : undefined;
   if (cards) budgeted.cards.push(cards);
   if (cards) background.push(bg);
+  else if (withPartner) {
+    // An Eden stream with cards off still makes connector calls: booked for those only, and `noModels` keeps it out of
+    // the card backfill each seed's model reports spread (as pi-ab books it, A27).
+    bg.noModels = true;
+    background.push(bg);
+  }
   // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
   let readerTask: RunResult | null = null;
   const reader =
@@ -486,6 +499,13 @@ async function runWorld(
       throw new Error(`sync never warmed for ${scope.userId}: a run without it is not this config`);
   }
   if (cards) await cards.idle();
+  // What the backfill (the sync's warm-up and its cards) cost before the first request: the user's one-time spend
+  // (H16), split from what the cards spend while the user works, as pi-ab does. Before A27 Hermes results lacked it,
+  // so the report put the whole backfill in the in-run background column.
+  bg.setupUsd = bg.cardsUsd;
+  bg.setupCalls = bg.calls;
+  bg.setupSourceCalls = edenCalls;
+  bg.sourceCalls = edenCalls;
 
   // The stream's state the routes read: the running task's binding, timeline, record and result.
   let task: {
@@ -550,7 +570,8 @@ async function runWorld(
   mkdirSync(home, { recursive: true });
   writeFileSync(join(home, "config.yaml"), hermesConfig(id, eden));
   if (eden) cpSync(join(LAB_DIR, "eden"), join(home, "plugins/eden"), { recursive: true });
-  const toolsets = ["mcp-sources", ...(eden ? ["mcp-eden"] : [])];
+  // `hermes-eden` (A16): Eden in place of the per-source search tools, as Pi's `eden` arm.
+  const toolsets = [...(useTools ? ["mcp-sources"] : []), ...(eden ? ["mcp-eden"] : [])];
 
   const out: RunResult[] = [];
   let previous: { sessionId: string; r: RunResult } | null = null;

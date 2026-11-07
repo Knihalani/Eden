@@ -31,15 +31,21 @@
  *
  * The router reads each POST body once to find `userId` (a `JSON.parse` the child repeats; router.bench.ts measures
  * the hop) and forwards the bytes unchanged with the `authorization` and `content-type` headers. A declared
- * content-length past `maxBodyBytes` is refused here with the handler's 413 (D100) so it is never buffered twice;
- * every other answer, auth, rate limit and validation included, is the child's.
+ * content-length past `maxBodyBytes` is refused here with the handler's 413 (D100) so it is never buffered twice,
+ * and a request past the tenant's whole rate (`tenantRatePerSec`, `tenantBurst`, undivided) gets the handler's 429
+ * here before its body is read; every other answer, auth, the child's own 1/N rate limit and validation included, is
+ * the child's.
  */
 import { Database } from "bun:sqlite";
 import { existsSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SourceMap } from "@eden/graph";
-import { fnv1a, mix32 } from "@eden/primitives";
-import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, MAX_PROCESSES, type ServerConfig } from "./config";
+import { fnv1a, Gcra, mix32 } from "@eden/primitives";
+import { bodyShapeUnder, keylessOriginAllowed } from "@eden/protocol";
+import { keyOf } from "./auth";
+import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, FANOUT_COPY, MAX_PROCESSES, type ServerConfig } from "./config";
+import { usdPerTenantDayFromEnv } from "./models";
+import { isLeaseRequest, SpendLedger } from "./spend-lease";
 
 /** The child a tenant/user is served by: stable across restarts and router instances, spread by a mixed FNV-1a. */
 export function childFor(tenant: string, userId: string, children: number): number {
@@ -54,7 +60,9 @@ export function childFor(tenant: string, userId: string, children: number): numb
  * without one go to the tenant's own child, where the handler refuses them with its usual 400.
  */
 export function userOf(body: Uint8Array): string {
-  if (body.byteLength === 0) return "";
+  // A body the child refuses unparsed (`bodyShapeUnder`, http.ts) is not parsed here either: padded structure is where
+  // the parse's cost lies (hundreds of ms for 8 MB), on the one thread every tenant's requests pass through.
+  if (body.byteLength === 0 || !bodyShapeUnder(body)) return "";
   try {
     const parsed: unknown = JSON.parse(decoder.decode(body));
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -173,7 +181,7 @@ const MAX_RESTART_MS = 30_000;
 export interface RouterOptions {
   /** The router's own configuration (`loadConfig`): port, host, keys, dev, body cap, source-map base, processes. */
   config: Pick<ServerConfig, "port" | "host" | "keys" | "dev" | "sourceMapPath" | "processes"> &
-    Partial<Pick<ServerConfig, "maxBodyBytes">>;
+    Partial<Pick<ServerConfig, "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "spendLeases">>;
   /** The environment each child starts from (default `process.env`); the router sets its own variables over it. */
   env?: Record<string, string | undefined>;
   /** The child entry (default `main.ts` beside this file). */
@@ -228,6 +236,9 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   const tooLarge = `body must be at most ${maxBodyBytes.toLocaleString("en-US")} bytes`;
   let stopping = false;
 
+  // Trial (D327, EDEN_SPEND_LEASES=1): one spend ledger per tenant and day, leased to the children.
+  const ledger = config.spendLeases === true ? new SpendLedger(usdPerTenantDayFromEnv(env), n) : null;
+
   const children: Child[] = Array.from({ length: n }, (_, index) => ({
     index,
     pid: 0,
@@ -250,6 +261,8 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         HOST: "127.0.0.1",
         EDEN_ROUTER_CHILD: `${c.index}/${n}`,
         EDEN_SOURCE_MAP: childSourceMapPath(config.sourceMapPath, c.index),
+        // The children lease their spend from this router's ledger exactly when it keeps one (D327).
+        EDEN_SPEND_LEASES: ledger ? "1" : "0",
       });
       let ready = false;
       let timedOut = false;
@@ -261,6 +274,15 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         stdout: options.onOutput ? "pipe" : "inherit",
         stderr: "inherit",
         ipc(message) {
+          if (ledger && isLeaseRequest(message)) {
+            // A child's spend lease (D327): granted from the tenant's one ledger, answered on the same channel.
+            try {
+              proc.send(ledger.lease(message.edenLease));
+            } catch {
+              // The child is exiting: it asks again after its restart.
+            }
+            return;
+          }
           const port = (message as { edenListening?: unknown } | null)?.edenListening;
           if (ready || typeof port !== "number") return;
           ready = true;
@@ -339,15 +361,28 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   }
 
   const tenantOf = (req: Request): string | null => {
-    const key = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    const key = keyOf(req);
     if (key && config.keys.has(key)) return config.keys.get(key)!;
     return config.dev && !key ? "dev" : null;
   };
   const fail = (status: number, error: string) => Response.json({ error }, { status });
+  // The tenant's whole rate and burst (each child holds 1/N of them): past it, a request is refused here before its
+  // body is read, as one process refuses it (http.ts). Otherwise a tenant over its rate still had every body buffered
+  // and parsed on the router's one thread, unlimited, before a child could say 429, starving every other tenant.
+  const limiter = new Gcra({ ratePerSec: config.tenantRatePerSec ?? 200, burst: config.tenantBurst ?? 400 });
 
-  const forward = async (c: Child, req: Request, url: URL, body: Uint8Array | undefined): Promise<Response> => {
+  const forward = async (
+    c: Child,
+    req: Request,
+    url: URL,
+    body: Uint8Array | undefined,
+    copy = false,
+  ): Promise<Response> => {
     if (!c.up) return fail(503, UNAVAILABLE);
     const headers: Record<string, string> = {};
+    // A fan-out's copy to a child that does not own the user (forget, usage): served, but not counted as a request
+    // of the tenant's (D326), so `/v1/usage` sums to one per call. The router sets it; a caller's own is not forwarded.
+    if (copy) headers[FANOUT_COPY] = "1";
     const auth = req.headers.get("authorization");
     if (auth !== null) headers.authorization = auth;
     const type = req.headers.get("content-type");
@@ -368,12 +403,37 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   // source-map rows. The caller gets the owner's answer (its 400 for a bad body, say); a 2xx there with any other
   // child down or failing is a 503, so the caller retries until every file is clean.
   const forgetEverywhere = async (owner: Child, req: Request, url: URL, body: Uint8Array): Promise<Response> => {
-    const answers = await Promise.all(children.map((c) => forward(c, req, url, body)));
+    const answers = await Promise.all(children.map((c) => forward(c, req, url, body, c !== owner)));
     const mine = answers[owner.index]!;
     for (const r of answers) if (r !== mine) void r.arrayBuffer().catch(() => {}); // Frees each connection.
     if (mine.status < 200 || mine.status >= 300) return mine;
     if (answers.some((r) => r.status < 200 || r.status >= 300)) return fail(503, UNAVAILABLE);
     return mine;
+  };
+
+  // Usage (D326) is the tenant's across every child: their numbers summed (`processesDown` counts those that did not
+  // answer), the owner's answer when it is a 4xx (a bad body), 503 when no child answered.
+  const usageEverywhere = async (owner: Child, req: Request, url: URL, body: Uint8Array): Promise<Response> => {
+    const answers = await Promise.all(children.map((c) => forward(c, req, url, body, c !== owner)));
+    const mine = answers[owner.index]!;
+    if (mine.status >= 400 && mine.status < 500) {
+      for (const r of answers) if (r !== mine) void r.arrayBuffer().catch(() => {});
+      return mine;
+    }
+    const parts: Record<string, unknown>[] = [];
+    for (const r of answers) {
+      if (r.status < 200 || r.status >= 300) {
+        void r.arrayBuffer().catch(() => {});
+        continue;
+      }
+      try {
+        parts.push((await r.json()) as Record<string, unknown>);
+      } catch {
+        // A child that died mid-answer is left out, as a down one.
+      }
+    }
+    if (parts.length === 0) return fail(503, UNAVAILABLE);
+    return Response.json({ ...sumUsage(parts), processesDown: n - parts.length });
   };
 
   // The router's own port can be taken (EADDRINUSE) after every child started: stop them before failing, as for a
@@ -415,6 +475,17 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         // Only an authenticated POST is read for its user; anything else gets the child's own answer (405, 401).
         if (req.method !== "POST" || tenant === null)
           return forward(children[childFor(tenant ?? "", "", n)]!, req, url, undefined);
+        // The child never sees the Origin header (only the key and content type are forwarded): a keyless request from
+        // another site's page is refused here, as one process refuses it (http.ts, audit A20).
+        if (tenant === "dev" && !keyOf(req) && !keylessOriginAllowed(req.headers.get("origin")))
+          return fail(403, "dev mode serves no key-less request from another site's page");
+        const waitMs = limiter.take(tenant);
+        if (waitMs > 0) {
+          return Response.json(
+            { error: "rate limited" },
+            { status: 429, headers: { "retry-after": String(Math.ceil(waitMs / 1_000)) } },
+          );
+        }
         if (Number(req.headers.get("content-length") ?? NaN) > maxBodyBytes) return fail(413, tooLarge);
         let body: Uint8Array;
         try {
@@ -424,6 +495,7 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         }
         const owner = children[childFor(tenant, userOf(body), n)]!;
         if (url.pathname === "/v1/forget") return forgetEverywhere(owner, req, url, body);
+        if (url.pathname === "/v1/usage") return usageEverywhere(owner, req, url, body);
         return forward(owner, req, url, body);
       },
       // Nothing above should throw; if it does, the caller gets the server's 503, never Bun's default 500.
@@ -432,17 +504,29 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   }
 }
 
+/**
+ * Children's `/v1/usage` answers summed (D326): every number added (nested records too, such as `requests` by route),
+ * every other field taken from the first answer (tenant, day).
+ */
+export function sumUsage(parts: Record<string, unknown>[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const p of parts) {
+    for (const [k, v] of Object.entries(p)) {
+      if (typeof v === "number") out[k] = ((out[k] as number | undefined) ?? 0) + v;
+      else if (v && typeof v === "object" && !Array.isArray(v)) {
+        out[k] = sumUsage([(out[k] as Record<string, unknown> | undefined) ?? {}, v as Record<string, unknown>]);
+      } else if (!(k in out)) out[k] = v;
+    }
+  }
+  return out;
+}
+
 /** `main.ts` with EDEN_PROCESSES above 1: starts the router, stops the children on SIGINT/SIGTERM. */
 export async function runRouter(config: ServerConfig): Promise<void> {
   const started = performance.now();
-  let router: Router;
-  try {
-    router = await startRouter({ config });
-  } catch (e) {
-    // A child's own message (a bad sources file, a bad variable) is already on stderr.
-    console.error(e instanceof Error ? e.message : String(e));
-    process.exit(2);
-  }
+  // A failure to start (a busy port, a child that exited before listening, whose own message is already on stderr)
+  // propagates to main.ts, which prints it as one `eden:` line and exits 2 (D365).
+  const router = await startRouter({ config });
   const stop = () => void router.stop().then(() => process.exit(0));
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);

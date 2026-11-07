@@ -1,0 +1,4 @@
+tasks 72; output share of agent $ 0.754 (Haiku 5.5 output $0.5/M)
+tasks asking 43; wall mean 3.93 s asking, 2.45 s not (unpaired)
+asks a task: control 1.00, hidden 0.54, neutral 1.08
+ask citations 273, already in a packet 51

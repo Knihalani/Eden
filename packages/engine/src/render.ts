@@ -1,6 +1,7 @@
 import { truncateUtf8, utf8Length } from "@eden/primitives";
 import type { Citation, ContextItem } from "@eden/protocol";
 import { safeBlock, safeLine } from "./line";
+import { GUARD_LINE, quarantine, quarantineItem } from "./shield";
 import { isStopword } from "./text";
 
 /**
@@ -39,11 +40,18 @@ export function renderPacket(
     note?: (item: ContextItem) => string | undefined;
     /**
      * `pushCandidates` (D236): a line of Eden's own (`EDEN_NOTE`, fixed words) after the header, framing the
-     * items as candidates the agent checks against the request. Never source or event text.
+     * items as candidates the agent checks against the request. Never source text; the one event text a lead
+     * carries is `planConflict`'s quote of the user's own earlier request (D301: redacted, one line, double quotes
+     * made single).
      */
     lead?: string;
+    /** `guardLine` (D306): `GUARD_LINE`, Eden's fixed words, after the header (before `lead`). */
+    guard?: boolean;
+    /** `quarantineInstructions` (D307): each item's instruction-shaped text replaced by Eden's marker first. */
+    quarantine?: boolean;
   },
 ): string {
+  if (options.quarantine) items = items.map(quarantineItem);
   const before = options.shownBefore;
   if (before && !options.focus) {
     // Not compacted: an item shown before keeps its message's parts with something new, in its own words and order.
@@ -81,13 +89,17 @@ export function renderPacket(
       return { ...item, text };
     });
   }
-  const lines = options.lead ? [HEADER, options.lead] : [HEADER];
+  const lines = [HEADER, ...(options.guard ? [GUARD_LINE] : []), ...(options.lead ? [options.lead] : [])];
   const footer = "</context>";
   let bytes = utf8Length(lines.join("\n")) + utf8Length(footer) + 2;
+  // The guard is Eden's own line: it takes no room from the items (D306).
+  const maxBytes = options.maxBytes + (options.guard ? utf8Length(GUARD_LINE) + 1 : 0);
   for (const item of items) {
-    const room = options.maxBytes - bytes - 1;
+    const room = maxBytes - bytes - 1;
     if (room < 40) break;
-    const note = options.note?.(item);
+    // The reader's bearing is model text read from the item (bounded by `parseReader`): quarantined like it (D307).
+    const read = options.note?.(item);
+    const note = read && options.quarantine ? quarantine(read) : read;
     const said = note ? `${READER_TAG}${safeLine(note).replace(/\|/g, "/")} | ` : "";
     // One item, one line (D11, D221): `safeLine` removes every kind of line break, control and bidi character, so
     // source text cannot forge another item's `- [source]` line inside the envelope.
@@ -120,9 +132,9 @@ export function shownText(rendered: string): string {
 }
 
 /**
- * Eden's own lines, never an item's: fixed words with no source or event text in them, inside the data envelope (D11,
- * D19). `shownText` drops them (they are no item's words), and no line starts `- [`, so they are counted as no item
- * (`renderedCount`).
+ * Eden's own lines, never an item's: fixed words with no source text in them, inside the data envelope (D11, D19);
+ * the only event text is `planConflict`'s quote of the user's own earlier request (D301). `shownText` drops them
+ * (they are no item's words), and no line starts `- [`, so they are counted as no item (`renderedCount`).
  */
 export const EDEN_NOTE = "Eden: ";
 
@@ -137,6 +149,26 @@ export const CANDIDATES_LEAD =
   `${EDEN_NOTE}items from the user's sources that may bear on this request; nothing has checked them against it. ` +
   "Before using one, check it is about the same person, thing and date as the request and still current; if it is " +
   "not, ignore it and do not mention it.";
+
+/**
+ * `planConflict` (D301): the framing line of a packet about an earlier request; the request's own words follow, quoted.
+ * Like the candidates' lead, it asks the agent to check before using an item, and to say nothing of one that does not
+ * bear on that request.
+ */
+export const PLAN_LEAD =
+  `${EDEN_NOTE}new in the user's sources since an earlier request in this conversation, and may bear on it; nothing ` +
+  "has checked it against that request. If it is about the same person, thing and date and changes what was done or " +
+  "planned, tell the user; if not, ignore it and do not mention it. The earlier request:";
+
+/**
+ * `askNudge` (D316, on in the default since D317): added after `CANDIDATES_LEAD` when no candidate holds every
+ * person, thing and day the request names (`settle.ts`). The opposite of D257's "nothing found" note, which made the
+ * agent skip the ask that finds what the push missed: here the agent is told the packet does not pin the request
+ * down and to ask.
+ */
+export const ASK_NUDGE =
+  "They may not cover the person, thing or date this request names: before answering, call ask_context with " +
+  "those specifics, if you have it.";
 
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";
