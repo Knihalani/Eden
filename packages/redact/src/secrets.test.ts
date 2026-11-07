@@ -115,6 +115,16 @@ describe("what hits", () => {
       "eden-presigned-url",
     ],
     [
+      "a presigned URL in JSON from a Go server, & escaped as \\u0026 (D220)",
+      `{"url":"https://b.s3.amazonaws.com/q?X-Amz-Expires=60\\u0026${"X-Amz-" + "Signature="}${"0a1b2c3d".repeat(8)}"}`,
+      "eden-presigned-url",
+    ],
+    [
+      "a presigned URL percent-encoded inside another URL's parameter (D220)",
+      `https://app.example/r?next=https%3A%2F%2Fb.s3.amazonaws.com%2Fq%3FX-Amz-Expires%3D60%26${"X-Amz-" + "Signature%3D"}${"0a1b2c3d".repeat(8)}%26x%3D1`,
+      "eden-presigned-url",
+    ],
+    [
       "an STS session token in a presigned URL (D220)",
       `?X-Amz-Date=20261107T000000Z&${"X-Amz-" + "Security-Token="}${alnum(40)}%2F${alnum(60, 5)}&X-Amz-Expires=60`,
       "eden-presigned-url",
@@ -193,6 +203,18 @@ describe("sanitizeForStore (D13, A6 §2.2): the value goes, what it is stays", (
       `https://b.s3.amazonaws.com/q.pdf?X-Amz-Expires=3600&${"X-Amz-" + "Signature="}${"0a1b2c3d".repeat(8)}&x=1`,
       "0a1b2c3d".repeat(8),
       "https://b.s3.amazonaws.com/q.pdf?X-Amz-Expires=3600&X-Amz-Signature=[REDACTED]&x=1",
+    ],
+    [
+      "a JSON-escaped presigned URL keeps the next parameter (D220)",
+      `"https://b/q?a=1\\u0026${"X-Amz-" + "Signature="}${"0a1b2c3d".repeat(8)}\\u0026x=1"`,
+      "0a1b2c3d".repeat(8),
+      "Signature=[REDACTED]\\u0026x=1",
+    ],
+    [
+      "a percent-encoded presigned URL keeps the next parameter (D220)",
+      `next=https%3A%2F%2Fb%2Fq%3Fa%3D1%26${"X-Amz-" + "Signature%3D"}${"0a1b2c3d".repeat(8)}%26x%3D1`,
+      "0a1b2c3d".repeat(8),
+      "Signature%3D[REDACTED]%26x%3D1",
     ],
     [
       "a private key block, whole",

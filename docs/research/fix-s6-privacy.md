@@ -11,7 +11,11 @@ unset. The plan is [realuse-1-weak-points.md](realuse-1-weak-points.md), issue 1
    - `eden-new-relic`: a bare New Relic user key, `NRAK-` plus 27 letters or digits, any case. gitleaks' rule needs
      "new relic" within reach, so a key pasted alone passed.
    - `eden-presigned-url`: the value of `X-Amz-Signature`, `X-Goog-Signature` and `X-Amz-Security-Token` in a URL
-     query. Only the value goes, so the URL still names the object.
+     query. Only the value goes, so the URL still names the object. It matches the URL as written plainly, in JSON
+     from a Go server (`&` as `\u0026`), and percent-encoded inside another URL (`%26`, `%3D`). The reviewer found
+     the last two missing from the first version.
+   - The value is an unrolled loop, with the length checked in code. A first version with a lookahead at every
+     character cost 240 ms per MB on one long value, against 3.5 now.
    - **The decision on presigned URLs: redact.** D187 left them alone because they expire. This reverses that. A
      SigV4 presigned URL lasts up to 7 days, and whoever holds it can read (or write) a private object. Eden stores
      it, indexes it and sends it to a model, so an expiry does not make it safe. The cost is a dead link in Eden's
@@ -20,6 +24,8 @@ unset. The plan is [realuse-1-weak-points.md](realuse-1-weak-points.md), issue 1
    - `safeLine(text)` makes text safe as part of one line:
      - it removes C0/C1 controls and bidi embeddings, overrides and isolates;
      - it collapses every line break (LF, CR, CRLF, VT, FF, NEL, U+2028, U+2029) and whitespace run to one space;
+     - it removes the direction marks (U+061C, U+200E, U+200F) and the Unicode tag characters (U+E0000–U+E007F), which
+       a person cannot see but a model reads (the reviewer's hardening point); zero-width joiners stay, for emoji;
      - it escapes `<` and its full-width (U+FF1C) and small (U+FE64) look-alikes as `&lt;`;
      - it trims. It is idempotent.
    - `safeBlock(text)` applies the same rules to fenced multi-line text, but keeps the lines, each break written as
@@ -91,35 +97,43 @@ Only three files build model prompts: `judge.ts`, `cards.ts` and `reader.ts`. `p
 env -u OPENROUTER_API_KEY bun packages/sim/lab/realuse-1/D/probes/privacy-probe.ts --reps 3 --json out.json
 ```
 
-Three presigned rows were appended after the original 50, so those keep their seeded values. "Before" is the same
-tree with `secrets.ts` stashed.
+Five presigned rows were appended after the original 50, so those keep their seeded values. "Before" is the base tree's
+`secrets.ts` (`97d381ee`).
 
 | | Before | After |
 |---|---:|---:|
 | Original 50 shapes redacted | 48 (missed `new-relic-bare`, `sentry-dsn`) | **49** (missed `sentry-dsn`, public by design) |
-| Presigned rows redacted (S3 signature, S3 session token, GCS signature) | 1 (the session token, by the keyword rule) | **3** |
+| Presigned rows redacted (S3 signature, S3 session token, GCS signature, JSON-escaped, percent-encoded) | 1 (the session token, by the keyword rule) | **5** |
 
 ### ReDoS: 1 MB crafted shapes, best of 3
 
-Before is 30 original shapes plus 2 added; after is the same 32.
+"First" is the first version of the rules (commit `c8befcef`), "final" the version after review. The added shapes come
+after the original 30.
 
-| | Before | After |
-|---|---:|---:|
-| Worst of the original 30, `sanitizeForStore` | 77.3 ms (`keyword-near-entropy`) | 77.1 ms (`password-eq-repeat`) |
-| `presigned-param-repeat` (`&X-Amz-Signature=` + 15 hex, repeated) | 14.6 ms | 13.0 ms |
-| `nrak-near-miss` (`NRAK-` + 26 letters, repeated) | 45.6 ms | 46.5 ms |
-| Worst `redactString` / `redact` | 11.2 / 11.6 ms | 14.7 / 12.4 ms |
+| | Before | First | Final |
+|---|---:|---:|---:|
+| Worst of the original 30, `sanitizeForStore` | 77.3 ms (`keyword-near-entropy`) | 77.1 ms (`password-eq-repeat`) | 68.3 ms (`password-eq-repeat`) |
+| `presigned-param-repeat` (`&X-Amz-Signature=` + 15 hex, repeated) | 14.6 ms | 13.0 ms | 26.0 ms |
+| `nrak-near-miss` (`NRAK-` + 26 letters, repeated) | 45.6 ms | 46.5 ms | 57.5 ms |
+| `presigned-encoded-repeat` (`%26X-Amz-Signature%3D` + 14 hex) | – | – | 16.2 ms |
+| Worst `redactString` / `redact` | 11.2 / 11.6 ms | 14.7 / 12.4 ms | 10.5 / 20.4 ms |
 
-Part D measured the worst case as 65 ms on its run; this box was busier.
+Part D measured the worst case as 65 ms on its run. The spread between runs here is load on the shared box (the
+`nrak-near-miss` row moves 46-58 ms with no change to its rule).
 
-Size scaling (scratch script, best of 3, ms per MB at 0.25 / 1 / 4 MB) shows linear time:
+Size scaling (a scratch script, best of 3, ms per MB at 0.25 / 1 / 4 MB), final rules:
 
 | Shape | 0.25 MB | 1 MB | 4 MB |
 |---|---:|---:|---:|
-| `presigned-param-repeat` | 19.1 | 13.4 | 14.2 |
-| one 4 MB signature value | 4.3 | 4.2 | 4.1 |
-| `nrak-near-miss` | 55.0 | 58.9 | 56.1 |
-| `password-eq-repeat` (part D's worst) | 70.2 | 63.1 | 63.3 |
+| `presigned-param-repeat` | 40.2 | 31.8 | 18.9 |
+| one long signature value | 3.4 | 3.5 | 3.5 |
+| `presigned-encoded-repeat` | 9.9 | 12.7 | 13.1 |
+| `\u0026x-amz-security-token=` repeated | 57.7 | 52.7 | 52.5 |
+| `nrak-near-miss` | 52.6 | 46.9 | 46.5 |
+| `password-eq-repeat` (part D's worst) | 73.4 | 73.8 | 73.1 |
+
+No row grows faster than its size, so time is linear. On the first rules, the one-long-value row was 4.3 / 4.2 / 4.1
+before the end-of-value change and 292 / 240 / 71 with the per-character lookahead; the unrolled loop fixed it.
 
 ### Gate bench
 
@@ -127,20 +141,20 @@ Size scaling (scratch script, best of 3, ms per MB at 0.25 / 1 / 4 MB) shows lin
 
 | Input | Before | After |
 |---|---:|---:|
-| 256 B | 4.68 / 3.23 | 3.59 / 7.14 |
-| 2 KB | 12.63 / 19.89 | 12.28 / 12.52 |
-| 16 KB | 119.1 / 130.2 | 122.0 / 126.4 |
+| 256 B | 4.68 / 3.23 | 5.20 / 4.32 |
+| 2 KB | 12.63 / 19.89 | 13.20 / 10.14 |
+| 16 KB | 119.1 / 130.2 | 151.5 / 120.6 |
 
 Within noise. The new rules run only when the prefilter sees `nrak-`, `x-amz-` or `x-goog-`.
 
 ### Injection
 
-- `injection.test.ts`: 21 tests pass (20 payloads plus the judge prompt).
+- `injection.test.ts`: 21 tests pass (20 payloads plus the judge prompt). `line.test.ts`: 16.
 - Part D's script, `injection-probe.ts`: 36 texts, 0 envelope broken, 0 raw `<` inside, 0 stray lines.
 
 ### Gate and eval
 
-- `bun run check` on the final tree: format, types and 1,862 tests, 0 failures.
+- `bun run check` on the final tree: format, types and 1,869 tests, 0 failures (1,862 before the review fixes).
 - `bun run eval` (no model): precision 0.8276, recall 0.48, falseFireRate 0, 31 scenarios and 148 turns; privacy 0
   leaked, 0 of 30 not inert. This matches part D's T2.
 - Funnel: not run. No shipped path changed: the judge is not wired by the servers, and render.ts and reader.ts are
@@ -151,5 +165,15 @@ Within noise. The new rules run only when the prefilter sees `nrak-`, `x-amz-` o
 - **Sentry DSN:** not redacted. Its key is public by Sentry's design.
 - **New Relic, other key kinds:** `NRII-`, `NRJS-` and the 64-character user API id still need the vendor name
   nearby, as gitleaks has them. Only `NRAK-` (the user key, which reads account data) is bare-matched.
-- **Azure SAS tokens:** `sig=` is a short generic name, so a bare rule would fire on unrelated URLs. Not done: it
-  needs a narrower anchor, such as `sv=` and `se=` in the same query.
+- **Other signed URLs** carry the same bearer capability, but their signature parameter has a generic name, so a bare
+  rule would fire on unrelated URLs. Each needs an anchor in the same query:
+  - CloudFront: `Signature=`, anchored by `Key-Pair-Id=`;
+  - legacy SigV2 S3 and GCS: `Signature=`, anchored by `AWSAccessKeyId=` or `GoogleAccessId=` (the S3 key id alone
+    is already caught by `eden-legacy-token`);
+  - Azure SAS: `sig=`, anchored by `sv=` and `se=`.
+- **Packets keep some characters until render.ts moves.** render.ts's `oneLine` + `inert` keep controls, bidi
+  characters and `<` look-alikes. `injection.test.ts`'s check covers line breaks and ASCII `<` only. Once render.ts
+  uses `safeLine`, widen its `faults` to controls, bidi and look-alikes too.
+- **The ReDoS control flakes.** `redos.test.ts`'s control ("still flags a rule that backtracks") read 39.8 ms against
+  its > 40 ms expectation once, and failed 1 run in 3 here. It times a deliberately backtracking engine, not a
+  shipped rule, as part D's note records.

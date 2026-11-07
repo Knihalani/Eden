@@ -9,9 +9,13 @@
 /**
  * Removed outright: C0 and C1 control characters other than the whitespace ones (a terminal escape, a NUL; Python's
  * `splitlines` also breaks on U+001C–U+001E), and the bidi embeddings, overrides and isolates, which reorder what a
- * person reading the line sees without changing what a model reads. NEL (U+0085) is a line break, handled below.
+ * person reading the line sees without changing what a model reads, with the direction marks (U+061C, U+200E,
+ * U+200F); and the Unicode tag characters (U+E0000-U+E007F), invisible to a person but read by a model, a known way
+ * to hide instructions. Zero-width joiners stay (emoji need them; a split tag is escaped anyway). NEL (U+0085) is a
+ * line break, handled below.
  */
-const CONTROLS = /[\u0000-\u0008\u000E-\u001F\u007F-\u0084\u0086-\u009F\u202A-\u202E\u2066-\u2069]/g;
+const CONTROLS =
+  /[\u0000-\u0008\u000E-\u001F\u007F-\u0084\u0086-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u{E0000}-\u{E007F}]/gu;
 /**
  * Whitespace runs, line breaks included. `\s` covers LF, CR, VT, FF, U+2028 and U+2029 but not NEL (U+0085), which
  * some readers treat as a line break.
@@ -21,7 +25,8 @@ const SPACES = /[\s\u0085]+/g;
 const BREAKS = /\r\n|[\r\v\f\u0085\u2028\u2029]/g;
 /**
  * A tag opener: `<`, and the full-width and small look-alikes a model reads as one. `&lt;` keeps the text readable;
- * nothing in it can open or close the `<context>` envelope or a prompt's fence. Matches `inert` in render.ts.
+ * nothing in it can open or close the `<context>` envelope or a prompt's fence. A superset of render.ts's
+ * `inert`, which escapes only ASCII `<`.
  */
 const OPENERS = /[<\uFF1C\uFE64]/g;
 

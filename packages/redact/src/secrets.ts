@@ -124,11 +124,25 @@ const PROVIDER_SHAPES: [string, RegExp][] = [
   // A New Relic user API key (D220). gitleaks' rule wants "new relic" within reach of it, so a key pasted alone
   // (a chat message, a runbook line) passed. The prefix and the exact length make the bare shape specific enough.
   ["eden-new-relic", /\bNRAK-[A-Z0-9]{27}\b/gi],
-  // A presigned or signed object URL (S3 SigV4, GCS V4) is a bearer capability until it expires, up to 7 days: anyone
-  // holding it reads (or writes) the object. Only the value goes (group 1), so the URL still says which object it
-  // was; an STS session token in the URL goes too. `;` covers `&amp;` in HTML mail. D220 reverses D187's note.
-  ["eden-presigned-url", /[?&;](?:x-amz-signature|x-goog-signature|x-amz-security-token)=([^\s&#"'<>]{16,})/dgi],
 ];
+/**
+ * A presigned or signed object URL (S3 SigV4, GCS V4) is a bearer capability until it expires, up to 7 days: anyone
+ * holding it reads (or writes) the object (D220, which reverses D187's note). Only the value goes (group 1), so the
+ * URL still says which object it was; an STS session token in the URL goes too. Before the name, `;` covers `&amp;`
+ * in HTML mail, `\u0026` JSON from Go servers (encoding/json escapes `&`), and `%26` a URL percent-encoded inside
+ * another (a redirect's `next=`), whose `=` is `%3D`. The value stops at a backslash or `%26` for the same reasons. It
+ * is written as an unrolled loop (runs without `%`, then `%` not starting `26`, then a run) so each character is read
+ * once: a lookahead at every character cost 240 ms per MB on one long value, against 4 with a plain class.
+ */
+const PRESIGNED = new RegExp(
+  String.raw`(?:[?&;]|\\u0026|%26)(?:x-amz-signature|x-goog-signature|x-amz-security-token)(?:=|%3D)` +
+    String.raw`([^\s&#"'<>\\%]*(?:%(?!26)[^\s&#"'<>\\%]*)*)`,
+  "dgi",
+);
+/** The shortest value taken for a signature or token: shorter is a placeholder or a name, not a credential. */
+const PRESIGNED_MIN = 16;
+const presignedSpans = (text: string): Span[] =>
+  matchSpans(PRESIGNED, text).filter(([start, end]) => end - start >= PRESIGNED_MIN);
 const ENTROPY_TOKEN = /\S{32,}/g;
 /** How far from a long token rule (d) looks for a secret keyword. */
 const KEYWORD_REACH = 40;
@@ -621,6 +635,7 @@ export function rulesWith(choice: EngineChoice): SecretRule[] {
     ...PROVIDER_SHAPES.map(([id, shape]) => plain(id, SHAPE_LITERALS[id] ?? [], (text) => matchSpans(shape, text))),
     plain("eden-keyword", SECRET_WORDS, (text) => matchSpans(KEYWORD_RULE, text)),
     plain("eden-url-userinfo", ["://"], (text) => matchSpans(URL_USERINFO, text)),
+    plain("eden-presigned-url", SHAPE_LITERALS["eden-presigned-url"]!, presignedSpans),
     plain("eden-entropy-keyword", SECRET_WORDS, entropyWithKeyword),
     // Every anchor holds one of these literals ("[redacted]" folded, as the matcher folds case).
     plain("eden-aws-secret", ["akia", "asia", "[redacted]", "secret"], awsSecret),

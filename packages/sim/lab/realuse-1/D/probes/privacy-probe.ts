@@ -106,6 +106,13 @@ const s3 = "https://b.s3.amazonaws.com/q.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-
 add("s3-presigned-signature", hex(64), (v) => `download: ${s3}&${j("X-Amz-", "Signature=")}${v}`);
 add("s3-presigned-session-token", j(b64(40), "%2F", an(80)), (v) => `${s3}&${j("X-Amz-", "Security-Token=")}${v}&x=1`);
 add("gcs-signed-signature", hex(512), (v) => `https://storage.googleapis.com/b/o?${j("X-Goog-", "Signature=")}${v}`);
+// The review's shapes: JSON from a Go server (`&` as \u0026) and a URL percent-encoded inside another.
+add("s3-presigned-json-escaped", hex(64), (v) => `{"url":"${s3}\\u0026${j("X-Amz-", "Signature=")}${v}"}`);
+add(
+  "s3-presigned-percent-encoded",
+  hex(64),
+  (v) => `next=${encodeURIComponent(`${s3}&${j("X-Amz-", "Signature=")}${v}`)}`,
+);
 
 warmGate?.();
 const secretRows = SECRETS.map(([name, value, wrap]) => {
@@ -153,6 +160,7 @@ const SHAPES: Record<string, () => string> = {
   // Added for D220's rules (fix-s6-privacy).
   "presigned-param-repeat": () => fill(j("&X-Amz-", "Signature=0123456789abcde")),
   "nrak-near-miss": () => fill(j("NR", "AK-", "ABCDEFGHIJKLMNOPQRSTUVWXYZ ")),
+  "presigned-encoded-repeat": () => fill(j("%26X-Amz-", "Signature%3D0123456789abcd")),
 };
 
 const time = (fn: () => void) => {

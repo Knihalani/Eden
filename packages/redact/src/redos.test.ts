@@ -47,6 +47,8 @@ describe("no input makes the gate super-linear", () => {
     ["eden-new-relic", "NRAK-ABCDEFGHIJKLMNOPQRSTUVWXYZ "],
     ["eden-presigned-url", "&X-Amz-Signature=0123456789abcde&"],
     ["eden-presigned-url", "?x-goog-signature="],
+    ["eden-presigned-url", "%26X-Amz-Signature%3D0123456789abcd%26"],
+    ["eden-presigned-url", "\\u0026x-amz-security-token="],
   ];
   for (const [rule, unit] of attacks) {
     test(`128 KB built against ${rule}: ${JSON.stringify(unit.slice(0, 20))}`, () => {
