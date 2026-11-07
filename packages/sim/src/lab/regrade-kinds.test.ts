@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { byKind, isConcern } from "./regrade-kinds";
+import { byKind, isConcern, isMiss } from "./regrade-kinds";
 
 describe("regrade by kind", () => {
   test("counts agreement and each direction of disagreement per kind, skipping ungraded sides", () => {
@@ -23,5 +23,15 @@ describe("regrade by kind", () => {
     expect(isConcern("control", { a: false })).toBe(false);
     expect(isConcern("hidden", { a: true })).toBe(false);
     expect(isConcern("neutral", undefined)).toBe(false);
+  });
+});
+
+describe("isMiss (--only-misses)", () => {
+  test("a hidden answer with no fact true", () => {
+    expect(isMiss("hidden", { a: false })).toBe(true);
+    expect(isMiss("hidden", {})).toBe(true);
+    expect(isMiss("hidden", { a: false, b: true })).toBe(false);
+    expect(isMiss("control", { a: false })).toBe(false);
+    expect(isMiss("neutral", undefined)).toBe(false);
   });
 });

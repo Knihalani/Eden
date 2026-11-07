@@ -1,0 +1,38 @@
+== all-MiniLM-L6-v2
+hidden n 384
+  embed top5 163
+  embed top15 207
+  embed top30 233
+  push pool (15) 283  push top5 (pool<5) 254
+  never surfaced 79 | of them embed top5 17 top15 25
+  not in push pool 101 | embed top5 36 top15 42
+control n 384
+  embed top5 176
+  embed top15 217
+  embed top30 241
+  push pool (15) 247  push top5 (pool<5) 219
+  never surfaced 117 | of them embed top5 22 top15 32
+  not in push pool 137 | embed top5 45 top15 61
+secs 337
+== bge-small-en-v1.5
+hidden n 384
+  embed top5 159
+  embed top15 205
+  embed top30 235
+  push pool (15) 283  push top5 (pool<5) 254
+  never surfaced 79 | of them embed top5 12 top15 18
+  not in push pool 101 | embed top5 31 top15 40
+control n 384
+  embed top5 170
+  embed top15 211
+  embed top30 230
+  push pool (15) 247  push top5 (pool<5) 219
+  never surfaced 117 | of them embed top5 15 top15 26
+  not in push pool 137 | embed top5 36 top15 47
+secs 667
+all-MiniLM-L6-v2: hybrid (the packet + the embedding top 1, approx.) reaches never-surfaced hidden +8, decoys +14
+all-MiniLM-L6-v2: hybrid (the packet + the embedding top 2, approx.) reaches never-surfaced hidden +9, decoys +16
+all-MiniLM-L6-v2: hybrid (the packet + the embedding top 3, approx.) reaches never-surfaced hidden +14, decoys +17
+bge-small-en-v1.5: hybrid (the packet + the embedding top 1, approx.) reaches never-surfaced hidden +6, decoys +11
+bge-small-en-v1.5: hybrid (the packet + the embedding top 2, approx.) reaches never-surfaced hidden +6, decoys +12
+bge-small-en-v1.5: hybrid (the packet + the embedding top 3, approx.) reaches never-surfaced hidden +7, decoys +13

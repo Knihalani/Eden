@@ -85,6 +85,8 @@ import {
   ItemCache,
   type CandidateDump,
   type CardMaker,
+  automated,
+  type PushPoolReport,
   worthCarding,
   worthCardingStrict,
   ECONOMY_CARD_LIMITS,
@@ -99,6 +101,7 @@ import { sanitizeForStore } from "@eden/redact";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
+import { noiseSources } from "./noise-sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
 import {
@@ -191,6 +194,8 @@ const cli = flags(
         "packets",
         "candidates",
         "ask-diag",
+        "pool-dump",
+        "corpus-dump",
         "label",
         "json",
         "rpm",
@@ -200,6 +205,8 @@ const cli = flags(
         "spend-headroom",
         "run-label",
         "distill",
+        "noise-sources",
+        "noise-items",
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
@@ -228,6 +235,12 @@ const SEEDS = opt("seeds", "41,42,43,44").split(",").map(Number);
  * is the delivery latency a user would see; 0 (the default) answers at once.
  */
 const TIME = Number(opt("time", "0"));
+/**
+ * `--noise-sources N` (A1 scale audit): N unrelated connectors beside the world's five, `--noise-items` items each
+ * (default 20; `noise-sources.ts`), so the screen runs a user with ~1,000 sources. 0 (the default): none.
+ */
+const NOISE_SOURCES = Number(opt("noise-sources", "0"));
+const NOISE_ITEMS = Number(opt("noise-items", "20"));
 /** `--config`: engine settings, checked whole (checkEngineConfig); a typo or a child whose parent is off exits 2. */
 const CONFIG = ((): Record<string, unknown> => {
   try {
@@ -477,6 +490,17 @@ const INTENT_QUERY_CHARS = 400;
  * no intent requests, and no match (D173).
  */
 const ASK_DIAG = opt("ask-diag", "");
+/**
+ * `--pool-dump FILE` (a diagnostic, docs/research/a2-quality.md): per task, the push's candidate pool (`onPushPool`,
+ * its last pass: a `readerPushBehind` second pass replaces the first's packet) in order, each item's title, text, card
+ * and flags (handed, automated sender, `readerGate`'s constraint test), and the planted item's (decoy's) place in it.
+ */
+const POOL_DUMP = opt("pool-dump", "");
+/**
+ * `--corpus-dump FILE` (a diagnostic, docs/research/a2-quality.md): per suite world, its items (title, text head) and
+ * its tasks with their planted ids, for offline retrieval screens.
+ */
+const CORPUS_DUMP = opt("corpus-dump", "");
 if (ASK_DIAG) writeFileSync(ASK_DIAG, "");
 /**
  * Each `--ask-diag` row's variant, rank, cached flag and coverage facts (`ask-coverage.ts`), for the run's split of
@@ -629,7 +653,16 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
   const keep = new Set(planted.map((it) => it.id));
   for (const task of tasks) clearSlot(world, task.text, keep);
-  const sources = simSources(world, REALISTIC, TIME, seed);
+  if (CORPUS_DUMP) {
+    // `--corpus-dump` (A2): the world's items as its sources hold them, with the tasks and their planted ids.
+    const items = world.items.map((it) => ({ id: it.id, title: it.title, text: it.text.slice(0, 1_200) }));
+    const asks = tasks.map((t, i) => ({ template: t.template, request: t.text, planted: planted[i]?.id ?? "" }));
+    appendFileSync(CORPUS_DUMP, `${JSON.stringify({ suite, seed, variant, tasks: asks, items })}\n`);
+  }
+  const sources = [
+    ...simSources(world, REALISTIC, TIME, seed),
+    ...(NOISE_SOURCES > 0 ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed) : []),
+  ];
   const returned = new Set<string>();
   let served = 0;
   for (const s of sources) {
@@ -753,6 +786,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   if (reader) readerLanes.push(reader);
   // Every report per session, in order: a request can be read twice (`readerPush`'s ask, then the funnel's own).
   const readerReports = new Map<string, ReaderReport[]>();
+  const pushPools = new Map<string, PushPoolReport[]>();
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
@@ -776,6 +810,12 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
         }
       : {}),
     ...(onCandidates ? { onCandidates } : {}),
+    // `pushCandidates`' pool per pass (`--pool-dump`, and `pushPoolAt` in each task's row).
+    onPushPool: (r: PushPoolReport) => {
+      const list = pushPools.get(r.sessionId) ?? [];
+      pushPools.set(r.sessionId, list);
+      list.push(r);
+    },
   });
   // The harness may read the engine's session table (as `quality.ts` `settle` does; product code may not): whether a
   // session's lookup or work its lookup left running (`behind`: `syncPollBehind`'s poll and follow-up, the
@@ -1042,6 +1082,26 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       };
       appendFileSync(PACKETS, JSON.stringify({ ...line, ...extra }) + "\n");
     }
+    const push = pushPools.get(sessionId)?.at(-1);
+    pushPools.delete(sessionId);
+    if (POOL_DUMP) {
+      const ids = push?.pool ?? [];
+      const items = ids.map((x, k) => {
+        const it = cache.get(scope, x, askAt);
+        const card = cards?.cardsOf(scope, [x], askAt).get(x);
+        return {
+          id: x,
+          handed: push!.handed.includes(x),
+          auto: it ? automated(it) : false,
+          cl: push!.constraintLike[k] === true,
+          title: it?.title ?? "",
+          text: it?.text ?? "",
+          ...(card ? { card: card.kind, statement: card.statement } : {}),
+        };
+      });
+      const line = { suite, seed, variant, template: task.template, request: task.text, detail: task.detail };
+      appendFileSync(POOL_DUMP, `${JSON.stringify({ ...line, planted: id, at: ids.indexOf(id), pool: items })}\n`);
+    }
     if (CANDIDATES) {
       const line = {
         suite,
@@ -1086,6 +1146,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
             askItems: answered!.citations.length,
             askMs: Number(askMs.toFixed(2)),
           }),
+      // `pushCandidates`' last pass: the planted item's place in its pool (-1: not in it), and whether it was handed.
+      ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       ...(rr
         ? {
             readerOutcome: rr.outcome,
