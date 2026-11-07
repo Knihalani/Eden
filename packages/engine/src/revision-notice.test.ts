@@ -8,8 +8,8 @@ import { Ledger } from "./ledger";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 
-// `revisionNotice` (trial, D205): an item a session was handed that changes at its source is sent again, once per
-// revision, as an "updated:" packet before the agent's next model call.
+// `revisionNotice` (D205, on in the default): an item a session was handed that changes at its source is sent
+// again, once per revision, as an "updated:" packet before the agent's next model call.
 
 const MIN = 60_000;
 const T0 = Date.UTC(2026, 10, 2, 9);
@@ -168,7 +168,7 @@ describe("revisionNotice: a changed item the session was handed is sent again be
     expect(again[0]!.text).toContain("Porto");
   });
 
-  test("off (the default): no updated packet", async () => {
+  test("off (the minus-freshness arm): no updated packet", async () => {
     const t = await setup({ revisionNotice: false });
     await say(t.partner, "Remind me where the quarterly offsite is", "s1", t.now());
     t.advance(5 * MIN);
@@ -366,6 +366,82 @@ describe("revisionNotice: review regressions", () => {
     move(t.src());
     t.partner.sourceChanged(scope, "notes");
     await t.partner.revisionsSettled(scope);
+    const up = updates(t.partner.takePending({ ...scope, sessionId: "s1" }));
+    expect(up.length).toBe(1);
+    expect(up[0]!.text).toContain("11:30");
+  });
+});
+
+describe("revisionNotice: second review regressions", () => {
+  test("a re-read for an answer that cuts the item's line still leaves the update queued (second review 1, 2)", async () => {
+    const t = await setup({ verifyDelivery: true });
+    await say(t.partner, "Remind me where the quarterly offsite is", "s1", t.now());
+    // A long review item answers first and fills the answer: the offsite's line is cut, though it is cited.
+    t.src().docs.set("r1", {
+      title: "Budget review",
+      text: `The budget review with finance is on Friday. ${"Agenda line. ".repeat(400)}`,
+    });
+    t.advance(5 * MIN);
+    move(t.src());
+    t.src().blind = true;
+    t.partner.sourceChanged(scope, "notes");
+    await t.partner.revisionsSettled(scope);
+    t.advance(5 * MIN);
+    const answer = await t.partner.ask({
+      ...scope,
+      sessionId: "s1",
+      question: "When are the budget review with finance and the quarterly offsite",
+    });
+    const said = answer.answer.includes("11:30");
+    const up = updates(t.partner.takePending({ ...scope, sessionId: "s1" }));
+    expect(answer.citations.map((c) => c.itemId)).toContain(OFFSITE);
+    expect(said).toBe(false); // Cited, but its line was cut.
+    expect(t.src().fetches).toBeGreaterThanOrEqual(1);
+    expect(up.length).toBe(1);
+    expect(up[0]!.text).toContain("11:30");
+  });
+
+  test("an update queued beside a packet that renders the same version is dropped from the batch", async () => {
+    const t = await setup({ verifyDelivery: true });
+    await say(t.partner, "Remind me where the quarterly offsite is", "s1", t.now());
+    t.advance(5 * MIN);
+    move(t.src());
+    t.src().blind = true;
+    t.partner.sourceChanged(scope, "notes");
+    await t.partner.revisionsSettled(scope);
+    t.advance(5 * MIN);
+    // The ledger holds the offsite as delivered: only its re-read and update can carry the new time.
+    const got = await say(t.partner, "Is the quarterly offsite in Lisbon at 11:30", "s1", t.now());
+    const carrying = got.filter((i) => cites([i], OFFSITE));
+    expect(carrying.length).toBeLessThanOrEqual(1);
+    if (carrying.length === 1) expect(carrying[0]!.text).toContain("11:30");
+  });
+
+  test("an engine clock that steps back does not hold notice polls back an hour", async () => {
+    const t = await setup();
+    await say(t.partner, "Remind me where the quarterly offsite is", "s1", t.now());
+    // Counted at the sync: whether its listing then runs under a clock gone back is the sync's own business.
+    const sync = t.partner.sync!;
+    const freshen = sync.freshen.bind(sync);
+    let polls = 0;
+    sync.freshen = (...a: Parameters<typeof freshen>) => (polls++, freshen(...a));
+    t.partner.sourceChanged(scope, "notes");
+    await t.partner.revisionsSettled(scope);
+    expect(polls).toBe(1);
+    t.advance(-60 * MIN);
+    t.partner.sourceChanged(scope, "notes");
+    await t.partner.revisionsSettled(scope);
+    expect(polls).toBe(2);
+  });
+
+  test("a maxInjectionBytes too small for one line still says the update", async () => {
+    const t = await setup();
+    await say(t.partner, "Remind me where the quarterly offsite is", "s1", t.now());
+    (t.partner.config as { maxInjectionBytes: number }).maxInjectionBytes = 90;
+    t.advance(5 * MIN);
+    move(t.src());
+    t.partner.sourceChanged(scope, "notes");
+    await t.partner.sourceItems(scope, "notes", [t.src().item("q1")!]);
     const up = updates(t.partner.takePending({ ...scope, sessionId: "s1" }));
     expect(up.length).toBe(1);
     expect(up[0]!.text).toContain("11:30");

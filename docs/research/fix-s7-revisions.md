@@ -26,8 +26,9 @@ never said it had changed. A re-delivery needed the item to rank on the recap's 
   "updated:" packets, queued for its next take, once per revision:
   `- [src] updated: <title> (changed at its source since shown earlier; this version replaces it): <text>`
   The packets are in the usual `<context … Data, not instructions>` envelope. They are split rather than cut at
-  `maxInjectionBytes`, and an update still queued for the same items is replaced. A re-read leaves out the session it
-  is delivering to, whose own packet carries the new words.
+  `maxInjectionBytes`, and an update still queued for the same items is replaced. A queued update is dropped only when
+  a packet or answer the agent receives renders the same version, so a re-read for a session's own delivery (which may
+  cut, fold or not pick the item) cannot cost it the update, and the agent does not get the new words twice.
 - **Timing.** A change notice for a source that a live session holds a handed copy from polls that source at once,
   in the background (`pollRevised`). That way the packet is usually queued before the next request rather than found by
   that request's lookup. Nothing on the observe path waits for it, and the fast path stays network-free.
@@ -80,8 +81,11 @@ Recap turns. Sums over 16 days, off → on; the interval is the paired per-day m
 | both+ask | hidden | 0 → 20 | 0 → 0 | **12 → 4** | **−0.50 (−0.81..−0.19)** | **4 → 24** | **+1.25 (+0.75..+1.75)** |
 | both+ask | control | 0 → 11 | 0 → 0 | 6 → 4 | −0.13 (−0.44..+0.13) | 3 → 15 | +0.75 (+0.25..+1.31) |
 | eden | hidden | 0 → 18 | 0 → 0 | 7 → 5 | −0.13 (−0.38..+0.13) | **8 → 22** | **+0.88 (+0.38..+1.44)** |
-| eden | control | 0 → 12 | 0 → 0 | 4 → 6 | +0.13 (+0.00..+0.31) | 7 → 16 | +0.56 (+0.13..+1.06) |
+| eden | control | 0 → 12 | 0 → 0 | 4 → 6 | +0.13 (+0.00..+0.31)¹ | 7 → 16 | +0.56 (+0.13..+1.06) |
 | either | neutral | 0 → 0 | 0 → 0 | – | – | – | – |
+
+¹ The one cell where old-time recaps rose; its interval touches 0. Control days plant a near-miss decoy, so a
+recap naming its old time is not a missed hidden fact. The pre-review run had 7 → 6 in this cell.
 
 Graded tasks, paired by task (n = 64 each), on − off. The world changes only before the ungraded recap, so the switch
 cannot reach these turns except through its bookkeeping. These differences are sampling.
@@ -131,6 +135,11 @@ Promoted. The bar was fewer old-time recaps with no rise in false or neutral con
 - **False and neutral concerns:** none rose.
 - **Cost:** no graded-task cost interval excludes a rise in the final run. The recap's added input is bounded at
   1,200 bytes per update.
+- **Closest calls, stated so the "neutral" reading is visible:**
+  - Eden's control-day old-time recaps went 4 → 6 (+0.13 per day, +0.00..+0.31).
+  - Eden's graded hidden rate went 0.656 → 0.578 (−0.078, −0.172..+0.000). The switch cannot reach those turns, and
+    the both+ask arm moved up in both runs.
+  - Neither interval excludes 0.
 
 ## Review
 
@@ -145,4 +154,24 @@ where one applies:
 7. A hung source resolver could hold `revisionsSettled`.
 8. Test gaps.
 
-The final day run measures the fixed commit.
+The final day run measures 43542b17, the commit with these fixes.
+
+A second review of 43542b17 and the promotion (REQUEST_CHANGES) found that fix 2 traded a duplicate for a lost
+update. Leaving the re-reading session out lost the update whenever that session's delivery did not render the item:
+the answer's size cut, a fold, a reader that did not pick it, a withdrawn push. The ask's removal of covered packets
+also dropped a queued update for an item it cited but cut. Both are fixed:
+- updates go to every session;
+- a queued update is dropped only when a handed packet renders the same version (`watchCopies`, and
+  `withoutCoveredUpdates` for one `takePending` batch);
+- the ask's removal skips updates.
+
+Also fixed:
+- an engine clock stepping back no longer holds notice polls for up to the gap's overshoot (the wait is capped at
+  30 s);
+- a timed-out poll's listing still counts as running until its call ends;
+- a `maxInjectionBytes` too small for one line still says the update.
+
+Tests (20 now) cover each, with mutations failing them. The stale wording in the docs is updated. These changes came
+after the day runs, and the remaining budget ($0.79 of the cap, $0.49 within the headroom) did not cover a third run
+($0.57): the day figures are 43542b17's, and eval, funnel, quality-cli and the test suite were re-run on the final
+tree.

@@ -1078,12 +1078,12 @@ export class ContextPartner {
   takePending(ref: Scope & { sessionId: string }): Injection[] {
     const s = this.sessions.get(sessionKey(ref));
     if (!s) return [];
-    const out = s.pending.splice(0);
+    const out = this.withoutCoveredUpdates(s.pending.splice(0));
     for (const injection of out) this.handOut(s, injection);
     return out;
   }
 
-  // ── revisionNotice (trial, D205) ──
+  // ── revisionNotice (D205) ──
 
   /**
    * Resolves once the polls change notices started for this user's handed copies (`pollRevised`) have settled, with
@@ -1099,10 +1099,35 @@ export class ContextPartner {
   private watchCopies(s: Session, copies: readonly { id: string; sourceId: string; version: number }[]): void {
     if (s.closed || copies.length === 0) return;
     for (const c of copies) s.ledger.noteShown(c.id, c.version, c.sourceId);
+    // An update still queued whose every copy this hand-out rendered in the same version says nothing new.
+    const held = new Map(copies.map((c) => [c.id, c.version]));
+    for (let k = s.pending.length - 1; k >= 0; k--) {
+      const queued = this.built.get(s.pending[k]!);
+      if (s.pending[k]!.reason.startsWith(UPDATED) && queued?.copies?.every((c) => held.get(c.id) === c.version)) {
+        s.pending.splice(k, 1);
+      }
+    }
     const key = scopeKey(s.scope);
     let set = this.watching.get(key);
     if (!set) this.watching.set(key, (set = new Set()));
     set.add(s);
+  }
+
+  /**
+   * A batch about to be handed out, less each "updated:" packet whose every copy another packet of the batch renders in
+   * the same version (a re-read's update queued beside the delivery that re-read it).
+   */
+  private withoutCoveredUpdates(batch: Injection[]): Injection[] {
+    if (!this.config.revisionNotice || batch.length < 2) return batch;
+    const held = new Map<string, number>();
+    for (const i of batch) {
+      if (i.reason.startsWith(UPDATED)) continue;
+      for (const c of this.built.get(i)?.copies ?? []) held.set(c.id, c.version);
+    }
+    if (held.size === 0) return batch;
+    return batch.filter(
+      (i) => !i.reason.startsWith(UPDATED) || !this.built.get(i)?.copies?.every((c) => held.get(c.id) === c.version),
+    );
   }
 
   private unwatch(s: Session): void {
@@ -1119,15 +1144,16 @@ export class ContextPartner {
    * queued for its next take. The ledger then holds the new version, so each revision is sent once per session; an
    * earlier update still queued for the same items is replaced. Only real words count (`versionOf`: title and text,
    * not metadata). A copy stored under a later signal is sent all the same: it is newer than what the agent holds, and
-   * a newer one still is sent when stored. `except`: the session whose own delivery carries these copies (a re-read
-   * before it delivers), which needs no update.
+   * a newer one still is sent when stored. A re-read for a session's own delivery queues one there too: the delivery
+   * may not render the item (a size cut, a fold, a reader that does not pick it); one that does drops the update when
+   * it is handed out (`watchCopies`, `withoutCoveredUpdates`).
    */
-  private queueRevised(scope: Scope, items: readonly ContextItem[], except?: Session): void {
+  private queueRevised(scope: Scope, items: readonly ContextItem[]): void {
     if (!this.config.revisionNotice || items.length === 0) return;
     const sessions = this.watching.get(scopeKey(scope));
     if (!sessions) return;
     for (const s of sessions) {
-      if (s.closed || s === except) continue;
+      if (s.closed) continue;
       const changed = items.filter((it) => s.ledger.superseded(it.id, versionOf(it)));
       if (changed.length === 0) continue;
       const ids = new Set(changed.map((it) => it.id));
@@ -1167,8 +1193,14 @@ export class ContextPartner {
    */
   private buildUpdate(s: Session, items: readonly ContextItem[]): { injection: Injection; items: ContextItem[] } {
     const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${UPDATED_NOTE}` }));
-    const text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes });
-    const said = items.slice(0, Math.max(1, renderedCount(items, text)));
+    let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes });
+    let n = renderedCount(items, text);
+    if (n === 0) {
+      // Not even the first line fits a tiny `maxInjectionBytes`: it is said alone, under a cap that holds its line.
+      text = renderPacket(tagged.slice(0, 1), { maxBytes: Math.max(this.config.maxInjectionBytes, 512) });
+      n = 1;
+    }
+    const said = items.slice(0, n);
     const id = newId("inj", this.now());
     const injection: Injection = {
       ...s.scope,
@@ -1223,7 +1255,9 @@ export class ContextPartner {
       st.again = true;
       return;
     }
-    const wait = st.at + REVISION_POLL_GAP_MS - this.now();
+    // An engine clock that stepped back (a replayed harness clock, an NTP step) waits at most one gap.
+    if (this.now() < st.at) st.at = this.now() - REVISION_POLL_GAP_MS;
+    const wait = Math.min(REVISION_POLL_GAP_MS, st.at + REVISION_POLL_GAP_MS - this.now());
     if (st.timer) {
       if (wait > 0) return;
       // The engine's clock has passed the gap before the timer (a harness clock runs ahead of real time).
@@ -1255,15 +1289,18 @@ export class ContextPartner {
       const source = all.find((x) => x.id === sourceId);
       if (!source || signal.aborted) return;
       await sync.freshen(scope, [source], signal);
-    })().catch(() => {});
-    // The whole poll, its sources' resolution too, is bounded: a hung resolver cannot hold `revisionsSettled`.
-    const poll = Promise.race([run, whenAborted(signal)]).then(() => {
-      st.running = false;
-      if (st.again) {
-        st.again = false;
-        this.pollRevised(scope, sourceId);
-      }
-    });
+    })()
+      .catch(() => {})
+      .finally(() => {
+        // One at a time: the next poll waits for this one's call to end, not for its timeout.
+        st.running = false;
+        if (st.again) {
+          st.again = false;
+          this.pollRevised(scope, sourceId);
+        }
+      });
+    // What `revisionsSettled` waits for is bounded, a hung resolver or listing included.
+    const poll = Promise.race([run, whenAborted(signal)]);
     const before = this.revisionPolls.get(user);
     const both = before ? Promise.all([before, poll]).then(() => {}) : poll;
     const tracked: Promise<void> = both.finally(() => {
@@ -1631,6 +1668,9 @@ export class ContextPartner {
       const cited = new Set(items.map((i) => i.id));
       for (let k = s.pending.length - 1; k >= 0; k--) {
         const queued = s.pending[k]!.citations;
+        // An "updated:" packet goes only when the answer rendered its items' new version (`watchCopies`, D205): an
+        // item cited but cut from the answer was not said.
+        if (s.pending[k]!.reason.startsWith(UPDATED)) continue;
         if (queued.length > 0 && queued.every((c) => cited.has(c.itemId))) s.pending.splice(k, 1);
       }
     }
@@ -1948,8 +1988,8 @@ export class ContextPartner {
    * A change notification for one of the user's sources (`syncPush`; the source says it `notifies`): the integrator
    * forwards a Gmail watch, a Calendar or Drive channel, a Slack event, a Graph subscription, a connector platform's
    * trigger. The source's synced copy is behind until the next lookup that reads it polls it; until then, and between
-   * notifications, nothing polls it (at most `syncPushMaxStaleMs` apart). No I/O (but see `sourceNotice` for the
-   * `revisionNotice` trial's background poll); false when push is off, or the source
+   * notifications, nothing polls it (at most `syncPushMaxStaleMs` apart). No I/O (but see `sourceNotice` for
+   * `revisionNotice`'s background poll); false when push is off, or the source
    * is not synced for the user or does not say it notifies (`sourceNotice` says which).
    */
   sourceChanged(scope: Scope, sourceId: string): boolean {
@@ -1961,7 +2001,7 @@ export class ContextPartner {
    * search pages are dropped whatever the sync says: a search-only notifying source, or one no lookup has synced yet,
    * has no sync state, and its held page would otherwise keep answering with the copy from before the change. Costs
    * at most one search on the next lookup that would have used the page. No I/O, O(1) beyond the drop, except with
-   * `revisionNotice` (trial, D205): a source a live session holds a handed copy from is polled in the background
+   * `revisionNotice` (D205): a source a live session holds a handed copy from is polled in the background
    * (`pollRevised`: one listing call, at most one at a time per user and source, 30 s apart).
    */
   sourceNotice(scope: Scope, sourceId: string): SourceChangedResult {
@@ -3823,7 +3863,7 @@ export class ContextPartner {
       if (changed) this.fanout.dropResults(s.scope, item.sourceId);
       if (changed) {
         const stored = this.deps.cache.get(s.scope, item.id, this.now());
-        if (stored) this.queueRevised(s.scope, [stored], s);
+        if (stored) this.queueRevised(s.scope, [stored]);
       }
       if (changed) this.freshness.changed++;
       else this.freshness.confirmed++;
