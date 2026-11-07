@@ -66,9 +66,10 @@ CI −0.080..+0.015), Eden's own −0.015 (−0.047..+0.018), and reader calls 4
 
 The carded cut (`intentByKind`, D200) adds no call either; it changes which items fill the reader's pool and makes the
 reader prompt about 2.4% longer on train (mean 7,493 to 7,673 characters over 1,306 to 1,314 calls, seeds 41-44, stub).
-On a Pi pair, held-out 13 and 14 seeds 41-42 (ledger runs `s3a-kind-h13-41` to `s3a-kind-h14-42`, $0.606; Anthropic
-direct), Eden's own cost on hidden tasks rose +$0.040 per 1k (95% CI +0.003..+0.076), agent+Eden cache-neutral +0.053
-(−0.006..+0.106); on control tasks +$0.000 (−0.049..+0.049), on neutral tasks about +$0.011 (unpaired means).
+On a Pi pair, held-out 13 and 14 seeds 41-42 (ledger runs `s3a-kind2-h13-41` to `s3a-kind2-h14-42`, $0.621; Anthropic
+direct), Eden's own cost on hidden tasks moved +$0.014 per 1k (95% CI −0.022..+0.048), agent+Eden cache-neutral +0.015
+(−0.044..+0.070); on control tasks +$0.009 and on neutral tasks +$0.042 (Eden's own, unpaired means). A
+first pair on a build that also widened the uncarded cut read +$0.040 (+0.003..+0.076) on hidden tasks.
 docs/research/fix-s3a-intent.md.
 
 **Card reasoning (D149): none by default.** Until D149 `ModelCardMaker` always sent reasoning "low" (D59), which the

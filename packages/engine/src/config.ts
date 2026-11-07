@@ -414,10 +414,11 @@ export interface EngineConfig {
   /**
    * On in the default (D200; docs/research/fix-s3a-intent.md): an intent hit whose item holds a constraint card (any
    * kind but `none`) counts from `intentCardCoverage` of the request's idf instead of `intentMinCoverage`, and up to
-   * `intentCardHits` such hits left out by the `intentHits` cut (read 3x `intentHits` deep) are kept after the others
-   * (`keepIntents`, intent.ts). On train, the hits under the thresholds or past the cut that held a constraint card
-   * were mostly hidden facts, the uncarded ones mostly decoys. Paid replay on train: hidden 311 to 316, decoys 137 to
-   * 132; Pi held-out 13+14: hidden raised +3.9 points, false concerns unchanged, Eden +$0.04 per 1k hidden tasks.
+   * `intentCardHits` such hits left out by the `intentHits` cut (a second search, 3x `intentHits` deep) are kept
+   * after the others (`keepIntents`, intent.ts). On train, the hits under the thresholds or past the cut that held a
+   * constraint card were mostly hidden facts, the uncarded ones mostly decoys. Paid replay on train: hidden 311 to
+   * 315, decoys 137 to 133; Pi held-out 13+14: hidden raised +2.3 points (not significant), false concerns unchanged
+   * pooled.
    */
   intentByKind: boolean;
   /** With `intentByKind`: the least share of the request's idf a constraint-carded item's requests must hold. */

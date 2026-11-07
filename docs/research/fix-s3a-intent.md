@@ -3,7 +3,7 @@
 Status: done, 2026-11-07. Plan: [realuse-1-weak-points.md](realuse-1-weak-points.md), issue 3. Decisions: D200
 (promoted), D201 (rejected), D202 (no change). Every paid call went to the Anthropic API with `HAIKU_API_KEY`,
 `claude-haiku-5-5` in every role, `OPENROUTER_API_KEY` unset, on one ledger with a hard $3 cap
-(`--spend-ledger .local/ledger.jsonl --spend-cap 3 --spend-headroom 0.3`). **Spent: $1.14999** (sum of the ledger's
+(`--spend-ledger .local/ledger.jsonl --spend-cap 3 --spend-headroom 0.3`). **Spent: $1.78756** (sum of the ledger's
 `costUsd`, all labels `s3a-*`; nothing else was paid). These are Anthropic-direct figures (D97).
 
 ## The problem
@@ -32,8 +32,11 @@ add decoys as fast as hidden facts; the card is what tells them apart.
 - a hit whose item holds a constraint card counts from `intentCardCoverage` (0.1) instead of `intentMinCoverage`
   (0.2);
 - carded hits the first `intentHits` raw hits or ids left out take up to `intentCardHits` (4) places after the others;
-- the store is read `3 x intentHits` deep for them (`CARD_REACH`), since a weak carded hit ranks behind uncarded ones by
-  BM25.
+- a second search reads `3 x intentHits` deep for them (`CARD_REACH`), since a weak carded hit ranks behind uncarded
+  ones by BM25. The shared pass keeps its own search of `intentHits`: the store skips hashes no longer cached or made
+  after the request before it cuts, so the first rows of a deeper search are not the rows a search of `intentHits`
+  returns. The first build used one deep search for both passes, which also widened the uncarded cut; the review
+  caught it (below), and the figures here are for the fixed build unless marked.
 
 Sweeps (train seeds 41-42, the reader replayed with misses, so only the pool lines are clean):
 
@@ -53,43 +56,57 @@ Lowering the carded floor alone moved carded hits from "under thresholds" to "pa
 full of uncarded ones. Raising the uncarded floor lost hidden about one for one with decoys. With the misses topped up
 (one process), the shipped arm reads 285/254.
 
-**Train, paid reader replayed** (recipe 2a, topped up: `s3a-bykind-reader-topup` 497 calls $0.15136,
-`s3a-default-reader-topup2` 2 calls $0.0007; then 654 replayed, 0 missed):
+**Train, paid reader replayed** (recipe 2a, topped up: `s3a-bykind-reader-topup` 499 rows $0.15136,
+`s3a-default-reader-topup2` 2 calls $0.0007, and for the fixed build `s3a-default-reader-topup3` 53 calls $0.01671;
+then 654 replayed, 0 missed):
 
 | | hidden surfaced | decoys surfaced | hidden in pool | decoys in pool | decoys flagged in pool | reader calls |
 |---|---:|---:|---:|---:|---:|---:|
 | before | 311 | 137 | 278 | 254 | 23 | 651 |
-| `intentByKind` | 316 | 132 | 285 | 254 | 27 | 654 |
+| `intentByKind` | 315 | 133 | 285 | 254 | 25 | 654 |
+| first build (marked) | 316 | 132 | 285 | 254 | 27 | 654 |
 
-Task by task (`--baseline`): hidden +11 −6, decoys +9 −14. A changed pool moves the reader's answers on other tasks
+Task by task (`--baseline`): hidden +11 −7, decoys +9 −13. A changed pool moves the reader's answers on other tasks
 too, so the net is the figure to read. Unranked hidden 45 to 38. Seeds 41-44 at pool level (stub reader, $0):
 hidden in pool 557 to 566/768, decoys 506 to 505, mean reader prompt 7,493 to 7,673 characters, reader calls 1,306 to
-1,314; seeds 43-44 alone +0 hidden, −2 decoys. The stub screen (recipe 1) moves 281/256 to 282/255.
+1,314; seeds 43-44 alone +0 hidden, −2 decoys. The stub screen (recipe 1) reads 281/256 before and after (pool 278/254
+to 285/254).
 
 **Pi live** (Haiku 5.5 in every role, direct profile, `--push signals`, held-out 13 hidden/control and held-out 14
-hidden/control/neutral, seeds 41-42, one process per suite and seed, conditions `eden,eden+intentByKind`; ledger runs
-`s3a-kind-h13-41`, `-h13-42`, `-h14-41`, `-h14-42`: $0.13338, $0.13308, $0.1644, $0.17548):
+hidden/control/neutral, seeds 41-42, one process per suite and seed, conditions `eden,eden+intentByKind`). Fixed
+build: ledger runs `s3a-kind2-h13-41`, `-h13-42`, `-h14-41`, `-h14-42` ($0.13947, $0.13894, $0.17253, $0.16993); first
+build: `s3a-kind-*` ($0.13338, $0.13308, $0.1644, $0.17548).
 
 | | hidden raised | control false concern | neutral any concern | Eden $/1k (hidden) | wall p50 s (hidden) |
 |---|---:|---:|---:|---:|---:|
-| eden | 0.734 (128) | 0.008 (128) | 0.016 (64) | 0.303 | 3.85 |
-| eden+intentByKind | 0.773 (128) | 0.008 (128) | 0.016 (64) | 0.344 | 3.96 |
+| eden | 0.734 (128) | 0.023 (128) | 4/64 | 0.344 | 3.90 |
+| eden+intentByKind | 0.758 (128) | 0.016 (128) | 5/64 | 0.358 | 3.95 |
+| first build: eden | 0.734 | 0.008 | 1/64 | 0.303 | 3.85 |
+| first build: eden+intentByKind | 0.773 | 0.008 | 1/64 | 0.344 | 3.96 |
 
-Paired bootstrap 95% (`pi-ab-report.ts` over the four files): hidden +0.039 (−0.031..+0.109; held-out 13 +0.047,
-held-out 14 +0.031), control +0.000 (−0.023..+0.023), Eden $/1k on hidden tasks +0.040 (+0.003..+0.076), agent+Eden
-cache-neutral +0.053 (−0.006..+0.106), wall +0.13 s (−0.18..+0.44). On control tasks the cost moved +0.000
-(−0.049..+0.049).
+Paired bootstrap 95% (`pi-ab-report.ts` over the four files), fixed build: hidden +0.023 (−0.055..+0.102; held-out
+13 +0.000, held-out 14 +0.047), control −0.008 (−0.031..+0.016), Eden $/1k on hidden tasks +0.014 (−0.022..+0.048),
+agent+Eden cache-neutral +0.015 (−0.044..+0.070), wall +0.08 s (−0.24..+0.42). Neutral, task by task: 4 tasks
+raised a concern only with `intentByKind`, 3 only without (`esta-expired` up in both pairs; the unchanged `eden` arm
+read 1/64 in one run and 4/64 in the other). First build: hidden +0.039 (−0.031..+0.109), control +0.000, Eden +0.040
+(+0.003..+0.076). Both pairs pooled, false concerns (control and neutral) are 9 in each arm.
 
-**The trade, and why it is promoted.** Hidden rises on train (+5) and live (+3.9 points, not significant alone), with
-no rise in false or neutral concerns and decoys surfaced down on train. It costs Eden about $0.04 per 1,000 hidden
-tasks more (a CI that excludes zero), about +13% of its per-task cost there, and about +$0.01 per 1,000 on control and
-neutral tasks: at RealUse-1's assumed 1:1:8 mix about +$0.014 per 1,000 tasks for about +0.4 points of all tasks
-raising a hidden fact. That is the trade the plan asked to state. `bun run eval` is identical (precision 0.8276, recall
-0.48, falseFireRate 0) and `eval-live.ts` on Haiku gives the same three ($0.00086, `s3a-eval-live`).
+**The trade, and why it is promoted.** Hidden rises on train (+4, decoys −4) and in both live pairs (+2.3 and +3.9
+points, neither significant alone), with false concerns pooled unchanged. Eden's cost moves on hidden tasks +$0.014
+per 1,000 (interval spanning zero), +$0.009 on control and +$0.042 on neutral (unpaired means): at RealUse-1's assumed
+1:1:8 mix about +$0.036 per 1,000 tasks for about +0.2 points of all tasks raising a hidden fact. That is the trade the
+plan asked to state; it departs from D112's no-extra-cost bar, which D200 says. `bun run eval` is identical
+(precision 0.8276, recall 0.48, falseFireRate 0) and `eval-live.ts` on Haiku gives the same three ($0.00086,
+`s3a-eval-live`).
 
-The reader cache of recipe 2a is replaced by its topped-up copy (1,915 lines, plain md5
-`477e2bf92262b86a4399b070bddd82c0`); the pre-D200 readings stay in it, so `--set '{"intentByKind":false}'` still
-replays 311/137.
+The reader cache of recipe 2a is replaced by its topped-up copy (1,968 lines, plain md5
+`d0ff788fa9cbad0f3c755f043b25d43b`); the pre-D200 readings stay in it, so `--set '{"intentByKind":false}'` still
+replays 311/137 (651 replayed, 0 missed).
+
+**Review.** The `reviewer` subagent re-ran `bun run check`, `bun run eval` and recipe 2a and asked for: (1) the
+uncarded-cut widening above (fixed, re-measured: replay, stub, Pi); (2) D200 to say it departs from D112's bar (done);
+(3) two stale comments (fixed); (4) the lab's `cardKind` read dropping an expired card outside the counted block (now
+read inside it).
 
 ## Step 2: requests in the phrasing agents use (D201, rejected)
 

@@ -807,9 +807,10 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     // read here after it.
     let cardKind: string | undefined;
     if (held > 0) {
-      // The engine's calls (partner.ts intentFinds: k = `intentHits`, and with `intentByKind` k = `intentReach` for the
-      // carded pass; before the ask's arrival, thresholds after), and an unbounded one (every hash the user holds) so a passing hit past the engine's cut is still known. Each
-      // call drops the expired cards it passes (counted, a side effect read after the ask).
+      // The engine's calls (partner.ts intentFinds: k = `intentHits`, and with `intentByKind` k = `intentReach` for
+      // the carded pass; before the ask's arrival, thresholds after), and an unbounded one (every hash the user
+      // holds) so a passing hit past the engine's cut is still known. Each call drops the expired cards it passes
+      // (counted, a side effect read after the ask).
       const text = sanitizeForStore(question).slice(0, INTENT_QUERY_CHARS);
       const accept = (x: string) => cache.get(scope, x, clock) !== null;
       const size0 = cards.intentSize(scope);

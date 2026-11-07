@@ -58,10 +58,11 @@ export interface IntentFindRow {
 /**
  * The planted item's intent hit for the question, as partner.ts's `intentFinds` reads `CardEnricher.intentFinds`
  * (cards.ts): the engine asks the store for `intentHits` raw hits (`cut`; with `byKind` also `intentReach`, `deep`) and
- * keeps them by `keepIntents` (intent.ts, the engine's own function: thresholds, at most `hits` ids, and with `byKind` (D200) a constraint card's
- * own threshold and extra places). An item placed there has its rank. Otherwise its first passing hit in `all` (an
- * unbounded call: every hash the user holds) is returned with rank -1 and `pastCut` true: it passes, but the engine
- * never sees it. With none, its first hit in `all` is returned with `passes` false. Null when no hit holds it. Pure.
+ * keeps them by `keepIntents` (intent.ts, the engine's own function: thresholds, at most `hits` ids, and with
+ * `byKind` (D200) a constraint card's own threshold and extra places). An item placed there has its rank. Otherwise
+ * its first passing hit in `all` (an unbounded call: every hash the user holds) is returned with rank -1 and
+ * `pastCut` true: it passes, but the engine never sees it. With none, its first hit in `all` is returned with
+ * `passes` false. Null when no hit holds it. Pure.
  */
 export function intentPlace(
   cut: readonly IntentFindRow[],
