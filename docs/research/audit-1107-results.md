@@ -29,9 +29,10 @@ the OpenRouter route the servers ship.
   (D342). Tried and deleted: link lines, re-show, retrieval moonshots, ask rewording.
 - **Scale, many connectors.** At 1,000 sources: hidden facts held (75/74 of 96 against 76/76 at 5, $0), card calls
   −94%, unused sources swept weekly instead of daily where a get tool exists (D356: −46% connector calls a user-day,
-  Zapier $47.7 → $25.7 a user a day). **Open:** live, a 1,000-source user still costs ~39 connector calls and 2.2 s
-  a task (A21); a budget halved the calls but lost hidden facts and did not move the path (A28, deleted): the path
-  needs every live search off the push, not most.
+  Zapier $47.7 → $25.7 a user a day). **Then B1 (D405–D406, in the default):** the push no longer waits on live searches of cut copies (it answers
+  from what is held and refreshes in the background): live at ~1,000 sources the push went **1,154 → 39 ms** a task,
+  Eden's whole path 2,603 → 1,582 ms (the rest is the agent's own asks), hidden facts **45 → 51 of 72**, connector
+  calls not up. Most of the lab's CPU and memory at that size was the simulated connectors themselves (D407).
 - **Scale, many users.** Idle users are frozen into one compressed blob and thawed on use (D325); the sync's id sets
   are compact (D371); a cold-start storm no longer stalls warm users (D328/D370: p99 1,180 → 48 ms). About **2,280
   users at the 3,000-item cap on a 4-core/16 GB box, ~$65 per 1,000 users a month** (AWS list prices via third-party
@@ -63,7 +64,8 @@ Left as off trials: `guardLine`, `quarantineInstructions` (D306–D307), spend l
 
 ## Numbers that moved (gates on the final tree)
 
-- `bun run check`: all green, 2,377 tests.
+- `bun run check`: all green, 2,378 tests (B2 moved the heap-bound test into its own process, which stopped its
+  failures under load).
 - `bun run eval` (no model): precision 0.5909 → **0.65** (A30's two-candidate cut: fewer items delivered, 44 → 40),
   recall 0.52, falseFireRate 0.
 - `bun run funnel` (no model, train1–6 seeds 41–42): hidden 314/384, decoys 273/384, unchanged since the morning's
@@ -78,7 +80,8 @@ Left as off trials: `guardLine`, `quarantineInstructions` (D306–D307), spend l
    none, so they stay daily until integrators wire one.
 3. **Integrations: send ref notices** (`sourceChanged(id, {refs})`) where the connector says which items changed,
    and on Hermes give Eden in place of the source tools, not beside them.
-4. **The 1,000-source path** (A28, D391): the next lever must take every live search off the push.
+4. **The 1,000-source path:** the push is off it (B1); what remains is the agent's own asks (~1.5 s a task), which
+   still search cut copies live, and ~44 connector calls a task.
 5. **Frozen-user persistence** (A14): restarts still re-sync every user; persisting the blobs needs a decision
    against D8.
 
