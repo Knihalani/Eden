@@ -35,6 +35,8 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   syncPollWidth: 8,
   syncBackfillLanes: 8,
   syncLocalComplete: true,
+  // D405, D406 (B1): the push answers a cut copy from the index and searches it live behind.
+  pushCutBehind: true,
   routeLocalHits: true,
   // D320–D323 (A13 scale): cards, the cap and routing for a user with many sources.
   syncKeepCut: true,
@@ -110,11 +112,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(59);
+    expect(differ.length).toBe(60);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(59);
+    expect(partKeys.size).toBe(60);
   });
 });
 

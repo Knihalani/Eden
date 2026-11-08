@@ -3582,6 +3582,8 @@ export class ContextPartner {
     let syncCalls = 0;
     let preRanked: ReturnType<SourceMap["route"]> | null = null;
     let pollable: Set<string> | null = null;
+    let cutBehind: Set<string> | undefined;
+    let probeLocal: Set<string> | null | undefined;
     if (this.sync) {
       // `syncPollWidth` (D263): over that many sources, only the best routed are polled. The lookup is routed once,
       // here, before its poll, and searches the head of the same ranking, so every source it searches was polled
@@ -3641,7 +3643,14 @@ export class ContextPartner {
         } else syncCalls = await polled; // `freshen` stops waiting at the deadline itself (D140, D283)
         if (s.closed) return { calls: syncCalls, syncCalls, sources: [], closed: true };
       }
-      local = this.localOf(s, all, behind);
+      // `pushCutBehind` (D405): on a lookup that does not wait for its poll, a cut copy answers here too and is
+      // searched behind (below); a follow-up reads what that search stored and starts none of its own.
+      if (behind && this.config.pushCutBehind && this.config.syncLocalComplete) {
+        cutBehind = new Set();
+        local = this.localOf(s, all, behind, cutBehind);
+        // The probes keep D264: they search a cut copy live and are not waited for (`probeGraceMs`).
+        probeLocal = this.localOf(s, all, behind);
+      } else local = this.localOf(s, all, behind);
     }
     const routing = this.spans?.open("route", cue.span);
     const ranked =
@@ -3733,10 +3742,26 @@ export class ContextPartner {
         : // What the poll left of the lookup's deadline (D140).
           this.fanout.search(chosen, query, { timeoutMs: left(), signal: s.abort.signal });
     const settled = searching.catch(() => null);
+    // As the lookup's own search (D140, D148): with under `MIN_SEARCH_MS` left, no call that could not answer is sent.
+    if (cutBehind && cutBehind.size > 0 && !cue.followUp && left() >= MIN_SEARCH_MS) {
+      const behindOf = (listing ? listers : routed).filter((x) => cutBehind!.has(x.id));
+      // Sent as the lookup's own search would be: through the planner's cascade (its shapes find what the request's
+      // words alone miss), its calls counted where they reach the connector.
+      const via: (CountedPlanCalls | undefined)[] = [];
+      const behindChosen =
+        planner && !listing
+          ? sendTo(behindOf).map((x) => {
+              const calls = this.fanout.planCalls(x, shared);
+              via.push(calls);
+              return new PlannedSource(x, planner, () => this.fanout.permit(s.scope, x.id), calls, deadlineAt);
+            })
+          : sendTo(behindOf);
+      if (behindOf.length > 0) this.searchCutBehind(s, cue, behindChosen, via, query, deadlineAt, readMark);
+    }
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing = this.config.probes
       ? this.probe(s, cue, routed, all, listing, probed, settled, shared, {
-          local,
+          local: probeLocal === undefined ? local : probeLocal,
           deadlineAt,
           ...(boost ? { boost } : {}),
         }).catch(() => {})
@@ -3823,6 +3848,58 @@ export class ContextPartner {
       };
     }
     return result;
+  }
+
+  /**
+   * `pushCutBehind` (D405): the live search D264 makes of cut copies, run behind a lookup that answered them from the
+   * index. Same query, same deadline, same fan-out (breaker, rate, a call in flight joined). What it returns is stored
+   * as the lookup's own finds are, and it joins `cue.polled`: if it stored anything new, the lookup's follow-up and
+   * the push's second reading run on the index it refreshed. Its calls get a trace of their own when it settles, as a
+   * poll behind does. Never throws.
+   */
+  private searchCutBehind(
+    s: Session,
+    cue: Cue,
+    sources: Source[],
+    via: readonly (CountedPlanCalls | undefined)[],
+    query: SearchQuery,
+    deadlineAt: number,
+    readMark: number,
+  ): void {
+    const turn = s.turn;
+    const started = performance.now();
+    const span = this.spans?.open("search.behind", cue.span, { async: true, sources: sources.length });
+    const work = this.fanout
+      .search(sources, query, { timeoutMs: Math.max(0, deadlineAt - performance.now()), signal: s.abort.signal })
+      .then(async (outcomes) => {
+        let made = 0;
+        for (let k = 0; k < outcomes.length; k++) made += via[k] ? via[k]!.made : reachedSource(outcomes[k]!) ? 1 : 0;
+        if (span) this.spans!.close(span, outcomeAttrs(outcomes));
+        if (made > 0) {
+          this.trace(s, {
+            sessionId: s.id,
+            turn,
+            event: "search",
+            decision: "skipped",
+            reason: "cut search behind",
+            latencyMs: Math.round(performance.now() - started),
+            sourceCalls: made,
+            modelCalls: 0,
+            costUsd: 0,
+            itemIds: [],
+          });
+        }
+        let fresh = 0;
+        for (let k = 0; k < outcomes.length; k++) {
+          if (k > 0) await yieldToLoop();
+          if (s.closed) return false;
+          fresh += this.store(s, outcomes[k]!.items, cue.span ?? 0, false, readMark);
+        }
+        return fresh > 0;
+      })
+      .catch(() => false);
+    const before = cue.polled;
+    cue.polled = before ? Promise.all([before, work]).then(([a, b]) => a || b) : work;
   }
 
   /**
@@ -4908,9 +4985,19 @@ export class ContextPartner {
   }
 
   /** The sources whose synced copy is current (`sync`, D57), which answer from the local index; null when none. */
-  private localOf(s: Session, all: readonly Source[], behind = false): Set<string> | null {
+  private localOf(s: Session, all: readonly Source[], behind = false, cut?: Set<string>): Set<string> | null {
     if (!this.sync) return null;
     const now = this.now();
+    // `pushCutBehind` (D405): `cut` collects the warm cut copies admitted here, whose live search runs behind.
+    if (cut) {
+      const local = new Set<string>();
+      for (const x of all) {
+        if (!this.sync.isWarm(s.scope, x.id)) continue;
+        local.add(x.id);
+        if (!this.sync.complete(s.scope, x.id)) cut.add(x.id);
+      }
+      return local.size > 0 ? local : null;
+    }
     // `behind`: a warm copy answers while its poll runs (`syncPollBehind`), never one still in its backfill; so does a
     // warm copy past `syncPollWidth` that the lookup did not poll (D263). An ask never passes `behind`: a stale copy
     // it did not poll is searched live (D127), within the probes' call budget.

@@ -1,0 +1,8 @@
+regrade-base-41a.log: w41:train3-control:restricted-datastore-grant eden claude-sonnet-5-5: {"restricted-datastore-grant":true} (1087ms) 
+regrade-base-41b.log: 
+regrade-base-42a.log: 
+regrade-base-42b.log: w42:train5-control:rail-strike-leeds eden claude-sonnet-5-5: {"rail-strike-leeds":false} (732ms) w42:train6-neutral:hospitality-per-head-cap eden claude-sonnet-5-5: {"hospitality-per-head-cap":false} (926ms) 
+regrade-cut-41a.log: w41:train1-neutral:council-tax-dd-exists eden~cut claude-sonnet-5-5: {"council-tax-dd-exists":false} (1087ms) 
+regrade-cut-41b.log: w41:train5-control:wedding-no-plus-ones eden~cut claude-sonnet-5-5: {"wedding-no-plus-ones":false} (820ms) 
+regrade-cut-42a.log: 
+regrade-cut-42b.log: 

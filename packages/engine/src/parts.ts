@@ -54,6 +54,7 @@ export const PARTS = {
     syncBackfillLanes: 1,
     syncIngestTurns: false,
     syncLocalComplete: false,
+    pushCutBehind: false,
     syncKeepCut: false,
     syncEngagedDeep: false,
     syncUnusedSweepMs: 0,

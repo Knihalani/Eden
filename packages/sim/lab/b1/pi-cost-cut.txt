@@ -1,0 +1,20 @@
+
+$ per 1,000 tasks (agent and Eden per task; bg run = Eden's cards and intent while the user worked, per task; one-time = backfill per user; steady = agent + Eden + bg run; all-in = steady + one-time spread over the user's tasks in this run). Recap turns are probes: not tasks, their $ apart.
+condition        n users   agent    Eden  bg run  steady  all-in  mix st  mix all   one-time $/user (from)  reader/t  Eden conn/t  agent tools/t  wall p50  mean  recaps $
+eden~cut       216     2   0.433   0.000   0.312   0.744   0.744   0.734    0.734           0.0000 (in-run)      0.00        41.25           1.21      5.03  4.69    0.0000
+
+connector calls per task (agent's source tools; Eden's in the task's window; Eden's background while the user worked) and Eden's one-time backfill calls per user; streams recorded before A3 lack the background and backfill
+eden~cut       agent 0.00  Eden 41.25  background 3.02  mix 46.59  backfill 1004/user (36 users)
+
+$ per 1,000 tasks with the connectors priced per plan ($ per 1,000 calls; market.py, list prices, assumed): steady, all-in, and on the 1:1:8 mix
+eden~cut       first-party (quota only)     steady   0.744  all-in   0.744  mix st   0.734  mix all   0.734
+eden~cut       Composio (overage)           steady  14.025  all-in  64.225  mix st  14.711  mix all  64.911
+eden~cut       Unified.to (Pro)             steady  33.946  all-in 159.446  mix st  35.678  mix all 161.178
+eden~cut       Arcade.dev (Team)            steady 443.430  all-in 2116.763  mix st 466.655  mix all 2139.988
+eden~cut       Pipedream Connect (overage)  steady 531.967  all-in 2539.967  mix st 559.839  mix all 2567.839
+eden~cut       Zapier MCP (10k tasks)       steady 1142.872  all-in 5460.072  mix st 1202.811  mix all 5520.011
+
+per kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s
+eden~cut       hidden     72  raised 51/72 (70.8%)  $0.441/1k  p50 5.03
+eden~cut       control    72  raised 1/72 (1.4%)  $0.440/1k  p50 5.09
+eden~cut       neutral    72  raised 1/72 (1.4%)  $0.417/1k  p50 4.91

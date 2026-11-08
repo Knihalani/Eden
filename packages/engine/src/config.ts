@@ -265,6 +265,16 @@ export interface EngineConfig {
    */
   syncLocalComplete: boolean;
   /**
+   * On in the default (D405, D406, B1; docs/research/b1-scale-path.md). With `syncLocalComplete`, on a lookup that
+   * does not wait for its poll (`syncPollBehind`: observe's slow-path lookup and the push's pass): a warm copy the cap
+   * cut answers from the index as it stands, and the live search D264 would wait for runs behind, with the same query,
+   * planner and deadline; the probes keep D264 (they are not waited for). What it stores reaches the agent as a
+   * poll's does: the lookup's follow-up (`afterPoll`) and the push's second reading (`readerPushBehind`), re-checked
+   * like any delivery. A follow-up starts no second search; an explicit ask keeps D264. Off: D264 on the push too,
+   * which waited ~1.1 s a task for connectors at 1,000 sources.
+   */
+  pushCutBehind: boolean;
+  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -681,6 +691,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncBackfillLanes: 8,
   syncIngestTurns: true,
   syncLocalComplete: true,
+  pushCutBehind: true,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,
