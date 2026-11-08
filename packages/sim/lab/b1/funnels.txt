@@ -1,0 +1,38 @@
+== n995-base-41
+TOTAL                                7/48     33/48                    33/48         49.8     42.4
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+calls: connectors received 4804 in the tasks' windows (1521 of them on-demand listings); traces summed 4804 (cross-check, fetches included)
+TOTAL                               15/48     34/48                    24/48         47.2     44.1
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+calls: connectors received 4512 in the tasks' windows (1287 of them on-demand listings); traces summed 4512 (cross-check, fetches included)
+  TOTAL      hidden 77/96  decoys 69/96
+reader screen (pool: the ids the reader was given for the request, a measurement of pool content, not a bound; top-K: the ask's ranked candidates; draft: the draft's pool against the request's first read):
+== n995-cut-41
+TOTAL                                7/48     33/48                    33/48         49.5     32.6
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+calls: connectors received 4825 in the tasks' windows (1562 of them on-demand listings); traces summed 4825 (cross-check, fetches included)
+TOTAL                               15/48     34/48                    24/48         46.2     34.4
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+calls: connectors received 4441 in the tasks' windows (1293 of them on-demand listings); traces summed 4441 (cross-check, fetches included)
+  TOTAL      hidden 77/96  decoys 69/96
+reader screen (pool: the ids the reader was given for the request, a measurement of pool content, not a bound; top-K: the ask's ranked candidates; draft: the draft's pool against the request's first read):
+against .local/b1/n995-base-41.json: hidden +0 −0, decoys +0 −0
+== n995-base-42
+TOTAL                                6/48     31/48                    33/48         51.1     45.1
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+calls: connectors received 4923 in the tasks' windows (1519 of them on-demand listings); traces summed 4923 (cross-check, fetches included)
+TOTAL                               16/48     33/48                    22/48         47.6     44.1
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+calls: connectors received 4583 in the tasks' windows (1311 of them on-demand listings); traces summed 4583 (cross-check, fetches included)
+  TOTAL      hidden 76/96  decoys 64/96
+reader screen (pool: the ids the reader was given for the request, a measurement of pool content, not a bound; top-K: the ask's ranked candidates; draft: the draft's pool against the request's first read):
+== n995-cut-42
+TOTAL                                6/48     31/48                    33/48         50.6     30.4
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+calls: connectors received 4855 in the tasks' windows (1529 of them on-demand listings); traces summed 4855 (cross-check, fetches included)
+TOTAL                               18/48     34/48                    22/48         46.7     34.9
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+calls: connectors received 4506 in the tasks' windows (1324 of them on-demand listings); traces summed 4506 (cross-check, fetches included)
+  TOTAL      hidden 77/96  decoys 64/96
+reader screen (pool: the ids the reader was given for the request, a measurement of pool content, not a bound; top-K: the ask's ranked candidates; draft: the draft's pool against the request's first read):
+against .local/b1/n995-base-42.json: hidden +1 −0, decoys +0 −0

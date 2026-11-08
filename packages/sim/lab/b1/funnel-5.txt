@@ -1,0 +1,10 @@
+delivered before first model call (observe wait 3000 ms): hidden 65 of 65 delivered (96 tasks), decoys 61 of 61 delivered (96 tasks)
+calls: connectors received 528 in the tasks' windows (528 of them on-demand listings); traces summed 528 (cross-check, fetches included)
+delivered before first model call (observe wait 3000 ms): hidden 67 of 67 delivered (96 tasks), decoys 60 of 60 delivered (96 tasks)
+calls: connectors received 509 in the tasks' windows (509 of them on-demand listings); traces summed 509 (cross-check, fetches included)
+delivered before first model call (observe wait 3000 ms): hidden 64 of 64 delivered (96 tasks), decoys 56 of 56 delivered (96 tasks)
+calls: connectors received 520 in the tasks' windows (520 of them on-demand listings); traces summed 520 (cross-check, fetches included)
+delivered before first model call (observe wait 3000 ms): hidden 65 of 65 delivered (96 tasks), decoys 47 of 47 delivered (96 tasks)
+calls: connectors received 507 in the tasks' windows (507 of them on-demand listings); traces summed 507 (cross-check, fetches included)
+  TOTAL      hidden 314/384  decoys 273/384
+  delivered before first model call (observe wait default ms): hidden 261 of 261 delivered (384 tasks), decoys 224 of 224 delivered (384 tasks)
