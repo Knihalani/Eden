@@ -1,0 +1,8 @@
+== base (train1-3, seed 41, --time 1)
+observe  n 96  wall p50 657  p90 1510  p99 1521  max 1521  mean 684 ms
+push     n 155  wall p50 704  p90 1505  p99 1524  max 1535  mean 592 ms
+ask      n 96  wall p50 1332  p90 1509  p99 1525  max 1525  mean 1216 ms
+== cut (train1-3, seed 41, --time 1)
+observe  n 96  wall p50 21.0  p90 39.2  p99 85.4  max 85.4  mean 24.5 ms
+push     n 165  wall p50 12.9  p90 28.7  p99 73.3  max 80.6  mean 13.5 ms
+ask      n 96  wall p50 1428  p90 1510  p99 1523  max 1523  mean 1233 ms

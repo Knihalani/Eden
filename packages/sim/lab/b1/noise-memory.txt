@@ -1,0 +1,1 @@
+noiseSources(world, 995, 20, 0, 41) after Bun.gc(true): heapUsed +495 MB, rss +705 MB

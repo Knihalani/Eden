@@ -197,7 +197,9 @@ counts the items listed (`demandItems`, `backgroundItems`) beside the calls.
 kept across all their sources, so with many busy connectors a source's synced copy can be cut to its newest few items.
 Such a copy (`Sync.complete` false: its backfill stopped at the user's cut before its listing ended, or a trim dropped
 some of its items) does not answer for its source (`syncLocalComplete`, D264): the source is searched live like an
-unsynced one, so what is older than the cut is still found. A lookup polls at most its `syncPollWidth` (8) best-routed
+unsynced one, so what is older than the cut is still found. The push does not wait for that search
+(`pushCutBehind`, D405, D406): it answers a cut copy from what is held, the search runs behind, and what it stores
+reaches the agent through the poll's follow-ups; an explicit ask still waits for it. A lookup polls at most its `syncPollWidth` (8) best-routed
 stale sources (D263); a warm source past them answers from its copy as it stands, as under `syncPollBehind`. Routing
 (`SourceMap.route`) adds, per source, log2(1 + its items among the request's 40 best matches in the user's own index)
 (`routeLocalHits`, D265), so a request that names no one still reaches the sources whose items share its words. The
