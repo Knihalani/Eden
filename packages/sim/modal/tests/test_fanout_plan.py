@@ -22,6 +22,33 @@ class PiAbPlan(unittest.TestCase):
         self.assertLessEqual(sum(s.cap_usd for s in shards), 4.0)
         self.assertEqual(len({s.run_label for s in shards}), 8)
 
+    def test_a_cards_list_is_merged_into_one_file_per_shard(self):
+        args = PI + ["--cards", "a.jsonl,b.jsonl"]
+        shard = plan.plan_pi_ab("train1", "41", 1.0, "r", args)[0]
+        cmd = plan.shard_command(shard)
+        merged = plan.shard_paths(shard)["cards_in"]
+        self.assertEqual(cmd[cmd.index("--cards") + 1], merged)
+        self.assertNotIn("a.jsonl,b.jsonl", cmd)
+        with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as out:
+            with open(os.path.join(repo, "a.jsonl"), "w") as f:
+                f.write('{"h":"1"}')  # no trailing newline: the merge adds one
+            with open(os.path.join(repo, "b.jsonl"), "w") as f:
+                f.write('{"h":"2"}\n')
+            old = plan.SHARD_DIR
+            plan.SHARD_DIR = out
+            try:
+                dest = plan.prepare_shard(shard, repo)
+            finally:
+                plan.SHARD_DIR = old
+            with open(dest) as f:
+                self.assertEqual(f.read().splitlines(), ['{"h":"1"}', '{"h":"2"}'])
+
+    def test_one_cards_file_is_passed_as_is(self):
+        shard = plan.plan_pi_ab("train1", "41", 1.0, "r", PI + ["--cards", "a.jsonl"])[0]
+        cmd = plan.shard_command(shard)
+        self.assertEqual(cmd[cmd.index("--cards") + 1], "a.jsonl")
+        self.assertIsNone(plan.prepare_shard(shard, "/nonexistent"))
+
     def test_the_split_rounds_down(self):
         each = plan.split_cap(1.0, 3)
         self.assertEqual(each, 0.333)

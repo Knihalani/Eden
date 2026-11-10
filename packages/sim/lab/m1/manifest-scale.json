@@ -1,0 +1,201 @@
+{
+  "shards": [
+    {
+      "name": "s000-train1-41",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.011535,
+      "capUsd": 0.018,
+      "seconds": 201.7
+    },
+    {
+      "name": "s001-train2-41",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.013752,
+      "capUsd": 0.018,
+      "seconds": 234.4
+    },
+    {
+      "name": "s002-train3-41",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.014382,
+      "capUsd": 0.018,
+      "seconds": 203.5
+    },
+    {
+      "name": "s003-train4-41",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.013405,
+      "capUsd": 0.018,
+      "seconds": 181.9
+    },
+    {
+      "name": "s004-train5-41",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.012413,
+      "capUsd": 0.018,
+      "seconds": 261.6
+    },
+    {
+      "name": "s005-train6-41",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.013965,
+      "capUsd": 0.018,
+      "seconds": 190.3
+    },
+    {
+      "name": "s006-train1-42",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.013171,
+      "capUsd": 0.018,
+      "seconds": 225.9
+    },
+    {
+      "name": "s007-train2-42",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.012801,
+      "capUsd": 0.018,
+      "seconds": 241.9
+    },
+    {
+      "name": "s008-train3-42",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.0141,
+      "capUsd": 0.018,
+      "seconds": 211.5
+    },
+    {
+      "name": "s009-train4-42",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.014856,
+      "capUsd": 0.018,
+      "seconds": 206.1
+    },
+    {
+      "name": "s010-train5-42",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.012753,
+      "capUsd": 0.018,
+      "seconds": 226.6
+    },
+    {
+      "name": "s011-train6-42",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.013982,
+      "capUsd": 0.018,
+      "seconds": 201.5
+    },
+    {
+      "name": "s012-train1-43",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.010523,
+      "capUsd": 0.018,
+      "seconds": 204.7
+    },
+    {
+      "name": "s013-train2-43",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.013112,
+      "capUsd": 0.018,
+      "seconds": 241.5
+    },
+    {
+      "name": "s014-train3-43",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.01445,
+      "capUsd": 0.018,
+      "seconds": 189.8
+    },
+    {
+      "name": "s015-train4-43",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.013225,
+      "capUsd": 0.018,
+      "seconds": 179.4
+    },
+    {
+      "name": "s016-train5-43",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.01382,
+      "capUsd": 0.018,
+      "seconds": 242.8
+    },
+    {
+      "name": "s017-train6-43",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.013943,
+      "capUsd": 0.018,
+      "seconds": 200.8
+    },
+    {
+      "name": "s018-train1-44",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.013748,
+      "capUsd": 0.018,
+      "seconds": 229.2
+    },
+    {
+      "name": "s019-train2-44",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.012434,
+      "capUsd": 0.018,
+      "seconds": 246.6
+    },
+    {
+      "name": "s020-train3-44",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.013691,
+      "capUsd": 0.018,
+      "seconds": 200.3
+    },
+    {
+      "name": "s021-train4-44",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.01412,
+      "capUsd": 0.018,
+      "seconds": 187.2
+    },
+    {
+      "name": "s022-train5-44",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.013965,
+      "capUsd": 0.018,
+      "seconds": 233.8
+    },
+    {
+      "name": "s023-train6-44",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.013923,
+      "capUsd": 0.018,
+      "seconds": 201.6
+    }
+  ],
+  "spentUsd": 0.322069,
+  "capUsd": 0.432,
+  "failed": [],
+  "overCap": [],
+  "withinCap": true
+}

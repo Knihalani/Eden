@@ -77,6 +77,13 @@ modal run packages/sim/modal/lab_fanout.py --kind funnel --suites train --seeds 
   --run m1-scale --args "-- --noise-sources 995 --limit 16"
 ```
 
+**Card lists and concurrency (M1, D440).** `--cards A,B,C` in a pi-ab run's `--args` is merged into one file inside
+each shard (pi-ab reads one; `prepare_shard`). Run Anthropic shards one or two at a time: a short train shard runs
+about 60 agent streams, and four fan-outs at once on one key met Anthropic's concurrent-request limit (1,500–1,900
+retried 429s a shard), which made wall times useless though quality pairs held. M1 measured the real costs: a train
+pi-ab shard (all six suites, 5 arms, 384 tasks an arm) took 3–10 minutes and $0.47–0.57 Anthropic; a `--days 8` user
+with 6 arms 5–8 minutes and $0.21–0.29; this session's 53 containers cost $1.54 of Modal credits (billing report).
+
 `--dry` prints the plan through Modal (it needs a token; `fanout_plan.py plan` does not). Hermes is not fanned out:
 it needs a local hermes-agent checkout with its venv (packages/sim/src/lab/CLAUDE.md), not built into this image.
 

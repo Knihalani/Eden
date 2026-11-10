@@ -1,0 +1,14 @@
+shards 8, seeds 45,46,47,48, tasks paired 1437 (dropped 99 unfinished)
+n per kind: hidden 719, control 718
+
+arm                    hidden  control  neutral  conc.rg   $/1k   wall p50/mean s  Eden ms  conn
+eden                   0.537   0.010    nan    0.0042   0.257   2.98/ 5.60       44   0.00
+eden~minus-nudge       0.515   0.007    nan    0.0000   0.262   2.67/ 5.29       44   0.00
+eden~minus-plans       0.538   0.008    nan    0.0014   0.255   2.96/ 5.35       45   0.00
+eden~minus-fewer       0.524   0.008    nan    0.0000   0.272   2.93/ 5.65       45   0.00
+
+== paired differences (a − b), bootstrap 95%; * the interval excludes zero
+points for hidden and concerns; $/1k; s; ms
+eden~minus-nudge       − eden   hidden -2.225 (-4.868..+0.417)   concerns -0.279 (-1.253..+0.696)   concernsRegraded -0.418 (-0.975..+0.000)   usdPer1k +0.005 (-0.001..+0.011)   wallMean -0.309 (-0.769..+0.151)   edenMs -0 (-1..+0)  conn +0.000 (+0.000..+0.000) 
+eden~minus-plans       − eden   hidden +0.139 (-2.643..+2.782)   concerns -0.139 (-0.975..+0.696)   concernsRegraded -0.279 (-0.696..+0.000)   usdPer1k -0.002 (-0.008..+0.004)   wallMean -0.252 (-0.711..+0.222)   edenMs +0 (-0..+1)  conn +0.000 (+0.000..+0.000) 
+eden~minus-fewer       − eden   hidden -1.252 (-3.894..+1.391)   concerns -0.139 (-1.114..+0.836)   concernsRegraded -0.418 (-0.975..+0.000)   usdPer1k +0.015 (+0.008..+0.021)*  wallMean +0.049 (-0.431..+0.558)   edenMs +0 (-0..+1)  conn +0.000 (+0.000..+0.000) 
