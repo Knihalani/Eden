@@ -296,6 +296,21 @@ describe("askNudgeDeep (D460, trial): the nudge only when the pool past the hand
     await say(cur, DATED_REQUEST);
     expect(now.at(-1)!.unsettled).toBe(true);
   });
+
+  test("bulk mail past those handed does not count, anchored or not (review)", async () => {
+    const BULK: ContextItem = {
+      ...item("bulk", "Harlow newsletter", "Harlow venue news for 30 October: deposits now open.", 1),
+      meta: { category: "promotions" },
+    };
+    const pools: PushPoolReport[] = [];
+    const p = setup({ askNudge: true, askNudgeDeep: true, pushCandidates: 1 }, (r) => pools.push(r));
+    ITEMS = [BULK, HOLD, OTHER];
+    await say(p, DATED_REQUEST);
+    const pool = pools.at(-1)!;
+    expect(pool.handed).toEqual([HOLD.id]);
+    expect(pool.anchored![pool.pool.indexOf(BULK.id)]).toBe(true);
+    expect(pool.unsettled).toBe(false);
+  });
 });
 
 describe("pushCandidatesSettled (D400, D404): fewer candidates when they settle the request", () => {
