@@ -28,6 +28,11 @@ const flag = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=
 const config = flag("config") ? (JSON.parse(flag("config")!) as Partial<EngineConfig>) : {};
 const churn = Number(flag("churn") ?? 1);
 const mailPerDay = Number(flag("mail-per-day") ?? 40);
+// `--mix=P,D` (F1, D478): the share of sources that push and have a change feed, and that have a feed only (by a
+// source's place in the list: every tenth by tenth, so the four workload sources take the first kinds too). A pushing
+// source's new items are forwarded as `--push=signals` (a bare notice, the default) or `payload` (the items).
+const mix = (flag("mix") ?? "").split(",").filter(Boolean).map(Number);
+const pushMode = flag("push") ?? "signals";
 const argv = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const N = Number(argv[0] ?? 1_000);
 const itemsPerSource = Number(argv[1] ?? 20);
@@ -50,7 +55,9 @@ const NOISE_WORDS = (
   "standup retro epic story bug triage design mockup component release branch merge build artifact queue alert"
 ).split(" ");
 
-const calls = { search: 0, list: 0, fetch: 0 };
+const calls = { search: 0, list: 0, fetch: 0, delta: 0 };
+/** Change events pushing sources sent (one per new item): what an event-trigger plan would bill. */
+let events = 0;
 
 /** An in-memory source whose rows can grow; lists newest first with an offset cursor, searches by name and word. */
 class DaySource implements Source {
@@ -60,6 +67,18 @@ class DaySource implements Source {
   readonly description: string;
   rows: ContextItem[];
   private made = 0;
+  /** `--mix`: the source forwards change notices; its change feed (`changes`), when it has one. */
+  notifies = false;
+  changes?: NonNullable<Source["changes"]>;
+  /** Every item added since the start, in order: the feed's log (the bench never changes or deletes an item). */
+  private readonly added: ContextItem[] = [];
+  enableDelta(): void {
+    this.changes = async (_scope, cursor) => {
+      calls.delta++;
+      const from = cursor === undefined ? this.added.length : Number(cursor);
+      return { items: this.added.slice(from), removed: [], next: String(this.added.length) };
+    };
+  }
   constructor(
     readonly id: string,
     rows: ContextItem[],
@@ -71,12 +90,19 @@ class DaySource implements Source {
     this.rows = [...rows].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
   }
   /** Adds the items that arrived over `ms` (Poisson), newest first. */
-  grow(ms: number, at: number): void {
+  grow(ms: number, at: number): ContextItem[] {
     let k = 0;
     const lambda = (this.rate * ms) / DAY;
     // Knuth's draw: rates here are small per step.
     for (let p = Math.exp(-lambda), u = r(); u > p; u *= r()) k++;
-    for (let i = 0; i < k; i++) this.rows.unshift(this.fresh(`${this.id}:n${this.made++}`, at));
+    const out: ContextItem[] = [];
+    for (let i = 0; i < k; i++) {
+      const it = this.fresh(`${this.id}:n${this.made++}`, at);
+      this.rows.unshift(it);
+      this.added.push(it);
+      out.push(it);
+    }
+    return out;
   }
   async search(q: SearchQuery): Promise<ContextItem[]> {
     calls.search++;
@@ -139,6 +165,14 @@ for (let k = sources.length; k < N; k++) {
   sources.push(new DaySource(id, rows, rate, (nid, at) => noiseItem(nid, id, kind, at)));
 }
 
+if (mix.length === 2) {
+  sources.forEach((s, k) => {
+    const u = ((k * 7) % 10) / 10 + 0.05;
+    s.notifies = u < mix[0]!;
+    if (u < mix[0]! + mix[1]!) s.enableDelta();
+  });
+}
+
 const card = { calls: 0, items: 0 };
 const maker: CardMaker = {
   async make(items, _today, _signal, _retry, intent) {
@@ -174,7 +208,7 @@ async function settle(): Promise<void> {
   let last = -1;
   while (quiet < 3) {
     await Bun.sleep(0);
-    const n = calls.search + calls.list + calls.fetch + card.calls;
+    const n = calls.search + calls.list + calls.fetch + calls.delta + card.calls;
     quiet = n === last ? quiet + 1 : 0;
     last = n;
   }
@@ -186,6 +220,9 @@ type Tally = {
   search: number;
   /** Re-reads by ref (`verifyDelivery`). */
   fetch: number;
+  /** Change-feed reads (in the two list counts too) and change events pushed. */
+  delta: number;
+  events: number;
   cardCalls: number;
   cardItems: number;
   cardUsd: number;
@@ -199,6 +236,8 @@ const snap = () => ({
   demand: sync.stats.demandCalls,
   search: calls.search,
   fetch: calls.fetch,
+  delta: calls.delta,
+  events,
   cardCalls: card.calls,
   cardItems: card.items,
   deferred: cards.stats.deferred,
@@ -212,6 +251,8 @@ const since = (a: ReturnType<typeof snap>): Tally => {
     listDemand: b.demand - a.demand,
     search: b.search - a.search,
     fetch: b.fetch - a.fetch,
+    delta: b.delta - a.delta,
+    events: b.events - a.events,
     cardCalls: b.cardCalls - a.cardCalls,
     cardItems: b.cardItems - a.cardItems,
     cardUsd: Math.round((b.cardCalls - a.cardCalls) * 0.000181 * 1e4) / 1e4,
@@ -247,7 +288,13 @@ for (let d = 0; d < days; d++) {
   const end = T0 + (d + 1) * DAY + 8 * HOUR;
   while (clock < end) {
     clock += MIN;
-    for (const s of sources) s.grow(MIN, clock);
+    for (const s of sources) {
+      const grown = s.grow(MIN, clock);
+      if (grown.length === 0 || !s.notifies) continue;
+      events += grown.length;
+      if (pushMode === "payload") await partner.sourceItems(w.scope, s.id, grown);
+      else partner.sourceChanged(w.scope, s.id);
+    }
     const hour = (clock % DAY) / HOUR;
     const minute = Math.round((clock % HOUR) / MIN);
     if (hour >= 9 && hour < 17 && minute % 10 === 0) {
@@ -267,9 +314,12 @@ for (let d = 0; d < days; d++) {
   perDay.push(since(start));
 }
 
-const out = { sources: N, itemsPerSource, churn, mailPerDay, config, cold, perDay };
+// `syncCold` (D475): what the cold tier holds at the end (items, bytes of its packs, sources with one).
+const coldTier = sync.coldStats(w.scope);
+const out = { sources: N, itemsPerSource, churn, mailPerDay, mix, pushMode, config, cold, perDay, coldTier };
 const line = (t: Tally) =>
-  `list ${t.listBackground} bg + ${t.listDemand} demand, search ${t.search}, fetch ${t.fetch}, cards ${t.cardCalls} calls ` +
+  `list ${t.listBackground} bg + ${t.listDemand} demand (${t.delta} delta), search ${t.search}, fetch ${t.fetch}, ` +
+  `events ${t.events}, cards ${t.cardCalls} calls ` +
   `($${t.cardUsd}, ${t.cardItems} items, ${t.deferred} deferred), listed ${t.itemsListed}, held ${t.syncedHeld}, ` +
   `${t.ms} ms`;
 console.error(`${N} sources × ${itemsPerSource} items, churn ${churn}/day\ncold: ${line(cold)}`);

@@ -1156,7 +1156,11 @@ export class SyncManager {
           }
           return;
         }
-        const every = this.onLongSweep(s) ? Math.max(this.o.unusedSweepMs!, this.o.sweepMs) : this.o.sweepMs;
+        // `cold` (D475): a cold copy stands `coldTtlMs` with no listing showing it again, so the longer sweep of a
+        // source that has any comes inside that (a sweep due exactly at it let the copies lapse first).
+        const within = (s.cold?.size ?? 0) > 0 ? (this.o.coldTtlMs ?? Infinity) * 0.85 : Infinity;
+        const long = Math.min(this.o.unusedSweepMs ?? 0, within);
+        const every = this.onLongSweep(s) ? Math.max(long, this.o.sweepMs) : this.o.sweepMs;
         if (s.sweep !== null || now - s.sweptAt >= every) await this.run(s, () => this.sweep(u, s, source));
         else if (now - s.sweptAt >= this.o.sweepMs) s.skipped = true;
       }),

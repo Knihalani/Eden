@@ -345,6 +345,13 @@ export interface EngineConfig {
   syncCold: boolean;
   syncColdMaxItems: number;
   /**
+   * With `syncCold` and `verifyDelivery`: a copy a lookup brought back from the cold tier is re-read by its ref before
+   * it is delivered or cited (a source with no change feed whose connector can fetch by ref), as the live search it
+   * replaces would have read it at its source. Off: it is delivered as any other synced copy is (D126: a copy's age
+   * alone does not doubt it), with no wait on the agent's path.
+   */
+  syncColdVerify: boolean;
+  /**
    * A trial (D476, F1; docs/research/f1-local-copy.md), off. With `sync`: a source whose connector has a change feed
    * (`Source.changes`: a Gmail history, a Graph or Drive delta, a Calendar sync token) is polled by one read of what
    * changed since its cursor: new and changed items wherever they sit in its listing, and deletions. A complete delta
@@ -738,6 +745,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncUnusedSweepMs: 7 * 24 * 3_600_000,
   syncCold: false,
   syncColdMaxItems: 30_000,
+  syncColdVerify: true,
   syncDelta: false,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,

@@ -118,6 +118,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncDelta: SYNC,
   syncCold: ["sync", "syncLocalComplete"],
   syncColdMaxItems: ["sync", "syncLocalComplete", "syncCold"],
+  syncColdVerify: ["sync", "syncLocalComplete", "syncCold", "verifyDelivery"],
   syncMaxUsersPerTenant: SYNC,
   syncLocalAll: SYNC,
   cardItems: ["cards"],

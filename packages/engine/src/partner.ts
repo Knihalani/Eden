@@ -4759,7 +4759,8 @@ export class ContextPartner {
     if (this.refreshing.size > 0 && this.refreshing.has(`${scopeKey(s.scope)}|${item.id}`)) return true;
     if (this.unswept(s.scope, item)) return true;
     // `syncCold` (D475): a copy a lookup brought back from the cold tier, not read at its source since.
-    if (this.config.syncCold && this.sync?.thawedUnread(s.scope, item.sourceId, item.id)) return true;
+    if (this.config.syncCold && this.config.syncColdVerify && this.sync?.thawedUnread(s.scope, item.sourceId, item.id))
+      return true;
     const mark = this.deps.cache.readMark(s.scope, item.id);
     if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark) !== true) return false;
     // A re-read since that signal could not tell (a null that proves nothing): another says the same until it signals.

@@ -1,0 +1,4 @@
+base       background   244.6  on demand  218.0  (delta reads    0.0)  searches  444.4  re-reads   0.0  ALL   907.0  events    0.0  items listed    8041  card calls  108.9  cold 0 items / 0.00 MB; cold start 1000 calls
+basemix    background   246.6  on demand  218.6  (delta reads    0.0)  searches  462.4  re-reads  18.6  ALL   946.1  events  330.7  items listed    8092  card calls  116.6  cold 0 items / 0.00 MB; cold start 1000 calls
+cold       background   206.9  on demand  197.0  (delta reads    0.0)  searches  114.1  re-reads   2.3  ALL   520.3  events    0.0  items listed    6650  card calls  118.6  cold 22457 items / 8.61 MB; cold start 1000 calls
+local      background   190.0  on demand  192.1  (delta reads  128.3)  searches  108.0  re-reads   0.3  ALL   490.4  events  330.7  items listed    5266  card calls  128.6  cold 22207 items / 8.55 MB; cold start 1600 calls
