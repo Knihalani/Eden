@@ -543,7 +543,7 @@ export function fromAnthropic(messages: readonly unknown[]): { messages: Message
 /**
  * The Anthropic messages with the context `withEden` placed (D653). A packet placed before a user turn becomes a
  * text block of that Anthropic message, ahead of its other blocks and after any leading tool results (the API wants
- * a user message's `tool_result` blocks first); a message whose content is a string becomes two text blocks. The API has
+ * a user message's `tool_result` blocks first); a message whose content is a string becomes two blocks. The API has
  * no system role inside `messages`, and a text block keeps the request a prefix of the next as the system message
  * does for chat completions. Packets with no user turn after them (a request with none) go into the last message
  * when it is the user's; otherwise nothing is inserted (null): an assistant prefill is not followed by Eden's text.
