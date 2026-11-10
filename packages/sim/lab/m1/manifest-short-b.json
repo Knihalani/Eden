@@ -1,0 +1,41 @@
+{
+  "shards": [
+    {
+      "name": "s000-train-45",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.470232,
+      "capUsd": 0.7,
+      "seconds": 382.0
+    },
+    {
+      "name": "s001-train-46",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.484697,
+      "capUsd": 0.7,
+      "seconds": 260.6
+    },
+    {
+      "name": "s002-train-47",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.475394,
+      "capUsd": 0.7,
+      "seconds": 364.0
+    },
+    {
+      "name": "s003-train-48",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.49541,
+      "capUsd": 0.7,
+      "seconds": 236.3
+    }
+  ],
+  "spentUsd": 1.925733,
+  "capUsd": 2.8,
+  "failed": [],
+  "overCap": [],
+  "withinCap": true
+}

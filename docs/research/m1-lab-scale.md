@@ -106,3 +106,160 @@ path spans); connector calls a task. Per part: the paired difference `eden~minus
   below zero; latency and connector calls reported with intervals.
 - Today's two-seed estimates are compared side by side with the eight-seed ones (direction kept or not; interval
   now excluding zero or not).
+
+## In plain words
+
+**Spent: $7.66 Anthropic** of the $10 cap (runs $7.57, regrade $0.09; `manifest-*.json`, ledgers), **Modal
+$1.54** of credits for this session's apps (`modal billing report`, workspace figures, hourly buckets). Anthropic-direct
+lab figures (D97), Haiku 5.5 in every role. 53 Modal containers in all; the long horizon's 8 seeds took 5–8 minutes
+of wall time (one container a seed), the short runs 3–10.
+
+- **No part measurably hurts.** Taking out the nudge, plan alerts, fewer candidates or freshness never raised hidden
+  facts or lowered regraded concerns with an interval clear of zero, on either horizon or pooled. Nothing is flagged
+  as hurting.
+- **Eight seeds show the parts are much smaller than their two-seed estimates.** Pooled over both horizons and 8
+  seeds (n = 1,496 hidden pairs), removing each part moves hidden facts by **nudge −1.3 points (−3.3..+0.6), plans
+  +1.2 (−0.6..+3.0), fewer +0.1 (−1.8..+1.9)**; freshness (long only, n = 101) +3.0 (−2.0..+8.9). D317's train
+  estimate for the nudge was +5.8 Haiku-graded (+1.9..+9.9) and +9.2 Sonnet-graded; here its gain is at most about
+  3 points (Haiku-graded; the hidden answers were not regraded, see below).
+- **Two parts cost without a measured gain (the rule's second flag).** The **nudge** costs $0.012/1k over a user's
+  days (−0.015..−0.009 without it) and **0.18 s a task** one request a session (−0.27..−0.10, from the clean wall
+  rerun); one request a session it is not dearer (removing it costs +$0.005, +0.001..+0.009). **Freshness** costs
+  $0.004/1k over days (−0.008..−0.000), about a fortieth of a cent per user-day; its purpose (recaps that name
+  dropped times, D342) is not graded by this design.
+- **`fewer` is confirmed with eight seeds:** it saves **$0.011/1k pooled (+0.008..+0.015 without it)**, $0.015
+  short and $0.000 over days, with hidden facts level (+0.1, −1.8..+1.9).
+- **`plans` is not exercised here.** Plan alerts fire on items stored after a request; the runs used no `--late`
+  arrivals, so its null is no evidence either way. D301's evidence (`--late`, 7 of 16 against 0) stands untested.
+- **The default against the agent alone holds with eight seeds** (long, 8 seeds): hidden **+55.4 points
+  (+45.5..+64.4)**, **0.70 s faster** (−0.86..−0.55), **+$0.035/1k** first-party (+0.028..+0.044), regraded concerns
+  0; short, seeds 41–44: +55.6 (+51.7..+59.5), +$0.011/1k (+0.003..+0.019); short clean wall rerun (41–44): **1.17 s
+  faster** (−1.36..−0.97). Every per-call connector plan makes the default cheaper (Composio −$0.29/1k long, −$0.44
+  short; Zapier MCP −$26.8/1k long, −$38.8 short).
+- **1,000 sources: hidden facts held, but Eden is on the critical path and the connector bill explodes.** At 995
+  noise sources against 5 (same tasks, seeds 41–44): hidden 65.2% against 66.1% (−0.9, −4.4..+2.8, n = 543); Eden's
+  path **+555 ms** (+497..+614) a task and **~42 connector calls** a task against 0; first-party $/1k +$0.18
+  (+0.17..+0.20). The clean rerun: the agent **0.75 s slower** than at 5 sources (+0.50..+0.99), Eden's path +670 ms.
+  On per-call plans the default at 1,000 sources costs $16.7/1k (Composio) and $1,393/1k (Zapier MCP) steady, against
+  $0.42 and $16.2 at 5.
+- **Seeds 45–48 (cards made in-run) score lower than 41–44 (replayed)** in every arm with Eden: hidden 53.7% against
+  64.5% for `eden` short, Eden's path 44 ms against 11 (live card calls running beside the requests). The part
+  effects do not differ by group (all intervals overlap zero in both).
+
+## 1. Runs
+
+Pi, `--config default`, `--suite train`, `--tenant-prompt`, `direct` profile, time scale 1, `--push payload`, Haiku 5.5
+in every role; `--variant-config` from `PARTS` (`.local/m1/go.sh`). One seed a shard; the main runs put all six train
+suites in one shard (the fan-out was invoked with `--suites train`, one suite name), the 1,000-source run one suite
+a shard.
+
+| run                 | shards | arms                                                    | tasks a seed an arm          | $       | notes                                          |
+| ------------------- | ------ | ------------------------------------------------------- | ---------------------------- | ------- | ---------------------------------------------- |
+| smoke               | 1      | tools, eden                                             | 8 (`--limit 4`)              | 0.006   | image, Secret, merge                           |
+| long                | 8      | tools, eden, minus nudge/plans/fewer/freshness          | ~132 (`--days 8`)            | 1.907   | ~5% requests retried (429), 1 ungraded         |
+| short 41–44         | 4      | tools, eden, minus nudge/plans/fewer                    | 384 (hidden, control)        | 2.202   | 1,500–1,900 retried a shard; 238 lost          |
+| short 45–48         | 4      | eden, minus nudge/plans/fewer                           | 384                          | 1.926   | 384–896 retried; 47 ungraded                   |
+| 1,000 sources       | 24     | eden, `--noise-sources 995`                             | 32 a suite (hidden)          | 0.322   | shard caps hit: 208 of 768 not run             |
+| wall rerun          | 8      | tools, eden, minus nudge/plans/fewer, `--limit 6`       | 72                           | 0.930   | one shard at a time, 0 retried; 65 cut by caps |
+| wall 1,000 sources  | 4      | eden, `--noise-sources 995`, `--limit 6`                | 72                           | 0.182   | one at a time                                  |
+| regrade             |        | Haiku + Sonnet, concerns only (77 answers)              |                              | 0.090   | Sonnet kept 8 of 77                            |
+
+## 2. Part effects (`eden~minus-X − eden`; bootstrap 95%, 5,000 draws, tasks resampled within seed and kind)
+
+Hidden and concerns in points; $ per 1,000 tasks (agent billed + Eden per task + background cards); wall s. `*` the
+interval excludes zero. Short = seeds 41–48 pooled from the two main runs (n 1,395 hidden, 1,407 control); long = 8
+users (101 hidden, 101 control, 786 neutral); wall = the clean rerun (n 260 hidden, 251 control).
+
+| part      | hidden, short          | hidden, long          | hidden, pooled         | regraded concerns, short / long | $/1k short               | $/1k long                 | wall s (clean rerun)       |
+| --------- | ---------------------- | --------------------- | ---------------------- | ------------------------------- | ------------------------ | ------------------------- | -------------------------- |
+| nudge     | −1.5 (−3.5..+0.6)      | +1.0 (−5.0..+6.9)     | −1.3 (−3.3..+0.6)      | −0.2 (−0.5..0) / 0 (0..0)       | +0.005 (+0.001..+0.009)\* | −0.012 (−0.015..−0.009)\* | −0.18 (−0.27..−0.10)\*     |
+| plans     | +1.3 (−0.6..+3.2)      | 0.0 (−5.9..+5.9)      | +1.2 (−0.6..+3.0)      | −0.1 (−0.4..0) / +0.1 (0..+0.3) | −0.002 (−0.007..+0.002)  | +0.001 (−0.003..+0.005)   | +0.03 (−0.04..+0.11)       |
+| fewer     | −0.3 (−2.2..+1.7)      | +5.0 (−1.0..+10.9)    | +0.1 (−1.8..+1.9)      | −0.2 (−0.5..0) / 0 (0..0)       | +0.015 (+0.011..+0.020)\* | +0.000 (−0.004..+0.003)   | −0.03 (−0.11..+0.06)       |
+| freshness | —                      | +3.0 (−2.0..+8.9)     | —                      | — / +0.2 (0..+0.6)              | —                        | −0.004 (−0.008..−0.000)\* | —                          |
+
+By seed group (short): seeds 41–44 nudge −0.7 (−3.7..+2.2), plans +2.5 (0.0..+5.2), fewer +0.7 (−2.4..+3.8); seeds
+45–48 nudge −2.2 (−4.9..+0.4), plans +0.1 (−2.6..+2.8), fewer −1.3 (−3.9..+1.4) (`short-parts-41-44.txt`,
+`short-parts-45-48.txt`). Eden's path does not move with any part (≤1 ms).
+
+**The rule, applied.** Hurts on hidden facts: none. Hurts on concerns: none (no regraded interval is entirely below
+zero). Costs: nudge (long $), freshness (long $); slows: nudge (short wall). Helps on hidden facts: none with an
+interval clear of zero. So **nudge and freshness are flagged "a cost without a measured gain"**; nothing is flagged as
+hurting.
+
+## 3. Today's two-seed figures against eight seeds
+
+| part      | earlier estimate (seeds, suite)                                         | eight seeds, train (this run)                 | direction kept? | now excludes zero? |
+| --------- | ----------------------------------------------------------------------- | --------------------------------------------- | --------------- | ------------------ |
+| nudge     | D317: +5.8 Haiku (+1.9..+9.9), +9.2 Sonnet; A29 blind: +12.5 (+1.4..+23.6) | +1.3 (−0.6..+3.3) pooled, Haiku               | yes, smaller    | no                 |
+| fewer     | D404: hidden +5.8 (−0.6..+12.3); $ −0.008 short, −0.013 long             | hidden −0.1 (−1.9..+1.8); $ −0.015 short\*, 0.000 long | $ yes (short); long no | $ short yes |
+| plans     | D301: late facts 7/16 vs 0 (`--late`)                                    | not exercised (no late arrivals)              | —               | —                  |
+| freshness | D342: hidden −1.1 (−8.7..+6.5), $ −0.001 (−0.004..+0.002)                | hidden −3.0 (−8.9..+2.0), $ +0.004\*          | level           | $ yes (small)      |
+
+(Signs here are the part's effect, `eden − eden~minus-X`.)
+
+## 4. The default against the agent alone, and at 1,000 sources
+
+| horizon / run                    | hidden (points)        | regraded concerns | $/1k first-party       | wall mean s             | Eden path ms | conn a task |
+| -------------------------------- | ---------------------- | ----------------- | ---------------------- | ----------------------- | ------------ | ----------- |
+| long, 8 users                    | +55.4 (+45.5..+64.4)\* | 0.0               | +0.035 (+0.028..+0.044)\* | −0.70 (−0.86..−0.55)\* | 8            | −1.19\*     |
+| short, seeds 41–44 (main)        | +55.6 (+51.7..+59.5)\* | 0.0               | +0.011 (+0.003..+0.019)\* | (429-bound, not read)  | 11           | −2.12\*     |
+| short, clean wall rerun 41–44    | +66.7 (+58.3..+75.0)\* | +2.1 (graded only) | +0.029 (+0.011..+0.047)\* | −1.17 (−1.36..−0.97)\* | 14 | −2.19\*     |
+
+Connector plans (`cost-*.txt`, `pi-cost-report.ts`, list prices, assumed), eden − tools steady $/1k: long first-party
++0.023, Composio −0.289, Zapier MCP −26.8; short (41–44) +0.011, −0.441, −38.8.
+
+**1,000 sources** (`scale.txt`; eden at 995 against eden at 5, same tasks, seeds 41–44):
+
+| pair                         | n   | hidden (points)    | Eden path ms           | conn a task        | $/1k first-party        | wall mean s             |
+| ---------------------------- | --- | ------------------ | ---------------------- | ------------------ | ----------------------- | ----------------------- |
+| main runs (hidden)           | 543 | −0.9 (−4.4..+2.8)  | +555 (+497..+614)\*    | +41.6 (+40.1..+43.1)\* | +0.184 (+0.171..+0.197)\* | (base 429-bound)     |
+| clean rerun, hidden          | 144 | −5.6 (−13.9..+2.8) | +670 (+557..+781)\*    | +32.1\*            | +0.302 (+0.280..+0.324)\* | +0.75 (+0.50..+0.99)\* |
+| clean rerun, control (decoy) | 144 | −0.7 (−3.5..+2.1)  | +815 (+700..+935)\*    | +34.6\*            | +0.288\*                | +0.83 (+0.59..+1.07)\* |
+
+The rule: hidden facts **held** at 1,000 sources (no interval entirely below zero). Per call, the default at 995
+sources costs $16.7/1k on Composio and $1,393/1k on Zapier MCP (steady, `cost-scale.txt`) against $0.42 and $16.2 at
+5 sources (`cost-short-a.txt`).
+
+## 5. Concerns
+
+77 answers the Haiku grader called a concern were regraded (Haiku + Sonnet; Sonnet's verdict decides): Sonnet kept 8
+(4 long, 4 short 45–48), none of them in a pair that moves a part's interval off zero. The default against the agent
+alone: regraded concerns 0.0 on both horizons (Haiku-graded +0.7 long, +0.6 short: grader errors, as fix-w2b found).
+The wall rerun's concerns were not regraded (graded only; they are a wall measurement).
+
+**Not regraded:** the hidden answers. The nudge's earlier gain was largest Sonnet-graded (D317: +9.2 against +5.8
+Haiku-graded), so this run's Haiku-graded hidden pairs may understate it. A Sonnet regrade of the 1,395 short hidden
+pairs of `eden` and `eden~minus-nudge` would cost about $4 (estimate) and did not fit the cap.
+
+## 6. Recommendations (nothing changed here)
+
+1. **Nudge (D317): a trial to re-measure, not a removal.** Eight seeds put its Haiku-graded hidden gain at +1.3
+   (−0.6..+3.3), against its cost ($0.012/1k over days) and 0.18 s a request. Before changing the default, regrade
+   the nudge pairs' hidden answers with Sonnet (the grade that showed its gain) on these eight seeds; if the gain stays
+   under about 3 points, take it out under D112 (no measured gain at a paid cost).
+2. **Freshness (D342): keep; measure its purpose.** Its cost is about $0.004/1k over days; its job (recaps naming
+   dropped times) needs the recap grading A17 used, at eight seeds.
+3. **Plans (D301): measure at eight seeds with `--day 4 --late`**, the only design that exercises it.
+4. **Fewer (D404): confirmed**; no action.
+5. **1,000 sources:** the remaining work is the agent's asks searching cut copies live (B1's note): +0.75 s a task and
+   ~32–42 connector calls, which is prohibitive on any per-call connector plan. That is the next scale lever.
+6. **Lab: run Anthropic shards one or two at a time,** or give each shard's streams a concurrency limit: four runs at
+   once on one key spent its concurrent-request limit and made the short runs' wall time useless (D440).
+
+## Reproduce
+
+```bash
+python3 -m venv .venv-modal && .venv-modal/bin/pip install 'modal[api-proxy-support]==1.6.3'
+export SSL_CERT_FILE=/root/.ccr/ca-bundle.crt     # behind the container proxy
+# go.sh RUN SEEDS CAP CONDITIONS EXTRA...: lab_fanout pi-ab, train, payload, Haiku everywhere, --variant-config from PARTS
+.local/m1/go.sh m1-long 41,42,43,44,45,46,47,48 3.2 tools,eden,eden~minus-nudge,eden~minus-plans,eden~minus-fewer,eden~minus-freshness --days 8
+.local/m1/go.sh m1-short-a 41,42,43,44 3.2 tools,eden,eden~minus-nudge,eden~minus-plans,eden~minus-fewer --variants hidden,control
+python3 -I packages/sim/lab/m1/parts.py --arms tools,eden,eden~minus-nudge .local/modal/m1-long
+python3 -I packages/sim/lab/m1/scale.py --arm eden --kind hidden .local/modal/m1-scale .local/modal/m1-short-a
+```
+
+`go.sh` is the command in §1 (kept in `.local/m1/`, not committed); its body is the README's pi-ab example with
+`--variant-config '{"minus-nudge":{"askNudge":false},"minus-plans":{"planConflict":false},"minus-fewer":{"pushCandidatesSettled":0},"minus-freshness":{"verifyDelivery":false,"readerVerifyAfter":false,"revisionNotice":false,"revisionDiff":false}}'`,
+`--cards packages/sim/lab/cards/cards-v2.jsonl,packages/sim/lab/cards/cards-train.jsonl,packages/sim/lab/cards/cards-train-4344.jsonl`,
+`--tenant-prompt --push payload --source-profile packages/sim/lab/before-after/market-profiles/direct.json` and
+Haiku 5.5 in every role. Summaries: `packages/sim/lab/m1/`.
