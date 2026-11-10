@@ -3,9 +3,9 @@
 Status: built and measured 2026-11-10 on branch `claude/f1-local-copy` (from `claude/lucid-hypatia-v9wqk5` at
 0fbbeb56). Decisions D475–D479. **Two trial switches, both off: nothing in the default changed** (D479). Paid calls:
 Anthropic API only, the Modal Secret `HAIKU_API_KEY`, `claude-haiku-5-5` in every role (agent, grader, cards, intent),
-lab provider (D97), each shard on its own ledger: **Anthropic-direct lab figures. Spent: $0.813** (three Modal runs,
-six shards; `manifest-*.json`). Modal credits: not read from the billing report; six 4-CPU, 24 GiB shards of 5–15
-minutes each, about $0.5 at the README's rate (**an estimate**). Every other figure is a $0 run on a 4 vCPU, 15 GiB
+lab provider (D97), each shard on its own ledger: **Anthropic-direct lab figures. Spent: $1.348** (five Modal runs,
+ten shards; `manifest-*.json`). Modal credits: not read from the billing report; ten 4-CPU, 24 GiB shards of 5–15
+minutes each, about $0.8 at the README's rate (**an estimate**). Every other figure is a $0 run on a 4 vCPU, 15 GiB
 box, Bun 1.4.4, `BUN_OPTIONS` and `OPENROUTER_API_KEY` unset. Summaries of every run are in `packages/sim/lab/f1/`.
 
 ## In plain words
@@ -27,42 +27,51 @@ box, Bun 1.4.4, `BUN_OPTIONS` and `OPENROUTER_API_KEY` unset. Summaries of every
      brings new items, changed items wherever they sit in the listing, and deletions. With push as well, a change
      notice costs one such read instead of a re-read of every item in doubt. Connectors with neither are polled,
      swept and re-read exactly as before (D126, D211, D356 all stand).
-  3. **The lab now has connector kinds** (D478): each simulated connector is push + feed, feed only, or neither,
-     30% / 30% / 40% (**an assumption taken from the brief, not a census**), and the cost report prices event
-     triggers.
-- **What it did, live** (Pi, train, seeds 41–44, 432 tasks an arm, 995 noise connectors, the 30/30/40 mix in every
-  arm, payload notices, market latency, `--tenant-prompt`; paired by task, bootstrap 95%):
-  - **Connector calls: 35.4 → 6.7 a task** on the 1:1:8 mix (−28.7, −30.4..−27.1).
-  - **Hidden facts raised: 83 → 94 of 144** (+0.076, +0.007..+0.146). False concerns not up (control 2 → 0, neutral
-    1 → 0, Haiku-graded, not regraded).
-  - **Cost on the mix, steady, per 1,000 tasks:** first-party $0.577 → $0.489; Composio $12.16 → $2.55; Zapier MCP
-    **$997 → $178**. The first read of a new user's sources costs more calls (1,004 → 1,625 a user), paid back
-    after about 20 tasks.
-  - **But tasks got slower: wall +2.1 s a task** (+1.7..+2.5) and Eden's time on the agent's path +1.08 s
-    (+0.82..+1.37). Without the re-read of copies brought back from the cold tier (`syncColdVerify` off, the `fast`
-    arm) it is still +1.56 s wall and +0.36 s on the path. The median path time fell (494 → 473 and 143 ms); the
-    tail grew (p90 1.4 → 4.6 and 3.8 s). Section 6 says what is known about why: the cold tier's own CPU.
+  3. **The lab now has connector kinds** (D478): each simulated connector is push + feed, feed only, or neither. The
+     main case is **5% / 5% / 90%** (the owner's expectation, passed on by the coordinator during the session: most
+     connectors a user adds offer only search and list, perhaps get-by-id); 30% / 30% / 40% is the sensitivity
+     check. **Both are assumptions, not a census.** The cost report prices event triggers.
+- **So the gain has to come from the cold tier, and it does.** At 5/5/90 the change feed touches a tenth of the
+  connectors; the calls fall as far as at 30/30/40.
+- **What it did, live** (Pi, train, seeds 41–44, 432 tasks an arm, 995 noise connectors, payload notices, market
+  latency, `--tenant-prompt`; paired by task, bootstrap 95%), **at 5/5/90**:
+  - **Connector calls: 35.9 → 8.6 a task** on the 1:1:8 mix (−27.3, −28.9..−25.7).
+  - **Hidden facts raised: 88 → 91 of 144** (+0.021, −0.049..+0.090): not worse. False concerns the same (control
+    1 → 1, neutral 0 → 0, Haiku-graded, not regraded).
+  - **Cost on the mix, steady, per 1,000 tasks:** first-party $0.561 → $0.529; Composio $12.27 → $3.17; Zapier MCP
+    **$1,007 → $228**. The first read of a new user's sources costs 1,004 → 1,119 calls, paid back within four
+    tasks.
+  - **The safety net's price.** Copies brought back from the cold tier are re-read by their ref before they are
+    delivered or cited (D126's path, strict for an ask, D211): **1.43 re-reads a task** (gmail 1.02), which is most
+    of what is left of Eden's calls beside the polls, and it is a wait on the agent's path.
+  - **But tasks got slower: wall +1.2 s a task** (+0.85..+1.58) and Eden's time on the agent's path +0.9 s
+    (+0.60..+1.20; the push 271 → 1,012 ms). Section 6 says what is known about why: those re-reads, and the cold
+    tier's own CPU.
+- **The same at 30/30/40:** calls 35.4 → 6.7 a task, hidden 83 → 94 of 144 (+0.076, +0.007..+0.146), Zapier MCP
+  $997 → $178, wall +2.1 s (+1.6 s without the re-read of copies brought back, `syncColdVerify` off).
 - **Stale and deleted deliveries** (`quality-cli`, 16 users × 20 sessions, 213 updates, 128 deletions, signal-only
-  notices): with a change feed, **deleted items delivered or cited 5/17 → 0/0** for feed-only connectors and
-  re-reads before delivery **1,492 → 0** for push + feed connectors, stale deliveries not up, with 0%, 20% and 30% of
-  notices lost. For connectors with neither, the cold tier alone is not worse than live-searching the cut copy
-  (deleted 3/14 → 2/12, stale 15/143 → 12/132) only because copies brought back are re-read before delivery;
-  without that re-read it reads 4/17.
-- **A user-day** (one user, 1,000 sources, items arriving all day, days 2–8): **907 → 373 connector calls a day**
-  (searches 444 → 0). The cold tier held 23,000 items in **8.9 MB** and Eden's own CPU for the day rose from 2.2 s
-  to 6.1 s.
+  notices). For connectors with **neither push nor a feed**, where nothing tells Eden an item changed: the cold
+  tier is not worse than live-searching the cut copy (**deleted delivered/cited 3/14 → 2/12, stale 15/143 →
+  12/132**, the same at 5/5/90 and with 20% of notices lost), because copies brought back are re-read before
+  delivery: 1,320–1,400 re-reads over 2,428 turns (0.55 a turn) against 21–76, with all of Eden's calls a lookup
+  still down from 3.0 to 1.2. Without that re-read it reads 4/17. With a change feed, deleted items delivered or
+  cited fall 5/17 → 0/0 for feed-only connectors and re-reads 1,492 → 0 for push + feed connectors, stale not up,
+  with 0%, 20% and 30% of notices lost.
+- **A user-day** (one user, 1,000 sources, items arriving all day, days 2–8): **919 → 384 connector calls a day**
+  at 5/5/90 (907 → 372 at 30/30/40; searches 450 → 0). The cold tier held 23,000 items in **10 MB** and Eden's own
+  CPU for the day rose from about 2 s to 6.5–7 s.
 - **Decision (D479): not promoted.** Calls fall, hidden facts are not worse, stale and deleted deliveries are not
   worse: the brief's three conditions hold. The trials stay off because tasks are measurably slower, the cold tier
-  costs about three times the memory of a live user's index and 2.7 times the CPU of a user-day, and no shipped
-  connector has a change feed yet (`McpSource` has no delta tool). Section 8 lists what would change that.
+  costs about four times the memory of a live user's index and about three times the CPU of a user-day, and no
+  shipped connector has a change feed yet (`McpSource` has no delta tool). Section 8 lists what would change that.
 
 ## 1. Where the calls were
 
 A21 and C4 measured ~40 calls a task at 1,000 sources: ~26 live searches of noise connectors' cut copies, ~6
-on-demand listings of noise copies, ~6.5 searches of the world's own sources. This run's baseline arm (the default,
-with the 30/30/40 mix) made 38.6 on the mix (Eden 32.4 in the task's window, 3.2 in the background): gmail search
-2.83 a task, crm 0.85, drive 0.71, slack 0.55, calendar 0.53, the rest spread over hundreds of noise connectors at
-~0.08 each (`pi-pair.txt`).
+on-demand listings of noise copies, ~6.5 searches of the world's own sources. This session's default arm at 5/5/90
+made 35.9 a task on the mix in the task's window, and 39.0 with its background while the user worked (the cost
+report's figure): gmail search 2.78 a task, crm 0.90, drive 0.71, slack 0.54, calendar 0.51, the rest spread over
+hundreds of noise connectors at ~0.07 each (`pi-pair-mix90.txt`).
 
 The cut copies exist because the sync keeps a user's newest 3,000 items across sources (`syncMaxItems`). With 995
 noise connectors of 20 items each, the backfill lists nearly all 20,000 items once and then drops 17,000 of them; a
@@ -140,7 +149,10 @@ on-demand polls a day measured below. What the trial adds is that the incrementa
 | 41 | 77 / 69, 47.8 calls | 76 / 69, 11.3 | 77 / 69, 42.9 | 76 / 69, 10.8 |
 | 42 | 77 / 64, 48.6 | 76 / 64, 11.8 | 77 / 64, 43.0 | 76 / 64, 9.6 |
 
-The ask's own time (one process, time 0) rose from 12–13 to 16–19 ms at the median and 25 to 43–50 ms at p90. The
+At 5/5/90 (`funnel-995-mix90.txt`): seed 41 77 / 69 at 46.9 calls → 76 / 69 at 11.3; seed 42 77 / 64 at 47.9 →
+76 / 64 at 11.7.
+
+The ask's own time (one process, time 0) rose from 12–13 to 17–20 ms at the median and from 21–27 to 41–58 ms at p90. The
 first form (no re-warming of used sources, cold items ranked by how many words they held) read 75 / 65 on seed 41.
 
 **Five sources:** `bun run funnel --jobs 4` reads 314/273 with both trials off and with both on, 768 rows identical.
@@ -165,8 +177,10 @@ items delivered; deleted items delivered / cited; re-reads; background calls; co
 | 30/30/40, 20% lost | default | 18/121 | 2/11 | 618 | 1,094 | 0.715 |
 | | `syncDelta` | 17/127 | 0/3 | 9 | 415 | 0.626 |
 
-(The 30% row is from the run before the last code change to `syncDelta`; the others were rerun after it and did
-not move.) Precision 0.427–0.439 and recall 0.496–0.505 in every row.
+Precision 0.427–0.439 and recall 0.496–0.505 in every row. At **5/5/90** (`freshness-mix90.txt`) the feed has little
+to act on, as expected: default 21/124 stale, 4/17 deleted, 198 re-reads, 1,102 background calls; `syncDelta` 19/123,
+4/17, 23 and 927 (20% lost: 20/123 and 19/123, the rest the same). Every row was rerun after the review's fixes
+(section 9) and none moved.
 
 The cold tier needs a cut copy, which a five-source world has only under a smaller cap, so these rows set
 `syncMaxItems` 300 (`freshness-cold.txt`):
@@ -176,11 +190,16 @@ The cold tier needs a cut copy, which a five-source world has only under a small
 | neither | cap 300, default | 15/143 | 3/14 | 21 | 3.042 | 0.529 |
 | | `syncCold`, no re-read (`syncColdVerify` off) | 12/130 | 4/17 | 29 | 1.097 | 0.496 |
 | | `syncCold` | 12/132 | 2/12 | 1,320 | 1.236 | 0.492 |
+| **5/5/90** | cap 300, default | 15/143 | 3/14 | 76 | 3.008 | 0.528 |
+| | `syncCold` | 12/132 | 2/12 | 1,398 | 1.221 | 0.492 |
+| | `syncCold` + `syncDelta` | 12/132 | 2/12 | 1,072 | 1.191 | 0.492 |
 | 30/30/40 | cap 300, default | 14/143 | 1/10 | 203 | 2.931 | 0.526 |
 | | `syncCold` | 11/132 | 1/10 | 1,578 | 1.194 | 0.492 |
-| | `syncCold` + `syncDelta` | 10/132 | 0/3 | 462 | 1.096 | 0.490 |
+| | `syncCold` + `syncDelta` | 10/132 | 0/3 | 463 | 1.096 | 0.490 |
 
-With 20% of notices lost the rows read the same within one item. Two things to read here. The deleted counts differ
+With 20% of notices lost the rows read the same within one item. The re-reads are the safety net at work: 0.54–0.58
+a turn with the cold tier, against 0.01–0.08 without it, each one a get-by-id call that replaces a live search (calls
+a lookup, re-reads included, still fall from 3.0 to 1.2). Two more things to read here. The deleted counts differ
 by one to three items of 128 deletions: small numbers, read with the mechanism (a live search cannot return a
 deleted item; a held copy can until two sweeps miss it, or a re-read finds it gone). And **recall is 0.03 lower
 with the cold tier than with live searches of the cut copies**, the same as the uncapped default's (0.496): in this
@@ -193,19 +212,26 @@ notice per new item of a pushing source):
 | Arm | Background | On demand | of which delta reads | Searches | Re-reads | All calls a day | Items listed | Eden CPU a day |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | default | 244.6 | 218.0 | 0 | 444.4 | 0 | **907.0** | 8,041 | 2.2 s |
-| default, mix | 246.6 | 218.6 | 0 | 462.4 | 18.6 | 946.1 | 8,092 | 2.2 s |
-| `syncDelta`, mix | 235.9 | 209.9 | 120.4 | 471.7 | 0 | 917.4 | 6,628 | 2.0 s |
-| `syncCold` | 201.7 | 190.3 | 0 | 0 | 0 | **392.0** | 6,460 | 6.0 s |
-| `syncCold` + `syncDelta`, mix | 184.9 | 188.3 | 124.0 | 0 | 0 | **373.1** | 5,054 | 6.1 s |
+| default, 5/5/90 | 244.0 | 224.3 | 0 | 450.4 | 0 | **918.7** | 8,093 | 1.9 s |
+| `syncCold` + `syncDelta`, 5/5/90 | 190.9 | 193.0 | 22.7 | 0 | 0 | **383.9** | 5,988 | 6.6 s |
+| default, 30/30/40 | 246.6 | 218.6 | 0 | 462.4 | 18.6 | 946.1 | 8,092 | 2.2 s |
+| `syncDelta`, 30/30/40 | 235.9 | 209.9 | 120.4 | 471.7 | 0 | 917.4 | 6,628 | 2.0 s |
+| `syncCold` | 199.4 | 183.6 | 0 | 0 | 0 | **383.0** | 6,274 | 6.8 s |
+| `syncCold` + `syncDelta`, 30/30/40 | 183.3 | 189.1 | 125.0 | 0 | 0 | **372.4** | 5,048 | 7.0 s |
 
-Cold start: 1,000 listing calls (1,600 with feeds: a cursor each for the 600 that have one), 3.0 s of CPU against
-5.5–5.7 s with the cold tier. The cold tier ended at 23,200–23,300 items in 8.9 MB (about 380 B an item: blobs, id
-sets, filters, signatures). A request or ask brought back 47 cold items and opened 30 blobs on average (a three-day
-run, 192 requests and asks; `coldTier` in the bench's JSON). The delta feed alone saves little in calls here (a 20-item source's sweep is one
+What is left with the cold tier is the polls: ~190 on demand (a routed source whose learned change rate says it has
+probably changed) and ~190 in the background (the weekly sweeps, the used sources' daily ones). The CPU column is the
+bench's wall time on a shared box (6.0–7.0 s across runs of the cold arms).
+
+Cold start: 1,000 listing calls (1,100 at 5/5/90 and 1,600 at 30/30/40: a cursor for each source with a feed), 2.9–3.0
+s of CPU against 5.9–6.4 s with the cold tier. The cold tier ended at 23,100–23,300 items in 10.0 MB (about 430 B an
+item: blobs, id sets, filters, a signature per id). Over the eight days a request or ask brought back about 57 cold
+items and opened about 34 blobs (29,446 and 17,352 over 512 requests and asks; `coldTier` in the bench's JSON). The delta feed alone saves little in calls here (a 20-item source's sweep is one
 page either way); it saves items listed and, with push, the re-reads.
 
 With 300 items a source the cold tier's cost shows (`base300`, `local300`; `syncColdMaxItems` raised to 400,000 so
-that every copy is whole): 964.6 → 759.0 calls a day, but 302,000 cold items in **104.7 MB**, a cold start of 3,592
+that every copy is whole; run before the review's fixes): 964.6 → 759.0 calls a day, but 302,000 cold items in
+**104.7 MB**, a cold start of 3,592
 calls and 55 s of CPU against 13 s, and 12.6 s of CPU a day against 5.0 s. At the default 30,000 most of those
 sources stay cut and are searched live as before. A complete copy of large sources does not fit in memory.
 
@@ -228,13 +254,43 @@ between them: that is the integrator's wiring (`sourceItems` for a trigger's pay
 ## 6. Live: Pi, train, seeds 41–44
 
 `lab_fanout.py --kind pi-ab` (`go.sh`): train1–6, `--limit 6`, hidden/control/neutral, `--noise-sources 995`,
-`--connector-mix 0.3,0.3`, `--push payload`, direct profile, time scale 1, `--tenant-prompt`, Haiku 5.5 in every
-role, cards and intent replayed, two shards at a time. Arms: `eden` (the default), `eden~local` (`syncCold` and
-`syncDelta`), `eden~fast` (the same with `syncColdVerify` off). Three runs: seeds 41–42 with `eden`, `eden~local`
-(commit aed88abe); seeds 43–44 with all three and seeds 41–42 with `eden~fast` alone (ce1a6680, which adds only the
-`syncColdVerify` switch and a multi-day sweep rule; the final tree adds one more multi-day rule, the half-cap
-overflow of section 2, which a one-day run does not reach). 432 tasks an arm, paired by task (`pi-pair.txt`,
-`pi-cost.txt`).
+`--connector-mix` (the same in every arm of a run), `--push payload`, direct profile, time scale 1,
+`--tenant-prompt`, Haiku 5.5 in every role, cards and intent replayed, two shards at a time. Arms: `eden` (the
+default), `eden~local` (`syncCold` and `syncDelta`), `eden~fast` (the same with `syncColdVerify` off). 432 tasks an
+arm in each comparison, paired by task.
+
+### 6a. The main case: 5% push + feed, 5% feed only, 90% neither
+
+Seeds 41–42 and 43–44, `eden` and `eden~local`, two arms a process (commit 7daf0a60, the tree before the review's
+fixes of section 9, which moved no $0 figure; `pi-pair-mix90.txt`, `pi-cost-mix90.txt`).
+
+| Arm | Hidden raised | Concerns control / neutral | Eden calls a task (mix) | Path mean / p50 / p90 ms | Wall mean / p50 s | Mix $/1k first-party | Composio | Zapier MCP |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| default | 88/144 | 1 / 0 | 35.89 | 1,193 / 572 / 2,780 | 4.03 / 3.59 | 0.561 | 12.27 | 1,007.38 |
+| `syncCold` + `syncDelta` | 91/144 | 1 / 0 | 8.64 | 2,088 / 1,383 / 5,537 | 5.25 / 4.34 | 0.529 | 3.17 | 227.82 |
+
+Paired, trial − default: hidden **+0.021 (−0.049..+0.090)**; control 0.000 (−0.021..+0.021); neutral 0; connector
+calls on the mix **−27.3 (−28.9..−25.7)**; agent + Eden $/1k on the mix −0.006 (−0.022..+0.009); Eden's path
+**+895 ms (+598..+1,200)**, of which the push 271 → 1,012 ms and the ask 922 → 1,075 ms; wall **+1,213 ms
+(+849..+1,579)**. Concerns Haiku-graded, not regraded (equal in both arms).
+
+Calls that remain (trial arm, a task, in the task's window): **re-reads 1.43** (gmail fetch 1.02, crm 0.15, drive
+0.14, slack 0.13: the copies brought back from the cold tier, read by ref before delivery), gmail list 0.96,
+calendar search 0.59 (the calendar is not in the cold tier), calendar list 0.41, slack list 0.34, crm list 0.17,
+drive list 0.11, the rest polls of noise connectors at ~0.02 each. The default arm's were searches: gmail 2.78, crm
+0.90, drive 0.71, slack 0.54, calendar 0.51 and hundreds of noise connectors at ~0.07 each. The pair script counts a
+task's window (35.9 → 8.6); the cost report adds Eden's background while the user worked (39.0 → 8.8), and its
+plan prices use that.
+
+The first read of a new user: 1,004 → 1,119 calls (115 more: the cursors of the sources with a feed, and the few
+listings longer than a page read to their end). At 30.2 fewer calls a task that is paid back within four tasks. The
+lab gives each user six tasks, so its all-in columns are dominated by the first read in both arms.
+
+### 6b. Sensitivity: 30% / 30% / 40%
+
+Three runs: seeds 41–42 with `eden`, `eden~local` (commit aed88abe); seeds 43–44 with all three arms and seeds 41–42
+with `eden~fast` alone (ce1a6680, which adds only the `syncColdVerify` switch and a multi-day sweep rule)
+(`pi-pair.txt`, `pi-cost.txt`).
 
 | Arm | Hidden raised | Concerns control / neutral | Eden calls a task (mix) | Path mean / p50 / p90 ms | Wall mean / p50 s | Mix $/1k first-party | Composio | Zapier MCP |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -245,41 +301,42 @@ overflow of section 2, which a one-day run does not reach). 432 tasks an arm, pa
 Paired, trial − default: hidden **+0.076 (+0.007..+0.146)**; control −0.014 (−0.035..0); neutral −0.007 (−0.021..0);
 connector calls on the mix **−28.7 (−30.4..−27.1)**; agent + Eden $/1k on the mix −0.027 (−0.042..−0.012); Eden's
 path **+1,080 ms (+817..+1,368)**; wall **+2,098 ms (+1,703..+2,512)**. No re-read − default: hidden +0.083
-(+0.014..+0.153); calls −29.6; path +358 ms (+191..+533); wall +1,563 ms (+1,242..+1,910). The concerns are
-Haiku-graded and were not regraded (the trial has fewer).
+(+0.014..+0.153); calls −29.6; path +358 ms (+191..+533); wall +1,563 ms (+1,242..+1,910). Re-reads 0.65 a task
+(gmail 0.48), delta reads 0.65. First read 1,004 → 1,625 calls, paid back after about 20 tasks (31.7 fewer a task
+with the background counted).
 
-Calls that remain (trial arm, a task): calendar search 0.57 (the calendar is not in the cold tier), gmail fetch 0.48,
-drive and slack fetch 0.16 (the re-reads of copies brought back), gmail list 0.48, calendar list 0.30, delta reads
-0.65 over the world's sources, the rest polls of noise connectors at ~0.02 each.
+The hidden-fact gain reads larger here than at 5/5/90 (+0.076 against +0.021); the intervals overlap, the default
+arms differ by five facts between the two sets of runs (83 and 88 of 144), and nothing in the design ties the gain
+to push, so it is read as "not worse" in both, not as an effect of the mix.
 
-The first read of a new user: 1,004 → 1,625 calls (the cursors, and the listings read to their end). The lab gives
-each user only six tasks, so its all-in columns are dominated by it; at 31.7 fewer calls a task it is paid back
-after about 20 tasks.
+### 6c. Why the tasks are slower
 
-**Why the tasks are slower.** By process: seeds 41–42 (two arms a process) path +539 ms, wall +774 ms; the no-re-read
-arm alone in its own process path +100 ms (−31..+256), wall +369 ms (0..+734); seeds 43–44 (three arms a process)
-path +1,621 and +617 ms, wall +3.4 and +2.8 s, with the model's time to first token at 2.3–2.6 s against 0.8 s for
-the default arm in the same process. What is known:
-
-- The re-read of copies brought back (`syncColdVerify`) waits on a connector on the agent's path: observe 144 → 688
-  ms a task. That part is the price of not delivering a copy older than a live search would have returned.
-- The rest is Eden's own CPU, which a lab process shares between its agent streams: the day bench reads 2.7 times
-  the CPU a user-day and 1.8 times at cold start, and a lookup brings 47 items back into the index and opens 30
-  blobs. In the one-process funnel the ask's median rose only 12 → 14–19 ms, so the cost is in the churn between the
-  tiers and the cold start, not in one lookup's match. It was not profiled further, and how much of the wall time
-  is the lab's packing (72 new users a shard, each with a 1,000-source cold start, beside running tasks) was not
-  isolated.
+- **The re-reads wait on a connector on the agent's path.** At 5/5/90 the push took 271 → 1,012 ms a task and the
+  task's re-reads were 1.43; at 30/30/40, 144 → 688 ms with 0.65. That is the price of not delivering a copy older
+  than the live search it replaces would have returned; the default does not wait there because its live search of
+  a cut copy runs behind the first packet (B1). Turning the re-read off took the path's increase from +1,080 to
+  +358 ms at 30/30/40, at the cost section 4 shows (deleted 4/17 against 3/14).
+- **The rest is Eden's own CPU**, which a lab process shares between its agent streams. By process at 30/30/40:
+  two arms a process path +539 ms, wall +774 ms; the no-re-read arm alone in its process path +100 ms (−31..+256),
+  wall +369 ms (0..+734); three arms a process path +1,621 and +617 ms, wall +3.4 and +2.8 s, with the model's time
+  to first token at 2.3–2.6 s against 0.8 s for the default arm in the same process. The day bench reads about
+  three times the CPU a user-day and twice at cold start, and a lookup brings ~57 items back into the index and
+  opens ~34 blobs. In the one-process funnel the ask's median rose only from 12–13 to 17–20 ms, so the cost is in
+  the churn between the tiers and the cold start, not in one lookup's match. It was not profiled further, and how
+  much of the wall time is the lab's packing (72 new users a shard, each with a 1,000-source cold start, beside
+  running tasks) was not isolated.
 
 ## 7. Decision (D479)
 
 The brief's rule: promote only if hidden facts are not worse (paired), stale and deleted deliveries are not worse,
-and calls a task fall. All three hold. **Not promoted**, because the same run shows costs the rule did not name and
-D112 does ("better or neutral at no extra cost"):
+and calls a task fall. All three hold at 5/5/90 and at 30/30/40. **Not promoted**, because the same runs show costs
+the rule did not name and D112 does ("better or neutral at no extra cost"):
 
-- tasks slower by 1.6–2.1 s of wall on the mix in the lab, partly on the agent's path;
-- about 8.9 MB of cold items for a 1,000-source user of small sources (a live user at the 3,000-item cap is about
-  2.7 MB of heap in `users.bench.ts`, C3's table), and far more for large ones;
-- 2.7 times Eden's CPU a user-day at 1,000 sources;
+- tasks slower by 1.2 s of wall on the mix at 5/5/90 (2.1 s at 30/30/40), about 0.9 s of it on the agent's path;
+- about 10 MB of cold items for a 1,000-source user of small sources (a live user at the 3,000-item cap is about
+  2.7 MB of heap in `users.bench.ts`, C3's table), not bounded per process (30,000 items a user at most, about
+  13 MB), and far more for large sources;
+- about three times Eden's CPU a user-day at 1,000 sources;
 - `syncDelta` moves nothing for a shipped connector: `McpSource` has no delta tool.
 
 `syncCold` (with `syncColdMaxItems`, `syncColdVerify`) and `syncDelta` stay as trial switches, off, in the trials
@@ -288,26 +345,57 @@ table to 2026-12-08. Nothing moves for the default: `bun run check` green, the e
 
 ## 8. What is left
 
+- **The re-read's wait.** Deliver the first packet without the copies brought back and send them once their
+  re-read lands (as the default's live search of a cut copy runs behind the push), instead of holding the whole
+  packet for them; and give the delta read and its fallback fetch one deadline, not one each (the review's M3).
 - **The cold tier's CPU.** Bring back fewer items (the best few across the lookup, not 8 a source), keep a matched
   item cold until it is delivered or cited rather than indexing every match, and stop rewriting a source's open
   chunk on every trim. Then rerun this note's live pair with one arm a process.
 - **Memory.** The packs are the obvious thing to write to disk under D425's opt-in (encrypted, per user), with the
   filters and id sets in memory; that is what the brief described, and it is what a complete copy of large sources
-  needs (105 MB in memory at 300 items a source). Not built here.
+  needs (105 MB in memory at 300 items a source). Not built here. In memory they also outlive the freeze of an idle
+  user's cache (D325) until the sync drops the user: bound or drop them at the freeze before any promotion.
+- **Connectors with no fetch by ref and no feed** (every shipped preset today): they stay out of the cold tier
+  (their cut copies are searched live as before, the review's M2), so the trial saves nothing for them until a get
+  tool is wired, as D356.
 - **A delta tool for `McpSource`** (`deltaTool`, read-only checked like `listTool`), with the mapping from a
-  connector's reply to `ChangePage`, and the presets that have one (Gmail history, Drive changes, Calendar sync
-  tokens). Until then `syncDelta` is exercised only by the sim and by an embedder's own `Source`.
-- **Calendars.** A source that lists by time is not in the cold tier and its cut copy is still searched live (0.57
+  connector's reply to `ChangePage`, a page limit, and background pages taking their ingest turn (D328; `pollDelta`
+  does not go through `list`'s turn or span today). Until then `syncDelta` is exercised only by the sim and by an
+  embedder's own `Source`.
+- **Calendars.** A source that lists by time is not in the cold tier and its cut copy is still searched live (0.59
   calls a task here).
 - **Recall against a connector's own search** (−0.03 in quality-cli under a 300-item cap): the local index answers
   a mail or chat search by every word (`syncLocalAll`); what the connector's ranking finds beyond that was not
   studied.
-- **Mentions.** Items a background read puts straight into the cold tier get no entity mentions recorded, so
-  routing learns nothing from them until they are brought back.
-- **The first read.** 60% more calls for a new user; it could be spread over the user's first days for sources
-  that no request has routed to.
+- **What a background read puts straight into the cold tier** gets no entity mentions, no card and no plan check
+  until it is brought back; and a copy whose re-read cannot say (a null that proves nothing) is re-read again on a
+  later delivery rather than held under D298.
 - **Triggers.** Whether to take a platform's event triggers is a per-plan choice by price (section 5); nothing in
   Eden picks it.
+
+## 9. Review
+
+The reviewer subagent read the engine and sources diff (REQUEST_CHANGES; with both switches off it found no change
+of behaviour). Fixed, each with a test that holds the case:
+
+- **A cursor taken over copies already held vouched for them** (after an expired cursor with the re-listing
+  failing, a first read that failed, a restart): a delta read on the new cursor says "no changes" about changes it
+  never saw, and an edited item was cited as held. Now such a feed vouches for nothing (`gap`) until a whole listing
+  begun after the cursor was taken has ended (`delta.test.ts`).
+- **The delta read's vouch covered copies the sync does not hold** (a lookup's own copy of an item the cap keeps
+  out), and a deletion of one was discarded: a deleted item was cited with the connector's search down. Now every
+  removed ref is dropped and held gone, and the vouch applies only to ids the sync holds (`signalledSince` takes
+  the item's id).
+- **A cold copy that changed and changed back read as unchanged** (a bare set of signatures): signatures are kept
+  per id now, and cover url and meta.
+- **A source with neither a fetch by ref nor a feed** got cold copies no re-read could confirm: such a source
+  stays out of the cold tier.
+- A delta read is no longer spent where it cannot settle a doubt (an item a whole listing missed, a `gap`).
+
+Not fixed, listed in section 8: the two deadlines of a delta read and its fallback, the packs' bound across users
+and across the freeze, background delta pages outside the ingest turn. The live runs were made before these fixes;
+every $0 table above was rerun after them and did not move, except the cold tier's bytes (8.9 → 10.0 MB: a signature
+per id).
 
 ## Reproduce
 
@@ -332,7 +420,8 @@ bun $B 1000 20 8 --mix=0.3,0.3 '--config={"syncCold":true,"syncDelta":true}' > l
 python3 -I packages/sim/lab/f1/days.py base=base.json cold=cold.json local=local.json
 # Live (Modal; go.sh RUN SEEDS CAP CONDITIONS VARIANT_CONFIG):
 VC='{"local":{"syncCold":true,"syncDelta":true},"fast":{"syncCold":true,"syncDelta":true,"syncColdVerify":false}}'
-packages/sim/lab/f1/go.sh f1-b 43,44 1.6 'eden,eden~local,eden~fast' "$VC"
+MIX=0.05,0.05 packages/sim/lab/f1/go.sh f1-d 41,42 1.0 'eden,eden~local' "$VC"   # f1-e: 43,44 (the main case)
+packages/sim/lab/f1/go.sh f1-b 43,44 1.6 'eden,eden~local,eden~fast' "$VC"         # 30/30/40; f1-a, f1-c: 41,42
 python3 -I packages/sim/lab/a8/pair.py base=S1:eden,… local=S1:eden~local,… --pair base,local   # S = STEM of out.json
 python3 -I packages/sim/lab/f1/path.py base=S1:eden,… local=S1:eden~local,…
 bun packages/sim/src/lab/pi-cost-report.ts …/out.json … --trigger-avoids 1 --events-per-task 1
@@ -343,9 +432,11 @@ bun packages/sim/src/lab/pi-cost-report.ts …/out.json … --trigger-avoids 1 -
 
 ## Spend
 
-| Run | Shards | Anthropic $ |
-| --- | --- | --- |
-| f1-a: seeds 41, 42; default and trial | 2 | 0.1345 + 0.1432 |
-| f1-b: seeds 43, 44; default, trial, no re-read | 2 | 0.1762 + 0.1853 |
-| f1-c: seeds 41, 42; no re-read | 2 | 0.0859 + 0.0879 |
-| **Total (manifests)** | 6 | **0.8130** |
+| Run | Mix | Shards | Anthropic $ |
+| --- | --- | --- | --- |
+| f1-a: seeds 41, 42; default and trial | 30/30/40 | 2 | 0.1345 + 0.1432 |
+| f1-b: seeds 43, 44; default, trial, no re-read | 30/30/40 | 2 | 0.1762 + 0.1853 |
+| f1-c: seeds 41, 42; no re-read | 30/30/40 | 2 | 0.0859 + 0.0879 |
+| f1-d: seeds 41, 42; default and trial | 5/5/90 | 2 | 0.1358 + 0.1428 |
+| f1-e: seeds 43, 44; default and trial | 5/5/90 | 2 | 0.1173 + 0.1387 |
+| **Total (manifests)** | | 10 | **1.3475** |

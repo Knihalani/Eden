@@ -241,8 +241,9 @@ cold copies that hold its words instead of searching the source live; a copy bro
 change feed is re-read before delivery (`syncColdVerify`). `syncDelta`: a source with a change feed (`Source.changes`)
 is polled by one read of what changed since its cursor, deletions included; a complete delta read vouches for every
 copy held, so a change notice costs one delta read instead of D126's re-read of each doubted item, and the daily
-re-listing becomes a delta read. At ~1,000 sources live they cut connector calls from 35 to 7 a task with hidden
-facts not lower, and made tasks about 2 s slower (the cold tier's CPU), so they are not in the default.
+re-listing becomes a delta read. At ~1,000 sources live, with nine connectors in ten offering neither push nor a
+feed, they cut connector calls from 36 to 9 a task with hidden facts not lower, and made tasks about 1.2 s slower
+(the re-reads' wait and the cold tier's CPU), so they are not in the default.
 
 **Change notifications** (D125, `syncPush`; `Source.notifies`, `ContextPartner.sourceChanged` and `sourceItems`,
 `POST /v1/sources/changed` and `/v1/sources/items`, the client's `sourceChanged`/`sourceItems`): a source whose

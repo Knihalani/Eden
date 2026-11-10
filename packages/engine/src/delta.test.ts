@@ -32,6 +32,8 @@ class FeedSource implements Source {
   deltas = 0;
   /** Set: the next read of the feed with a cursor says it expired. */
   expire = false;
+  /** Set: listings fail. */
+  failList = false;
   private cursor = 0;
   private held = new Map<string, string>();
   constructor(
@@ -47,6 +49,7 @@ class FeedSource implements Source {
   }
   async list(_scope: Scope, cursor: string | undefined, limit: number): Promise<ListPage> {
     this.lists++;
+    if (this.failList) throw new Error("listing down");
     const sorted = [...this.items].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
     const at = cursor ? Number(cursor) : 0;
     return { items: sorted.slice(at, at + limit), next: at + limit < sorted.length ? String(at + limit) : null };
@@ -215,14 +218,18 @@ describe("syncDelta (D476)", () => {
     const sync = t.partner.sync!;
     const mark = sync.mark();
     expect(t.partner.sourceChanged(alice, "bank")).toBe(true);
-    expect(sync.signalledSince(alice, "bank", mark)).toBe(true);
+    const id = itemId("bank", REF);
+    expect(sync.signalledSince(alice, "bank", mark, id)).toBe(true);
     // A read that began before the second notice does not cover it.
     const settling = sync.settleDelta(alice, bank, AbortSignal.timeout(5_000));
     t.partner.sourceChanged(alice, "bank");
     expect(await settling).toBe(true); // The second pass read again, after the notice.
-    expect(sync.signalledSince(alice, "bank", mark)).toBe(false);
-    t.partner.sourceChanged(alice, "bank");
+    expect(sync.signalledSince(alice, "bank", mark, id)).toBe(false);
+    // Only for a copy the sync holds: a lookup's own copy of an item it does not hold is not kept by the feed.
+    expect(sync.signalledSince(alice, "bank", mark, itemId("bank", "elsewhere"))).toBe(true);
     expect(sync.signalledSince(alice, "bank", mark)).toBe(true);
+    t.partner.sourceChanged(alice, "bank");
+    expect(sync.signalledSince(alice, "bank", mark, id)).toBe(true);
   });
 
   test("on: an expired cursor is replaced and the source listed again; nothing is lost", async () => {
@@ -243,6 +250,60 @@ describe("syncDelta (D476)", () => {
     expect(t.cache.get(alice, itemId("bank", "i3"), t.now())).toBeNull();
     const a = await ask(t.partner, alice, "s2");
     expect(a.answer).toContain("4,000 left");
+  });
+
+  test("on: a cursor taken over held copies vouches for nothing until a whole listing has ended (review)", async () => {
+    const { bank, all } = world();
+    bank.notifies = true;
+    const t = setup(new Map([["alice", all]]), ON);
+    await warm(t.partner, alice);
+    await ask(t.partner, alice, "s0"); // The bank is used: its daily check is a delta read.
+    edit(bank, "isa allowance: 4,000 left this year");
+    expect(t.partner.sourceChanged(alice, "bank")).toBe(true);
+    bank.expire = true;
+    bank.failList = true;
+    t.advance(25 * HOUR);
+    t.partner.sync!.track(alice, t.now());
+    await t.partner.sync!.tick(); // The background delta read: expired.
+    t.advance(10 * MIN);
+    t.partner.sync!.track(alice, t.now());
+    await t.partner.sync!.tick(); // A new cursor; the whole listing fails.
+    expect(t.partner.sync!.hasDelta(alice, "bank")).toBe(true);
+    t.advance(40 * MIN);
+    const fetches = bank.fetches;
+    // The new feed knows nothing of the edit: the doubted copy is re-read by its ref, as without a feed.
+    const a = await ask(t.partner, alice, "s1");
+    expect(a.answer).toContain("4,000 left");
+    expect(bank.fetches).toBeGreaterThan(fetches);
+    // Once a whole listing has ended, the feed vouches again.
+    bank.failList = false;
+    await live(t, alice, 1.2);
+    edit(bank, "isa allowance: 2,500 left this year");
+    t.partner.sourceChanged(alice, "bank");
+    const again = bank.fetches;
+    expect((await ask(t.partner, alice, "s2")).answer).toContain("2,500 left");
+    expect(bank.fetches).toBe(again);
+  });
+
+  test("on: a deleted item held only as a lookup's own copy is not cited after the feed reports it (review)", async () => {
+    for (const on of [false, true]) {
+      const { bank, all } = world();
+      bank.notifies = true;
+      // The cap keeps only the bank's newest ten: the asked item reaches the cache through a live search.
+      const t = setup(new Map([["alice", all]]), { syncMaxItems: 10, syncLocalComplete: true, ...(on ? ON : {}) });
+      await warm(t.partner, alice);
+      const id = itemId("bank", REF);
+      expect((await ask(t.partner, alice, "s0")).citations.map((c) => c.itemId)).toContain(id);
+      bank.items = bank.items.filter((i) => i.ref !== REF);
+      expect(t.partner.sourceChanged(alice, "bank")).toBe(true);
+      t.advance(MIN);
+      // The connector's search is down: only the cached copy could answer.
+      bank.search = async () => {
+        throw new Error("search down");
+      };
+      const a = await ask(t.partner, alice, "s1");
+      expect(a.citations.map((c) => c.itemId)).not.toContain(id);
+    }
   });
 
   test("on: a feed source is not re-listed daily, and deletions still go within the day", async () => {

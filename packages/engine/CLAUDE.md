@@ -404,13 +404,18 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   source's copy of that moment. A source that lists by time (a calendar) stays out (the cold match is on words). The
   cards and the intent index read only indexed items, which is why used sources are re-warmed: without it 5 planted
   items stayed cold in the 995-source funnel. Cold packs are this process's memory only: `snapshot` (D425) saves such
-  a source as cut. Memory is the cost (about 380 B an item in the day bench, 8.6 MB for a 1,000-source user).
+  a source as cut. A source with neither a fetch by ref nor a change feed stays out too (`chills`): its copies could
+  not be re-read. Signatures are per id (`ColdPack.sigs`): a bare set read a copy that changed and changed back as
+  unchanged. Memory is the cost (about 430 B an item in the day bench, 10 MB for a 1,000-source user), and CPU
+  (about three times a user-day's).
 - **Change feeds (`syncDelta`, D476, a trial, off; `delta.test.ts`).** A source with `Source.changes` is polled by
   `pollDelta` (one call; `fanout.changes`), its cursor taken before the backfill's first page (`acquire`). A complete
   delta read sets `deltaMark` (the read mark it began under) and `sweptAt`: `signalledSince` is false for a signal at
   or before it, so a notice costs one delta read (`check` → `recheckByDelta` → `Sync.settleDelta`, shared by every
   doubted item of the source) instead of a fetch per item; anything it cannot settle falls back to `recheck`.
   Deletions go through `SyncDeps.onRemoved` (the partner's `dropGone`: held gone, queued packets withdrawn). It never
+  vouches from a cursor taken over copies already held (`gap`, until a whole listing begun after it ends), nor for a
+  copy the sync does not hold (`signalledSince`'s `itemId`: pass it, or the feed's vouch does not apply), and never
   clears `missed`: after an expired cursor a deletion in the gap is in no feed, so the source is re-listed (daily
   while anything is missed, else every `deltaSweepMs`, inside the cache's time to live, which only a listing renews).
   A wrapper around a `Source` must pass `changes` through (as `list`), or the feed is silently off; `McpSource` has

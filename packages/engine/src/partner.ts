@@ -4762,11 +4762,11 @@ export class ContextPartner {
     if (this.config.syncCold && this.config.syncColdVerify && this.sync?.thawedUnread(s.scope, item.sourceId, item.id))
       return true;
     const mark = this.deps.cache.readMark(s.scope, item.id);
-    if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark) !== true) return false;
+    if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark, item.id) !== true) return false;
     // A re-read since that signal could not tell (a null that proves nothing): another says the same until it signals.
     const held = this.unverifiable.get(scopeKey(s.scope))?.get(item.id);
     if (held === undefined || this.now() - held.at > UNVERIFIABLE_HOLD_MS) return true;
-    return this.sync.signalledSince(s.scope, item.sourceId, held.mark);
+    return this.sync.signalledSince(s.scope, item.sourceId, held.mark, item.id);
   }
 
   /**

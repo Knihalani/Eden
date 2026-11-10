@@ -8,8 +8,8 @@
  *   time and read mark each copy was read under, so the freshness checks of D126 and D356 see the copy's real age);
  * - per chunk, the ids it holds (`IdSet`, D371) and a Bloom filter of its items' terms: a lookup opens a chunk only
  *   when the filter says one of the request's words may be in it;
- * - per pack, the signatures of the copies held (id, title, text and time hashed to 53 bits), so a listing that shows
- *   an item again can tell "unchanged" without opening anything.
+ * - per pack, each held id's signature (its title, text, time, url and meta hashed to 53 bits), so a listing that
+ *   shows an item again can tell "unchanged" without opening anything.
  *
  * An id is in at most one chunk; an entry of a blob is live only while its chunk's id set holds its id. Nothing here
  * does I/O. Item content never leaves memory (D8).
@@ -52,9 +52,10 @@ export function coldTerms(text: string): string[] {
   return [...out];
 }
 
-/** A copy's signature: 53 bits of its id, title, text and time. */
+/** A copy's signature: 53 bits of its id, title, text, time, url and meta (whatever a reader of the copy can see). */
 export function coldSig(item: ContextItem): number {
-  const s = `${item.id}\u0000${item.title}\u0000${item.text}\u0000${item.updatedAt ?? ""}`;
+  const meta = item.meta ? JSON.stringify(Object.entries(item.meta).sort(([a], [b]) => (a < b ? -1 : 1))) : "";
+  const s = `${item.id}\u0000${item.title}\u0000${item.text}\u0000${item.updatedAt ?? ""}\u0000${item.url ?? ""}\u0000${meta}`;
   const hi = hashString(s, 0x5c01d) >>> 0;
   const lo = hashString(s, 0x7e11a) >>> 0;
   return (hi & 0x1fffff) * 0x1_0000_0000 + lo;
@@ -126,7 +127,11 @@ export function coldQuery(text: string): ColdQuery {
 /** One source's cold items for one user. */
 export class ColdPack {
   private chunks: Chunk[] = [];
-  private sigs = new Set<number>();
+  /**
+   * The signature of the copy held under each id. By id, not a bare set of signatures: a copy that changed and
+   * changed back would otherwise read as the one held (the review).
+   */
+  private sigs = new Map<string, number>();
   private live = 0;
   private dead = 0;
 
@@ -135,9 +140,9 @@ export class ColdPack {
     return this.live;
   }
 
-  /** Bytes held: the blobs, the id sets, the filters and the signatures (8 B each, plus the set's own slots). */
+  /** Bytes held: the blobs, the id sets, the filters and the signatures (their ids and map slots, about 64 B each). */
   get bytes(): number {
-    let n = this.sigs.size * 16;
+    let n = this.sigs.size * 64;
     for (const c of this.chunks) n += c.blob.byteLength + c.ids.bytesHeld + c.bloom.byteLength;
     return n;
   }
@@ -149,7 +154,7 @@ export class ColdPack {
 
   /** Whether the pack holds this very copy (same id, title, text and time): a listing showed it again unchanged. */
   holds(item: ContextItem): boolean {
-    return this.sigs.has(coldSig(item)) && this.has(item.id);
+    return this.sigs.get(item.id) === coldSig(item);
   }
 
   /** Every id held (a copy). */
@@ -189,7 +194,7 @@ export class ColdPack {
       this.chunks[this.chunks.length - 1] = this.chunk([...kept, ...fresh.slice(0, at)]);
     }
     for (; at < fresh.length; at += CHUNK) this.chunks.push(this.chunk(fresh.slice(at, at + CHUNK)));
-    for (const e of fresh) this.sigs.add(coldSig(e.item));
+    for (const e of fresh) this.sigs.set(e.item.id, coldSig(e.item));
     this.live += fresh.length;
   }
 
@@ -197,6 +202,7 @@ export class ColdPack {
   drop(id: string): boolean {
     for (const c of this.chunks) {
       if (!c.ids.delete(id)) continue;
+      this.sigs.delete(id);
       this.live--;
       this.dead++;
       if (this.dead > DEAD_RATIO * Math.max(this.live, CHUNK)) this.compact();
@@ -276,11 +282,11 @@ export class ColdPack {
   private compact(): void {
     const all = this.entries();
     this.chunks = [];
-    this.sigs = new Set();
+    this.sigs = new Map();
     this.dead = 0;
     this.live = 0;
     for (let at = 0; at < all.length; at += CHUNK) this.chunks.push(this.chunk(all.slice(at, at + CHUNK)));
-    for (const e of all) this.sigs.add(coldSig(e.item));
+    for (const e of all) this.sigs.set(e.item.id, coldSig(e.item));
     this.live = all.length;
   }
 }

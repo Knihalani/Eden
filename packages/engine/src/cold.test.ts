@@ -109,6 +109,23 @@ describe("ColdPack", () => {
   });
 });
 
+describe("ColdPack (review)", () => {
+  test("a copy that changed and changed back is not taken for the one held", () => {
+    const pack = new ColdPack();
+    const a = item("bank", 1, "status: open");
+    const b = { ...a, text: "status: closed" };
+    pack.add([entry(a)]);
+    expect(pack.holds(a)).toBe(true);
+    expect(pack.holds(b)).toBe(false);
+    pack.drop(a.id);
+    pack.add([entry(b)]);
+    expect(pack.holds(a)).toBe(false);
+    expect(pack.holds(b)).toBe(true);
+    // A change of meta alone is a change (the party check reads it).
+    expect(pack.holds({ ...b, meta: { from: "x@example.com" } })).toBe(false);
+  });
+});
+
 function setup(byUser: Map<string, Source[]>, config: Record<string, unknown>) {
   let clock = T0;
   const cache = new ItemCache();
@@ -265,6 +282,19 @@ describe("syncCold (D475)", () => {
     const t = setup(new Map([["alice", all]]), { syncCold: true, syncColdMaxItems: 5 });
     await warm(t.partner, alice);
     expect(t.partner.sync!.coldStats(alice).items).toBe(5);
+    expect(t.partner.sync!.complete(alice, "bank")).toBe(false);
+    const a = await ask(t.partner, alice, "s1");
+    expect(a.citations.map((c) => c.itemId)).toContain(itemId("bank", REF));
+    expect(bank.searches).toBeGreaterThan(0);
+  });
+
+  test("on: a source with neither a fetch by ref nor a change feed stays out of the cold tier (review)", async () => {
+    const { bank, all } = world();
+    Object.defineProperty(bank, "fetchesById", { value: false });
+    Object.defineProperty(bank, "fetchReportsGone", { value: false });
+    const t = setup(new Map([["alice", all]]), ON);
+    await warm(t.partner, alice);
+    // Its copy is cut and searched live, as without the trial: a copy brought back could not be re-read.
     expect(t.partner.sync!.complete(alice, "bank")).toBe(false);
     const a = await ask(t.partner, alice, "s1");
     expect(a.citations.map((c) => c.itemId)).toContain(itemId("bank", REF));
