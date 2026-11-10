@@ -26,7 +26,9 @@ import { Gcra, IdSet } from "@eden/primitives";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { Source, SourceFanout, SourceResolver } from "@eden/sources";
-import type { ItemCache } from "./cache";
+import { itemId } from "@eden/protocol";
+import { sanitizedId, type ItemCache } from "./cache";
+import { ColdPack, type ColdEntry, type ColdQuery } from "./cold";
 import { sketchTerms, termHashes, TermSketch } from "./sketch";
 import type { Tracer } from "./spans";
 
@@ -113,6 +115,26 @@ export interface SyncOptions {
    * background pages) waits its `turn` before it is redacted and stored.
    */
   ingestTurns?: boolean;
+  /**
+   * `syncCold` (D475, a trial): items the user's `maxItems` cap pushes out of the index are kept compressed in a cold
+   * tier (`cold.ts`), per source, up to `coldMaxItems` a user, instead of dropped. A source whose items are all held,
+   * in the index or cold, is whole (`complete`): lookups answer it here (`thaw` brings back the cold copies that hold
+   * the request's words) and do not search it live. The backfill reads each listing to its end while the cold tier
+   * has room. Past `coldMaxItems` the oldest are dropped and their sources' copies are cut, as without it.
+   */
+  cold?: boolean;
+  coldMaxItems?: number;
+  /** With `cold`: how long a cold copy stands with no listing showing it again (the cache's `syncTtlMs`). */
+  coldTtlMs?: number;
+  /**
+   * `syncDelta` (D476, a trial): a source with a change feed (`Source.changes`) is polled by one read of what changed
+   * since its cursor (new and changed items, whatever their place in the listing, and deletions), not by its listing.
+   * A complete delta read vouches for every copy held: no re-read is needed for a signal it began after
+   * (`signalledSince`), and the daily re-listing for deletions is replaced by a delta read (the whole listing is read
+   * again only every `deltaSweepMs`, which keeps the copies inside the cache's time to live).
+   */
+  delta?: boolean;
+  deltaSweepMs?: number;
 }
 
 export interface SyncDeps {
@@ -126,6 +148,11 @@ export interface SyncDeps {
   onListed?: (scope: Scope, ids: string[]) => void;
   /** Span tracing (`spans.ts`): each listing call is a `sync.list` span naming its phase; absent or null when off. */
   tracer?: Tracer | null;
+  /**
+   * `delta` (D476): items a delta read said are deleted, by id. The partner drops them as it does a deletion notice's
+   * (held gone, queued packets citing them withdrawn) and calls `removed`. Absent: dropped from the cache here.
+   */
+  onRemoved?: (scope: Scope, sourceId: string, ids: string[]) => void;
 }
 
 /** Hours of item history the backfill reads a source's change rate from. */
@@ -155,6 +182,9 @@ const USERS_AT_ONCE = 16;
 const MAX_PEOPLE = 256;
 /** Sources a user's lookups use at once (`engage`): past it, the least recently used is no longer counted. */
 const MAX_USED = 64;
+/** `cold`: blobs a lookup opens in one source's pack, and across the sources of one `thaw`, at most. */
+const COLD_CHUNKS_PER_SOURCE = 8;
+const COLD_CHUNKS_PER_THAW = 48;
 
 interface SourceSync {
   id: string;
@@ -184,7 +214,7 @@ interface SourceSync {
    * The sweep under way, read across ticks: its next page and every id it (or any other read of the source since it
    * began: a poll, a lookup's on-demand poll) has seen listed.
    */
-  sweep: { cursor: string | undefined; seen: Set<string> } | null;
+  sweep: { cursor: string | undefined; seen: Set<string>; at: number; mark: number } | null;
   /**
    * Ids the last complete sweep did not list. An item is dropped only when two sweeps in a row miss it: an offset
    * listing shifts under a delete or an update between pages, so one sweep can skip an item the source still has.
@@ -241,6 +271,32 @@ interface SourceSync {
    * complete sweep, because the source was on the longer one. Its copies older than `sweepMs` are then in doubt.
    */
   skipped: boolean;
+  /** `cold` (D475): this source's items the user's cap pushed out of the index, compressed; null when none. */
+  cold: ColdPack | null;
+  /**
+   * `cold`: when, and under which read mark, the last complete sweep began that listed the source: every cold copy
+   * it did not miss is as current as that (an indexed copy has its fetch time moved by the same listing).
+   */
+  coldAt: number;
+  coldMark: number;
+  /** The source lists by time (a calendar): its items stay out of the cold tier, which matches on words only. */
+  byTime: boolean;
+  /** `cold` with `engagedDeep`: the source was just marked used, so its cold copies go back into the index. */
+  rewarm: boolean;
+  /** `cold`: ids a lookup brought back from the cold tier that no read of the source has seen since (`thaw`). */
+  thawed: Set<string> | null;
+  /** `delta` (D476): the source has a change feed (`Source.changes`). */
+  deltas: boolean;
+  /** `delta`: the feed's cursor, or null before one is held (or after the source said it expired). */
+  delta: string | null;
+  /**
+   * `delta`: the read mark the last complete delta read began under (-1 before any): every copy held then is as the
+   * source had it, so a signal at or before that mark doubts none of them.
+   */
+  deltaMark: number;
+  /** When the source's whole listing was last read to its end (the backfill, a sweep); `sweptAt` also moves with a
+   * complete delta read, which vouches for the copies without listing them. */
+  listedAt: number;
 }
 
 interface UserSync {
@@ -274,6 +330,12 @@ export interface SyncStats {
   demandItems: number;
   /** Items dropped because their source no longer lists them. */
   deleted: number;
+  /** `delta` (D476): change-feed reads made (counted in `backgroundCalls` or `demandCalls` too). */
+  deltaCalls: number;
+  /** `cold` (D475): items moved to the cold tier, brought back by a lookup, and blobs lookups opened. */
+  coldStored: number;
+  coldThawed: number;
+  coldOpened: number;
 }
 
 export class SyncManager {
@@ -291,6 +353,10 @@ export class SyncManager {
     backgroundItems: 0,
     demandItems: 0,
     deleted: 0,
+    deltaCalls: 0,
+    coldStored: 0,
+    coldThawed: 0,
+    coldOpened: 0,
   };
 
   constructor(
@@ -351,7 +417,8 @@ export class SyncManager {
         notifies: s.notifies,
         fetches: s.fetches,
         exhausted: s.exhausted,
-        cut: s.cut,
+        // The cold tier is this process's memory only: read back, the copy lacks what it held.
+        cut: s.cut || (s.cold?.size ?? 0) > 0,
         frontier: fin(s.frontier),
         polledAt: fin(s.polledAt),
         sweptAt: fin(s.sweptAt),
@@ -543,7 +610,88 @@ export class SyncManager {
       s.ids.delete(id);
       s.pushed.delete(id);
       s.missed.delete(id);
+      s.cold?.drop(id);
+      s.thawed?.delete(id);
     }
+  }
+
+  /**
+   * `cold` (D475): the cold copies of the given sources that hold any of the request's words go back into the user's
+   * index as synced items (at most `limit` a source, best first), each with the read time and mark it was read under,
+   * or those of the last complete sweep that listed it. A copy past its time to live, or one its source said is gone,
+   * is dropped instead. Returns the copies stored (the caller cards them and records their mentions, as it does a
+   * live search's finds). No I/O; opens at most `COLD_CHUNKS_PER_THAW` blobs.
+   */
+  thaw(scope: Scope, sourceIds: Iterable<string>, q: ColdQuery, limit: number, now = this.deps.now()): ContextItem[] {
+    const u = this.users.get(scopeKey(scope));
+    if (!u || !this.o.cold || q.words.length === 0) return [];
+    const opened = { chunks: 0 };
+    const out: ContextItem[] = [];
+    for (const id of sourceIds) {
+      const s = u.sources.get(id);
+      const pack = s?.cold;
+      if (!s || !pack || pack.size === 0) continue;
+      const room = Math.min(COLD_CHUNKS_PER_SOURCE, COLD_CHUNKS_PER_THAW - opened.chunks);
+      if (room <= 0) break;
+      const added = this.warmed(u, s, pack.match(q, limit, room, opened), now);
+      // What a lookup brings back stands in for a live search's find, which is the source's copy of that moment: a
+      // source with no change feed whose connector can fetch by ref has it re-read before it is delivered or cited
+      // (`thawedUnread`). A feed keeps its copies current by itself.
+      if (s.fetches && s.delta === null) for (const it of added) (s.thawed ??= new Set()).add(it.id);
+      out.push(...added);
+    }
+    this.stats.coldOpened += opened.chunks;
+    return out;
+  }
+
+  /**
+   * `cold`: these cold copies of a source go back into the index as synced items, each with the read time and mark it
+   * was read under, or those of the last complete sweep that listed it; one past its time to live or held gone is
+   * dropped instead. Returns the copies stored.
+   */
+  private warmed(u: UserSync, s: SourceSync, entries: readonly ColdEntry[], now: number): ContextItem[] {
+    const ttl = this.o.coldTtlMs ?? Infinity;
+    const back: ColdEntry[] = [];
+    for (const e of entries) {
+      const vouched = !s.missed.has(e.item.id);
+      const fetchedAt = vouched ? Math.max(e.fetchedAt, s.coldAt) : e.fetchedAt;
+      const readMark = vouched ? Math.max(e.readMark, s.coldMark) : e.readMark;
+      s.cold?.drop(e.item.id);
+      if (now - fetchedAt > ttl) {
+        // Not listed again within its time to live: let go, as the cache lets an indexed copy go. Not whole now.
+        s.cut = true;
+        continue;
+      }
+      if (this.deps.cache.isHeldGone(u.scope, e.item.id, now)) continue;
+      back.push({ item: e.item, fetchedAt, readMark });
+    }
+    if (back.length === 0) return [];
+    const added = this.deps.cache.putBack(u.scope, back, now);
+    for (const e of back) s.ids.add(e.item.id);
+    this.stats.coldThawed += back.length;
+    return added;
+  }
+
+  /**
+   * `cold` (D475): whether a lookup brought this copy back from the cold tier and nothing has read it at its source
+   * since (a listing, a re-read): it is re-read before delivery, as the live search it replaced would have read it.
+   */
+  thawedUnread(scope: Scope, sourceId: string, itemId: string): boolean {
+    return this.users.get(scopeKey(scope))?.sources.get(sourceId)?.thawed?.has(itemId) === true;
+  }
+
+  /** `cold` (D475): the user's cold items, and the bytes their packs hold. */
+  coldStats(scope: Scope): { items: number; bytes: number; sources: number } {
+    const u = this.users.get(scopeKey(scope));
+    const out = { items: 0, bytes: 0, sources: 0 };
+    if (!u) return out;
+    for (const s of u.sources.values()) {
+      if (!s.cold || s.cold.size === 0) continue;
+      out.items += s.cold.size;
+      out.bytes += s.cold.bytes;
+      out.sources++;
+    }
+    return out;
   }
 
   /**
@@ -565,7 +713,44 @@ export class SyncManager {
    */
   signalledSince(scope: Scope, sourceId: string, readMark: number): boolean {
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
-    return s !== undefined && s.notifies && s.noticedMark > readMark;
+    // `delta` (D476): a complete delta read that began at or after the signal brought every change with it.
+    return s !== undefined && s.notifies && s.noticedMark > readMark && s.noticedMark > s.deltaMark;
+  }
+
+  /** `delta` (D476): whether the user's copy of the source is kept by its change feed (a cursor is held). */
+  hasDelta(scope: Scope, sourceId: string): boolean {
+    return this.users.get(scopeKey(scope))?.sources.get(sourceId)?.delta != null;
+  }
+
+  /**
+   * `delta` (D476): makes the user's copy of a source current by one delta read, for a delivery that doubts copies of
+   * it: joins a read already running, then reads again if a signal came after that one began or its last vouching
+   * read is older than `sweepMs`. Resolves true once a complete delta read covers every signal so far; false when
+   * there is no feed, the read failed, or `signal` ended the wait (the caller re-reads its items one by one, D126).
+   * `tally.calls` counts the calls of a read this starts.
+   */
+  async settleDelta(scope: Scope, source: Source, signal: AbortSignal, tally?: { calls: number }): Promise<boolean> {
+    const u = this.users.get(scopeKey(scope));
+    const s = u?.sources.get(source.id);
+    if (!u || !s || s.delta === null || s.phase !== "warm" || !source.changes) return false;
+    const covered = () =>
+      s.delta !== null &&
+      s.deltaMark >= s.noticedMark &&
+      !s.skipped &&
+      s.missed.size === 0 &&
+      this.deps.now() - s.sweptAt <= this.o.sweepMs;
+    for (let k = 0; k < 2 && !covered(); k++) {
+      if (signal.aborted || u.gone) return false;
+      if (s.busy) {
+        await Promise.race([s.busy, aborted(signal)]);
+        continue;
+      }
+      const own = { fresh: 0, calls: 0 };
+      const polling = this.run(s, () => this.poll(u, s, source, this.o.catchupPages, true, undefined, own));
+      await Promise.race([polling, aborted(signal)]);
+      if (tally) tally.calls += own.calls;
+    }
+    return !signal.aborted && !u.gone && covered();
   }
 
   /**
@@ -619,6 +804,8 @@ export class SyncManager {
       fresh.push(id);
       // `engagedDeep`: a cut copy of a source the user uses is read again, whole, from the top (`deepen`).
       if (this.o.engagedDeep && s.phase === "warm" && s.cut) s.deep = { cursor: undefined, lost: false };
+      // `cold` (D475): what the cold tier holds of a source the user uses goes back into the index (`rewarm`).
+      if (this.o.cold && this.o.engagedDeep) s.rewarm = true;
     }
     while (u.used.size > MAX_USED) {
       const old = u.used.values().next().value as string;
@@ -627,6 +814,7 @@ export class SyncManager {
       if (s) {
         s.engaged = false;
         s.deep = null;
+        s.rewarm = false;
       }
     }
     return fresh;
@@ -661,7 +849,9 @@ export class SyncManager {
 
   /** A re-read found the item at its source (`verifyDelivery`): no longer counted as missed by a sweep. O(1). */
   vouched(scope: Scope, sourceId: string, itemId: string): void {
-    this.users.get(scopeKey(scope))?.sources.get(sourceId)?.missed.delete(itemId);
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    s?.missed.delete(itemId);
+    s?.thawed?.delete(itemId);
   }
 
   /**
@@ -670,7 +860,7 @@ export class SyncManager {
    */
   sweepSoon(scope: Scope, sourceId: string): void {
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
-    if (s && s.phase === "warm") s.sweptAt = -Infinity;
+    if (s && s.phase === "warm") s.sweptAt = s.listedAt = -Infinity;
   }
 
   /** Whether a lookup of the user's has searched the source (`engage`). False for one the sync does not hold. */
@@ -834,7 +1024,10 @@ export class SyncManager {
     if (s.phase !== "warm") return false;
     const age = now - s.polledAt;
     // A source that notifies changed only when it said so, or (a lost notification) after `pushMaxStaleMs`.
-    if (s.notifies) return age <= (this.o.pushMaxStaleMs || this.o.maxStaleMs) && s.notices === s.noticesPolled;
+    // With a change feed (`delta`, D476) the bound on a lost notification is `maxStaleMs`, not the longer push one:
+    // checking costs one delta read, which also brings what a listing's first page would miss.
+    const lost = s.delta !== null ? this.o.maxStaleMs : this.o.pushMaxStaleMs || this.o.maxStaleMs;
+    if (s.notifies) return age <= lost && s.notices === s.noticesPolled;
     if (!(age <= this.o.maxStaleMs)) return false;
     const rate = s.alpha / s.beta; // items per hour
     return 1 - Math.exp((-rate * Math.max(0, age)) / HOUR) < this.o.staleChance;
@@ -906,6 +1099,26 @@ export class SyncManager {
         this.trim(u, this.deps.now());
       }
     }
+    // `cold` (D475) with `engagedDeep`: a used source's cold copies go back into the index, newest first, up to the
+    // half of the cap the trim keeps for used sources: the cards and the intent index read only what is indexed. No
+    // call (`deepen` re-lists a cut copy for the same end); once per engagement, or the trim and this would trade
+    // the same items every tick.
+    if (this.o.cold && this.o.engagedDeep && !u.gone) {
+      const again = [...u.sources.values()].filter((s) => s.rewarm && s.phase === "warm");
+      if (again.some((s) => (s.cold?.size ?? 0) > 0) && (await this.thawed(u))) {
+        const share = Math.floor(this.o.maxItems / 2);
+        for (const s of again) {
+          if (!s.cold || s.cold.size === 0) continue;
+          const newest = s.cold
+            .entries()
+            .sort((a, b) => (b.item.updatedAt ?? 0) - (a.item.updatedAt ?? 0))
+            .slice(0, Math.max(0, share - s.ids.size));
+          const added = this.warmed(u, s, newest, this.deps.now());
+          if (added.length > 0) this.deps.onStored?.(u.scope, added);
+        }
+      }
+      for (const s of again) s.rewarm = false;
+    }
     // `keepCut`: polls and sweeps add the sources' new items; half the cap past it, the oldest go, back to the cap,
     // before the cache's own synced cap would evict by sync order instead. Not sooner: trimming the backfill's last
     // pages back to the cap took evidence routing reads (`routeLocalHits`) and lost 2 of 96 hidden facts at 1,000
@@ -916,6 +1129,7 @@ export class SyncManager {
     const now = this.deps.now();
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
+    // (Wider than the reads below for a source on a delta feed: at worst a thaw a little early.)
     const due = (s: SourceSync) => s.phase === "warm" && (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs);
     thawing = [...u.sources.values()].some(due) ? this.deps.cache.ready(u.scope) : null;
     if (thawing) await thawing;
@@ -924,6 +1138,24 @@ export class SyncManager {
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);
         if (!source || s.phase !== "warm" || s.busy || now < s.retryAt) return;
+        // `delta` (D476): a source kept by its change feed is re-listed whole only every `deltaSweepMs`; its daily
+        // check for deletions is one delta read, or (unused, with a get tool: D356) the re-read before delivery.
+        if (s.deltas && s.delta === null && source.changes && !s.sweep) {
+          // No cursor (its first read failed, or the source said it expired): a new one, then the whole listing.
+          await this.run(s, () => this.acquire(u, s, source));
+          if (s.delta !== null) s.sweptAt = s.listedAt = -Infinity;
+        }
+        if (s.delta !== null && source.changes) {
+          // An item the last whole listing missed (after a cursor expired, a deletion in the gap is in no feed; or
+          // an offset listing skipped it) is settled by the next day's listing, as without a feed.
+          const whole = s.missed.size > 0 ? this.o.sweepMs : Math.max(this.o.deltaSweepMs ?? 0, this.o.sweepMs);
+          if (s.sweep !== null || now - s.listedAt >= whole) await this.run(s, () => this.sweep(u, s, source));
+          else if (now - s.sweptAt >= this.o.sweepMs) {
+            if (this.onLongSweep(s)) s.skipped = true;
+            else await this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false));
+          }
+          return;
+        }
         const every = this.onLongSweep(s) ? Math.max(this.o.unusedSweepMs!, this.o.sweepMs) : this.o.sweepMs;
         if (s.sweep !== null || now - s.sweptAt >= every) await this.run(s, () => this.sweep(u, s, source));
         else if (now - s.sweptAt >= this.o.sweepMs) s.skipped = true;
@@ -947,7 +1179,10 @@ export class SyncManager {
       // nothing left that would be kept, and its backfill is done.
       if (this.total(u) >= this.o.maxItems) {
         const cut = this.trim(u, now);
-        for (const s of filling) if (s.frontier <= cut) this.warmUp(u, s, now);
+        // `cold` (D475): while the cold tier has room, each listing is read to its end (what the cut pushes out is
+        // kept there), so the copy is whole; a source that lists by time keeps the cut (`byTime`).
+        const room = this.coldRoom(u) > 0;
+        for (const s of filling) if (s.frontier <= cut && !(room && !s.byTime)) this.warmUp(u, s, now);
         if (filling.every((s) => s.phase === "warm")) return;
       }
       const ready = filling.filter((s) => s.phase === "backfill" && now >= s.retryAt && !s.busy);
@@ -968,6 +1203,12 @@ export class SyncManager {
           let page: Awaited<ReturnType<SourceFanout["list"]>> | undefined;
           next.noticesBackfill = next.notices;
           await this.run(next, async () => {
+            // `delta` (D476): the feed's cursor is taken before the first page is listed, so a change between the
+            // two is in the feed (and, at worst, in the listing too).
+            if (next.deltas && next.delta === null && next.cursor === undefined && next.ids.size === 0) {
+              await this.acquire(u, next, source);
+              if (u.gone) return;
+            }
             const readMark = this.marks;
             page = await this.list("backfill", source, u.scope, next.cursor, this.o.pageSize, {
               timeoutMs: this.o.timeoutMs,
@@ -1044,6 +1285,14 @@ export class SyncManager {
     return n;
   }
 
+  /** `cold` (D475): how many more items the user's cold tier takes (0 with the trial off). */
+  private coldRoom(u: UserSync): number {
+    if (!this.o.cold) return 0;
+    let n = this.o.coldMaxItems ?? 0;
+    for (const s of u.sources.values()) n -= s.cold?.size ?? 0;
+    return Math.max(0, n);
+  }
+
   /**
    * Keeps the user's newest `maxItems` synced items across sources (by `updatedAt`; an item without one counts as
    * oldest) and drops the rest from the cache. Returns the oldest kept time: the backfill's cut. Pages are read
@@ -1074,10 +1323,26 @@ export class SyncManager {
     } else rest.push(...all);
     const room = Math.max(0, this.o.maxItems - kept.length);
     const gone = rest.slice(room);
+    // `cold` (D475): the newest of what goes is kept in the cold tier while it has room; the rest is dropped.
+    let coldRoom = this.coldRoom(u);
+    const chilled = new Map<SourceSync, ColdEntry[]>();
     for (const g of gone) {
       g.s.ids.delete(g.id);
+      g.s.thawed?.delete(g.id);
+      const copy = coldRoom > 0 && !g.s.byTime ? this.deps.cache.syncedCopy(u.scope, g.id) : undefined;
+      if (copy) {
+        coldRoom--;
+        const list = chilled.get(g.s);
+        if (list) list.push(copy);
+        else chilled.set(g.s, [copy]);
+        continue;
+      }
       g.s.cut = true;
       if (g.s.deep) g.s.deep.lost = true;
+    }
+    for (const [s, copies] of chilled) {
+      (s.cold ??= new ColdPack()).add(copies);
+      this.stats.coldStored += copies.length;
     }
     this.deps.cache.dropSynced(
       u.scope,
@@ -1103,10 +1368,12 @@ export class SyncManager {
     if (!s.exhausted) s.cut = true;
     // `engagedDeep`: a source a lookup used while its backfill ran is read whole now (`engage` saw it cold).
     if (this.o.engagedDeep && s.engaged && s.cut && !s.deep) s.deep = { cursor: undefined, lost: false };
+    if (this.o.cold && this.o.engagedDeep && s.engaged) s.rewarm = true;
     s.polledAt = now;
     // Notifications that came before the backfill's last page began are read by it; later ones are not.
     s.noticesPolled = s.noticesBackfill;
     s.sweptAt = now;
+    s.listedAt = now;
     let recent = 0;
     let timed = 0;
     const updatedAt = this.deps.cache.updatedAtReader(u.scope, now);
@@ -1140,6 +1407,8 @@ export class SyncManager {
     tally?: { fresh: number; calls: number },
     resume?: PollResume,
   ): Promise<void> {
+    // `delta` (D476): one read of the change feed instead of the listing.
+    if (s.delta !== null && source.changes && !resume) return this.pollDelta(u, s, source, demand, signal, tally);
     // A background continuation of a lookup's poll goes on from where that poll stopped, as one poll: from the top,
     // its first page held what the lookup had just stored, read as the boundary, and the source was marked current
     // with the pages past the cap never read (audit A5).
@@ -1209,6 +1478,117 @@ export class SyncManager {
       void Promise.resolve().then(() =>
         this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false, undefined, undefined, from)),
       );
+    }
+  }
+
+  /**
+   * `delta` (D476): the feed's cursor for "now" (one call, counted as a background call). Left null on any failure:
+   * the source is then polled and swept by its listing, as one without a feed.
+   */
+  private async acquire(u: UserSync, s: SourceSync, source: Source): Promise<void> {
+    if (!source.changes || this.budget.take(budgetKey(u, s)) > 0) return;
+    const page = await this.deps.fanout.changes(source, u.scope, undefined, {
+      timeoutMs: this.o.timeoutMs,
+      reserve: SERVING_HEADROOM,
+    });
+    if (page !== "limited" && page !== "busy") {
+      this.stats.backgroundCalls++;
+      this.stats.deltaCalls++;
+    }
+    if (u.gone || typeof page === "string") return;
+    s.delta = page.next;
+    s.deltaMark = -1;
+  }
+
+  /**
+   * `delta` (D476): a poll by the source's change feed: what was created or changed since the cursor is stored, what
+   * was deleted is dropped, in one call (more only while the feed says more wait). A complete read marks the source
+   * polled, teaches its change rate, and vouches for every copy held, as a sweep does: no signal up to its start
+   * doubts a copy (one a whole listing missed stays missed: only a listing or a re-read settles that). An expired
+   * cursor is let go: the next tick takes a new one and re-lists.
+   */
+  private async pollDelta(
+    u: UserSync,
+    s: SourceSync,
+    source: Source,
+    demand: boolean,
+    signal?: AbortSignal,
+    tally?: { fresh: number; calls: number },
+  ): Promise<void> {
+    const started = this.deps.now();
+    const notices = s.notices;
+    const pushSeq = s.pushSeq;
+    const mark = this.marks;
+    let changed = 0;
+    for (let p = 0; p < MAX_POLL_PAGES; p++) {
+      if (u.gone) return;
+      if (signal?.aborted) {
+        if (demand) s.demandGaveUpAt = this.deps.now();
+        return;
+      }
+      if (this.budget.take(budgetKey(u, s)) > 0) return;
+      const readMark = this.marks;
+      if (tally) tally.calls++;
+      const page = await this.deps.fanout.changes(source, u.scope, s.delta ?? undefined, {
+        timeoutMs: this.o.timeoutMs,
+        ...(signal ? { signal } : {}),
+        reserve: demand ? 0 : SERVING_HEADROOM,
+        reuse: this.deps.cache.reuseFor(u.scope),
+      });
+      if (u.gone) return;
+      if (typeof page === "string") {
+        if (page !== "limited" && page !== "busy") {
+          this.count(demand);
+          this.stats.deltaCalls++;
+        } else if (tally) tally.calls--;
+        if (page === "expired") {
+          // Changes since the cursor are unknown: the copies are vouched for again only by a whole re-listing.
+          s.delta = null;
+          return;
+        }
+        if (signal?.aborted) {
+          if (demand) s.demandGaveUpAt = this.deps.now();
+          return;
+        }
+        this.failed(s, page);
+        return;
+      }
+      this.count(demand);
+      this.stats.deltaCalls++;
+      if (demand) this.stats.demandItems += page.items.length;
+      else this.stats.backgroundItems += page.items.length;
+      s.failures = 0;
+      const fresh = this.store(u, s, page.items, readMark, undefined, this.o.keepCut && !demand);
+      changed += fresh;
+      if (tally) tally.fresh += fresh;
+      if (page.removed.length > 0) {
+        // By the id the cache keys an item by (a ref the gate redacts is keyed by its hash, as a deletion notice's).
+        const ids = page.removed
+          .map((ref) => sanitizedId({ id: itemId(s.id, ref), sourceId: s.id, ref, title: "", text: "" }))
+          .filter((id) => s.ids.has(id) || s.cold?.has(id) === true);
+        if (ids.length > 0) {
+          for (const id of ids) {
+            s.ids.delete(id);
+            s.pushed.delete(id);
+            s.missed.delete(id);
+            s.cold?.drop(id);
+          }
+          if (this.deps.onRemoved) this.deps.onRemoved(u.scope, s.id, ids);
+          else this.deps.cache.dropSynced(u.scope, ids);
+          this.stats.deleted += ids.length;
+          if (tally) tally.fresh += ids.length;
+        }
+      }
+      s.delta = page.next;
+      if (page.more) continue;
+      this.polled(s, started, changed, notices, pushSeq);
+      // Everything held is as the source had it when this read began: swept, in effect, with nothing missing.
+      s.deltaMark = mark;
+      s.sweptAt = started;
+      s.skipped = false;
+      s.coldAt = Math.max(s.coldAt, started);
+      s.coldMark = Math.max(s.coldMark, mark);
+      return;
     }
   }
 
@@ -1295,12 +1675,16 @@ export class SyncManager {
     const started = this.deps.now();
     const notices = s.notices;
     const pushSeq = s.pushSeq;
-    s.sweep ??= { cursor: undefined, seen: new Set() };
+    s.sweep ??= { cursor: undefined, seen: new Set(), at: started, mark: this.marks };
     const sw = s.sweep;
+    // `cold` (D475): what the cold tier holds is older than every indexed copy, and is listed too, so a deletion
+    // there is seen: the sweep reads the whole listing, up to what both tiers can hold.
+    const cold = (s.cold?.size ?? 0) > 0;
     // How far back this source's synced items reach: the sweep reads that far, not the user's whole cap (`maxItems`
     // is across sources; a quiet source was paged to 3,000 items a day and its synced set grew past the backfill's
     // cut, audit A5). Listings run newest first; a source with an undated item is read as before.
-    const cut = this.oldestSynced(u, s);
+    const cut = cold ? -Infinity : this.oldestSynced(u, s);
+    const most = this.o.maxItems + (cold ? (this.o.coldMaxItems ?? 0) : 0);
     for (let p = 0; p < MAX_POLL_PAGES; p++) {
       if (u.gone) return;
       if (this.budget.take(budgetKey(u, s)) > 0) return;
@@ -1332,18 +1716,26 @@ export class SyncManager {
       // The sweep's first page is the newest: it is also a poll.
       if (first) this.polled(s, started, fresh, notices, pushSeq);
       // `keepCut`: every id held for the source is listed: what follows is older than all of it, and not held.
-      const all = this.o.keepCut === true && seenAll(s.ids, sw.seen);
-      const full = sw.seen.size >= this.o.maxItems || page.items.some(older) || all;
+      const all = this.o.keepCut === true && seenAll(s.ids, sw.seen) && (s.cold?.allIn(sw.seen) ?? true);
+      const full = sw.seen.size >= most || page.items.some(older) || all;
       if (page.next === null || page.items.length === 0 || full) {
         // Missed by this sweep and the one before: gone. Missed by this one only: perhaps skipped (an offset listing
         // shifted, a short page ended the listing early), so kept and checked again by the next sweep.
-        const missed = [...s.ids].filter((id) => !sw.seen.has(id));
+        const held = s.cold ? [...s.ids, ...s.cold.ids()] : [...s.ids];
+        const missed = held.filter((id) => !sw.seen.has(id));
         const gone = missed.filter((id) => s.missed.has(id));
         s.missed = new Set(missed.filter((id) => !s.missed.has(id)));
-        for (const id of gone) s.ids.delete(id);
+        for (const id of gone) {
+          s.ids.delete(id);
+          s.cold?.drop(id);
+        }
+        // Every cold copy this sweep listed is as current as its start (`thaw` leaves out the ones it missed).
+        s.coldAt = sw.at;
+        s.coldMark = sw.mark;
         this.stats.deleted += this.deps.cache.dropSynced(u.scope, gone);
         s.sweep = null;
         s.sweptAt = this.deps.now();
+        s.listedAt = s.sweptAt;
         s.skipped = false;
         return;
       }
@@ -1379,11 +1771,43 @@ export class SyncManager {
     // synced cap evicted such items oldest synced first, which could be the user's newest mail). Not stored, and the
     // source's copy is then not whole (D264). An item already held is stored as before (an update of what is kept).
     let kept = items;
+    // `cold` (D475): a listed item the cold tier holds unchanged stays there (listed, so not missing); a changed one
+    // leaves the cold tier and is stored below as any new copy is.
+    if (s.cold && s.cold.size > 0) {
+      const pack = s.cold;
+      kept = items.filter((it) => {
+        if (it.sourceId !== s.id || !pack.has(it.id)) return true;
+        if (!pack.holds(it)) {
+          pack.drop(it.id);
+          return true;
+        }
+        s.missed.delete(it.id);
+        s.sweep?.seen.add(it.id);
+        return false;
+      });
+      if (kept.length === 0) return 0;
+    }
     // A used source's items are kept before the cut's (`engagedDeep`): the cut is the other sources' only.
     if (keepCut && u.cutAt > -Infinity && !(this.o.engagedDeep && s.engaged)) {
       const cut = u.cutAt;
-      kept = items.filter((it) => it.updatedAt === undefined || it.updatedAt >= cut || s.ids.has(it.id));
-      if (kept.length < items.length) s.cut = true;
+      const older = kept.filter((it) => !(it.updatedAt === undefined || it.updatedAt >= cut || s.ids.has(it.id)));
+      if (older.length > 0) {
+        kept = kept.filter((it) => !older.includes(it));
+        // `cold`: older than the user's cut, so kept in the cold tier while it has room; else the copy is cut.
+        const room = s.byTime ? 0 : this.coldRoom(u);
+        const chill = older
+          .filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now))
+          .slice(0, room);
+        if (chill.length < older.length) s.cut = true;
+        if (chill.length > 0) {
+          (s.cold ??= new ColdPack()).add(chill.map((item) => ({ item, fetchedAt: now, readMark })));
+          this.stats.coldStored += chill.length;
+          for (const it of chill) {
+            s.missed.delete(it.id);
+            s.sweep?.seen.add(it.id);
+          }
+        }
+      }
       if (kept.length === 0) return 0;
     }
     // An item its source said is gone (`ItemCache.isHeldGone`) was listed before the deletion: neither stored nor
@@ -1395,6 +1819,7 @@ export class SyncManager {
     for (const it of own) {
       // Listed: not missing, whatever an earlier sweep thought (an offset listing may have skipped it then).
       s.missed.delete(it.id);
+      s.thawed?.delete(it.id);
       s.ids.delete(it.id); // Re-insert: the set stays oldest synced first.
       s.ids.add(it.id);
       // Listed while a sweep is under way (by the sweep, or by a poll between its pages): the source has it.
@@ -1417,6 +1842,10 @@ export class SyncManager {
     s.notifies = this.o.push === true && source.notifies === true;
     // Not every `fetch` can find an item: an MCP source without a get tool answers null to all (the review, D356).
     s.fetches = typeof source.fetch === "function" && (source.fetchesById ?? source.fetchReportsGone === true);
+    s.byTime = source.listsByTime === true;
+    s.deltas = this.o.delta === true && typeof source.changes === "function";
+    // The feed is gone (the trial turned off, a connector without it now): back to the listing.
+    if (!s.deltas) s.delta = null;
   }
 
   private failed(s: SourceSync, why: string): void {
@@ -1617,6 +2046,16 @@ function newSourceSync(id: string): SourceSync {
     sketch: null,
     fetches: false,
     skipped: false,
+    cold: null,
+    coldAt: -Infinity,
+    coldMark: 0,
+    byTime: false,
+    rewarm: false,
+    thawed: null,
+    deltas: false,
+    delta: null,
+    deltaMark: -1,
+    listedAt: -Infinity,
   };
 }
 
