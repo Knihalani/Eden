@@ -26,9 +26,15 @@ class SlowSearch implements Source {
   constructor(
     readonly id: string,
     readonly items: ContextItem[],
+    /** Every search any source of the run received, as "source query", in the order sent. */
+    readonly log: string[],
+    /** When any source of the run last started a search (`performance.now()`). */
+    readonly clock: { last: number },
   ) {}
   async search(q: SearchQuery): Promise<ContextItem[]> {
     this.searches++;
+    this.log.push(`${this.id} ${q.text}`);
+    this.clock.last = performance.now();
     await Bun.sleep(SEARCH_MS);
     const words = q.text
       .toLowerCase()
@@ -46,7 +52,9 @@ class SlowSearch implements Source {
 }
 
 /** 4 sources of 10 items for a cap of 20: every copy is cut. Source 0's oldest item, far past the cut, is the fact. */
-function world(): { sources: SlowSearch[]; fact: ContextItem } {
+function world(): { sources: SlowSearch[]; fact: ContextItem; log: string[]; clock: { last: number } } {
+  const log: string[] = [];
+  const clock = { last: 0 };
   const sources = Array.from(
     { length: 4 },
     (_, k) =>
@@ -60,16 +68,18 @@ function world(): { sources: SlowSearch[]; fact: ContextItem } {
           text: `filler words for source ${k} item ${i}`,
           updatedAt: T0 - (k + 4 * i) * HOUR,
         })),
+        log,
+        clock,
       ),
   );
   const fact = sources[0]!.items.at(-1)!;
   fact.title = "Zed Quinn contract on hold";
   fact.text = "Do not pay Zed Quinn: the Globex renewal payment is on hold until legal signs off";
-  return { sources, fact };
+  return { sources, fact, log, clock };
 }
 
 async function run(config: Record<string, unknown>) {
-  const { sources, fact } = world();
+  const { sources, fact, log, clock } = world();
   const cache = new ItemCache();
   const traces: Trace[] = [];
   const partner = new ContextPartner({
@@ -101,17 +111,22 @@ async function run(config: Record<string, unknown>) {
   });
   const pathMs = performance.now() - t0;
   const got: Injection[] = r.injection ? [r.injection] : [];
-  // What arrives behind the reply, until nothing is left running.
+  // What arrives behind the reply, until nothing is left running and no search has started for 2 x SEARCH_MS: the
+  // session can look idle between two phases of the push's work (a moment with nothing in flight before the probes
+  // start), and a snapshot taken there missed the push's last searches under load. A search started after a quiet
+  // period that long would follow no search of the push's (each ends within SEARCH_MS of its start).
   for (let n = 0; n < 2_000; n++) {
     got.push(...partner.takePending(ref));
     const s = (partner as unknown as { sessions: Map<string, { inflight: unknown; behind: unknown }> }).sessions.get(
       `t1/u1#s1`,
     );
-    if (!s?.inflight && !s?.behind) break;
+    if (!s?.inflight && !s?.behind && performance.now() - clock.last >= 2 * SEARCH_MS) break;
     await Bun.sleep(5);
   }
   got.push(...partner.takePending(ref));
   const searches = sources.reduce((n, s) => n + s.searches, 0);
+  // Every search the push sent, and none of the ask's below.
+  const pushed = log.slice();
   const delivered = got.flatMap((x) => x.citations.map((c) => c.itemId));
   const ask = await partner.ask({ ...ref, question: "Is the Zed Quinn Globex renewal payment on hold?" });
   return {
@@ -121,6 +136,8 @@ async function run(config: Record<string, unknown>) {
     delivered: delivered.includes(fact.id),
     asked: ask.citations.some((c) => c.itemId === fact.id),
     askSearches: sources.reduce((n, s) => n + s.searches, 0) - searches,
+    pushed,
+    log,
     behindTraces: traces.filter((t) => t.reason === "cut search behind"),
   };
 }
@@ -137,8 +154,14 @@ describe("pushCutBehind (D405)", () => {
     expect(on.cached).toBe(true);
     expect(on.delivered).toBe(off.delivered);
     expect(on.delivered).toBe(true);
-    // No more connector calls: the follow-up reads what the search stored and searches nothing again.
-    expect(on.searches).toBeLessThanOrEqual(off.searches);
+    // No more connector calls: the follow-up reads what the search stored and searches nothing again. Compared as
+    // sets of (source, query): every search the push sent with the switch on, the push with it off sent too (push
+    // against push: the off run's ask searches are left out, so a push that adds an ask-like query fails here), and
+    // no source was sent the same query twice. What keeps a repeated (source, query) from a second call may be the
+    // fan-out's held page as well as the follow-up's own guard.
+    const sentOff = new Set(off.pushed);
+    expect(on.pushed.filter((q) => !sentOff.has(q))).toEqual([]);
+    expect(new Set(on.log).size).toBe(on.log.length);
     // Its calls are traced, so traces still sum to what the connectors received.
     expect(on.behindTraces.reduce((n, t) => n + t.sourceCalls, 0)).toBeGreaterThan(0);
     expect(off.behindTraces).toHaveLength(0);

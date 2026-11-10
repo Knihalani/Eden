@@ -1,7 +1,7 @@
 {
   "name": "@eden/proxy",
   "version": "0.0.0",
-  "description": "An OpenAI-compatible proxy in front of the agent's model: reports each conversation's events to Eden and injects its context, with no change to the agent but its base URL.",
+  "description": "A proxy in front of the agent's model (OpenAI chat completions and Responses, Anthropic Messages): reports each conversation's events to Eden and injects its context, with no change to the agent but its base URL.",
   "type": "module",
   "main": "src/index.ts",
   "exports": { ".": "./src/index.ts" },

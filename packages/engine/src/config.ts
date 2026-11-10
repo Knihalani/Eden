@@ -295,7 +295,8 @@ export interface EngineConfig {
    * reads are
    * pooled by what the request had for the source: nothing, its words alone (among the source's held items or in its
    * sketch), or a name the source's items mentioned. A warm synced copy is not read live (no search of its cut copy
-   * behind, no probe, and with `sourceYieldPolls` no on-demand poll; it answers from what is held, and an ask names
+   * behind, no probe, and with `sourceYieldPolls` no on-demand poll; a lookup that waits for its poll still searches
+   * a spent cut copy; otherwise it answers from what is held, and an ask names
    * it "not searched") when its own run is at `sourceYieldRun` or more and the request names nothing it mentioned, or
    * when none of its items has ever reached the agent and the user's reads on that kind of evidence are surely
    * paying under `sourceYieldFloor` (uses per read; 0: the pooled rule off). The pool of reads on nothing always
@@ -717,6 +718,34 @@ export interface EngineConfig {
    * `pushCheckWaitMs`. With `pushCheckItems` 20 the pool fills the check and nothing widened is read.
    */
   pushWiden: boolean;
+  /**
+   * N5 (D527; a trial; 1 = I3's reply): 2 asks the check for a compare-first reply (`CHECK_SYSTEM_COMPARE`): per
+   * listed item, what its point applies to, what of the request's own that point lands on (or "none"), then the
+   * verdict. No thinking; a longer reply (no stop sequence).
+   */
+  pushCheckForm: number;
+  /**
+   * N5 (D533; a trial; true = I3's rule; docs/research/n5-widen-check.md): with `pushCheck`, whether a check that
+   * names no item sends no candidates packet. Off, the default's candidates go instead: the check then only ever
+   * replaces the default's packet with the items it named, and a request it finds nothing for is handled as today.
+   */
+  pushCheckSilent: boolean;
+  /**
+   * N5 (D534; a trial, off): with `pushCheck`, the check's call is made only when some item of the lexical pool's
+   * head (never a widened item) is constraint-like (`readerGate`'s test, cards included) and names one of the
+   * request's anchors (`settle.ts`: an entity or a day); otherwise no call and no widening are made and the
+   * default's candidates go. Fewer calls (about a third as many on train's 1:1:8 mix) with no stored answer and no
+   * dependency beyond the checker.
+   */
+  pushCheckAnchored: boolean;
+  /**
+   * O3 (D702; a trial, off; docs/research/o3-push-open.md): with `pushCandidates` and without `pushCheck`, the push
+   * also runs for a message whose verb is on no list but which does not open as a question, a remark or a statement
+   * (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`, kept for the reader's
+   * paid push and the check's) guard nothing there; the candidates' own gate (a constraint-like item in the pool)
+   * still decides whether a packet goes. An opened message is not kept as an acting request for plan alerts (D301).
+   */
+  pushOpen: boolean;
   pushWidenEmbed: number;
   pushWidenIntent: number;
   pushWidenDeep: number;
@@ -882,6 +911,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItemChars: 200,
   pushCheckItems: 15,
   pushWiden: false,
+  pushCheckForm: 1,
+  pushCheckSilent: true,
+  pushCheckAnchored: false,
+  pushOpen: false,
   pushWidenEmbed: 3,
   pushWidenIntent: 2,
   pushWidenDeep: 0,

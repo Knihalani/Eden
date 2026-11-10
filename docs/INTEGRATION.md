@@ -375,11 +375,16 @@ carries only a history id that your code turns into items with a `history.list` 
 
 ## The one-line integration: Eden in front of your model (`bun run proxy`, D280)
 
-If your agent calls an OpenAI-compatible chat API, you can add Eden without touching its loop:
+If your agent calls an OpenAI-compatible chat API or Anthropic's Messages API, you can add Eden without touching its
+loop:
 
 ```bash
 EDEN_PROXY_UPSTREAM=https://api.openai.com/v1 EDEN_URL=http://127.0.0.1:8790 EDEN_API_KEY=… bun run proxy
 # the agent: base_url="http://127.0.0.1:8791/v1", plus a header x-eden-user-id: <your user's id>
+
+# Anthropic's Messages API (D653): the same proxy, the SDK's base URL without /v1
+EDEN_PROXY_UPSTREAM=https://api.anthropic.com/v1 bun run proxy
+# the agent: Anthropic(base_url="http://127.0.0.1:8791", default_headers={"x-eden-user-id": user_id})
 ```
 
 `EDEN_PROXY_UPSTREAM` keeps the provider's version path (`/v1`, `/api/v1`; the proxy warns at startup when it has no
@@ -394,7 +399,24 @@ not as a line per request.
   3 s), inserts Eden's packets as a system message just before the latest user message, keeps the turn's packets on
   the turn's later model calls (tool loops), and streams the upstream's answer back unchanged. Other routes
   (`/v1/models`, embeddings) pass through.
-- **Identity.** `x-eden-user-id` (else the body's `user`) names the end user; without either, Eden is skipped (the
+- On each `POST /v1/messages` (Anthropic, D653) it does the same work on the same conversation state: `tool_use`
+  and `tool_result` blocks are reported as tool calls and results, and Eden's packet is inserted as a text block of
+  the latest user turn's message, ahead of its other blocks (the API has no system role inside `messages`). Text
+  beside tool results in one message (a harness's reminder) is not a user turn and is not reported. The top-level `system`, `cache_control` marks and every other field go upstream as they
+  came; `x-api-key` and `anthropic-version` are forwarded; the proxy's own errors on this route have Anthropic's
+  shape. `/v1/messages/count_tokens` and batches pass through untouched. Checked live (2026-11-10, one run each,
+  `claude-haiku-5-5`): asked where and when lunch is, the model answered that it has no calendar access directly
+  and "at Dishoom on Thursday at 12:30" through the proxy; a body with
+  `system`, `metadata.user_id` and `cache_control` was accepted (a scratch script, not in the repo).
+- On each `POST /v1/responses` (OpenAI's Responses API, D656) likewise: `input`'s items are read as the
+  conversation, and the packet goes back as a system item before the latest user message. With the history held
+  by the provider, `conversation` names the session; with `previous_response_id` alone send `x-eden-session-id`,
+  or each request is its own session. With the history held by the provider the model's `function_call` items
+  stay with the provider: Eden is told of no tool call, and each `function_call_output` reaches it as the result of
+  a tool named "tool" (the proxy does not read the replies for calls). Send the whole input instead of
+  `previous_response_id` if Eden should see tool calls. Not yet checked against the real API.
+- **Identity.** `x-eden-user-id` (else the body's `user`; on Anthropic's route `metadata.user_id` instead) names the end
+  user; without either, Eden is skipped (the
   proxy says so once on stderr, D365).
   `x-eden-session-id` names the conversation; without it the proxy keys it by a hash of its first non-system
   message (system prompts may change per request), so send it if many conversations open identically. Ids pass
@@ -627,6 +649,11 @@ back the first time they are used and their sources are polled for what is new. 
 docs/research/c3-persist-frozen.md): synced again in 14.1-14.2 s instead of 42.9-44.0 s at 1,000 items a user,
 and 32.4 s instead of 121.8 s at the 3,000-item cap; listing calls 2,400 → 600 and 6,000 → 600. Live users are
 written at SIGTERM (within 1.5 s); a crash loses only what was live.
+
+Trial (D652, off): `EDEN_PERSIST_DISK_ONLY=1` also lets go of the memory's copy of a frozen user once their file
+is written, and reads the file back when they return (a thaw 6-9 ms slower at the median). A frozen user then holds
+0.33-0.38 MB of resident memory instead of 0.62 MB; on a fleet that is 1.2x more users when a twentieth are active
+and 1.06x at an eighth (docs/research/o2-users-per-box.md). A file that does not open: that user is synced again.
 
 What you take on: redacted item content of idle users is on disk until the user returns, is forgotten (`/v1/forget`
 deletes the file too) or the file is 7 days old; the key in the environment opens every file, so put the directory

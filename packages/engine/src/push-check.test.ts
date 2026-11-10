@@ -9,7 +9,17 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import { CHECK_STOP, CHECK_SYSTEM, checkKey, checkMessages, itemMark, parseCheck, PushChecker } from "./push-check";
+import {
+  CHECK_STOP,
+  CHECK_SYSTEM,
+  CHECK_SYSTEM_COMPARE,
+  checkKey,
+  checkMessages,
+  itemMark,
+  parseCheck,
+  parseCompare,
+  PushChecker,
+} from "./push-check";
 
 // I3 (D500): the `pushCheck` trial. One model call over the push's pool names the items that change what the agent
 // should do; the candidates are those, in pool order; none named sends no packet; any failure leaves the default's.
@@ -366,6 +376,22 @@ describe("pushWiden (N2, D511): items past the pool, read by the check only", ()
     return { partner, seen };
   }
 
+  test("pushCheckAnchored decides before the widening: a push it leaves to the default makes no widen call", async () => {
+    const model = says(["Audi finance"]);
+    const on = { pushWiden: true, pushCheckAnchored: true };
+    // The request names Harlow, as a constraint-worded pool item does: the widening and the check both run.
+    const open = widened(on, model, ["mail:car"]);
+    expect(await handed(open.partner)).toEqual(["mail:car"]);
+    expect(open.seen.length).toBe(1);
+    // A request naming nothing those items name: no widen call, no model call, the default's candidates.
+    const closed = widened(on, model, ["mail:car"]);
+    const got = await handed(closed.partner, ref, "Pay the venue deposit invoice for Quillfeather.");
+    expect(closed.seen.length).toBe(0);
+    expect(model.calls.length).toBe(1);
+    expect(got.length).toBe(2);
+    expect(got).not.toContain("mail:car");
+  });
+
   test("a widened item the check names is handed after the pool; one it does not name is not", async () => {
     const pools: PushPoolReport[] = [];
     const yes = says(["Audi finance"]);
@@ -451,5 +477,140 @@ describe("pushWiden (N2, D511): items past the pool, read by the check only", ()
     expect(() => checkEngineConfig({ pushCheck: true, pushWidenEmbed: 4 }, { deps: { checker: true } })).toThrow();
     const ok = { pushCheck: true, pushWiden: true, pushWidenEmbed: 4 };
     expect(checkEngineConfig(ok, { deps: { checker: true } })).toEqual(ok);
+  });
+});
+
+// N5 (D527): `pushCheckForm` 2, the compare-first reply. Per listed item: what its point applies to, what of the
+// request's own it lands on (or none), then the verdict.
+describe("pushCheckForm 2 (N5, D527): the reply compares before it decides", () => {
+  /** A model that answers in the compare-first format: `yes` land on the request, `other` are about another one. */
+  const compares = (yes: string[], other: string[] = []) =>
+    new FakeModel((req) => {
+      const n = numbers(req);
+      const entry = (t: string, hits: string, act: boolean) =>
+        `{"i":${n.get(t)},"on":"${t}","hits":"${hits}","act":${act}}`;
+      const entries = [
+        ...yes.filter((t) => n.has(t)).map((t) => entry(t, "the Harlow deposit", true)),
+        ...other.filter((t) => n.has(t)).map((t) => entry(t, "none", false)),
+      ];
+      return `{"items":[${entries.join(",")}]}`;
+    });
+
+  test("1 in the default; 2 sends the compare-first instructions with no stop sequence", async () => {
+    expect(DEFAULT_CONFIG.pushCheckForm).toBe(1);
+    const model = compares(["Harlow deposit"], ["Invoice archive"]);
+    const { partner } = setup({ pushCheck: true, pushCheckForm: 2 }, model);
+    expect(await handed(partner)).toEqual(["mail:dated"]);
+    const req = model.calls[0]!;
+    expect(req.messages[0]).toEqual({ role: "system", content: CHECK_SYSTEM_COMPARE });
+    expect(req.stop).toBeUndefined();
+    expect(JSON.stringify(req.messages)).not.toContain("AKIAIOSFODNN7EXAMPLE");
+  });
+
+  test("none listed, or every entry landing on nothing, sends no packet", async () => {
+    expect(await handed(setup({ pushCheck: true, pushCheckForm: 2 }, compares([])).partner)).toEqual([]);
+    const p = setup({ pushCheck: true, pushCheckForm: 2 }, compares([], ["Harlow venue", "Harlow invoice"])).partner;
+    expect(await handed(p)).toEqual([]);
+  });
+
+  test("an unreadable compare-first reply leaves the default's candidates", async () => {
+    const { partner, checker } = setup({ pushCheck: true, pushCheckForm: 2 }, new FakeModel(() => "Item 2 lands."));
+    expect((await handed(partner)).length).toBe(2);
+    expect(checker!.stats.failures).toBe(1);
+  });
+
+  test("the two forms' answers are kept apart, and the instructions cache", () => {
+    const input = { request: "Pay Harlow", today: "2026-10-27", items: [] };
+    expect(checkKey({ ...input, form: 2 })).not.toBe(checkKey(input));
+    expect(CHECK_SYSTEM_COMPARE.length).toBeGreaterThan(2_400);
+    // The question, its yes and no, the example and the data rule are I3's own paragraphs.
+    expect(CHECK_SYSTEM_COMPARE.startsWith(CHECK_SYSTEM.split("\n\n").slice(0, 5).join("\n\n"))).toBe(true);
+  });
+
+  test("parseCompare: a yes needs act and a link; a contradiction is a no; a bad yes fails open", () => {
+    expect(parseCompare('{"items":[]}', 5)).toEqual([]);
+    const e = (i: number | string, hits: unknown, act: unknown) =>
+      `{"i":${JSON.stringify(i)},"on":"x","hits":${JSON.stringify(hits)},"act":${JSON.stringify(act)}}`;
+    expect(parseCompare(`{"items":[${e(2, "its evening", true)},${e(4, "none", false)}]}`, 5)).toEqual([1]);
+    // act true with no link is the entry contradicting itself: read as no, in any spelling of none.
+    for (const none of ["none", "None.", "", "nothing", "n/a", " NONE "]) {
+      expect(parseCompare(`{"items":[${e(1, none, true)}]}`, 5)).toEqual([]);
+    }
+    expect(parseCompare('{"items":[{"i":1,"on":"x","act":true}]}', 5)).toEqual([]);
+    // A none that explains itself is a none; a link that starts with "no" or "nothing" is a link.
+    expect(
+      parseCompare(`{"items":[${e(1, "none - another venue", true)},${e(2, "None (another invoice)", true)}]}`, 5),
+    ).toEqual([]);
+    expect(parseCompare(`{"items":[${e(1, "no licence increases until hold lifted", true)}]}`, 5)).toEqual([0]);
+    expect(parseCompare(`{"items":[${e(1, "nothing in payroll yet for November", true)}]}`, 5)).toEqual([0]);
+    // A yes whose link is not text is a format error: fail open (a yes read as nothing would silence the push).
+    expect(parseCompare(`{"items":[${e(1, ["the venue", "12 May"], true)}]}`, 5)).toBeNull();
+    expect(parseCompare(`{"items":[${e(1, null, true)}]}`, 5)).toBeNull();
+    expect(parseCompare(`{"items":[${e(1, null, false)}]}`, 5)).toEqual([]);
+    expect(parseCompare(`{"items":[${e("3", "its venue", "true")}]}`, 5)).toEqual([2]);
+    // A yes naming no item of the pool fails the reply open; so does a cut or wordy reply.
+    expect(parseCompare(`{"items":[${e(9, "its venue", true)}]}`, 5)).toBeNull();
+    expect(parseCompare(`{"items":[${e(2, "its venue", true)},{"i":3,"on":"y","hi`, 5)).toBeNull();
+    expect(parseCompare("Item 2 lands on the venue.", 5)).toBeNull();
+    expect(parseCompare('{"items":"none"}', 5)).toBeNull();
+    // Repeats count once; at most five.
+    const many = Array.from({ length: 8 }, (_, k) => e((k % 7) + 1, "its day", true)).join(",");
+    expect(parseCompare(`{"items":[${many}]}`, 10)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  test("the form's settings are checked: whole, 1 or 2, under pushCheck", () => {
+    const deps = { deps: { cards: true, reader: true, checker: true } };
+    expect(checkEngineConfig({ pushCheck: true, pushCheckForm: 2 }, deps)).toEqual({
+      pushCheck: true,
+      pushCheckForm: 2,
+    });
+    expect(() => checkEngineConfig({ pushCheck: true, pushCheckForm: 3 }, deps)).toThrow();
+    expect(() => checkEngineConfig({ pushCheckForm: 2 }, deps)).toThrow(/pushCheck/);
+  });
+});
+
+// N5 (D533, D534): `pushCheckSilent` off and `pushCheckAnchored` (arm N): the check as an addition to the default's
+// packet, called only where a constraint-like item names something the request names.
+describe("pushCheckSilent off and pushCheckAnchored (N5, D533, D534)", () => {
+  test("silent is I3's rule and the default; off, a check that names nothing leaves the default's candidates", async () => {
+    expect(DEFAULT_CONFIG.pushCheckSilent).toBe(true);
+    const model = says([]);
+    const { partner } = setup({ pushCheck: true, pushCheckSilent: false }, model);
+    expect((await handed(partner)).length).toBe(2);
+    expect(model.calls.length).toBe(1);
+    // The report says what the check answered (it was read, and named nothing), not a failure.
+    const pools: PushPoolReport[] = [];
+    const quiet = setup({ pushCheck: true, pushCheckSilent: false }, says([]), pools);
+    await handed(quiet.partner);
+    expect(pools.at(-1)!.check).toBe("yes");
+    expect(pools.at(-1)!.checked!.some(Boolean)).toBe(false);
+    expect(pools.at(-1)!.handed.length).toBe(2);
+    expect(pools.at(-1)!.checkCalled).toBe(true);
+    // A check that names something still replaces the default's packet.
+    const named = setup({ pushCheck: true, pushCheckSilent: false }, says(["Invoice archive"]));
+    expect(await handed(named.partner)).toEqual(["mail:other"]);
+  });
+
+  test("anchored: a call only when a constraint-like item names one of the request's anchors", async () => {
+    expect(DEFAULT_CONFIG.pushCheckAnchored).toBe(false);
+    // The request names Harlow; "Harlow venue" is constraint-worded and names it: the gate is open.
+    const open = says(["Harlow deposit"]);
+    expect(await handed(setup({ pushCheck: true, pushCheckAnchored: true }, open).partner)).toEqual(["mail:dated"]);
+    expect(open.calls.length).toBe(1);
+    // A request that names nothing the constraint-worded items name: no call, the default's candidates.
+    const closed = says(["Harlow deposit"]);
+    const { partner, checker } = setup({ pushCheck: true, pushCheckAnchored: true }, closed);
+    const got = await handed(partner, ref, "Pay the venue deposit invoice for Quillfeather.");
+    expect(closed.calls.length).toBe(0);
+    expect(checker!.stats.asked).toBe(0);
+    expect(got.length).toBe(2);
+  });
+
+  test("both need pushCheck and a checker", () => {
+    const deps = { deps: { cards: true, reader: true, checker: true } };
+    const on = { pushCheck: true, pushCheckAnchored: true, pushCheckSilent: false };
+    expect(checkEngineConfig(on, deps)).toEqual(on);
+    expect(() => checkEngineConfig({ pushCheckAnchored: true }, deps)).toThrow(/pushCheck/);
+    expect(() => checkEngineConfig(on, { deps: { cards: true, reader: true } })).toThrow(/checker/);
   });
 });

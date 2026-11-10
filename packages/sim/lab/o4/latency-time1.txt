@@ -1,0 +1,43 @@
+observe  n 96  wall p50 19.1  p90 32.9  p99 80.6  max 80.6  mean 20.9 ms
+  probes           ran 100%  p50    997  p90   2472  p99   3003  share 5207.4%
+  source.search    ran  55%  p50   1494  p90   2521  p99   3003  share 4144.2%
+  probe.person     ran  83%  p50    799  p90   2470  p99   3003  share 4034.0%
+  sync.freshen     ran 100%  p50   4.17  p90   2262  p99   3004  share 3106.9%
+  search.behind    ran  58%  p50    953  p90   1497  p99   1498  share 2671.1%
+  slow             ran 100%  p50   26.2  p90   1486  p99   1522  share 1998.9%
+  probes.grace     ran 100%  p50   10.0  p90   1470  p99   1507  share 1934.7%
+  search           ran 100%  p50   2.86  p90   1474  p99   1508  share 1922.5%
+  orgs             ran 100%  p50   0.06  p90   1492  p99   2220  share 1919.1%
+  route            ran 100%  p50   0.00  p90   1471  p99   1505  share 1912.7%
+  cards.match      ran 100%  p50   1.33  p90   1464  p99   1500  share 1908.4%
+  rank             ran 100%  p50   0.54  p90   1464  p99   1500  share 1906.1%
+push     n 127  wall p50 15.1  p90 25.1  p99 53.9  max 77.4  mean 14.6 ms
+  source.search    ran  55%  p50   1245  p90   1704  p99   3026  share 4949.1%
+  search.behind    ran  54%  p50   1083  p90   1497  p99   1499  share 3839.3%
+  probes           ran  66%  p50    701  p90   1497  p99   1510  share 3162.5%
+  probe.person     ran  55%  p50    505  p90   1367  p99   1498  share 2150.2%
+  sync.freshen     ran  66%  p50   10.2  p90    960  p99   1499  share 1347.4%
+  sanitize         ran  32%  p50   0.40  p90    786  p99   1233  share 535.1%
+  probe.consequence ran  25%  p50   4.56  p90   1410  p99   1501  share 530.4%
+  probe.topic      ran  11%  p50    736  p90   1497  p99   1510  share 479.8%
+  probe.second     ran  30%  p50   6.51  p90   1115  p99   1394  share 462.7%
+  cache.put        ran  32%  p50   0.38  p90    492  p99    887  share 320.7%
+  deliver          ran  70%  p50   0.87  p90   1.62  p99   2998  share 166.4%
+  render           ran  70%  p50   0.45  p90   0.85  p99   2997  share 164.1%
+ask      n 96  wall p50 11.2  p90 16.3  p99 69.3  max 69.3  mean 12.3 ms
+  source.search    ran  66%  p50    974  p90   1497  p99   1500  share 5377.2%
+  probes           ran 100%  p50    602  p90   1497  p99   1505  share 4705.9%
+  search.behind    ran  81%  p50    676  p90   1497  p99   1501  share 4426.0%
+  probe.person     ran  83%  p50    487  p90   1191  p99   1500  share 3376.4%
+  sync.freshen     ran 100%  p50   3.61  p90    940  p99   1506  share 1896.4%
+  probe.topic      ran  17%  p50    638  p90   1497  p99   1498  share 855.0%
+  cache.put        ran  47%  p50   0.12  p90    677  p99   1496  share 689.7%
+  probe.consequence ran  33%  p50   0.18  p90    618  p99   1497  share 353.6%
+  probe.role       ran  23%  p50   0.26  p90   1098  p99   1495  share 347.6%
+  sanitize         ran  18%  p50   0.13  p90    649  p99   1122  share 218.6%
+  probe.org        ran   8%  p50   0.46  p90   1502  p99   1502  share 209.6%
+  probe.second     ran  44%  p50   0.47  p90   1.25  p99   1098  share 196.4%
+TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0
+funnel score (surfaced = delivered or cited by ask), default, seeds 41, 475 s
+  TOTAL      hidden 38/48  decoys 39/48
+  TOTAL      hidden in pool 0/48, decoy in pool 0/48, mean pool items 0.0

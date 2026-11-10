@@ -26,20 +26,20 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `rare-terms.ts`                                                            | `RareTerms` (`sourceYieldEarn`, D600, a trial): one table a user of which few of their sources hold each listed word (4 bytes a word, at most 1 MB), filled in `Sync.store`, read by `Sync.rareHolders` |
 | `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, on in the default): per (user, source) a run of live reads with nothing used, and per user two pooled rates (reads on no evidence, reads on words alone); the partner's `spentSources` skips live reads by them |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
-| `push-check.ts`                                                            | The push check (`pushCheck`, D500–D504, a trial, off): one budgeted call a push names the pool's items that change the action (`CHECK_SYSTEM`, `parseCheck`, `PushChecker`); `push-check.test.ts`                              |
+| `push-check.ts`                                                            | The push check (`pushCheck`, D500–D504, a trial, off): one budgeted call a push names the pool's items that change the action (`CHECK_SYSTEM`, `parseCheck`, `PushChecker`); form 2, the compare-first reply (`CHECK_SYSTEM_COMPARE`, `parseCompare`, D527); `push-check.test.ts`                |
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
 | `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default): identifiers a call adds and its packets showed; `ItemCache.isCorrespondent` reads the user's header addresses |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
 | `ledger.ts`, `usage.ts`                                                    | Not-twice ledger; usage inference for learning (D13, D18)                                                                                                                                                                     |
 | `spans.ts`, `trace.ts`                                                     | Span tracing (off by default, content-free, D56); decision traces, `explainTrace` (a sentence per trace, D277); `UsageRecord` for the optional `onUsage` sink (whether the agent used each injection, content-free, D293); `ContextPartner.explain` keeps a session's last `EXPLAIN_TRACES` (32) |
-| `gate.ts`                                                                  | Redaction off the event loop through the worker pool (D25, D26)                                                                                                                                                               |
+| `gate.ts`                                                                  | Redaction off the event loop through the worker pool (D25, D26)                                                                                                                                                                                                                                  |
 
 `bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `ingest.bench.ts` (memory per synced
 user, ingest µs/item; the scale anchor, docs/TESTING.md), `users.bench.ts` (many users: memory live and frozen, thaw,
 D325), `storm.bench.ts` (a cold-start storm with warm users' p99, D328), `index-memory` (the per-user index's heap per
-item and per user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`; `many-sources` (one user,
-~1,000 connectors, a session) and `source-days` (the same over whole days with changing sources: listing and card
-calls per user per day, D324).
+item and per user, put/search latency, D111), `segment-screen` (O4's screens of varint postings, columns and text
+blocks, D750), `concurrent`, `put`, `churn`, `workload.ts`; `many-sources` (one user, ~1,000 connectors, a session)
+and `source-days` (the same over whole days with changing sources: listing and card calls per user per day, D324).
 
 ## Invariants (with the decisions)
 
@@ -295,6 +295,31 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   items, only where the check runs. They are handed only when the check names them; the nudge's deeper look,
   `anchoredPast` and the returned pool stay the lexical pool's, so an unnamed widened item never reaches an ask. Every
   route fails open to no widening.
+- **The push check's reply, gate and silence (N5, D527–D536, trials, off; docs/research/n5-widen-check.md).**
+  `pushCheckForm` 2 sends `CHECK_SYSTEM_COMPARE` and reads `parseCompare`: an entry is a yes only with `act` true and
+  a `hits` that is not "none"; there is no stop sequence (the entries with no link are the comparison), so the output
+  cap is `COMPARE_MAX_TOKENS`. The two forms' kept answers never mix (`checkKey` holds the form). Do not reword the
+  compare step without a funnel screen: "is it the same person, thing and day" rejected facts that bear on a request
+  without sharing its names (an all-hands on the request's evening), and thinking at effort low on form 1 handed
+  fewer facts than the default. `pushCheckAnchored` (`anchoredPool`) is decided before the widening and the call: when no item of the pool's
+  head is constraint-like and anchored (`gate.like`, `anchored`; a widened item never opens it), neither runs and the
+  default's candidates go, untouched. A second pass decides again on its own pool, so a gate that closes then
+  replaces a checked first packet with the default's. `pushCheckSilent`
+  off turns a check that names nothing into the default's candidates (`candidatesOf`). A silent push makes the agent
+  ask more (+0.30 `ask_context` a task on Pi): measure any change to when the push is silent live, with wall, not on
+  the funnel. A check answered from labels made at ingest (`pushCheckStored`, `pushCheckGate`) was measured and
+  deleted (D526, D529): with no request in hand a model cannot tell a fact from a look-alike that is a real
+  constraint about another venue, person or day.
+- **The push starts on a verb list; `pushOpen` (O3, D702, D706, a trial, off) reads the request's shape instead.**
+  `observe` starts the push only when `isImperative` knows the request's verb (a gate from the reader's paid push);
+  132 of 768 hidden train requests start none. With `pushOpen` and `pushCandidates` (and `pushCheck` off: an opened push never makes
+  the check's paid call), `isOpenRequest` (probes.ts: four words or more; not a remark, question or statement opener;
+  a question mark only on a polite ask; bounded input) also starts it. An opened message is not `noteActed`: a plan
+  alert (D301) quotes only a listed-verb request. Live:
+  hidden +4.1 points, confirmed concerns level, the decoy handed more often too (docs/research/o3-push-open.md). The
+  funnel always asks, so its "surfaced" cannot see this; read `pushHanded` (`n2/compare.py`) and measure live. Deleted
+  beside it: the push check run behind the packet (`pushCheckBehind`, D704: its follow-up reached the agent in 36 of
+  768 hidden tasks, hidden +0.0) and a lead line asking for the item's specifics (`candidatesSpecifics`, D705: +2.0).
 - **Updates name the times they drop (D342, `revisionDiff`).** `buildUpdate`'s title reads `Ledger.seenTimes`; times
   are noted only when a copy is handed out (`watchCopies`, from `copiesOf`'s `times`), never when an update is queued
   (one superseded in the queue was never shown). `timesOf` compares one written form ("HH:MM", "<day> <mon>"), so a
@@ -360,8 +385,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   backfill's overshoot back to the cap also lost 2). The sketch (`sketch.ts`) is per (user, source) in `SourceSync`,
   filled from every listed item in `store`, folded at `warmUp`.
 - **Which sources are read live is learned (`sourceYield`, D505, D509, on in the default; `source-yield.ts`,
-  docs/research/n1-calls.md).** `spentSources` gives a lookup the warm copies it reads nothing live of: no search
-  behind, no probe (they join the probes' `local` set) and, for a cut copy, no on-demand poll. A read is booked in
+  docs/research/n1-calls.md).** `spentSources` gives a lookup the warm copies whose live reads it skips: no search
+  behind, no probe (they join the probes' `local` set) and, for a cut copy, no on-demand poll. A lookup that waits for
+  its poll (not behind) still searches a spent cut copy live with the rest: more reads, never fewer facts. A read is booked in
   `noteLiveRead` from outcomes, "ok" only, once a source a turn (`Session.liveReads`), for warm copies only: booked
   when sent, one call counted twice (the push and the ask it starts join it) and an outage read as "nothing used".
   A new path that makes live reads must book them there, or its sources never earn or lose anything; a new path
@@ -429,6 +455,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   synchronously (~110-190 ms at 3,000 items) with every other request waiting. Bench: `bench/users.bench.ts`;
   on Bun 1.4 `heapUsed` already counts typed arrays' stores and `external` counts them again (D372): report each
   on its own, and RSS, never their sum.
+- **Frozen users on disk only (D652, a trial, off; `persist-disk-only.test.ts`).** With `persist(disk, { diskOnly:
+  true })` a frozen user's `blob` is null once its file is written, and the file is the only copy: any new path that
+  deletes a file without dropping the user loses the user (`thawSteps` then yields an empty one and `persistHooks.lost`
+  restarts the sync). A user whose items all expired is dropped without a read (`allExpired`).
 - **Persisted frozen users (D425, D426, opt-in; `persist.ts`, `persist.test.ts`, `bench/restart.bench.ts`).** With
   `ItemCache.persist(disk)`, `install` (every freeze) writes the blob and the partner's `persistHooks.save` (the sync's
   `snapshot`); `thawed` deletes it (on disk is only ever a frozen user's state) and, for a user read back from disk

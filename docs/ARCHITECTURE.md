@@ -443,6 +443,12 @@ pool it names none of sends no packet. It runs on the reader's model through the
 Trial `pushWiden` (D511, off; with I3's `pushCheck` trial) adds items no lexical rank reached (a `widen` dependency's
 nearest items, raw intent hits) to what the push check reads, sharing its wait; only the check can hand them
 (docs/research/n2-recall.md: it pays only behind a check that thinks, which is too slow and dear as measured).
+Three more trials shape that call (N5, D527–D536, all off; docs/research/n5-widen-check.md): `pushCheckForm` 2 asks
+for a compare-first reply (per listed item, what its point applies to, what of the request's own it lands on or
+"none", then the verdict), which keeps look-alikes out with no thinking at the same price and wait a call;
+`pushCheckAnchored` makes the call only when a constraint-like pool item names one of the request's anchors (about
+three pushes in ten, else the default's candidates with no call); `pushCheckSilent` off leaves the default's
+candidates when the check names nothing.
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search
@@ -470,6 +476,12 @@ with no verdict, or one that flagged an item changed since it read it, leaves th
 ask's wait leaves the ask answered without the reader.
 Its packet is queued only if the session is still open and no newer user message has arrived; the agent's own events in
 between (tool calls, its replies) do not make it stale.
+
+**The push for any request (`pushOpen`, O3, D702, D706; a trial, off).** `observe` starts the push only for a request
+whose verb `isImperative` lists, a gate from the reader's paid push. With `pushOpen`, `pushCandidates` and no
+`pushCheck`, a message that does not open as a question, a remark or a statement (`isOpenRequest`) starts it too: no
+model call, the candidates' own gate unchanged, and no acting request recorded for plan alerts
+(docs/research/o3-push-open.md).
 
 **The intent index** (`intent`, needs `cards`, on in the default, D112; D87, D109, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four requests
@@ -611,7 +623,8 @@ add the SDK: it turns each chat request's new messages (by content, so compacted
 events through `@eden/client`, inserts the turn's packets with `withContext`, and streams the upstream's answer back.
 It fails open under one deadline per request (the observe's wait plus 800 ms), keeps per-conversation state in memory
 (bounded, keyed by user and session), and off loopback needs its own key (`EDEN_PROXY_KEY`), since it holds the
-tenant's. A shadow mode reports and decides but injects nothing.
+tenant's. A shadow mode reports and decides but injects nothing. `POST /v1/messages` (Anthropic's Messages API, D653)
+runs the same logic on the conversation read as chat messages; a packet goes back as a text block of its user message.
 
 ## What is deliberately missing (see ROADMAP.md)
 

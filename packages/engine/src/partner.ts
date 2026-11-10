@@ -109,6 +109,7 @@ import {
   daysNamed,
   isAction,
   isImperative,
+  isOpenRequest,
   MORE_VERBS,
   LEADING,
   isScheduling,
@@ -248,11 +249,17 @@ export interface PushPoolReport {
   anchorKinds?: { entities: number; day: boolean };
   /**
    * `pushCheck` (D500): what the pass's check did ("yes": it answered; "none": no call, the gate found nothing
-   * constraint-like; "late", "failed": the default's candidates went) and, when it answered, per pool item whether it
-   * said the item changes the action.
+   * constraint-like or `pushCheckAnchored` left the push to the default; "late", "failed": the default's candidates
+   * went) and, when it answered, per pool item whether it said the item changes the action (all false with
+   * `pushCheckSilent` off is an answer that named nothing: the default's candidates went).
    */
   check?: "yes" | "none" | "late" | "failed";
   checked?: boolean[];
+  /**
+   * This pass made the check's model call and had its answer within the wait: not a pass that read a kept answer,
+   * that `pushCheckAnchored` skipped, or whose call ran past `pushCheckWaitMs` (traced "check-late" when it lands).
+   */
+  checkCalled?: boolean;
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -797,6 +804,9 @@ export class ContextPartner {
             }
           });
         },
+        // D652: the file of a user held on disk only did not open. Their sync starts over on the next event, as a new
+        // user's does.
+        lost: (scope) => sync?.forget(scope),
       };
     }
   }
@@ -844,7 +854,18 @@ export class ContextPartner {
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
     // not cut at `askReaderWaitMs` (that bounds an explicit ask): a reading that lands later is still queued, while its
     // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
-    const internal: { push: true; request?: number; turn?: number } = { push: true };
+    const internal: { push: true; request?: number; turn?: number; open?: boolean } = { push: true };
+    // `pushOpen` (O3, D702): the candidates' push also starts for a request whose verb is on no list. Not with
+    // `pushCheck`: an opened push would add the check's paid call, which D702 did not measure or cost.
+    const listed = event.kind === "user_message" && isImperative(event.text, MORE_VERBS);
+    const opened =
+      !listed &&
+      event.kind === "user_message" &&
+      this.config.pushOpen &&
+      this.config.pushCandidates > 0 &&
+      !this.config.pushCheck &&
+      isOpenRequest(event.text);
+    if (opened) internal.open = true;
     const push =
       this.config.readerPush &&
       this.config.askReader &&
@@ -853,7 +874,7 @@ export class ContextPartner {
       (this.deps.reader || this.config.pushCandidates > 0) &&
       event.kind === "user_message" &&
       event.draft !== true &&
-      isImperative(event.text, MORE_VERBS)
+      (listed || opened)
         ? // The question as an ask may carry it (`checkAsk`'s cap): the event's own cap is 100 times that, and the
           // ask redacts and tokenizes it before its first await, on the observe's critical path.
           this.ask({ ...event, question: head(event.text, MAX_QUESTION_CHARS), maxItems: 5 }, internal).catch(
@@ -2053,7 +2074,9 @@ export class ContextPartner {
     // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
     // a proactive packet (queued, taken before its next model request); nothing else is answered or handed out.
     if (internal.push) {
-      if (this.config.planConflict && internal.again === undefined) this.noteActed(s, cue);
+      // `pushOpen` (D702): a message the verb lists do not know is not kept as an acting request: a plan alert
+      // (D301) quotes the request it is about, and an opened message may be a remark.
+      if (this.config.planConflict && internal.again === undefined && !internal.open) this.noteActed(s, cue);
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
@@ -2064,7 +2087,17 @@ export class ContextPartner {
       // check can hand them, so it runs only where the check would.
       // One wait for both: the check gets what the widening left of `pushCheckWaitMs` (D500's bound holds).
       const widenFrom = performance.now();
-      if (gate && this.config.pushCheck && this.config.pushWiden && this.deps.checker && gate.like.some(Boolean))
+      // `pushCheckAnchored` (N5, D534) decides first: a push it leaves to the default makes no widening look either.
+      if (gate && this.config.pushCheck && this.config.pushCheckAnchored && this.deps.checker)
+        gate.skip = !this.anchoredPool(cue, gate);
+      if (
+        gate &&
+        !gate.skip &&
+        this.config.pushCheck &&
+        this.config.pushWiden &&
+        this.deps.checker &&
+        gate.like.some(Boolean)
+      )
         gate.widened = await this.widenPool(s, cue, [...order, ...scored], gate.pool);
       const check =
         gate && this.config.pushCheck && this.deps.checker
@@ -2536,13 +2569,13 @@ export class ContextPartner {
 
   /**
    * `pushCheck` (D500): the push check's answer for this pool, or null (off, unwired, no constraint-like item, no
-   * request text). Waits at most `pushCheckWaitMs`; a check that answers later is kept on the session, so a second
-   * pass over the same pool (`readerPushBehind`) reads it with no call. The call runs on the session's signal: it
-   * ends with the session, not with the wait.
+   * request text, or `pushCheckAnchored` left the push to the default). Waits at most `pushCheckWaitMs`; a check
+   * that answers later is kept on the session, so a second pass over the same pool (`readerPushBehind`) reads it
+   * with no call. The call runs on the session's signal: it ends with the session, not with the wait.
    */
   private async checkPush(s: Session, cue: Cue, gate: PushGate, spentMs = 0): Promise<PushCheckRead | null> {
     const checker = this.deps.checker;
-    if (!this.config.pushCheck || !checker || !gate.like.some(Boolean)) return null;
+    if (!this.config.pushCheck || !checker || !gate.like.some(Boolean) || gate.skip) return null;
     const request = sanitizeForStore(cue.raw);
     if (!request.trim()) return null;
     const focus = readerFocus(cue.raw);
@@ -2554,6 +2587,7 @@ export class ContextPartner {
       items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
       cacheKey: userCacheKey(s.scope),
+      ...(this.config.pushCheckForm === 2 ? { form: 2 as const } : {}),
     };
     const key = checkKey(input);
     const asked = `${input.today}\n${request}`;
@@ -2611,6 +2645,17 @@ export class ContextPartner {
     }
   }
 
+  /**
+   * `pushCheckAnchored` (N5, D534): whether some item of the pool's head (what the check reads of the lexical pool) is
+   * constraint-like and names one of the request's anchors (a person, a thing, a day). The constraint test and the
+   * anchors are the default's own: no model, no stored answer. False: no call, no widening, the default's candidates.
+   */
+  private anchoredPool(cue: Cue, gate: PushGate): boolean {
+    const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+    const head = Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS);
+    return gate.pool.slice(0, head).some((x, i) => gate.like[i] && anchored(x.item, anchors));
+  }
+
   /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
   private traceCheck(s: Session, r: PushCheckRead, t0: number): void {
     this.trace(s, {
@@ -2642,7 +2687,10 @@ export class ContextPartner {
     check: PushCheckRead | null = null,
   ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
     const { like } = gate;
-    const yes = check?.yes ?? null;
+    // `pushCheckSilent` off (N5, D533): a check that names nothing leaves the default's candidates instead of sending
+    // no packet, so the check only ever replaces the default's packet with the items it named.
+    const named = check?.yes ?? null;
+    const yes = named && named.size === 0 && !this.config.pushCheckSilent ? null : named;
     // `pushWiden` (D511): widened items are read only by the check and handed only when it names them, after the
     // pool's own; the nudge's deeper look, `anchoredPast` and the returned pool stay the lexical pool's.
     const pool = gate.pool;
@@ -2686,8 +2734,10 @@ export class ContextPartner {
         : {}),
       ...(this.config.pushCheck && this.deps.checker
         ? {
-            check: yes ? "yes" : !check ? "none" : check.late ? "late" : "failed",
-            ...(yes ? { checked: reported.map((x) => yes.has(x.item.id)) } : {}),
+            // What the check said, whatever `pushCheckSilent` then handed: an answer naming nothing is still "yes".
+            check: named ? "yes" : !check ? "none" : check.late ? "late" : "failed",
+            ...(named ? { checked: reported.map((x) => named.has(x.item.id)) } : {}),
+            ...(check?.called ? { checkCalled: true } : {}),
           }
         : {}),
     });
@@ -4067,7 +4117,9 @@ export class ContextPartner {
     let pollable: Set<string> | null = null;
     let cutBehind: Set<string> | undefined;
     let probeLocal: Set<string> | null | undefined;
-    // `sourceYield` (D505): the warm copies whose unused live reads are spent; this lookup reads nothing live of them.
+    // `sourceYield` (D505): the warm copies whose unused live reads are spent: no probe, no cut-copy poll, and on a
+    // lookup that does not wait for its poll no search behind. A lookup that waits for its poll still searches a spent
+    // cut copy with the rest (more reads, never fewer facts).
     if (this.yields) cue.boost = boost;
     const spent = this.spentSources(s, cue, all, boost);
     if (this.sync) {
@@ -4369,7 +4421,8 @@ export class ContextPartner {
   }
 
   /**
-   * `sourceYield` (D505): the user's warm synced copies this request reads nothing live of: a source whose own run
+   * `sourceYield` (D505): the user's warm synced copies this request skips live reads of (no probe, no cut-copy
+   * poll, no search behind; a lookup that waits for its poll still searches a spent cut copy): a source whose own run
    * of reads with nothing used has reached `sourceYieldRun` (never for a request that names an entity the source
    * mentioned), or one with no item ever used while the user's reads on the request's kind of evidence for it are not
    * paying (`SourceYield.poolSpent`). Only a warm copy: it answers from what is held, where a source with no copy
@@ -6679,6 +6732,8 @@ interface AskInternal {
   request?: number;
   /** The session's turn when the push's request was counted: the push's trace reports it (audit A11). */
   turn?: number;
+  /** `pushOpen` (D702): the push started on the message's shape (`isOpenRequest`), not on a listed verb. */
+  open?: boolean;
   /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
   again?: { searched: SearchedLive; prev: Injection | null };
   /**
@@ -6869,6 +6924,8 @@ interface PushGate {
   like: boolean[];
   /** `pushWiden` (D511): items past the pool, for the check only. */
   widened?: Scored[];
+  /** `pushCheckAnchored` (D534): the gate left this push to the default (no check call, no widening). */
+  skip?: boolean;
 }
 
 /** What a re-read found (`verifyDelivery`). */

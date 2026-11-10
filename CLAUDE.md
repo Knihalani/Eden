@@ -29,7 +29,9 @@ PR. `native/` is the measured Rust experiment behind D22 (hot kernels stay TypeS
   with costs. [docs/research/INDEX.md](docs/research/INDEX.md): every research note, its decisions and status.
   [docs/TESTING.md](docs/TESTING.md): test commands, timings, the slowest files.
 - Fast loop: `bun run test:changed` (touched packages and their dependents), `bun run test:pkg <name>`,
-  `bun run check:fast` (format, types, changed tests); `bun run check` is still the gate before a merge.
+  `bun run check:fast` (format, types, changed tests). While developing, a test file that already passed on
+  identical inputs is skipped (D650, D657); the gate before a merge is `CHECK_COLD=1 bun run check`, which runs
+  every file and trusts no cache.
 - `bun run funnel`: the no-model screen on train (the shipped default with its cards and intent requests replayed,
   D158; `--ask`, the funnel score; `--baseline F` diffs task by task; held-out suites need `--blind`).
 - `/deep-audit`: full audit → verified findings → fixes on branches with review → re-audit → plain-language report
@@ -40,7 +42,7 @@ PR. `native/` is the measured Rust experiment behind D22 (hot kernels stay TypeS
 GitHub Actions is off (the user does not pay for minutes). Before every merge, on the final tree:
 
 ```bash
-bun run check   # = format:check (prettier + 120-col line check) && typecheck && test
+CHECK_COLD=1 bun run check   # = format:check (prettier + 120-col line check) && typecheck && test, no caches
 bun run eval    # no-model metrics; paste the JSON in the PR when engine behaviour changes
 ```
 
@@ -88,7 +90,7 @@ runs the same shipped wiring with the reader on `claude-haiku-5-5` (`HAIKU_API_K
 
 1. Branch from up-to-date `main` (`git fetch origin main`), one change per PR.
 2. Tests first for behaviour changes; eval scenarios for engine behaviour.
-3. `bun run check` green; eval JSON in the PR if the engine changed.
+3. `CHECK_COLD=1 bun run check` green; eval JSON in the PR if the engine changed.
 4. Update `docs/` in the same PR when behaviour, a decision or the roadmap changes.
 5. Run the `reviewer` subagent (`.claude/agents/reviewer.md`) on the diff before merging engine, server or privacy
    changes; fix its correctness findings.
