@@ -552,7 +552,8 @@ facts and time in the run above.
 `docker build -t eden .` from the repo root builds the server image (D280); its header lists the flags. It listens on
 `PORT` (8790) on all interfaces, keeps the source map (entity names and counts, never content, D8) in the `/data`
 volume, and reports health on `/healthz`. Item text, sessions and the explain traces live in memory: a restart starts
-users' caches over (the background sync refills them) and loses nothing a user wrote. Set `EDEN_PROCESSES` to the
+users' caches over (the background sync refills them) and loses nothing a user wrote. To restart without re-reading
+every source, opt in to persisting idle users (below, "Restarts without a full re-sync"). Set `EDEN_PROCESSES` to the
 container's CPU quota and read "Processes and per-tenant caps" below. Never run `EDEN_DEV=1` on a reachable port (the
 server warns when it listens beyond loopback). Generate each tenant's key with `openssl rand -hex 24`; requests send
 it as `Authorization: Bearer <key>` (no other header is read). A configuration mistake (a short key, a missing
@@ -607,5 +608,30 @@ router over 4 children served 3.26x the events per second of one process (D178, 
   takes the lower count. Other limits (a v2 quota in a cgroup not visible from the container, an orchestrator's
   CPU request without a limit, a memory limit) are not seen: set `EDEN_PROCESSES` explicitly in any container, to
   the CPUs it may use and no more than its memory limit allows at ~67 MB each.
+
+### Restarts without a full re-sync (`EDEN_PERSIST_FROZEN_DIR`, opt-in, D425-D427)
+
+By default no item content touches the disk (D8), so a restart re-reads every active user's sources from the start:
+on a full 4-core box about 3.6 minutes of all four cores (A14), and every connector lists everything again. Set
+both of these to keep idle users across a restart instead:
+
+```bash
+EDEN_PERSIST_FROZEN_DIR=/data/frozen          # one subdirectory per process (<i>-of-<N>)
+EDEN_PERSIST_KEY=$(openssl rand -hex 32)      # 32 bytes, hex or base64; keep it in your secret store, not the image
+EDEN_PERSIST_MAX_MB=4096                      # optional; the directory's cap across processes (default 4,096)
+```
+
+A user idle 20-30 minutes is then also written to that directory, encrypted (AES-256-GCM, a file per user under a
+keyed-hash name, bound to its tenant and user), with the sync's position for them. After a restart each user is read
+back the first time they are used and their sources are polled for what is new. Measured (200 users, the bench in
+docs/research/c3-persist-frozen.md): synced again in 14.1-14.2 s instead of 42.9-44.0 s at 1,000 items a user,
+and 32.4 s instead of 121.8 s at the 3,000-item cap; listing calls 2,400 → 600 and 6,000 → 600. Live users are
+written at SIGTERM (within 1.5 s); a crash loses only what was live.
+
+What you take on: redacted item content of idle users is on disk until the user returns, is forgotten (`/v1/forget`
+deletes the file too) or the file is 7 days old; the key in the environment opens every file, so put the directory
+on an encrypted volume, keep the key out of images and logs, and disclose the store to your users (docs/PRIVACY.md,
+docs/THREAT-MODEL.md T12). A new key, a new Eden format, or a damaged file costs that user a re-sync, logged as a
+count, never an id. Changing `EDEN_PROCESSES` deletes the other count's directories (those users re-sync).
 
 [DECISIONS.md](DECISIONS.md) holds each part's evidence.

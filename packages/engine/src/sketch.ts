@@ -7,7 +7,8 @@
  * Bounded: `MAX_BITS` (4 KB) while it fills; once the source is warm it is folded (its two halves OR-ed, which a
  * power-of-two filter allows) while the fill stays low, so a quiet connector of a few hundred terms keeps 128-512 B.
  * Content-free in the sense D8 asks of the source map: it holds hashed bits, never a word, and lives in memory only,
- * per (user, source) like the rest of the sync's state (D9).
+ * per (user, source) like the rest of the sync's state (D9), except with the operator's opt-in to persisting frozen
+ * users (D425), where it is saved encrypted with them.
  */
 import { hashString } from "@eden/primitives";
 import { isStopword } from "./text";
@@ -65,6 +66,32 @@ export class TermSketch {
       this.bits = half;
       this.set = set;
     }
+  }
+
+  /** The sketch as JSON can hold it (D425: saved, encrypted, with a persisted user's sync state). */
+  dump(): { bits: string; set: number } {
+    return {
+      bits: Buffer.from(this.bits.buffer, this.bits.byteOffset, this.bits.byteLength).toString("base64"),
+      set: this.set,
+    };
+  }
+
+  /** A sketch from `dump`'s output, or null when it is not one (a power-of-two size within the bounds). */
+  static load(d: unknown): TermSketch | null {
+    const x = d as { bits?: unknown; set?: unknown } | null;
+    if (typeof x?.bits !== "string" || typeof x.set !== "number") return null;
+    const bytes = Buffer.from(x.bits, "base64");
+    const words = bytes.byteLength / 4;
+    if (!Number.isInteger(words) || words * 32 < MIN_BITS || words * 32 > MAX_BITS || (words & (words - 1)) !== 0) {
+      return null;
+    }
+    const t = new TermSketch();
+    t.bits = new Uint32Array(words);
+    new Uint8Array(t.bits.buffer).set(bytes);
+    let set = 0;
+    for (const w of t.bits) set += popcount(w);
+    t.set = set;
+    return t;
   }
 
   private setBit(i: number): void {

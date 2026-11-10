@@ -14,6 +14,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `partner.ts` (about 5,130 lines)                                           | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues                                                                                       |
 | `config.ts`, `parts.ts`                                                    | `EngineConfig`, `DEFAULT_CONFIG` (the unified default, D112: thresholds such as `confidentScore` 1.1, D6, and every part on); `PARTS` (each part's settings that take it out), `withoutParts`, `CORE_CONFIG` (every part out) |
 | `cache.ts`, `packed-text.ts`                                               | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem`; item text held deflated behind a `text` getter (D188)                                                                  |
+| `persist.ts`                                                               | `EncryptedFrozenDisk` (D425, opt-in): frozen users' blobs written AES-256-GCM, one file per user under a keyed-hash name, tenant/user in the additional data; `FrozenDisk`, `PERSIST_FORMAT` (bump it when a blob's shape changes) |
 | `text.ts`, `situation.ts`                                                  | Cues with no model (entities, content terms, chatter); a coarse situation label for routing                                                                                                                                   |
 | `render.ts`, `fold.ts`                                                     | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52)                                                                                               |
 | `judge.ts`                                                                 | The judge's prompt and parser (indexes only, D19)                                                                                                                                                                             |
@@ -51,7 +52,9 @@ calls per user per day, D324).
   (`sanitizeForStore`); model output that reaches the agent (the reader's bearing, D95) is redacted and made inert.
 - **Untrusted text (D11, D19).** Source and event text are data in every prompt (fenced, labelled), and everything
   delivered is inside the data envelope.
-- **Item content stays in memory (D8):** only content-free metadata goes to the source map.
+- **Item content stays in memory (D8):** only content-free metadata goes to the source map. The one exception is
+  opt-in (D425): `ItemCache.persist(disk)` writes frozen users' blobs encrypted (`persist.ts`); nothing else may write
+  item content to disk.
 - **One product (D112).** `DEFAULT_CONFIG` is the best measured configuration and what ships. A new behaviour lands
   as a trial switch in `config.ts` (off), with an owner and an end date in DECISIONS.md's trials table; at the end it
   joins the default (and a part in `parts.ts`) or is deleted with its code and tests. A part whose model role is not
@@ -344,6 +347,14 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   synchronously (~110-190 ms at 3,000 items) with every other request waiting. Bench: `bench/users.bench.ts`;
   on Bun 1.4 `heapUsed` already counts typed arrays' stores and `external` counts them again (D372): report each
   on its own, and RSS, never their sum.
+- **Persisted frozen users (D425, D426, opt-in; `persist.ts`, `persist.test.ts`, `bench/restart.bench.ts`).** With
+  `ItemCache.persist(disk)`, `install` (every freeze) writes the blob and the partner's `persistHooks.save` (the sync's
+  `snapshot`); `thawed` deletes it (on disk is only ever a frozen user's state) and, for a user read back from disk
+  (`FrozenUser.fromDisk`), calls `restored` (the sync's `restore`, cards enqueued again). `peek`, `touch` and `ready`
+  read a user this process does not hold from disk (`load`): synchronous, ~1-3 ms a user. A loaded user gets a new
+  revision, read marks 0 (another process's marks mean nothing here) and moves `seqs` past its own. Any new field a
+  `FrozenEntry`, `FrozenBody`, `PersistedUser` or `SyncSnapshot` carries bumps `PERSIST_FORMAT`; a new path that drops
+  or rewrites a user's items must go through `peek`/`touch`/`dropUser` (which delete the blob) or call `disk.delete`.
 - **`syncIngestTurns` (D328, on in the default since D370).** A background sync page waits its turn (one per
   event-loop turn) before it is redacted and stored, so a cold-start storm no longer stalls every request
   (`bench/storm.bench.ts`). The card drain gathers what still waits its turn before calling (`CardEnricher.gather`,

@@ -32,6 +32,11 @@
  * EDEN_SPEND_LEASES=1 trial (D327, spend-lease.ts): the router grants each child a tenant's model spend in chunks
  *                    from one ledger per tenant and day, instead of each child holding 1/N of the cap.
  * EDEN_ROUTER_CHILD  set by the router only ("i/N"): this process is child i of N.
+ * EDEN_PERSIST_FROZEN_DIR, EDEN_PERSIST_KEY  opt-in (D425, off by default): users frozen while idle (D325) are also
+ *                    written to this directory, encrypted (AES-256-GCM) with this key (32 bytes, as 64 hex digits or
+ *                    base64; never logged), so a restart thaws them from disk instead of re-reading every source. Set
+ *                    both or neither. Each process writes its own subdirectory (`<i>-of-<N>`).
+ * EDEN_PERSIST_MAX_MB the directory's cap (MB, across processes; default 4096): a freeze past it is not written.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -70,6 +75,34 @@ export interface ServerConfig {
    * ledger (spend-lease.ts) instead of divided by N. Off by default.
    */
   spendLeases: boolean;
+  /**
+   * D425 (opt-in, EDEN_PERSIST_FROZEN_DIR and EDEN_PERSIST_KEY): where frozen users are written, encrypted; null (the
+   * default) writes no content to disk (D8). `maxBytes` is the whole directory's; a router child gets 1/N of it.
+   */
+  persist?: { dir: string; key: PersistKey; maxBytes: number } | null;
+}
+
+/**
+ * The persistence key (D425), held so it cannot reach a log by accident: JSON, `String` and `console.log` of it say
+ * "[redacted]"; only `bytes()` gives the key.
+ */
+export class PersistKey {
+  readonly #bytes: Uint8Array;
+  constructor(bytes: Uint8Array) {
+    this.#bytes = bytes;
+  }
+  bytes(): Uint8Array {
+    return this.#bytes;
+  }
+  toJSON(): string {
+    return "[redacted]";
+  }
+  toString(): string {
+    return "[redacted]";
+  }
+  [Symbol.for("nodejs.util.inspect.custom")](): string {
+    return "PersistKey [redacted]";
+  }
 }
 
 /** The header the router puts on a fan-out's copies to children that do not own the user (not counted, D326). */
@@ -127,7 +160,42 @@ export function loadConfig(env = process.env, cores = machineCores()): ServerCon
     processes: child ? 1 : processCount(env.EDEN_PROCESSES, cores),
     child,
     spendLeases: flag(env.EDEN_SPEND_LEASES, "EDEN_SPEND_LEASES"),
+    persist: persistConfig(env, share),
   };
+}
+
+/** Default cap of the persistence directory (D425), MB across every process. */
+export const DEFAULT_PERSIST_MAX_MB = 4_096;
+
+/**
+ * EDEN_PERSIST_FROZEN_DIR and EDEN_PERSIST_KEY (D425): both or neither. The key's own value is never in a message.
+ * A child's cap is its 1/N share (`share`) of EDEN_PERSIST_MAX_MB.
+ */
+function persistConfig(env: NodeJS.ProcessEnv, share: number): ServerConfig["persist"] {
+  const dir = env.EDEN_PERSIST_FROZEN_DIR ?? "";
+  const raw = env.EDEN_PERSIST_KEY ?? "";
+  if (dir === "" && raw === "") {
+    if (env.EDEN_PERSIST_MAX_MB) throw new Error("EDEN_PERSIST_MAX_MB is set without EDEN_PERSIST_FROZEN_DIR");
+    return null;
+  }
+  if (dir === "") throw new Error("EDEN_PERSIST_KEY is set without EDEN_PERSIST_FROZEN_DIR: set both or neither");
+  if (raw === "") throw new Error("EDEN_PERSIST_FROZEN_DIR is set without EDEN_PERSIST_KEY: set both or neither");
+  const key = persistKey(raw);
+  if (key === null) {
+    throw new Error("EDEN_PERSIST_KEY must be 32 random bytes as 64 hex digits or base64 (e.g. openssl rand -hex 32)");
+  }
+  const mb = positive(env.EDEN_PERSIST_MAX_MB, DEFAULT_PERSIST_MAX_MB, "EDEN_PERSIST_MAX_MB");
+  return { dir, key: new PersistKey(key), maxBytes: Math.floor((mb * 1_048_576) / share) };
+}
+
+/** 64 hex digits or base64 of exactly 32 bytes; null otherwise (a key of all one byte too: a placeholder). */
+function persistKey(raw: string): Uint8Array | null {
+  const s = raw.trim();
+  let bytes: Buffer | null = null;
+  if (/^[0-9a-fA-F]{64}$/.test(s)) bytes = Buffer.from(s, "hex");
+  else if (/^[A-Za-z0-9+/_-]{43}=?$/.test(s)) bytes = Buffer.from(s.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+  if (bytes === null || bytes.length !== 32 || bytes.every((b) => b === bytes![0])) return null;
+  return new Uint8Array(bytes);
 }
 
 /**

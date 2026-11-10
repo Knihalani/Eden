@@ -24,6 +24,7 @@
  */
 import { Gcra, IdSet } from "@eden/primitives";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
+import { sanitizeForStore } from "@eden/redact";
 import type { Source, SourceFanout, SourceResolver } from "@eden/sources";
 import type { ItemCache } from "./cache";
 import { sketchTerms, termHashes, TermSketch } from "./sketch";
@@ -324,6 +325,136 @@ export class SyncManager {
       people: new Set(),
       used: new Set(),
     });
+  }
+
+  /**
+   * The user's sync state as it outlives a process (D425, opt-in): positions, change rates and the ids synced, saved
+   * encrypted beside the user's frozen blob. Undefined when the user is not synced. A read in flight is not saved
+   * (its source's cursor is where it began).
+   */
+  snapshot(scope: Scope): SyncSnapshot | undefined {
+    const u = this.users.get(scopeKey(scope));
+    if (!u) return undefined;
+    const fin = (x: number) => (Number.isFinite(x) ? x : null);
+    return {
+      activeAt: u.activeAt,
+      cutAt: fin(u.cutAt),
+      people: [...u.people],
+      used: [...u.used],
+      sources: [...u.sources.values()].map((s) => ({
+        id: s.id,
+        ids: [...s.ids],
+        phase: s.phase,
+        // A connector's page token can carry query text or an account id: stored only if the gate leaves it as it is
+        // (D10); otherwise the source's next page is read from the head again.
+        cursor: s.cursor !== undefined && sanitizeForStore(s.cursor) === s.cursor ? s.cursor : null,
+        notifies: s.notifies,
+        fetches: s.fetches,
+        exhausted: s.exhausted,
+        cut: s.cut,
+        frontier: fin(s.frontier),
+        polledAt: fin(s.polledAt),
+        sweptAt: fin(s.sweptAt),
+        missed: [...s.missed],
+        alpha: s.alpha,
+        beta: s.beta,
+        engaged: s.engaged,
+        skipped: s.skipped,
+        sketch: s.sketch?.dump() ?? null,
+      })),
+    };
+  }
+
+  /**
+   * Takes back a user's sync state an earlier process saved (D425; `snapshot`), when this process does not sync the
+   * user yet. Their sources are warm again, so the next lookup polls each one incrementally (newest first, until an
+   * item already synced) instead of a backfill. What happened while no process ran is not known: a notifying source
+   * is behind until polled, and every copy of it read before (the cache thaws them under read mark 0) is in doubt as
+   * after a signal, re-read before delivery (D126). The state's own fields are checked; anything else starts over.
+   */
+  restore(scope: Scope, snap: unknown): boolean {
+    const key = scopeKey(scope);
+    const signal = ++this.marks;
+    const existing = this.users.get(key);
+    if (existing) {
+      // Synced here already (tracked before the user was read back): its state stands, but the copies read back
+      // (read mark 0) are as unknown as the snapshot's, so its notifying sources count as signalled and behind.
+      for (const s of existing.sources.values()) {
+        s.notices++;
+        s.noticedMark = signal;
+      }
+      return false;
+    }
+    if (!isSnapshot(snap)) return false;
+    const num = (x: number | null, otherwise: number) => (typeof x === "number" && Number.isFinite(x) ? x : otherwise);
+    const u: UserSync = {
+      key,
+      scope: { tenantId: scope.tenantId, userId: scope.userId },
+      sources: new Map(),
+      activeAt: num(snap.activeAt, this.deps.now()),
+      gone: false,
+      cutAt: num(snap.cutAt, -Infinity),
+      people: new Set(snap.people.slice(-MAX_PEOPLE)),
+      used: new Set(snap.used.slice(-MAX_USED)),
+    };
+    for (const x of snap.sources) {
+      const s = newSourceSync(x.id);
+      for (const id of x.ids) s.ids.add(id);
+      trimIds(s.ids, this.o.maxItems);
+      s.phase = x.phase;
+      s.cursor = x.cursor ?? undefined;
+      s.exhausted = x.exhausted;
+      s.cut = x.cut;
+      s.frontier = num(x.frontier, Infinity);
+      s.polledAt = num(x.polledAt, -Infinity);
+      s.sweptAt = num(x.sweptAt, -Infinity);
+      s.missed = new Set(x.missed);
+      if (x.alpha > 0 && x.beta > 0) {
+        s.alpha = x.alpha;
+        s.beta = x.beta;
+      }
+      s.engaged = x.engaged;
+      s.skipped = x.skipped;
+      // As last seen, so a copy is doubted (`signalledSince`) and swept as before from the first event on; the next
+      // `notes` (a lookup or a tick) sets both again from the source.
+      s.notifies = x.notifies === true;
+      s.fetches = x.fetches === true;
+      s.sketch = x.sketch === null ? null : TermSketch.load(x.sketch);
+      // Behind until a poll that begins after now (a notifying source), and its earlier copies in doubt.
+      s.notices = 1;
+      s.noticesPolled = 0;
+      s.noticedMark = signal;
+      u.sources.set(s.id, s);
+    }
+    this.users.set(key, u);
+    return true;
+  }
+
+  /**
+   * After a restore (D425): the sources the user no longer has (a connector removed or revoked while they were on
+   * disk, where no tick saw it) lose their sync state and synced items now, before anything is served from them, as
+   * `step` would drop them. Waits for the resolver at most `timeoutMs`; a resolver that fails or is late changes
+   * nothing (the next tick does it). Returns how many sources were dropped.
+   */
+  async reconcile(scope: Scope, timeoutMs: number): Promise<number> {
+    const u = this.users.get(scopeKey(scope));
+    if (!u || u.sources.size === 0) return 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), timeoutMs);
+    });
+    const all = await Promise.race([this.deps.sources(u.scope).catch((): null => null), late]);
+    clearTimeout(timer);
+    if (all === null || u.gone || this.users.get(u.key) !== u) return 0;
+    const listed = new Set(all.filter((x) => typeof x.list === "function").map((x) => x.id));
+    let n = 0;
+    for (const [id, s] of [...u.sources]) {
+      if (listed.has(id)) continue;
+      u.sources.delete(id);
+      this.stats.deleted += this.deps.cache.dropSynced(u.scope, s.ids);
+      n++;
+    }
+    return n;
   }
 
   /** Stops syncing a user (or one of their sources) and drops the sync's state; the cache is the caller's to forget. */
@@ -1393,6 +1524,63 @@ export class SyncManager {
       release();
     }
   }
+}
+
+/** A user's sync state as JSON holds it (D425): infinities as null. */
+export interface SyncSnapshot {
+  activeAt: number;
+  cutAt: number | null;
+  people: string[];
+  used: string[];
+  sources: {
+    id: string;
+    ids: string[];
+    phase: "backfill" | "warm";
+    cursor: string | null;
+    notifies?: boolean;
+    fetches?: boolean;
+    exhausted: boolean;
+    cut: boolean;
+    frontier: number | null;
+    polledAt: number | null;
+    sweptAt: number | null;
+    missed: string[];
+    alpha: number;
+    beta: number;
+    engaged: boolean;
+    skipped: boolean;
+    sketch: unknown;
+  }[];
+}
+
+/** Whether `x` has a snapshot's shape (it was decrypted and authenticated, but may be another build's). */
+function isSnapshot(x: unknown): x is SyncSnapshot {
+  const s = x as SyncSnapshot | null;
+  if (typeof s !== "object" || s === null || !Array.isArray(s.sources)) return false;
+  if (!Array.isArray(s.people) || !Array.isArray(s.used)) return false;
+  const str = (v: unknown) => typeof v === "string";
+  const n = (v: unknown) => v === null || typeof v === "number";
+  return s.sources.every(
+    (x) =>
+      typeof x === "object" &&
+      x !== null &&
+      str(x.id) &&
+      Array.isArray(x.ids) &&
+      x.ids.every(str) &&
+      (x.phase === "backfill" || x.phase === "warm") &&
+      (x.cursor === null || str(x.cursor)) &&
+      typeof x.exhausted === "boolean" &&
+      typeof x.cut === "boolean" &&
+      n(x.frontier) &&
+      n(x.polledAt) &&
+      n(x.sweptAt) &&
+      Array.isArray(x.missed) &&
+      x.missed.every(str) &&
+      typeof x.alpha === "number" &&
+      typeof x.beta === "number" &&
+      typeof x.engaged === "boolean" &&
+      typeof x.skipped === "boolean",
+  );
 }
 
 function newSourceSync(id: string): SourceSync {
