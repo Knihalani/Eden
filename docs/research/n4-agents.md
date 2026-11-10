@@ -63,4 +63,39 @@ No engine change follows from (A) whatever it reads: it is a measurement (D520).
 
 ### (B) A new user's first minutes
 
-To be written in §0b before any (B) paid call.
+Written after the $0 screens below were read and before any (B) paid call.
+
+**The gap.** F2 (D482–D483): with a new user's cards made in-run and four of about sixteen card calls made, Pi raised
+56.0% of hidden facts with `cardsOrder` against 47.0% without; the same arm with every card made read 60.4% on seed
+41. What remains is the items the card model has not reached yet. The enricher reads one batch of 20 at a time for
+a user, so the backfill takes about sixteen call times end to end.
+
+**Two levers, both screened at $0 first** (`bun run funnel`, train1–6, seeds 41–42, 384 hidden and 384 control
+tasks, cards and requests replayed, `-- --cards-calls N`):
+
+1. **More card calls early: `cardsLanes` K** (a trial switch, D521, off): one user's card calls run in up to K lanes
+   while full batches wait. The same batches, the same calls, read in 1/K of the time, so at the moment one lane has
+   made N calls, K lanes have made N × K. The lab's `--cards-calls N` gives a stream with K lanes N × K calls.
+2. **A card-only model for the rest: `--cards-rest cards`** (lab only): past the cap the calls are answered with
+   their cards and no requests. That is M2's distilled model at its best (its cards match the teacher's; its
+   requests do not, D446), with the teacher's own cards standing in for it, so the screen is an upper bound on what
+   the endpoint could add.
+
+**Rules.**
+
+- **The card-only model.** It buys a Modal endpoint and a live arm only if the screen shows hidden ≥ +10 of 384 at
+  cap 4 or cap 8 (D361's noise bar for the intent index). This bar was written after the screen was read (§3); no
+  paid call depended on it.
+- **`cardsLanes`, live.** Pi (`packages/sim/lab/n4/new-user.sh`), Haiku 5.5 in every role, **no `--cards` file**
+  (every card and request made in-run), `--cards-calls 4`, arms `eden` (one lane, 4 calls), `eden~l2` (8 calls) and
+  `eden~l4` (16 calls) paired in one process, train, **seeds 45–48** (fresh users, no replay), short
+  (`--variants hidden,control`) and long (`--days 2 --day-size 16`). A smoke shard (train1, seed 45, `--limit 4`)
+  runs first and is not counted.
+- **Promote** `cardsLanes` K into `DEFAULT_CONFIG` (D112) for the largest K of 2 and 4 that passes all of: the pooled
+  paired hidden effect against `eden` (short and long, `cl4/pooled.py`) is ≥ +2.0 points with its 95% interval's
+  lower bound above 0; control concerns after a Sonnet regrade are up by at most 1.0 point; at $0 with every card
+  made the funnel with K lanes reads hidden ≥ 312 and decoys ≤ 276 with card calls up by no more than 5% (read
+  already in §3: it does). Otherwise the switch is deleted with its code and tests.
+- A lane adds no call, so the per-user cost question is whether the calls are the same; the live run reports each
+  arm's card calls and spend a user, and the measured latency of a card call (the ledger's `latencyMs`), from which
+  the backfill's wall time is one lane's calls × that latency ÷ K.

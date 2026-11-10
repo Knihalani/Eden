@@ -324,7 +324,10 @@ const TASK_REQUESTS = MAX_STEPS + 1;
 let capStopped = 0;
 // Cards replayed from disk: the replay file is only read, new cards go to their own file (cards-disk.ts).
 const CARDS_FILE = opt("cards", opt("cards-disk", ""));
-/** `--cards-calls N` (F2): each stream's enrichment gets N card calls; items past them stay uncovered. */
+/**
+ * `--cards-calls N` (F2): each stream's enrichment gets N card calls; items past them stay uncovered. With
+ * `cardsLanes` K (N4) a stream gets N × K: the calls K lanes have made when one lane has made N.
+ */
 const CARDS_CALLS = Number(opt("cards-calls", "-1"));
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
 // Compared as files, not strings: `./a.cards.jsonl` or a symlink must not send new cards into the replay file.
@@ -752,10 +755,13 @@ async function runWorld(
   const cappedMaker = (): CardMaker => {
     const maker = cardMaker();
     if (CARDS_CALLS < 0) return maker;
+    // N4 (`cardsLanes`, D521): the cap stands for a moment in a new user's backfill, so a stream whose enricher
+    // has K lanes has made K times the calls by then.
+    const cap = CARDS_CALLS * Math.max(1, effective(config).cardsLanes);
     let calls = 0;
     return {
       make: (items, today, signal, retry, intent) =>
-        calls++ < CARDS_CALLS
+        calls++ < cap
           ? maker.make(items, today, signal, retry, intent)
           : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
     };

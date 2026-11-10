@@ -488,6 +488,13 @@ export interface EngineConfig {
    */
   cardsOrder: boolean;
   /**
+   * A trial (N4, D521; docs/research/n4-agents.md), 1: off. With `cards`: how many card calls one user may have in
+   * flight (`CardEnricher.lanes`). The enricher reads one batch at a time, so a new user's backfill of about sixteen
+   * calls takes about sixteen call times, and requests in that window meet cards for part of the items. With more
+   * lanes a full batch still waiting behind a call in flight is sent beside it: the same items a call, read sooner.
+   */
+  cardsLanes: number;
+  /**
    * On in the default (D320). With `cards` and `sync`, for a user with more than 32 synced sources: a synced item is
    * read by the card model only when its source is one the user's lookups use (`Sync.engage`), or it names a name the
    * user's lookups named. The rest stay unread, uncovered, until their source is used, when its held items are read.
@@ -789,6 +796,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsLean: true,
   cardsLeanDays: 7,
   cardsOrder: true,
+  cardsLanes: 1,
   cardsSourceAware: true,
   intentHits: 12,
   intentMinCoverage: 0.2,
