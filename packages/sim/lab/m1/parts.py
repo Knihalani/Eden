@@ -52,7 +52,7 @@ for sdir, p in shards:
     d = json.load(open(p))
     seed = str(d.get("seeds", [""])[0]) if isinstance(d.get("seeds"), list) else ""
     if not seed:
-        seed = name_seed = os.path.basename(sdir).rsplit("-", 1)[-1]
+        seed = os.path.basename(sdir).rsplit("-", 1)[-1]
     if SEEDS and seed not in SEEDS:
         continue
     key = os.path.relpath(sdir)
@@ -62,8 +62,13 @@ for sdir, p in shards:
     regraded = {}
     rg = os.path.join(sdir, "regrade.json")
     if os.path.exists(rg):
+        # Haiku + Sonnet regrade: kept when both keep it, Sonnet's verdict on disagreement, which is Sonnet's verdict.
         for g in json.load(open(rg)).get("graded", []):
-            regraded[(g["task"], g["condition"])] = float(any(g["facts"].values()))
+            if g.get("facts") is None:
+                continue
+            k2 = (g["task"], g["condition"])
+            if "sonnet" in g.get("grader", "") or k2 not in regraded:
+                regraded[k2] = float(any(g["facts"].values()))
     for r in d["results"]:
         if r.get("facts") is None or r["condition"] not in ARMS:
             continue
