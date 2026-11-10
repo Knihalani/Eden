@@ -7,8 +7,9 @@ and reported locally. The arithmetic (shards, cap split, merging) is fanout_plan
         --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 --cards packages/sim/lab/cards/cards-train.jsonl"
     modal run packages/sim/modal/lab_fanout.py --kind funnel --suites train --seeds 41,42,43,44 --args "-- --noise-sources 995"
 
-The Anthropic key reaches Modal only as the Modal Secret `eden-haiku` (README.md has the one command) and only pi-ab
-shards get it; funnel shards run with no key at all. `--dry` prints the plan and starts nothing.
+The Anthropic key reaches Modal only as a Modal Secret (default name `HAIKU_API_KEY`, holding HAIKU_API_KEY;
+EDEN_HAIKU_SECRET names another) and only pi-ab shards get it; funnel shards run with no key at all. This app has
+no GPU function (one GPU function blocks a whole app until the workspace can use GPUs). `--dry` prints the plan and starts nothing.
 """
 import os
 import shlex
@@ -25,7 +26,9 @@ import fanout_plan as plan  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 BUN_VERSION = "1.4.4"
-HAIKU_SECRET = "eden-haiku"
+# The Modal Secret holding HAIKU_API_KEY (the owner made it, named HAIKU_API_KEY); EDEN_HAIKU_SECRET names another.
+# Read at import, since the secret is attached when the functions are defined.
+HAIKU_SECRET = os.environ.get("EDEN_HAIKU_SECRET", "HAIKU_API_KEY")
 
 
 def source_tarball():

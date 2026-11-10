@@ -23,16 +23,24 @@ scorer, by Eden's own parsers) and `cards-endpoint.ts` (the lab card transport b
 ## Setup (once)
 
 ```bash
-python3 -m venv .venv-modal && .venv-modal/bin/pip install -r packages/sim/modal/requirements.txt   # modal==1.6.3
+python3 -m venv .venv-modal && .venv-modal/bin/pip install -r packages/sim/modal/requirements.txt
+# = modal[api-proxy-support]==1.6.3: behind an HTTPS proxy (a Claude Code cloud container) the client needs the
+# extra and the proxy's CA, else "Could not connect to the Modal server":
+export SSL_CERT_FILE=/root/.ccr/ca-bundle.crt     # cloud containers only
 export MODAL_TOKEN_ID=… MODAL_TOKEN_SECRET=…        # or `modal token new`
-# The Anthropic key reaches Modal only as this Secret; the shell expands it, nothing prints it:
-modal secret create eden-haiku HAIKU_API_KEY="$HAIKU_API_KEY"
-# The card endpoint's bearer key: one random value, kept locally in the same variable the funnel reads.
-export EDEN_LAB_CARDS_KEY=$(openssl rand -hex 24)
-modal secret create eden-cards-endpoint EDEN_LAB_CARDS_KEY="$EDEN_LAB_CARDS_KEY"
 ```
 
-Only pi-ab shards get `eden-haiku`; funnel shards, the distillation and the embedding screen never see a key.
+Secrets are the owner's to make (never created by a session):
+
+- **`HAIKU_API_KEY`**: a Modal Secret named `HAIKU_API_KEY` holding the env var `HAIKU_API_KEY` (exists). Another
+  name: `EDEN_HAIKU_SECRET=<name>` when running `lab_fanout.py`.
+- **`eden-cards-endpoint`**: holding `EDEN_LAB_CARDS_KEY`, the card endpoint's bearer key; the same value is
+  exported locally as `EDEN_LAB_CARDS_KEY` for the funnel. Needed only by `cards_distill.py`'s `serve`.
+
+Each app is its own Modal app: `lab_fanout.py` is CPU only, and the GPU apps (`cards_distill.py`, `embed_screen.py`)
+are separate, since one GPU function blocks a whole app while the workspace cannot use GPUs.
+
+Only pi-ab shards get the Haiku secret; funnel shards, the distillation and the embedding screen never see a key.
 
 ## 1. The lab at scale: `lab_fanout.py`
 

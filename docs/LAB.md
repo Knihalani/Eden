@@ -173,7 +173,7 @@ messages can reach the cap (an estimate, not measured in the lab). The unit test
   `--run-label` per run). Prompt caching on, thinking off.
 - **Budgets:** every live runner takes `--budget` (USD, hard, per process: each call reserves its worst case).
 - **Modal (M0, D408; `packages/sim/modal/README.md`):** GPU and CPU credits for the lab, not a model provider. The
-  Anthropic key reaches it only as the Modal Secret `eden-haiku`, and only pi-ab shards get it; a fan-out refuses to
+  Anthropic key reaches it only as a Modal Secret (named `HAIKU_API_KEY`), and only pi-ab shards get it; a fan-out refuses to
   start without `--cap`, split cap/N per shard ledger. The distilled card model's endpoint is a lab card transport
   (`bun run funnel --cards-endpoint URL`, key in `EDEN_LAB_CARDS_KEY`), labelled `[cards: endpoint (lab, M0)]`.
 - Never print a key; never put one in a results file or a PR.
