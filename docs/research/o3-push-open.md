@@ -1,9 +1,10 @@
 # O3: the push for every request, and a line that asks for the specifics
 
-Status: 2026-11-10, branch `claude/o3-k-behind`, session O3, measured. Decisions D702, D703, D705, D706. **Result:
-`pushOpen` passes its pre-registered rule on eight train seeds (hidden +4.1 points, +1.6..+6.7, concerns level,
-+$0.006 per 1,000 tasks, no added wait) and goes to the owner as an off trial; `candidatesSpecifics` fails and is
-deleted.** Train suites only (train1–6);
+Status: 2026-11-10, branch `claude/o3-k-behind`, session O3, measured. Decisions D702, D703, D705–D707. **Result:
+`pushOpen` passes its pre-registered rule one request a session on eight train seeds (hidden +4.1 points,
++1.6..+6.7, concerns level, +$0.006 per 1,000 tasks, no added wait) and fails the hidden clause over a user's days
+(−2.0 points on 101 tasks, −10.0..+5.3): not promoted, an off trial whose deletion is the owner's call (§7).
+`candidatesSpecifics` fails and is deleted.** Train suites only (train1–6);
 heldout18 is not dumped, labelled or run. Paid calls go to Anthropic directly with `HAIKU_API_KEY` through the lab
 (D97): **Anthropic-direct lab figures**. Numbers marked **[EST]** are arithmetic or judgement; every other number
 comes from a command in this note.
@@ -172,8 +173,34 @@ there too.
   concerns, it is deleted.
 - **Budget [EST]:** $1.2.
 
-**Spend (both O3 notes):** Anthropic **$13.67** booked of $25 (`.local/o3/ledger.jsonl`: this note's runs $5.48 and
-regrades $3.41; o3-check-behind.md's $4.79). Modal $0.
+## 7. Result over days (Pi, local, daf758a3; Sonnet-graded): the hidden clause fails
+
+`.local/o3/days.sh days 41 … 48`: 989 task runs an arm (101 hidden, 101 control, 787 neutral), 0 ungraded, 0 requests
+retried; Sonnet regraded 207 answers (0 failed). `n5/days_hidden.py` (whole users resampled), `n5/mix.py --days`:
+
+| `eden~O` against `eden`, eight users' days     | Result                                             |
+| ---------------------------------------------- | -------------------------------------------------- |
+| Hidden raised                                  | **−2.0 points** (57 against 59 of 101; −10.0..+5.3) |
+| Sonnet-confirmed concerns, control and neutral | 0 against 0 of 888 (Haiku flagged 5 in each arm)   |
+| Total $ per 1,000 tasks                        | +0.015 (+0.009..+0.021)                            |
+| Wall a task                                    | +0.05 s (+0.01..+0.09)                             |
+| `ask_context` calls a task                     | +0.001                                             |
+
+- **Against §6's rule: concerns, cost and wall pass; hidden does not** (the rule asked for a point estimate not
+  lower; it is two tasks lower, inside an interval eleven times that wide). By the rule as written `pushOpen` is to
+  be deleted. It is **not promoted**. The deletion is left to the owner's delegate, because the rule's test cannot
+  tell −2 from +2 on 101 tasks and the branch is already merged: D707 records the failure and the choice.
+- **Why it gains nothing over days.** Where the planted item reached the agent, by arm (`eden`; `eden~O`): at its own
+  request in 52 tasks (47 raised); 52 (43). Only at an earlier request that day in 37 (12 raised); 39 (14). Never in
+  12; 10. So over a day the open push does not put more facts in front of the agent at their own request: a user's
+  world holds every day's planted items, the candidates hand five items on nearly every request, and most facts the
+  open push would add have already been handed for an earlier request, where the not-twice ledger keeps them.
+- **That is the days horizon's largest miss: 37 of 101 hidden facts are handed only at an earlier, unrelated
+  request, and 12 of them are raised** (against 47 of 52 handed at their own request). A17, A26 and N2 measured a
+  re-show for it and deleted it (D380, D512); it is still where the long horizon loses its facts.
+
+**Spend (both O3 notes):** Anthropic **$14.48** booked of $25 (`.local/o3/ledger.jsonl`: this note's short runs $5.48
+and their regrades $3.41, the days run $0.70 and its regrade $0.11; o3-check-behind.md's $4.79; rounded). Modal $0.
 
 ## Reproduce
 
