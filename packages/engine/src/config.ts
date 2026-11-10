@@ -314,19 +314,6 @@ export interface EngineConfig {
    */
   pushLazy: number;
   /**
-   * A trial (D508, N1), 0 (off). One search of a source a lookup: 1, a source the lookup's own search is sent to
-   * (live, or behind it) gets no word probe (a person, an organisation, the topic, a role) in the same lookup when
-   * its search is known to match any word of a query (`ProbeEconomy.formOf`), since the request's own query carries
-   * those words; 2, whatever its search (the bound on what 1 can save).
-   */
-  probeBatch: number;
-  /**
-   * A trial (D507, N1). How long a source's answer to a search stands in for the same search of it again (the
-   * fan-out's page cache: the same user, source, words, entities, window and page size). 60 s is the behaviour before
-   * the trial. A change notice or pushed items of the source drop its pages whatever the age (D148).
-   */
-  searchFreshMs: number;
-  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -803,8 +790,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sourceYieldHalfLifeMs: 7 * 24 * 3_600_000,
   sourceYieldPolls: true,
   pushLazy: 0,
-  probeBatch: 0,
-  searchFreshMs: 60_000,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,

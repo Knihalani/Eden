@@ -105,7 +105,7 @@ async function partnerOf(config: Record<string, unknown>, scopes: Scope[] = [u1]
     }
   };
   let n = 0;
-  /** One request in a session of its own; the searches the connectors received for it, and what the agent was handed. */
+  /** One request in a session of its own: the searches the connectors received for it, and what was handed over. */
   const request = async (scope: Scope, text: string) => {
     const ref = { ...scope, sessionId: `s${n++}` };
     // Past the fan-out's minute of page reuse: each request's reads reach the connectors.

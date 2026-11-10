@@ -8,8 +8,9 @@
  *   for a request that names an entity the source's items mentioned is never skipped by the run.
  * - **The user's reads on weak evidence.** With hundreds of sources a per-source run fills too slowly to matter (a
  *   source is read a few times a week), so the user's reads are pooled by what the request had for the source:
- *   nothing, or only its words. Each pool counts the reads sent to sources with nothing used yet, and how
- *   many of those sources then had their first item reach the agent. While a pool's rate is surely under `floor` (the upper `CONFIDENCE` bound of its Beta
+ *   nothing, or only its words. Each pool counts the reads sent to sources with nothing used yet, and how many of
+ *   those sources then had their first item reach the agent. While a pool's rate is surely under `floor` (the
+ *   upper `CONFIDENCE` bound of its Beta
  *   posterior, after `POOL_WARMUP` reads), a source that has never had an item reach the agent is not read on that
  *   kind of evidence. A source that has is exempt, a read on a name the source mentioned is never pooled, and the
  *   pools decay with the same half-life, so such reads resume now and then.

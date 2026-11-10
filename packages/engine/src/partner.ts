@@ -461,8 +461,6 @@ interface ProbeOpts {
   deadlineAt?: number;
   /** `routeLocalHits` (D265): the lookup's local evidence per source, for the probes' routing. */
   boost?: ReadonlyMap<string, number>;
-  /** `probeBatch` (D508): the sources the lookup's own search is sent to. */
-  searched?: ReadonlySet<string>;
 }
 /** `intent`'s reciprocal-rank constant: rank 0 scores 1/k (the usual 60 flattens a five-item list to a tie). */
 const ASK_FUSE_K = 2;
@@ -686,9 +684,6 @@ export class ContextPartner {
     }
     this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
     this.fanout = new SourceFanout({
-      // `searchFreshMs` (D507): how long a page answers the same search again; held past it as before (10 min).
-      freshMs: this.config.searchFreshMs,
-      staleMs: Math.max(600_000, this.config.searchFreshMs),
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
       sanitize: spans
         ? (items, signal) => {
@@ -3853,7 +3848,7 @@ export class ContextPartner {
     let probeLocal: Set<string> | null | undefined;
     // `pushLazy` (D506): the push (a lookup behind that is not an explicit ask) sends no live search of a cut copy.
     const lazy = behind && !cue.cutStatus ? this.config.pushLazy : 0;
-    // `sourceYield` (D505): the warm copies whose run of unused live reads is spent, which this lookup reads nothing of.
+    // `sourceYield` (D505): the warm copies whose unused live reads are spent; this lookup reads nothing live of them.
     if (this.yields) cue.boost = boost;
     const spent = this.spentSources(s, cue, all, boost);
     if (this.sync) {
@@ -4033,14 +4028,11 @@ export class ContextPartner {
       // An ask names a copy it did not search (D127): never "local" for a cut copy.
       for (const id of spent) if (cutBehind.has(id)) cue.cutStatus.set(id, UNSEARCHED);
     }
-    // `probeBatch` (D508): the sources this lookup's own search is sent to, live or behind.
-    const ownLive = this.config.probeBatch > 0 && left() >= MIN_SEARCH_MS ? new Set(chosen.map((x) => x.id)) : null;
     if (lazy >= 1) {
       // `pushLazy`: no search behind the push; the agent's ask searches the cut copies it routes to.
     } else if (cutBehind && cutBehind.size > 0 && !cue.followUp && left() >= MIN_SEARCH_MS) {
       const behindOf = (listing ? listers : routed).filter((x) => cutBehind!.has(x.id) && !spent?.has(x.id));
       this.noteLiveRead(s, cue, behindOf);
-      if (ownLive) for (const x of behindOf) ownLive.add(x.id);
       // Sent as the lookup's own search would be: through the planner's cascade (its shapes find what the request's
       // words alone miss), its calls counted where they reach the connector.
       const via: (CountedPlanCalls | undefined)[] = [];
@@ -4065,7 +4057,6 @@ export class ContextPartner {
           local: probeLocal === undefined ? local : probeLocal,
           deadlineAt,
           ...(boost ? { boost } : {}),
-          ...(ownLive && ownLive.size > 0 ? { searched: ownLive } : {}),
         }).catch(() => {})
       : null;
     // The same query answered by the synced sources from the local index (D57): no call, nothing to store.
@@ -4371,16 +4362,6 @@ export class ContextPartner {
         }
         if (keep) for (const i of reused) if (!kept.includes(i.id)) kept.push(i.id);
         return [...here, ...reused];
-      }
-      // `probeBatch` (D508): a source the lookup's own search is already sent to, whose search matches any word of a
-      // query (2: whatever its search), gets no word probe beside it: the request's own query names its people and
-      // topic. A day's listing and the consequence probe ask for something the request's words do not.
-      if (opts.searched && !window && kind !== "consequence") {
-        const batch = this.config.probeBatch;
-        sources = sources.filter(
-          (x) => !opts.searched!.has(x.id) || (batch < 2 && this.economy.formOf(s.scope, x.id) !== "any"),
-        );
-        if (sources.length === 0) return here;
       }
       let live = sources;
       if (this.config.probeFresh || this.config.probeYield) {

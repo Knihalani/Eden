@@ -118,7 +118,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   sourceYieldWords: ["sync", "sourceYield"],
   sourceYieldHalfLifeMs: ["sync", "sourceYield"],
   sourceYieldPolls: ["sync", "sourceYield", "syncOnDemand"],
-  probeBatch: ["probes"],
   pushLazy: [...POLL_BEHIND, "syncLocalComplete", "pushCutBehind"],
   syncKeepCut: SYNC,
   routeSketch: SYNC,
