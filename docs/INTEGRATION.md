@@ -375,11 +375,16 @@ carries only a history id that your code turns into items with a `history.list` 
 
 ## The one-line integration: Eden in front of your model (`bun run proxy`, D280)
 
-If your agent calls an OpenAI-compatible chat API, you can add Eden without touching its loop:
+If your agent calls an OpenAI-compatible chat API or Anthropic's Messages API, you can add Eden without touching its
+loop:
 
 ```bash
 EDEN_PROXY_UPSTREAM=https://api.openai.com/v1 EDEN_URL=http://127.0.0.1:8790 EDEN_API_KEY=… bun run proxy
 # the agent: base_url="http://127.0.0.1:8791/v1", plus a header x-eden-user-id: <your user's id>
+
+# Anthropic's Messages API (D653): the same proxy, the SDK's base URL without /v1
+EDEN_PROXY_UPSTREAM=https://api.anthropic.com/v1 bun run proxy
+# the agent: Anthropic(base_url="http://127.0.0.1:8791", default_headers={"x-eden-user-id": user_id})
 ```
 
 `EDEN_PROXY_UPSTREAM` keeps the provider's version path (`/v1`, `/api/v1`; the proxy warns at startup when it has no
@@ -394,7 +399,17 @@ not as a line per request.
   3 s), inserts Eden's packets as a system message just before the latest user message, keeps the turn's packets on
   the turn's later model calls (tool loops), and streams the upstream's answer back unchanged. Other routes
   (`/v1/models`, embeddings) pass through.
-- **Identity.** `x-eden-user-id` (else the body's `user`) names the end user; without either, Eden is skipped (the
+- On each `POST /v1/messages` (Anthropic, D653) it does the same work on the same conversation state: `tool_use`
+  and `tool_result` blocks are reported as tool calls and results, and Eden's packet is inserted as a text block of
+  the latest user turn's message, ahead of its other text and after any `tool_result` blocks (the API has no system
+  role inside `messages`). The top-level `system`, `cache_control` marks and every other field go upstream as they
+  came; `x-api-key` and `anthropic-version` are forwarded; the proxy's own errors on this route have Anthropic's
+  shape. `/v1/messages/count_tokens` and batches pass through untouched. Checked live (2026-11-10, one run each,
+  `claude-haiku-5-5`): asked where and when lunch is, the model answered that it has no calendar access directly
+  and "at Dishoom on Thursday at 12:30" through the proxy; a message with a tool result and text, and one with
+  `system`, `metadata.user_id` and `cache_control`, were accepted.
+- **Identity.** `x-eden-user-id` (else the body's `user`, or `metadata.user_id` on Anthropic's route) names the end
+  user; without either, Eden is skipped (the
   proxy says so once on stderr, D365).
   `x-eden-session-id` names the conversation; without it the proxy keys it by a hash of its first non-system
   message (system prompts may change per request), so send it if many conversations open identically. Ids pass

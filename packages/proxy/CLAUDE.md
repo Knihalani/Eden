@@ -4,7 +4,11 @@ Eden as an OpenAI-compatible proxy in front of the agent's model (D280): the age
 `POST …/chat/completions` reports the conversation's new messages to Eden (through `@eden/client`, so it fails open
 like the SDK), puts Eden's packets before the latest user message (`withContext`), keeps the turn's packets on every
 model call of a tool-using turn and every earlier turn's packets where they were (`keepPackets`, D336), and streams
-the upstream's answer back unchanged. Other routes are forwarded as is.
+the upstream's answer back unchanged. `POST …/messages` (Anthropic's Messages API, D653) gets the same treatment
+through one translation each way: `fromAnthropic` reads the conversation as chat messages (tool results as `tool`
+messages, text as the user turn), the same code decides what is new and where packets go, and `toAnthropic` puts
+each packet into its user message as a text block (after `tool_result` blocks, before other text). Other routes are
+forwarded as is.
 
 ## Files
 

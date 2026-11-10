@@ -252,7 +252,10 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
   const withEden = async (req: Request, body: Record<string, unknown>): Promise<Message[] | null> => {
     const messages = body.messages;
     if (!Array.isArray(messages) || messages.length === 0) return null;
-    const rawUser = req.headers.get("x-eden-user-id") ?? (typeof body.user === "string" ? body.user : "");
+    // The caller's header, else the body's user: OpenAI's `user`, Anthropic's `metadata.user_id`.
+    const meta = (body.metadata as { user_id?: unknown } | null | undefined)?.user_id;
+    const named = typeof body.user === "string" ? body.user : typeof meta === "string" ? meta : "";
+    const rawUser = req.headers.get("x-eden-user-id") ?? named;
     if (!rawUser) {
       // Once per proxy, through onError: otherwise a caller that forgot the header saw the agent work with no packet
       // and no word anywhere of why (D365). No content: the line names the header, not the request.
@@ -260,7 +263,8 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
         warnedNoUser = true;
         report(
           new Error(
-            "eden proxy: a chat request named no user (send x-eden-user-id or the body's user); it went upstream" +
+            "eden proxy: a chat request named no user (send x-eden-user-id, or the body's user or" +
+              " metadata.user_id); it went upstream" +
               " without Eden's context, and later ones will too (said once)",
           ),
         );
@@ -381,6 +385,11 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
   };
 
   const openAiError = (status: number, message: string) => Response.json({ error: { message } }, { status });
+  /** An error in the shape the route's SDK parses: Anthropic's for `…/messages`, OpenAI's otherwise. */
+  const errorFor = (anthropic: boolean) => (status: number, message: string) =>
+    anthropic
+      ? Response.json({ type: "error", error: { type: ANTHROPIC_ERRORS[status] ?? "api_error", message } }, { status })
+      : openAiError(status, message);
 
   return async function handle(req: Request): Promise<Response> {
     // The proxy's own liveness, for a load balancer or a container check (D365): before the key checks, since it says
@@ -388,30 +397,34 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     if ((req.method === "GET" || req.method === "HEAD") && new URL(req.url).pathname === "/healthz") {
       return Response.json({ ok: true });
     }
+    const url = new URL(req.url);
+    // Two routes carry a conversation: OpenAI's chat completions and Anthropic's Messages (D653). The rest (models,
+    // embeddings, Anthropic's token counting and batches) are forwarded as they came.
+    const anthropic = req.method === "POST" && url.pathname.endsWith("/messages");
+    const fail = errorFor(anthropic);
     // The proxy holds the tenant's Eden key: with `proxyKey` set, only callers who know it may name a user (D9).
     if (options.proxyKey !== undefined && !sameSecret(req.headers.get("x-eden-proxy-key"), options.proxyKey)) {
-      return openAiError(401, "eden proxy: missing or wrong x-eden-proxy-key");
+      return fail(401, "eden proxy: missing or wrong x-eden-proxy-key");
     }
     // With no key, whoever reaches the proxy names a user: a page on another site reaches 127.0.0.1 too (a blind
     // cross-site POST, or DNS rebinding to read the answer), so a browser request from another origin is refused.
     if (options.proxyKey === undefined && !keylessOriginAllowed(req.headers.get("origin"))) {
-      return openAiError(403, "eden proxy: no key-less request from another site's page (set EDEN_PROXY_KEY)");
+      return fail(403, "eden proxy: no key-less request from another site's page (set EDEN_PROXY_KEY)");
     }
-    const url = new URL(req.url);
     const path = url.pathname.replace(/^\/v1(?=\/|$)/, "") + url.search;
-    if (req.method !== "POST" || !url.pathname.endsWith("/chat/completions")) {
+    if (req.method !== "POST" || !(anthropic || url.pathname.endsWith("/chat/completions"))) {
       try {
         return await forward(req, path, req.method === "GET" || req.method === "HEAD" ? null : await req.arrayBuffer());
       } catch (e) {
         report(e);
-        return openAiError(502, "eden proxy: upstream unreachable");
+        return fail(502, "eden proxy: upstream unreachable");
       }
     }
     let raw: string;
     try {
       raw = await req.text();
     } catch {
-      return openAiError(400, "eden proxy: the request body could not be read");
+      return fail(400, "eden proxy: the request body could not be read");
     }
     let sent = raw;
     let body: unknown = null;
@@ -422,7 +435,14 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     }
     try {
       if (body && typeof body === "object" && !Array.isArray(body)) {
-        const messages = await withEden(req, body as Record<string, unknown>);
+        let messages: unknown[] | null;
+        if (anthropic) {
+          // The same work on the conversation read as chat messages; the context then goes back in as a text block.
+          const theirs = (body as { messages?: unknown }).messages;
+          const view = Array.isArray(theirs) ? fromAnthropic(theirs) : null;
+          const placed = view && (await withEden(req, { ...(body as object), messages: view.messages }));
+          messages = placed ? toAnthropic(theirs as unknown[], view!, placed) : null;
+        } else messages = await withEden(req, body as Record<string, unknown>);
         if (messages) sent = withMessages(raw, messages) ?? JSON.stringify({ ...(body as object), messages });
       }
     } catch (e) {
@@ -430,13 +450,13 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       report(e);
     }
     // The agent hung up during Eden's wait: nobody reads the answer, so the model is not called (audit A11).
-    if (req.signal.aborted) return openAiError(499, "eden proxy: the caller closed the request");
+    if (req.signal.aborted) return fail(499, "eden proxy: the caller closed the request");
     try {
       return await forward(req, path, sent);
     } catch (e) {
-      if (req.signal.aborted) return openAiError(499, "eden proxy: the caller closed the request");
+      if (req.signal.aborted) return fail(499, "eden proxy: the caller closed the request");
       report(e);
-      return openAiError(502, "eden proxy: upstream unreachable");
+      return fail(502, "eden proxy: upstream unreachable");
     }
   };
 }
@@ -446,6 +466,115 @@ function sameSecret(given: string | null, expected: string): boolean {
   if (given === null) return false;
   const digest = (s: string) => createHash("sha256").update(s).digest();
   return timingSafeEqual(digest(given), digest(expected));
+}
+
+/** Anthropic's error types by status, for the errors the proxy itself answers on `…/messages`. */
+const ANTHROPIC_ERRORS: Record<number, string> = {
+  400: "invalid_request_error",
+  401: "authentication_error",
+  403: "permission_error",
+};
+
+/**
+ * An Anthropic Messages conversation read as chat messages (D653), so the one implementation of what is new, what
+ * is reported and where packets are kept serves both routes. Per Anthropic message, in order:
+ *
+ * - a user message's `tool_result` blocks become `tool` messages (their `tool_use_id` the call's id), then its text
+ *   blocks one `user` message. A user message with only tool results has no `user` part: it is not a new turn;
+ * - an assistant message's text blocks become its content and its `tool_use` blocks its `tool_calls`.
+ *
+ * Thinking, images and documents are left out, as `textOf` leaves non-text parts out. `at` maps each chat message to
+ * the index of the Anthropic message it came from.
+ */
+export function fromAnthropic(messages: readonly unknown[]): { messages: Message[]; at: Map<Message, number> } {
+  const out: Message[] = [];
+  const at = new Map<Message, number>();
+  const add = (m: Message, i: number) => {
+    out.push(m);
+    at.set(m, i);
+  };
+  for (const [i, raw] of messages.entries()) {
+    const m = (raw ?? {}) as { role?: unknown; content?: unknown };
+    const blocks = Array.isArray(m.content) ? (m.content as { type?: unknown }[]) : null;
+    if (m.role === "assistant") {
+      const calls = (blocks ?? [])
+        .filter((b) => b?.type === "tool_use")
+        .map((b) => {
+          const use = b as { id?: unknown; name?: unknown; input?: unknown };
+          return {
+            id: use.id,
+            type: "function",
+            function: { name: use.name, arguments: JSON.stringify(use.input ?? {}) },
+          };
+        });
+      add({ role: "assistant", content: textOf(m.content), ...(calls.length ? { tool_calls: calls } : {}) }, i);
+      continue;
+    }
+    if (m.role !== "user") {
+      add({ role: m.role, content: textOf(m.content) }, i);
+      continue;
+    }
+    let results = 0;
+    for (const b of blocks ?? []) {
+      if (b?.type !== "tool_result") continue;
+      const r = b as { tool_use_id?: unknown; content?: unknown };
+      add({ role: "tool", tool_call_id: r.tool_use_id, content: textOf(r.content) }, i);
+      results++;
+    }
+    const text = textOf(m.content);
+    // A message of tool results alone is not a user turn; anything else is (an image alone too: a turn with no text).
+    if (results === 0 || text) add({ role: "user", content: text }, i);
+  }
+  return { messages: out, at };
+}
+
+/**
+ * The Anthropic messages with the context `withEden` placed (D653). A packet placed before a user turn becomes a
+ * text block of that Anthropic message, ahead of its other text and after its tool results (the API wants a user
+ * message's `tool_result` blocks first); a message whose content is a string becomes two text blocks. The API has
+ * no system role inside `messages`, and a text block keeps the request a prefix of the next as the system message
+ * does for chat completions. Packets with no user turn after them (a request with none) go into the last message
+ * when it is the user's; otherwise nothing is inserted (null): an assistant prefill is not followed by Eden's text.
+ */
+export function toAnthropic(
+  original: readonly unknown[],
+  view: { at: Map<Message, number> },
+  placed: readonly Message[],
+): unknown[] | null {
+  const out = [...original];
+  const insert = (i: number, text: string) => {
+    const m = out[i] as { content?: unknown };
+    const block = { type: "text", text };
+    if (!Array.isArray(m.content)) {
+      const own = typeof m.content === "string" && m.content.length > 0 ? [{ type: "text", text: m.content }] : [];
+      out[i] = { ...m, content: [block, ...own] };
+      return;
+    }
+    const blocks = m.content as { type?: unknown }[];
+    let k = 0;
+    while (k < blocks.length && blocks[k]?.type === "tool_result") k++;
+    out[i] = { ...m, content: [...blocks.slice(0, k), block, ...blocks.slice(k)] };
+  };
+  let waiting: string[] = [];
+  let inserted = false;
+  for (const m of placed) {
+    const i = view.at.get(m);
+    if (i === undefined) {
+      if (typeof m.content === "string" && m.content) waiting.push(m.content);
+      continue;
+    }
+    if (waiting.length === 0 || m.role !== "user") continue;
+    insert(i, waiting.join("\n\n"));
+    waiting = [];
+    inserted = true;
+  }
+  if (waiting.length > 0) {
+    const last = original.length - 1;
+    if ((original[last] as { role?: unknown } | undefined)?.role !== "user") return inserted ? out : null;
+    insert(last, waiting.join("\n\n"));
+    inserted = true;
+  }
+  return inserted ? out : null;
 }
 
 /**
