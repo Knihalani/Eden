@@ -253,3 +253,70 @@ test("second pass: forget leaves the owner's .tmp, works through a link, and tak
   expect(lines.join("\n")).toContain("2 items");
   expect(lines.join("\n")).not.toContain("stopped");
 });
+
+// Third pass (the parent review of the merged kit).
+test("third pass: pi-ab refuses a world file with any role off Anthropic, or with logging allowed", () => {
+  const bundle = join(dir, "bundle.json");
+  const meta = { user: USER, importedAt: 1, sources: { gmail: "mail" }, counts: { gmail: { items: 1, redacted: 0 } } };
+  const items = [{ sourceId: "gmail", ref: "m1", title: "Dentist", text: "Friday 9am", updatedAt: 1 }];
+  writeFileSync(bundle, JSON.stringify({ meta, items, tasks: [newTask("a", "Book the dentist", ["x"], 1)] }));
+  const piAb = (...extra: string[]) =>
+    spawnSync(
+      "bun",
+      [
+        join(import.meta.dir, "..", "lab", "pi-ab.ts"),
+        ...["--world-file", bundle, "--conditions", "tools,eden", "--out", join(dir, "out.json"), "--dry"],
+        ...["--spend-ledger", join(dir, "ledger.jsonl"), "--spend-cap", "0.01", "--budget", "0.01"],
+        ...extra,
+      ],
+      {
+        env: { ...process.env, OPENROUTER_API_KEY: "not-a-real-key", HAIKU_API_KEY: "not-a-real-key" },
+        encoding: "utf8",
+      },
+    );
+  // The harness's own defaults (an OpenRouter agent, card model and grader) would send real data to OpenRouter.
+  const routed = piAb("--reader-model", "z-ai/glm-5.3-flash");
+  expect(routed.status).not.toBe(0);
+  expect(routed.stderr).toContain("claude-* models only");
+  const claude = ["--model", "claude-haiku-5-5", "--grader", "claude-haiku-5-5", "--card-model", "claude-haiku-5-5"];
+  const logged = piAb(...claude, "--allow-logging");
+  expect(logged.status).not.toBe(0);
+  expect(logged.stderr).toContain("--allow-logging");
+  expect(piAb(...claude).status).toBe(0);
+}, 60_000);
+
+test("third pass: a request with no usable answer in one arm is not sent back to annotate", () => {
+  const task = newTask("a", "do it", ["x"], 1);
+  const one = (condition: string, extra: Partial<RunResult> = {}): RunResult =>
+    ({
+      task: taskId("a"),
+      condition,
+      answer: "ok",
+      modelCalls: 1,
+      toolCalls: 0,
+      costUsd: 0,
+      edenCostUsd: 0,
+      wallMs: 1,
+      ...extra,
+    }) as RunResult;
+  const failed = buildReport([task], [one("tools"), one("eden", { error: "budget reached", answer: "" })], {});
+  expect(failed.unmarked).toBe(0);
+  expect(failed.noAnswer).toBe(1);
+  expect(renderReport(failed)).not.toContain("pilot annotate");
+  expect(renderReport(failed)).toContain("no usable answer");
+  const both = buildReport([task], [one("tools"), one("eden")], {});
+  expect([both.unmarked, both.noAnswer]).toEqual([1, 0]);
+});
+
+test("third pass: a folder holding only a runs/ or a tasks.json of someone else's is not the pilot's", () => {
+  for (const name of ["runs", "tasks.json"]) {
+    const other = join(dir, `other-${name}`);
+    mkdirSync(other, { mode: 0o755 });
+    if (name === "runs") mkdirSync(join(other, "runs"));
+    else writeFileSync(join(other, name), "[]");
+    expect(() => new PilotStore(other).forget()).toThrow(PilotDirError);
+    expect(() => new PilotStore(other).init()).toThrow(PilotDirError);
+    expect(existsSync(join(other, name))).toBe(true);
+    expect(statSync(other).mode & 0o777).toBe(0o755);
+  }
+});

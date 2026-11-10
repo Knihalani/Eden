@@ -49,8 +49,9 @@ cards-enrich, presets, suites, free, spend` (`.ts`): check `git log origin/main`
 
 `pi-ab --world-file F` (F3, D489) runs a pilot bundle (`../pilot/world.ts`: one account's redacted import and its
 owner's requests) in place of a generated user: one world, one request a session, the same arms and accounting; it
-refuses `--suite`, `--days`, `--day`, `--variants`, `--templates`, `--dress`, `--noise-sources` and `--act`. Only
-`bun run pilot run` should start it on real data (docs/PILOT.md).
+refuses `--suite`, `--days`, `--day`, `--variants`, `--templates`, `--dress`, `--noise-sources` and `--act`, any
+role not on a `claude-*` model, and `--allow-logging` (real data stays off OpenRouter). Only `bun run pilot run`
+should start it on real data (docs/PILOT.md).
 
 Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-bench.py` (run with `python3 -I`).
 Modal (D408): `packages/sim/modal/` (fan-out, card distillation, embedding screen; README there); its Python tests run

@@ -116,7 +116,10 @@ export class PilotStore {
     if (!existsSync(this.dir) || !statSync(this.dir).isDirectory()) return false;
     const names = readdirSync(this.dir);
     const mine = (n: string) => (OWNED as readonly string[]).some((o) => n === o || n === `${o}.tmp`);
-    return names.length > 0 && names.every(mine);
+    // An import's own file must be there: a folder holding only a `runs/` or a `tasks.json` of someone else's (a
+    // project's output, a to-do app) would otherwise be taken over and later deleted whole.
+    const imported = names.includes("items.jsonl") || names.includes("meta.json");
+    return imported && names.every(mine);
   }
 
   /**

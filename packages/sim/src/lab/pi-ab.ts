@@ -291,6 +291,14 @@ const RUN_MODELS = [
   ...(CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).cards) ? [CARD_MODEL] : []),
   ...(USES_READER ? [READER_MODEL] : []),
 ];
+// A pilot bundle is a real person's data (D489): every role on Anthropic's API under the owner's key, never the lab's
+// OpenRouter route (it does not pin D12's no-retention endpoints) and never a logging endpoint. `pilot run` passes
+// claude-* ids for every role; this holds for a direct `pi-ab --world-file` too.
+if (WORLD_FILE) {
+  const routed = openRouterModels(RUN_MODELS);
+  if (routed.length) throw new Error(`--world-file sends real data: claude-* models only, not ${routed.join(", ")}`);
+  if (args.includes("--allow-logging")) throw new Error("--world-file sends real data: it cannot take --allow-logging");
+}
 // Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
 const ACCESS = labAccess(args, RUN_MODELS);
 const PACER = ACCESS.pacer;

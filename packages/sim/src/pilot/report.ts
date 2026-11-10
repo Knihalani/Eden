@@ -37,7 +37,10 @@ export interface PilotReport {
   /** The model grader's verdicts on the same tasks (any fact raised), when the run graded. */
   grader: { tasks: number; alone: number; withEden: number } | null;
   arms: Record<string, ArmSummary>;
+  /** Requests both arms answered that the owner has not marked in both yet. */
   unmarked: number;
+  /** Requests an arm failed or left empty: `annotate` cannot show them, so they are out of the pairing. */
+  noAnswer: number;
 }
 
 /** The exact two-sided sign test: the chance of a split at least this uneven among `b + c` discordant tasks. */
@@ -83,6 +86,7 @@ export function buildReport(
     grader: null,
     arms: {},
     unmarked: 0,
+    noAnswer: 0,
   };
   const graded = { tasks: 0, alone: 0, withEden: 0 };
   for (const t of tasks) {
@@ -97,7 +101,11 @@ export function buildReport(
       graded.withEden += any(re.facts) ? 1 : 0;
     }
     if (!a || !e) {
-      if (ra || re) out.unmarked++;
+      // `annotate` shows only answers that exist and did not fail: a request missing one is never markable, so it is
+      // counted apart rather than sent back to annotate.
+      const usable = (r: RunResult | undefined) => !!r && !r.error && !!r.answer.trim();
+      if (usable(ra) && usable(re)) out.unmarked++;
+      else if (ra || re) out.noAnswer++;
       continue;
     }
     out.wrong.marked++;
@@ -170,6 +178,12 @@ export function renderReport(r: PilotReport): string {
       "the least (8 against 1 also passes; 5 against 0 does not). " +
       "Treat a smaller pilot as a look at real answers, not a measurement.",
   );
+  if (r.noAnswer) {
+    lines.push(
+      `${r.noAnswer} requests have no usable answer in one arm (an error, the cap, or an empty reply): they are left ` +
+        "out of the pairing above.",
+    );
+  }
   if (r.unmarked) lines.push(`${r.unmarked} answered requests have no marks in both arms yet: run \`pilot annotate\`.`);
   return lines.join("\n");
 }
