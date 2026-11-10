@@ -355,4 +355,73 @@ describe("a restart with persisted users (D425)", () => {
     expect(files(dir)).toEqual([]);
     expect(find(a, alice, "quarterly plan", clock).some((i) => i.sourceId === "docs")).toBe(false);
   });
+
+  test("a restored notifying source's copies are in doubt from the first event, before any poll (review of C3)", async () => {
+    const dir = tempDir();
+    let clock = T0;
+    const src = Object.assign(new ListSource("mail", 6), { notifies: true });
+    const a = freezing();
+    a.persist(disk(dir).d);
+    const p1 = partnerOver(src, a, () => clock);
+    p1.sync!.track(alice);
+    for (let i = 0; i < 50 && !p1.sync!.warm(alice); i++, clock += 1_000) await p1.sync!.tick();
+    const id = itemId("mail", "m0");
+    expect(p1.sync!.signalledSince(alice, "mail", a.readMark(alice, id)!)).toBe(false);
+    freezeAll(a, clock);
+    const b = freezing();
+    b.persist(disk(dir).d);
+    const p2 = partnerOver(src, b, () => clock);
+    await p2.ready(alice);
+    expect(b.readMark(alice, id)).toBe(0);
+    expect(p2.sync!.signalledSince(alice, "mail", 0)).toBe(true);
+  });
+
+  test("a source removed while the user was on disk: its items are gone before the first event is served", async () => {
+    const dir = tempDir();
+    let clock = T0;
+    const mail = new ListSource("mail", 4);
+    const docs = new ListSource("docs", 4);
+    const a = freezing();
+    a.persist(disk(dir).d);
+    const p1 = new ContextPartner({
+      sources: async () => [mail, docs],
+      sourceMap: new SourceMap(":memory:", { seed: 1 }),
+      cache: a,
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { sync: true, syncPageSize: 2, syncCallsPerMin: 6_000 },
+    });
+    p1.sync!.track(alice);
+    for (let i = 0; i < 50 && !p1.sync!.warm(alice); i++, clock += 1_000) await p1.sync!.tick();
+    expect(a.isSynced(alice, itemId("docs", "m0"))).toBe(true);
+    freezeAll(a, clock);
+    // The restart: the user's docs connector was removed meanwhile.
+    const b = freezing();
+    b.persist(disk(dir).d);
+    const p2 = partnerOver(mail, b, () => clock);
+    await p2.ready(alice);
+    expect(b.isSynced(alice, itemId("docs", "m0"))).toBe(false);
+    expect(b.isSynced(alice, itemId("mail", "m0"))).toBe(true);
+    expect(find(b, alice, "quarterly plan", clock).some((i) => i.sourceId === "docs")).toBe(false);
+  });
+
+  test("a connector's page token the secret gate would change is not saved (D10)", async () => {
+    let clock = T0;
+    const token = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8";
+    class Tokened extends ListSource {
+      override async list(scope: Scope, cursor: string | undefined, limit: number): Promise<ListPage> {
+        const page = await super.list(scope, cursor?.split("|")[1], limit);
+        return { items: page.items, next: page.next === null ? null : `${token}|${page.next}` };
+      }
+    }
+    const p = partnerOver(new Tokened("mail", 40), freezing(), () => clock);
+    p.sync!.track(alice);
+    await p.sync!.tick();
+    const snap = p.sync!.snapshot(alice)!;
+    expect(snap.sources[0]!.phase).toBe("backfill");
+    expect(JSON.stringify(snap)).not.toContain("ghp_");
+    expect(snap.sources[0]!.cursor).toBeNull();
+    clock += 1;
+  });
 });

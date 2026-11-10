@@ -723,9 +723,15 @@ export class ContextPartner {
         restored: (scope, items, extra) => {
           const saved = (extra as { sync?: unknown } | null | undefined)?.sync;
           if (sync && saved) sync.restore(scope, saved);
-          if (items.length > 0 && this.config.cards && this.deps.cards) {
-            this.enqueueCards(scope, items, this.cardDefer(scope, items, mentionsOf(items)));
-          }
+          // A source removed while the user was on disk: its synced items go before the first event is served (the
+          // returning event's `ready` waits on this, bounded by the source timeout).
+          const checked = sync ? sync.reconcile(scope, this.config.sourceTimeoutMs) : Promise.resolve(0);
+          return checked.then(() => {
+            if (items.length > 0 && this.config.cards && this.deps.cards) {
+              const kept = items.filter((it) => this.deps.cache.get(scope, it.id, this.now()) !== null);
+              if (kept.length > 0) this.enqueueCards(scope, kept, this.cardDefer(scope, kept, mentionsOf(kept)));
+            }
+          });
         },
       };
     }

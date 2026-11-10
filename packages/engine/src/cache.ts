@@ -625,6 +625,8 @@ export class ItemCache {
    * from disk (D425), counted in `thawed` too once thawed; `loadMs` their reads.
    */
   readonly freezes = { frozen: 0, thawed: 0, thawMs: 0, loaded: 0, loadMs: 0 };
+  /** The owner's restores still settling, per user read back from disk (D425): `ready` waits on them. */
+  private readonly restoring = new Map<string, Promise<unknown>>();
   /** Where frozen users are also written (D425, opt-in); null by default: nothing goes to disk (D8). */
   private disk: FrozenDisk | null = null;
   /**
@@ -633,7 +635,8 @@ export class ItemCache {
    */
   persistHooks: {
     save(scope: Scope): unknown;
-    restored(scope: Scope, items: ContextItem[], extra: unknown): void;
+    /** May return a promise: a `ready` that read the user back resolves only once it settles. */
+    restored(scope: Scope, items: ContextItem[], extra: unknown): Promise<unknown> | void;
   } | null = null;
   private readonly perTenant = new Map<string, number>();
   /**
@@ -685,7 +688,8 @@ export class ItemCache {
 
   /**
    * Writes every live user (not frozen) to disk as a freeze would, for a shutdown (D425): users frozen already were
-   * written when they froze. Stops at `deadlineMs`; returns how many it wrote. Leaves the cache as it was.
+   * written when they froze. Stops at `deadlineMs`; returns how many it wrote. Only for a process about to exit: the
+   * users stay live, so a later change to them (a removal) would not reach the file they now have on disk.
    */
   flush(deadlineMs = Infinity): number {
     const disk = this.disk;
@@ -1698,8 +1702,15 @@ export class ItemCache {
       this.urgent.push({
         steps: this.thawJob(key, x),
         done: () => {
-          if (this.thawing.get(key)?.from === x) this.thawing.delete(key);
-          resolve();
+          const finish = () => {
+            if (this.thawing.get(key)?.from === x) this.thawing.delete(key);
+            resolve();
+          };
+          // A user read back from disk (D425) is ready once the owner's restore settles (its sources checked).
+          const restoring = this.restoring.get(key);
+          this.restoring.delete(key);
+          if (restoring) restoring.then(finish, finish);
+          else finish();
         },
       });
     });
@@ -1755,7 +1766,8 @@ export class ItemCache {
       const items: ContextItem[] = [];
       for (const e of u.items.values()) items.push(e.item);
       try {
-        this.persistHooks.restored(u.scope, items, f.extra);
+        const r = this.persistHooks.restored(u.scope, items, f.extra);
+        if (r instanceof Promise) this.restoring.set(key, r);
       } catch {
         // The owner's restore fails open: the items are held, and its own state starts over (a re-sync).
       }

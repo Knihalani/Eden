@@ -71,6 +71,18 @@ running process does. Two things cannot be known across a restart, and are handl
 
 A non-notifying source's copy is current or stale by its learned change rate, the downtime counting as elapsed time.
 
+The review of this branch found two gaps, fixed with a test each that fails without the fix:
+
+- a restored source was not marked notifying until its first poll (`notes` sets it), so on the first event after a
+  restart its read-mark-0 copies were not in doubt: `notifies` and `fetches` are now saved and restored;
+- a source removed while the user was on disk (no tick sees a user who is not in memory) came back with them, and its
+  items could be served on the first event: `SyncManager.reconcile` drops sources the resolver no longer lists, with
+  their synced items, before `ready` resolves (bounded by `sourceTimeoutMs`; a failing or late resolver changes
+  nothing, and the next tick does it).
+
+A connector's page token can carry query text or an account id, so it is saved only if `sanitizeForStore` leaves it
+unchanged; otherwise that source's next page is read from the head.
+
 ### The file
 
 ```
@@ -143,6 +155,9 @@ every user returns at once (one `user_message`), and the sync runs until every u
 | 200 x 3,000 (the cap) | instant | without | 121.75 s | 130.99 s | 6,000 | 600,000 |
 | | | with | **32.44 s** | 36.64 s | **600** | **3,000** |
 
+After the review's fixes (section 1), one more run of `200 1000`: 44.99 s without, 14.21 s with, the same 2,400 and
+600 calls.
+
 With persistence the 600 calls are one poll a source a user (each returning user's lookup polls its three sources:
 nothing new, so one page each). The time left is the thaws, which are sliced (D325) so other requests do not stall
 behind them: 64.7-67.8 ms a user at 1,000 items, 152 ms at 3,000; reading and decrypting a file is 1.0-1.2 ms and
@@ -189,6 +204,10 @@ undefined when off) and one null check on each freeze, thaw and miss.
 - **The stdio MCP server.** One user, a process the client starts and stops: not wired.
 - **Key rotation.** A new key discards every file (users re-sync). Two keys at once (read with either, write with the
   new) would let a rotation keep the files.
+- **A per-tenant share of the directory's cap.** `EDEN_PERSIST_MAX_MB` is per process across tenants: one tenant's
+  users can fill it, and other tenants' freezes are then refused ("full"; they re-sync after a restart, nothing is
+  evicted). A per-tenant share would follow CLAUDE.md's per-tenant caps; at 256-260 B an item the default 4 GB holds
+  about 5,500 users at the 3,000-item cap (4,096 MB / (260 B x 3,000)).
 - **Re-writing frozen users at shutdown.** A user frozen before the shutdown keeps the file written when they froze,
   with the sync's state of that moment; a later change to it while frozen (rare: polls and sweeps thaw the user) is
   not in the file. The restored state is then a little older, which the first poll corrects.

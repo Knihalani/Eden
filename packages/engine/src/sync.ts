@@ -24,6 +24,7 @@
  */
 import { Gcra, IdSet } from "@eden/primitives";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
+import { sanitizeForStore } from "@eden/redact";
 import type { Source, SourceFanout, SourceResolver } from "@eden/sources";
 import type { ItemCache } from "./cache";
 import { sketchTerms, termHashes, TermSketch } from "./sketch";
@@ -344,7 +345,11 @@ export class SyncManager {
         id: s.id,
         ids: [...s.ids],
         phase: s.phase,
-        cursor: s.cursor ?? null,
+        // A connector's page token can carry query text or an account id: stored only if the gate leaves it as it is
+        // (D10); otherwise the source's next page is read from the head again.
+        cursor: s.cursor !== undefined && sanitizeForStore(s.cursor) === s.cursor ? s.cursor : null,
+        notifies: s.notifies,
+        fetches: s.fetches,
         exhausted: s.exhausted,
         cut: s.cut,
         frontier: fin(s.frontier),
@@ -369,8 +374,18 @@ export class SyncManager {
    */
   restore(scope: Scope, snap: unknown): boolean {
     const key = scopeKey(scope);
-    if (this.users.has(key) || !isSnapshot(snap)) return false;
     const signal = ++this.marks;
+    const existing = this.users.get(key);
+    if (existing) {
+      // Synced here already (tracked before the user was read back): its state stands, but the copies read back
+      // (read mark 0) are as unknown as the snapshot's, so its notifying sources count as signalled and behind.
+      for (const s of existing.sources.values()) {
+        s.notices++;
+        s.noticedMark = signal;
+      }
+      return false;
+    }
+    if (!isSnapshot(snap)) return false;
     const num = (x: number | null, otherwise: number) => (typeof x === "number" && Number.isFinite(x) ? x : otherwise);
     const u: UserSync = {
       key,
@@ -400,6 +415,10 @@ export class SyncManager {
       }
       s.engaged = x.engaged;
       s.skipped = x.skipped;
+      // As last seen, so a copy is doubted (`signalledSince`) and swept as before from the first event on; the next
+      // `notes` (a lookup or a tick) sets both again from the source.
+      s.notifies = x.notifies === true;
+      s.fetches = x.fetches === true;
       s.sketch = x.sketch === null ? null : TermSketch.load(x.sketch);
       // Behind until a poll that begins after now (a notifying source), and its earlier copies in doubt.
       s.notices = 1;
@@ -409,6 +428,33 @@ export class SyncManager {
     }
     this.users.set(key, u);
     return true;
+  }
+
+  /**
+   * After a restore (D425): the sources the user no longer has (a connector removed or revoked while they were on
+   * disk, where no tick saw it) lose their sync state and synced items now, before anything is served from them, as
+   * `step` would drop them. Waits for the resolver at most `timeoutMs`; a resolver that fails or is late changes
+   * nothing (the next tick does it). Returns how many sources were dropped.
+   */
+  async reconcile(scope: Scope, timeoutMs: number): Promise<number> {
+    const u = this.users.get(scopeKey(scope));
+    if (!u || u.sources.size === 0) return 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), timeoutMs);
+    });
+    const all = await Promise.race([this.deps.sources(u.scope).catch((): null => null), late]);
+    clearTimeout(timer);
+    if (all === null || u.gone || this.users.get(u.key) !== u) return 0;
+    const listed = new Set(all.filter((x) => typeof x.list === "function").map((x) => x.id));
+    let n = 0;
+    for (const [id, s] of [...u.sources]) {
+      if (listed.has(id)) continue;
+      u.sources.delete(id);
+      this.stats.deleted += this.deps.cache.dropSynced(u.scope, s.ids);
+      n++;
+    }
+    return n;
   }
 
   /** Stops syncing a user (or one of their sources) and drops the sync's state; the cache is the caller's to forget. */
@@ -1491,6 +1537,8 @@ export interface SyncSnapshot {
     ids: string[];
     phase: "backfill" | "warm";
     cursor: string | null;
+    notifies?: boolean;
+    fetches?: boolean;
     exhausted: boolean;
     cut: boolean;
     frontier: number | null;

@@ -114,9 +114,14 @@ export class EncryptedFrozenDisk implements FrozenDisk {
     readMs: 0,
   };
 
-  constructor(private readonly o: DiskOptions) {
-    if (o.key.byteLength !== 32) throw new Error("the persistence key must be 32 bytes");
-    const derive = (info: string, n: number) => Buffer.from(hkdfSync("sha256", o.key, "eden-persist-frozen", info, n));
+  /** The options without the operator's key: only the derived keys are kept, so no dump of the store shows it. */
+  private readonly o: Omit<DiskOptions, "key">;
+
+  constructor(options: DiskOptions) {
+    const { key, ...o } = options;
+    this.o = o;
+    if (key.byteLength !== 32) throw new Error("the persistence key must be 32 bytes");
+    const derive = (info: string, n: number) => Buffer.from(hkdfSync("sha256", key, "eden-persist-frozen", info, n));
     this.enc = derive("enc", 32);
     this.names = derive("name", 32);
     this.keyId = derive("key-id", 8);
