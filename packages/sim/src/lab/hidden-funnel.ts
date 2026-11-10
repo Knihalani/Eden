@@ -102,7 +102,7 @@ import { sanitizeForStore } from "@eden/redact";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
-import { applyConnectorMix, connectorOptions, parseConnectorMix, pushNotifier } from "./connector-options";
+import { connectorOptions, pushNotifier } from "./connector-options";
 import { noiseSources } from "./noise-sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
@@ -213,7 +213,6 @@ const cli = flags(
         "distill",
         "noise-sources",
         "noise-items",
-        "connector-mix",
         "source-profile",
         "push",
         "push-rates",
@@ -262,7 +261,6 @@ const CONNECTORS = connectorOptions(opt);
 /** `--fetch-gone false`: the sources' fetch null proves nothing, as an MCP connector's (A18; default true). */
 const FETCH_GONE = opt("fetch-gone", "true") !== "false";
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
-const CONNECTOR_MIX = parseConnectorMix(opt("connector-mix", ""));
 /** `--config`: engine settings, checked whole (checkEngineConfig); a typo or a child whose parent is off exits 2. */
 const CONFIG = ((): Record<string, unknown> => {
   try {
@@ -708,8 +706,6 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   const notify = pushNotifier(own, CONNECTORS, seed, world.now);
   if (!FETCH_GONE) for (const s of own) s.fetchReportsGone = false;
   const sources = [...own, ...(NOISE_SOURCES > 0 ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed) : [])];
-  // `--connector-mix P,D` (F1): which connectors push and have a change feed, which only a feed, which neither.
-  applyConnectorMix(sources, CONNECTOR_MIX, seed);
   const returned = new Set<string>();
   let served = 0;
   for (const s of sources) {

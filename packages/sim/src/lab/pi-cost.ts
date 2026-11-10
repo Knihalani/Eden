@@ -35,37 +35,6 @@ export const CONNECTOR_PLANS: Readonly<Record<string, number>> = {
   "Zapier MCP (10k tasks)": 25.8,
 };
 
-/**
- * Event triggers on a per-call connector platform (F1, D478): the platform watches the user's source and sends each
- * change as an event carrying the item, billed per event instead of per tool call. `EVENT_TRIGGER_USD` is the
- * brief's figure (0.003 dollars an event; assumed, not checked against a price list). An event replaces the calls
- * Eden would make to learn of that change (its polls of that source and its re-reads before delivery), not its
- * searches.
- */
-export const EVENT_TRIGGER_USD = 0.003;
-
-/**
- * A plan's steady cost per task with event triggers on the sources that offer them: `avoided` connector calls a task
- * are no longer made (never more than Eden makes), and `events` events a task are billed instead. `breakEvenEvents`
- * is how many events a task the avoided calls pay for at this plan's price: above it, calls are the cheaper way.
- */
-export function triggerCosts(
-  c: ConditionCost,
-  perThousand: number,
-  t: { usdPerEvent: number; events: number; avoided: number },
-) {
-  const per = perThousand / 1_000;
-  const edenCalls = c.connectorPerTask.eden + c.connectorPerTask.background;
-  const avoided = Math.min(Math.max(0, t.avoided), edenCalls);
-  const plain = planCosts(c, perThousand).steady;
-  return {
-    steady: plain - avoided * per + t.events * t.usdPerEvent,
-    plain,
-    avoided,
-    breakEvenEvents: t.usdPerEvent > 0 ? (avoided * per) / t.usdPerEvent : Infinity,
-  };
-}
-
 /** The long-horizon user a run planned, or a cold start measured: what must match for one to stand for the other. */
 export interface UserShape {
   suites: string[];
