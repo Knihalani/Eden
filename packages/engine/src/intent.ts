@@ -74,6 +74,51 @@ export function intentTerms(text: string): string[] {
   return out;
 }
 
+/**
+ * Trial `intentPrune` (D480; docs/research/f2-quality.md): which of an item's requests are kept, judged against the
+ * item with no model (Doc2Query--, arXiv 2301.03266, filters a model's expansions by their relevance to the passage
+ * they were written for). The setting is a rule and its level, "" for none:
+ * - `share:<x>`: a request is kept when at least `x` of its distinct terms (`intentTerms`) are terms of the item;
+ * - `names`: a request is dropped when it names something (a capitalised word past its first, or a number) the item
+ *   does not hold: a name the model brought from elsewhere;
+ * - `top:<n>`: the `n` requests sharing most with the item are kept (ties: the model's order);
+ * - `far:<n>`: the `n` sharing least are kept (the bridge the index exists for; ties: the model's order).
+ * Pure and bounded: the item's first `PRUNE_READ` characters, at most `MAX_REQUESTS` requests.
+ */
+const PRUNE_READ = 4_000;
+const NAME = /(?<=[\p{L}\p{N}\p{P}]\s+)\p{Lu}[\p{L}\p{N}'-]+|\p{N}[\p{L}\p{N}.,:/-]*/gu;
+
+/** `intentPrune`'s rule, parsed; null when the setting is empty or not one of the rules (the checker refuses those). */
+export function parsePrune(spec: string): { rule: "share" | "names" | "top" | "far"; level: number } | null {
+  const m = /^(share|names|top|far)(?::(\d+(?:\.\d+)?))?$/.exec(spec);
+  if (!m) return null;
+  const rule = m[1] as "share" | "names" | "top" | "far";
+  if (rule === "names") return m[2] === undefined ? { rule, level: 0 } : null;
+  return m[2] === undefined ? null : { rule, level: Number(m[2]) };
+}
+
+export function pruneRequests(requests: readonly string[], title: string, text: string, spec: string): string[] {
+  const prune = parsePrune(spec);
+  if (!prune || requests.length === 0) return [...requests];
+  const body = `${title}\n${text.slice(0, PRUNE_READ)}`;
+  if (prune.rule === "names") {
+    const held = new Set(intentTerms(body));
+    return requests.filter((r) => (r.match(NAME) ?? []).every((n) => intentTerms(n).every((t) => held.has(t))));
+  }
+  const held = new Set(intentTerms(body));
+  const share = (r: string) => {
+    const terms = new Set(intentTerms(r));
+    let n = 0;
+    for (const t of terms) if (held.has(t)) n++;
+    return terms.size === 0 ? 0 : n / terms.size;
+  };
+  if (prune.rule === "share") return requests.filter((r) => share(r) >= prune.level);
+  const by = requests.map((r, i) => ({ r, i, s: share(r) }));
+  by.sort((a, b) => (prune.rule === "top" ? b.s - a.s : a.s - b.s) || a.i - b.i);
+  const keep = new Set(by.slice(0, Math.max(0, Math.floor(prune.level))).map((x) => x.i));
+  return requests.filter((_, i) => keep.has(i));
+}
+
 /** One item's place in a search (by content hash). */
 export interface IntentHit {
   hash: string;

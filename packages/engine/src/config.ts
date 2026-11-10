@@ -450,6 +450,18 @@ export interface EngineConfig {
    */
   cardsLeanDays: number;
   /**
+   * Trial (D480, F2; docs/research/f2-quality.md; off: ""). With `intent`, the requests the card call wrote for an
+   * item pass a no-model rule against that item before they are indexed (`pruneRequests`, intent.ts): `share:<x>`,
+   * `names`, `top:<n>` or `far:<n>`.
+   */
+  intentPrune: string;
+  /**
+   * Trial (D482, F2; docs/research/f2-quality.md). The card queue is read best first rather than as it filled
+   * (`orderQueue`, cards.ts): events ahead, mail from people the user writes to, and items of the last three days
+   * before the rest, so a new user's first requests meet cards for the items most likely to bear on them.
+   */
+  cardsOrder: boolean;
+  /**
    * On in the default (D320). With `cards` and `sync`, for a user with more than 32 synced sources: a synced item is
    * read by the card model only when its source is one the user's lookups use (`Sync.engage`), or it names a name the
    * user's lookups named. The rest stay unread, uncovered, until their source is used, when its held items are read.
@@ -734,6 +746,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intent: true,
   cardsLean: true,
   cardsLeanDays: 7,
+  intentPrune: "",
+  cardsOrder: false,
   cardsSourceAware: true,
   intentHits: 12,
   intentMinCoverage: 0.2,

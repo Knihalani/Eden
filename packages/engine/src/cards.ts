@@ -30,7 +30,7 @@ import { sanitizeForStore } from "@eden/redact";
 import type { Frame } from "./conflict";
 import { CLASSES, hasWord } from "./consequence";
 import { parseWhen } from "./grounding";
-import { cleanRequests, IntentIndex, MAX_REQUESTS, type IntentHit } from "./intent";
+import { cleanRequests, IntentIndex, MAX_REQUESTS, pruneRequests, type IntentHit } from "./intent";
 import { inert } from "./render";
 import { isStopword } from "./text";
 import type { Tracer } from "./spans";
@@ -594,6 +594,10 @@ export interface CardLimits {
    * when it is not automated and is dated within this many days or upcoming (`readForIntent`).
    */
   leanDays: number;
+  /** Trial `intentPrune` (D480, `prune()` sets it; "": off): the rule an item's requests pass to be kept. */
+  prune: string;
+  /** Trial `cardsOrder` (D482, `order()` sets it): the queue is read best first (`orderQueue`), not as it filled. */
+  order: boolean;
 }
 
 export const DEFAULT_CARD_LIMITS: CardLimits = {
@@ -607,6 +611,8 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   sentenceReuse: false,
   intent: false,
   leanDays: 0,
+  prune: "",
+  order: false,
 };
 
 /**
@@ -647,6 +653,52 @@ interface Queued {
   only?: true;
 }
 
+/** An address on a mail's From line, and on its To and Cc lines (header block only; bounded). */
+const ORDER_FROM = /^from:[^\n]*?([\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,4})/im;
+const ORDER_TO = /^(?:to|cc):[^\n]*$/gim;
+const ORDER_ADDRESS = /[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,4}/g;
+const ORDER_RECENT_MS = 3 * 86_400_000;
+/** What constraint wording counts for (the prefilter passed the item): more than the three other signs together. */
+const ORDER_WORDED = 4;
+
+/**
+ * Trial `cardsOrder` (D482; docs/research/f2-quality.md): the order a user's waiting items are read in, best first,
+ * for a new user whose backfill fills the queue faster than the model empties it. An item counts for each of: an
+ * event that starts after `now`; a sender the user has written to (the user is the address most of the queue's mail
+ * is from or to; the people they write to are on the To and Cc lines of mail from that address); dated within three
+ * days. More counts first, then the newer date, then the order the items came in. No model; reads each item's first
+ * 600 characters once.
+ */
+export function orderQueue<Q extends { item: ContextItem; only?: true }>(queue: readonly Q[], now: number): Q[] {
+  const heads = queue.map((q) => {
+    const head = q.item.text.slice(0, 600);
+    const blank = head.search(/\n[ \t]*\n/);
+    const block = blank >= 0 ? head.slice(0, blank) : head;
+    const from = (q.item.meta?.from ?? q.item.meta?.sender ?? ORDER_FROM.exec(block)?.[1])?.toLowerCase();
+    const to = (block.match(ORDER_TO) ?? []).flatMap((l) => l.match(ORDER_ADDRESS) ?? []).map((a) => a.toLowerCase());
+    return { from: from?.match(ORDER_ADDRESS)?.[0] ?? from, to };
+  });
+  const seen = new Map<string, number>();
+  for (const h of heads) for (const a of new Set([h.from, ...h.to])) if (a) seen.set(a, (seen.get(a) ?? 0) + 1);
+  let user: string | undefined;
+  for (const [a, n] of seen) if (user === undefined || n > seen.get(user)!) user = a;
+  const writesTo = new Set<string>();
+  for (const h of heads) if (h.from !== undefined && h.from === user) for (const a of h.to) writesTo.add(a);
+  const ranked = queue.map((q, i) => {
+    const start = q.item.meta?.start ? Date.parse(q.item.meta.start) : NaN;
+    const dated = Math.max(q.item.updatedAt ?? -Infinity, Number.isFinite(start) ? start : -Infinity);
+    const from = heads[i]!.from;
+    const tier =
+      (q.only ? 0 : ORDER_WORDED) +
+      (Number.isFinite(start) && start > now ? 1 : 0) +
+      (from !== undefined && from !== user && writesTo.has(from) ? 1 : 0) +
+      (dated >= now - ORDER_RECENT_MS ? 1 : 0);
+    return { q, i, tier, dated };
+  });
+  ranked.sort((a, b) => b.tier - a.tier || b.dated - a.dated || a.i - b.i);
+  return ranked.map((r) => r.q);
+}
+
 class UserCards {
   constructor(readonly tenantId: string) {}
   /** Content hash → card (null: the prefilter or the model said none; still remembered, so never re-read). */
@@ -658,7 +710,7 @@ class UserCards {
    * is not kept, and an intent search names the items a hash stands for.
    */
   readonly holders = new Map<string, Set<string>>();
-  readonly queue: Queued[] = [];
+  queue: Queued[] = [];
   /** With `intent`: the user's requests, indexed (`intent.ts`); created with the first. */
   intent: IntentIndex | undefined;
   /** Sentence key → the content hash whose card says it (`sentenceReuse`). */
@@ -695,6 +747,8 @@ export interface CardStats {
   requestOnly: number;
   /** With `intent`: items given one request or more. */
   requested: number;
+  /** Trial `intentPrune`: requests the model wrote that the rule dropped. */
+  pruned: number;
   /**
    * `cardsSourceAware`: items left unread because their source is one of many the user's lookups have not used and
    * they name none of the user's people (read once a lookup uses the source: `enqueue` again).
@@ -728,6 +782,7 @@ export class CardEnricher {
     implausible: 0,
     requestOnly: 0,
     requested: 0,
+    pruned: 0,
     deferred: 0,
   };
   /**
@@ -787,6 +842,16 @@ export class CardEnricher {
    */
   lean(days: number): void {
     this.limits = { ...this.limits, leanDays: Math.max(0, days) };
+  }
+
+  /** Trial `cardsOrder` (D482): the queue is read best first (`orderQueue`). */
+  order(): void {
+    this.limits = { ...this.limits, order: true };
+  }
+
+  /** Trial `intentPrune` (D480): the rule an item's requests pass before they are kept (`pruneRequests`). */
+  prune(spec: string): void {
+    this.limits = { ...this.limits, prune: spec };
   }
 
   private user(scope: Scope): UserCards {
@@ -920,7 +985,10 @@ export class CardEnricher {
 
   private enlist(u: UserCards, q: Queued): void {
     u.queue.push(q);
-    if (u.queue.length > this.limits.maxQueue) u.queue.shift();
+    if (u.queue.length <= this.limits.maxQueue) return;
+    // Over the bound the oldest goes; with `cardsOrder` the last in its order (the front is what is read next).
+    if (this.limits.order) u.queue = orderQueue(u.queue, this.deps.now()).slice(0, this.limits.maxQueue);
+    else u.queue.shift();
   }
 
   private keep(u: UserCards, hash: string, s: Stored): void {
@@ -949,6 +1017,8 @@ export class CardEnricher {
       const batch: Queued[] = [];
       const followers: (Queued & { skey: string })[] = [];
       const inBatch = new Set<string>();
+      // `cardsOrder`: what waits is read best first; sorted before each batch, since items arrive while calls run.
+      if (this.limits.order && u.queue.length > 1) u.queue = orderQueue(u.queue, this.deps.now());
       while (u.queue.length > 0 && batch.length < this.limits.batch) {
         const q = u.queue.shift()!;
         if (q.skey !== undefined) {
@@ -1000,7 +1070,11 @@ export class CardEnricher {
         const { cards, requests } = made;
         const at = this.deps.now();
         batch.forEach((b, i) => {
-          const asked = intent ? (requests?.[i] ?? null) : null;
+          const wrote = intent ? (requests?.[i] ?? null) : null;
+          // `intentPrune`: requests the rule drops are not indexed; the item still counts as read for its requests.
+          const asked =
+            wrote && this.limits.prune ? pruneRequests(wrote, b.item.title, b.item.text, this.limits.prune) : wrote;
+          if (wrote && asked) this.stats.pruned += wrote.length - asked.length;
           // An item read for its requests only keeps the card the prefilter gave it (none), whatever the model wrote;
           // with its requests unread it is uncovered.
           const card = b.only ? (asked ? NONE_CARD : null) : cards[i];

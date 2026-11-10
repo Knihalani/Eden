@@ -662,6 +662,10 @@ export class ContextPartner {
       if (this.config.intent) cards.intend();
       // `cardsLean`: what the prefilter rejects is read for requests only when a person wrote it recently.
       if (this.config.intent && this.config.cardsLean) cards.lean(this.config.cardsLeanDays);
+      // Trial `intentPrune` (D480): an item's requests pass a no-model rule against the item before they are indexed.
+      if (this.config.intent && this.config.intentPrune) cards.prune(this.config.intentPrune);
+      // Trial `cardsOrder` (D482): a user's waiting items are read best first (ahead, correspondents, recent).
+      if (this.config.cardsOrder) cards.order();
     }
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
