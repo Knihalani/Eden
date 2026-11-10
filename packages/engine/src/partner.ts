@@ -2149,7 +2149,7 @@ export class ContextPartner {
           ? flagged
               .filter((x) => {
                 const at = s.ledger.entry(x.item.id);
-                return !fresh.includes(x) && at !== undefined && at.turn < began;
+                return !fresh.includes(x) && at !== undefined && at.turn < began && !this.saidTitle(s, x.item);
               })
               .slice(0, POINTER_MAX)
           : [];
@@ -2950,6 +2950,25 @@ export class ContextPartner {
     }
   }
 
+  /**
+   * `pushPointer` (D708): whether a recent message of the agent's own holds every content word of the item's title
+   * (two or more): it has already spoken of the item, so it is not pointed back to it. Best effort and no model:
+   * a title the session's vocabulary lacks a word of was not said; an integration that reports no agent messages
+   * (the client's `withContext`, the lab's Pi harness) never sets it, the proxy does.
+   */
+  private saidTitle(s: Session, item: ContextItem): boolean {
+    if (!s.agentHas.some((h) => h.said)) return false;
+    const words = item.title.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [];
+    const ids: number[] = [];
+    for (const w of new Set(words)) {
+      const { ids: got, n } = termIds(w, s.vocab, false);
+      if (n !== 1) return false;
+      ids.push(got[0]!);
+    }
+    if (ids.length < 2) return false;
+    return s.agentHas.some((h) => h.said && ids.every((id) => sortedHas(h.terms, id)));
+  }
+
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
   private candidateFrame(nudge = false, pointed: readonly Scored[] = []): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
@@ -3388,7 +3407,9 @@ export class ContextPartner {
     s.window.push(`${event.kind}: ${text.slice(0, 1_000)}`);
     if (s.window.length > this.config.windowEvents) s.window.shift();
     if (event.kind === "tool_result" || event.kind === "agent_message") {
-      s.agentHas.push(heldOf(text, s.vocab));
+      const held = heldOf(text, s.vocab);
+      if (event.kind === "agent_message") held.said = true;
+      s.agentHas.push(held);
       if (s.agentHas.length > this.config.windowEvents) s.agentHas.shift();
     }
     for (let i = 0; i < terms.length; i++) {
@@ -6729,7 +6750,9 @@ function rebuildVocab(s: Session, maxTerms: number): void {
     // New ids do not keep the old order, so both arrays are sorted again after the remap.
     const terms = held.terms.map(remap);
     const pairs = held.pairs.map((p) => pairKey(remap(Math.floor(p / PAIR_BASE)), remap(p % PAIR_BASE)));
-    agentHas.unshift({ terms: sortedUnique(terms), pairs: sortedUnique(pairs) });
+    const kept: Held = { terms: sortedUnique(terms), pairs: sortedUnique(pairs) };
+    if (held.said) kept.said = true;
+    agentHas.unshift(kept);
   }
   s.agentHas = agentHas;
   s.vocab = vocab;
@@ -6827,6 +6850,8 @@ function buildCue(text: string, ids: Uint32Array, vocab: Vocab, at: number, offs
 interface Held {
   terms: Uint32Array;
   pairs: Float64Array;
+  /** The event was the agent's own message, not a tool result (`pushPointer`, D708: what the agent has said). */
+  said?: boolean;
 }
 
 /**

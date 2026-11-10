@@ -96,6 +96,21 @@ describe("pushPointer (O3, D708): earlier-handed candidates are named, not sent 
     expect(await packet(off, FIRST)).toBeUndefined();
   });
 
+  test("an item the agent has already spoken of by title is not named again", async () => {
+    const partner = setup({ pushCandidates: 3, pushPointer: true });
+    await packet(partner, FIRST);
+    await partner.observe({
+      ...ref,
+      at: NOW,
+      kind: "agent_message",
+      text: "I have not paid it: the Kestrel seating plan caps the Harlow room at 40 guests.",
+    } as AgentEvent);
+    const second = await packet(partner, SECOND);
+    expect(second!.text).toContain(POINTER_LEAD);
+    expect(second!.text).toContain("\"Harlow 'venue' hold\" (mail)");
+    expect(second!.text).not.toContain('"Kestrel seating" (mail)');
+  });
+
   test("isolation: what one user was handed is never named to another", async () => {
     const partner = setup({ pushCandidates: 3, pushPointer: true });
     await packet(partner, FIRST);

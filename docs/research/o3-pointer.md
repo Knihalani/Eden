@@ -29,19 +29,33 @@ content), no constraint test narrows them, no model call and no wait are added. 
 candidate, the names go as a packet with no item of its own. A title is source text: one inert line, cut to 80
 characters, its double quotes made single, inside the data envelope (as D301 quotes a request).
 
+An item whose title the agent has already stated in a message of its own is not named (`saidTitle`: every content
+word of the title in one recent agent message; best effort, no model). The lab's Pi harness and the client's
+`withContext` report no agent messages, so this is inert in the runs below; the proxy reports them.
+
 ## 2. Pre-registration (committed before the first call of the run below)
 
-- **Run:** pi-ab `--days 8`, the bench recipe, arms `eden` and `eden~P` (`pushPointer`), one user a process, one at
-  a time. **Stage 1:** users w41–w56 (16 users; cards and intent replayed for w41–w44, made in-run after).
-  **Stage 2:** users w57–w72, only if stage 1's hidden difference is at least +3.0 points and its interval reaches
-  zero; the rule is then read on all 32.
+A first form of this section named a two-arm run on 16 users; it was started, one user finished ($0.09), and it was
+stopped unread when the owner's delegate asked for one run that also settles `pushOpen` over days (D709). The
+finished user's results are not used.
+
+- **Run:** pi-ab `--days 8`, the bench recipe, one user a process, one at a time, arms `eden`, `eden~O` (`pushOpen`),
+  `eden~P` (`pushPointer`) and `eden~OP` (both). **Users w41–w72 (32)**, in two halves (w41–w56, then w57–w72); the
+  second half runs only if the ledger's booked total after the first is under $19.5 (the cap is $25); if it is not,
+  the rules are read on 16 users and the note says so. Cards and intent are replayed for w41–w44 and made in-run
+  after.
 - **Grades:** every hidden answer and every control or neutral concern regraded by Sonnet 5.5 (`i3-regrade.ts`).
   Hidden with whole users resampled (`n5/days_hidden.py`); cost and wall paired by task, clustered by user
   (`n5/mix.py --days`).
-- **Rule:** `pushPointer` goes to the owner's delegate for the default only if hidden raised is at least **+4.0
-  points** with the user-resampled interval's lower bound above 0; Sonnet-confirmed concerns (control and neutral)
-  are not up; total cost rises by at most **$0.20 per 1,000 tasks**; wall by at most **0.1 s** a task. Otherwise it
-  is deleted with its code and tests.
-- **Also reported, no bar:** of the hidden tasks whose fact was handed only earlier, in how many the pointer named
-  it, and how many of those were raised; pointers a task by kind.
-- **Budget [EST]:** stage 1 $2.2 (runs $1.9, regrade $0.3); stage 2 the same.
+- **Rule for `pushPointer` (`eden~P` against `eden`):** it goes to the owner's delegate for the default only if
+  hidden raised is at least **+4.0 points** with the user-resampled interval's lower bound above 0; Sonnet-confirmed
+  concerns (control and neutral) are not up; total cost rises by at most **$0.20 per 1,000 tasks**; wall by at most
+  **0.1 s** a task. Otherwise it is deleted with its code and tests.
+- **Rule for `pushOpen` over days (`eden~O` against `eden`; D709, replacing o3-push-open.md §6's point-estimate
+  clause):** it passes over days if the user-resampled interval's **lower bound for hidden is above −2.0 points**,
+  Sonnet-confirmed concerns are not up, cost rises by at most $0.20 per 1,000 tasks and wall by at most 0.1 s. Passing
+  here, with D706's pass one request a session, it is promoted into the default; failing, it stays off and is
+  deleted at its end date (2026-12-10).
+- **Also reported, no bar:** `eden~OP` against each single arm; of the hidden tasks whose fact was handed only
+  earlier, in how many the pointer named it and how many of those were raised; pointers a task by kind.
+- **Budget [EST]:** $4 a half (runs $3.5, regrade $0.5).
