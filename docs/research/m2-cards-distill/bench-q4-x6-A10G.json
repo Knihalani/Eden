@@ -1,0 +1,38 @@
+{
+  "gpu": "A10G",
+  "usdPerHour": 1.1,
+  "passes": [
+    {
+      "concurrency": 1,
+      "calls": 61,
+      "failed": 0,
+      "errors": [],
+      "items": 719,
+      "wallSeconds": 575.0,
+      "p50ms": 7596,
+      "p90ms": 16964,
+      "maxMs": 19996,
+      "tokensInPerCall": 2071,
+      "tokensOutPerCall": 418,
+      "cutAtMaxTokens": 0,
+      "itemsPerGpuSecond": 1.25,
+      "usdPer1000Items": 0.24436
+    },
+    {
+      "concurrency": 16,
+      "calls": 61,
+      "failed": 0,
+      "errors": [],
+      "items": 719,
+      "wallSeconds": 124.7,
+      "p50ms": 13116,
+      "p90ms": 30964,
+      "maxMs": 76911,
+      "tokensInPerCall": 2071,
+      "tokensOutPerCall": 482,
+      "cutAtMaxTokens": 2,
+      "itemsPerGpuSecond": 5.76,
+      "usdPer1000Items": 0.05299
+    }
+  ]
+}

@@ -56,6 +56,12 @@ tokens per ten-item call over 184 calls (24 of them retries of a batch cut off a
 that would be $0.0021 per call, $0.00021 per item, about $0.32 per user-month, an upper bound for a model that
 reasons that much. Request time adds one BM25 search over the user's requests (no model, no call).
 
+A distilled open model for the card and intent call (M2, lab only, D445–D449; docs/research/m2-cards-distill.md):
+Qwen2.5-1.5B-Instruct fine-tuned on Haiku's train cards, served by vLLM on one Modal L4 ($0.80 an hour, list), costs
+$0.0126 per 1,000 items at 16 calls at once and $0.133 one call at a time (p50 5.0 s, p90 12.0 s a call, about 12
+items a call), against Haiku's $0.051 per 1,000 items (lab provider, cached; $0.001012 a 20-item call, p50 5.4 s).
+Its cards match Haiku's in the funnel but its intent requests lose hidden facts, so it is not used.
+
 The match thresholds (`intentMinCoverage` 0.2, `intentMinMatched` 1, `intentHits` 12 since D179) add no call: a looser
 match only lets more intent hits into the ask's reader pool, which is capped at `askReaderPool` items either way. On
 Pi held-out 13 seeds 41–44, intent replayed (ledger runs `close-d159-pi-41` to `-44`, $0.534;

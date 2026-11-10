@@ -148,6 +148,58 @@
       "cardCalls": 377,
       "cardFailures": 0,
       "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards .local/modal/haiku-c.jsonl --intent .local/modal/haiku-r.jsonl --json .local/modal/funnel-haiku-c+haiku-r.json"
+    },
+    "q4-x6 endpoint (A10G), live": {
+      "hidden": 317,
+      "decoys": 289,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6611,
+        "found": 6590
+      },
+      "cardCalls": 373,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards-endpoint URL --cards \".local/modal/cards/q4-x6.cards.jsonl\" --json \".local/modal/funnel-q4-x6.json\" --baseline .local/modal/funnel-base.json"
+    },
+    "cards q4x6 + requests haiku, replayed": {
+      "hidden": 322,
+      "decoys": 278,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6600,
+        "found": 6600
+      },
+      "cardCalls": 372,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards \".local/modal/q4x6-c.jsonl\" --intent .local/modal/haiku-r.jsonl --json \".local/modal/funnel-q4x6-c+haiku-r.json\""
+    },
+    "cards haiku + requests q4x6, replayed": {
+      "hidden": 316,
+      "decoys": 285,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6615,
+        "found": 6613
+      },
+      "cardCalls": 377,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards .local/modal/haiku-c.jsonl --intent \".local/modal/q4x6-r.jsonl\" --json \".local/modal/funnel-haiku-c+q4x6-r.json\""
+    },
+    "cards q4x6 + requests q4x6, replayed": {
+      "hidden": 319,
+      "decoys": 288,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6602,
+        "found": 6598
+      },
+      "cardCalls": 376,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards \".local/modal/q4x6-c.jsonl\" --intent \".local/modal/q4x6-r.jsonl\" --json \".local/modal/funnel-q4x6-c+q4x6-r.json\""
     }
   }
 }
