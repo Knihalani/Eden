@@ -12,7 +12,6 @@
 | `bun run typecheck:parity` | tsc and tsgo one after the other; fails when their errors differ | After bumping either checker |
 | `bun run check` | format:check + typecheck + the tests whose inputs changed (D650) | While developing |
 | `CHECK_COLD=1 bun run check` | The same with every test and no Prettier, tsc or test-result cache | Before every merge and in every review (CLAUDE.md, D657) |
-| `CHECK_COLD=1 bun run check` | The same, without the Prettier, tsc and test-result caches | When a cache is in doubt |
 | `TEST_CACHE=0 bun run test` | Every test file, whatever passed before | When a skipped test is in doubt |
 | `bun scripts/test-cache-audit.ts --write` | Each test file under strace: what it reads against what its key covers; rewrites `scripts/test-cache-verified.txt` | After changing `scripts/test-cache.ts`; when a test reads files in a new way |
 | `bun test ./packages/x/src/y.test.ts` | One file | Debugging; **from the repo root only** |
@@ -106,7 +105,11 @@ file in the repository as well when it, or a module it reaches:
   audit writes that file for tests it traced reading nothing outside their key. An edit in such a test's closure
   sends it back to the whole tree until the audit runs again.
 
-Signs are looked for in the transpiler's output (comments gone, strings whole). A pass is kept for 24 hours; a file
+Signs are looked for in the transpiler's output (comments gone, strings whole); `import(`/`require(` of anything but
+one literal also in the source as written, since the transpiler folds `"./w" + ".ts"` into one. Bun's module reached
+other than as `Bun.x` (`import { file } from "bun"`, `= Bun`, `Bun[…]`, `process.getBuiltinModule`) counts as both
+spawning and reading files. Files outside the repository or ignored by git (`.local/`) are in no key and the audit
+skips them: a test must not read them. A pass is kept for 24 hours; a file
 whose tests were all skipped is not a pass. `CHECK_COLD=1`, `TEST_CACHE=0`, or any extra `bun test` argument runs
 every file. `bun scripts/test-cache.ts why <test file>` prints what a file's key covers.
 

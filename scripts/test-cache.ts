@@ -21,7 +21,8 @@
  *   on these bytes reading nothing outside its key (`VERIFIED`, D657).
  *
  * So a skipped file is one whose every reachable input is byte-identical to a run in which it passed. What the key
- * cannot see is a test that depends on the date, on the network, or on files outside the repository; none should
+ * cannot see is a test that depends on the date, on the network, or on files outside the repository or ignored by
+ * git (`.local/`: no test reads them, and the audit skips them too); none should
  * (docs/TESTING.md), and entries older than `MAX_AGE_MS` (a day) are run again. It is for the loop: the gate before a
  * merge is `CHECK_COLD=1 bun run check`, which runs everything, as `TEST_CACHE=0` does (scripts/test.sh).
  *
@@ -51,6 +52,11 @@ const VOLATILE_ENV =
  * named at run time (a variable, a template), or reads a path that is not absolute. A read of an absolute path made
  * at run time shows none of these: that is what `FS_USE` and the audit's record are for.
  */
+/** Bun's module or node's built-ins reached indirectly: may spawn or read files, so it counts as both. */
+const BUN_INDIRECT =
+  /\bfrom\s*["']bun["']|\brequire\s*\(\s*["']bun["']\s*\)|=\s*Bun\b(?!\s*\.)|\bBun\s*\[|\bgetBuiltinModule\b/;
+/** `import(` or `require(` of anything but one string literal closed by `)` or `,`. */
+const RUNTIME_NAMED = [/\brequire\s*\(\s*(?!["'][^"'\n]*["']\s*[),])/, /\bimport\s*\(\s*(?!["'][^"'\n]*["']\s*[),])/];
 const TREE_SIGNS = [
   /["']node:child_process["']|["']child_process["']/,
   /\bBun\.spawn(Sync)?\b|\bBun\.\$|import\s*\{[^}]*\$[^}]*\}\s*from\s*["']bun["']/,
@@ -60,8 +66,11 @@ const TREE_SIGNS = [
   /\bBun\.Glob\b|\bglob(Sync)?\s*\(/,
   /\bBun\.resolve(Sync)?\s*\(/,
   // A module named at run time: a variable, or a template (`import(\`./${name}.json\`)`).
-  /\brequire\s*\(\s*[^"'\s)]/,
-  /\bimport\s*\(\s*[^"'\s)]/,
+  // Anything but one string literal closed by `)` or `,`: `import("./w" + ".ts")` names a module at run time too.
+  ...RUNTIME_NAMED,
+  // Bun's own module reached any other way than `Bun.x`: `import { file } from "bun"`, `import * as B from "bun"`,
+  // `const { spawnSync } = Bun`, `Bun["spawn"]`, and node's modules by `process.getBuiltinModule` (review of D657).
+  BUN_INDIRECT,
   // A file read by a path that is not absolute: relative to the working directory, which is the repository.
   /\b(readFileSync|readFile|readdirSync|readdir|opendirSync|opendir|existsSync|statSync|lstatSync|accessSync|openSync|createReadStream|Bun\.file)\s*\(\s*["'`](?!\/)/,
 ];
@@ -104,10 +113,13 @@ const DOCS_SEGMENT = /["'`]docs["'`]/;
 /** Prose: docs/ and Markdown anywhere. */
 export const isProse = (p: string) => p.startsWith("docs/") || p.endsWith(".md");
 /** A module that starts a process (the first two `TREE_SIGNS`). */
-const SPAWNS =
-  /["'](?:node:)?child_process["']|\bBun\.spawn(Sync)?\b|\bBun\.\$|import\s*\{[^}]*\$[^}]*\}\s*from\s*["']bun["']/;
+const SPAWNS = new RegExp(
+  /["'](?:node:)?child_process["']|\bBun\.spawn(Sync)?\b|\bBun\.\$|/.source + BUN_INDIRECT.source,
+);
 /** A module that reads files itself: keyed on the tree unless the audit traced its test (`verified`). */
-const FS_USE = /["'](?:node:)?fs(?:\/promises)?["']|\bBun\.(?:file|write)\s*\(/;
+const FS_USE = new RegExp(
+  /["'](?:node:)?fs(?:\/promises)?["']|\bBun\.(?:file|write)\s*\(|/.source + BUN_INDIRECT.source,
+);
 /** `new URL("./worker.ts", import.meta.url)`: a module named by its file, followed as an import. */
 const URL_EDGE = /new URL\(\s*["'](\.{1,2}\/[^"']+)["']\s*,\s*import\.meta\.url\s*\)/g;
 /** `export const X = import.meta.url;`: a module naming itself (for a worker pool to load): already in the graph. */
@@ -191,6 +203,9 @@ function scan(path: string): Module {
   const urlUses = (bare.match(URL_OTHER) ?? []).length - named;
   if (urlUses > 0) m.tree ??= "import.meta.url";
   for (const sign of TREE_SIGNS) if (sign.test(bare)) m.tree ??= String(sign);
+  // The transpiler folds constants (`import("./w" + ".ts")` prints as one literal), so a module named at run time is
+  // also looked for in the source as written. A match inside a comment only re-runs more: the safe direction.
+  for (const sign of RUNTIME_NAMED) if (sign.test(code)) m.tree ??= String(sign);
   if (repoPath().test(bare)) m.tree ??= "names a repository path";
   if (DOCS_PATH.test(bare)) m.tree ??= "names prose";
   m.docs = DOCS_PATH.test(bare) || (m.tree !== null && DOCS_SEGMENT.test(bare));

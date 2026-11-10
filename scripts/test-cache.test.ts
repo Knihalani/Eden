@@ -105,6 +105,13 @@ describe("a test file's key (D650)", () => {
       "a template import": "const n = 'data';\nconst j = await import(`./${n}.json`);\nexport { j };\n",
       "a template require": "const n = 'data';\nconst j = require(`./${n}.json`);\nexport { j };\n",
       "any relative read": `import { existsSync } from "node:fs";\nexistsSync("data.json");\n`,
+      // Bun's module reached other than as `Bun.x`, and a module named by a sum (the review of D657).
+      "file imported from bun": `import { file } from "bun";\nexport const g = () => file(["fixtures", "g.txt"].join("/"));\n`,
+      "bun's module as a namespace": `import * as B from "bun";\nexport const s = () => B.$\`git status\`;\n`,
+      "Bun destructured": `const { spawnSync } = Bun;\nexport const s = () => spawnSync(["git", "status"]);\n`,
+      "Bun indexed": `export const s = () => Bun["spawnSync"](["git", "status"]);\n`,
+      "a built-in by name at run time": `export const cp = process.getBuiltinModule("node:child_" + "process");\n`,
+      "an import named by a sum": `export const w = await import("./w" + ".ts");\n`,
       // Not a comment: the string ends at its quote, and the sign after it must be seen.
       "a sign after a string that looks like a comment": `const g = "fixtures/*.tmp";\nconst d = import.meta.dir;\nconst h = "*/";\nexport { g, d, h };\n`,
     };
@@ -170,6 +177,35 @@ describe("a test file's key (D650)", () => {
     const k4 = key("lib/pure.test.ts");
     write(".env.test", "SECRET_FLAG=1\n");
     expect(key("lib/pure.test.ts")).not.toBe(k4);
+    // The same without Bun loading .env.test into the planner's own environment: the file itself is keyed.
+    const noEnv = () =>
+      /key ([0-9a-f]{40})/.exec(
+        sh("bun", ["--no-env-file", join(import.meta.dir, "test-cache.ts"), "why", "lib/pure.test.ts"]).stdout,
+      )![1]!;
+    const e0 = noEnv();
+    write(".env.test", "SECRET_FLAG=2\n");
+    expect(noEnv()).not.toBe(e0);
+  });
+
+  test("changes with the node on PATH, and sees files the user's own git excludes", () => {
+    const bin = join(repo, ".git", "fake-bin");
+    const node = (v: string) => {
+      write(".git/fake-bin/node", `#!/bin/sh\necho ${v}\n`);
+      sh("chmod", ["+x", join(bin, "node")]);
+    };
+    const path = { PATH: `${bin}:${process.env.PATH}` };
+    node("v1.0.0");
+    const n1 = key("lib/pure.test.ts", path);
+    node("v2.0.0");
+    expect(key("lib/pure.test.ts", path)).not.toBe(n1);
+    // A global excludes file that hides lib/extra.txt: a tree-keyed test must still see it change.
+    write(".git/user-excludes", "lib/extra.txt\n");
+    write(".git/user-gitconfig", `[core]\n\texcludesFile = ${join(repo, ".git", "user-excludes")}\n`);
+    const user = { GIT_CONFIG_GLOBAL: join(repo, ".git", "user-gitconfig") };
+    write("lib/extra.txt", "1\n");
+    const x1 = key("lib/spawn.test.ts", user);
+    write("lib/extra.txt", "2\n");
+    expect(key("lib/spawn.test.ts", user)).not.toBe(x1);
   });
 });
 
@@ -213,6 +249,7 @@ describe("plan and record (D650)", () => {
   });
 
   test("a pass older than the age bound is run again", () => {
+    expect(MAX_AGE_MS).toBe(24 * 3_600_000); // a day: the bound on what a date-dependent test could hide
     plan(...all);
     cache(["record", state, junit([["lib/pure.test.ts", 1, 0]])]);
     expect(lines(plan("./lib/pure.test.ts"))).toEqual([]);

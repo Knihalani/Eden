@@ -11,7 +11,8 @@ until shown otherwise.
    state, redaction before storing or sending text, read-only sources, bounded and budgeted model calls, untrusted
    content handling in prompts, fail-open behaviour, no 500s on caller input.
 3. Check that tests exercise the new behaviour and would fail without it. Write a probe test for anything you doubt.
-4. Run `CHECK_COLD=1 bun run check` (every test, no cached passes: D657) and `bun run eval` yourself. Compare the eval JSON with the PR's claims; any mismatch is a
+4. Run `CHECK_COLD=1 bun run check` (every test, no cached passes: D657) and `bun run eval` yourself. Compare the eval
+   JSON with the PR's claims; any mismatch is a
    finding.
 5. Check that docs/ changed where behaviour or decisions changed.
 
