@@ -10,8 +10,10 @@
 | `bun run check:fast` | format:check + typecheck:fast (tsgo) + test:changed | Before pushing a work-in-progress commit |
 | `bun run typecheck:fast` | The typecheck on tsgo, TypeScript 7's native preview (about 5x faster) | The inner loop |
 | `bun run typecheck:parity` | tsc and tsgo one after the other; fails when their errors differ | After bumping either checker |
-| `bun run check` | format:check + typecheck + every test | Before every merge (CLAUDE.md) |
-| `CHECK_COLD=1 bun run check` | The same, without the Prettier and tsc caches | When a cache is in doubt |
+| `bun run check` | format:check + typecheck + the tests whose inputs changed (D650) | While developing |
+| `CHECK_COLD=1 bun run check` | The same with every test and no Prettier, tsc or test-result cache | Before every merge and in every review (CLAUDE.md, D657) |
+| `TEST_CACHE=0 bun run test` | Every test file, whatever passed before | When a skipped test is in doubt |
+| `bun scripts/test-cache-audit.ts --write` | Each test file under strace: what it reads against what its key covers; rewrites `scripts/test-cache-verified.txt` | After changing `scripts/test-cache.ts`; when a test reads files in a new way |
 | `bun test ./packages/x/src/y.test.ts` | One file | Debugging; **from the repo root only** |
 
 **Screens, not tests: the retrieval screen (audit 2026-11-06 F25, docs/LAB.md recipe 1d).** Before the $0 funnel on all
@@ -82,6 +84,50 @@ path (about 16 s). The key was checked on Bun 1.3.13 (`packageManager`) too: 102
 under archived/ not run. On 1.3.13 three tests in those files fail (`utf8.test.ts` astral/lone-surrogate length, also
 failing with the old bunfig, and two `redos.test.ts` timing tests), and the run took 107 s; the gate is measured on
 1.4.4.
+
+## Test files that already passed are skipped (D650, 2026-11-10)
+
+`scripts/test.sh` skips a test file that passed before on exactly the inputs it has now, and prints how many it
+skipped (`test cache: 194 of 230 files passed on these inputs and are skipped, 36 run`). **It is for the loop, not
+the gate: before a merge, and in a review, run `CHECK_COLD=1 bun run check`** (D657), which runs every file. A pass
+is shared by every worktree of the repository, so one lucky run of a flaky test would otherwise stand for a day.
+
+The key (`scripts/test-cache.ts`): the file and everything it imports; the lockfile, `bunfig.toml`, the preload and
+what it imports, every `package.json` and `tsconfig`, the root's `.env*` files; Bun's, Node's and Python's versions;
+and every environment variable but the shell's own (`FUZZ_SEEDS=1` is a different key). A file is keyed on every
+file in the repository as well when it, or a module it reaches:
+
+- starts a process (then prose counts too: a child can read anything), learns its location (`import.meta.dir`,
+  `import.meta.require`), reads the working directory, or imports a name made at run time (a variable, a template);
+- reads a path that is not absolute (`readFileSync("x")`, `Bun.file("x")`), or names a repository path in a string: a
+  top-level directory and a slash, a root file's name, `join("packages", …)`, anything through docs/ or ending `.md`;
+- or has not been traced by the audit on these bytes (D658). Signs are a heuristic: two reviews found forms that
+  pass every sign (`globalThis.Bun`, `Bun.mmap`, a Worker by a built path, an import the transpiler folds), so a test
+  keeps a narrow key only while `scripts/test-cache-verified.txt` holds it with its closure's hash. The audit writes
+  that file for tests with no sign that it traced reading nothing outside their closure (182 of 230 on 2026-11-10).
+  An edit in a test's closure sends it to the whole tree until `bun scripts/test-cache-audit.ts --write` runs again.
+
+Signs are looked for in the transpiler's output (comments gone, strings whole). Bun's module reached other than as
+`Bun.x` (`import { file } from "bun"`, `= Bun`, `Bun[…]`, `process.getBuiltinModule`) counts as both spawning and
+reading files. Files outside the repository or ignored by git (`.local/`) are in no key and the audit
+skips them: a test must not read them. A pass is kept for 24 hours; a file
+whose tests were all skipped is not a pass. `CHECK_COLD=1`, `TEST_CACHE=0`, or any extra `bun test` argument runs
+every file. `bun scripts/test-cache.ts why <test file>` prints what a file's key covers.
+
+`bun scripts/test-cache-audit.ts [--write]` runs each test file under strace (opens, stats, access checks, of files
+and of directories) and fails when a test read something its key does not cover; `--write` refreshes
+`scripts/test-cache-verified.txt`. Run it after changing the cache, when a test reads files in a new way, and now
+and then to bring edited closures back (230 traced, 0 missed, 182 verified; 87–106 s). It joins the two halves strace
+prints for a call another thread interrupts (`<unfinished ...>` / `resumed`), which Bun's thread-pool reads produce.
+
+What the audit cannot see, so the key does not cover either: a test that depends on a file being absent (failed
+lookups are not traced), an `openat` relative to an open directory, a child that changes directory, and a read on a
+code path the traced run did not take. Each needs a path no sign sees (`Bun.main`, a stack trace) first; the gate
+runs cold (D657) for this reason too.
+
+Measured on a 4-core container after D657 and before D658 (docs/research/o2-dev-loop.md): the same tree again 51 s
+to 0.5 s; a docs edit 24 s; a leaf-package edit 27 s; an engine edit 45 s. D658 keeps the same 48 of 230 files on the
+tree, but a file whose closure was edited now re-runs on any change until the audit runs again.
 
 ## Bun's unref'd-timer spin (Bun 1.4.4, 2026-11-05)
 

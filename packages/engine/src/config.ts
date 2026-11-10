@@ -697,6 +697,26 @@ export interface EngineConfig {
    * `pushCheckWaitMs`. With `pushCheckItems` 20 the pool fills the check and nothing widened is read.
    */
   pushWiden: boolean;
+  /**
+   * N5 (D527; a trial; 1 = I3's reply): 2 asks the check for a compare-first reply (`CHECK_SYSTEM_COMPARE`): per
+   * listed item, what its point applies to, what of the request's own that point lands on (or "none"), then the
+   * verdict. No thinking; a longer reply (no stop sequence).
+   */
+  pushCheckForm: number;
+  /**
+   * N5 (D533; a trial; true = I3's rule; docs/research/n5-widen-check.md): with `pushCheck`, whether a check that
+   * names no item sends no candidates packet. Off, the default's candidates go instead: the check then only ever
+   * replaces the default's packet with the items it named, and a request it finds nothing for is handled as today.
+   */
+  pushCheckSilent: boolean;
+  /**
+   * N5 (D534; a trial, off): with `pushCheck`, the check's call is made only when some item of the lexical pool's
+   * head (never a widened item) is constraint-like (`readerGate`'s test, cards included) and names one of the
+   * request's anchors (`settle.ts`: an entity or a day); otherwise no call and no widening are made and the
+   * default's candidates go. Fewer calls (about a third as many on train's 1:1:8 mix) with no stored answer and no
+   * dependency beyond the checker.
+   */
+  pushCheckAnchored: boolean;
   pushWidenEmbed: number;
   pushWidenIntent: number;
   pushWidenDeep: number;
@@ -858,6 +878,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItemChars: 200,
   pushCheckItems: 15,
   pushWiden: false,
+  pushCheckForm: 1,
+  pushCheckSilent: true,
+  pushCheckAnchored: false,
   pushWidenEmbed: 3,
   pushWidenIntent: 2,
   pushWidenDeep: 0,

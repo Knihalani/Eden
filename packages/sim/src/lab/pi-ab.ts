@@ -97,6 +97,8 @@ import {
   AskReader,
   ModelReaderMaker,
   PushChecker,
+  cardKey,
+  sanitizeItem,
   type CardMaker,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
@@ -173,7 +175,7 @@ import {
 } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { sanitizeForStore } from "@eden/redact";
-import { loadWidenTable, widenFor } from "./n2-widen";
+import { loadWidenHashTable, loadWidenTable, widenByHash, widenFor, widenKey, type WidenUse } from "./n2-widen";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
 
@@ -304,6 +306,10 @@ const USES_CHECK = CONDITIONS.some((c) => c.withPartner && !c.noKey && effective
  * (`worldOf`). A `--days` user's world is not in it: there the embedding route finds nothing.
  */
 const WIDEN_TABLE = opt("widen-table", "") ? loadWidenTable(opt("widen-table", "")) : null;
+/** `--widen-hash FILE` (N5, D530): the same table keyed by item content, so a `--days` user's world is covered too. */
+const WIDEN_HASH = opt("widen-hash", "") ? loadWidenHashTable(opt("widen-hash", "")) : null;
+if (WIDEN_TABLE && WIDEN_HASH) throw new Error("--widen-table and --widen-hash are two forms of one table: pass one");
+const widenUse: WidenUse = { asked: 0, found: 0, hashes: 0, held: 0 };
 /** Every stream's push checker, for the run's CHECK line. */
 const checkers: PushChecker[] = [];
 // Every model a role of this run calls, once: the pacer and spend ledger are set up for them, and the key check below
@@ -840,6 +846,13 @@ async function runWorld(
         })
       : undefined;
   if (checker) checkers.push(checker);
+  // `--widen-hash` (N5): the world's items as the cache holds them, by content (the card key's head).
+  let held: ReturnType<typeof sanitizeItem>[] | null = null;
+  const worldItems = () => (held ??= sources.flatMap((src) => src.listAll()).map((raw) => sanitizeItem(raw)));
+  let byHash: Map<string, string> | null = null;
+  const idOf = (hash: string) =>
+    (byHash ??= new Map(worldItems().map((it) => [cardKey(it).slice(0, 20), it.id] as const))).get(hash);
+  const variantOf = new Map(baseTasks.map((t) => [widenKey(sanitizeForStore(t.text)), t.kind as string]));
   const partner = withPartner
     ? new ContextPartner({
         sources: async () => edenSources,
@@ -859,7 +872,9 @@ async function runWorld(
         ...(checker ? { checker } : {}),
         ...(WIDEN_TABLE && baseTasks[0]
           ? { widen: widenFor(WIDEN_TABLE, baseTasks[0].suite, seed, baseTasks[0].kind) }
-          : {}),
+          : WIDEN_HASH
+            ? { widen: widenByHash(WIDEN_HASH, seed, idOf, (request) => variantOf.get(request), widenUse) }
+            : {}),
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
@@ -1699,6 +1714,12 @@ if (checkers.length) {
       `${sum("overBudget")} over budget; $${sum("costUsd").toFixed(4)}; ` +
       `${calls ? (sum("inputTokens") / calls).toFixed(0) : 0} in (${calls ? (sum("cachedInputTokens") / calls).toFixed(0) : 0} ` +
       `cached) / ${calls ? (sum("outputTokens") / calls).toFixed(0) : 0} out a call`,
+  );
+}
+if (WIDEN_HASH && widenUse.asked) {
+  console.error(
+    `WIDEN (N5, by content): ${widenUse.found} of ${widenUse.asked} requests in the table; ` +
+      `${widenUse.held} of ${widenUse.hashes} of their items held by the world`,
   );
 }
 const replayMisses = (readerReplay?.missed ?? 0) + (graderReplay?.missed ?? 0);

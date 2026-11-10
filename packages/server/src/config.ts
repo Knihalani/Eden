@@ -37,6 +37,9 @@
  *                    base64; never logged), so a restart thaws them from disk instead of re-reading every source. Set
  *                    both or neither. Each process writes its own subdirectory (`<i>-of-<N>`).
  * EDEN_PERSIST_MAX_MB the directory's cap (MB, across processes; default 4096): a freeze past it is not written.
+ * EDEN_PERSIST_DISK_ONLY=1 trial (D652; needs the two above): a frozen user written to disk keeps no copy of its items
+ *                    in memory; the file is read back when they return (a few ms). A file that does not open: the
+ *                    user is synced again.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -79,7 +82,7 @@ export interface ServerConfig {
    * D425 (opt-in, EDEN_PERSIST_FROZEN_DIR and EDEN_PERSIST_KEY): where frozen users are written, encrypted; null (the
    * default) writes no content to disk (D8). `maxBytes` is the whole directory's; a router child gets 1/N of it.
    */
-  persist?: { dir: string; key: PersistKey; maxBytes: number } | null;
+  persist?: { dir: string; key: PersistKey; maxBytes: number; diskOnly?: boolean } | null;
 }
 
 /**
@@ -176,6 +179,7 @@ function persistConfig(env: NodeJS.ProcessEnv, share: number): ServerConfig["per
   const raw = env.EDEN_PERSIST_KEY ?? "";
   if (dir === "" && raw === "") {
     if (env.EDEN_PERSIST_MAX_MB) throw new Error("EDEN_PERSIST_MAX_MB is set without EDEN_PERSIST_FROZEN_DIR");
+    if (env.EDEN_PERSIST_DISK_ONLY) throw new Error("EDEN_PERSIST_DISK_ONLY is set without EDEN_PERSIST_FROZEN_DIR");
     return null;
   }
   if (dir === "") throw new Error("EDEN_PERSIST_KEY is set without EDEN_PERSIST_FROZEN_DIR: set both or neither");
@@ -185,7 +189,11 @@ function persistConfig(env: NodeJS.ProcessEnv, share: number): ServerConfig["per
     throw new Error("EDEN_PERSIST_KEY must be 32 random bytes as 64 hex digits or base64 (e.g. openssl rand -hex 32)");
   }
   const mb = positive(env.EDEN_PERSIST_MAX_MB, DEFAULT_PERSIST_MAX_MB, "EDEN_PERSIST_MAX_MB");
-  return { dir, key: new PersistKey(key), maxBytes: Math.floor((mb * 1_048_576) / share) };
+  const diskOnly = env.EDEN_PERSIST_DISK_ONLY === "1";
+  if (env.EDEN_PERSIST_DISK_ONLY && !diskOnly && env.EDEN_PERSIST_DISK_ONLY !== "0") {
+    throw new Error("EDEN_PERSIST_DISK_ONLY must be 1 or 0");
+  }
+  return { dir, key: new PersistKey(key), maxBytes: Math.floor((mb * 1_048_576) / share), diskOnly };
 }
 
 /** 64 hex digits or base64 of exactly 32 bytes; null otherwise (a key of all one byte too: a placeholder). */

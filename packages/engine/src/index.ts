@@ -110,6 +110,8 @@ export {
   CHECK_MAX_ITEMS,
   CHECK_STOP,
   CHECK_SYSTEM,
+  CHECK_SYSTEM_COMPARE,
+  parseCompare,
   CHECK_VERSION,
   checkKey,
   checkMessages,
