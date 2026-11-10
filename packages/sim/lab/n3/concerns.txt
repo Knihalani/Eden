@@ -1,0 +1,3 @@
+n3-days eden: Haiku 2, Sonnet-confirmed 1 of 434; eden+askReinvite: Haiku 2, Sonnet-confirmed 0 of 434; eden+compact: Haiku 3, Sonnet-confirmed 1 of 434; eden+compactUsed: Haiku 2, Sonnet-confirmed 0 of 434; tools: Haiku 3, Sonnet-confirmed 0 of 434
+n3-long eden: Haiku 1, Sonnet-confirmed 1 of 192; eden+askReinvite: Haiku 2, Sonnet-confirmed 1 of 192; eden+compact: Haiku 1, Sonnet-confirmed 1 of 192; eden+compactUsed: Haiku 4, Sonnet-confirmed 1 of 192
+n3-settle eden: Haiku 2, Sonnet-confirmed 1 of 144; eden~settle: Haiku 1, Sonnet-confirmed 0 of 144

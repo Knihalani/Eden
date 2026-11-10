@@ -1,0 +1,39 @@
+
+$ per 1,000 tasks (agent and Eden per task; bg run = Eden's cards and intent while the user worked, per task; one-time = backfill per user; steady = agent + Eden + bg run; all-in = steady + one-time spread over the user's tasks in this run). Recap turns are probes: not tasks, their $ apart.
+condition        n users   agent    Eden  bg run  steady  all-in  mix st  mix all   one-time $/user (from)  reader/t  Eden conn/t  agent tools/t  wall p50  mean  recaps $
+eden           1536     4   0.256   0.000   0.000   0.256   0.428       -        -           0.0658 (in-run)      0.00         0.00           0.48      1.80  2.09    0.0000
+eden~l2        1536     4   0.257   0.000   0.000   0.257   0.554       -        -           0.1140 (in-run)      0.00         0.00           0.47      1.81  2.09    0.0000
+eden~l4        1536     4   0.258   0.000   0.032   0.290   0.769       -        -           0.1839 (in-run)      0.00         0.00           0.47      1.79  2.09    0.0000
+
+connector calls per task (agent's source tools; Eden's in the task's window; Eden's background while the user worked) and Eden's one-time backfill calls per user; streams recorded before A3 lack the background and backfill
+eden           agent 0.00  Eden 0.00  background 0.56  mix -  backfill 18/user (48 users)
+eden~l2        agent 0.00  Eden 0.00  background 0.56  mix -  backfill 18/user (48 users)
+eden~l4        agent 0.00  Eden 0.00  background 0.56  mix -  backfill 18/user (48 users)
+
+$ per 1,000 tasks with the connectors priced per plan ($ per 1,000 calls; market.py, list prices, assumed): steady, all-in, and on the 1:1:8 mix
+eden           first-party (quota only)     steady   0.256  all-in   0.428  mix st       -  mix all       -
+eden           Composio (overage)           steady   0.425  all-in   0.765  mix st       -  mix all       -
+eden           Unified.to (Pro)             steady   0.678  all-in   1.272  mix st       -  mix all       -
+eden           Arcade.dev (Team)            steady   5.881  all-in  11.678  mix st       -  mix all       -
+eden           Pipedream Connect (overage)  steady   7.006  all-in  13.928  mix st       -  mix all       -
+eden           Zapier MCP (10k tasks)       steady  14.769  all-in  29.453  mix st       -  mix all       -
+eden~l2        first-party (quota only)     steady   0.257  all-in   0.554  mix st       -  mix all       -
+eden~l2        Composio (overage)           steady   0.426  all-in   0.892  mix st       -  mix all       -
+eden~l2        Unified.to (Pro)             steady   0.679  all-in   1.398  mix st       -  mix all       -
+eden~l2        Arcade.dev (Team)            steady   5.882  all-in  11.804  mix st       -  mix all       -
+eden~l2        Pipedream Connect (overage)  steady   7.007  all-in  14.054  mix st       -  mix all       -
+eden~l2        Zapier MCP (10k tasks)       steady  14.770  all-in  29.579  mix st       -  mix all       -
+eden~l4        first-party (quota only)     steady   0.290  all-in   0.769  mix st       -  mix all       -
+eden~l4        Composio (overage)           steady   0.459  all-in   1.106  mix st       -  mix all       -
+eden~l4        Unified.to (Pro)             steady   0.712  all-in   1.613  mix st       -  mix all       -
+eden~l4        Arcade.dev (Team)            steady   5.915  all-in  12.019  mix st       -  mix all       -
+eden~l4        Pipedream Connect (overage)  steady   7.040  all-in  14.269  mix st       -  mix all       -
+eden~l4        Zapier MCP (10k tasks)       steady  14.802  all-in  29.794  mix st       -  mix all       -
+
+per kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s
+eden           hidden    768  raised 430/768 (56.0%)  $0.253/1k  p50 1.76
+eden           control   768  raised 2/768 (0.3%)  $0.260/1k  p50 1.84
+eden~l2        hidden    768  raised 449/768 (58.5%)  $0.251/1k  p50 1.74
+eden~l2        control   768  raised 1/768 (0.1%)  $0.263/1k  p50 1.91
+eden~l4        hidden    768  raised 464/768 (60.4%)  $0.254/1k  p50 1.74
+eden~l4        control   768  raised 3/768 (0.4%)  $0.262/1k  p50 1.89

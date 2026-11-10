@@ -15,7 +15,15 @@
  *
  * 429 and 5xx answers are retried with jittered backoff, honouring Retry-After (`Pacer` in @eden/llm).
  */
-import { AnthropicModel, Pacer, priceFor, OpenRouterModel, type Model, type OpenRouterOptions } from "@eden/llm";
+import {
+  AnthropicModel,
+  Pacer,
+  anthropicPrice,
+  priceFor,
+  OpenRouterModel,
+  type Model,
+  type OpenRouterOptions,
+} from "@eden/llm";
 import { SpendLedger } from "./spend";
 import { createModels, createProvider, envApiKeyAuth, type Model as PiModel } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
@@ -171,7 +179,12 @@ export function piAnthropicModel(id: string, maxTokens: number): PiModel<"anthro
     baseUrl: "https://api.anthropic.com",
     reasoning: true,
     input: ["text"],
-    cost: { input: p.input, output: p.output, cacheRead: p.input * 0.1, cacheWrite: p.input * 1.25 },
+    cost: {
+      input: p.input,
+      output: p.output,
+      cacheRead: p.input * (anthropicPrice(id).cacheRead ?? 0.1),
+      cacheWrite: p.input * 1.25,
+    },
     contextWindow: 1_000_000,
     maxTokens,
     compat: {
@@ -192,12 +205,23 @@ export function piAnthropicModel(id: string, maxTokens: number): PiModel<"anthro
 const OFF_IS_BETWEEN_TOOLS = new Set(["claude-sonnet-5-5"]);
 
 /**
- * The Pi agent's Messages API payload with thinking off in the words `id` accepts (A2: a Sonnet agent; Haiku's
- * payload is returned as it is).
+ * Models that accept neither (N4, probed 2026-11-10: Opus 5.5 answers 400 to "disabled" and to "between_tools" and
+ * names `adaptive` with `output_config.effort`): thinking cannot be turned off, so the agent runs adaptive at effort
+ * low, the nearest setting. An Opus agent's result is labelled so.
+ */
+const OFF_IS_ADAPTIVE_LOW = new Set(["claude-opus-5-5"]);
+
+/**
+ * The Pi agent's Messages API payload with thinking off in the words `id` accepts (A2: a Sonnet agent; N4: an Opus
+ * agent; Haiku's payload is returned as it is).
  */
 export function anthropicThinkingOff(id: string, payload: unknown): unknown {
   const p = payload as { thinking?: { type?: string } };
-  if (!OFF_IS_BETWEEN_TOOLS.has(id) || p.thinking?.type !== "disabled") return payload;
+  if (p.thinking?.type !== "disabled") return payload;
+  if (OFF_IS_ADAPTIVE_LOW.has(id)) {
+    return { ...(payload as object), thinking: { type: "adaptive" }, output_config: { effort: "low" } };
+  }
+  if (!OFF_IS_BETWEEN_TOOLS.has(id)) return payload;
   return { ...(payload as object), thinking: { type: "between_tools" } };
 }
 

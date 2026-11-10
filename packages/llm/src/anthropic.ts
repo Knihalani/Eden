@@ -15,10 +15,15 @@
  */
 import type { ChatRequest, ChatResponse, Model, Usage } from "./types";
 
-/** USD per million tokens, at the short-prompt rate. Cache writes are 1.25x input (5 min) or 2x (1 h); reads 0.1x. */
+/**
+ * USD per million tokens, at the short-prompt rate. Cache writes are 1.25x input (5 min) or 2x (1 h); reads 0.1x
+ * unless `cacheRead` names another share of the input price.
+ */
 export interface AnthropicPrice {
   input: number;
   output: number;
+  /** A cache read's price as a share of the input price (default 0.1). */
+  cacheRead?: number;
   /** Above this many prompt tokens every rate is multiplied by `longMultiplier`. */
   longAbove?: number;
   longMultiplier?: number;
@@ -28,9 +33,10 @@ export interface AnthropicPrice {
 export const ANTHROPIC_PRICES: Record<string, AnthropicPrice> = {
   "claude-haiku-5-5": { input: 0.1, output: 0.5, longAbove: 100_000, longMultiplier: 5 },
   // The same reference, 2026-10-06: Sonnet 5.5 is $2 / $10 at every length (1M context). Lab regrade only (fix-s3b).
-  "claude-sonnet-5-5": { input: 2, output: 10 },
+  // Cache reads at 0.05x on Sonnet 5.5 and Opus 5.5: N4's brief (2026-11-10), not re-read from the reference here.
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.05 },
   // The same reference, cached 2026-11-03: Opus 5.5 is $4 / $20 (1M context). Lab labelling only (I1, D470).
-  "claude-opus-5-5": { input: 4, output: 20 },
+  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.05 },
 };
 
 /**
@@ -93,7 +99,7 @@ export function anthropicCost(usage: AnthropicUsage, price: AnthropicPrice, ttl:
   const usd =
     uncached * input +
     usage.cacheWriteTokens * input * (ttl === "1h" ? 2 : 1.25) +
-    usage.cachedInputTokens * input * 0.1 +
+    usage.cachedInputTokens * input * (price.cacheRead ?? 0.1) +
     usage.outputTokens * price.output * long;
   return usd / 1_000_000;
 }

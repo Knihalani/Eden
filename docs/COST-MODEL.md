@@ -62,6 +62,15 @@ $0.0126 per 1,000 items at 16 calls at once and $0.133 one call at a time (p50 5
 items a call), against Haiku's $0.051 per 1,000 items (lab provider, cached; $0.001012 a 20-item call, p50 5.4 s).
 Its cards match Haiku's in the funnel but its intent requests lose hidden facts, so it is not used.
 
+Card lanes (`cardsLanes` 4, D521, D522; docs/research/n4-agents.md): a user's waiting batches are sent up to four at
+once. No call is added (the $0 funnel makes 382–392 card calls with one lane or four, by machine load); a new
+user's backfill of about sixteen calls ($0.0014 a call, about $0.022 a user on Haiku 5.5, Anthropic-direct lab
+figures, cards made in-run on train seeds 45–48) is spent in a quarter of the time, with up to four reservations of
+`estimatedCallUsd` held against the user's day at once. Near the user's day cap that costs calls: lanes in flight
+hold their estimates ($0.003) rather than what they will cost (about $0.0014), so the refusal that drops what waits
+comes up to three calls' worth earlier than with one lane (the reviewer's probe: 2 calls against 3 under a cap of
+$0.0045).
+
 The match thresholds (`intentMinCoverage` 0.2, `intentMinMatched` 1, `intentHits` 12 since D179) add no call: a looser
 match only lets more intent hits into the ask's reader pool, which is capped at `askReaderPool` items either way. On
 Pi held-out 13 seeds 41–44, intent replayed (ledger runs `close-d159-pi-41` to `-44`, $0.534;

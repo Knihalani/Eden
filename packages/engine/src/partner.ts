@@ -54,7 +54,6 @@ import {
 } from "@eden/sources";
 import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache, type Sketch } from "./cache";
 import { SyncManager } from "./sync";
-import { coldQuery } from "./cold";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import {
@@ -695,6 +694,8 @@ export class ContextPartner {
       if (this.config.intent && this.config.cardsLean) cards.lean(this.config.cardsLeanDays);
       // `cardsOrder` (D482, D483): a user's waiting items are read best first (worded, ahead, correspondents, recent).
       if (this.config.cardsOrder) cards.order();
+      // `cardsLanes` (N4, D521, D522): a new user's backfill read by several calls at once.
+      if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
     }
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
@@ -735,10 +736,6 @@ export class ContextPartner {
               this.queuePlanConflicts(scope, items);
             },
             tracer: spans,
-            // `syncDelta` (D476): what a delta read says is deleted goes as a deletion notice's items do.
-            onRemoved: (scope, sourceId, ids) => {
-              this.dropGone(scope, sourceId, ids);
-            },
           },
           {
             maxItems: c.syncMaxItems,
@@ -763,12 +760,6 @@ export class ContextPartner {
             engagedDeep: c.syncEngagedDeep,
             // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
             unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
-            cold: c.syncCold,
-            coldMaxItems: c.syncColdMaxItems,
-            coldTtlMs: deps.cache.syncTtlMs,
-            delta: c.syncDelta,
-            // Inside the cache's time to live for a synced copy, which only a listing renews.
-            deltaSweepMs: Math.min(6 * 24 * 3_600_000, deps.cache.syncTtlMs * 0.85),
           },
         )
       : null;
@@ -4861,8 +4852,6 @@ export class ContextPartner {
   ): ContextItem[] {
     const cache = this.deps.cache;
     const now = this.now();
-    // `syncCold` (D475): these sources' cold copies that hold the request's words are back in the index first.
-    if (this.config.syncCold && text.trim()) this.thawCold(s, sourceIds, text, limit);
     const capped = (hits: CacheHit[]) => {
       const per = new Map<string, number>();
       return hits.filter((h) => {
@@ -4898,20 +4887,6 @@ export class ContextPartner {
     }
     const all = this.config.syncLocalAll;
     return cache.searchIn(s.scope, ids, ids.length, limit, sourceIds, all, now).map((h) => h.item);
-  }
-
-  /**
-   * `syncCold` (D475): brings the cold copies of these sources that hold any of the words back into the index, where
-   * the lookup ranks them as it would a live search's finds, and treats them as such finds are treated (`store`):
-   * carded, their mentions recorded. No call.
-   */
-  private thawCold(s: Session, sourceIds: ReadonlySet<string>, text: string, limit: number): void {
-    const sync = this.sync;
-    if (!sync) return;
-    const added = sync.thaw(s.scope, sourceIds, coldQuery(text), Math.max(limit, 8), this.now());
-    if (added.length === 0) return;
-    this.enqueueCards(s.scope, added);
-    this.recordMentions(s.scope, added);
   }
 
   /** Records the entity mentions of items new to the user's cache or changed (lookups and the sync, D57). */
@@ -4984,15 +4959,12 @@ export class ContextPartner {
     // A ref notice's re-read still on the wire (D347): the copy held is from before the change.
     if (this.refreshing.size > 0 && this.refreshing.has(`${scopeKey(s.scope)}|${item.id}`)) return true;
     if (this.unswept(s.scope, item)) return true;
-    // `syncCold` (D475): a copy a lookup brought back from the cold tier, not read at its source since.
-    if (this.config.syncCold && this.config.syncColdVerify && this.sync?.thawedUnread(s.scope, item.sourceId, item.id))
-      return true;
     const mark = this.deps.cache.readMark(s.scope, item.id);
-    if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark, item.id) !== true) return false;
+    if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark) !== true) return false;
     // A re-read since that signal could not tell (a null that proves nothing): another says the same until it signals.
     const held = this.unverifiable.get(scopeKey(s.scope))?.get(item.id);
     if (held === undefined || this.now() - held.at > UNVERIFIABLE_HOLD_MS) return true;
-    return this.sync.signalledSince(s.scope, item.sourceId, held.mark, item.id);
+    return this.sync.signalledSince(s.scope, item.sourceId, held.mark);
   }
 
   /**
@@ -5166,60 +5138,16 @@ export class ContextPartner {
     // The read mark before the re-read's call (D133): a signal while it is on the wire doubts what it stores, and
     // refuses its reuse.
     const mark = this.sync?.mark() ?? 0;
-    // `syncDelta` (D476): a source kept by its change feed is brought current by one delta read, shared by every
-    // doubted item of it, instead of a fetch for each; if that cannot settle the doubt, the item is re-read as before.
-    const byDelta = this.config.syncDelta && this.sync?.hasDelta(s.scope, item.sourceId) === true;
-    const reading = byDelta
-      ? this.recheckByDelta(s, item, made).then((o) => o ?? this.recheck(s, item, mark, made))
-      : this.recheck(s, item, mark, made);
     const entry: { at: number; mark: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome } = {
       at: now,
       mark,
-      outcome: reading.then((o) => (entry.settled = o)),
+      outcome: this.recheck(s, item, mark, made).then((o) => (entry.settled = o)),
     };
     const outcome = entry.outcome;
     checks.delete(item.id);
     checks.set(item.id, entry);
     while (checks.size > MAX_CHECKS) checks.delete(checks.keys().next().value as string);
     return outcome;
-  }
-
-  /**
-   * `syncDelta` (D476): the doubt about `item` settled by one read of its source's change feed (`Sync.settleDelta`,
-   * within `verifyTimeoutMs`): the read stores what changed and drops what was deleted, so the cache then says which
-   * it was. Null when the feed could not settle it (no cursor, a failed or late read, a signal during it, or the copy
-   * no longer held for another reason): the caller re-reads the item by its ref. Never throws.
-   */
-  private async recheckByDelta(s: Session, item: ContextItem, made?: { calls: number }): Promise<CheckOutcome | null> {
-    const sync = this.sync;
-    if (!sync) return null;
-    try {
-      const all = await this.deps.sources(s.scope).catch((): Source[] => []);
-      const source = all.find((x) => x.id === item.sourceId);
-      if (!source?.changes || s.closed) return null;
-      const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(this.config.verifyTimeoutMs)]);
-      const tally = { calls: 0 };
-      const settled = await sync.settleDelta(s.scope, source, signal, tally);
-      if (made) made.calls += tally.calls;
-      this.freshness.calls += tally.calls;
-      if (!settled || s.closed) return null;
-      const now = this.now();
-      if (this.deps.cache.isHeldGone(s.scope, item.id, now)) {
-        this.freshness.checked++;
-        this.freshness.gone++;
-        return "gone";
-      }
-      const copy = this.deps.cache.get(s.scope, item.id, now);
-      // Not held, and not because the feed said it is gone (evicted, or let go by the cap): re-read by ref.
-      if (!copy || this.doubted(s, copy)) return null;
-      this.freshness.checked++;
-      const changed = copy.text !== item.text || copy.title !== item.title;
-      if (changed) this.freshness.changed++;
-      else this.freshness.confirmed++;
-      return changed ? "changed" : "confirmed";
-    } catch {
-      return null;
-    }
   }
 
   private async recheck(
@@ -6192,7 +6120,6 @@ export class ContextPartner {
       ...(source.fetchesById !== undefined ? { fetchesById: source.fetchesById } : {}),
       // A listing (the sync, D57) is traced by the sync itself (`sync.list`): passed through as it is.
       ...(source.list ? { list: source.list.bind(source) } : {}),
-      ...(source.changes ? { changes: source.changes.bind(source) } : {}),
       // One `then`, no async frame of its own: a source call is the most frequent span (tracing overhead).
       search: (query, signal) => {
         const sp = spans.open("source.search", parent, { async: true, source: source.id, window: !!query.window });

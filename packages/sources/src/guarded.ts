@@ -28,7 +28,7 @@ import {
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { PlannedSource, type PlanCalls } from "./planner";
 import { untilAborted } from "./abort";
-import { FetchErrorResult, type ChangePage, type ListPage, type SearchQuery, type Source } from "./source";
+import { FetchErrorResult, type ListPage, type SearchQuery, type Source } from "./source";
 
 /**
  * One lookup's queries in flight or answered, by source and text (`sharedKey`): what the query planner and the probes
@@ -426,60 +426,6 @@ export class SourceFanout {
     try {
       if (options.turn) await options.turn(); // Only when asked: an await here moves the funnel's card batching.
       return { items: await this.redactListed(page.items, signal, options.reuse), next: page.next };
-    } catch {
-      // Our gate failed, not the source: no page, and nothing unredacted held.
-      return "error";
-    }
-  }
-
-  /**
-   * One read of a source's change feed (`Source.changes`, D476), under the same guards as `list`, its items redacted
-   * before they are returned. "expired": the source said the cursor is no longer valid. Never throws.
-   */
-  async changes(
-    source: Source,
-    scope: Scope,
-    cursor: string | undefined,
-    options: { timeoutMs: number; signal?: AbortSignal; reserve?: number; reuse?: ListReuse },
-  ): Promise<ChangePage | "expired" | Exclude<FanoutStatus, "ok" | "cached" | "stale">> {
-    if (!source.changes) return "error";
-    const timeout = AbortSignal.timeout(options.timeoutMs);
-    const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-    const key = `${scopeKey(scope)}|${source.id}`;
-    if ((options.reserve ?? 0) > 0 && this.rate.available(key) < 1 + options.reserve!) return "limited";
-    const s = this.state(key);
-    const epoch = this.admit(key, s);
-    if (typeof epoch !== "number") return epoch;
-    const started = performance.now();
-    let page: ChangePage | null;
-    try {
-      page = await source.changes(scope, cursor, signal);
-    } catch (e) {
-      const message = String(e);
-      if (signal.aborted && !timeout.aborted) {
-        s.limiter.release("ignored"); // The caller gave up: no evidence against the source.
-        return "error";
-      }
-      s.latency.record(performance.now() - started);
-      s.limiter.release("dropped");
-      s.breaker.failure(epoch);
-      if (RATE_LIMITED.test(message)) {
-        this.pushBack(key, s, retryAfterMs(message) ?? 5_000);
-        if (!timeout.aborted) return "throttled";
-      }
-      return timeout.aborted ? "timeout" : "error";
-    }
-    s.latency.record(performance.now() - started);
-    s.limiter.release("ok");
-    s.breaker.success(epoch);
-    if (page === null) return "expired";
-    try {
-      return {
-        items: await this.redactListed(page.items, signal, options.reuse),
-        removed: page.removed,
-        next: page.next,
-        ...(page.more ? { more: true } : {}),
-      };
     } catch {
       // Our gate failed, not the source: no page, and nothing unredacted held.
       return "error";
