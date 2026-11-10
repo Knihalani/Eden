@@ -10,7 +10,8 @@
  * at $0; `replayOnly` answers a miss from the per-pair labels the cache holds (the same request and item in any set)
  * and counts what it could not, scoring those 0 — never a call. `calls`, `misses`, `usd` and `ms` are the run's line.
  */
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { AnthropicModel } from "@eden/llm";
 import type { CheckPair, PairChecker } from "@eden/engine";
@@ -82,6 +83,8 @@ export function parseCheck(text: string, order: readonly number[]): number[] {
 
 export function labChecker(o: LabCheckerOptions): LabChecker {
   const model = o.model ?? "claude-haiku-5-5";
+  // A fresh container has no `.local/`: a failed append would fail every check open (the default's candidates).
+  mkdirSync(dirname(o.cache), { recursive: true });
   const bySet = new Map<string, Record<string, number>>();
   const byPair = new Map<string, number>();
   if (existsSync(o.cache)) {
