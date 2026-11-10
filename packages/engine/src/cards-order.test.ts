@@ -2,10 +2,11 @@ import { expect, test } from "bun:test";
 import { Budget } from "@eden/llm";
 import type { ContextItem } from "@eden/protocol";
 import { CardEnricher, orderQueue, type Card, type CardMaker } from "./cards";
+import { IntentIndex } from "./intent";
 
-// Trial `cardsOrder` (D482): a user's waiting items are read best first. Constraint wording (the prefilter passed
-// the item) counts most; then an event ahead, a sender the user writes to, and the last three days; then the newer
-// date; then the order the items came in.
+// `cardsOrder` (D482, promoted by D483): a user's waiting items are read best first. Constraint wording (the
+// prefilter passed the item) counts most; then an event ahead, a sender the user writes to, and the last three days;
+// then the newer date; then the order the items came in.
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");
 const DAY = 86_400_000;
@@ -113,4 +114,43 @@ test("each user's queue is ordered on its own items", async () => {
   await e.idle();
   expect(maker.batches).toContainEqual(["dana", "old", "sent"]);
   expect(maker.batches).toContainEqual(["newer", "dana"]);
+});
+
+// D483: items that say the same thing get the same requests and the same score. Which of them the index was given
+// first is the order the card model read them in, so equal scores are put in the order the items came in instead, and
+// a search answers the same whatever order the cards were made in (the funnel's files differed under load before).
+test("IntentIndex: equal scores come back in `seq` order, whatever order the docs were set in", () => {
+  const requests = ["approve the laptop order"];
+  const forward = new IntentIndex();
+  const backward = new IntentIndex();
+  // Up to 16 ties past the cut are put right (`TIE_SLACK`): more would need the index itself to break ties.
+  const hashes = Array.from({ length: 16 }, (_, i) => `h${String(i).padStart(2, "0")}`);
+  hashes.forEach((h, i) => forward.set(h, requests, i));
+  [...hashes].reverse().forEach((h) => backward.set(h, requests, hashes.indexOf(h)));
+  const want = hashes.slice(0, 5);
+  expect(forward.search("approve the order", 5).map((h) => h.hash)).toEqual(want);
+  expect(backward.search("approve the order", 5).map((h) => h.hash)).toEqual(want);
+  // A better match still comes first, whatever its place.
+  backward.set("best", ["approve the laptop order", "approve the order"], 99);
+  expect(backward.search("approve the order", 3).map((h) => h.hash)[0]).toBe("best");
+  // Without a `seq`, the order of the calls, as before.
+  const plain = new IntentIndex();
+  for (const h of ["b", "a", "c"]) plain.set(h, requests);
+  expect(plain.search("approve the order", 3).map((h) => h.hash)).toEqual(["b", "a", "c"]);
+});
+
+test("the intent hits are the same with and without the order", async () => {
+  const items = [old, sent, fromDana, worded, ahead, recent, past];
+  const found = async (order: boolean) => {
+    const e = new CardEnricher({ maker: new Maker(), budget: new Budget(), now: () => NOW }, { batch: 2 });
+    e.intend();
+    if (order) e.order();
+    const scope = { tenantId: "t", userId: "u" };
+    e.enqueue(scope, items);
+    await e.idle();
+    return e.intentFinds(scope, "approve the order", NOW + 1, 4, () => true).flatMap((r) => r.ids);
+  };
+  // Every item holds the same request: the first four in the order they came in, not in the order they were read.
+  expect(await found(false)).toEqual(items.slice(0, 4).map((i) => i.id));
+  expect(await found(true)).toEqual(items.slice(0, 4).map((i) => i.id));
 });

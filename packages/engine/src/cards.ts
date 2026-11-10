@@ -30,7 +30,7 @@ import { sanitizeForStore } from "@eden/redact";
 import type { Frame } from "./conflict";
 import { CLASSES, hasWord } from "./consequence";
 import { parseWhen } from "./grounding";
-import { cleanRequests, IntentIndex, MAX_REQUESTS, pruneRequests, type IntentHit } from "./intent";
+import { cleanRequests, IntentIndex, MAX_REQUESTS, type IntentHit } from "./intent";
 import { inert } from "./render";
 import { isStopword } from "./text";
 import type { Tracer } from "./spans";
@@ -594,9 +594,7 @@ export interface CardLimits {
    * when it is not automated and is dated within this many days or upcoming (`readForIntent`).
    */
   leanDays: number;
-  /** Trial `intentPrune` (D480, `prune()` sets it; "": off): the rule an item's requests pass to be kept. */
-  prune: string;
-  /** Trial `cardsOrder` (D482, `order()` sets it): the queue is read best first (`orderQueue`), not as it filled. */
+  /** `cardsOrder` (D482, D483; `order()` sets it): the queue is read best first (`orderQueue`), not as it filled. */
   order: boolean;
 }
 
@@ -611,7 +609,6 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   sentenceReuse: false,
   intent: false,
   leanDays: 0,
-  prune: "",
   order: false,
 };
 
@@ -637,6 +634,8 @@ interface Stored {
   card: Card | null;
   /** With `intent`: the requests the item would change (`intent.ts`), indexed in the user's `IntentIndex`. */
   requests?: string[];
+  /** With requests: their place among equal scores in the intent index (`Queued.seq`; `IntentIndex.set`). */
+  seq?: number;
   /** When the card was made (the partner's clock): a lookup uses only cards made before it began. */
   at: number;
   /** When an item last linked to it (made, or an item with this content enqueued): its time to live runs from here. */
@@ -651,6 +650,8 @@ interface Queued {
   hash: string;
   skey?: string;
   only?: true;
+  /** The item's place in the order the user's items were queued (`UserCards.enlisted`). */
+  seq?: number;
 }
 
 /** An address on a mail's From line, and on its To and Cc lines (header block only; bounded). */
@@ -662,8 +663,10 @@ const ORDER_RECENT_MS = 3 * 86_400_000;
 const ORDER_WORDED = 4;
 
 /**
- * Trial `cardsOrder` (D482; docs/research/f2-quality.md): the order a user's waiting items are read in, best first,
- * for a new user whose backfill fills the queue faster than the model empties it. An item counts for each of: an
+ * `cardsOrder` (D482, D483; docs/research/f2-quality.md): the order a user's waiting items are read in, best first,
+ * for a new user whose backfill fills the queue faster than the model empties it. An item with constraint wording
+ * (the prefilter passed it: not `only`) goes before any other: on train the planted items are 78% such, the queue 32%,
+ * and this alone carried the measured gain. Within each group an item counts for each of: an
  * event that starts after `now`; a sender the user has written to (the user is the address most of the queue's mail
  * is from or to; the people they write to are on the To and Cc lines of mail from that address); dated within three
  * days. More counts first, then the newer date, then the order the items came in. No model; reads each item's first
@@ -711,6 +714,8 @@ class UserCards {
    */
   readonly holders = new Map<string, Set<string>>();
   queue: Queued[] = [];
+  /** Items queued so far: each one's `seq`, the order the user's items came in whatever order they are read in. */
+  enlisted = 0;
   /** With `intent`: the user's requests, indexed (`intent.ts`); created with the first. */
   intent: IntentIndex | undefined;
   /** Sentence key → the content hash whose card says it (`sentenceReuse`). */
@@ -747,8 +752,6 @@ export interface CardStats {
   requestOnly: number;
   /** With `intent`: items given one request or more. */
   requested: number;
-  /** Trial `intentPrune`: requests the model wrote that the rule dropped. */
-  pruned: number;
   /**
    * `cardsSourceAware`: items left unread because their source is one of many the user's lookups have not used and
    * they name none of the user's people (read once a lookup uses the source: `enqueue` again).
@@ -782,7 +785,6 @@ export class CardEnricher {
     implausible: 0,
     requestOnly: 0,
     requested: 0,
-    pruned: 0,
     deferred: 0,
   };
   /**
@@ -844,14 +846,9 @@ export class CardEnricher {
     this.limits = { ...this.limits, leanDays: Math.max(0, days) };
   }
 
-  /** Trial `cardsOrder` (D482): the queue is read best first (`orderQueue`). */
+  /** `cardsOrder` (D482, D483): the queue is read best first (`orderQueue`). */
   order(): void {
     this.limits = { ...this.limits, order: true };
-  }
-
-  /** Trial `intentPrune` (D480): the rule an item's requests pass before they are kept (`pruneRequests`). */
-  prune(spec: string): void {
-    this.limits = { ...this.limits, prune: spec };
   }
 
   private user(scope: Scope): UserCards {
@@ -976,7 +973,7 @@ export class CardEnricher {
       const made = twin !== undefined ? u.byHash.get(twin) : undefined;
       if (made) {
         this.stats.sentenceReused++;
-        this.keep(u, hash, reused(made, now));
+        this.keep(u, hash, reused(made, now, u.enlisted++));
         return;
       }
     }
@@ -984,6 +981,7 @@ export class CardEnricher {
   }
 
   private enlist(u: UserCards, q: Queued): void {
+    q.seq = u.enlisted++;
     u.queue.push(q);
     if (u.queue.length <= this.limits.maxQueue) return;
     // Over the bound the oldest goes; with `cardsOrder` the last in its order (the front is what is read next).
@@ -995,7 +993,7 @@ export class CardEnricher {
     u.byHash.delete(hash);
     u.byHash.set(hash, s);
     // The requests are indexed while their card is held, and go with it (`dropCard`).
-    if (s.requests?.length) (u.intent ??= new IntentIndex()).set(hash, s.requests);
+    if (s.requests?.length) (u.intent ??= new IntentIndex()).set(hash, s.requests, s.seq);
     else u.intent?.delete(hash);
     while (u.byHash.size > this.limits.maxCardsPerUser) dropCard(u, u.byHash.keys().next().value as string);
   }
@@ -1026,7 +1024,7 @@ export class CardEnricher {
           const made = twin !== undefined ? u.byHash.get(twin) : undefined;
           if (made) {
             this.stats.sentenceReused++;
-            if (u.holders.has(q.hash)) this.keep(u, q.hash, reused(made, this.deps.now()));
+            if (u.holders.has(q.hash)) this.keep(u, q.hash, reused(made, this.deps.now(), q.seq!));
             continue;
           }
           if (inBatch.has(q.skey)) {
@@ -1070,11 +1068,7 @@ export class CardEnricher {
         const { cards, requests } = made;
         const at = this.deps.now();
         batch.forEach((b, i) => {
-          const wrote = intent ? (requests?.[i] ?? null) : null;
-          // `intentPrune`: requests the rule drops are not indexed; the item still counts as read for its requests.
-          const asked =
-            wrote && this.limits.prune ? pruneRequests(wrote, b.item.title, b.item.text, this.limits.prune) : wrote;
-          if (wrote && asked) this.stats.pruned += wrote.length - asked.length;
+          const asked = intent ? (requests?.[i] ?? null) : null;
           // An item read for its requests only keeps the card the prefilter gave it (none), whatever the model wrote;
           // with its requests unread it is uncovered.
           const card = b.only ? (asked ? NONE_CARD : null) : cards[i];
@@ -1099,7 +1093,7 @@ export class CardEnricher {
             card: card.kind === "none" ? null : card,
             at,
             seenAt: at,
-            ...(asked?.length ? { requests: asked } : {}),
+            ...(asked?.length ? { requests: asked, seq: b.seq } : {}),
           });
           if (b.skey !== undefined) {
             u.bySentence.set(b.skey, b.hash);
@@ -1117,7 +1111,7 @@ export class CardEnricher {
           const made = twin !== undefined ? u.byHash.get(twin) : undefined;
           if (made) {
             this.stats.sentenceReused++;
-            if (u.holders.has(f.hash)) this.keep(u, f.hash, reused(made, at));
+            if (u.holders.has(f.hash)) this.keep(u, f.hash, reused(made, at, f.seq!));
           } else u.queue.push(f);
         }
       } catch {
@@ -1342,8 +1336,8 @@ function unlink(u: UserCards, id: string): void {
 }
 
 /** A card made for one item, taken by another saying the same constraint sentences (`sentenceReuse`). */
-function reused(made: Stored, seenAt: number): Stored {
-  return { card: made.card, at: made.at, seenAt, ...(made.requests ? { requests: made.requests } : {}) };
+function reused(made: Stored, seenAt: number, seq: number): Stored {
+  return { card: made.card, at: made.at, seenAt, ...(made.requests ? { requests: made.requests, seq } : {}) };
 }
 
 /** The card of an item read for its requests only: the prefilter found no constraint language in it. */
