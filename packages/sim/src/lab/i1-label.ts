@@ -5,7 +5,8 @@
  *
  *   bun packages/sim/src/lab/i1-label.ts pairs --pool POOL.jsonl --out PAIRS.jsonl [--eval-share 0.2]
  *   bun packages/sim/src/lab/i1-label.ts label --pairs PAIRS.jsonl --out LABELS.jsonl --spend-ledger F --spend-cap USD
- *     [--mode direct|batch] [--seeds 41,42] [--limit N] [--model claude-opus-5-5] [--effort low] [--batch-id ID]
+ *     [--mode direct|batch] [--seeds 41,42] [--split eval|train] [--limit N] [--model claude-opus-5-5]
+ *     [--effort low] [--batch-id ID]
  *   bun packages/sim/src/lab/i1-label.ts score --pairs PAIRS.jsonl --labels LABELS.jsonl
  *
  * `pairs`: one group per (suite, seed, template) of the funnel's `--pool-dump` (train only; run with `--neutral`):
@@ -151,13 +152,15 @@ const MAX_TOKENS = 4_000;
 /** A batch request's output cap: the pilot's replies were 25-35 tokens an item plus low-effort thinking. */
 const batchMax = (g: PairGroup) => 600 + 45 * g.items.length;
 
-async function label(argv: string[]) {
+export async function label(argv: string[], system = LABEL_SYSTEM) {
   const opt = args(argv);
   const model = opt("model", "claude-opus-5-5");
   const effort = opt("effort", "low");
   const out = opt("out");
   const seeds = new Set(opt("seeds", "41,42,43,44").split(",").map(Number));
   let groups = readJsonl<PairGroup>(opt("pairs")).filter((g) => seeds.has(g.seed));
+  // `--split eval|train`: one split only (I2 measures the teacher on the held-out templates before labelling more).
+  if (opt("split")) groups = groups.filter((g) => g.split === opt("split"));
   const done = new Set(existsSync(out) ? readJsonl<Label>(out).map((l) => l.group) : []);
   groups = groups.filter((g) => !done.has(g.group));
   const limit = Number(opt("limit", "0"));
@@ -171,7 +174,7 @@ async function label(argv: string[]) {
     const one = async (g: PairGroup) => {
       const r = await m.chat({
         messages: [
-          { role: "system", content: LABEL_SYSTEM },
+          { role: "system", content: system },
           { role: "user", content: labelPrompt(g) },
         ],
         maxTokens: MAX_TOKENS,
@@ -191,7 +194,7 @@ async function label(argv: string[]) {
     console.log(`i1 label: $${usd.toFixed(4)} booked this run; ledger total $${ledger.committedUsd.toFixed(4)}`);
     return;
   }
-  await batch(opt, groups, model, effort, out, ledger);
+  await batch(opt, groups, model, effort, out, ledger, system);
 }
 
 /** The Message Batches API: half the price of a direct call, results within 24 hours (usually minutes). */
@@ -202,6 +205,7 @@ async function batch(
   effort: string,
   out: string,
   ledger: SpendLedger,
+  system = LABEL_SYSTEM,
 ) {
   const key = keyFor(model);
   const headers = { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" };
@@ -213,8 +217,7 @@ async function batch(
   // Worst case at the batch price: the prompt at 3 characters a token (the pilot read ~3.4), every output token used.
   const price = anthropicPrice(model);
   const worst = groups.reduce(
-    (n, g) =>
-      n + (((LABEL_SYSTEM.length + labelPrompt(g).length) / 3) * price.input + batchMax(g) * price.output) / 2e6,
+    (n, g) => n + (((system.length + labelPrompt(g).length) / 3) * price.input + batchMax(g) * price.output) / 2e6,
     0,
   );
   if (!id) {
@@ -225,7 +228,7 @@ async function batch(
       params: {
         model,
         max_tokens: batchMax(g),
-        system: LABEL_SYSTEM,
+        system,
         thinking: { type: "adaptive" },
         output_config: { effort },
         messages: [{ role: "user", content: labelPrompt(g) }],

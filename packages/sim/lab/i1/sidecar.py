@@ -1,10 +1,9 @@
-"""I1's checker as a CPU sidecar (D471-D473, docs/research/i1-checker.md). Lab only, not product code. The engine's
-`pushCheck` trial that called it was deleted (D473); its code, with the funnel's and pi-ab's `--checker URL`, is in
-commit fced3789.
+"""I1's checker as a CPU sidecar the lab calls (D471, docs/research/i1-checker.md). Lab only, not product code.
 
     python3 -I sidecar.py serve --model DIR [--port 8471] [--threads 1]      # POST /score
     python3 -I sidecar.py bench --model DIR --pairs PAIRS.jsonl [--threads 1] [--k 15] [--n 300]
     python3 -I sidecar.py score --model DIR --pairs PAIRS.jsonl --out SCORES.jsonl
+    python3 -I sidecar.py serve --oracle LABELS.jsonl --pairs PAIRS.jsonl [--port 8472]   # I2: the teacher's labels
 
 DIR holds `model.onnx`, `tokenizer.json` and `report.json` (`packages/sim/modal/i1_checker.py`). Needs `onnxruntime`,
 `tokenizers` and `numpy`. `/score` takes {"request": str, "items": [{"title": str, "text": str}]} and answers
@@ -52,6 +51,35 @@ class Checker:
         return (1 / (1 + np.exp(-logits))).tolist()
 
 
+class OracleChecker:
+    """I2 (D492): the teacher's own labels as the checker, an upper bound for any distilled one (not shippable: a
+    model call a push). Looks each (request, item) up by the request and `i1-label.ts`'s hash of the item's title and
+    text; an item the teacher did not label scores 0 and is counted (`misses`)."""
+
+    def __init__(self, pairs, labels):
+        import hashlib
+
+        self.h = lambda t: hashlib.sha256(t.encode()).hexdigest()[:10]
+        y = {(x["group"], x["key"]): x["y"] / 100.0 for x in groups_of(labels)}
+        self.by = {}
+        for g in groups_of(pairs):
+            for it in g["items"]:
+                if (g["group"], it["key"]) in y:
+                    self.by[(g["request"], self.h(f"{it['title']}\n{it['text']}"))] = y[(g["group"], it["key"])]
+        self.hits = self.misses = 0
+
+    def scores(self, request, items):
+        out = []
+        for it in items:
+            v = self.by.get((request, self.h(f"{it['title']}\n{it['text']}")))
+            self.hits += v is not None
+            self.misses += v is None
+            out.append(0.0 if v is None else v)
+        if (self.hits + self.misses) % 500 < len(items):
+            print(f"oracle: {self.hits} hits, {self.misses} misses", flush=True)
+        return out
+
+
 def serve(checker, port):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -85,7 +113,8 @@ def groups_of(path):
 def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["serve", "bench", "score"])
-    ap.add_argument("--model", required=True)
+    ap.add_argument("--model")
+    ap.add_argument("--oracle", help="I2: a labels file; serve the teacher's labels (with --pairs) instead of a model")
     ap.add_argument("--port", type=int, default=8471)
     ap.add_argument("--threads", type=int, default=1)
     ap.add_argument("--pairs")
@@ -93,7 +122,7 @@ def main(argv):
     ap.add_argument("--k", type=int, default=15)
     ap.add_argument("--n", type=int, default=300)
     a = ap.parse_args(argv)
-    checker = Checker(a.model, a.threads)
+    checker = OracleChecker(a.pairs, a.oracle) if a.oracle else Checker(a.model, a.threads)
     if a.cmd == "serve":
         serve(checker, a.port)
     elif a.cmd == "bench":
