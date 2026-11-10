@@ -151,6 +151,9 @@ describe("pushCutBehind (D405)", () => {
     // sets of (source, query), not as counts at the moment the push looked idle: under load that moment fell between
     // two phases of one run and not the other (12 searches against 10). Every search the push sent with the switch
     // on, the run with it off sent too, and no source was sent the same query twice.
+    // `off.log` holds the off run's ask too: where its push ended cannot be read from the log (the same race), and
+    // the ask's question is another text, so its searches stand for none of the push's. What keeps a repeated
+    // (source, query) from a second call may be the fan-out's held page as well as the follow-up's own guard.
     const sentOff = new Set(off.log);
     expect(on.pushed.filter((q) => !sentOff.has(q))).toEqual([]);
     expect(new Set(on.log).size).toBe(on.log.length);

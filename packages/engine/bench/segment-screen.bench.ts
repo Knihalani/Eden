@@ -36,8 +36,11 @@ const K1 = 1.2;
 const B_FIELD = 0.75;
 const WEIGHTS = [2, 1];
 const DOC_SPAN = 4_194_304;
-/** What an escaped term frequency is charged: a Map entry of two numbers (an estimate, not measured). */
-const BIG_ENTRY = 32;
+/**
+ * What an escaped term frequency is charged in the `term` form's size: one more byte in the list, as an inline
+ * escape would cost. Sized only: the search here reads escaped values from a Map.
+ */
+const BIG_ENTRY = 1;
 
 interface Doc {
   title: Uint32Array;
@@ -394,7 +397,9 @@ function run(n: number): void {
   for (const d of docs) ix.addFields([d.title, d.body], [d.title.length, d.body.length]);
   ix.settle();
   const priv = ix as unknown as { df: Uint32Array; lens: Float32Array; totalLens: Float64Array };
-  const terms = priv.df.length;
+  // Term ids in use (the df array's length is its capacity).
+  let terms = priv.df.length;
+  while (terms > 0 && priv.df[terms - 1] === 0) terms--;
   const lists = postingsOf(docs, terms);
   const keySeg = new KeySegment(lists);
   const termSeg = new TermSegment(lists);
@@ -450,11 +455,13 @@ function run(n: number): void {
   console.log(`  varint  ${"term: postings with lengths".padEnd(44)} ${per(termSeg.data.byteLength)}`);
   console.log(`  varint  ${"term: block offsets".padEnd(44)} ${per(termSeg.block.byteLength)}`);
   console.log(
-    `  varint  ${`term: ${termSeg.big.size} tf of 15 or more, 32 B each`.padEnd(44)} ${per(BIG_ENTRY * termSeg.big.size)}`,
+    `  varint  ${`term: ${termSeg.big.size} tf of 15 or more, a byte each`.padEnd(44)} ${per(BIG_ENTRY * termSeg.big.size)}`,
   );
   console.log(`  varint  ${"forward arena as varint gaps".padEnd(44)} ${per(fwdVarint)}`);
   const totals: [string, number][] = [
     ["key + today's forward arena", keySeg.bytes + fwdToday + shareOfDocs],
+    ["key + varint forward arena", keySeg.bytes + fwdVarint + shareOfDocs],
+    ["key, no forward arena", keySeg.bytes + shareOfDocs],
     ["term + today's forward arena", termSeg.bytes + fwdToday + shareOfDocs],
     ["term + varint forward arena", termSeg.bytes + fwdVarint + shareOfDocs],
     ["term, no forward arena (O2's sizing)", termSeg.bytes + shareOfDocs],
@@ -523,6 +530,8 @@ function heapBytes(): number {
  * item object with its strings, a Map by id; text left out: screen 3's) against the same fields in typed arrays, one
  * byte arena for the strings and an open-addressed id table. Child process, heap after less heap before.
  */
+const own = (text: string): string => JSON.parse(JSON.stringify(text)) as string;
+
 function columnsChild(mode: string, n: number): void {
   const items = ITEMS.slice(0, n);
   const keep: unknown[] = [];
@@ -531,14 +540,15 @@ function columnsChild(mode: string, n: number): void {
     const byId = new Map<string, unknown>();
     let prev: { next: unknown } | null = null;
     items.forEach((it, i) => {
-      // Copies of the strings, as a listing's parse gives each item its own.
+      // Copies of the strings, as a listing's parse gives each item its own (`own`: a slice or a template would
+      // share the world's string, which is held before the first reading and so would not be counted).
       const item = {
-        id: `${it.id}`.slice(0),
+        id: own(it.id),
         sourceId: it.sourceId,
-        ref: ` ${it.ref}`.slice(1),
-        title: ` ${it.title}`.slice(1),
+        ref: own(it.ref),
+        title: own(it.title),
         updatedAt: it.updatedAt,
-        url: it.url === undefined ? undefined : ` ${it.url}`.slice(1),
+        url: it.url === undefined ? undefined : own(it.url),
         meta: it.meta ? structuredClone(it.meta) : undefined,
       };
       const e = {
@@ -627,7 +637,9 @@ function textScreen(n: number, prose: boolean): void {
     // A stand-in for text that is not generated from templates: this repository's own notes (one author's English
     // prose and tables), cut into pieces of 1,100 characters. Not users' mail; the sim's text repeats far more.
     const dir = new URL("../../../docs/research/", import.meta.url).pathname;
+    // Notes up to O2's, so the corpus does not grow with later notes (this screen's own among them).
     const all = [...new Bun.Glob("*.md").scanSync(dir)]
+      .filter((f) => !/^(o[3-9]|[p-z])/.test(f))
       .sort()
       .map((f) => require("node:fs").readFileSync(dir + f, "utf8"));
     const joined = all.join("\n");
