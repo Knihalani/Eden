@@ -140,6 +140,11 @@ narrow and more seeds do not help; a part's effect (`fewer`: 1.3) is where seeds
   poll), standing in for the two hours between change and recap; `DaySummary.updatePackets` counts "updated:" packets.
   The change lands just before the recap, so a lever that re-sends an update at the recap repeats the packet the agent
   has just read (D341); `staleHanded`/`staleUpdated` say whether a stale recap's item was handed and updated that day.
+- **`--days` intervals** (N3, D519): a day's requests share one transcript, so pair with whole days resampled
+  (`../../lab/n3/day-cluster.py`); an arm that changed nothing differed from its twin over two users (asks +0.06 a
+  task, $ +0.015/1k, intervals excluding zero). `--late` on train costs about $0.48 a shard: a lower cap cuts every
+  stream's later days (`../../lab/n3/late.py` counts whole days only). `../../lab/n3/stems.sh RUN` turns a Modal
+  fan-out's shards into the `STEM.json`/`STEM.tl` pairs the Python reports read.
 - **Position in the day** (A17): `../../lab/a17/days.py` reads `--days` runs per position bucket and pairs arms task by
   task (it needs `--timeline`). One request a session (the funnel, short pi-ab) cannot see D340's re-show: screen it on
   `--days` only.
