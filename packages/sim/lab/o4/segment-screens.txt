@@ -1,0 +1,105 @@
+corpus: 6892 sim items
+
+== 500 items: 4441 terms, 105 postings and 103 distinct terms an item
+  packed  postings (docs + tf)                           227 B/item
+  packed  key offsets                                     54 B/item
+  packed  forward arena                                  156 B/item
+  packed  delta                                          305 B/item
+  packed  per doc and term (df, lens, where, nPost)       79 B/item
+  packed  total                                          822 B/item
+  varint  key: postings                                  218 B/item
+  varint  key: offsets                                   131 B/item
+  varint  term: postings with lengths                    231 B/item
+  varint  term: block offsets                              4 B/item
+  varint  term: 2620 tf of 15 or more, 32 B each         168 B/item
+  varint  forward arena as varint gaps                   109 B/item
+  total   key + today's forward arena                    584 B/item   1.41x smaller than packed
+  total   term + today's forward arena                   638 B/item   1.29x smaller than packed
+  total   term + varint forward arena                    590 B/item   1.39x smaller than packed
+  total   term, no forward arena (O2's sizing)           481 B/item   1.71x smaller than packed
+  search  packed             p50   26.4 µs  p99   50.7 µs  mean   26.7 µs  (1.00x packed's mean)
+  search  key                p50   11.4 µs  p99   27.3 µs  mean   11.7 µs  (0.44x packed's mean)  results differing from packed: 0 of 200
+  search  term, two passes   p50   17.5 µs  p99   41.1 µs  mean   18.2 µs  (0.68x packed's mean)  results differing from packed: 0 of 200
+  search  term, one pass     p50   12.8 µs  p99   32.0 µs  mean   13.6 µs  (0.51x packed's mean)  results differing from packed: 61 of 200
+
+== 2000 items: 12491 terms, 111 postings and 108 distinct terms an item
+  packed  postings (docs + tf)                           316 B/item
+  packed  key offsets                                     49 B/item
+  packed  forward arena                                  214 B/item
+  packed  delta                                          151 B/item
+  packed  per doc and term (df, lens, where, nPost)       46 B/item
+  packed  total                                          777 B/item
+  varint  key: postings                                  230 B/item
+  varint  key: offsets                                    66 B/item
+  varint  term: postings with lengths                    232 B/item
+  varint  term: block offsets                              2 B/item
+  varint  term: 10440 tf of 15 or more, 32 B each        167 B/item
+  varint  forward arena as varint gaps                   116 B/item
+  total   key + today's forward arena                    556 B/item   1.40x smaller than packed
+  total   term + today's forward arena                   662 B/item   1.17x smaller than packed
+  total   term + varint forward arena                    563 B/item   1.38x smaller than packed
+  total   term, no forward arena (O2's sizing)           447 B/item   1.74x smaller than packed
+  search  packed             p50   46.5 µs  p99   77.3 µs  mean   46.8 µs  (1.00x packed's mean)
+  search  key                p50   43.0 µs  p99   70.8 µs  mean   43.2 µs  (0.92x packed's mean)  results differing from packed: 0 of 200
+  search  term, two passes   p50   72.2 µs  p99  134.1 µs  mean   74.1 µs  (1.58x packed's mean)  results differing from packed: 0 of 200
+  search  term, one pass     p50   48.4 µs  p99  100.3 µs  mean   51.4 µs  (1.10x packed's mean)  results differing from packed: 65 of 200
+
+== 3000 items: 13624 terms, 99 postings and 95 distinct terms an item
+  packed  postings (docs + tf)                           272 B/item
+  packed  key offsets                                     35 B/item
+  packed  forward arena                                  186 B/item
+  packed  delta                                          222 B/item
+  packed  per doc and term (df, lens, where, nPost)       40 B/item
+  packed  total                                          755 B/item
+  varint  key: postings                                  205 B/item
+  varint  key: offsets                                    44 B/item
+  varint  term: postings with lengths                    202 B/item
+  varint  term: block offsets                              1 B/item
+  varint  term: 10440 tf of 15 or more, 32 B each        111 B/item
+  varint  forward arena as varint gaps                   103 B/item
+  total   key + today's forward arena                    474 B/item   1.59x smaller than packed
+  total   term + today's forward arena                   541 B/item   1.40x smaller than packed
+  total   term + varint forward arena                    458 B/item   1.65x smaller than packed
+  total   term, no forward arena (O2's sizing)           354 B/item   2.13x smaller than packed
+  search  packed             p50   71.7 µs  p99  164.2 µs  mean   75.8 µs  (1.00x packed's mean)
+  search  key                p50   61.3 µs  p99  147.3 µs  mean   65.7 µs  (0.87x packed's mean)  results differing from packed: 0 of 200
+  search  term, two passes   p50  104.6 µs  p99  211.7 µs  mean  107.3 µs  (1.41x packed's mean)  results differing from packed: 0 of 200
+  search  term, one pass     p50   70.5 µs  p99  176.3 µs  mean   75.7 µs  (1.00x packed's mean)  results differing from packed: 63 of 200
+
+== 6892 items: 14639 terms, 67 postings and 64 distinct terms an item
+  packed  postings (docs + tf)                           200 B/item
+  packed  key offsets                                     17 B/item
+  packed  forward arena                                  137 B/item
+  packed  delta                                           12 B/item
+  packed  per doc and term (df, lens, where, nPost)       25 B/item
+  packed  total                                          390 B/item
+  varint  key: postings                                  136 B/item
+  varint  key: offsets                                    19 B/item
+  varint  term: postings with lengths                    133 B/item
+  varint  term: block offsets                              1 B/item
+  varint  term: 10440 tf of 15 or more, 32 B each         48 B/item
+  varint  forward arena as varint gaps                    71 B/item
+  total   key + today's forward arena                    318 B/item   1.23x smaller than packed
+  total   term + today's forward arena                   345 B/item   1.13x smaller than packed
+  total   term + varint forward arena                    279 B/item   1.40x smaller than packed
+  total   term, no forward arena (O2's sizing)           207 B/item   1.88x smaller than packed
+  search  packed             p50  115.1 µs  p99  272.4 µs  mean  120.7 µs  (1.00x packed's mean)
+  search  key                p50  115.1 µs  p99  274.7 µs  mean  120.9 µs  (1.00x packed's mean)  results differing from packed: 0 of 200
+  search  term, two passes   p50  194.6 µs  p99  378.6 µs  mean  197.8 µs  (1.64x packed's mean)  results differing from packed: 0 of 200
+  search  term, one pass     p50  129.1 µs  p99  314.0 µs  mean  135.7 µs  (1.12x packed's mean)  results differing from packed: 63 of 200
+
+== entries: 3000 items (ids, refs, titles, urls, meta and the per-entry fields; no text, no index)
+  objects (today's shape)     276 B/item
+  columns and a byte arena    164 B/item   1.69x smaller
+
+== text: 3000 items, 2087 characters an item
+  deflate, each item (today)           548 B/item   read one item p50    7.7 µs  p99   29.6 µs
+  zstd 3, blocks of 1                  596 B/item   read one item p50    5.5 µs  p99   18.8 µs
+  zstd 3, blocks of 16                 173 B/item   read one item p50   18.3 µs  p99   62.3 µs
+  zstd 3, blocks of 32                 148 B/item   read one item p50   25.0 µs  p99  114.2 µs
+
+== text (the repository's notes, 1,100-character pieces): 2424 items, 1100 characters an item
+  deflate, each item (today)           607 B/item   read one item p50    8.8 µs  p99   23.6 µs
+  zstd 3, blocks of 1                  649 B/item   read one item p50    5.6 µs  p99   20.6 µs
+  zstd 3, blocks of 16                 486 B/item   read one item p50   29.2 µs  p99   61.6 µs
+  zstd 3, blocks of 32                 462 B/item   read one item p50   53.3 µs  p99   84.4 µs
