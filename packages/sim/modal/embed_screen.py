@@ -6,7 +6,8 @@ Eden's lexical pool (the funnel's `pushPoolAt`), especially for planted items th
     bun run funnel --suite train --seeds 41,42,43,44 --json .local/modal/embed/funnel.json \
         -- --corpus-dump .local/modal/embed/corpus.jsonl                                  # local, $0
     modal run packages/sim/modal/embed_screen.py --corpus .local/modal/embed/corpus.jsonl \
-        --funnel .local/modal/embed/funnel.json [--model Qwen/Qwen3-Embedding-0.6B] [--ks 1,5,10]
+        --funnel .local/modal/embed/funnel.json [--model Qwen/Qwen3-Embedding-0.6B] [--ks 1,5,10] \
+        [--pools .local/modal/embed/pool.jsonl --hybrid-ks 3,5,10]           # M3's hybrid (funnel --pool-dump)
 
 Only planted ids, ranks and the top ids come back; the corpus is simulated (generated worlds), never user data.
 """
@@ -25,6 +26,8 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 # Open embedding models and how each wants its query phrased (sentence-transformers' prompt names).
 MODELS = {
     "Qwen/Qwen3-Embedding-0.6B": {"query_prompt": "query", "licence": "Apache-2.0"},
+    # M3's larger model: half precision so 4B parameters and their activations fit an L4's 24 GB.
+    "Qwen/Qwen3-Embedding-4B": {"query_prompt": "query", "licence": "Apache-2.0", "half": True, "batch": 32},
     "BAAI/bge-large-en-v1.5": {"query_prefix": "Represent this sentence for searching relevant passages: ",
                                "licence": "MIT"},
     "sentence-transformers/all-MiniLM-L6-v2": {"licence": "Apache-2.0"},
@@ -50,11 +53,13 @@ def embed_remote(model: str, texts: list, worlds: list) -> dict:
 
     t0 = time.time()
     spec = MODELS.get(model, {})
-    m = SentenceTransformer(model, device="cuda")
-    E = m.encode(texts, batch_size=128, normalize_embeddings=True, convert_to_numpy=True, show_progress_bar=False)
+    kw = {"model_kwargs": {"torch_dtype": "float16"}} if spec.get("half") else {}
+    m = SentenceTransformer(model, device="cuda", **kw)
+    E = m.encode(texts, batch_size=spec.get("batch", 128), normalize_embeddings=True, convert_to_numpy=True, show_progress_bar=False)
     requests = [t["request"] for w in worlds for t in w["tasks"]]
     if "query_prompt" in spec:
-        Q = m.encode(requests, prompt_name=spec["query_prompt"], normalize_embeddings=True, convert_to_numpy=True)
+        Q = m.encode(requests, prompt_name=spec["query_prompt"], batch_size=spec.get("batch", 32),
+                     normalize_embeddings=True, convert_to_numpy=True)
     else:
         Q = m.encode([spec.get("query_prefix", "") + r for r in requests], normalize_embeddings=True,
                      convert_to_numpy=True)
@@ -72,7 +77,8 @@ def embed_remote(model: str, texts: list, worlds: list) -> dict:
 
 
 @app.local_entrypoint()
-def main(corpus: str, funnel: str, model: str = DEFAULT_MODEL, ks: str = "1,5,10", run: str = ""):
+def main(corpus: str, funnel: str, model: str = DEFAULT_MODEL, ks: str = "1,5,10", run: str = "", pools: str = "",
+         hybrid_ks: str = "3,5,10"):
     worlds = es.load_corpus(corpus)
     es.check_train(worlds)
     rows = es.funnel_rows(funnel)
@@ -90,9 +96,17 @@ def main(corpus: str, funnel: str, model: str = DEFAULT_MODEL, ks: str = "1,5,10
         for t in got["tasks"]:
             f.write(json.dumps(t) + "\n")
     report = es.lines(summary, model)
+    hybrid = None
+    if pools:
+        # M3's hybrid: the lexical pool (`--pool-dump`, ids only) fused with the embedding's top k.
+        ids = {(w["suite"], w["seed"], w["variant"]): [x["id"] for x in w["items"]] for w in worlds}
+        tops = {tuple(t["key"]): [ids[tuple(t["key"][:3])][i] for i in t["top"]] for t in got["tasks"]}
+        hk = tuple(int(x) for x in hybrid_ks.split(","))
+        hybrid = es.hybrid(worlds, tops, es.load_pools(pools), hk)
+        report += es.hybrid_lines(hybrid, model)
     with open(os.path.join(out, "report.json"), "w") as f:
         json.dump({"model": model, "corpus": corpus, "funnel": funnel, "seconds": got["seconds"], "dim": got["dim"],
-                   "summary": summary}, f, indent=2)
+                   "summary": summary, "pools": pools, "hybrid": hybrid}, f, indent=2)
     with open(os.path.join(out, "report.txt"), "w") as f:
         f.write("\n".join(report) + "\n")
     print("\n".join(report))
