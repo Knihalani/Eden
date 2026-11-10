@@ -48,3 +48,12 @@ passes where the primary does not is reported as such and is not run live in thi
 ## 2. Data and labels
 
 (Filled in below as the work runs.)
+
+## 1b. Addendum, pre-registered before its run: a confirmation of pass 0.3 on fresh worlds
+
+Written after the screen of §4 (the primary failed the bar; a post-hoc pass mark of 0.3 passed it on the same tasks,
+0.2 did not) and before this run. A pass mark chosen on the tasks it is judged on is not evidence, so it is checked
+once on worlds no step has seen: **the 40 held-out templates on seeds 45–48**, the same arms (trial off; trial on with
+the primary checker at `pushCheckPass` 0.3), the same bar (§1). Seeds 45–48 have no replayed intent requests, so both
+arms run intent inert (labelled); the comparison is within the run. This decides only whether the note recommends a
+live run at 0.3 to a later session: §1's rule stands, and no live run is made in this session either way.
