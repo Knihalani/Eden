@@ -71,6 +71,22 @@ an item and search time against the packed index, in `index-memory.bench.ts`; (2
 columns and measure heap; (3) zstd text in blocks of 16 and 32: bytes an item and the time to read one item. If
 (1) is not under 300 bytes at under 2x the search time, stop.
 
+### Screen (1), run: the bytes pass, the search time is not measured
+
+A scratch script (not in the repo) tokenized a sim world's items as the cache does (title and text, two fields) and
+sized each term's postings as delta-coded document gaps, one byte for both term frequencies when small, plus 6 bytes
+a term for a dictionary and the field lengths:
+
+| Items | Postings an item | Varint postings + dictionary + lengths | The packed index today (`index-memory.bench.ts`) |
+| --- | --- | --- | --- |
+| 500 | 103 | 280 B an item | |
+| 2,000 | 108 | 272 B an item | 799 B an item |
+| 3,000 | 95 | 232 B an item | |
+| 6,892 | 64 | 150 B an item | 415 B an item |
+
+About 2.8-2.9x smaller than the packed index at the two sizes both were measured. The script sized the encoding; it
+did not search it, so the 2x bound on search time is still open. Screens (2) and (3) were not run.
+
 ## 4. What the fleet then reads
 
 Resident memory a user = active share x live + (1 - active share) x frozen. Live after the redesign taken as 2.5 MB
