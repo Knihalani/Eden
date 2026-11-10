@@ -301,6 +301,16 @@ export const userPrompt = (task: Task) =>
       "what to do next, with the specific details."
     : task.text;
 
+/**
+ * `pi-ab` `+amend` (O3, D701): the extra turn's message, after the packet Eden queued behind the agent's answer. From
+ * the integration, not the user; the agent adds to its answer only if the packet changes it.
+ */
+export const AMEND_NOTE =
+  "(Automatic follow-up from the assistant's context service, not from the user.) More context from the user's " +
+  "sources arrived after your reply; it is above. If it changes what you told the user or what should be done for " +
+  "their request, write a short addition for the user: what the item says, with its specific details, and what " +
+  "changes. If it does not bear on the request, reply with exactly: No change.";
+
 /** The grader's prompt: which needed facts the answer states (paraphrase allowed, the specifics must match). */
 export function gradeMessages(task: Task, answer: string): Msg[] {
   const list = task.must.map((f, i) => `${i + 1}. ${f.detail}`).join("\n");
@@ -439,6 +449,12 @@ export interface RunResult {
   lateFacts?: Record<string, boolean>;
   lateTurns?: number;
   lateText?: string;
+  /**
+   * `pi-ab` `+amend` (O3, D701): the agent got one more turn for a packet Eden queued behind its answer; `wallMs`
+   * includes that turn and `answerWallMs` is when the first answer was complete.
+   */
+  amendTurns?: number;
+  answerWallMs?: number;
   error?: string;
   facts?: Record<string, boolean>;
   leaked?: boolean;

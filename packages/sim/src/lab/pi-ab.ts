@@ -119,6 +119,7 @@ import {
 } from "./connector-options";
 import {
   armPromptsHash,
+  AMEND_NOTE,
   ASK_DESCRIPTION,
   chatModel,
   emptyResult,
@@ -291,6 +292,8 @@ const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
   defaults: DEFAULT_CONFIG as unknown as Record<string, unknown>,
 });
 // D336's layouts differ only where a session holds several requests; on one request they would rerun `eden`.
+// `+amend` (O3, D701) is built for one request a session: over a day the next request takes what is queued.
+if (DAYS_ON && CONDITIONS.some((c) => c.amend)) throw new Error("+amend runs one request a session: not with --day(s)");
 if (!DAYS_ON && CONDITIONS.some((c) => c.packets !== "kept")) {
   throw new Error("+ephemeral and +ephemeralBp change how earlier requests' packets are kept: use --days or --day");
 }
@@ -729,6 +732,7 @@ async function runWorld(
     config,
     noKey,
     packets: layout,
+    amend,
   } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
@@ -1075,6 +1079,9 @@ async function runWorld(
     // With the ids each packet and `ask_context` answer cited, so the line tells delivery from uptake (uptake.ts).
     const uptake = new UptakeLog();
     const packets = uptake.packets;
+    // `+amend` (D701): the extra turn is running; the answer with the agent's addition, once it has one.
+    let amending = false;
+    let amended: string | undefined;
     const takeEden = () => {
       // `tools-act-firewall`: Eden only checks actions; what it would have delivered never reaches the agent.
       if (!partner || !useEden) return;
@@ -1240,7 +1247,9 @@ async function runWorld(
             return placePackets(messages, earlierPackets(layout, dayPackets), packets, asSystem);
           }
           if (!packets.length) return messages;
-          const at = messages.map((m) => m.role).lastIndexOf("user");
+          // The packets stay before the request, also in `+amend`'s extra turn (whose own packet is in its message).
+          const roles = messages.map((m) => m.role);
+          const at = amending ? roles.indexOf("user") : roles.lastIndexOf("user");
           const sys = packets.map((text) => ({ role: "system" as const, content: text, timestamp: Date.now() }));
           return [...messages.slice(0, at), ...sys, ...messages.slice(at)];
         },
@@ -1432,6 +1441,27 @@ async function runWorld(
         }
       });
       await agent.prompt(userPrompt(task));
+      // `+amend` (O3, D701): what Eden queued behind the answer (the push check's follow-up) gets one more turn. Only
+      // what is queued now: nothing is waited for. The packet rides in the turn's own message, after the answer.
+      if (amend && partner && useEden) {
+        const first = [...agent.state.messages].reverse().find((m) => m.role === "assistant");
+        const failed = first?.role === "assistant" && (first.stopReason === "error" || first.stopReason === "aborted");
+        const had = packets.length;
+        if (!failed) takeEden();
+        const later = packets.splice(had);
+        if (later.length > 0) {
+          r.answerWallMs = performance.now() - tl.origin;
+          tl.point("eden.amend", { packets: later.length });
+          amending = true;
+          await agent.prompt(`${later.join("\n")}\n\n${AMEND_NOTE}`);
+          const second = [...agent.state.messages].reverse().find((m) => m.role === "assistant");
+          const added = second && second !== first ? textOf(second).trim() : "";
+          r.amendTurns = 1;
+          // "No change" adds nothing; anything else is the agent's addition to its answer, graded with it.
+          if (first && added && !/^no change\b[.!]?$/i.test(added)) amended = `${textOf(first)}\n\n${added}`;
+          else if (first) amended = textOf(first);
+        }
+      }
       if (DAYS_ON) {
         dayMessages = [...agent.state.messages];
         dayPackets.push([...packets]);
@@ -1448,7 +1478,7 @@ async function runWorld(
       const last = [...agent.state.messages].reverse().find((m) => m.role === "assistant");
       if (last && last.role === "assistant" && (last.stopReason === "error" || last.stopReason === "aborted")) {
         r.error = last.errorMessage ?? last.stopReason;
-      } else r.answer = textOf(last);
+      } else r.answer = amended ?? textOf(last);
     } catch (e) {
       r.error = e instanceof Error ? e.message : String(e);
     }
