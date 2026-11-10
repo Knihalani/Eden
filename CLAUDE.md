@@ -29,7 +29,8 @@ PR. `native/` is the measured Rust experiment behind D22 (hot kernels stay TypeS
   with costs. [docs/research/INDEX.md](docs/research/INDEX.md): every research note, its decisions and status.
   [docs/TESTING.md](docs/TESTING.md): test commands, timings, the slowest files.
 - Fast loop: `bun run test:changed` (touched packages and their dependents), `bun run test:pkg <name>`,
-  `bun run check:fast` (format, types, changed tests); `bun run check` is still the gate before a merge.
+  `bun run check:fast` (format, types, changed tests); `bun run check` is still the gate before a merge. A test file
+  that already passed on identical inputs is skipped (D650; `CHECK_COLD=1` runs everything).
 - `bun run funnel`: the no-model screen on train (the shipped default with its cards and intent requests replayed,
   D158; `--ask`, the funnel score; `--baseline F` diffs task by task; held-out suites need `--blind`).
 - `/deep-audit`: full audit → verified findings → fixes on branches with review → re-audit → plain-language report
