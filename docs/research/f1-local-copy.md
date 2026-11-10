@@ -1,5 +1,9 @@
 # F1: a complete local copy that does not depend on push
 
+**Status: deleted (D495).** The repo owner judged the local-copy approach not practical; both trials and their lab
+flags were removed. This note is the record. The code (and the scripts in `packages/sim/lab/f1/`, which need its
+flags) is in history at the merge of `claude/f1-local-copy` (225625db0).
+
 Status: built and measured 2026-11-10 on branch `claude/f1-local-copy` (from `claude/lucid-hypatia-v9wqk5` at
 0fbbeb56). Decisions D475–D479. **Two trial switches, both off: nothing in the default changed** (D479). Paid calls:
 Anthropic API only, the Modal Secret `HAIKU_API_KEY`, `claude-haiku-5-5` in every role (agent, grader, cards, intent),

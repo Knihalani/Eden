@@ -201,6 +201,12 @@ describe("anthropicThinkingOff (A2: a Sonnet agent on Pi)", () => {
     const off = { model: "x", thinking: { type: "disabled" } };
     expect(anthropicThinkingOff("claude-sonnet-5-5", off)).toEqual({ model: "x", thinking: { type: "between_tools" } });
     expect(anthropicThinkingOff("claude-haiku-5-5", off)).toBe(off);
+    // N4: Opus 5.5 refuses both words; adaptive at effort low is the nearest it takes.
+    expect(anthropicThinkingOff("claude-opus-5-5", off)).toEqual({
+      model: "x",
+      thinking: { type: "adaptive" },
+      output_config: { effort: "low" },
+    });
     const none = { model: "x" };
     expect(anthropicThinkingOff("claude-sonnet-5-5", none)).toBe(none);
   });

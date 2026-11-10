@@ -596,6 +596,12 @@ export interface CardLimits {
   leanDays: number;
   /** `cardsOrder` (D482, D483; `order()` sets it): the queue is read best first (`orderQueue`), not as it filled. */
   order: boolean;
+  /**
+   * `cardsLanes` (N4, D521, D522; `lanes()` sets it): how many model calls one user may have in flight. 1: one
+   * batch at a time, as ever. More: while a full batch still waits behind a call in flight, another lane takes it, so
+   * a new user's backfill is read in a fraction of the time for the same items a call.
+   */
+  lanes: number;
 }
 
 export const DEFAULT_CARD_LIMITS: CardLimits = {
@@ -610,6 +616,7 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   intent: false,
   leanDays: 0,
   order: false,
+  lanes: 1,
 };
 
 /**
@@ -732,6 +739,10 @@ class UserCards {
   /** Content hash → its sentence key in `bySentence`: the entry goes when the card does (held no longer, D8). */
   readonly sentenceOf = new Map<string, string>();
   draining: Promise<void> | null = null;
+  /** With `cardsLanes` > 1 while the user drains: starts another lane if one is free (`CardEnricher.drainLanes`). */
+  spawn: (() => void) | null = null;
+  /** With `cardsLanes` > 1: sentence keys of the batches in flight, so another lane waits for their card. */
+  readonly flying = new Set<string>();
   readonly abort = new AbortController();
 }
 
@@ -860,6 +871,11 @@ export class CardEnricher {
     this.limits = { ...this.limits, order: true };
   }
 
+  /** `cardsLanes` (N4, D521, D522): up to `n` model calls in flight for one user. */
+  lanes(n: number): void {
+    this.limits = { ...this.limits, lanes: Math.max(1, Math.floor(n)) };
+  }
+
   private user(scope: Scope): UserCards {
     const key = scopeKey(scope);
     let u = this.users.get(key);
@@ -971,7 +987,7 @@ export class CardEnricher {
     this.trim(u);
     while (u.byItem.size > this.limits.maxCardsPerUser * 2) unlink(u, u.byItem.keys().next().value as string);
     if (u.queue.length > 0 && !u.draining) {
-      u.draining = this.drain(scope, u).finally(() => (u.draining = null));
+      this.start(scope, u);
     }
   }
 
@@ -1016,6 +1032,41 @@ export class CardEnricher {
     while (u.byHash.size > this.limits.maxCardsPerUser) dropCard(u, u.byHash.keys().next().value as string);
   }
 
+  /**
+   * Starts the user's drain. When it ends with items waiting (queued in the few microtask hops between a drain's
+   * last look at the queue and here, when `enqueue` still saw one running; four lanes made that window wider, N4's
+   * review), it starts again: otherwise they would wait for the user's next `enqueue`.
+   */
+  private start(scope: Scope, u: UserCards): void {
+    // One lane is `drain` itself, untouched: a wrapper's extra hops would move the single-lane cards (CL3).
+    const work = this.limits.lanes > 1 ? this.drainLanes(scope, u) : this.drain(scope, u);
+    u.draining = work.finally(() => {
+      u.draining = null;
+      if (u.queue.length > 0 && !u.abort.signal.aborted && this.users.get(scopeKey(scope)) === u) this.start(scope, u);
+    });
+  }
+
+  /**
+   * `cardsLanes` > 1: `drain` run in up to `lanes` lanes at once. A lane starts another when it has taken a batch
+   * and a full batch still waits (`UserCards.spawn`), so a short queue is read by one lane, in the batches it would
+   * have had. Each call reserves from the same budget; the lanes share the queue, taken from synchronously.
+   */
+  private async drainLanes(scope: Scope, u: UserCards): Promise<void> {
+    const running = new Set<Promise<void>>();
+    u.spawn = () => {
+      if (running.size >= this.limits.lanes) return;
+      const lane: Promise<void> = this.drain(scope, u).finally(() => running.delete(lane));
+      running.add(lane);
+    };
+    try {
+      u.spawn();
+      while (running.size > 0) await Promise.all([...running]);
+    } finally {
+      u.spawn = null;
+      u.flying.clear();
+    }
+  }
+
   private async drain(scope: Scope, u: UserCards): Promise<void> {
     const key = scopeKey(scope);
     const session = `cards:${key}`;
@@ -1045,7 +1096,8 @@ export class CardEnricher {
             if (u.holders.has(q.hash)) this.keep(u, q.hash, reused(made, this.deps.now(), q.seq!));
             continue;
           }
-          if (inBatch.has(q.skey)) {
+          // In this batch, or (`cardsLanes`) in another lane's batch in flight: wait for that card.
+          if (inBatch.has(q.skey) || u.flying.has(q.skey)) {
             followers.push(q as Queued & { skey: string });
             continue;
           }
@@ -1053,7 +1105,15 @@ export class CardEnricher {
         }
         batch.push(q);
       }
-      if (batch.length === 0) continue;
+      if (batch.length === 0) {
+        // `cardsLanes`: everything left waits on another lane's batch. Back in the queue; that lane reads them after
+        // its call (as its own followers), and this one ends.
+        if (followers.length > 0) {
+          u.queue.push(...followers);
+          return;
+        }
+        continue;
+      }
       const reservation = this.deps.budget.reserve(key, session, this.limits.estimatedCallUsd);
       // The per-session tally is the enricher's own and never ends otherwise: only the user's day is a cap.
       this.deps.budget.endSession(session);
@@ -1062,6 +1122,12 @@ export class CardEnricher {
         this.stats.overBudget += batch.length + u.queue.length;
         u.queue.length = 0;
         return;
+      }
+      // `cardsLanes`: this batch's sentence keys are in flight, and a full batch still waiting gets a lane of its own.
+      const spawn = u.spawn;
+      if (spawn) {
+        for (const k of inBatch) u.flying.add(k);
+        if (u.queue.length >= this.limits.batch) spawn();
       }
       const today = new Date(this.deps.now() + (this.offsetOf?.(scope) ?? 0) * 60_000).toISOString().slice(0, 10);
       const tracer = this.tracer;
@@ -1083,6 +1149,8 @@ export class CardEnricher {
           made = await this.retry(key, session, items, today, u, made);
           if (u.abort.signal.aborted || this.users.get(key) !== u) return;
         }
+        // Only now, after any retry: until the cards are kept, another lane's twin must wait, not call.
+        if (spawn) for (const k of inBatch) u.flying.delete(k);
         const { cards, requests } = made;
         const at = this.deps.now();
         batch.forEach((b, i) => {
@@ -1133,10 +1201,13 @@ export class CardEnricher {
           } else u.queue.push(f);
         }
       } catch {
+        if (spawn) for (const k of inBatch) u.flying.delete(k);
         if (sp && sp.endMs === 0) tracer!.close(sp, { error: true });
         this.deps.budget.settle(reservation, 0);
         this.stats.failures++;
         if (u.abort.signal.aborted) return;
+        // `cardsLanes`: a follower may wait on another lane's batch, which this failure says nothing about.
+        if (spawn) u.queue.push(...followers);
       }
     }
   }
