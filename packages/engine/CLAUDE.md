@@ -23,6 +23,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
 | `settle.ts`                                                                | `askNudge`'s no-model test of whether the candidates settle a request's people, things and days (D316, D317)                                                                                                                  |
 | `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
+| `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, on in the default): per (user, source) a run of live reads with nothing used, and per user two pooled rates (reads on no evidence, reads on words alone); the partner's `spentSources` skips live reads by them |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
 | `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default): identifiers a call adds and its packets showed; `ItemCache.isCorrespondent` reads the user's header addresses |
@@ -349,6 +350,23 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   lost 2 of 96 hidden facts: what it stores is routing evidence), and the trim waits for 1.5x the cap (trimming the
   backfill's overshoot back to the cap also lost 2). The sketch (`sketch.ts`) is per (user, source) in `SourceSync`,
   filled from every listed item in `store`, folded at `warmUp`.
+- **Which sources are read live is learned (`sourceYield`, D505, D509, on in the default; `source-yield.ts`,
+  docs/research/n1-calls.md).** `spentSources` gives a lookup the warm copies it reads nothing live of: no search
+  behind, no probe (they join the probes' `local` set) and, for a cut copy, no on-demand poll. A read is booked in
+  `noteLiveRead` from outcomes, "ok" only, once a source a turn (`Session.liveReads`), for warm copies only: booked
+  when sent, one call counted twice (the push and the ask it starts join it) and an outage read as "nothing used".
+  A new path that makes live reads must book them there, or its sources never earn or lose anything; a new path
+  that hands the agent an injection must go through `handOut`, which ends the sources' runs. A whole copy keeps its
+  poll (dropped, an ask called it failed). An ask's status for a cut copy it did not search is "unsearched"
+  (`UNSEARCHED`; `reachAnswer` names it apart from failures, never an all-clear, D127). The pools count only sources
+  with nothing used yet: counting the user's own mail's reads kept the words pool alive and noise sources read
+  (57 → 40 calls a request instead of 13). A read for a request that names an entity the source mentioned is never
+  skipped: a cap on those lost recall where sources are few. With five sources nothing is booked (no copy is cut),
+  so the usual funnel cannot see this: screen with `-- --noise-sources 995 --limit 16 --notify-share 0.05` and
+  `days-calls.ts --noise-sources 995` (it learns over a user's days). Deleted beside it: a push that searches
+  nothing live (`pushLazy`, D506: stale deliveries 15 → 19, hidden −2.3 points one request a session), a longer
+  reuse window for search pages (D507: a user's searches do not repeat) and one search of a source a lookup (D508:
+  the probes' budget goes elsewhere).
 - **A budget for live searches of cut copies was measured and deleted (D390, D391, docs/research/a28-scale.md).**
   Searching live only the 4 cut copies with the most routing evidence halved Eden's calls at 1,000 sources live, but
   left its path time unchanged (one live search of a cut copy that matters costs a connector's latency) and hidden
