@@ -22,6 +22,8 @@
  * - `+ephemeral`, `+ephemeralBp` (A16, D336): also the harness's, on a base with Eden: how earlier requests' packets
  *   stay in the transcript (`packet-layout.ts`): only the current request's, as `withContext` and the proxy send them,
  *   and with a cache breakpoint on the request's user turn. Only multi-request sessions (`--day`, `--days`) differ;
+ * - `+compact`, `+compactUsed` (N3, trial, D517): layouts too: a finished request's packets stay in their short form
+ *   (every one, or only those the answer used);
  * - `@w<ms>`: how long the first observe waits for Eden's slow path (default 3000, the client's `withContext`).
  *
  * An unknown base throws: a typo must not run Eden under another condition's name.
@@ -52,7 +54,7 @@ export interface Condition {
   judge: boolean;
   /** `+nokey`: no card enricher and no reader are built, as on a server without a model key (D291). */
   noKey: boolean;
-  /** `+ephemeral`, `+ephemeralBp` (D336): how earlier requests' packets stay in the transcript; else `kept`. */
+  /** `+ephemeral`, `+ephemeralBp` (D336), `+compact`, `+compactUsed` (D517): how earlier packets stay; else `kept`. */
   packets: PacketLayout;
 }
 
@@ -61,7 +63,7 @@ const ASK_FLAG = "ask";
 /** The harness flag `+nokey`: the partner gets no model roles, never sent to the engine as a setting. */
 const NOKEY_FLAG = "nokey";
 /** The harness flags of D336's packet layouts, never sent to the engine. */
-const LAYOUT_FLAGS: readonly PacketLayout[] = ["ephemeral", "ephemeralBp"];
+const LAYOUT_FLAGS: readonly PacketLayout[] = ["ephemeral", "ephemeralBp", "compact", "compactUsed"];
 
 const BASES = ["none", "tools", "eden", "both", "eden-judge", "both-judge"] as const;
 const SHAPE = /^([a-z-]+?)(-act(?:-firewall)?)?(?:~([A-Za-z0-9_.-]+))?((?:\+[^+@~]+)*)(?:@(.*))?$/;
@@ -112,7 +114,9 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
   }
   const askTool = base.startsWith("eden") || askFlag;
   const layouts = LAYOUT_FLAGS.filter((f) => allFlags.includes(f));
-  if (layouts.length > 1) throw new Error(`condition ${name}: +ephemeral and +ephemeralBp are two layouts; name one`);
+  if (layouts.length > 1) {
+    throw new Error(`condition ${name}: ${layouts.map((l) => `+${l}`).join(" and ")} are two layouts; name one`);
+  }
   if (layouts.length && (base === "none" || base === "tools")) {
     throw new Error(`condition ${name}: +${layouts[0]} places Eden's packets, so only a base with Eden takes it`);
   }

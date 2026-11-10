@@ -74,3 +74,10 @@ the funnel must be identical with it on (checked at $0). H3 has none either (one
 - A promoted switch needs `bun run check` green, `bun run eval` at 0.65 / 0.52 / 0 and the funnel at 314 / 274.
 - No arm, seed, metric or threshold above changes after the first paid call; anything added later is labelled
   exploratory.
+
+**Amendment before any measured run (2026-11-10).** A ten-request local smoke of the harness (`n3-smoke`,
+`n3-smoke2`, $0.026, counted in the spend) showed the first build of `+compact` re-writing the whole day to the
+cache on every request (cache writes 6.1k → 14.3k tokens): pi-ai's only moving cache entry ends at the last
+message, after the request's full packet, so it never matches once that packet is shortened. Both compact layouts
+therefore also put a cache breakpoint on the last assistant message before the request (`priorTurnBreakpoint`), as
+`+ephemeralBp` did on the user turn (D336). No arm, seed, metric or threshold changed.

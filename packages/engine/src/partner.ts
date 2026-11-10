@@ -127,6 +127,7 @@ import { Ledger, type LedgerEntry } from "./ledger";
 import {
   ASK_LATE_LEAD,
   ASK_NUDGE,
+  ASK_REINVITE,
   CANDIDATES_LEAD,
   citationsOf,
   PLAN_LEAD,
@@ -1210,6 +1211,22 @@ export class ContextPartner {
   }
 
   /**
+   * `takeSettleMs` (trial, D515): resolves once the session's work behind is done (what an ask or the push stopped
+   * waiting for), or after `takeSettleMs`, whichever is first; at once when the switch is 0, the session is unknown
+   * or nothing runs behind. An integration awaits it before a take at a model request that follows a tool result in
+   * the same turn. Reads only: it starts no work and never throws.
+   */
+  async settled(ref: Scope & { sessionId: string }): Promise<void> {
+    const ms = this.config.takeSettleMs;
+    const behind = ms > 0 ? this.sessions.get(sessionKey(ref))?.behind : null;
+    if (behind)
+      await within(
+        behind.catch(() => {}),
+        ms,
+      );
+  }
+
+  /**
    * `askBehind` (D430): at the user's next request, an ask's follow-up packets the agent has not taken are withdrawn
    * (what their delivery marked undone): they answer the last request's question, and their lead says so.
    */
@@ -2098,7 +2115,7 @@ export class ContextPartner {
                 `candidates:${cue.id}`,
                 cue,
                 undefined,
-                this.candidateFrame(candidates.unsettled !== undefined),
+                this.candidateFrame(candidates.unsettled !== undefined, candidates.reinvite === true),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -2466,7 +2483,7 @@ export class ContextPartner {
     s: Session,
     cue: Cue,
     ranked: readonly Scored[],
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; reinvite?: boolean } {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
@@ -2490,12 +2507,15 @@ export class ContextPartner {
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
     let anchors: Anchors | undefined;
+    let reinvite = false;
     const fewer = this.config.pushCandidatesSettled;
     if ((this.config.askNudge || fewer > 0) && items.length > 0) {
       anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
       const handed = items.map((x) => x.item);
       if (!settles(handed, anchors)) {
-        if (this.config.askNudge && (!this.config.askNudgeDeep || this.anchoredPast(pool, items, anchors)))
+        // `askReinvite` (trial, D518): late in a session the unsettled packet invites an ask whatever the pool holds.
+        reinvite = this.config.askNudge && this.config.askReinvite && s.requests >= REINVITE_FROM;
+        if (this.config.askNudge && (reinvite || !this.config.askNudgeDeep || this.anchoredPast(pool, items, anchors)))
           unsettled = anchors;
       } else if (fewer > 0) {
         // `pushCandidatesSettled` (D400, D404): a request its anchors settle gets fewer candidates, never losing the
@@ -2518,7 +2538,7 @@ export class ContextPartner {
           }
         : {}),
     });
-    return { items, pool, ...(unsettled ? { unsettled } : {}) };
+    return { items, pool, ...(unsettled ? { unsettled, ...(reinvite ? { reinvite } : {}) } : {}) };
   }
 
   /**
@@ -2655,12 +2675,12 @@ export class ContextPartner {
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
-  private candidateFrame(nudge = false): PacketFrame {
+  private candidateFrame(nudge = false, reinvite = false): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
+      lead: nudge ? `${CANDIDATES_LEAD} ${reinvite ? ASK_REINVITE : ASK_NUDGE}` : CANDIDATES_LEAD,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
@@ -6069,6 +6089,9 @@ function pendingOf(s: Session): boolean {
 
 /** `pushCandidates` (D236): the most of an item a candidate's excerpt says, whatever `compactItemBytes` is set to. */
 const MAX_CANDIDATE_BYTES = 2_000;
+
+/** `askReinvite` (trial, D518): the request of a session from which an unsettled packet re-invites an ask. */
+const REINVITE_FROM = 5;
 
 /** `planConflict` (D301): acting requests a session keeps, and how much of one its packet quotes. */
 const PLAN_REQUESTS = 12;
