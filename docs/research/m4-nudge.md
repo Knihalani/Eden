@@ -75,8 +75,8 @@ Eight containers, at most two at a time; no shard hit its cap, no task was dropp
 ## 1. Runs
 
 Pi, `--config default`, `--suite train`, `--tenant-prompt`, `direct` profile, time scale 1, `--push payload`, Haiku 5.5
-in every role, cards `cards-v2` + `cards-train` + `cards-train-4344` replayed (5,956 cards) and intent requests replayed;
-arms `eden` and `eden~minus-nudge` in one process a shard (`.local/m4/go.sh`, the M1 recipe with two arms).
+in every role, cards `cards-v2` + `cards-train` + `cards-train-4344` replayed (5,956 cards) and intent requests
+replayed; arms `eden` and `eden~minus-nudge` in one process a shard (`.local/m4/go.sh`, the M1 recipe with two arms).
 
 | run          | shards (seeds)  | tasks an arm                                   | $      | wall a shard |
 | ------------ | --------------- | ---------------------------------------------- | ------ | ------------ |
@@ -125,8 +125,11 @@ rests on one held-out suite whose interval reaches +1.4; it is not re-run here (
 part and `docs/profiles/minus-nudge.json`; `ASK_NUDGE`; `Session.nudged` and the ask's deeper look; the candidates'
 `unsettled` flag (`candidatesOf`, `PushPoolReport`, the funnel's `pushUnsettled`); `settle.ts`'s `anchored`; the
 nudge's tests in `ask-nudge.test.ts`. `settle.ts` stays: `pushCandidatesSettled` (D404) uses `settles` and
-`settledCut`, and their tests move to `settle.test.ts`. The code is in commit 638a36c3. `packages/sim/lab/a12/run.sh`
-is history: its `--variant-config` names `askNudge`, which no longer exists.
+`settledCut`, and their tests move to `settle.test.ts`. The code is in commit 638a36c3. `packages/sim/lab/a12/run.sh`,
+`a29/run.sh` and `m1/parts.py`'s usage line are history: they name `askNudge` (or its `minus-nudge` arm), which no
+longer exists, and now stop on `unknown key "askNudge"`; reproduce them from commit 638a36c3. A deployment whose
+`EDEN_ENGINE_CONFIG` sets `askNudge` (for example a copy of the old `minus-reader.json` or `minus-candidates.json`)
+now refuses to start (`checkEngineConfig` rejects unknown keys): drop the key.
 
 ## Reproduce
 
@@ -141,7 +144,8 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/regrade.ts --results SHARD/ou
   --kinds hidden --conditions eden,eden~minus-nudge --spend-ledger .local/m4/regrade-ledger.jsonl --spend-cap 2.32 \
   --spend-headroom 0.02 --run-label m4-regrade --out SHARD/regrade-hidden.json
 python3 -I packages/sim/lab/m4/nudge.py --templates packages/sim/lab/a2/targeted-templates.txt \
-  --group short=.local/modal/m4-short-a,.local/modal/m4-short-b --group long=.local/modal/m4-long-a,.local/modal/m4-long-b
+  --group short=.local/modal/m4-short-a,.local/modal/m4-short-b \
+  --group long=.local/modal/m4-long-a,.local/modal/m4-long-b
 ```
 
 `go.sh` and `regrade.sh` are kept in `.local/m4/` (not committed); `go.sh` is the README's pi-ab example with
