@@ -1,4 +1,5 @@
-"""I1's funnel screen, task by task (D473, docs/research/i1-checker.md §1's bar). Lab only.
+"""I1's funnel screen, task by task (D473, docs/research/i1-checker.md §1's bar). Lab only. The trial it compared
+(`pushCheck`) was deleted; its code is in commit fced3789.
 
     python3 -I compare.py --base BASE.json --trial TRIAL.json [--eval-share 0.2]
 

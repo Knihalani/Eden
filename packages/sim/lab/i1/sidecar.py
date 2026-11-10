@@ -1,4 +1,6 @@
-"""I1's checker as a CPU sidecar the lab calls (D471, docs/research/i1-checker.md). Lab only, not product code.
+"""I1's checker as a CPU sidecar (D471-D473, docs/research/i1-checker.md). Lab only, not product code. The engine's
+`pushCheck` trial that called it was deleted (D473); its code, with the funnel's and pi-ab's `--checker URL`, is in
+commit fced3789.
 
     python3 -I sidecar.py serve --model DIR [--port 8471] [--threads 1]      # POST /score
     python3 -I sidecar.py bench --model DIR --pairs PAIRS.jsonl [--threads 1] [--k 15] [--n 300]
