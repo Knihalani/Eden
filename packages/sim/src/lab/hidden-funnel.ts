@@ -1214,6 +1214,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
           handed: push!.handed.includes(x),
           auto: it ? automated(it) : false,
           cl: push!.constraintLike[k] === true,
+          // `pushCheck` (N2): the checker's score, when it answered.
+          ...(push!.checked ? { checked: push!.checked[k] } : {}),
           ...(push!.anchored ? { anchored: push!.anchored[k] === true } : {}),
           title: it?.title ?? "",
           text: it?.text ?? "",

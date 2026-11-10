@@ -96,3 +96,40 @@ every concern is regraded by Sonnet 5.5 (`regrade.ts`).
   up (D380's failed clause), re-shown items counted.
 
 If a bar fails, the arm stops there and the note says so.
+
+## 2. Screen results (seeds 41–44, all train templates; §1's arms and bars)
+
+The labels: arm C1's and C3's live runs called Haiku (no thinking) once per push and kept every answer
+(`.local/n2/check.jsonl`, 2,304 calls; `check-widen.jsonl`, 1,901 calls, 26.8 items a call); every figure below
+replays them with no wait (`--check-cache`, no `--check-live`), as I2 served its labels. **Why replayed:** live, a
+check takes p50 3.5 s (p90 4.1 s, 15–31 items, the `why` field included), longer than the funnel's 3 s observe wait;
+on 105 hidden tasks the push had not landed when the task ended (no `pushPoolAt`), so the live C1 run read planted
+handed 449 against 554 with the same labels. That is a latency finding for any shipped check (§5), not a quality one.
+Replay misses: 0–4 pairs a process, scored from the same request's per-pair labels.
+
+| Arm | Hidden surfaced | Decoys surfaced | Planted handed | Decoy handed | Neutral packets | Packet KB (hid/ctl/neu) |
+| --- | --- | --- | --- | --- | --- | --- |
+| C0 default | 634 | 552 | 491 | 418 | 617 | 964 / 926 / 693 |
+| C1 check | 664 (+30 −0) | 580 | 554 | 445 | 617 | 714 / 697 / 641 |
+| C2 check, silent (H3) | 664 | 578 | 554 | 403 | **185** | 692 / 542 / 176 |
+| C3 check, widen (H1) | 685 (+53 −2) | 615 | 574 | 480 | 620 | 758 / 715 / 653 |
+| C4 check, widen, silent | 685 | 613 | 571 | 433 | 207 | 744 / 573 / 200 |
+
+(of 768 each; `python3 -I packages/sim/lab/n2/compare.py --arm C0=… --arm C1=…`.)
+
+- **H3 passes** (C2 against C1): planted handed +0, hidden surfaced +0, neutral packets 617 → 185.
+- **H1 fails** (C3 against C1): planted handed **+20** (bar ≥ +8) but decoy handed **+35** (bar ≤ +3), and above C0's.
+- **H1+H3 fails** (C4 against C0): planted handed 491 → 571 and hidden surfaced +51, but decoy handed 418 → 433
+  (bar: ≤ 376).
+- **Why: the no-thinking check is lenient.** Of the planted items in the pool it passes 558 of 564; of the decoys 404
+  of 495 (82%; I2's effort-low Haiku passed 42% of held-out decoys). It removes items unrelated to the request, not
+  the look-alike. Widening then brings in look-alikes the lexical pool never ranked, and the check lets most through.
+
+## 3. Addendum, pre-registered before its run: the check with thinking at effort low
+
+Written after §2. The same arms and bars as §1 with one change: the checker thinks (`--check-thinking low`, adaptive
+thinking at effort low, I2's labelling setting). To stay inside the cap, only the widened pools are labelled live
+(arm C3L's run, `.local/n2/check-low.jsonl`); C1L and C2L replay the same labels per pair (each base pool item was
+labelled inside the widened set it belongs to, a larger context than C1L's own call would have: labelled so). Arms
+C1L–C4L, screen on seeds 41–44, the bars of §1 unchanged. The confirmation (§1) runs for whichever check (off or
+low) passes H1+H3, or, if neither does, for the low check's C2L (H3) only.

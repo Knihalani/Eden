@@ -176,6 +176,7 @@ import { sanitizeForStore } from "@eden/redact";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
 import { checkerLine, sidecarChecker } from "./i1-checker";
+import { labChecker, labCheckerLine } from "./n2-check";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -329,7 +330,21 @@ const CARDS_FILE = opt("cards", opt("cards-disk", ""));
 const CARDS_CALLS = Number(opt("cards-calls", "-1"));
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
 /** `--checker URL` (I1, D471): the pair checker sidecar an arm with `pushCheck` on reads (`i1-checker.ts`). */
-const CHECKER = opt("checker", "") ? sidecarChecker(opt("checker", "")) : null;
+const SIDECAR = opt("checker", "") ? sidecarChecker(opt("checker", "")) : null;
+/**
+ * `--check-cache FILE` (N2, D510): the lab's Haiku "changes what the agent should do" checker (`n2-check.ts`) for an arm
+ * with `pushCheck` on, its answers kept in FILE and replayed; a miss calls Haiku on the run's spend ledger (role
+ * `n2.check`); `--check-replay-only` answers misses from FILE's per-pair labels and counts them instead.
+ */
+const LAB_CHECK = opt("check-cache", "")
+  ? labChecker({
+      cache: opt("check-cache", ""),
+      replayOnly: args.includes("--check-replay-only"),
+      thinking: opt("check-thinking", "off") === "low" ? "low" : "off",
+      ...(ACCESS.ledger ? { ledger: ACCESS.ledger } : {}),
+    })
+  : null;
+const CHECKER = LAB_CHECK ?? SIDECAR;
 // Compared as files, not strings: `./a.cards.jsonl` or a symlink must not send new cards into the replay file.
 if (CARDS_FILE && samePath(CARDS_OUT, CARDS_FILE)) {
   throw new Error(`--cards-out ${CARDS_OUT} is the replayed --cards file: give new cards their own file`);
@@ -1644,7 +1659,8 @@ console.error(
     (INTENT_WANTED ? `; ${INTENT_LINE}` : ""),
 );
 console.error(overBudgetLine(budgeted));
-if (CHECKER) console.error(checkerLine(CHECKER));
+if (SIDECAR) console.error(checkerLine(SIDECAR));
+if (LAB_CHECK) console.error(labCheckerLine(LAB_CHECK));
 const replayMisses = (readerReplay?.missed ?? 0) + (graderReplay?.missed ?? 0);
 if (REPLAY_ONLY && replayMisses > 0) {
   console.error(
