@@ -4,7 +4,7 @@
 # Sonnet graded an answer (all hidden answers, and the control and neutral answers Haiku called a concern); an answer
 # Sonnet failed to grade keeps Haiku's verdict and is counted. Bootstrap 95%: 5,000 draws, seed 1, tasks resampled
 # within each (shard, kind) stratum, as M1's parts.py. `--templates F` (comma list of template names) adds the
-# subset of tasks whose id names one of them (A12's 91 targeted templates). Pooled and per run group (`--group
+# subset of tasks whose template (the task id's last part) is one of them (A12's 91 targeted templates). Pooled and per run group (`--group
 # NAME=RUN,RUN`).
 # usage: python3 -I nudge.py [--templates F] [--json OUT] --group short=RUN_DIR[,RUN_DIR] --group long=RUN_DIR...
 import json, os, statistics as st, sys
@@ -24,7 +24,8 @@ def opt(name, default=None, many=False):
 
 
 A, B = "eden", "eden~minus-nudge"
-TEMPLATES = set(open(opt("--templates")).read().strip().split(",")) if opt("--templates") else set()
+TFILE = opt("--templates")
+TEMPLATES = set(open(TFILE).read().strip().split(",")) if TFILE else set()
 OUT = opt("--json")
 GROUPS = [g.split("=", 1) for g in opt("--group", many=True)]
 DRAWS = 5000
@@ -72,7 +73,7 @@ for group, runs in GROUPS:
                     stats["sonnetFailed"] += 1
                 k = (group, sdir, r["task"])
                 KIND[k] = t["kind"]
-                TEMPLATE[k] = next((x for x in TEMPLATES if x in r["task"]), None)
+                TEMPLATE[k] = r["task"].rsplit(":", 1)[-1] in TEMPLATES
                 X.setdefault(k, {})[r["condition"]] = {
                     "haiku": haiku,
                     "sonnet": sonnet.get(k2, haiku),
