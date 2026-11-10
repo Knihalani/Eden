@@ -83,7 +83,9 @@ hard spend cap (D128).
 not on `127.0.0.1:8790`); point your agent's `base_url` there and send `x-eden-user-id` (or the body's `user`). At
 startup it prints whether it reached Eden. Each chat request's new messages are reported to Eden and its context is
 inserted before the latest user message, and kept there on later turns (D336); the answer streams back unchanged, and
-with Eden down the request goes through as it came (D280). Any OpenAI-compatible upstream works (OpenAI, OpenRouter,
+with Eden down the request goes through as it came (D280). Agents on Anthropic's Messages API use the same proxy:
+`EDEN_PROXY_UPSTREAM=https://api.anthropic.com/v1`, the SDK's `base_url` set to `http://127.0.0.1:8791`, and Eden's
+context arrives as a text block of the user's message (D653). Any OpenAI-compatible upstream works (OpenAI, OpenRouter,
 Anthropic's `https://api.anthropic.com/v1`, a local server). For full control, use the SDK:
 
 ```ts
@@ -151,7 +153,7 @@ docs/INTEGRATION.md).
 | `packages/redact`   | Secret gate                                                                                        |
 | `packages/server`   | HTTP API and MCP server; runs the default and wires the model roles                                |
 | `packages/client`   | SDK for agent builders (TypeScript)                                                                |
-| `packages/proxy`    | OpenAI-compatible proxy in front of the agent's model (`bun run proxy`)                            |
+| `packages/proxy`    | Proxy in front of the agent's model, OpenAI chat completions and Anthropic Messages (`bun run proxy`) |
 | `packages/client-python` | The Python client (`eden_client`, standard library only)                                      |
 | `packages/eval`     | Scenario harness and metrics                                                                       |
 | `packages/sim`      | Simulated users and the lab; `bun run demo`                                                        |

@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /**
- * `bun run proxy`: Eden as an OpenAI-compatible proxy in front of the agent's model (D280). Point the agent's
- * `base_url` at `http://127.0.0.1:8791/v1` and send `x-eden-user-id` (or the body's `user`):
+ * `bun run proxy`: Eden as a proxy in front of the agent's model: OpenAI-compatible chat completions (D280) and
+ * Anthropic's Messages API (D653). Point the agent's `base_url` at `http://127.0.0.1:8791/v1` (an Anthropic SDK:
+ * `http://127.0.0.1:8791`) and send `x-eden-user-id` (or the body's `user`, or `metadata.user_id`):
  *
  *   EDEN_PROXY_UPSTREAM  the model's base URL with its version path, required (https://api.openai.com/v1,
  *                        https://openrouter.ai/api/v1, https://api.anthropic.com/v1, a local server)
