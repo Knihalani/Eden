@@ -77,10 +77,13 @@ polls its own stale noise copies first.
 - `reachAnswer` names "searching" sources apart from failed ones: "Still reading a, b, c and N more: anything there
   that fits follows as a later packet", and an empty answer reads "Nothing found yet. … so this is not an all-clear
   yet."
-- `askLater`: once the work behind stored something new, the ask is ranked again with no second search
-  (`internal.late`), and what it would cite that the answer did not, and that the ledger still holds fresh, goes
-  through `verifyItems` and out as an `ask-behind:` packet (`ASK_LATE_LEAD`: found after the last answer, nothing has
-  checked it against the question). Dropped for a closed session or after the next user message.
+- `askLater`: once the work behind stored something new, the ask is ranked again with no second search and no
+  reader call (`internal.late`), and what it would cite from the sources that were still being read, that the answer
+  did not cite and the ledger still holds fresh, is re-read as strictly as the answer was (D211) and goes out as an
+  `ask-behind:` packet (`ASK_LATE_LEAD`: found after the last answer, nothing has checked it against the question).
+  Dropped for a closed session or after the next user message.
+- A cut copy whose live search was never sent (under `MIN_SEARCH_MS` of the deadline left, D148) is "timeout" at once,
+  never "searching": nothing is reading it.
 
 Its calls are the ones the ask made before: the poll's ("sync poll behind") and the searches' ("cut search behind")
 traces sum to what the connectors received. At `--time 1` the ask's calls rose 44.99 → 46.70 a task: with D264 the
@@ -91,7 +94,18 @@ on Pi the calls are flat.
 Unit tests: `ask-behind.test.ts` (4 cut sources, searches of 300 ms; off waits ≥ 270 ms and cites the fact; on, wait
 20 ms: under 150 ms, "searching", "Still reading", not an all-clear, the fact in the follow-up packet, searches not
 more, traced; wait 5 s: D264's answer and no follow-up; a follow-up dropped after the next request; two users'
-follow-ups kept apart), and the two `askBehind` cases in `review-regressions.test.ts`.
+follow-ups kept apart; the follow-up makes no reader call; it never hands over an item the answer left out as not
+re-checked; a cut copy with no search sent is "timeout"), and the two `askBehind` cases in
+`review-regressions.test.ts`.
+
+**Review (reviewer subagent, REQUEST_CHANGES, all fixed before the merge).** (1) The follow-up re-entered `ask()` and
+ran `readAsk` when a reader is wired with `pushCandidates` 0 (`minus-candidates`): an untraced model call; it now
+reads nothing. (2) Its non-strict re-read could hand over, as a new find, an item the answer had left out as not
+re-checked (D211); it now takes only items of the sources still being read and re-reads them strictly. (3) A cut
+copy whose search was never sent read "searching" while the poll ran; now "timeout". (4) Comments and docs that said
+the ask waits for its poll now say so only with the switch off. Each of (1)–(3) has a test that fails without its fix.
+None of them touches the measured runs: no follow-up packet was taken live, the shipped default has no reader call,
+and no screened ask ran short of the search deadline.
 
 ## 3. $0 screens
 

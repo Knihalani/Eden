@@ -274,8 +274,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   (docs/research/fix-w2b-false-concerns.md); a fix belongs upstream (the reader's judgement, or what it reads).
 - **One deadline per lookup (D140).** `searchLive` takes `deadlineAt` once, after resolving the sources and before
   the on-demand poll; the poll's signal, the live search's `timeoutMs`, the planner and the probes
-  (`ProbeOpts.deadlineAt`) get only what is left. Do not give a later stage a fresh `sourceTimeoutMs`: an ask waits
-  for its poll, so the stages add up. Under `MIN_SEARCH_MS` (50) left, the search is skipped with no call (no rate
+  (`ProbeOpts.deadlineAt`) get only what is left. Do not give a later stage a fresh `sourceTimeoutMs`: with
+  `askBehind` off (D430) an ask waits for its poll, so the stages add up. Under `MIN_SEARCH_MS` (50) left, the search is skipped with no call (no rate
   token or breaker failure for a call that could not answer): a source whose page for the query the fan-out holds
   answers from it (`SourceFanout.held`: "cached", or "stale" past `freshMs`), any other is a "timeout" (D148). `held`
   shares `one()`'s key (`pageKey`); a peek with its own key would silently miss. `Sync.freshen` skips a source
@@ -344,9 +344,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `cue.polled`; for an ask, `searchCutBehind` searches source by source (`cue.cutStatus`) and stores each page before
   noting its outcome, so a source called answered was ranked on what it found. Not settled: the answer names the
   sources still being read ("searching", `reachAnswer`'s "Still reading …") and `askLater` re-ranks once the work
-  stored something (`internal.late`: no second search), queuing what the answer did not cite and the ledger still
-  holds fresh as an `ask-behind:` packet (`ASK_LATE_LEAD`), through `verifyItems`, dropped after the next user
-  message. Do not reintroduce a wait: at market latency the work never settled within 300 ms (the wait was the
+  stored something (`internal.late`: no second search, no `readAsk`), queuing what it would cite from the sources
+  still being read (`behindLocal`) that the answer did not and the ledger still holds fresh, re-read strictly (D211:
+  an item the answer left out as not re-checked is never handed over as news), as an `ask-behind:` packet
+  (`ASK_LATE_LEAD`), dropped after the next user message. A cut copy no search was sent for is "timeout" at once. Do not reintroduce a wait: at market latency the work never settled within 300 ms (the wait was the
   ask's whole time), and in Pi no follow-up was ever taken (the agent's next model request starts as the tool result
   lands); the ask finds what the push missed from what the push's own searches behind stored.
 - **Idle users are frozen (D325, docs/research/a14-scale-users.md).** `ItemCache` holds a user idle for

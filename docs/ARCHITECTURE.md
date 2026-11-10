@@ -293,7 +293,8 @@ follow-up delivers the corrected copy (the departure from D40 is that the old co
 wait for the poll either (`askBehind`, above); with the switch off it does. The reader's push does not
 (`readerPushBehind`, below). A lookup has one deadline, `sourceTimeoutMs` (1.5 s) from
 when its sources are resolved (D140): the on-demand poll, the live search, the planner's cascade and the probes share
-it, so a listing that hangs and the search after it hold an ask back about 1.5 s before the reader starts, not 3 s.
+it, so with `askBehind` off (D430) a listing that hangs and the search after it hold an ask back about 1.5 s before
+the reader starts, not 3 s; with it on (the default) the ask waits for neither.
 With under 50 ms left, the live search is skipped and each chosen source reports "timeout" (no call). A source whose
 on-demand poll ran out of time is not polled again by a lookup for the next `sourceTimeoutMs`: it is searched live.
 
