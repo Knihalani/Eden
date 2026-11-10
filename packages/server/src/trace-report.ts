@@ -118,6 +118,8 @@ export function traceReport(lines: Iterable<string>): TraceReport {
       t.decision === "reader-late" ||
       t.decision === "reader-push" ||
       (t.decision === "skipped" && t.reason === "sync poll behind") ||
+      // `askBehind` (D430): an ask's follow-up packet, queued once the work it did not wait for stored something.
+      (t.event === "ask" && t.reason === "ask behind") ||
       // An update packet (a source changed items already shown) follows a source notice, not an agent event.
       t.reason.startsWith("updated:");
     if (!followUp) events++;
