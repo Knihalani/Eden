@@ -133,3 +133,54 @@ thinking at effort low, I2's labelling setting). To stay inside the cap, only th
 labelled inside the widened set it belongs to, a larger context than C1L's own call would have: labelled so). Arms
 C1L–C4L, screen on seeds 41–44, the bars of §1 unchanged. The confirmation (§1) runs for whichever check (off or
 low) passes H1+H3, or, if neither does, for the low check's C2L (H3) only.
+
+## 4. Effort-low results (§3), screen and confirmation
+
+Labels: C3L's live run, 1,903 calls on seeds 41–44 (p50 6.8 s, p90 8.4 s a check, 26 items a call,
+`.local/n2/check-low.jsonl`), replayed with no wait; 0 pairs missed in every arm. Confirmation: seeds 45–48, I2's 40
+held-out templates (`--templates`), its own live labelling run (`check-low45.jsonl`), 3–5 pairs missed an arm;
+intent inert in every arm there (no replay covers 45–48).
+
+| Arm | Seeds | Hidden surfaced | Decoys surfaced | Planted handed | Decoy handed | Neutral packets | Packet KB (hid/ctl/neu) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| C0 default | 41–44 | 634 | 552 | 491 | 418 | 617 | 964 / 926 / 693 |
+| C1L check | 41–44 | 665 (+31 −0) | 569 | 560 | 395 | 617 | 636 / 779 / 670 |
+| C2L check, silent | 41–44 | 665 | 564 | 560 | 193 | **93** | 603 / 384 / 115 |
+| C3L check, widen | 41–44 | 690 (+56 −0) | 590 | 584 | 398 | 619 | 666 / 788 / 666 |
+| **C4L check, widen, silent** | 41–44 | **690** | 585 | **584** | **195** | **150** | 651 / 424 / 159 |
+| C0 default | 45–48 held-out | 82 | 83 | 64 | 66 | 107 | 194 / 185 / 112 |
+| C1L | 45–48 held-out | 103 | 88 | 91 | 69 | 108 | 153 / 161 / 110 |
+| C2L | 45–48 held-out | 103 | 84 | 91 | 45 | 14 | 110 / 67 / 12 |
+| C3L | 45–48 held-out | 124 | 92 | 112 | 69 | 109 | 146 / 161 / 109 |
+| **C4L** | 45–48 held-out | **124 (+42 −0)** | 86 | **112** | **42** | **22** | 128 / 69 / 18 |
+
+(hidden, control and neutral tasks: 768 each on 41–44, 160 each on the confirmation.)
+
+- **Screen (41–44): every bar passes.** H1 (C3L against C1L): planted handed +24, decoy handed **+3** (bar ≤ +3,
+  at the edge), hidden surfaced +25, decoy handed 398 ≤ C0's 418. H3 (C2L against C1L): planted handed +0, hidden
+  +0, neutral packets 617 → 93. H1+H3 (C4L against C0): planted handed 491 → 584, decoy handed 418 → 195, hidden
+  surfaced 634 → 690, neutral packets 617 → 150.
+- **Confirmation (45–48): H3 passes; H1+H3 passes; H1 alone fails one clause.** H1: planted handed +21, decoy handed
+  +0 against C1L, hidden +21, but C3L's decoy handed (69) is above C0's (66) — as C1L's already is: without silence
+  the check alone does not cut look-alikes on these worlds. H1+H3 (C4L against C0): hidden 82 → 124, planted handed
+  64 → 112, decoy handed 66 → 42, neutral packets 107 → 22.
+- **Not in any bar, reported:** decoys *surfaced* (packet or the funnel's ask) rise with the check: 552 → 585 (C4L,
+  41–44) and 83 → 86 (45–48). The look-alikes leave the packet; some reach the ask's answer instead (the funnel always
+  asks). Whether that matters is the live concern count's question.
+- **What thinking buys.** The same rule with the no-thinking check failed H1 (§2): of the pool's decoys it passed
+  82%; with thinking at effort low the packet's decoys halve. It costs latency: p50 6.8 s a check against 3.5 s.
+
+## 5. Live, pre-registered before the run (the arm and its wait)
+
+The live arm is **C4L**: `eden~N2` = `pushCheck`, `pushWiden`, `pushCheckSilent`, `pushCheckWaitMs` 10,000, the lab
+checker with thinking at effort low (`--check-thinking low`), the embedding table `widen-train-41-48.jsonl.gz`
+(checked in, 0.3 MB of ids; short worlds only, a `--days` user's world is not in it, so over days the widening is the
+intent and deeper-rank routes alone). A check takes about 7 s, past the harness's 3 s first-observe wait, so the arm
+waits for it: **`@w12000`** (the agent's first model call waits up to 12 s for Eden's push). The cost of that wait
+is reported in the wall column; a shippable check must be faster (§6). `eden` runs at the default `@w3000`.
+
+- **Short:** `lab_fanout.py --preset bench-tools --seeds 41-48 --args "--conditions eden,eden~N2@w12000 --variants
+  hidden,control,neutral --templates <the 40 held-out templates>"`, `--max-streams 72` (two shards at a time).
+- **Days:** `--days 8`, users w41–w44, arms `eden`, `eden~N2@w12000`, `eden~N2R@w12000` (N2 plus
+  `pushCheckReshow`, H2), `--max-streams 6` (two shards at a time).
+- Bars as §1. Every hidden answer and every concern of the paired arms regraded by Sonnet 5.5.

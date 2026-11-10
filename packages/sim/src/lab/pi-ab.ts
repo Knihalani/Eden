@@ -177,6 +177,7 @@ import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
 import { checkerLine, sidecarChecker } from "./i1-checker";
 import { labChecker, labCheckerLine } from "./n2-check";
+import { loadWidenTable, widenFor } from "./n2-widen";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -345,6 +346,12 @@ const LAB_CHECK = opt("check-cache", "")
     })
   : null;
 const CHECKER = LAB_CHECK ?? SIDECAR;
+/**
+ * `--widen-table FILE` (N2, D511): the `widen` dependency of an arm with `pushWiden` (`n2-widen.ts`), the embedding's
+ * nearest items per (suite, seed, variant, request) of the funnel's worlds, which one-request-a-session worlds are
+ * (`worldOf`). A `--days` user's world is not in it: there the embedding route finds nothing.
+ */
+const WIDEN_TABLE = opt("widen-table", "") ? loadWidenTable(opt("widen-table", "")) : null;
 // Compared as files, not strings: `./a.cards.jsonl` or a symlink must not send new cards into the replay file.
 if (CARDS_FILE && samePath(CARDS_OUT, CARDS_FILE)) {
   throw new Error(`--cards-out ${CARDS_OUT} is the replayed --cards file: give new cards their own file`);
@@ -829,6 +836,9 @@ async function runWorld(
         ...(cards ? { cards } : {}),
         ...(reader ? { reader } : {}),
         ...(CHECKER ? { checker: CHECKER } : {}),
+        ...(WIDEN_TABLE && baseTasks[0]
+          ? { widen: widenFor(WIDEN_TABLE, baseTasks[0].suite, seed, baseTasks[0].kind) }
+          : {}),
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);

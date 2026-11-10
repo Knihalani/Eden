@@ -223,6 +223,7 @@ const cli = flags(
         "fetch-gone",
         "checker",
         "check-cache",
+        "templates",
         "check-thinking",
         "widen-table",
       ].map((k) => [k, V]),
@@ -488,6 +489,11 @@ const READER_THINKING = opt("reader-thinking", "off") as "off" | "adaptive";
 const READER_KEY = READER === "live" ? keyFor(READER_MODEL) : undefined;
 if (READER !== "none" && !ASK && !RUN.readerPush) throw new Error("--reader needs --ask (or readerPush)");
 const LIMIT = Number(opt("limit", "0"));
+/**
+ * `--templates a,b` (N2): only these templates' tasks run (every template's planted item stays in the world, so the
+ * kept tasks see the world a full run gives them).
+ */
+const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
 /** `--reader-log out.jsonl`: each reader call's prompt (the items as the model read them) and reply, sim data only. */
 const READER_LOG = opt("reader-log", "");
 // An approximated verdict logged beside recorded ones would be read back later as a real reading (checked before the
@@ -731,13 +737,17 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   const world = buildWorld({ seed: seed * 1_000 });
   const before = world.items.length;
   const all: HiddenTask[] = SUITES[suite]!(world, seed, variant);
-  const tasks = LIMIT > 0 ? all.slice(0, LIMIT) : all;
-  const planted = world.items.slice(before);
-  if (PLANTED_AGE_DAYS > 0) for (const it of planted) it.updatedAt = world.now - PLANTED_AGE_DAYS * 86_400_000;
-  for (const it of planted) dress(world, it);
+  // Planted items line up with `all` (one a template, in order); `--templates` keeps the pairs together.
+  const plantedAll = world.items.slice(before);
+  const chosen = all.map((_, i) => i).filter((i) => !TEMPLATES || TEMPLATES.has(all[i]!.template));
+  const tasks = (LIMIT > 0 ? chosen.slice(0, LIMIT) : chosen).map((i) => all[i]!);
+  const planted = TEMPLATES && plantedAll.length === all.length ? chosen.map((i) => plantedAll[i]!) : plantedAll;
+  // The world is made whole whatever `--templates` keeps: every planted item aged and dressed, every slot cleared.
+  if (PLANTED_AGE_DAYS > 0) for (const it of plantedAll) it.updatedAt = world.now - PLANTED_AGE_DAYS * 86_400_000;
+  for (const it of plantedAll) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
-  const keep = new Set(planted.map((it) => it.id));
-  for (const task of tasks) clearSlot(world, task.text, keep);
+  const keep = new Set(plantedAll.map((it) => it.id));
+  for (const task of all) clearSlot(world, task.text, keep);
   if (CORPUS_DUMP) {
     // `--corpus-dump` (A2): the world's items as its sources hold them, with the tasks and their planted ids.
     // Each item as its source lists it (a separate, unmetered set of sources), and `h`: the card key of the copy the
