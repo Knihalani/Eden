@@ -178,6 +178,7 @@ const cli = flags(
         "ask-question",
         "spans",
         "cards",
+        "cards-calls",
         "cards-endpoint",
         "cards-endpoint-model",
         "intent",
@@ -357,6 +358,8 @@ if (CARDS_ENDPOINT) console.log(`cards: ${ENDPOINT_LABEL}, misses made live and 
  * the prefilter reads, and the replayed card's kind: "none", or "uncovered" when not replayed), to study the
  * prefilter offline (docs/research/gen-tokens.md). Sim worlds only.
  */
+/** `--cards-calls N` (F2): each world's enrichment gets N card calls; the items past them stay uncovered. */
+const CARDS_CALLS = Number(opt("cards-calls", "-1"));
 const CARD_LOG = opt("card-log", "");
 if (CARD_LOG && cardMaker) {
   writeFileSync(CARD_LOG, "");
@@ -761,8 +764,20 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
           },
         }
       : cardMaker;
-  const cards = laneMaker
-    ? new CardEnricher({ maker: laneMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
+  // `--cards-calls N` (F2, D483): the lane's card model answers its first N calls and leaves the rest uncovered, as
+  // a new user's first request meets a backfill the enrichment has only begun. Not `async`, as above.
+  let cardCalls = 0;
+  const cappedMaker: CardMaker | null =
+    laneMaker && CARDS_CALLS >= 0
+      ? {
+          make: (items, today, signal, retry, intent) =>
+            cardCalls++ < CARDS_CALLS
+              ? laneMaker.make(items, today, signal, retry, intent)
+              : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
+        }
+      : laneMaker;
+  const cards = cappedMaker
+    ? new CardEnricher({ maker: cappedMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
     : null;
   if (cards) cardLanes.push(cards);
   // The lane's asks run one at a time: the model's latency for this task's call (as made, when replayed) is kept so a

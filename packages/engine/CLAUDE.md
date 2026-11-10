@@ -122,6 +122,13 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   rows ran with thinking off). Effort "low" was 1.82x slower at p50 and 1.54x dearer on Haiku 5.5 (docs/COST-MODEL.md,
   run `close-cards-reasoning`). Sending it again needs a decision, as for the reader. The judge (`partner.ts`, lab-only:
   the servers wire none) still sends "low"; changing that needs a judge measurement (D155).
+- **The card queue is read best first (`cardsOrder`, D482, D483, on in the default; `orderQueue`).** Constraint-worded
+  items first, then events ahead, senders the user writes to and the last three days. The read order depends on what
+  has arrived when a batch is taken, so nothing downstream may depend on it: equal-score intent hits are ordered by
+  `Queued.seq` (arrival), not by when their card was made (`IntentIndex.set`, 16 past the cut). A new structure filled
+  as cards land must not break ties by insertion order, or the funnel's output varies with machine load
+  (`funnel-flags.test.ts`'s sharded-files test caught it). Pruning an item's requests by word overlap with the item
+  was measured and deleted (D480, D481): the requests that look least like their item reach the hidden facts.
 - `cardsLean` (D125; window `cardsLeanDays` 7 since D244, 30 before) only narrows what the intent index reads
   (`readForIntent`): constraint-worded items are carded whatever their sender or age. `automated` reads a `From:` line
   in the text or a `meta.from`/`meta.sender` field (connectors differ: `toItems` keeps whatever text the tool

@@ -450,6 +450,15 @@ export interface EngineConfig {
    */
   cardsLeanDays: number;
   /**
+   * On in the default (D482, promoted by D483; F2, docs/research/f2-quality.md). The card queue is read best first
+   * rather than as it filled (`orderQueue`, cards.ts): items with constraint wording first, then events ahead, mail
+   * from people the user writes to and items of the last three days, so a new user's first requests meet cards for
+   * the items most likely to bear on them. Once every waiting item is read the cards are the same (the funnel reads
+   * the same with it on and off); with four card calls made per new user, Pi raised +9.0 points more hidden facts
+   * (+6.6..+11.4, n 1,536, train, seeds 41–48, cards made in-run by Haiku).
+   */
+  cardsOrder: boolean;
+  /**
    * On in the default (D320). With `cards` and `sync`, for a user with more than 32 synced sources: a synced item is
    * read by the card model only when its source is one the user's lookups use (`Sync.engage`), or it names a name the
    * user's lookups named. The rest stay unread, uncovered, until their source is used, when its held items are read.
@@ -746,6 +755,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intent: true,
   cardsLean: true,
   cardsLeanDays: 7,
+  cardsOrder: true,
   cardsSourceAware: true,
   intentHits: 12,
   intentMinCoverage: 0.2,

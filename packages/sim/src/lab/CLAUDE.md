@@ -84,6 +84,10 @@ inside `bun run check` through `modal-python.test.ts`.
   (`close-eval-live-off-wt`) 1,191 output tokens, $0.00103; adaptive at effort low (`close-eval-live-adaptive-wt`)
   2,466 tokens, $0.00166; adaptive before this fix, default effort (`close-eval-live-adaptive-before-wt`) 3,640
   tokens, $0.00214.
+- **`--cards-calls N`** (F2, D482; hidden-funnel after `--`, pi-ab): each user's card model answers its first N calls
+  and leaves the rest uncovered (no call, no spend), standing in for a new user whose requests arrive before the
+  backfill is read. Without it both harnesses wait for the enrichment to finish before the first request, so they
+  cannot see what order the cards were made in.
 - **Keys** are read by `keyFor`, never printed or put in results.
 - **Budgets:** every live run passes `--budget` (a hard cap per process on everything it spends).
 - **Strict CLIs (audit 2026-11-03b).** funnel.ts, hidden-funnel.ts and quality-cli.ts parse through `flags()`; a new

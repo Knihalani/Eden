@@ -44,6 +44,7 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   routeSketch: true,
   syncEngagedDeep: true,
   cardsSourceAware: true,
+  cardsOrder: true,
   // D328, D370 (A24): background pages stored one per loop turn; the card drain gathers them.
   syncIngestTurns: true,
   // D356 (A21): sources the user does not use are swept weekly; their unswept copies are re-read before delivery.

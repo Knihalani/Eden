@@ -294,6 +294,8 @@ const TASK_REQUESTS = MAX_STEPS + 1;
 let capStopped = 0;
 // Cards replayed from disk: the replay file is only read, new cards go to their own file (cards-disk.ts).
 const CARDS_FILE = opt("cards", opt("cards-disk", ""));
+/** `--cards-calls N` (F2): each stream's enrichment gets N card calls; items past them stay uncovered. */
+const CARDS_CALLS = Number(opt("cards-calls", "-1"));
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
 // Compared as files, not strings: `./a.cards.jsonl` or a symlink must not send new cards into the replay file.
 if (CARDS_FILE && samePath(CARDS_OUT, CARDS_FILE)) {
@@ -713,10 +715,23 @@ async function runWorld(
   // With `--cards`, cards on disk are replayed and only the rest made live (their spend booked to Eden as usual).
   const cardMaker = (): CardMaker =>
     diskCards ? new DiskCardMaker(CARDS_FILE, liveCards(), { out: CARDS_OUT, shared: diskCards }) : liveCards();
+  // `--cards-calls N` (F2, D483): each stream's card model answers its first N calls and leaves the rest uncovered
+  // (no call, no spend), as a new user's first requests meet a backfill the enrichment has only begun.
+  const cappedMaker = (): CardMaker => {
+    const maker = cardMaker();
+    if (CARDS_CALLS < 0) return maker;
+    let calls = 0;
+    return {
+      make: (items, today, signal, retry, intent) =>
+        calls++ < CARDS_CALLS
+          ? maker.make(items, today, signal, retry, intent)
+          : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
+    };
+  };
   const cards =
     // `+nokey` (D291): a server with no model key builds no card enricher and no reader (models.ts NO_MODELS).
     withPartner && !noKey && effective(config).cards
-      ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
+      ? new CardEnricher({ maker: cappedMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   if (cards) budgeted.cards.push(cards);
   // A stream with Eden but no cards (`+nokey`, D291) is booked too, for its connector calls (the backfill, ticks); it

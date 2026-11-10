@@ -358,9 +358,13 @@ with stub and oracle too: one line per read (task, the prompt a model would have
 train1 seed 41 wrote 54 lines for its 54 reader calls.
 
 A second, independent draw of train seeds 41–42's requests with the shipped prompt is checked in as
-`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 314/273 on the shipped sample and
-307/281 on it, with 43 hidden tasks moving between them. Screen a lever on the intent index on both (`zcat` it, then
+`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 314/274 on the shipped sample and
+307/281 on it (314/273 before D483's tie rule), with 43 hidden tasks moving between them. Screen a lever on the intent index on both (`zcat` it, then
 `--intent FILE`) and do not report a delta under about 10 tasks from one sample.
+
+A new user's first requests (F2, D482): `bun run funnel --jobs 4 -- --cards-calls N` gives each world's card model N
+calls and leaves the rest uncovered (a train world needs about 16); `--set '{"cardsOrder":false}'` is the old read
+order. pi-ab takes the same flag; without `--cards` every card is made in-run.
 
 ### 1c. Lab-only measurements of first-turn delivery, overlapping requests and sync items
 
