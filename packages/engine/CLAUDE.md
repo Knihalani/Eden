@@ -359,8 +359,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   backfill's overshoot back to the cap also lost 2). The sketch (`sketch.ts`) is per (user, source) in `SourceSync`,
   filled from every listed item in `store`, folded at `warmUp`.
 - **Which sources are read live is learned (`sourceYield`, D505, D509, on in the default; `source-yield.ts`,
-  docs/research/n1-calls.md).** `spentSources` gives a lookup the warm copies it reads nothing live of: no search
-  behind, no probe (they join the probes' `local` set) and, for a cut copy, no on-demand poll. A read is booked in
+  docs/research/n1-calls.md).** `spentSources` gives a lookup the warm copies whose live reads it skips: no search
+  behind, no probe (they join the probes' `local` set) and, for a cut copy, no on-demand poll. A lookup that waits for
+  its poll (not behind) still searches a spent cut copy live with the rest: more reads, never fewer facts. A read is booked in
   `noteLiveRead` from outcomes, "ok" only, once a source a turn (`Session.liveReads`), for warm copies only: booked
   when sent, one call counted twice (the push and the ask it starts join it) and an outage read as "nothing used".
   A new path that makes live reads must book them there, or its sources never earn or lose anything; a new path

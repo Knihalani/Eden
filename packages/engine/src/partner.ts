@@ -4066,7 +4066,9 @@ export class ContextPartner {
     let pollable: Set<string> | null = null;
     let cutBehind: Set<string> | undefined;
     let probeLocal: Set<string> | null | undefined;
-    // `sourceYield` (D505): the warm copies whose unused live reads are spent; this lookup reads nothing live of them.
+    // `sourceYield` (D505): the warm copies whose unused live reads are spent: no probe, no cut-copy poll, and on a
+    // lookup that does not wait for its poll no search behind. A lookup that waits for its poll still searches a spent
+    // cut copy with the rest (more reads, never fewer facts).
     if (this.yields) cue.boost = boost;
     const spent = this.spentSources(s, cue, all, boost);
     if (this.sync) {
@@ -4363,7 +4365,8 @@ export class ContextPartner {
   }
 
   /**
-   * `sourceYield` (D505): the user's warm synced copies this request reads nothing live of: a source whose own run
+   * `sourceYield` (D505): the user's warm synced copies this request skips live reads of (no probe, no cut-copy
+   * poll, no search behind; a lookup that waits for its poll still searches a spent cut copy): a source whose own run
    * of reads with nothing used has reached `sourceYieldRun` (never for a request that names an entity the source
    * mentioned), or one with no item ever used while the user's reads on the request's kind of evidence for it are not
    * paying (`SourceYield.poolSpent`). Only a warm copy: it answers from what is held, where a source with no copy

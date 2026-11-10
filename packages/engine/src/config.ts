@@ -295,7 +295,8 @@ export interface EngineConfig {
    * reads are
    * pooled by what the request had for the source: nothing, its words alone (among the source's held items or in its
    * sketch), or a name the source's items mentioned. A warm synced copy is not read live (no search of its cut copy
-   * behind, no probe, and with `sourceYieldPolls` no on-demand poll; it answers from what is held, and an ask names
+   * behind, no probe, and with `sourceYieldPolls` no on-demand poll; a lookup that waits for its poll still searches
+   * a spent cut copy; otherwise it answers from what is held, and an ask names
    * it "not searched") when its own run is at `sourceYieldRun` or more and the request names nothing it mentioned, or
    * when none of its items has ever reached the agent and the user's reads on that kind of evidence are surely
    * paying under `sourceYieldFloor` (uses per read; 0: the pooled rule off). The pool of reads on nothing always
