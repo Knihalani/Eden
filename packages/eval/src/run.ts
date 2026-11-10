@@ -217,11 +217,21 @@ const percentile = (xs: number[], p: number) => {
   return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))]!;
 };
 
+/** A scenario's start time: its `clock`, or 1 October 2026. Never the wall clock: the eval is a gate (D435). */
+export function scenarioClock(scenario: Pick<Scenario, "clock">): number {
+  return scenario.clock ? Date.parse(scenario.clock) : Date.UTC(2026, 9, 1);
+}
+
 export async function runScenarios(scenarios: Scenario[], options: RunOptions): Promise<Metrics> {
   if (options.reader && options.readerModel) throw new Error("a stub reader and a live reader are exclusive");
   const readerKind = options.readerModel ? ("live" as const) : options.reader;
+  // The run's clock (D435): the scenario's own time, advanced one millisecond per event, is the engine's `now` and
+  // every dependency's that takes one. Unset, they read the wall clock while events carry the scenario's times, and
+  // the metrics moved with the date the eval was run (an invoice "due 10 November" read as past or to come).
+  let clock = 0;
+  const now = () => clock;
   // A capped run charges every budget to its one cap; an uncapped one keeps the old unbounded budgets.
-  const budget = (limits = DEFAULT_LIMITS) => new Budget(limits, undefined, options.spend);
+  const budget = (limits = DEFAULT_LIMITS) => new Budget(limits, now, options.spend);
   let turns = 0;
   const total = tally();
   const byCategory = new Map<string, Tally>();
@@ -263,6 +273,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     const check = (got: Injection[]) => {
       for (const inj of got) inspect(inj.text, inj.citations);
     };
+    clock = scenarioClock(scenario);
     const sources = scenario.sources.map((s) => new StaticSource(s.id, s.description, s.docs));
     // A fresh reader per scenario, as each scenario is its own user. Uncapped, as the lab's no-model readers are: the
     // pool is what is measured, and a stub costs nothing.
@@ -271,12 +282,12 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     const uncapped = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
     // The live reader is the one `buildPartner` wires: `ModelReaderMaker` on the role model, the default limits.
     const reader = maker
-      ? new AskReader({ maker, budget: budget(uncapped), now: () => Date.now() })
+      ? new AskReader({ maker, budget: budget(uncapped), now })
       : options.readerModel
         ? new AskReader({
             maker: new ModelReaderMaker(options.readerModel),
             budget: budget(),
-            now: () => Date.now(),
+            now,
             ...(options.onReaderFailure ? { onFailure: options.onReaderFailure } : {}),
           })
         : null;
@@ -290,6 +301,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       model: options.model,
       config: options.config,
       onTrace: (t) => traces.push(t),
+      now,
       ...(options.planner ? { planner: new QueryPlanner({ seed: 1 }) } : {}),
       ...(reader ? { reader, onReader: (r: ReaderReport) => reports.push(r) } : {}),
     });
@@ -297,7 +309,6 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     const pooled = (sessionId: string, from: number, to: number) =>
       new Set(reports.slice(from, to).flatMap((r) => (r.sessionId === sessionId ? r.pool : [])));
     const who = { tenantId: EVAL_TENANT, userId: scenario.id };
-    let clock = scenario.clock ? Date.parse(scenario.clock) : Date.UTC(2026, 9, 1);
     for (const session of scenario.sessions) {
       const traceStart = traces.length;
       const deliveries: string[][] = [];
