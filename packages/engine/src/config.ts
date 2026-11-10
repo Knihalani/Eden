@@ -634,6 +634,11 @@ export interface EngineConfig {
   /** How long the push waits for the checker before it hands the default's candidates (ms). */
   pushCheckWaitMs: number;
   /**
+   * `pushCheck` as a gate only (I1's exploratory arm, D473): the checker decides only whether the push sends
+   * candidates (none passing: no packet); when one passes, the default's candidates go out unchanged.
+   */
+  pushCheckGate: boolean;
+  /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
    * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
@@ -780,5 +785,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheck: false,
   pushCheckPass: 0.5,
   pushCheckWaitMs: 500,
+  pushCheckGate: false,
   revisionDiff: true,
 };

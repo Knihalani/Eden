@@ -2492,15 +2492,24 @@ export class ContextPartner {
           )
         : new Map<string, Card>();
     const like = pool.map((x) => this.constraintLike(x, cards));
-    let items = checked
-      ? // `pushCheck` (D471): the pool's items the checker passes, in the pool's order (its 6th to 15th may enter, its
-        // first five may leave), standing in for the constraint-like gate: none passing sends no candidates.
-        pool
-          .filter((x) => !bulkMail(x.item) && (checked.get(x.item.id) ?? 0) >= this.config.pushCheckPass)
-          .slice(0, this.config.pushCandidates)
-      : like.some(Boolean)
-        ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates)
-        : [];
+    const passing = checked
+      ? pool.filter((x) => !bulkMail(x.item) && (checked.get(x.item.id) ?? 0) >= this.config.pushCheckPass)
+      : [];
+    let items =
+      checked && this.config.pushCheckGate
+        ? // `pushCheckGate` (D473): the checker only decides whether any candidates go; when they do, the default's.
+          passing.length > 0 && like.some(Boolean)
+          ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates)
+          : []
+        : checked
+          ? // `pushCheck` (D471): the pool's items the checker passes, in the pool's order (its 6th to 15th may enter, its
+            // first five may leave), standing in for the constraint-like gate: none passing sends no candidates.
+            pool
+              .filter((x) => !bulkMail(x.item) && (checked.get(x.item.id) ?? 0) >= this.config.pushCheckPass)
+              .slice(0, this.config.pushCandidates)
+          : like.some(Boolean)
+            ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates)
+            : [];
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
     const fewer = this.config.pushCandidatesSettled;
