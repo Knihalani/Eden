@@ -9,7 +9,7 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import { CHECK_STOP, CHECK_SYSTEM, checkMessages, parseCheck, PushChecker } from "./push-check";
+import { CHECK_STOP, CHECK_SYSTEM, checkKey, checkMessages, itemMark, parseCheck, PushChecker } from "./push-check";
 
 // I3 (D500): the `pushCheck` trial. One model call over the push's pool names the items that change what the agent
 // should do; the candidates are those, in pool order; none named sends no packet; any failure leaves the default's.
@@ -206,6 +206,51 @@ describe("pushCheck (I3, D500): one model call picks the push's candidates", () 
     expect(calls).toBe(1);
   });
 
+  test("a kept check is keyed by each item's date and sender too, not only its content (review of D500)", () => {
+    const it = { id: "a", source: "cal", title: "Harlow", date: "2026-10-30T09:00", from: "", text: "x", hash: "h" };
+    const input = { request: "Book Harlow", today: "2026-10-27", items: [it] };
+    const moved = { ...it, date: "2026-11-02T09:00" };
+    expect(itemMark(moved)).not.toBe(itemMark(it));
+    expect(checkKey({ ...input, items: [moved] })).not.toBe(checkKey(input));
+    expect(checkKey({ ...input, items: [{ ...it, from: "Eve" }] })).not.toBe(checkKey(input));
+  });
+
+  test("a late check's call is traced once it lands (check-late), with its cost", async () => {
+    const traces: { decision: string; checkCalls?: number }[] = [];
+    const slow: Model = {
+      id: "slow",
+      chat: async (r) => {
+        await new Promise((done) => setTimeout(done, 60));
+        return { ...(await says([]).chat(r)), costUsd: 0.0002 };
+      },
+    };
+    const p = new ContextPartner({
+      sources: async () => [{ id: "mail", kind: "test", description: "Mail", search: async () => ITEMS }],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: {
+        ...CORE_CONFIG,
+        askReader: true,
+        readerPush: true,
+        confidentScore: 99,
+        fallbackMatchedTerms: 99,
+        pushCandidates: 2,
+        pushCheck: true,
+        pushCheckWaitMs: 5,
+      },
+      checker: new PushChecker({ model: slow, budget: new Budget() }),
+      onTrace: (t) => traces.push(t),
+    });
+    await handed(p);
+    await new Promise((done) => setTimeout(done, 120));
+    const late = traces.filter((t) => t.decision === "check-late");
+    expect(late.length).toBe(1);
+    expect(late[0]!.checkCalls).toBe(1);
+  });
+
   test("isolation: one user's check is never another's", async () => {
     const model = says(["Harlow deposit"]);
     const { partner } = setup({ pushCheck: true }, model);
@@ -251,9 +296,18 @@ describe("push check prompt and parser", () => {
 
   test("parseCheck: whole replies, stopped replies, and unreadable ones", () => {
     expect(parseCheck('{"items":[]}', 5, false)).toEqual([]);
-    expect(parseCheck('{"items":[{"i":2,"why":"a hold","act":true},{"i":9,"why":"x","act":true}]}', 5, false)).toEqual([
-      1,
-    ]);
+    expect(parseCheck('{"items":[{"i":2,"why":"a hold","act":true},{"i":4,"why":"x","act":false}]}', 5, false)).toEqual(
+      [1],
+    );
+    // Another key order, an extra key, a number given as a string: still read (review of D500).
+    expect(parseCheck('{"items":[{"i":1,"act":true,"why":"hold"}]}', 5, false)).toEqual([0]);
+    expect(parseCheck('{"items":[{"i":1,"why":"hold","act":true,"c":1}]}', 5, false)).toEqual([0]);
+    expect(parseCheck('{"items":[{"i":"3","why":"hold","act":true}]}', 5, false)).toEqual([2]);
+    expect(parseCheck('{"items":[{"act":true,"why":"due","i":3},{"i":1,"why":"fine",', 5, true)).toEqual([2]);
+    // A yes naming no item of the pool (0, past it, missing) fails the reply open, never closed (no packet).
+    expect(parseCheck('{"items":[{"i":0,"why":"h","act":true}]}', 5, false)).toBeNull();
+    expect(parseCheck('{"items":[{"i":2,"why":"a","act":true},{"i":9,"why":"x","act":true}]}', 5, false)).toBeNull();
+    expect(parseCheck('{"items":[{"why":"h","act":true}]}', 5, false)).toBeNull();
     // Cut at the stop sequence: the entries before it count, the one being written does not.
     expect(parseCheck('{"items":[{"i":3,"why":"due Friday","act":true},{"i":1,"why":"fine",', 5, true)).toEqual([2]);
     expect(parseCheck('{"items":[{"i":3,"why":"due Friday","act":true},{"i":1,"why":"fine",', 5, undefined)).toEqual([

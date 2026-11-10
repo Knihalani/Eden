@@ -100,8 +100,13 @@ const head = (text: string) =>
 /** The key a session's check is cached under: the request as read, the day and the pool's items in order. */
 export function checkKey(input: PushCheckInput): string {
   const h = createHash("sha256").update(`v${CHECK_VERSION}\n${input.today}\n${head(input.request).toLowerCase()}\n`);
-  for (const it of input.items.slice(0, CHECK_MAX_ITEMS)) h.update(`${it.id}\t${it.hash}\t${it.text}\n`);
+  for (const it of input.items.slice(0, CHECK_MAX_ITEMS)) h.update(`${itemMark(it)}\t${it.text}\n`);
   return h.digest("hex").slice(0, 32);
+}
+
+/** What a kept check compares an item by: its id, content hash, and the date and sender the prompt shows. */
+export function itemMark(it: ReaderItem): string {
+  return `${it.id}\t${it.hash}\t${it.date}\t${it.from}`;
 }
 
 /** The prompt: the fixed instructions (cached), then the day, the request and the items, each fenced as data. */
@@ -124,35 +129,51 @@ export function checkMessages(input: PushCheckInput): ChatMessage[] {
   ];
 }
 
-/** A complete entry the model said changes the action: its number, its reason, then `"act":true`. */
-const YES_ENTRY = /\{\s*"i"\s*:\s*"?(\d+)"?\s*,\s*"why"\s*:\s*"(?:[^"\\]|\\.)*"\s*,\s*"act"\s*:\s*true\s*\}/g;
+/** One complete entry: a flat object (no braces inside; a reason holding one makes the cut reply unreadable). */
+const FLAT_ENTRY = /\{[^{}]*\}/g;
 /** The reply's opening, up to its list: a reply that does not open so is unreadable. */
 const OPENING = /^\s*\{\s*"items"\s*:\s*\[/;
 
 /**
  * The 0-based indexes the model says change the action, from a reply over `count` items; null when the reply is
  * unreadable (the push then keeps the default's candidates). A reply cut at `CHECK_STOP` keeps the entries before it;
- * one cut any other way (the token cap, a dropped stream) is read only if it parses whole. Entries past the fifth,
- * repeats and numbers outside the pool are ignored.
+ * one cut any other way (the token cap, a dropped stream) is read only if it parses whole. Entries past the fifth
+ * and repeats are ignored; a yes naming no item of the pool makes the reply unreadable.
  */
 export function parseCheck(text: string, count: number, stopped: boolean | undefined): number[] | null {
   if (!OPENING.test(text)) return null;
-  let whole = false;
+  let entries: unknown[] | null = null;
   try {
     const v = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { items?: unknown };
-    whole = Array.isArray(v.items);
+    if (Array.isArray(v.items)) entries = v.items;
   } catch {
-    whole = false;
+    entries = null;
   }
-  // A reply that ended on the stop sequence is cut by design; a provider that does not say counts as stopped only if
-  // the text ends where the stop would have cut it (after an entry's reason).
-  const cut =
-    !whole && (stopped === true || (stopped === undefined && /"why"\s*:\s*"(?:[^"\\]|\\.)*"\s*,?\s*$/.test(text)));
-  if (!whole && !cut) return null;
+  if (!entries) {
+    // A reply that ended on the stop sequence is cut by design; a provider that does not say counts as stopped only
+    // if the text ends where the stop would have cut it (after an entry's reason).
+    const cut = stopped === true || (stopped === undefined && /"why"\s*:\s*"(?:[^"\\]|\\.)*"\s*,?\s*$/.test(text));
+    if (!cut) return null;
+    // The complete entries before the cut, in any key order; one that does not parse makes the reply unreadable.
+    entries = [];
+    for (const m of text.slice(text.indexOf("[") + 1).matchAll(FLAT_ENTRY)) {
+      try {
+        entries.push(JSON.parse(m[0]));
+      } catch {
+        return null;
+      }
+    }
+  }
   const out: number[] = [];
-  for (const m of text.matchAll(YES_ENTRY)) {
-    const i = Number(m[1]) - 1;
-    if (i >= 0 && i < count && !out.includes(i) && out.length < 5) out.push(i);
+  for (const e of entries) {
+    if (!e || typeof e !== "object") return null;
+    const { i, act } = e as { i?: unknown; act?: unknown };
+    if (act !== true && act !== "true") continue;
+    // An entry that says yes about an item it does not name readably fails the whole reply open (the default's
+    // candidates), never closed: a yes read as nothing would silence the push.
+    const n = typeof i === "string" && /^\d+$/.test(i) ? Number(i) : i;
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > count) return null;
+    if (!out.includes(n - 1) && out.length < 5) out.push(n - 1);
   }
   return out;
 }

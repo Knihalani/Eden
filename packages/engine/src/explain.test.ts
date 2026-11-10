@@ -99,6 +99,7 @@ describe("explain (D277)", () => {
       "answer",
       "reader-push",
       "reader-late",
+      "check-late",
       "verify",
     ];
     const silent = ["slow path busy", "no candidates", "served", "no model", "no model budget", "model: none"];
