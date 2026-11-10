@@ -1,5 +1,5 @@
 # N1 user-day bench: bun packages/engine/bench/source-days.bench.ts 1000 20 8 [--config=...]; calls a user a day, days 2-8
-# merged tree; every request of this bench names a person, and ~45% of its noise sources mention one
+# merged tree; every request of this bench names a person, so its live reads are reads on a name, which the rule never skips
 base     background   241.7  on demand  227.3  searches  445.7  re-reads   0.0  ALL   914.7  card calls  111.6
 yield    background   242.6  on demand  224.0  searches  437.0  re-reads   0.0  ALL   903.6  card calls  111.1
 lazy     background   232.6  on demand  212.9  searches  192.6  re-reads   0.0  ALL   638.0  card calls   88.7

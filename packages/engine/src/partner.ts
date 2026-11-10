@@ -3837,8 +3837,6 @@ export class ContextPartner {
     let pollable: Set<string> | null = null;
     let cutBehind: Set<string> | undefined;
     let probeLocal: Set<string> | null | undefined;
-    // `pushLazy` (D506): the push (a lookup behind that is not an explicit ask) sends no live search of a cut copy.
-    const lazy = behind && !cue.cutStatus ? this.config.pushLazy : 0;
     // `sourceYield` (D505): the warm copies whose unused live reads are spent; this lookup reads nothing live of them.
     if (this.yields) cue.boost = boost;
     const spent = this.spentSources(s, cue, all, boost);
@@ -3868,8 +3866,7 @@ export class ContextPartner {
         const sync = this.sync;
         const skipPoll =
           spent && this.config.sourceYieldPolls ? (id: string) => spent.has(id) && !sync.complete(s.scope, id) : null;
-        const toPoll =
-          lazy >= 2 ? [] : all.filter((x) => (!pollable || pollable.has(x.id)) && !(skipPoll && skipPoll(x.id)));
+        const toPoll = all.filter((x) => (!pollable || pollable.has(x.id)) && !(skipPoll && skipPoll(x.id)));
         const polled = this.sync.freshen(s.scope, toPoll, signal, tally, s.abort.signal).then((calls) => {
           if (freshening) this.spans!.close(freshening, { calls, fresh: tally.fresh, ...(behind ? { behind } : {}) });
           return calls;
@@ -3912,9 +3909,8 @@ export class ContextPartner {
       if (behind && this.config.pushCutBehind && this.config.syncLocalComplete) {
         cutBehind = new Set();
         local = this.localOf(s, all, behind, cutBehind);
-        // The probes keep D264: they search a cut copy live and are not waited for (`probeGraceMs`). With `pushLazy`
-        // they answer a cut copy from what is held, as the lookup does.
-        probeLocal = lazy >= 1 ? local : this.localOf(s, all, behind);
+        // The probes keep D264: they search a cut copy live and are not waited for (`probeGraceMs`).
+        probeLocal = this.localOf(s, all, behind);
       } else local = this.localOf(s, all, behind);
       // A spent copy answers the probes from what is held too.
       if (spent && spent.size > 0) {
@@ -4023,9 +4019,7 @@ export class ContextPartner {
       // An ask names a copy it did not search (D127): never "local" for a cut copy.
       for (const id of spent) if (cutBehind.has(id)) cue.cutStatus.set(id, UNSEARCHED);
     }
-    if (lazy >= 1) {
-      // `pushLazy`: no search behind the push; the agent's ask searches the cut copies it routes to.
-    } else if (cutBehind && cutBehind.size > 0 && !cue.followUp && left() >= MIN_SEARCH_MS) {
+    if (cutBehind && cutBehind.size > 0 && !cue.followUp && left() >= MIN_SEARCH_MS) {
       const behindOf = (listing ? listers : routed).filter((x) => cutBehind!.has(x.id) && !spent?.has(x.id));
       // Sent as the lookup's own search would be: through the planner's cascade (its shapes find what the request's
       // words alone miss), its calls counted where they reach the connector.

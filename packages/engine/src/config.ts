@@ -308,12 +308,6 @@ export interface EngineConfig {
   sourceYieldHalfLifeMs: number;
   sourceYieldPolls: boolean;
   /**
-   * A trial (D506, N1), 0 (off). With `pushCutBehind`: 1, the push sends no live search of a cut copy (none behind
-   * its lookup, and its probes answer a cut copy from what is held); the agent's `ask_context` still searches them.
-   * 2: and the push starts no on-demand poll either.
-   */
-  pushLazy: number;
-  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -770,7 +764,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sourceYieldWords: true,
   sourceYieldHalfLifeMs: 7 * 24 * 3_600_000,
   sourceYieldPolls: true,
-  pushLazy: 0,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,

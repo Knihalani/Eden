@@ -1,6 +1,6 @@
 /**
- * N1's trial switches at the partner (docs/research/n1-calls.md): `sourceYield` (D505: a source whose live reads go
- * unused is not read live), `pushLazy` (D506: the push sends no live search of a cut copy; the ask does).
+ * `sourceYield` at the partner (D505, N1; docs/research/n1-calls.md): a source whose live reads go unused is not
+ * read live, an ask names it "unsearched", and a request with evidence for it reads it again.
  */
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
@@ -255,37 +255,5 @@ describe("sourceYield (D505)", () => {
     const named = await p.request(u1, "Pay Zed Quinn for the Globex renewal today");
     expect(named.searched[0]).toBeGreaterThan(0);
     expect(named.handed).toContain(p.fact.id);
-  });
-});
-
-describe("pushLazy (D506)", () => {
-  test("the push sends no live search of a cut copy; the ask still searches and finds the fact", async () => {
-    const off = await partnerOf({});
-    const on = await partnerOf({ pushLazy: 1 });
-    const REQUEST = "Pay Zed Quinn for the Globex renewal today";
-    const pushed = await off.request(u1, REQUEST);
-    const lazy = await on.request(u1, REQUEST);
-    expect(sum(pushed.searched)).toBeGreaterThan(0);
-    expect(pushed.handed).toContain(off.fact.id);
-    expect(sum(lazy.searched)).toBe(0);
-    expect(lazy.handed).not.toContain(on.fact.id);
-    const asked = await on.ask(lazy.ref, "Is the Zed Quinn Globex renewal payment on hold?");
-    expect(sum(asked.searched)).toBeGreaterThan(0);
-    // The ask's search runs behind (D430): its find is cited or follows as a packet.
-    const later = on.partner.takePending(lazy.ref).flatMap((x) => x.citations.map((c) => c.itemId));
-    const cited = asked.answer.citations.map((c) => c.itemId);
-    expect([...cited, ...later]).toContain(on.fact.id);
-  });
-
-  test("level 2 starts no on-demand poll on the push either", async () => {
-    const one = await partnerOf({ pushLazy: 1, syncStaleChance: 0 });
-    const two = await partnerOf({ pushLazy: 2, syncStaleChance: 0 });
-    const lists = (p: typeof one) => p.sources.reduce((n, s) => n + s.lists, 0);
-    const b1 = lists(one);
-    const b2 = lists(two);
-    await one.request(u1, BLIND);
-    await two.request(u1, BLIND);
-    expect(lists(two) - b2).toBe(0);
-    expect(lists(one) - b1).toBeGreaterThan(0);
   });
 });
