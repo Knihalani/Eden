@@ -1,0 +1,175 @@
+# packages/sim/modal: the lab on Modal (M0)
+
+Lab tooling for three uses of the Modal credits: the lab at scale (`lab_fanout.py`), the background card model
+distilled into a small open model (`cards_distill.py`), and an embedding retrieval screen (`embed_screen.py`). **Not
+product code**: nothing in `packages/*` product code imports anything here, and every figure these apps make is a
+lab figure, labelled so. Built and tested without a Modal token on 2026-11-10 (session M0); nothing here has run on
+Modal yet, so every cost below is an **estimate**.
+
+| File | What it is | Needs Modal |
+| --- | --- | --- |
+| `lab_fanout.py` | pi-ab seeds or funnel shards fanned out over containers, one hard Anthropic cap split across shards | yes |
+| `fanout_plan.py` | its arithmetic: shards, cap split, each shard's command, merging; `plan` prints a plan with no token | no |
+| `cards_distill.py` | LoRA on Haiku's cards, held-out eval, a vLLM OpenAI-compatible endpoint | yes |
+| `distill_data.py` | its data checks, bases, GPU choice, cost estimates | no |
+| `embed_screen.py` | the train corpus embedded on a GPU; planted item ranks against the lexical pool | yes |
+| `embed_score.py` | its scoring (ranks, groups, report) | no |
+| `tests/` | unit tests for the three no-Modal modules | no |
+
+Bun side (lab only, in `packages/sim/src/lab/`): `cards-distill.ts` (the training set's export and the eval's
+scorer, by Eden's own parsers) and `cards-endpoint.ts` (the lab card transport behind `bun run funnel
+--cards-endpoint`).
+
+## Setup (once)
+
+```bash
+python3 -m venv .venv-modal && .venv-modal/bin/pip install -r packages/sim/modal/requirements.txt   # modal==1.6.3
+export MODAL_TOKEN_ID=… MODAL_TOKEN_SECRET=…        # or `modal token new`
+# The Anthropic key reaches Modal only as the Secret `HAIKU_API_KEY` (holding HAIKU_API_KEY), which the workspace owner
+# creates in Modal's dashboard; `EDEN_MODAL_HAIKU_SECRET` names another.
+# The card endpoint's bearer key: one random value, kept locally in the same variable the funnel reads.
+export EDEN_LAB_CARDS_KEY=$(openssl rand -hex 24)
+modal secret create eden-cards-endpoint EDEN_LAB_CARDS_KEY="$EDEN_LAB_CARDS_KEY"
+```
+
+Only pi-ab shards get the `HAIKU_API_KEY` Secret; funnel shards, the distillation and the embedding screen never see a key.
+
+## 1. The lab at scale: `lab_fanout.py`
+
+The image is Debian with Bun 1.4.4 and the repository at one commit (`EDEN_COMMIT`, default `HEAD`): a `git archive`
+of that commit (less `archived/`, 26 MB) is built into the image with `bun install --frozen-lockfile`, so a shard
+runs exactly what was committed (uncommitted changes are not in it; the entrypoint says so). Each shard is one
+container:
+
+- **pi-ab**: one seed per shard (the lab's rule: one seed a process), suites grouped by `--suites-per-shard` (0: all
+  in one). 4 CPUs, 16 GiB; 24 GiB when the args hold `--noise-sources` ≥ 100 (A21: ~10 GB a process at 1,000
+  sources, two at once killed on 15 GiB; here every shard has its own container).
+- **funnel**: suite × seed cells (or `--shards N` blocks), 8 CPUs, 8 GiB (16 GiB at scale), no key at all. Refuses
+  `live` (a live reader or judge spends: run those on pi-ab or locally).
+
+**The spend cap.** A pi-ab run refuses to start without `--cap USD`. Each of N shards runs with its own ledger
+(`--spend-ledger`), `--spend-cap cap/N` (rounded down to $0.001, so the caps sum to at most `--cap`), the same as
+`--budget`, and a headroom of 10% of its cap (at most $0.25). The planner owns those flags (and `--seeds`,
+`--suite`, `--out`, `--timeline`, `--cards-out`, `--run-label`): passing one in `--args` is refused. After the run the
+shards' ledgers are summed and checked against the cap (`manifest.json`: `spentUsd`, `withinCap`, `overCap`).
+Held-out suites need `--blind` in `--args`, as `bun run funnel` asks.
+
+```bash
+# Plan only, no token, nothing started:
+python3 -I packages/sim/modal/fanout_plan.py plan --kind pi-ab --suites train --seeds 41,42,43,44 --cap 4 \
+  -- --conditions tools,eden --model claude-haiku-5-5
+
+# pi-ab, train, four seeds, $4 Anthropic in all ($1 a shard):
+EDEN_COMMIT=HEAD modal run packages/sim/modal/lab_fanout.py --kind pi-ab --suites train --seeds 41,42,43,44 \
+  --cap 4 --run m1-train --args "--conditions tools,eden --model claude-haiku-5-5 --grader claude-haiku-5-5 \
+  --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 --cards packages/sim/lab/cards/cards-train.jsonl"
+
+# The funnel at 1,000 sources, train, four seeds, $0 Anthropic:
+modal run packages/sim/modal/lab_fanout.py --kind funnel --suites train --seeds 41,42,43,44 \
+  --run m1-scale --args "-- --noise-sources 995 --limit 16"
+```
+
+`--dry` prints the plan through Modal (it needs a token; `fanout_plan.py plan` does not). Hermes is not fanned out:
+it needs a local hermes-agent checkout with its venv (packages/sim/src/lab/CLAUDE.md), not built into this image.
+
+**Results come back** compressed in each shard's return value and land in `.local/modal/<run>/` (git ignores
+`.local/`): per shard `<shard>/out.json` (its `timeline` field rewritten to the local `out.timeline/`),
+`ledger.jsonl`, `cards.jsonl` (cards a pi-ab shard made live: name them with `--cards` in a later run), `log.txt`
+(the last 400 KB), `status.json`; and for the run `manifest.json`, `ledger.jsonl` (all shards), and for funnel runs
+`funnel.json` (every shard's `perTask`). Then, locally, pi-ab runs get `pi-ab-report.txt` and `pi-cost-report.txt`
+(`pi-ab-report.ts` and `pi-cost-report.ts` over every shard's `out.json`), funnel runs `funnel-score.txt`
+(`funnel-score.py` on the merged rows).
+
+**Cost (estimate, Modal 2025 list prices: ~$0.047 a physical core-hour, ~$0.008 a GiB-hour; check
+modal.com/pricing).** A pi-ab shard (4 cores, 16 GiB) is about $0.32 an hour, $0.38 at 24 GiB; a funnel shard
+(8 cores, 8 GiB) about $0.44 an hour, and a train suite × seed funnel shard takes seconds at five sources. A four-seed
+pi-ab train run at an assumed 2 hours a shard: about $2.60 of Modal credits, plus the Anthropic spend (capped by
+`--cap`, billed by Anthropic, not Modal). The image builds once per commit (a few CPU-minutes).
+
+## 2. The card model distilled: `cards_distill.py`
+
+**The training set** is made locally at $0 by `cards-distill.ts export`: every item a sync of the train suites'
+worlds reads (seeds 41–44: hidden, control and neutral worlds, as `cards-enrich.ts` builds them), batched (20, 10, 5
+items a call, cycling) into the exact messages Eden's card call sends (`cardMessages` with the intent instructions,
+as the default ships; "Today is 2026-10-27", the day the caches were made), with the reply Haiku 5.5 gave: its card
+and requests from the checked-in `intent-v2.jsonl.gz`, joined by card key (`--cards-from intent`, the default). An
+item the prefilter rejects targets a none card (the enricher reads it for its requests only). `--cards-from replay`
+uses the cards the funnel replays (`packages/sim/lab/cards/*.jsonl`) instead; those mix teachers (`cards-train.jsonl`
+was glm-5.3-flash) and agree with Haiku's constraint flag on 645 of 878 items both cover, so they are not the
+default. 10% of items are held out by a hash of the card key; the splits are batched separately. Only train suites
+are accepted, and any item planted in a held-out or dev world is dropped from both splits (0 were, 2026-11-10).
+
+On 2026-11-10: 6,891 items, 529 training rows (6,172 items), 61 held-out rows (719 items, 64 with a constraint),
+771 constraint cards in all; about 1.31 M tokens an epoch (3.6 characters a token, estimate).
+
+**Bases** (Apache-2.0 only, so a result could be served): `qwen2.5-1.5b` (Qwen2.5-1.5B-Instruct, trains on an A10G,
+serves on an L4) and `qwen3-4b` (Qwen3-4B-Instruct-2507, L40S). Qwen2.5-3B-Instruct is left out: its licence is
+non-commercial. Pick by quality per dollar: train both, evaluate both, compare the constraint flag's F1 against Haiku
+per training dollar (`evaluate` prints it). LoRA r 16, alpha 32, all linear layers, lr 2e-4 cosine, 2 epochs,
+effective batch 8, loss on the reply only (TRL prompt-completion), merged into the base for vLLM.
+
+```bash
+bun packages/sim/src/lab/cards-distill.ts export --out .local/modal/cards/data           # ~60 s, $0
+modal run packages/sim/modal/cards_distill.py::train --data .local/modal/cards/data --run q15-a --base qwen2.5-1.5b
+modal run packages/sim/modal/cards_distill.py::evaluate --data .local/modal/cards/data --run q15-a
+modal run packages/sim/modal/cards_distill.py::evaluate --data .local/modal/cards/data --run qwen2.5-1.5b  # untrained
+EDEN_CARDS_RUN=q15-a modal deploy packages/sim/modal/cards_distill.py      # prints the serve URL
+bun run funnel --suite train --seeds 41,42 --cards-endpoint https://…modal.run --cards .local/modal/cards/q15-a.cards.jsonl
+```
+
+**The eval** (`cards-distill.ts score`, run by `evaluate`) reads the model's output and Haiku's target with Eden's
+own parsers (`parseCards`, `parseRequests`) and reports: the batch and item parse rates; the constraint flag (kind
+not none) as agreement, precision and recall against Haiku; kind agreement; on items both call a constraint, the
+fields the request-time match reads (kind, actions, span, limit, entities' word Jaccard); and the requests' word
+Jaccard. Output in `.local/modal/cards/<run>/` (`train.json`, `outputs.jsonl`, `score.json`). D235 found small local
+models fail as the *reader* (AUC 0.44–0.61); cards are a different job, which is what this measures before the
+funnel trusts it.
+
+**The funnel through the endpoint** (`--cards-endpoint URL [--cards-endpoint-model NAME]`, lab only like D97's
+provider; `cards-endpoint.ts`): no card is replayed; every item the default sends for a card goes to the endpoint
+(Eden's own `ModelCardMaker`: same prompt, caps and parser) and is appended to `--cards F`, so a rerun replays them
+for free. The endpoint writes the intent requests too, so the checked-in requests are not replayed (unless `--intent
+F`). The key is read from `EDEN_LAB_CARDS_KEY`, never a flag. Every such run is labelled `[cards: endpoint (lab,
+M0)]` and its JSON carries `cardsTransport`: its numbers are the distilled model's, never the shipped card model's.
+Screen hidden facts and decoys on train against the replayed-Haiku funnel (`bun run funnel --json` on the same
+suites and seeds); a held-out look needs `--blind` and is measurement only.
+
+**Cost (estimate: assumed training throughput, 2025 list prices).** Training: about $0.37 for `qwen2.5-1.5b` (A10G,
+~0.33 h) and $0.77 for `qwen3-4b` (L40S, ~0.39 h) for 2 epochs (`distill_data.estimate_train`; the run records its
+real seconds). Eval: one L40S for model load and 61 batches, roughly 5–10 minutes, ~$0.20–0.35. Serving: an L4 at
+~$0.80 an hour while up (it scales to zero 5 minutes after the last call); a train funnel through it makes a few
+hundred card calls (28 calls for train1 seed 41 with a stub endpoint, 2026-11-10).
+
+## 3. The embedding retrieval screen: `embed_screen.py`
+
+A15's question (docs/research/a15-retrieval.md, D330–D333): planted facts that share no word with the request mostly
+never reach a candidate pool. This embeds the train suites' corpus dump (`hidden-funnel --corpus-dump`, D333: each
+item as its source lists it, title and the first 500 characters) and every request with an open model on an L4, and
+reports, for hidden tasks (planted facts) and control tasks (decoys: what an extra slot would also bring), how many
+planted items rank in the top k (1, 5, 10) by cosine similarity against how many the push's lexical pool holds in its
+first k (`pushPoolAt` from the funnel's rows), either, and the embedding alone; for all tasks, those whose planted
+item shares no word with the request (A15's terms), those not in the lexical pool at all, and those the default
+never surfaced. Held-out suites in the dump are refused.
+
+```bash
+bun run funnel --suite train --seeds 41,42,43,44 --json .local/modal/embed/funnel.json \
+  -- --corpus-dump .local/modal/embed/corpus.jsonl                                       # local, $0
+modal run packages/sim/modal/embed_screen.py --corpus .local/modal/embed/corpus.jsonl \
+  --funnel .local/modal/embed/funnel.json --model Qwen/Qwen3-Embedding-0.6B
+```
+
+Models: `Qwen/Qwen3-Embedding-0.6B` (default, its query prompt), `BAAI/bge-large-en-v1.5` (query prefix),
+`sentence-transformers/all-MiniLM-L6-v2` (D331 (4)'s CPU model, for a like-for-like line). Output in
+`.local/modal/embed/<run>/`: `report.txt`, `report.json`, `ranks.jsonl` (each task's planted rank and top 20 item
+indexes). Only ids and ranks come back. **Cost (estimate):** one L4 for a few minutes (model download and ~6,500
+unique texts), well under $0.10 a model.
+
+## Tests
+
+```bash
+cd packages/sim/modal && python3 -I -m unittest     # 31 tests, no Modal, no token
+bun test ./packages/sim/src/lab/cards-distill.test.ts ./packages/sim/src/lab/cards-endpoint.test.ts \
+  ./packages/sim/src/lab/modal-python.test.ts       # export, scorer, endpoint transport against a stub server
+```
+
+`modal-python.test.ts` runs the Python tests inside `bun run check`.
