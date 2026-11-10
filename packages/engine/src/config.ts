@@ -681,7 +681,7 @@ export interface EngineConfig {
   pushCheck: boolean;
   /** How long the push waits for its check before it hands the default's candidates (ms). */
   pushCheckWaitMs: number;
-  /** The characters of each item's most relevant parts the check reads (`READER_ITEM_CHARS`, 400, is the most). */
+  /** The characters of each item's most relevant parts the check reads (200, D501; at most `READER_ITEM_CHARS`). */
   pushCheckItemChars: number;
   /**
    * How many of the pool's items, from its first, the check reads (at most `CHECK_MAX_ITEMS`); when it answers, only
@@ -840,7 +840,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCandidatesSettled: 2,
   pushCheck: false,
   pushCheckWaitMs: 2_500,
-  pushCheckItemChars: 400,
+  pushCheckItemChars: 200,
   pushCheckItems: 15,
   revisionDiff: true,
 };

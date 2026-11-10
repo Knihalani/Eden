@@ -552,6 +552,21 @@ packet or ask bytes by lexical anchoring drop planted facts or move the bytes in
 bytes are what recall costs. An agent with a fixed prompt under the provider's cache minimum (512 tokens on Haiku 5.5)
 pays its whole prompt as a cache write on every task; Pi's minimal Eden agent did (D260, D271).
 
+## The push check (I3, `pushCheck`, a trial; D500–D504)
+
+A per-push model call, so it needs this estimate (CLAUDE.md, "model last"). One Haiku 5.5 call a push over the whole
+pool (`push-check.ts`), only when the pool is constraint-like (the candidates' own gate), thinking off, a fixed
+~890-token instruction block first, then the request and at most 15 items of at most 200 characters; output a few
+short entries cut by a stop sequence; budgeted at $0.001 a call on its own `Budget` (20 calls and $0.02 a session,
+$0.25 a user-day, and the tenant's shared cap). Measured (funnel, train seeds 41–42 with neutral tasks, 1,152 tasks,
+Anthropic direct, lab provider, cached; docs/research/i3-push-check.md §2): **0.82 calls a task** (944, exactly the
+pushes the default hands candidates on; a second pass reuses the first's answer), **$0.000202 a call** (2,467 input
+tokens of which 894 read from the cache, 71 output), p50 886 ms and p90 1,190 ms as made. So **about $0.17 per
+1,000 tasks** on the train mix **[EST: calls × price]**, before any change in the agent's own spend (fewer packets on
+neutral and control requests: 309 → 110 and 318 → 220 of 384 in that screen). Through OpenRouter (the servers'
+route) no cache breakpoint is sent (D145), so the instructions are paid in full: about +$0.00008 a call **[EST]**,
+about $0.23 per 1,000 tasks. The live per-task figure with the agent's change is in i3-push-check.md §4.
+
 ## Levers, in order of leverage
 
 1. Fewer model calls: better cheap scoring (M1 tuning), the graph (M3; deleted by D225), learned silence. Done so far: ask answers
