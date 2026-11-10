@@ -156,6 +156,22 @@ The mildest trims a quarter of the added neutral packets for 8% of the facts; no
 **Notes on the figures.** `eden` reads 61.1% on seeds 41–44 here and 62.1% in o3-check-behind.md §4: two separate
 runs of the same arm. Stage 2 ran on d63681c8's code as stage 1 did. Spend figures are the ledger's, rounded.
 
+## 6. Pre-registration, addendum: `pushOpen` over a user's days (committed before its first call)
+
+§4 measured one request a session, with the looser test. This run is on the tree as shipped (daf758a3, §5's test). Over a user's days the agent keeps the day's transcript, so a packet on nearly
+every request (98% of neutral requests against 81%) is carried and re-read all day: the cost clause has to be read
+there too.
+
+- **Run:** pi-ab `--days 8`, users w41–w48 (one user a process, one at a time), arms `eden` and `eden~O`, the bench
+  recipe; every hidden answer and every control or neutral concern regraded by Sonnet 5.5.
+- **Read:** hidden with whole users resampled (`n5/days_hidden.py`; about 100 hidden tasks an arm, so the interval is
+  wide and is read beside §4's); cost and wall paired by task, clustered by user (`n5/mix.py --days`).
+- **Rule:** `pushOpen` keeps §4's verdict only if, over days, hidden is not lower at its point estimate,
+  Sonnet-confirmed concerns are not up, total cost rises by at most **$0.20 per 1,000 tasks** and wall by at most
+  **0.1 s** a task. Failing the cost or wall clause, it goes to the owner with that price stated; failing hidden or
+  concerns, it is deleted.
+- **Budget [EST]:** $1.2.
+
 **Spend (both O3 notes):** Anthropic **$13.67** booked of $25 (`.local/o3/ledger.jsonl`: this note's runs $5.48 and
 regrades $3.41; o3-check-behind.md's $4.79). Modal $0.
 
