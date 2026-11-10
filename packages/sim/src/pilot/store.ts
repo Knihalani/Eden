@@ -7,6 +7,7 @@
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -106,9 +107,16 @@ export class PilotStore {
     return join(this.dir, name);
   }
 
-  /** Whether the directory is one the pilot made (it holds the marker). */
+  /**
+   * Whether the directory is the pilot's: it holds the marker, or (a directory from before the marker existed) it
+   * holds pilot data and nothing that is not the pilot's own.
+   */
   private owned(): boolean {
-    return existsSync(this.path(MARKER));
+    if (existsSync(this.path(MARKER))) return true;
+    if (!existsSync(this.dir) || !statSync(this.dir).isDirectory()) return false;
+    const names = readdirSync(this.dir);
+    const mine = (n: string) => (OWNED as readonly string[]).some((o) => n === o || n === `${o}.tmp`);
+    return names.length > 0 && names.every(mine);
   }
 
   /**
@@ -117,12 +125,17 @@ export class PilotStore {
    * files in it (`EDEN_PILOT_DIR` pointed at a home or a documents folder by mistake).
    */
   init(): void {
+    if (existsSync(this.dir) && !statSync(this.dir).isDirectory()) {
+      throw new PilotDirError(`${this.dir} is a file: point EDEN_PILOT_DIR at a directory`);
+    }
     if (existsSync(this.dir) && !this.owned() && readdirSync(this.dir).length > 0) {
       throw new PilotDirError(`${this.dir} holds other files: point EDEN_PILOT_DIR at an empty or new directory`);
     }
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
     chmodSync(this.dir, 0o700);
-    if (!this.owned()) writeFileSync(this.path(MARKER), "Eden pilot kit data (docs/PILOT.md).\n", { mode: 0o600 });
+    if (!existsSync(this.path(MARKER))) {
+      writeFileSync(this.path(MARKER), "Eden pilot kit data (docs/PILOT.md).\n", { mode: 0o600 });
+    }
   }
 
   exists(name = "."): boolean {
@@ -202,7 +215,10 @@ export class PilotStore {
    */
   lockRun(run: string): void {
     const walk = (p: string) => {
-      const dir = statSync(p).isDirectory();
+      // A link is left as it is and never followed: what it points at is not the run's.
+      const st = lstatSync(p);
+      if (st.isSymbolicLink()) return;
+      const dir = st.isDirectory();
       chmodSync(p, dir ? 0o700 : 0o600);
       if (dir) for (const name of readdirSync(p)) walk(join(p, name));
     };
@@ -219,9 +235,14 @@ export class PilotStore {
     if (!existsSync(this.dir)) return false;
     if (!this.owned())
       throw new PilotDirError(`${this.dir} was not made by the pilot (no ${MARKER} in it): not removed`);
-    for (const name of [...OWNED].reverse()) rmSync(this.path(name), { recursive: true, force: true });
-    for (const name of readdirSync(this.dir)) if (name.endsWith(".tmp")) rmSync(this.path(name), { force: true });
-    if (readdirSync(this.dir).length === 0) rmdirSync(this.dir);
+    for (const name of [...OWNED].reverse()) {
+      rmSync(this.path(name), { recursive: true, force: true });
+      // A write that a crash interrupted left the pilot's own temporary file; no other `.tmp` is the pilot's.
+      rmSync(this.path(`${name}.tmp`), { force: true });
+    }
+    // The directory goes too when nothing else is in it (its real path: EDEN_PILOT_DIR may be a link, which stays).
+    const dir = realpathSync(this.dir);
+    if (readdirSync(dir).length === 0) rmdirSync(dir);
     return true;
   }
 }

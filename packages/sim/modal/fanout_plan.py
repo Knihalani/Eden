@@ -302,7 +302,12 @@ def with_preset(name, extra=()):
     if name not in PRESETS:
         raise PlanError(f"no preset {name!r} (presets: {', '.join(sorted(PRESETS))})")
     preset, extra = PRESETS[name], split_equals(extra)
-    dangling = [a for i, a in enumerate(extra) if a in value_flags(preset["args"]) and a not in value_flags(extra)]
+    # A flag that takes a value (in the preset, or one the stream count reads) with none after it, or an empty one:
+    # it would drop the preset's value, or count no streams and start every shard at once.
+    valued = set(value_flags(preset["args"])) | {"--conditions", "--variants", "--days"}
+    given = value_flags(extra)
+    dangling = [a for i, a in enumerate(extra)
+                if a in valued and (a not in given or not extra[i + 1].strip())]
     if dangling:
         raise PlanError(f"{', '.join(dangling)} needs a value")
     base, replaced, skip = [], value_flags(extra), False
@@ -351,6 +356,8 @@ def streams_per_shard(shard):
     if shard.kind != "pi-ab":
         return 0
     arms = len(split_list(flag_value(shard.args, "--conditions", "none,tools,eden,both")))
+    if arms == 0:
+        raise PlanError("--conditions names no arm")
     if flag_value(shard.args, "--days") is not None:
         worlds = 1
     else:

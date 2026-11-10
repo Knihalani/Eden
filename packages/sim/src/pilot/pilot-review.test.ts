@@ -200,3 +200,56 @@ test("the report charges Eden's background cards to its arm", () => {
   expect(r.arms.eden!.backgroundUsd).toBeCloseTo(0.004);
   expect(renderReport(r)).toContain("of it cards");
 });
+
+test("second pass: forget leaves the owner's .tmp, works through a link, and takes a directory from before the marker", async () => {
+  // Only the pilot's own temporary files go.
+  const store = new PilotStore(join(dir, "pilot"));
+  store.saveTasks([newTask("a", "do it", [], 1)]);
+  writeFileSync(join(store.dir, "notes.tmp"), "mine");
+  writeFileSync(join(store.dir, "tasks.json.tmp"), "torn");
+  expect(store.forget()).toBe(true);
+  expect(existsSync(join(store.dir, "notes.tmp"))).toBe(true);
+  expect(existsSync(join(store.dir, "tasks.json.tmp"))).toBe(false);
+  // EDEN_PILOT_DIR as a link to a directory outside git: forget succeeds and removes the real directory.
+  mkdirSync(join(dir, "real"));
+  symlinkSync(join(dir, "real"), join(dir, "link"));
+  const linked = new PilotStore(join(dir, "link"));
+  linked.saveTasks([newTask("a", "do it", [], 1)]);
+  expect(linked.forget()).toBe(true);
+  expect(existsSync(join(dir, "real"))).toBe(false);
+  // A directory holding only pilot data and no marker (made before the marker existed) is the pilot's.
+  const old = join(dir, "old");
+  mkdirSync(old, { mode: 0o700 });
+  writeFileSync(join(old, "items.jsonl"), "");
+  const legacy = new PilotStore(old);
+  legacy.saveTasks([newTask("a", "do it", [], 1)]);
+  expect(existsSync(join(old, MARKER))).toBe(true);
+  expect(legacy.forget()).toBe(true);
+  expect(existsSync(old)).toBe(false);
+  // A path that is a file is refused with a message.
+  writeFileSync(join(dir, "file"), "x");
+  expect(() => new PilotStore(join(dir, "file")).init()).toThrow(PilotDirError);
+  // The owner-only pass does not follow a link out of the run.
+  const outside = join(dir, "outside");
+  mkdirSync(outside, { mode: 0o755 });
+  writeFileSync(join(outside, "f"), "x", { mode: 0o644 });
+  const s2 = new PilotStore(join(dir, "p2"));
+  s2.init();
+  mkdirSync(s2.runDir("r"), { recursive: true });
+  symlinkSync(outside, join(s2.runDir("r"), "out"));
+  s2.lockRun("r");
+  expect(statSync(outside).mode & 0o777).toBe(0o755);
+  expect(statSync(join(outside, "f")).mode & 0o777).toBe(0o644);
+  // One malformed item does not stop its source's import, and the log counts what was kept.
+  const odd = { id: "x", sourceId: "gmail", ref: "m0", title: undefined, text: 42 } as unknown as never;
+  const good = { id: "y", sourceId: "gmail", ref: "m1", title: "Dentist", text: "Friday 9am" };
+  const source: Source = { id: "gmail", kind: "test", description: "mail", search: async () => [odd, good] };
+  const lines: string[] = [];
+  const got = await importSources([source], SCOPE, USER, { queries: ["dentist"], log: (l) => lines.push(l) });
+  expect(got.items.map((i) => [i.ref, i.title, i.text])).toEqual([
+    ["m0", "", "42"],
+    ["m1", "Dentist", "Friday 9am"],
+  ]);
+  expect(lines.join("\n")).toContain("2 items");
+  expect(lines.join("\n")).not.toContain("stopped");
+});

@@ -54,6 +54,16 @@ function safeItem(
   ref: string,
   now: number,
 ): { item: PilotItem; redacted: boolean } {
+  // A connector that is not `McpSource` may hand over a field that is not a string: coerced, so one odd item does not
+  // stop its source's import.
+  const str = (v: unknown) => (typeof v === "string" ? v : v === undefined || v === null ? "" : String(v));
+  raw = {
+    ...raw,
+    title: str(raw.title),
+    text: str(raw.text),
+    ...(raw.url === undefined ? {} : { url: str(raw.url) }),
+    ...(raw.meta ? { meta: Object.fromEntries(Object.entries(raw.meta).map(([k, v]) => [k, str(v)])) } : {}),
+  };
   const safe = sanitizeItem({ ...raw, ref }, MAX_TEXT_CHARS);
   const meta = safe.meta && Object.fromEntries(Object.entries(safe.meta).map(([k, v]) => [sanitizeForStore(k), v]));
   const updatedAt = Number(raw.updatedAt ?? now);
@@ -125,7 +135,7 @@ export async function importSources(
       // One source failing leaves what the others gave; the message may quote a URL, so it goes through the gate.
       log(`${source.id}: stopped: ${sanitizeForStore(e instanceof Error ? e.message : String(e)).slice(0, 200)}`);
     }
-    log(`${source.id} (as ${sourceId}): ${seen.size} items${source.list ? "" : " (no listing: searches only)"}`);
+    log(`${source.id} (as ${sourceId}): ${count.items} items${source.list ? "" : " (no listing: searches only)"}`);
   }
   return { meta, items };
 }

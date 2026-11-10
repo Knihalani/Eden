@@ -222,7 +222,7 @@ unique texts), well under $0.10 a model.
 ## Tests
 
 ```bash
-cd packages/sim/modal && python3 -I -m unittest     # 53 tests, no Modal, no token
+cd packages/sim/modal && python3 -I -m unittest     # 54 tests, no Modal, no token
 bun test ./packages/sim/src/lab/cards-distill.test.ts ./packages/sim/src/lab/cards-endpoint.test.ts \
   ./packages/sim/src/lab/modal-python.test.ts       # export, scorer, endpoint transport against a stub server
 ```

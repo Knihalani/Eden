@@ -221,9 +221,15 @@ class Presets(unittest.TestCase):
         self.assertEqual(args.count("--conditions"), 1)
         self.assertEqual(plan.flag_value(args, "--conditions"), "tools,eden")
         self.assertFalse(any(a.startswith("--conditions=") for a in args))
-        for extra in (["--cards"], ["--conditions", "--tenant-prompt"]):
+        for extra in (["--cards"], ["--conditions", "--tenant-prompt"], ["--conditions="], ["--variants", ""],
+                      ["--days"]):
             with self.assertRaises(plan.PlanError):
                 plan.with_preset("bench-fewer", extra)
+
+    def test_a_shard_with_no_arm_is_refused_not_counted_as_zero_streams(self):
+        shard = plan.plan_pi_ab("train1", "41", 1.0, "r", ["--conditions", ","])[0]
+        with self.assertRaises(plan.PlanError):
+            plan.wave_width([shard])
 
     def test_seed_ranges(self):
         self.assertEqual(plan.expand_seeds("41-44,48,43"), ["41", "42", "43", "44", "48"])

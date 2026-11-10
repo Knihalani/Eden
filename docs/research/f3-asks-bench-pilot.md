@@ -135,10 +135,11 @@ model requests, 0 retried on a 429** (`packages/sim/lab/f3/totals.json`).
 - **A. Several questions in one ask: measured, not promoted, deleted (D485).** The agent did use it: `ask_context`
   calls fell from 0.48 to 0.29 a task and model turns by 0.07 a task (−0.09..−0.05), wall by 0.07 s (−0.11..−0.02).
   Hidden facts were level, Sonnet-graded: **−0.4 points (−2.8..+2.1, n 813)**; concerns 0 in both arms. But the agent
-  asked **more questions in all** (0.48 → 0.83 a task: 2.9 questions a call where the default asks one compound question), each
-  answer is more text for the agent to read, and the cost rose by **+$0.036 per 1,000 tasks (+0.028..+0.043)**, about
-  14%. The rule needed no extra paid cost (D112); it failed that clause, so the switch, its code and its tests are
-  gone. The saving it bought, 0.07 s a task, is small because Haiku already makes its asks in parallel in one turn.
+  asked **more questions in all** (0.48 → 0.83 a task: 2.9 questions a call where the default asks one compound
+  question), each answer is more text for the agent to read, and the cost rose by **+$0.036 per 1,000 tasks
+  (+0.028..+0.043)**, about 14%. The rule needed no extra paid cost (D112); it failed that clause, so the switch, its
+  code and its tests are gone. The saving it bought, 0.07 s a task, is small because Haiku already makes its asks in
+  parallel in one turn.
 - **B. The bench works, and it changes how sure we are.** 28 seeds, 5,153 paired hidden tasks.
   - **The default against the agent alone: +47.0 points (+41.2..+52.6), confirmed.** The interval is ±5.7, not the
     ±1.5 the task count suggests: tasks of one template rise and fall together, so 5,153 tasks carry the information
@@ -146,11 +147,11 @@ model requests, 0 retried on a 429** (`packages/sim/lab/f3/totals.json`).
     is ±5.5); ±1.5 would need about 2,600 templates (arithmetic from the measured variance, not run). Eden is also
     1.14 s faster a task (−1.29..−0.98), 0.38 model turns fewer, and **+$0.069 per 1,000 tasks** dearer
     first-party (+0.057..+0.082); Sonnet-regraded false concerns 0 of 1,536 in both arms.
-  - **The seeds whose cards are made in-run read 11 points lower.** Seeds 41–44 (cards and requests replayed): 67.2% against 10.5%, +56.6
-    (+50.8..+62.5). Seeds 45–68 (no cache; Haiku cards each item in-run, closer to a new user): 54.2% against 8.9%,
-    +45.3 (+39.4..+51.2), and +$0.081/1k against +$0.030. The two groups are different seeds, the gap has no interval
-    of its own and the groups' intervals overlap, so this is a reading, not a measured effect of the cards; M1 saw
-    the same gap on four seeds (D444), and this is 24.
+  - **The seeds whose cards are made in-run read 11 points lower.** Seeds 41–44 (cards and requests replayed): 67.2%
+    against 10.5%, +56.6 (+50.8..+62.5). Seeds 45–68 (no cache; Haiku cards each item in-run, closer to a new user):
+    54.2% against 8.9%, +45.3 (+39.4..+51.2), and +$0.081/1k against +$0.030. The two groups are different seeds,
+    the gap has no interval of its own and the groups' intervals overlap, so this is a reading, not a measured
+    effect of the cards; M1 saw the same gap on four seeds (D444), and this is 24.
   - **Default minus `fewer` (D404): kept, at the edge.** Removing it raises hidden facts by **+1.0 point
     (−0.2..+2.1, n 5,014)**: the ±1.5 target was reached here (half-width 1.2; the run's minimum detectable effect
     is 1.7 points). The interval touches zero, so by the rule `fewer` stays. It saves $0.010 per 1,000 tasks
@@ -252,8 +253,9 @@ resampled within seed); here +56.6 with the wider clustered interval. `fewer`'s 
 The planner counted 48 streams a shard on seeds 41–44 (4 arms × 12 worlds), 36 on 45–48 and 18 on 49–68, and ran
 1, 1 and 3 shards at once under the 60-stream limit; the long run's four shards (2 streams each) ran together. The
 second and third runs queued behind the first on the checkout's lock. No wave met the rate limit (0 of 59,187
-requests retried on a 429, the smoke's 79 included), so the halving rule never fired; it is unit-tested. From the first bench shard's start
-to the last one's end was 44 minutes (the long run included), for 71 minutes of bench container time.
+requests retried on a 429, the smoke's 79 included), so the halving rule never fired; it is unit-tested. From the
+first bench shard's start to the last one's end was 44 minutes (the long run included), for 71 minutes of bench
+container time.
 
 ## 5. Recommendations (nothing in the default changed)
 
@@ -282,7 +284,10 @@ In the bench: `--flag=value` after a preset did not replace the preset's flag (t
 `all` and `heldout-all` were counted as one suite, and a single shard over `--max-streams` ran anyway (both are now
 refused); the report's card share now follows `backfillShares` (F3's reports are byte-identical under it). In the
 docs: a design effect quoted for the wrong group, figures without a committed source (now `totals.json`), and the
-in-run-card gap stated as a cause.
+in-run-card gap stated as a cause. A second pass on the fixes found six small defects in them, fixed the same way:
+`forget` removed any `.tmp` file and failed on a linked directory, a directory from before the marker was stranded,
+the owner-only pass followed links, one malformed item stopped its source's import, and an empty `--conditions=`
+counted no streams.
 
 ## Reproduce
 
