@@ -17,7 +17,7 @@ Anthropic directly with `HAIKU_API_KEY` through the lab (D97): **Anthropic-direc
   a session and **+10.9** over a user's days (Sonnet-graded). Without thinking (this note's prompt or I3's shippable
   check) the widening adds about one look-alike per fact again (H1 failed behind I3's check).
 - **Re-showing a fact handed earlier, even when the check says it applies now, lost facts over days (H2): deleted.**
-- **The careful check is too slow and too dear to ship as is:** 5–7 s a push and about $1 per 1,000 tasks, four times
+- **The careful check is too slow and too dear to ship as is:** 5–7 s a push and about $1 per 1,000 tasks, three times
   the agent. `pushWiden` stays an off trial for a check that is both careful and fast. Engine default unchanged.
 
 ## 0. Why, and what is on the base
@@ -114,7 +114,8 @@ If a bar fails, the arm stops there and the note says so.
 ## 2. Screen results (seeds 41–44, all train templates; §1's arms and bars)
 
 The labels: arm C1's and C3's live runs called Haiku (no thinking) once per push and kept every answer
-(`.local/n2/check.jsonl`, 2,304 calls; `check-widen.jsonl`, 1,901 calls, 26.8 items a call); every figure below
+(`.local/n2/check.jsonl`: 1,901 calls on the ledger, $1.0054, $0.00053 a call at about 15 items; `check-widen.jsonl`:
+1,903 calls, $1.6942, $0.00089 a call at 26.8 items); every figure below
 replays them with no wait (`--check-cache`, no `--check-live`), as I2 served its labels. **Why replayed:** live, a
 check takes p50 3.5 s (p90 4.1 s, 15–31 items, the `why` field included), longer than the funnel's 3 s observe wait;
 on 105 hidden tasks the push had not landed when the task ended (no `pushPoolAt`), so the live C1 run read planted
@@ -150,7 +151,8 @@ low) passes H1+H3, or, if neither does, for the low check's C2L (H3) only.
 
 ## 4. Effort-low results (§3), screen and confirmation
 
-Labels: C3L's live run, 1,903 calls on seeds 41–44 (p50 6.8 s, p90 8.4 s a check, 26 items a call,
+Labels: C3L's live run, 1,903 calls on seeds 41–44 ($2.1813 on the ledger, $0.00115 a call; p50 6.8 s, p90 8.4 s a
+check, 26 items a call,
 `.local/n2/check-low.jsonl`), replayed with no wait; 0 pairs missed in every arm. Confirmation: seeds 45–48, I2's 40
 held-out templates (`--templates`), its own live labelling run (`check-low45.jsonl`), 3–5 pairs missed an arm;
 intent inert in every arm there (no replay covers 45–48).
@@ -227,12 +229,13 @@ every concern regraded by Sonnet 5.5; `bench_report.py --sonnet`, template-clust
 | --- | --- | --- | --- |
 | hidden facts raised (Sonnet) | **+12.5 points** (65.0 vs 52.5, n 320) | +5.6..+19.4 | pass (≥ 0, low end ≥ −3) |
 | false concerns, control + neutral (Sonnet) | +0.2 points (1 vs 0 of 640) | +0.0..+0.5 | see below |
-| agent $ per 1,000 tasks (check not included) | −0.002 | −0.018..+0.014 | |
+| agent $ per 1,000 tasks (check not included) | −0.002 (0.312 vs 0.314) | −0.018..+0.014 | |
 | the check's own $ per 1,000 tasks | **+0.98** ($0.94 for 816 calls on 960 tasks) | | reported |
 | wall a task | +5.13 s | +4.38..+5.84 | reported |
 | `ask_context` calls a task | +0.205 | +0.103..+0.315 | |
 
-Haiku's grades read 54.4% → 68.8% hidden and 1 → 8 control and neutral concerns; Sonnet kept 1 of the 8
+The check on Pi: 102 calls a shard, p50 5.5–5.9 s and p90 7.2–7.9 s by shard (each shard's `CHECKER` line), 27.0–28.0
+items a call. Haiku's grades read 54.4% → 68.8% hidden and 1 → 8 control and neutral concerns; Sonnet kept 1 of the 8
 (`w45 train3-neutral pooled-accounts-banned`). The concern clause ("not up") reads 0 → 1 of 640: up by one, with the
 interval's low end at zero. It is the clause D380 failed on (0 → 1); it is recorded as **failed on a literal reading**.
 
@@ -272,7 +275,7 @@ effort-low check (§4) kept them out.
   thinking (this note's prompt or I3's) it adds about as many look-alikes as facts, as every widening before it did.
   The embedding route carried most of it (§2).
 - **H2 (re-show) fails** even when gated by the check.
-- **Cost and wait are the blocker.** The effort-low check costs about $1 per 1,000 tasks (four times the agent) and
+- **Cost and wait are the blocker.** The effort-low check costs about $1 per 1,000 tasks (about three times the agent: $0.98 against $0.31) and
   5–7 s a push; I3's costs $0.2 and under 1 s but cannot gate widening. `pushWiden` stays a trial (off) for a check
   that is both: I3's request with thinking at effort low and its short reply is the first thing to measure
   (**[EST]** about 2–3 s and $0.0004 a call: I3's input, about 300 output tokens).

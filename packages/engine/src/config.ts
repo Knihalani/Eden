@@ -692,7 +692,8 @@ export interface EngineConfig {
    * N2 (D511; H1; a trial, off): with `pushCheck`, the check reads items past the lexical pool too (`widenPool`): the
    * `widen` dependency's nearest items (`pushWidenEmbed`), the request's raw intent hits (`pushWidenIntent`) and the
    * ranking's next items (`pushWidenDeep`), after the pool's head and within the check's 20 items. Only the check can
-   * hand them, and only where the check runs (the constraint-like gate passed).
+   * hand them, and only where the check runs (the constraint-like gate passed). The widening and the check share one
+   * `pushCheckWaitMs`. With `pushCheckItems` 20 the pool fills the check and nothing widened is read.
    */
   pushWiden: boolean;
   pushWidenEmbed: number;

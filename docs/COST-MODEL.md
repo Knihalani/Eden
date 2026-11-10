@@ -569,15 +569,17 @@ about $0.23 per 1,000 tasks. The live per-task figure with the agent's change is
 
 ## A per-push "changes what to do" check (N2, D510–D514; a trial, off, not shipped)
 
-N2 measured the push with one Haiku 5.5 call that reads the request and the pool (15 lexical items plus up to 16
-widened ones, 27 on average) and says which items change what the agent should do (docs/research/n2-recall.md).
-Anthropic-direct lab figures, I2's prompt with a 12-word reason per item: **$0.00115 a check at thinking effort low**
-(p50 5.8 s, p90 7.5 s on Pi), $0.00075 with no thinking (p50 3.5 s, but it passed 82% of look-alikes and failed the
-screen). On Pi one request a session the push ran on 816 of 960 tasks: **+$0.98 per 1,000 tasks** for the check
-against the agent's whole $0.31, i.e. about four times the default's cost, and +5.1 s of wall a task while the agent
-waits for it (`@w12000`). It is a per-event model call: shipping it needs its own decision (D4, D5), a `Budget` and a
-smaller, faster request (no reason field, a capped pool; **[EST]** about 250 output tokens instead of about 800, so
-under 2 s and about $0.0006) measured again before any promotion.
+N2 measured the push with one Haiku 5.5 call that reads the request and the pool and says which items change what the
+agent should do (docs/research/n2-recall.md; Anthropic-direct lab figures, I2's prompt with a 12-word reason per
+item). On the ledger: **$0.00115 a check at thinking effort low** (about 27 items; on Pi p50 5.5–5.9 s, p90 7.2–7.9 s),
+$0.00053 (about 15 items) and $0.00089 (about 27) with no thinking (p50 3.5 s, but it passed 82% of the pool's
+look-alikes and failed the widening screen). On Pi one request a session the push ran a check on 816 of 960 tasks:
+**+$0.98 per 1,000 tasks** for the check against the agent's $0.312 per 1,000 (the bench report's $ column), about
+three times the agent, and +5.1 s of wall a task while the agent waits for it (`@w12000`); over days +$0.80 per
+1,000. It is a per-event model call: shipping it needs its own decision (D4, D5), a `Budget` and a smaller, faster
+request, measured again before any promotion: **[EST]** I3's short-reply request with thinking at effort low, about
+300 output tokens, 2–3 s and $0.0004 a call (n2-recall.md §8). I3's no-thinking check (D500–D502) is the cheap end:
+$0.0002 a call, p50 0.9 s, which cannot gate a widened pool (D511).
 
 ## Levers, in order of leverage
 

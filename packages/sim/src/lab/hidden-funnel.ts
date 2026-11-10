@@ -467,6 +467,19 @@ const LIMIT = Number(opt("limit", "0"));
  * kept tasks see the world a full run gives them).
  */
 const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
+if (TEMPLATES) {
+  // A typo would run no tasks and print totals of zero: every name must be a template of a suite in the run.
+  const known = new Set(
+    SUITE_LIST.flatMap((suite) => SUITES[suite]!(buildWorld({ seed: SEEDS[0]! * 1_000 }), SEEDS[0]!, "hidden")).map(
+      (t) => t.template,
+    ),
+  );
+  const unknown = [...TEMPLATES].filter((t) => !known.has(t));
+  if (unknown.length) {
+    console.error(`hidden-funnel: --templates names no template of the run's suites: ${unknown.join(", ")}`);
+    process.exit(2);
+  }
+}
 /**
  * `--widen-table FILE` (N2, D511): per (suite, seed, variant, request) the item ids an embedding ranks first for the
  * request (`packages/sim/modal/n2_embed.py`), wired as the `widen` dependency the `pushWiden` trial reads.
@@ -735,7 +748,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   const chosen = all.map((_, i) => i).filter((i) => !TEMPLATES || TEMPLATES.has(all[i]!.template));
   const tasks = (LIMIT > 0 ? chosen.slice(0, LIMIT) : chosen).map((i) => all[i]!);
   const planted = TEMPLATES && plantedAll.length === all.length ? chosen.map((i) => plantedAll[i]!) : plantedAll;
-  // The world is made whole whatever `--templates` keeps: every planted item aged and dressed, every slot cleared.
+  // The world is made whole whatever `--templates` keeps: every planted item aged and dressed, every slot cleared
+  // (with `--limit`, as before, only the kept tasks' slots).
   if (PLANTED_AGE_DAYS > 0) for (const it of plantedAll) it.updatedAt = world.now - PLANTED_AGE_DAYS * 86_400_000;
   for (const it of plantedAll) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).

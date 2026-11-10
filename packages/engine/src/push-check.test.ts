@@ -270,10 +270,17 @@ describe("push check prompt and parser", () => {
 
 describe("pushWiden (N2, D511): items past the pool, read by the check only", () => {
   const CAR = item("car", "Audi finance", "Outstanding finance on the Audi: settle it before any sale.", 30);
-  function widened(config: Record<string, unknown>, model: Model, ids: string[], pools: PushPoolReport[] = []) {
+  type Widen = (scope: unknown, request: string, k: number) => Promise<readonly string[]>;
+  function widened(
+    config: Record<string, unknown>,
+    model: Model,
+    ids: string[],
+    pools: PushPoolReport[] = [],
+    opts: { widen?: Widen; owner?: string } = {},
+  ) {
     const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
     const cache = new ItemCache();
-    cache.put({ tenantId: "t", userId: "u1" }, [CAR], NOW);
+    cache.put({ tenantId: "t", userId: opts.owner ?? "u1" }, [CAR], NOW);
     const seen: string[] = [];
     const partner = new ContextPartner({
       sources: async () => [source],
@@ -294,10 +301,12 @@ describe("pushWiden (N2, D511): items past the pool, read by the check only", ()
         ...config,
       },
       checker: new PushChecker({ model, budget: new Budget() }),
-      widen: async (_s, request, k) => {
-        seen.push(request);
-        return ids.slice(0, k);
-      },
+      widen:
+        opts.widen ??
+        (async (_s, request, k) => {
+          seen.push(request);
+          return ids.slice(0, k);
+        }),
       onPushPool: (r) => pools.push(r),
     });
     return { partner, seen };
@@ -328,6 +337,60 @@ describe("pushWiden (N2, D511): items past the pool, read by the check only", ()
     const plain = await handed(setup({}, null).partner);
     const broken = new FakeModel(() => "not json");
     expect(await handed(widened({ pushWiden: true }, broken, ["mail:car"]).partner)).toEqual(plain);
+  });
+
+  test("fails open: a widen that throws at once or rejects widens nothing and the check still runs", async () => {
+    for (const bad of [
+      (() => {
+        throw new Error("sync");
+      }) as unknown as Widen,
+      async () => Promise.reject(new Error("async")),
+    ]) {
+      const model = says(["Harlow venue"]);
+      const { partner } = widened({ pushWiden: true }, model, [], [], { widen: bad });
+      expect(await handed(partner)).toEqual(["mail:hold"]);
+      expect(model.calls[0]!.messages[1]!.content).not.toContain("Audi finance");
+    }
+  });
+
+  test("a session closed during the widen's wait makes no check call and queues nothing", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    const model = says(["Audi finance"]);
+    const slow: Widen = async () => {
+      await held;
+      return ["mail:car"];
+    };
+    const { partner } = widened({ pushWiden: true }, model, [], [], { widen: slow });
+    const seen = partner.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
+      waitMs: 2_000,
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    await partner.observe({ ...ref, at: NOW, kind: "session_end" } as AgentEvent);
+    release();
+    await seen;
+    await new Promise((r) => setTimeout(r, 30));
+    expect(model.calls.length).toBe(0);
+    expect(partner.takePending(ref)).toEqual([]);
+  });
+
+  test("an unnamed widened item never reaches the nudge's deeper look or an ask", async () => {
+    const model = says(["Harlow invoice"]);
+    const { partner } = widened(
+      { pushWiden: true, askNudge: true, askNudgeDeep: true, pushCandidatesSettled: 0 },
+      model,
+      ["mail:car"],
+    );
+    expect(await handed(partner)).toEqual(["mail:plain"]);
+    const answer = await partner.ask({ ...ref, question: "Is anything holding up the Harlow venue deposit?" });
+    expect(answer.citations.map((c) => c.itemId)).not.toContain("mail:car");
+  });
+
+  test("an id of another user's item from the widen dependency is never read", async () => {
+    const model = says(["Audi finance"]);
+    const { partner } = widened({ pushWiden: true }, model, ["mail:car"], [], { owner: "u2" });
+    await handed(partner);
+    expect(model.calls[0]!.messages[1]!.content).not.toContain("Audi finance");
   });
 
   test("the widen settings need pushWiden and pushCheck", () => {

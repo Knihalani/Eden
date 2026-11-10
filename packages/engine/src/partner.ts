@@ -2059,9 +2059,14 @@ export class ContextPartner {
       // is added: the push's timing (which turn it lands in) stays the default's.
       // `pushWiden` (N2, D511): items no lexical rank reached join what the check reads, after the pool; only the
       // check can hand them, so it runs only where the check would.
+      // One wait for both: the check gets what the widening left of `pushCheckWaitMs` (D500's bound holds).
+      const widenFrom = performance.now();
       if (gate && this.config.pushCheck && this.config.pushWiden && this.deps.checker && gate.like.some(Boolean))
         gate.widened = await this.widenPool(s, cue, [...order, ...scored], gate.pool);
-      const check = gate && this.config.pushCheck && this.deps.checker ? await this.checkPush(s, cue, gate) : null;
+      const check =
+        gate && this.config.pushCheck && this.deps.checker
+          ? await this.checkPush(s, cue, gate, performance.now() - widenFrom)
+          : null;
       if ((check || gate?.widened) && s.closed) {
         return {
           answer: "",
@@ -2530,7 +2535,7 @@ export class ContextPartner {
    * pass over the same pool (`readerPushBehind`) reads it with no call. The call runs on the session's signal: it
    * ends with the session, not with the wait.
    */
-  private async checkPush(s: Session, cue: Cue, gate: PushGate): Promise<PushCheckRead | null> {
+  private async checkPush(s: Session, cue: Cue, gate: PushGate, spentMs = 0): Promise<PushCheckRead | null> {
     const checker = this.deps.checker;
     if (!this.config.pushCheck || !checker || !gate.like.some(Boolean)) return null;
     const request = sanitizeForStore(cue.raw);
@@ -2577,7 +2582,8 @@ export class ContextPartner {
     const running = kept.read;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<null>((done) => {
-      timer = setTimeout(() => done(null), Math.max(0, this.config.pushCheckWaitMs));
+      // `spentMs`: what `pushWiden`'s look took of the same wait (D511), so the push never waits longer than D500's.
+      timer = setTimeout(() => done(null), Math.max(0, this.config.pushCheckWaitMs - spentMs));
     });
     try {
       const got = await Promise.race([running, late]);
@@ -2641,7 +2647,7 @@ export class ContextPartner {
       ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
       ...(read
         ? {
-            anchored: pool.map((x) => anchored(x.item, read)),
+            anchored: reported.map((x) => anchored(x.item, read)),
             anchorKinds: { entities: read.entities.length, day: hasDay(read) },
           }
         : {}),
