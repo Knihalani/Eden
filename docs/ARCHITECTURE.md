@@ -420,6 +420,9 @@ written to the agent's prompt cache, hidden facts not lower, A30). An ask answer
 candidates need no
 reader, so a server with no model key runs them too (D276). `ContextPartner.explain` returns a session's last 32
 traces for `POST /v1/explain` (D277), each with `explainTrace`'s sentence; content-free like every trace (D56).
+Trial `pushWiden` (D511, off; with I3's `pushCheck` trial) adds items no lexical rank reached (a `widen` dependency's
+nearest items, raw intent hits) to what the push check reads, sharing its wait; only the check can hand them
+(docs/research/n2-recall.md: it pays only behind a check that thinks, which is too slow and dear as measured).
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search

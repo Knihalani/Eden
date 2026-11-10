@@ -46,6 +46,12 @@ export interface Trace {
    */
   readerCalls?: number;
   readerCostUsd?: number;
+  /**
+   * With `pushCheck` (D500): the part of `modelCalls` and `costUsd` that is the push check's call, so a harness that
+   * meters the check's model itself does not count it twice.
+   */
+  checkCalls?: number;
+  checkCostUsd?: number;
   /** On a "reader-push" trace: the push handed out candidates (`pushCandidates`, D237), not a reading. */
   candidates?: boolean;
   itemIds: string[];
