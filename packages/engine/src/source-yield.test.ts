@@ -124,6 +124,23 @@ describe("SourceYield", () => {
     expect(y.hasYielded(u1, "mail")).toBe(false);
   });
 
+  test("a tenant at its user cap drops its own oldest user, never one of a tenant whose name it prefixes", () => {
+    const y = new SourceYield(WEEK);
+    const nested = { tenantId: "a/b", userId: "x" };
+    y.read(nested, ["s"], T0, named);
+    for (let i = 0; i < 1_001; i++) y.read({ tenantId: "a", userId: `u${i}` }, ["s"], T0, named);
+    expect(y.size(nested)).toBe(1);
+    expect(y.size({ tenantId: "a", userId: "u0" })).toBe(0);
+    expect(y.size({ tenantId: "a", userId: "u1000" })).toBe(1);
+  });
+
+  test("a pool remembers a bounded number of reads: fed for long, it is still under its warm-up two half-lives on", () => {
+    const y = new SourceYield(WEEK);
+    for (let i = 0; i < 2_000; i++) y.read(u1, [`n-${i}`], T0, blind);
+    expect(y.poolSpent(u1, 0, 0.05, T0)).toBe(true);
+    expect(y.poolSpent(u1, 0, 0.05, T0 + 2 * WEEK)).toBe(false);
+  });
+
   test("a user's sources are bounded: the least recently read is dropped", () => {
     const y = new SourceYield(WEEK);
     y.read(

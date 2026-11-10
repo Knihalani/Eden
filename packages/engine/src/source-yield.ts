@@ -24,6 +24,8 @@ import { betaIncInv } from "@eden/primitives";
 
 /** Reads on no evidence a user must have sent before the pooled rate may skip one. */
 export const POOL_WARMUP = 24;
+/** The most reads a pool remembers (two half-lives bring it under the warm-up again). */
+export const POOL_MAX = 4 * POOL_WARMUP - 1;
 /** The posterior bound the pooled rate must reach the floor at: skipped when 90% sure it is below. */
 const CONFIDENCE = 0.9;
 
@@ -82,9 +84,8 @@ export class SourceYield {
     }
     if (!make) return undefined;
     if ((this.perTenant.get(scope.tenantId) ?? 0) >= MAX_USERS_PER_TENANT) {
-      const prefix = scopeKey({ tenantId: scope.tenantId, userId: "" });
       for (const k of this.users.keys()) {
-        if (!k.startsWith(prefix)) continue;
+        if (this.tenants.get(k) !== scope.tenantId) continue;
         this.drop(k, scope.tenantId);
         break;
       }
@@ -150,6 +151,12 @@ export class SourceYield {
     pool.reads = this.fade(pool.reads, pool.at, now) + reads;
     pool.wins = this.fade(pool.wins, pool.at, now) + wins;
     pool.at = now;
+    // Bounded memory: past `POOL_MAX` reads the pool is scaled back (its rate kept), so a pool that stops being
+    // read falls under its warm-up within a few half-lives however long it was fed.
+    if (pool.reads > POOL_MAX) {
+      pool.wins *= POOL_MAX / pool.reads;
+      pool.reads = POOL_MAX;
+    }
   }
 
   /**

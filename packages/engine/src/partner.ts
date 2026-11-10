@@ -288,6 +288,8 @@ interface Session {
   /** Tenant, user and session: the only key a session's state is ever looked up by. */
   key: string;
   turn: number;
+  /** `sourceYield` (D505): the sources a live read was booked against in turn `turn` (once a source a turn). */
+  liveReads?: { turn: number; ids: Set<string> };
   /**
    * The user messages (not drafts) observed so far. A `readerPush` reading is queued only while its request is still
    * the latest: the agent's own events move `turn` within one request, a new user message moves this.
@@ -411,8 +413,6 @@ interface Cue {
    * records each cut copy's outcome here as it settles, so the ask can tell which sources answered in time.
    */
   cutStatus?: Map<string, string>;
-  /** `sourceYield` (D505): the sources this lookup has booked a live read against (once each). */
-  liveRead?: Set<string>;
   /** `sourceYield`: the lookup's routing boost and its evidence test, for the reads its probes book later. */
   boost?: ReadonlyMap<string, number> | undefined;
   evidence?: (id: string) => Evidence;
@@ -3122,7 +3122,7 @@ export class ContextPartner {
   private handOut(s: Session, injection: Injection): void {
     const built = this.built.get(injection);
     // `sourceYield` (D505): an item of a source reached the agent, so the source's run of unused reads ends.
-    if (built && this.yields) this.yields.used(s.scope, built.sourceIds, this.now());
+    if (built && this.yields && !s.closed) this.yields.used(s.scope, built.sourceIds, this.now());
     if (this.config.partyCheck && injection.reason !== "action-party" && injection.reason !== "ask") {
       this.notePacketParties(s, injection.text, injection.citations);
     }
@@ -3872,9 +3872,13 @@ export class ContextPartner {
         const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(left())]);
         const freshening = this.spans?.open("sync.freshen", cue.span, { async: true });
         const tally = { fresh: 0 };
-        const skipPoll = spent && this.config.sourceYieldPolls ? spent : null;
+        // A spent copy the cap cut is not polled either: it is answered as held and named "unsearched". A whole copy
+        // keeps its poll (a listing is no live read, and without it an ask would call the copy failed).
+        const sync = this.sync;
+        const skipPoll =
+          spent && this.config.sourceYieldPolls ? (id: string) => spent.has(id) && !sync.complete(s.scope, id) : null;
         const toPoll =
-          lazy >= 2 ? [] : all.filter((x) => (!pollable || pollable.has(x.id)) && !(skipPoll && skipPoll.has(x.id)));
+          lazy >= 2 ? [] : all.filter((x) => (!pollable || pollable.has(x.id)) && !(skipPoll && skipPoll(x.id)));
         const polled = this.sync.freshen(s.scope, toPoll, signal, tally, s.abort.signal).then((calls) => {
           if (freshening) this.spans!.close(freshening, { calls, fresh: tally.fresh, ...(behind ? { behind } : {}) });
           return calls;
@@ -4032,7 +4036,6 @@ export class ContextPartner {
       // `pushLazy`: no search behind the push; the agent's ask searches the cut copies it routes to.
     } else if (cutBehind && cutBehind.size > 0 && !cue.followUp && left() >= MIN_SEARCH_MS) {
       const behindOf = (listing ? listers : routed).filter((x) => cutBehind!.has(x.id) && !spent?.has(x.id));
-      this.noteLiveRead(s, cue, behindOf);
       // Sent as the lookup's own search would be: through the planner's cascade (its shapes find what the request's
       // words alone miss), its calls counted where they reach the connector.
       const via: (CountedPlanCalls | undefined)[] = [];
@@ -4050,7 +4053,6 @@ export class ContextPartner {
       // these copies: "timeout" at once, never "searching" (whose answer promises what follows).
       for (const id of cutBehind) if (!cue.cutStatus.has(id)) cue.cutStatus.set(id, "timeout");
     }
-    if (left() >= MIN_SEARCH_MS) this.noteLiveRead(s, cue, chosen);
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing = this.config.probes
       ? this.probe(s, cue, routed, all, listing, probed, settled, shared, {
@@ -4070,6 +4072,7 @@ export class ContextPartner {
         ).map((i) => i.id)
       : [];
     const outcomes = await searching;
+    this.noteLiveRead(s, cue, outcomes);
     if (searchSpan) spans!.close(searchSpan, outcomeAttrs(outcomes));
     const plans = planner
       ? chosen.flatMap((x) => {
@@ -4171,8 +4174,10 @@ export class ContextPartner {
       const kind = evidence(x.id);
       const run = this.yields.run(s.scope, x.id, now);
       const limit = kind === 2 ? 0 : c.sourceYieldRun;
+      // Half a read of slack: a run decays from the moment of its last read, so 4 reads read 3.999 a minute later.
       const spent =
-        (limit > 0 && run >= limit) || (kind < 2 && pooled[kind] === true && !this.yields.hasYielded(s.scope, x.id));
+        (limit > 0 && run > limit - 0.5) ||
+        (kind < 2 && pooled[kind] === true && !this.yields.hasYielded(s.scope, x.id));
       if (spent && this.sync.isWarm(s.scope, x.id)) (out ??= new Set()).add(x.id);
     }
     return out;
@@ -4193,12 +4198,24 @@ export class ContextPartner {
     };
   }
 
-  /** `sourceYield` (D505): books a live read against each source, once a lookup. */
-  private noteLiveRead(s: Session, cue: Cue, sources: readonly { id: string }[]): void {
-    if (!this.yields || sources.length === 0 || s.closed) return;
-    const seen = (cue.liveRead ??= new Set());
-    const fresh = sources.map((x) => x.id).filter((id) => !seen.has(id));
-    for (const id of fresh) seen.add(id);
+  /**
+   * `sourceYield` (D505): books a live read against each source that answered one, once a source a turn: the push,
+   * its probes and an ask of the same turn often join one call. Only an answer counts ("ok": the connector was
+   * called and replied): a failure, a timeout or a guard's refusal says nothing about what the source holds, and a
+   * page from the fan-out's cache was no call. Only a warm copy's source: no other is ever skipped, so its reads
+   * would fill the pools with reads the rule cannot act on.
+   */
+  private noteLiveRead(s: Session, cue: Cue, outcomes: readonly FanoutOutcome[]): void {
+    if (!this.yields || !this.sync || s.closed) return;
+    if (s.liveReads?.turn !== s.turn) s.liveReads = { turn: s.turn, ids: new Set() };
+    const seen = s.liveReads.ids;
+    const fresh: string[] = [];
+    for (const o of outcomes) {
+      if (o.status !== "ok" || seen.has(o.sourceId) || !this.sync.isWarm(s.scope, o.sourceId)) continue;
+      seen.add(o.sourceId);
+      fresh.push(o.sourceId);
+    }
+    if (fresh.length === 0) return;
     const evidence = (cue.evidence ??= this.evidenceFor(s, cue, cue.boost));
     this.yields.read(s.scope, fresh, this.now(), evidence);
   }
@@ -4243,6 +4260,7 @@ export class ContextPartner {
       .then(async (outcomes) => {
         let made = 0;
         for (let k = 0; k < outcomes.length; k++) made += via[k] ? via[k]!.made : reachedSource(outcomes[k]!) ? 1 : 0;
+        this.noteLiveRead(s, cue, outcomes);
         if (span) this.spans!.close(span, outcomeAttrs(outcomes));
         if (made > 0) {
           this.trace(s, {
@@ -4393,7 +4411,6 @@ export class ContextPartner {
       if (to.length === 0 || s.closed || deadline - performance.now() < 50) return [...here, ...reused];
       out.calls += to.length;
       if (own) extra += to.length;
-      this.noteLiveRead(s, cue, to);
       // A day's listing is the whole day (a busy one has more than a search's page); a query, its first page.
       const query = {
         scope: s.scope,
@@ -4444,6 +4461,7 @@ export class ContextPartner {
         return run;
       };
       const outcomes = (await Promise.all(to.map(one))).filter((o): o is FanoutOutcome => o !== null);
+      this.noteLiveRead(s, cue, outcomes);
       // A page of the probe's own size from each source, even when the call was the planner's (8 items): more would
       // crowd the probes' seats with the judge (live, the judge passed fewer planted items with them).
       const items = outcomes.flatMap((o) => o.items.slice(0, window ? 20 : 5));

@@ -69,3 +69,21 @@ resolution, and the note will say what the run could have detected.
 
 **Spend.** Anthropic hard cap $8 in all for this session, as per-shard caps: short $2.4 (4 shards), long $2.4 (6
 shards), regrade at most $0.3. Modal credits under $15.
+
+### 0b. Amendment (committed before the confirmation run; written after the short run was read, before the long run finished)
+
+The reviewer's pass on the trial code (section 7) found that `sourceYield` as first built counted a live read when
+it was sent, once for each lookup that joined the call: one connector call was often booked twice (the push and the
+ask it starts share it), a failed call counted as a read with nothing used, and reads of sources the rule can never
+skip filled the pools. The rule therefore learned about twice as fast as the calls it claims to count. Fixed before
+any decision: a read is booked only when the connector answered, once a source a turn, only for a warm copy; a whole
+copy keeps its on-demand poll; the pools remember a bounded number of reads. At $0 the fixed rule saves less on the
+short horizon and nearly as much over days (funnel 47.3 → 33.3 and 48.0 → 31.0 calls a task, no fact lost; 8 days
+57.2 → 13.1 a request, hidden 37/46 both; stale 12/142 against 15/143, deleted 3/14 both).
+
+The runs registered above measure the rule **as first built** (`eden~yield` at commit 4dfc651c for the short run and
+its successor for the long run, the same engine code). They stand as registered and decide `pushLazy`. For
+`sourceYield` the decision is taken on a **confirmation run of the fixed code**, same harness, arms `eden` and
+`eden~yield` only, short seeds 41–44 (`--limit 16 --variants hidden,control`) and long seeds 41–46 (`--days 8`), with
+the same rule. The first-built arm's figures are reported beside it and not pooled with it. Caps: short $1.2, long
+$1.2 (inside the session's $8).

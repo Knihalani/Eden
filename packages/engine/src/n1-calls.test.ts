@@ -9,6 +9,7 @@ import { itemId, type AgentEvent, type ContextItem, type Scope } from "@eden/pro
 import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
+import type { SourceYield } from "./source-yield";
 
 const HOUR = 3_600_000;
 const T0 = Date.UTC(2026, 10, 10, 9);
@@ -21,12 +22,15 @@ class Counting implements Source {
   readonly description = "test";
   searches = 0;
   lists = 0;
+  /** An outage: every search fails. */
+  down = false;
   constructor(
     readonly id: string,
     readonly items: ContextItem[],
   ) {}
   async search(q: SearchQuery): Promise<ContextItem[]> {
     this.searches++;
+    if (this.down) throw new Error("down");
     const words = q.text
       .toLowerCase()
       .split(/\W+/)
@@ -44,13 +48,12 @@ class Counting implements Source {
 }
 
 /** 4 sources of 10 items for a cap of 20: every copy is cut. Source 0's oldest item, past the cut, is the fact. */
-function world(): { sources: Counting[]; fact: ContextItem } {
-  const sources = Array.from(
-    { length: 4 },
-    (_, k) =>
+function world(sizes: number[]): { sources: Counting[]; fact: ContextItem } {
+  const sources = sizes.map(
+    (size, k) =>
       new Counting(
         `src${k}`,
-        Array.from({ length: 10 }, (_, i) => ({
+        Array.from({ length: size }, (_, i) => ({
           id: itemId(`src${k}`, `i${i}`),
           sourceId: `src${k}`,
           ref: `i${i}`,
@@ -66,8 +69,8 @@ function world(): { sources: Counting[]; fact: ContextItem } {
   return { sources, fact };
 }
 
-async function partnerOf(config: Record<string, unknown>, scopes: Scope[] = [u1]) {
-  const { sources, fact } = world();
+async function partnerOf(config: Record<string, unknown>, scopes: Scope[] = [u1], sizes = [10, 10, 10, 10]) {
+  const { sources, fact } = world(sizes);
   let clock = T0;
   const partner = new ContextPartner({
     sources: async () => sources,
@@ -93,7 +96,7 @@ async function partnerOf(config: Record<string, unknown>, scopes: Scope[] = [u1]
   for (const scope of scopes) {
     partner.sync!.track(scope);
     for (let i = 0; i < 200 && !partner.sync!.warm(scope); i++) await partner.sync!.tick();
-    for (const s of sources) expect(partner.sync!.complete(scope, s.id)).toBe(false);
+    for (const s of sources) if (s.items.length === 10) expect(partner.sync!.complete(scope, s.id)).toBe(false);
   }
   const settle = async (scope: Scope, sessionId: string) => {
     const key = `${scope.tenantId}/${scope.userId}#${sessionId}`;
@@ -126,7 +129,7 @@ async function partnerOf(config: Record<string, unknown>, scopes: Scope[] = [u1]
     await settle(ref, ref.sessionId);
     return { answer: a, searched: sources.map((s, k) => s.searches - before[k]!) };
   };
-  return { partner, sources, fact, request, ask };
+  return { partner, sources, fact, request, ask, advance: (ms: number) => (clock += ms) };
 }
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -178,11 +181,67 @@ describe("sourceYield (D505)", () => {
     expect(sum(after.searched.slice(1))).toBe(0);
   });
 
-  test("runs are per user: another user's sources are still searched, and forget starts a user again", async () => {
+  test("runs are per user: another user's sources are still searched; forget drops a source's run or the user's", async () => {
     const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, sourceYieldFloor: 0 }, [u1, u2]);
     for (let i = 0; i < 6; i++) await p.request(u1, BLIND);
     expect(sum((await p.request(u1, BLIND)).searched)).toBe(0);
     expect(sum((await p.request(u2, BLIND)).searched)).toBeGreaterThan(0);
+    const yields = (p.partner as unknown as { yields: SourceYield }).yields;
+    const read = p.sources.filter((s) => yields.run(u1, s.id, T0) > 0).map((s) => s.id);
+    expect(read.length).toBeGreaterThan(1);
+    p.partner.forget(u1, read[0]!);
+    expect(yields.run(u1, read[0]!, T0)).toBe(0);
+    expect(yields.run(u1, read[1]!, T0)).toBeGreaterThan(0);
+    expect(yields.size(u2)).toBeGreaterThan(0);
+    p.partner.forget(u1);
+    expect(yields.size(u1)).toBe(0);
+    expect(yields.size(u2)).toBeGreaterThan(0);
+  });
+
+  test("with the probes on, a spent source gets no probe either", async () => {
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, sourceYieldFloor: 0, probes: true });
+    const first = await p.request(u1, "Ask Zed Quinn about the offsite catering");
+    expect(sum(first.searched)).toBeGreaterThan(0);
+    for (let i = 0; i < 6; i++) await p.request(u1, BLIND);
+    expect(sum((await p.request(u1, BLIND)).searched)).toBe(0);
+  });
+
+  test("an outage is not a run of unused reads: a source that failed is searched again when it is back", async () => {
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, sourceYieldFloor: 0 });
+    for (const s of p.sources) s.down = true;
+    for (let i = 0; i < 6; i++) expect(sum((await p.request(u1, BLIND)).searched)).toBeGreaterThan(0);
+    for (const s of p.sources) s.down = false;
+    expect(sum((await p.request(u1, BLIND)).searched)).toBeGreaterThan(0);
+  });
+
+  test("one request books one read of a source, however many lookups joined its call", async () => {
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 99, sourceYieldFloor: 0 });
+    const r = await p.request(u1, BLIND);
+    const yields = (p.partner as unknown as { yields: SourceYield }).yields;
+    for (const [k, s] of p.sources.entries()) {
+      expect(yields.run(u1, s.id, T0 + 120_000)).toBeCloseTo(Math.min(1, r.searched[k]!), 3);
+    }
+  });
+
+  test("a whole copy keeps its poll: an ask never calls a spent whole copy failed or still being read", async () => {
+    // Source 3 has two items: its copy is whole, the others are cut.
+    const cfg = { sourceYield: true, sourceYieldRun: 99, sourceYieldFloor: 0.05, sourceYieldHalfLifeMs: 1e15 };
+    const p = await partnerOf(cfg, [u1], [10, 10, 10, 2]);
+    expect(p.partner.sync!.complete(u1, "src3")).toBe(true);
+    let last = await p.request(u1, BLIND);
+    for (let i = 0; i < 60; i++) last = await p.request(u1, BLIND);
+    expect(sum(last.searched)).toBe(0);
+    // Days on, every copy is stale.
+    p.advance(3 * 24 * HOUR);
+    const lists = p.sources[3]!.lists;
+    const asked = await p.ask({ ...u1, sessionId: "late" }, "Is the offsite catering arranged?");
+    const whole = asked.answer.sources?.find((x) => x.sourceId === "src3");
+    if (whole) {
+      expect(["local", "ok", "cached", "stale"]).toContain(whole.status);
+      expect(p.sources[3]!.lists).toBeGreaterThan(lists);
+    }
+    expect(asked.answer.answer).not.toContain("Could not reach");
+    expect(asked.answer.sources?.some((x) => x.status === "error")).toBe(false);
   });
 
   test("the pooled rule: once the user's reads on no evidence do not pay, unused sources are not read on none", async () => {
@@ -227,6 +286,6 @@ describe("pushLazy (D506)", () => {
     await one.request(u1, BLIND);
     await two.request(u1, BLIND);
     expect(lists(two) - b2).toBe(0);
-    expect(lists(one) - b1).toBeGreaterThanOrEqual(lists(two) - b2);
+    expect(lists(one) - b1).toBeGreaterThan(0);
   });
 });
