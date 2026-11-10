@@ -36,9 +36,9 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 `bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `ingest.bench.ts` (memory per synced
 user, ingest µs/item; the scale anchor, docs/TESTING.md), `users.bench.ts` (many users: memory live and frozen, thaw,
 D325), `storm.bench.ts` (a cold-start storm with warm users' p99, D328), `index-memory` (the per-user index's heap per
-item and per user, put/search latency, D111), `concurrent`, `put`, `churn`, `workload.ts`; `many-sources` (one user,
-~1,000 connectors, a session) and `source-days` (the same over whole days with changing sources: listing and card
-calls per user per day, D324).
+item and per user, put/search latency, D111), `segment-screen` (O4's screens of varint postings, columns and text
+blocks, D750), `concurrent`, `put`, `churn`, `workload.ts`; `many-sources` (one user, ~1,000 connectors, a session)
+and `source-days` (the same over whole days with changing sources: listing and card calls per user per day, D324).
 
 ## Invariants (with the decisions)
 
