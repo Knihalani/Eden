@@ -14,7 +14,7 @@ D425–D427. Paid spend: $0 (every figure is a no-model run). Machine: 4 vCPU, B
   they are used, and their sources are only checked for what is new.
 - **It is off unless the operator turns it on**, by setting both `EDEN_PERSIST_FROZEN_DIR` and `EDEN_PERSIST_KEY`.
   Off, nothing changes: no item content reaches the disk, as D8 says. On, it departs from D8 in one bounded way (D425):
-  redacted item content of idle users is on disk, encrypted, until the user is used again, forgotten, or 7 days old.
+  redacted item content of idle users is on disk, encrypted, until the user is used again, forgotten, or its newest item expires (at most 7 days after the write, D428).
 - **What a restart gains (200 users, measured).** At 1,000 items a user, every user was synced again in **14.1-14.2 s
   instead of 42.9-44.0 s**, with **600 listing calls instead of 2,400** and **3,000 items listed instead of 200,000**
   (two runs). At the 3,000-item cap with instant connectors: **32.4 s instead of 121.8 s**, **600 calls instead of
@@ -50,8 +50,8 @@ kills a child 2 s after its SIGTERM); a crash loses the live users' state, and t
 
 ### Reading it back
 
-On start the store reads every file's 36-byte header once: temporary files, other format versions, other keys and
-files older than 7 days are deleted (reported by reason). Nothing else is read until a user is used: `peek`, `touch`
+On start the store reads every file's 44-byte header once: temporary files, other format versions, other keys and
+files past their expiry (D428) or older than 7 days are deleted (reported by reason). Nothing else is read until a user is used: `peek`, `touch`
 and `ready` look for the user's file (a keyed-hash name in an in-memory set, no I/O when absent), read and decrypt it
 (1.0-1.2 ms at 1,000 items, 2.8 ms at 3,000), install it as a frozen user, and thaw it in slices as any frozen user
 is. A user read back gets a new revision (no revision of another process means anything here), read marks of 0, and
@@ -91,7 +91,7 @@ unchanged; otherwise that source's next page is read from the head.
 ### The file
 
 ```
-header (36 bytes, in the clear, authenticated): "EDNF" | format (u16) | 0 (u16) | key id (8) | written at (f64 ms) | nonce (12)
+header (44 bytes, in the clear, authenticated): "EDNF" | format (u16) | 0 (u16) | key id (8) | written at (f64 ms) | expiry (f64 ms, D428) | nonce (12)
 body: AES-256-GCM( meta length (u32) | meta JSON | zstd blob ) | tag (16)
 additional data: header | tenant id | NUL | user id
 name: hex(HMAC-SHA256(name key, tenant NUL user))[0..40] + ".blob"
@@ -117,7 +117,7 @@ is not written, and any older file of that user is deleted.
 | --- | --- | --- |
 | Another format version | deleted at open | `discarded (version)` |
 | Another key | deleted at open (its key id differs) | `discarded (key)` |
-| Older than 7 days | deleted at open, or by the expiry tick | `discarded (expired)` |
+| Past its expiry (its newest item's, D428) or older than 7 days | deleted at open, or by the expiry tick (no body decrypted) | `discarded (expired)` |
 | Truncated, tampered, or copied under another user's name | deleted on read | `discarded (corrupt)` |
 | Directory past its cap | not written; an older file of the user deleted | `write-failed (full)` |
 | A write or read error | not written / not read | `write-failed (io)`, `read-failed (io)` |
@@ -136,6 +136,7 @@ re-syncs, as without persistence.
 | Lazy load, then incremental re-sync | `ItemCache.load`; `SyncManager.restore` | "the sync's state comes back: polls, not backfills" (10 listing calls before, at most 2 after) |
 | `/v1/forget` and source removal delete the blob | `dropUser`, `forget`, `thawed` | "forget deletes the user's blob, read back or not; a source's forget and a removal too"; "a source the user no longer has"; server "forget deletes them" |
 | Older than the TTL or another version: discarded | `headerProblem`, `sweep` | "a wrong key, another version, a tampered byte and an expired blob each fail open" |
+| Deleted when its newest item expires, nobody reading it back (D428) | `frozenExpiry`, the header's expiry, `headerProblem`, `sweep` | "a file whose items have all expired is deleted by the sweep and at open"; "a file with one fresh item survives"; "the header's expiry is authenticated"; "a file of the previous format" |
 | Wrong key or corrupt: fail open, reported without content | `discard`, `PersistEvent` | the same test checks the events are reasons only |
 | Names reveal no ids | `nameOf` (HMAC) | "written encrypted under a keyed name" |
 | Bounded disk | `maxBytes`, `sweep` | "the directory is bounded"; "flush ... sweeps blobs nobody came back for" |

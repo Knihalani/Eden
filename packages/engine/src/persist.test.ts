@@ -231,6 +231,110 @@ describe("frozen users on disk (D425)", () => {
     expect(files(dir)).toEqual([]);
     expect(events).toEqual([{ kind: "discarded", reason: "expired" }]);
   });
+
+  // D428: a file lives until its newest item (or probe) expires, not the 7-day cap, even if nothing reads it back.
+  test("a file whose items have all expired is deleted by the sweep and at open, and nothing is restored", () => {
+    const dir = tempDir();
+    const a = freezing();
+    const { d } = disk(dir);
+    a.persist(d);
+    a.put(alice, items("alice", 3), T0); // Lookup items: a 24 h time to live.
+    freezeAll(a, T0);
+    expect(files(dir).length).toBe(1);
+    const b = freezing();
+    const { d: d2, events } = disk(dir); // The 7-day cap would keep it.
+    b.persist(d2);
+    expect(d2.count).toBe(1);
+    b.expireIdle(T0 + 23 * HOUR);
+    expect(files(dir).length).toBe(1);
+    b.expireIdle(T0 + 25 * HOUR);
+    expect(files(dir)).toEqual([]);
+    expect(events).toEqual([{ kind: "discarded", reason: "expired" }]);
+    expect(find(b, alice, "budget", T0 + 25 * HOUR)).toEqual([]);
+    expect(b.freezes.loaded).toBe(0);
+    // Written with items fetched 26 h ago (expired two hours since): the next process deletes it on opening.
+    const OLD = Date.now() - 26 * HOUR;
+    const c = freezing();
+    c.persist(disk(dir).d);
+    c.put(bob, items("bob", 3), OLD);
+    freezeAll(c, OLD);
+    expect(files(dir).length).toBe(1);
+    const e = freezing();
+    const { d: d3, events: opened } = disk(dir);
+    e.persist(d3);
+    expect(opened).toEqual([{ kind: "discarded", reason: "expired" }]);
+    expect(files(dir)).toEqual([]);
+    expect(find(e, bob, "budget", Date.now())).toEqual([]);
+    expect(e.freezes.loaded).toBe(0);
+  });
+
+  test("a file with one fresh item survives its older items' expiry, and a synced item keeps it for 7 days", () => {
+    const dir = tempDir();
+    const a = freezing();
+    a.persist(disk(dir).d);
+    a.put(alice, items("alice", 3), T0 - 20 * HOUR);
+    a.put(alice, items("alice", 1, "docs"), T0); // One fresh lookup item: the file lives to T0 + 24 h.
+    a.put(bob, items("bob", 2, "cal"), T0, false, true); // Synced: 7 days.
+    freezeAll(a, T0);
+    expect(files(dir).length).toBe(2);
+    const b = freezing();
+    const { d, events } = disk(dir);
+    b.persist(d);
+    b.expireIdle(T0 + 23 * HOUR); // Alice's older items expired at T0 + 4 h; the fresh one has not.
+    expect(files(dir).length).toBe(2);
+    expect(events).toEqual([]);
+    const back = find(b, alice, "budget", T0 + 23 * HOUR);
+    expect(back.map((i) => i.sourceId)).toEqual(["docs"]);
+    expect(b.freezes.loaded).toBe(1);
+    b.expireIdle(T0 + 6 * 24 * HOUR); // Bob's synced items are within 7 days.
+    expect(files(dir)).toEqual([d.nameOf(bob)]);
+    b.expireIdle(T0 + 7 * 24 * HOUR + HOUR);
+    expect(files(dir)).toEqual([]);
+  });
+
+  test("the header's expiry is authenticated: moving it later fails to decrypt, and never passes the age cap", () => {
+    const dir = tempDir();
+    const a = freezing();
+    const { d } = disk(dir);
+    a.persist(d);
+    a.put(alice, items("alice", 3), T0);
+    a.put(bob, items("bob", 3), T0);
+    freezeAll(a, T0);
+    const header = readFileSync(join(dir, d.nameOf(alice)));
+    expect(header.readDoubleLE(24)).toBe(T0 + 24 * HOUR);
+    // Alice's expiry moved a day later: the header is in the additional data, so the file does not open.
+    header.writeDoubleLE(T0 + 48 * HOUR, 24);
+    writeFileSync(join(dir, d.nameOf(alice)), header);
+    // Bob's moved a year later: still deleted at the 7-day cap without being decrypted.
+    const bPath = join(dir, d.nameOf(bob));
+    const bobs = readFileSync(bPath);
+    bobs.writeDoubleLE(T0 + 365 * 24 * HOUR, 24);
+    writeFileSync(bPath, bobs);
+    const b = freezing();
+    const { d: d2, events } = disk(dir);
+    b.persist(d2);
+    expect(events).toEqual([]);
+    expect(find(b, alice, "budget", T0)).toEqual([]);
+    expect(events).toEqual([{ kind: "discarded", reason: "corrupt" }]);
+    b.expireIdle(T0 + 7 * 24 * HOUR + HOUR);
+    expect(files(dir)).toEqual([]);
+    expect(events.at(-1)).toEqual({ kind: "discarded", reason: "expired" });
+  });
+
+  test("a file of the previous format (no expiry in its header) is discarded as another version", () => {
+    const dir = tempDir();
+    const a = freezing();
+    const { d } = disk(dir);
+    a.persist(d);
+    a.put(alice, items("alice", 2), T0);
+    freezeAll(a, T0);
+    const path = join(dir, d.nameOf(alice));
+    const v = readFileSync(path);
+    v.writeUInt16LE(1, 4);
+    writeFileSync(path, v);
+    expect(disk(dir).events).toEqual([{ kind: "discarded", reason: "version" }]);
+    expect(files(dir)).toEqual([]);
+  });
 });
 
 /** A connector with a recent-first list call; every call counted. */

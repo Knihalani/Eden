@@ -5,15 +5,17 @@
  *
  * One file per user, named by a keyed hash of tenant and user (`nameOf`: the directory reveals no id), holding:
  *
- *   header (36 bytes, in the clear, authenticated): "EDNF", format version (u16), 0 (u16), key id (8 bytes),
- *     time written (f64, ms), nonce (12 bytes, random per write)
+ *   header (44 bytes, in the clear, authenticated): "EDNF", format version (u16), 0 (u16), key id (8 bytes),
+ *     time written (f64, ms), expiry (f64, ms: the latest any item or probe in it lives to), nonce (12 bytes,
+ *     random per write)
  *   AES-256-GCM ciphertext of: meta length (u32) | meta JSON | the zstd blob; then its 16-byte tag
  *
  * The additional data is the header and the tenant and user ids, so a file copied under another user's name, or
- * written for another user, fails to open (and so does one whose time or version was edited). Keys come from the
- * operator's 32-byte key by HKDF (one for encryption, one for names, one for the key id); the key is never logged.
+ * written for another user, fails to open (and so does one whose time, expiry or version was edited). Keys come from
+ * the operator's 32-byte key by HKDF (one for encryption, one for names, one for the key id); the key is never logged.
  *
- * Everything fails open: a file of another format version, another key, past `maxAgeMs`, or that does not decrypt is
+ * Everything fails open: a file of another format version, another key, past its expiry or `maxAgeMs` (whichever comes
+ * first), or that does not decrypt is
  * deleted and reported by reason only (`PersistEvent`), and the user simply re-syncs. A write that would take the
  * directory past `maxBytes` is not made (reported "full"). Sync I/O, a user at a time: a few milliseconds at the sync
  * cap (docs/research/c3-persist-frozen.md), inside the cache's sliced freeze or a thaw that reads the user anyway.
@@ -39,10 +41,10 @@ import type { Scope } from "@eden/protocol";
  * The on-disk format. Bump it whenever what a blob holds changes shape (`FrozenEntry`, `FrozenBody`, `PersistedUser`,
  * the sync's `SyncSnapshot`): a blob of another version is discarded, never read as this one.
  */
-export const PERSIST_FORMAT = 1;
+export const PERSIST_FORMAT = 2; // 2: the header's expiry (1 had none: such files are discarded as "version").
 
 const MAGIC = Buffer.from("EDNF", "latin1");
-const HEADER = 36;
+const HEADER = 44;
 const NONCE = 12;
 const TAG = 16;
 const NAME = /^[0-9a-f]{40}\.blob$/;
@@ -61,6 +63,12 @@ export interface PersistedUser {
   extra?: unknown;
   /** The cache's zstd JSON blob of entries and tallies (`FrozenBody`). */
   blob: Uint8Array;
+  /**
+   * When everything in the blob has expired (ms, the cache's clock): the latest of each class's newest item plus its
+   * time to live, and of the newest probe plus its own. Written into the authenticated header, never past `maxAgeMs`
+   * after the write, so a file nobody reads back is deleted when its newest item expires, not days later.
+   */
+  expiresAt: number;
 }
 
 /** Content-free reports: what went wrong, never whose or what. */
@@ -79,7 +87,7 @@ export interface FrozenDisk {
   write(scope: Scope, user: PersistedUser, now: number): boolean;
   /** Deletes the user's blob, if any. Never throws. */
   delete(scope: Scope): void;
-  /** Deletes blobs past their age that nothing has read; returns how many. */
+  /** Deletes blobs past their expiry or age that nothing has read, without decrypting them; returns how many. */
   sweep(now: number): number;
 }
 
@@ -99,8 +107,8 @@ export class EncryptedFrozenDisk implements FrozenDisk {
   private readonly enc: Buffer;
   private readonly names: Buffer;
   private readonly keyId: Buffer;
-  /** Blobs on disk this store knows of: file name → bytes and time written. */
-  private readonly files = new Map<string, { bytes: number; at: number }>();
+  /** Blobs on disk this store knows of: file name → bytes, time written and how long it lives (`lifetime`). */
+  private readonly files = new Map<string, { bytes: number; at: number; life: number }>();
   private bytes = 0;
   /** Counts, and the time spent writing (encrypt + write + rename) and reading (read + decrypt), for the benches. */
   readonly stats = {
@@ -171,7 +179,7 @@ export class EncryptedFrozenDisk implements FrozenDisk {
       if (!validMeta(meta)) return this.discard(name, "corrupt");
       this.stats.read++;
       this.stats.readMs += performance.now() - t0;
-      return { ...meta, blob: new Uint8Array(plain.subarray(4 + metaLength)) };
+      return { ...meta, blob: new Uint8Array(plain.subarray(4 + metaLength)), expiresAt: file.readDoubleLE(24) };
     } catch {
       // Tampered, truncated, copied from another user's name, or written under another key with the same id.
       return this.discard(name, "corrupt");
@@ -182,7 +190,7 @@ export class EncryptedFrozenDisk implements FrozenDisk {
     const name = this.nameOf(scope);
     const t0 = performance.now();
     try {
-      const { blob, ...meta } = user;
+      const { blob, expiresAt, ...meta } = user;
       const json = Buffer.from(JSON.stringify(meta), "utf8");
       const length = Buffer.alloc(4);
       length.writeUInt32LE(json.length, 0);
@@ -200,6 +208,9 @@ export class EncryptedFrozenDisk implements FrozenDisk {
       header.writeUInt16LE(PERSIST_FORMAT, 4);
       this.keyId.copy(header, 8);
       header.writeDoubleLE(now, 16);
+      // Never later than the age cap; an unknown expiry (no item, no probe: NaN) is now, so the file goes at once.
+      const until = Number.isFinite(expiresAt) ? Math.min(expiresAt, now + this.o.maxAgeMs) : now;
+      header.writeDoubleLE(until, 24);
       randomBytes(NONCE).copy(header, HEADER - NONCE);
       const c = createCipheriv("aes-256-gcm", this.enc, header.subarray(HEADER - NONCE));
       c.setAAD(aad(header, scope));
@@ -210,7 +221,7 @@ export class EncryptedFrozenDisk implements FrozenDisk {
       writeFileSync(tmp, Buffer.concat([header, ...body]), { mode: 0o600 });
       renameSync(tmp, path);
       this.bytes += size - old;
-      this.files.set(name, { bytes: size, at: now });
+      this.files.set(name, { bytes: size, at: now, life: lifetime(now, until, this.o.maxAgeMs) });
       this.stats.written++;
       this.stats.bytesWritten += size;
       this.stats.writeMs += performance.now() - t0;
@@ -234,7 +245,7 @@ export class EncryptedFrozenDisk implements FrozenDisk {
   sweep(now: number): number {
     let n = 0;
     for (const [name, f] of this.files) {
-      if (now - f.at <= this.o.maxAgeMs) continue;
+      if (!expired(f.at, f.life, now)) continue;
       this.remove(name);
       this.stats.discarded++;
       this.o.report?.({ kind: "discarded", reason: "expired" });
@@ -279,7 +290,8 @@ export class EncryptedFrozenDisk implements FrozenDisk {
         this.o.report?.({ kind: "discarded", reason: bad });
         continue;
       }
-      this.files.set(name, { bytes, at: head.readDoubleLE(16) });
+      const at = head.readDoubleLE(16);
+      this.files.set(name, { bytes, at, life: lifetime(at, head.readDoubleLE(24), this.o.maxAgeMs) });
       this.bytes += bytes;
     }
   }
@@ -289,8 +301,11 @@ export class EncryptedFrozenDisk implements FrozenDisk {
     if (file.readUInt16LE(4) !== PERSIST_FORMAT) return "version";
     if (!file.subarray(8, 16).equals(this.keyId)) return "key";
     const at = file.readDoubleLE(16);
-    // A time ahead of this clock is read as written now (a clock moved back), never as fresher than it is.
-    if (!Number.isFinite(at) || now - Math.min(at, now) > this.o.maxAgeMs) return "expired";
+    const until = file.readDoubleLE(24);
+    if (!Number.isFinite(at) || !Number.isFinite(until)) return "expired";
+    // Read before the tag is checked: `lifetime` caps it at the age limit, so an edited expiry never keeps a file
+    // longer than that (and the edit fails to decrypt anyway).
+    if (expired(at, lifetime(at, until, this.o.maxAgeMs), now)) return "expired";
     return null;
   }
 
@@ -318,7 +333,20 @@ export class EncryptedFrozenDisk implements FrozenDisk {
   }
 }
 
-/** The additional data: the header (version, key id, time, nonce) and whose blob it is. */
+/** How long a file lives after it was written: to its expiry, never past the age cap. */
+function lifetime(at: number, until: number, maxAgeMs: number): number {
+  return Number.isFinite(at) && Number.isFinite(until) ? Math.min(until - at, maxAgeMs) : -1;
+}
+
+/**
+ * Whether a file written at `at` that lives `life` ms is past it. A time ahead of this clock is read as written now (a
+ * clock moved back), never as fresher than it is.
+ */
+function expired(at: number, life: number, now: number): boolean {
+  return !Number.isFinite(at) || now - Math.min(at, now) > life;
+}
+
+/** The additional data: the header (version, key id, time, expiry, nonce) and whose blob it is. */
 function aad(header: Buffer, scope: Scope): Buffer {
   return Buffer.concat([header, Buffer.from(`${scope.tenantId}\0${scope.userId}`, "utf8")]);
 }

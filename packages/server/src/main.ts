@@ -207,7 +207,7 @@ function persistStore(config: ServerConfig): EncryptedFrozenDisk | null {
     dir: childPersistDir(p.dir, child.index, child.count),
     key: p.key.bytes(),
     maxBytes: p.maxBytes,
-    // Every item in an older blob would have expired: the cache's longest time to live (synced items, 7 days).
+    // The cap on a file's own expiry (its newest item's, D428): the cache's longest time to live (synced, 7 days).
     maxAgeMs: DEFAULT_CACHE_LIMITS.syncTtlMs,
     report,
   });
