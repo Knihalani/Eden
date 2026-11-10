@@ -628,6 +628,11 @@ docs/research/c3-persist-frozen.md): synced again in 14.1-14.2 s instead of 42.9
 and 32.4 s instead of 121.8 s at the 3,000-item cap; listing calls 2,400 → 600 and 6,000 → 600. Live users are
 written at SIGTERM (within 1.5 s); a crash loses only what was live.
 
+Trial (D652, off): `EDEN_PERSIST_DISK_ONLY=1` also lets go of the memory's copy of a frozen user once their file
+is written, and reads the file back when they return (a thaw 6-9 ms slower at the median). A frozen user then holds
+0.33-0.38 MB of resident memory instead of 0.62 MB; on a fleet that is 1.2x more users when a twentieth are active
+and 1.06x at an eighth (docs/research/o2-users-per-box.md). A file that does not open: that user is synced again.
+
 What you take on: redacted item content of idle users is on disk until the user returns, is forgotten (`/v1/forget`
 deletes the file too) or the file is 7 days old; the key in the environment opens every file, so put the directory
 on an encrypted volume, keep the key out of images and logs, and disclose the store to your users (docs/PRIVACY.md,

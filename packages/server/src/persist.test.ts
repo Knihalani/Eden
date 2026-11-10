@@ -25,6 +25,15 @@ describe("EDEN_PERSIST_* (D425)", () => {
     expect(() => loadConfig({ ...dev, EDEN_PERSIST_MAX_MB: "10" })).toThrow(/EDEN_PERSIST_MAX_MB/);
   });
 
+  test("EDEN_PERSIST_DISK_ONLY (D652, a trial) is off by default, on with 1, and refused without the directory", () => {
+    const on = { ...dev, EDEN_PERSIST_FROZEN_DIR: root, EDEN_PERSIST_KEY: HEX };
+    expect(loadConfig(on).persist!.diskOnly).toBe(false);
+    expect(loadConfig({ ...on, EDEN_PERSIST_DISK_ONLY: "0" }).persist!.diskOnly).toBe(false);
+    expect(loadConfig({ ...on, EDEN_PERSIST_DISK_ONLY: "1" }).persist!.diskOnly).toBe(true);
+    expect(() => loadConfig({ ...on, EDEN_PERSIST_DISK_ONLY: "yes" })).toThrow(/EDEN_PERSIST_DISK_ONLY must be 1 or 0/);
+    expect(() => loadConfig({ ...dev, EDEN_PERSIST_DISK_ONLY: "1" })).toThrow(/without EDEN_PERSIST_FROZEN_DIR/);
+  });
+
   test("the key is 32 bytes (hex or base64), never a placeholder, and no message or log shows it", () => {
     const base64 = Buffer.from(HEX, "hex").toString("base64");
     for (const k of [HEX, base64]) {
