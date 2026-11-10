@@ -802,6 +802,9 @@ export class ContextPartner {
             }
           });
         },
+        // D652: the file of a user held on disk only did not open. Their sync starts over on the next event, as a new
+        // user's does.
+        lost: (scope) => sync?.forget(scope),
       };
     }
   }

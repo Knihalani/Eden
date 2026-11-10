@@ -17,7 +17,9 @@
  * 4. events: one `observe` per user (a fresh session each) on the thawed caches, timed (the fast path, `waitMs` 0).
  *
  * Run: `bun packages/engine/bench/users.bench.ts [users=1000] [itemsPerUser=500] [--world] [--no-freeze] [--waves=K]
- * [--config=<EngineConfig JSON>]`.
+ * [--persist] [--disk-only] [--config=<EngineConfig JSON>]`.
+ * `--persist`: frozen users are also written, encrypted, to a temp directory (D425); `--disk-only`: and held there only
+ * (D652).
  * `--waves=K`: phase 1 brings the users in K waves, earlier ones frozen (unless `--no-freeze`) before the next: its
  * memory line is then a steady state with 1/K of the users active; RSS there is what sizes a machine.
  * `--world` takes item text from the sim world (as `ingest.bench.ts --world`). No model, no network.
@@ -32,11 +34,14 @@ import type { ListPage, Source } from "@eden/sources";
 import { ItemCache } from "../src/cache";
 import type { EngineConfig } from "../src/config";
 import { ContextPartner } from "../src/partner";
+import { EncryptedFrozenDisk } from "../src/persist";
 import { termIds } from "../src/text";
 import { buildWorkload } from "./workload";
 
 const WORLD = process.argv.includes("--world");
 const NO_FREEZE = process.argv.includes("--no-freeze");
+const PERSIST = process.argv.includes("--persist");
+const DISK_ONLY = process.argv.includes("--disk-only");
 /** `--config=<EngineConfig JSON>`: settings over the default (as `storm.bench.ts`), e.g. a switch's off arm. */
 const CONFIG = JSON.parse(
   process.argv.find((a) => a.startsWith("--config="))?.slice(9) ?? "{}",
@@ -144,6 +149,17 @@ const byUser = new Map(users.map((x) => [x.scope.userId, x.sources]));
 
 const cache = new ItemCache({ maxUsersPerTenant: USERS + 1, maxSyncedPerUser: Math.max(5_000, PER_USER) });
 cache.close(); // The bench runs the expiry ticks itself.
+// `--persist`: frozen users are also written to a temp directory, encrypted (D425); `--disk-only`: and their blobs are
+// then held on disk only (`persistDiskOnly`, D652). The thaw line then includes the file's read.
+if (PERSIST || DISK_ONLY) {
+  const disk = new EncryptedFrozenDisk({
+    dir: mkdtempSync(join(tmpdir(), "eden-users-frozen-")),
+    key: new Uint8Array(32).map((_, i) => (i * 37 + 11) & 0xff),
+    maxBytes: 64 * 1024 ** 3,
+    maxAgeMs: 7 * 24 * 3_600_000,
+  });
+  cache.persist(disk, { diskOnly: DISK_ONLY });
+}
 const partner = new ContextPartner({
   sources: async (scope) => byUser.get(scope.userId)!,
   // A file, as the servers open (in memory its pages would count in RSS as user state; a file's page cache is bounded).
@@ -163,8 +179,14 @@ const n = USERS * PER_USER;
 const cpu0 = process.cpuUsage();
 const t0 = performance.now();
 for (let w = 0; w < WAVES; w++) {
-  if (w > 0 && !NO_FREEZE) for (let t = 0; t < 2; t++) cache.expireIdle(clock);
-  const wave = users.slice(Math.floor((w * USERS) / WAVES), Math.floor(((w + 1) * USERS) / WAVES));
+  // Every earlier wave frozen before the next arrives: as many expiry ticks as the idle bound takes (three at the
+  // defaults). Two were run here until O2 (D651), which left the wave before the last live: "1/K active" was 2/K.
+  const before = Math.floor((w * USERS) / WAVES);
+  if (w > 0 && !NO_FREEZE) {
+    for (let t = 0; t < 8 && cache.frozenCount < before; t++) cache.expireIdle(clock);
+    if (cache.frozenCount !== before) throw new Error(`froze ${cache.frozenCount} of ${before} before wave ${w}`);
+  }
+  const wave = users.slice(before, Math.floor(((w + 1) * USERS) / WAVES));
   for (const { scope } of wave) sync.track(scope, clock);
   const target = Math.floor(((w + 1) * USERS) / WAVES) * PER_USER;
   for (let i = 0; synced() < target; i++) {
@@ -176,6 +198,7 @@ for (let w = 0; w < WAVES; w++) {
 const stormMs = performance.now() - t0;
 const cpu = process.cpuUsage(cpu0);
 for (const { sources } of users) for (const s of sources) s.items = [];
+const frozenAtSteady = cache.frozenCount;
 const m2 = await mem();
 type Mem = { heap: number; ext: number; rss: number };
 const perUser = (a: Mem, b: Mem) => ({
@@ -275,7 +298,7 @@ console.log(
     `${f((cpu.user + cpu.system) / n, 1)} µs CPU/item, ${f(USERS / (stormMs / 1000), 1)} users/s`,
 );
 console.log(
-  `${WAVES > 1 ? `after ${WAVES} waves (${NO_FREEZE ? "none frozen" : "earlier waves frozen"})` : "synced, live"}: ` +
+  `${WAVES > 1 ? `after ${WAVES} waves (${NO_FREEZE ? "none frozen" : `${frozenAtSteady} of ${USERS} users frozen`})` : "synced, live"}: ` +
     `${f(live.heapMB)} MB heapUsed/user (${f((live.heapMB * MB) / PER_USER, 0)} B/item), ` +
     `${f(live.extMB)} MB external/user (counted in heapUsed too), ${f(live.rssMB)} MB RSS/user`,
 );
@@ -289,7 +312,7 @@ if (!NO_FREEZE) {
 }
 console.log(
   `first read after freeze: p50 ${f(pct(thaws, 0.5))} ms, p99 ${f(pct(thaws, 0.99))} ms, max ${f(Math.max(...thaws))} ms` +
-    ` (${f((pct(thaws, 0.5) * 1000) / PER_USER, 1)} µs/item at p50); heap after thaw ${f(perUser(m4, m0).heapMB)} MB/user`,
+    ` (${f((pct(thaws, 0.5) * 1000) / PER_USER, 1)} µs/item at p50); heap after thaw ${f(perUser(m4, m0).heapMB)} MB/user, RSS ${f(perUser(m4, m0).rssMB)} MB/user`,
 );
 if (sliced) {
   console.log(

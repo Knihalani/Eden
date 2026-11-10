@@ -111,7 +111,7 @@ async function serve(config: ServerConfig): Promise<void> {
     onTrace: process.env.EDEN_TRACE === "1" ? (t) => console.log(JSON.stringify(t)) : undefined,
     // Whether the agent used each injection (D293), for `bun run digest`; content-free like the traces.
     onUsage: process.env.EDEN_TRACE === "1" ? (u) => console.log(JSON.stringify({ usage: u })) : undefined,
-    ...(persist ? { persist } : {}),
+    ...(persist ? { persist, persistDiskOnly: config.persist?.diskOnly === true } : {}),
   });
   // The background sync's own connector calls (backfill, sweeps) are made outside any request, so no trace has them:
   // with EDEN_TRACE=1 its cumulative counters are logged once a minute, per process, for `bun run digest` (D293).
@@ -161,7 +161,10 @@ async function serve(config: ServerConfig): Promise<void> {
       ` (startup ${startupMs} ms; model roles ${process.env.OPENROUTER_API_KEY ? "on" : "off (no OPENROUTER_API_KEY)"}` +
       `; sources ${sources.shared} shared${sources.userSources ? " + per user (EDEN_USER_SOURCES_FILE)" : ""}` +
       `${keys.length > 0 ? `; engine settings: ${keys.join(", ")}` : ""}` +
-      (persist ? `; frozen users persisted, encrypted (${persist.count} on disk, D425)` : "") +
+      (persist
+        ? `; frozen users persisted, encrypted (${persist.count} on disk, D425` +
+          `${config.persist?.diskOnly ? "; on disk only while frozen, D652 trial" : ""})`
+        : "") +
       (child
         ? `; router child ${child.index} of ${child.count}, per-tenant caps divided by ${child.count}:` +
           (config.spendLeases

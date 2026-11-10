@@ -1390,6 +1390,15 @@ export class SyncManager {
     // counted as synced, or the listing would undo `removed`.
     const own = kept.filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now));
     const changed = this.deps.cache.put(u.scope, own, now, true, true, readMark);
+    // The put thawed a user whose file was lost (D652) and the owner forgot their sync inside it: what was just
+    // stored belongs to no sync state, so it goes rather than sit unswept.
+    if (u.gone) {
+      this.deps.cache.dropSynced(
+        u.scope,
+        changed.map((it) => it.id),
+      );
+      return 0;
+    }
     if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
     for (const it of own) {
