@@ -1534,6 +1534,13 @@ export class ItemCache {
       if (x instanceof FrozenUser) {
         // A frozen user is thawed here only when something of theirs expired (and frozen again below if still idle).
         if (!this.frozenExpired(x, now)) continue;
+        // D652: everything a user held on disk only has expired, and so has their file (D428). Dropped as an
+        // expired user is, without a read that would find no file and count them lost.
+        if (this.allExpired(x, now)) {
+          this.dropUser(key, x.scope.tenantId);
+          n++;
+          continue;
+        }
         if (sliced) {
           this.later.add(key);
           continue;
@@ -1581,6 +1588,10 @@ export class ItemCache {
     let x = this.users.get(key);
     if (x instanceof FrozenUser) {
       if (!this.frozenExpired(x, now)) return;
+      if (this.allExpired(x, now)) {
+        this.dropUser(key, x.scope.tenantId);
+        return;
+      }
       yield* this.thawJob(key, x);
       x = this.users.get(key);
       if (!(x instanceof UserCache) || this.expireUser(key, x, now)) return;
@@ -1647,6 +1658,11 @@ export class ItemCache {
       return true;
     }
     return false;
+  }
+
+  /** Whether a user held on disk only (D652) has nothing left alive: its file's expiry (`frozenExpiry`) has passed. */
+  private allExpired(f: FrozenUser, now: number): boolean {
+    return f.blob === null && !(this.frozenExpiry(f) > now);
   }
 
   /** Whether a frozen user holds an expired item (`anyExpired` on the oldest of each class) or holds none. */

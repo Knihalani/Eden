@@ -164,6 +164,38 @@ describe("frozen users on disk only (D652)", () => {
     }
   });
 
+  test("a user whose items all expired is dropped as any expired user: no read, not counted lost", () => {
+    const dir = tempDir();
+    const c = freezing();
+    c.persist(disk(dir).d, { diskOnly: true });
+    const lost: Scope[] = [];
+    c.persistHooks = { save: () => null, restored: () => {}, lost: (s) => lost.push(s) };
+    c.put(alice, items("alice", 5), T0);
+    freezeAll(c, T0);
+    expect(c.freezes.released).toBe(1);
+    c.expireIdle(T0 + 8 * 24 * HOUR);
+    expect(c.freezes.lost).toBe(0);
+    expect(lost).toEqual([]);
+    expect(c.frozenCount).toBe(0);
+    expect(files(dir)).toEqual([]);
+    expect(find(c, alice, Q, T0 + 8 * 24 * HOUR)).toEqual([]);
+  });
+
+  test("forgetting a disk-only user deletes the file and counts nothing lost", () => {
+    const dir = tempDir();
+    const c = freezing();
+    c.persist(disk(dir).d, { diskOnly: true });
+    c.put(alice, items("alice", 5), T0);
+    c.put(bob, items("bob", 5), T0);
+    freezeAll(c, T0);
+    expect(files(dir).length).toBe(2);
+    c.forget(alice);
+    expect(files(dir).length).toBe(1);
+    expect(c.freezes.lost).toBe(0);
+    expect(find(c, alice, Q, T0)).toEqual([]);
+    expect(find(c, bob, Q, T0).length).toBe(5);
+  });
+
   test("isolation: each disk-only user thaws their own items; another user's file under their name does not open", () => {
     const dir = tempDir();
     const c = freezing();

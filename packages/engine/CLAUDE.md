@@ -414,6 +414,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   synchronously (~110-190 ms at 3,000 items) with every other request waiting. Bench: `bench/users.bench.ts`;
   on Bun 1.4 `heapUsed` already counts typed arrays' stores and `external` counts them again (D372): report each
   on its own, and RSS, never their sum.
+- **Frozen users on disk only (D652, a trial, off; `persist-disk-only.test.ts`).** With `persist(disk, { diskOnly:
+  true })` a frozen user's `blob` is null once its file is written, and the file is the only copy: any new path that
+  deletes a file without dropping the user loses the user (`thawSteps` then yields an empty one and `persistHooks.lost`
+  restarts the sync). A user whose items all expired is dropped without a read (`allExpired`).
 - **Persisted frozen users (D425, D426, opt-in; `persist.ts`, `persist.test.ts`, `bench/restart.bench.ts`).** With
   `ItemCache.persist(disk)`, `install` (every freeze) writes the blob and the partner's `persistHooks.save` (the sync's
   `snapshot`); `thawed` deletes it (on disk is only ever a frozen user's state) and, for a user read back from disk

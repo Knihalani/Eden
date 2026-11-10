@@ -73,16 +73,17 @@ unchanged and the sync is as warm as it was.
   are kept (a restart's restore zeroes them).
 - **A write that fails** (the directory's cap, an I/O error) keeps the memory's copy: the user is frozen as without
   the trial.
-- **A file that does not open** (deleted, damaged, expired, copied from another user): the user thaws empty, what
+- **A file that does not open** (deleted, damaged, copied from another user): the user thaws empty, what
   was derived from their items is dropped (`onDropped(scope, null)`: cards), and the partner forgets the user's sync
   state, so the next event syncs them from the start, as a restart without the file does. Counted in
-  `freezes.lost`; the disk reports the reason, never content.
+  `freezes.lost`; the disk reports the reason, never content. A user whose every item has expired is dropped as
+  any expired user is, without a read (the review's finding; tested).
 - **Isolation.** The file is bound to tenant and user (D425's additional data): another user's file under this
   user's name does not open (tested).
 - **Privacy.** Nothing new is written: the file is D425's. With the trial the file is the only copy of an idle
   user's items, which is the point.
 
-Tests (`packages/engine/src/persist-disk-only.test.ts`, 7): off unless asked; the same answers, text and order
+Tests (`packages/engine/src/persist-disk-only.test.ts`, 9, expiry and forget among them): off unless asked; the same answers, text and order
 after a thaw from the file; a failed write; a lost or tampered file (the user empty, the owner told once, puts work
 again); isolation across tenants; the partner serving a returning user with the sync still warm; a lost file
 followed by a full re-sync and the fact delivered again. Two mutations each fail tests (the release switched off: 5
@@ -99,6 +100,10 @@ Measured, `users.bench.ts ... --world`, base against `--disk-only` (`--persist`,
 | | disk only | 0.79 MB | 2.23 MB | 0.13, 0.54 MB | 150.2 ms |
 | `400 3000 --waves=20` (1/20) | base | 0.66 MB | 1.46 MB | 0.41, 0.71 MB | 145.0 ms |
 | | disk only | 0.38 MB | 1.22 MB | 0.12, 0.41 MB | 153.5 ms |
+
+Each row is one run an arm; the base thaw p50 itself ranged 143-147 ms across runs, so the 6-9 ms is indicative.
+The 100-user run reads higher per user than §1's 200-user run at the same share (3.74 against 3.39 MB): the
+process's fixed memory is spread over fewer users.
 
 A frozen user's own cost, by the slope between the 100- and 200-user runs once everyone is frozen: 0.62 MB RSS a
 user before, 0.33-0.38 MB with the trial. What is left is not the blob: `/proc/self/smaps` and `bun:jsc`'s
