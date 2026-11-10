@@ -337,4 +337,21 @@ describe("syncDelta (D476)", () => {
     expect(got.answer).not.toContain("4,000 left");
     expect(got.citations.map((c) => c.itemId)).toContain(itemId("bank", REF));
   });
+
+  test("on: every deletion a large feed page names is applied (review)", async () => {
+    const { bank, all } = world();
+    const t = setup(new Map([["alice", all]]), ON);
+    await warm(t.partner, alice);
+    // A mass deletion: past the 1,000 refs a read drops at once, the asked item among the last.
+    const read = bank.changes.bind(bank);
+    bank.changes = async (scope, cursor) => {
+      const page = await read(scope, cursor);
+      if (!page || cursor === undefined) return page;
+      return { ...page, removed: [...Array.from({ length: 1_000 }, (_, i) => `gone${i}`), ...page.removed] };
+    };
+    bank.items = bank.items.filter((i) => i.ref !== REF);
+    t.advance(8 * HOUR);
+    const a = await ask(t.partner, alice, "s1");
+    expect(a.citations.map((c) => c.itemId)).not.toContain(itemId("bank", REF));
+  });
 });

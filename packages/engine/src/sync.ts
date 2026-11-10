@@ -1598,20 +1598,23 @@ export class SyncManager {
       if (page.removed.length > 0) {
         // By the id the cache keys an item by (a ref the gate redacts is keyed by its hash, as a deletion notice's).
         // Every one, held by the sync or not: a lookup may hold its own copy of an item the cap keeps out (the
-        // review), and the partner's drop holds the id gone whoever holds it.
-        const ids = page.removed
-          .slice(0, MAX_PUSHED)
-          .map((ref) => sanitizedId({ id: itemId(s.id, ref), sourceId: s.id, ref, title: "", text: "" }));
+        // review), and the partner's drop holds the id gone whoever holds it. Every ref, in chunks of `MAX_PUSHED`:
+        // the read below vouches for every copy held, so a deletion left out would be cited as current (the review).
         let held = 0;
-        for (const id of ids) {
-          if (s.ids.delete(id)) held++;
-          if (s.cold?.drop(id)) held++;
-          s.pushed.delete(id);
-          s.missed.delete(id);
-          s.thawed?.delete(id);
+        for (let at = 0; at < page.removed.length; at += MAX_PUSHED) {
+          const ids = page.removed
+            .slice(at, at + MAX_PUSHED)
+            .map((ref) => sanitizedId({ id: itemId(s.id, ref), sourceId: s.id, ref, title: "", text: "" }));
+          for (const id of ids) {
+            if (s.ids.delete(id)) held++;
+            if (s.cold?.drop(id)) held++;
+            s.pushed.delete(id);
+            s.missed.delete(id);
+            s.thawed?.delete(id);
+          }
+          if (this.deps.onRemoved) this.deps.onRemoved(u.scope, s.id, ids);
+          else this.deps.cache.dropSynced(u.scope, ids);
         }
-        if (this.deps.onRemoved) this.deps.onRemoved(u.scope, s.id, ids);
-        else this.deps.cache.dropSynced(u.scope, ids);
         this.stats.deleted += held;
         if (tally) tally.fresh += held;
       }
