@@ -461,6 +461,7 @@ export class SyncManager {
     for (const [id, s] of [...u.sources]) {
       if (listed.has(id)) continue;
       u.sources.delete(id);
+      u.rare?.forgetSource(id);
       this.stats.deleted += this.deps.cache.dropSynced(u.scope, s.ids);
       n++;
     }
@@ -478,6 +479,7 @@ export class SyncManager {
       return;
     }
     u.sources.delete(sourceId);
+    u.rare?.forgetSource(sourceId);
   }
 
   /** Whether the user's synced copy of a source can answer a lookup now: warm, and probably unchanged since polled. */
@@ -906,6 +908,7 @@ export class SyncManager {
     for (const [id, s] of [...u.sources]) {
       if (listed.has(id)) continue;
       u.sources.delete(id);
+      u.rare?.forgetSource(id);
       unlisted.push(s);
     }
     const byId = new Map(listable.map((x) => [x.id, x]));

@@ -330,6 +330,12 @@ describe("sourceYieldEarn (D600, a trial)", () => {
     expect([...sync.rareHolders(u2, word, 2)]).toEqual(["src0"]);
     expect(sync.restore(u1, snap)).toBe(true);
     expect([...sync.rareHolders(u1, word, 2)]).toEqual(["src0"]);
+    // A source the user drops is no longer named; a saved table that is not one restores as none.
+    p.partner.forget(u2, "src0");
+    expect(sync.rareHolders(u2, word, 2).size).toBe(0);
+    p.partner.forget(u1);
+    expect(sync.restore(u1, { ...snap, rare: { ids: [1], segments: "x" } })).toBe(true);
+    expect(sync.rareHolders(u1, word, 2).size).toBe(0);
     // The default keeps no table and saves none.
     const off = await partnerOf({ sourceYield: true });
     expect(off.partner.sync!.rareHolders(u1, word, 2).size).toBe(0);

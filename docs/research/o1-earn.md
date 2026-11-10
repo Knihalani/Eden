@@ -231,8 +231,8 @@ Changed:
   A rare-word rule read on the request's named things alone lost six hidden tasks of 96 on seed 43: every word of
   the request is needed.
 
-**Run 2 as amended** (its rule is replaced by section 2c's: it now promotes nothing alone). Arms as section 2. Two changes, both arms: the image is the commit that holds this
-section (eight-probe sketches in `eden~earn2`), and every step passes `--noise-vocab 1000` (`EXTRA` in `run.sh`), so
+**Run 2 as amended** (its rule is replaced by section 2c's: it now promotes nothing alone). Arms as section 2. Two
+changes, both arms: the image is the commit that holds this section (eight-probe sketches in `eden~earn2`), and every step passes `--noise-vocab 1000` (`EXTRA` in `run.sh`), so
 the default arm is no longer N1b's exact harness; the comparison is paired within the run as before.
 
 **What run 1 can now decide.** Run 1's arm ran the rule as first built, in the lab that flatters it. It stands as
@@ -265,9 +265,19 @@ as they were (two probes; `TermSketch` is unchanged from the base), so the trial
 
 Against the eight-probe sketches of section 2b: +0.72 MB in place of +1.19 MB at 460 terms a source, a ceiling of
 +1 MB in place of +2.3 MB, and no false holder in 500 unseen words where they gave 0.01–0.04 a word. Its costs: a
-word is 3 µs to add to a full table (67 segments; 400,000 adds in 1.3 s in its unit test), on the sync's store
-path; nothing is ever removed, so a source that no longer lists a word still "holds" it, as in a sketch; it is
-saved in the snapshot only with the trial on (`SyncSnapshot.rare`), so promotion bumps `PERSIST_FORMAT`.
+word new to its source is 3–5 µs to add to a full table (it scans up to 67 segments; the reviewer measured 4.4 µs,
+about half at 0.72 MB), so a page of 100 items of 150 new words each is 30–70 ms on the sync's store path, with
+the trial on only; no slot is ever freed, so a source that no longer lists a word still "holds" it, as in a
+sketch; it is saved in the snapshot only with the trial on (`SyncSnapshot.rare`), so promotion bumps
+`PERSIST_FORMAT`. A user restored without a table (saved with the trial off, or an unreadable one) has it filled
+again only as sources are listed, which for unused sources is the weekly sweep: for up to a week the rare rule is
+blind to them while `sourceYieldEarn` withholds their reads.
+
+After the review of the table (REQUEST_CHANGES, fixed before run 3): a full table, or a user past 4,095 source
+numbers, **fails towards "common"** (a word that could not be kept under a second source is marked common, where
+it read as held by the first alone); a source the user drops has its number retired (`forgetSource`), so a source
+that comes back under the same id starts with nothing; `sourceYieldRare` needs `routeSketch` (the table is
+filled beside the sketch). Run 3's image is the commit with these fixes.
 
 $0, the three switches on this structure, `--noise-vocab 1000`:
 
