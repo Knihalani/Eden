@@ -679,7 +679,7 @@ export interface EngineConfig {
   pushWiden: boolean;
   /**
    * N5 (D527; a trial; 1 = I3's reply): 2 asks the check for a compare-first reply (`CHECK_SYSTEM_COMPARE`): per
-   * listed item, what its point applies to, whether that is the request's own person, thing and day, then the
+   * listed item, what its point applies to, what of the request's own that point lands on (or "none"), then the
    * verdict. No thinking; a longer reply (no stop sequence).
    */
   pushCheckForm: number;
@@ -690,10 +690,11 @@ export interface EngineConfig {
    */
   pushCheckSilent: boolean;
   /**
-   * N5 (D534; a trial, off): with `pushCheck`, the check's call is made only when some item it would read is
-   * constraint-like (`readerGate`'s test, cards included) and names one of the request's anchors (`settle.ts`: an
-   * entity or a day); otherwise no call is made and the default's candidates go. Fewer calls (about a third as
-   * many on train's 1:1:8 mix) with no stored answer and no dependency beyond the checker.
+   * N5 (D534; a trial, off): with `pushCheck`, the check's call is made only when some item of the lexical pool's
+   * head (never a widened item) is constraint-like (`readerGate`'s test, cards included) and names one of the
+   * request's anchors (`settle.ts`: an entity or a day); otherwise no call and no widening are made and the
+   * default's candidates go. Fewer calls (about a third as many on train's 1:1:8 mix) with no stored answer and no
+   * dependency beyond the checker.
    */
   pushCheckAnchored: boolean;
   pushWidenEmbed: number;

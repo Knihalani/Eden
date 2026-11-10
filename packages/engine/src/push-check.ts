@@ -211,8 +211,12 @@ export function parseCheck(text: string, count: number, stopped: boolean | undef
   return out;
 }
 
-/** A compare-first entry whose point lands on nothing of the request's own. */
-const NO_HIT = /^\s*(?:none|nothing|n\/a|no)?\s*\.?\s*$/i;
+/**
+ * A compare-first entry whose point lands on nothing of the request's own: empty, a bare "none", "nothing", "no" or
+ * "n/a", or "none"/"n/a" followed by its explanation ("none - another venue"). A link that merely starts with "no"
+ * or "nothing" ("no licence increases until the hold lifts") is a link.
+ */
+const NO_HIT = /^\s*(?:(?:none|n\/a)(?![\p{L}\p{N}]).*|(?:nothing|no)?\s*\.?\s*)$/isu;
 /** The most entries a compare-first reply may hold, and its output cap (about 35 tokens an entry). */
 export const COMPARE_MAX_ENTRIES = 6;
 export const COMPARE_MAX_TOKENS = 500;
@@ -236,8 +240,11 @@ export function parseCompare(text: string, count: number): number[] | null {
     if (!e || typeof e !== "object") return null;
     const { i, hits, act } = e as { i?: unknown; hits?: unknown; act?: unknown };
     if (act !== true && act !== "true") continue;
+    // A yes whose link is not text (an array, null, another format's entry) is a format error: fail open, never
+    // closed (a yes read as nothing would silence the push). A missing link is the entry contradicting itself.
+    if (hits !== undefined && typeof hits !== "string") return null;
     // A verdict the entry's own comparison contradicts is a no: the point lands on nothing of the request's.
-    if (typeof hits !== "string" || NO_HIT.test(hits)) continue;
+    if (hits === undefined || NO_HIT.test(hits)) continue;
     const n = typeof i === "string" && /^\d+$/.test(i) ? Number(i) : i;
     if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > count) return null;
     if (!out.includes(n - 1) && out.length < 5) out.push(n - 1);

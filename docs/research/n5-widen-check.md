@@ -466,6 +466,19 @@ code and tests:** `pushCheckStored` (D526, code in 9968cb8e), `pushCheckActOnly`
 (`packages/sim/lab/n5/widen-hash-41-48.jsonl.gz`, `--widen-hash`, `widenByHash`), `--check-log`, each funnel row's
 `pushCheckCalled`, `packages/sim/lab/n5/mix.py` and `days_hidden.py`.
 
+**Review.** The reviewer subagent ran on 97b216a6..22d0b3ff (REQUEST_CHANGES; `bun run check` green, eval
+0.65 / 0.52 / 0 and funnel 314 / 274 on its own run). Fixed after the paid runs: with `pushWiden`, the anchored gate
+was decided after the widening's look, so a push the gate left to the default still waited on the `widen`
+dependency (instant in the lab's table, up to `pushCheckWaitMs` with a real embedder): the gate now decides first
+and a closed gate makes no widen call; with `pushCheckSilent` off the lab's report called a check that named nothing
+"failed" (it now says what the check answered); `parseCompare` read a yes whose `hits` was not text as a no (it now
+fails open) and a "none" followed by its explanation as a link (now a none; a link that starts with "no" or
+"nothing" stays a link). None of it changes a measured figure: of the 3,673 yes entries in the funnel's recorded
+replies none had a non-text or explained-none link, and arms K and N replay seed 42 identically on the fixed tree.
+The Pi runs' replies were not kept, so for them this is inferred from the funnel's. Known and left: a second pass
+whose gate closes replaces a checked first packet with the default's; `checkCalled` is not set for a call that ran
+past the wait.
+
 **Departures from the pre-registration, all said where they happened:** the screen split's rows were printed once
 while fitting §5's first rules; §2's sample became the whole of seed 41; the compare-first arm was not in §2 and its
 wording was revised twice on seed 41 before §7 froze it; §7's addendum was committed a few minutes after the seeds

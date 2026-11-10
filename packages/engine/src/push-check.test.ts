@@ -376,6 +376,22 @@ describe("pushWiden (N2, D511): items past the pool, read by the check only", ()
     return { partner, seen };
   }
 
+  test("pushCheckAnchored decides before the widening: a push it leaves to the default makes no widen call", async () => {
+    const model = says(["Audi finance"]);
+    const on = { pushWiden: true, pushCheckAnchored: true };
+    // The request names Harlow, as a constraint-worded pool item does: the widening and the check both run.
+    const open = widened(on, model, ["mail:car"]);
+    expect(await handed(open.partner)).toEqual(["mail:car"]);
+    expect(open.seen.length).toBe(1);
+    // A request naming nothing those items name: no widen call, no model call, the default's candidates.
+    const closed = widened(on, model, ["mail:car"]);
+    const got = await handed(closed.partner, ref, "Pay the venue deposit invoice for Quillfeather.");
+    expect(closed.seen.length).toBe(0);
+    expect(model.calls.length).toBe(1);
+    expect(got.length).toBe(2);
+    expect(got).not.toContain("mail:car");
+  });
+
   test("a widened item the check names is handed after the pool; one it does not name is not", async () => {
     const pools: PushPoolReport[] = [];
     const yes = says(["Audi finance"]);
@@ -521,6 +537,16 @@ describe("pushCheckForm 2 (N5, D527): the reply compares before it decides", () 
       expect(parseCompare(`{"items":[${e(1, none, true)}]}`, 5)).toEqual([]);
     }
     expect(parseCompare('{"items":[{"i":1,"on":"x","act":true}]}', 5)).toEqual([]);
+    // A none that explains itself is a none; a link that starts with "no" or "nothing" is a link.
+    expect(
+      parseCompare(`{"items":[${e(1, "none - another venue", true)},${e(2, "None (another invoice)", true)}]}`, 5),
+    ).toEqual([]);
+    expect(parseCompare(`{"items":[${e(1, "no licence increases until hold lifted", true)}]}`, 5)).toEqual([0]);
+    expect(parseCompare(`{"items":[${e(1, "nothing in payroll yet for November", true)}]}`, 5)).toEqual([0]);
+    // A yes whose link is not text is a format error: fail open (a yes read as nothing would silence the push).
+    expect(parseCompare(`{"items":[${e(1, ["the venue", "12 May"], true)}]}`, 5)).toBeNull();
+    expect(parseCompare(`{"items":[${e(1, null, true)}]}`, 5)).toBeNull();
+    expect(parseCompare(`{"items":[${e(1, null, false)}]}`, 5)).toEqual([]);
     expect(parseCompare(`{"items":[${e("3", "its venue", "true")}]}`, 5)).toEqual([2]);
     // A yes naming no item of the pool fails the reply open; so does a cut or wordy reply.
     expect(parseCompare(`{"items":[${e(9, "its venue", true)}]}`, 5)).toBeNull();
@@ -552,6 +578,14 @@ describe("pushCheckSilent off and pushCheckAnchored (N5, D533, D534)", () => {
     const { partner } = setup({ pushCheck: true, pushCheckSilent: false }, model);
     expect((await handed(partner)).length).toBe(2);
     expect(model.calls.length).toBe(1);
+    // The report says what the check answered (it was read, and named nothing), not a failure.
+    const pools: PushPoolReport[] = [];
+    const quiet = setup({ pushCheck: true, pushCheckSilent: false }, says([]), pools);
+    await handed(quiet.partner);
+    expect(pools.at(-1)!.check).toBe("yes");
+    expect(pools.at(-1)!.checked!.some(Boolean)).toBe(false);
+    expect(pools.at(-1)!.handed.length).toBe(2);
+    expect(pools.at(-1)!.checkCalled).toBe(true);
     // A check that names something still replaces the default's packet.
     const named = setup({ pushCheck: true, pushCheckSilent: false }, says(["Invoice archive"]));
     expect(await handed(named.partner)).toEqual(["mail:other"]);

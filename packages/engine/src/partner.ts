@@ -247,12 +247,16 @@ export interface PushPoolReport {
   anchorKinds?: { entities: number; day: boolean };
   /**
    * `pushCheck` (D500): what the pass's check did ("yes": it answered; "none": no call, the gate found nothing
-   * constraint-like; "late", "failed": the default's candidates went) and, when it answered, per pool item whether it
-   * said the item changes the action.
+   * constraint-like or `pushCheckAnchored` left the push to the default; "late", "failed": the default's candidates
+   * went) and, when it answered, per pool item whether it said the item changes the action (all false with
+   * `pushCheckSilent` off is an answer that named nothing: the default's candidates went).
    */
   check?: "yes" | "none" | "late" | "failed";
   checked?: boolean[];
-  /** This pass made the check's model call: not one that read a kept answer or that `pushCheckAnchored` skipped. */
+  /**
+   * This pass made the check's model call and had its answer within the wait: not a pass that read a kept answer,
+   * that `pushCheckAnchored` skipped, or whose call ran past `pushCheckWaitMs` (traced "check-late" when it lands).
+   */
   checkCalled?: boolean;
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
@@ -2054,7 +2058,17 @@ export class ContextPartner {
       // check can hand them, so it runs only where the check would.
       // One wait for both: the check gets what the widening left of `pushCheckWaitMs` (D500's bound holds).
       const widenFrom = performance.now();
-      if (gate && this.config.pushCheck && this.config.pushWiden && this.deps.checker && gate.like.some(Boolean))
+      // `pushCheckAnchored` (N5, D534) decides first: a push it leaves to the default makes no widening look either.
+      if (gate && this.config.pushCheck && this.config.pushCheckAnchored && this.deps.checker)
+        gate.skip = !this.anchoredPool(cue, gate);
+      if (
+        gate &&
+        !gate.skip &&
+        this.config.pushCheck &&
+        this.config.pushWiden &&
+        this.deps.checker &&
+        gate.like.some(Boolean)
+      )
         gate.widened = await this.widenPool(s, cue, [...order, ...scored], gate.pool);
       const check =
         gate && this.config.pushCheck && this.deps.checker
@@ -2526,26 +2540,19 @@ export class ContextPartner {
 
   /**
    * `pushCheck` (D500): the push check's answer for this pool, or null (off, unwired, no constraint-like item, no
-   * request text). Waits at most `pushCheckWaitMs`; a check that answers later is kept on the session, so a second
-   * pass over the same pool (`readerPushBehind`) reads it with no call. The call runs on the session's signal: it
-   * ends with the session, not with the wait.
+   * request text, or `pushCheckAnchored` left the push to the default). Waits at most `pushCheckWaitMs`; a check
+   * that answers later is kept on the session, so a second pass over the same pool (`readerPushBehind`) reads it
+   * with no call. The call runs on the session's signal: it ends with the session, not with the wait.
    */
   private async checkPush(s: Session, cue: Cue, gate: PushGate, spentMs = 0): Promise<PushCheckRead | null> {
     const checker = this.deps.checker;
-    if (!this.config.pushCheck || !checker || !gate.like.some(Boolean)) return null;
+    if (!this.config.pushCheck || !checker || !gate.like.some(Boolean) || gate.skip) return null;
     const request = sanitizeForStore(cue.raw);
     if (!request.trim()) return null;
     const focus = readerFocus(cue.raw);
     const head = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
     // `pushWiden` (D511): the widened items after the pool's head, within the check's item cap.
     const read = [...head, ...(gate.widened ?? []).slice(0, Math.max(0, CHECK_MAX_ITEMS - head.length))];
-    // `pushCheckAnchored` (N5, D534): the call is made only when some item the check would read is constraint-like
-    // and names one of the request's anchors (a person, a thing, a day); otherwise no call and the default's
-    // candidates. No model and no stored answer: the constraint test and the anchors are the default's own.
-    if (this.config.pushCheckAnchored) {
-      const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
-      if (!head.some((x, i) => gate.like[i] && anchored(x.item, anchors))) return null;
-    }
     const input = {
       request,
       items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
@@ -2607,6 +2614,17 @@ export class ContextPartner {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * `pushCheckAnchored` (N5, D534): whether some item of the pool's head (what the check reads of the lexical pool) is
+   * constraint-like and names one of the request's anchors (a person, a thing, a day). The constraint test and the
+   * anchors are the default's own: no model, no stored answer. False: no call, no widening, the default's candidates.
+   */
+  private anchoredPool(cue: Cue, gate: PushGate): boolean {
+    const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+    const head = Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS);
+    return gate.pool.slice(0, head).some((x, i) => gate.like[i] && anchored(x.item, anchors));
   }
 
   /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
@@ -2687,8 +2705,9 @@ export class ContextPartner {
         : {}),
       ...(this.config.pushCheck && this.deps.checker
         ? {
-            check: yes ? "yes" : !check ? "none" : check.late ? "late" : "failed",
-            ...(yes ? { checked: reported.map((x) => yes.has(x.item.id)) } : {}),
+            // What the check said, whatever `pushCheckSilent` then handed: an answer naming nothing is still "yes".
+            check: named ? "yes" : !check ? "none" : check.late ? "late" : "failed",
+            ...(named ? { checked: reported.map((x) => named.has(x.item.id)) } : {}),
             ...(check?.called ? { checkCalled: true } : {}),
           }
         : {}),
@@ -6740,6 +6759,8 @@ interface PushGate {
   like: boolean[];
   /** `pushWiden` (D511): items past the pool, for the check only. */
   widened?: Scored[];
+  /** `pushCheckAnchored` (D534): the gate left this push to the default (no check call, no widening). */
+  skip?: boolean;
 }
 
 /** What a re-read found (`verifyDelivery`). */
