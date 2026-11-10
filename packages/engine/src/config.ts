@@ -611,6 +611,15 @@ export interface EngineConfig {
    */
   askNudge: boolean;
   /**
+   * Trial (D460, M5, docs/research/m5-nudge-narrow.md; off): a narrower `askNudge`. The nudge fires only when, besides
+   * leaving the request unsettled, the push pool past the handed candidates holds an item (not bulk mail) that names
+   * one of the request's anchors: what the ask's deeper look would list. With nothing anchored past the handed items
+   * an ask has nothing deeper to show, and at $0 (train 41–44) the planted fact was already handed in 322 of the 421
+   * hidden tasks the nudge fired on; this cuts the fires to 185 hidden (43 → 34 with the fact deep in the pool) and
+   * 423 → 202 control. Needs `askNudge`.
+   */
+  askNudgeDeep: boolean;
+  /**
    * D400 (A30, docs/research/a30-token-gap.md; promoted by D404: 2 in the default, part `fewer`; 0 = off): with
    * `pushCandidates`, when the request names an anchor (a person, thing or day) and the handed candidates settle it
    * (`settle.ts`, `askNudge`'s test), the push hands only the first `pushCandidatesSettled` of them, extended through
@@ -763,6 +772,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   partyCheck: true,
   planConflict: true,
   askNudge: true,
+  askNudgeDeep: false,
   pushCandidatesSettled: 2,
   revisionDiff: true,
 };

@@ -1147,13 +1147,21 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
           handed: push!.handed.includes(x),
           auto: it ? automated(it) : false,
           cl: push!.constraintLike[k] === true,
+          ...(push!.anchored ? { anchored: push!.anchored[k] === true } : {}),
           title: it?.title ?? "",
           text: it?.text ?? "",
           ...(card ? { card: card.kind, statement: card.statement } : {}),
         };
       });
       const line = { suite, seed, variant, template: task.template, request: task.text, detail: task.detail };
-      appendFileSync(POOL_DUMP, `${JSON.stringify({ ...line, planted: id, at: ids.indexOf(id), pool: items })}\n`);
+      const extra = {
+        planted: id,
+        at: ids.indexOf(id),
+        ...(push?.unsettled !== undefined ? { unsettled: push.unsettled } : {}),
+        ...(push?.anchorKinds ? { anchorKinds: push.anchorKinds } : {}),
+        pool: items,
+      };
+      appendFileSync(POOL_DUMP, `${JSON.stringify({ ...line, ...extra })}\n`);
     }
     if (CANDIDATES) {
       const line = {

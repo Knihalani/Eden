@@ -259,6 +259,45 @@ describe("askNudge (D316): a nudge to ask when the candidates do not settle the 
   });
 });
 
+describe("askNudgeDeep (D460, trial): the nudge only when the pool past the handed items holds an anchor", () => {
+  test("off in the default; the config check needs askNudge", () => {
+    expect(DEFAULT_CONFIG.askNudgeDeep).toBe(false);
+    expect(checkEngineConfig({ askNudgeDeep: true })).toEqual({ askNudgeDeep: true });
+    expect(() => checkEngineConfig({ askNudge: false, askNudgeDeep: true })).toThrow(/askNudge/);
+  });
+
+  test("an anchored item past those handed: the nudge fires, and the ask lists it", async () => {
+    const pools: PushPoolReport[] = [];
+    const p = setup({ askNudge: true, askNudgeDeep: true, pushCandidates: 1 }, (r) => pools.push(r));
+    await say(p, DATED_REQUEST);
+    const pool = pools.at(-1)!;
+    expect(pool.handed).not.toContain(DATED.id);
+    expect(pool.unsettled).toBe(true);
+    expect(packet(p)!.text.split("\n")[1]).toBe(`${CANDIDATES_LEAD} ${ASK_NUDGE}`);
+    const answer = await p.ask({ ...ref(), question: "Anything about the cleaning rota?" });
+    expect(answer.citations.map((c) => c.itemId)).toContain(DATED.id);
+  });
+
+  test("nothing anchored past those handed: no nudge, though the request is unsettled", async () => {
+    const pools: PushPoolReport[] = [];
+    const on = setup({ askNudge: true, askNudgeDeep: true, pushCandidates: 1 }, (r) => pools.push(r));
+    ITEMS = [HOLD, OTHER];
+    await say(on, DATED_REQUEST);
+    const pool = pools.at(-1)!;
+    expect(pool.handed).toEqual([HOLD.id]);
+    // HOLD names Harlow but not the day; OTHER, past it, names neither.
+    expect(pool.anchored).toEqual(pool.pool.map((id) => id === HOLD.id));
+    expect(pool.unsettled).toBe(false);
+    expect(packet(on)!.text.split("\n")[1]).toBe(CANDIDATES_LEAD);
+    // The current nudge fires on the same pool.
+    const now: PushPoolReport[] = [];
+    const cur = setup({ askNudge: true, pushCandidates: 1 }, (r) => now.push(r));
+    ITEMS = [HOLD, OTHER];
+    await say(cur, DATED_REQUEST);
+    expect(now.at(-1)!.unsettled).toBe(true);
+  });
+});
+
 describe("pushCandidatesSettled (D400, D404): fewer candidates when they settle the request", () => {
   const handed = async (config: Record<string, unknown>, request: string) => {
     const pools: PushPoolReport[] = [];
