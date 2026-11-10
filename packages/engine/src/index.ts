@@ -11,8 +11,16 @@ export { FACT_NAMES, vectorOf, type Facts } from "./decide";
 export { DEFAULT_CONFIG, type EngineConfig } from "./config";
 export { CORE_CONFIG, PARTS, withoutParts, type Part } from "./parts";
 export { checkEngineConfig, NEEDS_DEP, PARENTS, type ConfigCheckOptions, type ConfigDep } from "./config-check";
-export { ItemCache, sanitizeItem, type CacheHit, type CacheLimits } from "./cache";
-export { SyncManager, type SyncOptions, type SyncStats } from "./sync";
+export { DEFAULT_CACHE_LIMITS, ItemCache, sanitizeItem, type CacheHit, type CacheLimits } from "./cache";
+export { SyncManager, type SyncOptions, type SyncSnapshot, type SyncStats } from "./sync";
+export {
+  EncryptedFrozenDisk,
+  PERSIST_FORMAT,
+  type DiskOptions,
+  type FrozenDisk,
+  type PersistedUser,
+  type PersistEvent,
+} from "./persist";
 export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
 export { Ledger } from "./ledger";
 export { inert, oneLine, renderAnswer, renderPacket } from "./render";

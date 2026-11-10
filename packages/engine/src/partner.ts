@@ -714,6 +714,21 @@ export class ContextPartner {
     // D370: with `syncIngestTurns`, the card drain gathers what waits for its turn, so its batches follow the items.
     const sync = this.sync;
     if (sync && c.syncIngestTurns && c.cards && deps.cards) deps.cards.gather = () => sync.pending();
+    // D425 (opt-in): a user frozen to disk carries the sync's state for them; one read back by a later process takes
+    // it again (so the restart polls, not backfills) and has its items carded again, as a re-sync would (cards are
+    // not persisted). Set only when the embedder made the cache persist.
+    if (deps.cache.persisting) {
+      deps.cache.persistHooks = {
+        save: (scope) => ({ sync: sync?.snapshot(scope) ?? null }),
+        restored: (scope, items, extra) => {
+          const saved = (extra as { sync?: unknown } | null | undefined)?.sync;
+          if (sync && saved) sync.restore(scope, saved);
+          if (items.length > 0 && this.config.cards && this.deps.cards) {
+            this.enqueueCards(scope, items, this.cardDefer(scope, items, mentionsOf(items)));
+          }
+        },
+      };
+    }
   }
 
   /**
@@ -1440,6 +1455,14 @@ export class ContextPartner {
       items: c.items,
       syncedUsers: this.sync?.tenantUsers(tenantId) ?? 0,
     };
+  }
+
+  /**
+   * D425 (opt-in): writes every user not yet frozen to disk, as a freeze would, for a shutdown; users frozen already
+   * were written when they froze. Stops after `deadlineMs`. Returns how many were written (0 when not persisting).
+   */
+  persistLive(deadlineMs: number): number {
+    return this.deps.cache.flush(deadlineMs);
   }
 
   /**

@@ -551,6 +551,14 @@ scheduler (`ItemCache.pump`: a few milliseconds of work per event-loop turn, one
 same scheduler, so a burst of returning users queues instead of stalling every other request. Figures:
 docs/research/a14-scale-users.md.
 
+An operator may opt in to persisting frozen users (D425-D427, `persist.ts`; `EDEN_PERSIST_FROZEN_DIR` and
+`EDEN_PERSIST_KEY`): each freeze also writes the blob, with the sync's state for the user (`SyncManager.snapshot`),
+AES-256-GCM to one file per user under a keyed-hash name, and a thaw deletes it. A restarted process reads a user
+back on first use (`ItemCache.load`, from `peek`, `touch` or `ready`), thaws them in slices, and restores their sync
+state (`SyncManager.restore`), so their sources are polled for what is new instead of backfilled; copies of notifying
+sources are re-read before delivery, as after a signal (D426). Off, nothing is written. Figures:
+docs/research/c3-persist-frozen.md.
+
 Dates in items are read the same on every host: `parseWhen` (`grounding.ts`) reads a zone-less date or date-time (a
 `Date:` header without a zone, a calendar start with no offset, "14 Oct 2026") as UTC, not the server process's local
 zone, and leaves strings with a zone ("Z" in either case, "+01:00", "GMT+1") and ISO bare dates to `Date.parse`. An

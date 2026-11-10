@@ -45,6 +45,7 @@ import { bodyShapeUnder, keylessOriginAllowed } from "@eden/protocol";
 import { keyOf } from "./auth";
 import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, FANOUT_COPY, MAX_PROCESSES, type ServerConfig } from "./config";
 import { usdPerTenantDayFromEnv } from "./models";
+import { prunePersistDirs } from "./persist";
 import { isLeaseRequest, SpendLedger } from "./spend-lease";
 
 /** The child a tenant/user is served by: stable across restarts and router instances, spread by a mixed FNV-1a. */
@@ -181,7 +182,7 @@ const MAX_RESTART_MS = 30_000;
 export interface RouterOptions {
   /** The router's own configuration (`loadConfig`): port, host, keys, dev, body cap, source-map base, processes. */
   config: Pick<ServerConfig, "port" | "host" | "keys" | "dev" | "sourceMapPath" | "processes"> &
-    Partial<Pick<ServerConfig, "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "spendLeases">>;
+    Partial<Pick<ServerConfig, "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "spendLeases" | "persist">>;
   /** The environment each child starts from (default `process.env`); the router sets its own variables over it. */
   env?: Record<string, string | undefined>;
   /** The child entry (default `main.ts` beside this file). */
@@ -349,6 +350,8 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
 
   // Before any child opens its file: no row may sit in a file no child of this N reaches (forget would miss it).
   rehomeSourceMaps(config.sourceMapPath, n, log);
+  // D425: blobs another N wrote are in directories no child of this N reads; their users re-sync (as D163 has it).
+  if (config.persist) prunePersistDirs(config.persist.dir, n);
 
   // Each spawn carries its own deadline, so this settles within `startTimeoutMs` (plus the kill) either way. On a
   // failure the exit handler has already scheduled a restart; stopChildren sets `stopping` and clears that timer
