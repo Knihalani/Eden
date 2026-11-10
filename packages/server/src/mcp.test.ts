@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { ASK_CONTEXT_DESCRIPTION, ASK_CONTEXT_MULTI_DESCRIPTION } from "@eden/protocol";
+import { ASK_CONTEXT_DESCRIPTION } from "@eden/protocol";
 import { StaticSource } from "@eden/sources";
 import { buildPartner } from "./build";
 import { createMcpServer, MCP_SESSION_IDLE_MS } from "./mcp";
@@ -163,53 +163,5 @@ test("D281: the old session is ended only once its last ask in flight returns", 
   await slow;
   await new Promise((r) => setTimeout(r, 0));
   expect(partner.sessionCount).toBe(1); // ended once it did
-  await client.close();
-});
-
-test("askMulti (D485): one ask_context call carries several questions and returns each answer under its question", async () => {
-  const cal = new StaticSource("calendar", "events", [{ ref: "e1", title: "Dentist", text: "Dentist Friday 9am" }]);
-  const mail = new StaticSource("gmail", "mail", [{ ref: "m1", title: "Plumber", text: "Plumber booked Tuesday 2pm" }]);
-  const partner = buildPartner({ sources: async () => [cal, mail], model: null, engine: { askMulti: true } });
-  const server = createMcpServer(partner, { tenantId: "t", userId: "u", sessionId: "s" });
-  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  await server.connect(serverSide);
-  const client = new Client({ name: "agent", version: "1" });
-  await client.connect(clientSide);
-  const { tools } = await client.listTools();
-  expect(tools[0]!.description).toBe(ASK_CONTEXT_MULTI_DESCRIPTION);
-  expect(Object.keys(tools[0]!.inputSchema.properties ?? {})).toEqual(["questions"]);
-  const call = (args: Record<string, unknown>) =>
-    client.callTool({ name: "ask_context", arguments: args }) as Promise<{
-      content: { text: string }[];
-      isError?: boolean;
-    }>;
-  const both = (await call({ questions: ["when is the dentist?", "when is the plumber?"] })).content[0]!.text;
-  const [first, second] = both.split("Question 2: ");
-  expect(first).toStartWith("Question 1: when is the dentist?\n");
-  expect(first).toContain("Dentist Friday 9am");
-  expect(second).toStartWith("when is the plumber?\n");
-  expect(second).toContain("Plumber booked Tuesday 2pm");
-  // One question reads as the single-question tool's answer: no heading.
-  const one = (await call({ questions: ["when is the dentist?"] })).content[0]!.text;
-  // (The session was shown the item already, so its text is not repeated.)
-  expect(one).not.toContain("Question 1");
-  expect(one).toContain("[calendar] Dentist");
-  // More questions than the cap, or none, are refused by the schema, never a 500 or a silent cut.
-  expect((await call({ questions: Array(6).fill("when is the dentist?") })).isError).toBe(true);
-  expect((await call({ questions: [] })).isError).toBe(true);
-  await client.close();
-});
-
-test("askMulti off (the default): the tool takes one question, described as it ships", async () => {
-  const partner = buildPartner({ sources: async () => [], model: null });
-  expect(partner.config.askMulti).toBe(false);
-  const server = createMcpServer(partner, { tenantId: "t", userId: "u", sessionId: "s" });
-  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  await server.connect(serverSide);
-  const client = new Client({ name: "agent", version: "1" });
-  await client.connect(clientSide);
-  const { tools } = await client.listTools();
-  expect(tools[0]!.description).toBe(ASK_CONTEXT_DESCRIPTION);
-  expect(Object.keys(tools[0]!.inputSchema.properties ?? {})).toEqual(["question"]);
   await client.close();
 });

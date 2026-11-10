@@ -5,14 +5,7 @@
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { renderAnswer, safeLine, type ContextPartner } from "@eden/engine";
-import {
-  ASK_CONTEXT_DESCRIPTION,
-  ASK_CONTEXT_MULTI_DESCRIPTION,
-  ASK_MULTI_MAX,
-  joinAnswers,
-  type AskResponse,
-  type Scope,
-} from "@eden/protocol";
+import { ASK_CONTEXT_DESCRIPTION, type Scope } from "@eden/protocol";
 import { z } from "zod";
 
 /** An MCP session's id lasts until this long with no ask (the engine's `sessionIdleMs` default) or a UTC day ends. */
@@ -65,46 +58,29 @@ export function createMcpServer(
     inFlight.delete(sessionId);
     if (ending.has(sessionId)) end(sessionId);
   };
-  // Titles and URLs are source text (an email subject is attacker-controlled): they go in a data envelope too, one
-  // line each (`safeLine`, D221), so a line break in a title cannot forge another `[n]` source line.
-  const textOf = (res: AskResponse): string => {
-    const cites = res.citations.map(
-      (c, i) => `[${i}] ${safeLine(c.sourceId)}: ${safeLine(c.title)}${c.url ? ` (${safeLine(c.url)})` : ""}`,
-    );
-    return cites.length ? `${res.answer}\n\nSources:\n${renderAnswer(cites.join("\n"))}` : res.answer;
-  };
-  /** Every question of one call in one session, at once (as an MCP client's parallel calls would run). */
-  const answer = async (questions: readonly string[]): Promise<string> => {
-    const sessionId = begin();
-    try {
-      const all = await Promise.all(questions.map((question) => partner.ask({ ...who, sessionId, question })));
-      return joinAnswers(all.map((res, i) => ({ question: questions[i]!, text: textOf(res) })));
-    } finally {
-      finish(sessionId);
-    }
-  };
-  const question = z.string().min(1).max(2_000);
-  if (partner.config.askMulti) {
-    // `askMulti` (trial, D485): one call carries every question the agent has.
-    server.registerTool(
-      "ask_context",
-      {
-        description: ASK_CONTEXT_MULTI_DESCRIPTION,
-        inputSchema: { questions: z.array(question).min(1).max(ASK_MULTI_MAX) },
-        annotations: { readOnlyHint: true },
-      },
-      async ({ questions }) => ({ content: [{ type: "text", text: await answer(questions) }] }),
-    );
-  } else {
-    server.registerTool(
-      "ask_context",
-      {
-        description: ASK_CONTEXT_DESCRIPTION,
-        inputSchema: { question },
-        annotations: { readOnlyHint: true },
-      },
-      async ({ question }) => ({ content: [{ type: "text", text: await answer([question]) }] }),
-    );
-  }
+  server.registerTool(
+    "ask_context",
+    {
+      description: ASK_CONTEXT_DESCRIPTION,
+      inputSchema: { question: z.string().min(1).max(2_000) },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ question }) => {
+      const sessionId = begin();
+      let res;
+      try {
+        res = await partner.ask({ ...who, sessionId, question });
+      } finally {
+        finish(sessionId);
+      }
+      // Titles and URLs are source text (an email subject is attacker-controlled): they go in a data envelope too, one
+      // line each (`safeLine`, D221), so a line break in a title cannot forge another `[n]` source line.
+      const cites = res.citations.map(
+        (c, i) => `[${i}] ${safeLine(c.sourceId)}: ${safeLine(c.title)}${c.url ? ` (${safeLine(c.url)})` : ""}`,
+      );
+      const text = cites.length ? `${res.answer}\n\nSources:\n${renderAnswer(cites.join("\n"))}` : res.answer;
+      return { content: [{ type: "text", text }] };
+    },
+  );
   return server;
 }

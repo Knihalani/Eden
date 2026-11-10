@@ -100,7 +100,7 @@ import {
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
-import { ASK_MULTI_MAX, askQuestions, joinAnswers, type AgentEvent, type ContextItem } from "@eden/protocol";
+import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import { noiseSources } from "./noise-sources";
@@ -109,7 +109,6 @@ import { connectorHeader, connectorOptions, pushNotifier, recapNotice, sourceFie
 import {
   armPromptsHash,
   ASK_DESCRIPTION,
-  ASK_MULTI_DESCRIPTION,
   chatModel,
   emptyResult,
   grade,
@@ -558,8 +557,6 @@ const PROMPTS_HASH = armPromptsHash(
   VARIANTS.includes("neutral"),
 );
 const askParams = Type.Object({ question: Type.String() });
-/** `askMulti` (trial, D485): the tool's parameter when one call carries every question the agent has. */
-const askMultiParams = Type.Object({ questions: Type.Array(Type.String(), { minItems: 1, maxItems: ASK_MULTI_MAX }) });
 
 /**
  * A model whose calls are charged to the task that started them (`owner()` read when the call starts): a call that
@@ -1045,50 +1042,29 @@ async function runWorld(
       }
       // `eden`, and `both+ask` (the shape integrators ship: own tools, Eden's context and its ask).
       if (askTool && partner) {
-        const askOne = async (asked: string): Promise<string> => {
-          const a = await partner.ask({ ...scope, sessionId, question: asked });
-          // The agent's question is recorded with the answer (sim data is fake), for replays of real questions.
-          const question = sanitizeForStore(asked);
-          uptake.answer(a, question);
-          day?.answer(
-            a.citations.map((c) => c.itemId),
-            a.answer,
-          );
-          tl.point("eden.ask", { question: question.slice(0, QUESTION_CHARS), items: a.citations.length });
-          return a.answer || "Nothing found.";
-        };
-        if (config.askMulti === true) {
-          // `askMulti` (trial, D485): every question of the call at once, the answers back together. A timeline's
-          // `tool.ask_context` spans count the calls and its `eden.ask` points the questions.
-          tools.push({
-            name: "ask_context",
-            description: ASK_MULTI_DESCRIPTION,
-            label: "ask_context",
-            parameters: askMultiParams,
-            prepareArguments: (a) => ({ questions: askQuestions(a) }),
-            execute: async (_id, raw) => {
-              const { questions } = raw as { questions: string[] };
-              const texts = await Promise.all(questions.map(askOne));
-              const text = joinAnswers(questions.map((question, i) => ({ question, text: texts[i]! })));
-              return { content: [{ type: "text", text: text || "Nothing found." }], details: {} };
-            },
-          });
-        } else {
-          tools.push({
-            name: "ask_context",
-            description: ASK_DESCRIPTION,
-            label: "ask_context",
-            parameters: askParams,
-            prepareArguments: (a) => {
-              const x = (a ?? {}) as { query?: unknown; question?: unknown };
-              return { question: String(x.question ?? x.query ?? "") };
-            },
-            execute: async (_id, raw) => {
-              const params = raw as { question: string };
-              return { content: [{ type: "text", text: await askOne(params.question) }], details: {} };
-            },
-          });
-        }
+        tools.push({
+          name: "ask_context",
+          description: ASK_DESCRIPTION,
+          label: "ask_context",
+          parameters: askParams,
+          prepareArguments: (a) => {
+            const x = (a ?? {}) as { query?: unknown; question?: unknown };
+            return { question: String(x.question ?? x.query ?? "") };
+          },
+          execute: async (_id, raw) => {
+            const params = raw as { question: string };
+            const a = await partner.ask({ ...scope, sessionId, question: params.question });
+            // The agent's question is recorded with the answer (sim data is fake), for replays of real questions.
+            const question = sanitizeForStore(params.question);
+            uptake.answer(a, question);
+            day?.answer(
+              a.citations.map((c) => c.itemId),
+              a.answer,
+            );
+            tl.point("eden.ask", { question: question.slice(0, QUESTION_CHARS), items: a.citations.length });
+            return { content: [{ type: "text", text: a.answer || "Nothing found." }], details: {} };
+          },
+        });
       }
       // `--act`: the stub action tools; each call is recorded and runs. With the firewall, Eden checks each call
       // first (`beforeToolCall` below) and the check's record waits here for the call to run; without it, `off`.

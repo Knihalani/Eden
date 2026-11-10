@@ -94,7 +94,6 @@ or replace the preset's (`--variants hidden`, `--days 8`, `--conditions …`). `
 | `bench-tools` | `tools`, `eden` |
 | `bench-fewer` | `tools`, `eden`, `eden~minus-fewer` (D404) |
 | `bench-parts` | `eden` and `eden~minus-<part>` for nudge, plans, fewer, freshness (M1's arms; `PART_VARIANTS` are checked against `PARTS` by `modal-python.test.ts`) |
-| `bench-askmulti` | `eden`, `eden+askMulti` (D485) |
 
 Anthropic shards run in **waves**: the planner counts a shard's agent streams (arms × worlds: six train suites ×
 variants, or one for a `--days` user) and starts only as many shards at once as keep the streams on the key at or

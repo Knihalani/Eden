@@ -276,8 +276,6 @@ PRESETS = {
     "bench-parts": {"kind": "pi-ab", "suites": "train",
                     "args": _bench(["eden", *(f"eden~{v}" for v in PART_VARIANTS)], list(PART_VARIANTS)),
                     "about": "the default against default minus each part a plain pi-ab run exercises (M1's arms)"},
-    "bench-askmulti": {"kind": "pi-ab", "suites": "train", "args": _bench(["eden", "eden+askMulti"]),
-                       "about": "the default against the askMulti trial (D485)"},
 }
 
 

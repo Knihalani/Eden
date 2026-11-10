@@ -17,11 +17,12 @@ effect is A − B, on tasks both arms finished) and each metric this prints:
 
     python3 -I packages/sim/modal/bench_report.py --pair eden:tools --pair eden~minus-fewer:eden \\
         --group cached=.local/modal/f3-b-41 --group inrun=.local/modal/f3-b-45,.local/modal/f3-b-49 \\
-        [--sonnet] [--target 1.5] [--draws 5000] [--json OUT]
+        [--sonnet [all|concerns]] [--target 1.5] [--draws 5000] [--json OUT]
 
 A run directory is what `lab_fanout.py` leaves: one directory a shard with `out.json`, its `out.timeline/tasks.jsonl`
 (ask calls and questions a task) and any `regrade*.json` beside it (`regrade.ts`; with `--sonnet` a Sonnet verdict
-replaces the run's grader's wherever Sonnet graded the answer).
+replaces the run's grader's wherever Sonnet graded the answer; `--sonnet concerns` only on control and neutral
+answers, for a pair whose hidden answers were not all regraded).
 """
 import json
 import math
@@ -96,7 +97,9 @@ def read_asks(shard_dir):
 
 
 def load(groups, sonnet=False):
-    """Rows keyed (group, shard, task): its kind, template, seed and each arm's metrics. `groups`: [(name, [dirs])]."""
+    """Rows keyed (group, shard, task): its kind, template, seed and each arm's metrics. `groups`: [(name, [dirs])].
+    `sonnet`: False, True (every answer Sonnet graded) or "concerns" (control and neutral answers only: a pair whose
+    arms were not all regraded on hidden tasks keeps one grader there)."""
     rows, stats = {}, {"sonnetGraded": 0, "sonnetFailed": 0, "ungraded": 0, "shards": 0}
     for group, runs in groups:
         for run in runs:
@@ -123,7 +126,10 @@ def load(groups, sonnet=False):
                         continue
                     key2 = (r["task"], r["condition"])
                     raised = float(any(r["facts"].values()))
-                    if key2 in verdict:
+                    use = sonnet is True or (sonnet == "concerns" and task["kind"] != "hidden")
+                    if not use:
+                        pass
+                    elif key2 in verdict:
                         raised = verdict[key2]
                         stats["sonnetGraded"] += 1
                     elif key2 in failed:
@@ -324,7 +330,8 @@ def main(argv):
     ap.add_argument("--pair", action="append", required=True, help="A:B, the effect A − B")
     ap.add_argument("--group", action="append", required=True, help="NAME=RUN_DIR[,RUN_DIR]")
     ap.add_argument("--metrics", default=",".join(METRICS))
-    ap.add_argument("--sonnet", action="store_true")
+    ap.add_argument("--sonnet", nargs="?", const="all", choices=["all", "concerns"],
+                    help="take Sonnet's verdicts from regrade*.json: on every answer it graded, or on concerns only")
     ap.add_argument("--target", type=float, default=1.5, help="the hidden half-width aimed for, points")
     ap.add_argument("--draws", type=int, default=DRAWS)
     ap.add_argument("--json")
@@ -336,7 +343,7 @@ def main(argv):
     if unknown or any(len(p) != 2 for p in pair_list):
         print(f"unknown metric {unknown} or a --pair not written A:B", file=sys.stderr)
         return 2
-    rows, stats = load(groups, a.sonnet)
+    rows, stats = load(groups, True if a.sonnet == "all" else a.sonnet or False)
     lines, summary = report(rows, stats, pair_list, [g for g, _ in groups], metrics, a.target, a.draws)
     print("\n".join(lines))
     if a.json:

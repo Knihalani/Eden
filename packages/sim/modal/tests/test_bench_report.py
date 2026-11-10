@@ -72,6 +72,9 @@ class Load(unittest.TestCase):
             get = lambda rs: {p[0]: (p[3], p[4]) for p in bench.pairs(rs, "eden", "tools", "hidden")}
             self.assertEqual(get(plain), {"train1:isa": (1.0, 1.0), "train1:mot": (1.0, 0.0)})
             self.assertEqual(get(rows), {"train1:isa": (0.0, 1.0), "train1:mot": (1.0, 0.0)})
+            # "concerns": hidden answers keep the run's grader, so a half-regraded pair is not mixed.
+            only, _ = bench.load([("g", [run])], sonnet="concerns")
+            self.assertEqual(get(only), get(plain))
 
 
 def synthetic(templates, seeds, effect_of):
