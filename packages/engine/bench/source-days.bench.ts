@@ -315,7 +315,12 @@ for (let d = 0; d < days; d++) {
 }
 
 // `syncCold` (D475): what the cold tier holds at the end (items, bytes of its packs, sources with one).
-const coldTier = sync.coldStats(w.scope);
+const coldTier = {
+  ...sync.coldStats(w.scope),
+  stored: sync.stats.coldStored,
+  thawed: sync.stats.coldThawed,
+  opened: sync.stats.coldOpened,
+};
 const out = { sources: N, itemsPerSource, churn, mailPerDay, mix, pushMode, config, cold, perDay, coldTier };
 const line = (t: Tally) =>
   `list ${t.listBackground} bg + ${t.listDemand} demand (${t.delta} delta), search ${t.search}, fetch ${t.fetch}, ` +

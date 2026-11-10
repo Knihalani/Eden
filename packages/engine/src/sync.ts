@@ -1794,7 +1794,14 @@ export class SyncManager {
     // A used source's items are kept before the cut's (`engagedDeep`): the cut is the other sources' only.
     if (keepCut && u.cutAt > -Infinity && !(this.o.engagedDeep && s.engaged)) {
       const cut = u.cutAt;
-      const older = kept.filter((it) => !(it.updatedAt === undefined || it.updatedAt >= cut || s.ids.has(it.id)));
+      // `cold` (D475): with the index already half a cap over (the trim's own bound), a background read's new items
+      // go to the cold tier whatever their date. A week's sweeps land together (D356) and list every unused source's
+      // new items at once; stored in the index they passed the cache's own synced cap, which evicts by sync order,
+      // and the copies that lost items were cut again (the day bench's seventh day).
+      const over = this.o.cold === true && this.total(u) >= this.o.maxItems * 1.5;
+      const older = kept.filter(
+        (it) => !s.ids.has(it.id) && (over || !(it.updatedAt === undefined || it.updatedAt >= cut)),
+      );
       if (older.length > 0) {
         kept = kept.filter((it) => !older.includes(it));
         // `cold`: older than the user's cut, so kept in the cold tier while it has room; else the copy is cut.
