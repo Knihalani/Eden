@@ -1,0 +1,19 @@
+{
+  "captured": "2026-11-10, tools/list of Google's hosted Gmail and Calendar MCP servers (tool metadata only; no mail or events read)",
+  "search_threads": {
+    "description": "It returns a list of threads, each with its thread `id`, `messageCount` (total messages in the thread), `viewUrl`, and a subset of up to 5 related messages (each with its own message `id`, `viewUrl`, `sender`, recipients, `date`, and `labelIds`).",
+    "view.THREAD_VIEW_MINIMAL": "Returns `id`, `snippet`, `subject`, `sender`, `toRecipients`, `ccRecipients`, `bccRecipients`, `addressDisplayNames`, `date`, `labelIds`, `viewUrl` (if applicable).",
+    "view.THREAD_VIEW_SUMMARY": "Returns `THREAD_VIEW_MINIMAL` fields with only the most recent message per thread (`messages` has at most 1 entry), plus `messageCount` and `viewUrl` (if applicable) on the thread."
+  },
+  "get_thread": {
+    "description": "Retrieves a specific email thread from the authenticated user's Gmail account, including its `viewUrl` and a list of its messages (each with their own `viewUrl`).",
+    "messageFormat": "Optional. Specifies the format of the messages returned within the thread. Defaults to `FULL_CONTENT`. We recommend using `PLAIN_TEXT` to prevent context exhaustion. Note: `MINIMAL` format returns `id`, `snippet`, `subject`, `sender`, `toRecipients`, `ccRecipients`, `bccRecipients`, `date`, `labelIds`, `viewUrl` (if applicable). `METADATA_ONLY` format returns `id`, `sender`, `toRecipients`, `ccRecipients`, `bccRecipients`, `date`, `labelIds`, `viewUrl` (if applicable). `FULL_CONTENT` returns `id`, `snippet`, `subject`, `sender`, `toRecipients`, `ccRecipients`, `bccRecipients`, `date`, `labelIds`, `attachmentIds`, `plaintextBody`, `htmlBody`, `attachments`, `viewUrl` (if applicable). `PLAIN_TEXT` returns `id`, `snippet`, `subject`, `sender`, `toRecipients`, `ccRecipients`, `bccRecipients`, `date`, `labelIds`, `attachmentIds`, `plaintextBody`, `attachments`, `viewUrl` (if applicable, without `htmlBody`)."
+  },
+  "search_events": {
+    "description": "Searches events on the user's primary calendar using semantic search."
+  },
+  "get_event": {
+    "description": "Returns a single event on the given calendar.",
+    "calendarId": "Optional. ID of the calendar containing the event. Email address - can be resolved using `list_calendars`. Default: primary calendar."
+  }
+}
