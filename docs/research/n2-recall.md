@@ -184,3 +184,21 @@ is reported in the wall column; a shippable check must be faster (§6). `eden` r
 - **Days:** `--days 8`, users w41–w44, arms `eden`, `eden~N2@w12000`, `eden~N2R@w12000` (N2 plus
   `pushCheckReshow`, H2), `--max-streams 6` (two shards at a time).
 - Bars as §1. Every hidden answer and every concern of the paired arms regraded by Sonnet 5.5.
+
+## 6. I3's check landed: H1 behind it, pre-registered before its run
+
+I3 (`claude/i3-push-check`, D500–D502) built the shippable check: one budgeted Haiku call a push, only where the
+default's constraint-like gate would hand candidates, no thinking, a reply that lists only the items that change the
+action (stop sequence on the first rejection), 15 items of 200 characters; p50 0.9 s and $0.0002 a call in I3's
+pilot, against this note's lab checker's 5.8 s and $0.00115. Its "none named, no packet" is H3. This branch merges
+it and rebuilds H1 and H2 on it (§1's lab checker and the code that measured §2–§5 are in commit 69ce1942):
+`pushWiden` adds, after the pool's head and within the check's 20 items, `pushWidenEmbed` 3 embedding neighbours
+(first: they carried most of H1's gains, 17 of 22 facts handed in §2's route split) and `pushWidenIntent` 2 raw
+intent hits; `pushWidenDeep` 0 (no facts in §2's split came that way that the other routes did not bring).
+
+**Screen.** `bun run funnel --suite train --seeds 41,42,43,44 -- --neutral --check live --check-cache F`, Haiku live
+with I3's settings and `pushCheckWaitMs` 60,000 (every decision the check's), arms K1 (`pushCheck`) and K3
+(`pushCheck`, `pushWiden`, `--widen-table`), and the default C0. **Confirmation:** seeds 45–48, I2's held-out
+templates, the same arms. **Bars:** §1's H1 bar with K1 for C1 and K3 for C3 (planted handed ≥ +8, ≥ +2 on the
+confirmation; decoy handed ≤ +3, ≤ +1; hidden surfaced not lower; neutral packets not more than +5%; K3's decoy
+handed ≤ C0's). No live run: the cap does not allow one after §5 (§7's spend).
