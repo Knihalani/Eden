@@ -65,6 +65,7 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   pushCheck: "checker",
   pushCheckWaitMs: "checker",
   pushCheckItemChars: "checker",
+  pushCheckItems: "checker",
 };
 
 /**
@@ -161,6 +162,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheck: PUSH,
   pushCheckWaitMs: [...PUSH, "pushCheck"],
   pushCheckItemChars: [...PUSH, "pushCheck"],
+  pushCheckItems: [...PUSH, "pushCheck"],
   revisionDiff: ["revisionNotice"],
 };
 
@@ -223,6 +225,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   pushCandidatesSettled: { integer: true, max: 40 },
   pushCheckWaitMs: COUNT,
   pushCheckItemChars: { integer: true, min: 40, max: 400 },
+  pushCheckItems: { integer: true, min: 1, max: 20 },
 };
 
 /** String-list keys whose entries must come from a known list. */

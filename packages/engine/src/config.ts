@@ -684,6 +684,11 @@ export interface EngineConfig {
   /** The characters of each item's most relevant parts the check reads (`READER_ITEM_CHARS`, 400, is the most). */
   pushCheckItemChars: number;
   /**
+   * How many of the pool's items, from its first, the check reads (at most `CHECK_MAX_ITEMS`); when it answers, only
+   * those can be candidates.
+   */
+  pushCheckItems: number;
+  /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
    * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
@@ -836,5 +841,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheck: false,
   pushCheckWaitMs: 2_500,
   pushCheckItemChars: 400,
+  pushCheckItems: 15,
   revisionDiff: true,
 };

@@ -2529,7 +2529,9 @@ export class ContextPartner {
     const focus = readerFocus(cue.raw);
     const input = {
       request,
-      items: gate.pool.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
+      items: gate.pool
+        .slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS))
+        .map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
       cacheKey: userCacheKey(s.scope),
     };
