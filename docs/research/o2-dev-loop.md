@@ -141,5 +141,9 @@ A docs edit costs more than before: the tests that start a process run again on 
 The gate itself is not faster: `CHECK_COLD=1 bun run check` is what it was (51-55 s of tests). What the cache buys
 is the loop between gates.
 
+**After D658** (the second review): the 54 tests with no sign and no file reads also need the audit's record now; the
+audit (`--write`) recorded 182 of 230, and 48 stay on the tree, as above. The timings in the table were measured
+before D658 and not re-run: a file whose closure was edited now re-runs on any change until the audit runs again.
+
 One run in this session shows why the gate must be cold: `packages/engine/src/push-cut-behind.test.ts` failed once
 under load (`expect(on.searches).toBeLessThanOrEqual(off.searches)`: 12 against 10) and passed on the next run.

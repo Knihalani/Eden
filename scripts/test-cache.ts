@@ -17,8 +17,8 @@
  * - for a file that can read the repository some other way, every file of the repository that git does not ignore,
  *   outside archived/ (prose only when a string names it or a process is started). That is a file which, or a module
  *   it reaches: shows a sign (`TREE_SIGNS`, `repoPath`: it starts a process, asks where it is on disk, reads a
- *   relative path, names a repository path); or imports the file system at all, unless the audit traced this test
- *   on these bytes reading nothing outside its key (`VERIFIED`, D657).
+ *   relative path, names a repository path); or has not been traced by the audit on these bytes reading nothing
+ *   outside its key (`VERIFIED`, D657, D658): the signs alone never earn a narrow key.
  *
  * So a skipped file is one whose every reachable input is byte-identical to a run in which it passed. What the key
  * cannot see is a test that depends on the date, on the network, or on files outside the repository or ignored by
@@ -203,9 +203,6 @@ function scan(path: string): Module {
   const urlUses = (bare.match(URL_OTHER) ?? []).length - named;
   if (urlUses > 0) m.tree ??= "import.meta.url";
   for (const sign of TREE_SIGNS) if (sign.test(bare)) m.tree ??= String(sign);
-  // The transpiler folds constants (`import("./w" + ".ts")` prints as one literal), so a module named at run time is
-  // also looked for in the source as written. A match inside a comment only re-runs more: the safe direction.
-  for (const sign of RUNTIME_NAMED) if (sign.test(code)) m.tree ??= String(sign);
   if (repoPath().test(bare)) m.tree ??= "names a repository path";
   if (DOCS_PATH.test(bare)) m.tree ??= "names prose";
   m.docs = DOCS_PATH.test(bare) || (m.tree !== null && DOCS_SEGMENT.test(bare));
@@ -365,9 +362,11 @@ export interface Keyed {
 export function keyOf(test: string): Keyed {
   const c = closure(realpathSync(resolve(ROOT, test)));
   const { files, docs } = c;
-  // Fail closed (the review of D650): a closure that opens files by paths the signs cannot see is keyed on the tree
-  // until the audit has traced this test on these very bytes.
-  const tree = c.tree ?? (c.fs && !verified(test, closureHash(files)) ? "reads files, not traced by the audit" : null);
+  // Fail closed (the reviews of D650 and D657): the signs are a heuristic that keeps missing forms (`Bun.mmap`,
+  // `globalThis.Bun`, a Worker by a built path, a folded import), so no test keeps a narrow key on them alone. A
+  // test without a sign is keyed on its closure only once the audit has traced it, on these very bytes, reading
+  // nothing outside that closure (`VERIFIED`); until then, and after any edit to its closure, on the whole tree.
+  const tree = c.tree ?? (!verified(test, closureHash(files)) ? "not traced by the audit on these bytes" : null);
   const h = hasher();
   h.update(`v2\n${envHash()}\n${test}\n`);
   for (const f of files) h.update(`${relative(ROOT, f)}\0${hashOf(f)}\n`);

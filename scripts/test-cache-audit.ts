@@ -8,9 +8,9 @@
  *   bun scripts/test-cache-audit.ts [test files...] [--jobs 4] [--reads out.json] [--write]
  *
  * It traces opens, stats, access checks and link reads, of files and of directories (a listing is an input too).
- * `--write` (with no files named: the whole suite) records in scripts/test-cache-verified.txt the tests whose closure
- * reads files and that read nothing outside their key, bound to their closure's bytes: test-cache.ts keys every other
- * file-reading test on the whole tree.
+ * `--write` (with no files named: the whole suite) records in scripts/test-cache-verified.txt the tests with no sign
+ * that read nothing outside their closure, bound to their closure's bytes: test-cache.ts keys every other test on the
+ * whole tree (D658).
  *
  * Linux with strace only; a few minutes for the whole suite. Not part of `bun run check`: run it after changing
  * scripts/test-cache.ts, and when a test starts reading files in a new way.
@@ -107,7 +107,7 @@ function audit(test: string, slot: number): Promise<Finding> {
         if (covered.has(rel) || config.has(rel)) continue;
         missed.add(rel);
       }
-      const bound = !c.tree && c.fs ? `${closureHash(c.files)} ${test}` : null;
+      const bound = !c.tree ? `${closureHash(c.files)} ${test}` : null;
       done({ test, missed: [...missed].sort(), failed: code !== 0, reads: [...reads].sort(), bound });
     });
   });

@@ -101,14 +101,15 @@ file in the repository as well when it, or a module it reaches:
   `import.meta.require`), reads the working directory, or imports a name made at run time (a variable, a template);
 - reads a path that is not absolute (`readFileSync("x")`, `Bun.file("x")`), or names a repository path in a string: a
   top-level directory and a slash, a root file's name, `join("packages", …)`, anything through docs/ or ending `.md`;
-- imports the file system at all, unless `scripts/test-cache-verified.txt` holds the test with its closure's hash: the
-  audit writes that file for tests it traced reading nothing outside their key. An edit in such a test's closure
-  sends it back to the whole tree until the audit runs again.
+- or has not been traced by the audit on these bytes (D658). Signs are a heuristic: two reviews found forms that
+  pass every sign (`globalThis.Bun`, `Bun.mmap`, a Worker by a built path, an import the transpiler folds), so a test
+  keeps a narrow key only while `scripts/test-cache-verified.txt` holds it with its closure's hash. The audit writes
+  that file for tests with no sign that it traced reading nothing outside their closure (182 of 230 on 2026-11-10).
+  An edit in a test's closure sends it to the whole tree until `bun scripts/test-cache-audit.ts --write` runs again.
 
-Signs are looked for in the transpiler's output (comments gone, strings whole); `import(`/`require(` of anything but
-one literal also in the source as written, since the transpiler folds `"./w" + ".ts"` into one. Bun's module reached
-other than as `Bun.x` (`import { file } from "bun"`, `= Bun`, `Bun[…]`, `process.getBuiltinModule`) counts as both
-spawning and reading files. Files outside the repository or ignored by git (`.local/`) are in no key and the audit
+Signs are looked for in the transpiler's output (comments gone, strings whole). Bun's module reached other than as
+`Bun.x` (`import { file } from "bun"`, `= Bun`, `Bun[…]`, `process.getBuiltinModule`) counts as both spawning and
+reading files. Files outside the repository or ignored by git (`.local/`) are in no key and the audit
 skips them: a test must not read them. A pass is kept for 24 hours; a file
 whose tests were all skipped is not a pass. `CHECK_COLD=1`, `TEST_CACHE=0`, or any extra `bun test` argument runs
 every file. `bun scripts/test-cache.ts why <test file>` prints what a file's key covers.
@@ -118,7 +119,7 @@ and of directories) and fails when a test read something its key does not cover;
 `scripts/test-cache-verified.txt`. Run it after changing the cache, when a test reads files in a new way, and now
 and then to bring edited closures back (230 traced, 0 missed, 128 verified; 87 s).
 
-Measured on a 4-core container after D657 (docs/research/o2-dev-loop.md): the same tree again 51 s to 0.5 s; a docs
+Measured on a 4-core container after D657 and before D658 (docs/research/o2-dev-loop.md; D658 keeps 48 of 230 files on the tree, as before, but an untraced edit now re-runs more until the audit is re-run): the same tree again 51 s to 0.5 s; a docs
 edit 24 s; a leaf-package edit 27 s; an engine edit 45 s.
 
 ## Bun's unref'd-timer spin (Bun 1.4.4, 2026-11-05)

@@ -20,6 +20,12 @@ const cache = (args: string[], env: Record<string, string> = {}) =>
 const key = (t: string, env: Record<string, string> = {}) =>
   /key ([0-9a-f]{40})/.exec(cache(["why", t], env).stdout)![1]!;
 const state = join(repo, ".git", "state.json");
+/** Records tests as the audit would after tracing them on these bytes (D658): only then is a key narrow. */
+const trust = (...tests: string[]) =>
+  write(
+    "scripts/test-cache-verified.txt",
+    tests.map((t) => `${/closure ([0-9a-f]{40})/.exec(cache(["why", t]).stdout)![1]!} ${t}\n`).join(""),
+  );
 const plan = (...tests: string[]) => cache(["plan", state, ...tests]);
 const junit = (suites: Array<[file: string, tests: number, failures: number, skipped?: number]>) => {
   const body = suites
@@ -54,6 +60,7 @@ write("README.md", "readme\n");
 
 describe("a test file's key (D650)", () => {
   test("changes with the file and what it imports, transitively; not with a file it cannot reach, nor with prose", () => {
+    trust("lib/pure.test.ts");
     const k0 = key("lib/pure.test.ts");
     expect(key("lib/pure.test.ts")).toBe(k0);
     write("lib/other.ts", `export const other = 2;\n`);
@@ -68,6 +75,7 @@ describe("a test file's key (D650)", () => {
   });
 
   test("a comment that names a path or a location is not a sign; a module named by URL is followed", () => {
+    trust("lib/pure.test.ts", "lib/url.test.ts");
     expect(cache(["why", "lib/pure.test.ts"]).stdout).not.toContain("whole tree");
     const why = cache(["why", "lib/url.test.ts"]).stdout;
     expect(why).not.toContain("whole tree");
@@ -111,7 +119,6 @@ describe("a test file's key (D650)", () => {
       "Bun destructured": `const { spawnSync } = Bun;\nexport const s = () => spawnSync(["git", "status"]);\n`,
       "Bun indexed": `export const s = () => Bun["spawnSync"](["git", "status"]);\n`,
       "a built-in by name at run time": `export const cp = process.getBuiltinModule("node:child_" + "process");\n`,
-      "an import named by a sum": `export const w = await import("./w" + ".ts");\n`,
       // Not a comment: the string ends at its quote, and the sign after it must be seen.
       "a sign after a string that looks like a comment": `const g = "fixtures/*.tmp";\nconst d = import.meta.dir;\nconst h = "*/";\nexport { g, d, h };\n`,
     };
@@ -127,6 +134,31 @@ describe("a test file's key (D650)", () => {
     // A Markdown file named in a string is read from the working directory: the tree, with prose.
     write("lib/md.test.ts", `const name = "README.md";\nexport { name };\n`);
     expect(cache(["why", "lib/md.test.ts"]).stdout).toMatch(/and the whole tree \(/);
+  });
+
+  test("a test the audit has not traced is keyed on the tree, whatever the signs miss (D658)", () => {
+    // Forms the second review of D657 got past every sign: only the audit's trace can vouch for a narrow key.
+    const unseen: Record<string, string> = {
+      "Bun passed as an argument": `const run = (b: typeof Bun) => b.spawnSync(["cat", "x"]);\nexport const r = () => run(Bun);\n`,
+      "globalThis.Bun": `const b = globalThis.Bun;\nexport const f = () => b.file(["lib", "d.txt"].join("/"));\n`,
+      "Bun.mmap": `export const m = () => Bun.mmap(["lib", "d.txt"].join("/"));\n`,
+      "a Worker by a built path": `export const w = () => new Worker(["lib", "w.ts"].join("/"));\n`,
+      "an import the transpiler folds": `export const w = await import("./w" + ".ts");\n`,
+    };
+    let i = 0;
+    for (const [what, code] of Object.entries(unseen)) {
+      const t = `lib/unseen${i++}.test.ts`;
+      write(t, code);
+      expect({ what, why: /whole tree/.test(cache(["why", t]).stdout) }).toEqual({ what, why: true });
+    }
+    // A comment that looks like a dynamic import does not cost a traced test its narrow key.
+    write("lib/comment.test.ts", "/** The module a pool imports (`import(`x`)`). */\nexport const c = 1;\n");
+    const why = () => cache(["why", "lib/comment.test.ts"]).stdout;
+    expect(why()).toContain("not traced by the audit");
+    const hash = /closure ([0-9a-f]{40})/.exec(why())![1]!;
+    write("scripts/test-cache-verified.txt", `${hash} lib/comment.test.ts\n`);
+    expect(why()).not.toContain("whole tree");
+    write("scripts/test-cache-verified.txt", "");
   });
 
   test("a closure that reads files is keyed on the tree unless the audit traced it on these bytes", () => {
