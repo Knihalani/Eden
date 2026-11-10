@@ -275,8 +275,10 @@ blind to them while `sourceYieldEarn` withholds their reads.
 
 After the review of the table (REQUEST_CHANGES, fixed before run 3): a full table, or a user past 4,095 source
 numbers, **fails towards "common"** (a word that could not be kept under a second source is marked common, where
-it read as held by the first alone); a source the user drops has its number retired (`forgetSource`), so a source
-that comes back under the same id starts with nothing; `sourceYieldRare` needs `routeSketch` (the table is
+it read as held by the first alone); a source the user drops has its number retired (`forgetSource`) and its slots are
+taken over as words are added, so a source that comes back under the same id starts with nothing and one that
+comes and goes neither turns its words common nor uses a slot each time (each return still uses one of the
+4,095 source numbers); `sourceYieldRare` needs `routeSketch` (the table is
 filled beside the sketch). Run 3's image is the commit with these fixes.
 
 $0, the three switches on this structure, `--noise-vocab 1000`:

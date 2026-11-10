@@ -59,14 +59,21 @@ describe("RareTerms", () => {
 
   test("a full table fails towards common: a word a second source could not be kept under names no one", () => {
     const t = new RareTerms();
-    t.add("a", ...h("target"));
-    for (let i = 0; t.dropped === 0 && i < 600_000; i++) t.add(`s${i % 50}`, ...h(`w${i}`));
+    const words = 300_000;
+    for (let i = 0; i < words; i++) t.add(`s${i % 50}`, ...h(`w${i}`));
     expect(t.dropped).toBeGreaterThan(0);
-    expect(t.holders(...h("target"), 2)).toEqual(["a"]);
-    // The table is full where this word sits or not; either way it must not go on reading as held by one source.
-    for (let k = 0; k < 3; k++) t.add(`late${k}`, ...h("target"));
-    expect(t.holders(...h("target"), 2).length === 2 || t.holders(...h("target"), 2).length === 0).toBe(true);
-    expect(t.holders(...h("target"), 1)).toEqual([]);
+    // Every word one source holds gets a second holder; where the table had no slot for it, the word must stop
+    // reading as held by one source.
+    let refused = 0;
+    for (let i = 0; i < words && refused < 20; i += 7) {
+      if (t.holders(...h(`w${i}`), 1).length !== 1) continue;
+      const before = t.dropped;
+      t.add("late", ...h(`w${i}`));
+      if (t.dropped === before) continue;
+      refused++;
+      expect(t.holders(...h(`w${i}`), 2)).toEqual([]);
+    }
+    expect(refused).toBeGreaterThan(0);
   });
 
   test("past the last source number a word another source holds is marked common, not left rare", () => {
@@ -89,10 +96,22 @@ describe("RareTerms", () => {
     t.add("wiki", ...h("renewal"));
     expect(t.holders(...h("renewal"), 2)).toEqual(["wiki"]);
     expect(t.holders(...h("vitalis"), 2)).toEqual([]);
+    // Coming and going does not turn a word common, nor a second real holder with it.
+    for (let round = 0; round < 3; round++) {
+      t.forgetSource("wiki");
+      t.add("wiki", ...h("renewal"));
+      expect(t.holders(...h("renewal"), 1)).toEqual(["wiki"]);
+    }
+    t.add("mail", ...h("renewal"));
+    expect(t.holders(...h("renewal"), 2).sort()).toEqual(["mail", "wiki"]);
+    const slots = t.size;
+    t.forgetSource("wiki");
+    t.add("wiki", ...h("renewal"));
+    expect(t.size).toBe(slots);
     // The hole survives a dump.
     const back = RareTerms.load(JSON.parse(JSON.stringify(t.dump())))!;
     expect(back.holders(...h("vitalis"), 2)).toEqual([]);
-    expect(back.holders(...h("renewal"), 2)).toEqual(["wiki"]);
+    expect(back.holders(...h("renewal"), 2).sort()).toEqual(["mail", "wiki"]);
   });
 
   test("a small user's table is small", () => {

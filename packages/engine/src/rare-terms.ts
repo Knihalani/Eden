@@ -67,6 +67,10 @@ export class RareTerms {
     let holders = 0;
     let first = -1;
     let firstIn: Uint32Array | undefined;
+    // A slot of a source the user dropped (`forgetSource`): no holder, and the first one is taken over below, so a
+    // source that comes and goes neither turns its words common nor uses a slot each time (the review).
+    let hole = -1;
+    let holeIn: Uint32Array | undefined;
     for (const seg of this.segments) {
       const mask = seg.length - 1;
       for (let k = 0; k < REACH; k++) {
@@ -76,6 +80,13 @@ export class RareTerms {
         if (slot >>> 12 !== tag) continue;
         const who = slot & 0xfff;
         if (who === COMMON || who === n) return;
+        if (this.ids[who] === undefined) {
+          if (!holeIn) {
+            hole = i;
+            holeIn = seg;
+          }
+          continue;
+        }
         if (holders === 0) {
           first = i;
           firstIn = seg;
@@ -89,6 +100,10 @@ export class RareTerms {
       firstIn![first] = ((tag << 12) | COMMON) >>> 0;
       return;
     }
+    if (numbered && holeIn) {
+      holeIn[hole] = ((tag << 12) | n!) >>> 0;
+      return;
+    }
     if (numbered && this.put(h1, ((tag << 12) | n!) >>> 0)) return;
     // Not kept (no number for the source, or no free slot in reach of a full table). The table must not then say
     // fewer sources hold the word than do: with one holder kept, the word is marked common. It fails towards weak
@@ -98,8 +113,8 @@ export class RareTerms {
   }
 
   /**
-   * The user no longer has the source: its number is retired, so its words name no one (their slots stay, and
-   * still count towards "common"), and a source that comes back under the same id starts with nothing.
+   * The user no longer has the source: its number is retired, so its words name no one and count for nothing
+   * (`add` takes their slots over), and a source that comes back under the same id starts with nothing.
    */
   forgetSource(sourceId: string): void {
     const n = this.numbers.get(sourceId);
