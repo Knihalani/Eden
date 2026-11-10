@@ -10,9 +10,10 @@ the ``eden`` toolset instead of your source MCP servers. Configuration comes fro
   registers nothing and says so once.
 - ``EDEN_URL`` (default ``http://127.0.0.1:8790``), ``EDEN_API_KEY``, ``EDEN_TENANT_ID``: as for ``EdenClient``.
 - ``EDEN_CHECK_TOOLS``: which tool calls go through ``check`` first. Unset: the tools whose name carries an acting
-  verb as a whole word (``ACTING``: send, reply, forward, share, invite, book, schedule, pay, transfer, grant,
-  post, purchase: ``send_email`` and ``mcp_gmail_send_message``, not ``list_messages``), which is where the party
-  check finds anything; a read-only tool gains nothing from a check and
+  verb as a whole word, camelCase split (``ACTING``: send, reply, forward, share, invite, book, schedule, pay,
+  transfer, grant, post, purchase, order, create, update, add, respond, deploy: ``send_email``, ``sendEmail``,
+  ``create_event``, ``mcp_gmail_send_message``, not ``list_messages`` or ``read_file``), which is where the party
+  check finds anything (a calendar create or update adds guests); a read-only tool gains nothing from a check and
   would send its arguments to Eden for nothing. A comma list names the tools exactly; ``*`` checks every tool but
   Eden's own; empty checks none.
 
@@ -56,7 +57,8 @@ TOOLSET = "eden"
 MAX_SESSIONS = 256
 #: The default ``EDEN_CHECK_TOOLS``: a tool whose name carries one of these verbs as a word acts on someone's behalf.
 ACTING = re.compile(
-    r"(?:^|[_\-.])(send|reply|forward|share|invite|book|schedule|pay|transfer|grant|post|purchase)(?=$|[_\-.])",
+    r"(?:^|[_\-.])(send|reply|forward|share|invite|invites|book|schedule|pay|transfer|grant|post|purchase|order"
+    r"|create|update|add|respond|deploy)(?=$|[_\-.])",
     re.I,
 )
 
@@ -132,7 +134,8 @@ class EdenHermes:
             return True
         if self.check_mode == "list":
             return tool_name in self.check_tools
-        return ACTING.search(tool_name) is not None
+        # camelCase as words: sendEmail -> send_Email, chat.postMessage -> chat.post_Message.
+        return ACTING.search(re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", tool_name)) is not None
 
     # -- hooks (each returns None on anything unexpected: fail open) ------------------------------------------------
 
@@ -198,7 +201,10 @@ class EdenHermes:
             return None
 
     def end_session(self, session_id: Any = None, old_session_id: Any = None, **_: Any) -> None:
-        """``on_session_finalize`` (``session_id``) and ``on_session_reset`` (``old_session_id``): the identity ends."""
+        """``on_session_finalize`` (``session_id``) and ``on_session_reset`` (``old_session_id``): the identity ends.
+
+        Hermes' CLI reset passes only the new ``session_id``: that pops a session with no client yet and sends
+        nothing, and the old one was already ended by the ``on_session_finalize`` its ``/new`` fires first."""
         try:
             sid = self.session_key(old_session_id or session_id)
             if not self.user or sid is None:

@@ -22,8 +22,10 @@ on the shortest path. Now an integrator who copies the quickstart gets them.
   against keeping the source tools beside Eden; those figures are the lab plugin's, with `ask_context` over MCP): the
   turn's new packet only (Hermes keeps earlier ones, A27), tool results reported and queued packets appended, as the
   lab plugin did; added and not measured inside Hermes: `ask_context` as a plugin tool, the acting tools' calls
-  checked (`pre_tool_call` blocks with the held result; by default only names with an acting verb), and the Eden
-  session ended with the Hermes identity (`on_session_finalize`/`on_session_reset`). INTEGRATION.md documents it with a note on when to keep the source
+  checked (`pre_tool_call` blocks with the held result; by default names with an acting verb, camelCase split; an
+  over-match such as `address_book_lookup` costs only a check round trip), and the Eden
+  session ended with the Hermes identity (`on_session_finalize`/`on_session_reset`).
+  INTEGRATION.md documents it with a note on when to keep the source
   tools (acting through them, browsing a whole listing, a source not connected to Eden).
 
 ## What was checked, and how
@@ -58,7 +60,8 @@ The reviewer subagent (REQUEST_CHANGES on the first commit) found, and this bran
   would have dropped the queued packets, what Eden knows the agent read, and the per-session model budget. Now the
   session ends on those two hooks, with a test that it does not on `on_session_end`.
 - Every tool call was checked by default, read-only built-ins included (their arguments sent to Eden, a round trip
-  each). Now the default is tools named with an acting verb; `*` keeps the old behaviour.
+  each). Now the default is tools named with an acting verb (widened on re-review to calendar create/update, orders
+  and camelCase names); `*` keeps the old behaviour.
 - A hook with no session id shared one fallback session per user; now it uses the task id, or skips Eden.
 - Python/TypeScript guard parity: a finding without an id is held in both; an async `held` on a sync Python tool runs
   the tool (reported) instead of returning a coroutine; partials of async tools and objects with an async `__call__`

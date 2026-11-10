@@ -116,11 +116,13 @@ class Hermes(unittest.TestCase):
 
     def test_default_checks_only_acting_tools(self):
         _, ctx = plugin()
-        for name in ["read_file", "web_search", "terminal", "search_mail", "mcp_gmail_list_messages", "send_email",
-                     "mcp_gmail_send_message", "calendar_book", "share-doc", "pay_invoice", "reply"]:
+        acting = ["send_email", "mcp_gmail_send_message", "calendar_book", "share-doc", "pay_invoice", "reply",
+                  "create_event", "mcp_calendar_update_event", "add_attendees", "respond_to_event", "place_order",
+                  "order", "deploy", "sendEmail", "chat.postMessage"]
+        for name in ["read_file", "web_search", "terminal", "search_mail", "mcp_gmail_list_messages", "list_orders",
+                     "getEvent", "lookup_contact"] + acting:
             ctx.hooks["pre_tool_call"](tool_name=name, args={}, session_id="s")
-        self.assertEqual([t for t, _ in FakeClient.made[0].checks],
-                         ["send_email", "mcp_gmail_send_message", "calendar_book", "share-doc", "pay_invoice", "reply"])
+        self.assertEqual([t for t, _ in FakeClient.made[0].checks], acting)
         _, ctx = plugin({"EDEN_CHECK_TOOLS": "*"})
         ctx.hooks["pre_tool_call"](tool_name="read_file", args={}, session_id="s")
         ctx.hooks["pre_tool_call"](tool_name="mcp_eden_ask_context", args={}, session_id="s")

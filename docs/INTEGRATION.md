@@ -498,10 +498,11 @@ The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces
   returned as context. Only the new packet: Hermes keeps each turn's context and sends it again on later calls (A27,
   D385), so the plugin never re-sends earlier packets.
 - **`pre_tool_call`**: an acting tool's call goes to `check` first; a finding blocks the call and becomes its result
-  (calling again proceeds). By default the acting tools are those whose name carries an acting verb as a word (send,
-  reply, forward, share, invite, book, schedule, pay, transfer, grant, post, purchase: `send_email`,
-  `mcp_gmail_send_message`, not `list_messages` or `read_file`); `EDEN_CHECK_TOOLS=send_email,book_room` names them
-  exactly, `*` checks every tool but Eden's own, empty checks none.
+  (calling again proceeds). By default the acting tools are those whose name carries an acting verb as a word,
+  camelCase split (send, reply, forward, share, invite, book, schedule, pay, transfer, grant, post, purchase, order,
+  create, update, add, respond, deploy: `send_email`, `sendEmail`, `create_event`, `mcp_gmail_send_message`, not
+  `list_messages` or `read_file`). A tool that acts under another name is not checked: name your acting tools with
+  `EDEN_CHECK_TOOLS=send_email,book_room` (exactly those), or `*` (every tool but Eden's own); empty checks none.
 - **`post_tool_call`, `transform_tool_result`**: tool results are reported, and packets Eden queued since are appended
   to the result, so context found mid-turn reaches the next model call.
 - **`on_session_finalize`, `on_session_reset`**: each Hermes session is its own Eden session (its id through
