@@ -1,0 +1,5 @@
+name: eden
+version: "0.1"
+description: >-
+  Eden context partner: ask_context in place of the source tools, its packet each turn,
+  and a check before each acting call

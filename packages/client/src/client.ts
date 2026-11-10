@@ -385,7 +385,10 @@ export class EdenClient {
    * Forwards a change notification for one of the user's sources (a Gmail watch, a Calendar or Drive channel, a Slack
    * event, a webhook). Never throws.
    *
-   * - **With the changed items (`change.items`, deleted refs in `change.removed`): the recommended form (D210).** Eden
+   * Send what the notice names (D421): its refs where the connector reports changed ids (the default), its items
+   * where it carries the content; the bare signal only where it names nothing (the slow path: A18, D347).
+   *
+   * - **With the changed items (`change.items`, deleted refs in `change.removed`; D210).** Eden
    *   holds the items as synced and drops the removed ones at once, with no call to the source: a signal makes the
    *   next lookup poll the source's listing, a payload does not (RealUse-1 part D: 0.22 connector calls a lookup
    *   with payloads, 0.91 with signals). Batches past `MAX_PUSHED_ITEMS` are split. Resolves true when every part
@@ -393,10 +396,11 @@ export class EdenClient {
    *   synced yet, takes the items and stores none (`sourceItems` resolves 0; `sourceNotice` says why). When a part
    *   did not reach it (unreachable, refused, an answer of another shape), the plain signal is sent as well, so Eden
    *   polls the source rather than miss the change, and it resolves false.
-   * - **With the changed refs only (`change.refs`, D347):** for a notice that names what changed but carries no
-   *   content. Eden reads those refs itself in the background and puts nothing else of the source in doubt, so the
-   *   agent's next request waits on no re-read; a ref it cannot read falls back to the signal on the server. A part not
-   *   taken (unreachable, or the source not synced and notifying) sends the plain signal and resolves false.
+   * - **With the changed refs only (`change.refs`, D347; the default for a notice that names ids, D421):** for a
+   *   notice that names what changed but carries no content. Eden reads those refs itself in the background and
+   *   puts nothing else of the source in doubt, so the agent's next request waits on no re-read; a ref it cannot read
+   *   falls back to the signal on the server. A part not taken (unreachable, or the source not synced and notifying)
+   *   sends the plain signal and resolves false.
    * - **Without items (a signal):** with the server's `syncPush`, the source is polled at its next use instead of on a
    *   guess. Resolves false when the partner could not be reached or does not sync that source (`sourceNotice` says
    *   why).

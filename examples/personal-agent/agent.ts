@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /**
  * A minimal personal-agent loop with Eden beside it. The agent is any OpenAI-compatible chat model; Eden sees each
- * event, adds context before each model call, and is offered to the model as an `ask_context` tool.
+ * event, adds context before each model call, is offered to the model as an `ask_context` tool, and checks each call
+ * of the agent's acting tool before it runs (`guardTools`, D420: a finding comes back as the tool's result).
  *
  *   EDEN_DEV=1 EDEN_SOURCES_FILE=examples/personal-agent/sources.json bun run dev    # terminal 1
  *   bun examples/personal-agent/agent.ts "move lunch with Priya Raman to Friday"     # terminal 2, offline (default)
@@ -12,7 +13,7 @@
  * the whole loop (observe, injected context, ask) runs for free. OPENAI_BASE_URL / AGENT_MODEL point the agent at
  * any OpenAI-compatible endpoint (OpenRouter works); EDEN_URL at a server other than http://127.0.0.1:8790.
  */
-import { ASK_CONTEXT_DESCRIPTION, EdenClient, withContext } from "@eden/client";
+import { ASK_CONTEXT_DESCRIPTION, EdenClient, guardTools, withContext } from "@eden/client";
 
 // No key against the dev server; EDEN_API_KEY against one with EDEN_API_KEYS set. Eden fails open, so a wrong key
 // shows up only through onError.
@@ -41,7 +42,31 @@ const tools = [
       parameters: { type: "object", properties: { question: { type: "string" } }, required: ["question"] },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "move_event",
+      description: "Move one of the user's calendar events, and tell its guests.",
+      parameters: {
+        type: "object",
+        properties: {
+          event: { type: "string" },
+          to: { type: "string" },
+          notify: { type: "array", items: { type: "string" } },
+        },
+        required: ["event", "to"],
+      },
+    },
+  },
 ];
+
+// The agent's acting tools, each checked by Eden before it runs (D376, D420): on a finding (a guest only a stranger's
+// mail named, say) the agent gets the finding as the tool's result instead, and calling again goes ahead. A demo
+// stand-in: a real agent would call its calendar here.
+const actions = guardTools(eden, {
+  move_event: async (args: { event: string; to: string; notify?: string[] }) =>
+    `(demo) moved ${args.event} to ${args.to}${args.notify?.length ? `, told ${args.notify.join(", ")}` : ""}`,
+});
 
 /** Context Eden injected unasked (the system messages `withContext` adds), as the stub model saw it, once each. */
 const injected = new Set<string>();
@@ -99,10 +124,13 @@ for (let step = 0; step < 5; step++) {
     break;
   }
   for (const call of reply.tool_calls) {
-    const { question } = JSON.parse(call.function.arguments) as { question: string };
-    await eden.observe({ kind: "tool_call", tool: call.function.name, input: { question } });
-    const answer = (await eden.ask(question))?.answer ?? "No context available.";
-    messages.push({ role: "tool", tool_call_id: call.id, content: answer });
+    const input = JSON.parse(call.function.arguments) as Record<string, unknown>;
+    await eden.observe({ kind: "tool_call", tool: call.function.name, input });
+    let content: string;
+    if (call.function.name === "move_event") content = await actions.move_event(input as { event: string; to: string });
+    else content = (await eden.ask(String(input.question ?? "")))?.answer ?? "No context available.";
+    messages.push({ role: "tool", tool_call_id: call.id, content });
+    await eden.observe({ kind: "tool_result", tool: call.function.name, output: content });
   }
 }
 await eden.observe({ kind: "session_end" });

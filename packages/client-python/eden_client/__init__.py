@@ -6,6 +6,7 @@
     result = eden.observe({"kind": "user_message", "text": text})     # each event; waits up to 3 s on a user message
     messages = with_context(messages, eden.collect(result["injection"]))  # before each model call
     answer = eden.ask("What did Dana say about the renewal?")          # or expose as the agent's ask_context tool
+    tools = guard_tools(eden, {"send_email": send_email})             # acting tools: check first (D376, D420)
 
 Fails open, always (D14): a network error, a timeout, a non-2xx or an answer of the wrong shape is "no context"
 (``None``, ``[]``, or ``proceed`` for ``check``), never an exception in the agent's loop. Errors go to ``on_error``.
@@ -15,7 +16,10 @@ Never logs the API key; ``on_error`` gets the error, never the request.
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import hashlib
+import inspect
 import json
 import math
 import re
@@ -30,6 +34,8 @@ __all__ = [
     "MAX_PUSHED_ITEMS",
     "EdenClient",
     "eden_id",
+    "guard_tool",
+    "guard_tools",
     "held_result",
     "with_context",
 ]
@@ -130,6 +136,77 @@ def held_result(tool: str, finding: Dict[str, Any]) -> str:
         f"Not executed: {tool} was held because the user's context partner has context on it.\n{finding['text']}\n"
         f"To execute it anyway, call {tool} again with the same arguments."
     )
+
+
+def _guard_input(args: Any, kwargs: Dict[str, Any]) -> Any:
+    """What Eden is told a call's input is: the one argument, or the keyword arguments (positional ones under
+    ``"args"``), so ``send_email(to=..., cc=...)`` and ``send_email({"to": ..., "cc": ...})`` read the same."""
+    if len(args) == 1 and not kwargs:
+        return args[0]
+    return {**({"args": list(args)} if args else {}), **kwargs}
+
+
+def guard_tool(eden: Any, name: str, fn: Callable[..., Any], held: Optional[Callable[..., Any]] = None,
+               timeout_s: Optional[float] = None, on_error: Optional[Callable[[Exception], Any]] = None
+               ) -> Callable[..., Any]:
+    """``fn``, checked with ``eden.check(name, input)`` before each call (``guardTool`` in @eden/client, D420).
+
+    On a finding the call does not run and the agent gets ``held(name, finding, input)`` as the tool's result
+    (default ``held_result``: hold, show the finding, say that calling again with the same arguments goes ahead; the
+    server proceeds on the repeat). Fails open (D14): a check or a ``held`` that raises runs the tool as if Eden were
+    absent; ``on_error`` gets what was swallowed. The tool's own exceptions are its own and propagate. An ``async``
+    tool gets an ``async`` wrapper, whose check runs in a thread (the client is synchronous).
+    """
+
+    def report(e: Exception) -> None:
+        try:
+            if on_error:
+                on_error(e)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def ask(args: Any, kwargs: Dict[str, Any]) -> Any:
+        """The held result, or ``_RUN`` to run the tool."""
+        data = _guard_input(args, kwargs)
+        try:
+            res = eden.check(name, data) if timeout_s is None else eden.check(name, data, timeout_s=timeout_s)
+            finding = res.get("finding") if isinstance(res, dict) and res.get("verdict") == "finding" else None
+            if not _is_injection(finding):
+                return _RUN
+            return held(name, finding, data) if held else held_result(name, finding)
+        except Exception as e:  # noqa: BLE001 - fail open on anything (D14)
+            report(e)
+            return _RUN
+
+    if inspect.iscoroutinefunction(fn):
+        @functools.wraps(fn)
+        async def guarded_async(*args: Any, **kwargs: Any) -> Any:
+            try:
+                out = await asyncio.to_thread(ask, args, kwargs)
+                if inspect.isawaitable(out):
+                    out = await out
+            except Exception as e:  # noqa: BLE001
+                report(e)
+                out = _RUN
+            return await fn(*args, **kwargs) if out is _RUN else out
+
+        return guarded_async
+
+    @functools.wraps(fn)
+    def guarded(*args: Any, **kwargs: Any) -> Any:
+        out = ask(args, kwargs)
+        return fn(*args, **kwargs) if out is _RUN else out
+
+    return guarded
+
+
+def guard_tools(eden: Any, tools: Dict[str, Callable[..., Any]], **options: Any) -> Dict[str, Callable[..., Any]]:
+    """Every tool in ``tools``, each checked under its key as its name (``guardTools``). Wrap the tools that act
+    (send, book, pay, share, order); ``options`` are ``guard_tool``'s ``held``, ``timeout_s`` and ``on_error``."""
+    return {name: guard_tool(eden, name, fn, **options) for name, fn in tools.items()}
+
+
+_RUN = object()
 
 
 class EdenError(Exception):
@@ -307,12 +384,11 @@ class EdenClient:
 
     def source_changed(self, source_id: str, items: Optional[List[Dict[str, Any]]] = None,
                        removed: Optional[List[str]] = None, refs: Optional[List[str]] = None) -> bool:
-        """Forwards a source's change notification, with its items when you have them (the recommended form, D210).
-
-        ``refs``: the refs it changed or added, when the notice names them but carries no content (D347); Eden reads
-        them itself and puts nothing else of the source in doubt. True when every part reached the server and was
-        taken. A part that did not is followed by the bare signal, so Eden polls the source rather than miss the
-        change. With no items and no refs, it is the bare signal.
+        """Forwards a source's change notification with what it names (D421): ``refs`` where the connector reports
+        changed ids (the default; D347: Eden reads them itself and puts nothing else of the source in doubt), ``items``
+        where the notice carries the content (D210), ``removed`` for deletions. True when every part reached the
+        server and was taken. A part that did not is followed by the bare signal, so Eden polls the source rather than
+        miss the change. With no items and no refs, it is the bare signal (the slow path).
         """
         # A tuple or a set of refs is as idiomatic in Python as a list; anything else (a str, a dict) is read as none.
         items = list(items) if isinstance(items, _SEQUENCES) else []

@@ -9,15 +9,19 @@ D64's timelines, not tested in a tenant's agent. Measure in your own agent befor
 ## The loop
 
 ```ts
-import { EdenClient, withContext } from "@eden/client";
+import { EdenClient, guardTools, withContext } from "@eden/client";
 
 // Each sent user message's observe waits up to 3 s for its lookup by default (see "How long to wait" below).
 const eden = new EdenClient({ apiKey, userId, sessionId });
 const { injection } = await eden.observe({ kind: "user_message", text }); // report each event
 messages = withContext(messages, await eden.collect(injection)); // before each model call
-// From your sources' webhooks: forward what changed, with the items (see "Forward your sources' change notifications").
-await eden.sourceChanged(sourceId, { items, removed });
+// The agent's acting tools, each checked before it runs (see "Agents that act").
+const tools = guardTools(eden, { send_email, book_meeting });
+// From your sources' webhooks: forward the refs that changed (see "Forward your sources' change notifications").
+await eden.sourceChanged(sourceId, { refs: changedIds, removed: deletedIds });
 ```
+
+On Hermes Agent the plugin does all of this for you: see "Hermes Agent" below.
 
 - **One `userId` per end user, one `sessionId` per conversation.** Eden keys every piece of state by tenant, user and
   session (D9); a shared id would mix users' context.
@@ -150,14 +154,34 @@ endpoint's prices, as Eden's lab does (D71); otherwise the comparison measures r
 
 ## Agents that act: check each call (D69, D376)
 
-If your agent sends, books, pays or orders through its own tools, check each such call before it runs:
+If your agent sends, books, pays, shares or orders through its own tools, wrap them so each call is checked before it
+runs (**the recommended setup**, D420):
 
 ```ts
-import { heldResult } from "@eden/client";
+import { guardTools } from "@eden/client";
 
-const check = await eden.check(toolName, args);
-if (check.verdict === "finding" && check.finding) return heldResult(toolName, check.finding); // or ask the user
+const tools = guardTools(eden, { send_email: sendEmail, book_meeting: bookMeeting });
+// tools.send_email(args): check first; on a finding the email is not sent and the agent gets the finding as the
+// tool's result (heldResult); calling again with the same arguments sends it (the server proceeds on the repeat).
 ```
+
+```python
+from eden_client import guard_tools
+
+tools = guard_tools(eden, {"send_email": send_email, "book_meeting": book_meeting})  # async tools stay async
+```
+
+- `guardTool(eden, name, fn)` wraps one; `held: (tool, finding, input) => …` replaces the held result (ask the user
+  instead, say); `timeoutMs` (Python `timeout_s`) bounds the check. **It fails open**: a check that errors, times out
+  or throws, or a `held` that throws, runs the tool as if Eden were absent (D14); the tool's own errors are its own.
+- Wrap the acting tools, not the read-only ones: a check makes no source or model call (4–5 ms p50), but it adds the
+  call's redacted argument words to the session's vocabulary for nothing.
+- By hand it is `const check = await eden.check(toolName, args)` and, on `check.verdict === "finding"`,
+  `heldResult(toolName, check.finding)` as the tool's result.
+- **The proxy cannot do this.** `@eden/proxy` sees a tool call only in the model's answer, which it streams back
+  unchanged, and the agent runs the call before the next request reaches the proxy; holding it there would mean
+  rewriting the model's answer. Behind the proxy, wrap the acting tools in your agent with the SDK (Python too).
+  The Hermes plugin checks every call itself (`pre_tool_call`).
 
 - **On in the default: the party check (`partyCheck`, D375, D376).** A call that adds a recipient, cc, guest,
   share or payee account (an email address, a sort code, an 8-digit account, an IBAN) that Eden's own packets or
@@ -166,8 +190,8 @@ if (check.verdict === "finding" && check.finding) return heldResult(toolName, ch
   carry) gets a finding: confirm with the user. Anyone can email your user, and the injections an agent followed in
   A10's suite were exactly this (an extra cc or guest asked for in a stranger's mail). In A25's live run (Pi on
   Haiku 5.5) it cut such attacks followed from 12 in 576 tasks to 0, with no finding on a legitimate call in 576
-  control and neutral tasks (docs/research/a25-action-guard.md). It only works if you call `check`: Eden cannot see
-  a call you do not send it.
+  control and neutral tasks (docs/research/a25-action-guard.md). It only works if you call `check` (`guardTools` does):
+  Eden cannot see a call you do not send it.
 - The fuller action firewall, `actionCheck` (calendar clashes, conflicts, absences; a trial switch, off, D112's
   trials table), needs the switch in the server's engine config; the grounds it reads are in the default.
 - Eden returns context as data and never "do not"; whether to hold the call, ask the user or go ahead is your policy.
@@ -258,23 +282,32 @@ preset yet: no CRM server's tools could be verified, so write a CRM entry by han
 maps the query from its schema). A worked per-user OAuth directory, which keeps refresh tokens in your app and hands
 Eden short-lived access tokens on preset entries, is [examples/oauth-directory](../examples/oauth-directory/directory.ts).
 
-## Forward your sources' change notifications, with their items (`syncPush`, D125, D210)
+## Forward your sources' change notifications, with the refs or items they name (`syncPush`, D125, D210, D347, D421)
 
 Eden keeps a synced copy of each user's listable sources. Without help it guesses when a source has changed (a busy
 inbox goes stale in minutes) and polls it at the next lookup: 3.8 to 5.1 listing calls per agent task in the
 market-latency runs (docs/research/cost-fixes.md). On a connector platform that bills per call, those polls are most
 of Eden's connector bill (RealUse-1: agent + Eden $113–133 per 1,000 tasks on a $12/1k-calls plan, against $39–41 for
-the agent alone). If you receive the provider's change notifications, forward them, **with the changed items**:
+the agent alone). If you receive the provider's change notifications, forward them, **with what they name**: the refs
+that changed (the default wherever the connector reports changed ids: a Gmail `history.list`, a Graph or HubSpot
+webhook, a Drive changes list, a connector platform's trigger), or the items themselves when the notice already
+carries them. **Never send a bare "changed" signal where you have ids**: it is the slow fallback below.
 
 ```ts
-// The default integration: what changed, in full. Eden holds it with no call to the source.
-await eden.sourceChanged("gmail", {
-  items: [{ ref: msg.id, title: msg.subject, text: msg.body, updatedAt: msg.internalDate }],
-  removed: deletedIds, // refs the source no longer has (deleted, recalled)
-});
+// The default: the ids the notice names. Eden reads them itself and doubts nothing else of the source.
+await eden.sourceChanged("gmail", { refs: changedIds, removed: deletedIds });
+// When the notice already carries the content (a Slack event, a Graph notification with resource data): the items.
+await eden.sourceChanged("slack", { items: [{ ref: msg.ts, title: msg.channel, text: msg.text }] });
 ```
 
-- **The changed items themselves (the default; D210).** A Slack Events API message, a Graph notification with
+```python
+eden.source_changed("gmail", refs=changed_ids, removed=deleted_ids)
+```
+
+Decision rule: items if the notice has them (no fetch at all), else refs (one fetch per ref, in the background),
+else the bare signal. Refs and items mix in one call.
+
+- **The changed items themselves (D210).** A Slack Events API message, a Graph notification with
   resource data, a connector platform's trigger payload, a Gmail push turned into messages with `history.list`:
   `client.sourceChanged(sourceId, { items, removed })`. Each item is `{ref, title?, text, url?, updatedAt?, meta?}`
   with the same `ref` the source's list tool returns, so a pushed item and the same item listed later are one item.
@@ -285,7 +318,7 @@ await eden.sourceChanged("gmail", {
   item), it also sends the bare signal, so the source is polled rather than the change missed, and resolves false.
   The routes underneath are `POST /v1/sources/items {userId, sourceId, items}` and `POST /v1/sources/removed {userId,
 sourceId, refs}` (at most 100 each), also exposed as `client.sourceItems` and `client.sourceRemoved`.
-- **The refs that changed, without their content (D347).** A Gmail `history.list` gives message ids, a Graph or
+- **The refs that changed, without their content (D347; the default for a notice that names ids, D421).** A Gmail `history.list` gives message ids, a Graph or
   HubSpot webhook a resource id, a Drive changes list file ids: `client.sourceChanged(sourceId, { refs, removed })`
   (Python `source_changed(source_id, refs=…, removed=…)`, route `POST /v1/sources/refs {userId, sourceId, refs}`, at
   most 100). Eden reads those refs itself in the background through the source's fetch tool and holds them as synced;
@@ -297,12 +330,14 @@ sourceId, refs}` (at most 100 each), also exposed as `client.sourceItems` and `c
   request p50 1,013 → 6 ms and p90 1,507 → 17 ms, an `ask_context` p50 588 → 2.3 ms and p99 2,782 → 1,050 ms, connector
   calls 7.4 → 2.0 a task; the freshness simulation delivered no more stale or deleted items than payload notices
   (docs/research/a18-latency.md). Each ref is one fetch: prefer the items when you already have them.
-- **Only that the source changed** (a Gmail `watch` push you do not expand, a Calendar or Drive channel, a HubSpot
-  webhook): `client.sourceChanged(sourceId)`, or `POST /v1/sources/changed {userId, sourceId}`. The source is polled
+- **Only that the source changed: the slow fallback** (a provider that gives no ids at all, such as a Calendar
+  channel's bare ping): `client.sourceChanged(sourceId)`, or `POST /v1/sources/changed {userId, sourceId}`. The source is polled
   once, at its next use, however many notifications came first, and every item Eden read from it before the signal is
   re-read by its id before it is delivered or cited (D126, D131, D211). For a busy inbox this saves little: it changes
   about every hour, so it is polled about as often as before. Use it only where the provider gives no items.
-  **It also makes `ask_context` slow** (CL4, D249): on Pi with signals, an ask took 1.35–1.59 s, almost all of it
+  **It is the slow path** (measured, lab): against the same notices sent as refs, the agent's wait on a request
+  p50 1,013 ms against 6 ms, an `ask_context` p50 588 ms against 2.3 ms and 7.4 connector calls a task against 2.0
+  (A18, above). **It also makes `ask_context` slow** (CL4, D249): on Pi with signals, an ask took 1.35–1.59 s, almost all of it
   re-reading 4–5 doubted copies it cites; with the items pushed it took 0.19 s (heldout14 neutral tasks, one seed,
   Anthropic-direct lab figures, docs/research/cl-cl4.md).
 
@@ -368,7 +403,9 @@ not as a line per request.
   no text) per request Eden would have changed. Run it on real traffic for a week, then read `bun run trace-report`
   on the Eden server's `EDEN_TRACE=1` log and `/v1/explain` on the sessions that matter, before letting it inject.
 - **What it does not do.** It adds no `ask_context` tool (give the agent the MCP server for that, D70 says keep it),
-  and it cannot report events that never reach the model (a webhook's new mail: forward those with `sourceChanged`).
+  it cannot report events that never reach the model (a webhook's new mail: forward those with `sourceChanged`, with
+  their refs), and it cannot check a tool call before it runs (the agent runs it between two requests): wrap the
+  acting tools with `guardTools`/`guard_tools` in the agent ("Agents that act").
 - **Checked live** (2026-11-07): a plain Python `urllib` call to Anthropic's OpenAI-compatible endpoint
   (`claude-haiku-5-5`) through the proxy and a no-key Eden on the example sources, asking "Can you move my lunch with
   Priya Raman to 11:30 on Thursday?", got back "Priya emailed that she can't do anything before 12:15, so 11:30 may
@@ -429,6 +466,51 @@ without-Eden column, pass a log of the agent without Eden's context: `--baseline
 mode (it reports events but injects nothing) or from before Eden. On the lab's train worlds (D291) the agent alone
 made 3.38 connector calls a request; with Eden 0 at request time, plus a one-time backfill of 18 listings a user.
 
+## Hermes Agent: Eden in place of its source tools (D422)
+
+For [Hermes Agent](https://github.com/NousResearch/hermes-agent), install the Eden plugin and give the agent Eden's
+`ask_context` **instead of** your sources' tools. That is the `hermes-eden` shape the lab measured best: against Hermes
+keeping its source tools beside Eden, hidden facts raised 81.9% against 72.2% (+9.7 points, +2.8..+18.1) and wall p50
+3.79 s against 5.74 s (−1.5 s); against Hermes alone, 81.9% against 9.7% (Hermes Agent on claude-haiku-5-5, train1–6,
+seeds 41–42, in-sample; docs/research/a16-loop.md, "Hermes with Eden in place of its source tools").
+
+```bash
+pip install /path/to/Eden/packages/client-python          # into Hermes' own environment
+cp -r /path/to/Eden/examples/hermes/eden ~/.hermes/plugins/eden
+export EDEN_USER_ID=alice EDEN_URL=http://127.0.0.1:8790   # and EDEN_API_KEY against a keyed server
+```
+
+```yaml
+# ~/.hermes/config.yaml
+plugins:
+  enabled: [eden]
+# Connect the user's mail, calendar and drive to Eden (EDEN_USER_SOURCES_FILE), not to Hermes: leave their MCP
+# servers out of mcp_servers, and enable the `eden` toolset where you choose the agent's toolsets.
+```
+
+The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces:
+
+- **`ask_context`** in the `eden` toolset, with Eden's own description (D70), answered by the same server and session
+  as the hooks.
+- **`pre_llm_call`**: the user's message goes to Eden (waiting up to 3 s, as the SDK does) and the turn's packet is
+  returned as context. Only the new packet: Hermes keeps each turn's context and sends it again on later calls (A27,
+  D385), so the plugin never re-sends earlier packets.
+- **`pre_tool_call`**: every tool call but Eden's own goes to `check` first; a finding blocks the call and becomes its
+  result (calling again proceeds). `EDEN_CHECK_TOOLS=send_email,book` narrows it to the acting tools; empty checks none.
+- **`post_tool_call`, `transform_tool_result`**: tool results are reported, and packets Eden queued since are appended
+  to the result, so context found mid-turn reaches the next model call.
+- **`on_session_end`**: each Hermes session is its own Eden session (its id through `eden_id`), ended with it.
+
+`EDEN_USER_ID` names the user (one Hermes install serves one user; mapped with `eden_id`); without it the plugin
+registers nothing and says so on stderr. Every hook fails open. The hook names and contracts were read in Hermes'
+source at the lab's pin (06433066); the plugin is tested against a stand-in for Hermes' plugin context and the real
+Eden server (`examples/onboarding/integration-defaults.test.ts`), not run inside Hermes in this repository.
+
+**Keep the source tools beside Eden only** when the agent needs them for what `ask_context` does not do: acting
+through the connector (sending, booking, writing: keep those tools, and the plugin checks them), browsing a whole
+listing or folder by hand, or a source you cannot connect to Eden. Keeping the read tools for retrieval cost both hidden
+facts and time in the run above.
+
 ## Other languages
 
 - **TypeScript or JavaScript outside this repository:** the workspace package exports TypeScript and depends on
@@ -437,7 +519,8 @@ made 3.38 connector calls a request; with Eden 0 at request time, plus a one-tim
   `npm install /path/to/Eden/dist/eden-client` (or `bun add`). Node 18+, Bun and Deno load it (D365).
 - **Python:** `packages/client-python` (`pip install /path/to/Eden/packages/client-python`, import `eden_client`), the same calls
   as `@eden/client` (`observe`, `pending`, `collect`, `ask`, `check`, `feedback`, `health`, `explain`,
-  `source_changed`) and `with_context`, standard library only, fail-open (D278). `eden_id` maps ids exactly as the
+  `source_changed` with `refs=`) with `with_context` and `guard_tools`/`guard_tool`, and the Hermes plugin
+  (`eden_client.hermes`), standard library only, fail-open (D278). `eden_id` maps ids exactly as the
   TypeScript `edenId` does, so a mixed stack finds one user's state. Synchronous: from asyncio, call it through
   `asyncio.to_thread`.
 - **Anything else:** the HTTP API is a handful of JSON POSTs (`packages/server/src/http.ts` lists them). Keep the
