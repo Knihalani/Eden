@@ -23,6 +23,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
 | `settle.ts`                                                                | `askNudge`'s no-model test of whether the candidates settle a request's people, things and days (D316, D317)                                                                                                                  |
 | `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
+| `cold.ts`                                                                  | `ColdPack` (`syncCold`, D475, a trial): one source's items the user's cap pushed out of the index, zstd chunks of 64 behind a Bloom filter of their terms, per (user, source) on the sync's state; `coldQuery`/`match` (rare words first), `holds` (a listing showed the copy unchanged)                                                 |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
 | `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default): identifiers a call adds and its packets showed; `ItemCache.isCorrespondent` reads the user's header addresses |
@@ -401,6 +402,36 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `doubted`/`verifyItems` would hand over items the weekly sweep has not checked; a source that cannot find an item by
   ref (`Source.fetchesById` false: an `McpSource` with no `fetchTool` still has a `fetch` that answers null) must stay
   on the daily sweep (`onLongSweep`); a wrapper around a `Source` must copy `fetchesById` (as `notifies`).
+- **The cold tier (`syncCold`, D475, a trial, off; `cold.ts`, `cold.test.ts`, docs/research/f1-local-copy.md).** The
+  trim moves what the cap pushes out into the source's `ColdPack` (`SourceSync.cold`) instead of dropping it, and the
+  backfill reads each listing to its end while `syncColdMaxItems` has room, so `Sync.complete` is true for a copy
+  that is whole across both tiers and lookups stop searching it live. An id is in the index (`SourceSync.ids`) or
+  cold, never both: `store` drops a cold id whose listed copy changed (`ColdPack.holds` is false) and leaves an
+  unchanged one cold (counted as listed for the sweep); the sweep of a source with cold items reads its whole listing
+  and counts cold ids among the missed. Cold copies come back only through `Sync.thaw` (from `localAnswer`, so the
+  probes get them too) and `rewarm` (a source just marked used, up to the trim's half), always with the read time and
+  read mark they were read under (`ItemCache.putBack`; a `put` would stamp them as read now and D126/D356 would stop
+  doubting them). A copy `thaw` brought back from a source with no change feed and a fetch tool is `doubted` until a
+  listing or re-read sees it (`thawedUnread`, `syncColdVerify`): it stands in for a live search's find, which was the
+  source's copy of that moment. A source that lists by time (a calendar) stays out (the cold match is on words). The
+  cards and the intent index read only indexed items, which is why used sources are re-warmed: without it 5 planted
+  items stayed cold in the 995-source funnel. Cold packs are this process's memory only: `snapshot` (D425) saves such
+  a source as cut. A source with neither a fetch by ref nor a change feed stays out too (`chills`): its copies could
+  not be re-read. Signatures are per id (`ColdPack.sigs`): a bare set read a copy that changed and changed back as
+  unchanged. Memory is the cost (about 430 B an item in the day bench, 10 MB for a 1,000-source user), and CPU
+  (about three times a user-day's).
+- **Change feeds (`syncDelta`, D476, a trial, off; `delta.test.ts`).** A source with `Source.changes` is polled by
+  `pollDelta` (one call; `fanout.changes`), its cursor taken before the backfill's first page (`acquire`). A complete
+  delta read sets `deltaMark` (the read mark it began under) and `sweptAt`: `signalledSince` is false for a signal at
+  or before it, so a notice costs one delta read (`check` → `recheckByDelta` → `Sync.settleDelta`, shared by every
+  doubted item of the source) instead of a fetch per item; anything it cannot settle falls back to `recheck`.
+  Deletions go through `SyncDeps.onRemoved` (the partner's `dropGone`: held gone, queued packets withdrawn). It never
+  vouches from a cursor taken over copies already held (`gap`, until a whole listing begun after it ends), nor for a
+  copy the sync does not hold (`signalledSince`'s `itemId`: pass it, or the feed's vouch does not apply), and never
+  clears `missed`: after an expired cursor a deletion in the gap is in no feed, so the source is re-listed (daily
+  while anything is missed, else every `deltaSweepMs`, inside the cache's time to live, which only a listing renews).
+  A wrapper around a `Source` must pass `changes` through (as `list`), or the feed is silently off; `McpSource` has
+  no delta tool yet, so no shipped connector has a feed.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

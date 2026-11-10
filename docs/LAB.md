@@ -453,6 +453,12 @@ world's five as its agent's tools); one seed per process (two at once ran out of
 with every source on the weekly sweep (D356's worst case): `quality-cli --never-used` (no source is ever "used").
 Recipes and figures: docs/research/a21-scale.md.
 
+Connector kinds (F1, D478): `--connector-mix P,D` on the funnel, pi-ab, quality-cli and days-calls (`--mix=P,D` on
+`source-days.bench.ts`) makes a share P of the connectors push and have a change feed, a share D have a feed only,
+the rest neither (`0.3,0.3` in F1, an assumption); the trials that use them are `syncCold` and `syncDelta`
+(`--set '{"syncCold":true,"syncDelta":true}'`). `pi-cost-report.ts --trigger-avoids N --events-per-task E` prices
+event triggers. Recipes and figures: docs/research/f1-local-copy.md.
+
 Read hidden/decoys, `calls/task`, and the `merged cards use` line's `calls` and `sent` (card calls are stub-counted:
 noise items are not in the replay; price them at $0.000181 a call, A1). Compare task by task against the same seed
 without the arm (the JSON's `perTask`). The "hidden returned" count falls when sources answer from the index instead

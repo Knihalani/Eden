@@ -234,6 +234,17 @@ re-reads it by id first (D126, D211). A copy no re-read confirms is not delivere
 the next tick. At 1,000 sources the sweep falls from ~1,114 to ~282 listing calls a user a day; a five-source user uses
 all their sources and keeps the daily sweep.
 
+Two trials, both off (F1, D475–D479; docs/research/f1-local-copy.md), aim at a local copy that is complete without
+push. `syncCold`: what the cap pushes out of the index is kept compressed in memory per source behind a filter of its
+words (`cold.ts`), each listing is read to its end while `syncColdMaxItems` has room, and a lookup brings back the
+cold copies that hold its words instead of searching the source live; a copy brought back from a source with no
+change feed is re-read before delivery (`syncColdVerify`). `syncDelta`: a source with a change feed (`Source.changes`)
+is polled by one read of what changed since its cursor, deletions included; a complete delta read vouches for every
+copy held, so a change notice costs one delta read instead of D126's re-read of each doubted item, and the daily
+re-listing becomes a delta read. At ~1,000 sources live, with nine connectors in ten offering neither push nor a
+feed, they cut connector calls from 36 to 9 a task with hidden facts not lower, and made tasks about 1.2 s slower
+(the re-reads' wait and the cold tier's CPU), so they are not in the default.
+
 **Change notifications** (D125, `syncPush`; `Source.notifies`, `ContextPartner.sourceChanged` and `sourceItems`,
 `POST /v1/sources/changed` and `/v1/sources/items`, the client's `sourceChanged`/`sourceItems`): a source whose
 integrator forwards the provider's change notifications is not polled on its learned change rate. A notification marks

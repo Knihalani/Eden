@@ -101,11 +101,20 @@ import {
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
-import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
+import { QueryPlanner, type ChangePage, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import { noiseSources } from "./noise-sources";
 import type { World } from "../world";
-import { connectorHeader, connectorOptions, pushNotifier, recapNotice, sourceFields } from "./connector-options";
+import {
+  applyConnectorMix,
+  changesField,
+  connectorHeader,
+  connectorOptions,
+  parseConnectorMix,
+  pushNotifier,
+  recapNotice,
+  sourceFields,
+} from "./connector-options";
 import {
   armPromptsHash,
   ASK_DESCRIPTION,
@@ -230,6 +239,8 @@ const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
 const TIME_SCALE = Number(opt("time-scale", "1"));
 // `--source-profile`, `--push`, `--push-rates` (connector-options.ts).
 const CONNECTORS = connectorOptions(opt);
+// `--connector-mix P,D` (F1): the share of connectors with push and a change feed, and with a feed only.
+const CONNECTOR_MIX = parseConnectorMix(opt("connector-mix", ""));
 const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 // The first N tasks of each world only: a plumbing check before a real run.
@@ -521,6 +532,7 @@ function watched(
         () => source.list(scope, cursor, limit, signal),
         (page: ListPage) => page.items.length,
       ),
+    ...changesField(source, (run) => timed("delta", run, (page: ChangePage | null) => page?.items.length ?? 0)),
   };
 }
 
@@ -696,6 +708,7 @@ async function runWorld(
   let edenCalls = 0;
   const noise =
     NOISE_SOURCES > 0 && cond.withPartner ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME_SCALE, seed) : [];
+  applyConnectorMix([...sources, ...noise], CONNECTOR_MIX, seed);
   const edenSources = [...sources, ...noise].map((s) =>
     watched(s, (id, op, start, end, status, items) => {
       edenCalls++;

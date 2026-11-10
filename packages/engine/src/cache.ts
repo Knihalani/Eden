@@ -886,6 +886,11 @@ export class ItemCache {
     };
   }
 
+  /** How long a synced item is kept with no listing showing it again (ms). */
+  get syncTtlMs(): number {
+    return this.limits.syncTtlMs;
+  }
+
   /** Characters of item text kept (`sanitizeItem`'s limit for this cache). */
   get maxTextChars(): number {
     return this.limits.maxTextChars;
@@ -1223,6 +1228,46 @@ export class ItemCache {
       const e = items?.get(id);
       return e !== undefined && e.synced === true && this.alive(e, now);
     };
+  }
+
+  /**
+   * `syncCold` (D475): the copy of a synced item as held, with when it was read and under which read mark, for the
+   * cold tier to keep when the sync's trim lets the item go. Undefined when it is not held as synced.
+   */
+  syncedCopy(scope: Scope, id: string): { item: ContextItem; fetchedAt: number; readMark: number } | undefined {
+    const e = this.peek(scope)?.items.get(id);
+    return e?.synced ? { item: e.item, fetchedAt: e.fetchedAt, readMark: e.readMark } : undefined;
+  }
+
+  /**
+   * `syncCold` (D475): copies the cold tier held go back into the index as synced items, each with the read time and
+   * read mark it was first read under (not now's): a copy's age is what D126 and D356 doubt it by. Returns the stored
+   * copies that were not held already (one the index holds is newer, and stands).
+   */
+  putBack(
+    scope: Scope,
+    copies: readonly { item: ContextItem; fetchedAt: number; readMark: number }[],
+    now = Date.now(),
+  ): ContextItem[] {
+    const held = this.peek(scope)?.items;
+    const fresh = copies.filter((c) => !held?.has(c.item.id));
+    if (fresh.length === 0) return [];
+    const added = this.put(
+      scope,
+      fresh.map((c) => c.item),
+      now,
+      true,
+      true,
+      0,
+    );
+    const items = this.peek(scope)?.items;
+    for (const c of fresh) {
+      const e = items?.get(c.item.id);
+      if (!e) continue;
+      e.fetchedAt = c.fetchedAt;
+      e.readMark = c.readMark;
+    }
+    return added;
   }
 
   get(scope: Scope, id: string, now = Date.now()): ContextItem | null {

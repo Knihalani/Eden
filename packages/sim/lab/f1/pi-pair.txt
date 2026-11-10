@@ -1,0 +1,61 @@
+tasks in every arm: 432 (hidden 144, control 144, neutral 144)
+arm       kind      n   rate   $/1k   calls/t (agent, Eden)
+base      hidden   144  0.576  0.517  28.44 (0.00, 28.44)
+base      control  144  0.014  0.541  32.11 (0.00, 32.11)
+base      neutral  144  0.007  0.541  36.71 (0.00, 36.71)
+base      mix 1:1:8             0.539  35.42 (0.00, 35.42)
+local     hidden   144  0.653  0.512  5.83 (0.00, 5.83)
+local     control  144  0.000  0.503  6.06 (0.00, 6.06)
+local     neutral  144  0.000  0.513  6.88 (0.00, 6.88)
+local     mix 1:1:8             0.512  6.69 (0.00, 6.69)
+fast      hidden   144  0.660  0.541  5.05 (0.00, 5.05)
+fast      control  144  0.007  0.553  5.53 (0.00, 5.53)
+fast      neutral  144  0.000  0.571  5.99 (0.00, 5.99)
+fast      mix 1:1:8             0.566  5.85 (0.00, 5.85)
+
+Eden's connector calls a task by source and operation (all tasks of the arm, in its timelines):
+  base: gmail search 2.833, crm search 0.845, gmail list 0.752, drive search 0.713, slack list 0.595, slack search 0.549, calendar search 0.528, calendar list 0.296, crm list 0.137, drive list 0.104, slack-channel-110 search 0.086, github-185 search 0.086, github-230 search 0.083, jira-909 search 0.081, sheets-800 search 0.081, wiki-424 search 0.079, slack-channel-893 search 0.079, jira-576 search 0.079, slack-channel-596 search 0.079, sheets-80 search 0.076, slack-channel-317 search 0.076, zendesk-348 search 0.076, sheets-944 search 0.074, github-419 search 0.072, figma-466 search 0.069, slac
+  local: calendar search 0.569, gmail fetch 0.484, gmail list 0.479, calendar list 0.301, gmail delta 0.278, slack list 0.183, crm delta 0.164, drive fetch 0.109, slack delta 0.109, drive list 0.076, drive delta 0.072, slack fetch 0.053, calendar delta 0.032, zendesk-348 list 0.030, wiki-397 list 0.021, figma-52 delta 0.021, figma-745 list 0.019, jira-783 list 0.019, slack-channel-317 list 0.016, drive-folder-580 list 0.016, sheets-80 delta 0.016, github-869 list 0.016, sheets-656 list 0.016, jira-729 list 0.016, slack-channel-479 list 0.014, slack-channel-695 list 0.014, sheets-944 list 0.014
+  fast: calendar search 0.551, gmail list 0.465, calendar list 0.296, gmail delta 0.273, slack list 0.190, crm delta 0.153, slack delta 0.111, drive delta 0.079, drive list 0.076, calendar delta 0.037, zendesk-348 list 0.025, figma-466 delta 0.019, slack-channel-911 delta 0.019, jira-729 list 0.019, github-644 list 0.016, wiki-397 list 0.016, sheets-80 delta 0.016, github-869 list 0.016, figma-331 list 0.016, sheets-656 list 0.016, slack-channel-110 list 0.014, sheets-746 delta 0.014, zendesk-897 delta 0.014, figma-178 delta 0.014, jira-783 list 0.014, wiki-388 list 0.014, dashboard-462 delta 
+
+== paired B − A, bootstrap 95%; * the interval excludes zero
+local − base raised: hidden +0.076 (+0.007..+0.146)*; control -0.014 (-0.035..+0.000) ; neutral -0.007 (-0.021..+0.000) ; mix +0.001 (-0.015..+0.012) 
+local − base usd   : hidden -0.005 (-0.027..+0.017) ; control -0.038 (-0.060..-0.017)*; neutral -0.029 (-0.046..-0.010)*; mix -0.027 (-0.042..-0.012)*
+local − base conn  : hidden -22.611 (-24.403..-20.861)*; control -26.056 (-28.056..-24.118)*; neutral -29.826 (-32.000..-27.778)*; mix -28.728 (-30.378..-27.062)*
+local − base eden  : hidden -22.611 (-24.396..-20.896)*; control -26.056 (-28.090..-24.174)*; neutral -29.826 (-31.951..-27.799)*; mix -28.728 (-30.403..-27.031)*
+fast − base raised: hidden +0.083 (+0.014..+0.153)*; control -0.007 (-0.035..+0.014) ; neutral -0.007 (-0.021..+0.000) ; mix +0.002 (-0.012..+0.013) 
+fast − base usd   : hidden +0.023 (-0.002..+0.049) ; control +0.012 (-0.009..+0.033) ; neutral +0.030 (+0.011..+0.049)*; mix +0.028 (+0.012..+0.044)*
+fast − base conn  : hidden -23.396 (-25.181..-21.576)*; control -26.576 (-28.569..-24.604)*; neutral -30.715 (-32.861..-28.681)*; mix -29.569 (-31.253..-27.913)*
+fast − base eden  : hidden -23.396 (-25.257..-21.660)*; control -26.576 (-28.583..-24.542)*; neutral -30.715 (-32.826..-28.583)*; mix -29.569 (-31.241..-27.919)*
+local − fast raised: hidden -0.007 (-0.076..+0.062) ; control -0.007 (-0.021..+0.000) ; neutral +0.000 (+0.000..+0.000) ; mix -0.001 (-0.008..+0.006) 
+local − fast usd   : hidden -0.029 (-0.051..-0.006)*; control -0.050 (-0.068..-0.032)*; neutral -0.059 (-0.078..-0.040)*; mix -0.055 (-0.070..-0.040)*
+local − fast conn  : hidden +0.785 (+0.181..+1.389)*; control +0.521 (-0.042..+1.076) ; neutral +0.889 (+0.396..+1.389)*; mix +0.842 (+0.444..+1.239)*
+local − fast eden  : hidden +0.785 (+0.201..+1.389)*; control +0.521 (-0.035..+1.097) ; neutral +0.889 (+0.396..+1.396)*; mix +0.842 (+0.451..+1.254)*
+
+== path and wall, seeds 41-44
+base     n 432  path mean    659 ms  p50    494  p90   1437  observe    144  ask    515  wall mean   3657  p50   3617
+local    n 432  path mean   1738 ms  p50    473  p90   4639  observe    688  ask   1051  wall mean   5755  p50   4489
+local - base: path +1080 ms (+817..+1368)
+local - base: wall +2098 ms (+1703..+2512)
+base     n 432  path mean    659 ms  p50    494  p90   1437  observe    144  ask    515  wall mean   3657  p50   3617
+fast     n 432  path mean   1017 ms  p50    143  p90   3827  observe    141  ask    876  wall mean   5220  p50   4275
+fast - base: path +358 ms (+191..+533)
+fast - base: wall +1563 ms (+1242..+1910)
+== seeds 41-42 only (two arms a process; fast in its own process)
+base     n 216  path mean    431 ms  p50    403  p90    908  observe    115  ask    316  wall mean   3652  p50   3437
+local    n 216  path mean    970 ms  p50    152  p90   2959  observe    473  ask    497  wall mean   4426  p50   3909
+local - base: path +539 ms (+348..+743)
+local - base: wall +774 ms (+392..+1165)
+base     n 216  path mean    431 ms  p50    403  p90    908  observe    115  ask    316  wall mean   3652  p50   3437
+fast     n 216  path mean    531 ms  p50    126  p90   1495  observe    114  ask    418  wall mean   4022  p50   3524
+fast - base: path +100 ms (-31..+256)
+fast - base: wall +369 ms (+0..+734)
+== seeds 43-44 only (three arms a process)
+base     n 216  path mean    886 ms  p50    930  p90   2002  observe    172  ask    714  wall mean   3661  p50   4024
+local    n 216  path mean   2507 ms  p50   1017  p90   6648  observe    903  ask   1604  wall mean   7085  p50   5455
+local - base: path +1621 ms (+1137..+2136)
+local - base: wall +3423 ms (+2746..+4168)
+base     n 216  path mean    886 ms  p50    930  p90   2002  observe    172  ask    714  wall mean   3661  p50   4024
+fast     n 216  path mean   1503 ms  p50    206  p90   4724  observe    168  ask   1335  wall mean   6419  p50   5565
+fast - base: path +617 ms (+319..+925)
+fast - base: wall +2757 ms (+2259..+3267)
