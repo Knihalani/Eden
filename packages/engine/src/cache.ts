@@ -816,6 +816,7 @@ export class ItemCache {
   private dropUser(key: string, tenantId: string): void {
     const u = this.users.get(key);
     if (!u || !this.users.delete(key)) return;
+    this.restoring.delete(key);
     this.disk?.delete(u.scope); // Expired, evicted or forgotten: its blob on disk goes with it (D425).
     this.dropped?.(u.scope, null);
     clearDecoded(); // An expired or evicted user's decoded text does not stay in the memo (`packed-text.ts`).
@@ -1696,7 +1697,7 @@ export class ItemCache {
     // A user an earlier process froze to disk (D425) is read back here, then thawed in slices like any other.
     const x = this.users.get(key) ?? this.load(key, scope);
     const running = this.thawing.get(key);
-    if (!(x instanceof FrozenUser)) return running?.done ?? null;
+    if (!(x instanceof FrozenUser)) return running?.done ?? this.restorePending(key);
     if (running?.from === x) return running.done;
     const done = new Promise<void>((resolve) => {
       this.urgent.push({
@@ -1725,7 +1726,14 @@ export class ItemCache {
    * session that waits on that thaw (review of A24).
    */
   pendingThaw(scope: Scope): Promise<void> | null {
-    return this.thawing.get(scopeKey(scope))?.done ?? null;
+    const key = scopeKey(scope);
+    return this.thawing.get(key)?.done ?? this.restorePending(key);
+  }
+
+  /** The owner's restore of a user read back from disk and thawed outside `ready` (D425), still settling, or null. */
+  private restorePending(key: string): Promise<void> | null {
+    const r = this.restoring.get(key);
+    return r ? r.then(noop, noop) : null;
   }
 
   /** A thaw as a sliced job: given up if the user is thawed (`peek`) or dropped meanwhile. */
@@ -1767,7 +1775,13 @@ export class ItemCache {
       for (const e of u.items.values()) items.push(e.item);
       try {
         const r = this.persistHooks.restored(u.scope, items, f.extra);
-        if (r instanceof Promise) this.restoring.set(key, r);
+        if (r instanceof Promise) {
+          this.restoring.set(key, r);
+          // Gone once settled, whoever thawed the user (a sync `peek` as well as `ready`'s sliced job).
+          void r.finally(() => {
+            if (this.restoring.get(key) === r) this.restoring.delete(key);
+          });
+        }
       } catch {
         // The owner's restore fails open: the items are held, and its own state starts over (a re-sync).
       }
@@ -1912,6 +1926,8 @@ export class ItemCache {
     return this.users.size;
   }
 }
+
+function noop(): void {}
 
 /** Whether the user made a probe at or after `since` (the probes map is least recently made first). */
 function probedSince(probes: Map<string, { at: number }>, since: number): boolean {

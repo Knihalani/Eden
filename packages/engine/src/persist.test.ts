@@ -406,6 +406,47 @@ describe("a restart with persisted users (D425)", () => {
     expect(find(b, alice, "quarterly plan", clock).some((i) => i.sourceId === "docs")).toBe(false);
   });
 
+  test("a user read back outside `ready` (a removal): a later `ready` still waits for the removed source's drop", async () => {
+    const dir = tempDir();
+    let clock = T0;
+    const mail = new ListSource("mail", 4);
+    const docs = new ListSource("docs", 4);
+    const a = freezing();
+    a.persist(disk(dir).d);
+    const p1 = new ContextPartner({
+      sources: async () => [mail, docs],
+      sourceMap: new SourceMap(":memory:", { seed: 1 }),
+      cache: a,
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { sync: true, syncPageSize: 2, syncCallsPerMin: 6_000 },
+    });
+    p1.sync!.track(alice);
+    for (let i = 0; i < 50 && !p1.sync!.warm(alice); i++, clock += 1_000) await p1.sync!.tick();
+    freezeAll(a, clock);
+    const b = freezing();
+    b.persist(disk(dir).d);
+    // A resolver that answers late: the docs connector is gone.
+    const p2 = new ContextPartner({
+      sources: async () => {
+        await Bun.sleep(50);
+        return [mail];
+      },
+      sourceMap: new SourceMap(":memory:", { seed: 1 }),
+      cache: b,
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { sync: true, syncPageSize: 2, syncCallsPerMin: 6_000 },
+    });
+    b.removeItems(alice, [itemId("mail", "m3")], clock); // Reads the user back synchronously.
+    const waiting = p2.ready(alice);
+    expect(waiting).not.toBeNull();
+    await waiting;
+    expect(b.isSynced(alice, itemId("docs", "m0"))).toBe(false);
+  });
+
   test("a connector's page token the secret gate would change is not saved (D10)", async () => {
     let clock = T0;
     const token = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8";

@@ -80,6 +80,11 @@ The review of this branch found two gaps, fixed with a test each that fails with
   their synced items, before `ready` resolves (bounded by `sourceTimeoutMs`; a failing or late resolver changes
   nothing, and the next tick does it).
 
+Its second pass found a user read back outside `ready` (a removal's synchronous `peek`) left the restore's promise
+unwaited: a later `ready` returned at once while the removed source's items were still held. `ready` and
+`pendingThaw` now wait on a restore still settling, and the entry goes when it settles or the user is dropped (a test
+that fails without it).
+
 A connector's page token can carry query text or an account id, so it is saved only if `sanitizeForStore` leaves it
 unchanged; otherwise that source's next page is read from the head.
 
