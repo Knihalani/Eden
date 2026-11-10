@@ -868,7 +868,6 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     }
     return at;
   };
-  const behindChecks = new Set<string>();
   const countCalls = (t: Trace) => {
     // The traces' count, a cross-check only.
     calls += t.sourceCalls;
@@ -878,8 +877,6 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       callsByTrace.set(key, (callsByTrace.get(key) ?? 0) + t.sourceCalls);
     }
     if (t.reason.startsWith("slow path busy")) busyTraces.busy++;
-    // `pushCheckBehind` (D700): a check that ran behind its packet is traced on its own, by session.
-    if (t.decision === "check-late" && t.reason === "push check behind") behindChecks.add(t.sessionId);
     if (t.localSources !== undefined) {
       syncUse.lookups++;
       syncUse.localSources += t.localSources;
@@ -1218,9 +1215,6 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       pendingSeen.push(x);
       arrived.push({ ids: x.citations.map((c) => c.itemId), at: performance.now() - t0 });
     }
-    const behindIds = pendingSeen
-      .filter((x) => x.reason.startsWith("check-behind:"))
-      .flatMap((x) => x.citations.map((c) => c.itemId));
     taskCpuUs += cpuNow() - c0;
     // Enrichment of what this request brought in finishes before the next request (it lands one request later).
     if (cards) await cards.idle();
@@ -1317,7 +1311,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     }
     const push = pushPools.get(sessionId)?.at(-1);
     // `pushCheck`: whether any pass of this task made the check's call (N5's call rate by variant).
-    const checkCalled = (pushPools.get(sessionId) ?? []).some((r) => r.checkCalled) || behindChecks.delete(sessionId);
+    const checkCalled = (pushPools.get(sessionId) ?? []).some((r) => r.checkCalled);
     pushPools.delete(sessionId);
     if (POOL_DUMP) {
       const ids = push?.pool ?? [];
@@ -1404,10 +1398,6 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
       ...(checkCalled ? { pushCheckCalled: true } : {}),
-      // `pushCheckBehind` (O3, D700): the check's follow-up packets of this request: how many items, and whether the
-      // planted item (or the decoy) is among them. The funnel takes every follow-up; a live agent takes one only if it
-      // makes another model request.
-      ...(behindIds.length ? { checkBehindN: behindIds.length, checkBehindHas: behindIds.includes(id) } : {}),
       // `askNudge` (D316): whether that pass's candidates left the request unsettled (the packet nudged an ask).
       ...(push?.unsettled !== undefined ? { pushUnsettled: push.unsettled } : {}),
       ...(rr

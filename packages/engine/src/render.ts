@@ -147,16 +147,6 @@ export const ASK_LATE_LEAD =
   "not mention it.";
 
 /**
- * `pushCheckBehind` (O3, D700): the framing line of the push check's follow-up, the items a check that ran behind the
- * default's packet named and the agent has not been handed. A model read them against the request, so the line says
- * so; the check still lets some look-alikes through (N5: about one for three facts), so the agent's own test stays.
- */
-export const CHECK_BEHIND_LEAD =
-  `${EDEN_NOTE}a closer read of the user's sources, after the items above were sent, found these likely change what ` +
-  "should be done for the current request. If one is about the same person, thing and date as the request and " +
-  "still current, tell the user before going ahead; if it is not, ignore it and do not mention it.";
-
-/**
  * `pushCandidates` (D236, D237; CL6 H19): the push hands the agent the top of its pool with no reader call, after this
  * line: the items may bear on the request, and the agent checks each against the request's who, what and when first
  * (D96's why-before-binds moved into the agent's packet; without the check, look-alikes were raised 4 times in 48).
@@ -167,16 +157,6 @@ export const CANDIDATES_LEAD =
   `${EDEN_NOTE}items from the user's sources that may bear on this request; nothing has checked them against it. ` +
   "Before using one, check it is about the same person, thing and date as the request and still current; if it is " +
   "not, ignore it and do not mention it.";
-
-/**
- * `candidatesSpecifics` (O3, D703): added after `CANDIDATES_LEAD`. Agents handed the planted item state its core and
- * often leave out what the user must do about it (who has to sign off, the fee, the exception route): 24 of 134
- * handed facts on train seed 41 were not raised in full. This line asks for the item's own specifics once the agent
- * has judged that it applies; the check before it and the "do not mention it" rule stand.
- */
-export const CANDIDATES_SPECIFICS =
-  "If one does bear on the request, tell the user what it says and what it means for the request, with the item's " +
-  "own specifics: the limit, date, amount or fee, who has to agree, and what has to happen first.";
 
 /**
  * `planConflict` (D301): the framing line of a packet about an earlier request; the request's own words follow, quoted.

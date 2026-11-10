@@ -22,9 +22,6 @@
  * - `+ephemeral`, `+ephemeralBp` (A16, D336): also the harness's, on a base with Eden: how earlier requests' packets
  *   stay in the transcript (`packet-layout.ts`): only the current request's, as `withContext` and the proxy send them,
  *   and with a cache breakpoint on the request's user turn. Only multi-request sessions (`--day`, `--days`) differ;
- * - `+amend` (O3, D701): also the harness's, on a base with Eden, one request a session: when the agent has answered
- *   and Eden holds a packet it queued behind that answer (the push check's follow-up, `pushCheckBehind`), the agent
- *   gets one more turn with it and may add to its answer. Nothing is waited for: only what is queued at that moment;
  * - `@w<ms>`: how long the first observe waits for Eden's slow path (default 3000, the client's `withContext`).
  *
  * An unknown base throws: a typo must not run Eden under another condition's name.
@@ -57,16 +54,12 @@ export interface Condition {
   noKey: boolean;
   /** `+ephemeral`, `+ephemeralBp` (D336): how earlier requests' packets stay in the transcript; else `kept`. */
   packets: PacketLayout;
-  /** `+amend` (D701): a packet queued behind the agent's answer gets one more agent turn. */
-  amend: boolean;
 }
 
 /** The harness flag `+ask`: `ask_context` beside the tools, never sent to the engine as a setting. */
 const ASK_FLAG = "ask";
 /** The harness flag `+nokey`: the partner gets no model roles, never sent to the engine as a setting. */
 const NOKEY_FLAG = "nokey";
-/** The harness flag `+amend` (D701): one more turn for what Eden queued behind the answer; not an engine setting. */
-const AMEND_FLAG = "amend";
 /** The harness flags of D336's packet layouts, never sent to the engine. */
 const LAYOUT_FLAGS: readonly PacketLayout[] = ["ephemeral", "ephemeralBp"];
 
@@ -123,13 +116,7 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
   if (layouts.length && (base === "none" || base === "tools")) {
     throw new Error(`condition ${name}: +${layouts[0]} places Eden's packets, so only a base with Eden takes it`);
   }
-  const amend = allFlags.includes(AMEND_FLAG);
-  if (amend && (base === "none" || base === "tools")) {
-    throw new Error(`condition ${name}: +amend hands on what Eden queued, so only a base with Eden takes it`);
-  }
-  const flags = allFlags.filter(
-    (f) => f !== ASK_FLAG && f !== NOKEY_FLAG && f !== AMEND_FLAG && !(LAYOUT_FLAGS as string[]).includes(f),
-  );
+  const flags = allFlags.filter((f) => f !== ASK_FLAG && f !== NOKEY_FLAG && !(LAYOUT_FLAGS as string[]).includes(f));
   let extra: Record<string, unknown> = {};
   if (variant !== undefined) {
     const v = options.variants?.[variant];
@@ -174,7 +161,6 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
     judge: base.endsWith("-judge"),
     noKey,
     packets: layouts[0] ?? "kept",
-    amend,
   };
 }
 

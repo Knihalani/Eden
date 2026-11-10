@@ -128,10 +128,8 @@ import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
 import {
   ASK_LATE_LEAD,
-  CHECK_BEHIND_LEAD,
   ASK_NUDGE,
   CANDIDATES_LEAD,
-  CANDIDATES_SPECIFICS,
   citationsOf,
   PLAN_LEAD,
   renderAnswer,
@@ -396,11 +394,6 @@ interface Session {
    * it read every one of (same request, same day, same content). Dropped with the session (a forget closes it).
    */
   pushChecks?: Map<string, KeptCheck>;
-  /**
-   * `pushCheckBehind` (D700): the latest request's check running behind its packet (`requests` then) and the promise
-   * that settles once its follow-up, if any, is queued: an ask in that request may wait for it (`pushCheckAskWaitMs`).
-   */
-  checking?: { request: number | undefined; done: Promise<void> };
   /** `planConflict` (D301): the session's last `PLAN_REQUESTS` acting requests (the push's cues), oldest first. */
   acted?: Cue[];
   /** `planConflict` (D301): ids the sync stored since the last take, at most `PLAN_WAITING`, oldest first. */
@@ -563,8 +556,6 @@ type SourceStatus = NonNullable<AskResponse["sources"]>[number];
 const ANSWERED = new Set(["ok", "cached", "stale", "local"]);
 /** `askBehind` (D430): the reason prefix of an ask's follow-up packet, withdrawn untaken at the next request. */
 const ASK_BEHIND = "ask-behind:";
-/** `pushCheckBehind` (D700): the reason prefix of the check's follow-up packet ; withdrawn untaken at the next one. */
-const CHECK_BEHIND = "check-behind:";
 /** `askBehind` (D430): a source whose poll or live search was still running when the ask answered. */
 const SEARCHING = "searching";
 /** `sourceYield` (D505): a cut copy an ask did not search, its source's run of unused live reads being spent. */
@@ -936,8 +927,7 @@ export class ContextPartner {
     s.turn++;
     if (event.kind === "user_message") {
       s.requests++;
-      // `askBehind` (D430): a follow-up packet still queued answered the last request's ask, not this request; so
-      // did a check's follow-up (`pushCheckBehind`, D700).
+      // `askBehind` (D430): a follow-up packet still queued answered the last request's ask, not this request.
       this.dropAskBehind(s);
     }
     const prep = spans?.open("observe.prep", root!.id);
@@ -1264,7 +1254,7 @@ export class ContextPartner {
   private dropAskBehind(s: Session): void {
     for (let k = s.pending.length - 1; k >= 0; k--) {
       const packet = s.pending[k]!;
-      if (!packet.reason.startsWith(ASK_BEHIND) && !packet.reason.startsWith(CHECK_BEHIND)) continue;
+      if (!packet.reason.startsWith(ASK_BEHIND)) continue;
       s.pending.splice(k, 1);
       this.withdraw(s, packet);
     }
@@ -2088,13 +2078,9 @@ export class ContextPartner {
       // `pushCheckAnchored` (N5, D534) decides first: a push it leaves to the default makes no widening look either.
       if (gate && this.config.pushCheck && this.config.pushCheckAnchored && this.deps.checker)
         gate.skip = !this.anchoredPool(cue, gate);
-      // `pushCheckBehind` (O3, D700): neither is waited for. The default's candidates go now; the widening and the
-      // check run behind, and what the check names that the agent lacks follows as a packet of its own.
-      const checkBehind = this.config.pushCheckBehind;
       if (
         gate &&
         !gate.skip &&
-        !checkBehind &&
         this.config.pushCheck &&
         this.config.pushWiden &&
         this.deps.checker &&
@@ -2102,7 +2088,7 @@ export class ContextPartner {
       )
         gate.widened = await this.widenPool(s, cue, [...order, ...scored], gate.pool);
       const check =
-        gate && this.config.pushCheck && this.deps.checker && !checkBehind
+        gate && this.config.pushCheck && this.deps.checker
           ? await this.checkPush(s, cue, gate, performance.now() - widenFrom)
           : null;
       if ((check || gate?.widened) && s.closed) {
@@ -2190,10 +2176,6 @@ export class ContextPartner {
           : null;
       if (injection && undo) this.keepUndo(s, injection, checked, undo);
       if (injection) s.pending.push(injection);
-      // `pushCheckBehind` (D700): started once the default's packet has marked its items, so the follow-up holds only
-      // what that packet did not.
-      if (gate && checkBehind && this.config.pushCheck && this.deps.checker && !s.closed && still)
-        this.checkBehind(s, cue, gate, [...order, ...scored], internal.request);
       // `askNudge` (D316, D317): the ask the nudge asks for, in this request, may look past what was handed. A settled
       // packet (a `readerPushBehind` second pass replacing a nudged one) ends that look: the agent was not nudged.
       if (injection && candidates && !candidates.unsettled) s.nudged = undefined;
@@ -2238,14 +2220,6 @@ export class ContextPartner {
     const unconfirmed = new Map<string, number>();
     const unswept = new Map<string, number>();
     const checked = await this.verifyItems(s, chosen, cue, { unconfirmed, unswept });
-    // `pushCheckBehind` (D700): an ask in the request whose check is still running behind waits a bounded moment for
-    // it (counted from the ask's start, beside its own work), so the check's follow-up is queued when the agent's next
-    // model request takes what is pending. The answer itself is unchanged.
-    const checking = s.checking;
-    if (this.config.pushCheckBehind && this.config.pushCheckAskWaitMs > 0 && checking?.request === s.requests) {
-      const left = this.config.pushCheckAskWaitMs - (performance.now() - t0);
-      if (left > 0) await within(checking.done, left);
-    }
     const items = checked.map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
     const answering = this.answering(s, cue);
@@ -2587,13 +2561,7 @@ export class ContextPartner {
    * that answers later is kept on the session, so a second pass over the same pool (`readerPushBehind`) reads it
    * with no call. The call runs on the session's signal: it ends with the session, not with the wait.
    */
-  private async checkPush(
-    s: Session,
-    cue: Cue,
-    gate: PushGate,
-    spentMs = 0,
-    waitMs = this.config.pushCheckWaitMs,
-  ): Promise<PushCheckRead | null> {
+  private async checkPush(s: Session, cue: Cue, gate: PushGate, spentMs = 0): Promise<PushCheckRead | null> {
     const checker = this.deps.checker;
     if (!this.config.pushCheck || !checker || !gate.like.some(Boolean) || gate.skip) return null;
     const request = sanitizeForStore(cue.raw);
@@ -2641,15 +2609,10 @@ export class ContextPartner {
       while (checks.size > CHECK_KEPT) checks.delete(checks.keys().next().value as string);
     }
     const running = kept.read;
-    // `pushCheckBehind` (D700): nothing waits on a check that runs behind, so it is read to its end.
-    if (waitMs === Infinity) {
-      const got = await running;
-      return fresh ? got : { ...got, costUsd: 0, called: false };
-    }
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<null>((done) => {
       // `spentMs`: what `pushWiden`'s look took of the same wait (D511), so the push never waits longer than D500's.
-      timer = setTimeout(() => done(null), Math.max(0, waitMs - spentMs));
+      timer = setTimeout(() => done(null), Math.max(0, this.config.pushCheckWaitMs - spentMs));
     });
     try {
       const got = await Promise.race([running, late]);
@@ -2671,66 +2634,6 @@ export class ContextPartner {
   }
 
   /**
-   * `pushCheckBehind` (O3, D700): the check for a push that did not wait for it. Behind the default's packet: the
-   * widening's look (`pushWiden`), then the check's one call, read to its end. The items it names that the session's
-   * ledger still holds fresh (the default's packet marked its own) are re-read like any delivery and queued as one
-   * follow-up packet (`CHECK_BEHIND_LEAD`), at most `pushCandidates` of them in the pool's order. Nothing is queued
-   * for a closed session or once the user has sent another request; nothing here silences, replaces or withdraws
-   * the default's packet. The call is traced on its own ("check-late"), so traces sum to the calls made. Never throws.
-   */
-  private checkBehind(
-    s: Session,
-    cue: Cue,
-    gate: PushGate,
-    ranked: readonly Scored[],
-    request: number | undefined,
-  ): void {
-    if (!gate.like.some(Boolean) || gate.skip || s.closed) return;
-    const t0 = performance.now();
-    const live = () => !s.closed && this.sessions.get(s.key) === s && (request === undefined || request === s.requests);
-    const work = (async () => {
-      const mine: PushGate = { pool: gate.pool, like: gate.like };
-      if (this.config.pushWiden) mine.widened = await this.widenPool(s, cue, ranked, gate.pool);
-      if (s.closed) return;
-      const read = await this.checkPush(s, cue, mine, 0, Infinity);
-      if (!read) return;
-      if (read.called) this.traceCheck(s, read, t0, "push check behind");
-      const yes = read.yes;
-      if (!yes || yes.size === 0 || !live()) return;
-      const named = [...mine.pool, ...(mine.widened ?? [])].filter((x) => yes.has(x.item.id) && !bulkMail(x.item));
-      const fresh = named.filter((x) => s.ledger.isFresh(x.item.id, s.turn)).slice(0, this.config.pushCandidates);
-      if (fresh.length === 0) return;
-      // As the push (audit A11): the re-reads first, and an item handed out meanwhile is not marked twice.
-      const was = new Map(fresh.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
-      let checked = await this.verifyItems(s, fresh, cue);
-      checked = checked.filter((x) => {
-        const now = s.ledger.entry(x.item.id);
-        return now === undefined || sameEntry(was.get(x.item.id), now);
-      });
-      if (checked.length === 0 || !live()) return;
-      const frame = { ...this.candidateFrame(), lead: CHECK_BEHIND_LEAD };
-      const injection = this.deliver(s, checked, "proactive", `${CHECK_BEHIND}${cue.id}`, cue, undefined, frame);
-      // Undoable, so a follow-up the agent has not taken when the user's next request comes is withdrawn whole.
-      this.keepUndo(s, injection, checked, was);
-      s.pending.push(injection);
-      this.trace(s, {
-        sessionId: s.id,
-        turn: s.turn,
-        event: "user_message",
-        decision: "sources",
-        reason: "check behind",
-        latencyMs: Math.round(performance.now() - t0),
-        sourceCalls: 0,
-        modelCalls: 0,
-        costUsd: 0,
-        itemIds: injection.citations.map((c) => c.itemId),
-      });
-    })().catch(() => {});
-    s.checking = { request, done: work };
-    this.addBehind(s, work);
-  }
-
-  /**
    * `pushCheckAnchored` (N5, D534): whether some item of the pool's head (what the check reads of the lexical pool) is
    * constraint-like and names one of the request's anchors (a person, a thing, a day). The constraint test and the
    * anchors are the default's own: no model, no stored answer. False: no call, no widening, the default's candidates.
@@ -2742,13 +2645,13 @@ export class ContextPartner {
   }
 
   /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
-  private traceCheck(s: Session, r: PushCheckRead, t0: number, reason = "push check"): void {
+  private traceCheck(s: Session, r: PushCheckRead, t0: number): void {
     this.trace(s, {
       sessionId: s.id,
       turn: s.turn,
       event: "user_message",
       decision: "check-late",
-      reason,
+      reason: "push check",
       latencyMs: Math.round(performance.now() - t0),
       sourceCalls: 0,
       modelCalls: 1,
@@ -3026,7 +2929,7 @@ export class ContextPartner {
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      lead: `${CANDIDATES_LEAD}${this.config.candidatesSpecifics ? ` ${CANDIDATES_SPECIFICS}` : ""}${nudge ? ` ${ASK_NUDGE}` : ""}`,
+      lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),

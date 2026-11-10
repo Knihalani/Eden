@@ -8,10 +8,8 @@ import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { isImperative, isOpenRequest, MORE_VERBS } from "./probes";
-import { CANDIDATES_SPECIFICS } from "./render";
 
-// O3 (D702, D703): `pushOpen` starts the candidates' push for a request whose verb is on no list;
-// `candidatesSpecifics` adds one line to the candidates' lead.
+// O3 (D702): `pushOpen` starts the candidates' push for a request whose verb is on no list.
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");
 const item = (id: string, title: string, text: string): ContextItem => ({
@@ -85,10 +83,9 @@ describe("isOpenRequest (D702): a request by its shape, not its verb", () => {
   });
 });
 
-describe("pushOpen (D702) and candidatesSpecifics (D703)", () => {
-  test("both are off in the default", () => {
+describe("pushOpen (D702)", () => {
+  test("off in the default", () => {
     expect(DEFAULT_CONFIG.pushOpen).toBe(false);
-    expect(DEFAULT_CONFIG.candidatesSpecifics).toBe(false);
   });
 
   test("off, a request with an unlisted verb starts no push; on, it gets the candidates", async () => {
@@ -110,12 +107,5 @@ describe("pushOpen (D702) and candidatesSpecifics (D703)", () => {
     const partner = setup({ pushOpen: true });
     await packets(partner, REQUEST);
     expect(partner.takePending({ ...ref, userId: "u2" })).toEqual([]);
-  });
-
-  test("candidatesSpecifics adds its line to the candidates' lead, and only then", async () => {
-    const plain = await packets(setup({ pushOpen: true }), REQUEST);
-    expect(plain[0]!.text).not.toContain(CANDIDATES_SPECIFICS);
-    const said = await packets(setup({ pushOpen: true, candidatesSpecifics: true }), REQUEST);
-    expect(said[0]!.text).toContain(CANDIDATES_SPECIFICS);
   });
 });

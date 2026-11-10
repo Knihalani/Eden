@@ -1,6 +1,9 @@
 # O3: the push for every request, and a line that asks for the specifics
 
-Status: 2026-11-10, branch `claude/o3-k-behind`, session O3. Decisions D702–D704. Train suites only (train1–6);
+Status: 2026-11-10, branch `claude/o3-k-behind`, session O3, measured. Decisions D702, D703, D705, D706. **Result:
+`pushOpen` passes its pre-registered rule on eight train seeds (hidden +4.1 points, +1.6..+6.7, concerns level,
++$0.006 per 1,000 tasks, no added wait) and goes to the owner as an off trial; `candidatesSpecifics` fails and is
+deleted.** Train suites only (train1–6);
 heldout18 is not dumped, labelled or run. Paid calls go to Anthropic directly with `HAIKU_API_KEY` through the lab
 (D97): **Anthropic-direct lab figures**. Numbers marked **[EST]** are arithmetic or judgement; every other number
 comes from a command in this note.
@@ -68,3 +71,62 @@ the fact handed and 30 had it in hand. Two things stand out, neither needing a m
 - **Also reported, no bar:** planted and decoy items handed in the push, `ask_context` calls a task, and the
   packet's share of the agent's bill.
 - **Budget [EST]:** $5.5 (four arms, four seeds $3.6; regrade $1.9).
+
+## 4. Result (Pi, local; stage 1 at d63681c8 on seeds 41–44, stage 2 on seeds 45–48; Sonnet-graded)
+
+4,608 task runs an arm (1,536 a variant); 26 results ungraded and dropped (all in stage 1, which ran two processes
+at once and had 992 requests retried on a 429; stage 2 ran one process at a time with none). Sonnet regraded 6,214
+answers (0 failed). `bench_report.py --sonnet` (template-clustered) and `n5/mix.py` (1:1:8):
+
+| Against `eden` (56.2% of hidden raised)        | `eden~O` (`pushOpen`)           | `eden~L` (`candidatesSpecifics`) | `eden~OL` (both)        |
+| ---------------------------------------------- | ------------------------------- | -------------------------------- | ----------------------- |
+| Hidden raised, eight seeds                     | **+4.1 points (+1.6..+6.7)**    | +2.0 (+0.2..+3.7)                | +4.0 (+1.6..+6.9)       |
+| seeds 41–44 (cards and intent replayed)        | +6.3 (+3.2..+9.7), 67.4 vs 61.1 | +3.9 (+1.4..+6.7)                | +3.8 (+0.7..+7.3)       |
+| seeds 45–48 (cards in-run, intent inert)       | +2.0 (−1.2..+5.2), 53.3 vs 51.3 | +0.0 (−2.6..+2.5)                | +4.3 (+1.2..+7.6)       |
+| Sonnet-confirmed concerns, control and neutral | **1 against 1** of 3,064 pairs        | 0 against 1                      | 1 against 1             |
+| Haiku-flagged concerns (before the regrade)    | 26 against 15                   | 22 against 15                    | 13 against 15           |
+| Total $ per 1,000 tasks, 1:1:8 mix             | +0.006 (+0.000..+0.012)         | +0.013 (+0.008..+0.018)          | +0.019 (+0.013..+0.026) |
+| Wall a task, 1:1:8 mix                         | −0.05 s (−0.20..+0.09)          | +0.04 s (−0.08..+0.14)           | +0.01 s (−0.15..+0.18)  |
+| `ask_context` calls a task, mix                | −0.062 (−0.109..−0.019)         | +0.029                           | −0.014                  |
+| Planted item in a push packet (of 1,534)       | 1,066 against 961               | 961                              | 1,069                   |
+| Decoy in a push packet (control, of 1,535)     | 1,010 against 894               | 892                              | 1,013                   |
+| Neutral requests given a candidates packet     | 1,498 against 1,239 of 1,534    | 1,240                            | 1,497                   |
+
+(Wall on seeds 45–48 alone, the clean stage: `eden~O` −0.06 s, −0.11..−0.02, on a base of 2.00 s. Both against
+`eden~O` alone, eight seeds: −0.1 points, −1.9..+1.7.)
+
+- **`pushOpen` passes every clause** (hidden at least +4.0 with the lower bound above 0; confirmed concerns not up;
+  wall not up; +$0.006 per 1,000 tasks). The agent asks a little less, because more requests start with a packet.
+  The gain is larger where the intent index is live (seeds 41–44): the ranking's top five hold the fact more often
+  there, so an opened push hands it more often.
+- **What it costs is not in the rule: look-alikes handed rise with the facts** (the decoy is in a push packet in
+  1,010 control tasks against 894), and nearly every request now gets a packet (98% of neutral requests against
+  81%). The agent turned none of the extra look-alikes into a confirmed concern here (Haiku flagged 11 more answers;
+  Sonnet confirmed one in each arm). The brief wanted look-alikes handed down, so this session does not promote it:
+  it stays an off trial for the owner, with a blind run on heldout18 as the next step (D706).
+- **`candidatesSpecifics` fails** (+2.0 points against a bar of +4.0) and adds nothing to `pushOpen` (−0.1). Deleted
+  with its code and tests (D705; the code is in commit d63681c8).
+- **What is left after `pushOpen`** (seeds 41–44, its arm, 768 hidden tasks): the fact is in a push packet in 596
+  (488 raised), only in an ask's answer in 36 (27), never handed in 136 (the agent asked in 35). So the two gaps are
+  still open: about 18% of tasks never get the fact (it is outside the ranking's top five or outside the pool, where
+  only a read of the request against more items has found it: N2, N5), and about 18% of handed facts are not stated
+  with their specifics (a line asking for them did not move that).
+
+**Spend (both O3 notes):** Anthropic **$13.67** booked of $25 (`.local/o3/ledger.jsonl`: this note's runs $5.48 and
+regrades $3.41; o3-check-behind.md's $4.79). Modal $0.
+
+## Reproduce
+
+```bash
+bun run funnel --suite train --seeds 41,42,43,44 --jobs 4 --json .local/o3/base.json -- --neutral            # $0
+bun run funnel --suite train --seeds 41,42,43,44 --json .local/o3/open.json --set '{"pushOpen":true}' -- --neutral
+python3 -I packages/sim/lab/n2/compare.py --arm C0=.local/o3/base.json --arm O=.local/o3/open.json
+V='{"O":{"pushOpen":true},"L":{"candidatesSpecifics":true},"OL":{"pushOpen":true,"candidatesSpecifics":true}}'
+# one seed a process, the bench recipe (LAB.md 7b's RECIPE; the three card files concatenated); L is at d63681c8
+bun packages/sim/src/lab/pi-ab.ts --suite train --seeds 45 --conditions 'eden,eden~O,eden~L,eden~OL' \
+  --variant-config "$V" --variants hidden,control,neutral --config default --tenant-prompt --push payload …
+bun packages/sim/src/lab/i3-regrade.ts --results .local/o3/ol2/s45/out.json,… --spend-ledger … --spend-cap 25
+python3 -I packages/sim/modal/bench_report.py --pair 'eden~O:eden' --group cached=.local/o3/ol \
+  --group inrun=.local/o3/ol2 --sonnet
+python3 -I packages/sim/lab/n5/mix.py --base eden --arms 'eden~O' .local/o3/ol/s4*/out.json .local/o3/ol2/s4*/out.json
+```
