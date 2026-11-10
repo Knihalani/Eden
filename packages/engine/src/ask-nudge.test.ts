@@ -259,9 +259,9 @@ describe("askNudge (D316): a nudge to ask when the candidates do not settle the 
   });
 });
 
-describe("askNudgeDeep (D460, trial): the nudge only when the pool past the handed items holds an anchor", () => {
-  test("off in the default; the config check needs askNudge", () => {
-    expect(DEFAULT_CONFIG.askNudgeDeep).toBe(false);
+describe("askNudgeDeep (D460, D461): the nudge only when the pool past the handed items holds an anchor", () => {
+  test("on in the default (D461); the config check needs askNudge", () => {
+    expect(DEFAULT_CONFIG.askNudgeDeep).toBe(true);
     expect(checkEngineConfig({ askNudgeDeep: true })).toEqual({ askNudgeDeep: true });
     expect(() => checkEngineConfig({ askNudge: false, askNudgeDeep: true })).toThrow(/askNudge/);
   });

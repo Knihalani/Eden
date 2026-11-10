@@ -1,0 +1,55 @@
+tasks paired 2016 (dropped 0 an arm did not finish)
+Sonnet graded 1644 answers, failed 0 (Haiku's verdict kept); flips hidden −62 +56, concern −16 +0
+hidden answers Sonnet did not grade (Haiku's verdict kept): 0
+
+The effect, eden~deep − eden (points; $/1k; s; asks a task). * the interval excludes zero.
+
+[pooled] hidden 814, control+neutral 1202, targeted-template hidden 382
+  eden~deep          hidden Sonnet 0.657 Haiku 0.651; concerns Sonnet 0.0000 Haiku 0.0042
+  eden               hidden Sonnet 0.650 Haiku 0.663; concerns Sonnet 0.0000 Haiku 0.0092
+  hidden, Sonnet    +0.7 (-1.8..+3.4)  n 814
+  hidden, Haiku     -1.2 (-3.9..+1.5)  n 814
+  concerns, Sonnet  +0.0 (+0.0..+0.0)  n 1202
+  concerns, Haiku   -0.5 (-1.2..+0.2)  n 1202
+  targeted, Sonnet  +2.1 (-1.3..+5.5)  n 382
+  targeted, Haiku   -0.8 (-4.5..+2.9)  n 382
+  other templates, Sonnet -0.5 (-4.4..+3.2)  n 432
+  $/1k              -0.005 (-0.009..-0.000)*
+  wall mean s       -0.062 (-0.097..-0.027)*
+  asks a task       -0.062 (-0.086..-0.038)*
+  eden~deep          asks a task 0.382
+  eden               asks a task 0.444
+
+[short] hidden 768, control+neutral 768, targeted-template hidden 364
+  eden~deep          hidden Sonnet 0.660 Haiku 0.652; concerns Sonnet 0.0000 Haiku 0.0039
+  eden               hidden Sonnet 0.652 Haiku 0.663; concerns Sonnet 0.0000 Haiku 0.0091
+  hidden, Sonnet    +0.8 (-1.7..+3.4)  n 768
+  hidden, Haiku     -1.0 (-3.8..+1.6)  n 768
+  concerns, Sonnet  +0.0 (+0.0..+0.0)  n 768
+  concerns, Haiku   -0.5 (-1.3..+0.3)  n 768
+  targeted, Sonnet  +2.2 (-1.1..+5.8)  n 364
+  targeted, Haiku   -0.3 (-4.1..+3.3)  n 364
+  other templates, Sonnet -0.5 (-4.5..+3.5)  n 404
+  $/1k              -0.006 (-0.012..-0.000)*
+  wall mean s       -0.101 (-0.146..-0.058)*
+  asks a task       -0.082 (-0.113..-0.051)*
+  eden~deep          asks a task 0.474
+  eden               asks a task 0.556
+
+[long] hidden 46, control+neutral 434, targeted-template hidden 18
+  eden~deep          hidden Sonnet 0.609 Haiku 0.630; concerns Sonnet 0.0000 Haiku 0.0046
+  eden               hidden Sonnet 0.609 Haiku 0.674; concerns Sonnet 0.0000 Haiku 0.0092
+  hidden, Sonnet    +0.0 (-15.2..+15.2)  n 46
+  hidden, Haiku     -4.3 (-15.2..+6.5)  n 46
+  concerns, Sonnet  +0.0 (+0.0..+0.0)  n 434
+  concerns, Haiku   -0.5 (-1.6..+0.7)  n 434
+  targeted, Sonnet  +0.0 (-22.2..+22.2)  n 18
+  targeted, Haiku   -11.1 (-27.8..+5.6)  n 18
+  other templates, Sonnet +0.0 (-14.3..+14.3)  n 28
+  $/1k              +0.000 (-0.005..+0.005)
+  wall mean s       +0.065 (+0.022..+0.108)*
+  asks a task       +0.002 (-0.023..+0.027)
+  eden~deep          asks a task 0.090
+  eden               asks a task 0.087
+
+RULE: targeted Sonnet +2.1 (-1.3..+5.5)  n 382 ok=True; concerns up False; asks -0.062 (-0.086..-0.038)*, $/1k -0.005 (-0.009..-0.000)*, wall -0.062 (-0.097..-0.027)* fall=True -> PROMOTE askNudgeDeep

@@ -1,7 +1,27 @@
 # M5: a narrower trigger for the ask nudge (`askNudgeDeep`, D460)
 
 Status: 2026-11-10, branch `claude/m5-nudge-narrow` (from `claude/lucid-hypatia-v9wqk5` at 9be15991). Decisions
-D460–D464. §0 to §1 are the pre-registration, committed and pushed before any paid call.
+D460–D462 (D463, D464 not used). §0 and §1 are the pre-registration, committed and pushed (dbf215af) before any paid
+call; §2 onwards came after. **Result: the rule says promote, and `askNudgeDeep` is in the default (D461).**
+
+## In plain words
+
+**Spent: $3.06 Anthropic** of the $4 cap (runs $1.258 from the shards' manifests, Sonnet regrade $1.805 from its
+ledger, 1,644 answers at about $0.0011 each), **Modal $0.14** billed for this session's four apps (`modal billing
+report --for today`, complete hours only). Anthropic-direct lab figures (D97). Eight containers, two at a time; no
+shard hit its cap, no task was dropped, no answer failed to regrade.
+
+- **What tells the tasks apart (D462).** Where the nudge helps, the planted fact sits 6th–15th in the push's pool or in
+  no pool; where it fires for nothing, the fact is already in the packet (322 of 421 nudged hidden tasks at $0). The
+  ask's deeper look can only help when the pool past the handed items holds something anchored to the request.
+- **The narrower trigger keeps the gain and drops the empty asks.** Firing only then (`askNudgeDeep`), against the
+  current nudge, pooled over both horizons and four seeds, Sonnet-graded: targeted-template hidden **+2.1 points
+  (−1.3..+5.5, n 382)**, all hidden +0.7 (−1.8..+3.4, n 814); **asks −0.062 a task (−0.086..−0.038)**, **−$0.005 per
+  1,000 tasks (−0.009..−0.000)**, **−0.062 s a task (−0.097..−0.027)**; Sonnet kept no concern in either arm.
+- **Caveats.** Haiku-graded the targeted subset reads −0.8 (−4.5..+2.9); Sonnet changed 118 of 1,628 hidden verdicts
+  (62 raised → missed, 56 missed → raised). Over a user's days (n 46 hidden) the switch saves no asks (+0.002) and
+  costs +0.065 s (+0.022..+0.108): the gain is in one-request sessions, where the nudge fired most.
+- `bun run eval` unchanged (0.65/0.52/0); funnel unchanged task by task (314/273 at 41–42; 633/550 at 41–44).
 
 ## 0. Pre-registration
 
@@ -80,3 +100,54 @@ control tasks (where every ask is cost). The screen's row counts `automated` sen
 `bun run funnel` with the switch on against the default, task by task: **+0 −0 hidden, +0 −0 decoys** (633/768,
 550/768 at seeds 41–44; 314/273 at 41–42): the funnel always asks, and where the switch silences the nudge the
 deeper look had nothing anchored to add. Its effect is only on whether the live agent asks, which is what §0 measures.
+
+## 2. Runs
+
+Pi on Modal, `packages/sim/lab/m5/go.sh` at commit dbf215af (the review's comment and test fix after it change no
+behaviour), arms `eden` and `eden~deep`, as pre-registered. Manifests: `packages/sim/lab/m5/manifest-*.json`.
+
+| run     | seeds  | tasks an arm                         | $      | wall a shard |
+| ------- | ------ | ------------------------------------ | ------ | ------------ |
+| short-a | 41, 42 | 384 a seed (192 hidden, 192 control) | 0.474  | 108–131 s    |
+| short-b | 43, 44 | 384 a seed                           | 0.472  | 119–122 s    |
+| long-a  | 41, 42 | a user's 8 days (`--days 8`)         | 0.149  | 219–252 s    |
+| long-b  | 43, 44 | a user's 8 days                      | 0.163  | 255–273 s    |
+| regrade | local  | 1,628 hidden, 16 concerns (both arms) | 1.805 |              |
+
+## 3. The effect (`eden~deep − eden`; bootstrap 95%, 5,000 draws, within shard and kind)
+
+From `packages/sim/lab/m5/narrow.txt` (`narrow.py`). Points for hidden and concerns; `*` the interval excludes zero.
+
+| scope                       | hidden, Sonnet       | hidden, Haiku        | asks a task                | $/1k                       | wall s                    |
+| --------------------------- | -------------------- | -------------------- | -------------------------- | -------------------------- | ------------------------- |
+| **targeted templates (rule)** | **+2.1 (−1.3..+5.5)** | −0.8 (−4.5..+2.9)  |                            |                            |                           |
+| other templates             | −0.5 (−4.4..+3.2)    |                      |                            |                            |                           |
+| **pooled**                  | +0.7 (−1.8..+3.4)    | −1.2 (−3.9..+1.5)    | **−0.062 (−0.086..−0.038)\*** | **−0.005 (−0.009..−0.000)\*** | **−0.062 (−0.097..−0.027)\*** |
+| short (n 768 hidden)        | +0.8 (−1.7..+3.4)    | −1.0 (−3.8..+1.6)    | −0.082 (−0.113..−0.051)\*  | −0.006 (−0.012..−0.000)\*  | −0.101 (−0.146..−0.058)\* |
+| long (n 46 hidden)          | +0.0 (−15.2..+15.2)  | −4.3 (−15.2..+6.5)   | +0.002 (−0.023..+0.027)    | +0.000 (−0.005..+0.005)    | +0.065 (+0.022..+0.108)\* |
+
+Asks a task, pooled: 0.444 with the current nudge, 0.382 with the narrower one (short 0.556 → 0.474). Concerns:
+Haiku called 16 (11 current, 5 narrower) of 2,404 control and neutral answers; Sonnet kept none.
+
+**The rule, applied.** (a) targeted point +2.1 ≥ −1.0 and the interval not wholly below zero; (b) concerns not up;
+(c) asks, $/1k and wall points all below zero: **promote** (D461).
+
+## Reproduce
+
+```bash
+python3 -m venv .venv-modal && .venv-modal/bin/pip install 'modal[api-proxy-support]==1.6.3'
+export SSL_CERT_FILE=/root/.ccr/ca-bundle.crt
+bun run funnel --suite train --seeds 41,42,43,44 -- --pool-dump .local/m5/pool.jsonl     # §1, $0
+python3 -I packages/sim/lab/m5/screen.py .local/m5/pool.jsonl
+EDEN_COMMIT=dbf215af packages/sim/lab/m5/go.sh m5-short-a 41,42 0.6 --variants hidden,control   # then 43,44 as -b
+EDEN_COMMIT=dbf215af packages/sim/lab/m5/go.sh m5-long-a 41,42 0.24 --days 8                    # then 43,44 as -b
+# per shard: Sonnet on every hidden answer and every Haiku-called concern, both arms
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/regrade.ts --results SHARD/out.json --graders claude-sonnet-5-5 \
+  --kinds hidden --conditions eden,eden~deep --spend-ledger .local/m5/regrade-ledger.jsonl --spend-cap 2.32 \
+  --spend-headroom 0.02 --run-label m5-regrade --out SHARD/regrade-hidden.json   # and --only-concerns → regrade-concerns.json
+python3 -I packages/sim/lab/m5/narrow.py --templates packages/sim/lab/a2/targeted-templates.txt \
+  --group short=.local/modal/m5-short-a,.local/modal/m5-short-b --group long=.local/modal/m5-long-a,.local/modal/m5-long-b
+```
+
+After D461 the default has `askNudgeDeep` on, so `go.sh`'s `eden` arm is the narrower nudge too: reproduce from
+commit dbf215af, or give the old arm `--variant-config '{"wide":{"askNudgeDeep":false}}'`.

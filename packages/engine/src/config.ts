@@ -611,12 +611,15 @@ export interface EngineConfig {
    */
   askNudge: boolean;
   /**
-   * Trial (D460, M5, docs/research/m5-nudge-narrow.md; off): a narrower `askNudge`. The nudge fires only when, besides
+   * D460 (M5, docs/research/m5-nudge-narrow.md; promoted by D461, on in the default, part `nudge`): a narrower
+   * `askNudge`. The nudge fires only when, besides
    * leaving the request unsettled, the push pool past the handed candidates holds an item (not bulk mail) that names
    * one of the request's anchors: what the ask's deeper look would list. With nothing anchored past the handed items
    * an ask has nothing deeper to show, and at $0 (train 41–44) the planted fact was already handed in 322 of the 421
    * hidden tasks the nudge fired on; this cuts the fires to 202 hidden (34 of 43 with the fact deep in the pool kept)
-   * and 423 → 231 control. Needs `askNudge`.
+   * and 423 → 231 control. Needs `askNudge`. Pi, train 41–44, short and over days, against the current nudge, every
+   * hidden answer Sonnet-graded: targeted-template hidden +2.1 points (−1.3..+5.5), all hidden +0.7 (−1.8..+3.4),
+   * asks −0.062 a task, −$0.005 per 1,000 tasks and −0.06 s a task (each interval below zero), concerns 0 both.
    */
   askNudgeDeep: boolean;
   /**
@@ -772,7 +775,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   partyCheck: true,
   planConflict: true,
   askNudge: true,
-  askNudgeDeep: false,
+  askNudgeDeep: true,
   pushCandidatesSettled: 2,
   revisionDiff: true,
 };
