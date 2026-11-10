@@ -22,7 +22,7 @@ import { READER_KINDS } from "./reader";
 type Key = keyof EngineConfig;
 
 /** A partner dependency some settings act through (`PartnerDeps`). */
-export type ConfigDep = "cards" | "reader";
+export type ConfigDep = "cards" | "reader" | "checker";
 
 /**
  * Keys that act only when the partner has a dependency, with that dependency. Set to anything but their default
@@ -62,6 +62,9 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerReuse: "reader",
   readerStopEarly: "reader",
   // `pushCandidates` is not here: the candidates make no reader call and act without one (D276).
+  pushCheck: "checker",
+  pushCheckWaitMs: "checker",
+  pushCheckItemChars: "checker",
 };
 
 /**
@@ -155,6 +158,9 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   askNudge: PUSH,
   askNudgeDeep: [...PUSH, "askNudge"],
   pushCandidatesSettled: PUSH,
+  pushCheck: PUSH,
+  pushCheckWaitMs: [...PUSH, "pushCheck"],
+  pushCheckItemChars: [...PUSH, "pushCheck"],
   revisionDiff: ["revisionNotice"],
 };
 
@@ -215,6 +221,8 @@ const RANGES: Partial<Record<Key, Range>> = {
   askReaderPool: COUNT,
   pushCandidates: { integer: true, max: 40 },
   pushCandidatesSettled: { integer: true, max: 40 },
+  pushCheckWaitMs: COUNT,
+  pushCheckItemChars: { integer: true, min: 40, max: 400 },
 };
 
 /** String-list keys whose entries must come from a known list. */

@@ -671,6 +671,19 @@ export interface EngineConfig {
    */
   pushCandidatesSettled: number;
   /**
+   * I3 (D500; a trial, off; docs/research/i3-push-check.md): with `pushCandidates` and a `checker` dependency (a
+   * budgeted model call, `push-check.ts`), a push whose pool passes the candidates' constraint-like gate asks the
+   * model once, over the whole pool, which items change what the assistant should do for the request (I2's question,
+   * D490); the candidates are the pool's items it names, in the pool's order (bulk mail out), the first
+   * `pushCandidates` of them, and a pool it names none of sends no packet. A refusal, an error, an unreadable reply or
+   * a reply later than `pushCheckWaitMs` leaves the default's candidates; a late reply still serves a second pass.
+   */
+  pushCheck: boolean;
+  /** How long the push waits for its check before it hands the default's candidates (ms). */
+  pushCheckWaitMs: number;
+  /** The characters of each item's most relevant parts the check reads (`READER_ITEM_CHARS`, 400, is the most). */
+  pushCheckItemChars: number;
+  /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
    * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
@@ -820,5 +833,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askNudge: true,
   askNudgeDeep: true,
   pushCandidatesSettled: 2,
+  pushCheck: false,
+  pushCheckWaitMs: 2_500,
+  pushCheckItemChars: 400,
   revisionDiff: true,
 };

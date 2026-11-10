@@ -80,6 +80,7 @@ import {
   type ReaderKind,
   type ReaderVerdict,
 } from "./reader";
+import { CHECK_MAX_ITEMS, checkKey, type PushCheckRead, type PushChecker } from "./push-check";
 import {
   accounts,
   actionKey,
@@ -216,6 +217,11 @@ export interface PartnerDeps {
    * flags only. Apart from `onReader`, whose consumers count reader readings.
    */
   onPushPool?: PushPoolSink;
+  /**
+   * I3 (D500, trial `pushCheck`): the push check's model call (`push-check.ts`), with its own budget. Absent, or the
+   * flag off: no call is made and the default's candidates go.
+   */
+  checker?: PushChecker;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -235,6 +241,13 @@ export interface PushPoolReport {
    */
   anchored?: boolean[];
   anchorKinds?: { entities: number; day: boolean };
+  /**
+   * `pushCheck` (D500): what the pass's check did ("yes": it answered; "none": no call, the gate found nothing
+   * constraint-like; "late", "failed": the default's candidates went) and, when it answered, per pool item whether it
+   * said the item changes the action.
+   */
+  check?: "yes" | "none" | "late" | "failed";
+  checked?: boolean[];
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -361,6 +374,12 @@ interface Session {
    * with their content hashes, and its verdict (null when it gave none).
    */
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
+  /**
+   * `pushCheck` (D500): the session's push checks by input (`checkKey`), at most `CHECK_KEPT`, oldest first: a late
+   * check still answers a second pass over the same pool, and a settled one answers, with no call, a pass whose items
+   * it read every one of (same request, same day, same content). Dropped with the session (a forget closes it).
+   */
+  pushChecks?: Map<string, KeptCheck>;
   /** `planConflict` (D301): the session's last `PLAN_REQUESTS` acting requests (the push's cues), oldest first. */
   acted?: Cue[];
   /** `planConflict` (D301): ids the sync stored since the last take, at most `PLAN_WAITING`, oldest first. */
@@ -2030,7 +2049,20 @@ export class ContextPartner {
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
-      const candidates = candidating ? this.candidatesOf(s, cue, [...order, ...scored]) : null;
+      const gate = candidating ? this.pushGate(s, cue, [...order, ...scored]) : null;
+      // `pushCheck` (D500): one budgeted call over the pool, only when the gate would hand candidates. Off, no await
+      // is added: the push's timing (which turn it lands in) stays the default's.
+      const check = gate && this.config.pushCheck && this.deps.checker ? await this.checkPush(s, cue, gate) : null;
+      if (check && s.closed) {
+        return {
+          answer: "",
+          citations: [],
+          usedModel: false,
+          costUsd: 0,
+          latencyMs: Math.round(performance.now() - t0),
+        };
+      }
+      const candidates = gate ? this.candidatesOf(s, cue, gate, check) : null;
       const flagged = candidates
         ? candidates.items
         : reading
@@ -2131,10 +2163,11 @@ export class ContextPartner {
         // that joined the slow path's in flight, or was answered by the fan-out's cache, is none), and a harness
         // summing `sourceCalls` over a task counts what its connectors were sent. Plans and sync use stay off.
         sourceCalls,
-        modelCalls: reading?.called ? 1 : 0,
-        costUsd,
+        modelCalls: (reading?.called ? 1 : 0) + (check?.called ? 1 : 0),
+        costUsd: costUsd + (check?.costUsd ?? 0),
         ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
         ...(candidates ? { candidates: true } : {}),
+        ...(check ? { checkCalls: check.called ? 1 : 0, checkCostUsd: check.costUsd } : {}),
         itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
       });
       const turn = internal.turn ?? s.turn;
@@ -2457,16 +2490,11 @@ export class ContextPartner {
   }
 
   /**
-   * `pushCandidates` (D236): the push's candidates for the agent to judge, with no model call. The pool `readAsk` would
-   * read (the first `askReaderPool` distinct items of `ranked`) in its own order, bulk mail out; the first
-   * `pushCandidates` of them. A pool with no constraint-like item (`readerGate`'s test, cards included) gives none, as
-   * `readerGate` would read none. (Constraint-like items first lost 27 points of hidden facts live: D236.)
+   * `pushCandidates` (D236): the push's pool and its constraint-like gate. The pool `readAsk` would read (the first
+   * `askReaderPool` distinct items of `ranked`) in its own order; per item, `readerGate`'s constraint test, cards
+   * included. A pool with no constraint-like item gives no candidates, as `readerGate` would read none.
    */
-  private candidatesOf(
-    s: Session,
-    cue: Cue,
-    ranked: readonly Scored[],
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
+  private pushGate(s: Session, cue: Cue, ranked: readonly Scored[]): PushGate {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
@@ -2476,17 +2504,101 @@ export class ContextPartner {
       seen.add(x.item.id);
       pool.push(x);
     }
-    if (pool.length === 0) return { items: [], pool };
     const cards =
-      this.config.cards && this.deps.cards
+      pool.length > 0 && this.config.cards && this.deps.cards
         ? this.deps.cards.cardsOf(
             s.scope,
             pool.map((x) => x.item.id),
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    const like = pool.map((x) => this.constraintLike(x, cards));
-    let items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
+    return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
+  }
+
+  /**
+   * `pushCheck` (D500): the push check's answer for this pool, or null (off, unwired, no constraint-like item, no
+   * request text). Waits at most `pushCheckWaitMs`; a check that answers later is kept on the session, so a second
+   * pass over the same pool (`readerPushBehind`) reads it with no call. The call runs on the session's signal: it
+   * ends with the session, not with the wait.
+   */
+  private async checkPush(s: Session, cue: Cue, gate: PushGate): Promise<PushCheckRead | null> {
+    const checker = this.deps.checker;
+    if (!this.config.pushCheck || !checker || !gate.like.some(Boolean)) return null;
+    const request = sanitizeForStore(cue.raw);
+    if (!request.trim()) return null;
+    const focus = readerFocus(cue.raw);
+    const input = {
+      request,
+      items: gate.pool.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
+      today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
+      cacheKey: userCacheKey(s.scope),
+    };
+    const key = checkKey(input);
+    const asked = `${input.today}\n${request}`;
+    const checks = (s.pushChecks ??= new Map());
+    // A settled check of this request that read every item of this pool, unchanged, answers it with no call: a second
+    // pass (`readerPushBehind`) often only reorders the pool or drops an item.
+    const items = input.items.slice(0, CHECK_MAX_ITEMS);
+    for (const kept of checks.values()) {
+      const yes = kept.settled?.yes;
+      if (!yes || kept.asked !== asked || !items.every((it) => kept.hashes.get(it.id) === it.hash)) continue;
+      return {
+        yes: new Set(items.filter((it) => yes.has(it.id)).map((it) => it.id)),
+        costUsd: 0,
+        called: false,
+        overBudget: false,
+      };
+    }
+    let kept = checks.get(key);
+    const fresh = !kept;
+    if (!kept) {
+      const entry: KeptCheck = {
+        asked,
+        hashes: new Map(items.map((it) => [it.id, it.hash])),
+        read: checker.check(s.scope, s.key, input, s.abort.signal),
+      };
+      void entry.read.then((r) => (entry.settled = r));
+      kept = entry;
+      checks.set(key, entry);
+      while (checks.size > CHECK_KEPT) checks.delete(checks.keys().next().value as string);
+    }
+    const running = kept.read;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<null>((done) => {
+      timer = setTimeout(() => done(null), Math.max(0, this.config.pushCheckWaitMs));
+    });
+    try {
+      const got = await Promise.race([running, late]);
+      // A check this pass did not start (a second pass reading the first's) cost this pass nothing.
+      if (got) return fresh ? got : { ...got, costUsd: 0, called: false };
+      // Past the wait: the call goes on behind and is counted by the pass that started it, when it settles.
+      return { yes: null, costUsd: 0, called: false, overBudget: false, late: true };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * `pushCandidates` (D236): the push's candidates for the agent to judge, with no model call: the gate's pool, bulk
+   * mail out, the first `pushCandidates` of them; none when no pooled item is constraint-like. (Constraint-like items
+   * first lost 27 points of hidden facts live: D236.) With a `pushCheck` answer (D500), the pool's items it named
+   * instead, in the pool's order, and none when it named none.
+   */
+  private candidatesOf(
+    s: Session,
+    cue: Cue,
+    gate: PushGate,
+    check: PushCheckRead | null = null,
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
+    const { pool, like } = gate;
+    if (pool.length === 0) return { items: [], pool };
+    const yes = check?.yes ?? null;
+    const open = pool.filter((x) => !bulkMail(x.item));
+    let items = yes
+      ? open.filter((x) => yes.has(x.item.id)).slice(0, this.config.pushCandidates)
+      : like.some(Boolean)
+        ? open.slice(0, this.config.pushCandidates)
+        : [];
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
     let anchors: Anchors | undefined;
@@ -2515,6 +2627,12 @@ export class ContextPartner {
         ? {
             anchored: pool.map((x) => anchored(x.item, read)),
             anchorKinds: { entities: read.entities.length, day: hasDay(read) },
+          }
+        : {}),
+      ...(this.config.pushCheck && this.deps.checker
+        ? {
+            check: yes ? "yes" : !check ? "none" : check.late ? "late" : "failed",
+            ...(yes ? { checked: pool.map((x) => yes.has(x.item.id)) } : {}),
           }
         : {}),
     });
@@ -3071,6 +3189,7 @@ export class ContextPartner {
     this.deps.budget.endSession(s.key);
     // The reader reserves on a Budget of its own, by the same session key.
     this.deps.reader?.endSession(s.key);
+    this.deps.checker?.endSession(s.key);
     this.sessions.delete(s.key);
     const user = scopeKey(s.scope);
     const mine = this.userSessions.get(user);
@@ -6552,6 +6671,22 @@ function refTryAgain(got: { why: string; guard?: string; pushedBack?: boolean })
 
 /** The most candidates an ask's reader reads, whatever `askReaderPool` says. */
 const READER_POOL_CAP = READER_MAX_ITEMS;
+/** `pushCheck` (D500): the push checks a session keeps (a request's first and second pass, and a few before). */
+const CHECK_KEPT = 4;
+
+/** `pushCheck` (D500): one kept check: the request and day it read, its items' content hashes, its answer. */
+interface KeptCheck {
+  asked: string;
+  hashes: Map<string, string>;
+  read: Promise<PushCheckRead>;
+  settled?: PushCheckRead;
+}
+
+/** `pushCandidates` (D236): the push's pool and, per item, whether it is constraint-like. */
+interface PushGate {
+  pool: Scored[];
+  like: boolean[];
+}
 
 /** What a re-read found (`verifyDelivery`). */
 /**

@@ -106,4 +106,19 @@ export {
   type ReaderStats,
   type ReaderVerdict,
 } from "./reader";
+export {
+  CHECK_MAX_ITEMS,
+  CHECK_STOP,
+  CHECK_SYSTEM,
+  CHECK_VERSION,
+  checkKey,
+  checkMessages,
+  DEFAULT_CHECK_LIMITS,
+  parseCheck,
+  PushChecker,
+  type PushCheckInput,
+  type PushCheckLimits,
+  type PushCheckRead,
+  type PushCheckStats,
+} from "./push-check";
 export { mayConstrain } from "./conflict";

@@ -87,6 +87,7 @@ import {
   type CardMaker,
   automated,
   type PushPoolReport,
+  PushChecker,
   worthCarding,
   worthCardingStrict,
   ECONOMY_CARD_LIMITS,
@@ -218,6 +219,9 @@ const cli = flags(
         "push",
         "push-rates",
         "fetch-gone",
+        "check",
+        "check-model",
+        "check-cache",
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
@@ -471,8 +475,36 @@ const READER_SYS = systemHash({ messages: readerMessages({ request: "", items: [
  */
 const READER_SUBSET = opt("reader-subset", "");
 if (READER_SUBSET && READER !== "replay") throw new Error("--reader-subset needs --reader replay");
-/** The judge's and the reader's requests: paced, capped and retried, with the run's logging choice (free.ts). */
-const ACCESS = labAccess(args, [...(LIVE ? [MODEL] : []), ...(READER === "live" ? [READER_MODEL] : [])]);
+/**
+ * `--check live|replay` (I3, D500): the `pushCheck` trial's model (`--check-model`, default Haiku 5.5), through a
+ * replay cache (`--check-cache F`, appended to by a live run: pay once). Wiring it changes nothing unless the run's
+ * configuration turns `pushCheck` on. `live` keeps the funnel to one process (one cache file, one ledger stream).
+ */
+const CHECK = opt("check", "none");
+if (!["none", "live", "replay"].includes(CHECK)) throw new Error("--check must be live or replay");
+const CHECK_MODEL = opt("check-model", "claude-haiku-5-5");
+const CHECK_CACHE = opt("check-cache", "");
+if (CHECK !== "none" && !CHECK_CACHE) throw new Error("--check needs --check-cache FILE");
+if (CHECK !== "none" && !RUN.pushCheck)
+  throw new Error("--check is inert unless pushCheck is on (--set pushCheck=true)");
+/** The judge's, the reader's and the check's requests: paced, capped and retried, with the run's logging choice. */
+const ACCESS = labAccess(args, [
+  ...(LIVE ? [MODEL] : []),
+  ...(READER === "live" ? [READER_MODEL] : []),
+  ...(CHECK === "live" ? [CHECK_MODEL] : []),
+]);
+/** One replaying check model for every lane; each lane's `PushChecker` keeps its own stats. */
+const checkModel =
+  CHECK === "none"
+    ? null
+    : new ReplayModel(
+        CHECK_CACHE,
+        CHECK === "live"
+          ? labModel(ACCESS, { apiKey: keyFor(CHECK_MODEL)!, model: CHECK_MODEL, timeoutMs: 60_000 }, "eden.check")
+          : null,
+        CHECK_MODEL,
+      );
+const checkLanes: PushChecker[] = [];
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
 const readerModel =
   READER === "none" || NO_MODEL_READER
@@ -845,6 +877,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   if (reader) readerLanes.push(reader);
   // Every report per session, in order: a request can be read twice (`readerPush`'s ask, then the funnel's own).
   const readerReports = new Map<string, ReaderReport[]>();
+  const checker = checkModel ? new PushChecker({ model: checkModel, budget: new Budget(UNCAPPED) }) : null;
+  if (checker) checkLanes.push(checker);
   const pushPools = new Map<string, PushPoolReport[]>();
   const partner = new ContextPartner({
     sources: async () => sources,
@@ -858,6 +892,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
+    ...(checker ? { checker } : {}),
     ...(reader
       ? {
           reader,
@@ -1576,6 +1611,37 @@ if (READER_SUBSET && readerModel) {
       "(--reader-subset): approximate, a verdict on fewer items read off a reading of more",
   );
 }
+/** `--check` (I3, D500): the push check's calls over the whole run, every phase (neutral included). */
+const checkUse = checkModel
+  ? (() => {
+      const sum = (k: keyof PushChecker["stats"]) => checkLanes.reduce((n, c) => n + c.stats[k], 0);
+      const lat = checkModel.quantiles();
+      return {
+        asked: sum("asked"),
+        calls: sum("calls"),
+        failures: sum("failures"),
+        costUsdAsMade: Number(checkModel.calls.reduce((n, c) => n + c.costUsd, 0).toFixed(6)),
+        inputTokens: checkModel.calls.reduce((n, c) => n + c.inputTokens, 0),
+        cachedInputTokens: checkModel.calls.reduce((n, c) => n + c.cachedInputTokens, 0),
+        outputTokens: checkModel.calls.reduce((n, c) => n + c.outputTokens, 0),
+        replayed: checkModel.replayed,
+        sent: checkModel.sent,
+        missed: checkModel.missed,
+        p50Ms: lat.p50,
+        p90Ms: lat.p90,
+      };
+    })()
+  : null;
+if (checkUse) {
+  const per = (x: number) => (checkUse.calls ? x / checkUse.calls : 0);
+  console.log(
+    `CHECK (I3, ${CHECK_MODEL}, ${CHECK}): ${checkUse.calls} calls of ${checkUse.asked} asked, ` +
+      `${checkUse.failures} failed, ${checkUse.missed} replay misses; $${checkUse.costUsdAsMade.toFixed(4)} as made ` +
+      `($${per(checkUse.costUsdAsMade).toFixed(6)} a call); ${per(checkUse.inputTokens).toFixed(0)} in ` +
+      `(${per(checkUse.cachedInputTokens).toFixed(0)} cached) / ${per(checkUse.outputTokens).toFixed(0)} out a call; ` +
+      `as made p50 ${checkUse.p50Ms.toFixed(0)} ms, p90 ${checkUse.p90Ms.toFixed(0)} ms`,
+  );
+}
 if (LIVE) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);
   console.log(
@@ -1673,6 +1739,7 @@ if (out) {
               },
             }
           : {}),
+        ...(checkUse ? { check: checkUse } : {}),
         ...(SUITE_LIST.length > 1 ? { suites } : {}),
         // Per task, with the suite: how each planted item was delivered (`why`), for breakdowns by path.
         perTask: runs.flatMap((r) => r.perTask.map((t) => ({ suite: r.suite, ...t }))),
