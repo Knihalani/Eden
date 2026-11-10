@@ -290,6 +290,43 @@ export interface EngineConfig {
    */
   askBehindWaitMs: number;
   /**
+   * A trial (D505, N1; docs/research/n1-calls.md), off. With `sync`: each of a user's sources keeps a run of the live
+   * reads made of it since one of its items last reached the agent (`source-yield.ts`), and the user's reads are
+   * pooled by what the request had for the source: nothing, its words alone (among the source's held items or in its
+   * sketch), or a name the source's items mentioned. A warm synced copy is not read live (no search of its cut copy
+   * behind, no probe, and with `sourceYieldPolls` no on-demand poll; it answers from what is held, and an ask names
+   * it "not searched") when its own run is at `sourceYieldRun` or more and the request names nothing it mentioned, or
+   * when none of its items has ever reached the agent and the user's reads on that kind of evidence are surely
+   * paying under `sourceYieldFloor` (uses per read; 0: the pooled rule off). The pool of reads on nothing always
+   * acts; `sourceYieldWords` turns on the pool of reads on words; a read on a name is never pooled. Runs and pools
+   * halve every `sourceYieldHalfLifeMs`, so sources are tried again.
+   */
+  sourceYield: boolean;
+  sourceYieldRun: number;
+  sourceYieldFloor: number;
+  sourceYieldWords: boolean;
+  sourceYieldHalfLifeMs: number;
+  sourceYieldPolls: boolean;
+  /**
+   * A trial (D506, N1), 0 (off). With `pushCutBehind`: 1, the push sends no live search of a cut copy (none behind
+   * its lookup, and its probes answer a cut copy from what is held); the agent's `ask_context` still searches them.
+   * 2: and the push starts no on-demand poll either.
+   */
+  pushLazy: number;
+  /**
+   * A trial (D508, N1), 0 (off). One search of a source a lookup: 1, a source the lookup's own search is sent to
+   * (live, or behind it) gets no word probe (a person, an organisation, the topic, a role) in the same lookup when
+   * its search is known to match any word of a query (`ProbeEconomy.formOf`), since the request's own query carries
+   * those words; 2, whatever its search (the bound on what 1 can save).
+   */
+  probeBatch: number;
+  /**
+   * A trial (D507, N1). How long a source's answer to a search stands in for the same search of it again (the
+   * fan-out's page cache: the same user, source, words, entities, window and page size). 60 s is the behaviour before
+   * the trial. A change notice or pushed items of the source drop its pages whatever the age (D148).
+   */
+  searchFreshMs: number;
+  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -759,6 +796,15 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCutBehind: true,
   askBehind: true,
   askBehindWaitMs: 0,
+  sourceYield: false,
+  sourceYieldRun: 4,
+  sourceYieldFloor: 0.05,
+  sourceYieldWords: true,
+  sourceYieldHalfLifeMs: 7 * 24 * 3_600_000,
+  sourceYieldPolls: true,
+  pushLazy: 0,
+  probeBatch: 0,
+  searchFreshMs: 60_000,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,
