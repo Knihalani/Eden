@@ -176,7 +176,7 @@ there too.
 ## 7. Result over days (Pi, local, daf758a3; Sonnet-graded): the hidden clause fails
 
 `.local/o3/days.sh days 41 … 48`: 989 task runs an arm (101 hidden, 101 control, 787 neutral), 0 ungraded, 0 requests
-retried; Sonnet regraded 207 answers (0 failed). `n5/days_hidden.py` (whole users resampled), `n5/mix.py --days`:
+retried; Sonnet regraded 212 answers (0 failed). `n5/days_hidden.py` (whole users resampled), `n5/mix.py --days`:
 
 | `eden~O` against `eden`, eight users' days     | Result                                             |
 | ---------------------------------------------- | -------------------------------------------------- |
