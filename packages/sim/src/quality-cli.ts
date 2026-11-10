@@ -30,7 +30,6 @@ import { checkEngineConfig } from "@eden/engine";
 import { OpenRouterModel } from "@eden/llm";
 import { flags, parseJson } from "./lab/flags";
 import { Timeline } from "./lab/timeline";
-import { parseConnectorMix } from "./lab/connector-options";
 import { DiskCardMaker } from "./lab/cards-disk";
 import { mergeTallies, qualityReport, tallyQuality, type QualityOptions, type QualityTally } from "./quality";
 import { readFileSync } from "node:fs";
@@ -71,7 +70,6 @@ const cli = flags(
         "deletes",
         "push",
         "lost-notices",
-        "connector-mix",
         "fetch-gone",
         "refresh-after-hours",
         "tool-rate",
@@ -196,7 +194,6 @@ const opts: QualityOptions = {
     return v;
   })(),
   nullProvesNothing: has("null-proves-nothing"),
-  connectorMix: parseConnectorMix(arg("connector-mix", "")),
   // A21 (D356): no source counts as used, so `syncUnusedSweepMs` sweeps every source less often (the worst case).
   neverUsed: has("never-used"),
   config: {

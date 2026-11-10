@@ -332,35 +332,6 @@ export interface EngineConfig {
    * tick. At 1,000 sources the daily sweep was ~1,100 listing calls a user a day (D324).
    */
   syncUnusedSweepMs: number;
-  /**
-   * A trial (D475, F1; docs/research/f1-local-copy.md), off. With `sync`: the items a user's `syncMaxItems` cap pushes
-   * out of the index are kept compressed in memory in a cold tier (`cold.ts`), per source behind a compact index of
-   * their terms, up to `syncColdMaxItems` a user, and the backfill reads each listing to its end while there is room.
-   * A source whose items are all held, indexed or cold, answers lookups here: its cold copies that hold the request's
-   * words are brought back into the index (no call), instead of the live search D264 makes of a cut copy on every
-   * lookup (~33 connector calls a task at 1,000 sources). Past `syncColdMaxItems` a copy is cut and searched live, as
-   * before. Cold copies keep the read time and read mark they were read under, so D126's and D356's re-reads see them
-   * as they would the indexed copy.
-   */
-  syncCold: boolean;
-  syncColdMaxItems: number;
-  /**
-   * With `syncCold` and `verifyDelivery`: a copy a lookup brought back from the cold tier is re-read by its ref before
-   * it is delivered or cited (a source with no change feed whose connector can fetch by ref), as the live search it
-   * replaces would have read it at its source. Off: it is delivered as any other synced copy is (D126: a copy's age
-   * alone does not doubt it), with no wait on the agent's path.
-   */
-  syncColdVerify: boolean;
-  /**
-   * A trial (D476, F1; docs/research/f1-local-copy.md), off. With `sync`: a source whose connector has a change feed
-   * (`Source.changes`: a Gmail history, a Graph or Drive delta, a Calendar sync token) is polled by one read of what
-   * changed since its cursor: new and changed items wherever they sit in its listing, and deletions. A complete delta
-   * read vouches for every copy held, so (with `syncPush`) a change notice costs one delta read instead of a re-read
-   * of each doubted item before delivery (D126), and the daily re-listing for deletions becomes one delta read (the
-   * whole listing is read again about every six days, inside the cache's time to live). Sources without a feed are
-   * polled, swept and re-read as before.
-   */
-  syncDelta: boolean;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
   syncMaxUsersPerTenant: number;
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
@@ -764,10 +735,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   routeSketch: true,
   syncEngagedDeep: true,
   syncUnusedSweepMs: 7 * 24 * 3_600_000,
-  syncCold: false,
-  syncColdMaxItems: 30_000,
-  syncColdVerify: true,
-  syncDelta: false,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncPush: true,
