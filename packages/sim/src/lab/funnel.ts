@@ -12,6 +12,11 @@
  *   adds settings (a trial is `--set` over `default`).
  * - `--cards default`: the checked-in card caches (cards-v2 for dev/held-out worlds, cards-train for train), merged
  *   into a temp file; used when the configuration has `cards`.
+ * - `--cards-endpoint URL [--cards-endpoint-model NAME]` (M0, lab only; `cards-endpoint.ts`): every card comes live
+ *   from an OpenAI-compatible endpoint (the distilled card model, `packages/sim/modal/`), none replayed, at $0
+ *   Anthropic; `--cards F` keeps them (read and appended to, so a rerun replays them), else a temp file. The
+ *   endpoint writes the intent requests too, so the checked-in requests are not replayed unless `--intent F` names a
+ *   file. Labelled `[cards: endpoint (lab, M0)]`: never the shipped card model's figures.
  * - `--baseline`: a `--json` file of an earlier run on the same suites and seeds; prints, task by task, the hidden
  *   items gained and lost and the decoys gained and lost.
  * - Held-out suites are refused without `--blind`: they are measurement only, never for tuning (suites.ts).
@@ -96,7 +101,7 @@ import { parseSuites, UNREAD_BLIND, UNRUN_BLIND } from "./suites";
 
 const USAGE = `
 bun run funnel [--suite train] [--seeds 41,42] [--preset default] [--set '{"flag":true}'] [--cards default|none|F]
-  [--intent default|none|F] [--no-ask] [--json out.json] [--baseline earlier.json] [--record] [--blind] [--jobs N] [--allow-misses]
+  [--cards-endpoint URL [--cards-endpoint-model NAME]] [--intent default|none|F] [--no-ask] [--json out.json] [--baseline earlier.json] [--record] [--blind] [--jobs N] [--allow-misses]
   [-- more hidden-funnel flags]
 Presets: ${Object.keys(PRESETS).join(", ")}. docs/LAB.md has the recipes; funnel.ts's header every flag.`;
 // Strict (flags.ts): a misspelled flag exits 2 before anything runs; what follows `--` is hidden-funnel.ts's to check.
@@ -108,6 +113,8 @@ const cli = flags(
     preset: "value",
     set: "value",
     cards: "value",
+    "cards-endpoint": "value",
+    "cards-endpoint-model": "value",
     intent: "value",
     json: "value",
     baseline: "value",
@@ -219,7 +226,10 @@ const seeds = opt("seeds", "41,42");
 const seedList = seeds.split(",");
 // The intent requests (D158): replayed by default whenever the checked-in file covers the run, as the cards are, so
 // the $0 screen runs what ships (`intent` is on in DEFAULT_CONFIG). Resolved before the baseline check below.
-const intentArg = opt("intent", "default");
+const endpoint = opt("cards-endpoint", "");
+if (endpoint && opt("cards", "default") === "none") fail("--cards-endpoint makes cards: drop --cards none");
+// With an endpoint the requests are the endpoint's own (its calls ask for them), so none are replayed by default.
+const intentArg = opt("intent", endpoint ? "none" : "default");
 if (cli.has("intent") && has("--intent")) fail("--intent given twice (before and after `--`): pass one");
 const intentWanted = run.intent === true && run.cards === true && opt("cards", "default") !== "none";
 let intentNote = "";
@@ -227,7 +237,7 @@ let intentByDefault = false;
 if (has("--intent")) {
   intentNote = `-- --intent ${passValue("intent")}`;
 } else if (intentArg === "none") {
-  intentNote = "--intent none";
+  intentNote = endpoint && !cli.has("intent") ? "requests from the endpoint (lab, M0), none replayed" : "--intent none";
 } else if (intentArg !== "default") {
   passthrough.push("--intent", intentArg);
   intentNote = intentArg;
@@ -245,7 +255,9 @@ if (has("--intent")) {
   }
 }
 if (intentWanted) console.error(`funnel: intent: ${intentNote}`);
-if (intentWanted && !has("--intent")) {
+if (intentWanted && endpoint && !has("--intent")) {
+  console.error("funnel: cards and intent requests come live from the endpoint (lab, M0), none replayed");
+} else if (intentWanted && !has("--intent")) {
   console.error(`funnel: intent is on with no replay: no hits; every TOTAL and pool line says ${INTENT_INERT}`);
 }
 // `--reader stub|oracle` with `--baseline`: refuse a baseline whose intent state differs, before the run when this
@@ -259,12 +271,20 @@ const checkBaseline = (current: IntentState) => {
   if (why) fail(`--baseline ${baseline} refused: ${why}`);
 };
 if (!run.intent || !run.cards) checkBaseline("off");
+// The endpoint writes requests for what it cards: live unless it wrote none (checked again after the run).
+else if (endpoint) checkBaseline("live");
 else if (!has("--intent")) checkBaseline("inert");
 // The checked-in requests cover this run, so it is live unless the replay matches nothing (checked again after).
 else if (intentByDefault) checkBaseline("live");
 
 let cards = opt("cards", "default");
-if (cards === "default") {
+if (endpoint) {
+  // The endpoint's cards go to `--cards F` (created when missing, replayed by a rerun) or a temp file.
+  if (cards === "default") cards = join(scratch, "cards-endpoint.jsonl");
+  if (!existsSync(cards)) writeFileSync(cards, "");
+  passthrough.push("--cards-endpoint", endpoint);
+  if (opt("cards-endpoint-model", "")) passthrough.push("--cards-endpoint-model", opt("cards-endpoint-model", ""));
+} else if (cards === "default") {
   const merged = join(scratch, "cards.jsonl");
   const text = ["cards-v2.jsonl", "cards-train.jsonl"]
     .map((f) => readFileSync(join(labDir, "cards", f), "utf8").trimEnd())

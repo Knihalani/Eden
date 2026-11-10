@@ -172,6 +172,10 @@ messages can reach the cap (an estimate, not measured in the lab). The unit test
   `--spend-ledger FILE --spend-cap USD` (one ledger for all parallel processes; `--spend-headroom` each,
   `--run-label` per run). Prompt caching on, thinking off.
 - **Budgets:** every live runner takes `--budget` (USD, hard, per process: each call reserves its worst case).
+- **Modal (M0, D408; `packages/sim/modal/README.md`):** GPU and CPU credits for the lab, not a model provider. The
+  Anthropic key reaches it only as the Modal Secret `eden-haiku`, and only pi-ab shards get it; a fan-out refuses to
+  start without `--cap`, split cap/N per shard ledger. The distilled card model's endpoint is a lab card transport
+  (`bun run funnel --cards-endpoint URL`, key in `EDEN_LAB_CARDS_KEY`), labelled `[cards: endpoint (lab, M0)]`.
 - Never print a key; never put one in a results file or a PR.
 
 ## Measurement
@@ -982,6 +986,24 @@ python3 -I packages/sim/lab/scripts/haiku-bench.py $H/ledger.jsonl $H/p2/runs/*.
 
 Its scale: blind held-out 5–8 and 10–12, seeds 41–48, 1,400 hidden and 1,400 control tasks per condition, five Pi and
 three Hermes conditions; $18.46 for the main matrix and $24.36 for the whole campaign (haiku-benchmark.md).
+
+### 7. On Modal: the lab at scale, a distilled card model, an embedding screen (M0, D408)
+
+Three Modal apps in `packages/sim/modal/` (its README has the setup, every command, how results come back and the
+estimated cost of each run): `lab_fanout.py` fans pi-ab seeds or funnel shards over containers (one seed a pi-ab
+shard, 16 GiB, 24 GiB at `--noise-sources` ≥ 100; a hard `--cap` split across shard ledgers) and runs pi-ab-report /
+pi-cost-report or the funnel score locally on `.local/modal/<run>/`; `cards_distill.py` trains, evaluates and serves
+a small open model on Haiku's cards; `embed_screen.py` ranks planted items by embedding against the push's lexical
+pool. Without a token:
+
+```bash
+bun packages/sim/src/lab/cards-distill.ts export --out .local/modal/cards/data      # the training set, ~60 s, $0
+python3 -I packages/sim/modal/fanout_plan.py plan --kind pi-ab --suites train --seeds 41,42 --cap 2 -- --conditions tools,eden
+cd packages/sim/modal && python3 -I -m unittest                                    # the apps' arithmetic
+```
+
+The funnel through a distilled model's endpoint: `bun run funnel --suite train --seeds 41,42 --cards-endpoint URL
+--cards F` (every card live through it, none replayed, appended to F; labelled; never the shipped card model's figures).
 
 ## Recording
 

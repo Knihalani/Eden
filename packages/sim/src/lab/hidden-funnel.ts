@@ -106,6 +106,7 @@ import { connectorOptions, pushNotifier } from "./connector-options";
 import { noiseSources } from "./noise-sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
+import { ENDPOINT_LABEL, endpointCardMaker, endpointFromArgs } from "./cards-endpoint";
 import {
   allMissedHint,
   cacheModels,
@@ -177,6 +178,8 @@ const cli = flags(
         "ask-question",
         "spans",
         "cards",
+        "cards-endpoint",
+        "cards-endpoint-model",
         "intent",
         "card-log",
         "card-limits",
@@ -334,10 +337,21 @@ const INTENT_FILES = opt("intent", "").split(",").filter(Boolean);
 /** One replaying maker for every seed and suite: the disk cache is read once. */
 // With no --intent, no requests are replayed at all (not a card file's `r` lines), so `--ask-diag`'s replay figure
 // (null with no --intent) says what the run replayed.
+/**
+ * `--cards-endpoint URL [--cards-endpoint-model NAME]` (M0, lab only, `cards-endpoint.ts`): cards `--cards` does not
+ * hold are made live by an OpenAI-compatible endpoint (the distilled card model on Modal) and appended to `--cards`,
+ * at $0 Anthropic. The run's label and JSON say so (`cardsTransport`): its cards are not the shipped model's.
+ */
+const CARDS_ENDPOINT = opt("cards-endpoint", "");
+if (CARDS_ENDPOINT && !CARDS) throw new Error("--cards-endpoint needs --cards FILE (the endpoint's cards go there)");
+const cardLive = CARDS_ENDPOINT
+  ? endpointCardMaker(endpointFromArgs(CARDS_ENDPOINT, opt("cards-endpoint-model", "")))
+  : undefined;
 const cardMaker = CARDS
-  ? new DiskCardMaker(CARDS, undefined, { requests: INTENT_FILES, cardRequests: INTENT_FILES.length > 0 })
+  ? new DiskCardMaker(CARDS, cardLive, { requests: INTENT_FILES, cardRequests: INTENT_FILES.length > 0 })
   : null;
 if (INTENT_FILES.length && !cardMaker) throw new Error("--intent needs --cards");
+if (CARDS_ENDPOINT) console.log(`cards: ${ENDPOINT_LABEL}, misses made live and appended to ${CARDS}`);
 /**
  * `--card-log out.jsonl`: every item the enrichment sent for a card (its content hash, title, the head of its text
  * the prefilter reads, and the replayed card's kind: "none", or "uncovered" when not replayed), to study the
@@ -1455,7 +1469,11 @@ if (REAL_SYNC) {
 if (cardMaker) {
   for (const c of cardLanes) for (const [k, v] of Object.entries(c.stats)) cardUse[k] = (cardUse[k] ?? 0) + v;
   cardUse.users = cardLanes.length;
-  console.log(`cards: ${cardMaker.hits} replayed, ${cardMaker.misses} uncovered (no cached card)`);
+  console.log(
+    CARDS_ENDPOINT
+      ? `cards: ${cardMaker.hits} replayed, ${cardMaker.misses} made by the endpoint (${ENDPOINT_LABEL})`
+      : `cards: ${cardMaker.hits} replayed, ${cardMaker.misses} uncovered (no cached card)`,
+  );
   console.log(`cards use: ${JSON.stringify(cardUse)}`);
 }
 if (readerModel) {
@@ -1590,7 +1608,8 @@ if (out) {
         seeds: SEEDS,
         config: CONFIG,
         // The run's label, stamped when intent was on but inert, so a number copied out of the file keeps the caveat.
-        label: (opt("label", "") + inertTag()).trim(),
+        label: (opt("label", "") + inertTag() + (CARDS_ENDPOINT ? `  [cards: ${ENDPOINT_LABEL}]` : "")).trim(),
+        ...(CARDS_ENDPOINT ? { cardsTransport: ENDPOINT_LABEL } : {}),
         intent: { state: intentNow(), ...intentUse },
         rows,
         total: grand,
