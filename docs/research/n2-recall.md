@@ -6,6 +6,20 @@ Decisions D510–D514. Train suites only (train1–6); heldout18 is not dumped, 
 Anthropic directly with `HAIKU_API_KEY` through the lab (D97): **Anthropic-direct lab figures**. Caps: Anthropic $12
 (ledger `.local/n2/ledger.jsonl`), Modal $15.
 
+## In plain words
+
+- **Silence works.** Asking Haiku "does this item change what the agent should do?" over the push's pool and sending
+  nothing when it names nothing cuts packets on requests where nothing applies by 65–85% and loses no planted fact
+  from the packet (H3), with every check measured here.
+- **Wider reach works only behind a careful check.** Adding embedding neighbours and raw intent hits to what the check
+  reads finds facts that share no word with the request. With Haiku thinking at effort low, the look-alikes stay out:
+  every pre-registered bar passed on two sets of worlds, and live on Pi hidden facts rose **+12.5 points** one request
+  a session and **+10.9** over a user's days (Sonnet-graded). Without thinking (this note's prompt or I3's shippable
+  check) the widening adds about one look-alike per fact again (H1 failed behind I3's check).
+- **Re-showing a fact handed earlier, even when the check says it applies now, lost facts over days (H2): deleted.**
+- **The careful check is too slow and too dear to ship as is:** 5–7 s a push and about $1 per 1,000 tasks, four times
+  the agent. `pushWiden` stays an off trial for a check that is both careful and fast. Engine default unchanged.
+
 ## 0. Why, and what is on the base
 
 - **(a) Facts that never reach the agent.** On the base, train seeds 41–44 (768 hidden tasks, the funnel's shipped
@@ -202,3 +216,87 @@ with I3's settings and `pushCheckWaitMs` 60,000 (every decision the check's), ar
 templates, the same arms. **Bars:** §1's H1 bar with K1 for C1 and K3 for C3 (planted handed ≥ +8, ≥ +2 on the
 confirmation; decoy handed ≤ +3, ≤ +1; hidden surfaced not lower; neutral packets not more than +5%; K3's decoy
 handed ≤ C0's). No live run: the cap does not allow one after §5 (§7's spend).
+
+## 7. Results: live (§5) and H1 behind I3's check (§6)
+
+**Live, short** (Pi on Modal, `lab_fanout.py`, commit 69ce1942: this note's lab checker, effort low, `@w12000`;
+train seeds 41–48, I2's 40 held-out templates, hidden, control and neutral; 1,920 task runs; every hidden answer and
+every concern regraded by Sonnet 5.5; `bench_report.py --sonnet`, template-clustered intervals):
+
+| `eden~N2` − `eden` | Effect | Interval | Bar |
+| --- | --- | --- | --- |
+| hidden facts raised (Sonnet) | **+12.5 points** (65.0 vs 52.5, n 320) | +5.6..+19.4 | pass (≥ 0, low end ≥ −3) |
+| false concerns, control + neutral (Sonnet) | +0.2 points (1 vs 0 of 640) | +0.0..+0.5 | see below |
+| agent $ per 1,000 tasks (check not included) | −0.002 | −0.018..+0.014 | |
+| the check's own $ per 1,000 tasks | **+0.98** ($0.94 for 816 calls on 960 tasks) | | reported |
+| wall a task | +5.13 s | +4.38..+5.84 | reported |
+| `ask_context` calls a task | +0.205 | +0.103..+0.315 | |
+
+Haiku's grades read 54.4% → 68.8% hidden and 1 → 8 control and neutral concerns; Sonnet kept 1 of the 8
+(`w45 train3-neutral pooled-accounts-banned`). The concern clause ("not up") reads 0 → 1 of 640: up by one, with the
+interval's low end at zero. It is the clause D380 failed on (0 → 1); it is recorded as **failed on a literal reading**.
+
+**Live, days** (`--days 8`, users w41–w44, 480 task runs an arm, 46 hidden; the widening there is the intent and
+deeper routes only, §5):
+
+| Pair | Hidden (Sonnet) | Concerns (Sonnet) | Agent $/1k (check not included) | Wall |
+| --- | --- | --- | --- | --- |
+| `eden~N2` − `eden` | **+10.9** (73.9 vs 63.0), −2.0..+24.4 | 0 vs 0 | **−0.036** (−0.045..−0.028) | +4.35 s |
+| `eden~N2R` − `eden~N2` (H2) | **−10.9** (63.0 vs 73.9), −22.7..+0.0 | 0 vs 0 | +0.026 (+0.017..+0.035) | +0.02 s |
+
+The check's own cost over days: $0.77 for 772 calls on the two check arms' 960 task runs, **+$0.80 per 1,000 tasks**.
+The silent packets cut the agent's input (6,819 → 5,256 tokens a hidden task, Haiku's report), which is why the
+agent's cost falls. **H2 fails** (bar ≥ +2 points): with the check gating it, the re-show still loses facts on these
+days; the switch is deleted (D512).
+
+**H1 behind I3's check** (§6; funnel, seeds 41–44, Haiku live, I3's settings; K3 replayed on the final tree reads the
+same):
+
+| Arm | Hidden surfaced | Decoys surfaced | Planted handed | Decoy handed | Neutral packets |
+| --- | --- | --- | --- | --- | --- |
+| C0 default | 634 | 552 | 491 | 418 | 617 |
+| K1 I3's check | 662 | 565 | 550 | 251 | 213 |
+| K3 I3's check + widen | 678 | 591 | 566 | 291 | 238 |
+
+**H1 fails behind I3's check:** planted handed +16, but decoy handed **+40** and neutral packets +25 (bars ≤ +3 and
+≤ +5%). 1,887 calls an arm, $0.000201 (K1) and $0.000237 (K3) a call, p50 0.84–0.86 s. No confirmation was run (the
+screen failed). The same pattern as §2: a check that does not think lets the widened look-alikes through; the
+effort-low check (§4) kept them out.
+
+## 8. What this means
+
+- **H3 (silence) holds with every check measured** (§2, §4, I3's): neutral packets fall 617 → 93–213 with no
+  planted fact lost from the packet. It is I3's design; I3's own Pi run decides `pushCheck`.
+- **H1 (wider reach) works only behind a check that can tell a fact from its twin.** With thinking at effort low it
+  passes every bar on two sets of worlds and raises hidden facts live (+12.5 short, +10.9 over days, with H3); with no
+  thinking (this note's prompt or I3's) it adds about as many look-alikes as facts, as every widening before it did.
+  The embedding route carried most of it (§2).
+- **H2 (re-show) fails** even when gated by the check.
+- **Cost and wait are the blocker.** The effort-low check costs about $1 per 1,000 tasks (four times the agent) and
+  5–7 s a push; I3's costs $0.2 and under 1 s but cannot gate widening. `pushWiden` stays a trial (off) for a check
+  that is both: I3's request with thinking at effort low and its short reply is the first thing to measure
+  (**[EST]** about 2–3 s and $0.0004 a call: I3's input, about 300 output tokens).
+- **Not measured:** H1 live without H3; the embedding route over days (no table for `--days` worlds); held-out suites.
+
+## 9. Spend
+
+**Anthropic $9.77** of $12 (local ledger `.local/n2/ledger.jsonl` and the shards' ledgers): no-thinking labels
+$2.70 (C1 $1.01, C3 $1.69), effort-low labels $2.53 (C3L $2.18, X3L $0.35), I3-check screens $0.83, Pi short $1.65
+(check $0.94), Pi days $1.20 (check $0.77), Sonnet regrades $0.86, smokes $0.02. **Modal $0.44** (embedding $0.07,
+the two Pi fan-outs $0.37; `modal billing report --for today --json`, by app id).
+
+## Reproduce
+
+```bash
+bun run funnel --suite train --seeds 41,...,48 -- --neutral --corpus-dump .local/n2/corpus.jsonl          # $0
+modal run packages/sim/modal/n2_embed.py --corpus .local/n2/corpus.jsonl --out .local/n2/widen.jsonl.gz   # $0.07
+# §2–§4 used the lab checker at commit 69ce1942 (git checkout 69ce1942), e.g. C3L's labels, then replays:
+bun run funnel --suite train --seeds 41,42,43,44 --jobs 16 --set '{"pushCheck":true,"pushCheckWaitMs":60000,
+  "pushWiden":true}' -- --neutral --check-cache .local/n2/check-low.jsonl --check-live --check-thinking low \
+  --widen-table .local/n2/widen.jsonl.gz --spend-ledger .local/n2/ledger.jsonl --spend-cap 12
+python3 -I packages/sim/lab/n2/compare.py --arm C0=base.json --arm C1=C1L.json --arm C2=C2L.json --arm C3=C3L.json \
+  --arm C4=C4L.json        # --confirm and --templates (the 40 held-out ones) for seeds 45-48
+# §5 live: .local/n2/live.sh and days.sh (lab_fanout.py --preset bench-tools, --variant-config N2/N2R), regrades
+# with regrade.ts --graders claude-sonnet-5-5 (--kinds hidden; --only-concerns), bench_report.py --sonnet.
+# §6 on this tree (I3's check): --check live|replay --check-cache F, K1 = pushCheck, K3 = + pushWiden --widen-table
+```

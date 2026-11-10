@@ -699,11 +699,6 @@ export interface EngineConfig {
   pushWidenIntent: number;
   pushWidenDeep: number;
   /**
-   * N2 (D512; H2; a trial, off): with `pushCheck`, a candidate the agent took for an earlier request of the session is
-   * handed again when the check names it for this one (D340's re-show, gated by the check, not the constraint test).
-   */
-  pushCheckReshow: boolean;
-  /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
    * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
@@ -861,6 +856,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushWidenEmbed: 3,
   pushWidenIntent: 2,
   pushWidenDeep: 0,
-  pushCheckReshow: false,
   revisionDiff: true,
 };

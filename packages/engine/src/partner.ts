@@ -310,11 +310,6 @@ interface Session {
    * the latest: the agent's own events move `turn` within one request, a new user message moves this.
    */
   requests: number;
-  /**
-   * `pushCheckReshow` (N2, D512): by item, the request (`requests`) a candidates' packet citing it was last handed out
-   * in; at most `MAX_HANDED_IN`. Filled only with the switch on.
-   */
-  handedIn: Map<string, number>;
   /** The session's last `EXPLAIN_TRACES` traces, oldest first (`explain`, D277). */
   traces: Trace[];
   lastActive: number;
@@ -400,8 +395,6 @@ interface Session {
 
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
-/** Items whose hand-out request a session keeps (`pushCheckReshow`, D512): far above what a day's packets cite. */
-const MAX_HANDED_IN = 512;
 
 interface Cue {
   text: string;
@@ -2103,12 +2096,7 @@ export class ContextPartner {
         (x) =>
           withdrawn.has(x.item.id) ||
           s.ledger.isFresh(x.item.id, s.turn) ||
-          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)) ||
-          // `pushCheckReshow` (N2, D512): a candidate the agent took for an earlier request goes again only when the
-          // check named it for this one (D380's blind re-show raised concerns).
-          (this.config.pushCheckReshow &&
-            candidates?.named?.has(x.item.id) === true &&
-            this.handedBefore(s, x.item.id)),
+          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
       );
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
@@ -2613,7 +2601,7 @@ export class ContextPartner {
     cue: Cue,
     gate: PushGate,
     check: PushCheckRead | null = null,
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; named?: ReadonlySet<string> } {
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
     const { like } = gate;
     const yes = check?.yes ?? null;
     // `pushWiden` (D511): widened items are read only by the check and handed only when it names them, after the
@@ -2664,14 +2652,15 @@ export class ContextPartner {
           }
         : {}),
     });
-    return { items, pool, ...(unsettled ? { unsettled } : {}), ...(yes ? { named: yes } : {}) };
+    return { items, pool, ...(unsettled ? { unsettled } : {}) };
   }
 
   /**
    * `pushWiden` (N2, D511): items the push pool's lexical order did not reach, for the check only: the request's
    * nearest items by the `widen` dependency (an embedding table in the lab, `pushWidenEmbed`, bounded by
    * `pushCheckWaitMs`), its raw intent hits (no thresholds, `pushWidenIntent`) and the ranking's next items
-   * (`pushWidenDeep`), in that order. Current cached copies only, bulk mail out, none already in the pool. No model call.
+   * (`pushWidenDeep`), in that order. Current cached copies only, bulk mail out, none already in the pool. No model
+   * call; every route fails open to no widening.
    */
   private async widenPool(s: Session, cue: Cue, ranked: readonly Scored[], pool: readonly Scored[]): Promise<Scored[]> {
     const c = this.config;
@@ -2722,16 +2711,6 @@ export class ContextPartner {
       add(deep, c.pushWidenDeep);
     }
     return out;
-  }
-
-  /**
-   * `pushCheckReshow` (N2, D512): the item was handed out as a push candidate in this session for an earlier request
-   * (`handedIn`: the agent took it before the latest user message). Never one handed for this request: a packet of the
-   * last request taken with this one's observe counts as this request's.
-   */
-  private handedBefore(s: Session, id: string): boolean {
-    const handed = s.handedIn.get(id);
-    return handed !== undefined && handed < s.requests;
   }
 
   /**
@@ -3239,7 +3218,6 @@ export class ContextPartner {
       key,
       turn: 0,
       requests: 0,
-      handedIn: new Map(),
       traces: [],
       lastActive: now,
       window: [],
@@ -3336,15 +3314,6 @@ export class ContextPartner {
     if (built?.copies) {
       this.watchCopies(s, built.copies);
       built.copies = undefined;
-    }
-    // `pushCheckReshow` (D512): the request each push candidate was last handed out in (what the agent took, not what
-    // was queued). Only candidates' packets: an item that reached the agent by an ask or another path is not re-shown.
-    if (this.config.pushCheck && this.config.pushCheckReshow && injection.reason.startsWith("candidates:")) {
-      for (const c of injection.citations) {
-        s.handedIn.delete(c.itemId);
-        s.handedIn.set(c.itemId, s.requests);
-      }
-      while (s.handedIn.size > MAX_HANDED_IN) s.handedIn.delete(s.handedIn.keys().next().value!);
     }
     if (!built || s.outstanding.has(injection.id)) return;
     if (this.recordedOf(s.scope)?.has(injection.id)) return;

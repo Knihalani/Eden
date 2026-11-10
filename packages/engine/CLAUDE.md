@@ -280,8 +280,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **No re-show of a candidate across requests (D340 deleted by D380).** A candidate the agent took for an earlier
   request stays behind the not-twice ledger (D13) at its own request: a fresh paired run did not show the re-show
   better (docs/research/a26-reshow.md). Measure any revival on `pi-ab --days`, never the funnel (one request a session).
-  **`pushCheckReshow` (N2, D512, a trial, off)** re-shows one only when `pushCheck`'s call names it for the later
-  request (`candidatesOf`'s `named`, never the fallback's candidates); `Session.handedIn` is filled only with it on.
+  N2's re-show gated by the push check (`pushCheckReshow`, D512) was measured on `pi-ab --days` and deleted too
+  (hidden −10.9 points against the check alone; code in commit 69ce1942 and, on I3's check, 00e20972).
 - **`pushWiden` (N2, D511, a trial, off; docs/research/n2-recall.md).** With `pushCheck`, `widenPool` adds items past
   the lexical pool (the `widen` dependency's, raw intent hits, deeper ranks) to what the check reads, within its 20
   items, only where the check runs. They are handed only when the check names them; the nudge's deeper look,

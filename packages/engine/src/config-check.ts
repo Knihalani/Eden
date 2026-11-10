@@ -70,7 +70,6 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   pushWidenEmbed: "checker",
   pushWidenIntent: "checker",
   pushWidenDeep: "checker",
-  pushCheckReshow: "checker",
 };
 
 /**
@@ -172,7 +171,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushWidenEmbed: [...PUSH, "pushCheck", "pushWiden"],
   pushWidenIntent: [...PUSH, "pushCheck", "pushWiden"],
   pushWidenDeep: [...PUSH, "pushCheck", "pushWiden"],
-  pushCheckReshow: [...PUSH, "pushCheck"],
   revisionDiff: ["revisionNotice"],
 };
 
