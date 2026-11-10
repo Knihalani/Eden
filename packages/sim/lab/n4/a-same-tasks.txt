@@ -1,0 +1,9 @@
+haiku   all          tools 4/96 (4.2%) tools/t 1.83 err 0  |  eden 62/96 (64.6%) tools/t 0.48 err 0
+haiku   opus-subset  tools 0/48 (0.0%) tools/t 1.98 err 0  |  eden 28/48 (58.3%) tools/t 0.50 err 0
+sonnet  all          tools 14/96 (14.6%) tools/t 5.47 err 0  |  eden 77/96 (80.2%) tools/t 1.61 err 0
+sonnet  opus-subset  tools 3/48 (6.3%) tools/t 5.27 err 0  |  eden 37/48 (77.1%) tools/t 1.79 err 0
+opus    all          tools 0/48 (0.0%) tools/t 2.63 err 0  |  eden 36/48 (75.0%) tools/t 0.52 err 0
+opus    opus-subset  tools 0/48 (0.0%) tools/t 2.63 err 0  |  eden 36/48 (75.0%) tools/t 0.52 err 0
+haiku partial false wall 23.9
+sonnet partial false wall 45.5
+opus partial false wall 29.6

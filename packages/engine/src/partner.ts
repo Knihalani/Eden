@@ -670,6 +670,8 @@ export class ContextPartner {
       if (this.config.intent && this.config.cardsLean) cards.lean(this.config.cardsLeanDays);
       // `cardsOrder` (D482, D483): a user's waiting items are read best first (worded, ahead, correspondents, recent).
       if (this.config.cardsOrder) cards.order();
+      // `cardsLanes` (N4, D521, D522): a new user's backfill read by several calls at once.
+      if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
     }
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).

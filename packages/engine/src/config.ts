@@ -459,6 +459,16 @@ export interface EngineConfig {
    */
   cardsOrder: boolean;
   /**
+   * With `cards` (N4, D521, D522; docs/research/n4-agents.md): how many card calls one user may have in flight
+   * (`CardEnricher.lanes`; 1: one batch at a time). One lane reads a new user's backfill of about sixteen calls in
+   * about sixteen call times, and requests in that window meet cards for part of the items. With more lanes a full
+   * batch still waiting behind a call in flight is sent beside it: the same batches and the same calls, read sooner.
+   * At the moment one lane has made four calls, four lanes raised +4.3 points more hidden facts on Pi (+1.0..+7.8,
+   * n 784, train, seeds 45–48, cards made in-run by Haiku); two lanes +2.4 (−0.8..+5.7). Measured with a call cap
+   * standing in for time (K lanes given K times the calls), not with requests interleaved in real time.
+   */
+  cardsLanes: number;
+  /**
    * On in the default (D320). With `cards` and `sync`, for a user with more than 32 synced sources: a synced item is
    * read by the card model only when its source is one the user's lookups use (`Sync.engage`), or it names a name the
    * user's lookups named. The rest stay unread, uncovered, until their source is used, when its held items are read.
@@ -756,6 +766,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsLean: true,
   cardsLeanDays: 7,
   cardsOrder: true,
+  cardsLanes: 4,
   cardsSourceAware: true,
   intentHits: 12,
   intentMinCoverage: 0.2,

@@ -129,6 +129,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   as cards land must not break ties by insertion order, or the funnel's output varies with machine load
   (`funnel-flags.test.ts`'s sharded-files test caught it). Pruning an item's requests by word overlap with the item
   was measured and deleted (D480, D481): the requests that look least like their item reach the hidden facts.
+- **A user's card calls run in up to four lanes (`cardsLanes`, D521, D522, 4 in the default; `drainLanes`).** A lane
+  starts another only when it has taken a batch and a full batch still waits, so steady-state trickles stay on one
+  lane with the batches they had. One lane (`cardsLanes: 1`, part `cards`) is `drain` itself with no wrapper: keep it
+  so, or the single-lane timing moves. The lanes take from the queue synchronously and share `UserCards.flying` (the
+  sentence keys in flight): a new await between taking a batch and the maker call would let two lanes send the same
+  sentence. Re-run the default funnel after touching it (314 / 274, card calls 382–392 by load).
 - `cardsLean` (D125; window `cardsLeanDays` 7 since D244, 30 before) only narrows what the intent index reads
   (`readForIntent`): constraint-worded items are carded whatever their sender or age. `automated` reads a `From:` line
   in the text or a `meta.from`/`meta.sender` field (connectors differ: `toItems` keeps whatever text the tool

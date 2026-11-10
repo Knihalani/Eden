@@ -1,0 +1,11 @@
+eden − tools hidden   runs 6 n  100 diff +0.650 (+0.540..+0.750)
+eden − tools control  runs 6 n  100 diff +0.010 (+0.000..+0.030)
+eden − tools neutral  runs 2 n   24 diff +0.042 (-0.083..+0.167)
+eden         control  n  100  haiku 1.0  regraded   0
+eden         neutral  n   24  haiku 2.0  regraded   0
+tools        control  n  100  haiku 0.0  regraded   0
+tools        neutral  n   24  haiku 1.0  regraded   1
+disputed: a-sonnet-short-42 w42:train3-control:month-end-change-freeze eden sonnet drops
+disputed: a-sonnet-long-42 w42:train1-neutral:broadband-already-switched eden sonnet drops
+eden − tools control+neutral concern (haiku) runs 6 n 124 diff +0.0161 (-0.0081..+0.0484)
+eden − tools control+neutral concern (regraded) runs 6 n 124 diff -0.0081 (-0.0242..+0.0000)
