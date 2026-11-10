@@ -493,7 +493,8 @@ export interface EngineConfig {
    * about sixteen call times, and requests in that window meet cards for part of the items. With more lanes a full
    * batch still waiting behind a call in flight is sent beside it: the same batches and the same calls, read sooner.
    * At the moment one lane has made four calls, four lanes raised +4.3 points more hidden facts on Pi (+1.0..+7.8,
-   * n 784, train, seeds 45–48, cards made in-run by Haiku); two lanes +2.4 (−0.8..+5.7).
+   * n 784, train, seeds 45–48, cards made in-run by Haiku); two lanes +2.4 (−0.8..+5.7). Measured with a call cap
+   * standing in for time (K lanes given K times the calls), not with requests interleaved in real time.
    */
   cardsLanes: number;
   /**

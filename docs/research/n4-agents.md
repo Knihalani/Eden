@@ -238,7 +238,7 @@ Hidden surfaced / decoys surfaced, by how many card calls each world's card mode
   missing their intent requests, not their cards.
 - **`cardsLanes` leaves the finished backfill as it was**: with every card made, 2 and 4 lanes read 314 / 274, the
   same 768 task rows as one lane; card calls 386 and 388 against one lane's 384 and 392 on two runs (the count moves
-  a little with machine load). With the cap scaled (2 lanes at 8 calls, 4 at 16) the rows equal one lane's at 8 and
+  with machine load: 382–392 over every run of either). With the cap scaled (2 lanes at 8 calls, 4 at 16) the rows equal one lane's at 8 and
   16. On the promoted tree the default reads 314 / 274, 382 calls.
 
 ### Live (Pi, Haiku 5.5 in every role, seeds 45–48, every card made in-run; `b-pooled.txt`, `b-*-cost.txt`)
@@ -356,4 +356,10 @@ python3 -I packages/sim/lab/cl4/pooled.py 'eden~l4' eden $R/b-short-4{5,6,7,8} $
 - Four lanes mean up to four card calls in flight for one user and up to four reservations against the user's day
   at once (`estimatedCallUsd` $0.003 each against $0.25): a storm of new users puts four times the concurrent calls
   on the card model's endpoint for a quarter of the time.
+- Near a user's day cap four lanes make fewer calls than one: lanes in flight hold their estimates, so the refusal
+  that drops what waits comes up to three calls earlier (the reviewer's probe; docs/COST-MODEL.md).
+- The reviewer found two defects in the lanes path after the live run (items queued as the last lane ended could
+  wait for the user's next enqueue; a follower of another lane's batch was dropped when its own lane's call threw)
+  and one duplicate-call window during a retry. All three are fixed with tests. In the live runs 2 of 1,442 card
+  calls ended in an error (the ledger), so at most those two batches could have dropped a waiting follower.
 - The card-only screen used the teacher's cards for the distilled model's: an upper bound, not a run of the model.

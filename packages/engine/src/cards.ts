@@ -987,9 +987,7 @@ export class CardEnricher {
     this.trim(u);
     while (u.byItem.size > this.limits.maxCardsPerUser * 2) unlink(u, u.byItem.keys().next().value as string);
     if (u.queue.length > 0 && !u.draining) {
-      // One lane is `drain` itself, untouched: a wrapper's extra hops would move the default's cards (CL3).
-      const work = this.limits.lanes > 1 ? this.drainLanes(scope, u) : this.drain(scope, u);
-      u.draining = work.finally(() => (u.draining = null));
+      this.start(scope, u);
     }
   }
 
@@ -1032,6 +1030,20 @@ export class CardEnricher {
     if (s.requests?.length) (u.intent ??= new IntentIndex()).set(hash, s.requests, s.seq);
     else u.intent?.delete(hash);
     while (u.byHash.size > this.limits.maxCardsPerUser) dropCard(u, u.byHash.keys().next().value as string);
+  }
+
+  /**
+   * Starts the user's drain. When it ends with items waiting (queued in the few microtask hops between a drain's
+   * last look at the queue and here, when `enqueue` still saw one running; four lanes made that window wider, N4's
+   * review), it starts again: otherwise they would wait for the user's next `enqueue`.
+   */
+  private start(scope: Scope, u: UserCards): void {
+    // One lane is `drain` itself, untouched: a wrapper's extra hops would move the single-lane cards (CL3).
+    const work = this.limits.lanes > 1 ? this.drainLanes(scope, u) : this.drain(scope, u);
+    u.draining = work.finally(() => {
+      u.draining = null;
+      if (u.queue.length > 0 && !u.abort.signal.aborted && this.users.get(scopeKey(scope)) === u) this.start(scope, u);
+    });
   }
 
   /**
@@ -1124,7 +1136,6 @@ export class CardEnricher {
         const items = batch.map((b) => b.item);
         const intent = this.limits.intent;
         let made = await this.deps.maker.make(items, today, u.abort.signal, false, intent);
-        if (spawn) for (const k of inBatch) u.flying.delete(k);
         const { costUsd } = made;
         if (sp) tracer!.close(sp, { costUsd, cards: made.cards.length });
         this.deps.budget.settle(reservation, costUsd);
@@ -1138,6 +1149,8 @@ export class CardEnricher {
           made = await this.retry(key, session, items, today, u, made);
           if (u.abort.signal.aborted || this.users.get(key) !== u) return;
         }
+        // Only now, after any retry: until the cards are kept, another lane's twin must wait, not call.
+        if (spawn) for (const k of inBatch) u.flying.delete(k);
         const { cards, requests } = made;
         const at = this.deps.now();
         batch.forEach((b, i) => {
@@ -1193,6 +1206,8 @@ export class CardEnricher {
         this.deps.budget.settle(reservation, 0);
         this.stats.failures++;
         if (u.abort.signal.aborted) return;
+        // `cardsLanes`: a follower may wait on another lane's batch, which this failure says nothing about.
+        if (spawn) u.queue.push(...followers);
       }
     }
   }
