@@ -1011,6 +1011,43 @@ cd packages/sim/modal && python3 -I -m unittest                                 
 The funnel through a distilled model's endpoint: `bun run funnel --suite train --seeds 41,42 --cards-endpoint URL
 --cards F` (every card live through it, none replayed, appended to F; labelled; never the shipped card model's figures).
 
+### 7b. The powered bench: presets, waves and a clustered report (F3, D487)
+
+For a question of about two points (a part's effect), run enough paired tasks and read the template-clustered
+interval. One command a run, then the report:
+
+```bash
+export SSL_CERT_FILE=/root/.ccr/ca-bundle.crt                      # cloud containers only
+# the default against the agent alone and against default minus `fewer`, seeds 41-48 with control tasks:
+modal run packages/sim/modal/lab_fanout.py --preset bench-fewer --seeds 41-48 --cap 4.2 --run bench-a
+# 20 more seeds, hidden tasks only (no cache covers seeds 45+: cards are made in-run, D444):
+modal run packages/sim/modal/lab_fanout.py --preset bench-fewer --seeds 49-68 --cap 4.4 --run bench-b \
+  --args "--variants hidden"
+python3 -I packages/sim/modal/bench_report.py --pair eden:tools --pair eden~minus-fewer:eden \
+  --group cached=.local/modal/bench-a --group inrun=.local/modal/bench-b --target 1.5
+```
+
+- **Presets** (`fanout_plan.PRESETS`): `bench-tools`, `bench-fewer`, `bench-parts`; `--args` after a
+  preset add or replace flags. `python3 -I packages/sim/modal/fanout_plan.py plan --preset … --seeds … --cap …`
+  prints the plan, the streams a shard and the shards at once, with no token.
+- **Concurrency is automatic.** Shards run in waves that keep the agent streams on the key at or under
+  `--max-streams` (60); a wave with more than 2% of requests retried on a 429 halves the next. One Anthropic fan-out
+  at a time from a checkout. F3's 28 shards ran with 0 retried 429s (see the note).
+- **Cost (F3, measured):** a train seed with hidden and control tasks costs about $0.12 an arm ($0.000316 a task
+  run, Haiku 5.5 everywhere); a 4-arm shard takes about 2.3 minutes of container time.
+- **What the report says.** The effect with a cluster bootstrap over templates, the task-level and seed-clustered
+  intervals beside it, the design effect, McNemar's exact test, the minimum detectable effect, and the floor more
+  seeds cannot pass (the between-template variance over 192 templates). `--sonnet` reads `regrade*.json` beside each
+  shard.
+
+### 8. A real-data pilot on one consenting account (F3, D489): built, not run
+
+`bun run pilot` ([PILOT.md](PILOT.md)): the owner imports their own Gmail and Calendar through the connector presets
+(every text through `sanitizeForStore`), writes their own requests and the facts that mattered, runs the Pi harness
+alone and with Eden on them (`pi-ab --world-file`), marks the answers blind and reads a paired report. Data stays in
+`EDEN_PILOT_DIR` (outside any git work tree); the only data that leaves the machine is the model calls of a run the
+owner starts with `--send-to anthropic`. No session has run it on real data.
+
 ## Recording
 
 - Funnel and `bench.ts` runs go to `bench/ledger.jsonl` unless `--no-record` (`bun run funnel` records only with

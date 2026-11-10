@@ -1,0 +1,120 @@
+{
+ "note": "F3 totals, made from .local/modal/f3-*/ and .local/f3/*-ledger.jsonl on 2026-11-10 (not committed: raw outputs). wallWindow and modalUsd were read by hand and are not reproducible from files.",
+ "runs": {
+  "f3-smoke": {
+   "shards": 1,
+   "spentUsd": 0.011487,
+   "capUsd": 0.05,
+   "requestsSent": 79,
+   "retriedOn429": 0,
+   "taskRunsCutByCap": 0,
+   "shardSeconds": [
+    22.1
+   ]
+  },
+  "f3-b-41": {
+   "shards": 4,
+   "spentUsd": 1.943651,
+   "capUsd": 2.4,
+   "requestsSent": 15405,
+   "retriedOn429": 0,
+   "taskRunsCutByCap": 0,
+   "shardSeconds": [
+    137.7,
+    130.6,
+    143.1,
+    132.2
+   ]
+  },
+  "f3-a-long": {
+   "shards": 4,
+   "spentUsd": 0.31896,
+   "capUsd": 0.4,
+   "requestsSent": 2103,
+   "retriedOn429": 0,
+   "taskRunsCutByCap": 8,
+   "shardSeconds": [
+    218.3,
+    245.7,
+    251.9,
+    235.4
+   ]
+  },
+  "f3-b-45": {
+   "shards": 4,
+   "spentUsd": 1.523606,
+   "capUsd": 1.8,
+   "requestsSent": 12264,
+   "retriedOn429": 0,
+   "taskRunsCutByCap": 0,
+   "shardSeconds": [
+    167.7,
+    161.7,
+    154.4,
+    161.4
+   ]
+  },
+  "f3-b-49": {
+   "shards": 20,
+   "spentUsd": 3.797052,
+   "capUsd": 4.4,
+   "requestsSent": 29336,
+   "retriedOn429": 0,
+   "taskRunsCutByCap": 435,
+   "shardSeconds": [
+    151.9,
+    151.2,
+    153.6,
+    143.0,
+    169.4,
+    135.7,
+    151.3,
+    159.8,
+    170.9,
+    157.9,
+    152.2,
+    164.0,
+    157.4,
+    153.8,
+    157.0,
+    156.1,
+    149.7,
+    147.0,
+    137.0,
+    144.1
+   ]
+  }
+ },
+ "requestsSent": 59187,
+ "retriedOn429": 0,
+ "containers": 33,
+ "regrades": {
+  "f3-a-regrade": {
+   "calls": 1648,
+   "spentUsd": 1.815632
+  },
+  "f3-b-regrade": {
+   "calls": 24,
+   "spentUsd": 0.027884
+  }
+ },
+ "anthropicUsd": 9.4383,
+ "edenToolsHiddenPairs": {
+  "templates": 192,
+  "minPairsATemplate": 17,
+  "pairs": 5153
+ },
+ "askMultiQuestionsACall": {
+  "with": 2.87,
+  "without": 1.0
+ },
+ "wallWindow": {
+  "firstBenchShardStartUtc": "10:24",
+  "lastBenchShardEndUtc": "11:08",
+  "source": "log file times, read by hand"
+ },
+ "modalUsd": {
+  "value": 0.519,
+  "source": "modal billing report --for today --json at 11:10 UTC, this session's five app ids; the last hour may be missing"
+ }
+}

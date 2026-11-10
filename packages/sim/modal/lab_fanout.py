@@ -127,6 +127,21 @@ def funnel_scale_shard(shard: dict) -> dict:
     return _run(shard)
 
 
+def _key_lock():
+    """One Anthropic fan-out at a time from this machine: a second run waits here for the first, so two runs' waves
+    never add up past the streams limit (M1 ran four at once and met it, D440)."""
+    import fcntl
+    path = os.path.join(ROOT, ".local", "modal", "anthropic.lock")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    f = open(path, "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("another Anthropic fan-out is running from this checkout: waiting for it to finish")
+        fcntl.flock(f, fcntl.LOCK_EX)
+    return f
+
+
 def _unpack(result):
     result = dict(result)
     result["files"] = {k: zlib.decompress(v) for k, v in result.get("files", {}).items()}
@@ -134,9 +149,19 @@ def _unpack(result):
 
 
 @app.local_entrypoint()
-def main(kind: str, suites: str, seeds: str, cap: float = -1.0, run: str = "", args: str = "",
-         suites_per_shard: int = 0, shards: int = 0, dry: bool = False, report: bool = True):
+def main(seeds: str, kind: str = "", suites: str = "", preset: str = "", cap: float = -1.0, run: str = "",
+         args: str = "", suites_per_shard: int = 0, shards: int = 0, max_streams: int = plan.SAFE_STREAMS,
+         dry: bool = False, report: bool = True):
     extra = shlex.split(args)
+    try:
+        if preset:
+            # A named run shape (fanout_plan.PRESETS): its kind, suites and args, with --args after them.
+            kind, preset_suites, extra = plan.with_preset(preset, extra)
+            suites = suites or preset_suites
+        if not kind or not suites:
+            raise plan.PlanError("name a --preset, or --kind with --suites")
+    except plan.PlanError as e:
+        sys.exit(f"refused: {e}")
     run = run or f"{kind}-{time.strftime('%Y%m%d-%H%M%S')}"
     try:
         if kind == "pi-ab":
@@ -145,12 +170,18 @@ def main(kind: str, suites: str, seeds: str, cap: float = -1.0, run: str = "", a
             planned = plan.plan_funnel(suites, seeds, run, extra, shards)
         else:
             raise plan.PlanError("--kind is pi-ab or funnel")
+        # Refused before anything starts: a shard over the streams limit, a suite group that cannot be counted.
+        first_width = plan.wave_width(planned, max_streams)
     except plan.PlanError as e:
         sys.exit(f"refused: {e}")
     res = plan.resources(kind, extra)
     total_cap = round(sum(s.cap_usd for s in planned), 3) if kind == "pi-ab" else None
     print(f"run {run} at {COMMIT[:12]}: {len(planned)} {kind} shards, {res['memory']} MiB and {res['cpu']} CPU each"
           + (f", cap ${planned[0].cap_usd:.3f} a shard (${total_cap} of --cap {cap})" if total_cap else ", $0"))
+    if kind == "pi-ab":
+        at_once = min(first_width, len(planned))
+        print(f"  {plan.streams_per_shard(planned[0])} agent streams a shard, {at_once} shards at once "
+              f"(--max-streams {max_streams})")
     dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT, capture_output=True,
                            text=True).stdout.strip()
     if dirty:
@@ -164,14 +195,33 @@ def main(kind: str, suites: str, seeds: str, cap: float = -1.0, run: str = "", a
     run_dir = os.path.join(ROOT, ".local", "modal", run)
     os.makedirs(run_dir, exist_ok=True)
     results = []
-    for s, r in zip(planned, fn.map([plan.asdict(s) for s in planned], return_exceptions=True)):
-        if isinstance(r, BaseException):
-            print(f"  {s.name}: failed in Modal: {r!r}")
-            results.append({"name": s.name, "kind": kind, "code": -1, "capUsd": s.cap_usd, "files": {}})
-            continue
-        r = _unpack(r)
-        print(f"  {s.name}: exit {r['code']} in {r['seconds']} s")
-        results.append(r)
+    # Waves (D487): only as many shards at once as keep the agent streams on one key under --max-streams, and half
+    # as many after a wave that met the rate limit.
+    width, left = first_width, list(planned)
+    lock = _key_lock() if kind == "pi-ab" else None
+    try:
+        while left:
+            wave, left = plan.waves(left, width)
+            done = []
+            # (list: the map is read to its end before the wave is reported.)
+            for s, r in zip(wave, list(fn.map([plan.asdict(s) for s in wave], return_exceptions=True))):
+                if isinstance(r, BaseException):
+                    print(f"  {s.name}: failed in Modal: {r!r}")
+                    done.append({"name": s.name, "kind": kind, "code": -1, "capUsd": s.cap_usd, "files": {}})
+                    continue
+                r = _unpack(r)
+                print(f"  {s.name}: exit {r['code']} in {r['seconds']} s")
+                done.append(r)
+            results += done
+            share, sent, limited = plan.retry_share(done)
+            narrower = plan.next_width(width, done)
+            if kind == "pi-ab":
+                print(f"  wave of {len(wave)}: {limited} of {sent} requests retried on a 429 ({share:.1%})"
+                      + (f"; next waves {narrower} at a time" if narrower != width else ""))
+            width = narrower
+    finally:
+        if lock:
+            lock.close()
     manifest = plan.merge(run_dir, results, total_cap)
     manifest_note = (f"spent ${manifest['spentUsd']:.4f}" + (f" of ${total_cap}" if total_cap else "")
                      + ("" if manifest["withinCap"] else "  OVER THE CAP"))

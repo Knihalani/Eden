@@ -17,3 +17,18 @@ test.skipIf(!hasPython)("packages/sim/modal's Python unit tests pass", () => {
   expect(run.status).toBe(0);
   expect(run.stderr).toMatch(/Ran \d+ tests/);
 });
+
+test.skipIf(!hasPython)(
+  "the fan-out presets' `default minus <part>` variants are PARTS' own settings (D487)",
+  async () => {
+    const { PARTS } = await import("@eden/engine");
+    const run = spawnSync("python3", ["-I", "-B", "fanout_plan.py", "presets"], { cwd: dir, encoding: "utf8" });
+    expect(run.status).toBe(0);
+    const { partVariants } = JSON.parse(run.stdout) as { partVariants: Record<string, Record<string, unknown>> };
+    expect(Object.keys(partVariants).length).toBeGreaterThan(0);
+    for (const [name, settings] of Object.entries(partVariants)) {
+      const part = name.replace(/^minus-/, "") as keyof typeof PARTS;
+      expect(settings, name).toEqual({ ...PARTS[part] });
+    }
+  },
+);
