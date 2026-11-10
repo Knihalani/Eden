@@ -1,0 +1,49 @@
+== t1-base vs t1-ab300
+    base hidden   n  48  delivered  33  ask-cited  37  follow-up   0  surfaced  38  calls/task   44.8  ask ms p50  1316.3 p90  1509.3
+    base control  n  48  delivered  33  ask-cited  38  follow-up   0  surfaced  39  calls/task   45.2  ask ms p50  1478.8 p90  1514.6
+   trial hidden   n  48  delivered  33  ask-cited  37  follow-up   0  surfaced  38  calls/task   46.5  ask ms p50   313.0 p90   318.8
+   trial control  n  48  delivered  33  ask-cited  38  follow-up   0  surfaced  39  calls/task   46.9  ask ms p50   313.1 p90   324.2
+paired tasks: 96
+delivered: +0 -0
+askCited: +0 -0
+== t1-base vs t1-ab0
+    base hidden   n  48  delivered  33  ask-cited  37  follow-up   0  surfaced  38  calls/task   44.8  ask ms p50  1316.3 p90  1509.3
+    base control  n  48  delivered  33  ask-cited  38  follow-up   0  surfaced  39  calls/task   45.2  ask ms p50  1478.8 p90  1514.6
+   trial hidden   n  48  delivered  33  ask-cited  37  follow-up   0  surfaced  38  calls/task   46.5  ask ms p50    13.9 p90    17.6
+   trial control  n  48  delivered  33  ask-cited  38  follow-up   0  surfaced  39  calls/task   47.3  ask ms p50    13.5 p90    19.2
+paired tasks: 96
+delivered: +0 -0
+askCited: +0 -0
+== n41-base vs n41-ab0 (train1-6, time 0, 995 noise sources)
+    base hidden   n  96  delivered  67  ask-cited  72  follow-up   0  surfaced  77  calls/task   47.9  ask ms p50    11.5 p90    25.9
+    base control  n  96  delivered  57  ask-cited  62  follow-up   0  surfaced  69  calls/task   48.7  ask ms p50    11.7 p90    24.6
+   trial hidden   n  96  delivered  67  ask-cited  73  follow-up   0  surfaced  77  calls/task   47.8  ask ms p50    12.9 p90    22.9
+   trial control  n  96  delivered  57  ask-cited  62  follow-up   0  surfaced  69  calls/task   48.7  ask ms p50    12.2 p90    24.3
+paired tasks: 192
+delivered: +0 -0
+askCited: +1 -0
+  gained train6/41/hidden/hospitality-per-head-cap
+== n42-base vs n42-ab0 (train1-6, time 0, 995 noise sources)
+    base hidden   n  96  delivered  65  ask-cited  74  follow-up   0  surfaced  77  calls/task   48.7  ask ms p50    12.6 p90    22.1
+    base control  n  96  delivered  55  ask-cited  61  follow-up   0  surfaced  64  calls/task   48.9  ask ms p50    11.3 p90    24.7
+   trial hidden   n  96  delivered  65  ask-cited  74  follow-up   0  surfaced  77  calls/task   48.6  ask ms p50    13.1 p90    24.6
+   trial control  n  96  delivered  55  ask-cited  61  follow-up   0  surfaced  64  calls/task   48.9  ask ms p50    12.0 p90    21.1
+paired tasks: 192
+delivered: +0 -0
+askCited: +0 -0
+== 5 sources, train1-6 seeds 41-42: askBehind off vs on (promoted)
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+TOTAL      hidden in pool 0/96, decoy in pool 0/96, mean pool items 0.0
+  TOTAL      hidden 314/384  decoys 273/384
+reader screen (pool: the ids the reader was given for the request, a measurement of pool content, not a bound; top-K: the ask's ranked candidates; draft: the draft's pool against the request's first read):
+  TOTAL      hidden in pool 0/384, decoy in pool 0/384, mean pool items 0.0
+against .local/c4/funnel5-promoted.json: hidden +0 −0, decoys +0 −0
+    base hidden   n 384  delivered 261  ask-cited 305  follow-up   0  surfaced 314  calls/task    2.7  ask ms p50     3.5 p90     8.2
+    base control  n 384  delivered 224  ask-cited 261  follow-up   0  surfaced 273  calls/task    2.7  ask ms p50     2.9 p90     6.1
+   trial hidden   n 384  delivered 261  ask-cited 305  follow-up   0  surfaced 314  calls/task    2.7  ask ms p50     3.6 p90     8.3
+   trial control  n 384  delivered 224  ask-cited 261  follow-up   0  surfaced 273  calls/task    2.7  ask ms p50     3.1 p90     7.2
+paired tasks: 768
+delivered: +0 -0
+askCited: +0 -0

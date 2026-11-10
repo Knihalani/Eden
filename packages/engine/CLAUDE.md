@@ -151,8 +151,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `AskResponse.sources` carries the statuses. A new lookup path an ask answers from must return statuses too, or an
   outage reads as "nothing". A failed on-demand sync poll (`freshen`) feeds the status
   through `localOf`, not a status of its own: it leaves the copy not current, so the source is searched live and that
-  search's status stands. An ask never passes `behind`, so a warm-but-stale copy is not "local" there
-  (`review-regressions.test.ts`); only the reader push's first reading answers from it. A session that ends before the
+  search's status stands. With `askBehind` off an ask never passes `behind`, so a warm-but-stale copy is not "local"
+  there (`review-regressions.test.ts`). With it on (D431, the default) the ask's lookup is `behind`, and
+  `behindStatuses` rewrites every copy it answered before it was whole or current (`SearchedLive.behindLocal`): its
+  live search's outcome, "local" once its poll made it current, "searching" while the work runs, and "error" (a cut
+  copy never searched: "timeout") once the work is done and the copy is still not current, so a failed poll is
+  never an all-clear (the 2026-11-05 audit's case, both waits tested). A session that ends before the
   search runs returns `closed`, and the answer says so rather than "nothing". Probes are extra queries
   beside a chosen source's own search, whose outcome gives the source's status.
 - **An ask cites no doubted copy that no re-read confirmed (D211).** The ask's `verifyItems` runs `strict`: a doubted
@@ -273,8 +277,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   (docs/research/fix-w2b-false-concerns.md); a fix belongs upstream (the reader's judgement, or what it reads).
 - **One deadline per lookup (D140).** `searchLive` takes `deadlineAt` once, after resolving the sources and before
   the on-demand poll; the poll's signal, the live search's `timeoutMs`, the planner and the probes
-  (`ProbeOpts.deadlineAt`) get only what is left. Do not give a later stage a fresh `sourceTimeoutMs`: an ask waits
-  for its poll, so the stages add up. Under `MIN_SEARCH_MS` (50) left, the search is skipped with no call (no rate
+  (`ProbeOpts.deadlineAt`) get only what is left. Do not give a later stage a fresh `sourceTimeoutMs`: with
+  `askBehind` off (D430) an ask waits for its poll, so the stages add up. Under `MIN_SEARCH_MS` (50) left, the search is skipped with no call (no rate
   token or breaker failure for a call that could not answer): a source whose page for the query the fan-out holds
   answers from it (`SourceFanout.held`: "cached", or "stale" past `freshMs`), any other is a "timeout" (D148). `held`
   shares `one()`'s key (`pageKey`); a peek with its own key would silently miss. `Sync.freshen` skips a source
@@ -335,9 +339,20 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **The push never waits on a cut copy's live search (`pushCutBehind`, D405, D406, docs/research/b1-scale-path.md).**
   On a `behind` lookup a cut copy answers from the index and `searchCutBehind` sends D264's search behind it, through
   the planner (the raw query alone missed a planted fact), joining `cue.polled` so `afterPoll`/`pushAgain` run on what
-  it stored; a follow-up searches nothing again, the probes and explicit asks keep D264. A new consumer of a `behind`
-  lookup's `sources` must not read its "local" status as a whole copy (D127 holds only for asks, which never pass
-  `behind`). Its calls get their own trace ("cut search behind").
+  it stored; a follow-up searches nothing again, the probes keep D264. A new consumer of a `behind` lookup's `sources`
+  must not read its "local" status as a whole copy (the explicit ask rewrites them, `behindStatuses`). Its calls get
+  their own trace ("cut search behind").
+- **The ask never waits on its poll or a cut copy's live search either (`askBehind`, D430, D431,
+  docs/research/c4-ask-path.md).** The explicit ask runs its lookup `behind` and waits `askBehindWaitMs` (0) for
+  `cue.polled`; for an ask, `searchCutBehind` searches source by source (`cue.cutStatus`) and stores each page before
+  noting its outcome, so a source called answered was ranked on what it found. Not settled: the answer names the
+  sources still being read ("searching", `reachAnswer`'s "Still reading …") and `askLater` re-ranks once the work
+  stored something (`internal.late`: no second search, no `readAsk`), queuing what it would cite from the sources
+  still being read (`behindLocal`) that the answer did not and the ledger still holds fresh, re-read strictly (D211:
+  an item the answer left out as not re-checked is never handed over as news), as an `ask-behind:` packet
+  (`ASK_LATE_LEAD`), dropped after the next user message. A cut copy no search was sent for is "timeout" at once. Do not reintroduce a wait: at market latency the work never settled within 300 ms (the wait was the
+  ask's whole time), and in Pi no follow-up was ever taken (the agent's next model request starts as the tool result
+  lands); the ask finds what the push missed from what the push's own searches behind stored.
 - **Idle users are frozen (D325, docs/research/a14-scale-users.md).** `ItemCache` holds a user idle for
   `freezeIdleMs` (30 min) as one zstd blob (`FrozenUser`) and thaws them exactly on next use. Every reader of a
   user's state goes through `peek`/`touch` (which thaw and mark the user seen); only `revision` and `syncedCount`

@@ -145,6 +145,14 @@ export const EDEN_NOTE = "Eden: ";
  * Fixed words, inside the data envelope (D11, D19): an instruction of Eden's own to the agent about the items around
  * it, never source text (a departure D237 records).
  */
+/**
+ * `askBehind` (D430): the lead of a packet holding what an ask's sources still being read found after it answered.
+ */
+export const ASK_LATE_LEAD =
+  `${EDEN_NOTE}found after your last ask_context answer, in sources it was still reading; nothing has checked them ` +
+  "against the question. Use one only if it is about the same person, thing and date; if it is not, ignore it and do " +
+  "not mention it.";
+
 export const CANDIDATES_LEAD =
   `${EDEN_NOTE}items from the user's sources that may bear on this request; nothing has checked them against it. ` +
   "Before using one, check it is about the same person, thing and date as the request and still current; if it is " +

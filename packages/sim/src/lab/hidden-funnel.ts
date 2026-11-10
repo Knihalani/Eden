@@ -652,6 +652,8 @@ interface TaskRow {
   askKept?: number;
   askItems?: number;
   askMs?: number;
+  /** `askBehind` (D430): the planted item came in the ask's follow-up packet, this many ms after the ask began. */
+  askLateMs?: number;
   /** When the planted item reached the agent, from the request (ms of wall time); absent when it did not. */
   deliveryMs?: number;
   /** It came with the request's own reply (the observe call), not later. */
@@ -1052,6 +1054,17 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     const answered = ASK ? await partner.ask({ ...scope, sessionId, question }) : null;
     const askMs = performance.now() - a0;
     const askCited = answered ? answered.citations.some((c) => c.itemId === id) : undefined;
+    // `askBehind` (D430): what an ask that answered before its sources were read queues after it, taken once nothing
+    // is left running (bounded as the request's own wait). Nothing is queued when the trial is off.
+    let askLate: number | undefined;
+    if (ASK) {
+      const until = performance.now() + Math.max(WAIT_MS, WAIT_DEFAULT);
+      while (busy(sessionId) && performance.now() < until) await Bun.sleep(1);
+      for (const x of partner.takePending({ ...scope, sessionId })) {
+        if (!x.reason.startsWith("ask-behind:")) continue;
+        if (askLate === undefined && x.citations.some((c) => c.itemId === id)) askLate = performance.now() - a0;
+      }
+    }
     const reports = readerReports.get(sessionId) ?? [];
     readerReports.delete(sessionId);
     const rr = reports.at(-1);
@@ -1185,6 +1198,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
             ...(askCited ? { askKept: kept(task.detail, planted[i]!, answered!.answer) } : {}),
             askItems: answered!.citations.length,
             askMs: Number(askMs.toFixed(2)),
+            ...(askLate !== undefined ? { askLateMs: Number(askLate.toFixed(2)) } : {}),
           }),
       // `pushCandidates`' last pass: the planted item's place in its pool (-1: not in it), and whether it was handed.
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),

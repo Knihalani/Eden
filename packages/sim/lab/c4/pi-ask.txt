@@ -1,0 +1,6 @@
+  base hidden   n  72  asks/task 0.69  ask cited planted  38  follow-ups taken  0 (planted 0)  untaken items 0
+  base control  n  72  asks/task 0.89  ask cited planted  42  follow-ups taken  0 (planted 0)  untaken items 1
+  base neutral  n  72  asks/task 1.08  ask cited planted  56  follow-ups taken  0 (planted 0)  untaken items 1
+    ab hidden   n  72  asks/task 0.64  ask cited planted  32  follow-ups taken  0 (planted 0)  untaken items 1
+    ab control  n  72  asks/task 0.81  ask cited planted  38  follow-ups taken  0 (planted 0)  untaken items 2
+    ab neutral  n  72  asks/task 1.10  ask cited planted  56  follow-ups taken  0 (planted 0)  untaken items 0
