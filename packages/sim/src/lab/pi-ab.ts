@@ -165,6 +165,7 @@ import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayR
 import { sanitizeForStore } from "@eden/redact";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
+import { checkerLine, sidecarChecker } from "./i1-checker";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -297,6 +298,8 @@ const CARDS_FILE = opt("cards", opt("cards-disk", ""));
 /** `--cards-calls N` (F2): each stream's enrichment gets N card calls; items past them stay uncovered. */
 const CARDS_CALLS = Number(opt("cards-calls", "-1"));
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
+/** `--checker URL` (I1, D471): the pair checker sidecar an arm with `pushCheck` on reads (`i1-checker.ts`). */
+const CHECKER = opt("checker", "") ? sidecarChecker(opt("checker", "")) : null;
 // Compared as files, not strings: `./a.cards.jsonl` or a symlink must not send new cards into the replay file.
 if (CARDS_FILE && samePath(CARDS_OUT, CARDS_FILE)) {
   throw new Error(`--cards-out ${CARDS_OUT} is the replayed --cards file: give new cards their own file`);
@@ -778,6 +781,7 @@ async function runWorld(
         config,
         ...(cards ? { cards } : {}),
         ...(reader ? { reader } : {}),
+        ...(CHECKER ? { checker: CHECKER } : {}),
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
@@ -1605,6 +1609,7 @@ console.error(
     (INTENT_WANTED ? `; ${INTENT_LINE}` : ""),
 );
 console.error(overBudgetLine(budgeted));
+if (CHECKER) console.error(checkerLine(CHECKER));
 const replayMisses = (readerReplay?.missed ?? 0) + (graderReplay?.missed ?? 0);
 if (REPLAY_ONLY && replayMisses > 0) {
   console.error(

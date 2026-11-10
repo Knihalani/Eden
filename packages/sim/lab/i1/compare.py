@@ -1,5 +1,4 @@
-"""I1's funnel screen, task by task (D473, docs/research/i1-checker.md §1's bar). Lab only. The trial it compared
-(`pushCheck`) was deleted; its code is in commit fced3789.
+"""I1's funnel screen, task by task (D473, docs/research/i1-checker.md §1's bar). Lab only.
 
     python3 -I compare.py --base BASE.json --trial TRIAL.json [--eval-share 0.2]
 
@@ -53,6 +52,7 @@ def main(argv):
     ap.add_argument("--base", required=True)
     ap.add_argument("--trial", required=True)
     ap.add_argument("--eval-share", type=float, default=0.2)
+    ap.add_argument("--bar", choices=["i1", "i2"], default="i1", help="i2: D493's packet bar (docs/research/i2-…)")
     a = ap.parse_args(argv)
     base, trial = load(a.base), load(a.trial)
     sp = lambda k: split_of(k[0], k[3], a.eval_share)  # noqa: E731
@@ -81,6 +81,17 @@ def main(argv):
     one = dh >= 4 and dd <= 2
     two = dd <= -8 and dh >= -2
     verdict = "PASS" if (one or two) and neutral_ok else "FAIL"
+    if a.bar == "i2":
+        # D493: the packet, not "surfaced" (the ask path hides a packet's loss in the funnel; D257 showed it costs live).
+        ph = p["hidden"]["handed_planted_trial"] - p["hidden"]["handed_planted_base"]
+        dc = p["control"]["handed_planted_trial"] - p["control"]["handed_planted_base"]
+        ok = {"decoy handed -16 or fewer": dc <= -16, "planted handed -5 or better": ph >= -5,
+              "hidden surfaced -2 or better": dh >= -2, "decoys surfaced +2 or fewer": dd <= 2, "neutral packets": neutral_ok}
+        verdict = "PASS" if all(ok.values()) else "FAIL"
+        print(f"I2 BAR (held-out templates): planted handed {ph:+d}, decoy handed {dc:+d}, hidden {dh:+d}, "
+              f"decoys {dd:+d}; " + ", ".join(f"{k} {'yes' if v else 'no'}" for k, v in ok.items()) + f" -> {verdict}")
+        print(json.dumps(res))
+        return
     print(f"BAR (held-out templates): hidden {dh:+d}, decoys {dd:+d}, neutral candidates "
           f"{p['neutral']['candidates_base']} -> {p['neutral']['candidates_trial']}: "
           f"clause 1 {'yes' if one else 'no'}, clause 2 {'yes' if two else 'no'}, neutral {'ok' if neutral_ok else 'up'}"
