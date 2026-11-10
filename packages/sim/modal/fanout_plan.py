@@ -252,7 +252,7 @@ RECIPE = ["--config", "default", "--tenant-prompt", "--push", "payload", "--sour
 # `default minus <part>` as --variant-config entries: copies of PARTS in @eden/engine (parts.ts), the parts a plain
 # pi-ab run exercises. `modal-python.test.ts` checks them against PARTS, so a part that changes fails the check.
 PART_VARIANTS = {
-    "minus-nudge": {"askNudge": False},
+    "minus-nudge": {"askNudge": False, "askNudgeDeep": False},
     "minus-plans": {"planConflict": False},
     "minus-fewer": {"pushCandidatesSettled": 0},
     "minus-freshness": {"verifyDelivery": False, "readerVerifyAfter": False, "revisionNotice": False,
