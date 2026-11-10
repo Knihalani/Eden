@@ -444,6 +444,35 @@ class Guard(unittest.TestCase):
         self.assertIn("Not executed: pay was held", asyncio.run(t(5)))
         self.assertEqual(asyncio.run(t(5)), "paid 5")
 
+    def test_parity_with_the_typescript_guard(self):
+        # A finding without an id is still held (guardTool tests only its text).
+        f = {"verdict": "finding", "finding": {"text": "held"}}
+        self.assertIn("Not executed: t was held", guard_tool(FakeChecker([f]), "t", lambda x: x)(1))
+        # An async held policy on a sync tool: the tool runs, never a coroutine object handed to the agent.
+        errors = []
+
+        async def policy(*a):
+            return "asked"
+
+        out = guard_tool(FakeChecker([f]), "t", lambda x: f"ran {x}", held=policy, on_error=errors.append)(2)
+        self.assertEqual(out, "ran 2")
+        self.assertIn("awaitable", str(errors[0]))
+        # A partial of an async tool, and an object with an async __call__, get the async wrapper.
+        import functools
+
+        async def pay(amount, currency):
+            return f"paid {amount} {currency}"
+
+        class Booker:
+            async def __call__(self, when):
+                return f"booked {when}"
+
+        p = guard_tool(FakeChecker([]), "pay", functools.partial(pay, currency="GBP"))
+        b = guard_tool(FakeChecker([]), "book", Booker())
+        self.assertTrue(asyncio.iscoroutinefunction(p))
+        self.assertEqual(asyncio.run(p(5)), "paid 5 GBP")
+        self.assertEqual(asyncio.run(b("noon")), "booked noon")
+
     def test_real_client_with_no_server_runs_the_tool(self):
         errors = []
         eden = EdenClient(user_id="u", session_id="s", base_url="http://127.0.0.1:9", timeout_s=0.2,

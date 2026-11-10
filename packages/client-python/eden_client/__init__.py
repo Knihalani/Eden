@@ -171,14 +171,15 @@ def guard_tool(eden: Any, name: str, fn: Callable[..., Any], held: Optional[Call
         try:
             res = eden.check(name, data) if timeout_s is None else eden.check(name, data, timeout_s=timeout_s)
             finding = res.get("finding") if isinstance(res, dict) and res.get("verdict") == "finding" else None
-            if not _is_injection(finding):
+            # The same test as guardTool's: a finding with text is held (its id is not needed to show it).
+            if not isinstance(finding, dict) or not isinstance(finding.get("text"), str):
                 return _RUN
             return held(name, finding, data) if held else held_result(name, finding)
         except Exception as e:  # noqa: BLE001 - fail open on anything (D14)
             report(e)
             return _RUN
 
-    if inspect.iscoroutinefunction(fn):
+    if _is_async(fn):
         @functools.wraps(fn)
         async def guarded_async(*args: Any, **kwargs: Any) -> Any:
             try:
@@ -195,6 +196,13 @@ def guard_tool(eden: Any, name: str, fn: Callable[..., Any], held: Optional[Call
     @functools.wraps(fn)
     def guarded(*args: Any, **kwargs: Any) -> Any:
         out = ask(args, kwargs)
+        if inspect.isawaitable(out):
+            # An async ``held`` on a sync tool cannot be awaited here: never hand the agent a coroutine object.
+            close = getattr(out, "close", None)
+            if callable(close):
+                close()
+            report(TypeError(f"guard_tool({name!r}): held returned an awaitable for a sync tool; the tool ran"))
+            out = _RUN
         return fn(*args, **kwargs) if out is _RUN else out
 
     return guarded
@@ -207,6 +215,13 @@ def guard_tools(eden: Any, tools: Dict[str, Callable[..., Any]], **options: Any)
 
 
 _RUN = object()
+
+
+def _is_async(fn: Any) -> bool:
+    """An ``async def``, a ``functools.partial`` of one, or an object whose ``__call__`` is one."""
+    while isinstance(fn, functools.partial):
+        fn = fn.func
+    return inspect.iscoroutinefunction(fn) or inspect.iscoroutinefunction(getattr(fn, "__call__", None))
 
 
 class EdenError(Exception):

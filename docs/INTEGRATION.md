@@ -469,7 +469,9 @@ made 3.38 connector calls a request; with Eden 0 at request time, plus a one-tim
 ## Hermes Agent: Eden in place of its source tools (D422)
 
 For [Hermes Agent](https://github.com/NousResearch/hermes-agent), install the Eden plugin and give the agent Eden's
-`ask_context` **instead of** your sources' tools. That is the `hermes-eden` shape the lab measured best: against Hermes
+`ask_context` **instead of** your sources' tools. That is the `hermes-eden` shape the lab measured best (with the lab's
+plugin, which carries the packet and tool-result hooks below; the shipped plugin's tool check and its own
+`ask_context` registration were not in that run): against Hermes
 keeping its source tools beside Eden, hidden facts raised 81.9% against 72.2% (+9.7 points, +2.8..+18.1) and wall p50
 3.79 s against 5.74 s (−1.5 s); against Hermes alone, 81.9% against 9.7% (Hermes Agent on claude-haiku-5-5, train1–6,
 seeds 41–42, in-sample; docs/research/a16-loop.md, "Hermes with Eden in place of its source tools").
@@ -495,11 +497,17 @@ The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces
 - **`pre_llm_call`**: the user's message goes to Eden (waiting up to 3 s, as the SDK does) and the turn's packet is
   returned as context. Only the new packet: Hermes keeps each turn's context and sends it again on later calls (A27,
   D385), so the plugin never re-sends earlier packets.
-- **`pre_tool_call`**: every tool call but Eden's own goes to `check` first; a finding blocks the call and becomes its
-  result (calling again proceeds). `EDEN_CHECK_TOOLS=send_email,book` narrows it to the acting tools; empty checks none.
+- **`pre_tool_call`**: an acting tool's call goes to `check` first; a finding blocks the call and becomes its result
+  (calling again proceeds). By default the acting tools are those whose name carries an acting verb as a word (send,
+  reply, forward, share, invite, book, schedule, pay, transfer, grant, post, purchase: `send_email`,
+  `mcp_gmail_send_message`, not `list_messages` or `read_file`); `EDEN_CHECK_TOOLS=send_email,book_room` names them
+  exactly, `*` checks every tool but Eden's own, empty checks none.
 - **`post_tool_call`, `transform_tool_result`**: tool results are reported, and packets Eden queued since are appended
   to the result, so context found mid-turn reaches the next model call.
-- **`on_session_end`**: each Hermes session is its own Eden session (its id through `eden_id`), ended with it.
+- **`on_session_finalize`, `on_session_reset`**: each Hermes session is its own Eden session (its id through
+  `eden_id`; a hook with no session id uses its task id, and with neither Eden is skipped), ended when Hermes tears
+  the identity down. Not `on_session_end`, which Hermes fires after every turn: ending Eden's session there would
+  drop its queued packets, what it knows the agent read and its per-session budget each turn.
 
 `EDEN_USER_ID` names the user (one Hermes install serves one user; mapped with `eden_id`); without it the plugin
 registers nothing and says so on stderr. Every hook fails open. The hook names and contracts were read in Hermes'

@@ -1,5 +1,6 @@
-"""Eden as a Hermes Agent plugin, in the measured ``hermes-eden`` shape (D422): Eden's ``ask_context`` in place of the
-agent's source tools, Eden's packet before each turn, and each acting call checked first.
+"""Eden as a Hermes Agent plugin (D422), built on the ``hermes-eden`` arm the lab measured: Eden's ``ask_context`` in
+place of the agent's source tools and Eden's packet before each turn; plus, unmeasured inside Hermes, a check before
+each acting call.
 
 Install (docs/INTEGRATION.md, "Hermes Agent"): ``pip install`` this package into Hermes' environment, copy
 ``examples/hermes/eden`` to ``~/.hermes/plugins/eden``, enable it (``plugins: enabled: [eden]``) and give the agent
@@ -8,8 +9,12 @@ the ``eden`` toolset instead of your source MCP servers. Configuration comes fro
 - ``EDEN_USER_ID`` (required; mapped with ``eden_id``): the end user whose sources Eden reads. Unset, the plugin
   registers nothing and says so once.
 - ``EDEN_URL`` (default ``http://127.0.0.1:8790``), ``EDEN_API_KEY``, ``EDEN_TENANT_ID``: as for ``EdenClient``.
-- ``EDEN_CHECK_TOOLS``: which tool calls go through ``check`` first: ``*`` (the default: every tool but Eden's own),
-  a comma list of tool names, or empty to check none.
+- ``EDEN_CHECK_TOOLS``: which tool calls go through ``check`` first. Unset: the tools whose name carries an acting
+  verb as a whole word (``ACTING``: send, reply, forward, share, invite, book, schedule, pay, transfer, grant,
+  post, purchase: ``send_email`` and ``mcp_gmail_send_message``, not ``list_messages``), which is where the party
+  check finds anything; a read-only tool gains nothing from a check and
+  would send its arguments to Eden for nothing. A comma list names the tools exactly; ``*`` checks every tool but
+  Eden's own; empty checks none.
 
 What it registers (hook names and contracts as Hermes defines them at the lab's pin, 06433066; read in its source,
 ``hermes_cli/plugins.py`` and ``model_tools.py``, not run here):
@@ -22,16 +27,20 @@ What it registers (hook names and contracts as Hermes defines them at the lab's 
 - ``post_tool_call`` / ``transform_tool_result``: each tool result is reported, and packets Eden queued since are
   appended to it, so context found mid-turn reaches the agent before its next model call.
 - ``ask_context`` (toolset ``eden``), with Eden's own description (D70), answered by ``EdenClient.ask``.
-- ``on_session_end``: the session's end is reported and its client dropped.
+- ``on_session_finalize`` / ``on_session_reset``: the session's end is reported and its client dropped. Not
+  ``on_session_end``: Hermes fires that after every turn (``run_conversation``), and ending Eden's session each turn
+  would drop its queued packets, its record of what the agent read and its per-session budget.
 
-Each Hermes session is its own Eden session (``session_id`` through ``eden_id``). Fails open (D14): any error,
-timeout or refusal is "no context" and never breaks the agent's turn.
+Each Hermes session is its own Eden session (``session_id`` through ``eden_id``; a hook with no session id falls back
+to its ``task_id``, and with neither Eden is skipped, so two conversations never share a session). Fails open (D14):
+any error, timeout or refusal is "no context" and never breaks the agent's turn.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import threading
 from collections import OrderedDict
@@ -45,6 +54,11 @@ ASK_TOOL = "ask_context"
 TOOLSET = "eden"
 #: Hermes sessions with a live client; the least recent is dropped past this.
 MAX_SESSIONS = 256
+#: The default ``EDEN_CHECK_TOOLS``: a tool whose name carries one of these verbs as a word acts on someone's behalf.
+ACTING = re.compile(
+    r"(?:^|[_\-.])(send|reply|forward|share|invite|book|schedule|pay|transfer|grant|post|purchase)(?=$|[_\-.])",
+    re.I,
+)
 
 ASK_SCHEMA = {
     "name": ASK_TOOL,
@@ -75,18 +89,25 @@ class EdenHermes:
         self.tenant = (env.get("EDEN_TENANT_ID") or "").strip() or None
         self.base_url = (env.get("EDEN_URL") or "").strip() or None
         self.api_key = env.get("EDEN_API_KEY") or None
-        tools = env.get("EDEN_CHECK_TOOLS", "*")
-        self.check_all = tools.strip() == "*"
-        self.check_tools = {t.strip() for t in tools.split(",") if t.strip()} if not self.check_all else set()
+        tools = env.get("EDEN_CHECK_TOOLS")
+        # None: the acting-verb default; "*": every tool; otherwise exactly the names listed (empty: none).
+        self.check_mode = "acting" if tools is None else "all" if tools.strip() == "*" else "list"
+        self.check_tools = {t.strip() for t in (tools or "").split(",") if t.strip()}
         self._factory = client_factory or EdenClient
         self._clients: "OrderedDict[str, Any]" = OrderedDict()
         self._lock = threading.Lock()
 
-    def client(self, session_id: Any) -> Optional[Any]:
-        """The session's client, made on first use; None when there is no user (the plugin is then inert)."""
-        if not self.user:
+    @staticmethod
+    def session_key(session_id: Any, task_id: Any = None) -> Optional[str]:
+        """The Eden session id for a hook's ids; None when it has neither (Eden is then skipped for that call)."""
+        raw = session_id or task_id
+        return eden_id(str(raw)) if raw else None
+
+    def client(self, session_id: Any, task_id: Any = None) -> Optional[Any]:
+        """The session's client, made on first use; None when there is no user or no session id."""
+        sid = self.session_key(session_id, task_id)
+        if not self.user or sid is None:
             return None
-        sid = eden_id(str(session_id)) if session_id else "hermes"
         with self._lock:
             c = self._clients.get(sid)
             if c is not None:
@@ -105,17 +126,22 @@ class EdenHermes:
         return c
 
     def checks(self, tool_name: Any) -> bool:
-        if not isinstance(tool_name, str) or tool_name == ASK_TOOL or tool_name.endswith("_" + ASK_TOOL):
+        if not _is_tool(tool_name) or _is_ask(tool_name):
             return False
-        return self.check_all or tool_name in self.check_tools
+        if self.check_mode == "all":
+            return True
+        if self.check_mode == "list":
+            return tool_name in self.check_tools
+        return ACTING.search(tool_name) is not None
 
     # -- hooks (each returns None on anything unexpected: fail open) ------------------------------------------------
 
-    def pre_llm_call(self, session_id: Any = None, user_message: Any = None, **_: Any) -> Optional[Dict[str, str]]:
+    def pre_llm_call(self, session_id: Any = None, user_message: Any = None, task_id: Any = None,
+                     **_: Any) -> Optional[Dict[str, str]]:
         try:
             if not isinstance(user_message, str) or not user_message.strip():
                 return None
-            c = self.client(session_id)
+            c = self.client(session_id, task_id)
             if c is None:
                 return None
             res = c.observe({"kind": "user_message", "text": user_message})
@@ -125,12 +151,12 @@ class EdenHermes:
             _warn(f"pre_llm_call: {e}")
             return None
 
-    def pre_tool_call(self, tool_name: Any = None, args: Any = None, session_id: Any = None,
+    def pre_tool_call(self, tool_name: Any = None, args: Any = None, session_id: Any = None, task_id: Any = None,
                       **_: Any) -> Optional[Dict[str, str]]:
         try:
             if not self.checks(tool_name):
                 return None
-            c = self.client(session_id)
+            c = self.client(session_id, task_id)
             if c is None:
                 return None
             res = c.check(tool_name, args if args is not None else {})
@@ -142,11 +168,12 @@ class EdenHermes:
             _warn(f"pre_tool_call: {e}")
             return None
 
-    def post_tool_call(self, tool_name: Any = None, result: Any = None, session_id: Any = None, **_: Any) -> None:
+    def post_tool_call(self, tool_name: Any = None, result: Any = None, session_id: Any = None, task_id: Any = None,
+                       **_: Any) -> None:
         try:
-            if not isinstance(tool_name, str) or tool_name == ASK_TOOL or tool_name.endswith("_" + ASK_TOOL):
+            if not _is_tool(tool_name) or _is_ask(tool_name):
                 return None
-            c = self.client(session_id)
+            c = self.client(session_id, task_id)
             if c is None:
                 return None
             output = result if isinstance(result, str) else json.dumps(result, default=str)
@@ -155,11 +182,13 @@ class EdenHermes:
             _warn(f"post_tool_call: {e}")
         return None
 
-    def transform_tool_result(self, result: Any = None, session_id: Any = None, **_: Any) -> Optional[str]:
+    def transform_tool_result(self, result: Any = None, session_id: Any = None, task_id: Any = None,
+                              **_: Any) -> Optional[str]:
+        # Eden's own answer gets queued packets appended too, as the lab's plugin (the measured arm) did.
         try:
             if not isinstance(result, str):
                 return None
-            c = self.client(session_id)
+            c = self.client(session_id, task_id)
             if c is None:
                 return None
             text = _joined(c.pending())
@@ -168,25 +197,26 @@ class EdenHermes:
             _warn(f"transform_tool_result: {e}")
             return None
 
-    def on_session_end(self, session_id: Any = None, **_: Any) -> None:
+    def end_session(self, session_id: Any = None, old_session_id: Any = None, **_: Any) -> None:
+        """``on_session_finalize`` (``session_id``) and ``on_session_reset`` (``old_session_id``): the identity ends."""
         try:
-            if not self.user:
+            sid = self.session_key(old_session_id or session_id)
+            if not self.user or sid is None:
                 return None
-            sid = eden_id(str(session_id)) if session_id else "hermes"
             with self._lock:
                 c = self._clients.pop(sid, None)
             if c is not None:
                 c.observe({"kind": "session_end"})
         except Exception as e:  # noqa: BLE001
-            _warn(f"on_session_end: {e}")
+            _warn(f"end_session: {e}")
         return None
 
-    def ask_context(self, args: Any = None, session_id: Any = None, **_: Any) -> str:
+    def ask_context(self, args: Any = None, session_id: Any = None, task_id: Any = None, **_: Any) -> str:
         try:
             question = args.get("question") if isinstance(args, dict) else None
             if not isinstance(question, str) or not question.strip():
                 return "ask_context needs a question."
-            c = self.client(session_id)
+            c = self.client(session_id, task_id)
             answer = c.ask(question) if c is not None else None
             if isinstance(answer, dict) and isinstance(answer.get("answer"), str):
                 return answer["answer"]
@@ -202,9 +232,19 @@ class EdenHermes:
         ctx.register_hook("pre_tool_call", self.pre_tool_call)
         ctx.register_hook("post_tool_call", self.post_tool_call)
         ctx.register_hook("transform_tool_result", self.transform_tool_result)
-        ctx.register_hook("on_session_end", self.on_session_end)
+        ctx.register_hook("on_session_finalize", self.end_session)
+        ctx.register_hook("on_session_reset", self.end_session)
         ctx.register_tool(name=ASK_TOOL, toolset=TOOLSET, schema=ASK_SCHEMA, handler=self.ask_context,
                           description=ASK_CONTEXT_DESCRIPTION)
+
+
+def _is_tool(name: Any) -> bool:
+    return isinstance(name, str) and bool(name)
+
+
+def _is_ask(name: str) -> bool:
+    """Eden's own tool, registered here or reached as an MCP tool (``mcp_eden_ask_context``)."""
+    return name == ASK_TOOL or name.endswith("_" + ASK_TOOL)
 
 
 def _joined(injections: Any) -> Optional[str]:

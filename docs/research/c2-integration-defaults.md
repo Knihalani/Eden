@@ -18,10 +18,12 @@ on the shortest path. Now an integrator who copies the quickstart gets them.
   them the default wherever a connector names changed ids, items where the notice carries content, and describe the
   bare signal as the slow fallback with its measured cost (A18: agent's wait p50 1,013 → 6 ms with refs).
 - **Hermes (D422).** A Hermes Agent plugin ships in `eden_client.hermes` (installed by copying `examples/hermes/eden`
-  to `~/.hermes/plugins/eden`), in the `hermes-eden` shape the lab measured best (+9.7 points hidden and −1.5 s
-  against keeping the source tools beside Eden): `ask_context` as a plugin tool, the turn's new packet only (Hermes
-  keeps earlier ones, A27), every non-Eden tool call checked (`pre_tool_call` blocks with the held result), tool
-  results reported and queued packets appended. INTEGRATION.md documents it with a note on when to keep the source
+  to `~/.hermes/plugins/eden`), built on the `hermes-eden` arm the lab measured best (+9.7 points hidden and −1.5 s
+  against keeping the source tools beside Eden; those figures are the lab plugin's, with `ask_context` over MCP): the
+  turn's new packet only (Hermes keeps earlier ones, A27), tool results reported and queued packets appended, as the
+  lab plugin did; added and not measured inside Hermes: `ask_context` as a plugin tool, the acting tools' calls
+  checked (`pre_tool_call` blocks with the held result; by default only names with an acting verb), and the Eden
+  session ended with the Hermes identity (`on_session_finalize`/`on_session_reset`). INTEGRATION.md documents it with a note on when to keep the source
   tools (acting through them, browsing a whole listing, a source not connected to Eden).
 
 ## What was checked, and how
@@ -46,6 +48,22 @@ on the shortest path. Now an integrator who copies the quickstart gets them.
     ref, and an unsynced user's refs fall back to the signal; from Python, `guard_tools` holds and releases the same
     call, and the Hermes plugin injects the turn's packet, answers `ask_context` with the address and blocks then
     releases the call.
+
+## Review fixes
+
+The reviewer subagent (REQUEST_CHANGES on the first commit) found, and this branch fixed:
+
+- The plugin ended Eden's session on Hermes' `on_session_end`, which Hermes fires after every turn
+  (`agent/turn_finalizer.py`; its `observer-hooks.md` says to use `on_session_finalize`/`on_session_reset`). Each turn
+  would have dropped the queued packets, what Eden knows the agent read, and the per-session model budget. Now the
+  session ends on those two hooks, with a test that it does not on `on_session_end`.
+- Every tool call was checked by default, read-only built-ins included (their arguments sent to Eden, a round trip
+  each). Now the default is tools named with an acting verb; `*` keeps the old behaviour.
+- A hook with no session id shared one fallback session per user; now it uses the task id, or skips Eden.
+- Python/TypeScript guard parity: a finding without an id is held in both; an async `held` on a sync Python tool runs
+  the tool (reported) instead of returning a coroutine; partials of async tools and objects with an async `__call__`
+  get the async wrapper.
+- The docs now say which parts of the plugin the lab's figures measured.
 
 ## Not done
 

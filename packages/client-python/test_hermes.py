@@ -73,7 +73,9 @@ class Hermes(unittest.TestCase):
     def test_registers_the_hermes_eden_shape(self):
         _, ctx = plugin()
         self.assertEqual(set(ctx.hooks), {"pre_llm_call", "pre_tool_call", "post_tool_call", "transform_tool_result",
-                                          "on_session_end"})
+                                          "on_session_finalize", "on_session_reset"})
+        # Hermes fires on_session_end after every turn: ending Eden's session there would drop its state each turn.
+        self.assertNotIn("on_session_end", ctx.hooks)
         toolset, schema, _, description = ctx.tools[ASK_TOOL]
         self.assertEqual(toolset, TOOLSET)
         self.assertEqual(schema["description"], ASK_CONTEXT_DESCRIPTION)
@@ -112,9 +114,21 @@ class Hermes(unittest.TestCase):
         self.assertIsNone(ctx.hooks["pre_tool_call"](tool_name=ASK_TOOL, args={"question": "q"}, session_id="s"))
         self.assertEqual([t for t, _ in c.checks], ["send_email", "send_email"])
 
+    def test_default_checks_only_acting_tools(self):
+        _, ctx = plugin()
+        for name in ["read_file", "web_search", "terminal", "search_mail", "mcp_gmail_list_messages", "send_email",
+                     "mcp_gmail_send_message", "calendar_book", "share-doc", "pay_invoice", "reply"]:
+            ctx.hooks["pre_tool_call"](tool_name=name, args={}, session_id="s")
+        self.assertEqual([t for t, _ in FakeClient.made[0].checks],
+                         ["send_email", "mcp_gmail_send_message", "calendar_book", "share-doc", "pay_invoice", "reply"])
+        _, ctx = plugin({"EDEN_CHECK_TOOLS": "*"})
+        ctx.hooks["pre_tool_call"](tool_name="read_file", args={}, session_id="s")
+        ctx.hooks["pre_tool_call"](tool_name="mcp_eden_ask_context", args={}, session_id="s")
+        self.assertEqual([t for t, _ in FakeClient.made[0].checks], ["read_file"])
+
     def test_check_tools_narrows_what_is_checked(self):
         _, ctx = plugin({"EDEN_CHECK_TOOLS": "send_email, book"})
-        ctx.hooks["pre_tool_call"](tool_name="search_mail", args={}, session_id="s")
+        ctx.hooks["pre_tool_call"](tool_name="send_message", args={}, session_id="s")
         ctx.hooks["pre_tool_call"](tool_name="book", args={}, session_id="s")
         self.assertEqual([t for t, _ in FakeClient.made[0].checks], ["book"])
         _, ctx = plugin({"EDEN_CHECK_TOOLS": ""})
@@ -132,15 +146,29 @@ class Hermes(unittest.TestCase):
         self.assertEqual(ctx.hooks["transform_tool_result"](tool_name="t", result="r", session_id="s"),
                          f"r\n\n{PACKET['text']}")
 
-    def test_ask_context_and_session_end(self):
+    def test_ask_context_and_session_finalize_and_reset(self):
         _, ctx = plugin()
         handler = ctx.tools[ASK_TOOL][2]
         self.assertEqual(handler({"question": "When is lunch?"}, session_id="s"), "answer to When is lunch?")
         self.assertEqual(handler({}, session_id="s"), "ask_context needs a question.")
-        ctx.hooks["on_session_end"](session_id="s")
+        ctx.hooks["on_session_finalize"](session_id="s")
         self.assertEqual(FakeClient.made[0].events[-1], {"kind": "session_end"})
         handler({"question": "again"}, session_id="s")
         self.assertEqual(len(FakeClient.made), 2)
+        # A reset ends the old identity, not the new one.
+        handler({"question": "q"}, session_id="new")
+        ctx.hooks["on_session_reset"](session_id="new", old_session_id="s", new_session_id="new")
+        self.assertEqual(FakeClient.made[1].events[-1], {"kind": "session_end"})
+        self.assertEqual(FakeClient.made[2].events, [])
+
+    def test_no_session_id_uses_the_task_id_or_skips_eden(self):
+        _, ctx = plugin()
+        ctx.hooks["pre_llm_call"](session_id="", task_id="task-1", user_message="hi")
+        self.assertEqual(FakeClient.made[0].kw["session_id"], "task-1")
+        self.assertIsNone(ctx.hooks["pre_llm_call"](session_id="", task_id=None, user_message="hi"))
+        self.assertIsNone(ctx.hooks["pre_tool_call"](tool_name="send_email", args={}, session_id=""))
+        self.assertEqual(ctx.tools[ASK_TOOL][2]({"question": "q"}, session_id=""), "No context available.")
+        self.assertEqual(len(FakeClient.made), 1)
 
     def test_fails_open_everywhere(self):
         _, ctx = plugin()
@@ -151,7 +179,7 @@ class Hermes(unittest.TestCase):
         self.assertIsNone(ctx.hooks["post_tool_call"](tool_name="send", result="ok", session_id="s"))
         self.assertIsNone(ctx.hooks["transform_tool_result"](result="ok", session_id="s"))
         self.assertEqual(ctx.tools[ASK_TOOL][2]({"question": "q"}, session_id="s"), "No context available.")
-        self.assertIsNone(ctx.hooks["on_session_end"](session_id="s"))
+        self.assertIsNone(ctx.hooks["on_session_finalize"](session_id="s"))
         # Odd shapes from the check are no finding.
         _, ctx = plugin()
         ctx.hooks["pre_llm_call"](session_id="s", user_message="hi")
