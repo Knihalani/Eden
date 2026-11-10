@@ -180,66 +180,83 @@ promoted with `sourceYieldEarn` if section 0's four clauses hold for `eden~earn2
 
 Run 1's results are not read before run 2 is paid for, so neither run's shape depends on the other's outcome.
 
-## 3. Dormant sources (`syncDormantMs`, D602; a trial, off; not decided by a paid run)
+## 2b. Amendment to run 2 after two reviews (committed before run 2's first paid call; no result of run 1 read)
 
-With the trials above a 1,000-source user's request-time calls are about 2.4 a request, about 35 a day at 14
-requests. The weekly sweep of the sources the user does not use (D356) is then the largest cost left: on the
-user-day bench it lists all of them on day 8 (906 background listings that day against 125–145 on the others),
-about 130 calls a user-day spread over the week, and a connector without a fetch tool is swept daily (D415: every
-shipped preset).
+The reviewer (`.claude/agents/reviewer.md`, REQUEST_CHANGES twice) measured what the lab could not show: **the
+rare-word rule did not work at the scale it is for.** A sketch set two bits a term and folds to a fill of 0.2, so a
+word one source holds was also "held" by about one sketch in 25: at 1,000 sources with vocabularies of their own,
+about 27 false holders a word, and no word was ever held by "at most two". The lab hid it: its noise connectors
+share 45 words (their numbered words carry a digit, which a sketch drops), so their sketches set the same few bits
+and a world word missed all of them at once.
 
-`syncDormantMs` (0: off): a warm source no lookup has used for that long, and that does not notify, drops its
-synced items (`Sync.sleep`) and is no longer polled or swept; one listing page every `syncDormantRefreshMs` (28
-days) feeds its sketch alone. Its sketch and the source map's mentions stay, so a request with strong evidence
-still searches it live, and a lookup that uses it, or a read that stores an item of it, wakes it. Nothing is held,
-so nothing can be delivered stale or deleted, whatever the connector's fetch tool.
+Changed:
 
-Measured at $0 only (at two days in place of a week, so eight simulated days can show it): the user-day bench's
-sweep day 923 → 243 background listings with `sourceYieldEarn` (1,386 sources slept, some more than once: a poll
-on demand wakes one); days-calls at `--night-h 20`, seed 41: 919 sources slept, surfaced hidden 9 of 12 and decoys
-9 of 12 with and without; quality-cli at a cap of 300 identical to the companions' row above (its users live under
-two days). **Not decided here:** the lab's noise connectors never hold a fact, so no lab run can price what a
-dormant source's dropped copy would have found; Pi's `--days` compresses eight days into 36 hours and never reaches
-a week. The trade (about 100 listings a user-day against whatever a never-used source's held items are worth) is
-the owner's.
+- **Sketches set eight bits a term under `sourceYieldEarn`** (`TermSketch.probes`, `Sync`'s `sketchProbes`; folding
+  to a fill of 0.28, restart at 0.45). The default's sketches are untouched (two bits, the same dump); a saved
+  sketch loads only with its own number of probes, else it starts again. `o1-sketch-bytes.ts`, 995 noise connectors
+  with words of their own:
 
-## 2b. Amendment to run 2 after the review (committed before run 2's first paid call; no result of run 1 read)
+  | Distinct terms a source | Two probes: bytes a user, false holders a word | Eight probes |
+  | --- | --- | --- |
+  | 460 | 0.76 MB, 26.8 | 1.95 MB, 0.01 |
+  | 798 | 1.07 MB, 33.6 | 3.92 MB, 0.01 |
+  | 1,206 | 1.75 MB, 28.4 | 4.08 MB, 0.04 |
 
-The reviewer (`.claude/agents/reviewer.md`, REQUEST_CHANGES) measured what the lab could not show: **the rare-word
-rule did not work at the scale it is for.** A sketch set two bits a term and folds to a fill of 0.2, so a word one
-source holds was also "held" by about one sketch in 25: at 1,000 sources with vocabularies of their own, about 27
-false holders a word, and no word was ever held by "at most two". The lab hid it: its noise connectors share 45
-words (their numbered words carry a digit, which a sketch drops), so their sketches set the same few bits and a
-world word missed all of them at once.
-
-Changed, on the reviewer's findings:
-
-- **Sketches set four bits a term under `sourceYieldEarn`** (`TermSketch.probes`, `Sync`'s `sketchProbes`; folding
-  to a fill of 0.15, restart at 0.35). The default's sketches are untouched (two bits, the same dump).
-  `o1-sketch-bytes.ts`, 995 noise connectors with 1,000 words of their own each (460 distinct terms a source listed):
-  false holders of an unseen word 26.8 → 0.16 a word; at most one false holder for 4 of 500 words → 487 of 500;
-  **sketch memory 0.76 MB → 1.98 MB a user** (at 1,206 terms a source: 1.75 → 4.08 MB, 28.4 → 0.37 false holders).
-  A saved sketch loads only with its own number of probes (else it starts again).
+  **The cost is memory: 2.3 to 3.7 times the two-probe sketches, up to the 4.08 MB ceiling a 1,000-source user**
+  (995 sketches of 4 KB, reached near 800 terms a source), and a full-size sketch restarts after about 2,450
+  distinct terms where a two-probe one holds about 11,400 (arithmetic from the constants), so a large source's
+  older words are forgotten sooner. Four probes at the same bytes measured 0.16 false holders a word, which at
+  eight words a request is more than one false source read a request (7.2 calls a task on seed 41 against 5.3).
 - **The lab's noise connectors can have words of their own** (`--noise-vocab N`: funnel, pi-ab, days-calls;
-  `noiseSources`). Seed 41 at `--noise-vocab 1000`: the default 30.5 calls a task; the companions' bundle with
-  two-probe sketches 3.9 calls and two hidden tasks lost, two gained (the rare rule dead, as the reviewer said);
-  **with four probes 7.2 calls and no task different from the default.** Seeds 42–44: 29.7 / 33.2 / 34.4 → 7.2 /
-  8.6 / 8.2 calls a task; hidden surfaced +2, +1 −1, +2; decoys +1 −1, +1 −1, 0. Over four seeds: **hidden +5 −1 of
-  384, decoys +2 −2**, card calls 226–251 a seed.
-- **Dormancy** (not in any paid run): a dormant source is not polled on demand, nor one just woken that holds
-  nothing yet (a poll with no known item read page after page: 7 listings for one request in the reviewer's probe);
-  a restored user's dormant sources stay dormant (they were all swept at the first tick); a refresh makes no call
-  with `routeSketch` off, counts its call even when the source woke meanwhile, and stops adding at a full sketch
-  (a restart would forget the source's older words, and nothing re-lists a dormant source); a dormant source no
-  longer makes the tick thaw a frozen user. D602's wording now says what the code does: the clock runs for a source
-  out of the user's used set, not "unused for that long". Tests added for each, and for isolation.
+  `noiseSources`). At `--noise-vocab 1000`, the three switches against the default, on the code as committed:
+
+  | Screen | Default | Three switches |
+  | --- | --- | --- |
+  | Funnel, 995 noise, calls a task, seeds 41 / 42 / 43 / 44 | 30.5 / 29.7 / 33.2 / 34.4 | **5.3 / 4.9 / 6.8 / 6.8** |
+  | hidden surfaced of 384 (task diff) | | +4 −1 |
+  | control decoys surfaced of 384 (task diff) | | +2 −2 |
+  | card calls, seed 41 | 343 | 226 |
+  | 8 days, seeds 41–42: request-time calls a request | 10.4 | **3.5** |
+  | by day | 29.5 12.7 10.3 8.8 4.7 5.6 6.4 5.6 | 4.8 2.2 2.0 1.8 4.7 4.4 4.0 3.6 |
+  | background calls a user-day; steady calls a request | 11.8; 11.2 | 4.9; 3.8 |
+  | surfaced over days: hidden / decoys of 23 | 18 / 17 | 18 / 17 |
+
+  With two-probe sketches on the same noise the bundle read 3.9 calls a task and lost two hidden tasks of 96 (the
+  rare rule dead, as the reviewer said). With realistic vocabularies the default's own pools close after a user's
+  first four days (4.7–6.4 calls a request from day 5), so over days the switches' gain is mostly the first days.
+  A rare-word rule read on the request's named things alone lost six hidden tasks of 96 on seed 43: every word of
+  the request is needed.
 
 **Run 2 as amended.** Arms and rule as section 2. Two changes, both arms: the image is the commit that holds this
-section (four-probe sketches in `eden~earn2`), and every step passes `--noise-vocab 1000` (`EXTRA` in `run.sh`), so
+section (eight-probe sketches in `eden~earn2`), and every step passes `--noise-vocab 1000` (`EXTRA` in `run.sh`), so
 the default arm is no longer N1b's exact harness; the comparison is paired within the run as before.
 
 **What run 1 can now decide.** Run 1's arm ran the rule as first built, in the lab that flatters it. It stands as
 a measurement of that arm (reported in full), but **it promotes nothing on its own**: the decision matrix of
-section 2 is replaced by "the three switches, with four-probe sketches, are promoted together if run 2 passes
+section 2 is replaced by "the three switches, with eight-probe sketches, are promoted together if run 2 passes
 section 0's four clauses; otherwise they stay off (point estimate above −2.0) or are deleted". Promotion also
 states the sketches' memory (above) as a cost for the owner and O2.
+
+## 3. Dormant sources: built, screened at $0, removed after review (D602; a proposal, not a trial)
+
+With the trials above a 1,000-source user's request-time calls are a few a request. The weekly sweep of the sources
+the user does not use (D356) is then the largest cost left: on the user-day bench it lists all of them on day 8
+(906 background listings that day against 125–145 on the others), about 130 calls a user-day spread over the week,
+and a connector without a fetch tool is swept daily (D415: every shipped preset).
+
+Built as `syncDormantMs`: a warm source out of the user's used set for that long, and not notifying, dropped its
+synced items and was no longer polled or swept; one listing page every 28 days fed its sketch alone; strong
+evidence still searched it live, and use woke it. Nothing held, so nothing delivered stale or deleted, whatever the
+connector's fetch tool. At $0 (two days in place of a week, the first build, earlier lab): the user-day bench's
+sweep day 923 → 243 background listings; days-calls at `--night-h 20`, seed 41: 919 sources slept, surfaced hidden 9
+of 12 and decoys 9 of 12 with and without.
+
+**Removed from the branch** (the code is in commits 83b0ec8c and d23e1449). Two reviews found seven defects in its
+edges, each fixable but each new state: a waking source's poll read page after page; a restore swept every dormant
+source, and the fix then made dormant any source the cap had left empty, and a notifying one deaf to its notices; a
+woken source could stay unpolled; a refresh could restart a sketch and forget the source's older words. And the lab
+cannot decide it: its noise connectors never hold a fact, so no run prices what a dropped copy would have found,
+and Pi's `--days` compresses eight days into 36 hours and never reaches a week. A trial nothing can end is not one
+(D112). **What it would take:** a suite whose facts sit in rarely used sources (or the real-data pilot,
+docs/PILOT.md), dormancy saved in the snapshot (`PERSIST_FORMAT`), and the owner's view on about 100 listings a
+user-day against a never-used source's held copy.

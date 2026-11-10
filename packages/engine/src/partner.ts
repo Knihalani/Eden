@@ -768,12 +768,10 @@ export class ContextPartner {
             pushMaxStaleMs: c.syncPushMaxStaleMs,
             keepCut: c.syncKeepCut,
             sketch: c.routeSketch,
-            sketchProbes: c.sourceYield && c.sourceYieldEarn ? 4 : 2,
+            sketchProbes: c.sourceYield && c.sourceYieldEarn ? 8 : 2,
             engagedDeep: c.syncEngagedDeep,
             // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
             unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
-            dormantMs: c.syncDormantMs,
-            dormantRefreshMs: c.syncDormantRefreshMs,
           },
         )
       : null;

@@ -209,14 +209,12 @@ the sources with nothing used yet. A copy whose run has reached `sourceYieldRun`
 kind of read is clearly not paying (`sourceYieldFloor`), gets no search behind, no probe and no on-demand poll for a
 request that names nothing the source mentioned: it answers from what is held, and an ask gives it the status
 "unsearched" and says so, never an all-clear. Runs and pools halve every week, so sources are tried again. With
-1,000 sources this took Eden's connector calls from ~36 to ~11 a task over a user's days. Four trials, all off (O1,
-D600–D602; docs/research/o1-earn.md), turn the rule around: with `sourceYieldEarn` a copy with nothing used is read
+1,000 sources this took Eden's connector calls from ~36 to ~11 a task over a user's days. Three trials, all off (O1,
+D600, D601; docs/research/o1-earn.md), turn the rule around: with `sourceYieldEarn` a copy with nothing used is read
 live only on a name its items mentioned or a word of the request that at most `sourceYieldRare` (2) of the user's
-sources hold in their sketches (which then set four bits a term, so a thousand sketches give few false holders), and
+sources hold in their sketches (which then set eight bits a term, so a thousand sketches give few false holders), and
 the pools are not consulted; `sourceYieldNames` makes a name many sources mention weak for such a copy;
-`sourceYieldEngage` does not mark a source used by a request that reads nothing live of it; `syncDormantMs` drops the
-copy of a source long out of the user's used set, which is then not polled or swept and has one page listed every
-`syncDormantRefreshMs` for its sketch. A lookup polls at most its
+`sourceYieldEngage` does not mark a source used by a request that reads nothing live of it. A lookup polls at most its
 `syncPollWidth` (8) best-routed
 stale sources (D263); a warm source past them answers from its copy as it stands, as under `syncPollBehind`. Routing
 (`SourceMap.route`) adds, per source, log2(1 + its items among the request's 40 best matches in the user's own index)

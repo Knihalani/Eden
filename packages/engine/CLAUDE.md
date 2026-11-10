@@ -375,17 +375,19 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   nothing live (`pushLazy`, D506: stale deliveries 15 → 19, hidden −2.3 points one request a session), a longer
   reuse window for search pages (D507: a user's searches do not repeat) and one search of a source a lookup (D508:
   the probes' budget goes elsewhere).
-- **Trials on top of `sourceYield` (O1, D600–D602, all off; docs/research/o1-earn.md).** `sourceYieldEarn`: a warm
+- **Trials on top of `sourceYield` (O1, D600, D601, all off; docs/research/o1-earn.md).** `sourceYieldEarn`: a warm
   copy with nothing used is read live only on strong evidence (`evidenceFor` 2: a name its items mentioned, or a
   request word at most `sourceYieldRare` sources hold in their sketches, `Sync.sketchRare`); the pools are not
-  consulted, and `spentSources` acts from a user's first request. `sourceYieldNames`: a name more than that many
-  sources mention is strong only for a source with an item used. `sourceYieldEngage`: `searchLive` does not
-  `engage` a source it reads nothing live of (no deep copy, daily sweep or card call for it). `syncDormantMs`: a
-  source no lookup has used for that long drops its copy (`Sync.sleep`), is not polled or swept, and has one page
-  listed every `syncDormantRefreshMs` for its sketch (`refresh`); `engage` or any `store` of its items wakes it.
-  A held item that is handed over makes its source "used" (`handOut`), so a unit test of weak evidence must keep
-  the evidence out of the held copy (past the cut), as `source-yield-partner.test.ts` does. Screen with the 995-source
-  funnel and `days-calls.ts`; the five-source funnel cannot see any of them (314 / 274 with and without).
+  consulted, and `spentSources` acts from a user's first request. Under it the sync's sketches set eight bits a
+  term (`sketchProbes`, `TermSketch.probes`): with two, a thousand sketches give about 27 false holders a word and
+  the rare rule never fires; a saved sketch loads only with its own number of probes. `sourceYieldNames`: a name
+  more than that many sources mention is strong only for a source with an item used. `sourceYieldEngage`:
+  `searchLive` does not `engage` a source it reads nothing live of (no deep copy, daily sweep or card call for it).
+  A held item that is handed over makes its source "used" (`handOut`), so a unit test of weak evidence must keep the
+  evidence out of the held copy (past the cut), as `source-yield-partner.test.ts` does. Screen with the 995-source
+  funnel and `days-calls.ts`, both with `--noise-vocab 1000`: the lab's noise connectors otherwise share 45 words
+  and their sketches collide, which hid the false holders. The five-source funnel sees none of this (314 / 274).
+  Dormant sources (`syncDormantMs`, D602) were built and removed: nothing in the lab can price a dropped copy.
 - **A budget for live searches of cut copies was measured and deleted (D390, D391, docs/research/a28-scale.md).**
   Searching live only the 4 cut copies with the most routing evidence halved Eden's calls at 1,000 sources live, but
   left its path time unchanged (one live search of a cut copy that matters costs a connector's latency) and hidden

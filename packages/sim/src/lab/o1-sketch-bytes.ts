@@ -1,5 +1,5 @@
 /**
- * O1 (docs/research/o1-earn.md): what a user's sketches weigh with two and with four probes, and how many false
+ * O1 (docs/research/o1-earn.md): what a user's sketches weigh with two and with eight probes, and how many false
  * holders `Sync.sketchRare` would see, over the lab's noise connectors with words of their own.
  *   bun packages/sim/src/lab/o1-sketch-bytes.ts [sources=995] [vocab=1000] [items=20]
  */
@@ -10,7 +10,7 @@ import { noiseSources } from "./noise-sources";
 const [n = 995, vocab = 1000, items = 20] = process.argv.slice(2).map(Number);
 const world = buildWorld({ seed: 41 });
 const sources = noiseSources(world, n, items, 0, 41, vocab);
-for (const probes of [2, 4] as const) {
+for (const probes of [2, 8] as const) {
   let bytes = 0;
   let terms = 0;
   const sketches: TermSketch[] = [];

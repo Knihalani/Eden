@@ -371,16 +371,6 @@ export interface EngineConfig {
    * tick. At 1,000 sources the daily sweep was ~1,100 listing calls a user a day (D324).
    */
   syncUnusedSweepMs: number;
-  /**
-   * A trial, off (D602, O1; docs/research/o1-earn.md): 0, or how long (ms) a warm source that is not among the
-   * user's used sources (`Sync.engage`: never used, or pushed out of the 64 most recent) may hold a copy. Past it the
-   * source goes dormant (`Sync.sleep`): its synced items are dropped, it is no longer polled or swept, and one page
-   * of its listing is read every `syncDormantRefreshMs` for its sketch alone. Its sketch and the
-   * source map's mentions stay, so a request with evidence for it still searches it live; a lookup that uses it, or a
-   * read that stores an item of it, wakes it. A source that notifies is never dormant.
-   */
-  syncDormantMs: number;
-  syncDormantRefreshMs: number;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
   syncMaxUsersPerTenant: number;
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
@@ -833,8 +823,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   routeSketch: true,
   syncEngagedDeep: true,
   syncUnusedSweepMs: 7 * 24 * 3_600_000,
-  syncDormantMs: 0,
-  syncDormantRefreshMs: 28 * 24 * 3_600_000,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncPush: true,

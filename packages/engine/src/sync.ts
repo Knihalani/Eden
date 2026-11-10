@@ -91,8 +91,8 @@ export interface SyncOptions {
    * which `sketchScores` reads for routing.
    */
   sketch?: boolean;
-  /** `sourceYieldEarn` (D600): sketches set four bits a term (`TermSketch.probes`), for `sketchRare`. */
-  sketchProbes?: 2 | 4;
+  /** `sourceYieldEarn` (D600): sketches set eight bits a term (`TermSketch.probes`), for `sketchRare`. */
+  sketchProbes?: 2 | 8;
   /**
    * `syncUnusedSweepMs` (D356, on in the default at a week; 0 or absent: off): a source the user does not use
    * (`engage`) whose connector can fetch by ref is swept this often (ms) instead of every `sweepMs`. The engine
@@ -100,16 +100,6 @@ export interface SyncOptions {
    * before delivering them, since a deletion may be behind them.
    */
   unusedSweepMs?: number;
-  /**
-   * `syncDormantMs` (D602, a trial; 0 or absent: off): a warm source that is not among the user's used sources
-   * (`engage`: never used, or pushed out of the 64 most recent) and has not been for this long, and that does not
-   * notify, goes dormant: the items synced from it are dropped (its sketch and the source map's
-   * mentions stay, so a request can still be routed to it and search it live), and it is no longer polled or swept.
-   * Every `dormantRefreshMs` one page of its listing is read for the sketch alone. A lookup that uses it, or any read
-   * that stores an item of it, wakes it.
-   */
-  dormantMs?: number;
-  dormantRefreshMs?: number;
   /**
    * `syncPush`: a source that says it `notifies` is current until told it changed (`Sync.changed`) or its last poll
    * is `maxStaleMs` old, instead of by its learned change rate.
@@ -253,13 +243,6 @@ interface SourceSync {
    * complete sweep, because the source was on the longer one. Its copies older than `sweepMs` are then in doubt.
    */
   skipped: boolean;
-  /** `dormantMs`: when the source became warm, was last used by a lookup (`engage`) or left the used set. */
-  idleAt: number;
-  /** `dormantMs`: dormant now (nothing of it is held; `sleep`), and when its sketch was last refreshed. */
-  dormant: boolean;
-  refreshedAt: number;
-  /** `dormantMs`: woken by a lookup and holding nothing yet; its read from the top (`deep`) or a search fills it. */
-  woke: boolean;
 }
 
 interface UserSync {
@@ -434,14 +417,6 @@ export class SyncManager {
       }
       s.engaged = x.engaged;
       s.skipped = x.skipped;
-      // Dormancy is not saved, but a source that was dormant is known by what it holds: warm, cut, not used, no
-      // item. It is dormant again, its sketch refreshed as of now, or the first tick would sweep every one (the
-      // review: one listing a source at each restart).
-      s.idleAt = this.deps.now();
-      if ((this.o.dormantMs ?? 0) > 0 && s.phase === "warm" && s.cut && !s.engaged && s.ids.size === 0) {
-        s.dormant = true;
-        s.refreshedAt = s.idleAt;
-      }
       // As last seen, so a copy is doubted (`signalledSince`) and swept as before from the first event on; the next
       // `notes` (a lookup or a tick) sets both again from the source.
       s.notifies = x.notifies === true;
@@ -641,10 +616,6 @@ export class SyncManager {
       // only grew gave back the card savings over weeks).
       u.used.delete(id);
       u.used.add(id);
-      s.idleAt = this.deps.now();
-      // `dormantMs`: a lookup uses it again (a dormant source is never engaged: its cut copy is read from the top).
-      if (s.dormant) s.woke = true;
-      s.dormant = false;
       if (s.engaged) continue;
       s.engaged = true;
       fresh.push(id);
@@ -658,7 +629,6 @@ export class SyncManager {
       if (s) {
         s.engaged = false;
         s.deep = null;
-        s.idleAt = this.deps.now();
       }
     }
     return fresh;
@@ -848,9 +818,6 @@ export class SyncManager {
         const s = u.sources.get(source.id);
         if (s) this.notes(s, source);
         if (!s || s.phase !== "warm" || this.isCurrent(s, now) || !source.list) return;
-        // `dormantMs` (D602): a dormant source holds nothing, so a poll would find no item it knows and read page
-        // after page (the review: 7 listings for one request). Its copy is cut: the lookup searches it live.
-        if (s.dormant || s.woke) return;
         // Its last on-demand poll just ran out of time (D140): not current, so the lookup searches it live.
         if (now - s.demandGaveUpAt < (this.o.demandTimeoutMs ?? 0)) return;
         // Its listing failed twice running and is backing off (`failed`): every lookup listed it again regardless, a
@@ -880,78 +847,6 @@ export class SyncManager {
   }
 
   // ── internals ──
-
-  /** `dormantMs` (D602): a warm source no lookup uses, that does not notify, idle for `dormantMs`, not yet dormant. */
-  private dormantDue(s: SourceSync, now: number): boolean {
-    const after = this.o.dormantMs ?? 0;
-    return (
-      after > 0 &&
-      !s.dormant &&
-      !s.engaged &&
-      !s.notifies &&
-      s.phase === "warm" &&
-      s.sweep === null &&
-      s.deep === null &&
-      now - s.idleAt >= after
-    );
-  }
-
-  /**
-   * `dormantMs` (D602): the source goes dormant. Its synced items leave the cache (not deletions: the source still has
-   * them), its copy is cut, so nothing answers for it from the index and a lookup with evidence searches it live.
-   */
-  private sleep(u: UserSync, s: SourceSync, now: number): void {
-    this.deps.cache.dropSynced(u.scope, s.ids);
-    s.ids.clear();
-    s.missed.clear();
-    s.pushed.clear();
-    s.cut = true;
-    s.wholeAt = -1;
-    s.skipped = false;
-    s.dormant = true;
-    s.woke = false;
-    s.refreshedAt = now;
-  }
-
-  /**
-   * `dormantMs` (D602): one page of a dormant source's listing, read for its sketch alone (nothing is stored), so a
-   * word new to the source can still route a request to it. One background listing call.
-   */
-  private async refresh(u: UserSync, s: SourceSync, source: Source): Promise<void> {
-    // No sketch to feed (`routeSketch` off): no call.
-    if (!this.o.sketch) {
-      s.refreshedAt = this.deps.now();
-      return;
-    }
-    if (this.budget.take(budgetKey(u, s)) > 0) return;
-    const page = await this.list("sweep", source, u.scope, undefined, this.o.pageSize, {
-      timeoutMs: this.o.timeoutMs,
-      reserve: SERVING_HEADROOM,
-    });
-    if (u.gone) return;
-    if (typeof page === "string") {
-      if (page !== "limited" && page !== "busy") this.stats.backgroundCalls++;
-      if (s.dormant) this.failed(s, page);
-      return;
-    }
-    // Counted whatever happened meanwhile: the connector received the call.
-    this.stats.backgroundCalls++;
-    this.stats.backgroundItems += page.items.length;
-    // Woken while the page was read (a lookup used it): its copy is being read again, sketch and all.
-    if (!s.dormant) return;
-    s.failures = 0;
-    s.refreshedAt = this.deps.now();
-    const sketch = (s.sketch ??= new TermSketch(this.o.sketchProbes ?? 2));
-    for (const it of page.items) {
-      if (it.sourceId !== s.id) continue;
-      for (const t of sketchTerms(`${it.title} ${it.text}`)) {
-        // A full sketch would start again at the next term and forget every older one, and no sweep re-lists a
-        // dormant source to fill it back (the review): it keeps what it has.
-        if (sketch.full) return;
-        sketch.add(...termHashes(t));
-      }
-    }
-  }
 
   /**
    * `unusedSweepMs` (D356): a source the user does not use whose connector can fetch by ref is swept that often. One
@@ -1047,11 +942,7 @@ export class SyncManager {
     const now = this.deps.now();
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
-    // A dormant source is never swept, and its refresh stores nothing: it needs no thaw.
-    const due = (s: SourceSync) =>
-      s.phase === "warm" &&
-      !s.dormant &&
-      (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs || this.dormantDue(s, now));
+    const due = (s: SourceSync) => s.phase === "warm" && (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs);
     thawing = [...u.sources.values()].some(due) ? this.deps.cache.ready(u.scope) : null;
     if (thawing) await thawing;
     if (u.gone) return;
@@ -1059,13 +950,6 @@ export class SyncManager {
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);
         if (!source || s.phase !== "warm" || s.busy || now < s.retryAt) return;
-        // `dormantMs` (D602): a source long unused holds nothing and is not swept; its sketch is refreshed at times.
-        if (this.dormantDue(s, now)) this.sleep(u, s, now);
-        if (s.dormant) {
-          const every = Math.max(this.o.dormantRefreshMs ?? 0, this.o.dormantMs!);
-          if (now - s.refreshedAt >= every) await this.run(s, () => this.refresh(u, s, source));
-          return;
-        }
         const every = this.onLongSweep(s) ? Math.max(this.o.unusedSweepMs!, this.o.sweepMs) : this.o.sweepMs;
         if (s.sweep !== null || now - s.sweptAt >= every) await this.run(s, () => this.sweep(u, s, source));
         else if (now - s.sweptAt >= this.o.sweepMs) s.skipped = true;
@@ -1239,7 +1123,6 @@ export class SyncManager {
   private warmUp(u: UserSync, s: SourceSync, now: number): void {
     if (s.phase === "warm") return;
     s.phase = "warm";
-    s.idleAt = now;
     // The backfill's pages are in: a quiet source's sketch shrinks to what its terms need.
     s.sketch?.fold();
     // Done before its listing ended: the rest was older than the user's cut, and is not held.
@@ -1533,13 +1416,6 @@ export class SyncManager {
     // counted as synced, or the listing would undo `removed`.
     const own = kept.filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now));
     const changed = this.deps.cache.put(u.scope, own, now, true, true, readMark);
-    // `dormantMs`: a read stored items of a dormant source (a lookup's poll): it holds a copy again, swept as any
-    // other, and sleeps once more if no lookup comes to use it.
-    if (s.dormant && own.length > 0) {
-      s.dormant = false;
-      s.idleAt = now;
-    }
-    if (own.length > 0) s.woke = false;
     if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
     for (const it of own) {
@@ -1767,10 +1643,6 @@ function newSourceSync(id: string): SourceSync {
     sketch: null,
     fetches: false,
     skipped: false,
-    idleAt: 0,
-    dormant: false,
-    refreshedAt: 0,
-    woke: false,
   };
 }
 
