@@ -86,6 +86,8 @@ export const INTENT_COVERS: Record<string, string[]> = {
   heldout16: ["41", "42", "43", "44"],
   // The end-of-day confirmation's blind suite (docs/research/a19-heldout17.md): made on Haiku 5.5 on 2026-11-07, unrun.
   heldout17: ["41", "42", "43", "44"],
+  // M6's blind suite (docs/research/m6-heldout18.md): made on Haiku 5.5 on 2026-11-10, unrun.
+  heldout18: ["41", "42", "43", "44"],
 };
 
 /** The suite × seed shards INTENT_FILE was not made for. */

@@ -348,10 +348,10 @@ describe("the harnesses' intent replay (D158)", () => {
 
   // Own timeout: four worlds built and listed take about 5 s under `bun run check`'s parallel run, past bun's default
   // 5 s (one of three timed checks failed on it, 5,410 ms; RealUse-1 part E).
-  test("the checked-in file covers held-out 13 to 17 items (the shards INTENT_COVERS claims)", () => {
+  test("the checked-in file covers held-out 13 to 18 items (the shards INTENT_COVERS claims)", () => {
     const requests = loadRequests(INTENT_PATH);
     for (const [suite, seed] of [41, 44].flatMap((s) =>
-      (["heldout13", "heldout14", "heldout15", "heldout16", "heldout17"] as const).map((x) => [x, s] as const),
+      (["heldout13", "heldout14", "heldout15", "heldout16", "heldout17", "heldout18"] as const).map((x) => [x, s] as const),
     )) {
       for (const variant of ["hidden", "control"] as const) {
         // As hidden-funnel.ts and ab-common's worldOf build each world.
@@ -372,5 +372,5 @@ describe("the harnesses' intent replay (D158)", () => {
         expect(mine.found).toBe(mine.of);
       }
     }
-  }, 150_000); // Twenty worlds now (held-out 13 to 17), five times the earlier four.
+  }, 180_000); // Twenty-four worlds now (held-out 13 to 18), six times the earlier four.
 });
