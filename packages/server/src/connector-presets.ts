@@ -58,8 +58,9 @@ export const PRESETS: Readonly<Record<string, ConnectorPreset>> = {
     verified: "Google's hosted Gmail MCP server: tools/list input schema of search_threads, 2026-11-07",
     noFetch:
       "get_thread returns every message of a thread (no messageFormat narrows it) where the summary view holds only " +
-      "the newest, with messageCount (both tools' served descriptions, 2026-11-10): a re-read of an unchanged thread " +
-      "of two or more messages would differ in its text and be sent as an update (D126, D205)",
+      "the newest, and messageCount sits only on the search's thread (fixtures/google-tool-descriptions.json, " +
+      "2026-11-10): the thread row is held as its whole JSON, so a re-read of any unchanged thread would differ in " +
+      "its text and be sent as an update (D126, D205)",
     annotations: "not captured: if the server does not mark search_threads readOnlyHint, the connect is refused",
   },
   "google-calendar": {

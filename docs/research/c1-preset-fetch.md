@@ -9,8 +9,8 @@ name no fetch tool, so they never get the weekly sweep.
 
 We looked at each preset to see whether a fetch tool can safely be added. For now none can:
 
-- **Gmail.** A Gmail fetch returns the whole thread. The search Eden uses returns only the newest message. If Eden
-  re-read an unchanged thread with a fetch, the copy would look different and the agent would be sent an "updated"
+- **Gmail.** A Gmail fetch returns the whole thread. The search Eden uses returns only the newest message, plus a
+  message count the fetch lacks. If Eden re-read any unchanged thread with a fetch, the copy would look different and the agent would be sent an "updated"
   notice for nothing. That breaks the "silent by default" rule.
 - **Google Calendar.** The fetch tool's arguments are known and map correctly, but nobody has captured what it
   returns. If its copy differs from the search's in any field, the same false "updated" notice follows. The preset has
@@ -24,8 +24,8 @@ an operator how to add one by hand once they have checked that their server's tw
 
 | Preset | Fetch tool on the server | Input schema | Can the fetched copy stand for the searched one? |
 | --- | --- | --- | --- |
-| `gmail` | `get_thread` | `google-tools.json`: `threadId` (required), `messageFormat` enum | No. The served descriptions (Google's hosted Gmail server, read 2026-11-10 in this session's tool list; schemas only, no mail read): `THREAD_VIEW_SUMMARY` "returns `THREAD_VIEW_MINIMAL` fields with only the most recent message per thread (`messages` has at most 1 entry), plus `messageCount` and `viewUrl`"; `get_thread` returns "a list of its messages", and its formats (`MINIMAL`, `METADATA_ONLY`, `PLAIN_TEXT`, `FULL_CONTENT`) change each message's fields, not how many. A thread row has no top-level title or text key, so `rowItem` holds its whole JSON as the text (`mcp-source.ts`), and D205's version (title and text) differs for any thread of two or more messages. |
-| `google-calendar` | `get_event` | `google-tools.json`: `eventId` (required), `calendarId` (optional, primary by default) | Unknown. No reply of either tool was captured. An event's title is its `summary` and its text its `description`, or the whole JSON when there is none, so any field the two tools serialise differently would read as a change. No `listTool` (D57), so D356 does not apply to this preset at all. |
+| `gmail` | `get_thread` | `google-tools.json`: `threadId` (required), `messageFormat` enum | No. The served descriptions (Google's hosted Gmail server's tools/list, captured 2026-11-10 in `fixtures/google-tool-descriptions.json`; tool metadata only, no mail read): `THREAD_VIEW_SUMMARY` "returns `THREAD_VIEW_MINIMAL` fields with only the most recent message per thread (`messages` has at most 1 entry), plus `messageCount` and `viewUrl`"; `get_thread` returns "a list of its messages", and its formats (`MINIMAL`, `METADATA_ONLY`, `PLAIN_TEXT`, `FULL_CONTENT`) change each message's fields, not how many. A thread row has no top-level title or text key, so `rowItem` holds its whole JSON as the text (`mcp-source.ts`), and D205's version (title and text) differs for any thread: `messageCount` is only on the search's thread, the default `FULL_CONTENT` adds bodies and attachments to each message, and a second message adds more. The thread's reply shape is inferred from these descriptions; no reply was captured. |
+| `google-calendar` | `get_event` | `google-tools.json`: `eventId` (required), `calendarId` (optional; primary by default per the served description) | Unknown. No reply of either tool was captured. An event's title is its `summary` and its text its `description`, or the whole JSON when there is none, so any field the two tools serialise differently would read as a change. No `listTool` (D57), so D356 does not apply to this preset at all. |
 | `caldav` | not captured | lab fixture has `caldav_search_events` only | Not checked: no schema. |
 | `obsidian` | not captured | lab fixture has `search_notes` only | Not checked: no schema. |
 
@@ -45,8 +45,10 @@ and `get_event` maps it to `eventId`, never `calendarId`. So an operator's hand-
 - `get_thread` and `get_event` map from their served schemas to `{threadId}` and `{eventId}`;
 - the source built through `UserSources` from a Gmail preset entry with the operator's own `fetchTool` has
   `fetchesById` true and fetches by id. Under a synced `ContextPartner` with `syncUnusedSweepMs` set to a week, it is
-  listed 0 times in three active days, while the plain preset entry is listed 3 or more times. With the switch at 0
-  the first count is 6 and the test fails, so the test tells the two sweeps apart.
+  listed exactly once a week (one two-page sweep, 2 calls, in eight active days), while the plain preset entry is
+  swept daily (14 or more calls). With the switch at 0 the fetching source is swept daily as well and the test fails,
+  so the test tells the two sweeps apart and also catches a source that is never swept again.
+- the fixture's served descriptions still say what D415 rests on.
 
 ## Next
 

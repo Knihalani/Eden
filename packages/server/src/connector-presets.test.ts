@@ -17,6 +17,7 @@ import {
 } from "../../sources/src/schema-args";
 import labTools from "../../sources/src/fixtures/mcp-tools.json";
 import { expandPreset, PRESETS } from "./connector-presets";
+import described from "./fixtures/google-tool-descriptions.json";
 import google from "./fixtures/google-tools.json";
 import { checkSpecs, SourceConfigError, UserSources } from "./user-sources";
 
@@ -58,8 +59,13 @@ describe("connector presets (D294)", () => {
   test("every preset names a fetch tool or says why not (C1, D415)", () => {
     for (const [name, p] of Object.entries(PRESETS)) {
       // Exactly one: a fetch tool, or the reason there is none (the daily sweep, D356; doubted copies held, D126).
-      expect([name, p.fetchTool === undefined, (p.noFetch ?? "").length > 20]).toEqual([name, true, true]);
+      expect([name, (p.fetchTool !== undefined) !== (p.noFetch ?? "").length > 20]).toEqual([name, true]);
     }
+    // Today none names one (D415); a preset that gains a verified fetch tool changes this line and its decision.
+    expect(Object.values(PRESETS).filter((p) => p.fetchTool)).toEqual([]);
+    // The served descriptions D415 rests on: the summary search holds one message, get_thread every one.
+    expect(described.search_threads["view.THREAD_VIEW_SUMMARY"]).toContain("`messages` has at most 1 entry");
+    expect(described.get_thread.description).toContain("a list of its messages");
   });
 
   test("Google's fetch-by-id tools map from their served schemas, the ref to the id argument (C1)", () => {
@@ -206,14 +212,15 @@ describe("connector presets (D294)", () => {
     expect(sync.warm(scope)).toBe(true);
     const listings = (g: ReturnType<typeof gmailServer>) => g.calls.filter((c) => c.name === "search_threads").length;
     const before = [listings(plain), listings(fetching)];
-    // Three active days, the sync ticking every 10 minutes; neither source is used (no lookup routes to it).
-    for (let k = 0; k < (3 * DAY) / (10 * MIN); k++) {
+    // Eight active days, the sync ticking every 10 minutes; neither source is used (no lookup routes to it). The
+    // plain source is swept daily (two pages a sweep), the one with a fetch tool once, at the week.
+    for (let k = 0; k < (8 * DAY) / (10 * MIN); k++) {
       clock += 10 * MIN;
       sync.track(scope, clock);
       await sync.tick();
     }
-    expect(listings(plain) - before[0]!).toBeGreaterThanOrEqual(3);
-    expect(listings(fetching) - before[1]!).toBe(0);
+    expect(listings(plain) - before[0]!).toBeGreaterThanOrEqual(14);
+    expect(listings(fetching) - before[1]!).toBe(2);
     await users.close();
   });
 });
