@@ -1,7 +1,8 @@
 # O3: the push check behind the packet ("K behind")
 
 Status: 2026-11-10, branch `claude/o3-k-behind` (from `claude/lucid-hypatia-v9wqk5` at 146aa636), session O3, measured.
-Decisions D700, D701, D704. **Result: killed (§4).** Train suites only (train1–6); heldout18 is not dumped, labelled or run. Every paid call goes to
+Decisions D700, D701, D704. **Result: killed (§4).** Train suites only (train1–6); heldout18 is not dumped,
+labelled or run. Every paid call goes to
 Anthropic directly with `HAIKU_API_KEY` through the lab (D97): **Anthropic-direct lab figures**. Numbers marked
 **[EST]** are arithmetic or judgement; every other number comes from a command in this note. Cap: Anthropic $25
 (ledger `.local/o3/ledger.jsonl`); Modal is not used (the runs are local, one seed a process, two at a time).
@@ -26,8 +27,8 @@ Sonnet 5.5 (`i3-regrade.ts`, $0.11), read with `decomp.py` against each task's t
 - **30 of the 72 misses had the fact in hand.** Read one by one, most of those answers state the fact's core and
   leave out a specific the grader requires (the sign-off needed, the exception route, the fee), a few reason past it,
   one was cut by the excerpt. The excerpt is not the lever: D258 measured 93% of the fact's words kept at 320 bytes.
-- **Of the 42 never handed** (the funnel's view of the same tasks, `base.json`): 13 had no candidates push at all (no
-  constraint-like item in the pool, so no check would run either; the funnel's ask finds 8 of them), 13 had the fact
+- **Of the 42 never handed** (the funnel's view of the same tasks, `base.json`): 13 started no push at all (so no
+  check would run either; the funnel's ask finds 8 of them: their verb is on no list, o3-push-open.md), 13 had the fact
   in the pool at places 6–15, 12 had it outside the pool, 4 other.
 - So 90% needs both: the fact handed in about 95% of tasks (150 of 192 today) and stated with its specifics in about
   95% of those (120 of 150 today).
@@ -53,7 +54,7 @@ Sonnet 5.5 (`i3-regrade.ts`, $0.11), read with `decomp.py` against each task's t
   agent after its reply (Pi's follow-up message); the product's client has no such hook, so this arm can be
   recommended, not promoted.
 
-## 2. Pilot at $0.26 (funnel, seed 41, check live; the funnel takes every follow-up)
+## 2. Pilot at $0.24 (funnel, seed 41, check live; the funnel takes every follow-up)
 
 `.local/o3/funnel-b.sh` (`bun run funnel … --check live`), against `base.json`; 192 tasks a variant:
 

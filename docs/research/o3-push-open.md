@@ -26,11 +26,14 @@ the fact handed and 30 had it in hand. Two things stand out, neither needing a m
 
 ## 1. What is built (trials, off)
 
-- **`pushOpen` (D702).** With `pushCandidates`, the push also runs for a message `isOpenRequest` reads as a request
-  by its shape: at least four words, not a remark or reply ("Thanks, …", "Yes …"), not a request to be told ("let me
-  know …"), and a question mark only on a polite ask ("Can you …?"). The candidates' own gate (a constraint-like
-  item in the pool) still decides whether a packet goes. The reader's paid push (`pushCandidates` 0) keeps the verb
-  lists.
+- **`pushOpen` (D702).** With `pushCandidates` and without `pushCheck`, the push also runs for a message
+  `isOpenRequest` accepts. No verb can be recognised without a list, so it reads what the message is not: at least
+  four words, and its first word after the openers is not a remark's ("Thanks, …"), a question's ("What …", "Is …",
+  or a "can/could/would/will" not followed by "you"), a statement's ("I think …", "The boiler …") or a request to be
+  told ("let me know …"); a question mark only on a polite ask ("Can you …?"). The candidates' own gate (a
+  constraint-like item in the pool) still decides whether a packet goes. The reader's paid push (`pushCandidates` 0)
+  and the push check keep the verb lists. **As measured in §2–§4 the test was looser (any message of four or more
+  words that was not a remark or a plain question); §5 says what the review changed and what that moves.**
 - **`candidatesSpecifics` (D703).** The candidates' lead adds one line (`CANDIDATES_SPECIFICS`): if an item does
   bear on the request, tell the user what it says and what it means for the request, with the item's own specifics
   (the limit, date, amount or fee, who has to agree, what has to happen first). The check before it and "if it is
@@ -104,13 +107,54 @@ answers (0 failed). `bench_report.py --sonnet` (template-clustered) and `n5/mix.
   81%). The agent turned none of the extra look-alikes into a confirmed concern here (Haiku flagged 11 more answers;
   Sonnet confirmed one in each arm). The brief wanted look-alikes handed down, so this session does not promote it:
   it stays an off trial for the owner, with a blind run on heldout18 as the next step (D706).
-- **`candidatesSpecifics` fails** (+2.0 points against a bar of +4.0) and adds nothing to `pushOpen` (−0.1). Deleted
-  with its code and tests (D705; the code is in commit d63681c8).
+- **`candidatesSpecifics` fails** (+2.0 points against a bar of +4.0). `eden~OL` meets the rule as printed (+4.0,
+  concerns level), but it is `pushOpen` with a line that adds nothing (−0.1 against `pushOpen` alone) for three
+  times the cost, so the line is deleted with its code and tests (D705; the code is in commit d63681c8).
+- **Some facts change path.** With the switch on, facts the default delivered by a rule path (a grounded conflict,
+  the fallback) arrive in the candidates' packet instead: on funnel seeds 41–42 the hidden rule paths read candidates
+  243, grounded-conflict 13, fallback 3, others 3 without it and candidates 293, grounded-conflict 2 with it. The live
+  figures are net of this.
 - **What is left after `pushOpen`** (seeds 41–44, its arm, 768 hidden tasks): the fact is in a push packet in 596
   (488 raised), only in an ask's answer in 36 (27), never handed in 136 (the agent asked in 35). So the two gaps are
   still open: about 18% of tasks never get the fact (it is outside the ranking's top five or outside the pool, where
   only a read of the request against more items has found it: N2, N5), and about 18% of handed facts are not stated
   with their specifics (a line asking for them did not move that).
+
+## 5. Review, and what it changed
+
+The reviewer subagent ran on 146aa636..c9ac7fe8 (REQUEST_CHANGES; on its own run `CHECK_COLD=1 bun run check` green,
+eval 0.65 / 0.52 / 0, funnel 314 / 274, and §2's and §4's figures reproduced). Fixed after the paid runs:
+
+- **With `pushCheck` on, an opened push made the check's paid call.** `pushOpen` now does nothing when `pushCheck`
+  is on (a test holds it); "no model call" is true as built.
+- **An opened message was kept as an acting request for plan alerts (D301),** so a remark could be quoted later as
+  the user's request. Only listed verbs are kept now. Plan alerts were not exercised by §4's runs.
+- **The test accepted almost any message of four or more words,** and read the whole text. It now rejects question,
+  statement and remark openers with or without a question mark, reads the first word after the openers, takes
+  "can/could/would/will" as a request only before "you", is Unicode-aware, and reads the first 400 characters and
+  the last 32. On train seeds 41–44 this changes the packet for **2 of 192 templates** ("When you do Mum's FreshCart
+  order …, add …", "I can't make the Larkspur Winter Weekender … just forward my ticket …": 24 of 2,304 tasks); every
+  other task's packet is the same as in the measured arm. At $0 the tree as shipped reads planted handed **582** of
+  768 (+91 −0; measured arm 590), decoy handed 502 (510), neutral packets 738 (746). **So §4's live figures are the
+  looser test's; the shipped test differs on about 1% of tasks and was not re-run live.**
+- The isolation test could not fail (the other user had no session); it now gives them one.
+
+**A filter for the extra packets (the parent's question, $0).** On the 392 pushes the open rule adds (seeds 41–44:
+132 hidden, 131 control, 129 neutral; 99 planted and 92 decoys handed), no no-model test of the pool keeps the facts
+and drops the neutral packets:
+
+| Push only when                                   | Planted handed (of 99) | Neutral packets (of 129) | Decoys handed (of 92) |
+| ------------------------------------------------ | ---------------------- | ------------------------ | --------------------- |
+| a constraint-like item is among those handed     | 91                     | 97                       | 87                    |
+| a constraint-like item is in the top five        | 93                     | 108                      | 90                    |
+| three or more constraint-like items in the pool  | 90                     | 104                      | 80                    |
+| an anchored item is handed                       | 59                     | 54                       | 60                    |
+| a constraint-like, anchored item is in the pool  | 48                     | 29                       | 41                    |
+
+The mildest trims a quarter of the added neutral packets for 8% of the facts; none was built.
+
+**Notes on the figures.** `eden` reads 61.1% on seeds 41–44 here and 62.1% in o3-check-behind.md §4: two separate
+runs of the same arm. Stage 2 ran on d63681c8's code as stage 1 did. Spend figures are the ledger's, rounded.
 
 **Spend (both O3 notes):** Anthropic **$13.67** booked of $25 (`.local/o3/ledger.jsonl`: this note's runs $5.48 and
 regrades $3.41; o3-check-behind.md's $4.79). Modal $0.

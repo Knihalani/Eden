@@ -472,6 +472,12 @@ ask's wait leaves the ask answered without the reader.
 Its packet is queued only if the session is still open and no newer user message has arrived; the agent's own events in
 between (tool calls, its replies) do not make it stale.
 
+**The push for any request (`pushOpen`, O3, D702, D706; a trial, off).** `observe` starts the push only for a request
+whose verb `isImperative` lists, a gate from the reader's paid push. With `pushOpen`, `pushCandidates` and no
+`pushCheck`, a message that does not open as a question, a remark or a statement (`isOpenRequest`) starts it too: no
+model call, the candidates' own gate unchanged, and no acting request recorded for plan alerts
+(docs/research/o3-push-open.md).
+
 **The intent index** (`intent`, needs `cards`, on in the default, D112; D87, D109, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four requests
 the item would change, in a user's words (validated, at most 120 characters each, redacted); items the card prefilter
