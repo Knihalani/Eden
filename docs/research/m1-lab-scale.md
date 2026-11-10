@@ -65,6 +65,13 @@ regrade capped at what is left, at most $0.30). Modal spend is reported from the
 under $60. A shard that hits its cap stops early; its tasks are dropped from the pairs it did not finish and the note
 says how many.
 
+**Amendment before the main runs (after the smoke shard, before any main-run call).** The smoke shard (train1 seed 41,
+`--limit 4`, `tools,eden`, 16 task runs) spent $0.0058, about $0.00036 a task run. At that rate the plan above costs
+about $10 before cards and the regrade, so: the short horizon runs `tools` on seeds 41–44 only (its four part arms on
+all eight seeds; part effects are read against `eden`, which every shard has), and the 1,000-source check runs hidden
+tasks only (`--variants hidden`). Caps: short 41–44 $3.20 (24 shards), short 45–48 $2.80 (24 shards), long $3.20 (8
+shards), 1,000 sources $0.45 (24 shards), regrade at most $0.30; with the smoke, $9.96 at most.
+
 **Metrics.** Hidden facts raised; false concerns on control (short and long) and neutral (long), Haiku-graded and
 after the regrade; $ per 1,000 tasks (agent billed + Eden per task + background cards spread over the arm's task
 runs; the short horizon over its hidden + control tasks, the long horizon over the user's mixed days) and the
