@@ -642,24 +642,6 @@ export interface EngineConfig {
    */
   pushCandidatesSettled: number;
   /**
-   * I1 (D471; a trial, off; docs/research/i1-checker.md): with `pushCandidates` and a `checker` dependency (the lab's
-   * CPU sidecar; no server wires one), the push's pool is scored by a small cross-encoder distilled from Opus's labels
-   * ("about the same person, thing and date as the request, and bears on it") and its candidates are the pool's items
-   * scoring at least `pushCheckPass`, in the pool's order, the first `pushCandidates` of them: items 6-15 that pass
-   * enter, items 1-5 that fail leave, and a pool with none passing sends no candidates packet. A checker that errs or
-   * misses `pushCheckWaitMs` leaves the default's candidates.
-   */
-  pushCheck: boolean;
-  /** `pushCheck`'s pass mark on the checker's score (0-1; 0.5 pre-registered, D470). */
-  pushCheckPass: number;
-  /** How long the push waits for the checker before it hands the default's candidates (ms). */
-  pushCheckWaitMs: number;
-  /**
-   * `pushCheck` as a gate only (I1's exploratory arm, D473): the checker decides only whether the push sends
-   * candidates (none passing: no packet); when one passes, the default's candidates go out unchanged.
-   */
-  pushCheckGate: boolean;
-  /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
    * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
@@ -805,9 +787,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askNudge: true,
   askNudgeDeep: true,
   pushCandidatesSettled: 2,
-  pushCheck: false,
-  pushCheckPass: 0.5,
-  pushCheckWaitMs: 500,
-  pushCheckGate: false,
   revisionDiff: true,
 };

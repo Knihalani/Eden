@@ -147,7 +147,6 @@ import {
 } from "./neutral";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
-import { checkerLine, sidecarChecker } from "./i1-checker";
 import {
   coverageLines,
   intentPlace,
@@ -218,7 +217,6 @@ const cli = flags(
         "push",
         "push-rates",
         "fetch-gone",
-        "checker",
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
@@ -308,11 +306,6 @@ const SERIAL = cli.has("serial");
  * are unchanged by it.
  */
 const NEUTRAL = cli.has("neutral");
-/**
- * `--checker URL` (I1, D471): the pair checker sidecar (`packages/sim/lab/i1/sidecar.py`) the `pushCheck` trial reads.
- * Wiring it changes nothing unless the run's configuration turns `pushCheck` on (`--set pushCheck=true`).
- */
-const CHECKER = opt("checker", "") ? sidecarChecker(opt("checker", "")) : null;
 const NOOP_SPANS = opt("spans", "") === "noop";
 const REAL_SYNC = RUN.sync;
 if (REAL_SYNC && SYNC) throw new Error("--sync (the oracle) and the real sync (config sync) are exclusive");
@@ -861,7 +854,6 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
-    ...(CHECKER ? { checker: CHECKER } : {}),
     ...(reader
       ? {
           reader,
@@ -1233,7 +1225,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
           }),
       // `pushCandidates`' last pass: the planted item's place in its pool (-1: not in it), and whether it was handed.
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
-      // How many candidates that pass handed (0: no candidates packet; I1 counts neutral tasks given one).
+      // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
       // `askNudge` (D316): whether that pass's candidates left the request unsettled (the packet nudged an ask).
       ...(push?.unsettled !== undefined ? { pushUnsettled: push.unsettled } : {}),
@@ -1377,7 +1369,6 @@ if (SUITE_LIST.length > 1) {
   console.log(`\n${header}`);
   for (const r of runs) console.log(line(r.suite, r.total));
   console.log(line("TOTAL", grand) + inertTag());
-  if (CHECKER) console.log(checkerLine(CHECKER));
   const all = runs.flatMap((r) => r.perTask) as unknown as ScreenRow[];
   for (const l of screenLines("TOTAL", all, PACKET_K)) console.log(l + TAG + inertTag());
   for (const l of surfacedLines("TOTAL", all as unknown as SurfacedRow[])) console.log(l + TAG + inertTag());

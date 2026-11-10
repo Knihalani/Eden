@@ -199,6 +199,12 @@ free of L4, A10G, T4. `packages/sim/lab/i1/evaluate.py` quantizes to int8 and me
 against Opus held out, but Opus itself could not separate facts from decoys (0.548) and the engine trial failed
 (D472). About $0.40 of Modal for eleven runs (bge-reranker-base $0.22 of it); no secret is used.
 
+**I2 (2026-11-10, D490–D494, docs/research/i2-changes-action.md)** reused it on `i2-label.ts`'s labels ("does this
+item change what the assistant should do?"; Opus separates facts from decoys at 0.917 held out): seven runs
+(TinyBERT-L2 to bge-reranker-v2-m3, `--decoy-weight 8 --epochs 5` on two) reached 0.83–0.92 against Opus but
+0.45–0.55 planted against decoy on new templates; $0.77 of Modal. `sidecar.py serve --oracle LABELS --pairs PAIRS`
+serves a teacher's labels as the checker (the upper-bound arm).
+
 ## Tests
 
 ```bash

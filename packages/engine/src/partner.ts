@@ -145,7 +145,6 @@ import {
 import { quarantineTitle } from "./shield";
 import { safeLine } from "./line";
 import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
-import { checkPool, type PairChecker } from "./checker";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -216,11 +215,6 @@ export interface PartnerDeps {
    * flags only. Apart from `onReader`, whose consumers count reader readings.
    */
   onPushPool?: PushPoolSink;
-  /**
-   * I1 (D471, trial `pushCheck`): a pair checker that scores the push's pool against the request (`checker.ts`). The
-   * lab wires a CPU sidecar; no server wires one, so the servers refuse `pushCheck` (`NEEDS_DEP`).
-   */
-  checker?: PairChecker;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -240,8 +234,6 @@ export interface PushPoolReport {
    */
   anchored?: boolean[];
   anchorKinds?: { entities: number; day: boolean };
-  /** `pushCheck` (D471): the checker's score per pool item, when it answered. */
-  checked?: number[];
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -2027,31 +2019,7 @@ export class ContextPartner {
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
-      // `pushCheck` (D471): the checker scores the pool first; null (off, unwired, late or failed) is the default's rule.
-      const checkScores =
-        candidating && this.config.pushCheck && this.deps.checker
-          ? await checkPool(
-              this.deps.checker,
-              s.scope,
-              sanitizeForStore(cue.raw),
-              this.pushPool([...order, ...scored]).map((x) => ({
-                id: x.item.id,
-                title: x.item.title,
-                text: x.item.text,
-              })),
-              this.config.pushCheckWaitMs,
-            )
-          : null;
-      if (s.closed) {
-        return {
-          answer: "",
-          citations: [],
-          usedModel: false,
-          costUsd: 0,
-          latencyMs: Math.round(performance.now() - t0),
-        };
-      }
-      const candidates = candidating ? this.candidatesOf(s, cue, [...order, ...scored], checkScores) : null;
+      const candidates = candidating ? this.candidatesOf(s, cue, [...order, ...scored]) : null;
       const flagged = candidates
         ? candidates.items
         : reading
@@ -2487,9 +2455,16 @@ export class ContextPartner {
     s: Session,
     cue: Cue,
     ranked: readonly Scored[],
-    checked: Map<string, number> | null = null,
   ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
-    const pool = this.pushPool(ranked);
+    const pool: Scored[] = [];
+    const seen = new Set<string>();
+    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
+    for (const x of ranked) {
+      if (pool.length >= cap) break;
+      if (seen.has(x.item.id)) continue;
+      seen.add(x.item.id);
+      pool.push(x);
+    }
     if (pool.length === 0) return { items: [], pool };
     const cards =
       this.config.cards && this.deps.cards
@@ -2500,24 +2475,7 @@ export class ContextPartner {
           )
         : new Map<string, Card>();
     const like = pool.map((x) => this.constraintLike(x, cards));
-    const passing = checked
-      ? pool.filter((x) => !bulkMail(x.item) && (checked.get(x.item.id) ?? 0) >= this.config.pushCheckPass)
-      : [];
-    let items =
-      checked && this.config.pushCheckGate
-        ? // `pushCheckGate` (D473): the checker only decides whether any candidates go; when they do, the default's.
-          passing.length > 0 && like.some(Boolean)
-          ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates)
-          : []
-        : checked
-          ? // `pushCheck` (D471): the pool's items the checker passes, in the pool's order (its 6th to 15th may enter, its
-            // first five may leave), standing in for the constraint-like gate: none passing sends no candidates.
-            pool
-              .filter((x) => !bulkMail(x.item) && (checked.get(x.item.id) ?? 0) >= this.config.pushCheckPass)
-              .slice(0, this.config.pushCandidates)
-          : like.some(Boolean)
-            ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates)
-            : [];
+    let items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
     let anchors: Anchors | undefined;
@@ -2548,7 +2506,6 @@ export class ContextPartner {
             anchorKinds: { entities: read.entities.length, day: hasDay(read) },
           }
         : {}),
-      ...(checked ? { checked: pool.map((x) => checked.get(x.item.id) ?? 0) } : {}),
     });
     return { items, pool, ...(unsettled ? { unsettled } : {}) };
   }
@@ -2560,20 +2517,6 @@ export class ContextPartner {
   private anchoredPast(pool: readonly Scored[], handed: readonly Scored[], anchors: Anchors): boolean {
     const ids = new Set(handed.map((x) => x.item.id));
     return pool.some((x) => !ids.has(x.item.id) && !bulkMail(x.item) && anchored(x.item, anchors));
-  }
-
-  /** The push's pool: the first `askReaderPool` distinct items of `ranked` (at most `READER_POOL_CAP`), in order. */
-  private pushPool(ranked: readonly Scored[]): Scored[] {
-    const pool: Scored[] = [];
-    const seen = new Set<string>();
-    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
-    for (const x of ranked) {
-      if (pool.length >= cap) break;
-      if (seen.has(x.item.id)) continue;
-      seen.add(x.item.id);
-      pool.push(x);
-    }
-    return pool;
   }
 
   /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */

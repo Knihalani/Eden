@@ -6,7 +6,24 @@ blind). Numbers marked **[EST]** are arithmetic or judgement; every other number
 
 ## In plain words
 
-(Filled in at the end, §7.)
+- **The question.** I1 found that Opus could not tell a planted fact from its look-alike when asked "is this about the
+  same person, thing and date?", because the train suites' look-alikes are the fact's all-clear twin. I2 asked the
+  product's question instead: "does this item change what the assistant should do for this request?"
+- **Opus can answer it.** On 40 templates held out from everything, Opus's confidence ranks the fact above its
+  look-alike with AUC **0.917** (I1: 0.548), and 0.898 on fresh worlds. Measured first, as the brief asked.
+- **A small model cannot learn it from these labels.** Seven cross-encoders, 4 M to 568 M parameters, distilled on
+  Modal from Opus's labels on 12,468 pairs, learn Opus's sense of topic (AUC 0.83–0.92 against Opus) but rank the
+  fact above its look-alike only half the time on new templates (0.45–0.55). In sample they learned it (0.864): 154
+  templates with one fact-and-twin each are too few for the distinction to transfer. In the funnel the best CPU
+  checker silenced the packet instead of sorting it (planted facts in the packet 104 → 36): it failed the
+  pre-registered bar, so no live Pi run was made.
+- **But the mechanism works with a good enough judge.** Opus's own labels served as the checker passed the bar on
+  the held-out templates and again on fresh worlds: look-alikes in the packet 84 → 18 and 66 → 9, planted facts kept
+  (104 → 104, 64 → 65), neutral tasks given a packet 135 → 5 and 107 → 3. **Haiku 5.5**, asked the same question,
+  passed too (look-alikes in the packet −42 and −16, planted facts +14 and +20, neutral packets 135 → 9 and 107 → 9).
+  A per-push Haiku check is a model call on the request path, so it is a recommendation for a later session, not a
+  change here.
+- **Cost:** $12.97 Anthropic (Opus $12.70, Haiku $0.27; ledger), $0.77 Modal. The engine is unchanged.
 
 ## 1. What I1 left and what I2 asks
 
@@ -119,3 +136,89 @@ same pass mark (0.5) and bar (§4), against the trial off on the same seeds (int
 Passing would recommend a per-push Haiku check to a later session (a model call a push needs its own decision and a
 cost estimate, docs/COST-MODEL.md); no live run is made in this session either way, since §4's live step was for a
 CPU checker (arm A) only.
+
+## 5. Results (step 3)
+
+Funnel, `bun run funnel --suite train --jobs 2 -- --neutral` with `pushCheck` on (`pushCheckWaitMs` 60,000, so every
+decision is the checker's: 636 calls a process, 0 failures in every arm) against the same seeds with it off
+(`compare.py --bar i2`). Held-out templates: 160 tasks a variant. "Planted (decoy) handed": the planted item (decoy)
+in the candidates packet; "surfaced" is the funnel's (packet or ask); "neutral packets": neutral tasks given one.
+
+| Arm | Seeds | Hidden surfaced | Decoys surfaced | Planted handed | Decoy handed | Neutral packets | Packet KB (hid/ctl/neu) | Bar |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| trial off | 41–44 | 136 | 104 | 104 | 84 | 135 | 216 / 197 / 149 | |
+| **A: MiniLM-L6 int8, 0.5** | 41–44 | 134 (+1 −3) | 105 (+1 −0) | **36** | 25 | 1 | 69 / 46 / 10 | **fail** |
+| **B: Opus's labels, 0.5** | 41–44 | 141 (+5 −0) | 103 (+3 −4) | **104** | **18** | 5 | 124 / 51 / 13 | **pass** |
+| Haiku's labels, 0.5 (exploratory) | 41–44 | 145 (+9 −0) | 102 (+4 −6) | 118 | 42 | 9 | 139 / 73 / 15 | pass |
+| trial off (intent inert) | 45–48 | 82 | 83 | 64 | 66 | 107 | 194 / 186 / 112 | |
+| **B: Opus's labels** (§4 confirmation) | 45–48 | 92 (+14 −4) | 75 (+0 −8) | 65 | **9** | 3 | 85 / 38 / 5 | **pass** |
+| **Haiku's labels** (§4b confirmation) | 45–48 | 102 (+21 −1) | 80 (+1 −4) | 84 | **50** | 9 | 102 / 71 / 9 | **pass** |
+
+Over all 768 tasks of seeds 41–44 (train templates in sample for A, labelled by the teacher for B): trial off hidden
+634, decoys 552, neutral packets 617 (seeds 41–42: 314/274, as main); A 652 / 548 / 28, planted handed 491 → 405;
+B 658 / 540 / 49, planted handed 491 → 466, decoys handed 418 → 64. On seeds 45–48 only the held-out templates were
+labelled, so the arms' other templates there (scored 0, no packet) are not a measurement. Opus's labels missed 74 of
+27,511 lookups on 41–44 (the two unparsed groups), scored 0.
+
+**Reading it.** The distilled checker separates ordinary items (planted against the rest 0.915) and so silences
+neutral pools, but within a pool that holds the fact it cannot tell the fact from its twin, and at a mark that keeps
+the twin out it keeps the fact out too (arm A). A judge that can tell them apart turns the same rule into what I1
+was after: the packet keeps the fact, loses the look-alike, and stays silent where nothing applies. The hidden gains
+(+5 to +21) come from facts at the pool's 6th–15th places entering the packet when items above them fail. Haiku is
+more lenient than Opus (41 of 98 held-out decoys yes, against 20), so it removes fewer look-alikes (−16 on fresh
+worlds, exactly the bar) but keeps or adds more facts.
+
+## 6. Cost and latency
+
+**Anthropic: $12.9698** on the ledger (`.local/i2/ledger.jsonl`): Opus 5.5 $12.7009 (pilot $0.1594 direct; batches
+$2.4138 held-out, $8.1502 train, $1.9774 seeds 45–48 held-out), Haiku 5.5 $0.2689 (batch $0.0858, direct re-runs and
+seeds 45–48 $0.1831). **Modal: $0.7722** for the 7 training runs (`modal billing report --for today --json`, by app
+id). No live Pi run; nothing else spent.
+
+**Production shape [EST].** The distilled checker is 230 ms of one core a push (int8, 15 pairs) and does not work. The
+teacher arms are not CPU checkers: Opus a push is out of the question on cost and latency; Haiku a push is about
+$0.0009 direct at this prompt (161 direct calls, $0.1449, groups of about 18 items) and adds a model round trip to
+the push (not measured here; D144's reader timings put Haiku 5.5 with effort low at seconds, not milliseconds).
+
+## 7. What would change the answer, and the next step
+
+- **A Haiku check on the push, as a trial (recommended).** D493's result is the first lever in this line of work that
+  moves look-alikes out of the packet without moving facts out with them. Before it can ship it needs: a decision
+  for a model call on the request path (D4, D5) with a cost estimate in docs/COST-MODEL.md, the check built behind
+  `Budget` with a wait and the default's candidates on a miss (D471's shape), Haiku without thinking measured too
+  (the shipped reader sends none, D144), and a live Pi run (D257: the packet's facts are what the agent uses).
+- **A CPU checker needs data, not size.** In sample a MiniLM learned the distinction; on new templates no model did.
+  Generated fact-and-twin pairs over many more templates (the twins differ by the constraint, not the topic) are the
+  untested route; train on generated templates, test on these.
+- **Limits.** Train suites only; one prompt; the teacher saw each group's items together (the fact beside its twin),
+  which a push check would too (it sees the pool), but the Haiku arm's labels came from groups that union three
+  worlds' pools, not one push's pool; the oracle arms read labels, so the funnel cannot see their latency. Seeds 45–48
+  ran intent inert in both arms.
+
+## Reproduce
+
+```bash
+bun run funnel --suite train --seeds 41,42,43,44 --jobs 4 --json .local/i2/base.json -- --neutral \
+  --pool-dump .local/i2/pool.jsonl                                                                  # 17 s, $0
+bun packages/sim/src/lab/i1-label.ts pairs --pool .local/i2/pool.jsonl --out .local/i2/pairs.jsonl
+L="--spend-ledger .local/i2/ledger.jsonl --spend-cap 20 --mode batch"
+bun packages/sim/src/lab/i2-label.ts label --pairs .local/i2/pairs.jsonl --out .local/i2/labels-eval.jsonl $L \
+  --seeds 41,42,43,44 --split eval                                                                  # $2.41, the gate
+bun packages/sim/src/lab/i2-label.ts auc --pairs .local/i2/pairs.jsonl --labels .local/i2/labels-eval.jsonl
+bun packages/sim/src/lab/i2-label.ts label --pairs .local/i2/pairs.jsonl --out .local/i2/labels-train.jsonl $L \
+  --seeds 41,42,43,44 --split train                                                                 # $8.15
+cat .local/i2/labels-eval.jsonl .local/i2/labels-train.jsonl > .local/i2/labels.jsonl
+export SSL_CERT_FILE=/root/.ccr/ca-bundle.crt
+modal run packages/sim/modal/i1_checker.py --pairs .local/i2/pairs.jsonl --labels .local/i2/labels.jsonl \
+  --max-len 256 --run i2-minilm6-w8 --base cross-encoder/ms-marco-MiniLM-L6-v2 --decoy-weight 8 --epochs 5
+python3 -I packages/sim/lab/i1/evaluate.py --model .local/i1/models/i2-minilm6-w8 --pairs .local/i2/pairs.jsonl \
+  --labels .local/i2/labels.jsonl --n 60
+# The funnel screen needs the deleted trial: git checkout 2cc34284, then
+python3 -I packages/sim/lab/i1/sidecar.py serve --model .local/i1/models/i2-minilm6-w8 --threads 2 --port 8471 &
+python3 -I packages/sim/lab/i1/sidecar.py serve --oracle .local/i2/labels.jsonl --pairs .local/i2/pairs.jsonl \
+  --port 8472 &
+bun run funnel --suite train --seeds 41,42,43,44 --jobs 2 --json .local/i2/trialB.json \
+  --set '{"pushCheck":true,"pushCheckWaitMs":60000}' -- --neutral --checker http://127.0.0.1:8472
+python3 -I packages/sim/lab/i1/compare.py --base .local/i2/base.json --trial .local/i2/trialB.json --bar i2
+# Seeds 45-48: the same with --seeds 45,46,47,48, pairs45/labels45 (held-out split only); Haiku: --model claude-haiku-5-5
+```
