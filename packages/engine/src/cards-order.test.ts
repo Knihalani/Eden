@@ -154,3 +154,29 @@ test("the intent hits are the same with and without the order", async () => {
   expect(await found(false)).toEqual(items.slice(0, 4).map((i) => i.id));
   expect(await found(true)).toEqual(items.slice(0, 4).map((i) => i.id));
 });
+
+// Review of D483: the bound is applied once per `enqueue`, not by a sort per item past it (a 4,000-item backfill
+// took 8.3 s on the store path that way, against 0.13 s without the order).
+test("a backfill of twice the queue's bound is trimmed once, to the best of it", async () => {
+  const many = Array.from({ length: 400 }, (_, i) =>
+    i % 4 === 0
+      ? mail(`w${i}`, "sam@elsewhere.org", USER, "Spending over £5,000 must have a second signature", 40)
+      : mail(`p${i}`, "sam@elsewhere.org", USER, "Lovely to see you", 40),
+  );
+  const maker = new Maker();
+  const e = new CardEnricher({ maker, budget: new Budget(), now: () => NOW }, { batch: 50, maxQueue: 200 });
+  e.intend();
+  e.order();
+  e.enqueue({ tenantId: "t", userId: "u" }, many);
+  await e.idle();
+  const read = maker.batches.flat();
+  // The bound holds, every worded item is read, and they are read first.
+  expect(read.length).toBe(200);
+  expect(read.slice(0, 100).every((ref) => ref.startsWith("w"))).toBe(true);
+  expect(read.filter((ref) => ref.startsWith("w")).length).toBe(100);
+});
+
+test("a sender field that is not text is read as no sender", () => {
+  const odd = { ...old, meta: { from: 7 as unknown as string } };
+  expect(orderQueue([{ item: odd }, { item: worded }], NOW).length).toBe(2);
+});

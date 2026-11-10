@@ -453,8 +453,8 @@ export interface EngineConfig {
    * On in the default (D482, promoted by D483; F2, docs/research/f2-quality.md). The card queue is read best first
    * rather than as it filled (`orderQueue`, cards.ts): items with constraint wording first, then events ahead, mail
    * from people the user writes to and items of the last three days, so a new user's first requests meet cards for
-   * the items most likely to bear on them. Once every waiting item is read the cards are the same (the funnel is
-   * unchanged, 314/273); with four card calls made per new user, Pi raised +9.0 points more hidden facts
+   * the items most likely to bear on them. Once every waiting item is read the cards are the same (the funnel reads
+   * the same with it on and off); with four card calls made per new user, Pi raised +9.0 points more hidden facts
    * (+6.6..+11.4, n 1,536, train, seeds 41–48, cards made in-run by Haiku).
    */
   cardsOrder: boolean;

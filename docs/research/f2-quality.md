@@ -210,6 +210,14 @@ task `car-finance-outstanding/41` now surfaces; identical with `cardsOrder` on a
 −1). The live runs and the tables above were made before this rule; the N 4 and N 8 rows re-run on the final tree
 read the same hidden counts (235 → 259, 237 → 255, 252 → 272, 250 → 270).
 
+**Review (the `reviewer` subagent, on `e1e6f337`): one finding, fixed.** Past the queue's bound the first build
+sorted the whole queue for every further item inside `enqueue`: a 4,000-item backfill took 8.3 s on the store path
+against 0.13 s without the order (the reviewer's measurement). The bound is now applied once per `enqueue` (and at
+twice the bound within one call), and each item's sender and addressees are read once: 4,000 items 102 ms against
+74 ms with the order off, 8,000 items 275 ms against 232 ms (`.local/f2/enq.ts`, one run each, this box). A test
+covers a backfill of twice the bound. The funnel at no cap and at `--cards-calls 4` is byte for byte the same after
+the fix (314/274; 259/248).
+
 Final tree: `bun run check` green, `bun run eval` precision 0.65, recall 0.52, falseFireRate 0 (the eval wires no card
 maker), `bun run funnel --jobs 4` 314/274.
 

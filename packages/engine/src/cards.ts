@@ -659,6 +659,8 @@ const ORDER_FROM = /^from:[^\n]*?([\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,4
 const ORDER_TO = /^(?:to|cc):[^\n]*$/gim;
 const ORDER_ADDRESS = /[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,4}/g;
 const ORDER_RECENT_MS = 3 * 86_400_000;
+/** Each waiting item's sender and addressees as `orderQueue` read them, held while the item object lives. */
+const ORDER_HEADS = new WeakMap<ContextItem, { from: string | undefined; to: string[] }>();
 /** What constraint wording counts for (the prefilter passed the item): more than the three other signs together. */
 const ORDER_WORDED = 4;
 
@@ -669,17 +671,24 @@ const ORDER_WORDED = 4;
  * and this alone carried the measured gain. Within each group an item counts for each of: an
  * event that starts after `now`; a sender the user has written to (the user is the address most of the queue's mail
  * is from or to; the people they write to are on the To and Cc lines of mail from that address); dated within three
- * days. More counts first, then the newer date, then the order the items came in. No model; reads each item's first
- * 600 characters once.
+ * days (an event ahead is dated by its start, so it counts for that too). More counts first, then the newer date,
+ * then the order the items came in. No model; reads each item's first 600 characters once.
  */
 export function orderQueue<Q extends { item: ContextItem; only?: true }>(queue: readonly Q[], now: number): Q[] {
   const heads = queue.map((q) => {
+    // Read once per item object: the queue is sorted before every batch, and an item waits through many.
+    const known = ORDER_HEADS.get(q.item);
+    if (known) return known;
     const head = q.item.text.slice(0, 600);
     const blank = head.search(/\n[ \t]*\n/);
     const block = blank >= 0 ? head.slice(0, blank) : head;
-    const from = (q.item.meta?.from ?? q.item.meta?.sender ?? ORDER_FROM.exec(block)?.[1])?.toLowerCase();
+    // A sender field that is not text (a caller's raw item) is read as none.
+    const given = q.item.meta?.from ?? q.item.meta?.sender;
+    const from = (typeof given === "string" ? given : ORDER_FROM.exec(block)?.[1])?.toLowerCase();
     const to = (block.match(ORDER_TO) ?? []).flatMap((l) => l.match(ORDER_ADDRESS) ?? []).map((a) => a.toLowerCase());
-    return { from: from?.match(ORDER_ADDRESS)?.[0] ?? from, to };
+    const read = { from: from?.match(ORDER_ADDRESS)?.[0] ?? from, to };
+    ORDER_HEADS.set(q.item, read);
+    return read;
   });
   const seen = new Map<string, number>();
   for (const h of heads) for (const a of new Set([h.from, ...h.to])) if (a) seen.set(a, (seen.get(a) ?? 0) + 1);
@@ -959,6 +968,7 @@ export class CardEnricher {
       }
       this.queueItem(u, item, hash, now);
     }
+    this.trim(u);
     while (u.byItem.size > this.limits.maxCardsPerUser * 2) unlink(u, u.byItem.keys().next().value as string);
     if (u.queue.length > 0 && !u.draining) {
       u.draining = this.drain(scope, u).finally(() => (u.draining = null));
@@ -984,9 +994,17 @@ export class CardEnricher {
     q.seq = u.enlisted++;
     u.queue.push(q);
     if (u.queue.length <= this.limits.maxQueue) return;
-    // Over the bound the oldest goes; with `cardsOrder` the last in its order (the front is what is read next).
-    if (this.limits.order) u.queue = orderQueue(u.queue, this.deps.now()).slice(0, this.limits.maxQueue);
-    else u.queue.shift();
+    // Over the bound the oldest goes. With `cardsOrder` the front is what is read next, so the last in its order
+    // goes instead, once per `enqueue` (`trim`): a sort per item would stall the store path on a large backfill.
+    if (!this.limits.order) u.queue.shift();
+    // ... and at twice the bound within one call, so the queue (which `enqueue` scans per item) stays bounded.
+    else if (u.queue.length >= this.limits.maxQueue * 2) this.trim(u);
+  }
+
+  /** `cardsOrder`: the queue back to its bound, the last in its order dropped (`enqueue` calls it once). */
+  private trim(u: UserCards): void {
+    if (!this.limits.order || u.queue.length <= this.limits.maxQueue) return;
+    u.queue = orderQueue(u.queue, this.deps.now()).slice(0, this.limits.maxQueue);
   }
 
   private keep(u: UserCards, hash: string, s: Stored): void {
