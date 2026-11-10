@@ -22,15 +22,9 @@ import type { AgentEvent } from "@eden/protocol";
 import { CardEnricher, ContextPartner, ItemCache, type EngineConfig } from "@eden/engine";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
-import {
-  applyConnectorMix,
-  changesField,
-  parseConnectorMix,
-  recapNotice,
-  sourceFields,
-  type PushMode,
-} from "./connector-options";
+import { applyNotifyShare, parseNotifyShare, recapNotice, sourceFields, type PushMode } from "./connector-options";
 import { DiskCardMaker, INTENT_PATH } from "./cards-disk";
+import { noiseSources } from "./noise-sources";
 import { isRecap, recapOf, shiftClocks, shiftMeta, UPDATED_MARK, type ClockMove } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { parseSuites } from "./suites";
@@ -50,8 +44,10 @@ export interface DaysCallsOptions {
   config?: Partial<EngineConfig>;
   gapMs?: number;
   nightMs?: number;
-  /** `--connector-mix P,D` (F1): the shares of connectors with push and a change feed, and with a feed only. */
-  connectorMix?: { push: number; delta: number } | null;
+  /** `--notify-share P` (N1): only this share of the connectors notify (`applyNotifyShare`). */
+  notifyShare?: number | null;
+  /** `--noise-sources N` (N1): N unrelated connectors beside the world's five (`noise-sources.ts`), 20 items each. */
+  noiseSources?: number;
 }
 
 export interface DaysCallsUser {
@@ -70,6 +66,14 @@ export interface DaysCallsUser {
    * at the next request (a changed copy delivered stale would need one). */
   changed: number;
   staleHeld: number;
+  /**
+   * Requests with a planted item, and those whose item reached the agent (a packet or the ask's citations), by the
+   * task's kind: "hidden" (the fact) and "control" (its all-clear decoy). The funnel's "surfaced", over a user's days.
+   */
+  surfaced: Record<string, { n: number; got: number }>;
+  /** Request-time calls by day (index 0 is the first day). */
+  requestCallsByDay: number[];
+  requestsByDay: number[];
 }
 
 const bump = (c: Counts, k: string, n = 1) => (c[k] = (c[k] ?? 0) + n);
@@ -90,7 +94,6 @@ function counted(source: SimSource, phase: () => Phase, into: Counts, fetched: M
       bump(into, k("list"));
       return source.list(scope, cursor, limit, signal);
     },
-    ...changesField(source, (run) => (bump(into, k("delta")), run())),
   };
 }
 
@@ -108,9 +111,10 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   const userPrefix = `w${seed}:user`;
   const tasks = withDayRecaps(u.tasks, u.daySizes, (t, d) => recapOf(t, `${userPrefix}:day${d}:recap`));
   // Time scale 0: instant sources, so the run is deterministic and the counts are the connectors' alone.
-  const sources = simSources(world, REALISTIC, 0, seed);
-  if (o.push !== "none") for (const s of sources) s.notifies = true;
-  applyConnectorMix(sources, o.connectorMix ?? null, seed);
+  const own = simSources(world, REALISTIC, 0, seed);
+  if (o.push !== "none") for (const s of own) s.notifies = true;
+  const sources = [...own, ...(o.noiseSources ? noiseSources(world, o.noiseSources, 20, 0, seed) : [])];
+  applyNotifyShare(sources, o.notifyShare ?? null, seed);
   const counts: Counts = {};
   const fetched = new Map<string, number>();
   let phase: Phase = "backfill";
@@ -142,7 +146,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   const start = clock;
   clock -= 30 * 60_000;
   sync.track(scope, clock);
-  for (let i = 0; i < 120 && !sync.warm(scope); i++) {
+  for (let i = 0; i < (o.noiseSources ? 600 : 120) && !sync.warm(scope); i++) {
     await sync.tick();
     clock += 60_000;
   }
@@ -159,9 +163,17 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   let updatePackets = 0;
   let staleHeld = 0;
   const f0 = { ...partner.freshness };
+  const surfaced: DaysCallsUser["surfaced"] = {};
+  const requestCallsByDay: number[] = [];
+  const requestsByDay: number[] = [];
+  /** The item ids the agent was handed in the current request. */
+  const handed = new Set<string>();
+  const requestCalls = () => callsWhere(counts, (p) => p === "request");
   const take = () => {
-    for (const i of partner.takePending({ ...scope, sessionId: session }))
+    for (const i of partner.takePending({ ...scope, sessionId: session })) {
       if (i.text.includes(UPDATED_MARK)) updatePackets++;
+      for (const c of i.citations) handed.add(c.itemId);
+    }
   };
   for (const task of tasks) {
     clock += newDay && dayNo >= 0 ? nightMs : gapMs;
@@ -201,16 +213,33 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     phase = "request";
     const ev = { ...scope, sessionId: session, at: clock };
     if (!isRecap(task)) requests++;
+    handed.clear();
+    const callsBefore = requestCalls();
     const arriving = task.event === "external" ? { source: "gmail" } : {};
     const r = await partner.observe({ ...ev, kind: task.event, text: task.text, ...arriving } as AgentEvent, {
       waitMs: 3_000,
     });
     if (r.injection?.text.includes(UPDATED_MARK)) updatePackets++;
+    for (const c of r.injection?.citations ?? []) handed.add(c.itemId);
     // The lookup's work left running (the push behind its poll, a second reading) settles before the next request.
     for (let k = 0; k < 5_000 && busy(session); k++) await Bun.sleep(1);
     take();
-    if (o.ask && !isRecap(task)) await partner.ask({ ...scope, sessionId: session, question: task.text });
+    if (o.ask && !isRecap(task)) {
+      const a = await partner.ask({ ...scope, sessionId: session, question: task.text });
+      for (const c of a.citations) handed.add(c.itemId);
+      // The ask's reads behind (D430) settle before the next request, as the push's do.
+      for (let k = 0; k < 5_000 && busy(session); k++) await Bun.sleep(1);
+    }
     take();
+    if (!isRecap(task)) {
+      requestCallsByDay[dayNo] = (requestCallsByDay[dayNo] ?? 0) + requestCalls() - callsBefore;
+      requestsByDay[dayNo] = (requestsByDay[dayNo] ?? 0) + 1;
+      if (task.planted && task.kind !== "neutral") {
+        const row = (surfaced[task.kind] ??= { n: 0, got: 0 });
+        row.n++;
+        if (handed.has(task.planted)) row.got++;
+      }
+    }
     if (cards) await cards.idle();
     if (!isRecap(task) && task.planted) planted.add(task.planted);
     // After each request, whether the cache holds a moved item in an old version (its old time without the new one)
@@ -240,6 +269,9 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     updatePackets,
     changed: moved.size,
     staleHeld,
+    surfaced,
+    requestCallsByDay,
+    requestsByDay,
   };
 }
 
@@ -269,7 +301,8 @@ if (import.meta.main) {
     recapSignal: recap === "signal",
     cards: cardsFile ? new DiskCardMaker(cardsFile, undefined, { requests: [INTENT_PATH] }) : null,
     config: JSON.parse(opt("set", "{}")) as Partial<EngineConfig>,
-    connectorMix: parseConnectorMix(opt("connector-mix", "")),
+    notifyShare: parseNotifyShare(opt("notify-share", "")),
+    noiseSources: Number(opt("noise-sources", "0")),
     gapMs: Number(opt("gap-min", "10")) * 60_000,
     nightMs: Number(opt("night-h", "2")) * 3_600_000,
   };
@@ -285,9 +318,16 @@ if (import.meta.main) {
     `${cardsFile ? ", cards replayed" : ", no cards"}, night ${o.nightMs! / 3_600_000} h${set}`;
   console.log(`days-calls: seeds ${seeds.join(",")}, ${o.days} days, ${requests} requests, ${label}`);
   console.log("phase     source    op       calls   per request  per user-day");
-  for (const k of Object.keys(total).sort()) {
+  // With noise connectors, one row for all of them a phase and operation: a thousand rows say nothing more.
+  const world5 = new Set(["gmail", "calendar", "drive", "slack", "crm"]);
+  const rows: Counts = {};
+  for (const [k, v] of Object.entries(total)) {
     const [p, s, op] = k.split(" ") as [string, string, string];
-    const v = total[k]!;
+    bump(rows, `${p} ${o.noiseSources && !world5.has(s) ? "(noise)" : s} ${op}`, v);
+  }
+  for (const k of Object.keys(rows).sort()) {
+    const [p, s, op] = k.split(" ") as [string, string, string];
+    const v = rows[k]!;
     const per = p === "backfill" ? "" : (v / requests).toFixed(3);
     const perDay = p === "backfill" ? `${(v / users.length).toFixed(1)} a user` : (v / days).toFixed(2);
     console.log(
@@ -301,6 +341,20 @@ if (import.meta.main) {
       `a request; steady ${(at(["request", "tick", "notice"]) / requests).toFixed(3)} a request; backfill ` +
       `${(at(["backfill"]) / users.length).toFixed(1)} a user`,
   );
+  const surf = (kind: string) => {
+    const n = users.reduce((x, u) => x + (u.surfaced[kind]?.n ?? 0), 0);
+    const got = users.reduce((x, u) => x + (u.surfaced[kind]?.got ?? 0), 0);
+    return `${got}/${n}`;
+  };
+  console.log(
+    `surfaced (a packet or the ask's citations): hidden facts ${surf("hidden")}, control decoys ${surf("control")}`,
+  );
+  const byDay = Array.from({ length: Math.max(...users.map((u) => u.requestCallsByDay.length)) }, (_, d) => {
+    const c = users.reduce((x, u) => x + (u.requestCallsByDay[d] ?? 0), 0);
+    const r = users.reduce((x, u) => x + (u.requestsByDay[d] ?? 0), 0);
+    return (c / Math.max(1, r)).toFixed(1);
+  });
+  console.log(`request-time calls a request, by day: ${byDay.join(" ")}`);
   for (const u of users)
     console.log(
       `  w${u.seed}: verify ${JSON.stringify(u.freshness)}; items re-read ${u.fetchedItems}, more than once ` +

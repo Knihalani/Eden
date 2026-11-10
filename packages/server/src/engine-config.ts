@@ -47,7 +47,7 @@ export function parseEngineConfig(value: unknown, where = "engine config"): Part
   return checkEngineConfig(value, {
     where,
     // Wired whenever a model key is set (build.ts, models.ts); without one they are inert by design (D112).
-    deps: { cards: true, reader: true },
+    deps: { cards: true, reader: true, checker: true },
     parents: false,
   });
 }

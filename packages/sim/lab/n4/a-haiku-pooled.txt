@@ -1,0 +1,9 @@
+eden − tools hidden   runs 6 n  100 diff +0.600 (+0.490..+0.700)
+eden − tools control  runs 6 n  100 diff +0.000 (+0.000..+0.000)
+eden − tools neutral  runs 2 n   24 diff +0.000 (+0.000..+0.000)
+eden         control  n  100  haiku 0.0  regraded   0
+eden         neutral  n   24  haiku 0.0  regraded   0
+tools        control  n  100  haiku 0.0  regraded   0
+tools        neutral  n   24  haiku 0.0  regraded   0
+eden − tools control+neutral concern (haiku) runs 6 n 124 diff +0.0000 (+0.0000..+0.0000)
+eden − tools control+neutral concern (regraded) runs 6 n 124 diff +0.0000 (+0.0000..+0.0000)

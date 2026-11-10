@@ -54,7 +54,6 @@ import {
 } from "@eden/sources";
 import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache, type Sketch } from "./cache";
 import { SyncManager } from "./sync";
-import { coldQuery } from "./cold";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import {
@@ -80,6 +79,7 @@ import {
   type ReaderKind,
   type ReaderVerdict,
 } from "./reader";
+import { CHECK_MAX_ITEMS, checkKey, itemMark, type PushCheckRead, type PushChecker } from "./push-check";
 import {
   accounts,
   actionKey,
@@ -91,6 +91,7 @@ import {
   structuralTie,
 } from "./firewall";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
+import { SourceYield, type Evidence } from "./source-yield";
 import { ProbeEconomy, type ProbeKind } from "./economy";
 import { judgeMessages, parseJudge } from "./judge";
 import {
@@ -216,6 +217,16 @@ export interface PartnerDeps {
    * flags only. Apart from `onReader`, whose consumers count reader readings.
    */
   onPushPool?: PushPoolSink;
+  /**
+   * I3 (D500, trial `pushCheck`): the push check's model call (`push-check.ts`), with its own budget. Absent, or the
+   * flag off: no call is made and the default's candidates go.
+   */
+  checker?: PushChecker;
+  /**
+   * N2 (D511, trial `pushWiden`): item ids a non-lexical retrieval ranks first for the request (at most `k`, best
+   * first). The lab wires an embedding table; no server wires one.
+   */
+  widen?: (scope: Scope, request: string, k: number) => Promise<readonly string[]>;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -235,6 +246,13 @@ export interface PushPoolReport {
    */
   anchored?: boolean[];
   anchorKinds?: { entities: number; day: boolean };
+  /**
+   * `pushCheck` (D500): what the pass's check did ("yes": it answered; "none": no call, the gate found nothing
+   * constraint-like; "late", "failed": the default's candidates went) and, when it answered, per pool item whether it
+   * said the item changes the action.
+   */
+  check?: "yes" | "none" | "late" | "failed";
+  checked?: boolean[];
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -287,6 +305,8 @@ interface Session {
   /** Tenant, user and session: the only key a session's state is ever looked up by. */
   key: string;
   turn: number;
+  /** `sourceYield` (D505): the sources a live read was booked against in turn `turn` (once a source a turn). */
+  liveReads?: { turn: number; ids: Set<string> };
   /**
    * The user messages (not drafts) observed so far. A `readerPush` reading is queued only while its request is still
    * the latest: the agent's own events move `turn` within one request, a new user message moves this.
@@ -361,6 +381,12 @@ interface Session {
    * with their content hashes, and its verdict (null when it gave none).
    */
   pushRead?: { request: number; main: string; hashes: Map<string, string>; verdict: Promise<ReaderVerdict | null> };
+  /**
+   * `pushCheck` (D500): the session's push checks by input (`checkKey`), at most `CHECK_KEPT`, oldest first: a late
+   * check still answers a second pass over the same pool, and a settled one answers, with no call, a pass whose items
+   * it read every one of (same request, same day, same content). Dropped with the session (a forget closes it).
+   */
+  pushChecks?: Map<string, KeptCheck>;
   /** `planConflict` (D301): the session's last `PLAN_REQUESTS` acting requests (the push's cues), oldest first. */
   acted?: Cue[];
   /** `planConflict` (D301): ids the sync stored since the last take, at most `PLAN_WAITING`, oldest first. */
@@ -410,6 +436,9 @@ interface Cue {
    * records each cut copy's outcome here as it settles, so the ask can tell which sources answered in time.
    */
   cutStatus?: Map<string, string>;
+  /** `sourceYield`: the lookup's routing boost and its evidence test, for the reads its probes book later. */
+  boost?: ReadonlyMap<string, number> | undefined;
+  evidence?: (id: string) => Evidence;
 }
 
 /**
@@ -522,6 +551,8 @@ const ANSWERED = new Set(["ok", "cached", "stale", "local"]);
 const ASK_BEHIND = "ask-behind:";
 /** `askBehind` (D430): a source whose poll or live search was still running when the ask answered. */
 const SEARCHING = "searching";
+/** `sourceYield` (D505): a cut copy an ask did not search, its source's run of unused live reads being spent. */
+const UNSEARCHED = "unsearched";
 
 /** How the answer names a status that did not answer (`unreached`). */
 const STATUS_WORDS: Record<string, string> = {
@@ -627,6 +658,8 @@ export class ContextPartner {
   private readonly redact: (items: ContextItem[]) => ContextItem[] | Promise<ContextItem[]>;
   /** What each user's probes bring back (`probeFresh`, `probeYield`). */
   private readonly economy = new ProbeEconomy();
+  /** `sourceYield` (D505): each source's run of live reads with nothing used; null when off. */
+  private readonly yields: SourceYield | null;
   /** Span tracing (`spans.ts`): null when off, so each phase's call site is one null check. */
   private readonly spans: Tracer | null;
   private readonly stats: SpanStats | null;
@@ -671,7 +704,10 @@ export class ContextPartner {
       if (this.config.intent && this.config.cardsLean) cards.lean(this.config.cardsLeanDays);
       // `cardsOrder` (D482, D483): a user's waiting items are read best first (worded, ahead, correspondents, recent).
       if (this.config.cardsOrder) cards.order();
+      // `cardsLanes` (N4, D521, D522): a new user's backfill read by several calls at once.
+      if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
     }
+    this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
       sanitize: spans
@@ -711,10 +747,6 @@ export class ContextPartner {
               this.queuePlanConflicts(scope, items);
             },
             tracer: spans,
-            // `syncDelta` (D476): what a delta read says is deleted goes as a deletion notice's items do.
-            onRemoved: (scope, sourceId, ids) => {
-              this.dropGone(scope, sourceId, ids);
-            },
           },
           {
             maxItems: c.syncMaxItems,
@@ -739,12 +771,6 @@ export class ContextPartner {
             engagedDeep: c.syncEngagedDeep,
             // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
             unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
-            cold: c.syncCold,
-            coldMaxItems: c.syncColdMaxItems,
-            coldTtlMs: deps.cache.syncTtlMs,
-            delta: c.syncDelta,
-            // Inside the cache's time to live for a synced copy, which only a listing renews.
-            deltaSweepMs: Math.min(6 * 24 * 3_600_000, deps.cache.syncTtlMs * 0.85),
           },
         )
       : null;
@@ -2030,7 +2056,31 @@ export class ContextPartner {
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
-      const candidates = candidating ? this.candidatesOf(s, cue, [...order, ...scored]) : null;
+      const gate = candidating ? this.pushGate(s, cue, [...order, ...scored]) : null;
+      // `pushCheck` (D500): one budgeted call over the pool, only when the gate would hand candidates. Off, no await
+      // is added: the push's timing (which turn it lands in) stays the default's.
+      // `pushWiden` (N2, D511): items no lexical rank reached join what the check reads, after the pool; only the
+      // check can hand them, so it runs only where the check would.
+      // One wait for both: the check gets what the widening left of `pushCheckWaitMs` (D500's bound holds).
+      const widenFrom = performance.now();
+      if (gate && this.config.pushCheck && this.config.pushWiden && this.deps.checker && gate.like.some(Boolean))
+        gate.widened = await this.widenPool(s, cue, [...order, ...scored], gate.pool);
+      const check =
+        gate && this.config.pushCheck && this.deps.checker
+          ? await this.checkPush(s, cue, gate, performance.now() - widenFrom)
+          : null;
+      if ((check || gate?.widened) && s.closed) {
+        // The session closed while the check ran: its call was paid for, so it is traced on its own.
+        if (check?.called) this.traceCheck(s, check, t0);
+        return {
+          answer: "",
+          citations: [],
+          usedModel: false,
+          costUsd: 0,
+          latencyMs: Math.round(performance.now() - t0),
+        };
+      }
+      const candidates = gate ? this.candidatesOf(s, cue, gate, check) : null;
       const flagged = candidates
         ? candidates.items
         : reading
@@ -2131,10 +2181,11 @@ export class ContextPartner {
         // that joined the slow path's in flight, or was answered by the fan-out's cache, is none), and a harness
         // summing `sourceCalls` over a task counts what its connectors were sent. Plans and sync use stay off.
         sourceCalls,
-        modelCalls: reading?.called ? 1 : 0,
-        costUsd,
+        modelCalls: (reading?.called ? 1 : 0) + (check?.called ? 1 : 0),
+        costUsd: costUsd + (check?.costUsd ?? 0),
         ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
         ...(candidates ? { candidates: true } : {}),
+        ...(check ? { checkCalls: check.called ? 1 : 0, checkCostUsd: check.costUsd } : {}),
         itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
       });
       const turn = internal.turn ?? s.turn;
@@ -2457,16 +2508,11 @@ export class ContextPartner {
   }
 
   /**
-   * `pushCandidates` (D236): the push's candidates for the agent to judge, with no model call. The pool `readAsk` would
-   * read (the first `askReaderPool` distinct items of `ranked`) in its own order, bulk mail out; the first
-   * `pushCandidates` of them. A pool with no constraint-like item (`readerGate`'s test, cards included) gives none, as
-   * `readerGate` would read none. (Constraint-like items first lost 27 points of hidden facts live: D236.)
+   * `pushCandidates` (D236): the push's pool and its constraint-like gate. The pool `readAsk` would read (the first
+   * `askReaderPool` distinct items of `ranked`) in its own order; per item, `readerGate`'s constraint test, cards
+   * included. A pool with no constraint-like item gives no candidates, as `readerGate` would read none.
    */
-  private candidatesOf(
-    s: Session,
-    cue: Cue,
-    ranked: readonly Scored[],
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
+  private pushGate(s: Session, cue: Cue, ranked: readonly Scored[]): PushGate {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
@@ -2476,17 +2522,137 @@ export class ContextPartner {
       seen.add(x.item.id);
       pool.push(x);
     }
-    if (pool.length === 0) return { items: [], pool };
     const cards =
-      this.config.cards && this.deps.cards
+      pool.length > 0 && this.config.cards && this.deps.cards
         ? this.deps.cards.cardsOf(
             s.scope,
             pool.map((x) => x.item.id),
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    const like = pool.map((x) => this.constraintLike(x, cards));
-    let items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
+    return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
+  }
+
+  /**
+   * `pushCheck` (D500): the push check's answer for this pool, or null (off, unwired, no constraint-like item, no
+   * request text). Waits at most `pushCheckWaitMs`; a check that answers later is kept on the session, so a second
+   * pass over the same pool (`readerPushBehind`) reads it with no call. The call runs on the session's signal: it
+   * ends with the session, not with the wait.
+   */
+  private async checkPush(s: Session, cue: Cue, gate: PushGate, spentMs = 0): Promise<PushCheckRead | null> {
+    const checker = this.deps.checker;
+    if (!this.config.pushCheck || !checker || !gate.like.some(Boolean)) return null;
+    const request = sanitizeForStore(cue.raw);
+    if (!request.trim()) return null;
+    const focus = readerFocus(cue.raw);
+    const head = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
+    // `pushWiden` (D511): the widened items after the pool's head, within the check's item cap.
+    const read = [...head, ...(gate.widened ?? []).slice(0, Math.max(0, CHECK_MAX_ITEMS - head.length))];
+    const input = {
+      request,
+      items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
+      today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
+      cacheKey: userCacheKey(s.scope),
+    };
+    const key = checkKey(input);
+    const asked = `${input.today}\n${request}`;
+    const checks: Map<string, KeptCheck> = (s.pushChecks ??= new Map());
+    // A settled check of this request that read every item of this pool, unchanged, answers it with no call: a second
+    // pass (`readerPushBehind`) often only reorders the pool or drops an item.
+    const items = input.items.slice(0, CHECK_MAX_ITEMS);
+    for (const kept of checks.values()) {
+      const yes = kept.settled?.yes;
+      if (!yes || kept.asked !== asked || !items.every((it) => kept.marks.get(it.id) === itemMark(it))) continue;
+      // An answer that named its most (5) may have left out items a fresh read of a smaller pool would name.
+      if (yes.size >= 5 && items.length < kept.marks.size) continue;
+      return {
+        yes: new Set(items.filter((it) => yes.has(it.id)).map((it) => it.id)),
+        costUsd: 0,
+        called: false,
+        overBudget: false,
+      };
+    }
+    let kept = checks.get(key);
+    const fresh = !kept;
+    if (!kept) {
+      const entry: KeptCheck = {
+        asked,
+        marks: new Map(items.map((it) => [it.id, itemMark(it)])),
+        read: checker.check(s.scope, s.key, input, s.abort.signal),
+      };
+      void entry.read.then((r) => (entry.settled = r));
+      kept = entry;
+      checks.set(key, entry);
+      while (checks.size > CHECK_KEPT) checks.delete(checks.keys().next().value as string);
+    }
+    const running = kept.read;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<null>((done) => {
+      // `spentMs`: what `pushWiden`'s look took of the same wait (D511), so the push never waits longer than D500's.
+      timer = setTimeout(() => done(null), Math.max(0, this.config.pushCheckWaitMs - spentMs));
+    });
+    try {
+      const got = await Promise.race([running, late]);
+      // A check this pass did not start (a second pass reading the first's) cost this pass nothing.
+      if (got) return fresh ? got : { ...got, costUsd: 0, called: false };
+      // Past the wait: the call goes on behind; the pass that started it traces it when it settles ("check-late"),
+      // even after the session closed (the call was paid for), so traces sum to the calls made.
+      if (fresh) {
+        const t0 = performance.now();
+        void running.then(
+          (r) => r.called && this.traceCheck(s, r, t0),
+          () => undefined,
+        );
+      }
+      return { yes: null, costUsd: 0, called: false, overBudget: false, late: true };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
+  private traceCheck(s: Session, r: PushCheckRead, t0: number): void {
+    this.trace(s, {
+      sessionId: s.id,
+      turn: s.turn,
+      event: "user_message",
+      decision: "check-late",
+      reason: "push check",
+      latencyMs: Math.round(performance.now() - t0),
+      sourceCalls: 0,
+      modelCalls: 1,
+      costUsd: r.costUsd,
+      checkCalls: 1,
+      checkCostUsd: r.costUsd,
+      itemIds: [],
+    });
+  }
+
+  /**
+   * `pushCandidates` (D236): the push's candidates for the agent to judge, with no model call: the gate's pool, bulk
+   * mail out, the first `pushCandidates` of them; none when no pooled item is constraint-like. (Constraint-like items
+   * first lost 27 points of hidden facts live: D236.) With a `pushCheck` answer (D500), the pool's items it named
+   * instead, in the pool's order, and none when it named none.
+   */
+  private candidatesOf(
+    s: Session,
+    cue: Cue,
+    gate: PushGate,
+    check: PushCheckRead | null = null,
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
+    const { like } = gate;
+    const yes = check?.yes ?? null;
+    // `pushWiden` (D511): widened items are read only by the check and handed only when it names them, after the
+    // pool's own; the nudge's deeper look, `anchoredPast` and the returned pool stay the lexical pool's.
+    const pool = gate.pool;
+    const reported = yes && gate.widened?.length ? [...pool, ...gate.widened] : pool;
+    if (reported.length === 0) return { items: [], pool };
+    const open = reported.filter((x) => !bulkMail(x.item));
+    let items = yes
+      ? open.filter((x) => yes.has(x.item.id)).slice(0, this.config.pushCandidates)
+      : like.some(Boolean)
+        ? open.slice(0, this.config.pushCandidates)
+        : [];
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
     let anchors: Anchors | undefined;
@@ -2507,18 +2673,82 @@ export class ContextPartner {
     const read = anchors;
     this.deps.onPushPool?.({
       sessionId: s.id,
-      pool: pool.map((x) => x.item.id),
-      constraintLike: like,
+      pool: reported.map((x) => x.item.id),
+      constraintLike: reported.length > like.length ? [...like, ...reported.slice(like.length).map(() => false)] : like,
       handed: items.map((x) => x.item.id),
       ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
       ...(read
         ? {
-            anchored: pool.map((x) => anchored(x.item, read)),
+            anchored: reported.map((x) => anchored(x.item, read)),
             anchorKinds: { entities: read.entities.length, day: hasDay(read) },
+          }
+        : {}),
+      ...(this.config.pushCheck && this.deps.checker
+        ? {
+            check: yes ? "yes" : !check ? "none" : check.late ? "late" : "failed",
+            ...(yes ? { checked: reported.map((x) => yes.has(x.item.id)) } : {}),
           }
         : {}),
     });
     return { items, pool, ...(unsettled ? { unsettled } : {}) };
+  }
+
+  /**
+   * `pushWiden` (N2, D511): items the push pool's lexical order did not reach, for the check only: the request's
+   * nearest items by the `widen` dependency (an embedding table in the lab, `pushWidenEmbed`, bounded by
+   * `pushCheckWaitMs`), its raw intent hits (no thresholds, `pushWidenIntent`) and the ranking's next items
+   * (`pushWidenDeep`), in that order. Current cached copies only, bulk mail out, none already in the pool. No model
+   * call; every route fails open to no widening.
+   */
+  private async widenPool(s: Session, cue: Cue, ranked: readonly Scored[], pool: readonly Scored[]): Promise<Scored[]> {
+    const c = this.config;
+    const now = this.now();
+    const have = new Set(pool.map((x) => x.item.id));
+    const out: Scored[] = [];
+    const add = (ids: readonly string[], n: number) => {
+      let k = 0;
+      for (const id of ids) {
+        if (k >= n) break;
+        if (have.has(id)) continue;
+        const item = this.deps.cache.get(s.scope, id, now);
+        if (!item || bulkMail(item)) continue;
+        have.add(id);
+        out.push({ item, score: 0, matched: 0, sketch: null });
+        k++;
+      }
+    };
+    if (c.pushWidenEmbed > 0 && this.deps.widen) {
+      const widen = this.deps.widen;
+      // Fail open: a dependency that throws, rejects or is late widens nothing.
+      const ids = await within(
+        Promise.resolve()
+          .then(() => widen(s.scope, sanitizeForStore(cue.raw), c.pushWidenEmbed * 2))
+          .catch(() => [] as string[]),
+        c.pushCheckWaitMs,
+      );
+      if (s.closed) return [];
+      add(ids ?? [], c.pushWidenEmbed);
+    }
+    const enricher = this.deps.cards;
+    if (c.pushWidenIntent > 0 && c.cards && c.intent && enricher) {
+      const accept = (id: string) => this.deps.cache.get(s.scope, id, now) !== null;
+      const text = cue.raw.slice(0, INTENT_QUERY_CHARS);
+      try {
+        const rows = enricher.intentFinds(s.scope, text, cue.arrived ?? now, c.pushWidenIntent * 2, accept);
+        add(
+          rows.flatMap((r) => r.ids),
+          c.pushWidenIntent,
+        );
+      } catch {
+        // Fail open: the widening is extra reach, never a reason to lose the push.
+      }
+    }
+    if (c.pushWidenDeep > 0) {
+      const deep: string[] = [];
+      for (const x of ranked) if (!have.has(x.item.id) && !deep.includes(x.item.id)) deep.push(x.item.id);
+      add(deep, c.pushWidenDeep);
+    }
+    return out;
   }
 
   /**
@@ -2983,6 +3213,7 @@ export class ContextPartner {
     this.fanout.forget(scope, sourceId);
     this.deps.planner?.forget(scope, sourceId);
     this.economy.forget(scope, sourceId);
+    this.yields?.forget(scope, sourceId);
     this.sync?.forget(scope, sourceId);
     // A source's forget drops only what its items brought: the user's other items keep their cards.
     this.deps.cards?.forget(scope, sourceId);
@@ -3071,6 +3302,7 @@ export class ContextPartner {
     this.deps.budget.endSession(s.key);
     // The reader reserves on a Budget of its own, by the same session key.
     this.deps.reader?.endSession(s.key);
+    this.deps.checker?.endSession(s.key);
     this.sessions.delete(s.key);
     const user = scopeKey(s.scope);
     const mine = this.userSessions.get(user);
@@ -3109,6 +3341,8 @@ export class ContextPartner {
   /** Starts usage tracking: from the moment the agent actually receives an injection, against what it had seen. */
   private handOut(s: Session, injection: Injection): void {
     const built = this.built.get(injection);
+    // `sourceYield` (D505): an item of a source reached the agent, so the source's run of unused reads ends.
+    if (built && this.yields && !s.closed) this.yields.used(s.scope, built.sourceIds, this.now());
     if (this.config.partyCheck && injection.reason !== "action-party" && injection.reason !== "ask") {
       this.notePacketParties(s, injection.text, injection.citations);
     }
@@ -3832,6 +4066,11 @@ export class ContextPartner {
     let pollable: Set<string> | null = null;
     let cutBehind: Set<string> | undefined;
     let probeLocal: Set<string> | null | undefined;
+    // `sourceYield` (D505): the warm copies whose unused live reads are spent: no probe, no cut-copy poll, and on a
+    // lookup that does not wait for its poll no search behind. A lookup that waits for its poll still searches a spent
+    // cut copy with the rest (more reads, never fewer facts).
+    if (this.yields) cue.boost = boost;
+    const spent = this.spentSources(s, cue, all, boost);
     if (this.sync) {
       // `syncPollWidth` (D263): over that many sources, only the best routed are polled. The lookup is routed once,
       // here, before its poll, and searches the head of the same ranking, so every source it searches was polled
@@ -3853,7 +4092,12 @@ export class ContextPartner {
         const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(left())]);
         const freshening = this.spans?.open("sync.freshen", cue.span, { async: true });
         const tally = { fresh: 0 };
-        const toPoll = pollable ? all.filter((x) => pollable!.has(x.id)) : all;
+        // A spent copy the cap cut is not polled either: it is answered as held and named "unsearched". A whole copy
+        // keeps its poll (a listing is no live read, and without it an ask would call the copy failed).
+        const sync = this.sync;
+        const skipPoll =
+          spent && this.config.sourceYieldPolls ? (id: string) => spent.has(id) && !sync.complete(s.scope, id) : null;
+        const toPoll = all.filter((x) => (!pollable || pollable.has(x.id)) && !(skipPoll && skipPoll(x.id)));
         const polled = this.sync.freshen(s.scope, toPoll, signal, tally, s.abort.signal).then((calls) => {
           if (freshening) this.spans!.close(freshening, { calls, fresh: tally.fresh, ...(behind ? { behind } : {}) });
           return calls;
@@ -3899,6 +4143,11 @@ export class ContextPartner {
         // The probes keep D264: they search a cut copy live and are not waited for (`probeGraceMs`).
         probeLocal = this.localOf(s, all, behind);
       } else local = this.localOf(s, all, behind);
+      // A spent copy answers the probes from what is held too.
+      if (spent && spent.size > 0) {
+        const base = probeLocal === undefined ? local : probeLocal;
+        probeLocal = new Set([...(base ?? []), ...spent]);
+      }
     }
     // `askBehind` (D430): which copies answered here before they were whole or current (read once the route is known).
     const now0 = this.now();
@@ -3997,8 +4246,12 @@ export class ContextPartner {
           this.fanout.search(chosen, query, { timeoutMs: left(), signal: s.abort.signal });
     const settled = searching.catch(() => null);
     // As the lookup's own search (D140, D148): with under `MIN_SEARCH_MS` left, no call that could not answer is sent.
+    if (spent && cue.cutStatus && cutBehind) {
+      // An ask names a copy it did not search (D127): never "local" for a cut copy.
+      for (const id of spent) if (cutBehind.has(id)) cue.cutStatus.set(id, UNSEARCHED);
+    }
     if (cutBehind && cutBehind.size > 0 && !cue.followUp && left() >= MIN_SEARCH_MS) {
-      const behindOf = (listing ? listers : routed).filter((x) => cutBehind!.has(x.id));
+      const behindOf = (listing ? listers : routed).filter((x) => cutBehind!.has(x.id) && !spent?.has(x.id));
       // Sent as the lookup's own search would be: through the planner's cascade (its shapes find what the request's
       // words alone miss), its calls counted where they reach the connector.
       const via: (CountedPlanCalls | undefined)[] = [];
@@ -4014,7 +4267,7 @@ export class ContextPartner {
     } else if (cue.cutStatus && cutBehind) {
       // `askBehind` (D430): no search behind was sent (too little of the deadline left, D148), so nothing is reading
       // these copies: "timeout" at once, never "searching" (whose answer promises what follows).
-      for (const id of cutBehind) cue.cutStatus.set(id, "timeout");
+      for (const id of cutBehind) if (!cue.cutStatus.has(id)) cue.cutStatus.set(id, "timeout");
     }
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing = this.config.probes
@@ -4035,6 +4288,7 @@ export class ContextPartner {
         ).map((i) => i.id)
       : [];
     const outcomes = await searching;
+    this.noteLiveRead(s, cue, outcomes);
     if (searchSpan) spans!.close(searchSpan, outcomeAttrs(outcomes));
     const plans = planner
       ? chosen.flatMap((x) => {
@@ -4111,6 +4365,79 @@ export class ContextPartner {
   }
 
   /**
+   * `sourceYield` (D505): the user's warm synced copies this request skips live reads of (no probe, no cut-copy
+   * poll, no search behind; a lookup that waits for its poll still searches a spent cut copy): a source whose own run
+   * of reads with nothing used has reached `sourceYieldRun` (never for a request that names an entity the source
+   * mentioned), or one with no item ever used while the user's reads on the request's kind of evidence for it are not
+   * paying (`SourceYield.poolSpent`). Only a warm copy: it answers from what is held, where a source with no copy
+   * would answer nothing. Null when the trial is off or no source is spent.
+   */
+  private spentSources(
+    s: Session,
+    cue: Cue,
+    all: readonly Source[],
+    boost: ReadonlyMap<string, number> | undefined,
+  ): Set<string> | null {
+    if (!this.yields || !this.sync || this.yields.size(s.scope) === 0) return null;
+    const now = this.now();
+    const c = this.config;
+    const evidence = this.evidenceFor(s, cue, boost);
+    const pooled = [
+      this.yields.poolSpent(s.scope, 0, c.sourceYieldFloor, now),
+      c.sourceYieldWords && this.yields.poolSpent(s.scope, 1, c.sourceYieldFloor, now),
+    ];
+    let out: Set<string> | null = null;
+    for (const x of all) {
+      const kind = evidence(x.id);
+      const run = this.yields.run(s.scope, x.id, now);
+      const limit = kind === 2 ? 0 : c.sourceYieldRun;
+      // Half a read of slack: a run decays from the moment of its last read, so 4 reads read 3.999 a minute later.
+      const spent =
+        (limit > 0 && run > limit - 0.5) ||
+        (kind < 2 && pooled[kind] === true && !this.yields.hasYielded(s.scope, x.id));
+      if (spent && this.sync.isWarm(s.scope, x.id)) (out ??= new Set()).add(x.id);
+    }
+    return out;
+  }
+
+  /**
+   * `sourceYield` (D505): what the request has for a source: 2, it names an entity the source's items mentioned (the
+   * source map); 1, its words are among the source's held items or in its sketch (`boost`); 0, nothing.
+   */
+  private evidenceFor(s: Session, cue: Cue, boost: ReadonlyMap<string, number> | undefined): (id: string) => Evidence {
+    let named: Set<string> | undefined;
+    return (id) => {
+      if (!named) {
+        named = new Set();
+        for (const e of cue.entities) for (const m of this.deps.sourceMap.sourcesFor(s.scope, e)) named.add(m.sourceId);
+      }
+      return named.has(id) ? 2 : (boost?.get(id) ?? 0) > 0 ? 1 : 0;
+    };
+  }
+
+  /**
+   * `sourceYield` (D505): books a live read against each source that answered one, once a source a turn: the push,
+   * its probes and an ask of the same turn often join one call. Only an answer counts ("ok": the connector was
+   * called and replied): a failure, a timeout or a guard's refusal says nothing about what the source holds, and a
+   * page from the fan-out's cache was no call. Only a warm copy's source: no other is ever skipped, so its reads
+   * would fill the pools with reads the rule cannot act on.
+   */
+  private noteLiveRead(s: Session, cue: Cue, outcomes: readonly FanoutOutcome[]): void {
+    if (!this.yields || !this.sync || s.closed) return;
+    if (s.liveReads?.turn !== s.turn) s.liveReads = { turn: s.turn, ids: new Set() };
+    const seen = s.liveReads.ids;
+    const fresh: string[] = [];
+    for (const o of outcomes) {
+      if (o.status !== "ok" || seen.has(o.sourceId) || !this.sync.isWarm(s.scope, o.sourceId)) continue;
+      seen.add(o.sourceId);
+      fresh.push(o.sourceId);
+    }
+    if (fresh.length === 0) return;
+    const evidence = (cue.evidence ??= this.evidenceFor(s, cue, cue.boost));
+    this.yields.read(s.scope, fresh, this.now(), evidence);
+  }
+
+  /**
    * `pushCutBehind` (D405): the live search D264 makes of cut copies, run behind a lookup that answered them from the
    * index. Same query, same deadline, same fan-out (breaker, rate, a call in flight joined). What it returns is stored
    * as the lookup's own finds are, and it joins `cue.polled`: if it stored anything new, the lookup's follow-up and
@@ -4150,6 +4477,7 @@ export class ContextPartner {
       .then(async (outcomes) => {
         let made = 0;
         for (let k = 0; k < outcomes.length; k++) made += via[k] ? via[k]!.made : reachedSource(outcomes[k]!) ? 1 : 0;
+        this.noteLiveRead(s, cue, outcomes);
         if (span) this.spans!.close(span, outcomeAttrs(outcomes));
         if (made > 0) {
           this.trace(s, {
@@ -4350,6 +4678,7 @@ export class ContextPartner {
         return run;
       };
       const outcomes = (await Promise.all(to.map(one))).filter((o): o is FanoutOutcome => o !== null);
+      this.noteLiveRead(s, cue, outcomes);
       // A page of the probe's own size from each source, even when the call was the planner's (8 items): more would
       // crowd the probes' seats with the judge (live, the judge passed fewer planted items with them).
       const items = outcomes.flatMap((o) => o.items.slice(0, window ? 20 : 5));
@@ -4662,8 +4991,6 @@ export class ContextPartner {
   ): ContextItem[] {
     const cache = this.deps.cache;
     const now = this.now();
-    // `syncCold` (D475): these sources' cold copies that hold the request's words are back in the index first.
-    if (this.config.syncCold && text.trim()) this.thawCold(s, sourceIds, text, limit);
     const capped = (hits: CacheHit[]) => {
       const per = new Map<string, number>();
       return hits.filter((h) => {
@@ -4699,20 +5026,6 @@ export class ContextPartner {
     }
     const all = this.config.syncLocalAll;
     return cache.searchIn(s.scope, ids, ids.length, limit, sourceIds, all, now).map((h) => h.item);
-  }
-
-  /**
-   * `syncCold` (D475): brings the cold copies of these sources that hold any of the words back into the index, where
-   * the lookup ranks them as it would a live search's finds, and treats them as such finds are treated (`store`):
-   * carded, their mentions recorded. No call.
-   */
-  private thawCold(s: Session, sourceIds: ReadonlySet<string>, text: string, limit: number): void {
-    const sync = this.sync;
-    if (!sync) return;
-    const added = sync.thaw(s.scope, sourceIds, coldQuery(text), Math.max(limit, 8), this.now());
-    if (added.length === 0) return;
-    this.enqueueCards(s.scope, added);
-    this.recordMentions(s.scope, added);
   }
 
   /** Records the entity mentions of items new to the user's cache or changed (lookups and the sync, D57). */
@@ -4785,15 +5098,12 @@ export class ContextPartner {
     // A ref notice's re-read still on the wire (D347): the copy held is from before the change.
     if (this.refreshing.size > 0 && this.refreshing.has(`${scopeKey(s.scope)}|${item.id}`)) return true;
     if (this.unswept(s.scope, item)) return true;
-    // `syncCold` (D475): a copy a lookup brought back from the cold tier, not read at its source since.
-    if (this.config.syncCold && this.config.syncColdVerify && this.sync?.thawedUnread(s.scope, item.sourceId, item.id))
-      return true;
     const mark = this.deps.cache.readMark(s.scope, item.id);
-    if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark, item.id) !== true) return false;
+    if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark) !== true) return false;
     // A re-read since that signal could not tell (a null that proves nothing): another says the same until it signals.
     const held = this.unverifiable.get(scopeKey(s.scope))?.get(item.id);
     if (held === undefined || this.now() - held.at > UNVERIFIABLE_HOLD_MS) return true;
-    return this.sync.signalledSince(s.scope, item.sourceId, held.mark, item.id);
+    return this.sync.signalledSince(s.scope, item.sourceId, held.mark);
   }
 
   /**
@@ -4967,60 +5277,16 @@ export class ContextPartner {
     // The read mark before the re-read's call (D133): a signal while it is on the wire doubts what it stores, and
     // refuses its reuse.
     const mark = this.sync?.mark() ?? 0;
-    // `syncDelta` (D476): a source kept by its change feed is brought current by one delta read, shared by every
-    // doubted item of it, instead of a fetch for each; if that cannot settle the doubt, the item is re-read as before.
-    const byDelta = this.config.syncDelta && this.sync?.hasDelta(s.scope, item.sourceId) === true;
-    const reading = byDelta
-      ? this.recheckByDelta(s, item, made).then((o) => o ?? this.recheck(s, item, mark, made))
-      : this.recheck(s, item, mark, made);
     const entry: { at: number; mark: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome } = {
       at: now,
       mark,
-      outcome: reading.then((o) => (entry.settled = o)),
+      outcome: this.recheck(s, item, mark, made).then((o) => (entry.settled = o)),
     };
     const outcome = entry.outcome;
     checks.delete(item.id);
     checks.set(item.id, entry);
     while (checks.size > MAX_CHECKS) checks.delete(checks.keys().next().value as string);
     return outcome;
-  }
-
-  /**
-   * `syncDelta` (D476): the doubt about `item` settled by one read of its source's change feed (`Sync.settleDelta`,
-   * within `verifyTimeoutMs`): the read stores what changed and drops what was deleted, so the cache then says which
-   * it was. Null when the feed could not settle it (no cursor, a failed or late read, a signal during it, or the copy
-   * no longer held for another reason): the caller re-reads the item by its ref. Never throws.
-   */
-  private async recheckByDelta(s: Session, item: ContextItem, made?: { calls: number }): Promise<CheckOutcome | null> {
-    const sync = this.sync;
-    if (!sync) return null;
-    try {
-      const all = await this.deps.sources(s.scope).catch((): Source[] => []);
-      const source = all.find((x) => x.id === item.sourceId);
-      if (!source?.changes || s.closed) return null;
-      const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(this.config.verifyTimeoutMs)]);
-      const tally = { calls: 0 };
-      const settled = await sync.settleDelta(s.scope, source, signal, tally);
-      if (made) made.calls += tally.calls;
-      this.freshness.calls += tally.calls;
-      if (!settled || s.closed) return null;
-      const now = this.now();
-      if (this.deps.cache.isHeldGone(s.scope, item.id, now)) {
-        this.freshness.checked++;
-        this.freshness.gone++;
-        return "gone";
-      }
-      const copy = this.deps.cache.get(s.scope, item.id, now);
-      // Not held, and not because the feed said it is gone (evicted, or let go by the cap): re-read by ref.
-      if (!copy || this.doubted(s, copy)) return null;
-      this.freshness.checked++;
-      const changed = copy.text !== item.text || copy.title !== item.title;
-      if (changed) this.freshness.changed++;
-      else this.freshness.confirmed++;
-      return changed ? "changed" : "confirmed";
-    } catch {
-      return null;
-    }
   }
 
   private async recheck(
@@ -5993,7 +6259,6 @@ export class ContextPartner {
       ...(source.fetchesById !== undefined ? { fetchesById: source.fetchesById } : {}),
       // A listing (the sync, D57) is traced by the sync itself (`sync.list`): passed through as it is.
       ...(source.list ? { list: source.list.bind(source) } : {}),
-      ...(source.changes ? { changes: source.changes.bind(source) } : {}),
       // One `then`, no async frame of its own: a source call is the most frequent span (tracing overhead).
       search: (query, signal) => {
         const sp = spans.open("source.search", parent, { async: true, source: source.id, window: !!query.window });
@@ -6258,15 +6523,29 @@ function reachAnswer(
   }
   // `askBehind` (D430): sources still being read when the ask answered are named apart from those that failed.
   const reading = (sources ?? []).filter((x) => x.status === SEARCHING);
-  const missed = (sources ?? []).filter((x) => !ANSWERED.has(x.status) && x.status !== SEARCHING);
+  // `sourceYield` (D505): cut copies the ask did not search are named apart too: nothing failed.
+  const skipped = (sources ?? []).filter((x) => x.status === UNSEARCHED);
+  const missed = (sources ?? []).filter(
+    (x) => !ANSWERED.has(x.status) && x.status !== SEARCHING && x.status !== UNSEARCHED,
+  );
   const told = unreached(packet, sources ?? [], missed);
-  if (reading.length === 0) return told;
-  const shown = reading.slice(0, 3).map((x) => x.sourceId);
-  const names = `${shown.join(", ")}${reading.length > 3 ? ` and ${reading.length - 3} more` : ""}`;
-  const note = `Still reading ${names}: anything there that fits follows as a later packet`;
-  if (told === "Nothing in the connected sources.")
-    return `Nothing found yet. ${note}, so this is not an all-clear yet.`;
-  return `${told}\n${note}.`;
+  if (reading.length === 0 && skipped.length === 0) return told;
+  const some = (xs: readonly SourceStatus[]) =>
+    `${xs
+      .slice(0, 3)
+      .map((x) => x.sourceId)
+      .join(", ")}${xs.length > 3 ? ` and ${xs.length - 3} more` : ""}`;
+  const notes: string[] = [];
+  if (reading.length > 0)
+    notes.push(`Still reading ${some(reading)}: anything there that fits follows as a later packet`);
+  if (skipped.length > 0) {
+    notes.push(`Not searched past what is held of ${some(skipped)}: nothing found there has been used lately`);
+  }
+  if (told === "Nothing in the connected sources.") {
+    const head = reading.length > 0 ? "Nothing found yet." : "Nothing found in what was searched.";
+    return `${head} ${notes.join(". ")}, so this is not an all-clear${reading.length > 0 ? " yet" : ""}.`;
+  }
+  return `${told}\n${notes.join(". ")}.`;
 }
 
 /** `reachAnswer`'s text for the sources that did not answer (`missed`), as D127 words it. */
@@ -6552,6 +6831,25 @@ function refTryAgain(got: { why: string; guard?: string; pushedBack?: boolean })
 
 /** The most candidates an ask's reader reads, whatever `askReaderPool` says. */
 const READER_POOL_CAP = READER_MAX_ITEMS;
+/** `pushCheck` (D500): the push checks a session keeps (a request's first and second pass, and a few before). */
+const CHECK_KEPT = 4;
+
+/** `pushCheck` (D500): one kept check: the request and day it read, its items as read (`itemMark`), its answer. */
+interface KeptCheck {
+  asked: string;
+  /** Per item read, `itemMark`: id, content hash, date and sender. */
+  marks: Map<string, string>;
+  read: Promise<PushCheckRead>;
+  settled?: PushCheckRead;
+}
+
+/** `pushCandidates` (D236): the push's pool and, per item, whether it is constraint-like. */
+interface PushGate {
+  pool: Scored[];
+  like: boolean[];
+  /** `pushWiden` (D511): items past the pool, for the check only. */
+  widened?: Scored[];
+}
 
 /** What a re-read found (`verifyDelivery`). */
 /**

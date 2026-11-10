@@ -1,4 +1,5 @@
 #!/bin/bash
+# Record only: `--connector-mix` was deleted with the local-copy trials (D495); run at commit 225625db0.
 # go.sh RUN SEEDS CAP CONDITIONS VARIANT_CONFIG [EXTRA...]: lab_fanout pi-ab at 1,000 sources, train, short (limit 6),
 # hidden/control/neutral, payload notices, market latency, Haiku 5.5 in every role, cards and intent replayed.
 cd /home/user/Eden

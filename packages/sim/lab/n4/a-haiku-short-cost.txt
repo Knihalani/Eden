@@ -1,0 +1,37 @@
+
+$ per 1,000 tasks (agent and Eden per task; bg run = Eden's cards and intent while the user worked, per task; one-time = backfill per user; steady = agent + Eden + bg run; all-in = steady + one-time spread over the user's tasks in this run). Recap turns are probes: not tasks, their $ apart.
+condition        n users   agent    Eden  bg run  steady  all-in  mix st  mix all   one-time $/user (from)  reader/t  Eden conn/t  agent tools/t  wall p50  mean  recaps $
+tools          192     4   0.225   0.000   0.000   0.225   0.225       -        -           0.0000 (none)      0.00         0.00           1.88      3.27  2.96    0.0000
+eden           192     4   0.287   0.000   0.000   0.287   0.324       -        -           0.0018 (in-run)      0.00         0.00           0.57      1.98  2.26    0.0000
+
+connector calls per task (agent's source tools; Eden's in the task's window; Eden's background while the user worked) and Eden's one-time backfill calls per user; streams recorded before A3 lack the background and backfill
+tools          agent 1.88  Eden 0.00  background 0.00  mix -  backfill 0/user (0 users)
+eden           agent 0.00  Eden 0.00  background 0.00  mix -  backfill 18/user (48 users)
+
+$ per 1,000 tasks with the connectors priced per plan ($ per 1,000 calls; market.py, list prices, assumed): steady, all-in, and on the 1:1:8 mix
+tools          first-party (quota only)     steady   0.225  all-in   0.225  mix st       -  mix all       -
+tools          Composio (overage)           steady   0.787  all-in   0.787  mix st       -  mix all       -
+tools          Unified.to (Pro)             steady   1.631  all-in   1.631  mix st       -  mix all       -
+tools          Arcade.dev (Team)            steady  18.975  all-in  18.975  mix st       -  mix all       -
+tools          Pipedream Connect (overage)  steady  22.725  all-in  22.725  mix st       -  mix all       -
+tools          Zapier MCP (10k tasks)       steady  48.600  all-in  48.600  mix st       -  mix all       -
+eden           first-party (quota only)     steady   0.287  all-in   0.324  mix st       -  mix all       -
+eden           Composio (overage)           steady   0.287  all-in   1.674  mix st       -  mix all       -
+eden           Unified.to (Pro)             steady   0.287  all-in   3.699  mix st       -  mix all       -
+eden           Arcade.dev (Team)            steady   0.287  all-in  45.324  mix st       -  mix all       -
+eden           Pipedream Connect (overage)  steady   0.287  all-in  54.324  mix st       -  mix all       -
+eden           Zapier MCP (10k tasks)       steady   0.287  all-in 116.424  mix st       -  mix all       -
+
+eden − tools per plan, $ per 1,000 tasks (each condition against `tools`)
+eden           first-party (quota only)     steady   0.062  all-in   0.099  mix st       -  mix all       -
+eden           Composio (overage)           steady  -0.501  all-in   0.886  mix st       -  mix all       -
+eden           Unified.to (Pro)             steady  -1.344  all-in   2.067  mix st       -  mix all       -
+eden           Arcade.dev (Team)            steady -18.688  all-in  26.349  mix st       -  mix all       -
+eden           Pipedream Connect (overage)  steady -22.438  all-in  31.599  mix st       -  mix all       -
+eden           Zapier MCP (10k tasks)       steady -48.313  all-in  67.824  mix st       -  mix all       -
+
+per kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s
+tools          hidden     96  raised 4/96 (4.2%)  $0.224/1k  p50 3.27
+tools          control    96  raised 0/96 (0.0%)  $0.226/1k  p50 3.26
+eden           hidden     96  raised 62/96 (64.6%)  $0.282/1k  p50 1.88
+eden           control    96  raised 0/96 (0.0%)  $0.292/1k  p50 2.05

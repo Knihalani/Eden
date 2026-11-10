@@ -365,6 +365,16 @@ A second, independent draw of train seeds 41–42's requests with the shipped pr
 A new user's first requests (F2, D482): `bun run funnel --jobs 4 -- --cards-calls N` gives each world's card model N
 calls and leaves the rest uncovered (a train world needs about 16); `--set '{"cardsOrder":false}'` is the old read
 order. pi-ab takes the same flag; without `--cards` every card is made in-run.
+`-- --cards-calls N --cards-rest cards` (N4, funnel only) answers the calls past N with their cards and no requests:
+a card-only model reading the rest of the backfill, with the replayed teacher's cards standing in for it (an upper
+bound; it adds +1 hidden task of 384 at every cap, docs/research/n4-agents.md).
+
+**A stronger agent (N4, D520).** `packages/sim/lab/n4/run.sh AGENT LABEL CONDITIONS …` runs pi-ab on train with
+`--model AGENT` and Haiku 5.5 as Eden's card model, reader and grader. Sonnet 5.5 runs with thinking
+`between_tools`; Opus 5.5 accepts neither "disabled" nor `between_tools` and runs `adaptive` at effort `low`
+(`anthropicThinkingOff`, free.ts): label an Opus agent's row so. Cache reads are priced at 0.05x input on both
+(`ANTHROPIC_PRICES`, `cacheRead`), 0.1x on Haiku. A task run costs about $0.009 (Sonnet) and $0.015 (Opus) against
+Haiku's $0.0003. `packages/sim/lab/n4/tokens.py MODEL STEM…` splits each arm's agent bill by token class.
 
 ### 1c. Lab-only measurements of first-turn delivery, overlapping requests and sync items
 
@@ -453,16 +463,28 @@ world's five as its agent's tools); one seed per process (two at once ran out of
 with every source on the weekly sweep (D356's worst case): `quality-cli --never-used` (no source is ever "used").
 Recipes and figures: docs/research/a21-scale.md.
 
-Connector kinds (F1, D478): `--connector-mix P,D` on the funnel, pi-ab, quality-cli and days-calls (`--mix=P,D` on
-`source-days.bench.ts`) makes a share P of the connectors push and have a change feed, a share D have a feed only,
-the rest neither (`0.3,0.3` in F1, an assumption); the trials that use them are `syncCold` and `syncDelta`
-(`--set '{"syncCold":true,"syncDelta":true}'`). `pi-cost-report.ts --trigger-avoids N --events-per-task E` prices
-event triggers. Recipes and figures: docs/research/f1-local-copy.md.
+Where the calls go, and over days (N1, docs/research/n1-calls.md): `-- --call-split` (one line a funnel process)
+splits a task's calls by connector (the world's or a noise one; search or listing) and by what made them (the poll,
+the push's probes, the cut copies' searches, the ask's probes). `--notify-share P` (funnel, pi-ab, quality-cli,
+days-calls) lets only a share P of the connectors send change notices, the rest polled and swept (the owner's
+estimate is that ~90% of connectors send none: `--notify-share 0.05`). `days-calls.ts --noise-sources 995` runs the
+`--days` user with the noise connectors and prints the planted items that reached the agent and the request-time
+calls by day, so a rule that learns over days can be screened at $0 (about 15 s a user).
 
 Read hidden/decoys, `calls/task`, and the `merged cards use` line's `calls` and `sent` (card calls are stub-counted:
 noise items are not in the replay; price them at $0.000181 a call, A1). Compare task by task against the same seed
 without the arm (the JSON's `perTask`). The "hidden returned" count falls when sources answer from the index instead
 of a live search: read "hidden surfaced" (`TOTAL hidden`), not it. Figures for the shipped default: a13-scale.md.
+
+### 1f. A wider pool behind the push check (N2, D511; docs/research/n2-recall.md)
+
+`bun run funnel … -- --widen-table F` wires an embedding table (`packages/sim/modal/n2_embed.py` on Modal, about
+$0.07 for train seeds 41–48; the checked-in `packages/sim/lab/n2/widen-train-41-48.jsonl.gz`) as the engine's `widen`
+dependency for an arm with `pushWiden` (and `pushCheck`, `--check live|replay`); pi-ab takes the same flag (short
+worlds only). `-- --templates a,b` runs only those templates' tasks in a whole world (the confirmation's 40 held-out
+templates). `python3 -I packages/sim/lab/n2/compare.py --arm NAME=F …` prints planted and decoy handed, neutral
+packets and N2's pre-registered bars. Read a check's quality from replayed labels: a live check slower than the
+funnel's 3 s observe wait misses the push (D510).
 
 ### 2. The same with Eden's reader live (NEW)
 
@@ -1033,7 +1055,7 @@ python3 -I packages/sim/modal/bench_report.py --pair eden:tools --pair eden~minu
   --group cached=.local/modal/bench-a --group inrun=.local/modal/bench-b --target 1.5
 ```
 
-- **Presets** (`fanout_plan.PRESETS`): `bench-tools`, `bench-fewer`, `bench-parts`; `--args` after a
+- **Presets** (`fanout_plan.PRESETS`): `bench-tools`, `bench-fewer`, `bench-parts`, `bench-yield` (N1b, D543); `--args` after a
   preset add or replace flags. `python3 -I packages/sim/modal/fanout_plan.py plan --preset … --seeds … --cap …`
   prints the plan, the streams a shard and the shards at once, with no token.
 - **Concurrency is automatic.** Shards run in waves that keep the agent streams on the key at or under

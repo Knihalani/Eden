@@ -1,0 +1,14 @@
+TOTAL 11.626
+a-haiku-long 0.018
+a-haiku-short 0.126
+a-opus-long 0.588
+a-opus-short 2.886
+a-sonnet-long 0.675
+a-sonnet-short 3.578
+b-long 0.224
+b-short 2.937
+b-smoke 0.177
+probe-opus 0.003
+probe-opus2 0.249
+probe-sonnet 0.151
+regrades 0.014

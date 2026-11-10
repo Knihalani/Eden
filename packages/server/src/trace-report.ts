@@ -26,7 +26,10 @@ export interface TraceReport {
   traces: number;
   /** Distinct session ids: traces carry no tenant or user, so two users' "s1" count once. */
   sessionIds: number;
-  /** Events the engine saw (every trace but its own follow-ups: "verify", "reader-late", a sync poll's "skipped"). */
+  /**
+   * Events the engine saw (every trace but its own follow-ups: "verify", "reader-late", "check-late", a sync poll's
+   * "skipped").
+   */
   events: number;
   decisions: Record<string, number>;
   /**
@@ -116,6 +119,7 @@ export function traceReport(lines: Iterable<string>): TraceReport {
     const followUp =
       t.decision === "verify" ||
       t.decision === "reader-late" ||
+      t.decision === "check-late" ||
       t.decision === "reader-push" ||
       (t.decision === "skipped" && (t.reason === "sync poll behind" || t.reason === "cut search behind")) ||
       // `askBehind` (D430): an ask's follow-up packet, queued once the work it did not wait for stored something.

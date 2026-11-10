@@ -234,6 +234,9 @@ export const SOLO_WHY: Record<string, string> = {
   "--judge live": "one spend stream per run (its pacer, request cap and budget are per process); not built in parallel",
   "--reader live":
     "one append-only reader cache file and one spend stream per run; a parallel live top-up is not built",
+  "--check":
+    "I3's push check: one append-only check cache file and one spend stream, and its CHECK line sums every lane " +
+    "(not merged across shards)",
 };
 
 /** The reasons a run keeps one process ("flag: why"), from funnel.ts's `--record` and the flags after `--`. */
@@ -247,6 +250,7 @@ export function soloReasons(o: { record: boolean; passthrough: readonly string[]
     ...(o.passthrough.includes("--timeline") ? ["--timeline"] : []),
     ...(value("--judge") === "live" ? ["--judge live"] : []),
     ...(value("--reader") === "live" ? ["--reader live"] : []),
+    ...(o.passthrough.includes("--check") ? ["--check"] : []),
   ];
   return on.map((flag) => `${flag} (${SOLO_WHY[flag]})`);
 }

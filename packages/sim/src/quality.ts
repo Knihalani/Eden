@@ -21,12 +21,12 @@ import {
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
 import { QueryPlanner, type PlannerOptions } from "@eden/sources";
-import { applyConnectorMix } from "./lab/connector-options";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { OracleJudge } from "./judge";
 import { Rng } from "./rng";
 import { buildSessions, type AskCase, type Label, type SimTask, type SimTurn } from "./sessions";
 import { simSources, type ProfileSet, type SimSource } from "./sources";
+import { applyNotifyShare } from "./lab/connector-options";
 import {
   applyDelete,
   applyUpdate,
@@ -86,12 +86,8 @@ export interface QualityOptions {
    * source takes the longer sweep: the worst case for deletions a lost notice leaves to the sweep.
    */
   neverUsed?: boolean;
-  /**
-   * F1 (D478): the shares of connectors that push and have a change feed, and that only have a feed; the rest have
-   * neither (`applyConnectorMix`). Only a pushing connector's changes are forwarded (`push`). Absent: every source
-   * notifies when `push` is on and none has a feed, as before.
-   */
-  connectorMix?: { push: number; delta: number } | null;
+  /** `--notify-share P` (N1, `applyNotifyShare`): only that share of the connectors send change notices. */
+  notifyShare?: number | null;
   agentToolRate?: number;
   /**
    * With no live model: "perfect" puts an oracle judge in the model's place (the ceiling of the model path),
@@ -581,8 +577,8 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
     if (o.nullProvesNothing)
       for (const src of sources) Object.defineProperty(src, "fetchReportsGone", { value: false, enumerable: true });
     if ((o.push ?? "none") !== "none") for (const s of sources) s.notifies = true;
+    applyNotifyShare(sources, o.notifyShare ?? null, o.seed + u);
     if (o.fetchGone === false) for (const s of sources) s.fetchReportsGone = false;
-    applyConnectorMix(sources, o.connectorMix ?? null, o.seed + u);
     return { world, sessions, asks, updates, deletes, sources };
   });
   const runUser = async (u: number) => {
@@ -650,8 +646,8 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
       if (mode === "none") return;
       for (const s of sources) {
         if (!touched.has(s.id)) continue;
-        // `connectorMix`: a connector that does not push sends nothing.
-        if (o.connectorMix && !s.notifies) continue;
+        // `notifyShare`: a connector that does not notify sends nothing.
+        if (o.notifyShare != null && !s.notifies) continue;
         if ((o.lostNotices ?? 0) > 0 && losing.chance(o.lostNotices!)) {
           lostNotices++;
           continue;
