@@ -7,7 +7,9 @@ model call of a tool-using turn and every earlier turn's packets where they were
 the upstream's answer back unchanged. `POST …/messages` (Anthropic's Messages API, D653) gets the same treatment
 through one translation each way: `fromAnthropic` reads the conversation as chat messages (tool results as `tool`
 messages, text as the user turn), the same code decides what is new and where packets go, and `toAnthropic` puts
-each packet into its user message as a text block (after `tool_result` blocks, before other text). Other routes are
+each packet into its user message as a text block (after `tool_result` blocks, before other text). `POST …/responses`
+(OpenAI's Responses API, D656): `fromResponses` reads `input`'s items one to one as chat messages and `toResponses`
+puts each packet back as a system item; `conversation` names the session when no header does. Other routes are
 forwarded as is.
 
 ## Files
@@ -17,6 +19,7 @@ forwarded as is.
 | `src/proxy.ts` | `createProxy` (identity: `x-eden-user-id` or the body's `user`; conversation: `x-eden-session-id` or a hash of its first non-system message; new messages by content hash, `Conversation.seen`; one deadline per request; `proxyKey`), `eventsOf` (messages to events), `textOf` |
 | `src/main.ts` | `bun run proxy` (`EDEN_PROXY_UPSTREAM`, `EDEN_URL`, `EDEN_API_KEY`, `PROXY_PORT`/`PROXY_HOST`, default 127.0.0.1:8791; `EDEN_PROXY_KEY` required off loopback; `EDEN_PROXY_SHADOW`; `EDEN_PROXY_MAX_BODY_BYTES`, default 64 MB, a chat body with images). At startup (D365): a warning for an upstream with no path, and one `/v1/whoami` probe saying whether Eden is reachable and takes the key |
 | `src/proxy-anthropic.test.ts` | The Messages route (D653): injection as a text block with the rest byte for byte, `metadata.user_id` (this route only), a tool turn, text beside tool results not a turn, a later turn, isolation, fail open, `keepPackets` off, shadow, streaming, other `…/messages` routes untouched, error shape, `fromAnthropic`/`toAnthropic` alone |
+| `src/proxy-responses.test.ts` | The Responses route (D656): a string and a list input, a tool turn with a reasoning item, `user` and `conversation`, fail open, other `…/responses` routes untouched, `fromResponses`/`toResponses` alone |
 | `src/proxy-a16.test.ts` | `keepPackets` (D336): off and on, on by default, each request a prefix of the next, Eden down, isolation, shadow; with a scripted Eden: sliding windows, a repeated message in a new turn, an overtaken request, the byte budget, no user message |
 | `src/proxy.test.ts` | A fake upstream and the real Eden handler in process: injection, once-only reporting, compaction and sliding windows, isolation, eviction, keying, the deadline under a slow Eden, `proxyKey`, hop-by-hop headers, tool events, streaming, fail-open, 502, shadow |
 

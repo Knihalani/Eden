@@ -408,6 +408,10 @@ not as a line per request.
   `claude-haiku-5-5`): asked where and when lunch is, the model answered that it has no calendar access directly
   and "at Dishoom on Thursday at 12:30" through the proxy; a body with
   `system`, `metadata.user_id` and `cache_control` was accepted (a scratch script, not in the repo).
+- On each `POST /v1/responses` (OpenAI's Responses API, D656) likewise: `input`'s items are read as the
+  conversation, and the packet goes back as a system item before the latest user message. With the history held
+  by the provider, `conversation` names the session; with `previous_response_id` alone send `x-eden-session-id`,
+  or each request is its own session. Not yet checked against the real API.
 - **Identity.** `x-eden-user-id` (else the body's `user`; on Anthropic's route `metadata.user_id` instead) names the end
   user; without either, Eden is skipped (the
   proxy says so once on stderr, D365).

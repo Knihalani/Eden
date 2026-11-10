@@ -1,0 +1,144 @@
+import { afterAll, describe, expect, test } from "bun:test";
+import { buildPartner, createHandler } from "@eden/server";
+import { StaticSource } from "@eden/sources";
+import { createProxy, fromResponses, toResponses } from "./proxy";
+
+// D656: the proxy in front of OpenAI's Responses API (`POST …/v1/responses`). A fake upstream records what reached the
+// model; Eden is the real handler in process, with no model key.
+
+const KEY = "k_proxy_0123456789abcd";
+const sources = new StaticSource("calendar", "The user's calendar", [
+  { ref: "evt-priya", title: "Lunch with Priya Raman", text: "Thursday 12:30 at Dishoom, confirmed" },
+]);
+const partner = buildPartner({ sources: async () => [sources], model: null });
+const eden = Bun.serve({ port: 0, fetch: createHandler(partner, { keys: new Map([[KEY, "acme"]]), dev: false }) });
+const seen: { path: string; raw: string; body: any }[] = [];
+const upstream = Bun.serve({
+  port: 0,
+  async fetch(req) {
+    const raw = await req.text();
+    let body: any = null;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      body = raw;
+    }
+    seen.push({ path: new URL(req.url).pathname, raw, body });
+    return Response.json({ id: "resp_1", output: [] });
+  },
+});
+afterAll(() => {
+  eden.stop(true);
+  upstream.stop(true);
+  partner.stopSync();
+});
+const proxy = createProxy({
+  upstream: `${upstream.url.href}v1`,
+  edenUrl: eden.url.href,
+  edenApiKey: KEY,
+  waitMs: 1_000,
+});
+const post = (raw: string, headers: Record<string, string> = {}, path = "/v1/responses") =>
+  proxy(
+    new Request(`http://proxy${path}`, {
+      method: "POST",
+      headers: { authorization: "Bearer sk", ...headers },
+      body: raw,
+    }),
+  );
+const explain = async (userId: string, sessionId: string) =>
+  (
+    (await (
+      await fetch(`${eden.url.href}v1/explain`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${KEY}` },
+        body: JSON.stringify({ userId, sessionId }),
+      })
+    ).json()) as { decisions: { event: string }[] }
+  ).decisions.map((d) => d.event);
+const ASK = "What time is lunch with Priya Raman?";
+
+describe("the proxy on OpenAI's Responses API (D656)", () => {
+  test("a string input becomes the context as a system item, then the user's message; the rest as it came", async () => {
+    const raw = `{"model":"m","seed":18446744073709551615,"instructions":"Be brief.","input":${JSON.stringify(ASK)},"store":false}`;
+    await post(raw, { "x-eden-user-id": "r1", "x-eden-session-id": "s1" });
+    const got = seen.at(-1)!;
+    expect(got.path).toBe("/v1/responses");
+    expect(got.raw.startsWith('{"model":"m","seed":18446744073709551615,"instructions":"Be brief.","input":[')).toBe(
+      true,
+    );
+    expect(got.raw.endsWith(',"store":false}')).toBe(true);
+    expect(got.body.input.map((i: any) => i.role)).toEqual(["system", "user"]);
+    expect(got.body.input[0].content).toContain("Dishoom");
+    expect(got.body.input[1]).toEqual({ role: "user", content: ASK });
+  });
+
+  test("a tool turn: items stay the caller's own, the packet stays put, calls and outputs are reported once", async () => {
+    const h = { "x-eden-user-id": "r2", "x-eden-session-id": "s2" };
+    const user = { role: "user", content: [{ type: "input_text", text: ASK }] };
+    await post(JSON.stringify({ model: "m", input: [user] }), h);
+    const first = seen.at(-1)!.body.input;
+    const input = [
+      user,
+      { type: "reasoning", id: "rs_1", summary: [] },
+      { type: "function_call", call_id: "call_1", name: "calendar_search", arguments: '{"q":"Priya"}' },
+      { type: "function_call_output", call_id: "call_1", output: "Thursday 12:30" },
+    ];
+    await post(JSON.stringify({ model: "m", input }), h);
+    const sent = seen.at(-1)!.body.input;
+    expect(sent.slice(0, 2)).toEqual(first);
+    expect(sent.slice(2)).toEqual(input.slice(1));
+    await post(JSON.stringify({ model: "m", input }), h);
+    const events = await explain("r2", "s2");
+    for (const kind of ["user_message", "tool_call", "tool_result"]) {
+      expect(events.filter((e) => e === kind).length).toBe(1);
+    }
+  });
+
+  test("the body's user names the user; `conversation` names the session when no header does", async () => {
+    const body = { model: "m", user: "r3", conversation: { id: "conv_abc" }, input: ASK };
+    await post(JSON.stringify(body));
+    expect(JSON.stringify(seen.at(-1)!.body.input)).toContain("Dishoom");
+    expect((await explain("r3", "conv_abc")).includes("user_message")).toBe(true);
+  });
+
+  test("fails open: no user, an input that is neither text nor a list, and a body that is not JSON go as they came", async () => {
+    for (const raw of [JSON.stringify({ model: "m", input: ASK }), '{"model":"m","input":{"a":1}}', "not json"]) {
+      await post(raw, raw.includes('"a"') || raw === "not json" ? { "x-eden-user-id": "r4" } : {});
+      expect(seen.at(-1)!.raw).toBe(raw);
+    }
+  });
+
+  test("another route ending in /responses is forwarded as bytes", async () => {
+    const raw = JSON.stringify({ input: ASK });
+    await post(raw, { "x-eden-user-id": "r5" }, "/v1/evals/e_1/responses");
+    expect(seen.at(-1)!.raw).toBe(raw);
+  });
+});
+
+describe("Responses input read as chat messages (D656)", () => {
+  test("one message an item; unknown items keep their place and are no turn", () => {
+    const input = [
+      { type: "message", role: "developer", content: "rules" },
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: "hi" },
+          { type: "input_image", image_url: "x" },
+        ],
+      },
+      { type: "item_reference", id: "x" },
+      { type: "function_call", call_id: "c", name: "f", arguments: "{}" },
+      { type: "function_call_output", call_id: "c", output: "r" },
+      null,
+    ];
+    const v = fromResponses(input)!;
+    expect(v.messages.map((m) => m.role)).toEqual(["developer", "user", "item", "assistant", "tool", "item"]);
+    expect(v.messages[1]!.content).toBe("hi");
+    const context = { role: "system", content: "CTX" };
+    const out = toResponses(v, [v.messages[0]!, context, ...v.messages.slice(1)]);
+    expect(out).toEqual([input[0], context, ...input.slice(1)]);
+    expect(fromResponses({ a: 1 })).toBeNull();
+    expect(fromResponses(undefined)).toBeNull();
+  });
+});

@@ -59,10 +59,29 @@ event reported once, a retry reporting nothing), tool results with text, a later
 fail open (Eden down, no user, a body that is not JSON), streaming, token counting, error shape, and the two
 translations alone.
 
+## OpenAI's Responses API (D656)
+
+Built after the Messages route, on branch `claude/o2-proxy-responses` (stacked on this one). `POST /v1/responses`
+gets the same treatment through `fromResponses` and `toResponses`:
+
+- `input`'s items map one to one onto chat messages: a message item is its role and text (`input_text`,
+  `output_text`), a `function_call` an assistant message with that call, a `function_call_output` a tool message.
+  Other items (reasoning, references, built-in tools' calls) keep their place and are neither reported nor a turn.
+  A string input is one user message.
+- The API takes system items inside `input`, so a packet goes back exactly where the chat route puts its system
+  message; every other item is the caller's own object. Only `input` is rewritten (`withMessages` with a key).
+- **History held by the provider.** With `conversation` or `previous_response_id` the input is only what is new.
+  That needs no other design after all: what the proxy inserted on an earlier request is part of the provider's
+  history, so nothing has to be kept in place. What it does need is a session: `conversation` names it when no
+  `x-eden-session-id` does. With `previous_response_id` alone and no header, each request is its own Eden session
+  (keyed by its first message), so Eden may show an item again that it showed on an earlier turn: send the header.
+- Tests: `packages/proxy/src/proxy-responses.test.ts`, 6 (injection with the rest byte for byte, a tool turn with a
+  reasoning item, `user` and `conversation`, fail open, another `…/responses` route untouched, the translations).
+- **Not checked against the real API**: this session's paid calls are limited to Anthropic. The shapes are from
+  OpenAI's published reference; a first live call may show a field this misses.
+
 ## Not done
 
-- **OpenAI's Responses API** (`/v1/responses`). With `previous_response_id` the history lives at the provider and
-  the proxy sees only the latest input, so "what is new" and "where packets stay" need a different design.
 - **A measured effect on an Anthropic-SDK agent.** The lab's Pi harness already measures Eden's context in front of
   Haiku; this change is transport. A Pi run through the proxy's Messages route would show nothing the SDK runs do
   not, and was not paid for.
