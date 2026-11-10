@@ -263,6 +263,8 @@ SWITCH_VARIANTS = {
     "off-yield": {"sourceYield": False},
     # A trial switch turned on over the default: O1's arm, D600.
     "earn": {"sourceYieldEarn": True},
+    # The same with its two companions (D601): common names weak, unread sources not marked used.
+    "earn2": {"sourceYieldEarn": True, "sourceYieldNames": 4, "sourceYieldEngage": True},
 }
 # A user with about 1,000 connected sources, 5% of whose connectors send change notices (N1's shape, D509).
 SCALE = ["--noise-sources", "995", "--notify-share", "0.05"]
@@ -291,6 +293,10 @@ PRESETS = {
     "bench-earn": {"kind": "pi-ab", "suites": "train",
                    "args": _bench(["eden", "eden~earn"], ["earn"], SCALE),
                    "about": "the default against the default with sourceYieldEarn on, at ~1,000 sources (O1, D600)"},
+    "bench-earn2": {"kind": "pi-ab", "suites": "train",
+                    "args": _bench(["eden", "eden~earn2"], ["earn2"], SCALE),
+                    "about": "the default against sourceYieldEarn with sourceYieldNames 4 and sourceYieldEngage, at "
+                             "~1,000 sources (O1, D601)"},
 }
 
 

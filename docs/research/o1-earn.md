@@ -118,3 +118,87 @@ with the same calls and the same task-by-task diff.)
   - a rare word at 5 or 10 holders: 10.1 and 14.0 calls for the same facts as 2;
   - the pessimistic start without the rare word: 6.9 calls, 3 facts lost of 96 (old documents past the cut whose
     only evidence is a word in one source's sketch).
+
+## 2. Two companions and a second pre-registration (written while run 1 was being paid for; none of its results read)
+
+Screened after section 0 was pushed, on what the trial leaves: at 8.2 calls a task the noise connectors still took
+0.3–3.2 searches (reads on a name), and over days the user's own mailbox took 2.4 searches a request.
+
+**`sourceYieldNames` 4 (D601).** A name more than four of the user's sources mention is weak evidence for a source
+with nothing used; it stays strong for a source with an item used (the user's mailbox names most people). The lab's
+noise connectors name a world person in about 3% of their items, so about twenty of them mention any one person;
+on the user-day bench, where every request names one, searches are 420 of 800 calls a day.
+
+**`sourceYieldEngage` (D601).** A source the request reads nothing live of is not marked used by that request
+(`Sync.engage`). Marked used, a noise connector that mentions a requested name got a deep copy (two listing pages a
+tick), a daily sweep in place of the weekly one, a seat among the 64 used sources and its items sent to the card
+model; the used sources' share of the cap (half) then went to them and the user's mailbox stayed cut.
+
+$0, both on with `sourceYieldEarn` (`--set '{"sourceYieldEarn":true,"sourceYieldNames":4,"sourceYieldEngage":true}'`;
+the same commands as section 1; seeds 42–44, the days and the five-source funnel ran through scratch switches before
+the code was written, seed 41 again on the code as committed):
+
+| Screen | Default | `sourceYieldEarn` | with both companions |
+| --- | --- | --- | --- |
+| Funnel, 995 noise, calls a task, seeds 41 / 42 / 43 / 44 | 33.3 / 31.0 / 33.9 / 34.2 | 8.2 / 8.5 / 8.8 / 9.8 | **5.2 / 5.4 / 6.4 / 7.7** |
+| hidden surfaced of 384 (task diff against the default) | 306 | −4 | −4 +3 |
+| control decoys surfaced of 384 (task diff) | 266 | +2 | +5 −1 |
+| card calls, seed 41 (12 users) | 433 | 433 | **223** |
+| 8 days, seeds 41–42: request-time calls a request | 12.3 | 6.7 | **2.4** |
+| by day | 26.6 15.6 19.4 4.9 10.0 5.4 10.4 6.8 | 8.1 6.3 7.2 5.0 7.3 5.7 6.4 6.7 | 5.5 2.3 1.9 1.5 2.1 1.5 2.1 1.7 |
+| background calls a user-day | 15.9 | 14.9 | **4.5** |
+| the mailbox's searches a request | 2.52 | 2.44 | 0.24 |
+| surfaced over days: hidden / decoys of 23 | 18 / 16 | 18 / 16 | 18 / 17 |
+| Five-source funnel (`bun run funnel --jobs 4`) | 314 / 274 | | 314 / 274, no task differs |
+| quality-cli at a cap of 300 (N1's `qrun.sh`): stale / updates | 12/142 | | 14/139 |
+| deleted delivered / cited; recall | 3/14; 0.522 | | 3/12; 0.520 |
+
+The four hidden tasks lost are section 1's one template on each seed; the three gained are two other templates.
+`sourceYieldNames` at 16 changes nothing on seed 41 (8.2 calls); 4 and 2 read the same over days. With the names
+rule alone (no `sourceYieldEngage`): 6.6 calls a task on seed 41, 5.7 a request over days.
+
+**Pre-registration of run 2** (committed and pushed before its first paid call). Everything as section 0 (harness,
+shapes, seeds, caps, metrics, at most two shards at once), with:
+
+| arm | settings over the default |
+| --- | --- |
+| `eden` | none |
+| `eden~earn2` | `{"sourceYieldEarn":true,"sourceYieldNames":4,"sourceYieldEngage":true}` |
+
+`lab_fanout.py --preset bench-earn2`, runs `o1-earn2-*`. Also reported: Eden's background card spend ($ per 1,000
+tasks, from the cost report), since the engage rule changes what is carded.
+
+**Rule for run 2 (applied mechanically, after run 1's rule).** `sourceYieldNames` 4 and `sourceYieldEngage` are
+promoted with `sourceYieldEarn` if section 0's four clauses hold for `eden~earn2 − eden`. Then:
+
+- run 1 passes and run 2 passes: all three are promoted (the default becomes `eden~earn2`);
+- run 1 passes, run 2 fails: `sourceYieldEarn` alone is promoted; the companions stay off trials if run 2's hidden
+  point estimate is above −2.0, else they are deleted;
+- run 1 fails, run 2 passes: the three are promoted together (the bundle is what was measured safe), and the note
+  says run 1's interval did not clear the bar on its own;
+- both fail: nothing is promoted; section 0's "otherwise" applies to each.
+
+Run 1's results are not read before run 2 is paid for, so neither run's shape depends on the other's outcome.
+
+## 3. Dormant sources (`syncDormantMs`, D602; a trial, off; not decided by a paid run)
+
+With the trials above a 1,000-source user's request-time calls are about 2.4 a request, about 35 a day at 14
+requests. The weekly sweep of the sources the user does not use (D356) is then the largest cost left: on the
+user-day bench it lists all of them on day 8 (906 background listings that day against 125–145 on the others),
+about 130 calls a user-day spread over the week, and a connector without a fetch tool is swept daily (D415: every
+shipped preset).
+
+`syncDormantMs` (0: off): a warm source no lookup has used for that long, and that does not notify, drops its
+synced items (`Sync.sleep`) and is no longer polled or swept; one listing page every `syncDormantRefreshMs` (28
+days) feeds its sketch alone. Its sketch and the source map's mentions stay, so a request with strong evidence
+still searches it live, and a lookup that uses it, or a read that stores an item of it, wakes it. Nothing is held,
+so nothing can be delivered stale or deleted, whatever the connector's fetch tool.
+
+Measured at $0 only (at two days in place of a week, so eight simulated days can show it): the user-day bench's
+sweep day 923 → 243 background listings with `sourceYieldEarn` (1,386 sources slept, some more than once: a poll
+on demand wakes one); days-calls at `--night-h 20`, seed 41: 919 sources slept, surfaced hidden 9 of 12 and decoys
+9 of 12 with and without; quality-cli at a cap of 300 identical to the companions' row above (its users live under
+two days). **Not decided here:** the lab's noise connectors never hold a fact, so no lab run can price what a
+dormant source's dropped copy would have found; Pi's `--days` compresses eight days into 36 hours and never reaches
+a week. The trade (about 100 listings a user-day against whatever a never-used source's held items are worth) is
+the owner's.

@@ -771,6 +771,8 @@ export class ContextPartner {
             engagedDeep: c.syncEngagedDeep,
             // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
             unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
+            dormantMs: c.syncDormantMs,
+            dormantRefreshMs: c.syncDormantRefreshMs,
           },
         )
       : null;
@@ -4174,7 +4176,12 @@ export class ContextPartner {
     this.engageSources(
       s,
       cue,
-      ranked.filter((r) => r.entityHits > 0 || (localHits?.get(r.sourceId) ?? 0) > 0).map((r) => r.sourceId),
+      ranked
+        .filter((r) => r.entityHits > 0 || (localHits?.get(r.sourceId) ?? 0) > 0)
+        // `sourceYieldEngage` (D601): a source this request reads nothing live of has not earned a deep copy, a
+        // daily sweep or the card model either.
+        .filter((r) => !(this.config.sourceYieldEngage && spent?.has(r.sourceId)))
+        .map((r) => r.sourceId),
     );
     // Only the sources not answered locally are searched live; the local ones answer the same query below.
     const found = local ? routed.filter((x) => !local.has(x.id)) : routed;
@@ -4403,14 +4410,22 @@ export class ContextPartner {
   /**
    * `sourceYield` (D505): what the request has for a source: 2, it names an entity the source's items mentioned (the
    * source map); 1, its words are among the source's held items or in its sketch (`boost`); 0, nothing. With
-   * `sourceYieldEarn` (D600) a word of the request that few of the user's sources hold counts as a name (2).
+   * `sourceYieldEarn` (D600) a word of the request that few of the user's sources hold counts as a name (2), and
+   * with `sourceYieldNames` (D601) a name many of them mention counts only for a source with an item used.
    */
   private evidenceFor(s: Session, cue: Cue, boost: ReadonlyMap<string, number> | undefined): (id: string) => Evidence {
     let named: Set<string> | undefined;
     return (id) => {
       if (!named) {
         named = new Set();
-        for (const e of cue.entities) for (const m of this.deps.sourceMap.sourcesFor(s.scope, e)) named.add(m.sourceId);
+        // `sourceYieldNames` (D601): a name more sources than that mention says little about any one of them; it
+        // stays evidence for a source that has had an item used (the user's own mailbox names most people).
+        const common = this.config.sourceYieldEarn ? this.config.sourceYieldNames : 0;
+        for (const e of cue.entities) {
+          const holders = this.deps.sourceMap.sourcesFor(s.scope, e);
+          const weak = common > 0 && holders.length > common;
+          for (const m of holders) if (!weak || this.yields?.hasYielded(s.scope, m.sourceId)) named.add(m.sourceId);
+        }
         if (this.config.sourceYieldEarn && this.config.sourceYieldRare > 0 && this.sync) {
           const terms = sketchTerms(`${cue.text} ${cue.entities.join(" ")}`).slice(0, MAX_SKETCH_TERMS);
           const rare = this.sync.sketchRare(s.scope, terms.map(termHashes), this.config.sourceYieldRare);

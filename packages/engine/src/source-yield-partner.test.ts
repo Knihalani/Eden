@@ -69,8 +69,15 @@ function world(sizes: number[]): { sources: Counting[]; fact: ContextItem } {
   return { sources, fact };
 }
 
-async function partnerOf(config: Record<string, unknown>, scopes: Scope[] = [u1], sizes = [10, 10, 10, 10]) {
+async function partnerOf(
+  config: Record<string, unknown>,
+  scopes: Scope[] = [u1],
+  sizes = [10, 10, 10, 10],
+  /** Changes the world before anything is synced. */
+  tweak: (sources: Counting[]) => void = () => {},
+) {
   const { sources, fact } = world(sizes);
+  tweak(sources);
   let clock = T0;
   const partner = new ContextPartner({
     sources: async () => sources,
@@ -303,5 +310,101 @@ describe("sourceYieldEarn (D600, a trial)", () => {
   test("off (the default): a new user's first request on no evidence is read live", async () => {
     const p = await partnerOf({ sourceYield: true });
     expect(sum((await p.request(u1, BLIND)).searched)).toBeGreaterThan(0);
+  });
+});
+
+describe("sourceYieldNames, sourceYieldEngage (D601, trials)", () => {
+  const EARN = { sourceYield: true, sourceYieldEarn: true };
+  /**
+   * Sources 1 to 3 each listed an old item naming Dana Reyes, past the cut: the source map has her in three sources
+   * and no held item names her (one that did would be handed over, and its source would have had an item used).
+   */
+  const dana = (sources: Counting[]) => {
+    for (const s of sources.slice(1)) s.items.at(-1)!.text = "Dana Reyes left a comment on the rollout plan";
+  };
+  const NAMED = "Please email Dana Reyes about lunch";
+
+  test("a name more sources mention than sourceYieldNames is weak evidence for a source with nothing used", async () => {
+    const off = await partnerOf(EARN, [u1], [10, 10, 10, 10], dana);
+    expect(sum((await off.request(u1, NAMED)).searched.slice(1))).toBeGreaterThan(0);
+    const on = await partnerOf({ ...EARN, sourceYieldNames: 2 }, [u1], [10, 10, 10, 10], dana);
+    expect(sum((await on.request(u1, NAMED)).searched)).toBe(0);
+    // Within the bound the name is still strong evidence.
+    const wide = await partnerOf({ ...EARN, sourceYieldNames: 3 }, [u1], [10, 10, 10, 10], dana);
+    expect(sum((await wide.request(u1, NAMED)).searched.slice(1))).toBeGreaterThan(0);
+  });
+
+  test("a common name still reads a source that has had an item used", async () => {
+    const p = await partnerOf({ ...EARN, sourceYieldNames: 2 }, [u1], [10, 10, 10, 10], (sources) => {
+      dana(sources);
+      // Source 0's fact, past the cut, names her too.
+      sources[0]!.items.at(-1)!.text += " (Dana Reyes has the details)";
+    });
+    const fact = await p.request(u1, "Pay Zed Quinn for the Globex renewal today");
+    expect(fact.handed).toContain(p.fact.id);
+    const named = await p.request(u1, NAMED);
+    expect(named.searched[0]).toBeGreaterThan(0);
+    expect(sum(named.searched.slice(1))).toBe(0);
+  });
+
+  test("a source the request reads nothing live of is not marked used by it", async () => {
+    const off = await partnerOf({ ...EARN, sourceYieldNames: 2 }, [u1], [10, 10, 10, 10], dana);
+    await off.request(u1, NAMED);
+    expect(off.partner.sync!.engaged(u1, "src1")).toBe(true);
+    const on = await partnerOf({ ...EARN, sourceYieldNames: 2, sourceYieldEngage: true }, [u1], [10, 10, 10, 10], dana);
+    await on.request(u1, NAMED);
+    expect(on.partner.sync!.engaged(u1, "src1")).toBe(false);
+    // A source it does read is used as before.
+    await on.request(u1, "Pay Zed Quinn for the Globex renewal today");
+    expect(on.partner.sync!.engaged(u1, "src1")).toBe(false);
+  });
+});
+
+describe("syncDormantMs (D602, a trial)", () => {
+  const DAY = 24 * HOUR;
+  const CFG = { sourceYield: true, sourceYieldEarn: true, syncDormantMs: 2 * DAY, syncDormantRefreshMs: 10 * DAY };
+  const held = (p: Awaited<ReturnType<typeof partnerOf>>, id: string) => [...p.partner.sync!.syncedIds(u1, id)].length;
+
+  test("a source no lookup uses drops its copy, is not swept, and is refreshed for its sketch alone", async () => {
+    const p = await partnerOf(CFG);
+    expect(held(p, "src1")).toBeGreaterThan(0);
+    // Two days on, the user active again: every source is unused, so every copy goes.
+    p.advance(2 * DAY);
+    await p.request(u1, BLIND);
+    await p.partner.sync!.tick();
+    for (const s of p.sources) expect(held(p, s.id)).toBe(0);
+    // Days of ticks with the user active: no sweep, no poll.
+    const lists = p.sources.map((s) => s.lists);
+    for (let d = 0; d < 4; d++) {
+      p.advance(DAY);
+      await p.request(u1, BLIND);
+      await p.partner.sync!.tick();
+    }
+    expect(p.sources.map((s) => s.lists)).toEqual(lists);
+    // Past the refresh interval: one page a source, and still nothing held.
+    p.advance(6 * DAY);
+    await p.request(u1, BLIND);
+    await p.partner.sync!.tick();
+    expect(p.sources.map((s) => s.lists)).toEqual(lists.map((n) => n + 1));
+    for (const s of p.sources) expect(held(p, s.id)).toBe(0);
+  });
+
+  test("a dormant source is still searched on strong evidence, and its fact arrives", async () => {
+    const p = await partnerOf(CFG);
+    p.advance(2 * DAY);
+    await p.request(u1, BLIND);
+    await p.partner.sync!.tick();
+    expect(held(p, "src0")).toBe(0);
+    const named = await p.request(u1, "Pay Zed Quinn for the Globex renewal today");
+    expect(named.searched[0]).toBeGreaterThan(0);
+    expect(named.handed).toContain(p.fact.id);
+  });
+
+  test("off (the default): copies are kept", async () => {
+    const p = await partnerOf({ sourceYield: true, sourceYieldEarn: true });
+    p.advance(2 * DAY);
+    await p.request(u1, BLIND);
+    await p.partner.sync!.tick();
+    expect(held(p, "src1")).toBeGreaterThan(0);
   });
 });

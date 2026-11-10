@@ -320,6 +320,15 @@ export interface EngineConfig {
   sourceYieldEarn: boolean;
   sourceYieldRare: number;
   /**
+   * Trials, off (D601, O1; docs/research/o1-earn.md), both with `sourceYieldEarn`. `sourceYieldNames` (0: off): a
+   * name more than this many of the user's sources mention is weak evidence for a source with nothing used (a
+   * teammate's name is in hundreds of tickets and channels); it stays strong for a source with an item used.
+   * `sourceYieldEngage`: a source the request reads nothing live of (`spentSources`) is not marked used by it
+   * (`Sync.engage`), so it gets no deep copy, no daily sweep and no card call on that request's account.
+   */
+  sourceYieldNames: number;
+  sourceYieldEngage: boolean;
+  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -362,6 +371,15 @@ export interface EngineConfig {
    * tick. At 1,000 sources the daily sweep was ~1,100 listing calls a user a day (D324).
    */
   syncUnusedSweepMs: number;
+  /**
+   * A trial, off (D602, O1; docs/research/o1-earn.md): 0, or how long (ms) a warm source no lookup has used may hold a
+   * copy. Past it the source goes dormant (`Sync.sleep`): its synced items are dropped, it is no longer polled or
+   * swept, and one page of its listing is read every `syncDormantRefreshMs` for its sketch alone. Its sketch and the
+   * source map's mentions stay, so a request with evidence for it still searches it live; a lookup that uses it, or a
+   * read that stores an item of it, wakes it. A source that notifies is never dormant.
+   */
+  syncDormantMs: number;
+  syncDormantRefreshMs: number;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
   syncMaxUsersPerTenant: number;
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
@@ -807,11 +825,15 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sourceYieldPolls: true,
   sourceYieldEarn: false,
   sourceYieldRare: 2,
+  sourceYieldNames: 0,
+  sourceYieldEngage: false,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,
   syncEngagedDeep: true,
   syncUnusedSweepMs: 7 * 24 * 3_600_000,
+  syncDormantMs: 0,
+  syncDormantRefreshMs: 28 * 24 * 3_600_000,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncPush: true,
