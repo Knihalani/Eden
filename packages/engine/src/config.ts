@@ -724,6 +724,18 @@ export interface EngineConfig {
    * the same request, withdrawn untaken at the user's next request. It never silences or replaces the default's
    * packet. `pushCheckWaitMs` and `pushCheckSilent` do not apply.
    */
+  /**
+   * O3 (D702; a trial, off; docs/research/o3-push-open.md): with `pushCandidates`, the push also runs for a request
+   * whose verb is on no list (`isOpenRequest`: its shape, not its vocabulary). The candidates make no model call, so
+   * the verb lists (`isImperative`, kept for the reader's paid push) guard nothing there; the candidates' own gate (a
+   * constraint-like item in the pool) still decides whether a packet goes.
+   */
+  pushOpen: boolean;
+  /**
+   * O3 (D703; a trial, off; docs/research/o3-push-open.md): the candidates' packet adds `CANDIDATES_SPECIFICS` to its
+   * lead: when an item bears on the request, say what it means for it with the item's own specifics.
+   */
+  candidatesSpecifics: boolean;
   pushCheckBehind: boolean;
   /**
    * O3 (D700): with `pushCheckBehind`, how long an `ask` in the request waits for that request's check still running
@@ -894,6 +906,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckForm: 1,
   pushCheckSilent: true,
   pushCheckAnchored: false,
+  pushOpen: false,
+  candidatesSpecifics: false,
   pushCheckBehind: false,
   pushCheckAskWaitMs: 0,
   pushWidenEmbed: 3,

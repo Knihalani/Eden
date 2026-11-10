@@ -109,6 +109,7 @@ import {
   daysNamed,
   isAction,
   isImperative,
+  isOpenRequest,
   MORE_VERBS,
   LEADING,
   isScheduling,
@@ -130,6 +131,7 @@ import {
   CHECK_BEHIND_LEAD,
   ASK_NUDGE,
   CANDIDATES_LEAD,
+  CANDIDATES_SPECIFICS,
   citationsOf,
   PLAN_LEAD,
   renderAnswer,
@@ -869,7 +871,9 @@ export class ContextPartner {
       (this.deps.reader || this.config.pushCandidates > 0) &&
       event.kind === "user_message" &&
       event.draft !== true &&
-      isImperative(event.text, MORE_VERBS)
+      // `pushOpen` (O3, D702): the candidates' push reads the request's shape, not a verb list (it makes no call).
+      (isImperative(event.text, MORE_VERBS) ||
+        (this.config.pushOpen && this.config.pushCandidates > 0 && isOpenRequest(event.text)))
         ? // The question as an ask may carry it (`checkAsk`'s cap): the event's own cap is 100 times that, and the
           // ask redacts and tokenizes it before its first await, on the observe's critical path.
           this.ask({ ...event, question: head(event.text, MAX_QUESTION_CHARS), maxItems: 5 }, internal).catch(
@@ -3022,7 +3026,7 @@ export class ContextPartner {
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
+      lead: `${CANDIDATES_LEAD}${this.config.candidatesSpecifics ? ` ${CANDIDATES_SPECIFICS}` : ""}${nudge ? ` ${ASK_NUDGE}` : ""}`,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),

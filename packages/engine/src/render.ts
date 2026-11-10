@@ -169,6 +169,16 @@ export const CANDIDATES_LEAD =
   "not, ignore it and do not mention it.";
 
 /**
+ * `candidatesSpecifics` (O3, D703): added after `CANDIDATES_LEAD`. Agents handed the planted item state its core and
+ * often leave out what the user must do about it (who has to sign off, the fee, the exception route): 24 of 134
+ * handed facts on train seed 41 were not raised in full. This line asks for the item's own specifics once the agent
+ * has judged that it applies; the check before it and the "do not mention it" rule stand.
+ */
+export const CANDIDATES_SPECIFICS =
+  "If one does bear on the request, tell the user what it says and what it means for the request, with the item's " +
+  "own specifics: the limit, date, amount or fee, who has to agree, and what has to happen first.";
+
+/**
  * `planConflict` (D301): the framing line of a packet about an earlier request; the request's own words follow, quoted.
  * Like the candidates' lead, it asks the agent to check before using an item, and to say nothing of one that does not
  * bear on that request.

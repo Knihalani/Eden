@@ -73,6 +73,35 @@ export function isImperative(raw: string, more?: ReadonlySet<string>): boolean {
   return false;
 }
 
+/** Words that open a reply or a remark, not a request (`isOpenRequest`). */
+const REMARKS = new Set(
+  "thanks thank thx cheers great nice cool perfect lovely yes yep yeah no nope sure sorry".split(" "),
+);
+/** Openers that make a question mark a polite request ("Can you tag v2.8.0 … ?"). */
+const POLITE = new Set(["can", "could", "would", "will"]);
+
+/**
+ * `pushOpen` (O3, D702): a message that reads as a request to do something whatever its verb. `isImperative` knows a
+ * closed list of verbs, and users do not keep to it ("Cash in £3,000 of my Premium Bonds", "Top up Maya's dinner
+ * account", "Reimburse Oskar the £180"): 132 of 768 hidden train requests open with a verb on no list. This reads the
+ * shape instead: at least four words; not a remark or a reply ("Thanks, that works for me"); and a question mark
+ * only on a polite ask ("Can you …?", "Could you …?") that does not ask to be told something ("Can you tell me …?").
+ */
+export function isOpenRequest(raw: string): boolean {
+  const text = raw.trim();
+  const words = text.split(/\s+/);
+  if (words.length < 4) return false;
+  const clean = (w: string | undefined) => (w ?? "").toLowerCase().replace(/[^a-z-]/g, "");
+  let i = 0;
+  while (i < words.length && i < 8 && OPENERS.has(clean(words[i]))) i++;
+  const first = clean(words[i]);
+  if (!first || REMARKS.has(first)) return false;
+  const next = clean(words[i + 1]);
+  if (TELL_ME.has(first) && (next === "me" || next === "us")) return false;
+  if (/\?\s*$/.test(text)) return POLITE.has(clean(words[0])) || (clean(words[0]) === "please" && i > 0);
+  return true;
+}
+
 /**
  * `conflictVocab` (D75): more verbs that open a request to act, beside `LEADING` (which also cleans names, so it
  * is not widened): moving money, renewing, raising, reserving, granting or removing, releasing.
