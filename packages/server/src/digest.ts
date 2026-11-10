@@ -190,7 +190,9 @@ export function digest(lines: Iterable<string>): Digest {
     .sort((a, b) => b.length - a.length);
   for (const t of traces) {
     if (t.event === "agent_message" || t.event === "tool_call") agentEvents++;
-    if (t.decision === "skipped" && t.reason !== "sync poll behind") nothingToLookUp++;
+    // A background search B1 started (D405) is not a lookup of its own (as a sync poll behind is not).
+    if (t.decision === "skipped" && t.reason !== "sync poll behind" && t.reason !== "cut search behind")
+      nothingToLookUp++;
     if (t.decision === "answer") {
       asks.total++;
       if (t.itemIds.length > 0) asks.withItems++;
@@ -250,7 +252,7 @@ function connectorCalls(traces: Trace[], syncRuns: Map<string, { done: number; l
       t.decision === "verify" ||
       t.decision === "reader-late" ||
       t.decision === "reader-push" ||
-      (t.decision === "skipped" && t.reason === "sync poll behind") ||
+      (t.decision === "skipped" && (t.reason === "sync poll behind" || t.reason === "cut search behind")) ||
       t.reason.startsWith("updated:") ||
       // The firewall's finding on a tool call the agent also reported: the same call, traced twice (`checkAction`).
       t.reason.startsWith("action-");
