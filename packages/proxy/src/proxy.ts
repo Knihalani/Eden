@@ -96,6 +96,8 @@ interface Conversation {
    */
   placed?: Map<string, { text: string; turn: number; bytes: number }>;
   placedBytes?: number;
+  /** With the history held by the provider: ids of the packets already sent upstream, each inserted once. */
+  sent?: Set<string>;
 }
 
 const MAX_KEPT_BYTES = 64_000;
@@ -261,6 +263,11 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     anthropic = false,
     /** The provider's own id for the conversation (the Responses API's `conversation`), when the caller sent no id. */
     conversation?: string,
+    /**
+     * The provider holds the history (the Responses API's `conversation` or `previous_response_id`): the request is
+     * only what is new, and what an earlier request inserted is already in that history.
+     */
+    held = false,
   ): Promise<Message[] | null> => {
     const messages = body.messages;
     if (!Array.isArray(messages) || messages.length === 0) return null;
@@ -393,6 +400,16 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       }
       return null;
     }
+    if (held) {
+      // Each packet goes upstream once: re-inserted on the turn's later calls (tool outputs), it would be stored
+      // again by the provider every time (the review of D656). Nothing is kept in place: the provider keeps it.
+      const sent = (conv.sent ??= new Set());
+      const fresh = packets.filter((p) => !sent.has(p.id));
+      if (fresh.length === 0) return null;
+      for (const p of fresh) sent.add(p.id);
+      while (sent.size > MAX_SEEN) sent.delete(sent.values().next().value!);
+      return withContext(messages as { role: string; content: unknown }[], fresh);
+    }
     if (keepPackets) {
       return keptInPlace(conv, messages as Message[], packets, turn, options.maxKeptBytes ?? MAX_KEPT_BYTES);
     }
@@ -473,6 +490,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
               { ...(body as object), messages: view.messages },
               false,
               typeof named === "string" && named ? named : undefined,
+              conv !== undefined || (body as { previous_response_id?: unknown }).previous_response_id != null,
             ));
           messages = placed ? toResponses(view!, placed) : null;
         } else messages = await withEden(req, body as Record<string, unknown>);
@@ -534,10 +552,12 @@ export function fromResponses(
   for (const [i, raw] of items.entries()) {
     const it = (raw ?? {}) as Record<string, unknown>;
     let m: Message;
-    if (it.type === "function_call") {
-      const call = { id: it.call_id, type: "function", function: { name: it.name, arguments: it.arguments } };
+    if (it.type === "function_call" || it.type === "custom_tool_call") {
+      // A custom tool's `input` is free text where a function's `arguments` is JSON; both are the caller's tools.
+      const args = it.type === "function_call" ? it.arguments : it.input;
+      const call = { id: it.call_id, type: "function", function: { name: it.name, arguments: args } };
       m = { role: "assistant", content: "", tool_calls: [call] };
-    } else if (it.type === "function_call_output") {
+    } else if (it.type === "function_call_output" || it.type === "custom_tool_call_output") {
       m = { role: "tool", tool_call_id: it.call_id, content: responsesText(it.output) };
     } else if ((it.type === undefined || it.type === "message") && typeof it.role === "string") {
       m = { role: it.role, content: responsesText(it.content) };

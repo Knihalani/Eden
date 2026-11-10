@@ -102,6 +102,39 @@ describe("the proxy on OpenAI's Responses API (D656)", () => {
     expect((await explain("r3", "conv_abc")).includes("user_message")).toBe(true);
   });
 
+  test("history held by the provider: a packet goes upstream once, not again with each tool output", async () => {
+    for (const [user, held] of [
+      ["r6", { conversation: "conv_r6" }],
+      ["r7", { previous_response_id: "resp_0" }],
+    ] as const) {
+      const h = { "x-eden-user-id": user, "x-eden-session-id": "held" };
+      await post(JSON.stringify({ model: "m", ...held, input: ASK }), h);
+      expect(JSON.stringify(seen.at(-1)!.body.input)).toContain("Dishoom");
+      for (const id of ["c1", "c2"]) {
+        const raw = JSON.stringify({
+          model: "m",
+          ...held,
+          input: [{ type: "function_call_output", call_id: id, output: "ok" }],
+        });
+        await post(raw, h);
+        expect(seen.at(-1)!.raw).toBe(raw);
+      }
+    }
+  });
+
+  test("a custom tool's call and output are reported as a function's are", async () => {
+    const h = { "x-eden-user-id": "r8", "x-eden-session-id": "s8" };
+    const input = [
+      { role: "user", content: "run it" },
+      { type: "custom_tool_call", call_id: "k1", name: "shell", input: "ls" },
+      { type: "custom_tool_call_output", call_id: "k1", output: "a b" },
+    ];
+    await post(JSON.stringify({ model: "m", input }), h);
+    const events = await explain("r8", "s8");
+    expect(events.filter((e) => e === "tool_call").length).toBe(1);
+    expect(events.filter((e) => e === "tool_result").length).toBe(1);
+  });
+
   test("fails open: no user, an input that is neither text nor a list, and a body that is not JSON go as they came", async () => {
     for (const raw of [JSON.stringify({ model: "m", input: ASK }), '{"model":"m","input":{"a":1}}', "not json"]) {
       await post(raw, raw.includes('"a"') || raw === "not json" ? { "x-eden-user-id": "r4" } : {});

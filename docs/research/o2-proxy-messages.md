@@ -66,16 +66,21 @@ gets the same treatment through `fromResponses` and `toResponses`:
 
 - `input`'s items map one to one onto chat messages: a message item is its role and text (`input_text`,
   `output_text`), a `function_call` an assistant message with that call, a `function_call_output` a tool message.
-  Other items (reasoning, references, built-in tools' calls) keep their place and are neither reported nor a turn.
+  A custom tool's call and output are read the same way. Other items (reasoning, references, built-in tools' calls)
+  keep their place and are neither reported nor a turn. A packet goes directly before a user message, or at the end
+  when the input has none, so it never lands between a reasoning item and its call or between a call and its
+  output unless the caller put a user message there.
   A string input is one user message.
 - The API takes system items inside `input`, so a packet goes back exactly where the chat route puts its system
   message; every other item is the caller's own object. Only `input` is rewritten (`withMessages` with a key).
-- **History held by the provider.** With `conversation` or `previous_response_id` the input is only what is new.
-  That needs no other design after all: what the proxy inserted on an earlier request is part of the provider's
-  history, so nothing has to be kept in place. What it does need is a session: `conversation` names it when no
+- **History held by the provider.** With `conversation` or `previous_response_id` the input is only what is new,
+  and what the proxy inserted on an earlier request is already in the provider's history. So nothing is kept in
+  place, and each packet is inserted once: the first version put the turn's packet into every tool-output request
+  of the turn, and the provider stored a copy each time (the review; tested for both fields). It also needs a
+  session: `conversation` names it when no
   `x-eden-session-id` does. With `previous_response_id` alone and no header, each request is its own Eden session
   (keyed by its first message), so Eden may show an item again that it showed on an earlier turn: send the header.
-- Tests: `packages/proxy/src/proxy-responses.test.ts`, 6 (injection with the rest byte for byte, a tool turn with a
+- Tests: `packages/proxy/src/proxy-responses.test.ts`, 8 (injection with the rest byte for byte, a tool turn with a
   reasoning item, `user` and `conversation`, fail open, another `…/responses` route untouched, the translations).
 - **Not checked against the real API**: this session's paid calls are limited to Anthropic. The shapes are from
   OpenAI's published reference; a first live call may show a field this misses.
