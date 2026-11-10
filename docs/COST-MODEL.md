@@ -109,8 +109,11 @@ Haiku (lab provider), train seeds 41–42, 1:1:8 mix, steady state per 1,000 tas
 figures below hold for `pushCandidates: 0` (`--preset minus-candidates`). **D317 (A12) adds no model call of Eden's
 and no connector call** but makes the agent ask more (`askNudge`: +0.20–0.38 asks a task): +$0.061 per 1,000 tasks
 on the 1:1:8 mix as measured (0.374 → 0.435; Pi, Anthropic Haiku, the 91 targeted train templates, seeds 41–44 and
-41–42 for neutral; docs/research/a12-quality.md). A later check of the version after review came out at
-+$0.046–0.059 a kind against an earlier baseline, so read the trade as +$0.04–0.07 a kind and +0.3–0.6 s (D317).
+41–42 for neutral; docs/research/a12-quality.md). A later check of the version after review came out at +$0.046–0.059
+a kind against an earlier baseline, so read the trade as +$0.04–0.07 a kind and +0.3–0.6 s (D317). M4 measured it on
+the whole train suites at +$0.022 per 1,000 tasks and +0.21 s a task (D455); **D461's narrower trigger
+(`askNudgeDeep`) takes back −$0.005 per 1,000 tasks (−0.009..−0.000), −0.062 asks and −0.062 s a task** against it
+(Pi, train 41–44, short and over days; docs/research/m5-nudge-narrow.md).
 **With the D340 trial on (A17; off in the default)** a candidate handed for an earlier request of the session is
 handed again when it ranks for a later one: over a user's days the agent reads about 600-750 more input tokens a task (+$0.013 per 1,000 tasks on
 8-day days, +5% of the eden arm's $0.251 steady state; +$0.017 pooled with 40-request days), with no Eden model call;

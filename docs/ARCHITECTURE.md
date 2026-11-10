@@ -412,7 +412,9 @@ what and when first; a pool with nothing constraint-like (`readerGate`'s test) g
 build it, D257 deleted the push's other one). When no handed item holds the request's named person or thing and,
 if it names one, its day (`settle.ts`, no model), the line adds a nudge to call `ask_context` with those specifics, and
 an ask in that request also lists the pool's deeper items that hold one of them (`askNudge`, D317: hidden +9.2 points
-on Pi, through the agent's asks). When the request names a person, thing or day and a handed item settles it, the push
+on Pi, through the agent's asks); since D461 only when the pool past the handed items holds such an item
+(`askNudgeDeep`: 0.062 fewer asks a task, targeted hidden not lower). When the request names a person, thing or day and
+a handed item settles it, the push
 hands only the first two, through the first that settles it (`pushCandidatesSettled` 2, D404: fewer packet tokens
 written to the agent's prompt cache, hidden facts not lower, A30). An ask answers in rule order with no reading. The
 candidates need no

@@ -144,7 +144,7 @@ import {
 } from "./parties";
 import { quarantineTitle } from "./shield";
 import { safeLine } from "./line";
-import { anchored, anchorsOf, settledCut, settles, type Anchors } from "./settle";
+import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -228,6 +228,12 @@ export interface PushPoolReport {
   handed: string[];
   /** `askNudge` (D316): whether the handed candidates leave the request unsettled (the packet then nudges an ask). */
   unsettled?: boolean;
+  /**
+   * When the request's anchors were read (`askNudge` or `pushCandidatesSettled`), per pool item whether it holds one
+   * of them (`anchored`), and what kinds the request names: flags only, for the lab's trigger screens (M5).
+   */
+  anchored?: boolean[];
+  anchorKinds?: { entities: number; day: boolean };
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -2470,26 +2476,45 @@ export class ContextPartner {
     let items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
+    let anchors: Anchors | undefined;
     const fewer = this.config.pushCandidatesSettled;
     if ((this.config.askNudge || fewer > 0) && items.length > 0) {
-      const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+      anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
       const handed = items.map((x) => x.item);
       if (!settles(handed, anchors)) {
-        if (this.config.askNudge) unsettled = anchors;
+        if (this.config.askNudge && (!this.config.askNudgeDeep || this.anchoredPast(pool, items, anchors)))
+          unsettled = anchors;
       } else if (fewer > 0) {
         // `pushCandidatesSettled` (D400, D404): a request its anchors settle gets fewer candidates, never losing the
         // first one that settles it.
         items = items.slice(0, settledCut(handed, anchors, fewer));
       }
     }
+    // The arguments are built only when the lab's hook is wired (an optional call evaluates none otherwise).
+    const read = anchors;
     this.deps.onPushPool?.({
       sessionId: s.id,
       pool: pool.map((x) => x.item.id),
       constraintLike: like,
       handed: items.map((x) => x.item.id),
       ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
+      ...(read
+        ? {
+            anchored: pool.map((x) => anchored(x.item, read)),
+            anchorKinds: { entities: read.entities.length, day: hasDay(read) },
+          }
+        : {}),
     });
     return { items, pool, ...(unsettled ? { unsettled } : {}) };
+  }
+
+  /**
+   * `askNudgeDeep` (D460, D461): whether the pool past the handed candidates holds an item the ask's deeper look would
+   * list (not bulk mail, holding one of the request's anchors), judged on the pool's copies as ranked.
+   */
+  private anchoredPast(pool: readonly Scored[], handed: readonly Scored[], anchors: Anchors): boolean {
+    const ids = new Set(handed.map((x) => x.item.id));
+    return pool.some((x) => !ids.has(x.item.id) && !bulkMail(x.item) && anchored(x.item, anchors));
   }
 
   /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */
