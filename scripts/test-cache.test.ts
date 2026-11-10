@@ -21,11 +21,11 @@ const key = (t: string, env: Record<string, string> = {}) =>
   /key ([0-9a-f]{40})/.exec(cache(["why", t], env).stdout)![1]!;
 const state = join(repo, ".git", "state.json");
 const plan = (...tests: string[]) => cache(["plan", state, ...tests]);
-const junit = (suites: Array<[file: string, tests: number, failures: number]>) => {
+const junit = (suites: Array<[file: string, tests: number, failures: number, skipped?: number]>) => {
   const body = suites
     .map(
-      ([f, t, x]) =>
-        `<testsuite name="${f}" file="${f}" tests="${t}" assertions="1" failures="${x}" skipped="0" time="0.1">\n` +
+      ([f, t, x, k]) =>
+        `<testsuite name="${f}" file="${f}" tests="${t}" assertions="1" failures="${x}" skipped="${k ?? 0}" time="0.1">\n` +
         `<testsuite name="${f}" file="${f}" line="3" tests="${t}" assertions="1" failures="0" time="0.1"></testsuite>\n` +
         `</testsuite>`,
     )
@@ -45,6 +45,7 @@ write(
   `import { a } from "./a";\n// docs/NOTES.md and import.meta.dir are only named here\ntest("a", () => a);\n`,
 );
 write("lib/url.test.ts", `const w = new URL("./worker.ts", import.meta.url);\ntest("w", () => w);\n`);
+write("lib/loc.test.ts", `const here = import.meta.dir;\ntest("l", () => here);\n`);
 write("lib/spawn.test.ts", `import { spawnSync } from "node:child_process";\ntest("s", () => spawnSync("true"));\n`);
 write("lib/where.test.ts", `import { join } from "node:path";\nconst d = join(import.meta.dir, "..", "docs");\n`);
 write("lib/named.test.ts", `import { readFileSync } from "node:fs";\nreadFileSync("docs/NOTES.md");\n`);
@@ -76,17 +77,67 @@ describe("a test file's key (D650)", () => {
     expect(key("lib/url.test.ts")).not.toBe(k0);
   });
 
-  test("a file that spawns is keyed on every file but prose", () => {
-    expect(cache(["why", "lib/spawn.test.ts"]).stdout).toContain("the whole tree without prose");
-    const k0 = key("lib/spawn.test.ts");
+  test("a file that learns its location is keyed on every file but prose; one that spawns, on prose too", () => {
+    expect(cache(["why", "lib/loc.test.ts"]).stdout).toContain("the whole tree without prose");
+    const k0 = key("lib/loc.test.ts");
+    const s0 = key("lib/spawn.test.ts");
     write("docs/NOTES.md", "notes 3\n");
     write("README.md", "readme 2\n");
-    expect(key("lib/spawn.test.ts")).toBe(k0);
+    expect(key("lib/loc.test.ts")).toBe(k0);
+    // A process it starts can read anything (the review: Python tests reading their README).
+    expect(cache(["why", "lib/spawn.test.ts"]).stdout).toMatch(/and the whole tree \(/);
+    expect(key("lib/spawn.test.ts")).not.toBe(s0);
     write("lib/other.ts", `export const other = 3;\n`);
-    const k1 = key("lib/spawn.test.ts");
+    const k1 = key("lib/loc.test.ts");
     expect(k1).not.toBe(k0);
     write("lib/added.json", "{}\n"); // untracked, not ignored: part of the tree
-    expect(key("lib/spawn.test.ts")).not.toBe(k1);
+    expect(key("lib/loc.test.ts")).not.toBe(k1);
+  });
+
+  test("reads the import graph does not show are tree signs (the review of D650)", () => {
+    const cases: Record<string, string> = {
+      "a directory listed by a bare name": `import { readdirSync } from "node:fs";\nreaddirSync("lib");\n`,
+      "a root file by name": `import { readFileSync } from "node:fs";\nreadFileSync(".env.example");\n`,
+      "a root file named in a string": `const f = "LICENSE";\nexport { f };\n`,
+      "a path joined from a top-level directory": `import { join } from "node:path";\njoin("lib", "x", "y.json");\n`,
+      "a path under a top-level directory": `const p = "./lib/data.json";\nexport { p };\n`,
+      "import.meta.require": `const j = import.meta.require("./data.json");\nexport { j };\n`,
+      "a template import": "const n = 'data';\nconst j = await import(`./${n}.json`);\nexport { j };\n",
+      "a template require": "const n = 'data';\nconst j = require(`./${n}.json`);\nexport { j };\n",
+      "any relative read": `import { existsSync } from "node:fs";\nexistsSync("data.json");\n`,
+      // Not a comment: the string ends at its quote, and the sign after it must be seen.
+      "a sign after a string that looks like a comment": `const g = "fixtures/*.tmp";\nconst d = import.meta.dir;\nconst h = "*/";\nexport { g, d, h };\n`,
+    };
+    write(".env.example", "A=1\n");
+    write("LICENSE", "x\n");
+    let i = 0;
+    for (const [what, code] of Object.entries(cases)) {
+      const t = `lib/sign${i++}.test.ts`;
+      write(t, code);
+      const why = cache(["why", t]).stdout;
+      expect({ what, tree: /whole tree/.test(why) && !why.includes("not traced") }).toEqual({ what, tree: true });
+    }
+    // A Markdown file named in a string is read from the working directory: the tree, with prose.
+    write("lib/md.test.ts", `const name = "README.md";\nexport { name };\n`);
+    expect(cache(["why", "lib/md.test.ts"]).stdout).toMatch(/and the whole tree \(/);
+  });
+
+  test("a closure that reads files is keyed on the tree unless the audit traced it on these bytes", () => {
+    const reads = (enc: string) =>
+      `import { readFileSync } from "node:fs";\nexport const read = (p: string) => readFileSync(p${enc});\n`;
+    write("lib/reads.ts", reads(""));
+    write("lib/reads.test.ts", `import { read } from "./reads";\ntest("r", () => read);\n`);
+    const why = () => cache(["why", "lib/reads.test.ts"]).stdout;
+    expect(why()).toContain("not traced by the audit");
+    const hash = /closure ([0-9a-f]{40})/.exec(why())![1]!;
+    write("scripts/test-cache-verified.txt", `${hash} lib/reads.test.ts\n`);
+    expect(why()).not.toContain("whole tree");
+    const k0 = key("lib/reads.test.ts");
+    write("lib/other.ts", `export const other = 9;\n`);
+    expect(key("lib/reads.test.ts")).toBe(k0);
+    // An edit in its closure: the audit's line no longer matches, so it is back on the tree.
+    write("lib/reads.ts", reads(', "utf8"'));
+    expect(why()).toContain("not traced by the audit");
   });
 
   test("a file that names prose, in one string or in path parts beside a location, is keyed on prose too", () => {
@@ -98,12 +149,27 @@ describe("a test file's key (D650)", () => {
     }
   });
 
-  test("changes with the lockfile and with a variable a test can see; not with another variable", () => {
+  test("changes with the lockfile, the preload's imports, a root .env file and any variable but the shell's own", () => {
     const k0 = key("lib/pure.test.ts");
-    expect(key("lib/pure.test.ts", { TEST_SERIAL: "1" })).not.toBe(k0);
-    expect(key("lib/pure.test.ts", { UNRELATED_NAME: "1" })).toBe(k0);
+    // FUZZ_SEEDS=1 runs a weaker fuzz: its pass is not the full run's (the review).
+    expect(key("lib/pure.test.ts", { FUZZ_SEEDS: "1" })).not.toBe(k0);
+    expect(key("lib/pure.test.ts", { ANY_NAME_AT_ALL: "1" })).not.toBe(k0);
+    expect(key("lib/pure.test.ts", { OLDPWD: "/elsewhere", TERM: "dumb", SHLVL: "7" })).toBe(k0);
     write("bun.lock", "lock 2\n");
-    expect(key("lib/pure.test.ts")).not.toBe(k0);
+    const k1 = key("lib/pure.test.ts");
+    expect(k1).not.toBe(k0);
+    write("scripts/preload-helper.ts", "export const zone = 'UTC';\n");
+    write("scripts/test-preload.ts", `import { zone } from "./preload-helper";\nprocess.env.TZ = zone;\n`);
+    const k2 = key("lib/pure.test.ts");
+    expect(k2).not.toBe(k1);
+    write("scripts/preload-helper.ts", "export const zone = 'Asia/Tokyo';\n");
+    const k3 = key("lib/pure.test.ts");
+    expect(k3).not.toBe(k2);
+    // Ignored by git, loaded by Bun into every test.
+    write(".gitignore", ".env.test\n");
+    const k4 = key("lib/pure.test.ts");
+    write(".env.test", "SECRET_FLAG=1\n");
+    expect(key("lib/pure.test.ts")).not.toBe(k4);
   });
 });
 
@@ -141,13 +207,16 @@ describe("plan and record (D650)", () => {
       ]),
     ]);
     expect(lines(plan(...all))).toEqual(all);
+    // Every test skipped (a missing tool): nothing was proved.
+    cache(["record", state, junit([["lib/pure.test.ts", 2, 0, 2]])]);
+    expect(lines(plan(...all))).toEqual(all);
   });
 
   test("a pass older than the age bound is run again", () => {
     plan(...all);
     cache(["record", state, junit([["lib/pure.test.ts", 1, 0]])]);
     expect(lines(plan("./lib/pure.test.ts"))).toEqual([]);
-    const store = join(repo, ".git", "eden-check-cache", "tests-v1");
+    const store = join(repo, ".git", "eden-check-cache", "tests-v2");
     const old = Date.now() - MAX_AGE_MS - 60_000;
     writeFileSync(store, readFileSync(store, "utf8").replace(/^([0-9a-f]{40}) \d+ /gm, `$1 ${old} `));
     expect(lines(plan("./lib/pure.test.ts"))).toEqual(["./lib/pure.test.ts"]);

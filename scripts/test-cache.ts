@@ -8,68 +8,106 @@
  *
  * A file's key is a hash of:
  *
- * - the run's environment: Bun's version, platform, `bun.lock`, `bunfig.toml`, the preload, every `tsconfig*.json`
- *   and `package.json` outside archived/, `python3 --version`, the core count, and the names and values of the
- *   environment variables a test can see (`ENV_NAMES`);
+ * - the run's environment: Bun's, Node's and Python's versions, platform, core count, `bun.lock`, `bunfig.toml`, the
+ *   preload and what it imports, the root's `.env*` files, every `tsconfig*.json` and `package.json` outside
+ *   archived/, and every environment variable but the shell's own (`VOLATILE_ENV`);
  * - the file itself and every file it reaches through imports: static and literal dynamic imports, and
  *   `new URL("./x", import.meta.url)` (how workers and child scripts are named), resolved as Bun resolves them.
  *   Imports that land in node_modules are covered by `bun.lock`;
- * - for a file that can read the repository some other way (`needsTree`: it, or a module it reaches, spawns a
- *   process, asks where it is on disk, or names a repository path in a string), every file of the repository that
- *   git does not ignore, outside archived/. Such a file is skipped only when nothing in the repository changed.
+ * - for a file that can read the repository some other way, every file of the repository that git does not ignore,
+ *   outside archived/ (prose only when a string names it or a process is started). That is a file which, or a module
+ *   it reaches: shows a sign (`TREE_SIGNS`, `repoPath`: it starts a process, asks where it is on disk, reads a
+ *   relative path, names a repository path); or imports the file system at all, unless the audit traced this test
+ *   on these bytes reading nothing outside its key (`VERIFIED`, D657).
  *
  * So a skipped file is one whose every reachable input is byte-identical to a run in which it passed. What the key
  * cannot see is a test that depends on the date, on the network, or on files outside the repository; none should
- * (docs/TESTING.md), and entries older than `MAX_AGE_MS` are run again. `CHECK_COLD=1` or `TEST_CACHE=0` runs
- * everything (scripts/test.sh).
+ * (docs/TESTING.md), and entries older than `MAX_AGE_MS` (a day) are run again. It is for the loop: the gate before a
+ * merge is `CHECK_COLD=1 bun run check`, which runs everything, as `TEST_CACHE=0` does (scripts/test.sh).
  *
  * The passed set is one file shared by every worktree of the repository, as scripts/format.sh's is: lines of
  * `<key> <unix ms> <path>`, capped, written by rename.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { cpus } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
 const ROOT = realpathSync(process.env.EDEN_TEST_CACHE_ROOT || join(import.meta.dir, ".."));
 /** A pass older than this is run again: a bound on what a date-dependent test could hide. */
-export const MAX_AGE_MS = 7 * 24 * 3_600_000;
+export const MAX_AGE_MS = 24 * 3_600_000;
 const MAX_LINES = 20_000;
 /**
- * Variables a test can see that change what it does. scripts/test-preload.ts clears EDEN_* and OPENROUTER_* in the
- * test process, but a value set by the caller of `bun test` (KG_DIFF_SEEDS was one) or read before the preload counts.
+ * Every environment variable is part of the key (a test can read any: FUZZ_SEEDS=1 runs a weaker fuzz, and its pass
+ * must not stand for the full one), except these, which differ between two shells on one tree and which no test
+ * should read: the shell's own bookkeeping, the terminal, the session, and directories the run replaces (HOME, TMPDIR).
  */
-const ENV_NAMES = /^(BUN_|NODE_|TEST_|EDEN_|OPENROUTER_|HAIKU_|ANTHROPIC_|MODAL_|TZ$|CI$|LANG$|LC_)/;
+const VOLATILE_ENV =
+  /^(PWD|OLDPWD|SHLVL|_|HOME|TMPDIR|TEMP|TMP|USER|LOGNAME|HOSTNAME|SHELL|EDITOR|VISUAL|PAGER|LS_COLORS|COLUMNS|LINES|DISPLAY|WINDOWID|XAUTHORITY|MAIL|LESS.*|TERM.*|COLORTERM|SSH_.*|XDG_.*|DBUS_.*|GPG_.*|TMUX.*|STY|WINDOW|INVOCATION_ID|JOURNAL_STREAM|EDEN_TEST_CACHE_.*|CLAUDE.*|npm_.*|BUN_INSTALL.*|INIT_CWD|P9K_.*|VSCODE_.*)$/;
 
 /**
  * Signs that a module can read files the import graph does not show: it starts a process, learns its own location
  * (other than to name a sibling module, which `URL_EDGE` follows), reads the working directory, or imports a module
- * named at run time. Reading or listing a path is not a sign by itself: a path into the repository has to come from
- * one of these, or from a string that names it (`REPO_PATH`); the rest are temporary directories.
+ * named at run time (a variable, a template), or reads a path that is not absolute. A read of an absolute path made
+ * at run time shows none of these: that is what `FS_USE` and the audit's record are for.
  */
 const TREE_SIGNS = [
   /["']node:child_process["']|["']child_process["']/,
   /\bBun\.spawn(Sync)?\b|\bBun\.\$|import\s*\{[^}]*\$[^}]*\}\s*from\s*["']bun["']/,
-  /\bimport\.meta\.(dir|dirname|path|filename|resolve|resolveSync)\b/,
+  /\bimport\.meta\.(dir|dirname|path|filename|resolve|resolveSync|require)\b/,
   /\b__dirname\b|\b__filename\b/,
   /\bprocess\.cwd\s*\(/,
   /\bBun\.Glob\b|\bglob(Sync)?\s*\(/,
   /\bBun\.resolve(Sync)?\s*\(/,
-  /\brequire\s*\(\s*[^"'`\s)]/,
-  /\bimport\s*\(\s*[^"'`\s)]/,
+  // A module named at run time: a variable, or a template (`import(\`./${name}.json\`)`).
+  /\brequire\s*\(\s*[^"'\s)]/,
+  /\bimport\s*\(\s*[^"'\s)]/,
+  // A file read by a path that is not absolute: relative to the working directory, which is the repository.
+  /\b(readFileSync|readFile|readdirSync|readdir|opendirSync|opendir|existsSync|statSync|lstatSync|accessSync|openSync|createReadStream|Bun\.file)\s*\(\s*["'`](?!\/)/,
 ];
-/** A string that names a path inside the repository: read relative to the working directory, most likely. */
-const REPO_PATH = /["'`](?:\.{1,2}\/)*(?:docs|packages|examples|scripts|bench|native)\/[\w@.-]/;
+
+/** The repository's top-level names (`git ls-files`), for `repoPath`: its directories, and the files at its root. */
+function topLevel(): { dirs: string[]; files: string[] } {
+  const dirs = new Set<string>();
+  const files = new Set<string>();
+  for (const p of treeFiles() ?? []) {
+    const cut = p.indexOf("/");
+    if (cut < 0) files.add(p);
+    else dirs.add(p.slice(0, cut));
+  }
+  return { dirs: [...dirs], files: [...files] };
+}
+const quote = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+let repoPathMemo: RegExp | undefined;
 /**
- * Strings that name prose: a path through docs/, or a Markdown file. A module without one does not read prose, so
- * prose is left out of the tree it is keyed on (`treeHash`): an edit to a research note re-runs only the tests that can
- * read notes. `DOCS_SEGMENT` is a path built from parts (`join(import.meta.dir, "..", "docs", ...)`); it counts only
- * beside a location sign, because "docs" alone is also a connector's id.
+ * A string that names a path inside the repository, read relative to the working directory most likely: one that
+ * starts (after any `./` or `../`) with a top-level directory and a slash, one that is exactly a root file's name
+ * (`"LICENSE"`, `"Dockerfile"`), or a top-level directory as the first part of a `join` or `resolve`.
+ */
+function repoPath(): RegExp {
+  if (repoPathMemo) return repoPathMemo;
+  const { dirs, files } = topLevel();
+  const d = dirs.map(quote).join("|") || "\\0";
+  const f = files.map(quote).join("|") || "\\0";
+  return (repoPathMemo = new RegExp(
+    `["'\`](?:\\.{1,2}/)*(?:${d})/|["'\`](?:\\.{1,2}/)*(?:${f})["'\`]|\\b(?:join|resolve)\\s*\\(\\s*["'\`](?:${d})["'\`]`,
+  ));
+}
+/**
+ * Strings that name prose: a path through docs/, a Markdown file, or a bare "docs" beside another sign (a path built
+ * from parts; alone it is also a connector's id). A module without one does not read prose, so prose is left out of
+ * the tree it is keyed on (`treeHash`): an edit to a research note re-runs only the tests that can read notes. A
+ * string that names prose is a tree sign too (`"README.md"` is read from the working directory).
  */
 const DOCS_PATH = /["'`][^"'`\n]*(?:\bdocs\/[\w.@-]|\.md["'`])/;
 const DOCS_SEGMENT = /["'`]docs["'`]/;
 /** Prose: docs/ and Markdown anywhere. */
 export const isProse = (p: string) => p.startsWith("docs/") || p.endsWith(".md");
+/** A module that starts a process (the first two `TREE_SIGNS`). */
+const SPAWNS =
+  /["'](?:node:)?child_process["']|\bBun\.spawn(Sync)?\b|\bBun\.\$|import\s*\{[^}]*\$[^}]*\}\s*from\s*["']bun["']/;
+/** A module that reads files itself: keyed on the tree unless the audit traced its test (`verified`). */
+const FS_USE = /["'](?:node:)?fs(?:\/promises)?["']|\bBun\.(?:file|write)\s*\(/;
 /** `new URL("./worker.ts", import.meta.url)`: a module named by its file, followed as an import. */
 const URL_EDGE = /new URL\(\s*["'](\.{1,2}\/[^"']+)["']\s*,\s*import\.meta\.url\s*\)/g;
 /** `export const X = import.meta.url;`: a module naming itself (for a worker pool to load): already in the graph. */
@@ -109,19 +147,29 @@ interface Module {
   tree: string | null;
   /** It names docs/ or a Markdown file in a string, so the tree it may read includes them. */
   docs: boolean;
+  /** It imports the file system or opens files through Bun (`FS_USE`). */
+  fs: boolean;
 }
 const transpilers = { ts: new Bun.Transpiler({ loader: "ts" }), tsx: new Bun.Transpiler({ loader: "tsx" }) };
 /**
- * Source with its comments blanked, for the sign tests only: a comment that names `docs/x.md` or `import.meta.dir`
- * reads nothing. A `//` counts as a comment at the start of a line or after a space, so a URL in a string stays.
+ * The source as the transpiler prints it, for the sign tests: comments gone (one that names `docs/x.md` or
+ * `import.meta.dir` reads nothing) and strings intact, which a regular expression over the text cannot tell apart
+ * (`"fixtures/*.tmp"` opened a comment for it). When it does not transpile, the source itself: more signs, never fewer.
  */
-const uncommented = (code: string) => code.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|\s)\/\/[^\n]*/g, "$1");
+function uncommented(code: string, t: Bun.Transpiler): string {
+  try {
+    return t.transformSync(code.replace(/^#![^\n]*/, ""));
+  } catch {
+    return code;
+  }
+}
+
 const modules = new Map<string, Module>();
 
 function scan(path: string): Module {
   let m = modules.get(path);
   if (m) return m;
-  m = { edges: [], tree: null, docs: false };
+  m = { edges: [], tree: null, docs: false, fs: false };
   modules.set(path, m);
   if (!/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(path)) return m; // JSON, text: a leaf, hashed as bytes
   let code: string;
@@ -137,14 +185,18 @@ function scan(path: string): Module {
   } catch {
     m.tree = "does not parse";
   }
-  const bare = uncommented(code);
+  const bare = uncommented(code, /\.(tsx|jsx)$/.test(path) ? transpilers.tsx : transpilers.ts);
   for (const u of bare.matchAll(URL_EDGE)) names.push(u[1]!);
   const named = [...bare.matchAll(URL_EDGE)].length + (bare.match(URL_SELF) ?? []).length;
   const urlUses = (bare.match(URL_OTHER) ?? []).length - named;
   if (urlUses > 0) m.tree ??= "import.meta.url";
   for (const sign of TREE_SIGNS) if (sign.test(bare)) m.tree ??= String(sign);
-  if (REPO_PATH.test(bare)) m.tree ??= "names a repository path";
+  if (repoPath().test(bare)) m.tree ??= "names a repository path";
+  if (DOCS_PATH.test(bare)) m.tree ??= "names prose";
   m.docs = DOCS_PATH.test(bare) || (m.tree !== null && DOCS_SEGMENT.test(bare));
+  // A process it starts can read anything, prose too (the Modal apps' Python tests read their README).
+  if (SPAWNS.test(bare)) m.docs = true;
+  m.fs = FS_USE.test(bare);
   if (TRUSTED[relative(ROOT, path)]) m.tree = null;
   const from = dirname(path);
   for (const name of names) {
@@ -168,23 +220,54 @@ function scan(path: string): Module {
  * Every repository file reachable from `entry`, sorted; the first reason it needs the whole tree; whether any module
  * names prose.
  */
-export function closure(entry: string): { files: string[]; tree: string | null; docs: boolean } {
+export function closure(entry: string): { files: string[]; tree: string | null; docs: boolean; fs: boolean } {
   const seen = new Set<string>([entry]);
   const stack = [entry];
   let tree: string | null = null;
   let docs = false;
+  let fs = false;
   while (stack.length > 0) {
     const at = stack.pop()!;
     const m = scan(at);
     if (m.tree && !tree) tree = `${relative(ROOT, at)}: ${m.tree}`;
     docs ||= m.docs;
+    fs ||= m.fs;
     for (const e of m.edges) {
       if (seen.has(e)) continue;
       seen.add(e);
       stack.push(e);
     }
   }
-  return { files: [...seen].sort(), tree, docs };
+  return { files: [...seen].sort(), tree, docs, fs };
+}
+
+/** One hash over a closure's paths and bytes: what the audit's record of a test (`VERIFIED`) is bound to. */
+export function closureHash(files: readonly string[]): string {
+  const h = hasher();
+  for (const f of files) h.update(`${relative(ROOT, f)}\0${hashOf(f)}\n`);
+  return h.digest("hex").slice(0, 40);
+}
+
+/**
+ * Tests the audit traced reading nothing outside their key (`scripts/test-cache-audit.ts --write`), each bound to its
+ * closure's bytes then: `<closure hash> <test path>` a line. A test whose closure reads files (`FS_USE`) is keyed on
+ * the tree unless its line here still matches, so an edit anywhere in its closure sends it back to the tree until
+ * the audit runs again. A missing or stale file only makes more tests run.
+ */
+export const VERIFIED = "scripts/test-cache-verified.txt";
+let verifiedMemo: Set<string> | undefined;
+function verified(test: string, hash: string): boolean {
+  if (!verifiedMemo) {
+    verifiedMemo = new Set();
+    try {
+      for (const line of readFileSync(join(ROOT, VERIFIED), "utf8").split("\n")) {
+        if (/^[0-9a-f]{40} \S/.test(line)) verifiedMemo.add(line);
+      }
+    } catch {
+      // No record: nothing is verified.
+    }
+  }
+  return verifiedMemo.has(`${hash} ${test}`);
 }
 
 const git = (...args: string[]) => {
@@ -196,7 +279,16 @@ let listMemo: string[] | null | undefined;
 /** Every file git tracks or would track (not ignored), outside archived/, sorted; null without git. */
 export function treeFiles(): string[] | null {
   if (listMemo !== undefined) return listMemo;
-  const listed = git("ls-files", "-z", "--cached", "--others", "--exclude-standard");
+  // Without the user's own excludes file: what is "not ignored" must not depend on whose machine this is.
+  const listed = git(
+    "-c",
+    "core.excludesFile=/dev/null",
+    "ls-files",
+    "-z",
+    "--cached",
+    "--others",
+    "--exclude-standard",
+  );
   if (listed === null) return (listMemo = null);
   return (listMemo = [...new Set(listed.split("\0"))].filter((p) => p && !p.startsWith("archived/")).sort());
 }
@@ -218,7 +310,17 @@ function treeHash(docs: boolean): string {
 /** The configuration every key covers. */
 export function configFiles(): string[] {
   const config = (treeFiles() ?? []).filter((p) => /(^|\/)(package\.json|tsconfig[\w.]*\.json)$/.test(p));
-  return ["bun.lock", "bunfig.toml", "scripts/test-preload.ts", "scripts/test.sh", "scripts/test-cache.ts", ...config];
+  // The preload and what it imports run in every test; Bun loads the root's .env files (.env, .env.test,
+  // .env.local) into every test's environment, tracked or not.
+  const preload = closure(join(ROOT, "scripts/test-preload.ts")).files.map((f) => relative(ROOT, f));
+  let env: string[] = [];
+  try {
+    env = readdirSync(ROOT).filter((n) => n.startsWith(".env"));
+  } catch {
+    // No listing: the tracked ones are in the tree hash at least.
+  }
+  const fixed = ["bun.lock", "bunfig.toml", "scripts/test.sh", "scripts/test-cache.ts", VERIFIED];
+  return [...new Set([...fixed, ...preload, ...env.sort(), ...config])];
 }
 
 let envMemo: string | undefined;
@@ -226,10 +328,12 @@ function envHash(): string {
   if (envMemo !== undefined) return envMemo;
   const h = hasher();
   h.update(`bun ${Bun.version} ${Bun.revision} ${process.platform} ${process.arch} cores ${cpus().length}\n`);
-  const py = spawnSync("python3", ["--version"], { encoding: "utf8" });
-  h.update(`python ${py.status === 0 ? py.stdout.trim() : "none"}\n`);
+  for (const tool of ["python3", "node"]) {
+    const v = spawnSync(tool, ["--version"], { encoding: "utf8" });
+    h.update(`${tool} ${v.status === 0 ? v.stdout.trim() : "none"}\n`);
+  }
   for (const k of Object.keys(process.env).sort()) {
-    if (ENV_NAMES.test(k) && !k.startsWith("EDEN_TEST_CACHE_")) h.update(`${k}=${process.env[k]}\n`);
+    if (!VOLATILE_ENV.test(k)) h.update(`${k}=${process.env[k]}\n`);
   }
   for (const p of configFiles()) h.update(`${p}\0${hashOf(join(ROOT, p))}\n`);
   return (envMemo = h.digest("hex"));
@@ -244,9 +348,13 @@ export interface Keyed {
 
 /** The key of one test file (a path relative to the repository root). */
 export function keyOf(test: string): Keyed {
-  const { files, tree, docs } = closure(realpathSync(resolve(ROOT, test)));
+  const c = closure(realpathSync(resolve(ROOT, test)));
+  const { files, docs } = c;
+  // Fail closed (the review of D650): a closure that opens files by paths the signs cannot see is keyed on the tree
+  // until the audit has traced this test on these very bytes.
+  const tree = c.tree ?? (c.fs && !verified(test, closureHash(files)) ? "reads files, not traced by the audit" : null);
   const h = hasher();
-  h.update(`v1\n${envHash()}\n${test}\n`);
+  h.update(`v2\n${envHash()}\n${test}\n`);
   for (const f of files) h.update(`${relative(ROOT, f)}\0${hashOf(f)}\n`);
   if (tree) h.update(`tree ${docs} ${treeHash(docs)}\n`);
   return { key: h.digest("hex").slice(0, 40), files: files.length, tree, docs };
@@ -255,7 +363,7 @@ export function keyOf(test: string): Keyed {
 function storePath(): string | null {
   const common = git("rev-parse", "--git-common-dir");
   if (common === null) return null;
-  return join(resolve(ROOT, common.trim()), "eden-check-cache", "tests-v1");
+  return join(resolve(ROOT, common.trim()), "eden-check-cache", "tests-v2");
 }
 
 function readStore(path: string): Map<string, number> {
@@ -309,7 +417,9 @@ function record(stateFile: string, junit: string): void {
     /<testsuite name="([^"]*)" file="([^"]*)" tests="(\d+)"[^>]*? failures="(\d+)"[^>]*>/g,
   )) {
     if (m[1] !== m[2] || / line="/.test(m[0])) continue;
-    if (Number(m[4]) === 0 && Number(m[3]) > 0) ok.push(norm(m[2]!));
+    // A file whose tests were all skipped proved nothing (`test.skipIf` on a missing tool): not a pass.
+    const skipped = Number(/ skipped="(\d+)"/.exec(m[0])?.[1] ?? 0);
+    if (Number(m[4]) === 0 && Number(m[3]) - skipped > 0) ok.push(norm(m[2]!));
   }
   const now = Date.now();
   const add: string[] = [];
@@ -345,7 +455,8 @@ if (import.meta.main) {
     const k = keyOf(t);
     const { files } = closure(realpathSync(resolve(ROOT, t)));
     const scope = k.docs ? "the whole tree" : "the whole tree without prose";
-    console.log(`${t}: key ${k.key}, ${k.files} files by import${k.tree ? `, and ${scope} (${k.tree})` : ""}`);
+    const tree = k.tree ? `, and ${scope} (${k.tree})` : "";
+    console.log(`${t}: key ${k.key}, ${k.files} files by import (closure ${closureHash(files)})${tree}`);
     for (const f of files) console.log(`  ${relative(ROOT, f)}`);
     const store = storePath();
     const at = store ? readStore(store).get(k.key) : undefined;

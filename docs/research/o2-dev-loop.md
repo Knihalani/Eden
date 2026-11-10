@@ -106,3 +106,40 @@ tests are in sim, which depends on 11 of the 16 packages).
   needs cheaper tests, not fewer.
 - Run the audit in `check`: 92 s, and it needs strace. It is a tool to run after changing the cache or when a test
   starts reading files in a new way.
+
+## 6. After the review (D657)
+
+The review of D650 found reads the key missed and inputs it left out. Each has a test in
+`scripts/test-cache.test.ts` that fails without its fix.
+
+| Finding | Fix |
+| --- | --- |
+| Reads by a bare directory or root file name, `import.meta.require`, template imports | Tree signs: any read by a path that is not absolute, a root file's name in a string, a top-level directory (from `git ls-files`) with a slash or as `join`'s first part, `import.meta.require`, a template in `import(`/`require(`. A Markdown name is a tree sign too, not only "prose" |
+| Comment blanking was not string-aware (`"fixtures/*.tmp"` hid what followed) | Signs are tested on the transpiler's output: comments gone, strings whole; the raw source when it does not transpile |
+| `FUZZ_SEEDS=1` and the like left the key unchanged | Every environment variable is in the key but a short list of the shell's own |
+| One pass, shared by worktrees, trusted by the reviewer and the integrator | The merge gate and the reviewer run `CHECK_COLD=1 bun run check` (CLAUDE.md, `.claude/agents/reviewer.md`); the cache serves the loop. Passes are kept 24 hours, not 7 days |
+| The audit was not part of anything | Fail closed: a closure that imports the file system is keyed on the tree unless `scripts/test-cache-verified.txt` (written by `test-cache-audit.ts --write`) holds the test with its closure's hash |
+| Other inputs | The preload's imports, the root's `.env*`, Node's version, `ls-files` without the user's excludes file; a file whose tests were all skipped is not recorded |
+
+The audit now traces stats, access checks and directory reads as well as opens. Its first run with them found one
+more miss: `modal-python.test.ts` starts Python tests that read a README, so a file that starts a process is now
+keyed on prose too.
+
+Counts on the integration tip (230 test files): 48 keyed on the tree from a sign, 128 file-reading tests verified by
+the audit, 54 with no sign and no file reads. Audit: 230 traced, 0 outside their key, 87 s.
+
+| Edit | D650 | After D657 | Files run |
+| --- | --- | --- | --- |
+| none (the same tree again) | 0.45 s | 0.5 s | 0 of 230 |
+| `docs/research/a14-scale-users.md` | 10.3 s | 23.8 s | 36 |
+| `packages/proxy/src/main.ts` | 27.6 s | 27.1 s | 48 |
+| `packages/engine/src/text.ts` | 44.9 s | 44.5 s | 161 |
+
+A docs edit costs more than before: the tests that start a process run again on prose. After an engine edit the
+159 tests that reach the engine are keyed on the tree until the audit is run again; they would run anyway.
+
+The gate itself is not faster: `CHECK_COLD=1 bun run check` is what it was (51-55 s of tests). What the cache buys
+is the loop between gates.
+
+One run in this session shows why the gate must be cold: `packages/engine/src/push-cut-behind.test.ts` failed once
+under load (`expect(on.searches).toBeLessThanOrEqual(off.searches)`: 12 against 10) and passed on the next run.

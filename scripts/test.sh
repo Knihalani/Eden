@@ -11,7 +11,8 @@
 #
 # A file that already passed on exactly the inputs it has now is skipped (scripts/test-cache.ts, D650: the file, what it
 # imports, the lockfile and configuration; the whole tree for a file that spawns or reads the repository). The run
-# prints how many were skipped. CHECK_COLD=1 or TEST_CACHE=0 runs every file; so does any argument for `bun test`
+# prints how many were skipped. For the loop only: the merge gate is CHECK_COLD=1 (D657). CHECK_COLD=1 or TEST_CACHE=0
+# runs every file; so does any argument for `bun test`
 # (a name filter would otherwise record a partial run as a pass).
 set -euo pipefail
 cd "$(dirname "$0")/.."
