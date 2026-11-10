@@ -60,3 +60,10 @@ Sonnet only if the rule turns on them), the share of the gap closed = (order −
 
 The distilled card model (M2) is run through `--cards-endpoint` only if an endpoint is deployed on Modal when the
 main run ends; none was when this was written (`modal app list`: every `eden-cards-distill` app stopped or ephemeral).
+
+**Amendment after the smoke shard, before any main-run call.** The smoke (train1, seed 41, `--limit 4`, 16 task runs,
+4 streams) spent $0.0260: 16 card calls at $0.0012 each ($0.0195) and $0.0004 a task run. At that rate a main shard
+(24 streams, 96 card calls, 768 task runs) costs about $0.43 **[EST]**, so $0.45 a shard would stop shards early. Caps
+are now: main $4.40 ($0.55 a shard, run as four fan-outs of two seeds), reference **seed 41 only** $0.65. With the
+smoke, at most $5.08 of the $6 cap. The rule and the figures are unchanged; the share of the gap closed is read on
+seed 41.
