@@ -160,16 +160,6 @@ export const PLAN_LEAD =
   "has checked it against that request. If it is about the same person, thing and date and changes what was done or " +
   "planned, tell the user; if not, ignore it and do not mention it. The earlier request:";
 
-/**
- * `askNudge` (D316, on in the default since D317): added after `CANDIDATES_LEAD` when no candidate holds every
- * person, thing and day the request names (`settle.ts`). The opposite of D257's "nothing found" note, which made the
- * agent skip the ask that finds what the push missed: here the agent is told the packet does not pin the request
- * down and to ask.
- */
-export const ASK_NUDGE =
-  "They may not cover the person, thing or date this request names: before answering, call ask_context with " +
-  "those specifics, if you have it.";
-
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";
 const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;

@@ -144,7 +144,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   readerStopEarly: READER,
   pushCandidates: PUSH,
   planConflict: [...PUSH, "sync"],
-  askNudge: PUSH,
   pushCandidatesSettled: PUSH,
   revisionDiff: ["revisionNotice"],
 };

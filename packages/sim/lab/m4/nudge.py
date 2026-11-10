@@ -129,6 +129,7 @@ for name, keep in scopes:
     hid = [k for k in ks if KIND[k] == "hidden"]
     con = [k for k in ks if KIND[k] != "hidden"]
     tgt = [k for k in hid if TEMPLATE[k]]
+    rest = [k for k in hid if not TEMPLATE[k]]
     rate = lambda keys, a, f: st.mean(X[k][a][f] for k in keys) if keys else float("nan")
     row = {
         "hiddenSonnet": boot(hid, eff("sonnet")),
@@ -137,6 +138,7 @@ for name, keep in scopes:
         "concernsHaiku": boot(con, eff("haiku")),
         "targetedSonnet": boot(tgt, eff("sonnet")),
         "targetedHaiku": boot(tgt, eff("haiku")),
+        "otherSonnet": boot(rest, eff("sonnet")),
         "usdPer1k": boot(ks, eff("usd")),
         "wallMean": boot(ks, eff("wall")),
         "rates": {a: {"hiddenSonnet": rate(hid, a, "sonnet"), "hiddenHaiku": rate(hid, a, "haiku"),
@@ -155,6 +157,7 @@ for name, keep in scopes:
     print(f"  concerns, Haiku   {fmt(row['concernsHaiku'])}")
     print(f"  targeted, Sonnet  {fmt(row['targetedSonnet'])}")
     print(f"  targeted, Haiku   {fmt(row['targetedHaiku'])}")
+    print(f"  other templates, Sonnet {fmt(row['otherSonnet'])}")
     print(f"  $/1k              {fmt3(row['usdPer1k'])}")
     print(f"  wall mean s       {fmt3(row['wallMean'])}")
 

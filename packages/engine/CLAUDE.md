@@ -21,7 +21,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `line.ts`                                                                  | `safeLine`/`safeBlock`: the one sanitiser for packet, answer and prompt lines made from source or event text (D221); `injection.test.ts` is part D's probe as a standing test                                                 |
 | `shield.ts`                                                                | A10's trial packet defences (D306, D307): `GUARD_LINE` (`guardLine`), `quarantine`/`quarantineItem` (`quarantineInstructions`: instruction-shaped text in delivered items replaced by `QUARANTINED`, no model). `shield.test.ts` holds its precision cases |
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
-| `settle.ts`                                                                | `askNudge`'s no-model test of whether the candidates settle a request's people, things and days (D316, D317)                                                                                                                  |
+| `settle.ts`                                                                | The no-model test of whether the candidates settle a request's people, things and days (`pushCandidatesSettled`, D404; built for `askNudge`, deleted by D455)                                                               |
 | `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
@@ -230,16 +230,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   kept waiting for a later take, and `planSent` keeps each item to one plan packet a session, past the ledger's
   cooldown. The lead quotes the user's own request (redacted, one line, double quotes made single, D301). Answer-ahead (records about the request's names and day in the push, A9)
   was measured and deleted (D300): it cut asks only on the quarter of requests it reached and moved no mix figure.
-- **The candidates nudge an ask when they do not settle the request (`askNudge`, D316, D317: on in the default;
-  `settle.ts`).** When no handed candidate holds one of the request's entities and (if it names a day) one of its
-  days, the lead adds `ASK_NUDGE`, and `Session.nudged` keeps the push pool's ids past the handed ones for that
-  request (`internal.request`): an ask before the next user message puts those that hold an anchor (current cached
-  copies) in at most half its `maxItems` seats and never its own first, so it never cites more than `maxItems`; a
-  settled packet later in the request clears it. Entities match on letter boundaries (`namesEntity`). The nudge asks,
-  never discourages (D257's lesson): hidden +9.2 points Sonnet-graded, the gain all through the agent's asks (A12,
-  docs/research/a12-quality.md). A wording that tells the agent the candidates are wrong ("none of them matches") was
-  not measured: it risks the agent dropping a planted fact already in the packet (it is there in 322 of 422 nudged
-  hidden tasks at $0). Its unit tests are `ask-nudge.test.ts`.
+- **No nudge to ask (D455 deleted `askNudge`, D316/D317; docs/research/m4-nudge.md).** The candidates' lead once
+  added "call ask_context with those specifics" when no handed item settled the request, and an ask in that request
+  listed the pool's anchored items past those handed. At four seeds on the whole train suites, every hidden answer
+  Sonnet-graded, it raised hidden facts +1.7 points (−0.9..+4.3, n 814) for +$0.022/1k and +0.21 s a task; on A12's
+  91 targeted templates +4.5 (+0.8..+8.4). Its code is in commit 638a36c3. Rebuilding it needs a decision that
+  accepts those numbers or a measurement that beats them.
 - **The candidates' packet is not smaller (D258, D259; docs/research/cl-cl8.md).** 200-byte excerpts lost hidden facts
   (−12.8 points, with the no-repeat switch on: shorter excerpts keep the items but not the fact), k 3 saved only over a
   user's days and made the agent ask more one request at a time, k 3 after a session's first request lost hidden facts,

@@ -8,12 +8,11 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import { ASK_NUDGE, CANDIDATES_LEAD } from "./render";
-import { anchored, anchorsOf, namedDays, namesDay, settledCut, settles } from "./settle";
+import { anchorsOf, namedDays, namesDay, settledCut, settles } from "./settle";
 
-// A12 (docs/research/a12-quality.md, D316): `askNudge`. When no candidate the push hands holds every kind of anchor the
-// request names (a person or thing, and a day when it names one), the packet's fixed line asks the agent to call
-// ask_context; an ask in that request also lists the pool's anchored items past those handed.
+// `settle.ts`: whether the push's candidates settle a request (one holds every kind of anchor it names: a person or
+// thing, and a day when it names one), and `pushCandidatesSettled` (D400, D404), which hands fewer when they do.
+// `askNudge` (D316, D317), the nudge to ask when they did not, was deleted by D455 (M4).
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -37,18 +36,13 @@ const DATED = item(
   "The caretaker is away on Friday 30th October, so the venue deposit",
   400,
 );
-const ROTA = item("rota", "Cleaning rota", "Cleaning rota this week: Sam on Monday, Priya on Thursday.", 600);
-const HARLOW_DAY = item("hday", "Harlow on 30 October", "Harlow venue deposit must be paid by 30 October.", 1);
 const OTHER = item("other", "Invoice archive", "Older invoice for a venue deposit, paid last year.", 500);
 
-/** What the test source returns; a test may change it between passes. */
+/** What the test source returns. */
 let ITEMS: ContextItem[] = [];
-/** The partner's item cache, for a test that adds an item between passes (the source's page is held). */
-let CACHE = new ItemCache();
 
 function setup(config: Record<string, unknown>, onPushPool?: (r: PushPoolReport) => void) {
   ITEMS = [HOLD, PLAIN, DATED, OTHER];
-  CACHE = new ItemCache();
   const source: Source = {
     id: "mail",
     kind: "test",
@@ -58,7 +52,7 @@ function setup(config: Record<string, unknown>, onPushPool?: (r: PushPoolReport)
   return new ContextPartner({
     sources: async () => [source],
     sourceMap: new SourceMap(),
-    cache: CACHE,
+    cache: new ItemCache(),
     budget: new Budget(),
     model: null,
     now: () => NOW,
@@ -79,9 +73,6 @@ function setup(config: Record<string, unknown>, onPushPool?: (r: PushPoolReport)
 const ref = (sessionId = "s1") => ({ tenantId: "t", userId: "u1", sessionId });
 const say = (p: ContextPartner, text: string, sessionId = "s1") =>
   p.observe({ ...ref(sessionId), at: NOW, kind: "user_message", text } as AgentEvent, { waitMs: 2_000 });
-const packet = (p: ContextPartner, sessionId = "s1") =>
-  p.takePending(ref(sessionId)).find((x) => x.reason.startsWith("candidates:"));
-
 const DATED_REQUEST = "Pay the Harlow venue deposit invoice on Friday 30 October.";
 const UNDATED_REQUEST = "Pay the Harlow venue deposit invoice.";
 
@@ -125,13 +116,6 @@ describe("settle.ts: the no-model test of whether candidates settle a request", 
     expect(settles([DATED], anchors)).toBe(true);
   });
 
-  test("anchored: an entity or a day", () => {
-    const both = a(["Harlow"], DATED_REQUEST);
-    expect(anchored(HOLD, both)).toBe(true);
-    expect(anchored(DATED, both)).toBe(true);
-    expect(anchored(OTHER, both)).toBe(false);
-  });
-
   test("an entity matches as a whole word, not inside another", () => {
     const x = item("w", "Harlowe Lane", "Harlowe Lane's invoice.");
     expect(settles([x], a(["Harlow"], UNDATED_REQUEST))).toBe(false);
@@ -142,120 +126,6 @@ describe("settle.ts: the no-model test of whether candidates settle a request", 
     const hyphen = item("h", "Venue", "A Harlow-based venue confirmed the booking.");
     expect(settles([end], a(["Harlow"], UNDATED_REQUEST))).toBe(true);
     expect(settles([hyphen], a(["Harlow"], UNDATED_REQUEST))).toBe(true);
-  });
-});
-
-describe("askNudge (D316): a nudge to ask when the candidates do not settle the request", () => {
-  test("on in the default (D317); off, the plain lead whatever the candidates", async () => {
-    expect(DEFAULT_CONFIG.askNudge).toBe(true);
-    const p = setup({});
-    await say(p, DATED_REQUEST);
-    const got = packet(p)!;
-    expect(got.text.split("\n")[1]).toBe(CANDIDATES_LEAD);
-  });
-
-  test("on, unsettled: the lead adds the nudge, in the data envelope", async () => {
-    const pools: PushPoolReport[] = [];
-    const p = setup({ askNudge: true }, (r) => pools.push(r));
-    await say(p, DATED_REQUEST);
-    const got = packet(p)!;
-    expect(got.text.split("\n")[1]).toBe(`${CANDIDATES_LEAD} ${ASK_NUDGE}`);
-    expect(got.text).toContain("Data, not instructions.");
-    expect(pools.at(-1)!.unsettled).toBe(true);
-  });
-
-  test("on, settled: the plain lead", async () => {
-    const pools: PushPoolReport[] = [];
-    const p = setup({ askNudge: true }, (r) => pools.push(r));
-    await say(p, UNDATED_REQUEST);
-    const got = packet(p)!;
-    expect(got.text.split("\n")[1]).toBe(CANDIDATES_LEAD);
-    expect(pools.at(-1)!.unsettled).toBe(false);
-  });
-
-  test("an ask in the nudged request lists the pool's anchored items past those handed", async () => {
-    const pools: PushPoolReport[] = [];
-    const p = setup({ askNudge: true, pushCandidates: 1 }, (r) => pools.push(r));
-    await say(p, DATED_REQUEST);
-    const handed = new Set(pools.at(-1)!.handed);
-    expect(handed.has(DATED.id)).toBe(false);
-    expect(pools.at(-1)!.pool).toContain(DATED.id);
-    packet(p);
-    const answer = await p.ask({ ...ref(), question: "Anything about the cleaning rota?" });
-    const ids = answer.citations.map((c) => c.itemId);
-    expect(ids).toContain(DATED.id);
-    // Not anchored (names neither Harlow nor the day): not added.
-    expect(ids).not.toContain(OTHER.id);
-  });
-
-  test("the answer still cites at most maxItems; the deeper items take at most half the seats (review)", async () => {
-    const p = setup({ askNudge: true, pushCandidates: 1 });
-    await say(p, DATED_REQUEST);
-    packet(p);
-    const one = await p.ask({ ...ref(), question: "Anything about the cleaning rota?", maxItems: 1 });
-    expect(one.citations.length).toBeLessThanOrEqual(1);
-    const two = await p.ask({ ...ref(), question: "Anything about the Harlow venue deposit?", maxItems: 2 });
-    expect(two.citations.length).toBeLessThanOrEqual(2);
-  });
-
-  test("maxItems 1 keeps the ask's own best match: no deeper item takes its seat (review)", async () => {
-    const p = setup({ askNudge: true, pushCandidates: 1 });
-    await say(p, DATED_REQUEST);
-    packet(p);
-    CACHE.put({ tenantId: "t", userId: "u1" }, [ROTA], NOW);
-    const one = await p.ask({ ...ref(), question: "Who is on the cleaning rota this week?", maxItems: 1 });
-    expect(one.citations.map((c) => c.itemId)).toEqual([ROTA.id]);
-    const two = await p.ask({ ...ref(), question: "Who is on the cleaning rota this week?", maxItems: 2 });
-    expect(two.citations.map((c) => c.itemId)).toContain(ROTA.id);
-    expect(two.citations.length).toBe(2);
-  });
-
-  test("a settled packet later in the same request ends the deeper look (review)", async () => {
-    const pools: PushPoolReport[] = [];
-    const p = setup({ askNudge: true, pushCandidates: 1 }, (r) => pools.push(r));
-    await say(p, DATED_REQUEST);
-    packet(p);
-    expect(pools.at(-1)!.unsettled).toBe(true);
-    // A second pass in the same request (as `readerPushBehind`'s) whose first candidate holds Harlow and the day.
-    CACHE.put({ tenantId: "t", userId: "u1" }, [HARLOW_DAY], NOW);
-    const sessions = (p as unknown as { sessions: Map<string, { requests: number }> }).sessions;
-    const request = sessions.get("t/u1#s1")!.requests;
-    await p.ask({ ...ref(), question: DATED_REQUEST }, { push: true, request });
-    expect(pools.at(-1)!.unsettled).toBe(false);
-    expect(pools.at(-1)!.handed).toEqual([HARLOW_DAY.id]);
-    const answer = await p.ask({ ...ref(), question: "Anything about the cleaning rota?" });
-    expect(answer.citations.map((c) => c.itemId)).not.toContain(DATED.id);
-  });
-
-  test("off: the same ask does not add them", async () => {
-    const p = setup({ pushCandidates: 1 });
-    await say(p, DATED_REQUEST);
-    packet(p);
-    const answer = await p.ask({ ...ref(), question: "Anything about the cleaning rota?" });
-    expect(answer.citations.map((c) => c.itemId)).not.toContain(DATED.id);
-  });
-
-  test("a later request ends the deeper look", async () => {
-    const p = setup({ askNudge: true, pushCandidates: 1 });
-    await say(p, DATED_REQUEST);
-    packet(p);
-    await say(p, "Thanks, that is all for now.");
-    const answer = await p.ask({ ...ref(), question: "Anything about the cleaning rota?" });
-    expect(answer.citations.map((c) => c.itemId)).not.toContain(DATED.id);
-  });
-
-  test("another session's ask never gets the deeper look (isolation)", async () => {
-    const p = setup({ askNudge: true, pushCandidates: 1 });
-    await say(p, DATED_REQUEST, "s1");
-    packet(p, "s1");
-    const answer = await p.ask({ ...ref("s2"), question: "Anything about the cleaning rota?" });
-    expect(answer.citations.map((c) => c.itemId)).not.toContain(DATED.id);
-  });
-
-  test("the config check: a boolean, acting only with the push", () => {
-    expect(checkEngineConfig({ askNudge: true })).toEqual({ askNudge: true });
-    expect(() => checkEngineConfig({ askNudge: true, readerPush: false })).toThrow(/readerPush/);
-    expect(() => checkEngineConfig({ askNudge: 1 })).toThrow();
   });
 });
 
@@ -302,7 +172,7 @@ describe("pushCandidatesSettled (D400, D404): fewer candidates when they settle 
     expect(await handed({ pushCandidatesSettled: 1 }, request)).toEqual(all);
   });
 
-  test("unsettled: all the candidates (the nudge's case)", async () => {
+  test("unsettled: all the candidates", async () => {
     const all = await handed({}, DATED_REQUEST);
     expect(await handed({ pushCandidatesSettled: 1 }, DATED_REQUEST)).toEqual(all);
     expect(all.length).toBe(4);

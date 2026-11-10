@@ -2,15 +2,12 @@ import type { ContextItem } from "@eden/protocol";
 import { namesParticipant, startDay } from "./grounding";
 
 /**
- * `askNudge` (D316, D317; docs/research/a12-quality.md): whether the push's candidates settle what the request is
- * about, with no model. A request's anchors are the people and things it names (its entities) and the days it names
- * (its time window, and calendar dates written out). A candidate settles the request when it holds every kind of
- * anchor the request has: one of its entities, and (when the request names a day) one of its days. A request with no
- * anchor is never unsettled: there is nothing for the agent to pin down by asking.
- *
- * Why: A2 found the facts the push misses rank 6th–15th in its pool or in no pool at all, and that the agent's own
- * `ask_context` is the one reader of the request's meaning left since D237. D257's note made the agent skip asks and
- * lost hidden facts; this is the opposite, a nudge to ask when the packet visibly does not pin the request down.
+ * Whether the push's candidates settle what the request is about, with no model: `pushCandidatesSettled` (D400,
+ * D404) hands fewer candidates when they do. A request's anchors are the people and things it names (its entities)
+ * and the days it names (its time window, and calendar dates written out). A candidate settles the request when it
+ * holds every kind of anchor the request has: one of its entities, and (when the request names a day) one of its
+ * days. A request with no anchor is always settled: there is nothing to pin down. Built for `askNudge` (D316, D317),
+ * deleted by D455 (M4).
  */
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
@@ -137,11 +134,6 @@ export function settles(items: readonly ContextItem[], a: Anchors): boolean {
   const wantsDay = hasDay(a);
   if (!wantsEntity && !wantsDay) return true;
   return items.some((x) => (!wantsEntity || namesEntity(x, a)) && (!wantsDay || namesRequestDay(x, a)));
-}
-
-/** Whether `item` holds any of the request's anchors (an entity or a day): what the ask's deeper look keeps. */
-export function anchored(item: ContextItem, a: Anchors): boolean {
-  return namesEntity(item, a) || namesRequestDay(item, a);
 }
 
 /**

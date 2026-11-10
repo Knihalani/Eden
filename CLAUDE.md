@@ -31,7 +31,8 @@ PR. `native/` is the measured Rust experiment behind D22 (hot kernels stay TypeS
 - Fast loop: `bun run test:changed` (touched packages and their dependents), `bun run test:pkg <name>`,
   `bun run check:fast` (format, types, changed tests); `bun run check` is still the gate before a merge.
 - `bun run funnel`: the no-model screen on train (the shipped default with its cards and intent requests replayed,
-  D158; `--ask`, the funnel score; `--baseline F` diffs task by task; held-out suites need `--blind`).
+  D158; `--ask`, the funnel score; `--baseline F` diffs task by task; held-out suites need `--blind`). On main the
+  default reads hidden 305/384, decoys 267/384 (since D455; 314/273 before).
 - `/deep-audit`: full audit → verified findings → fixes on branches with review → re-audit → plain-language report
   (`.claude/skills/deep-audit/`).
 
@@ -45,8 +46,8 @@ bun run eval    # no-model metrics; paste the JSON in the PR when engine behavio
 ```
 
 The no-model eval runs on each scenario's own clock, so its result does not depend on the day it runs (D435). On
-main it reads precision 0.65, recall 0.52, falseFireRate 0. Treat a difference from those numbers as a change in
-behaviour.
+main it reads precision 0.65, recall 0.52, falseFireRate 0 (and the funnel 305/267, above). Treat a difference from
+those numbers as a change in behaviour.
 
 The standard agent for live agent tests (`agent-ab.ts`, any "Eden against tools" comparison) is the **Pi harness**
 (pi-mono's agent loop, `earendil-works/pi`, formerly `badlogic/pi-mono`): its minimal loop and tools, with Eden added

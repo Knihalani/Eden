@@ -403,10 +403,10 @@ flags are queued as a proactive packet, so an agent that never calls `ask_contex
 the agent the first five items of the pool the reader would have read (the ask's order, bulk mail out), each a focused
 excerpt, after a fixed line of Eden's own saying they may bear on the request and must be checked against its who,
 what and when first; a pool with nothing constraint-like (`readerGate`'s test) gets nothing (no note: D237 did not
-build it, D257 deleted the push's other one). When no handed item holds the request's named person or thing and,
-if it names one, its day (`settle.ts`, no model), the line adds a nudge to call `ask_context` with those specifics, and
-an ask in that request also lists the pool's deeper items that hold one of them (`askNudge`, D317: hidden +9.2 points
-on Pi, through the agent's asks). When the request names a person, thing or day and a handed item settles it, the push
+build it, D257 deleted the push's other one). D317's nudge to call `ask_context` when no handed item settled the
+request (`askNudge`) was deleted by D455: at four seeds on the whole train suites, Sonnet-graded, it raised hidden
+facts +1.7 points (−0.9..+4.3) for +$0.022/1k and +0.21 s a task (M4). When the request names a person, thing or day
+and a handed item settles it (`settle.ts`, no model), the push
 hands only the first two, through the first that settles it (`pushCandidatesSettled` 2, D404: fewer packet tokens
 written to the agent's prompt cache, hidden facts not lower, A30). An ask answers in rule order with no reading. The
 candidates need no
