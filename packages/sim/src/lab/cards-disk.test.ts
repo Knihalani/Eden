@@ -351,7 +351,9 @@ describe("the harnesses' intent replay (D158)", () => {
   test("the checked-in file covers held-out 13 to 18 items (the shards INTENT_COVERS claims)", () => {
     const requests = loadRequests(INTENT_PATH);
     for (const [suite, seed] of [41, 44].flatMap((s) =>
-      (["heldout13", "heldout14", "heldout15", "heldout16", "heldout17", "heldout18"] as const).map((x) => [x, s] as const),
+      (["heldout13", "heldout14", "heldout15", "heldout16", "heldout17", "heldout18"] as const).map(
+        (x) => [x, s] as const,
+      ),
     )) {
       for (const variant of ["hidden", "control"] as const) {
         // As hidden-funnel.ts and ab-common's worldOf build each world.

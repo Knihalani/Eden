@@ -134,7 +134,8 @@ const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
  * Held-out suites kept out of `all` so a tuning command cannot spend them; held-out 9-13 have been read (D72, D80,
  * D85, D98, D112) and a blind round needs a new suite. Held-out 14 is RealUse-1's blind suite (run once for it);
  * held-out 15 was RealUse-2's (run once); held-out 16 was the CL wave's final check (RealUse-3); held-out 17 was the
- * end-of-day confirmation's (A29, run once). Held-out 18 is M6's, unread (D465). A run names them to measure on them (with `--blind`).
+ * end-of-day confirmation's (A29, run once). Held-out 18 is M6's, unread (D465). A run names them to measure on
+ * them (with `--blind`).
  */
 export const UNRUN_BLIND = [
   "heldout9",

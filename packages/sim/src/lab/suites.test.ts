@@ -198,7 +198,7 @@ describe("suite registry", () => {
         const ids = by[v]!.tasks.map((t: { id: string }) => t.id);
         expect(new Set(ids).size).toBe(ids.length);
       }
-      // As heldout17: refs of the base world's shape, the same in hidden and control, and no marker an agent could read.
+      // As heldout17: refs of the base world's shape, equal in hidden and control, and no marker an agent could read.
       const refs = (v: string) => by[v]!.items.map((it: { ref: string }) => it.ref);
       expect(refs("control")).toEqual(refs("hidden"));
       for (const v of ["hidden", "control"]) {

@@ -33,6 +33,7 @@ per suite for train1–6 and held-out 10–12.
 | `heldout15`                                | Blind, the weak-points plan's (fix-s3b-lab.md); 32 new templates, same areas, with `neutral`          | **Read** (RealUse-2, 2026-11-07: Pi seeds 41–44, Hermes 41–42, the blind funnel); spent                                  |
 | `heldout16`                                | Blind, the CL wave's (cl-cl5.md); 32 new templates over the same 8 areas, with `neutral`              | **Read** (RealUse-3 Pi, 2026-11-07, realuse-3/pi-heldout16.md): no longer blind; cards and intent cached for seeds 41–44 |
 | `heldout17` | Blind, the end-of-day confirmation's (a19-heldout17.md, D350); 32 new templates over the same 8 areas, with `neutral`; 8 late-arrival templates (`HELDOUT17_LATE`, for `--late`) | **Read** (A29 Pi, 2026-11-07, a29-heldout17.md): no longer blind; cards and intent cached for seeds 41–44 |
+| `heldout18` | Blind, M6's (m6-heldout18.md, D465); 32 new templates over the same 8 areas, with `neutral`; 8 late arrivals (`HELDOUT18_LATE`); 13 short anchored requests (`HELDOUT18_ANCHORED`, D466) | **Unread** (`UNREAD_BLIND`): cards and intent cached for seeds 41–44; running it at all spends it |
 
 **The `neutral` variant** (held-out 14–17 and, since CL5, train1–6; `neutral.ts`, `NEUTRAL_SUITES`): the same request
 as `hidden` and `control` with nothing planted. The train suites get it from `withNeutral` in suites.ts (the control
@@ -48,7 +49,8 @@ a neutral task as a false one, and `pi-ab-report.ts` adds a `neutral` table and 
   written by an author who saw no engine code.
 - `UNRUN_BLIND` (held-out 9–16) keeps them out of `--suite all` so a tuning command cannot spend them, but all five
   have been read (D72, D80, D85, D98, D112), 14 by RealUse-1 and 15 by RealUse-2: treat the list as "not in `all`",
-  not as "fresh". Held-out 16 is the one unread suite: running it at all (funnel or agent) spends it.
+  not as "fresh". Held-out 18 (M6, D465) is the one unread suite (`UNREAD_BLIND`): running it at all (funnel or
+  agent) spends it.
 - Seeds: 41–44 for funnel work (41–42 on train), 41–48 for the Haiku benchmark. Same seed, same world, same tasks.
 
 ## Configurations (`presets.ts`)
