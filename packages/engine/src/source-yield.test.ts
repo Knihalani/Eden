@@ -71,6 +71,26 @@ describe("SourceYield", () => {
     expect(y.poolSpent(u1, 1, 0.2, T0)).toBe(before);
   });
 
+  test("a read of a source that has already earned its place is no evidence about the others", () => {
+    const y = new SourceYield(WEEK);
+    y.used(u1, ["mail", "crm"], T0);
+    // Hundreds of reads on words of the sources the user does use, each used again: no read of the pool, no win.
+    for (let i = 0; i < 100; i++) {
+      y.read(u1, ["mail", "crm"], T0, words);
+      y.used(u1, ["mail", "crm"], T0);
+    }
+    expect(y.poolSpent(u1, 1, 0.05, T0)).toBe(false);
+    // The unused sources' reads alone fill the pool: 60 of them with nothing used spend it, whatever mail earned.
+    y.read(
+      u1,
+      Array.from({ length: 60 }, (_, k) => `n-${k}`),
+      T0,
+      words,
+    );
+    expect(y.poolSpent(u1, 1, 0.05, T0)).toBe(true);
+    expect(y.hasYielded(u1, "mail")).toBe(true);
+  });
+
   test("the pool decays, so reads on no evidence resume", () => {
     const y = new SourceYield(WEEK);
     y.read(
