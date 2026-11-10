@@ -147,6 +147,9 @@ import {
 } from "./neutral";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
+import { checkerLine, sidecarChecker } from "./i1-checker";
+import { labChecker, labCheckerLine } from "./n2-check";
+import { loadWidenTable, widenFor } from "./n2-widen";
 import {
   coverageLines,
   intentPlace,
@@ -218,13 +221,25 @@ const cli = flags(
         "push",
         "push-rates",
         "fetch-gone",
+        "checker",
+        "check-cache",
+        "check-thinking",
+        "widen-table",
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
-      ["overlap", "sync", "ask", "serial", "allow-misses", "no-record", "cpu", "allow-logging", "neutral"].map((k) => [
-        k,
-        B,
-      ]),
+      [
+        "overlap",
+        "sync",
+        "ask",
+        "serial",
+        "allow-misses",
+        "no-record",
+        "cpu",
+        "allow-logging",
+        "neutral",
+        "check-live",
+      ].map((k) => [k, B]),
     ),
   },
   `
@@ -308,6 +323,24 @@ const SERIAL = cli.has("serial");
  * are unchanged by it.
  */
 const NEUTRAL = cli.has("neutral");
+/**
+ * `--checker URL` (I1, D471): the pair checker sidecar (`packages/sim/lab/i1/sidecar.py`) the `pushCheck` trial reads.
+ * Wiring it changes nothing unless the run's configuration turns `pushCheck` on (`--set pushCheck=true`).
+ */
+const SIDECAR = opt("checker", "") ? sidecarChecker(opt("checker", "")) : null;
+/**
+ * `--check-cache FILE` (N2, D510): the lab's Haiku "changes what the agent should do" checker (`n2-check.ts`) in place
+ * of a sidecar, replaying FILE; `--check-live` lets it call Haiku on a miss (needs `--spend-ledger`/`--spend-cap`),
+ * else a miss is answered from the file's per-pair labels and counted. `--check-thinking off|low` (off by default).
+ */
+const CHECK_CACHE = opt("check-cache", "");
+const CHECK_LIVE = cli.has("check-live");
+if (CHECK_LIVE && !CHECK_CACHE) throw new Error("--check-live needs --check-cache FILE");
+/**
+ * `--widen-table FILE` (N2, D511): per (suite, seed, variant, request) the item ids an embedding ranks first for the
+ * request (`packages/sim/modal/n2_embed.py`), wired as the `widen` dependency the `pushWiden` trial reads.
+ */
+const WIDEN_TABLE = opt("widen-table", "") ? loadWidenTable(opt("widen-table", "")) : null;
 const NOOP_SPANS = opt("spans", "") === "noop";
 const REAL_SYNC = RUN.sync;
 if (REAL_SYNC && SYNC) throw new Error("--sync (the oracle) and the real sync (config sync) are exclusive");
@@ -472,7 +505,20 @@ const READER_SYS = systemHash({ messages: readerMessages({ request: "", items: [
 const READER_SUBSET = opt("reader-subset", "");
 if (READER_SUBSET && READER !== "replay") throw new Error("--reader-subset needs --reader replay");
 /** The judge's and the reader's requests: paced, capped and retried, with the run's logging choice (free.ts). */
-const ACCESS = labAccess(args, [...(LIVE ? [MODEL] : []), ...(READER === "live" ? [READER_MODEL] : [])]);
+const ACCESS = labAccess(args, [
+  ...(LIVE ? [MODEL] : []),
+  ...(READER === "live" ? [READER_MODEL] : []),
+  ...(CHECK_LIVE ? ["claude-haiku-5-5"] : []),
+]);
+const LAB_CHECK = CHECK_CACHE
+  ? labChecker({
+      cache: CHECK_CACHE,
+      replayOnly: !CHECK_LIVE,
+      thinking: opt("check-thinking", "off") === "low" ? "low" : "off",
+      ...(ACCESS.ledger ? { ledger: ACCESS.ledger } : {}),
+    })
+  : null;
+const CHECKER = LAB_CHECK ?? SIDECAR;
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
 const readerModel =
   READER === "none" || NO_MODEL_READER
@@ -858,6 +904,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
+    ...(CHECKER ? { checker: CHECKER } : {}),
+    ...(WIDEN_TABLE ? { widen: widenFor(WIDEN_TABLE, suite, seed, variant) } : {}),
     ...(reader
       ? {
           reader,
@@ -1229,7 +1277,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
           }),
       // `pushCandidates`' last pass: the planted item's place in its pool (-1: not in it), and whether it was handed.
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
-      // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
+      // How many candidates that pass handed (0: no candidates packet; I1 counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
       // `askNudge` (D316): whether that pass's candidates left the request unsettled (the packet nudged an ask).
       ...(push?.unsettled !== undefined ? { pushUnsettled: push.unsettled } : {}),
@@ -1373,6 +1421,8 @@ if (SUITE_LIST.length > 1) {
   console.log(`\n${header}`);
   for (const r of runs) console.log(line(r.suite, r.total));
   console.log(line("TOTAL", grand) + inertTag());
+  if (SIDECAR) console.log(checkerLine(SIDECAR));
+  if (LAB_CHECK) console.log(labCheckerLine(LAB_CHECK));
   const all = runs.flatMap((r) => r.perTask) as unknown as ScreenRow[];
   for (const l of screenLines("TOTAL", all, PACKET_K)) console.log(l + TAG + inertTag());
   for (const l of surfacedLines("TOTAL", all as unknown as SurfacedRow[])) console.log(l + TAG + inertTag());

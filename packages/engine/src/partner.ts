@@ -146,6 +146,7 @@ import {
 import { quarantineTitle } from "./shield";
 import { safeLine } from "./line";
 import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
+import { checkPool, type PairChecker } from "./checker";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -216,6 +217,16 @@ export interface PartnerDeps {
    * flags only. Apart from `onReader`, whose consumers count reader readings.
    */
   onPushPool?: PushPoolSink;
+  /**
+   * I1 (D471, trial `pushCheck`): a pair checker that scores the push's pool against the request (`checker.ts`). The
+   * lab wires a CPU sidecar; no server wires one, so the servers refuse `pushCheck` (`NEEDS_DEP`).
+   */
+  checker?: PairChecker;
+  /**
+   * N2 (D511, trial `pushWiden`): item ids a non-lexical retrieval ranks first for the request (at most `k`, best
+   * first). The lab wires an embedding table; no server wires one.
+   */
+  widen?: (scope: Scope, request: string, k: number) => Promise<readonly string[]>;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -235,6 +246,8 @@ export interface PushPoolReport {
    */
   anchored?: boolean[];
   anchorKinds?: { entities: number; day: boolean };
+  /** `pushCheck` (D471): the checker's score per pool item, when it answered. */
+  checked?: number[];
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -292,6 +305,11 @@ interface Session {
    * the latest: the agent's own events move `turn` within one request, a new user message moves this.
    */
   requests: number;
+  /**
+   * `pushCheckReshow` (N2, D512): by item, the request (`requests`) a candidates' packet citing it was last handed out
+   * in; at most `MAX_HANDED_IN`. Kept only with the switch on.
+   */
+  handedIn: Map<string, number>;
   /** The session's last `EXPLAIN_TRACES` traces, oldest first (`explain`, D277). */
   traces: Trace[];
   lastActive: number;
@@ -371,6 +389,8 @@ interface Session {
 
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
+/** Items whose hand-out request a session keeps (`pushCheckReshow`, D512): far above what a day's packets cite. */
+const MAX_HANDED_IN = 512;
 
 interface Cue {
   text: string;
@@ -2030,7 +2050,37 @@ export class ContextPartner {
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
-      const candidates = candidating ? this.candidatesOf(s, cue, [...order, ...scored]) : null;
+      // `pushCheck` (D471): the checker scores the pool first; null (off, unwired, late or failed) is the default's rule.
+      const checking = candidating && this.config.pushCheck && this.deps.checker !== undefined;
+      // `pushWiden` (D511): items no lexical rank reached (raw intent hits, the `widen` dependency's, deeper ranks)
+      // join the pool only for the checker to judge; with the checker late or failed they are not read.
+      const t1 = performance.now();
+      const widened = checking && this.config.pushWiden ? await this.widenPool(s, cue, [...order, ...scored]) : [];
+      const checkScores = checking
+        ? await checkPool(
+            this.deps.checker!,
+            s.scope,
+            sanitizeForStore(cue.raw),
+            [...this.pushPool([...order, ...scored]), ...widened].map((x) => ({
+              id: x.item.id,
+              title: x.item.title,
+              text: x.item.text,
+            })),
+            Math.max(0, this.config.pushCheckWaitMs - (performance.now() - t1)),
+          )
+        : null;
+      if (s.closed) {
+        return {
+          answer: "",
+          citations: [],
+          usedModel: false,
+          costUsd: 0,
+          latencyMs: Math.round(performance.now() - t0),
+        };
+      }
+      const candidates = candidating
+        ? this.candidatesOf(s, cue, [...order, ...scored], checkScores, checkScores ? widened : [])
+        : null;
       const flagged = candidates
         ? candidates.items
         : reading
@@ -2055,7 +2105,10 @@ export class ContextPartner {
         (x) =>
           withdrawn.has(x.item.id) ||
           s.ledger.isFresh(x.item.id, s.turn) ||
-          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
+          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)) ||
+          // `pushCheckReshow` (D512): a candidate the agent took for an earlier request goes again only when the
+          // checker says it changes what to do for this one (D380's blind re-show raised concerns).
+          (candidates?.checked === true && this.config.pushCheckReshow && this.handedBefore(s, x.item.id)),
       );
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
@@ -2466,16 +2519,12 @@ export class ContextPartner {
     s: Session,
     cue: Cue,
     ranked: readonly Scored[],
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
-    const pool: Scored[] = [];
-    const seen = new Set<string>();
-    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
-    for (const x of ranked) {
-      if (pool.length >= cap) break;
-      if (seen.has(x.item.id)) continue;
-      seen.add(x.item.id);
-      pool.push(x);
-    }
+    checked: Map<string, number> | null = null,
+    widened: readonly Scored[] = [],
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; checked?: boolean } {
+    // `pushWiden` (D511): the widened items come after the pool, so the pool's own passing items lead.
+    const base = this.pushPool(ranked);
+    const pool = widened.length > 0 ? [...base, ...widened] : base;
     if (pool.length === 0) return { items: [], pool };
     const cards =
       this.config.cards && this.deps.cards
@@ -2485,8 +2534,29 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    const like = pool.map((x) => this.constraintLike(x, cards));
-    let items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
+    // The constraint test reads the lexical pool only: widened items enter by the checker alone (D511).
+    const like = base.map((x) => this.constraintLike(x, cards));
+    const passing = checked
+      ? pool.filter((x) => !bulkMail(x.item) && (checked.get(x.item.id) ?? 0) >= this.config.pushCheckPass)
+      : [];
+    let items =
+      checked && this.config.pushCheckGate
+        ? // `pushCheckGate` (D473): the checker only decides whether any candidates go; when they do, the default's.
+          passing.length > 0 && like.some(Boolean)
+          ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates)
+          : []
+        : checked
+          ? // `pushCheck` (D510): the pool's items the checker passes, in the pool's order (its 6th to 15th, and with
+            // `pushWiden` the widened items, may enter; its first five may leave). None passing: no candidates with
+            // `pushCheckSilent` (D513), the default's rule without.
+            passing.length > 0 || this.config.pushCheckSilent
+            ? passing.slice(0, this.config.pushCandidates)
+            : like.some(Boolean)
+              ? base.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates)
+              : []
+          : like.some(Boolean)
+            ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates)
+            : [];
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
     let anchors: Anchors | undefined;
@@ -2508,7 +2578,7 @@ export class ContextPartner {
     this.deps.onPushPool?.({
       sessionId: s.id,
       pool: pool.map((x) => x.item.id),
-      constraintLike: like,
+      constraintLike: widened.length > 0 ? [...like, ...widened.map(() => false)] : like,
       handed: items.map((x) => x.item.id),
       ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
       ...(read
@@ -2517,8 +2587,74 @@ export class ContextPartner {
             anchorKinds: { entities: read.entities.length, day: hasDay(read) },
           }
         : {}),
+      ...(checked ? { checked: pool.map((x) => checked.get(x.item.id) ?? 0) } : {}),
     });
-    return { items, pool, ...(unsettled ? { unsettled } : {}) };
+    return { items, pool, ...(unsettled ? { unsettled } : {}), ...(checked ? { checked: true } : {}) };
+  }
+
+  /**
+   * `pushWiden` (N2, D511): items the push pool's lexical order did not reach, for the checker only: the request's raw
+   * intent hits (no thresholds, `pushWidenIntent` deep), the `widen` dependency's (an embedding's nearest items in the
+   * lab, `pushWidenEmbed` of them, bounded by `pushCheckWaitMs`) and the ranking's next `pushWidenDeep` past the pool.
+   * Current cached copies only, bulk mail out, none already in the pool. No model call.
+   */
+  private async widenPool(s: Session, cue: Cue, ranked: readonly Scored[]): Promise<Scored[]> {
+    const c = this.config;
+    const now = this.now();
+    const pool = this.pushPool(ranked);
+    const have = new Set(pool.map((x) => x.item.id));
+    const out: Scored[] = [];
+    const add = (ids: readonly string[], n: number) => {
+      let k = 0;
+      for (const id of ids) {
+        if (k >= n) break;
+        if (have.has(id)) continue;
+        const item = this.deps.cache.get(s.scope, id, now);
+        if (!item || bulkMail(item)) continue;
+        have.add(id);
+        out.push({ item, score: 0, matched: 0, sketch: null });
+        k++;
+      }
+    };
+    const enricher = this.deps.cards;
+    if (c.pushWidenIntent > 0 && c.cards && c.intent && enricher) {
+      const accept = (id: string) => this.deps.cache.get(s.scope, id, now) !== null;
+      const rows = enricher.intentFinds(
+        s.scope,
+        cue.raw.slice(0, INTENT_QUERY_CHARS),
+        cue.arrived ?? now,
+        c.pushWidenIntent * 2,
+        accept,
+      );
+      add(
+        rows.flatMap((r) => r.ids),
+        c.pushWidenIntent,
+      );
+    }
+    if (c.pushWidenEmbed > 0 && this.deps.widen) {
+      const ids = await within(
+        this.deps.widen(s.scope, sanitizeForStore(cue.raw), c.pushWidenEmbed * 2).catch(() => [] as string[]),
+        c.pushCheckWaitMs,
+      );
+      if (s.closed) return [];
+      add(ids ?? [], c.pushWidenEmbed);
+    }
+    if (c.pushWidenDeep > 0) {
+      const deep: string[] = [];
+      for (const x of ranked) if (!have.has(x.item.id) && !deep.includes(x.item.id)) deep.push(x.item.id);
+      add(deep, c.pushWidenDeep);
+    }
+    return out;
+  }
+
+  /**
+   * `pushCheckReshow` (D512): the item was handed out as a push candidate in this session for an earlier request
+   * (`handedIn`: the agent took it before the latest user message). Never one handed for this request: a packet of the
+   * last request taken with this one's observe counts as this request's.
+   */
+  private handedBefore(s: Session, id: string): boolean {
+    const handed = s.handedIn.get(id);
+    return handed !== undefined && handed < s.requests;
   }
 
   /**
@@ -2528,6 +2664,20 @@ export class ContextPartner {
   private anchoredPast(pool: readonly Scored[], handed: readonly Scored[], anchors: Anchors): boolean {
     const ids = new Set(handed.map((x) => x.item.id));
     return pool.some((x) => !ids.has(x.item.id) && !bulkMail(x.item) && anchored(x.item, anchors));
+  }
+
+  /** The push's pool: the first `askReaderPool` distinct items of `ranked` (at most `READER_POOL_CAP`), in order. */
+  private pushPool(ranked: readonly Scored[]): Scored[] {
+    const pool: Scored[] = [];
+    const seen = new Set<string>();
+    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
+    for (const x of ranked) {
+      if (pool.length >= cap) break;
+      if (seen.has(x.item.id)) continue;
+      seen.add(x.item.id);
+      pool.push(x);
+    }
+    return pool;
   }
 
   /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */
@@ -3026,6 +3176,7 @@ export class ContextPartner {
       key,
       turn: 0,
       requests: 0,
+      handedIn: new Map(),
       traces: [],
       lastActive: now,
       window: [],
@@ -3121,6 +3272,15 @@ export class ContextPartner {
     if (built?.copies) {
       this.watchCopies(s, built.copies);
       built.copies = undefined;
+    }
+    // `pushCheckReshow` (D512): the request each push candidate was last handed out in (what the agent took, not what
+    // was queued). Only candidates' packets: an item that reached the agent by an ask or another path is not re-shown.
+    if (this.config.pushCheck && this.config.pushCheckReshow && injection.reason.startsWith("candidates:")) {
+      for (const c of injection.citations) {
+        s.handedIn.delete(c.itemId);
+        s.handedIn.set(c.itemId, s.requests);
+      }
+      while (s.handedIn.size > MAX_HANDED_IN) s.handedIn.delete(s.handedIn.keys().next().value!);
     }
     if (!built || s.outstanding.has(injection.id)) return;
     if (this.recordedOf(s.scope)?.has(injection.id)) return;

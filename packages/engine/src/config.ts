@@ -671,6 +671,43 @@ export interface EngineConfig {
    */
   pushCandidatesSettled: number;
   /**
+   * N2 (D510; a trial, off; docs/research/n2-recall.md; I1's D471 and I2's D491 shape): with `pushCandidates` and a
+   * `checker` dependency (the lab's Haiku "does this item change what the agent should do for this request?" check;
+   * no server wires one), the push's pool is scored and its candidates are the pool's items scoring at least
+   * `pushCheckPass`, in the pool's order, the first `pushCandidates` of them: items 6-15 that pass enter, items 1-5
+   * that fail leave. None passing: the default's rule, or no packet with `pushCheckSilent`. A checker that errs or
+   * misses `pushCheckWaitMs` leaves the default's candidates.
+   */
+  pushCheck: boolean;
+  /** `pushCheck`'s pass mark on the checker's score (0-1; 0.5 pre-registered, D470). */
+  pushCheckPass: number;
+  /** How long the push waits for the checker before it hands the default's candidates (ms). */
+  pushCheckWaitMs: number;
+  /**
+   * `pushCheck` as a gate only (I1's exploratory arm, D473): the checker decides only whether the push sends
+   * candidates (none passing: no packet); when one passes, the default's candidates go out unchanged.
+   */
+  pushCheckGate: boolean;
+  /**
+   * N2 (D513; H3): with `pushCheck`, a pool none of whose items passes sends no candidates packet (silence where the
+   * checker says nothing changes what to do); off, such a pool gets the default's candidates.
+   */
+  pushCheckSilent: boolean;
+  /**
+   * N2 (D511; H1): with `pushCheck`, the pool the checker reads is widened past the lexical ranking (`widenPool`):
+   * the request's raw intent hits (`pushWidenIntent`), the `widen` dependency's nearest items (`pushWidenEmbed`) and
+   * the ranking's next items (`pushWidenDeep`), after the pool, so only the checker can hand them.
+   */
+  pushWiden: boolean;
+  pushWidenIntent: number;
+  pushWidenEmbed: number;
+  pushWidenDeep: number;
+  /**
+   * N2 (D512; H2): with `pushCheck`, a candidate the agent took for an earlier request of the session is handed again
+   * when the checker passes it for this one (D340's re-show, gated by the check instead of the constraint test).
+   */
+  pushCheckReshow: boolean;
+  /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
    * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
@@ -820,5 +857,15 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askNudge: true,
   askNudgeDeep: true,
   pushCandidatesSettled: 2,
+  pushCheck: false,
+  pushCheckPass: 0.5,
+  pushCheckWaitMs: 500,
+  pushCheckGate: false,
+  pushCheckSilent: false,
+  pushWiden: false,
+  pushWidenIntent: 6,
+  pushWidenEmbed: 5,
+  pushWidenDeep: 5,
+  pushCheckReshow: false,
   revisionDiff: true,
 };

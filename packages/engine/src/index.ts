@@ -9,6 +9,7 @@ export {
 } from "./partner";
 export { FACT_NAMES, vectorOf, type Facts } from "./decide";
 export { DEFAULT_CONFIG, type EngineConfig } from "./config";
+export { checkPool, type CheckPair, type PairChecker } from "./checker";
 export { CORE_CONFIG, PARTS, withoutParts, type Part } from "./parts";
 export { checkEngineConfig, NEEDS_DEP, PARENTS, type ConfigCheckOptions, type ConfigDep } from "./config-check";
 export { DEFAULT_CACHE_LIMITS, ItemCache, sanitizeItem, type CacheHit, type CacheLimits } from "./cache";
