@@ -250,9 +250,15 @@ For common servers you can name a preset instead of working out which tools read
 A preset fills in only read tools and their fixed arguments; anything you write in the entry wins. It never adds
 `trustedReadTools`, so the read-only check (D7) runs as for a hand-written entry: a server that does not annotate a
 tool `readOnlyHint: true` is refused until you have checked the tool and listed it. Ask for read-only OAuth scopes
-(`gmail.readonly`, `calendar.readonly`) as well, so the provider refuses a write beneath Eden's check. No preset names a fetch tool yet: a
-fetched Gmail thread holds every message where search holds the newest, so it would look changed (add one by hand
-only where both tools return the same copy). Google's read-only annotations were not captured: if the server does not
+(`gmail.readonly`, `calendar.readonly`) as well, so the provider refuses a write beneath Eden's check. No preset names a fetch tool (D415,
+[c1-preset-fetch](research/c1-preset-fetch.md)), and each says why in `PRESETS[name].noFetch`. A fetched Gmail thread
+holds every message, while the summary search holds only the newest, so an unchanged thread would look changed. No
+reply of Google Calendar's `get_event` was captured to show that it matches `search_events`' copy. Neither the caldav
+nor the mcpvault server had a fetch tool's schema captured. So a preset source cannot find an item by id
+(`fetchesById` false): its listing keeps the daily sweep (D356) and doubted copies are delivered as held (D126). If
+you have checked that your server's fetch returns the same copy as its search, add the tool by hand
+(`"fetchTool": {"name": "get_event"}`; the id argument is mapped from the schema, `eventId`), and an unused source
+with a listing then moves to the weekly sweep. Google's read-only annotations were not captured: if the server does not
 set them, the connect is refused until you list the tool. There is no CRM
 preset yet: no CRM server's tools could be verified, so write a CRM entry by hand (`searchTool` with its name, Eden
 maps the query from its schema). A worked per-user OAuth directory, which keeps refresh tokens in your app and hands
