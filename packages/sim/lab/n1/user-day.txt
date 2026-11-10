@@ -1,4 +1,5 @@
-# N1 user-day bench: bun packages/engine/bench/source-days.bench.ts 1000 20 8 --mix=0.05,0.05 [--config=...]; calls a user a day, days 2-8
-base       background   242.6  on demand  228.0  (delta reads    0.0)  searches  447.9  re-reads   0.0  ALL   918.4  events    0.0  items listed    8154  card calls  113.1  cold 0 items / 0.00 MB; cold start 1000 calls
-yield      background   245.6  on demand  217.3  (delta reads    0.0)  searches  431.7  re-reads   0.0  ALL   894.6  events    0.0  items listed    8122  card calls  106.1  cold 0 items / 0.00 MB; cold start 1000 calls
-lazy       background   238.0  on demand  214.7  (delta reads    0.0)  searches  193.1  re-reads   0.0  ALL   645.9  events    0.0  items listed    7916  card calls   86.4  cold 0 items / 0.00 MB; cold start 1000 calls
+# N1 user-day bench: bun packages/engine/bench/source-days.bench.ts 1000 20 8 [--config=...]; calls a user a day, days 2-8
+# merged tree; every request of this bench names a person, and ~45% of its noise sources mention one
+base     background   241.7  on demand  227.3  searches  445.7  re-reads   0.0  ALL   914.7  card calls  111.6
+yield    background   242.6  on demand  224.0  searches  437.0  re-reads   0.0  ALL   903.6  card calls  111.1
+lazy     background   232.6  on demand  212.9  searches  192.6  re-reads   0.0  ALL   638.0  card calls   88.7

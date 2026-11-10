@@ -1,11 +1,11 @@
-# N1 stale and deleted deliveries: quality-cli, 16 users x 20 sessions, 5/5/90, signal-only notices, cap 300 items (copies cut); l = share of notices lost
-# packages/sim/lab/n1/qrun.sh NAME LOST CONFIG; python3 -I packages/sim/lab/f1/fresh.py
+# N1 stale and deleted deliveries: quality-cli, 16 users x 20 sessions, 5% of connectors notifying, signal-only notices, cap 300 items (copies cut); l = share of notices lost
+# packages/sim/lab/n1/qrun.sh NAME LOST CONFIG; python3 -I packages/sim/lab/f1/fresh.py   (merged tree, the fixed sourceYield)
 run                                 stale/upd del dlv/cited re-reads bg calls  demand calls/lookup precision  recall
-base-l0                              15/143        3/14           76      502       0         3.01     0.445   0.528
-Y-l0                                 12/141        3/14           75      503       0        2.296     0.448    0.52
+base-l0                              15/143        3/14           76      502       0        3.004     0.446   0.529
+Y-l0                                 12/142        3/14           75      504       0        2.492     0.448   0.522
 lazy1-l0                             19/142        3/14          119      505       0         1.96     0.401   0.404
 lazy2-l0                             35/129        3/14          126      500       0        1.895     0.392   0.389
-base-l0.2                            15/143        3/14           75      502       0        3.016     0.443   0.528
-Y-l0.2                               12/141        3/14           75      503       0        2.298     0.447    0.52
+base-l0.2                            15/143        3/14           75      502       0        3.012     0.443   0.528
+Y-l0.2                               12/142        3/14           75      504       0        2.492     0.447   0.522
 lazy1-l0.2                           19/142        3/14          117      505       0        1.962     0.401   0.404
 lazy2-l0.2                           35/129        3/14          123      500       0        1.896     0.392   0.389
