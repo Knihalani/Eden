@@ -27,6 +27,7 @@ import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { Source, SourceFanout, SourceResolver } from "@eden/sources";
 import type { ItemCache } from "./cache";
+import { RareTerms } from "./rare-terms";
 import { sketchTerms, termHashes, TermSketch } from "./sketch";
 import type { Tracer } from "./spans";
 
@@ -91,8 +92,8 @@ export interface SyncOptions {
    * which `sketchScores` reads for routing.
    */
   sketch?: boolean;
-  /** `sourceYieldEarn` (D600): sketches set eight bits a term (`TermSketch.probes`), for `sketchRare`. */
-  sketchProbes?: 2 | 8;
+  /** `sourceYieldEarn` (D600): the user keeps a table of which few sources hold each word (`RareTerms`). */
+  rareTerms?: boolean;
   /**
    * `syncUnusedSweepMs` (D356, on in the default at a week; 0 or absent: off): a source the user does not use
    * (`engage`) whose connector can fetch by ref is swept this often (ms) instead of every `sweepMs`. The engine
@@ -264,6 +265,8 @@ interface UserSync {
   people: Set<string>;
   /** Sources marked used (`engage`), least recently used first, at most `MAX_USED`. */
   used: Set<string>;
+  /** `rareTerms` (D600): which few of the user's sources hold each word their listings had; null until one is. */
+  rare: RareTerms | null;
 }
 
 export interface SyncStats {
@@ -326,6 +329,7 @@ export class SyncManager {
       cutAt: -Infinity,
       people: new Set(),
       used: new Set(),
+      rare: null,
     });
   }
 
@@ -343,6 +347,8 @@ export class SyncManager {
       cutAt: fin(u.cutAt),
       people: [...u.people],
       used: [...u.used],
+      // Only with the trial on, so the default's snapshot is what it always was.
+      ...(u.rare ? { rare: u.rare.dump() } : {}),
       sources: [...u.sources.values()].map((s) => ({
         id: s.id,
         ids: [...s.ids],
@@ -398,6 +404,8 @@ export class SyncManager {
       cutAt: num(snap.cutAt, -Infinity),
       people: new Set(snap.people.slice(-MAX_PEOPLE)),
       used: new Set(snap.used.slice(-MAX_USED)),
+      // Saved only by a process with the trial on; absent or unreadable, the table fills again as sources are listed.
+      rare: this.o.rareTerms && snap.rare !== undefined ? RareTerms.load(snap.rare) : null,
     };
     for (const x of snap.sources) {
       const s = newSourceSync(x.id);
@@ -421,7 +429,7 @@ export class SyncManager {
       // `notes` (a lookup or a tick) sets both again from the source.
       s.notifies = x.notifies === true;
       s.fetches = x.fetches === true;
-      s.sketch = x.sketch === null ? null : TermSketch.load(x.sketch, this.o.sketchProbes ?? 2);
+      s.sketch = x.sketch === null ? null : TermSketch.load(x.sketch);
       // Behind until a poll that begins after now (a notifying source), and its earlier copies in doubt.
       s.notices = 1;
       s.noticesPolled = 0;
@@ -728,25 +736,16 @@ export class SyncManager {
   }
 
   /**
-   * `sourceYieldEarn` (D600): the sources whose sketch holds one of `terms` that at most `maxHolders` of the user's
-   * sketched sources hold: a word that rare says where to look, as a name does. No call; empty with under two
-   * sketched sources (as `sketchScores`: with one source there is nothing to tell apart).
+   * `sourceYieldEarn` (D600): the user's sources that hold one of `terms` which at most `maxHolders` (1 or 2) of
+   * them hold: a word that rare says where to look, as a name does. Read from the user's `RareTerms`; no call. A
+   * source the user no longer has is not named.
    */
-  sketchRare(scope: Scope, terms: readonly (readonly [number, number])[], maxHolders: number): Set<string> {
+  rareHolders(scope: Scope, terms: readonly (readonly [number, number])[], maxHolders: number): Set<string> {
     const out = new Set<string>();
     const u = this.users.get(scopeKey(scope));
-    if (!u || terms.length === 0 || maxHolders <= 0) return out;
-    const sketched: SourceSync[] = [];
-    for (const s of u.sources.values()) if (s.sketch) sketched.push(s);
-    if (sketched.length < 2) return out;
+    if (!u?.rare || maxHolders <= 0) return out;
     for (const t of terms) {
-      const holders: string[] = [];
-      for (const s of sketched) {
-        if (!s.sketch!.has(t[0], t[1])) continue;
-        holders.push(s.id);
-        if (holders.length > maxHolders) break;
-      }
-      if (holders.length <= maxHolders) for (const id of holders) out.add(id);
+      for (const id of u.rare.holders(t[0], t[1], Math.min(maxHolders, 2))) if (u.sources.has(id)) out.add(id);
     }
     return out;
   }
@@ -1394,11 +1393,17 @@ export class SyncManager {
     const now = this.deps.now();
     // `routeSketch`: every listed item's terms, kept or not (what the cap trims still says what the source holds).
     if (this.o.sketch) {
-      const sketch = (s.sketch ??= new TermSketch(this.o.sketchProbes ?? 2));
+      const sketch = (s.sketch ??= new TermSketch());
+      // `rareTerms` (D600): the same terms, in the user's one table of which few sources hold a word.
+      const rare = this.o.rareTerms ? (u.rare ??= new RareTerms()) : null;
       for (const it of items) {
         // Held items too: a sketch that restarted (saturated) is filled again by the next sweep's re-listing.
         if (it.sourceId !== s.id) continue;
-        for (const t of sketchTerms(`${it.title} ${it.text}`)) sketch.add(...termHashes(t));
+        for (const t of sketchTerms(`${it.title} ${it.text}`)) {
+          const [h1, h2] = termHashes(t);
+          sketch.add(h1, h2);
+          rare?.add(s.id, h1, h2);
+        }
       }
     }
     // `keepCut`: a poll's or a sweep's item dated before the user's cut would be the first a trim drops (the cache's
@@ -1558,6 +1563,8 @@ export interface SyncSnapshot {
   cutAt: number | null;
   people: string[];
   used: string[];
+  /** `rareTerms` (D600, a trial): `RareTerms.dump`, present only when the trial is on. */
+  rare?: unknown;
   sources: {
     id: string;
     ids: string[];

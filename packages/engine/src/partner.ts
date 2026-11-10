@@ -768,7 +768,7 @@ export class ContextPartner {
             pushMaxStaleMs: c.syncPushMaxStaleMs,
             keepCut: c.syncKeepCut,
             sketch: c.routeSketch,
-            sketchProbes: c.sourceYield && c.sourceYieldEarn ? 8 : 2,
+            rareTerms: c.sourceYield && c.sourceYieldEarn && c.sourceYieldRare > 0,
             engagedDeep: c.syncEngagedDeep,
             // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
             unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
@@ -4427,7 +4427,7 @@ export class ContextPartner {
         }
         if (this.config.sourceYieldEarn && this.config.sourceYieldRare > 0 && this.sync) {
           const terms = sketchTerms(`${cue.text} ${cue.entities.join(" ")}`).slice(0, MAX_SKETCH_TERMS);
-          const rare = this.sync.sketchRare(s.scope, terms.map(termHashes), this.config.sourceYieldRare);
+          const rare = this.sync.rareHolders(s.scope, terms.map(termHashes), this.config.sourceYieldRare);
           for (const id of rare) named.add(id);
         }
       }

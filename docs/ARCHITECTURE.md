@@ -212,7 +212,7 @@ request that names nothing the source mentioned: it answers from what is held, a
 1,000 sources this took Eden's connector calls from ~36 to ~11 a task over a user's days. Three trials, all off (O1,
 D600, D601; docs/research/o1-earn.md), turn the rule around: with `sourceYieldEarn` a copy with nothing used is read
 live only on a name its items mentioned or a word of the request that at most `sourceYieldRare` (2) of the user's
-sources hold in their sketches (which then set eight bits a term, so a thousand sketches give few false holders), and
+sources hold (`RareTerms`: one table a user of which few sources hold each listed word, at most 1 MB), and
 the pools are not consulted; `sourceYieldNames` makes a name many sources mention weak for such a copy;
 `sourceYieldEngage` does not mark a source used by a request that reads nothing live of it. A lookup polls at most its
 `syncPollWidth` (8) best-routed

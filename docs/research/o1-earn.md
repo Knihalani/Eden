@@ -231,7 +231,7 @@ Changed:
   A rare-word rule read on the request's named things alone lost six hidden tasks of 96 on seed 43: every word of
   the request is needed.
 
-**Run 2 as amended.** Arms and rule as section 2. Two changes, both arms: the image is the commit that holds this
+**Run 2 as amended** (its rule is replaced by section 2c's: it now promotes nothing alone). Arms as section 2. Two changes, both arms: the image is the commit that holds this
 section (eight-probe sketches in `eden~earn2`), and every step passes `--noise-vocab 1000` (`EXTRA` in `run.sh`), so
 the default arm is no longer N1b's exact harness; the comparison is paired within the run as before.
 
@@ -240,6 +240,65 @@ a measurement of that arm (reported in full), but **it promotes nothing on its o
 section 2 is replaced by "the three switches, with eight-probe sketches, are promoted together if run 2 passes
 section 0's four clauses; otherwise they stay off (point estimate above −2.0) or are deleted". Promotion also
 states the sketches' memory (above) as a cost for the owner and O2.
+
+## 2c. One table a user in place of wider sketches, and run 3 (committed before run 3's first paid call; no result of runs 1 or 2 read)
+
+The parent, with O2's figure of about 3.4 MB resident a live user, asked for the false-holder rate without
+per-source sketch growth. A sweep of probes and fold fills (2 to 16 probes) moved along one curve (1.4 MB at 0.08
+false holders a word, 1.75–1.95 MB at 0.01–0.02; 460 terms a source): a per-source filter needs two to three bytes
+a (source, term) pair for this, whatever its shape.
+
+**`RareTerms` (`rare-terms.ts`): one table a user**, sized by the distinct words their sources listed. A word is a
+20-bit tag in a slot chosen by other bits of its hash, with the number of one source that holds it; a second holder
+takes a second slot, a third marks the word common (one slot, no source). Four bytes a word; segments of 1 KB
+doubling to 16 KB, at most 1 MB a user, past which a word with no free slot is not added. The default's sketches are
+as they were (two probes; `TermSketch` is unchanged from the base), so the trial adds the table and nothing else.
+`o1-rare-bytes.ts`, the lab's noise connectors:
+
+| Sources, terms a source (distinct in all) | Default sketches: bytes, false holders a word | The table: bytes, words not added, false holders |
+| --- | --- | --- |
+| 995, 460 (135,484) | 0.76 MB, 26.8 | **+0.72 MB**, 0, 0 of 500 words |
+| 995, 798 (209,776) | 1.07 MB, 33.6 | +1.05 MB (the cap), 22,067, 0.002 |
+| 995, 231 (73,592) | 0.42 MB, 23.7 | +0.41 MB, 0, 0 |
+| 995, shared words only (303) | 0.13 MB, 5.8 | +7 KB, 0, 0 |
+| 45, 463 (12,423) | 36 KB, 1.1 | +81 KB, 0, 0 |
+
+Against the eight-probe sketches of section 2b: +0.72 MB in place of +1.19 MB at 460 terms a source, a ceiling of
++1 MB in place of +2.3 MB, and no false holder in 500 unseen words where they gave 0.01–0.04 a word. Its costs: a
+word is 3 µs to add to a full table (67 segments; 400,000 adds in 1.3 s in its unit test), on the sync's store
+path; nothing is ever removed, so a source that no longer lists a word still "holds" it, as in a sketch; it is
+saved in the snapshot only with the trial on (`SyncSnapshot.rare`), so promotion bumps `PERSIST_FORMAT`.
+
+$0, the three switches on this structure, `--noise-vocab 1000`:
+
+| Screen | Default | Eight-probe sketches (run 2's arm) | The table |
+| --- | --- | --- | --- |
+| Funnel, calls a task, seeds 41 / 42 / 43 / 44 | 30.5 / 29.7 / 33.2 / 34.4 | 5.3 / 4.9 / 6.8 / 6.8 | **4.8 / 4.3 / 6.2 / 5.3** |
+| hidden surfaced of 384 (task diff) | | +4 −1 | +4 −1 |
+| control decoys surfaced of 384 (task diff) | | +2 −2 | +2 −3 |
+| 8 days, seeds 41–42: request-time calls a request | 10.4 | 3.5 | **1.7** |
+| by day | 29.5 12.7 10.3 8.8 4.7 5.6 6.4 5.6 | 4.8 2.2 2.0 1.8 4.7 4.4 4.0 3.6 | 4.7 1.9 1.0 1.0 1.4 0.8 1.7 1.0 |
+| steady calls a request (request + background) | 11.2 | 3.8 | **2.1** |
+| surfaced over days: hidden / decoys of 23 | 18 / 17 | 18 / 17 | 18 / 17 |
+
+The same tasks differ from the default on seeds 41, 42 and 44; on seed 43 the one hidden task lost is another
+template than with the sketches. The calls fall because a false holder is a source read for nothing: polled,
+searched, probed, and sometimes "used" by a look-alike, after which it is read on weak evidence too.
+
+Also screened at $0 on the committed bundle and not taken (no trial opened): no word probe to a source the lookup
+already searches (5.3 → 5.0 calls a task on seed 41, 6.8 → 6.0 on seed 43: D508's idea, small now as then); polling
+only sources the request has evidence for (5.3 → 4.9: the polled sources nearly all have it). **Where the floor
+is:** what is left one request a session is the user's own five sources, 2.4 on-demand listings and about 2
+searches a task; with those five sending change notices (`--push payload` and no `--notify-share`) the same bundle
+makes 2.2 calls a task with the same facts surfaced (38 of 48 on train1–3, seed 41, eight-probe build).
+
+**Run 3 (pre-registered here).** Run 2 measures the bundle on the eight-probe sketches; what would ship is the
+bundle on the table, which reads fewer sources. Run 3 repeats run 2 exactly (arms, `--noise-vocab 1000`, shapes,
+seeds, caps, metrics, two shards at once; runs `o1-earn2t-*`, preset `bench-earn2`) on the commit that holds this
+section. **Rule:** the three switches, with `RareTerms`, are promoted if **run 3** passes section 0's four
+clauses; run 2 is reported beside it and promotes nothing by itself (its structure is not in the tree). If run 2
+fails clause 1 with a point estimate at or below −2.0, run 3 is not paid for and the switches are deleted. Run 3's
+caps sum to $6.47 with its regrade; with runs 1 and 2 the session's Anthropic spend stays under $16 of $25.
 
 ## 3. Dormant sources: built, screened at $0, removed after review (D602; a proposal, not a trial)
 

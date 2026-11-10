@@ -377,10 +377,11 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   the probes' budget goes elsewhere).
 - **Trials on top of `sourceYield` (O1, D600, D601, all off; docs/research/o1-earn.md).** `sourceYieldEarn`: a warm
   copy with nothing used is read live only on strong evidence (`evidenceFor` 2: a name its items mentioned, or a
-  request word at most `sourceYieldRare` sources hold in their sketches, `Sync.sketchRare`); the pools are not
-  consulted, and `spentSources` acts from a user's first request. Under it the sync's sketches set eight bits a
-  term (`sketchProbes`, `TermSketch.probes`): with two, a thousand sketches give about 27 false holders a word and
-  the rare rule never fires; a saved sketch loads only with its own number of probes. `sourceYieldNames`: a name
+  request word at most `sourceYieldRare` sources hold, `Sync.rareHolders`); the pools are not consulted, and
+  `spentSources` acts from a user's first request. "Which few sources hold this word" is not read from the
+  sketches (a thousand two-probe sketches give about 27 false holders a word) but from `RareTerms`
+  (`rare-terms.ts`): one table a user, filled in `Sync.store` beside the sketch, four bytes a word, at most 1 MB,
+  saved in the snapshot only with the trial on (promotion bumps `PERSIST_FORMAT`). `sourceYieldNames`: a name
   more than that many sources mention is strong only for a source with an item used. `sourceYieldEngage`:
   `searchLive` does not `engage` a source it reads nothing live of (no deep copy, daily sweep or card call for it).
   A held item that is handed over makes its source "used" (`handOut`), so a unit test of weak evidence must keep the

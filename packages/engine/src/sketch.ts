@@ -21,26 +21,10 @@ const MIN_BITS = 1 << 10;
 const FOLD_FILL = 0.2;
 /** A fill past this restarts the sketch: a k = 2 filter half full matches a quarter of the terms it never saw. */
 const SATURATED = 0.5;
-/**
- * The same two bounds for a sketch of eight probes (`sourceYieldEarn`, D600: `Sync.sketchRare` asks which few of a
- * thousand sketches hold a word, so one false match in 25 would name forty sources). At a fill of 0.28 eight probes
- * match about one unseen term in 26,000; at 0.45, one in 600. Four probes at the same bytes (a fill of 0.15)
- * measured sixteen times the false matches (`o1-sketch-bytes.ts`).
- */
-const FOLD_FILL_8 = 0.28;
-const SATURATED_8 = 0.45;
 
 export class TermSketch {
   private bits = new Uint32Array(MAX_BITS / 32);
   private set = 0;
-
-  /** `probes`: bits a term sets, 2 (the default, D322) or 8 (`sourceYieldEarn`: about 2.6 times the bytes a term). */
-  constructor(readonly probes: 2 | 8 = 2) {}
-
-  /** Whether the next term added restarts the sketch (`add`). */
-  private get full(): boolean {
-    return this.set > (this.probes === 8 ? SATURATED_8 : SATURATED) * this.bits.length * 32;
-  }
 
   /** Bytes held. */
   get bytes(): number {
@@ -51,22 +35,19 @@ export class TermSketch {
   add(h1: number, h2: number): void {
     // Saturated (a folded sketch whose source grew, or a busy one): it would match every term, so it starts again,
     // full size, from what comes next (the daily sweep re-lists the source). The review measured 96% false matches.
-    if (this.full) {
+    if (this.set > SATURATED * this.bits.length * 32) {
       this.bits = new Uint32Array(MAX_BITS / 32);
       this.set = 0;
     }
     const mask = this.bits.length * 32 - 1;
     this.setBit(h1 & mask);
     this.setBit((h1 + h2) & mask);
-    for (let i = 2; i < this.probes; i++) this.setBit((h1 + i * h2) & mask);
   }
 
   /** Whether the term may be in the sketch (never false for one added). */
   has(h1: number, h2: number): boolean {
     const mask = this.bits.length * 32 - 1;
-    if (!this.bit(h1 & mask) || !this.bit((h1 + h2) & mask)) return false;
-    for (let i = 2; i < this.probes; i++) if (!this.bit((h1 + i * h2) & mask)) return false;
-    return true;
+    return this.bit(h1 & mask) && this.bit((h1 + h2) & mask);
   }
 
   /** Halves the sketch while the fill after halving stays under `FOLD_FILL`. Terms added keep matching. */
@@ -75,7 +56,7 @@ export class TermSketch {
       const n = this.bits.length;
       if (n * 32 <= MIN_BITS) return;
       const f = this.set / (n * 32);
-      if (1 - (1 - f) * (1 - f) > (this.probes === 8 ? FOLD_FILL_8 : FOLD_FILL)) return;
+      if (1 - (1 - f) * (1 - f) > FOLD_FILL) return;
       const half = new Uint32Array(n / 2);
       let set = 0;
       for (let i = 0; i < n / 2; i++) {
@@ -88,29 +69,23 @@ export class TermSketch {
   }
 
   /** The sketch as JSON can hold it (D425: saved, encrypted, with a persisted user's sync state). */
-  dump(): { bits: string; set: number; probes?: 8 } {
+  dump(): { bits: string; set: number } {
     return {
       bits: Buffer.from(this.bits.buffer, this.bits.byteOffset, this.bits.byteLength).toString("base64"),
       set: this.set,
-      // Only when not the default, so a default sketch is saved as it always was.
-      ...(this.probes === 8 ? { probes: 8 as const } : {}),
     };
   }
 
-  /**
-   * A sketch from `dump`'s output, or null when it is not one (a power-of-two size within the bounds) or was filled
-   * with another number of probes than `probes`: read with more, it would deny terms it holds, so it starts again.
-   */
-  static load(d: unknown, probes: 2 | 8 = 2): TermSketch | null {
-    const x = d as { bits?: unknown; set?: unknown; probes?: unknown } | null;
+  /** A sketch from `dump`'s output, or null when it is not one (a power-of-two size within the bounds). */
+  static load(d: unknown): TermSketch | null {
+    const x = d as { bits?: unknown; set?: unknown } | null;
     if (typeof x?.bits !== "string" || typeof x.set !== "number") return null;
-    if ((x.probes ?? 2) !== probes) return null;
     const bytes = Buffer.from(x.bits, "base64");
     const words = bytes.byteLength / 4;
     if (!Number.isInteger(words) || words * 32 < MIN_BITS || words * 32 > MAX_BITS || (words & (words - 1)) !== 0) {
       return null;
     }
-    const t = new TermSketch(probes);
+    const t = new TermSketch();
     t.bits = new Uint32Array(words);
     new Uint8Array(t.bits.buffer).set(bytes);
     let set = 0;

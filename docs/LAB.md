@@ -473,9 +473,9 @@ calls by day, so a rule that learns over days can be screened at $0 (about 15 s 
 
 **Give the noise connectors words of their own: `--noise-vocab 1000`** (O1, docs/research/o1-earn.md §2b; funnel,
 pi-ab, days-calls). Without it the 995 share 45 sketchable words, so their vocabulary sketches set the same bits and
-any rule that reads sketches across sources (`sketchRare`, `sourceYieldEarn`) looks better than it is: a review
-found about 27 false holders a word that the shared words hid. `packages/sim/src/lab/o1-sketch-bytes.ts` prints
-sketch bytes and false holders a word; live: `lab_fanout.py --preset bench-earn2` through
+any rule that reads sketches across sources looks better than it is: a review found about 27 false holders a
+word that the shared words hid (`sourceYieldEarn` now reads `RareTerms`). `packages/sim/src/lab/o1-rare-bytes.ts`
+prints the sketches' and the table's bytes and false holders a word; live: `lab_fanout.py --preset bench-earn2` through
 `EXTRA='--noise-vocab 1000' packages/sim/lab/o1/run.sh earn2 …` (two shards at once), reports by
 `packages/sim/lab/o1/report.sh`.
 

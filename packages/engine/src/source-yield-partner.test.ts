@@ -9,6 +9,7 @@ import { itemId, type AgentEvent, type ContextItem, type Scope } from "@eden/pro
 import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
+import { sketchTerms, termHashes } from "./sketch";
 import type { SourceYield } from "./source-yield";
 
 const HOUR = 3_600_000;
@@ -314,6 +315,25 @@ describe("sourceYieldEarn (D600, a trial)", () => {
     await p.request(u1, FACT);
     expect((await p.request(u1, BLIND)).searched[0]).toBeGreaterThan(0);
     expect(sum((await p.request(u2, BLIND)).searched)).toBe(0);
+  });
+
+  test("the table of rare words is per user, saved only with the trial on, and survives a restore", async () => {
+    const word = sketchTerms("globex").map(termHashes);
+    const p = await partnerOf(EARN, [u1, u2]);
+    const sync = p.partner.sync!;
+    expect([...sync.rareHolders(u1, word, 2)]).toEqual(["src0"]);
+    expect([...sync.rareHolders(u2, word, 2)]).toEqual(["src0"]);
+    const snap = JSON.parse(JSON.stringify(sync.snapshot(u1)));
+    expect(snap.rare).toBeDefined();
+    p.partner.forget(u1);
+    expect(sync.rareHolders(u1, word, 2).size).toBe(0);
+    expect([...sync.rareHolders(u2, word, 2)]).toEqual(["src0"]);
+    expect(sync.restore(u1, snap)).toBe(true);
+    expect([...sync.rareHolders(u1, word, 2)]).toEqual(["src0"]);
+    // The default keeps no table and saves none.
+    const off = await partnerOf({ sourceYield: true });
+    expect(off.partner.sync!.rareHolders(u1, word, 2).size).toBe(0);
+    expect("rare" in (off.partner.sync!.snapshot(u1) as object)).toBe(false);
   });
 
   test("off (the default): a new user's first request on no evidence is read live", async () => {
