@@ -511,6 +511,8 @@ type SourceStatus = NonNullable<AskResponse["sources"]>[number];
 
 /** The statuses of a source that answered (D127): the connector, the fan-out's held result, or the synced index. */
 const ANSWERED = new Set(["ok", "cached", "stale", "local"]);
+/** `askBehind` (D430): the reason prefix of an ask's follow-up packet, withdrawn untaken at the next request. */
+const ASK_BEHIND = "ask-behind:";
 /** `askBehind` (D430): a source whose poll or live search was still running when the ask answered. */
 const SEARCHING = "searching";
 
@@ -866,7 +868,11 @@ export class ContextPartner {
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
     this.sync?.track(s.scope, this.now());
     s.turn++;
-    if (event.kind === "user_message") s.requests++;
+    if (event.kind === "user_message") {
+      s.requests++;
+      // `askBehind` (D430): a follow-up packet still queued answered the last request's ask, not this request.
+      this.dropAskBehind(s);
+    }
     const prep = spans?.open("observe.prep", root!.id);
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
@@ -1182,6 +1188,19 @@ export class ContextPartner {
     const out = this.currentLast(s, this.withoutCoveredUpdates(s.pending.splice(0)));
     if (!options.shadow) for (const injection of out) this.handOut(s, injection);
     return out;
+  }
+
+  /**
+   * `askBehind` (D430): at the user's next request, an ask's follow-up packets the agent has not taken are withdrawn
+   * (what their delivery marked undone): they answer the last request's question, and their lead says so.
+   */
+  private dropAskBehind(s: Session): void {
+    for (let k = s.pending.length - 1; k >= 0; k--) {
+      const packet = s.pending[k]!;
+      if (!packet.reason.startsWith(ASK_BEHIND)) continue;
+      s.pending.splice(k, 1);
+      this.withdraw(s, packet);
+    }
   }
 
   /**
@@ -1962,9 +1981,13 @@ export class ContextPartner {
       };
       const injection =
         checked.length > 0 && current()
-          ? this.deliver(s, checked, "proactive", `ask-behind:${cue.id}`, cue, undefined, frame)
+          ? this.deliver(s, checked, "proactive", `${ASK_BEHIND}${cue.id}`, cue, undefined, frame)
           : null;
-      if (injection) s.pending.push(injection);
+      if (injection) {
+        // Undoable, so a packet the agent has not taken when the user's next request comes is withdrawn whole.
+        this.keepUndo(s, injection, checked, was);
+        s.pending.push(injection);
+      }
       const latencyMs = Math.round(performance.now() - t0);
       this.trace(s, {
         sessionId: s.id,

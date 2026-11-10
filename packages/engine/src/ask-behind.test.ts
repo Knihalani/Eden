@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
-import { itemId, type ContextItem, type Scope } from "@eden/protocol";
+import { itemId, type ContextItem, type Injection, type Scope } from "@eden/protocol";
 import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { DEFAULT_CONFIG } from "./config";
@@ -222,6 +222,26 @@ describe("askBehind (D430)", () => {
     expect(late.some((x) => x.reason.startsWith("ask-behind:") && x.citations.some((c) => c.itemId === fact.id))).toBe(
       false,
     );
+  });
+
+  test("a follow-up still queued at the user's next request is withdrawn, never handed with it (review of D430)", async () => {
+    const { partner, worlds } = await partnerFor({ askBehind: true, askBehindWaitMs: 20 }, ["u1"]);
+    const ref = { tenantId: "t1", userId: "u1", sessionId: "s1" };
+    await partner.ask({ ...ref, question: QUESTION });
+    // The work behind settles and queues the follow-up; the agent takes nothing before the user's next request.
+    const key = "t1/u1#s1";
+    const live = () =>
+      (partner as unknown as { sessions: Map<string, { inflight: unknown; behind: unknown }> }).sessions.get(key);
+    for (let n = 0; n < 2_000 && (live()?.inflight || live()?.behind); n++) await Bun.sleep(5);
+    const fact = worlds.get("u1")!.fact;
+    const queued = (live() as unknown as { pending: Injection[] }).pending;
+    expect(queued.some((x) => x.reason.startsWith("ask-behind:"))).toBe(true);
+    const r = await partner.observe({ ...ref, at: T0, kind: "user_message", text: "Book a dentist slot on Monday" });
+    const handed = [...(r.injection ? [r.injection] : []), ...(await drain(partner, ref))];
+    expect(handed.some((x) => x.reason.startsWith("ask-behind:"))).toBe(false);
+    // Withdrawn, not spent: the session's ledger holds the fact as fresh again (what the delivery marked is undone).
+    const s = live() as unknown as { ledger: { isFresh(id: string, turn: number): boolean }; turn: number };
+    expect(s.ledger.isFresh(fact.id, s.turn)).toBe(true);
   });
 
   test("the follow-up makes no model call: a wired reader is called by the answer only (review of D430)", async () => {
