@@ -55,6 +55,7 @@ export const PARTS = {
     syncIngestTurns: false,
     syncLocalComplete: false,
     pushCutBehind: false,
+    askBehind: false,
     syncKeepCut: false,
     syncEngagedDeep: false,
     syncUnusedSweepMs: 0,

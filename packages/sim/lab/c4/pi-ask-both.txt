@@ -1,0 +1,3 @@
+differs (42, 'w42:train4-control:deal-desk-discount-ceiling') base cited False ab cited True
+hidden: both arms asked, planted in no packet in either: n 17, ask cited planted base 17 ab 17
+control: both arms asked, planted in no packet in either: n 25, ask cited planted base 24 ab 25

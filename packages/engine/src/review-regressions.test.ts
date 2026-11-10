@@ -588,7 +588,8 @@ describe("deep audit 2026-11-05 ask-false-all-clear (D127): a failed sync poll i
       budget: new Budget(),
       model: null,
       now: () => clock,
-      config: { ...DEFAULT_CONFIG, sync: true, syncOnDemand: true, sourceTimeoutMs: 300 },
+      // The ask that waits for its poll (D127, D264); `askBehind` (D430) has its own cases below.
+      config: { ...DEFAULT_CONFIG, sync: true, syncOnDemand: true, sourceTimeoutMs: 300, askBehind: false },
     });
     // Track the user and warm the synced copy while the source is healthy.
     await p.observe({ ...who, at: clock, kind: "user_message", text: "hello" } as AgentEvent, { waitMs: 0 });
@@ -607,5 +608,47 @@ describe("deep audit 2026-11-05 ask-false-all-clear (D127): a failed sync poll i
     expect(status).not.toBe("local");
     expect(r.answer).not.toContain("Nothing in the connected sources.");
     expect(r.answer).toContain("Could not reach mail");
+  });
+
+  /** C4 (D430): the same outage with the ask's lookup behind, waiting `wait` ms for its poll (`slow`: 100 ms late). */
+  const behind = async (wait: number, slow = false) => {
+    let clock = T0;
+    const src = flaky();
+    const p = new ContextPartner({
+      sources: async () => [src],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { ...DEFAULT_CONFIG, sync: true, syncOnDemand: true, sourceTimeoutMs: 300, askBehindWaitMs: wait },
+    });
+    await p.observe({ ...who, at: clock, kind: "user_message", text: "hello" } as AgentEvent, { waitMs: 0 });
+    for (let i = 0; i < 10 && !p.sync!.warm(who); i++) await p.sync!.tick();
+    clock += DEFAULT_CONFIG.syncMaxStaleMs + HOUR;
+    src.down = true;
+    const list = src.list;
+    if (slow) src.list = async () => (await Bun.sleep(100), list.call(src));
+    return p.ask({ ...who, question: "When is lunch with Priya?" });
+  };
+
+  test("askBehind, the failed poll done within the wait: named as failed, never 'local' or 'stale'", async () => {
+    // At wait 0 too: a listing that fails at once has settled by then.
+    for (const r of [await behind(2_000), await behind(0)]) {
+      expect(r.sources?.find((x) => x.sourceId === "mail")?.status).toBe("error");
+      expect(r.answer).not.toContain("Nothing in the connected sources.");
+      expect(r.answer).toContain("Could not reach mail");
+    }
+    const r = await behind(2_000, true);
+    expect(r.sources?.find((x) => x.sourceId === "mail")?.status).toBe("error");
+    expect(r.answer).not.toContain("Nothing in the connected sources.");
+    expect(r.answer).toContain("Could not reach mail");
+  });
+
+  test("askBehind, the poll still running at the answer: 'searching', not an all-clear", async () => {
+    const r = await behind(0, true);
+    expect(r.sources?.find((x) => x.sourceId === "mail")?.status).toBe("searching");
+    expect(r.answer).not.toContain("Nothing in the connected sources.");
+    expect(r.answer).toContain("Still reading mail");
   });
 });

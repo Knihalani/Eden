@@ -1,0 +1,60 @@
+harness pi, model claude-haiku-5-5, grader claude-haiku-5-5, time scale 1, tools parallel
+spent $0.0444 (agent $0.0173, Eden $0.0239, grader $0.0031); 54 runs, errors 0, ungraded 0
+config {}
+cost columns, $ per 1k tasks: $/1k = agent + Eden's per-task calls; (Eden) = Eden's per-task calls (its reader and judge); bkfill = its background calls (cards, bridge), each seed's spread evenly over that seed's task runs with cards or bridge on (mostly a one-time backfill: an upper bound on the steady state); all-in = (Eden) + bkfill
+
+== hidden: hidden fact raised
+condition     n   rate   $/1k  (Eden) bkfill all-in  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+eden          18  0.778  0.318   0.000  0.443  0.443   1.56   0.67     3025      341    4.21    5.41    6.17          513
+
+== control: false concern
+condition     n   rate   $/1k  (Eden) bkfill all-in  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+eden          18  0.000  0.312   0.000  0.443  0.443   1.56   0.94     2917      337    3.28    6.17    6.36          491
+
+== neutral: any concern (nothing planted; counts as a false concern)
+condition     n   rate   $/1k  (Eden) bkfill all-in  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+eden          18  0.000  0.333   0.000  0.443  0.443   1.83   1.17     3323      365    4.10    5.32    5.73          468
+
+== traffic-weighted: w × hidden + (1 − w) × control; means weighted, p50/p90 from the pooled per-task samples
+w     condition          n hid  n ctl   $/1k  (Eden)  tools   p50 s   p90 s
+0.10  eden                18     18  0.313   0.000   0.92    4.21    6.17
+0.50  eden                18     18  0.315   0.000   0.81    4.21    5.47
+
+== traffic mix (assumed): 1 hidden, 1 control, 8 neutral in 10; means weighted, p50/p90 pooled; raised = share of all tasks raising the hidden fact, false = share raising a wrong concern (control + neutral)
+condition        n hid  n ctl  n neu   $/1k  (Eden)  tools   p50 s   p90 s  raised   false
+eden                18     18     18  0.330   0.000   1.09    4.11    5.32   0.078   0.000
+
+== critical path, mean ms per task (share of wall time); Eden beside the loop and grading after it
+condition     n             eden         model          tool         other    eden-bg  grading
+eden          54        891 (25%)    2623 (75%)        0 (0%)        2 (0%)       2537     1462
+
+== Eden on the critical path by task kind, mean ms per task: observe (the push) and ask_context, the reader's share of Eden's path, and the wall-time multiple if Eden took no time
+condition    kind       n  wall ms   eden (% wall)  observe      ask  reader (% eden)  if-zero
+eden         hidden    18    3298    812 (24.6%)       41      772        0 (0.0%)     1.33x
+eden         control   18    3448    793 (23.0%)       41      752        0 (0.0%)     1.30x
+eden         neutral   18    3802   1068 (28.1%)       42     1025        0 (0.0%)     1.39x
+
+== paired differences (a − b), bootstrap 95% interval over tasks
+
+== per-second profile: mean ms of each second of task time by phase, over tasks still running
+-- eden (54 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%     47   949     0     2      990
+   1     98%    365   486     0     0      786
+   2     67%    638   337     0     1      783
+   3     65%     94   837     0     0      287
+   4     54%      0   603     0     0       60
+   5     15%      0   626     0     0        0
+   6      6%      0   234     0     0        0
+
+== agent $/1k tasks: billed, and re-priced at fixed claude-haiku-5-5 prices (neutral: cached and cache-write tokens as plain input)
+condition       n   billed       list   neutral  mix
+eden           54     0.321     0.321     0.483
+
+== uptake (hidden): raised rate (n) when the planted item was in a packet, only in an ask answer, or neither
+eden         packet 0.917 (12)   ask 1.000 (3)   neither 0.000 (3)
+
+== Eden per task: source calls, probe queries (calls), cache hits, judge calls, slow path and ask ms
+eden         sources 35.69  probes 8.28 (21.65 calls)  cache hits 0.00  judge 0.00 (p50 0 ms)  injected 1.15  slow p50 24 p90 71  ask p50 54 ms
+
+== process: 155 s sampled, CPU p50 43.6% p90 63.6% max 311.0% of a core; CPU time user 83.5 s system 7.1 s (1677 ms per run); RSS max 7338.7 MB; tasks in flight max 9

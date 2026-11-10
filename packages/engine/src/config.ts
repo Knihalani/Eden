@@ -275,6 +275,21 @@ export interface EngineConfig {
    */
   pushCutBehind: boolean;
   /**
+   * On in the default (D430, D431, C4; docs/research/c4-ask-path.md). With `pushCutBehind`: an explicit ask's lookup
+   * runs as the push's does (a warm copy answers as it stands; the on-demand poll and the cut copies' live searches
+   * run behind, joining any read of the same source already in flight), and the ask waits at most `askBehindWaitMs`
+   * for that work. Done in time: the ask ranks on the refreshed index, as with D264. Not: it answers from what is
+   * held, names the sources still being read (status "searching", never an all-clear, D127), and what that work then
+   * stores which the ask would cite goes to the agent as a packet at its next take. Off: the ask waits for its poll
+   * and searches cut copies live (D127, D264), ~1.4 s an ask at 1,000 sources (~3 ms at five).
+   */
+  askBehind: boolean;
+  /**
+   * With `askBehind`: how long an ask waits for its poll and cut copies' searches before answering from what is held.
+   * 0 (C4's screens: at market latency the work never settled within 300 ms, and the wait was the ask's whole time).
+   */
+  askBehindWaitMs: number;
+  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -692,6 +707,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncIngestTurns: true,
   syncLocalComplete: true,
   pushCutBehind: true,
+  askBehind: true,
+  askBehindWaitMs: 0,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,

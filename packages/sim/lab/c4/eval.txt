@@ -1,0 +1,6 @@
+== bun run eval, final tree (askBehind on), wall clock 2026-11-10
+precision 0.6842105263157895 recall 0.52 falseFireRate 0
+== the same, clock pinned to 2026-11-07 12:00 UTC (clock.ts)
+precision 0.65 recall 0.52 falseFireRate 0
+== main 314e2445 (stashed tree), wall clock: precision 0.6842105263157895 recall 0.52 falseFireRate 0 (run in this session)
+== branch with askBehind off, pinned clock: precision 0.65 recall 0.52 falseFireRate 0 (run in this session)

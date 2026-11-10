@@ -1,0 +1,2 @@
+  base packet: raised 36/43  ask only: raised 8/21  neither: raised 0/8
+    ab packet: raised 40/43  ask only: raised 5/19  neither: raised 0/10

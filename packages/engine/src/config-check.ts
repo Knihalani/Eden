@@ -109,6 +109,8 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncBackfillLanes: SYNC,
   syncLocalComplete: SYNC,
   pushCutBehind: [...POLL_BEHIND, "syncLocalComplete"],
+  askBehind: [...POLL_BEHIND, "syncLocalComplete", "pushCutBehind"],
+  askBehindWaitMs: [...POLL_BEHIND, "syncLocalComplete", "pushCutBehind", "askBehind"],
   syncKeepCut: SYNC,
   routeSketch: SYNC,
   syncEngagedDeep: SYNC,

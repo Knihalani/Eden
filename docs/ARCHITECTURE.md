@@ -199,7 +199,10 @@ Such a copy (`Sync.complete` false: its backfill stopped at the user's cut befor
 some of its items) does not answer for its source (`syncLocalComplete`, D264): the source is searched live like an
 unsynced one, so what is older than the cut is still found. The push does not wait for that search
 (`pushCutBehind`, D405, D406): it answers a cut copy from what is held, the search runs behind, and what it stores
-reaches the agent through the poll's follow-ups; an explicit ask still waits for it. A lookup polls at most its `syncPollWidth` (8) best-routed
+reaches the agent through the poll's follow-ups. Nor does an explicit ask (`askBehind`, D430, D431): its lookup runs
+behind as the push's does, it waits `askBehindWaitMs` (0) for that work, answers from what is held and names the
+sources still being read (status "searching", never an all-clear), and what they then store that it would cite goes
+out as a packet at the next take. A lookup polls at most its `syncPollWidth` (8) best-routed
 stale sources (D263); a warm source past them answers from its copy as it stands, as under `syncPollBehind`. Routing
 (`SourceMap.route`) adds, per source, log2(1 + its items among the request's 40 best matches in the user's own index)
 (`routeLocalHits`, D265), so a request that names no one still reaches the sources whose items share its words. The
@@ -286,8 +289,9 @@ what it delivers is queued for the agent's next request: after a delivery, or wi
 grounded (so it makes no judge call); after silence with no model, as the lookup would have decided. The first answer
 can carry a copy the poll then finds edited; the ledger records each delivered item's words with the flag, and the
 follow-up delivers the corrected copy (the departure from D40 is that the old copy went out first).
-`ObserveResult.pending` stays true while a poll or follow-up is running. The agent's `ask_context` still waits for the
-poll; the reader's push does not (`readerPushBehind`, below). A lookup has one deadline, `sourceTimeoutMs` (1.5 s) from
+`ObserveResult.pending` stays true while a poll or follow-up is running. Since D431 the agent's `ask_context` does not
+wait for the poll either (`askBehind`, above); with the switch off it does. The reader's push does not
+(`readerPushBehind`, below). A lookup has one deadline, `sourceTimeoutMs` (1.5 s) from
 when its sources are resolved (D140): the on-demand poll, the live search, the planner's cascade and the probes share
 it, so a listing that hangs and the search after it hold an ask back about 1.5 s before the reader starts, not 3 s.
 With under 50 ms left, the live search is skipped and each chosen source reports "timeout" (no call). A source whose
@@ -396,8 +400,9 @@ cap; D114): otherwise "Nothing in the connected sources" would be a false all-cl
 guard). A source outage is the other false all-clear (D127, audit 2026-11-05 `ask-false-all-clear`): an ask says
 "Nothing in the connected sources." only when every source it chose answered (ok, cached, stale, or from the synced
 index); otherwise its answer names the sources that failed (error, timeout, circuit open, busy, limited, throttled:
-the connector's own 429, worded "rate-limited", D212) and says it
-is not an all-clear, and `AskResponse.sources` carries each chosen source's status. With `readerPush` (on in the default), a
+the connector's own 429, worded "rate-limited", D212), or, with `askBehind` (D430), the sources whose poll or live
+search was still running when it answered ("searching": "Still reading …: anything there that fits follows as a later
+packet"), and says it is not an all-clear, and `AskResponse.sources` carries each chosen source's status. With `readerPush` (on in the default), a
 user request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
 flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. **Since D237 the default does not call the reader there or on an ask (`pushCandidates` 5, CL6):** the push hands
 the agent the first five items of the pool the reader would have read (the ask's order, bulk mail out), each a focused
