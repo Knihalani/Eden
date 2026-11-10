@@ -130,3 +130,83 @@ def lines(summary, model):
                               f"emb-only {c['embeddingOnly']}" for k, c in s.items() if k.startswith("k"))
             out.append(f"  {variant:7s} {g:28s} n {s['tasks']:4d}  {cells}   ({what})")
     return out
+
+
+# The hybrid (M3, docs/research/m3-embed-screen.md): the lexical pool fused with the embedding's top k by reciprocal
+# rank fusion, its first FIRST against the lexical pool's first FIRST (the push hands at most 5).
+RRF_C = 60
+FIRST = 5
+HYBRID_GROUPS = ("all", "no shared word")
+
+
+def load_pools(path):
+    """The funnel's `--pool-dump`, ids only: (suite, seed, variant, template) -> the push's last pool in order."""
+    out = {}
+    with open(path) as f:
+        for line in f:
+            if line.strip():
+                r = json.loads(line)
+                out[(r["suite"], r["seed"], r["variant"], r["template"])] = [x["id"] for x in r["pool"]]
+    return out
+
+
+def rrf(lexical, embedded, n=FIRST, c=RRF_C):
+    """The first n of the two lists fused, score = sum of 1/(c + rank) (1-based) over the lists an item is in; ties go
+    to the lexical order first, then the embedding's."""
+    score = {}
+    for lst in (lexical, embedded):
+        for r, x in enumerate(lst):
+            score[x] = score.get(x, 0.0) + 1.0 / (c + r + 1)
+    big = len(lexical) + len(embedded)
+    order = {x: (lexical.index(x) if x in lexical else big + embedded.index(x)) for x in score}
+    return sorted(score, key=lambda x: (-score[x], order[x]))[:n]
+
+
+def extra_slot(lexical, embedded, n=FIRST):
+    """A15's shape: the lexical first n plus the embedding's best item not already in them (n + 1 candidates)."""
+    head = lexical[:n]
+    more = [x for x in embedded if x not in head][:1]
+    return head + more
+
+
+def hybrid(worlds, tops, pools, ks=(3, 5, 10)):
+    """Per variant and group (all; shares no word with the request): for each k, the planted item gained (in the
+    hybrid's first 5, not in the lexical first 5), lost (the reverse), net, and the extra slot's gains.
+    `tops`: key -> the embedding's ranked item ids (at least max(ks)); `pools`: key -> the lexical pool's ids."""
+    out = {}
+    for w in worlds:
+        items = {x["id"]: x for x in w["items"]}
+        for t in w["tasks"]:
+            key = (w["suite"], w["seed"], w["variant"], t["template"])
+            p = t["planted"]
+            if not p or p not in items or key not in tops:
+                continue
+            lex = pools.get(key, [])
+            groups = ["all"] if shares_word(t["request"], items[p]) else ["all", "no shared word"]
+            for g in groups:
+                s = out.setdefault(w["variant"], {}).setdefault(g, {"tasks": 0, "lexical": 0, **{
+                    f"k{k}": {"gained": 0, "lost": 0, "net": 0, "slotGained": 0} for k in ks}})
+                s["tasks"] += 1
+                before = p in lex[:FIRST]
+                s["lexical"] += before
+                for k in ks:
+                    emb = tops[key][:k]
+                    after = p in rrf(lex, emb)
+                    c = s[f"k{k}"]
+                    c["gained"] += after and not before
+                    c["lost"] += before and not after
+                    c["net"] = c["gained"] - c["lost"]
+                    c["slotGained"] += (p in extra_slot(lex, emb)) and not before
+    return out
+
+
+def hybrid_lines(summary, model):
+    out = [f"hybrid ({model}; lab, M3): lexical pool fused with the embedding's top k (RRF c {RRF_C}), planted item in "
+           f"the first {FIRST} against the lexical first {FIRST}; slot: lexical first {FIRST} + the best embedding item"]
+    for variant in ("hidden", "control"):
+        for g in [g for g in HYBRID_GROUPS if g in summary.get(variant, {})]:
+            s = summary[variant][g]
+            cells = "  ".join(f"k{k[1:]}: +{c['gained']} -{c['lost']} net {c['net']:+d} slot +{c['slotGained']}"
+                              for k, c in s.items() if k.startswith("k"))
+            out.append(f"  {variant:7s} {g:15s} n {s['tasks']:4d} lexical-first-{FIRST} {s['lexical']:4d}  {cells}")
+    return out

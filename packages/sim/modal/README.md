@@ -158,7 +158,13 @@ modal run packages/sim/modal/embed_screen.py --corpus .local/modal/embed/corpus.
   --funnel .local/modal/embed/funnel.json --model Qwen/Qwen3-Embedding-0.6B
 ```
 
-Models: `Qwen/Qwen3-Embedding-0.6B` (default, its query prompt), `BAAI/bge-large-en-v1.5` (query prefix),
+`--pools .local/modal/embed/pool.jsonl` (the same funnel run with `--pool-dump`; ids only are read) adds M3's hybrid
+(D453): the lexical pool fused with the embedding's top k (`--hybrid-ks 3,5,10`) by RRF, gained, lost and net in the
+first 5 per variant, and A15's extra-slot shape. **Run on 2026-11-10 (M3, docs/research/m3-embed-screen.md):** decoys
+rose as much as facts (0.6B k 3: +42 facts, +48 decoys), no trial (D450); billed $0.043 (0.6B) and $0.063 (4B).
+
+Models: `Qwen/Qwen3-Embedding-0.6B` (default, its query prompt), `Qwen/Qwen3-Embedding-4B` (half precision),
+`BAAI/bge-large-en-v1.5` (query prefix),
 `sentence-transformers/all-MiniLM-L6-v2` (D331 (4)'s CPU model, for a like-for-like line). Output in
 `.local/modal/embed/<run>/`: `report.txt`, `report.json`, `ranks.jsonl` (each task's planted rank and top 20 item
 indexes). Only ids and ranks come back. **Cost (estimate):** one L4 for a few minutes (model download and ~6,500
@@ -167,7 +173,7 @@ unique texts), well under $0.10 a model.
 ## Tests
 
 ```bash
-cd packages/sim/modal && python3 -I -m unittest     # 31 tests, no Modal, no token
+cd packages/sim/modal && python3 -I -m unittest     # 35 tests, no Modal, no token
 bun test ./packages/sim/src/lab/cards-distill.test.ts ./packages/sim/src/lab/cards-endpoint.test.ts \
   ./packages/sim/src/lab/modal-python.test.ts       # export, scorer, endpoint transport against a stub server
 ```
