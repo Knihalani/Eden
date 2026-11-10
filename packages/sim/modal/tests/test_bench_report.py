@@ -23,8 +23,13 @@ def shard(run, name, seed, outcomes, regrade=None, asks=None):
                             "costUsd": 0.001 if arm == "tools" else 0.002, "edenCostUsd": 0, "wallMs": 2000,
                             "modelCalls": 2})
     with open(os.path.join(d, "out.json"), "w") as f:
-        json.dump({"seeds": [seed], "tasks": tasks, "results": results,
-                   "background": [{"cardsUsd": 0.001 * sum(1 for r in results if r["condition"] != "tools")}]}, f)
+        arms = sorted({r["condition"] for r in results if r["condition"] != "tools"})
+        background = [{"condition": arm, "tasks": [r["task"] for r in results if r["condition"] == arm],
+                       # All of the shard's cards booked to its first Eden stream, as a shared cache does.
+                       "cardsUsd": 0.001 * sum(1 for r in results if r["condition"] != "tools") if i == 0 else 0,
+                       **({"noModels": True} if arm.endswith("+nokey") else {})}
+                      for i, arm in enumerate(arms)]
+        json.dump({"seeds": [seed], "tasks": tasks, "results": results, "background": background}, f)
     with open(os.path.join(d, "out.timeline", "tasks.jsonl"), "w") as f:
         for (task, arm), (calls, questions) in (asks or {}).items():
             events = [{"ev": "tool.ask_context", "data": {"tool": "ask_context"}}] * calls
@@ -55,6 +60,17 @@ class Load(unittest.TestCase):
             self.assertAlmostEqual(usd["train1:isa"][1], 1.0)
             row = rows[("g", os.path.join(run, "s000"), "w41:train1:isa")]
             self.assertEqual((row["arms"]["eden"]["askCalls"], row["arms"]["eden"]["questions"]), (2.0, 3.0))
+
+    def test_card_spend_is_shared_by_the_streams_with_a_card_model_only(self):
+        with tempfile.TemporaryDirectory() as run:
+            shard(run, "s000", 41, {("train1", "isa", "hidden"): {"eden": 1, "eden~x": 1, "zeden+nokey": 1, "tools": 0}})
+            rows, _ = bench.load([("g", [run])])
+            arms = rows[("g", os.path.join(run, "s000"), "w41:train1:isa")]["arms"]
+            # $0.003 of cards booked to one stream, shared by the two streams with a card model: $1.5 per 1,000 each.
+            self.assertAlmostEqual(arms["eden"]["usd"], 2.0 + 1.5)
+            self.assertAlmostEqual(arms["eden~x"]["usd"], 2.0 + 1.5)
+            self.assertAlmostEqual(arms["zeden+nokey"]["usd"], 2.0)
+            self.assertAlmostEqual(arms["tools"]["usd"], 1.0)
 
     def test_sonnet_replaces_the_runs_verdict_only_where_it_graded(self):
         with tempfile.TemporaryDirectory() as run:

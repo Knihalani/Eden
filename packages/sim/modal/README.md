@@ -97,7 +97,9 @@ or replace the preset's (`--variants hidden`, `--days 8`, `--conditions …`). `
 
 Anthropic shards run in **waves**: the planner counts a shard's agent streams (arms × worlds: six train suites ×
 variants, or one for a `--days` user) and starts only as many shards at once as keep the streams on the key at or
-under `--max-streams` (default 60, the level that ran with no retried 429 in M1's rerun, M4 and F3). After each wave
+under `--max-streams` (default 60, the level that ran with no retried 429 in M1's rerun, M4 and F3). A shard that
+alone would pass the limit is refused, and so are `all` and `heldout-all` (name the suites: the planner cannot count
+a group it does not know). `--flag=value` after a preset is read as `--flag value`. After each wave
 it reads the shards' request summaries and halves the width if more than 2% of requests were retried on a 429. One
 Anthropic fan-out runs at a time from a checkout (`.local/modal/anthropic.lock`): a second waits for the first.
 
@@ -220,7 +222,7 @@ unique texts), well under $0.10 a model.
 ## Tests
 
 ```bash
-cd packages/sim/modal && python3 -I -m unittest     # 51 tests, no Modal, no token
+cd packages/sim/modal && python3 -I -m unittest     # 53 tests, no Modal, no token
 bun test ./packages/sim/src/lab/cards-distill.test.ts ./packages/sim/src/lab/cards-endpoint.test.ts \
   ./packages/sim/src/lab/modal-python.test.ts       # export, scorer, endpoint transport against a stub server
 ```

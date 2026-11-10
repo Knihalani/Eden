@@ -19,12 +19,13 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { sanitizeForStore } from "@eden/redact";
 import { checkSpecs, UserSources } from "@eden/server";
-import type { RunResult } from "../lab/ab-common";
+import type { Background, RunResult } from "../lab/ab-common";
 import { importSources } from "./import";
 import { annotate } from "./annotate";
 import { buildReport, renderReport } from "./report";
-import { pilotDir, PilotDirError, PilotStore, type PilotTask } from "./store";
+import { pilotDir, PilotStore, type PilotTask } from "./store";
 
 const USAGE = `pilot <command>   (files in EDEN_PILOT_DIR, default ~/.eden/pilot; never inside a git repository)
   task add --id ID --text "the request" [--fact "what mattered" ...]   a real request, and what mattered for it
@@ -75,7 +76,30 @@ export function newTask(id: string, text: string, facts: readonly string[], now:
   if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(id))
     throw new Error("--id is a short name: lower-case letters, digits, dashes");
   if (!text.trim()) throw new Error("--text is the request, in the words you would give an assistant");
-  return { id, text: text.trim(), facts: facts.map((detail, i) => ({ id: `${id}-${i + 1}`, detail })), addedAt: now };
+  // The owner's own words are stored and sent to models too: they pass the gate like any stored text (D10).
+  const safe = (t: string) => sanitizeForStore(t.trim());
+  const kept = facts.map((detail, i) => ({ id: `${id}-${i + 1}`, detail: safe(detail) }));
+  return { id, text: safe(text), facts: kept, addedAt: now };
+}
+
+/** A run's own headroom under its cap (as the fan-out's shards: a tenth, at most $0.25), not the ledger's $0.50. */
+export const headroomFor = (cap: number) => Math.min(0.25, Math.round(cap * 1000) / 10_000);
+
+/** The specs of a sources file; a file that is not JSON is named, never quoted (it may hold a token). */
+export function readSpecs(file: string): ReturnType<typeof checkSpecs> {
+  let text: string;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {
+    throw new Error(`cannot read ${file}`);
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new Error(`${file} is not valid JSON`);
+  }
+  return checkSpecs(raw, file);
 }
 
 /** What a run sends, and where: printed before anything is sent, and the run starts only with `--send-to` naming it. */
@@ -91,6 +115,8 @@ export function sendNotice(model: string, arms: readonly string[], items: number
 }
 
 async function main(argv: string[]): Promise<number> {
+  // Everything this process and the harness it starts create is owner-only.
+  process.umask(0o077);
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === "--help" || cmd === "help") {
     console.log(USAGE);
@@ -124,7 +150,7 @@ async function main(argv: string[]): Promise<number> {
     case "import": {
       const f = parseFlags(rest, ["query"]);
       const file = need(f, "sources");
-      const specs = checkSpecs(JSON.parse(readFileSync(file, "utf8")), file);
+      const specs = readSpecs(file);
       const user = { name: need(f, "name"), email: need(f, "email") };
       const sources = new UserSources({ directory: () => specs });
       try {
@@ -133,7 +159,7 @@ async function main(argv: string[]): Promise<number> {
         // The owner's requests are searched for too: a source with no listing is read only this way.
         const queries = [...store.tasks().map((t) => t.text), ...(f.many.query ?? [])];
         const got = await importSources(await sources.sources(SCOPE), SCOPE, user, {
-          maxItems: Number(f.one["max-items"] ?? 2_000),
+          maxItems: f.one["max-items"] === undefined ? 2_000 : Number(f.one["max-items"]),
           queries,
           log: (l) => console.log(`  ${l}`),
         });
@@ -179,7 +205,11 @@ async function main(argv: string[]): Promise<number> {
       }
       const run = latestRun(f);
       const dir = store.runDir(run);
-      store.write(join("runs", run, "bundle.json"), JSON.stringify({ meta, items, tasks }));
+      // A run's answers are marked once: a second run under the same name would pair old marks with new answers.
+      if (store.exists(store.runFile(run, "out.json"))) {
+        throw new Error(`a run named ${run} exists: name another with --run NAME`);
+      }
+      store.write(store.runFile(run, "bundle.json"), JSON.stringify({ meta, items, tasks }));
       const out = join(dir, "out.json");
       const env = { ...process.env };
       delete env.OPENROUTER_API_KEY;
@@ -193,12 +223,15 @@ async function main(argv: string[]): Promise<number> {
           ...["--source-profile", join(LAB, "..", "..", "lab", "before-after", "market-profiles", "direct.json")],
           ...["--model", model, "--grader", model, "--card-model", model, "--reader-model", model],
           ...["--spend-ledger", join(dir, "ledger.jsonl"), "--spend-cap", String(cap), "--budget", String(cap)],
+          ...["--spend-headroom", String(headroomFor(cap))],
           ...["--out", out, "--timeline", join(dir, "timeline"), "--cards-out", join(dir, "cards.jsonl")],
           ...["--run-label", `pilot-${run}`],
           ...(f.one.limit ? ["--limit", f.one.limit] : []),
         ],
         { env, stdio: "inherit" },
       );
+      // The harness's own files (answers, timeline, ledger, cards) are narrowed to the owner as the store's are.
+      store.lockRun(run);
       if (piAb.status !== 0) return piAb.status ?? 1;
       console.log(`\nanswers in ${out}. Next: pilot annotate${run === "pilot" ? "" : ` --run ${run}`}`);
       return 0;
@@ -206,7 +239,7 @@ async function main(argv: string[]): Promise<number> {
     case "annotate": {
       const f = parseFlags(rest);
       const run = latestRun(f);
-      const results = JSON.parse(store.read(join("runs", run, "out.json"))) as { results: RunResult[] };
+      const results = JSON.parse(store.read(store.runFile(run, "out.json"))) as { results: RunResult[] };
       const rl = createInterface({ input: process.stdin, output: process.stdout });
       try {
         const marks = await annotate(store.tasks(), results.results, store.marks(run), {
@@ -223,10 +256,14 @@ async function main(argv: string[]): Promise<number> {
     case "report": {
       const f = parseFlags(rest);
       const run = latestRun(f);
-      const results = JSON.parse(store.read(join("runs", run, "out.json"))) as { results: RunResult[] };
+      const out = JSON.parse(store.read(store.runFile(run, "out.json"))) as {
+        results: RunResult[];
+        background?: Background[];
+      };
       const [alone, withEden] = (f.one.arms ?? "tools,eden").split(",");
-      const text = renderReport(buildReport(store.tasks(), results.results, store.marks(run), alone, withEden));
-      store.write(join("runs", run, "report.txt"), `${text}\n`);
+      const report = buildReport(store.tasks(), out.results, store.marks(run), alone, withEden, out.background);
+      const text = renderReport(report);
+      store.write(store.runFile(run, "report.txt"), `${text}\n`);
       console.log(text);
       return 0;
     }
@@ -243,8 +280,9 @@ if (import.meta.main) {
   main(process.argv.slice(2)).then(
     (code) => process.exit(code),
     (e) => {
-      // Config and usage errors are messages, not stack traces (and never a source's text).
-      console.error(`pilot: ${e instanceof PilotDirError || e instanceof Error ? e.message : String(e)}`);
+      // Config and usage errors are messages, not stack traces, and pass the gate: a message may quote a URL or a
+      // header from the owner's own files.
+      console.error(`pilot: ${sanitizeForStore(e instanceof Error ? e.message : String(e)).slice(0, 400)}`);
       process.exit(2);
     },
   );

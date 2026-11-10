@@ -4,7 +4,19 @@
  * writes source content to disk in the clear (D8; D425's opt-in is encrypted): the pilot does, for one consenting
  * account, on that person's own machine, and `forget` deletes all of it. Lab tooling, not product code.
  */
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { edenHome } from "@eden/protocol";
 
@@ -51,9 +63,28 @@ export type PilotMarks = Record<string, Record<string, PilotMark>>;
 
 export class PilotDirError extends Error {}
 
-/** Whether `dir` or a directory above it is a git work tree: real data must never sit where a commit could take it. */
+/** The file that marks a directory as the pilot's own: only a directory holding it is written to or deleted. */
+export const MARKER = ".eden-pilot";
+/** Everything the pilot writes at the top of its directory: what `forget` removes, and nothing else. */
+const OWNED = [MARKER, "items.jsonl", "meta.json", "tasks.json", "runs"] as const;
+
+/** `dir` with symbolic links followed, through its nearest existing ancestor (the directory may not exist yet). */
+function real(dir: string): string {
+  const rest: string[] = [];
+  let d = resolve(dir);
+  while (!existsSync(d) && dirname(d) !== d) {
+    rest.unshift(d.slice(dirname(d).length + 1));
+    d = dirname(d);
+  }
+  return join(realpathSync(d), ...rest);
+}
+
+/**
+ * Whether `dir` or a directory above it is a git work tree: real data must never sit where a commit could take it.
+ * Links are followed first, so a link from outside a repository into one is refused too.
+ */
 export function insideGit(dir: string): boolean {
-  for (let d = resolve(dir); ; d = dirname(d)) {
+  for (let d = real(dir); ; d = dirname(d)) {
     if (existsSync(join(d, ".git"))) return true;
     if (dirname(d) === d) return false;
   }
@@ -75,10 +106,23 @@ export class PilotStore {
     return join(this.dir, name);
   }
 
-  /** Creates the directory, owner-only; an existing one is narrowed to owner-only. */
+  /** Whether the directory is one the pilot made (it holds the marker). */
+  private owned(): boolean {
+    return existsSync(this.path(MARKER));
+  }
+
+  /**
+   * Creates the directory, owner-only, and marks it as the pilot's. An existing directory is taken only if it is
+   * empty or already marked: the pilot never narrows, writes into or later deletes a directory with someone else's
+   * files in it (`EDEN_PILOT_DIR` pointed at a home or a documents folder by mistake).
+   */
   init(): void {
+    if (existsSync(this.dir) && !this.owned() && readdirSync(this.dir).length > 0) {
+      throw new PilotDirError(`${this.dir} holds other files: point EDEN_PILOT_DIR at an empty or new directory`);
+    }
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
     chmodSync(this.dir, 0o700);
+    if (!this.owned()) writeFileSync(this.path(MARKER), "Eden pilot kit data (docs/PILOT.md).\n", { mode: 0o600 });
   }
 
   exists(name = "."): boolean {
@@ -87,6 +131,7 @@ export class PilotStore {
 
   /** A file written owner-only, through a temporary file so a crash leaves the old one. */
   write(name: string, text: string): string {
+    this.init();
     const p = this.path(name);
     mkdirSync(dirname(p), { recursive: true, mode: 0o700 });
     const tmp = `${p}.tmp`;
@@ -131,26 +176,52 @@ export class PilotStore {
   }
 
   runDir(run: string): string {
-    if (!/^[A-Za-z0-9._-]+$/.test(run) || run.startsWith(".")) throw new PilotDirError(`bad run name ${run}`);
+    if (!/^[A-Za-z0-9._-]+$/.test(run) || run.startsWith(".")) {
+      throw new PilotDirError("a run name is letters, digits, dots, dashes and underscores, not starting with a dot");
+    }
     return join(this.dir, "runs", run);
   }
 
+  /** A file of one run, by its name inside the pilot directory; the run's name is checked first. */
+  runFile(run: string, name: string): string {
+    this.runDir(run);
+    return join("runs", run, name);
+  }
+
   marks(run: string): PilotMarks {
-    return this.json<PilotMarks>(join("runs", run, "marks.json"), {});
+    return this.json<PilotMarks>(this.runFile(run, "marks.json"), {});
   }
 
   saveMarks(run: string, marks: PilotMarks): void {
-    this.runDir(run);
-    this.write(join("runs", run, "marks.json"), JSON.stringify(marks, null, 2));
+    this.write(this.runFile(run, "marks.json"), JSON.stringify(marks, null, 2));
   }
 
-  /** Every file the pilot wrote, gone. Returns whether there was anything. */
+  /**
+   * Everything under a run made owner-only (0700 directories, 0600 files): the harness writes its results, timeline,
+   * ledger and cards with the process's default mode.
+   */
+  lockRun(run: string): void {
+    const walk = (p: string) => {
+      const dir = statSync(p).isDirectory();
+      chmodSync(p, dir ? 0o700 : 0o600);
+      if (dir) for (const name of readdirSync(p)) walk(join(p, name));
+    };
+    const dir = this.runDir(run);
+    if (existsSync(dir)) walk(dir);
+  }
+
+  /**
+   * Every file the pilot wrote, gone; returns whether there was anything. Only a directory the pilot marked is
+   * touched, and only the pilot's own entries in it are removed: anything else found there stays, and so does the
+   * directory.
+   */
   forget(): boolean {
     if (!existsSync(this.dir)) return false;
-    // Only a directory the pilot made is removed whole: one holding anything else is refused.
-    const mode = statSync(this.dir).mode & 0o777;
-    if (mode !== 0o700) throw new PilotDirError(`${this.dir} is not an owner-only pilot directory: not removed`);
-    rmSync(this.dir, { recursive: true, force: true });
+    if (!this.owned())
+      throw new PilotDirError(`${this.dir} was not made by the pilot (no ${MARKER} in it): not removed`);
+    for (const name of [...OWNED].reverse()) rmSync(this.path(name), { recursive: true, force: true });
+    for (const name of readdirSync(this.dir)) if (name.endsWith(".tmp")) rmSync(this.path(name), { force: true });
+    if (readdirSync(this.dir).length === 0) rmdirSync(this.dir);
     return true;
   }
 }

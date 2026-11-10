@@ -285,11 +285,26 @@ def value_flags(args):
             if a.startswith("--") and i + 1 < len(args) and not args[i + 1].startswith("--")}
 
 
+def split_equals(args):
+    """`--flag=value` as two tokens: pi-ab reads only `--flag value`, so the joined form would not replace a preset's
+    flag and the preset's arms would run (and be paid for) under the caller's nose."""
+    out = []
+    for a in args:
+        if a.startswith("--") and "=" in a:
+            out += a.split("=", 1)
+        else:
+            out.append(a)
+    return out
+
+
 def with_preset(name, extra=()):
     """A preset's kind, suites and args, with `extra` after them; a valued flag in `extra` replaces the preset's."""
     if name not in PRESETS:
         raise PlanError(f"no preset {name!r} (presets: {', '.join(sorted(PRESETS))})")
-    preset, extra = PRESETS[name], list(extra)
+    preset, extra = PRESETS[name], split_equals(extra)
+    dangling = [a for i, a in enumerate(extra) if a in value_flags(preset["args"]) and a not in value_flags(extra)]
+    if dangling:
+        raise PlanError(f"{', '.join(dangling)} needs a value")
     base, replaced, skip = [], value_flags(extra), False
     if "--days" in replaced:
         # A `--days` user plans its own requests (hidden, control and neutral): pi-ab refuses --variants beside it.
@@ -317,6 +332,8 @@ SAFE_STREAMS = 60
 RETRY_SHARE = 0.02
 # Suite names that stand for several suites (suites.ts `parseSuites`).
 SUITE_GROUPS = {"train": 6}
+# Names whose size the planner does not know (suites.ts owns the lists): a stream count would be a guess.
+UNCOUNTED_GROUPS = ("all", "heldout-all")
 
 
 def flag_value(args, name, default=None):
@@ -337,6 +354,10 @@ def streams_per_shard(shard):
     if flag_value(shard.args, "--days") is not None:
         worlds = 1
     else:
+        unknown = [s for s in shard.suites if s in UNCOUNTED_GROUPS]
+        if unknown:
+            raise PlanError(f"name the suites of {', '.join(unknown)} one by one: the planner cannot count the agent "
+                            "streams of a group it does not know, so it could not keep them under --max-streams")
         suites = sum(SUITE_GROUPS.get(s, 1) for s in shard.suites)
         worlds = suites * len(split_list(flag_value(shard.args, "--variants", "hidden,control")))
     return arms * worlds * len(shard.seeds)
@@ -349,7 +370,11 @@ def wave_width(shards, max_streams=SAFE_STREAMS):
     per = max((streams_per_shard(s) for s in shards), default=0)
     if per == 0:
         return max(len(shards), 1)
-    return max(1, max_streams // per)
+    if per > max_streams:
+        # One shard alone would pass the limit: fewer arms or suites a shard (--suites-per-shard), or a higher limit.
+        raise PlanError(f"one shard runs {per} agent streams, over --max-streams {max_streams}: use fewer arms, "
+                        "--suites-per-shard, or raise --max-streams")
+    return max_streams // per
 
 
 def retry_share(results):
@@ -507,11 +532,11 @@ def main(argv):
             shards = plan_pi_ab(a.suites, a.seeds, a.cap, a.run, rest, a.suites_per_shard)
         else:
             shards = plan_funnel(a.suites, a.seeds, a.run, rest, a.shards)
+        width = wave_width(shards, a.max_streams)
     except PlanError as e:
         print(f"refused: {e}", file=sys.stderr)
         return 2
     res = resources(a.kind, rest)
-    width = wave_width(shards, a.max_streams)
     print(json.dumps({"shards": len(shards), "capEach": shards[0].cap_usd, "resources": res,
                       "streamsPerShard": streams_per_shard(shards[0]), "shardsAtOnce": min(width, len(shards))}))
     for s in shards:

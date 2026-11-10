@@ -170,6 +170,8 @@ def main(seeds: str, kind: str = "", suites: str = "", preset: str = "", cap: fl
             planned = plan.plan_funnel(suites, seeds, run, extra, shards)
         else:
             raise plan.PlanError("--kind is pi-ab or funnel")
+        # Refused before anything starts: a shard over the streams limit, a suite group that cannot be counted.
+        first_width = plan.wave_width(planned, max_streams)
     except plan.PlanError as e:
         sys.exit(f"refused: {e}")
     res = plan.resources(kind, extra)
@@ -177,7 +179,7 @@ def main(seeds: str, kind: str = "", suites: str = "", preset: str = "", cap: fl
     print(f"run {run} at {COMMIT[:12]}: {len(planned)} {kind} shards, {res['memory']} MiB and {res['cpu']} CPU each"
           + (f", cap ${planned[0].cap_usd:.3f} a shard (${total_cap} of --cap {cap})" if total_cap else ", $0"))
     if kind == "pi-ab":
-        at_once = min(plan.wave_width(planned, max_streams), len(planned))
+        at_once = min(first_width, len(planned))
         print(f"  {plan.streams_per_shard(planned[0])} agent streams a shard, {at_once} shards at once "
               f"(--max-streams {max_streams})")
     dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT, capture_output=True,
@@ -195,7 +197,7 @@ def main(seeds: str, kind: str = "", suites: str = "", preset: str = "", cap: fl
     results = []
     # Waves (D487): only as many shards at once as keep the agent streams on one key under --max-streams, and half
     # as many after a wave that met the rate limit.
-    width, left = plan.wave_width(planned, max_streams), list(planned)
+    width, left = first_width, list(planned)
     lock = _key_lock() if kind == "pi-ab" else None
     try:
         while left:

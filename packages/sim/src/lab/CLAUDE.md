@@ -58,7 +58,8 @@ inside `bun run check` through `modal-python.test.ts`. **The powered bench (F3, 
 bench-…` (named run shapes, seed ranges, Anthropic shards in waves under `--max-streams` 60, halved after a wave with
 429s) and `bench_report.py` (paired effects with a template-clustered bootstrap, McNemar, the run's minimum
 detectable effect). Read a part's effect from the clustered interval: on train the default against the agent alone
-has a design effect of about 2.5 (D488), so a task-level interval is too narrow by a factor of about 1.6.
+has a design effect of 15 over 28 seeds (D488; 2.5 on four seeds), so its task-level interval is 3.9 times too
+narrow and more seeds do not help; a part's effect (`fewer`: 1.3) is where seeds buy precision.
 
 ## Rules
 

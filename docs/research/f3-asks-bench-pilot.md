@@ -129,13 +129,13 @@ Modal spend is read from `modal billing report` and kept under $25.
 
 **Spent: $9.44 Anthropic** of the $12 cap (runs $7.59 from the shards' manifests, Sonnet regrades $1.84 from their
 ledgers), **Modal $0.52** for this session's five apps (`modal billing report --for today`, read at 11:10 UTC; the
-last hour may not be in it). Anthropic-direct lab figures (D97), Haiku 5.5 in every role. 33 containers, **59,108
-model requests, 0 retried on a 429**.
+last hour may not be in it). Anthropic-direct lab figures (D97), Haiku 5.5 in every role. 33 containers, **59,187
+model requests, 0 retried on a 429** (`packages/sim/lab/f3/totals.json`).
 
 - **A. Several questions in one ask: measured, not promoted, deleted (D485).** The agent did use it: `ask_context`
   calls fell from 0.48 to 0.29 a task and model turns by 0.07 a task (−0.09..−0.05), wall by 0.07 s (−0.11..−0.02).
   Hidden facts were level, Sonnet-graded: **−0.4 points (−2.8..+2.1, n 813)**; concerns 0 in both arms. But the agent
-  asked **more questions in all** (0.48 → 0.83 a task: it splits one compound question into three or four), each
+  asked **more questions in all** (0.48 → 0.83 a task: 2.9 questions a call where the default asks one compound question), each
   answer is more text for the agent to read, and the cost rose by **+$0.036 per 1,000 tasks (+0.028..+0.043)**, about
   14%. The rule needed no extra paid cost (D112); it failed that clause, so the switch, its code and its tests are
   gone. The saving it bought, 0.07 s a task, is small because Haiku already makes its asks in parallel in one turn.
@@ -146,9 +146,11 @@ model requests, 0 retried on a 429**.
     is ±5.5); ±1.5 would need about 2,600 templates (arithmetic from the measured variance, not run). Eden is also
     1.14 s faster a task (−1.29..−0.98), 0.38 model turns fewer, and **+$0.069 per 1,000 tasks** dearer
     first-party (+0.057..+0.082); Sonnet-regraded false concerns 0 of 1,536 in both arms.
-  - **Cards made in-run cost 11 points.** Seeds 41–44 (cards and requests replayed): 67.2% against 10.5%, +56.6
+  - **The seeds whose cards are made in-run read 11 points lower.** Seeds 41–44 (cards and requests replayed): 67.2% against 10.5%, +56.6
     (+50.8..+62.5). Seeds 45–68 (no cache; Haiku cards each item in-run, closer to a new user): 54.2% against 8.9%,
-    +45.3 (+39.4..+51.2), and +$0.081/1k against +$0.030. M1 saw the same gap on four seeds (D444); this is 24.
+    +45.3 (+39.4..+51.2), and +$0.081/1k against +$0.030. The two groups are different seeds, the gap has no interval
+    of its own and the groups' intervals overlap, so this is a reading, not a measured effect of the cards; M1 saw
+    the same gap on four seeds (D444), and this is 24.
   - **Default minus `fewer` (D404): kept, at the edge.** Removing it raises hidden facts by **+1.0 point
     (−0.2..+2.1, n 5,014)**: the ±1.5 target was reached here (half-width 1.2; the run's minimum detectable effect
     is 1.7 points). The interval touches zero, so by the rule `fewer` stays. It saves $0.010 per 1,000 tasks
@@ -249,8 +251,8 @@ resampled within seed); here +56.6 with the wider clustered interval. `fewer`'s 
 
 The planner counted 48 streams a shard on seeds 41–44 (4 arms × 12 worlds), 36 on 45–48 and 18 on 49–68, and ran
 1, 1 and 3 shards at once under the 60-stream limit; the long run's four shards (2 streams each) ran together. The
-second and third runs queued behind the first on the checkout's lock. No wave met the rate limit (0 of 59,108
-requests retried on a 429), so the halving rule never fired; it is unit-tested. From the first bench shard's start
+second and third runs queued behind the first on the checkout's lock. No wave met the rate limit (0 of 59,187
+requests retried on a 429, the smoke's 79 included), so the halving rule never fired; it is unit-tested. From the first bench shard's start
 to the last one's end was 44 minutes (the long run included), for 71 minutes of bench container time.
 
 ## 5. Recommendations (nothing in the default changed)
@@ -260,10 +262,27 @@ to the last one's end was 44 minutes (the long run included), for 71 minutes of 
 2. **To tighten the headline number, write templates, not seeds:** a suite of new templates run on a few seeds
    narrows it; 20 more seeds do not.
 3. **`fewer`:** leave it. A trial that settles 1 point needs about four times this run (about $16, estimate).
-4. **In-run cards (−11 points):** the largest measured lever left is card and request quality for a user with no
-   cache, which is every real user at first.
+4. **In-run cards (seeds reading 11 points lower):** worth its own paired test (the same seeds with cards made
+   in-run and replayed). If the gap is the cards, card and request quality for a user with no cache, which is
+   every real user at first, is the largest lever left.
 5. **Asks:** the agent's ask turn is not shortened by batching. The remaining idea is A16's answer-ahead (Eden
    pre-runs the likely ask), not the tool's shape.
+
+## 6. Review
+
+The reviewer subagent read the branch at 0690da9a and asked for changes; each finding is fixed with a test
+(`pilot-review.test.ts`, the planner's and the report's tests). In the pilot kit: `forget` could delete any owner-only
+directory and `init` could take over a directory with other files (now a marker file, and only the pilot's own
+entries are removed); the import cut text with a plain slice before the gate, so a private key straddling the cut
+was kept (now the engine's `sanitizeItem`); the owner's requests, a source's description and field names were stored
+unredacted; a malformed sources file's parse error could print a token; `--run` could write outside the directory;
+the harness's own files were not owner-only; the documented `--cap 0.50` refused every call (the ledger's default
+$0.50 headroom); a rerun under one name kept old marks; the report left Eden's background cards out of its cost.
+In the bench: `--flag=value` after a preset did not replace the preset's flag (the preset's arms would have run);
+`all` and `heldout-all` were counted as one suite, and a single shard over `--max-streams` ran anyway (both are now
+refused); the report's card share now follows `backfillShares` (F3's reports are byte-identical under it). In the
+docs: a design effect quoted for the wrong group, figures without a committed source (now `totals.json`), and the
+in-run-card gap stated as a cause.
 
 ## Reproduce
 

@@ -209,7 +209,7 @@ test("the report pairs the arms on the owner's marks and says how little a small
   expect(r.arms.eden!.turns).toBe(1);
   const text = renderReport(r);
   expect(text).toContain("with Eden 8 of 8 (100%)");
-  expect(text).toContain(`at least ${MIN_DISCORDANT} requests differ`);
+  expect(text).toContain(`${MIN_DISCORDANT} against 0 at the least`);
   // Unmarked answers are counted, never guessed from the grader.
   const partial = buildReport(TASKS, RESULTS, { "pilot:t0": marks["pilot:t0"]! });
   expect([partial.factTasks, partial.unmarked]).toEqual([1, 11]);

@@ -112,9 +112,13 @@ def load(groups, sonnet=False):
                 with open(path) as f:
                     doc = json.load(f)
                 tasks = {t["id"]: t for t in doc["tasks"]}
-                eden_runs = sum(1 for r in doc["results"] if not r["condition"].startswith(("tools", "none")))
-                background = sum(b.get("cardsUsd", 0) + b.get("bridgeUsd", 0) for b in doc.get("background", []))
-                share = background / max(eden_runs, 1)
+                # The shard's card spend, spread evenly over the task runs of its streams that had a model for cards
+                # (`backfillShares` in ab-common.ts: one cache a seed, whichever stream made the call; `+nokey`
+                # streams, `noModels`, neither pay nor share).
+                carded = [b for b in doc.get("background", []) if not b.get("noModels")]
+                runs = sum(len(b.get("tasks", [])) for b in carded)
+                share = sum(b.get("cardsUsd", 0) + b.get("bridgeUsd", 0) for b in carded) / max(runs, 1)
+                shared = {(t, b["condition"]) for b in carded for t in b.get("tasks", [])}
                 verdict, failed = read_sonnet(shard) if sonnet else ({}, set())
                 asks = read_asks(shard)
                 for r in doc["results"]:
@@ -134,10 +138,9 @@ def load(groups, sonnet=False):
                         stats["sonnetGraded"] += 1
                     elif key2 in failed:
                         stats["sonnetFailed"] += 1
-                    with_eden = not r["condition"].startswith(("tools", "none"))
                     m = {
                         "raised": raised,
-                        "usd": (r["costUsd"] + r.get("edenCostUsd", 0) + (share if with_eden else 0)) * 1000,
+                        "usd": (r["costUsd"] + r.get("edenCostUsd", 0) + (share if key2 in shared else 0)) * 1000,
                         "wall": r["wallMs"] / 1000,
                         "turns": float(r.get("modelCalls", 0)),
                     }

@@ -5,6 +5,7 @@
  * Calendar preset) is read by searching for the owner's queries (their tasks' own words by default), as a lookup
  * would. Nothing is sent anywhere: the only network calls are the connectors' reads.
  */
+import { sanitizeItem } from "@eden/engine";
 import type { ContextItem, Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { Source } from "@eden/sources";
@@ -13,6 +14,8 @@ import type { PilotItem, PilotMeta } from "./store";
 /** As the engine's cache caps an item's text. */
 export const MAX_TEXT_CHARS = 8_000;
 const PAGE = 100;
+/** Listing pages read from one source at most: a server that keeps handing out a cursor does not hold the import. */
+const MAX_PAGES = 1_000;
 const SEARCH_LIMIT = 20;
 const CALL_TIMEOUT_MS = 30_000;
 
@@ -41,11 +44,31 @@ export function labSourceOf(source: Pick<Source, "id" | "description">): string 
   return "drive";
 }
 
-/** One text through the secret gate, and whether it changed. */
-function redact(text: string, count: { redacted: boolean }): string {
-  const out = sanitizeForStore(text);
-  if (out !== text) count.redacted = true;
-  return out;
+/**
+ * An item as the pilot keeps it: made safe by the engine's own `sanitizeItem` (every field through the gate, the text
+ * clipped so that a secret straddling the cut is still caught), its field names through the gate too.
+ */
+function safeItem(
+  raw: ContextItem,
+  sourceId: string,
+  ref: string,
+  now: number,
+): { item: PilotItem; redacted: boolean } {
+  const safe = sanitizeItem({ ...raw, ref }, MAX_TEXT_CHARS);
+  const meta = safe.meta && Object.fromEntries(Object.entries(safe.meta).map(([k, v]) => [sanitizeForStore(k), v]));
+  const updatedAt = Number(raw.updatedAt ?? now);
+  const item: PilotItem = {
+    sourceId,
+    ref: safe.ref,
+    title: safe.title,
+    text: safe.text,
+    ...(safe.url === undefined ? {} : { url: safe.url }),
+    updatedAt: Number.isFinite(updatedAt) ? updatedAt : now,
+    ...(meta ? { meta } : {}),
+  };
+  // Redacted: the kept item carries more of the gate's marks than the source's own text did.
+  const marks = (v: unknown) => JSON.stringify(v).split("[REDACTED]").length;
+  return { item, redacted: marks(item) > marks([ref, raw.title, raw.text, raw.url, raw.meta]) };
 }
 
 export async function importSources(
@@ -55,6 +78,8 @@ export async function importSources(
   options: ImportOptions = {},
 ): Promise<{ meta: PilotMeta; items: PilotItem[] }> {
   const maxItems = options.maxItems ?? 2_000;
+  if (!Number.isInteger(maxItems) || maxItems < 1)
+    throw new Error("the most items a source is a whole number, 1 or more");
   const now = options.now ?? Date.now;
   const log = options.log ?? (() => {});
   const serveAs = options.serveAs ?? labSourceOf;
@@ -64,38 +89,30 @@ export async function importSources(
     const sourceId = serveAs(source);
     const seen = new Set<string>();
     const count = (meta.counts[sourceId] ??= { items: 0, redacted: 0 });
-    meta.sources[sourceId] ??= source.description;
-    const keep = (found: readonly ContextItem[]) => {
+    meta.sources[sourceId] ??= sanitizeForStore(source.description);
+    /** Keeps the items not seen yet, up to the cap; returns how many were new. */
+    const keep = (found: readonly ContextItem[]): number => {
+      let added = 0;
       for (const it of found) {
         // Two sources served as one connector keep their refs apart.
         const ref = sourceId === source.id ? it.ref : `${source.id}:${it.ref}`;
         if (seen.size >= maxItems || seen.has(ref)) continue;
         seen.add(ref);
-        const flag = { redacted: false };
-        const meta0 = it.meta;
-        const updatedAt = Number(it.updatedAt ?? now());
-        items.push({
-          sourceId,
-          ref: redact(ref, flag),
-          title: redact(String(it.title ?? ""), flag),
-          text: redact(String(it.text ?? "").slice(0, MAX_TEXT_CHARS), flag),
-          ...(typeof it.url === "string" ? { url: redact(it.url, flag) } : {}),
-          updatedAt: Number.isFinite(updatedAt) ? updatedAt : now(),
-          ...(meta0
-            ? { meta: Object.fromEntries(Object.entries(meta0).map(([k, v]) => [k, redact(String(v), flag)])) }
-            : {}),
-        });
+        const { item, redacted } = safeItem(it, sourceId, ref, now());
+        items.push(item);
+        added++;
         count.items++;
-        if (flag.redacted) count.redacted++;
+        if (redacted) count.redacted++;
       }
+      return added;
     };
     try {
       if (source.list) {
         let cursor: string | undefined;
-        while (seen.size < maxItems) {
+        for (let pages = 0; pages < MAX_PAGES && seen.size < maxItems; pages++) {
           const page = await source.list(scope, cursor, PAGE, AbortSignal.timeout(CALL_TIMEOUT_MS));
-          keep(page.items);
-          if (!page.next || page.items.length === 0) break;
+          // A page that adds nothing new ends the listing: a cursor that loops would otherwise never stop.
+          if (keep(page.items) === 0 || !page.next) break;
           cursor = page.next;
         }
       }

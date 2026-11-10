@@ -4,13 +4,16 @@
  * and never replace them). Honest about size: a handful of tasks shows only large differences, and the report says
  * how large.
  */
-import type { RunResult } from "../lab/ab-common";
+import { backfillShares, type Background, type RunResult } from "../lab/ab-common";
 import type { PilotMarks, PilotTask } from "./store";
 import { taskId } from "./world";
 
 export interface ArmSummary {
   tasks: number;
+  /** The agent's bill, Eden's per-request calls, and the arm's share of Eden's background cards (`backgroundUsd`). */
   usdPerTask: number;
+  /** Of `usdPerTask`: Eden's background cards, mostly a one-time read of the import, spread over the arm's requests. */
+  backgroundUsd: number;
   wallMeanS: number;
   turns: number;
   toolCalls: number;
@@ -50,7 +53,7 @@ export function signTest(b: number, c: number): number {
   return Math.min(1, 2 * tail);
 }
 
-/** The fewest discordant tasks, all one way, that reach p < 0.05: 6. */
+/** The fewest requests that must differ between the arms for p < 0.05, when all of them go one way: 6. */
 export const MIN_DISCORDANT = 6;
 
 export function buildReport(
@@ -59,7 +62,11 @@ export function buildReport(
   marks: PilotMarks,
   alone = "tools",
   withEden = "eden",
+  /** The run's background spend (`out.json`): Eden's cards are charged to no request, so they are added here. */
+  background: readonly Background[] = [],
 ): PilotReport {
+  const shares = backfillShares([...background]);
+  const share = (r: RunResult) => shares.get(`${r.task}\u0000${r.condition}`) ?? 0;
   const by = new Map(results.map((r) => [`${r.task}|${r.condition}`, r]));
   const any = (m: Record<string, boolean> | undefined) => !!m && Object.values(m).some(Boolean);
   const out: PilotReport = {
@@ -116,7 +123,8 @@ export function buildReport(
     const mean = (f: (r: RunResult) => number) => (rs.length ? rs.reduce((s, r) => s + f(r), 0) / rs.length : 0);
     out.arms[arm] = {
       tasks: rs.length,
-      usdPerTask: mean((r) => r.costUsd + r.edenCostUsd),
+      usdPerTask: mean((r) => r.costUsd + r.edenCostUsd + share(r)),
+      backgroundUsd: mean(share),
       wallMeanS: mean((r) => r.wallMs / 1000),
       turns: mean((r) => r.modelCalls),
       toolCalls: mean((r) => r.toolCalls),
@@ -147,17 +155,19 @@ export function renderReport(r: PilotReport): string {
         `${r.grader.alone}, with Eden ${r.grader.withEden}`,
     );
   }
-  lines.push("", "Per request (model calls billed to your key; Eden's own model calls included in its arm):");
+  lines.push("", "Per request (model calls billed to your key; Eden's reader and background cards are in its arm):");
   for (const [arm, a] of Object.entries(r.arms)) {
+    const cards = a.backgroundUsd > 0 ? ` ($${a.backgroundUsd.toFixed(5)} of it cards, mostly a one-time read)` : "";
     lines.push(
-      `  ${arm}: ${a.tasks} answered, $${a.usdPerTask.toFixed(5)} a request, ${a.wallMeanS.toFixed(2)} s, ` +
+      `  ${arm}: ${a.tasks} answered, $${a.usdPerTask.toFixed(5)} a request${cards}, ${a.wallMeanS.toFixed(2)} s, ` +
         `${a.turns.toFixed(2)} model turns, ${a.toolCalls.toFixed(2)} tool calls`,
     );
   }
   lines.push(
     "",
     `How much this can show: with ${r.factTasks} requests, a difference is distinguishable from chance (p < 0.05) ` +
-      `only if at least ${MIN_DISCORDANT} requests differ between the arms and all of them go one way. ` +
+      `only if several requests differ between the arms and nearly all go one way: ${MIN_DISCORDANT} against 0 at ` +
+      "the least (8 against 1 also passes; 5 against 0 does not). " +
       "Treat a smaller pilot as a look at real answers, not a measurement.",
   );
   if (r.unmarked) lines.push(`${r.unmarked} answered requests have no marks in both arms yet: run \`pilot annotate\`.`);

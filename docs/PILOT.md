@@ -28,11 +28,11 @@ Use it only on an account whose owner has agreed, and run it as that owner. One 
 | Step | What happens to your data |
 | --- | --- |
 | import | Eden calls only each connector's read tools, and only if the server marks them read-only or you have listed them by hand (D7). Your mail and calendar provider sees ordinary read calls from your own token. Nothing is sent to anyone else: no model is called. |
-| what is kept | Each item's title, text, link and fields, **after `sanitizeForStore`** (D10): API keys, tokens and passwords the gate recognises become `[REDACTED]`. Text is cut at 8,000 characters an item, 2,000 items a source by default. The redaction removes secrets, **not personal content**: the files hold your mail. |
-| where | `EDEN_PILOT_DIR` (default `~/.eden/pilot`): a directory only your user can read (0700, files 0600). The kit **refuses a directory inside a git repository**, so the data cannot be committed. It is plain text, not encrypted: it sits beside your mail client's own cache, under your disk's protection. |
+| what is kept | Each item's title, text, link and fields, **after the engine's own `sanitizeItem`** (D10): API keys, tokens and passwords the gate recognises become `[REDACTED]`, including one that the 8,000-character cut would split. Your own requests and facts pass the same gate. 2,000 items a source by default. The redaction removes secrets, **not personal content**: the files hold your mail. |
+| where | `EDEN_PILOT_DIR` (default `~/.eden/pilot`): a directory only your user can read (0700, files 0600, the harness's result files included: they are narrowed when a run ends). The kit marks the directory as its own (`.eden-pilot`) and **refuses a non-empty directory it did not mark**, so it cannot take over or later delete a folder with your other files. The kit **refuses a directory inside a git repository**, so the data cannot be committed. It is plain text, not encrypted: it sits beside your mail client's own cache, under your disk's protection. |
 | run | The agent, Eden's cards, Eden's reader and the grader are model calls. They go to **Anthropic's API with your own key** (`HAIKU_API_KEY` or `ANTHROPIC_API_KEY`), and they carry your requests, the items the tools and Eden return, and the answers. `pilot run` prints this list and **does nothing until you add `--send-to anthropic`**. Only `claude-*` models are accepted: the lab's OpenRouter route does not pin the no-retention endpoints the servers use (D12), so real data does not go that way. No connector is called during a run: the agent and Eden read the import. |
 | nothing else | No telemetry, no benchmark ledger, no upload. Results stay in the pilot directory. |
-| forget | `pilot forget` deletes the directory. Your tasks and marks go with it. |
+| forget | `pilot forget` deletes what the pilot wrote (the import, your tasks, every run and its marks) and the directory if nothing else is in it. A file you put there yourself is left. |
 
 **How this differs from the server (D8, D425).** A running Eden server keeps item content in memory only (D8), or
 encrypted on disk when the operator opts in (D425). The pilot keeps one person's redacted items in plain files so
@@ -74,6 +74,9 @@ bun run pilot report
 bun run pilot forget
 ```
 
+A run's name (`--run NAME`, default `pilot`) is used once: a second run needs another name, so marks made on one
+run's answers are never paired with another's.
+
 Notes on the import:
 
 - **Gmail** is read through its listing (newest threads first, up to `--max-items`, default 2,000) and by searching
@@ -88,11 +91,13 @@ Notes on the import:
 
 The report counts, on requests where something mattered, how many answers raised at least one such fact in each arm,
 how many only one arm raised, and an exact sign test on those. It lists the answers you marked wrong or misleading in
-each arm, and each arm's cost, time and model turns a request. The model grader's verdicts are shown beside your
+each arm, and each arm's cost (Eden's background cards included in its arm and shown apart: mostly a one-time read
+of the import), time and model turns a request. The model grader's verdicts are shown beside your
 marks for comparison and never replace them.
 
-**A pilot is small.** With fewer than about 20 requests only a large difference is distinguishable from chance: at
-least six requests must differ between the arms, all in one direction. Treat a smaller pilot as a look at real
+**A pilot is small.** With fewer than about 20 requests only a large difference is distinguishable from chance:
+several requests must differ between the arms and nearly all go one way (six against none at the least; eight
+against one also passes, five against none does not). Treat a smaller pilot as a look at real
 answers. The lab's simulated benchmarks (LAB.md) are where effects are measured; the pilot says whether they look
 true on one real account.
 

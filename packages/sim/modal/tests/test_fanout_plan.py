@@ -216,6 +216,15 @@ class Presets(unittest.TestCase):
         with self.assertRaises(plan.PlanError):
             plan.plan_pi_ab(suites, "41", 1.0, "r", args)
 
+    def test_an_equals_flag_replaces_the_presets_and_a_valueless_one_is_refused(self):
+        _, _, args = plan.with_preset("bench-fewer", ["--conditions=tools,eden"])
+        self.assertEqual(args.count("--conditions"), 1)
+        self.assertEqual(plan.flag_value(args, "--conditions"), "tools,eden")
+        self.assertFalse(any(a.startswith("--conditions=") for a in args))
+        for extra in (["--cards"], ["--conditions", "--tenant-prompt"]):
+            with self.assertRaises(plan.PlanError):
+                plan.with_preset("bench-fewer", extra)
+
     def test_seed_ranges(self):
         self.assertEqual(plan.expand_seeds("41-44,48,43"), ["41", "42", "43", "44", "48"])
         with self.assertRaises(plan.PlanError):
@@ -239,7 +248,13 @@ class Concurrency(unittest.TestCase):
         self.assertEqual(plan.wave_width(self.shards()), 1)                       # 36 a shard under 60
         self.assertEqual(plan.wave_width(self.shards(["--variants", "hidden"])), 3)  # 18 a shard
         self.assertEqual(plan.wave_width(self.shards(["--days", "8"])), 20)
-        self.assertEqual(plan.wave_width(self.shards(), max_streams=10), 1)       # never under one shard
+        # One shard over the limit is refused, never run above it; so is a suite group the planner cannot count.
+        with self.assertRaises(plan.PlanError):
+            plan.wave_width(self.shards(), max_streams=10)
+        self.assertEqual(plan.wave_width(self.shards(), max_streams=36), 1)
+        for group in plan.UNCOUNTED_GROUPS:
+            with self.assertRaises(plan.PlanError):
+                plan.wave_width(plan.plan_pi_ab(group, "41", 1.0, "r", ["--conditions", "tools,eden"]))
         self.assertEqual(plan.wave_width(plan.plan_funnel("train1,train2", "41", "r")), 2)
         with self.assertRaises(plan.PlanError):
             plan.wave_width(self.shards(), max_streams=0)
