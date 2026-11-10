@@ -149,6 +149,8 @@ import {
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
 import { loadWidenTable, widenFor } from "./n2-widen";
+import { loadActs } from "./n5-label";
+import { actsFor, StoredRequestIndex, type ActRule } from "./n5-acts";
 import {
   coverageLines,
   intentPlace,
@@ -223,7 +225,14 @@ const cli = flags(
         "check",
         "check-model",
         "check-cache",
+        "check-thinking",
+        "check-log",
         "widen-table",
+        "acts",
+        "acts-rule",
+        "acts-dump",
+        "widen-q",
+        "widen-embed",
         "templates",
       ].map((k) => [k, V]),
     ),
@@ -492,6 +501,19 @@ if (TEMPLATES) {
  * request (`packages/sim/modal/n2_embed.py`), wired as the `widen` dependency the `pushWiden` trial reads.
  */
 const WIDEN_TABLE = opt("widen-table", "") ? loadWidenTable(opt("widen-table", "")) : null;
+/**
+ * `--acts FILE` (N5, D525): the stored answers (`n5-label.ts`) the `pushCheckStored` trial reads, by `--acts-rule`
+ * (JSON, `ActRule`; default R0); `--acts-dump FILE` writes each call's per-item features (sim data only).
+ * `--widen-q N`: the `widen` dependency also returns the stored requests' best N lexical hits (`StoredRequestIndex`),
+ * after the embedding table's first `--widen-embed` ids (default 0 with no table, else 5).
+ */
+const ACTS = opt("acts", "") ? loadActs(opt("acts", "")) : null;
+const ACTS_RULE = parseJson(opt("acts-rule", '{"mode":"act"}'), "--acts-rule") as ActRule;
+const ACTS_DUMP = opt("acts-dump", "");
+const WIDEN_Q = Number(opt("widen-q", "0"));
+const WIDEN_EMBED = Number(opt("widen-embed", WIDEN_TABLE ? "5" : "0"));
+if (WIDEN_Q > 0 && !ACTS) throw new Error("--widen-q needs --acts FILE");
+if (ACTS_DUMP) writeFileSync(ACTS_DUMP, "");
 /** `--reader-log out.jsonl`: each reader call's prompt (the items as the model read them) and reply, sim data only. */
 const READER_LOG = opt("reader-log", "");
 // An approximated verdict logged beside recorded ones would be read back later as a real reading (checked before the
@@ -526,6 +548,16 @@ const ACCESS = labAccess(args, [
   ...(READER === "live" ? [READER_MODEL] : []),
   ...(CHECK === "live" ? [CHECK_MODEL] : []),
 ]);
+/**
+ * `--check-thinking low` (N5, lab only; the shipped check sends no thinking): the check's model thinks at effort low,
+ * with room for it in the output cap. Its replies are cached apart (the replay's salt).
+ */
+const CHECK_THINKING = opt("check-thinking", "off");
+if (!["off", "low"].includes(CHECK_THINKING)) throw new Error("--check-thinking must be off or low");
+const thinkingLow = (inner: Model): Model => ({
+  id: inner.id,
+  chat: (request) => inner.chat({ ...request, reasoning: "low", maxTokens: Math.max(request.maxTokens ?? 0, 3_000) }),
+});
 /** One replaying check model for every lane; each lane's `PushChecker` keeps its own stats. */
 const checkModel =
   CHECK === "none"
@@ -533,10 +565,37 @@ const checkModel =
     : new ReplayModel(
         CHECK_CACHE,
         CHECK === "live"
-          ? labModel(ACCESS, { apiKey: keyFor(CHECK_MODEL)!, model: CHECK_MODEL, timeoutMs: 60_000 }, "eden.check")
+          ? CHECK_THINKING === "low"
+            ? thinkingLow(
+                labModel(
+                  ACCESS,
+                  { apiKey: keyFor(CHECK_MODEL)!, model: CHECK_MODEL, timeoutMs: 60_000 },
+                  "eden.check",
+                  {
+                    thinking: "adaptive",
+                  },
+                ),
+              )
+            : labModel(ACCESS, { apiKey: keyFor(CHECK_MODEL)!, model: CHECK_MODEL, timeoutMs: 60_000 }, "eden.check")
           : null,
         CHECK_MODEL,
+        CHECK_THINKING === "low" ? { salt: { thinking: "low" } } : {},
       );
+/** `--check-log FILE` (N5): each check call's prompt (request and items as read) and reply, sim data only. */
+const CHECK_LOG = opt("check-log", "");
+if (CHECK_LOG) writeFileSync(CHECK_LOG, "");
+const loggedCheck = (tag: Record<string, unknown>): Model | null =>
+  checkModel && CHECK_LOG
+    ? {
+        id: checkModel.id,
+        chat: async (request) => {
+          const res = await checkModel.chat(request);
+          const prompt = request.messages.find((m) => m.role === "user")?.content ?? "";
+          appendFileSync(CHECK_LOG, `${JSON.stringify({ ...tag, prompt, reply: res.text })}\n`);
+          return res;
+        },
+      }
+    : checkModel;
 const checkLanes: PushChecker[] = [];
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
 const readerModel =
@@ -915,9 +974,31 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   if (reader) readerLanes.push(reader);
   // Every report per session, in order: a request can be read twice (`readerPush`'s ask, then the funnel's own).
   const readerReports = new Map<string, ReaderReport[]>();
-  const checker = checkModel ? new PushChecker({ model: checkModel, budget: new Budget(UNCAPPED) }) : null;
+  const laneCheck = loggedCheck({ suite, seed, variant });
+  const checker = laneCheck ? new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) }) : null;
   if (checker) checkLanes.push(checker);
   const pushPools = new Map<string, PushPoolReport[]>();
+  // `--widen-table`, `--widen-q` (N2, N5): the embedding table's ids, then the stored requests' lexical hits.
+  const embedded = WIDEN_TABLE ? widenFor(WIDEN_TABLE, suite, seed, variant) : null;
+  let stored: StoredRequestIndex | null = null;
+  const storedIndex = () =>
+    (stored ??= new StoredRequestIndex(
+      simSources(world, REALISTIC, 0, seed)
+        .flatMap((src) => src.listAll())
+        .map((raw) => sanitizeItem(raw)),
+      ACTS!,
+    ));
+  const widen =
+    embedded || WIDEN_Q > 0
+      ? async (sc: unknown, request: string, k: number): Promise<readonly string[]> => {
+          const first = embedded ? (await embedded(sc, request, k)).slice(0, WIDEN_EMBED) : [];
+          if (WIDEN_Q <= 0 || !ACTS) return first;
+          const hits = storedIndex()
+            .search(request, WIDEN_Q)
+            .map((h) => h.id);
+          return [...first, ...hits.filter((id) => !first.includes(id))];
+        }
+      : null;
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
@@ -931,7 +1012,17 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
     ...(checker ? { checker } : {}),
-    ...(WIDEN_TABLE ? { widen: widenFor(WIDEN_TABLE, suite, seed, variant) } : {}),
+    ...(widen ? { widen } : {}),
+    ...(ACTS
+      ? {
+          acts: actsFor(ACTS, {
+            rule: ACTS_RULE,
+            now: () => clock,
+            idf: () => storedIndex().idf,
+            ...(ACTS_DUMP ? { dump: { file: ACTS_DUMP, tag: { suite, seed, variant } } } : {}),
+          }),
+        }
+      : {}),
     ...(reader
       ? {
           reader,

@@ -39,7 +39,7 @@ export const CHECK_STOP = '"act":false';
  * 512-token minimum). The question and its yes and no are I2's `CHANGES_SYSTEM` (D490), which separated planted facts
  * from their all-clear twins at AUC 0.917 (Opus) and 0.876 (Haiku); the format is one call's reply over a pool.
  */
-export const CHECK_SYSTEM = [
+const CHECK_PARTS = [
   "You check context for an AI assistant. A user asked their assistant to do something (the request). The " +
     "assistant's helper found items from the user's own mail, calendar, documents, CRM and chat that look related " +
     "to it. For each item, decide one question: does this item change what the assistant should do for this request?",
@@ -69,6 +69,34 @@ export const CHECK_SYSTEM = [
     "List only the items whose answer is yes, the most decisive first, at most 5. Write why before act. If you start " +
     'an entry and find the answer is no, write "act":false and end there. ' +
     'Reply {"items":[]} when no item changes what the assistant should do; that is the usual answer.',
+];
+export const CHECK_SYSTEM = CHECK_PARTS.join("\n\n");
+
+/**
+ * N5 (D527, `pushCheckForm` 2): the same question, answered by comparing first. Each listed item's entry says what
+ * the item's point applies to (`on`), then what of the request's own that point lands on, or none (`hits`),
+ * then the verdict (`act`). Written in that order the model compares before it decides, with no thinking: N2 found a
+ * check that does not think lets a constraint about another venue, invoice or day through (D510), and D96's reader
+ * cut look-alikes the same way (`why` before `binds`). The question, its yes and no and the data rule are I2's and
+ * I3's, word for word.
+ */
+export const CHECK_SYSTEM_COMPARE = [
+  ...CHECK_PARTS.slice(0, 5),
+  "Reply with one JSON object only, no prose and no code fence: " +
+    '{"items":[{"i":<item number>,"on":"<at most 8 words>","hits":"<at most 6 words, or none>","act":true}, ...]}. ' +
+    "List only the items that touch the request's own subject, the most decisive first, at most 6; leave every other " +
+    'item out. In each entry write "on" first: the specific person, organisation, place, account, thing and day ' +
+    "the item's point applies to, in the item's own names. Then \"hits\": what of the request's own that point " +
+    "lands on, in the request's words: its person, its venue, its account, its document, its thing, its day or " +
+    "evening, its money. A point can land without sharing a name: an event on the request's evening, a limit or " +
+    "allowance the request's amount counts against, a clause its offer falls under, the same job already booked, " +
+    "paid or arranged by someone else, a guest of its party, a helper it depends on. Write none when the point is " +
+    "about another one of the same kind and leaves the request's own alone: another venue, another route, another " +
+    "invoice or reference, another person off or covering, another document or template, another day. Then " +
+    '"act": true only if "hits" is not none and the item gives a reason to stop, to check first or to do it another ' +
+    "way; false for a go-ahead (approved, lifted, back to normal, no longer applies), for background and whenever " +
+    '"hits" is none. ' +
+    'Reply {"items":[]} when no item touches the request\'s subject; that is the usual answer.',
 ].join("\n\n");
 
 /** What one check is asked: the request's head, the pool's items as the reader renders them, and the user's day. */
@@ -78,6 +106,8 @@ export interface PushCheckInput {
   today: string;
   /** The user's opaque sticky-routing key (`userCacheKey`): routing only, never prompt text, not in `checkKey`. */
   cacheKey?: string;
+  /** `pushCheckForm`: 1 (absent) is I3's reply, 2 the compare-first reply (`CHECK_SYSTEM_COMPARE`, D527). */
+  form?: 1 | 2;
 }
 
 /** One check's outcome: the item ids it says change the action (null: no answer, fail open), and its accounting. */
@@ -99,7 +129,10 @@ const head = (text: string) =>
 
 /** The key a session's check is cached under: the request as read, the day and the pool's items in order. */
 export function checkKey(input: PushCheckInput): string {
-  const h = createHash("sha256").update(`v${CHECK_VERSION}\n${input.today}\n${head(input.request).toLowerCase()}\n`);
+  const form = input.form === 2 ? "c" : "";
+  const h = createHash("sha256").update(
+    `v${CHECK_VERSION}${form}\n${input.today}\n${head(input.request).toLowerCase()}\n`,
+  );
   for (const it of input.items.slice(0, CHECK_MAX_ITEMS)) h.update(`${itemMark(it)}\t${it.text}\n`);
   return h.digest("hex").slice(0, 32);
 }
@@ -119,7 +152,7 @@ export function checkMessages(input: PushCheckInput): ChatMessage[] {
     );
   });
   return [
-    { role: "system", content: CHECK_SYSTEM },
+    { role: "system", content: input.form === 2 ? CHECK_SYSTEM_COMPARE : CHECK_SYSTEM },
     {
       role: "user",
       content:
@@ -171,6 +204,40 @@ export function parseCheck(text: string, count: number, stopped: boolean | undef
     if (act !== true && act !== "true") continue;
     // An entry that says yes about an item it does not name readably fails the whole reply open (the default's
     // candidates), never closed: a yes read as nothing would silence the push.
+    const n = typeof i === "string" && /^\d+$/.test(i) ? Number(i) : i;
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > count) return null;
+    if (!out.includes(n - 1) && out.length < 5) out.push(n - 1);
+  }
+  return out;
+}
+
+/** A compare-first entry whose point lands on nothing of the request's own. */
+const NO_HIT = /^\s*(?:none|nothing|n\/a|no)?\s*\.?\s*$/i;
+/** The most entries a compare-first reply may hold, and its output cap (about 35 tokens an entry). */
+export const COMPARE_MAX_ENTRIES = 6;
+export const COMPARE_MAX_TOKENS = 500;
+
+/**
+ * `pushCheckForm` 2: the 0-based indexes a compare-first reply says change the action (`hits` not none and `act`
+ * true), at most 5; null when the reply is unreadable (the push keeps the default's candidates). An entry that says
+ * yes about an item it does not name readably fails the whole reply open, as `parseCheck` does.
+ */
+export function parseCompare(text: string, count: number): number[] | null {
+  if (!OPENING.test(text)) return null;
+  let entries: unknown;
+  try {
+    entries = (JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { items?: unknown }).items;
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(entries)) return null;
+  const out: number[] = [];
+  for (const e of entries.slice(0, COMPARE_MAX_ENTRIES * 2)) {
+    if (!e || typeof e !== "object") return null;
+    const { i, hits, act } = e as { i?: unknown; hits?: unknown; act?: unknown };
+    if (act !== true && act !== "true") continue;
+    // A verdict the entry's own comparison contradicts is a no: the point lands on nothing of the request's.
+    if (typeof hits !== "string" || NO_HIT.test(hits)) continue;
     const n = typeof i === "string" && /^\d+$/.test(i) ? Number(i) : i;
     if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > count) return null;
     if (!out.includes(n - 1) && out.length < 5) out.push(n - 1);
@@ -244,15 +311,20 @@ export class PushChecker {
     try {
       const res = await this.deps.model.chat({
         messages: checkMessages({ ...input, items }),
-        maxTokens: CHECK_MAX_TOKENS,
+        maxTokens: input.form === 2 ? COMPARE_MAX_TOKENS : CHECK_MAX_TOKENS,
         json: true,
-        stop: [CHECK_STOP],
+        // The compare-first reply lists its rejections on purpose (a "hits": "none" entry), so it has no stop.
+        ...(input.form === 2 ? {} : { stop: [CHECK_STOP] }),
         ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),
         signal,
       });
       this.deps.budget.settle(reservation, res.costUsd);
       this.count(res.costUsd, res.usage);
-      const at = res.truncated ? null : parseCheck(res.text, items.length, res.stopped);
+      const at = res.truncated
+        ? null
+        : input.form === 2
+          ? parseCompare(res.text, items.length)
+          : parseCheck(res.text, items.length, res.stopped);
       if (!at) {
         this.stats.failures++;
         this.failed(new Error("push check reply unreadable (cut off at the token cap, or not the expected JSON)"));
