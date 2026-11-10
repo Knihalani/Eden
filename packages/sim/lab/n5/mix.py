@@ -1,17 +1,16 @@
 """N5 (docs/research/n5-widen-check.md): an arm against `eden`, paired task by task, for cost and wall.
 
-    python3 -I mix.py [--days] [--cluster template|user|day] --base eden --arms 'eden~K,eden~G' OUT.json [OUT.json ...]
+    python3 -I mix.py [--days] [--cluster template|user] --base eden --arms 'eden~K,eden~G' OUT.json [OUT.json ...]
 
 Short runs (one request a session, hidden, control and neutral in equal numbers) are weighted to the 1:1:8 mix: each
 kind's mean difference, then 0.1 x hidden + 0.1 x control + 0.8 x neutral. `--days` runs are a 1:1:8 user already: the
 plain mean over tasks. Per arm: agent $ and Eden's per-task $ per 1,000 tasks, wall seconds a task, Eden's model calls
 a task, the agent's model calls and tool calls a task. Intervals: 95% bootstrap, 5,000 draws, whole clusters resampled
-(templates for short runs; users or user-days for `--days`, D519).
+(templates for short runs; users for `--days`, D519).
 """
 import argparse
 import json
 import random
-import re
 
 W = {"hidden": 0.1, "control": 0.1, "neutral": 0.8}
 METRICS = {
@@ -35,10 +34,8 @@ def load(files, days):
             t = kinds.get(r["task"])
             if not t or t["kind"] not in W or "wallMs" not in r:
                 continue
-            day = re.search(r":day(\d+)", r["task"])
             rows[(seed, r["task"], r["condition"])] = {
                 **r, "kind": t["kind"], "template": f"{t['suite']}/{t['type']}", "user": seed,
-                "day": f"{seed}:{day.group(1) if day else 0}",
             }
     return rows
 
@@ -87,7 +84,6 @@ def main():
                     draws.append(e)
             draws.sort()
             lo, hi = draws[int(0.025 * len(draws))], draws[int(0.975 * len(draws)) - 1]
-            level = effect([(b, b) for _, b in pairs], lambda r: 0, a.days)  # noqa: F841
             base = (sum(metric(b) for _, b in pairs) / len(pairs)) if a.days else sum(
                 W[k] * (sum(metric(b) for _, b in pairs if b["kind"] == k) / max(1, kinds[k])) for k in W)
             print(f"  {name:12s} {point:+.3f} ({lo:+.3f}..{hi:+.3f})   base {base:.3f}")

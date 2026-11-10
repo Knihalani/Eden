@@ -22,7 +22,7 @@ import { READER_KINDS } from "./reader";
 type Key = keyof EngineConfig;
 
 /** A partner dependency some settings act through (`PartnerDeps`). */
-export type ConfigDep = "cards" | "reader" | "checker" | "acts";
+export type ConfigDep = "cards" | "reader" | "checker";
 
 /**
  * Keys that act only when the partner has a dependency, with that dependency. Set to anything but their default
@@ -69,7 +69,6 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   pushCheckItems: "checker",
   pushWiden: "checker",
   pushCheckForm: "checker",
-  pushCheckGate: "acts",
   pushCheckSilent: "checker",
   pushCheckAnchored: "checker",
   pushWidenEmbed: "checker",
@@ -171,7 +170,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckItems: [...PUSH, "pushCheck"],
   pushWiden: [...PUSH, "pushCheck"],
   pushCheckForm: [...PUSH, "pushCheck"],
-  pushCheckGate: [...PUSH, "pushCheck"],
   pushCheckSilent: [...PUSH, "pushCheck"],
   pushCheckAnchored: [...PUSH, "pushCheck"],
   pushWidenEmbed: [...PUSH, "pushCheck", "pushWiden"],
@@ -242,7 +240,6 @@ const RANGES: Partial<Record<Key, Range>> = {
   pushCheckItemChars: { integer: true, min: 40, max: 400 },
   pushCheckItems: { integer: true, min: 1, max: 20 },
   pushCheckForm: { integer: true, min: 1, max: 2 },
-  pushCheckGate: { integer: true, max: 2 },
   pushWidenEmbed: { integer: true, max: 20 },
   pushWidenIntent: { integer: true, max: 20 },
   pushWidenDeep: { integer: true, max: 20 },

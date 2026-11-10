@@ -430,6 +430,12 @@ pool it names none of sends no packet. It runs on the reader's model through the
 Trial `pushWiden` (D511, off; with I3's `pushCheck` trial) adds items no lexical rank reached (a `widen` dependency's
 nearest items, raw intent hits) to what the push check reads, sharing its wait; only the check can hand them
 (docs/research/n2-recall.md: it pays only behind a check that thinks, which is too slow and dear as measured).
+Three more trials shape that call (N5, D527–D536, all off; docs/research/n5-widen-check.md): `pushCheckForm` 2 asks
+for a compare-first reply (per listed item, what its point applies to, what of the request's own it lands on or
+"none", then the verdict), which keeps look-alikes out with no thinking at the same price and wait a call;
+`pushCheckAnchored` makes the call only when a constraint-like pool item names one of the request's anchors (about
+three pushes in ten, else the default's candidates with no call); `pushCheckSilent` off leaves the default's
+candidates when the check names nothing.
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search

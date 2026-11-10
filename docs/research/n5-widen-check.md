@@ -1,10 +1,36 @@
 # N5: N2's "widen + check" at a cost and wait that can ship
 
 Status: 2026-11-10, branch `claude/n5-widen-check` (from `claude/lucid-hypatia-v9wqk5` at 97b216a6, N2 and I3
-merged), session N5. Decisions D525–D539. Train suites only (train1–6); heldout18 is not dumped, labelled or run.
+merged), session N5. Decisions D525–D536. Train suites only (train1–6); heldout18 is not dumped, labelled or run.
 Numbers marked **[EST]** are arithmetic or judgement; every other number comes from a command in this note. Every paid
 call goes to Anthropic directly with `HAIKU_API_KEY` through the lab (D97): **Anthropic-direct lab figures**. Caps:
-Anthropic $25 (ledger `.local/n5/ledger.jsonl` and the shards' ledgers), Modal $20.
+Anthropic $25 (spent $22.28), Modal $20 (spent $0.73). **Result: nothing is promoted. The targets (at most +$0.10
+per 1,000 tasks and +0.3 s a task, with N2's quality) are not met by any variant; the frontier moved a long way, and
+two off trials are left for the owner with their exact trade (§12).**
+
+## In plain words
+
+- **The careful check no longer needs thinking.** A reply that first writes what each item's point applies to, then
+  what of the request's own it lands on (or "none"), then the verdict, keeps look-alikes out as N2's thinking check
+  did, for **$0.00026 and about 1 s a call instead of $0.00115 and 5–7 s** (`pushCheckForm` 2). With the widened
+  pool it raised hidden facts **+7.9 points** live (+5.3..+10.7, Sonnet-graded, 1,536 pairs), no confirmed concern
+  more, for +$0.21 per 1,000 tasks and +1.06 s a task. N2's check cost +$0.98 and +5 s; I3's raised +4.0 for +$0.15.
+- **Asking the question when the item is stored does not work** (hypothesis 4). With no request in hand a model can
+  say "this is a constraint", but most look-alikes are a real constraint about another venue, invoice, person or
+  day. Read back with no model, the stored answers keep the facts or the silence, never both.
+- **Thinking on the short reply, fewer items, and a two-stage check are not worth building** (hypotheses 1, 2, 5):
+  thinking at effort low on I3's reply costs 2 s and hands fewer facts than the default; reading only the items a
+  stored answer marks saves 14% of the input and nothing else.
+- **Calling less often works, and the cheap way to choose when is the default's own test** (hypothesis 3): call only
+  when a constraint-like item in the pool names a person, thing or day the request names. That is about three
+  pushes in ten. A gate built from stored answers did no better at $0 and costs an ingest call.
+- **Where the gain comes from.** Part is the packet (the fact in, the look-alike out). Part is that a silent push
+  makes the agent ask (`ask_context` +0.30 a task), and the ask finds facts; that is also most of the extra wait.
+  The arm that never silences and never widens (N) gains +2.7 points for +$0.04 to +$0.08 and +0.3 to +0.4 s.
+- **The wait is the wall no variant gets under.** A Haiku call is 0.6 s when it answers "nothing" and 1 s when it
+  lists items, so +0.3 s a task allows about one call in three pushes with nothing else added; N comes in at +0.31 s
+  one request a session and +0.41 s over a user's days. Running the check behind (hypothesis 6) was not built: N3
+  measured that packets after the first request rarely land.
 
 ## 0. Where this starts
 
@@ -289,7 +315,7 @@ default's packet goes, so a neutral request still gets one four times in five.
 
 ## 9. Pre-registration F (addendum): a gate that needs no stored answer, and a check that never silences
 
-Written after round 1's short run was read (§10: K +7.9 points for +$0.21 per 1,000 tasks and +1.06 s; G +5.3 for
+Written after round 1's short run was read (§10, below: K +7.9 points for +$0.21 per 1,000 tasks and +1.06 s; G +5.3 for
 +$0.054 and +0.33 s) and before round 1's days run finished; committed before round 2 started.
 
 **Two things round 1 showed.**
@@ -328,3 +354,161 @@ It needs nothing the product lacks (the servers wire the checker on the reader's
   an off trial and the trade is reported.
 - **Budget:** about $5.8 **[EST]** (short $3.0, days $0.9, regrades $1.9) of the $8 left under the $25 cap.
 - The top-five gate, the stored-answer gate with no packet, and N with the widening are not run live (the cap).
+
+## 10. Round 1, live (§7's arms; Pi on Modal, commit acf6f34f)
+
+`lab_fanout.py --preset bench-tools`, arms `eden`, `eden~K` (compare-first, widened), `eden~Kp` (compare-first, no
+widening), `eden~G` (K behind the stored-answer gate at 11.5), Haiku 5.5 as agent, grader, cards and check,
+`pushCheckWaitMs` 2,500 inside the 3,000 ms observe wait. **Short:** seeds 41–48, hidden, control and neutral, all 192
+templates (seed 41 cost $1.00, so the plan projected under $14): 4,608 task runs an arm, 0 of 55,728 requests retried
+on a 429. **Days:** `--days 8`, users w41–w48, 989 task runs an arm (101 hidden). Sonnet 5.5 regraded every hidden
+answer and every concern (6,213 short and 435 days answers, 0 failed). Quality intervals: template-clustered bootstrap
+(`bench_report.py --sonnet`), and for days whole users resampled (`days_hidden.py`); cost and wall: paired by task,
+the short shape weighted 1:1:8, clustered by template (short) or user (days) (`mix.py`).
+
+| Arm − `eden` | Hidden raised, short (Sonnet)               | Hidden, days (by template; by user) | Concerns (Sonnet), short; days | Total $/1k, short mix       | Total $/1k, days        | Wall, short mix            | Wall, days             | Check calls a task (short mix; days) |
+| ------------ | ------------------------------------------- | ----------------------------------- | ------------------------------ | --------------------------- | ----------------------- | -------------------------- | ---------------------- | ------------------------------------ |
+| **K**        | **+7.9 points (+5.3..+10.7)**, 66.0 vs 58.0 | +5.9 (−1.0..+13.1; −1.1..+9.9)      | 0 vs 1 of 3,072; 0 vs 0 of 888 | +0.214 (+0.197..+0.232)     | +0.173 (+0.163..+0.182) | +1.06 s (+0.97..+1.16)     | +0.85 s (+0.79..+0.93) | 0.81; 0.83                           |
+| Kp           | +3.4 (+0.9..+5.9), 61.4                     | +6.9 (+1.0..+13.7; −1.0..+14.7)     | 0 vs 1; 0 vs 0                 | +0.183 (+0.166..+0.199)     | +0.156 (+0.141..+0.170) | +1.04 s (+0.95..+1.13)     | +0.88 s (+0.76..+0.99) | 0.81; 0.83                           |
+| G            | +5.3 (+2.7..+7.9), 63.3                     | +6.9 (+1.8..+13.0; +3.0..+11.0)     | 1 vs 1; **1 vs 0**             | **+0.054 (+0.040..+0.069)** | +0.136 (+0.125..+0.147) | **+0.33 s (+0.26..+0.40)** | +0.65 s (+0.58..+0.70) | 0.28; 0.60                           |
+
+(K against Kp, short: +4.6 points, +2.3..+7.0: what the widening adds. `eden`'s base: $0.248 per 1,000 tasks and
+2.19 s short, $0.231 and 1.49 s over days.)
+
+- **The check on Pi:** 11,825 calls, **$0.00025–0.00026 a call**, p50 0.96–1.04 s, p90 1.44–1.52 s, about 2,950
+  input tokens (1,185 read from the cache) and 128–143 output tokens a call.
+- **Quality.** K is the best arm: +7.9 points one request a session (I3's check: +4.0; N2's thinking check on 40
+  templates: +12.5, +5.6..+19.4). No arm raised Sonnet-confirmed concerns on the short shape; over days G has one
+  (0 → 1 of 888: up on a literal reading, as N2's was).
+- **Against the targets (≤ +$0.10, ≤ +0.3 s, both shapes): no arm meets them.** K and Kp cost +$0.16 to +$0.21
+  and about a second. G meets the cost short (+$0.054) and misses the wall by 0.03 s, **before the stored answers'
+  own cost** (§9), and misses both over days.
+- **Why K's wall is more than its call.** 0.81 calls of 0.95–1.0 s is 0.8 s; the rest is the agent asking where the
+  push went silent: `ask_context` +0.30 a task on the short mix (agent turns +0.15). The agent's own bill is flat
+  short (+$0.003) and lower over days (−$0.046: smaller packets carried in the day's transcript).
+- **G over days is not the gate as fitted.** The stored answers were made for the short worlds; a days user's
+  world holds 65–161 items a user they do not cover (4–8% of the items read), and an item with no stored answer opens
+  the gate, so G called on 0.60 of tasks there (0.28 short). The embedding table covered every request of the days
+  (1,632 of 1,632) and 91–96% of the items it names.
+- **Connector plans** (days, steady state, `pi-cost-report.ts`): the arms make the same connector calls as `eden`
+  (the check reads the cache), so each plan moves by the same dollars as the first-party line: Composio 0.296 →
+  0.450 (K), 0.433 (Kp), 0.413 (G); Zapier MCP 4.163 → 4.318, 4.300, 4.281 ($ per 1,000 tasks). (`pi-cost-report.ts`
+  books the in-run card calls, $0.019 per 1,000 tasks, to the first arm only, so its steady-state column overstates
+  `eden` by that much against the others; the table above uses the paired agent + check difference.)
+
+## 11. Round 2, live (§9's arm N; Pi on Modal, commit a5d1c9eb)
+
+Arms `eden` and `eden~N` (`pushCheck`, `pushCheckForm` 2, `pushCheckAnchored`, `pushCheckSilent` off; no widening,
+no stored answers, nothing the product lacks). Short: seeds 41–48, all templates, 4,608 task runs an arm; days:
+`--days 8`, users w41–w48, 989 task runs an arm; 0 requests retried on a 429. Sonnet regraded 3,112 short and 216
+days answers (0 failed). **The days run started four shards at a time (two agent streams each), not two: the brief's
+limit of two Anthropic shards at once was broken by my `--max-streams 8` with two arms; the load was the eight
+streams round 1's days ran.**
+
+| N − `eden`                              | Short                                               | Days                                                                   |
+| --------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------- |
+| Hidden raised (Sonnet)                  | **+2.7 points (+0.3..+5.1)**, 60.4 vs 57.7, n 1,536 | +3.0 (−2.0..+8.3 by template; −1.8..+7.8 by user), 59.4 vs 56.4, n 101 |
+| Concerns, control and neutral (Sonnet)  | 2 vs 2 of 3,072                                     | 0 vs 1 of 888                                                          |
+| Total $ per 1,000 tasks (agent + check) | +0.043 (+0.029..+0.057), 1:1:8 mix                  | **+0.083 (+0.075..+0.091)**                                            |
+| of it the agent                         | −0.030                                              | −0.010                                                                 |
+| Wall a task                             | **+0.31 s (+0.25..+0.38)**, 1:1:8 mix               | **+0.41 s (+0.36..+0.46)**                                             |
+| Check calls a task                      | 0.30                                                | 0.40                                                                   |
+| `ask_context` calls a task              | −0.002                                              | +0.005                                                                 |
+
+The check on Pi: 2,369 calls, $0.00023–0.00025 a call, p50 0.98–1.02 s, p90 1.50 s. Haiku's own grades read +1.0
+points short (−1.4..+3.6); the pre-registered grade is Sonnet's. Connector plans (days, steady state): every plan
+moves by the first-party line's dollars (Composio 0.294 → 0.358, Zapier MCP 4.161 → 4.225 per 1,000 tasks, with
+`pi-cost-report.ts`'s $0.019 of in-run cards booked to `eden` alone).
+
+**Against §9's rule.** Hidden is better (the interval is above zero). Confirmed concerns are not up (2 vs 2; 0 vs
+1). Cost is inside the bound (+$0.083 over days, +$0.043 short). **Wall is not: +0.31 s short and +0.41 s over
+days against 0.3 s.** So N is not promoted (D535). Over days the gate opens more often (0.40 of tasks against
+0.30): a user's world holds every day's planted constraints, so more requests meet a constraint-like item that
+names one of their anchors.
+
+## 12. The trade, for the owner (D536)
+
+Per 1,000 tasks of a 1:1:8 user (100 of them carry a hidden fact), against the default. Facts: the short shape's
+Sonnet-graded points (the powered figure). I3 and N2 are their own notes' figures (D503, D514; N2's on 40 templates).
+
+| Arm                                                | More hidden facts raised | $ added, short; days                                              | Wait added a task, short; days | $ per extra fact, short; days          | Seconds of wait per extra fact (short) | Needs                                      |
+| -------------------------------------------------- | ------------------------ | ----------------------------------------------------------------- | ------------------------------ | -------------------------------------- | -------------------------------------- | ------------------------------------------ |
+| **N** (compare-first, anchored gate, never silent) | +2.7 (+0.3..+5.1)        | 0.043; 0.083                                                      | 0.31; 0.41 s                   | 0.016; 0.031                           | 116                                    | nothing new                                |
+| G (K behind a stored-answer gate; deleted, D529)   | +5.3 (+2.7..+7.9)        | 0.054; 0.136, plus the stored answers (about 0.06–0.12 **[EST]**) | 0.33; 0.65 s                   | 0.010; 0.026 before the stored answers | 62                                     | an ingest call for every item; an embedder |
+| Kp (compare-first, every gated push)               | +3.4 (+0.9..+5.9)        | 0.183; 0.156                                                      | 1.04; 0.88 s                   | 0.054; 0.046                           | 306                                    | nothing new                                |
+| **K** (Kp with the widened pool)                   | **+7.9 (+5.3..+10.7)**   | 0.214; 0.173                                                      | 1.06; 0.85 s                   | 0.027; 0.022                           | 134                                    | an embedder for the request                |
+| I3's check (D503)                                  | +4.0 (+1.5..+6.5)        | 0.154; 0.112                                                      | about 0.9; 0.8 s               | 0.039; 0.028                           | about 226                              | nothing new                                |
+| N2's thinking check (D514)                         | +12.5 (+5.6..+19.4)      | 0.98; 0.80 (check only)                                           | 5.1; 4.4 s                     | 0.078                                  | 410                                    | an embedder                                |
+
+- **Nothing meets both targets.** N is the nearest that can ship today: inside the cost bound on both shapes, 0.01 s
+  and 0.11 s over the wait bound. If the owner takes +0.4 s, N can be promoted as it stands (its rule's other three
+  clauses hold).
+- **K is the best quality per dollar among the arms that call on every push**, at twice I3's gain for 1.4 times its
+  price, and it replaces N2's check outright (a quarter of the cost, a fifth of the wait a call, two thirds of the
+  measured gain on a much tighter interval). It needs a request embedder the product does not have, and one whose
+  own latency fits the push: not measured here.
+- **The untested arm most likely to sit between them: K behind `pushCheckAnchored`, silent** (all switches are in
+  the tree). At $0 it hands 418 planted facts of 608 against the stored-answer gate's 422 at the same call rate
+  (0.29), and G, its stored-answer twin, measured +5.3 points for +$0.054 and +0.33 s short. It is the first thing
+  to run next; this session's cap was spent.
+- **What would move the wall itself:** a faster model call does not exist under the brief (Haiku 5.5 is the floor);
+  a reply cut off at its first token when it starts `{"items":[]}` would save about 0.3 s on the calls that find
+  nothing (not built: the lab's model interface has no stream to the engine); and a gate at 0.24 calls a task (an
+  anchored constraint in the first five pool items) screened at 381 planted handed against N's gate's 393.
+
+## 13. What is in the tree, review, limits, spend
+
+**Kept (all off; rows in the trials table):** `pushCheckForm` (2: the compare-first reply, D527), `pushCheckAnchored`
+(D534), `pushCheckSilent` (D533; true is I3's rule), with I3's `pushCheck` and N2's `pushWiden`. **Deleted with their
+code and tests:** `pushCheckStored` (D526, code in 9968cb8e), `pushCheckActOnly` and the lab's `--check-thinking`
+(D528, 9968cb8e), `pushCheckGate`, the `acts` dependency, `n5-label.ts`, `n5-acts.ts` and the stored answers' file
+(D529, a5d1c9eb). **Lab tooling (D530):** the embedding table keyed by item content
+(`packages/sim/lab/n5/widen-hash-41-48.jsonl.gz`, `--widen-hash`, `widenByHash`), `--check-log`, each funnel row's
+`pushCheckCalled`, `packages/sim/lab/n5/mix.py` and `days_hidden.py`.
+
+**Departures from the pre-registration, all said where they happened:** the screen split's rows were printed once
+while fitting §5's first rules; §2's sample became the whole of seed 41; the compare-first arm was not in §2 and its
+wording was revised twice on seed 41 before §7 froze it; §7's addendum was committed a few minutes after the seeds
+42–44 screen started (unread); round 2's days ran four shards at a time; the funnel screens cut the embedding
+table's list at five ids where the Pi runs read six (`--widen-embed 5` reproduces the screens: seed 42 replays with
+0 misses).
+
+**Limits.** Train suites only; Haiku 5.5 as the agent; one compare-first wording; the lab caches the instruction
+block (OpenRouter would not without `anthropicCache`, D145: about +$0.0001 a call **[EST]**, 1,185 tokens at the
+uncached price); the embedding table is made offline, so K's figures leave out a real embedder's time and cost; G's
+days run had incomplete stored answers (§10); `--days` has 101 hidden tasks an arm, so its quality intervals are
+wide and are read beside the short shape's.
+
+**Spend.** Anthropic **$22.28** of $25: stored-answer labels $1.10, funnel pilots and screens $1.71, smokes $0.04,
+Pi shards $13.94 (round 1 short $8.05 and days $1.78; round 2 short $3.35 and days $0.77), Sonnet regrade batches
+$5.47 (`.local/n5/ledger.jsonl` and the shards' ledgers). Modal **$0.73** (`modal billing report --for today
+--json`, this session's six app ids; the last app may still be settling).
+
+## Reproduce
+
+```bash
+L="--spend-ledger .local/n5/ledger.jsonl --spend-cap 25"; W=packages/sim/lab/n5/widen-hash-41-48.jsonl.gz
+bun run funnel --suite train --seeds 41,42,43,44 --jobs 4 --json .local/n5/base.json -- --neutral             # $0
+# Arm K's screen, one process a seed (a live check keeps one process): about $0.13 a seed
+bun run funnel --suite train --seeds 42 --json .local/n5/K-42.json \
+  --set '{"pushCheck":true,"pushCheckWaitMs":60000,"pushWiden":true,"pushCheckForm":2}' \
+  -- --neutral --check live --check-cache .local/n5/check-K-42.jsonl --widen-hash $W --widen-embed 5 $L
+python3 -I packages/sim/lab/n2/compare.py --arm C0=.local/n5/base.json --arm K=.local/n5/K-42.json --seeds 42
+# Arm N at $0 on recorded replies of the no-widening arm (the same --set without pushWiden, live, makes them)
+bun run funnel --suite train --seeds 42 --json .local/n5/N-42.json --set '{"pushCheck":true,"pushCheckWaitMs":60000,
+  "pushCheckForm":2,"pushCheckAnchored":true,"pushCheckSilent":false}' -- --neutral --check replay \
+  --check-cache .local/n5/check-Kp-42.jsonl
+# Live (Modal; SSL_CERT_FILE=/root/.ccr/ca-bundle.crt). Round 1 at acf6f34f (K, Kp and the deleted G), round 2:
+V='{"N":{"pushCheck":true,"pushCheckForm":2,"pushCheckAnchored":true,"pushCheckSilent":false}}'
+EDEN_COMMIT=a5d1c9eb modal run packages/sim/modal/lab_fanout.py --preset bench-tools --seeds 41-48 --cap 4.0 \
+  --max-streams 72 --run n5b-short --args "--conditions eden,eden~N --variant-config '$V' \
+  --variants hidden,control,neutral"                                                             # $3.35
+EDEN_COMMIT=a5d1c9eb modal run packages/sim/modal/lab_fanout.py --preset bench-tools --seeds 41-48 --cap 1.6 \
+  --max-streams 4 --run n5b-days --args "--conditions eden,eden~N --variant-config '$V' --days 8"  # $0.77
+bun packages/sim/src/lab/i3-regrade.ts --results $(ls -d .local/modal/n5b-short/s0*/ | sed 's|/$|/out.json|' \
+  | paste -sd,) $L --run-label n5b-regrade-short                                                 # $1.70
+python3 -I packages/sim/modal/bench_report.py --pair eden~N:eden --group short=.local/modal/n5b-short --sonnet
+python3 -I packages/sim/lab/n5/mix.py --base eden --arms eden~N .local/modal/n5b-short/s0*/out.json
+python3 -I packages/sim/lab/n5/mix.py --days --base eden --arms eden~N .local/modal/n5b-days/s0*/out.json
+python3 -I packages/sim/lab/n5/days_hidden.py --base eden --arms eden~N .local/modal/n5b-days/s0*/
+```

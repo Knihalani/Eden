@@ -24,7 +24,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `settle.ts`                                                                | `askNudge`'s no-model test of whether the candidates settle a request's people, things and days (D316, D317)                                                                                                                  |
 | `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
-| `push-check.ts`                                                            | The push check (`pushCheck`, D500–D504, a trial, off): one budgeted call a push names the pool's items that change the action (`CHECK_SYSTEM`, `parseCheck`, `PushChecker`); `push-check.test.ts`                              |
+| `push-check.ts`                                                            | The push check (`pushCheck`, D500–D504, a trial, off): one budgeted call a push names the pool's items that change the action (`CHECK_SYSTEM`, `parseCheck`, `PushChecker`); form 2, the compare-first reply (`CHECK_SYSTEM_COMPARE`, `parseCompare`, D527); `push-check.test.ts` |
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
 | `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default): identifiers a call adds and its packets showed; `ItemCache.isCorrespondent` reads the user's header addresses |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
@@ -293,6 +293,19 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   items, only where the check runs. They are handed only when the check names them; the nudge's deeper look,
   `anchoredPast` and the returned pool stay the lexical pool's, so an unnamed widened item never reaches an ask. Every
   route fails open to no widening.
+- **The push check's reply, gate and silence (N5, D527–D536, trials, off; docs/research/n5-widen-check.md).**
+  `pushCheckForm` 2 sends `CHECK_SYSTEM_COMPARE` and reads `parseCompare`: an entry is a yes only with `act` true and
+  a `hits` that is not "none"; there is no stop sequence (the entries with no link are the comparison), so the output
+  cap is `COMPARE_MAX_TOKENS`. The two forms' kept answers never mix (`checkKey` holds the form). Do not reword the
+  compare step without a funnel screen: "is it the same person, thing and day" rejected facts that bear on a request
+  without sharing its names (an all-hands on the request's evening), and thinking at effort low on form 1 handed
+  fewer facts than the default. `pushCheckAnchored` returns before any call when no item the check would read is
+  constraint-like and anchored (`gate.like`, `anchored`): the default's candidates go, untouched. `pushCheckSilent`
+  off turns a check that names nothing into the default's candidates (`candidatesOf`). A silent push makes the agent
+  ask more (+0.30 `ask_context` a task on Pi): measure any change to when the push is silent live, with wall, not on
+  the funnel. A check answered from labels made at ingest (`pushCheckStored`, `pushCheckGate`) was measured and
+  deleted (D526, D529): with no request in hand a model cannot tell a fact from a look-alike that is a real
+  constraint about another venue, person or day.
 - **Updates name the times they drop (D342, `revisionDiff`).** `buildUpdate`'s title reads `Ledger.seenTimes`; times
   are noted only when a copy is handed out (`watchCopies`, from `copiesOf`'s `times`), never when an update is queued
   (one superseded in the queue was never shown). `timesOf` compares one written form ("HH:MM", "<day> <mon>"), so a

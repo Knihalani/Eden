@@ -478,6 +478,20 @@ templates). `python3 -I packages/sim/lab/n2/compare.py --arm NAME=F …` prints 
 packets and N2's pre-registered bars. Read a check's quality from replayed labels: a live check slower than the
 funnel's 3 s observe wait misses the push (D510).
 
+### 1g. The compare-first check, its gate, and a days user's widening (N5, D527–D536; docs/research/n5-widen-check.md)
+
+`--set '{"pushCheck":true,"pushCheckForm":2}'` asks the push check for the compare-first reply; add `"pushWiden":true`
+with `-- --widen-hash packages/sim/lab/n5/widen-hash-41-48.jsonl.gz` (the embedding table keyed by item content, so
+pi-ab `--days` worlds are covered; `--widen-embed 5` is the cut N5's funnel screens ran with), `"pushCheckAnchored":
+true` to call only where a constraint-like pool item names a request anchor, `"pushCheckSilent":false` to leave the
+default's packet when the check names nothing. A live check keeps the funnel to one process: run one seed a
+process and merge the JSONs (about $0.13 and 8 minutes a seed with neutral tasks). `-- --check-log F` writes each
+call's prompt and reply; each row's `pushCheckCalled` gives the call rate by variant. For a live pair read quality
+from `bench_report.py --sonnet`, cost and wall on the 1:1:8 mix from `python3 -I packages/sim/lab/n5/mix.py --base
+eden --arms eden~V OUT.json…` (`--days` for a days run) and days' hidden facts by user from `days_hidden.py`. On
+Modal, `--max-streams` counts streams, not shards: with two arms a days shard has two streams, so two shards at a
+time is `--max-streams 4`.
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash

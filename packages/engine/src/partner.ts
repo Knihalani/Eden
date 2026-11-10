@@ -226,24 +226,7 @@ export interface PartnerDeps {
    * first). The lab wires an embedding table; no server wires one.
    */
   widen?: (scope: Scope, request: string, k: number) => Promise<readonly string[]>;
-  /**
-   * N5 (D529, trial `pushCheckGate`): the answer to the check's question written when each item was stored, read for
-   * this request: per item, whether it scores (true), does not (false), or has no stored answer yet (null).
-   * Synchronous: no model call and no network. The lab wires a label table (`n5-acts.ts`); no server wires one.
-   */
-  acts?: StoredActs;
 }
-
-/** What `PartnerDeps.acts` reads a request by: its redacted text and its anchors (`settle.ts`). */
-export interface StoredActsRequest {
-  text: string;
-  anchors: Anchors;
-}
-export type StoredActs = (
-  scope: Scope,
-  request: StoredActsRequest,
-  items: readonly ContextItem[],
-) => readonly (boolean | null)[];
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
 export interface PushPoolReport {
@@ -269,7 +252,7 @@ export interface PushPoolReport {
    */
   check?: "yes" | "none" | "late" | "failed";
   checked?: boolean[];
-  /** This pass made the check's model call; one that read a kept answer, or that `pushCheckGate` closed, did not. */
+  /** This pass made the check's model call: not one that read a kept answer or that `pushCheckAnchored` skipped. */
   checkCalled?: boolean;
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
@@ -2556,34 +2539,12 @@ export class ContextPartner {
     const head = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
     // `pushWiden` (D511): the widened items after the pool's head, within the check's item cap.
     const read = [...head, ...(gate.widened ?? []).slice(0, Math.max(0, CHECK_MAX_ITEMS - head.length))];
-    // `pushCheckGate` (N5, D529): the call is made only when the stored answer of some item read scores for this
-    // request (`PartnerDeps.acts`; an item with no stored answer yet counts, so a new item is never skipped).
-    // Otherwise no call: the default's candidates (1) or no packet (2). A dependency that throws gates nothing.
     // `pushCheckAnchored` (N5, D534): the call is made only when some item the check would read is constraint-like
     // and names one of the request's anchors (a person, a thing, a day); otherwise no call and the default's
     // candidates. No model and no stored answer: the constraint test and the anchors are the default's own.
     if (this.config.pushCheckAnchored) {
       const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
       if (!head.some((x, i) => gate.like[i] && anchored(x.item, anchors))) return null;
-    }
-    if (this.config.pushCheckGate > 0 && this.deps.acts) {
-      let open = true;
-      try {
-        const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
-        const passes = this.deps.acts(
-          s.scope,
-          { text: request, anchors },
-          read.map((x) => x.item),
-        );
-        open = read.some((_, i) => passes[i] !== false);
-      } catch {
-        open = true;
-      }
-      if (!open) {
-        return this.config.pushCheckGate === 2
-          ? { yes: new Set(), costUsd: 0, called: false, overBudget: false }
-          : null;
-      }
     }
     const input = {
       request,

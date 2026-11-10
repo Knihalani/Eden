@@ -5,11 +5,8 @@ export {
   type PartnerDeps,
   type ReaderReport,
   type PushPoolReport,
-  type StoredActs,
-  type StoredActsRequest,
   type ReaderSink,
 } from "./partner";
-export type { Anchors } from "./settle";
 export { FACT_NAMES, vectorOf, type Facts } from "./decide";
 export { DEFAULT_CONFIG, type EngineConfig } from "./config";
 export { CORE_CONFIG, PARTS, withoutParts, type Part } from "./parts";

@@ -7,7 +7,7 @@ import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
-import { ContextPartner, type PushPoolReport, type StoredActs } from "./partner";
+import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import {
   CHECK_STOP,
@@ -59,7 +59,7 @@ function says(yes: string[], extra = "") {
   });
 }
 
-function setup(config: Record<string, unknown>, model: Model | null, pools: PushPoolReport[] = [], acts?: StoredActs) {
+function setup(config: Record<string, unknown>, model: Model | null, pools: PushPoolReport[] = []) {
   const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
   const checker = model ? new PushChecker({ model, budget: new Budget() }) : undefined;
   const partner = new ContextPartner({
@@ -80,7 +80,6 @@ function setup(config: Record<string, unknown>, model: Model | null, pools: Push
       ...config,
     },
     ...(checker ? { checker } : {}),
-    ...(acts ? { acts } : {}),
     onPushPool: (r) => pools.push(r),
   });
   return { partner, checker };
@@ -544,102 +543,8 @@ describe("pushCheckForm 2 (N5, D527): the reply compares before it decides", () 
   });
 });
 
-// N5 (D529): `pushCheckGate`. The check's call is made only when a stored answer of some item read scores for the
-// request (`PartnerDeps.acts`); otherwise no call: the default's candidates (1) or no packet (2).
-describe("pushCheckGate (N5, D529): the stored answers decide whether the check calls", () => {
-  const stored =
-    (score: (id: string) => boolean | null, seen: string[][] = []): StoredActs =>
-    (_scope, request, items) => {
-      seen.push([request.text, ...items.map((it) => it.id)]);
-      return items.map((it) => score(it.id));
-    };
-
-  test("0 in the default; off, the stored answers are never read", async () => {
-    expect(DEFAULT_CONFIG.pushCheckGate).toBe(0);
-    const seen: string[][] = [];
-    const model = says(["Harlow deposit"]);
-    const { partner } = setup(
-      { pushCheck: true },
-      model,
-      [],
-      stored(() => false, seen),
-    );
-    expect(await handed(partner)).toEqual(["mail:dated"]);
-    expect(seen.length).toBe(0);
-    expect(model.calls.length).toBe(1);
-  });
-
-  test("an open gate calls as without it; the request reaches the dependency redacted", async () => {
-    const seen: string[][] = [];
-    const model = says(["Harlow deposit"]);
-    const acts = stored((id) => id === "mail:hold", seen);
-    const { partner } = setup({ pushCheck: true, pushCheckGate: 1 }, model, [], acts);
-    expect(await handed(partner)).toEqual(["mail:dated"]);
-    expect(model.calls.length).toBe(1);
-    expect(seen[0]![0]).toBe(sanitizeForStore(REQUEST));
-    expect(seen[0]!).toContain("mail:hold");
-  });
-
-  test("a closed gate makes no call: 1 hands the default's candidates, 2 hands nothing", async () => {
-    const pools: PushPoolReport[] = [];
-    const m1 = says(["Harlow deposit"]);
-    const one = setup(
-      { pushCheck: true, pushCheckGate: 1 },
-      m1,
-      pools,
-      stored(() => false),
-    );
-    expect((await handed(one.partner)).length).toBe(2);
-    expect(m1.calls.length).toBe(0);
-    expect(one.checker!.stats.asked).toBe(0);
-    expect(pools.at(-1)!.checkCalled).toBeUndefined();
-    const m2 = says(["Harlow deposit"]);
-    const two = setup(
-      { pushCheck: true, pushCheckGate: 2 },
-      m2,
-      [],
-      stored(() => false),
-    );
-    expect(await handed(two.partner)).toEqual([]);
-    expect(m2.calls.length).toBe(0);
-  });
-
-  test("an item with no stored answer yet opens the gate; so does a dependency that throws", async () => {
-    const m1 = says(["Harlow deposit"]);
-    const unread = stored((id) => (id === "mail:dated" ? null : false));
-    expect(await handed(setup({ pushCheck: true, pushCheckGate: 2 }, m1, [], unread).partner)).toEqual(["mail:dated"]);
-    expect(m1.calls.length).toBe(1);
-    const m2 = says(["Harlow deposit"]);
-    const broken: StoredActs = () => {
-      throw new Error("no table");
-    };
-    expect(await handed(setup({ pushCheck: true, pushCheckGate: 2 }, m2, [], broken).partner)).toEqual(["mail:dated"]);
-    expect(m2.calls.length).toBe(1);
-  });
-
-  test("isolation: the dependency is asked with the session's own scope", async () => {
-    const scopes: string[] = [];
-    const acts: StoredActs = (scope, _request, items) => {
-      scopes.push(`${scope.tenantId}/${scope.userId}`);
-      return items.map(() => true);
-    };
-    const { partner } = setup({ pushCheck: true, pushCheckGate: 1 }, says([]), [], acts);
-    await handed(partner);
-    await handed(partner, { tenantId: "t", userId: "u2", sessionId: "s9" });
-    expect(new Set(scopes)).toEqual(new Set(["t/u1", "t/u2"]));
-  });
-
-  test("the gate needs the acts dependency and pushCheck", () => {
-    const on = { pushCheck: true, pushCheckGate: 1 };
-    expect(() => checkEngineConfig(on, { deps: { cards: true, reader: true, checker: true } })).toThrow(/acts/);
-    expect(checkEngineConfig(on, { deps: { cards: true, reader: true, checker: true, acts: true } })).toEqual(on);
-    expect(() => checkEngineConfig({ pushCheckGate: 1 }, { deps: { checker: true, acts: true } })).toThrow(/pushCheck/);
-    expect(() => checkEngineConfig({ ...on, pushCheckGate: 3 }, { deps: { checker: true, acts: true } })).toThrow();
-  });
-});
-
-// N5 (D533, D534): `pushCheckSilent` off and `pushCheckAnchored`: the check as an addition to the default's packet,
-// called only where a constraint-like item names something the request names.
+// N5 (D533, D534): `pushCheckSilent` off and `pushCheckAnchored` (arm N): the check as an addition to the default's
+// packet, called only where a constraint-like item names something the request names.
 describe("pushCheckSilent off and pushCheckAnchored (N5, D533, D534)", () => {
   test("silent is I3's rule and the default; off, a check that names nothing leaves the default's candidates", async () => {
     expect(DEFAULT_CONFIG.pushCheckSilent).toBe(true);
