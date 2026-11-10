@@ -31,7 +31,8 @@ const FILES = opt("results").split(",").filter(Boolean);
 if (!FILES.length) throw new Error("--results is required");
 const MODEL = opt("model", "claude-sonnet-5-5");
 const CONDITIONS = opt("conditions") ? new Set(opt("conditions").split(",")) : null;
-const MAX_TOKENS = 2_000;
+// A verdict is a few tokens of JSON; regrade.ts caps at 2,000, which only inflates the batch's reserved worst case.
+const MAX_TOKENS = 400;
 
 interface Item {
   id: string;
