@@ -24,19 +24,19 @@ import distill_data as dd  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 VOLUME = "eden-cards-distill"
-ENDPOINT_SECRET = "eden-cards-endpoint"
 vol = modal.Volume.from_name(VOLUME, create_if_missing=True)
 
 train_image = (
     modal.Image.debian_slim(python_version="3.12")
     .pip_install("torch==2.8.0", "transformers==4.56.2", "peft==0.17.1", "trl==0.23.0", "accelerate==1.10.1",
                  "datasets==4.1.1")
-    .env({"HF_HOME": "/vol/hf"})
+    .env({"HF_HOME": "/vol/hf", "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"})
     .add_local_python_source("distill_data")
 )
 vllm_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .pip_install("vllm==0.10.2")
+    # transformers pinned: vLLM 0.10.2 needs >= 4.56 and breaks on 5.x (`all_special_tokens_extended` is gone; M2).
+    .pip_install("vllm==0.10.2", "transformers==4.56.2")
     .env({"HF_HOME": "/vol/hf", "EDEN_CARDS_RUN": os.environ.get("EDEN_CARDS_RUN", "")})
     .add_local_python_source("distill_data")
 )
@@ -68,6 +68,9 @@ def train_remote(data_dir: str, run: str, base: str, epochs: float, lr: float, r
     ev = Dataset.from_list([dd.prompt_completion(r) for r in held[:16]])
     cfg = SFTConfig(output_dir=f"/vol/models/{run}/ckpt", num_train_epochs=epochs, learning_rate=lr,
                     per_device_train_batch_size=1, gradient_accumulation_steps=8, lr_scheduler_type="cosine",
+                    # Eval one row at a time, loss only: TRL's default batch of 8 casts 8 × 8k × 151k-vocab logits
+                    # to float at the epoch's eval and ran out of memory on an A10G (M2).
+                    per_device_eval_batch_size=1, prediction_loss_only=True,
                     warmup_ratio=0.05, max_length=dd.MAX_LENGTH, bf16=True, gradient_checkpointing=True,
                     logging_steps=5, eval_strategy="epoch", save_strategy="no", report_to="none",
                     completion_only_loss=True, packing=False, seed=7)
@@ -107,16 +110,28 @@ def generate_remote(model: str, rows: list, guided_json: bool) -> dict:
     return {"texts": texts, "seconds": round(time.time() - t0), "model": path}
 
 
-@app.function(image=vllm_image, gpu="L4", volumes={"/vol": vol}, timeout=24 * 3600, scaledown_window=300,
-              secrets=[modal.Secret.from_name(ENDPOINT_SECRET)])
-@modal.concurrent(max_inputs=32)
-@modal.web_server(port=8000, startup_timeout=600)
+def _endpoint_secret():
+    """The endpoint's bearer key, from EDEN_LAB_CARDS_KEY where `modal deploy` runs, as an ephemeral
+    `Secret.from_dict` (M2): nothing is stored in the workspace. Every run builds it; only `serve` reads it."""
+    return modal.Secret.from_dict({"EDEN_LAB_CARDS_KEY": os.environ.get("EDEN_LAB_CARDS_KEY", "")})
+
+
 def serve():
     """vLLM's OpenAI-compatible server for EDEN_CARDS_RUN's merged model, behind the endpoint secret's bearer key."""
     run = os.environ["EDEN_CARDS_RUN"]
+    if not os.environ.get("EDEN_LAB_CARDS_KEY"):
+        raise RuntimeError("EDEN_LAB_CARDS_KEY was empty at deploy: the endpoint is never served without a key")
     args = dd.vllm_serve_args(_model_dir(run))
     env = dict(os.environ, VLLM_API_KEY=os.environ["EDEN_LAB_CARDS_KEY"])
     subprocess.Popen(args, env=env)
+
+
+# The endpoint exists only when a run is named (`EDEN_CARDS_RUN=… modal deploy`): a web function's label is unique,
+# so defining it in every `modal run train`/`evaluate` made concurrent runs collide (M2).
+if os.environ.get("EDEN_CARDS_RUN"):
+    serve = app.function(image=vllm_image, gpu=os.environ.get("EDEN_CARDS_SERVE_GPU", "L4"), volumes={"/vol": vol},
+                         timeout=24 * 3600, scaledown_window=300, secrets=[_endpoint_secret()])(
+        modal.concurrent(max_inputs=32)(modal.web_server(port=8000, startup_timeout=600)(serve)))
 
 
 def _upload(data):
@@ -131,14 +146,18 @@ def _upload(data):
 
 
 @app.local_entrypoint()
-def train(data: str, run: str, base: str = dd.DEFAULT_BASE, epochs: float = 2.0, lr: float = 2e-4, rank: int = 16):
+def train(data: str, run: str, base: str = dd.DEFAULT_BASE, epochs: float = 2.0, lr: float = 2e-4, rank: int = 16,
+          gpu: str = ""):
     if base not in dd.BASES:
         sys.exit(f"--base is one of {', '.join(dd.BASES)}")
     name, rows, _, stats = _upload(data)
     est = dd.estimate_train(base, rows, epochs)
     print(f"data {name}: {stats}; estimate (assumed throughput, list price): {est}")
     # The base's GPU (a 4B model wants an L40S's 48 GB; the decorator's A10G fits 1.5B).
-    gpu = dd.BASES[base]["gpu"]
+    # `--gpu` overrides it (M2 trained the 1.5B on an L40S to finish sooner).
+    gpu = gpu or dd.BASES[base]["gpu"]
+    if gpu not in dd.GPU_USD_PER_HOUR:
+        sys.exit(f"--gpu is one of {', '.join(dd.GPU_USD_PER_HOUR)}")
     metrics = train_remote.with_options(gpu=gpu).remote(name, run, base, epochs, lr, rank, gpu)
     out = os.path.join(ROOT, ".local", "modal", "cards", run)
     os.makedirs(out, exist_ok=True)
@@ -153,7 +172,8 @@ def evaluate(data: str, run: str, guided_json: bool = False):
     held = dd.load_rows(os.path.join(data, "heldout.jsonl"))
     model = dd.BASES[run]["hf"] if run in dd.BASES else run
     got = generate_remote.remote(model, held, guided_json)
-    out = os.path.join(ROOT, ".local", "modal", "cards", run)
+    # A guided run gets its own directory (M2), so it never overwrites the plain run's outputs and score.
+    out = os.path.join(ROOT, ".local", "modal", "cards", run + ("-guided" if guided_json else ""))
     os.makedirs(out, exist_ok=True)
     outputs = os.path.join(out, "outputs.jsonl")
     with open(outputs, "w") as f:
@@ -163,8 +183,11 @@ def evaluate(data: str, run: str, guided_json: bool = False):
                     os.path.join(data, "heldout.jsonl"), "--outputs", outputs, "--json", score], cwd=ROOT, check=True)
     with open(score) as f:
         s = json.load(f)
-    train_json = os.path.join(out, "train.json")
+    train_json = os.path.join(ROOT, ".local", "modal", "cards", run, "train.json")
     usd = json.load(open(train_json)).get("estimate", {}).get("usd") if os.path.exists(train_json) else None
+    with open(os.path.join(out, "generate.json"), "w") as f:
+        json.dump({"seconds": got["seconds"], "rows": len(held), "items": sum(len(r["keys"]) for r in held),
+                   "gpu": "L40S", "guidedJson": guided_json, "model": got["model"]}, f, indent=2)
     print(f"{run}: generated {len(held)} rows in {got['seconds']} s; flag precision {s['flagPrecision']}, recall "
           f"{s['flagRecall']}, parse {s['batchParseRate']}"
           + (f"; F1 per training $ (estimate) {dd.quality_per_dollar(s, usd)}" if usd else ""))

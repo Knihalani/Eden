@@ -1,0 +1,53 @@
+{
+  "gpu": "L4",
+  "usdPerHour": 0.8,
+  "passes": [
+    {
+      "concurrency": 1,
+      "calls": 60,
+      "failed": 1,
+      "errors": [
+        "RemoteDisconnected"
+      ],
+      "items": 709,
+      "wallSeconds": 452.2,
+      "p50ms": 5447,
+      "p90ms": 11727,
+      "maxMs": 13533,
+      "tokensInPerCall": 2073,
+      "tokensOutPerCall": 419,
+      "itemsPerGpuSecond": 1.57,
+      "usdPer1000Items": 0.14173
+    },
+    {
+      "concurrency": 16,
+      "calls": 61,
+      "failed": 0,
+      "errors": [],
+      "items": 719,
+      "wallSeconds": 39.6,
+      "p50ms": 6950,
+      "p90ms": 14326,
+      "maxMs": 17392,
+      "tokensInPerCall": 2071,
+      "tokensOutPerCall": 420,
+      "itemsPerGpuSecond": 18.17,
+      "usdPer1000Items": 0.01224
+    },
+    {
+      "concurrency": 32,
+      "calls": 61,
+      "failed": 0,
+      "errors": [],
+      "items": 719,
+      "wallSeconds": 226.3,
+      "p50ms": 85853,
+      "p90ms": 174576,
+      "maxMs": 174876,
+      "tokensInPerCall": 2071,
+      "tokensOutPerCall": 2622,
+      "itemsPerGpuSecond": 3.18,
+      "usdPer1000Items": 0.06994
+    }
+  ]
+}

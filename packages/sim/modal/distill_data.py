@@ -93,3 +93,18 @@ def quality_per_dollar(score, usd):
         return 0.0
     f1 = 2 * p * r / (p + r)
     return round(f1 / max(usd, 0.01), 3)
+
+
+def percentile(values, q):
+    """The q-th percentile (0-100) by nearest rank; None for no values."""
+    if not values:
+        return None
+    s = sorted(values)
+    return s[max(0, min(len(s) - 1, math.ceil(q / 100 * len(s)) - 1))]
+
+
+def usd_per_1000_items(gpu, gpu_seconds, items):
+    """GPU dollars per 1,000 items carded: measured GPU-seconds at a GPU's list price (M2's cost line)."""
+    if items <= 0:
+        raise ValueError("no items")
+    return round(gpu_seconds * GPU_USD_PER_HOUR[gpu] / 3600 / items * 1000, 5)

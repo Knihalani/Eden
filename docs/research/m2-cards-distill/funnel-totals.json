@@ -1,0 +1,153 @@
+{
+  "suites": "train1-6",
+  "seeds": [
+    41,
+    42
+  ],
+  "reader": "stub (funnel default)",
+  "runs": {
+    "default (mixed replayed cards + Haiku requests)": {
+      "hidden": 314,
+      "decoys": 273,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6604,
+        "found": 6604
+      },
+      "cardCalls": 376,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --json .local/modal/funnel-base.json"
+    },
+    "teacher: Haiku intent-v2 cards + requests replayed": {
+      "hidden": 318,
+      "decoys": 278,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6615,
+        "found": 6615
+      },
+      "cardCalls": 377,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards .local/modal/haiku-intent-cards.jsonl --json .local/modal/funnel-haikucards.json --baseline .local/modal/funnel-base.json"
+    },
+    "q15-x3 endpoint, live": {
+      "hidden": 295,
+      "decoys": 272,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6608,
+        "found": 6605
+      },
+      "cardCalls": 356,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards-endpoint URL --cards \".local/modal/cards/q15-x3.cards.jsonl\" --json \".local/modal/funnel-q15-x3.json\" --baseline .local/modal/funnel-base.json"
+    },
+    "q15-x6 endpoint, live": {
+      "hidden": 303,
+      "decoys": 282,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6604,
+        "found": 6602
+      },
+      "cardCalls": 356,
+      "cardFailures": 1,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards-endpoint URL --cards \".local/modal/cards/q15-x6.cards.jsonl\" --json \".local/modal/funnel-q15-x6.json\" --baseline .local/modal/funnel-base.json"
+    },
+    "cards q15x3 + requests haiku, replayed": {
+      "hidden": 320,
+      "decoys": 276,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6603,
+        "found": 6603
+      },
+      "cardCalls": 372,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards \".local/modal/q15x3-c.jsonl\" --intent .local/modal/haiku-r.jsonl --json \".local/modal/funnel-q15x3-c+haiku-r.json\""
+    },
+    "cards haiku + requests q15x3, replayed": {
+      "hidden": 297,
+      "decoys": 267,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6615,
+        "found": 6612
+      },
+      "cardCalls": 377,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards .local/modal/haiku-c.jsonl --intent \".local/modal/q15x3-r.jsonl\" --json \".local/modal/funnel-haiku-c+q15x3-r.json\""
+    },
+    "cards q15x3 + requests q15x3, replayed": {
+      "hidden": 295,
+      "decoys": 269,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6603,
+        "found": 6600
+      },
+      "cardCalls": 372,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards \".local/modal/q15x3-c.jsonl\" --intent \".local/modal/q15x3-r.jsonl\" --json \".local/modal/funnel-q15x3-c+q15x3-r.json\""
+    },
+    "cards q15x6 + requests haiku, replayed": {
+      "hidden": 321,
+      "decoys": 277,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6604,
+        "found": 6604
+      },
+      "cardCalls": 373,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards \".local/modal/q15x6-c.jsonl\" --intent .local/modal/haiku-r.jsonl --json \".local/modal/funnel-q15x6-c+haiku-r.json\""
+    },
+    "cards haiku + requests q15x6, replayed": {
+      "hidden": 311,
+      "decoys": 281,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6615,
+        "found": 6615
+      },
+      "cardCalls": 377,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards .local/modal/haiku-c.jsonl --intent \".local/modal/q15x6-r.jsonl\" --json \".local/modal/funnel-haiku-c+q15x6-r.json\""
+    },
+    "cards q15x6 + requests q15x6, replayed": {
+      "hidden": 308,
+      "decoys": 279,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6604,
+        "found": 6604
+      },
+      "cardCalls": 373,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards \".local/modal/q15x6-c.jsonl\" --intent \".local/modal/q15x6-r.jsonl\" --json \".local/modal/funnel-q15x6-c+q15x6-r.json\""
+    },
+    "cards haiku + requests haiku, replayed (split files)": {
+      "hidden": 318,
+      "decoys": 278,
+      "of": 384,
+      "intent": {
+        "state": "live",
+        "asked": 6615,
+        "found": 6615
+      },
+      "cardCalls": 377,
+      "cardFailures": 0,
+      "command": "bun packages/sim/src/lab/funnel.ts --suite train --seeds \"41,42\" --cards .local/modal/haiku-c.jsonl --intent .local/modal/haiku-r.jsonl --json .local/modal/funnel-haiku-c+haiku-r.json"
+    }
+  }
+}
