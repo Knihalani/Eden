@@ -201,7 +201,8 @@ def main(seeds: str, kind: str = "", suites: str = "", preset: str = "", cap: fl
         while left:
             wave, left = plan.waves(left, width)
             done = []
-            for s, r in zip(wave, fn.map([plan.asdict(s) for s in wave], return_exceptions=True)):
+            # (list: the map is read to its end before the wave is reported.)
+            for s, r in zip(wave, list(fn.map([plan.asdict(s) for s in wave], return_exceptions=True))):
                 if isinstance(r, BaseException):
                     print(f"  {s.name}: failed in Modal: {r!r}")
                     done.append({"name": s.name, "kind": kind, "code": -1, "capUsd": s.cap_usd, "files": {}})

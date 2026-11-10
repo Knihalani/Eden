@@ -293,6 +293,9 @@ def with_preset(name, extra=()):
         raise PlanError(f"no preset {name!r} (presets: {', '.join(sorted(PRESETS))})")
     preset, extra = PRESETS[name], list(extra)
     base, replaced, skip = [], value_flags(extra), False
+    if "--days" in replaced:
+        # A `--days` user plans its own requests (hidden, control and neutral): pi-ab refuses --variants beside it.
+        replaced = {**replaced, "--variants": -1}
     for i, a in enumerate(preset["args"]):
         if skip:
             skip = False

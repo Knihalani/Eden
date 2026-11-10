@@ -47,9 +47,18 @@ cards-enrich, presets, suites, free, spend` (`.ts`): check `git log origin/main`
 | `decide-fit.ts`, `cards-census.ts`, `sync-*.ts`                                  | Offline instruments for one track each                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `lab.ts`, `lab-cli.ts`, `connectors.ts`, `build.ts`, `capture.ts`                | The connector lab: real MCP servers in Docker over seeded backends (`bun run sim:lab`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
+`pi-ab --world-file F` (F3, D489) runs a pilot bundle (`../pilot/world.ts`: one account's redacted import and its
+owner's requests) in place of a generated user: one world, one request a session, the same arms and accounting; it
+refuses `--suite`, `--days`, `--day`, `--variants`, `--templates`, `--dress`, `--noise-sources` and `--act`. Only
+`bun run pilot run` should start it on real data (docs/PILOT.md).
+
 Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-bench.py` (run with `python3 -I`).
 Modal (D408): `packages/sim/modal/` (fan-out, card distillation, embedding screen; README there); its Python tests run
-inside `bun run check` through `modal-python.test.ts`.
+inside `bun run check` through `modal-python.test.ts`. **The powered bench (F3, D487):** `lab_fanout.py --preset
+bench-…` (named run shapes, seed ranges, Anthropic shards in waves under `--max-streams` 60, halved after a wave with
+429s) and `bench_report.py` (paired effects with a template-clustered bootstrap, McNemar, the run's minimum
+detectable effect). Read a part's effect from the clustered interval: on train the default against the agent alone
+has a design effect of about 2.5 (D488), so a task-level interval is too narrow by a factor of about 1.6.
 
 ## Rules
 

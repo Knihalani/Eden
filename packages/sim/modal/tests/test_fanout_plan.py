@@ -195,6 +195,8 @@ class Presets(unittest.TestCase):
         self.assertEqual(json.loads(plan.flag_value(args, "--variant-config")), {"minus-fewer": {"pushCandidatesSettled": 0}})
         self.assertEqual(plan.flag_value(args, "--days"), "8")
         self.assertIn("--tenant-prompt", args)
+        # pi-ab refuses --variants beside --days: the preset's own is dropped with it.
+        self.assertNotIn("--variants", plan.with_preset("bench-fewer", ["--days", "8"])[2])
         shards = plan.plan_pi_ab(suites, "41-43", 3.0, "r", args)
         self.assertEqual([s.seeds for s in shards], [["41"], ["42"], ["43"]])
 

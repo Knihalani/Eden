@@ -9,7 +9,8 @@ Modal yet, so every cost below is an **estimate**.
 | File | What it is | Needs Modal |
 | --- | --- | --- |
 | `lab_fanout.py` | pi-ab seeds or funnel shards fanned out over containers, one hard Anthropic cap split across shards | yes |
-| `fanout_plan.py` | its arithmetic: shards, cap split, each shard's command, merging; `plan` prints a plan with no token | no |
+| `fanout_plan.py` | its arithmetic: shards, cap split, each shard's command, merging, presets, waves; `plan` prints a plan with no token | no |
+| `bench_report.py` | the powered bench's report (F3, D487): paired effects clustered by template, McNemar, the run's minimum detectable effect | no |
 | `cards_distill.py` | LoRA on Haiku's cards, held-out eval, a vLLM OpenAI-compatible endpoint | yes |
 | `distill_data.py` | its data checks, bases, GPU choice, cost estimates | no |
 | `embed_screen.py` | the train corpus embedded on a GPU; planted item ranks against the lexical pool | yes |
@@ -83,6 +84,38 @@ about 60 agent streams, and four fan-outs at once on one key met Anthropic's con
 retried 429s a shard), which made wall times useless though quality pairs held. M1 measured the real costs: a train
 pi-ab shard (all six suites, 5 arms, 384 tasks an arm) took 3–10 minutes and $0.47–0.57 Anthropic; a `--days 8` user
 with 6 arms 5–8 minutes and $0.21–0.29; this session's 53 containers cost $1.54 of Modal credits (billing report).
+
+**Presets, waves and the powered bench (F3, D487).** `--preset NAME` names a checked-in run shape
+(`fanout_plan.PRESETS`: the M1 recipe with its arms), so a powered run is one command; `--args` after it add flags
+or replace the preset's (`--variants hidden`, `--days 8`, `--conditions …`). `--seeds` takes ranges (`41-68`).
+
+| preset | arms |
+| --- | --- |
+| `bench-tools` | `tools`, `eden` |
+| `bench-fewer` | `tools`, `eden`, `eden~minus-fewer` (D404) |
+| `bench-parts` | `eden` and `eden~minus-<part>` for nudge, plans, fewer, freshness (M1's arms; `PART_VARIANTS` are checked against `PARTS` by `modal-python.test.ts`) |
+| `bench-askmulti` | `eden`, `eden+askMulti` (D485) |
+
+Anthropic shards run in **waves**: the planner counts a shard's agent streams (arms × worlds: six train suites ×
+variants, or one for a `--days` user) and starts only as many shards at once as keep the streams on the key at or
+under `--max-streams` (default 60, the level that ran with no retried 429 in M1's rerun, M4 and F3). After each wave
+it reads the shards' request summaries and halves the width if more than 2% of requests were retried on a 429. One
+Anthropic fan-out runs at a time from a checkout (`.local/modal/anthropic.lock`): a second waits for the first.
+
+```bash
+python3 -I packages/sim/modal/fanout_plan.py plan --preset bench-fewer --seeds 49-68 --cap 4.4 -- --variants hidden
+modal run packages/sim/modal/lab_fanout.py --preset bench-fewer --seeds 49-68 --cap 4.4 --run f3-b-49 \
+  --args "--variants hidden"
+python3 -I packages/sim/modal/bench_report.py --pair eden:tools --pair eden~minus-fewer:eden \
+  --group cached=.local/modal/f3-b-41 --group inrun=.local/modal/f3-b-45,.local/modal/f3-b-49 --target 1.5
+```
+
+`bench_report.py` pairs two arms task by task and, for hidden facts, concerns, $/1k, wall, model turns and asks,
+prints the effect with a **template-clustered bootstrap** interval (tasks of one template share their errors, arXiv
+2411.00640), the task-level and seed-clustered intervals beside it, the design effect, the exact paired McNemar
+test, the run's **minimum detectable effect** (2.80 × the clustered standard error: 80% power, 5% two-sided), and
+how far more seeds can narrow it (the between-template variance sets a floor). `--sonnet` takes Sonnet's verdicts
+from `regrade*.json` beside each shard. Pure Python, no numpy.
 
 `--dry` prints the plan through Modal (it needs a token; `fanout_plan.py plan` does not). Hermes is not fanned out:
 it needs a local hermes-agent checkout with its venv (packages/sim/src/lab/CLAUDE.md), not built into this image.
@@ -188,7 +221,7 @@ unique texts), well under $0.10 a model.
 ## Tests
 
 ```bash
-cd packages/sim/modal && python3 -I -m unittest     # 35 tests, no Modal, no token
+cd packages/sim/modal && python3 -I -m unittest     # 51 tests, no Modal, no token
 bun test ./packages/sim/src/lab/cards-distill.test.ts ./packages/sim/src/lab/cards-endpoint.test.ts \
   ./packages/sim/src/lab/modal-python.test.ts       # export, scorer, endpoint transport against a stub server
 ```
