@@ -14,6 +14,8 @@ Modal yet, so every cost below is an **estimate**.
 | `distill_data.py` | its data checks, bases, GPU choice, cost estimates | no |
 | `embed_screen.py` | the train corpus embedded on a GPU; planted item ranks against the lexical pool | yes |
 | `embed_score.py` | its scoring (ranks, groups, report) | no |
+| `i1_checker.py` | I1: a cross-encoder fine-tuned on a teacher's (request, item) labels, ONNX export | yes |
+| `i1_data.py` | its data checks, targets and AUCs | no |
 | `tests/` | unit tests for the three no-Modal modules | no |
 
 Bun side (lab only, in `packages/sim/src/lab/`): `cards-distill.ts` (the training set's export and the eval's
@@ -185,10 +187,22 @@ Models: `Qwen/Qwen3-Embedding-0.6B` (default, its query prompt), `Qwen/Qwen3-Emb
 indexes). Only ids and ranks come back. **Cost (estimate):** one L4 for a few minutes (model download and ~6,500
 unique texts), well under $0.10 a model.
 
+## 4. The pair checker: `i1_checker.py` (I1, D470–D474)
+
+`bun packages/sim/src/lab/i1-label.ts pairs` turns the funnel's `--pool-dump` (train only, with `--neutral`) into
+groups of (request, pool item) pairs with the sim's truth and a by-template split; `label` has a teacher (Opus 5.5 by
+default) label them, direct or as a Message Batch, booked on the spend ledger. `i1_checker.py` fine-tunes a
+cross-encoder on the train templates' pairs (`--target opus|truth|mix`, decoys weighted `--decoy-weight`), reports
+held-out AUCs before and after, and exports ONNX with its tokenizer to `.local/i1/models/<run>/`; GPU is the first
+free of L4, A10G, T4. `packages/sim/lab/i1/evaluate.py` quantizes to int8 and measures AUCs and CPU latency locally;
+`sidecar.py` serves it over HTTP. **Run on 2026-11-10 (docs/research/i1-checker.md):** MiniLM-L6 reached AUC 0.906
+against Opus held out, but Opus itself could not separate facts from decoys (0.548) and the engine trial failed
+(D472). About $0.40 of Modal for eleven runs (bge-reranker-base $0.22 of it); no secret is used.
+
 ## Tests
 
 ```bash
-cd packages/sim/modal && python3 -I -m unittest     # 35 tests, no Modal, no token
+cd packages/sim/modal && python3 -I -m unittest     # 42 tests, no Modal, no token
 bun test ./packages/sim/src/lab/cards-distill.test.ts ./packages/sim/src/lab/cards-endpoint.test.ts \
   ./packages/sim/src/lab/modal-python.test.ts       # export, scorer, endpoint transport against a stub server
 ```

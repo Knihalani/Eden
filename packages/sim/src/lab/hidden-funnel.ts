@@ -1225,6 +1225,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
           }),
       // `pushCandidates`' last pass: the planted item's place in its pool (-1: not in it), and whether it was handed.
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
+      // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
+      ...(push ? { pushHandedN: push.handed.length } : {}),
       // `askNudge` (D316): whether that pass's candidates left the request unsettled (the packet nudged an ask).
       ...(push?.unsettled !== undefined ? { pushUnsettled: push.unsettled } : {}),
       ...(rr
