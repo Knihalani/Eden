@@ -637,3 +637,41 @@ describe("pushCheckGate (N5, D529): the stored answers decide whether the check 
     expect(() => checkEngineConfig({ ...on, pushCheckGate: 3 }, { deps: { checker: true, acts: true } })).toThrow();
   });
 });
+
+// N5 (D533, D534): `pushCheckSilent` off and `pushCheckAnchored`: the check as an addition to the default's packet,
+// called only where a constraint-like item names something the request names.
+describe("pushCheckSilent off and pushCheckAnchored (N5, D533, D534)", () => {
+  test("silent is I3's rule and the default; off, a check that names nothing leaves the default's candidates", async () => {
+    expect(DEFAULT_CONFIG.pushCheckSilent).toBe(true);
+    const model = says([]);
+    const { partner } = setup({ pushCheck: true, pushCheckSilent: false }, model);
+    expect((await handed(partner)).length).toBe(2);
+    expect(model.calls.length).toBe(1);
+    // A check that names something still replaces the default's packet.
+    const named = setup({ pushCheck: true, pushCheckSilent: false }, says(["Invoice archive"]));
+    expect(await handed(named.partner)).toEqual(["mail:other"]);
+  });
+
+  test("anchored: a call only when a constraint-like item names one of the request's anchors", async () => {
+    expect(DEFAULT_CONFIG.pushCheckAnchored).toBe(false);
+    // The request names Harlow; "Harlow venue" is constraint-worded and names it: the gate is open.
+    const open = says(["Harlow deposit"]);
+    expect(await handed(setup({ pushCheck: true, pushCheckAnchored: true }, open).partner)).toEqual(["mail:dated"]);
+    expect(open.calls.length).toBe(1);
+    // A request that names nothing the constraint-worded items name: no call, the default's candidates.
+    const closed = says(["Harlow deposit"]);
+    const { partner, checker } = setup({ pushCheck: true, pushCheckAnchored: true }, closed);
+    const got = await handed(partner, ref, "Pay the venue deposit invoice for Quillfeather.");
+    expect(closed.calls.length).toBe(0);
+    expect(checker!.stats.asked).toBe(0);
+    expect(got.length).toBe(2);
+  });
+
+  test("both need pushCheck and a checker", () => {
+    const deps = { deps: { cards: true, reader: true, checker: true } };
+    const on = { pushCheck: true, pushCheckAnchored: true, pushCheckSilent: false };
+    expect(checkEngineConfig(on, deps)).toEqual(on);
+    expect(() => checkEngineConfig({ pushCheckAnchored: true }, deps)).toThrow(/pushCheck/);
+    expect(() => checkEngineConfig(on, { deps: { cards: true, reader: true } })).toThrow(/checker/);
+  });
+});

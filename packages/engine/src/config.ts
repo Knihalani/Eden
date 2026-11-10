@@ -687,9 +687,23 @@ export interface EngineConfig {
    * N5 (D529; a trial; 0 = off; docs/research/n5-widen-check.md): with `pushCheck` and an `acts` dependency (the
    * answer to the check's question written once, when each item was stored), the check's call is made only when the
    * stored answer of some item it would read scores for this request; otherwise no call is made and the push hands
-   * the default's candidates (1) or no packet (2). An item with no stored answer yet always opens the gate.
+   * the default's candidates (1) or no packet (2; screened, not run live). An item with no stored answer yet always
+   * opens the gate.
    */
   pushCheckGate: number;
+  /**
+   * N5 (D533; a trial; true = I3's rule): with `pushCheck`, whether a check that names no item sends no candidates
+   * packet. Off, the default's candidates go instead: the check then only ever replaces the default's packet with the
+   * items it named, and a request it finds nothing for is handled as today.
+   */
+  pushCheckSilent: boolean;
+  /**
+   * N5 (D534; a trial, off): with `pushCheck`, the check's call is made only when some item it would read is
+   * constraint-like (`readerGate`'s test, cards included) and names one of the request's anchors (`settle.ts`: an
+   * entity or a day); otherwise no call is made and the default's candidates go. Fewer calls (about a third as
+   * many on train's 1:1:8 mix) with no stored answer and no dependency beyond the checker.
+   */
+  pushCheckAnchored: boolean;
   pushWidenEmbed: number;
   pushWidenIntent: number;
   pushWidenDeep: number;
@@ -847,6 +861,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushWiden: false,
   pushCheckForm: 1,
   pushCheckGate: 0,
+  pushCheckSilent: true,
+  pushCheckAnchored: false,
   pushWidenEmbed: 3,
   pushWidenIntent: 2,
   pushWidenDeep: 0,

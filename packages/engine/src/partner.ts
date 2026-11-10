@@ -2559,6 +2559,13 @@ export class ContextPartner {
     // `pushCheckGate` (N5, D529): the call is made only when the stored answer of some item read scores for this
     // request (`PartnerDeps.acts`; an item with no stored answer yet counts, so a new item is never skipped).
     // Otherwise no call: the default's candidates (1) or no packet (2). A dependency that throws gates nothing.
+    // `pushCheckAnchored` (N5, D534): the call is made only when some item the check would read is constraint-like
+    // and names one of the request's anchors (a person, a thing, a day); otherwise no call and the default's
+    // candidates. No model and no stored answer: the constraint test and the anchors are the default's own.
+    if (this.config.pushCheckAnchored) {
+      const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+      if (!head.some((x, i) => gate.like[i] && anchored(x.item, anchors))) return null;
+    }
     if (this.config.pushCheckGate > 0 && this.deps.acts) {
       let open = true;
       try {
@@ -2672,7 +2679,10 @@ export class ContextPartner {
     check: PushCheckRead | null = null,
   ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
     const { like } = gate;
-    const yes = check?.yes ?? null;
+    // `pushCheckSilent` off (N5, D533): a check that names nothing leaves the default's candidates instead of sending
+    // no packet, so the check only ever replaces the default's packet with the items it named.
+    const named = check?.yes ?? null;
+    const yes = named && named.size === 0 && !this.config.pushCheckSilent ? null : named;
     // `pushWiden` (D511): widened items are read only by the check and handed only when it names them, after the
     // pool's own; the nudge's deeper look, `anchoredPast` and the returned pool stay the lexical pool's.
     const pool = gate.pool;

@@ -194,15 +194,15 @@ A1 R1 90 / 59 / 55; A3 R1 93 / 66 / 58.
 | --------------------------------------------- | -------------- | ------------ | --------------- | ------------ | ------------------------ | --------------- | ------ |
 | C0 default                                    | 121            | 110          | 156             |              |                          |                 |        |
 | T0 I3's reply, no thinking                    | 139            | 70           | 67              | 0.000237     | 2,772 (892) / 79         | 0.87 / 1.18     | 0      |
-| T1 I3's reply, thinking low                   | 108            | 14           | 15              | 0.000318     | 2,236 (840) / 340        | 2.16 / 3.36     | 28     |
-| T1a T1 over stored-`act` items only           | 103            | 15           | 18              | (as T1)      |                          | 2.6 / 3.7       |        |
+| T1 I3's reply, thinking low                   | 108            | 14           | 15              | 0.000358     | 2,598 (836) / 346        | 2.05 / 3.47     | 30     |
+| T1a T1 over stored-`act` items only           | 103            | 15           | 18              | 0.000318     | 2,236 (840) / 340        | 2.16 / 3.36     | 28     |
 | T2c compare-first, first wording (`same`)     | 125            | 26           | 24              | 0.000253     | 2,905 (1,025) / 110      | 0.89 / 1.22     | 3      |
 | T2a T2c over stored-`act` items only          | 125            | 31           | 21              | 0.000213     | 2,504 (1,027) / 109      | 0.88 / 1.22     | 1      |
 | T3c compare-first, second wording             | 132            | 31           | 31              | 0.000262     | 3,030 (1,150) / 126      | 0.95 / 1.28     | 3      |
 | **T4c compare-first, third wording (`hits`)** | **138**        | **36**       | **45**          | **0.000269** | 3,056 (1,180) / 140      | **0.98 / 1.41** | 5      |
 
-- **Thinking on I3's short reply is not N2's check** (T1): 2.2 s and $0.00032 a call, as N2 guessed, but it hands
-  fewer planted facts than the default (108 against 121) and 28 replies ran past the output cap. Reading only the
+- **Thinking on I3's short reply is not N2's check** (T1): 2.0 s and $0.00036 a call, close to N2's guess, but it hands
+  fewer planted facts than the default (108 against 121) and 30 replies were unreadable. Reading only the
   stored-`act` items (T1a, T2a: hypothesis 2's "fewer items") saves 14% of the input and changes nothing else. Both
   switches are deleted (D528).
 - **A reply that compares before it decides does what thinking did, without thinking** (`pushCheckForm` 2, D527): per
@@ -240,3 +240,91 @@ been read**. The wording (`CHECK_SYSTEM_COMPARE`, commit 9968cb8e) is frozen fro
   if the live rule holds for it. Since K as run includes the widening, a promotion of the check alone would need K
   without `pushWiden` measured too: **arm `eden~Kp`** (`pushCheck`, `pushCheckForm` 2, no widening) runs beside K
   for that. G needs the stored answers (an ingest call the product does not make): recommended only.
+
+## 8. Screen and confirmation of §7 (funnel, Haiku 5.5 live, every decision the check's)
+
+`bun run funnel --suite train --seeds S -- --neutral --check live --check-cache F --widen-table …`, one process a
+seed; `compare.py`. K's calls: 470–473 a seed (0.82 a task), **$0.000268–0.000272 a call, p50 0.97–1.00 s, p90
+1.40–1.47 s**, 3,049–3,076 input tokens (1,185 cached) and 139–145 output tokens a call; 9–13 replies a seed
+unreadable (2%, the default's candidates go).
+
+| Arm                                  | Tasks                      | Hidden surfaced  | Decoys surfaced | Planted handed    | Decoy handed | Neutral packets |
+| ------------------------------------ | -------------------------- | ---------------- | --------------- | ----------------- | ------------ | --------------- |
+| C0 default                           | 42–44, all (576 a variant) | 480              | 411             | 370               | 308          | 461             |
+| Kp compare-first, no widening        | 42–44, all                 | 497              | 413             | 403               | 112          | 135             |
+| **K compare-first, widened**         | 42–44, all                 | **510 (+33 −3)** | 426             | **419 (+60 −11)** | **125**      | **140**         |
+| C0                                   | 41–44, all (768)           | 634              | 552             | 491               | 418          | 617             |
+| K (seed 41 chose the wording)        | 41–44, all                 | 677              | 571             | 557               | 161          | 185             |
+| N2's C4L (thinking, $0.00115, 6.8 s) | 41–44, all                 | 690              | 585             | 584               | 195          | 150             |
+| C0 (intent inert)                    | 45–48, held-out (160)      | 82               | 83              | 64                | 66           | 107             |
+| **K**                                | 45–48, held-out            | **119 (+37 −0)** | 84              | **103 (+42 −3)**  | **27**       | **21**          |
+| N2's C4L                             | 45–48, held-out            | 124              | 86              | 112               | 42           | 22              |
+
+- **K passes every bar on the screen and on the confirmation** (planted handed not lower, decoy handed at least 10%
+  lower, hidden surfaced not lower, neutral packets at least halved): 370 → 419, 308 → 125 (−59%), 480 → 510,
+  461 → 140 on seeds 42–44; 64 → 103, 66 → 27, 82 → 119, 107 → 21 on the fresh worlds.
+- **Against N2's thinking check on the same tasks** it hands 27 fewer planted facts of 768 and 34 fewer look-alikes
+  on 41–44, and 9 fewer and 15 fewer on 45–48, for **23% of the price and 14% of the wait** a call.
+- **The reply carries most of it; the widening adds a little** (Kp against K, 42–44): +33 planted handed without
+  the widening, +16 more with it (and +13 look-alikes).
+
+**The gate (arm G).** Fitted on the fit split of seeds 41–44 at $0 on K's recorded replies (`--check replay`,
+`pushCheckGate` 1 or 2, `--acts-rule {"mode":"match","minScore":M}`; the call rate by variant from each task's
+`pushCheckCalled`):
+
+| Mark M, form                   | Call rate on the 1:1:8 mix (hidden / control / neutral) | Planted handed | Decoy handed | Neutral packets |
+| ------------------------------ | ------------------------------------------------------- | -------------- | ------------ | --------------- |
+| no gate (K), fit split (608)   | 0.82 (the default's own gate)                           | 435            | 136          | 152             |
+| 10, default's candidates       | 0.397 (0.71 / 0.65 / 0.33)                              | 428            | 174          | 364             |
+| 11, default's candidates       | 0.331 (0.65 / 0.61 / 0.26)                              | 425            | 185          | 394             |
+| 11, no packet                  | 0.331                                                   | 364            | 113          | 68              |
+| **11.5, default's candidates** | **0.289 (0.61 / 0.56 / 0.22)**                          | **422**        | **191**      | **407**         |
+| 12, default's candidates       | 0.253 (0.57 / 0.53 / 0.18)                              | 420            | 201          | 423             |
+
+The rule picks the mark at or under 0.33 (11 reads 0.331: over) and the form with more planted handed: **Gd at
+11.5**. On the screen split (160): planted handed 104 → 120 (K 122), decoy handed 84 → 43 (K 25), neutral packets
+135 → 116 (K 33), call rate 0.265. On the confirmation: 64 → 95 (K 103), 66 → 40 (K 27), 107 → 91 (K 21), call
+rate 0.221. **G qualifies for the live run.** What the gate gives up is the silence: where it makes no call the
+default's packet goes, so a neutral request still gets one four times in five.
+
+## 9. Pre-registration F (addendum): a gate that needs no stored answer, and a check that never silences
+
+Written after round 1's short run was read (§10: K +7.9 points for +$0.21 per 1,000 tasks and +1.06 s; G +5.3 for
++$0.054 and +0.33 s) and before round 1's days run finished; committed before round 2 started.
+
+**Two things round 1 showed.**
+
+- **Silence is not free one request at a time.** K and Kp send no packet on most neutral requests, and the agent then
+  asks: `ask_context` +0.30 a task on the 1:1:8 mix, agent turns +0.15, so wall rises 1.06 s for 0.81 calls of
+  0.95 s. G, which leaves the default's packet where it makes no call, shows neither (+0.04 asks).
+- **G's stored answers cost an ingest call for every item** ($0.054 per 1,000 items; at the cost model's 36 new items
+  and about 16 requests a day that is about +$0.12 per 1,000 tasks direct, +$0.06 by batch **[EST]**), which is most
+  of the budget G saved.
+
+**So two switches, screened at $0 on recorded replies before this was written** (seeds 42–44, the no-widening arm's
+replies, 576 a variant; C0 370 planted handed, 308 decoys, 461 neutral packets; Kp 403 / 112 / 135 at 0.82 calls):
+
+| Arm (no widening)                                                                                   | Calls a task, 1:1:8 mix | Planted handed | Decoy handed | Neutral packets |
+| --------------------------------------------------------------------------------------------------- | ----------------------- | -------------- | ------------ | --------------- |
+| gate: a constraint-like pool item names a request anchor (`pushCheckAnchored`)                      | 0.291                   | 393            | 198          | 378             |
+| the same within the first five pool items                                                           | 0.242                   | 381            | 212          | 395             |
+| `pushCheckAnchored`, and a check naming nothing leaves the default's packet (`pushCheckSilent` off) | 0.291                   | 399            | 285          | 461             |
+| no gate, `pushCheckSilent` off                                                                      | 0.806                   | 411            | 278          | 461             |
+
+With the widening on the fit split of 41–44, the anchored gate reads planted handed 418 against the stored-answer
+gate's 422 at the same call rate (0.289): the stored answers buy nothing the default's own constraint test and
+anchors do not.
+
+**Arm N (round 2):** `pushCheck`, `pushCheckForm` 2, `pushCheckAnchored`, `pushCheckSilent` off, **no widening**: the
+check is called on about three pushes in ten and only ever replaces the default's packet with the items it named.
+It needs nothing the product lacks (the servers wire the checker on the reader's model), so it can be promoted.
+
+- **Runs:** Pi on Modal, §4's harness, arms `eden` and `eden~N`, short (seeds 41–48, hidden, control, neutral, all
+  templates) and `--days 8` (users w41–w48); every hidden answer and every concern Sonnet-regraded.
+- **Rule (the brief's, §4's):** N is promoted into `DEFAULT_CONFIG` only if hidden is better (short, the
+  template-clustered interval above zero), Sonnet-confirmed concerns are not up (short and days), total $ per 1,000
+  tasks rises by at most $0.10 (days, steady state, `pi-cost-report.ts`; the short shape's 1:1:8 figure beside it)
+  and wall rises by at most 0.3 s a task on both shapes (paired mean on the 1:1:8 mix, `mix.py`). Otherwise it stays
+  an off trial and the trade is reported.
+- **Budget:** about $5.8 **[EST]** (short $3.0, days $0.9, regrades $1.9) of the $8 left under the $25 cap.
+- The top-five gate, the stored-answer gate with no packet, and N with the widening are not run live (the cap).
