@@ -39,14 +39,14 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
   costs replace estimates as calls settle, so the spend can pass the cap by at most what calls in flight cost over
   their estimates. The lab's spend ledger meters only `claude-*` ids and lives in `@eden/sim`, which eval does not
   import.
-- **Precision over recall (D3).** A change that raises `recall` by raising `falseFireRate` needs an explicit
-  decision. The no-model run of the default reads precision 0.65, recall 0.52, falseFireRate 0 (26 of 50 expected,
-  40 delivered; D435). D119 removed D112's false fire in `people-and-days-4` (`groundOccasion` took a lowercase first
-  name for the occasion): any false fire is a regression. The pre-D128 `--live` (now `--live --judge`) still had one
-  on that turn, from the judge it wires (`model:` reason; the servers wire none, D112, and neither does `--live`
-  since D128). Precision fell to 0.889 with the `large-*` scenarios (24 of 27 delivered items expected under the old default): the rule paths deliver lookalikes
-  there (`large-flight-lookalikes` 3 items for 1 expected, `large-people-lookalikes` 2 for 1). That is the gap the
-  reader closes, so it is kept in the baseline, not fixed by editing the scenarios.
+- **Precision over recall (D3).** A change that raises `recall` by raising `falseFireRate` needs an explicit decision.
+  The no-model run of the default reads precision 0.65, recall 0.52, falseFireRate 0 (26 of 50 expected, 40 delivered;
+  D435). D119 removed D112's false fire in `people-and-days-4` (`groundOccasion` took a lowercase first name for the
+  occasion): any false fire is a regression. The pre-D128 `--live` (now `--live --judge`) still had one on that turn,
+  from the judge it wires (`model:` reason; the servers wire none, D112, and neither does `--live` since D128).
+  Precision fell to 0.889 with the `large-*` scenarios (24 of 27 delivered items expected under the old default): the
+  rule paths deliver lookalikes there (`large-flight-lookalikes` 3 items for 1 expected, `large-people-lookalikes` 2 for
+  1). That is the gap the reader closes, so it is kept in the baseline, not fixed by editing the scenarios.
 - **The reader (`--reader stub|oracle`).** `bun run eval` runs the default with no model: its reader, cards and
   intent are inert (listed under `inert`), which is the shipped default's no-model path. An override that names
   `askReader` itself is refused without `--reader`. `--reader stub` wires the real
