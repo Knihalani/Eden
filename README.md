@@ -85,7 +85,8 @@ startup it prints whether it reached Eden. Each chat request's new messages are 
 inserted before the latest user message, and kept there on later turns (D336); the answer streams back unchanged, and
 with Eden down the request goes through as it came (D280). Agents on Anthropic's Messages API use the same proxy:
 `EDEN_PROXY_UPSTREAM=https://api.anthropic.com/v1`, the SDK's `base_url` set to `http://127.0.0.1:8791`, and Eden's
-context arrives as a text block of the user's message (D653). Any OpenAI-compatible upstream works (OpenAI, OpenRouter,
+context arrives as a text block of the user's message (D653); OpenAI's Responses API (`/v1/responses`) is served
+too (D656). Any OpenAI-compatible upstream works (OpenAI, OpenRouter,
 Anthropic's `https://api.anthropic.com/v1`, a local server). For full control, use the SDK:
 
 ```ts
