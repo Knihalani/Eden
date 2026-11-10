@@ -148,7 +148,7 @@ import {
 } from "./neutral";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
-import { loadWidenTable, widenFor } from "./n2-widen";
+import { loadWidenHashTable, loadWidenTable, widenByHash, widenFor } from "./n2-widen";
 import {
   coverageLines,
   intentPlace,
@@ -224,7 +224,10 @@ const cli = flags(
         "check",
         "check-model",
         "check-cache",
+        "check-log",
         "widen-table",
+        "widen-hash",
+        "widen-embed",
         "templates",
       ].map((k) => [k, V]),
     ),
@@ -501,6 +504,14 @@ if (TEMPLATES) {
  * request (`packages/sim/modal/n2_embed.py`), wired as the `widen` dependency the `pushWiden` trial reads.
  */
 const WIDEN_TABLE = opt("widen-table", "") ? loadWidenTable(opt("widen-table", "")) : null;
+/** `--widen-hash FILE` (N5, D530): the same table keyed by item content (`widenByHash`), as pi-ab's days need it. */
+const WIDEN_HASH = opt("widen-hash", "") ? loadWidenHashTable(opt("widen-hash", "")) : null;
+if (WIDEN_TABLE && WIDEN_HASH) throw new Error("--widen-table and --widen-hash are two forms of one table: pass one");
+/**
+ * `--widen-embed N` (N5): the table's first N ids at most reach the engine (0: no cut). N5's funnel screens ran with
+ * 5 (the engine asks for `pushWidenEmbed` × 2 = 6 and keeps the first 3 not in the pool); the Pi runs had no cut.
+ */
+const WIDEN_EMBED = Number(opt("widen-embed", "0"));
 /** `--reader-log out.jsonl`: each reader call's prompt (the items as the model read them) and reply, sim data only. */
 const READER_LOG = opt("reader-log", "");
 // An approximated verdict logged beside recorded ones would be read back later as a real reading (checked before the
@@ -546,6 +557,21 @@ const checkModel =
           : null,
         CHECK_MODEL,
       );
+/** `--check-log FILE` (N5): each check call's prompt (request and items as read) and reply, sim data only. */
+const CHECK_LOG = opt("check-log", "");
+if (CHECK_LOG) writeFileSync(CHECK_LOG, "");
+const loggedCheck = (tag: Record<string, unknown>): Model | null =>
+  checkModel && CHECK_LOG
+    ? {
+        id: checkModel.id,
+        chat: async (request) => {
+          const res = await checkModel.chat(request);
+          const prompt = request.messages.find((m) => m.role === "user")?.content ?? "";
+          appendFileSync(CHECK_LOG, `${JSON.stringify({ ...tag, prompt, reply: res.text })}\n`);
+          return res;
+        },
+      }
+    : checkModel;
 const checkLanes: PushChecker[] = [];
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
 const readerModel =
@@ -950,9 +976,27 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   if (reader) readerLanes.push(reader);
   // Every report per session, in order: a request can be read twice (`readerPush`'s ask, then the funnel's own).
   const readerReports = new Map<string, ReaderReport[]>();
-  const checker = checkModel ? new PushChecker({ model: checkModel, budget: new Budget(UNCAPPED) }) : null;
+  const laneCheck = loggedCheck({ suite, seed, variant });
+  const checker = laneCheck ? new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) }) : null;
   if (checker) checkLanes.push(checker);
   const pushPools = new Map<string, PushPoolReport[]>();
+  // `--widen-table`, `--widen-hash` (N2, N5): the embedding table's ids for this world's requests.
+  let byHash: Map<string, string> | null = null;
+  const idOf = (hash: string) =>
+    (byHash ??= new Map(
+      simSources(world, REALISTIC, 0, seed)
+        .flatMap((src) => src.listAll())
+        .map((raw) => [cardKey(sanitizeItem(raw)).slice(0, 20), raw.id] as const),
+    )).get(hash);
+  const embedded = WIDEN_TABLE
+    ? widenFor(WIDEN_TABLE, suite, seed, variant)
+    : WIDEN_HASH
+      ? widenByHash(WIDEN_HASH, seed, idOf, () => variant)
+      : null;
+  const widen =
+    embedded && WIDEN_EMBED > 0
+      ? async (sc: unknown, request: string, k: number) => (await embedded(sc, request, k)).slice(0, WIDEN_EMBED)
+      : embedded;
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
@@ -966,7 +1010,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
     ...(checker ? { checker } : {}),
-    ...(WIDEN_TABLE ? { widen: widenFor(WIDEN_TABLE, suite, seed, variant) } : {}),
+    ...(widen ? { widen } : {}),
     ...(reader
       ? {
           reader,
@@ -1266,6 +1310,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       appendFileSync(PACKETS, JSON.stringify({ ...line, ...extra }) + "\n");
     }
     const push = pushPools.get(sessionId)?.at(-1);
+    // `pushCheck`: whether any pass of this task made the check's call (N5's call rate by variant).
+    const checkCalled = (pushPools.get(sessionId) ?? []).some((r) => r.checkCalled);
     pushPools.delete(sessionId);
     if (POOL_DUMP) {
       const ids = push?.pool ?? [];
@@ -1351,6 +1397,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
+      ...(checkCalled ? { pushCheckCalled: true } : {}),
       // `askNudge` (D316): whether that pass's candidates left the request unsettled (the packet nudged an ask).
       ...(push?.unsettled !== undefined ? { pushUnsettled: push.unsettled } : {}),
       ...(rr

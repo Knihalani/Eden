@@ -78,6 +78,8 @@ export interface BuildOptions {
    * and EDEN_PERSIST_KEY). Unset, the default: no item content reaches the disk (D8).
    */
   persist?: FrozenDisk;
+  /** Trial (D652, EDEN_PERSIST_DISK_ONLY=1; with `persist`): a frozen user on disk keeps no blob in memory. */
+  persistDiskOnly?: boolean;
 }
 
 /**
@@ -155,7 +157,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
       : undefined;
   const cache = new ItemCache();
   // Before the partner is built: it wires the sync's state into what a persisted user carries.
-  if (options.persist) cache.persist(options.persist);
+  if (options.persist) cache.persist(options.persist, { diskOnly: options.persistDiskOnly === true });
   const partner = new ContextPartner({
     sources: options.sources,
     sourceMap,

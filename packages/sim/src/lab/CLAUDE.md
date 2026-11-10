@@ -53,6 +53,13 @@ refuses `--suite`, `--days`, `--day`, `--variants`, `--templates`, `--dress`, `-
 role not on a `claude-*` model, and `--allow-logging` (real data stays off OpenRouter). Only `bun run pilot run`
 should start it on real data (docs/PILOT.md).
 
+**The push check in the lab (I3, N2, N5):** `--check live|replay --check-cache F` wires the check's model in the
+funnel (`--check-log F` writes each prompt and reply; a row's `pushCheckCalled` says whether the task made the call),
+pi-ab wires it for any arm with `pushCheck`. `--widen-table` (N2, ids, short worlds) or `--widen-hash` (N5, D530, item
+content, any world of the same seed; `n2-widen.ts`) is the `widen` dependency of an arm with `pushWiden`.
+`../../lab/n5/mix.py` pairs an arm against `eden` for cost and wall on the 1:1:8 mix; `days_hidden.py` resamples
+whole users. Recipes: docs/LAB.md 1f, 1g.
+
 Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-bench.py` (run with `python3 -I`).
 Modal (D408): `packages/sim/modal/` (fan-out, card distillation, embedding screen; README there); its Python tests run
 inside `bun run check` through `modal-python.test.ts`. **The powered bench (F3, D487):** `lab_fanout.py --preset

@@ -593,6 +593,28 @@ request, measured again before any promotion: **[EST]** I3's short-reply request
 300 output tokens, 2–3 s and $0.0004 a call (n2-recall.md §8). I3's no-thinking check (D500–D502) is the cheap end:
 $0.0002 a call, p50 0.9 s, which cannot gate a widened pool (D511).
 
+## The compare-first push check and its gate (N5, `pushCheckForm` 2, `pushCheckAnchored`; trials, off; D527–D536)
+
+The per-push call of I3's check with another reply (docs/research/n5-widen-check.md): the same fixed instructions
+plus a compare-first format (about 1,185 tokens, read from the cache on Anthropic direct), the request and at most 20
+items of 200 characters, no thinking, no stop sequence, output capped at 500 tokens; one call a push through the
+check's own `Budget` ($0.001 reserved a call). Measured on Pi (train seeds 41–48, lab provider, cached; 14,194
+calls): **$0.00023–0.00026 a call** (about 2,950 input tokens of which 1,185 cached, 116–143 output), p50 0.96–1.04 s,
+p90 1.44–1.52 s.
+
+| Arm (per 1,000 tasks, 1:1:8) | Calls a task | Check $ | Total $ against the default (short; days) | Wait a task (short; days) |
+| --- | --- | --- | --- | --- |
+| every gated push, with `pushWiden` (K) | 0.81–0.83 | 0.21–0.22 | +0.214; +0.173 | +1.06 s; +0.85 s |
+| every gated push (Kp) | 0.81–0.83 | 0.18–0.19 | +0.183; +0.156 | +1.04 s; +0.88 s |
+| `pushCheckAnchored`, `pushCheckSilent` off (N) | 0.30; 0.40 | 0.07; 0.09 | +0.043; +0.083 | +0.31 s; +0.41 s |
+
+The agent's own spend is flat to lower with the check (−$0.01 to −$0.05 per 1,000 tasks over days: smaller packets
+in the day's transcript); a silent push adds agent turns one request a session (`ask_context` +0.30 a task, D532).
+Through OpenRouter with no cache breakpoint (D145) the instructions are paid in full: about +$0.0001 a call
+**[EST]**. Asking the check's question once per item at ingest (rejected, D526) cost $0.000053–0.000055 an item on
+Haiku 5.5 at effort low, 12 items a call: about $0.12 per 1,000 tasks at 36 new items and 16 requests a day
+**[EST]**, half by Message Batches. Thinking at effort low on I3's short reply: $0.00036 and 2.0 s a call (D528).
+
 ## Levers, in order of leverage
 
 1. Fewer model calls: better cheap scoring (M1 tuning), the graph (M3; deleted by D225), learned silence. Done so far: ask answers

@@ -161,7 +161,9 @@ export class EncryptedFrozenDisk implements FrozenDisk {
     try {
       file = readFileSync(join(this.o.dir, name));
     } catch {
-      this.forgetFile(name);
+      // Unlinked, best effort: a file this store stopped knowing of would outlive a later forget of its user and be
+      // read back by the next process (the review of D652, where every thaw reads).
+      this.remove(name);
       this.o.report?.({ kind: "read-failed", reason: "io" });
       return null;
     }
