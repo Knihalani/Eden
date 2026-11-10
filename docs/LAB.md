@@ -1055,7 +1055,7 @@ python3 -I packages/sim/modal/bench_report.py --pair eden:tools --pair eden~minu
   --group cached=.local/modal/bench-a --group inrun=.local/modal/bench-b --target 1.5
 ```
 
-- **Presets** (`fanout_plan.PRESETS`): `bench-tools`, `bench-fewer`, `bench-parts`; `--args` after a
+- **Presets** (`fanout_plan.PRESETS`): `bench-tools`, `bench-fewer`, `bench-parts`, `bench-yield` (N1b, D543); `--args` after a
   preset add or replace flags. `python3 -I packages/sim/modal/fanout_plan.py plan --preset … --seeds … --cap …`
   prints the plan, the streams a shard and the shards at once, with no token.
 - **Concurrency is automatic.** Shards run in waves that keep the agent streams on the key at or under

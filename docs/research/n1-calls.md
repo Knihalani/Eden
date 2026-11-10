@@ -295,7 +295,8 @@ both). Concerns: the interval is not entirely above zero (one concern in 1,045 a
 is not entirely above zero. All five hold: **`sourceYield` is promoted into the default (D509)**. Two things the
 figures do not settle and the note should not hide: the hidden point estimate is below zero in both live runs (−0.4
 first built, −1.1 as shipped; the two runs share tasks, not agent draws), and a real loss of up to about four points
-is not excluded; the powered bench (28 seeds) would settle it for about $3.
+is not excluded; the powered bench (28 seeds) would settle it for about $3. **It was run (N1b, D540–D541,
+n1b-yield-bench.md): +0.5 points with the rule (−0.8..+1.8, n 2,632); the switch stays.**
 
 ## 6. What is left
 
