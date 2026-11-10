@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildWorld } from "../world";
 import { HELDOUT17_LATE } from "./hidden-heldout17";
+import { HELDOUT18_ANCHORED, HELDOUT18_LATE } from "./hidden-heldout18";
 import { supportsNeutral } from "./neutral";
 import { parseSuites, SUITE_NAMES, SUITES, UNREAD_BLIND, UNRUN_BLIND } from "./suites";
 
@@ -168,8 +169,67 @@ describe("suite registry", () => {
     }
     expect(UNRUN_BLIND).toContain("heldout17");
     // Read by A29 (D399): the funnel now warns that a run naming it was read before.
-    expect(UNREAD_BLIND).toEqual([]);
+    expect(UNREAD_BLIND).not.toContain("heldout17");
     expect(supportsNeutral("heldout17")).toBe(true);
     expect(parseSuites("all")).not.toContain("heldout17");
+  });
+  // D465 (docs/research/m6-heldout18.md): counts, ids and refs only; its templates' text is not read here.
+  test("heldout18 builds 32 tasks per variant with neutral, unread, out of `all`, and its refs name no template", () => {
+    for (const seed of [41, 44]) {
+      const by = Object.fromEntries(
+        (["hidden", "control", "neutral"] as const).map((v) => {
+          const world = buildWorld({ seed: seed * 1_000 });
+          const before = world.items.length;
+          const tasks = SUITES.heldout18!(world, seed, v);
+          return [v, { tasks, items: world.items.slice(before) }];
+        }),
+      );
+      expect([by.hidden!.items.length, by.control!.items.length, by.neutral!.items.length]).toEqual([32, 32, 0]);
+      const same = (t: { text: string; detail: string; template: string }) => [t.text, t.detail, t.template];
+      for (const v of ["control", "neutral"]) {
+        expect(by[v]!.tasks.map(same)).toEqual(by.hidden!.tasks.map(same));
+        expect(by[v]!.tasks.every((t: { id: string }) => t.id.startsWith(`w${seed}:heldout18-${v}:`))).toBe(true);
+      }
+      expect(by.hidden!.tasks.every((t: { id: string }) => t.id.startsWith(`w${seed}:heldout18:`))).toBe(true);
+      // Template names and task ids are unique, so a per-template read (or a --templates filter) names one task.
+      const names: string[] = by.hidden!.tasks.map((t: { template: string }) => t.template);
+      expect(new Set(names).size).toBe(names.length);
+      for (const v of ["hidden", "control", "neutral"]) {
+        const ids = by[v]!.tasks.map((t: { id: string }) => t.id);
+        expect(new Set(ids).size).toBe(ids.length);
+      }
+      // As heldout17: refs of the base world's shape, equal in hidden and control, and no marker an agent could read.
+      const refs = (v: string) => by[v]!.items.map((it: { ref: string }) => it.ref);
+      expect(refs("control")).toEqual(refs("hidden"));
+      for (const v of ["hidden", "control"]) {
+        for (const it of by[v]!.items as { ref: string; id: string; title: string }[]) {
+          expect(it.ref).toMatch(/^[a-z]+-\d+$/);
+          const meta = Object.values((it as { meta?: Record<string, string> }).meta ?? {}).join(" ");
+          const seen = `${it.ref} ${it.id} ${it.title} ${meta}`.toLowerCase();
+          expect(names.filter((n) => seen.includes(n))).toEqual([]);
+          expect(/heldout|h18|planted|decoy/.test(seen)).toBe(false);
+        }
+      }
+      // Eight late-arrival templates and at least twelve short anchored requests, all templates of the suite.
+      expect(HELDOUT18_LATE.length).toBe(8);
+      expect(HELDOUT18_LATE.every((n) => names.includes(n))).toBe(true);
+      expect(HELDOUT18_ANCHORED.length).toBeGreaterThanOrEqual(12);
+      expect(HELDOUT18_ANCHORED.every((n) => names.includes(n))).toBe(true);
+      const words = (t: { text: string }) => t.text.split(/\s+/).filter(Boolean).length;
+      const anchored = by.hidden!.tasks.filter((t: { template: string }) => HELDOUT18_ANCHORED.includes(t.template));
+      expect(anchored.every((t: { text: string }) => words(t) <= 12)).toBe(true);
+    }
+    expect(UNRUN_BLIND).toContain("heldout18");
+    // Unread (D465): the funnel calls a run naming it the blind read rather than "read before".
+    expect(UNREAD_BLIND).toEqual(["heldout18"]);
+    expect(supportsNeutral("heldout18")).toBe(true);
+    expect(parseSuites("all")).not.toContain("heldout18");
+  });
+
+  test("the registry's suite names are unique and every UNRUN_BLIND and UNREAD_BLIND name is a suite", () => {
+    expect(new Set(SUITE_NAMES).size).toBe(SUITE_NAMES.length);
+    expect(new Set(UNRUN_BLIND).size).toBe(UNRUN_BLIND.length);
+    expect(UNRUN_BLIND.every((n) => SUITE_NAMES.includes(n))).toBe(true);
+    expect(UNREAD_BLIND.every((n) => UNRUN_BLIND.includes(n))).toBe(true);
   });
 });

@@ -18,6 +18,7 @@ export const NEUTRAL_SUITES: readonly string[] = [
   "heldout15",
   "heldout16",
   "heldout17",
+  "heldout18",
   "train1",
   "train2",
   "train3",
