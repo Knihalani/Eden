@@ -1,0 +1,21 @@
+seeds [41] eden        hidden 94/192 = 0.490  concerns 1/192  agent $/1k 0.273
+seeds [41] eden~order  hidden 98/192 = 0.510  concerns 2/192  agent $/1k 0.278
+seeds [42] eden        hidden 86/192 = 0.448  concerns 2/192  agent $/1k 0.259
+seeds [42] eden~order  hidden 106/192 = 0.552  concerns 2/192  agent $/1k 0.273
+seeds [43] eden        hidden 91/192 = 0.474  concerns 2/192  agent $/1k 0.265
+seeds [43] eden~order  hidden 116/192 = 0.604  concerns 0/192  agent $/1k 0.276
+seeds [44] eden        hidden 94/192 = 0.490  concerns 0/192  agent $/1k 0.262
+seeds [44] eden~order  hidden 109/192 = 0.568  concerns 3/192  agent $/1k 0.275
+seeds [45] eden        hidden 96/192 = 0.500  concerns 3/192  agent $/1k 0.260
+seeds [45] eden~order  hidden 109/192 = 0.568  concerns 2/192  agent $/1k 0.269
+seeds [46] eden        hidden 87/192 = 0.453  concerns 0/192  agent $/1k 0.262
+seeds [46] eden~order  hidden 105/192 = 0.547  concerns 2/192  agent $/1k 0.272
+seeds [47] eden        hidden 90/192 = 0.469  concerns 1/192  agent $/1k 0.249
+seeds [47] eden~order  hidden 109/192 = 0.568  concerns 2/192  agent $/1k 0.280
+seeds [48] eden        hidden 84/192 = 0.438  concerns 2/192  agent $/1k 0.256
+seeds [48] eden~order  hidden 108/192 = 0.562  concerns 2/192  agent $/1k 0.267
+all eden        hidden 722/1536 = 0.470  concerns 11/1536  agent $/1k 0.261
+all eden~order  hidden 860/1536 = 0.560  concerns 15/1536  agent $/1k 0.274
+reference (no call cap), seed 41:
+seeds [41] eden        hidden 116/192 = 0.604  concerns 2/192  agent $/1k 0.276
+all eden        hidden 116/192 = 0.604  concerns 2/192  agent $/1k 0.276

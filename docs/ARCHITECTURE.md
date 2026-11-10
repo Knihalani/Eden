@@ -199,7 +199,10 @@ Such a copy (`Sync.complete` false: its backfill stopped at the user's cut befor
 some of its items) does not answer for its source (`syncLocalComplete`, D264): the source is searched live like an
 unsynced one, so what is older than the cut is still found. The push does not wait for that search
 (`pushCutBehind`, D405, D406): it answers a cut copy from what is held, the search runs behind, and what it stores
-reaches the agent through the poll's follow-ups; an explicit ask still waits for it. A lookup polls at most its `syncPollWidth` (8) best-routed
+reaches the agent through the poll's follow-ups. Nor does an explicit ask (`askBehind`, D430, D431): its lookup runs
+behind as the push's does, it waits `askBehindWaitMs` (0) for that work, answers from what is held and names the
+sources still being read (status "searching", never an all-clear), and what they then store that it would cite goes
+out as a packet at the next take. A lookup polls at most its `syncPollWidth` (8) best-routed
 stale sources (D263); a warm source past them answers from its copy as it stands, as under `syncPollBehind`. Routing
 (`SourceMap.route`) adds, per source, log2(1 + its items among the request's 40 best matches in the user's own index)
 (`routeLocalHits`, D265), so a request that names no one still reaches the sources whose items share its words. The
@@ -230,6 +233,17 @@ whose daily sweep was skipped, or such a source's copy the last sweep did not li
 re-reads it by id first (D126, D211). A copy no re-read confirms is not delivered and makes its source's sweep due at
 the next tick. At 1,000 sources the sweep falls from ~1,114 to ~282 listing calls a user a day; a five-source user uses
 all their sources and keeps the daily sweep.
+
+Two trials, both off (F1, D475–D479; docs/research/f1-local-copy.md), aim at a local copy that is complete without
+push. `syncCold`: what the cap pushes out of the index is kept compressed in memory per source behind a filter of its
+words (`cold.ts`), each listing is read to its end while `syncColdMaxItems` has room, and a lookup brings back the
+cold copies that hold its words instead of searching the source live; a copy brought back from a source with no
+change feed is re-read before delivery (`syncColdVerify`). `syncDelta`: a source with a change feed (`Source.changes`)
+is polled by one read of what changed since its cursor, deletions included; a complete delta read vouches for every
+copy held, so a change notice costs one delta read instead of D126's re-read of each doubted item, and the daily
+re-listing becomes a delta read. At ~1,000 sources live, with nine connectors in ten offering neither push nor a
+feed, they cut connector calls from 36 to 9 a task with hidden facts not lower, and made tasks about 1.2 s slower
+(the re-reads' wait and the cold tier's CPU), so they are not in the default.
 
 **Change notifications** (D125, `syncPush`; `Source.notifies`, `ContextPartner.sourceChanged` and `sourceItems`,
 `POST /v1/sources/changed` and `/v1/sources/items`, the client's `sourceChanged`/`sourceItems`): a source whose
@@ -286,10 +300,12 @@ what it delivers is queued for the agent's next request: after a delivery, or wi
 grounded (so it makes no judge call); after silence with no model, as the lookup would have decided. The first answer
 can carry a copy the poll then finds edited; the ledger records each delivered item's words with the flag, and the
 follow-up delivers the corrected copy (the departure from D40 is that the old copy went out first).
-`ObserveResult.pending` stays true while a poll or follow-up is running. The agent's `ask_context` still waits for the
-poll; the reader's push does not (`readerPushBehind`, below). A lookup has one deadline, `sourceTimeoutMs` (1.5 s) from
+`ObserveResult.pending` stays true while a poll or follow-up is running. Since D431 the agent's `ask_context` does not
+wait for the poll either (`askBehind`, above); with the switch off it does. The reader's push does not
+(`readerPushBehind`, below). A lookup has one deadline, `sourceTimeoutMs` (1.5 s) from
 when its sources are resolved (D140): the on-demand poll, the live search, the planner's cascade and the probes share
-it, so a listing that hangs and the search after it hold an ask back about 1.5 s before the reader starts, not 3 s.
+it, so with `askBehind` off (D430) a listing that hangs and the search after it hold an ask back about 1.5 s before
+the reader starts, not 3 s; with it on (the default) the ask waits for neither.
 With under 50 ms left, the live search is skipped and each chosen source reports "timeout" (no call). A source whose
 on-demand poll ran out of time is not polled again by a lookup for the next `sourceTimeoutMs`: it is searched live.
 
@@ -396,8 +412,9 @@ cap; D114): otherwise "Nothing in the connected sources" would be a false all-cl
 guard). A source outage is the other false all-clear (D127, audit 2026-11-05 `ask-false-all-clear`): an ask says
 "Nothing in the connected sources." only when every source it chose answered (ok, cached, stale, or from the synced
 index); otherwise its answer names the sources that failed (error, timeout, circuit open, busy, limited, throttled:
-the connector's own 429, worded "rate-limited", D212) and says it
-is not an all-clear, and `AskResponse.sources` carries each chosen source's status. With `readerPush` (on in the default), a
+the connector's own 429, worded "rate-limited", D212), or, with `askBehind` (D430), the sources whose poll or live
+search was still running when it answered ("searching": "Still reading …: anything there that fits follows as a later
+packet"), and says it is not an all-clear, and `AskResponse.sources` carries each chosen source's status. With `readerPush` (on in the default), a
 user request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
 flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. **Since D237 the default does not call the reader there or on an ask (`pushCandidates` 5, CL6):** the push hands
 the agent the first five items of the pool the reader would have read (the ask's order, bulk mail out), each a focused
@@ -406,7 +423,9 @@ what and when first; a pool with nothing constraint-like (`readerGate`'s test) g
 build it, D257 deleted the push's other one). When no handed item holds the request's named person or thing and,
 if it names one, its day (`settle.ts`, no model), the line adds a nudge to call `ask_context` with those specifics, and
 an ask in that request also lists the pool's deeper items that hold one of them (`askNudge`, D317: hidden +9.2 points
-on Pi, through the agent's asks). When the request names a person, thing or day and a handed item settles it, the push
+on Pi, through the agent's asks); since D461 only when the pool past the handed items holds such an item
+(`askNudgeDeep`: 0.062 fewer asks a task, targeted hidden not lower). When the request names a person, thing or day and
+a handed item settles it, the push
 hands only the first two, through the first that settles it (`pushCandidatesSettled` 2, D404: fewer packet tokens
 written to the agent's prompt cache, hidden facts not lower, A30). An ask answers in rule order with no reading. The
 candidates need no
@@ -445,7 +464,9 @@ between (tool calls, its replies) do not make it stale.
 the item would change, in a user's words (validated, at most 120 characters each, redacted); items the card prefilter
 rejects are read for their requests only, and with `cardsLean` (D125) only when a person wrote them recently: not
 automated mail (`automated`: a no-reply or list sender, a bulk category or footer) and dated within `cardsLeanDays`
-(7 since D244; 30 before) or upcoming; constraint-worded items are read whatever their sender or age. They live in a per-user BM25 index apart
+(7 since D244; 30 before) or upcoming; constraint-worded items are read whatever their sender or age, and first
+(`cardsOrder`, D482, D483: what waits for the card model is read best first, so a new user's early requests meet cards
+for the items most likely to bear on them; equal-score hits keep the order their items came in). They live in a per-user BM25 index apart
 from the item text, keyed by content hash and dropped with the card. At request time, with no model, the request's words
 are searched in it: the best hits join the lookup's candidates and one judge seat, and are fused into an `ask` by
 reciprocal rank after the verdict hits. An intent hit alone is never a no-model delivery. A hit whose item holds a
@@ -550,6 +571,14 @@ scheduler (`ItemCache.pump`: a few milliseconds of work per event-loop turn, one
 `observe`, `ask` and `checkAction` first await `cache.ready(scope)`, which thaws a frozen user as an urgent job of the
 same scheduler, so a burst of returning users queues instead of stalling every other request. Figures:
 docs/research/a14-scale-users.md.
+
+An operator may opt in to persisting frozen users (D425-D427, `persist.ts`; `EDEN_PERSIST_FROZEN_DIR` and
+`EDEN_PERSIST_KEY`): each freeze also writes the blob, with the sync's state for the user (`SyncManager.snapshot`),
+AES-256-GCM to one file per user under a keyed-hash name, and a thaw deletes it. A restarted process reads a user
+back on first use (`ItemCache.load`, from `peek`, `touch` or `ready`), thaws them in slices, and restores their sync
+state (`SyncManager.restore`), so their sources are polled for what is new instead of backfilled; copies of notifying
+sources are re-read before delivery, as after a signal (D426). Off, nothing is written. Figures:
+docs/research/c3-persist-frozen.md.
 
 Dates in items are read the same on every host: `parseWhen` (`grounding.ts`) reads a zone-less date or date-time (a
 `Date:` header without a zone, a calendar start with no offset, "14 Oct 2026") as UTC, not the server process's local

@@ -1,0 +1,59 @@
+
+$ per 1,000 tasks (agent and Eden per task; bg run = Eden's cards and intent while the user worked, per task; one-time = backfill per user; steady = agent + Eden + bg run; all-in = steady + one-time spread over the user's tasks in this run). Recap turns are probes: not tasks, their $ apart.
+condition        n users   agent    Eden  bg run  steady  all-in  mix st  mix all   one-time $/user (from)  reader/t  Eden conn/t  agent tools/t  wall p50  mean  recaps $
+eden           432     4   0.300   0.000   0.271   0.571   0.571   0.577    0.577           0.0000 (in-run)      0.00        32.42           0.81      3.62  3.66    0.0000
+eden~local     432     4   0.277   0.000   0.210   0.487   0.487   0.489    0.489           0.0000 (in-run)      0.00         6.26           0.78      4.47  5.76    0.0000
+eden~fast      432     4   0.286   0.000   0.253   0.539   0.539   0.551    0.551           0.0000 (in-run)      0.00         5.53           0.82      4.26  5.22    0.0000
+
+connector calls per task (agent's source tools; Eden's in the task's window; Eden's background while the user worked) and Eden's one-time backfill calls per user; streams recorded before A3 lack the background and backfill
+eden           agent 0.00  Eden 32.42  background 3.19  mix 38.61  backfill 1004/user (72 users)
+eden~local     agent 0.00  Eden 6.26  background 0.18  mix 6.87  backfill 1625/user (72 users)
+eden~fast      agent 0.00  Eden 5.53  background 0.20  mix 6.06  backfill 1625/user (72 users)
+
+$ per 1,000 tasks with the connectors priced per plan ($ per 1,000 calls; market.py, list prices, assumed): steady, all-in, and on the 1:1:8 mix
+eden           first-party (quota only)     steady   0.571  all-in   0.571  mix st   0.577  mix all   0.577
+eden           Composio (overage)           steady  11.254  all-in  61.429  mix st  12.160  mix all  62.335
+eden           Unified.to (Pro)             steady  27.279  all-in 152.717  mix st  29.536  mix all 154.973
+eden           Arcade.dev (Team)            steady 356.682  all-in 2029.182  mix st 386.697  mix all 2059.197
+eden           Pipedream Connect (overage)  steady 427.904  all-in 2434.904  mix st 463.921  mix all 2470.921
+eden           Zapier MCP (10k tasks)       steady 919.338  all-in 5234.388  mix st 996.767  mix all 5311.817
+eden~local     first-party (quota only)     steady   0.487  all-in   0.487  mix st   0.489  mix all   0.489
+eden~local     Composio (overage)           steady   2.416  all-in  83.641  mix st   2.550  mix all  83.775
+eden~local     Unified.to (Pro)             steady   5.311  all-in 208.374  mix st   5.642  mix all 208.704
+eden~local     Arcade.dev (Team)            steady  64.815  all-in 2772.315  mix st  69.193  mix all 2776.693
+eden~local     Pipedream Connect (overage)  steady  77.681  all-in 3326.681  mix st  82.933  mix all 3331.933
+eden~local     Zapier MCP (10k tasks)       steady 166.455  all-in 7151.805  mix st 177.744  mix all 7163.094
+eden~fast      first-party (quota only)     steady   0.539  all-in   0.539  mix st   0.551  mix all   0.551
+eden~fast      Composio (overage)           steady   2.258  all-in  83.483  mix st   2.368  mix all  83.593
+eden~fast      Unified.to (Pro)             steady   4.836  all-in 207.899  mix st   5.093  mix all 208.156
+eden~fast      Arcade.dev (Team)            steady  57.831  all-in 2765.331  mix st  61.116  mix all 2768.616
+eden~fast      Pipedream Connect (overage)  steady  69.289  all-in 3318.289  mix st  73.229  mix all 3322.229
+eden~fast      Zapier MCP (10k tasks)       steady 148.352  all-in 7133.702  mix st 156.808  mix all 7142.158
+
+event triggers (0.003 dollars an event, assumed): steady $ per 1,000 tasks with 1 connector calls a task replaced by 1 events a task, against calls alone; break-even = events a task the replaced calls pay for (above it, calls are cheaper)
+eden           Composio (overage)           calls   11.254  with triggers   13.954  break-even 0.10 events/task
+eden           Unified.to (Pro)             calls   27.279  with triggers   29.529  break-even 0.25 events/task
+eden           Arcade.dev (Team)            calls  356.682  with triggers  349.682  break-even 3.33 events/task
+eden           Pipedream Connect (overage)  calls  427.904  with triggers  418.904  break-even 4.00 events/task
+eden           Zapier MCP (10k tasks)       calls  919.338  with triggers  896.538  break-even 8.60 events/task
+eden~local     Composio (overage)           calls    2.416  with triggers    5.116  break-even 0.10 events/task
+eden~local     Unified.to (Pro)             calls    5.311  with triggers    7.561  break-even 0.25 events/task
+eden~local     Arcade.dev (Team)            calls   64.815  with triggers   57.815  break-even 3.33 events/task
+eden~local     Pipedream Connect (overage)  calls   77.681  with triggers   68.681  break-even 4.00 events/task
+eden~local     Zapier MCP (10k tasks)       calls  166.455  with triggers  143.655  break-even 8.60 events/task
+eden~fast      Composio (overage)           calls    2.258  with triggers    4.958  break-even 0.10 events/task
+eden~fast      Unified.to (Pro)             calls    4.836  with triggers    7.086  break-even 0.25 events/task
+eden~fast      Arcade.dev (Team)            calls   57.831  with triggers   50.831  break-even 3.33 events/task
+eden~fast      Pipedream Connect (overage)  calls   69.289  with triggers   60.289  break-even 4.00 events/task
+eden~fast      Zapier MCP (10k tasks)       calls  148.352  with triggers  125.552  break-even 8.60 events/task
+
+per kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s
+eden           hidden    144  raised 83/144 (57.6%)  $0.285/1k  p50 2.58
+eden           control   144  raised 2/144 (1.4%)  $0.308/1k  p50 3.56
+eden           neutral   144  raised 1/144 (0.7%)  $0.308/1k  p50 3.95
+eden~local     hidden    144  raised 94/144 (65.3%)  $0.279/1k  p50 4.68
+eden~local     control   144  raised 0/144 (0.0%)  $0.270/1k  p50 4.04
+eden~local     neutral   144  raised 0/144 (0.0%)  $0.280/1k  p50 4.38
+eden~fast      hidden    144  raised 95/144 (66.0%)  $0.272/1k  p50 3.93
+eden~fast      control   144  raised 1/144 (0.7%)  $0.284/1k  p50 4.06
+eden~fast      neutral   144  raised 0/144 (0.0%)  $0.303/1k  p50 4.61

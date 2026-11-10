@@ -1,0 +1,18 @@
+
+$ per 1,000 tasks (agent and Eden per task; bg run = Eden's cards and intent while the user worked, per task; one-time = backfill per user; steady = agent + Eden + bg run; all-in = steady + one-time spread over the user's tasks in this run). Recap turns are probes: not tasks, their $ apart.
+condition        n users   agent    Eden  bg run  steady  all-in  mix st  mix all   one-time $/user (from)  reader/t  Eden conn/t  agent tools/t  wall p50  mean  recaps $
+eden           560     4   0.264   0.000   0.243   0.507   0.507       -        -           0.0000 (in-run)      0.00        41.91           0.49      2.08  2.98    0.0000
+
+connector calls per task (agent's source tools; Eden's in the task's window; Eden's background while the user worked) and Eden's one-time backfill calls per user; streams recorded before A3 lack the background and backfill
+eden           agent 0.00  Eden 41.91  background 12.07  mix -  backfill 1004/user (24 users)
+
+$ per 1,000 tasks with the connectors priced per plan ($ per 1,000 calls; market.py, list prices, assumed): steady, all-in, and on the 1:1:8 mix
+eden           first-party (quota only)     steady   0.507  all-in   0.507  mix st       -  mix all       -
+eden           Composio (overage)           steady  16.701  all-in  29.603  mix st       -  mix all       -
+eden           Unified.to (Pro)             steady  40.992  all-in  73.248  mix st       -  mix all       -
+eden           Arcade.dev (Team)            steady 540.311  all-in 970.382  mix st       -  mix all       -
+eden           Pipedream Connect (overage)  steady 648.271  all-in 1164.357  mix st       -  mix all       -
+eden           Zapier MCP (10k tasks)       steady 1393.200  all-in 2502.785  mix st       -  mix all       -
+
+per kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s
+eden           hidden    560  raised 365/560 (65.2%)  $0.264/1k  p50 2.08

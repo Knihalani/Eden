@@ -24,6 +24,7 @@ import { plantHeldout14 } from "./hidden-heldout14";
 import { plantHeldout15 } from "./hidden-heldout15";
 import { plantHeldout16 } from "./hidden-heldout16";
 import { plantHeldout17 } from "./hidden-heldout17";
+import { plantHeldout18 } from "./hidden-heldout18";
 import { plantTrain1 } from "./hidden-train1";
 import { plantTrain2 } from "./hidden-train2";
 import { plantTrain3 } from "./hidden-train3";
@@ -111,6 +112,12 @@ export const SUITES: Record<string, Plant> = {
   // templates whose fact reads as arriving later that day (`HELDOUT17_LATE`, for `pi-ab --late`). Reserved for the
   // end-of-day confirmation: do not run it (funnel or agent) before then, never tune on it.
   heldout17: plantHeldout17,
+  // M6's blind suite (D465, docs/research/m6-heldout18.md), written by an author who saw only a scaffold of the format
+  // (helpers and planting function, one example template), two train suites, the HiddenTask interface and the sim world
+  // API; with `neutral`, eight late-arrival templates (`HELDOUT18_LATE`) and at least twelve short requests that name a
+  // person, thing or date the planted item words differently (`HELDOUT18_ANCHORED`, for the askNudge question,
+  // D455-D457). Unread: do not run it (funnel or agent) except as the blind read it was made for; never tune on it.
+  heldout18: plantHeldout18,
   // The broad tuning set: six suites written blind (each author saw only the world generator, the text helpers and
   // the HiddenTask interface), one life area each, so a change must generalise across authors to show up. Tune on them.
   train1: withNeutral("train1", plantTrain1),
@@ -127,7 +134,8 @@ const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
  * Held-out suites kept out of `all` so a tuning command cannot spend them; held-out 9-13 have been read (D72, D80,
  * D85, D98, D112) and a blind round needs a new suite. Held-out 14 is RealUse-1's blind suite (run once for it);
  * held-out 15 was RealUse-2's (run once); held-out 16 was the CL wave's final check (RealUse-3); held-out 17 was the
- * end-of-day confirmation's (A29, run once). A run names them to measure on them (with `--blind`).
+ * end-of-day confirmation's (A29, run once). Held-out 18 is M6's, unread (D465). A run names them to measure on
+ * them (with `--blind`).
  */
 export const UNRUN_BLIND = [
   "heldout9",
@@ -139,10 +147,11 @@ export const UNRUN_BLIND = [
   "heldout15",
   "heldout16",
   "heldout17",
+  "heldout18",
 ];
 /** The UNRUN_BLIND suites nobody has read yet: the funnel's "read before" warning skips them (D350). Held-out 17 was
- * read by A29 (D399): none is unread now. */
-export const UNREAD_BLIND: string[] = [];
+ * read by A29 (D399); held-out 18 (M6, D465) is unread: move it out once its blind read has run. */
+export const UNREAD_BLIND: string[] = ["heldout18"];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**

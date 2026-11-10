@@ -44,6 +44,10 @@ bun run check   # = format:check (prettier + 120-col line check) && typecheck &&
 bun run eval    # no-model metrics; paste the JSON in the PR when engine behaviour changes
 ```
 
+The no-model eval runs on each scenario's own clock, so its result does not depend on the day it runs (D435). On
+main it reads precision 0.65, recall 0.52, falseFireRate 0. Treat a difference from those numbers as a change in
+behaviour.
+
 The standard agent for live agent tests (`agent-ab.ts`, any "Eden against tools" comparison) is the **Pi harness**
 (pi-mono's agent loop, `earendil-works/pi`, formerly `badlogic/pi-mono`): its minimal loop and tools, with Eden added
 as a tool or as injected context. Until the lab runs on Pi, label any agent result from the older in-house loop as such.

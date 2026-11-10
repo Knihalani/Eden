@@ -55,6 +55,7 @@ export const PARTS = {
     syncIngestTurns: false,
     syncLocalComplete: false,
     pushCutBehind: false,
+    askBehind: false,
     syncKeepCut: false,
     syncEngagedDeep: false,
     syncUnusedSweepMs: 0,
@@ -77,6 +78,7 @@ export const PARTS = {
     cardsLean: false,
     intentByKind: false,
     cardsSourceAware: false,
+    cardsOrder: false,
   },
   /** The intent index (D87, D109), what it reads (`cardsLean`, D125) and its carded cut (`intentByKind`, D200). */
   intent: { intent: false, cardsLean: false, intentByKind: false },
@@ -95,13 +97,14 @@ export const PARTS = {
     askReaderItemChars: 400,
     pushCandidates: 0,
     askNudge: false,
+    askNudgeDeep: false,
     pushCandidatesSettled: 0,
   },
   /**
    * The push's candidates for the agent to judge, in place of the reader's push and ask readings (D236, D237): out,
    * the reader reads both again.
    */
-  candidates: { pushCandidates: 0, askNudge: false, pushCandidatesSettled: 0 },
+  candidates: { pushCandidates: 0, askNudge: false, askNudgeDeep: false, pushCandidatesSettled: 0 },
   /**
    * An item stored after a request the push acted on, that would have been among its candidates, is sent at the next
    * take whatever the agent asks then (D301).
@@ -109,9 +112,9 @@ export const PARTS = {
   plans: { planConflict: false },
   /**
    * The candidates' nudge to ask when they do not settle the request's people, things and day, and the ask's look past
-   * the handed items (D316, D317).
+   * the handed items (D316, D317), narrowed to when the pool past them holds an anchored item (D460, D461).
    */
-  nudge: { askNudge: false },
+  nudge: { askNudge: false, askNudgeDeep: false },
   /**
    * A request the candidates settle (its people, things and day, `settle.ts`) gets the first two of them, through the
    * first that settles it, not five (D400, promoted by D404).

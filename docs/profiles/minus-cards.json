@@ -4,5 +4,6 @@
   "intent": false,
   "cardsLean": false,
   "intentByKind": false,
-  "cardsSourceAware": false
+  "cardsSourceAware": false,
+  "cardsOrder": false
 }

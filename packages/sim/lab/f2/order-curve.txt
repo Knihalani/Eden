@@ -1,0 +1,33 @@
+N=1 draw1
+.local/f2/calls-1-fifo.json              hidden 221/384 decoys 226/384 | in packet .local/f2/calls-1-order.json             hidden 224/384 decoys 230/384 | in packet    hidden: +14    hidden: -11    control: +11    control: -7 
+N=1 draw-d2
+.local/f2/calls-1-fifo-d2.json           hidden 224/384 decoys 227/384 | in packet .local/f2/calls-1-order-d2.json          hidden 227/384 decoys 231/384 | in packet    hidden: +15    hidden: -12    control: +14    control: -10 
+N=2 draw1
+.local/f2/calls-2-fifo.json              hidden 228/384 decoys 236/384 | in packet .local/f2/calls-2-order.json             hidden 229/384 decoys 234/384 | in packet    hidden: +5    hidden: -4    control: +3    control: -5 
+N=2 draw-d2
+.local/f2/calls-2-fifo-d2.json           hidden 233/384 decoys 242/384 | in packet .local/f2/calls-2-order-d2.json          hidden 233/384 decoys 237/384 | in packet    hidden: +4    hidden: -4    control: +3    control: -8 
+N=4 draw1
+.local/f2/calls-4-fifo.json              hidden 235/384 decoys 240/384 | in packet .local/f2/calls-4-order.json             hidden 259/384 decoys 248/384 | in packet    hidden: +27    hidden: -3    control: +13    control: -5 
+N=4 draw-d2
+.local/f2/calls-4-fifo-d2.json           hidden 237/384 decoys 241/384 | in packet .local/f2/calls-4-order-d2.json          hidden 255/384 decoys 248/384 | in packet    hidden: +24    hidden: -6    control: +14    control: -7 
+N=8 draw1
+.local/f2/calls-8-fifo.json              hidden 252/384 decoys 246/384 | in packet .local/f2/calls-8-order.json             hidden 272/384 decoys 252/384 | in packet    hidden: +22    hidden: -2    control: +12    control: -6 
+N=8 draw-d2
+.local/f2/calls-8-fifo-d2.json           hidden 250/384 decoys 255/384 | in packet .local/f2/calls-8-order-d2.json          hidden 270/384 decoys 253/384 | in packet    hidden: +23    hidden: -3    control: +5    control: -7 
+N=12 draw1
+.local/f2/calls-12-fifo.json             hidden 282/384 decoys 265/384 | in packet .local/f2/calls-12-order.json            hidden 290/384 decoys 264/384 | in packet    hidden: +9    hidden: -1    control: +4    control: -5 
+N=12 draw-d2
+.local/f2/calls-12-fifo-d2.json          hidden 279/384 decoys 262/384 | in packet .local/f2/calls-12-order-d2.json         hidden 289/384 decoys 267/384 | in packet    hidden: +10    hidden: -0    control: +6    control: -1 
+N=16 draw1
+.local/f2/calls-16-fifo.json             hidden 314/384 decoys 272/384 | in packet .local/f2/calls-16-order.json            hidden 314/384 decoys 272/384 | in packet    hidden: +0    hidden: -0    control: +0    control: -0 
+N=16 draw-d2
+.local/f2/calls-16-fifo-d2.json          hidden 306/384 decoys 281/384 | in packet .local/f2/calls-16-order-d2.json         hidden 308/384 decoys 281/384 | in packet    hidden: +2    hidden: -0    control: +0    control: -0 
+N=24 draw1
+.local/f2/calls-24-fifo.json             hidden 314/384 decoys 273/384 | in packet .local/f2/calls-24-order.json            hidden 314/384 decoys 273/384 | in packet    hidden: +0    hidden: -0    control: +0    control: -0 
+N=24 draw-d2
+.local/f2/calls-24-fifo-d2.json          hidden 307/384 decoys 281/384 | in packet .local/f2/calls-24-order-d2.json         hidden 308/384 decoys 282/384 | in packet    hidden: +1    hidden: -0    control: +1    control: -0 
+== order-all {"cardsOrder":true}
+.local/f2/order-all-d1.json              hidden 314/384 decoys 273/384 | in packet: planted 242 decoy 209 | ask bytes (hidden) 284708
+   hidden: +0    hidden: -0    control: +0    control: -0 
+.local/f2/order-all-d2.json              hidden 308/384 decoys 282/384 | in packet: planted 239 decoy 218 | ask bytes (hidden) 290974
+   hidden: +1    hidden: -0    control: +1    control: -0 

@@ -54,6 +54,7 @@ import {
 } from "@eden/sources";
 import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache, type Sketch } from "./cache";
 import { SyncManager } from "./sync";
+import { coldQuery } from "./cold";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import {
@@ -123,7 +124,16 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import { ASK_NUDGE, CANDIDATES_LEAD, citationsOf, PLAN_LEAD, renderAnswer, renderPacket, shownText } from "./render";
+import {
+  ASK_LATE_LEAD,
+  ASK_NUDGE,
+  CANDIDATES_LEAD,
+  citationsOf,
+  PLAN_LEAD,
+  renderAnswer,
+  renderPacket,
+  shownText,
+} from "./render";
 import {
   callParties,
   MAX_PACKET_PARTIES,
@@ -135,7 +145,7 @@ import {
 } from "./parties";
 import { quarantineTitle } from "./shield";
 import { safeLine } from "./line";
-import { anchored, anchorsOf, settledCut, settles, type Anchors } from "./settle";
+import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -219,6 +229,12 @@ export interface PushPoolReport {
   handed: string[];
   /** `askNudge` (D316): whether the handed candidates leave the request unsettled (the packet then nudges an ask). */
   unsettled?: boolean;
+  /**
+   * When the request's anchors were read (`askNudge` or `pushCandidatesSettled`), per pool item whether it holds one
+   * of them (`anchored`), and what kinds the request names: flags only, for the lab's trigger screens (M5).
+   */
+  anchored?: boolean[];
+  anchorKinds?: { entities: number; day: boolean };
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -389,6 +405,11 @@ interface Cue {
    * with no model (what is sure or grounded, and corrections), so it never calls the judge.
    */
   followUp?: true;
+  /**
+   * `askBehind` (D430): set by an explicit ask that runs behind; `searchCutBehind` then searches source by source and
+   * records each cut copy's outcome here as it settles, so the ask can tell which sources answered in time.
+   */
+  cutStatus?: Map<string, string>;
 }
 
 /**
@@ -497,6 +518,10 @@ type SourceStatus = NonNullable<AskResponse["sources"]>[number];
 
 /** The statuses of a source that answered (D127): the connector, the fan-out's held result, or the synced index. */
 const ANSWERED = new Set(["ok", "cached", "stale", "local"]);
+/** `askBehind` (D430): the reason prefix of an ask's follow-up packet, withdrawn untaken at the next request. */
+const ASK_BEHIND = "ask-behind:";
+/** `askBehind` (D430): a source whose poll or live search was still running when the ask answered. */
+const SEARCHING = "searching";
 
 /** How the answer names a status that did not answer (`unreached`). */
 const STATUS_WORDS: Record<string, string> = {
@@ -644,6 +669,8 @@ export class ContextPartner {
       if (this.config.intent) cards.intend();
       // `cardsLean`: what the prefilter rejects is read for requests only when a person wrote it recently.
       if (this.config.intent && this.config.cardsLean) cards.lean(this.config.cardsLeanDays);
+      // `cardsOrder` (D482, D483): a user's waiting items are read best first (worded, ahead, correspondents, recent).
+      if (this.config.cardsOrder) cards.order();
     }
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
@@ -684,6 +711,10 @@ export class ContextPartner {
               this.queuePlanConflicts(scope, items);
             },
             tracer: spans,
+            // `syncDelta` (D476): what a delta read says is deleted goes as a deletion notice's items do.
+            onRemoved: (scope, sourceId, ids) => {
+              this.dropGone(scope, sourceId, ids);
+            },
           },
           {
             maxItems: c.syncMaxItems,
@@ -708,12 +739,39 @@ export class ContextPartner {
             engagedDeep: c.syncEngagedDeep,
             // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
             unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
+            cold: c.syncCold,
+            coldMaxItems: c.syncColdMaxItems,
+            coldTtlMs: deps.cache.syncTtlMs,
+            delta: c.syncDelta,
+            // Inside the cache's time to live for a synced copy, which only a listing renews.
+            deltaSweepMs: Math.min(6 * 24 * 3_600_000, deps.cache.syncTtlMs * 0.85),
           },
         )
       : null;
     // D370: with `syncIngestTurns`, the card drain gathers what waits for its turn, so its batches follow the items.
     const sync = this.sync;
     if (sync && c.syncIngestTurns && c.cards && deps.cards) deps.cards.gather = () => sync.pending();
+    // D425 (opt-in): a user frozen to disk carries the sync's state for them; one read back by a later process takes
+    // it again (so the restart polls, not backfills) and has its items carded again, as a re-sync would (cards are
+    // not persisted). Set only when the embedder made the cache persist.
+    if (deps.cache.persisting) {
+      deps.cache.persistHooks = {
+        save: (scope) => ({ sync: sync?.snapshot(scope) ?? null }),
+        restored: (scope, items, extra) => {
+          const saved = (extra as { sync?: unknown } | null | undefined)?.sync;
+          if (sync && saved) sync.restore(scope, saved);
+          // A source removed while the user was on disk: its synced items go before the first event is served (the
+          // returning event's `ready` waits on this, bounded by the source timeout).
+          const checked = sync ? sync.reconcile(scope, this.config.sourceTimeoutMs) : Promise.resolve(0);
+          return checked.then(() => {
+            if (items.length > 0 && this.config.cards && this.deps.cards) {
+              const kept = items.filter((it) => this.deps.cache.get(scope, it.id, this.now()) !== null);
+              if (kept.length > 0) this.enqueueCards(scope, kept, this.cardDefer(scope, kept, mentionsOf(kept)));
+            }
+          });
+        },
+      };
+    }
   }
 
   /**
@@ -829,7 +887,11 @@ export class ContextPartner {
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
     this.sync?.track(s.scope, this.now());
     s.turn++;
-    if (event.kind === "user_message") s.requests++;
+    if (event.kind === "user_message") {
+      s.requests++;
+      // `askBehind` (D430): a follow-up packet still queued answered the last request's ask, not this request.
+      this.dropAskBehind(s);
+    }
     const prep = spans?.open("observe.prep", root!.id);
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
@@ -1015,6 +1077,61 @@ export class ContextPartner {
   }
 
   /**
+   * `askBehind` (D430): once the work an explicit ask stopped waiting for is done, and only if it stored something,
+   * the ask is ranked again on the refreshed index (`internal.late`: no second search) and what it would now cite that
+   * its answer did not is queued for the agent's next take. Nothing runs for a closed session or once the user has
+   * sent another request. Never throws.
+   */
+  private askLater(
+    s: Session,
+    request: AskRequest,
+    polled: Promise<boolean>,
+    searched: SearchedLive,
+    cited: readonly string[],
+  ): void {
+    const asked = s.requests;
+    const work = polled
+      .then(async (fresh) => {
+        if (!fresh || s.closed || this.sessions.get(s.key) !== s || s.requests !== asked) return;
+        // The calls were the answer's; the follow-up makes none (nor any plan) of its own.
+        const { plans: _plans, ...rest } = searched;
+        const again = { ...rest, calls: 0, ...(rest.syncCalls !== undefined ? { syncCalls: 0 } : {}) };
+        await this.ask(request, { late: { searched: again, cited: new Set(cited), request: asked } });
+      })
+      .catch(() => {});
+    this.addBehind(s, work);
+  }
+
+  /**
+   * `askBehind` (D430): each chosen source's status once the ask stops waiting. A copy answered here that was cut or
+   * not current gives its live search's outcome once that has settled (D127: a timeout or error is named), "local"
+   * once its poll made it current, "error" when the work behind is done and its poll did not make it current
+   * ("timeout" for a cut copy that was not searched), and "searching" (not answered: the answer says so, never an
+   * all-clear) while that work runs.
+   */
+  private behindStatuses(
+    s: Session,
+    searched: SearchedLive,
+    cut: ReadonlyMap<string, string>,
+    settled: boolean,
+  ): SourceStatus[] {
+    const pending = new Set(searched.behindLocal ?? []);
+    const now = this.now();
+    return (searched.sources ?? []).map((x) => {
+      if (!pending.has(x.sourceId)) return x;
+      const done = cut.get(x.sourceId);
+      if (done !== undefined) return { sourceId: x.sourceId, status: done };
+      const whole = this.sync!.complete(s.scope, x.sourceId);
+      if (whole && this.sync!.current(s.scope, x.sourceId, now)) return x;
+      if (!settled) return { sourceId: x.sourceId, status: SEARCHING };
+      // The work is done and the copy is still not current: its poll failed or was skipped after failures (the
+      // 2026-11-05 audit's false all-clear: never "local" or "stale"), or a cut copy got no live search (too little of
+      // the deadline left, D148) and answered nothing older than its cut.
+      return { sourceId: x.sourceId, status: whole ? "error" : "timeout" };
+    });
+  }
+
+  /**
    * `readerPushBehind`: records what `injection`'s delivery marked in `s` (`was`: each item's ledger entry before it),
    * so `withdraw` can undo it. An item the delivery left unmarked has nothing to undo.
    */
@@ -1090,6 +1207,19 @@ export class ContextPartner {
     const out = this.currentLast(s, this.withoutCoveredUpdates(s.pending.splice(0)));
     if (!options.shadow) for (const injection of out) this.handOut(s, injection);
     return out;
+  }
+
+  /**
+   * `askBehind` (D430): at the user's next request, an ask's follow-up packets the agent has not taken are withdrawn
+   * (what their delivery marked undone): they answer the last request's question, and their lead says so.
+   */
+  private dropAskBehind(s: Session): void {
+    for (let k = s.pending.length - 1; k >= 0; k--) {
+      const packet = s.pending[k]!;
+      if (!packet.reason.startsWith(ASK_BEHIND)) continue;
+      s.pending.splice(k, 1);
+      this.withdraw(s, packet);
+    }
   }
 
   /**
@@ -1443,6 +1573,14 @@ export class ContextPartner {
   }
 
   /**
+   * D425 (opt-in): writes every user not yet frozen to disk, as a freeze would, for a shutdown; users frozen already
+   * were written when they froze. Stops after `deadlineMs`. Returns how many were written (0 when not persisting).
+   */
+  persistLive(deadlineMs: number): number {
+    return this.deps.cache.flush(deadlineMs);
+  }
+
+  /**
    * Null when the user's cache is not frozen; else when it is thawed (D325, `ItemCache.ready`). Every entry point that
    * serves a user's items awaits it first (`observe`, `ask`, `checkAction`, `sourceItems`, a notice's revision poll;
    * the server before a removal), so a thaw runs in slices and other users' requests do not wait behind it. A bare
@@ -1724,14 +1862,40 @@ export class ContextPartner {
     if (root) cue.span = root.id;
     const limit = request.maxItems ?? 5;
     // `readerPushBehind`: the push reads the index as it stands while the sync's poll runs behind (the agent's asks
-    // still wait for it). Its second reading, once the poll has stored something, reuses the first one's search.
+    // wait for it only with `askBehind` off, D430). Its second reading, once the poll has stored something, reuses the
+    // first one's search.
     const behind =
       internal.push === true &&
       internal.again === undefined &&
       this.config.readerPushBehind &&
       this.config.syncPollBehind &&
       this.config.syncOnDemand;
-    const searched = internal.again?.searched ?? (await this.searchLive(s, cue, this.config.askSources, behind));
+    // `askBehind` (D430): an explicit ask's lookup runs behind as the push's does, and the ask waits for that work only
+    // `askBehindWaitMs`. Its follow-up (`internal.late`) reuses the first search and starts none.
+    const askBehind =
+      !internal.push &&
+      internal.again === undefined &&
+      internal.late === undefined &&
+      this.config.askBehind &&
+      this.config.pushCutBehind &&
+      this.config.syncLocalComplete &&
+      this.config.syncPollBehind &&
+      this.config.syncOnDemand &&
+      this.sync !== null;
+    if (askBehind) cue.cutStatus = new Map();
+    let searched =
+      internal.again?.searched ??
+      internal.late?.searched ??
+      (await this.searchLive(s, cue, this.config.askSources, behind || askBehind));
+    // Whether the work behind the ask was done when it answered; false leaves a follow-up for what it stores.
+    let settled = true;
+    if (askBehind && searched.behindLocal?.length) {
+      const waiting = spans?.open("ask.wait", cue.span, { async: true });
+      // No work behind at all (no poll, no search started) is settled: each such copy is then named, never "local".
+      settled = cue.polled ? (await within(cue.polled, this.config.askBehindWaitMs)) !== null : true;
+      if (waiting) spans!.close(waiting, { settled });
+      searched = { ...searched, sources: this.behindStatuses(s, searched, cue.cutStatus!, settled) };
+    }
     const { calls: sourceCalls, plans, probed, local, syncCalls } = searched;
     // `intent`: what the question would change, by the requests written for each item (no model, no call).
     const intentFound = this.intentFinds(s, cue);
@@ -1774,8 +1938,9 @@ export class ContextPartner {
     };
     // `pushCandidates` (D236, D237): no reader call, on the push or on an ask (the agent reads the candidates).
     const candidating = this.config.pushCandidates > 0;
+    // `askBehind`'s follow-up (`internal.late`) reads nothing: it makes no call of its own, model or source (D430).
     const reading =
-      this.config.askReader && this.deps.reader && !candidating
+      this.config.askReader && this.deps.reader && !candidating && internal.late === undefined
         ? await this.readAsk(
             s,
             cue,
@@ -1807,6 +1972,56 @@ export class ContextPartner {
           extra.push({ item, score: 0, matched: 0, sketch: null });
       }
       chosen = [...chosen.slice(0, Math.max(0, limit - extra.length)), ...extra];
+    }
+    // `askBehind` (D430): the follow-up of an ask that answered before its sources were read. What it would cite now
+    // that the answer did not, and the agent has not been handed, goes out as a packet for the next take, re-checked
+    // like any delivery; nothing for a closed session or a request the user has since followed with another.
+    if (internal.late) {
+      const { cited, request: asked } = internal.late;
+      // Only what the sources still being read could have brought (the answer's own sources answered it), re-read as
+      // strictly as the answer was (D211): an item the answer left out as not re-checked is not handed over as news.
+      const reading = new Set(searched.behindLocal ?? []);
+      const fresh = chosen.filter(
+        (x) => reading.has(x.item.sourceId) && !cited.has(x.item.id) && s.ledger.isFresh(x.item.id, s.turn),
+      );
+      const was = new Map(fresh.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
+      const current = () => !s.closed && s.requests === asked;
+      const strict = { unconfirmed: new Map<string, number>(), unswept: new Map<string, number>() };
+      let checked = fresh.length > 0 && current() ? await this.verifyItems(s, fresh, cue, strict) : [];
+      // As the push (audit A11): an item handed out during the re-reads is not marked twice.
+      checked = checked.filter((x) => {
+        const now = s.ledger.entry(x.item.id);
+        return now === undefined || sameEntry(was.get(x.item.id), now);
+      });
+      const frame = {
+        lead: ASK_LATE_LEAD,
+        itemBytes: this.config.compactItemBytes,
+        maxBytes: this.config.maxInjectionBytes,
+      };
+      const injection =
+        checked.length > 0 && current()
+          ? this.deliver(s, checked, "proactive", `${ASK_BEHIND}${cue.id}`, cue, undefined, frame)
+          : null;
+      if (injection) {
+        // Undoable, so a packet the agent has not taken when the user's next request comes is withdrawn whole.
+        this.keepUndo(s, injection, checked, was);
+        s.pending.push(injection);
+      }
+      const latencyMs = Math.round(performance.now() - t0);
+      this.trace(s, {
+        sessionId: s.id,
+        turn: s.turn,
+        event: "ask",
+        decision: injection ? "sources" : "silent",
+        reason: "ask behind",
+        latencyMs,
+        sourceCalls: 0,
+        modelCalls: 0,
+        costUsd: 0,
+        itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
+      });
+      if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "ask-behind", delivered: !!injection });
+      return { answer: "", citations: [], usedModel: false, costUsd: 0, latencyMs };
     }
     // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
     // a proactive packet (queued, taken before its next model request); nothing else is answered or handed out.
@@ -2005,6 +2220,15 @@ export class ContextPartner {
       ...(local !== undefined ? { localSources: local, syncCalls: syncCalls ?? 0 } : {}),
     });
     if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "answer", delivered: items.length > 0 });
+    if (askBehind && !settled && cue.polled) {
+      this.askLater(
+        s,
+        request,
+        cue.polled,
+        searched,
+        items.map((i) => i.id),
+      );
+    }
     return {
       answer,
       citations: this.cited(items),
@@ -2265,26 +2489,45 @@ export class ContextPartner {
     let items = like.some(Boolean) ? pool.filter((x) => !bulkMail(x.item)).slice(0, this.config.pushCandidates) : [];
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
+    let anchors: Anchors | undefined;
     const fewer = this.config.pushCandidatesSettled;
     if ((this.config.askNudge || fewer > 0) && items.length > 0) {
-      const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+      anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
       const handed = items.map((x) => x.item);
       if (!settles(handed, anchors)) {
-        if (this.config.askNudge) unsettled = anchors;
+        if (this.config.askNudge && (!this.config.askNudgeDeep || this.anchoredPast(pool, items, anchors)))
+          unsettled = anchors;
       } else if (fewer > 0) {
         // `pushCandidatesSettled` (D400, D404): a request its anchors settle gets fewer candidates, never losing the
         // first one that settles it.
         items = items.slice(0, settledCut(handed, anchors, fewer));
       }
     }
+    // The arguments are built only when the lab's hook is wired (an optional call evaluates none otherwise).
+    const read = anchors;
     this.deps.onPushPool?.({
       sessionId: s.id,
       pool: pool.map((x) => x.item.id),
       constraintLike: like,
       handed: items.map((x) => x.item.id),
       ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
+      ...(read
+        ? {
+            anchored: pool.map((x) => anchored(x.item, read)),
+            anchorKinds: { entities: read.entities.length, day: hasDay(read) },
+          }
+        : {}),
     });
     return { items, pool, ...(unsettled ? { unsettled } : {}) };
+  }
+
+  /**
+   * `askNudgeDeep` (D460, D461): whether the pool past the handed candidates holds an item the ask's deeper look would
+   * list (not bulk mail, holding one of the request's anchors), judged on the pool's copies as ranked.
+   */
+  private anchoredPast(pool: readonly Scored[], handed: readonly Scored[], anchors: Anchors): boolean {
+    const ids = new Set(handed.map((x) => x.item.id));
+    return pool.some((x) => !ids.has(x.item.id) && !bulkMail(x.item) && anchored(x.item, anchors));
   }
 
   /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */
@@ -3551,6 +3794,11 @@ export class ContextPartner {
     unresolved?: true;
     /** The session ended before the search ran: nothing was searched, which is not an empty result either (D127). */
     closed?: true;
+    /**
+     * `askBehind` (D430): the chosen sources answered from a copy that was not whole (cut) or not current when the
+     * lookup ran, whose poll or live search runs behind. Their "local" status stands only once that work is done.
+     */
+    behindLocal?: string[];
   }> {
     // Before any call: what this lookup stores was read under it, so a signal while it runs doubts it (D133).
     const readMark = this.sync?.mark() ?? 0;
@@ -3572,8 +3820,8 @@ export class ContextPartner {
       this.config.routeSketch && wide ? this.sketchRouteHits(s, cue) : undefined,
     );
     // One deadline for the whole lookup (D140): the on-demand poll, the live search, the planner's cascade and the
-    // probes share it. An ask waits for its poll, so a poll and a search with deadlines of their own could hold the
-    // reader back twice `sourceTimeoutMs` (a listing that hangs, then the search that follows it).
+    // probes share it. An ask with `askBehind` off waits for its poll, so a poll and a search with deadlines of their
+    // own could hold the reader back twice `sourceTimeoutMs` (a listing that hangs, then the search that follows it).
     const deadlineAt = performance.now() + this.config.sourceTimeoutMs;
     const left = () => Math.max(0, deadlineAt - performance.now());
     // The background sync (D57): a source whose synced copy is current answers from the user's local index, at no
@@ -3612,7 +3860,7 @@ export class ContextPartner {
         });
         // `syncPollBehind`: the poll is not waited for. This lookup answers from the index as it stands (every warm
         // synced source, current or not); if the poll stores anything, the lookup is made again once it is done
-        // (`afterPoll`), and the agent's ask waits for it as before.
+        // (`afterPoll`). The agent's ask waits for it only with `askBehind` off (D430); on, it runs behind too.
         if (behind) {
           // The poll's listing calls are in no lookup's trace (this one's is out before they are counted, and a
           // follow-up runs only when the poll stored something), so the poll gets a trace of its own when it settles:
@@ -3652,6 +3900,12 @@ export class ContextPartner {
         probeLocal = this.localOf(s, all, behind);
       } else local = this.localOf(s, all, behind);
     }
+    // `askBehind` (D430): which copies answered here before they were whole or current (read once the route is known).
+    const now0 = this.now();
+    const notYet =
+      cue.cutStatus && local && this.sync
+        ? (id: string) => local!.has(id) && (cutBehind?.has(id) === true || !this.sync!.current(s.scope, id, now0))
+        : null;
     const routing = this.spans?.open("route", cue.span);
     const ranked =
       preRanked?.slice(0, limit) ??
@@ -3757,6 +4011,10 @@ export class ContextPartner {
             })
           : sendTo(behindOf);
       if (behindOf.length > 0) this.searchCutBehind(s, cue, behindChosen, via, query, deadlineAt, readMark);
+    } else if (cue.cutStatus && cutBehind) {
+      // `askBehind` (D430): no search behind was sent (too little of the deadline left, D148), so nothing is reading
+      // these copies: "timeout" at once, never "searching" (whose answer promises what follows).
+      for (const id of cutBehind) cue.cutStatus.set(id, "timeout");
     }
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing = this.config.probes
@@ -3799,11 +4057,13 @@ export class ContextPartner {
       sourceId: x.id,
       status: local?.has(x.id) ? "local" : (statusOf.get(x.id) ?? "error"),
     }));
+    const behindLocal = notYet ? sources.filter((x) => notYet(x.sourceId)).map((x) => x.sourceId) : undefined;
     const result = {
       calls: made + syncCalls,
       sources,
       ...(plans ? { plans } : {}),
       ...(this.sync ? { local: local?.size ?? 0, syncCalls } : {}),
+      ...(behindLocal ? { behindLocal } : {}),
     };
     if (s.closed) return result; // Forgotten or ended mid-search: keep nothing.
     // One shadow lookup per session at a time: shadowing must not pile up work behind a slow connector.
@@ -3869,8 +4129,24 @@ export class ContextPartner {
     const turn = s.turn;
     const started = performance.now();
     const span = this.spans?.open("search.behind", cue.span, { async: true, sources: sources.length });
-    const work = this.fanout
-      .search(sources, query, { timeoutMs: Math.max(0, deadlineAt - performance.now()), signal: s.abort.signal })
+    const opts = { timeoutMs: Math.max(0, deadlineAt - performance.now()), signal: s.abort.signal };
+    // `askBehind` (D430): one source at a time (the same calls as one fan-out), each stored as it settles and its
+    // outcome noted only then, so an ask that stops waiting ranks every source it calls answered on what it found.
+    const each = cue.cutStatus;
+    let early = 0;
+    const searching = each
+      ? Promise.all(
+          sources.map((x) =>
+            this.fanout.search([x], query, opts).then(([o]) => {
+              if (!s.closed) early += this.store(s, o!.items, cue.span ?? 0, false, readMark);
+              each.set(o!.sourceId, o!.status);
+              return { ...o!, items: [] };
+            }),
+          ),
+        )
+      : this.fanout.search(sources, query, opts);
+    // On the ask's path the outcomes come back with no items: each page was stored above as its source answered.
+    const work = searching
       .then(async (outcomes) => {
         let made = 0;
         for (let k = 0; k < outcomes.length; k++) made += via[k] ? via[k]!.made : reachedSource(outcomes[k]!) ? 1 : 0;
@@ -3889,7 +4165,7 @@ export class ContextPartner {
             itemIds: [],
           });
         }
-        let fresh = 0;
+        let fresh = early;
         for (let k = 0; k < outcomes.length; k++) {
           if (k > 0) await yieldToLoop();
           if (s.closed) return false;
@@ -4386,6 +4662,8 @@ export class ContextPartner {
   ): ContextItem[] {
     const cache = this.deps.cache;
     const now = this.now();
+    // `syncCold` (D475): these sources' cold copies that hold the request's words are back in the index first.
+    if (this.config.syncCold && text.trim()) this.thawCold(s, sourceIds, text, limit);
     const capped = (hits: CacheHit[]) => {
       const per = new Map<string, number>();
       return hits.filter((h) => {
@@ -4421,6 +4699,20 @@ export class ContextPartner {
     }
     const all = this.config.syncLocalAll;
     return cache.searchIn(s.scope, ids, ids.length, limit, sourceIds, all, now).map((h) => h.item);
+  }
+
+  /**
+   * `syncCold` (D475): brings the cold copies of these sources that hold any of the words back into the index, where
+   * the lookup ranks them as it would a live search's finds, and treats them as such finds are treated (`store`):
+   * carded, their mentions recorded. No call.
+   */
+  private thawCold(s: Session, sourceIds: ReadonlySet<string>, text: string, limit: number): void {
+    const sync = this.sync;
+    if (!sync) return;
+    const added = sync.thaw(s.scope, sourceIds, coldQuery(text), Math.max(limit, 8), this.now());
+    if (added.length === 0) return;
+    this.enqueueCards(s.scope, added);
+    this.recordMentions(s.scope, added);
   }
 
   /** Records the entity mentions of items new to the user's cache or changed (lookups and the sync, D57). */
@@ -4493,12 +4785,15 @@ export class ContextPartner {
     // A ref notice's re-read still on the wire (D347): the copy held is from before the change.
     if (this.refreshing.size > 0 && this.refreshing.has(`${scopeKey(s.scope)}|${item.id}`)) return true;
     if (this.unswept(s.scope, item)) return true;
+    // `syncCold` (D475): a copy a lookup brought back from the cold tier, not read at its source since.
+    if (this.config.syncCold && this.config.syncColdVerify && this.sync?.thawedUnread(s.scope, item.sourceId, item.id))
+      return true;
     const mark = this.deps.cache.readMark(s.scope, item.id);
-    if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark) !== true) return false;
+    if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark, item.id) !== true) return false;
     // A re-read since that signal could not tell (a null that proves nothing): another says the same until it signals.
     const held = this.unverifiable.get(scopeKey(s.scope))?.get(item.id);
     if (held === undefined || this.now() - held.at > UNVERIFIABLE_HOLD_MS) return true;
-    return this.sync.signalledSince(s.scope, item.sourceId, held.mark);
+    return this.sync.signalledSince(s.scope, item.sourceId, held.mark, item.id);
   }
 
   /**
@@ -4672,16 +4967,60 @@ export class ContextPartner {
     // The read mark before the re-read's call (D133): a signal while it is on the wire doubts what it stores, and
     // refuses its reuse.
     const mark = this.sync?.mark() ?? 0;
+    // `syncDelta` (D476): a source kept by its change feed is brought current by one delta read, shared by every
+    // doubted item of it, instead of a fetch for each; if that cannot settle the doubt, the item is re-read as before.
+    const byDelta = this.config.syncDelta && this.sync?.hasDelta(s.scope, item.sourceId) === true;
+    const reading = byDelta
+      ? this.recheckByDelta(s, item, made).then((o) => o ?? this.recheck(s, item, mark, made))
+      : this.recheck(s, item, mark, made);
     const entry: { at: number; mark: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome } = {
       at: now,
       mark,
-      outcome: this.recheck(s, item, mark, made).then((o) => (entry.settled = o)),
+      outcome: reading.then((o) => (entry.settled = o)),
     };
     const outcome = entry.outcome;
     checks.delete(item.id);
     checks.set(item.id, entry);
     while (checks.size > MAX_CHECKS) checks.delete(checks.keys().next().value as string);
     return outcome;
+  }
+
+  /**
+   * `syncDelta` (D476): the doubt about `item` settled by one read of its source's change feed (`Sync.settleDelta`,
+   * within `verifyTimeoutMs`): the read stores what changed and drops what was deleted, so the cache then says which
+   * it was. Null when the feed could not settle it (no cursor, a failed or late read, a signal during it, or the copy
+   * no longer held for another reason): the caller re-reads the item by its ref. Never throws.
+   */
+  private async recheckByDelta(s: Session, item: ContextItem, made?: { calls: number }): Promise<CheckOutcome | null> {
+    const sync = this.sync;
+    if (!sync) return null;
+    try {
+      const all = await this.deps.sources(s.scope).catch((): Source[] => []);
+      const source = all.find((x) => x.id === item.sourceId);
+      if (!source?.changes || s.closed) return null;
+      const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(this.config.verifyTimeoutMs)]);
+      const tally = { calls: 0 };
+      const settled = await sync.settleDelta(s.scope, source, signal, tally);
+      if (made) made.calls += tally.calls;
+      this.freshness.calls += tally.calls;
+      if (!settled || s.closed) return null;
+      const now = this.now();
+      if (this.deps.cache.isHeldGone(s.scope, item.id, now)) {
+        this.freshness.checked++;
+        this.freshness.gone++;
+        return "gone";
+      }
+      const copy = this.deps.cache.get(s.scope, item.id, now);
+      // Not held, and not because the feed said it is gone (evicted, or let go by the cap): re-read by ref.
+      if (!copy || this.doubted(s, copy)) return null;
+      this.freshness.checked++;
+      const changed = copy.text !== item.text || copy.title !== item.title;
+      if (changed) this.freshness.changed++;
+      else this.freshness.confirmed++;
+      return changed ? "changed" : "confirmed";
+    } catch {
+      return null;
+    }
   }
 
   private async recheck(
@@ -4999,8 +5338,9 @@ export class ContextPartner {
       return local.size > 0 ? local : null;
     }
     // `behind`: a warm copy answers while its poll runs (`syncPollBehind`), never one still in its backfill; so does a
-    // warm copy past `syncPollWidth` that the lookup did not poll (D263). An ask never passes `behind`: a stale copy
-    // it did not poll is searched live (D127), within the probes' call budget.
+    // warm copy past `syncPollWidth` that the lookup did not poll (D263). An ask passes `behind` only with `askBehind`
+    // (D430), which then names such a copy's status itself (`behindStatuses`); without it a stale copy it did not poll
+    // is searched live (D127), within the probes' call budget.
     // With `syncLocalComplete`, only a copy that holds the whole source answers for it (D264): one the user's cap cut
     // is searched live, or a lookup would miss what is older than the cut.
     const whole = (id: string) => !this.config.syncLocalComplete || this.sync!.complete(s.scope, id);
@@ -5653,6 +5993,7 @@ export class ContextPartner {
       ...(source.fetchesById !== undefined ? { fetchesById: source.fetchesById } : {}),
       // A listing (the sync, D57) is traced by the sync itself (`sync.list`): passed through as it is.
       ...(source.list ? { list: source.list.bind(source) } : {}),
+      ...(source.changes ? { changes: source.changes.bind(source) } : {}),
       // One `then`, no async frame of its own: a source call is the most frequent span (tracing overhead).
       search: (query, signal) => {
         const sp = spans.open("source.search", parent, { async: true, source: source.id, window: !!query.window });
@@ -5915,11 +6256,25 @@ function reachAnswer(
     const none = "Could not reach the connected sources (they could not be listed), so this is not an all-clear.";
     return packet ? `${packet}\n${none}` : none;
   }
-  const missed = (sources ?? []).filter((x) => !ANSWERED.has(x.status));
+  // `askBehind` (D430): sources still being read when the ask answered are named apart from those that failed.
+  const reading = (sources ?? []).filter((x) => x.status === SEARCHING);
+  const missed = (sources ?? []).filter((x) => !ANSWERED.has(x.status) && x.status !== SEARCHING);
+  const told = unreached(packet, sources ?? [], missed);
+  if (reading.length === 0) return told;
+  const shown = reading.slice(0, 3).map((x) => x.sourceId);
+  const names = `${shown.join(", ")}${reading.length > 3 ? ` and ${reading.length - 3} more` : ""}`;
+  const note = `Still reading ${names}: anything there that fits follows as a later packet`;
+  if (told === "Nothing in the connected sources.")
+    return `Nothing found yet. ${note}, so this is not an all-clear yet.`;
+  return `${told}\n${note}.`;
+}
+
+/** `reachAnswer`'s text for the sources that did not answer (`missed`), as D127 words it. */
+function unreached(packet: string, sources: readonly SourceStatus[], missed: readonly SourceStatus[]): string {
   if (missed.length === 0) return packet || "Nothing in the connected sources.";
   const names = missed.map((x) => `${x.sourceId} (${STATUS_WORDS[x.status] ?? x.status})`).join(", ");
   if (packet) return `${packet}\nCould not reach ${names}: this answer may be missing what they hold.`;
-  const answered = (sources ?? []).filter((x) => ANSWERED.has(x.status)).map((x) => x.sourceId);
+  const answered = sources.filter((x) => ANSWERED.has(x.status)).map((x) => x.sourceId);
   if (answered.length === 0) return `Could not reach ${names}, so this is not an all-clear: nothing was checked.`;
   return `Nothing in ${answered.join(", ")}. Could not reach ${names}, so this is not an all-clear.`;
 }
@@ -6027,6 +6382,11 @@ interface AskInternal {
   turn?: number;
   /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
   again?: { searched: SearchedLive; prev: Injection | null };
+  /**
+   * `askBehind` (D430): the follow-up of an explicit ask that answered before its sources were read: the ask's search,
+   * the ids its answer cited, and the session's request count when it was asked.
+   */
+  late?: { searched: SearchedLive; cited: ReadonlySet<string>; request: number };
 }
 
 /** `readAsk`'s options: whether it reads for the push, and the push's request. */

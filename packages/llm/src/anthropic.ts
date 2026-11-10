@@ -29,6 +29,8 @@ export const ANTHROPIC_PRICES: Record<string, AnthropicPrice> = {
   "claude-haiku-5-5": { input: 0.1, output: 0.5, longAbove: 100_000, longMultiplier: 5 },
   // The same reference, 2026-10-06: Sonnet 5.5 is $2 / $10 at every length (1M context). Lab regrade only (fix-s3b).
   "claude-sonnet-5-5": { input: 2, output: 10 },
+  // The same reference, cached 2026-11-03: Opus 5.5 is $4 / $20 (1M context). Lab labelling only (I1, D470).
+  "claude-opus-5-5": { input: 4, output: 20 },
 };
 
 /**

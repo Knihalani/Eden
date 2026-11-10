@@ -101,11 +101,20 @@ import {
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
-import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
+import { QueryPlanner, type ChangePage, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import { noiseSources } from "./noise-sources";
 import type { World } from "../world";
-import { connectorHeader, connectorOptions, pushNotifier, recapNotice, sourceFields } from "./connector-options";
+import {
+  applyConnectorMix,
+  changesField,
+  connectorHeader,
+  connectorOptions,
+  parseConnectorMix,
+  pushNotifier,
+  recapNotice,
+  sourceFields,
+} from "./connector-options";
 import {
   armPromptsHash,
   ASK_DESCRIPTION,
@@ -147,6 +156,7 @@ import { parseConditions, parseVariants, type Condition } from "./pi-conditions"
 import { effective, PRESETS } from "./presets";
 import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Budgeted } from "./reader-disk";
 import { parseSuites } from "./suites";
+import { readBundle, worldFromPilot } from "../pilot/world";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
 import { earlierPackets, userTurnBreakpoint } from "./packet-layout";
 import {
@@ -179,9 +189,13 @@ const SEEDS = opt("seeds", "41").split(",").map(Number);
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
 const GRADER = opt("grader", "anthropic/claude-haiku-5.5");
 const BUDGET = Number(opt("budget", "0.6"));
-const SUITE = opt("suite", "heldout");
+// `--world-file F` (F3, D489; ../pilot/): the world and tasks are a pilot bundle (one consenting account's redacted
+// import and its owner's own requests) in place of a generated user. One world, one request a session; the arms,
+// agent loop, connectors' profiles and accounting are the harness's own.
+const WORLD_FILE = opt("world-file", "");
+const SUITE = WORLD_FILE ? "pilot" : opt("suite", "heldout");
 const LOOKUPS = SUITE === "lookups";
-const SUITE_LIST = LOOKUPS ? ["lookups"] : parseSuites(SUITE);
+const SUITE_LIST = WORLD_FILE ? ["pilot"] : LOOKUPS ? ["lookups"] : parseSuites(SUITE);
 // `--days D` (H16, pi-user.ts): one user per seed over D days of `--day-size` requests (12-20), each day mixing
 // hidden, control and neutral requests in `--mix` proportion (1:1:8); the agent's transcript resets each day, Eden
 // persists. Eden's clock moves `--gap-min` minutes a request and `--night-h` hours between days (the world's now is
@@ -197,6 +211,12 @@ const NIGHT_MS = Number(opt("night-h", "2")) * 3_600_000;
 const RECAP_NOTICE = opt("recap-notice", "push");
 if (RECAP_NOTICE !== "push" && RECAP_NOTICE !== "signal") throw new Error("--recap-notice must be push or signal");
 const RECAP_SIGNAL = RECAP_NOTICE === "signal";
+if (WORLD_FILE) {
+  for (const f of ["suite", "days", "day", "variants", "templates", "reuse-arms", "dress", "noise-sources", "act"]) {
+    if (args.includes(`--${f}`)) throw new Error(`--world-file runs the bundle's own requests: it cannot take --${f}`);
+  }
+  if (SEEDS.length !== 1) throw new Error("--world-file is one user: name one seed");
+}
 if (USER_DAYS > 0) {
   for (const f of ["day", "variants", "templates", "reuse-arms"]) {
     if (args.includes(`--${f}`)) throw new Error(`--days plans the user's requests itself: it cannot take --${f}`);
@@ -219,6 +239,8 @@ const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
 const TIME_SCALE = Number(opt("time-scale", "1"));
 // `--source-profile`, `--push`, `--push-rates` (connector-options.ts).
 const CONNECTORS = connectorOptions(opt);
+// `--connector-mix P,D` (F1): the share of connectors with push and a change feed, and with a feed only.
+const CONNECTOR_MIX = parseConnectorMix(opt("connector-mix", ""));
 const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 // The first N tasks of each world only: a plumbing check before a real run.
@@ -280,6 +302,14 @@ const RUN_MODELS = [
   ...(CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).cards) ? [CARD_MODEL] : []),
   ...(USES_READER ? [READER_MODEL] : []),
 ];
+// A pilot bundle is a real person's data (D489): every role on Anthropic's API under the owner's key, never the lab's
+// OpenRouter route (it does not pin D12's no-retention endpoints) and never a logging endpoint. `pilot run` passes
+// claude-* ids for every role; this holds for a direct `pi-ab --world-file` too.
+if (WORLD_FILE) {
+  const routed = openRouterModels(RUN_MODELS);
+  if (routed.length) throw new Error(`--world-file sends real data: claude-* models only, not ${routed.join(", ")}`);
+  if (args.includes("--allow-logging")) throw new Error("--world-file sends real data: it cannot take --allow-logging");
+}
 // Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
 const ACCESS = labAccess(args, RUN_MODELS);
 const PACER = ACCESS.pacer;
@@ -294,6 +324,8 @@ const TASK_REQUESTS = MAX_STEPS + 1;
 let capStopped = 0;
 // Cards replayed from disk: the replay file is only read, new cards go to their own file (cards-disk.ts).
 const CARDS_FILE = opt("cards", opt("cards-disk", ""));
+/** `--cards-calls N` (F2): each stream's enrichment gets N card calls; items past them stay uncovered. */
+const CARDS_CALLS = Number(opt("cards-calls", "-1"));
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
 // Compared as files, not strings: `./a.cards.jsonl` or a symlink must not send new cards into the replay file.
 if (CARDS_FILE && samePath(CARDS_OUT, CARDS_FILE)) {
@@ -500,6 +532,7 @@ function watched(
         () => source.list(scope, cursor, limit, signal),
         (page: ListPage) => page.items.length,
       ),
+    ...changesField(source, (run) => timed("delta", run, (page: ChangePage | null) => page?.items.length ?? 0)),
   };
 }
 
@@ -675,6 +708,7 @@ async function runWorld(
   let edenCalls = 0;
   const noise =
     NOISE_SOURCES > 0 && cond.withPartner ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME_SCALE, seed) : [];
+  applyConnectorMix([...sources, ...noise], CONNECTOR_MIX, seed);
   const edenSources = [...sources, ...noise].map((s) =>
     watched(s, (id, op, start, end, status, items) => {
       edenCalls++;
@@ -713,10 +747,23 @@ async function runWorld(
   // With `--cards`, cards on disk are replayed and only the rest made live (their spend booked to Eden as usual).
   const cardMaker = (): CardMaker =>
     diskCards ? new DiskCardMaker(CARDS_FILE, liveCards(), { out: CARDS_OUT, shared: diskCards }) : liveCards();
+  // `--cards-calls N` (F2, D483): each stream's card model answers its first N calls and leaves the rest uncovered
+  // (no call, no spend), as a new user's first requests meet a backfill the enrichment has only begun.
+  const cappedMaker = (): CardMaker => {
+    const maker = cardMaker();
+    if (CARDS_CALLS < 0) return maker;
+    let calls = 0;
+    return {
+      make: (items, today, signal, retry, intent) =>
+        calls++ < CARDS_CALLS
+          ? maker.make(items, today, signal, retry, intent)
+          : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
+    };
+  };
   const cards =
     // `+nokey` (D291): a server with no model key builds no card enricher and no reader (models.ts NO_MODELS).
     withPartner && !noKey && effective(config).cards
-      ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
+      ? new CardEnricher({ maker: cappedMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   if (cards) budgeted.cards.push(cards);
   // A stream with Eden but no cards (`+nokey`, D291) is booked too, for its connector calls (the backfill, ticks); it
@@ -1411,8 +1458,11 @@ async function runWorld(
 /** `--limit` on a user: the first N requests, the day sizes cut to match. */
 const cutDays = (sizes: number[], n: number) =>
   sizes.map((k, d) => Math.max(0, Math.min(k, n - sizes.slice(0, d).reduce((a, b) => a + b, 0)))).filter((k) => k > 0);
-const worlds: { seed: number; world: World; tasks: Task[]; daySizes?: number[]; clashes?: number }[] =
-  USER_DAYS > 0
+const worlds: { seed: number; world: World; tasks: Task[]; daySizes?: number[]; clashes?: number }[] = WORLD_FILE
+  ? [worldFromPilot(readBundle(readFileSync(WORLD_FILE, "utf8")), SEEDS[0]!)].map((w) =>
+      LIMIT > 0 ? { ...w, tasks: w.tasks.slice(0, LIMIT) } : w,
+    )
+  : USER_DAYS > 0
     ? SEEDS.map((seed) => {
         if (LOOKUPS) throw new Error("--days needs hidden-context suites, not lookups");
         const plan = planUser(seed, suiteTemplates(seed, SUITE_LIST), { days: USER_DAYS, size: DAY_SIZE, mix: MIX });

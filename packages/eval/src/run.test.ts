@@ -355,3 +355,54 @@ describe("scenarios", () => {
     for (const s of large) expect(s.sources.reduce((n, src) => n + src.docs.length, 0)).toBeGreaterThanOrEqual(50);
   });
 });
+
+describe("the eval's clock (D435)", () => {
+  // Runs `fn` with the wall clock moved to `iso` (Date.now and `new Date()`): what a run on that day would read.
+  async function on<T>(iso: string, fn: () => Promise<T>): Promise<T> {
+    const Real = Date;
+    const shift = Real.parse(iso) - Real.now();
+    class Shifted extends Real {
+      constructor(...args: unknown[]) {
+        if (args.length === 0) super(Real.now() + shift);
+        else super(...(args as [number]));
+      }
+      static override now() {
+        return Real.now() + shift;
+      }
+    }
+    globalThis.Date = Shifted as DateConstructor;
+    try {
+      return await fn();
+    } finally {
+      globalThis.Date = Real;
+    }
+  }
+  const dir = join(import.meta.dir, "..", "scenarios");
+  const all = readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .sort()
+    .map((f) => JSON.parse(readFileSync(join(dir, f), "utf8")) as Scenario);
+  const scored = (m: Awaited<ReturnType<typeof runScenarios>>) => {
+    const { latencyP50Ms: _p50, latencyP95Ms: _p95, ...rest } = m;
+    return rest;
+  };
+
+  test("every scenario scores the same whatever day the eval runs on", async () => {
+    // 2026-11-07 and 2026-11-10 read precision 0.65 and 0.684 before the clock was pinned: on the 10th, "today" in
+    // large-vendor-freeze's request was the day its invoice falls due, and the push handed fewer candidates (D400).
+    const run = () => runScenarios(all, { model: null, waitMs: 2_000, planner: true, config: {} });
+    const a = scored(await on("2026-11-07T12:00:00Z", run));
+    const b = scored(await on("2026-11-10T12:00:00Z", run));
+    const c = scored(await on("2031-03-01T00:00:00Z", run));
+    expect(b).toEqual(a);
+    expect(c).toEqual(a);
+  });
+
+  test("the partner's clock is the scenario's: the push reads its request's day from it, not the wall clock", async () => {
+    const vendor = all.find((s) => s.id === "large-vendor-freeze")!;
+    const m = await on("2026-11-10T12:00:00Z", () => runScenarios([vendor], { model: null, waitMs: 2_000 }));
+    // Its clock is 3 November: "today" is not the invoice's due day, so nothing settles the request and the push
+    // hands its five candidates.
+    expect(m.counts.delivered).toBe(5);
+  });
+});

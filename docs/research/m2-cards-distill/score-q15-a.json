@@ -1,0 +1,31 @@
+{
+  "data": ".local/modal/cards/data-k/heldout.jsonl",
+  "missing": 0,
+  "items": 719,
+  "batches": 61,
+  "batchParseRate": 1,
+  "itemParseRate": 1,
+  "constraintRef": 64,
+  "constraintOut": 62,
+  "flagAgreement": 0.911,
+  "flagPrecision": 0.5,
+  "flagRecall": 0.4844,
+  "kindAgreement": 0.8887,
+  "kept": {
+    "items": 89,
+    "constraintRef": 61,
+    "constraintOut": 37,
+    "flagPrecision": 0.8378,
+    "flagRecall": 0.5082
+  },
+  "onBoth": {
+    "n": 31,
+    "kind": 0.4839,
+    "actions": 0.2581,
+    "span": 0.5161,
+    "limit": 0.9355,
+    "entitiesJaccard": 0.5451
+  },
+  "requestsParsed": 1,
+  "requestsJaccard": 0.4528
+}

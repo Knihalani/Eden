@@ -56,6 +56,12 @@ tokens per ten-item call over 184 calls (24 of them retries of a batch cut off a
 that would be $0.0021 per call, $0.00021 per item, about $0.32 per user-month, an upper bound for a model that
 reasons that much. Request time adds one BM25 search over the user's requests (no model, no call).
 
+A distilled open model for the card and intent call (M2, lab only, D445–D449; docs/research/m2-cards-distill.md):
+Qwen2.5-1.5B-Instruct fine-tuned on Haiku's train cards, served by vLLM on one Modal L4 ($0.80 an hour, list), costs
+$0.0126 per 1,000 items at 16 calls at once and $0.133 one call at a time (p50 5.0 s, p90 12.0 s a call, about 12
+items a call), against Haiku's $0.051 per 1,000 items (lab provider, cached; $0.001012 a 20-item call, p50 5.4 s).
+Its cards match Haiku's in the funnel but its intent requests lose hidden facts, so it is not used.
+
 The match thresholds (`intentMinCoverage` 0.2, `intentMinMatched` 1, `intentHits` 12 since D179) add no call: a looser
 match only lets more intent hits into the ask's reader pool, which is capped at `askReaderPool` items either way. On
 Pi held-out 13 seeds 41–44, intent replayed (ledger runs `close-d159-pi-41` to `-44`, $0.534;
@@ -109,8 +115,11 @@ Haiku (lab provider), train seeds 41–42, 1:1:8 mix, steady state per 1,000 tas
 figures below hold for `pushCandidates: 0` (`--preset minus-candidates`). **D317 (A12) adds no model call of Eden's
 and no connector call** but makes the agent ask more (`askNudge`: +0.20–0.38 asks a task): +$0.061 per 1,000 tasks
 on the 1:1:8 mix as measured (0.374 → 0.435; Pi, Anthropic Haiku, the 91 targeted train templates, seeds 41–44 and
-41–42 for neutral; docs/research/a12-quality.md). A later check of the version after review came out at
-+$0.046–0.059 a kind against an earlier baseline, so read the trade as +$0.04–0.07 a kind and +0.3–0.6 s (D317).
+41–42 for neutral; docs/research/a12-quality.md). A later check of the version after review came out at +$0.046–0.059
+a kind against an earlier baseline, so read the trade as +$0.04–0.07 a kind and +0.3–0.6 s (D317). M4 measured it on
+the whole train suites at +$0.022 per 1,000 tasks and +0.21 s a task (D455); **D461's narrower trigger
+(`askNudgeDeep`) takes back −$0.005 per 1,000 tasks (−0.009..−0.000), −0.062 asks and −0.062 s a task** against it
+(Pi, train 41–44, short and over days; docs/research/m5-nudge-narrow.md).
 **With the D340 trial on (A17; off in the default)** a candidate handed for an earlier request of the session is
 handed again when it ranks for a later one: over a user's days the agent reads about 600-750 more input tokens a task (+$0.013 per 1,000 tasks on
 8-day days, +5% of the eden arm's $0.251 steady state; +$0.017 pooled with 40-request days), with no Eden model call;

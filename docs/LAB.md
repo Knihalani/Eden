@@ -33,6 +33,7 @@ per suite for train1–6 and held-out 10–12.
 | `heldout15`                                | Blind, the weak-points plan's (fix-s3b-lab.md); 32 new templates, same areas, with `neutral`          | **Read** (RealUse-2, 2026-11-07: Pi seeds 41–44, Hermes 41–42, the blind funnel); spent                                  |
 | `heldout16`                                | Blind, the CL wave's (cl-cl5.md); 32 new templates over the same 8 areas, with `neutral`              | **Read** (RealUse-3 Pi, 2026-11-07, realuse-3/pi-heldout16.md): no longer blind; cards and intent cached for seeds 41–44 |
 | `heldout17` | Blind, the end-of-day confirmation's (a19-heldout17.md, D350); 32 new templates over the same 8 areas, with `neutral`; 8 late-arrival templates (`HELDOUT17_LATE`, for `--late`) | **Read** (A29 Pi, 2026-11-07, a29-heldout17.md): no longer blind; cards and intent cached for seeds 41–44 |
+| `heldout18` | Blind, M6's (m6-heldout18.md, D465); 32 new templates over the same 8 areas, with `neutral`; 8 late arrivals (`HELDOUT18_LATE`); 13 short anchored requests (`HELDOUT18_ANCHORED`, D466) | **Unread** (`UNREAD_BLIND`): cards and intent cached for seeds 41–44; running it at all spends it |
 
 **The `neutral` variant** (held-out 14–17 and, since CL5, train1–6; `neutral.ts`, `NEUTRAL_SUITES`): the same request
 as `hidden` and `control` with nothing planted. The train suites get it from `withNeutral` in suites.ts (the control
@@ -48,7 +49,8 @@ a neutral task as a false one, and `pi-ab-report.ts` adds a `neutral` table and 
   written by an author who saw no engine code.
 - `UNRUN_BLIND` (held-out 9–16) keeps them out of `--suite all` so a tuning command cannot spend them, but all five
   have been read (D72, D80, D85, D98, D112), 14 by RealUse-1 and 15 by RealUse-2: treat the list as "not in `all`",
-  not as "fresh". Held-out 16 is the one unread suite: running it at all (funnel or agent) spends it.
+  not as "fresh". Held-out 18 (M6, D465) is the one unread suite (`UNREAD_BLIND`): running it at all (funnel or
+  agent) spends it.
 - Seeds: 41–44 for funnel work (41–42 on train), 41–48 for the Haiku benchmark. Same seed, same world, same tasks.
 
 ## Configurations (`presets.ts`)
@@ -172,6 +174,10 @@ messages can reach the cap (an estimate, not measured in the lab). The unit test
   `--spend-ledger FILE --spend-cap USD` (one ledger for all parallel processes; `--spend-headroom` each,
   `--run-label` per run). Prompt caching on, thinking off.
 - **Budgets:** every live runner takes `--budget` (USD, hard, per process: each call reserves its worst case).
+- **Modal (M0, D408; `packages/sim/modal/README.md`):** GPU and CPU credits for the lab, not a model provider. The
+  Anthropic key reaches it only as a Modal Secret (named `HAIKU_API_KEY`), and only pi-ab shards get it; a fan-out refuses to
+  start without `--cap`, split cap/N per shard ledger. The distilled card model's endpoint is a lab card transport
+  (`bun run funnel --cards-endpoint URL`, key in `EDEN_LAB_CARDS_KEY`), labelled `[cards: endpoint (lab, M0)]`.
 - Never print a key; never put one in a results file or a PR.
 
 ## Measurement
@@ -352,9 +358,13 @@ with stub and oracle too: one line per read (task, the prompt a model would have
 train1 seed 41 wrote 54 lines for its 54 reader calls.
 
 A second, independent draw of train seeds 41–42's requests with the shipped prompt is checked in as
-`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 314/273 on the shipped sample and
-307/281 on it, with 43 hidden tasks moving between them. Screen a lever on the intent index on both (`zcat` it, then
+`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 314/274 on the shipped sample and
+307/281 on it (314/273 before D483's tie rule), with 43 hidden tasks moving between them. Screen a lever on the intent index on both (`zcat` it, then
 `--intent FILE`) and do not report a delta under about 10 tasks from one sample.
+
+A new user's first requests (F2, D482): `bun run funnel --jobs 4 -- --cards-calls N` gives each world's card model N
+calls and leaves the rest uncovered (a train world needs about 16); `--set '{"cardsOrder":false}'` is the old read
+order. pi-ab takes the same flag; without `--cards` every card is made in-run.
 
 ### 1c. Lab-only measurements of first-turn delivery, overlapping requests and sync items
 
@@ -442,6 +452,12 @@ Live (A21, D357): `pi-ab --noise-sources 995` gives Eden's arms the same noise c
 world's five as its agent's tools); one seed per process (two at once ran out of memory). Deletions under lost notices
 with every source on the weekly sweep (D356's worst case): `quality-cli --never-used` (no source is ever "used").
 Recipes and figures: docs/research/a21-scale.md.
+
+Connector kinds (F1, D478): `--connector-mix P,D` on the funnel, pi-ab, quality-cli and days-calls (`--mix=P,D` on
+`source-days.bench.ts`) makes a share P of the connectors push and have a change feed, a share D have a feed only,
+the rest neither (`0.3,0.3` in F1, an assumption); the trials that use them are `syncCold` and `syncDelta`
+(`--set '{"syncCold":true,"syncDelta":true}'`). `pi-cost-report.ts --trigger-avoids N --events-per-task E` prices
+event triggers. Recipes and figures: docs/research/f1-local-copy.md.
 
 Read hidden/decoys, `calls/task`, and the `merged cards use` line's `calls` and `sent` (card calls are stub-counted:
 noise items are not in the replay; price them at $0.000181 a call, A1). Compare task by task against the same seed
@@ -982,6 +998,61 @@ python3 -I packages/sim/lab/scripts/haiku-bench.py $H/ledger.jsonl $H/p2/runs/*.
 
 Its scale: blind held-out 5–8 and 10–12, seeds 41–48, 1,400 hidden and 1,400 control tasks per condition, five Pi and
 three Hermes conditions; $18.46 for the main matrix and $24.36 for the whole campaign (haiku-benchmark.md).
+
+### 7. On Modal: the lab at scale, a distilled card model, an embedding screen (M0, D408)
+
+Three Modal apps in `packages/sim/modal/` (its README has the setup, every command, how results come back and the
+estimated cost of each run): `lab_fanout.py` fans pi-ab seeds or funnel shards over containers (one seed a pi-ab
+shard, 16 GiB, 24 GiB at `--noise-sources` ≥ 100; a hard `--cap` split across shard ledgers) and runs pi-ab-report /
+pi-cost-report or the funnel score locally on `.local/modal/<run>/`; `cards_distill.py` trains, evaluates and serves
+a small open model on Haiku's cards; `embed_screen.py` ranks planted items by embedding against the push's lexical
+pool. Without a token:
+
+```bash
+bun packages/sim/src/lab/cards-distill.ts export --out .local/modal/cards/data      # the training set, ~60 s, $0
+python3 -I packages/sim/modal/fanout_plan.py plan --kind pi-ab --suites train --seeds 41,42 --cap 2 -- --conditions tools,eden
+cd packages/sim/modal && python3 -I -m unittest                                    # the apps' arithmetic
+```
+
+The funnel through a distilled model's endpoint: `bun run funnel --suite train --seeds 41,42 --cards-endpoint URL
+--cards F` (every card live through it, none replayed, appended to F; labelled; never the shipped card model's figures).
+
+### 7b. The powered bench: presets, waves and a clustered report (F3, D487)
+
+For a question of about two points (a part's effect), run enough paired tasks and read the template-clustered
+interval. One command a run, then the report:
+
+```bash
+export SSL_CERT_FILE=/root/.ccr/ca-bundle.crt                      # cloud containers only
+# the default against the agent alone and against default minus `fewer`, seeds 41-48 with control tasks:
+modal run packages/sim/modal/lab_fanout.py --preset bench-fewer --seeds 41-48 --cap 4.2 --run bench-a
+# 20 more seeds, hidden tasks only (no cache covers seeds 45+: cards are made in-run, D444):
+modal run packages/sim/modal/lab_fanout.py --preset bench-fewer --seeds 49-68 --cap 4.4 --run bench-b \
+  --args "--variants hidden"
+python3 -I packages/sim/modal/bench_report.py --pair eden:tools --pair eden~minus-fewer:eden \
+  --group cached=.local/modal/bench-a --group inrun=.local/modal/bench-b --target 1.5
+```
+
+- **Presets** (`fanout_plan.PRESETS`): `bench-tools`, `bench-fewer`, `bench-parts`; `--args` after a
+  preset add or replace flags. `python3 -I packages/sim/modal/fanout_plan.py plan --preset … --seeds … --cap …`
+  prints the plan, the streams a shard and the shards at once, with no token.
+- **Concurrency is automatic.** Shards run in waves that keep the agent streams on the key at or under
+  `--max-streams` (60); a wave with more than 2% of requests retried on a 429 halves the next. One Anthropic fan-out
+  at a time from a checkout. F3's 28 shards ran with 0 retried 429s (see the note).
+- **Cost (F3, measured):** a train seed with hidden and control tasks costs about $0.12 an arm ($0.000316 a task
+  run, Haiku 5.5 everywhere); a 4-arm shard takes about 2.3 minutes of container time.
+- **What the report says.** The effect with a cluster bootstrap over templates, the task-level and seed-clustered
+  intervals beside it, the design effect, McNemar's exact test, the minimum detectable effect, and the floor more
+  seeds cannot pass (the between-template variance over 192 templates). `--sonnet` reads `regrade*.json` beside each
+  shard.
+
+### 8. A real-data pilot on one consenting account (F3, D489): built, not run
+
+`bun run pilot` ([PILOT.md](PILOT.md)): the owner imports their own Gmail and Calendar through the connector presets
+(every text through `sanitizeForStore`), writes their own requests and the facts that mattered, runs the Pi harness
+alone and with Eden on them (`pi-ab --world-file`), marks the answers blind and reads a paired report. Data stays in
+`EDEN_PILOT_DIR` (outside any git work tree); the only data that leaves the machine is the model calls of a run the
+owner starts with `--send-to anthropic`. No session has run it on real data.
 
 ## Recording
 

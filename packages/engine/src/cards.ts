@@ -594,6 +594,8 @@ export interface CardLimits {
    * when it is not automated and is dated within this many days or upcoming (`readForIntent`).
    */
   leanDays: number;
+  /** `cardsOrder` (D482, D483; `order()` sets it): the queue is read best first (`orderQueue`), not as it filled. */
+  order: boolean;
 }
 
 export const DEFAULT_CARD_LIMITS: CardLimits = {
@@ -607,6 +609,7 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   sentenceReuse: false,
   intent: false,
   leanDays: 0,
+  order: false,
 };
 
 /**
@@ -631,6 +634,8 @@ interface Stored {
   card: Card | null;
   /** With `intent`: the requests the item would change (`intent.ts`), indexed in the user's `IntentIndex`. */
   requests?: string[];
+  /** With requests: their place among equal scores in the intent index (`Queued.seq`; `IntentIndex.set`). */
+  seq?: number;
   /** When the card was made (the partner's clock): a lookup uses only cards made before it began. */
   at: number;
   /** When an item last linked to it (made, or an item with this content enqueued): its time to live runs from here. */
@@ -645,6 +650,65 @@ interface Queued {
   hash: string;
   skey?: string;
   only?: true;
+  /** The item's place in the order the user's items were queued (`UserCards.enlisted`). */
+  seq?: number;
+}
+
+/** An address on a mail's From line, and on its To and Cc lines (header block only; bounded). */
+const ORDER_FROM = /^from:[^\n]*?([\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,4})/im;
+const ORDER_TO = /^(?:to|cc):[^\n]*$/gim;
+const ORDER_ADDRESS = /[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,4}/g;
+const ORDER_RECENT_MS = 3 * 86_400_000;
+/** Each waiting item's sender and addressees as `orderQueue` read them, held while the item object lives. */
+const ORDER_HEADS = new WeakMap<ContextItem, { from: string | undefined; to: string[] }>();
+/** What constraint wording counts for (the prefilter passed the item): more than the three other signs together. */
+const ORDER_WORDED = 4;
+
+/**
+ * `cardsOrder` (D482, D483; docs/research/f2-quality.md): the order a user's waiting items are read in, best first,
+ * for a new user whose backfill fills the queue faster than the model empties it. An item with constraint wording
+ * (the prefilter passed it: not `only`) goes before any other: on train the planted items are 78% such, the queue 32%,
+ * and this alone carried the measured gain. Within each group an item counts for each of: an
+ * event that starts after `now`; a sender the user has written to (the user is the address most of the queue's mail
+ * is from or to; the people they write to are on the To and Cc lines of mail from that address); dated within three
+ * days (an event ahead is dated by its start, so it counts for that too). More counts first, then the newer date,
+ * then the order the items came in. No model; reads each item's first 600 characters once.
+ */
+export function orderQueue<Q extends { item: ContextItem; only?: true }>(queue: readonly Q[], now: number): Q[] {
+  const heads = queue.map((q) => {
+    // Read once per item object: the queue is sorted before every batch, and an item waits through many.
+    const known = ORDER_HEADS.get(q.item);
+    if (known) return known;
+    const head = q.item.text.slice(0, 600);
+    const blank = head.search(/\n[ \t]*\n/);
+    const block = blank >= 0 ? head.slice(0, blank) : head;
+    // A sender field that is not text (a caller's raw item) is read as none.
+    const given = q.item.meta?.from ?? q.item.meta?.sender;
+    const from = (typeof given === "string" ? given : ORDER_FROM.exec(block)?.[1])?.toLowerCase();
+    const to = (block.match(ORDER_TO) ?? []).flatMap((l) => l.match(ORDER_ADDRESS) ?? []).map((a) => a.toLowerCase());
+    const read = { from: from?.match(ORDER_ADDRESS)?.[0] ?? from, to };
+    ORDER_HEADS.set(q.item, read);
+    return read;
+  });
+  const seen = new Map<string, number>();
+  for (const h of heads) for (const a of new Set([h.from, ...h.to])) if (a) seen.set(a, (seen.get(a) ?? 0) + 1);
+  let user: string | undefined;
+  for (const [a, n] of seen) if (user === undefined || n > seen.get(user)!) user = a;
+  const writesTo = new Set<string>();
+  for (const h of heads) if (h.from !== undefined && h.from === user) for (const a of h.to) writesTo.add(a);
+  const ranked = queue.map((q, i) => {
+    const start = q.item.meta?.start ? Date.parse(q.item.meta.start) : NaN;
+    const dated = Math.max(q.item.updatedAt ?? -Infinity, Number.isFinite(start) ? start : -Infinity);
+    const from = heads[i]!.from;
+    const tier =
+      (q.only ? 0 : ORDER_WORDED) +
+      (Number.isFinite(start) && start > now ? 1 : 0) +
+      (from !== undefined && from !== user && writesTo.has(from) ? 1 : 0) +
+      (dated >= now - ORDER_RECENT_MS ? 1 : 0);
+    return { q, i, tier, dated };
+  });
+  ranked.sort((a, b) => b.tier - a.tier || b.dated - a.dated || a.i - b.i);
+  return ranked.map((r) => r.q);
 }
 
 class UserCards {
@@ -658,7 +722,9 @@ class UserCards {
    * is not kept, and an intent search names the items a hash stands for.
    */
   readonly holders = new Map<string, Set<string>>();
-  readonly queue: Queued[] = [];
+  queue: Queued[] = [];
+  /** Items queued so far: each one's `seq`, the order the user's items came in whatever order they are read in. */
+  enlisted = 0;
   /** With `intent`: the user's requests, indexed (`intent.ts`); created with the first. */
   intent: IntentIndex | undefined;
   /** Sentence key → the content hash whose card says it (`sentenceReuse`). */
@@ -789,6 +855,11 @@ export class CardEnricher {
     this.limits = { ...this.limits, leanDays: Math.max(0, days) };
   }
 
+  /** `cardsOrder` (D482, D483): the queue is read best first (`orderQueue`). */
+  order(): void {
+    this.limits = { ...this.limits, order: true };
+  }
+
   private user(scope: Scope): UserCards {
     const key = scopeKey(scope);
     let u = this.users.get(key);
@@ -897,6 +968,7 @@ export class CardEnricher {
       }
       this.queueItem(u, item, hash, now);
     }
+    this.trim(u);
     while (u.byItem.size > this.limits.maxCardsPerUser * 2) unlink(u, u.byItem.keys().next().value as string);
     if (u.queue.length > 0 && !u.draining) {
       u.draining = this.drain(scope, u).finally(() => (u.draining = null));
@@ -911,7 +983,7 @@ export class CardEnricher {
       const made = twin !== undefined ? u.byHash.get(twin) : undefined;
       if (made) {
         this.stats.sentenceReused++;
-        this.keep(u, hash, reused(made, now));
+        this.keep(u, hash, reused(made, now, u.enlisted++));
         return;
       }
     }
@@ -919,15 +991,27 @@ export class CardEnricher {
   }
 
   private enlist(u: UserCards, q: Queued): void {
+    q.seq = u.enlisted++;
     u.queue.push(q);
-    if (u.queue.length > this.limits.maxQueue) u.queue.shift();
+    if (u.queue.length <= this.limits.maxQueue) return;
+    // Over the bound the oldest goes. With `cardsOrder` the front is what is read next, so the last in its order
+    // goes instead, once per `enqueue` (`trim`): a sort per item would stall the store path on a large backfill.
+    if (!this.limits.order) u.queue.shift();
+    // ... and at twice the bound within one call, so the queue (which `enqueue` scans per item) stays bounded.
+    else if (u.queue.length >= this.limits.maxQueue * 2) this.trim(u);
+  }
+
+  /** `cardsOrder`: the queue back to its bound, the last in its order dropped (`enqueue` calls it once). */
+  private trim(u: UserCards): void {
+    if (!this.limits.order || u.queue.length <= this.limits.maxQueue) return;
+    u.queue = orderQueue(u.queue, this.deps.now()).slice(0, this.limits.maxQueue);
   }
 
   private keep(u: UserCards, hash: string, s: Stored): void {
     u.byHash.delete(hash);
     u.byHash.set(hash, s);
     // The requests are indexed while their card is held, and go with it (`dropCard`).
-    if (s.requests?.length) (u.intent ??= new IntentIndex()).set(hash, s.requests);
+    if (s.requests?.length) (u.intent ??= new IntentIndex()).set(hash, s.requests, s.seq);
     else u.intent?.delete(hash);
     while (u.byHash.size > this.limits.maxCardsPerUser) dropCard(u, u.byHash.keys().next().value as string);
   }
@@ -949,6 +1033,8 @@ export class CardEnricher {
       const batch: Queued[] = [];
       const followers: (Queued & { skey: string })[] = [];
       const inBatch = new Set<string>();
+      // `cardsOrder`: what waits is read best first; sorted before each batch, since items arrive while calls run.
+      if (this.limits.order && u.queue.length > 1) u.queue = orderQueue(u.queue, this.deps.now());
       while (u.queue.length > 0 && batch.length < this.limits.batch) {
         const q = u.queue.shift()!;
         if (q.skey !== undefined) {
@@ -956,7 +1042,7 @@ export class CardEnricher {
           const made = twin !== undefined ? u.byHash.get(twin) : undefined;
           if (made) {
             this.stats.sentenceReused++;
-            if (u.holders.has(q.hash)) this.keep(u, q.hash, reused(made, this.deps.now()));
+            if (u.holders.has(q.hash)) this.keep(u, q.hash, reused(made, this.deps.now(), q.seq!));
             continue;
           }
           if (inBatch.has(q.skey)) {
@@ -1025,7 +1111,7 @@ export class CardEnricher {
             card: card.kind === "none" ? null : card,
             at,
             seenAt: at,
-            ...(asked?.length ? { requests: asked } : {}),
+            ...(asked?.length ? { requests: asked, seq: b.seq } : {}),
           });
           if (b.skey !== undefined) {
             u.bySentence.set(b.skey, b.hash);
@@ -1043,7 +1129,7 @@ export class CardEnricher {
           const made = twin !== undefined ? u.byHash.get(twin) : undefined;
           if (made) {
             this.stats.sentenceReused++;
-            if (u.holders.has(f.hash)) this.keep(u, f.hash, reused(made, at));
+            if (u.holders.has(f.hash)) this.keep(u, f.hash, reused(made, at, f.seq!));
           } else u.queue.push(f);
         }
       } catch {
@@ -1268,8 +1354,8 @@ function unlink(u: UserCards, id: string): void {
 }
 
 /** A card made for one item, taken by another saying the same constraint sentences (`sentenceReuse`). */
-function reused(made: Stored, seenAt: number): Stored {
-  return { card: made.card, at: made.at, seenAt, ...(made.requests ? { requests: made.requests } : {}) };
+function reused(made: Stored, seenAt: number, seq: number): Stored {
+  return { card: made.card, at: made.at, seenAt, ...(made.requests ? { requests: made.requests, seq } : {}) };
 }
 
 /** The card of an item read for its requests only: the prefilter found no constraint language in it. */

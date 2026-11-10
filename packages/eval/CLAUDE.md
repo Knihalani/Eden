@@ -39,14 +39,14 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
   costs replace estimates as calls settle, so the spend can pass the cap by at most what calls in flight cost over
   their estimates. The lab's spend ledger meters only `claude-*` ids and lives in `@eden/sim`, which eval does not
   import.
-- **Precision over recall (D3).** A change that raises `recall` by raising `falseFireRate` needs an explicit
-  decision. The no-model run of the default reads precision 0.828, recall 0.48, falseFireRate 0 (D119 removed D112's
-  false fire in `people-and-days-4`: `groundOccasion` took a lowercase first name for the occasion): any false fire
-  is a regression. The pre-D128 `--live` (now `--live --judge`) still had one on that turn, from the judge it wires
-  (`model:` reason; the servers wire none, D112, and neither does `--live` since D128). Precision fell to 0.889 with
-  the `large-*` scenarios (24 of 27 delivered items expected under the old default): the rule paths deliver lookalikes
-  there (`large-flight-lookalikes` 3 items for 1 expected, `large-people-lookalikes` 2 for 1). That is the gap the
-  reader closes, so it is kept in the baseline, not fixed by editing the scenarios.
+- **Precision over recall (D3).** A change that raises `recall` by raising `falseFireRate` needs an explicit decision.
+  The no-model run of the default reads precision 0.65, recall 0.52, falseFireRate 0 (26 of 50 expected, 40 delivered;
+  D435). D119 removed D112's false fire in `people-and-days-4` (`groundOccasion` took a lowercase first name for the
+  occasion): any false fire is a regression. The pre-D128 `--live` (now `--live --judge`) still had one on that turn,
+  from the judge it wires (`model:` reason; the servers wire none, D112, and neither does `--live` since D128).
+  Precision fell to 0.889 with the `large-*` scenarios (24 of 27 delivered items expected under the old default): the
+  rule paths deliver lookalikes there (`large-flight-lookalikes` 3 items for 1 expected, `large-people-lookalikes` 2 for
+  1). That is the gap the reader closes, so it is kept in the baseline, not fixed by editing the scenarios.
 - **The reader (`--reader stub|oracle`).** `bun run eval` runs the default with no model: its reader, cards and
   intent are inert (listed under `inert`), which is the shipped default's no-model path. An override that names
   `askReader` itself is refused without `--reader`. `--reader stub` wires the real
@@ -59,6 +59,10 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
 - **Unwired flags are labelled.** `cards` and `intent` need a card maker the eval does not
   wire: they run as if off, are named under `inert` in the JSON and on stderr. Use the
   lab's funnel (replayed cards) to measure them.
+- **The run's clock is the scenario's (D435).** `runScenarios` passes one clock (`scenarioClock`, then one ms an event)
+  to the partner's `now`, every `Budget` and the readers. Anything new that takes a `now` gets it too: a wall-clock
+  read made the metrics depend on the date (the push's "today", D436: 0.65 on 2026-11-07, 0.684 on 2026-11-10).
+  `run.test.ts` runs every scenario under three faked dates and asserts identical metrics.
 - `secretsLeaked` and `notInert` must stay 0: a scenario plants secrets and an injection in mail to check D10/D11.
 - A new scenario is ground truth written by hand: keep its expected items honest (what the agent truly needs), not
   what the engine currently delivers. Add a scenario rather than editing one to make a change pass.
@@ -66,7 +70,7 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
 ## Test
 
 ```bash
-bun run test:pkg eval            # ~0.5 s (run.test.ts: the harness, the reader wiring, scenario integrity; no model)
+bun run test:pkg eval            # ~3 s (run.test.ts: harness, reader wiring, scenario integrity, clock; no model)
 bun run eval                     # a few seconds, no model, deterministic: the metrics JSON
 bun run eval --config '{"probes":true}'   # the same scenarios under engine flags
 bun run eval --reader stub                # the default with the stub reader wired

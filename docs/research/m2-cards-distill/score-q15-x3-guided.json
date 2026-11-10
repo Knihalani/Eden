@@ -1,0 +1,39 @@
+{
+  "data": ".local/modal/cards/data-k/heldout.jsonl",
+  "missing": 0,
+  "items": 719,
+  "batches": 61,
+  "batchParseRate": 1,
+  "itemParseRate": 1,
+  "constraintRef": 64,
+  "constraintOut": 66,
+  "flagAgreement": 0.9555,
+  "flagPrecision": 0.7424,
+  "flagRecall": 0.7656,
+  "kindAgreement": 0.9346,
+  "kept": {
+    "items": 89,
+    "constraintRef": 61,
+    "constraintOut": 54,
+    "flagPrecision": 0.9074,
+    "flagRecall": 0.8033
+  },
+  "onBoth": {
+    "n": 49,
+    "kind": 0.6939,
+    "actions": 0.3878,
+    "span": 0.5714,
+    "limit": 0.9388,
+    "entitiesJaccard": 0.6342
+  },
+  "requestsParsed": 1,
+  "requestsJaccard": 0.4624,
+  "generate": {
+    "seconds": 63,
+    "rows": 61,
+    "items": 719,
+    "gpu": "L40S",
+    "guidedJson": true,
+    "model": "q15-x3"
+  }
+}

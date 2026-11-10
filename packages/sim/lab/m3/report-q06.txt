@@ -1,0 +1,14 @@
+embedding screen (Qwen/Qwen3-Embedding-0.6B; lab, M0): planted item in the top k by embedding vs in the first k of the push's lexical pool (pushPoolAt)
+  hidden  all                          n  384  k1: emb 154 lex 153 either 219 emb-only 66  k5: emb 220 lex 254 either 314 emb-only 60  k10: emb 239 lex 276 either 331 emb-only 55   (planted facts)
+  hidden  no shared word               n   65  k1: emb 9 lex 2 either 9 emb-only 7  k5: emb 14 lex 24 either 32 emb-only 8  k10: emb 18 lex 29 either 37 emb-only 8   (planted facts)
+  hidden  not in lexical pool          n  101  k1: emb 34 lex 0 either 34 emb-only 34  k5: emb 46 lex 0 either 46 emb-only 46  k10: emb 50 lex 0 either 50 emb-only 50   (planted facts)
+  hidden  not surfaced by the default  n   70  k1: emb 12 lex 0 either 12 emb-only 12  k5: emb 25 lex 0 either 25 emb-only 25  k10: emb 29 lex 14 either 37 emb-only 23   (planted facts)
+  control all                          n  384  k1: emb 164 lex 144 either 217 emb-only 73  k5: emb 216 lex 219 either 288 emb-only 69  k10: emb 242 lex 237 either 304 emb-only 67   (decoys (look-alikes: an extra slot would bring these))
+  control no shared word               n   53  k1: emb 1 lex 0 either 1 emb-only 1  k5: emb 3 lex 8 either 11 emb-only 3  k10: emb 5 lex 9 either 14 emb-only 5   (decoys (look-alikes: an extra slot would bring these))
+  control not in lexical pool          n  137  k1: emb 39 lex 0 either 39 emb-only 39  k5: emb 57 lex 0 either 57 emb-only 57  k10: emb 64 lex 0 either 64 emb-only 64   (decoys (look-alikes: an extra slot would bring these))
+  control not surfaced by the default  n  111  k1: emb 15 lex 0 either 15 emb-only 15  k5: emb 26 lex 0 either 26 emb-only 26  k10: emb 31 lex 13 either 38 emb-only 25   (decoys (look-alikes: an extra slot would bring these))
+hybrid (Qwen/Qwen3-Embedding-0.6B; lab, M3): lexical pool fused with the embedding's top k (RRF c 60), planted item in the first 5 against the lexical first 5; slot: lexical first 5 + the best embedding item
+  hidden  all             n  384 lexical-first-5  254  k3: +56 -14 net +42 slot +45  k5: +57 -21 net +36 slot +45  k10: +56 -24 net +32 slot +45
+  hidden  no shared word  n   65 lexical-first-5   24  k3: +7 -5 net +2 slot +6  k5: +7 -6 net +1 slot +6  k10: +7 -6 net +1 slot +6
+  control all             n  384 lexical-first-5  219  k3: +64 -16 net +48 slot +49  k5: +66 -20 net +46 slot +49  k10: +66 -18 net +48 slot +49
+  control no shared word  n   53 lexical-first-5    8  k3: +1 -2 net -1 slot +1  k5: +3 -3 net +0 slot +1  k10: +3 -4 net -1 slot +1

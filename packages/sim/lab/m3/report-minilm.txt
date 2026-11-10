@@ -1,0 +1,14 @@
+embedding screen (sentence-transformers/all-MiniLM-L6-v2; lab, M0): planted item in the top k by embedding vs in the first k of the push's lexical pool (pushPoolAt)
+  hidden  all                          n  384  k1: emb 113 lex 153 either 199 emb-only 46  k5: emb 170 lex 254 either 303 emb-only 49  k10: emb 202 lex 276 either 322 emb-only 46   (planted facts)
+  hidden  no shared word               n   65  k1: emb 2 lex 2 either 2 emb-only 0  k5: emb 7 lex 24 either 27 emb-only 3  k10: emb 8 lex 29 either 31 emb-only 2   (planted facts)
+  hidden  not in lexical pool          n  101  k1: emb 22 lex 0 either 22 emb-only 22  k5: emb 37 lex 0 either 37 emb-only 37  k10: emb 41 lex 0 either 41 emb-only 41   (planted facts)
+  hidden  not surfaced by the default  n   70  k1: emb 7 lex 0 either 7 emb-only 7  k5: emb 15 lex 0 either 15 emb-only 15  k10: emb 19 lex 14 either 27 emb-only 13   (planted facts)
+  control all                          n  384  k1: emb 133 lex 144 either 197 emb-only 53  k5: emb 180 lex 219 either 272 emb-only 53  k10: emb 206 lex 237 either 296 emb-only 59   (decoys (look-alikes: an extra slot would bring these))
+  control no shared word               n   53  k1: emb 3 lex 0 either 3 emb-only 3  k5: emb 5 lex 8 either 12 emb-only 4  k10: emb 7 lex 9 either 15 emb-only 6   (decoys (look-alikes: an extra slot would bring these))
+  control not in lexical pool          n  137  k1: emb 31 lex 0 either 31 emb-only 31  k5: emb 46 lex 0 either 46 emb-only 46  k10: emb 56 lex 0 either 56 emb-only 56   (decoys (look-alikes: an extra slot would bring these))
+  control not surfaced by the default  n  111  k1: emb 14 lex 0 either 14 emb-only 14  k5: emb 20 lex 0 either 20 emb-only 20  k10: emb 25 lex 13 either 34 emb-only 21   (decoys (look-alikes: an extra slot would bring these))
+hybrid (sentence-transformers/all-MiniLM-L6-v2; lab, M3): lexical pool fused with the embedding's top k (RRF c 60), planted item in the first 5 against the lexical first 5; slot: lexical first 5 + the best embedding item
+  hidden  all             n  384 lexical-first-5  254  k3: +38 -14 net +24 slot +28  k5: +48 -18 net +30 slot +28  k10: +49 -24 net +25 slot +28
+  hidden  no shared word  n   65 lexical-first-5   24  k3: +2 -4 net -2 slot +0  k5: +3 -5 net -2 slot +0  k10: +3 -6 net -3 slot +0
+  control all             n  384 lexical-first-5  219  k3: +48 -16 net +32 slot +35  k5: +51 -21 net +30 slot +35  k10: +51 -24 net +27 slot +35
+  control no shared word  n   53 lexical-first-5    8  k3: +3 -2 net +1 slot +3  k5: +3 -2 net +1 slot +3  k10: +3 -2 net +1 slot +3

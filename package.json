@@ -27,6 +27,7 @@
     "pack:client": "bun packages/client/pack.ts",
     "trace-report": "bun packages/server/src/trace-report.ts",
     "demo": "bun packages/sim/src/demo.ts",
+    "pilot": "bun packages/sim/src/pilot/pilot.ts",
     "digest": "bun packages/server/src/digest.ts",
     "funnel": "bun packages/sim/src/lab/funnel.ts",
     "gate-traffic": "bun packages/sim/src/lab/gate-traffic.ts"

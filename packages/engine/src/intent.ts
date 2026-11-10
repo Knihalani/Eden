@@ -89,6 +89,13 @@ export interface IntentHit {
 const REBUILD_FACTOR = 4;
 const MIN_REBUILD = 20_000;
 
+/**
+ * Hits read past the `k` asked for, so equal scores can be put in arrival order before the cut (D483): items that say
+ * the same thing get the same requests and the same score, and which of them the index was given first is the order
+ * the card model happened to read them in (`cardsOrder`), not a fact about the items.
+ */
+const TIE_SLACK = 16;
+
 /** One user's requests, indexed (BM25, one field). Never shared across users: each `UserCards` holds its own. */
 export class IntentIndex {
   private vocab = new Vocab(256);
@@ -97,17 +104,25 @@ export class IntentIndex {
   private hashOf: (string | undefined)[] = [];
   /** Each doc's requests, kept to rebuild from (the vocabulary never forgets a term otherwise). */
   private readonly texts = new Map<string, string>();
+  /** Each doc's place among equal scores: the order its content reached the user (`set`'s `seq`), lower first. */
+  private readonly seqOf = new Map<string, number>();
+  private nextSeq = 0;
   private baseline = 0;
 
   get size(): number {
     return this.docOf.size;
   }
 
-  /** Sets (or replaces) a content hash's requests; none removes it. */
-  set(hash: string, requests: readonly string[]): void {
+  /**
+   * Sets (or replaces) a content hash's requests; none removes it. `seq`: its place among equal scores (lower
+   * first); without one, the order of the calls.
+   */
+  set(hash: string, requests: readonly string[], seq?: number): void {
     this.delete(hash);
     if (requests.length === 0) return;
     const text = requests.join("\n");
+    this.seqOf.set(hash, seq ?? this.nextSeq);
+    this.nextSeq = Math.max(this.nextSeq, seq ?? 0) + 1;
     this.texts.set(hash, text);
     this.add(hash, text);
     if (this.vocab.size > Math.max(MIN_REBUILD, this.baseline * REBUILD_FACTOR)) this.rebuild();
@@ -119,6 +134,7 @@ export class IntentIndex {
     this.index.remove(doc);
     this.docOf.delete(hash);
     this.texts.delete(hash);
+    this.seqOf.delete(hash);
     if (this.hashOf[doc] === hash) this.hashOf[doc] = undefined;
   }
 
@@ -132,14 +148,15 @@ export class IntentIndex {
       if (ids.length >= MAX_QUERY_TERMS) break;
     }
     if (ids.length === 0) return [];
-    const res = this.index.search(ids, ids.length, k);
+    const res = this.index.search(ids, ids.length, k + TIE_SLACK);
     const out: IntentHit[] = [];
     for (let j = 0; j < res.count; j++) {
       const hash = this.hashOf[res.docs[j]!];
       if (hash === undefined) continue;
       out.push({ hash, score: res.scores[j]!, coverage: res.coverage[j]!, matched: res.matched[j]! });
     }
-    return out;
+    out.sort((a, b) => b.score - a.score || this.seqOf.get(a.hash)! - this.seqOf.get(b.hash)!);
+    return out.slice(0, k);
   }
 
   private add(hash: string, text: string): void {

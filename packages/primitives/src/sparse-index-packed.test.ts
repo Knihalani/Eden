@@ -222,7 +222,7 @@ describe("SparseIndex (packed) matches the reference layout exactly", () => {
     same(m, Uint32Array.of(96, 74_999), 50);
     expect((m.packed as unknown as { fDocs: unknown }).fDocs).toBeInstanceOf(Uint32Array);
     expect(m.freedPacked).toEqual(m.freedReference);
-  });
+  }, 30_000); // ~1–2 s alone; past 5 s once under a loaded full run (2026-11-10), so a wide timeout
 
   test("a term view stays valid after the index freezes and purges", () => {
     const ix = new SparseIndex();
