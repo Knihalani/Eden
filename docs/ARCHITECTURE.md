@@ -428,6 +428,16 @@ written to the agent's prompt cache, hidden facts not lower, A30). An ask answer
 candidates need no
 reader, so a server with no model key runs them too (D276). `ContextPartner.explain` returns a session's last 32
 traces for `POST /v1/explain` (D277), each with `explainTrace`'s sentence; content-free like every trace (D56).
+**The push check (`pushCheck`, D500–D504, a trial, off; `push-check.ts`)** puts one budgeted model call on the push:
+when the gate passes, the model reads the pool (at most `pushCheckItems` items of `pushCheckItemChars`, fenced as
+data) and names the items that change what the agent should do; the candidates become those, in pool order, and a
+pool it names none of sends no packet. It runs on the reader's model through the `checker` dependency, waits at most
+`pushCheckWaitMs` (a miss, an error or a refusal hands the default's candidates; a late answer is traced
+"check-late" and kept for a second pass), and costs the push about 0.8 s on the agent's path (i3-push-check.md).
+
+Trial `pushWiden` (D511, off; with I3's `pushCheck` trial) adds items no lexical rank reached (a `widen` dependency's
+nearest items, raw intent hits) to what the push check reads, sharing its wait; only the check can hand them
+(docs/research/n2-recall.md: it pays only behind a check that thinks, which is too slow and dear as measured).
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search

@@ -25,6 +25,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
 | `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, on in the default): per (user, source) a run of live reads with nothing used, and per user two pooled rates (reads on no evidence, reads on words alone); the partner's `spentSources` skips live reads by them |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
+| `push-check.ts`                                                            | The push check (`pushCheck`, D500–D504, a trial, off): one budgeted call a push names the pool's items that change the action (`CHECK_SYSTEM`, `parseCheck`, `PushChecker`); `push-check.test.ts`                              |
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
 | `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default): identifiers a call adds and its packets showed; `ItemCache.isCorrespondent` reads the user's header addresses |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
@@ -286,6 +287,13 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **No re-show of a candidate across requests (D340 deleted by D380).** A candidate the agent took for an earlier
   request stays behind the not-twice ledger (D13) at its own request: a fresh paired run did not show the re-show
   better (docs/research/a26-reshow.md). Measure any revival on `pi-ab --days`, never the funnel (one request a session).
+  N2's re-show gated by the push check (`pushCheckReshow`, D512) was measured on `pi-ab --days` and deleted too
+  (hidden −10.9 points against the check alone; code in commit 69ce1942 and, on I3's check, 00e20972).
+- **`pushWiden` (N2, D511, a trial, off; docs/research/n2-recall.md).** With `pushCheck`, `widenPool` adds items past
+  the lexical pool (the `widen` dependency's, raw intent hits, deeper ranks) to what the check reads, within its 20
+  items, only where the check runs. They are handed only when the check names them; the nudge's deeper look,
+  `anchoredPast` and the returned pool stay the lexical pool's, so an unnamed widened item never reaches an ask. Every
+  route fails open to no widening.
 - **Updates name the times they drop (D342, `revisionDiff`).** `buildUpdate`'s title reads `Ledger.seenTimes`; times
   are noted only when a copy is handed out (`watchCopies`, from `copiesOf`'s `times`), never when an update is queued
   (one superseded in the queue was never shown). `timesOf` compares one written form ("HH:MM", "<day> <mon>"), so a

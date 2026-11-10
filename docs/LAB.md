@@ -476,6 +476,16 @@ noise items are not in the replay; price them at $0.000181 a call, A1). Compare 
 without the arm (the JSON's `perTask`). The "hidden returned" count falls when sources answer from the index instead
 of a live search: read "hidden surfaced" (`TOTAL hidden`), not it. Figures for the shipped default: a13-scale.md.
 
+### 1f. A wider pool behind the push check (N2, D511; docs/research/n2-recall.md)
+
+`bun run funnel … -- --widen-table F` wires an embedding table (`packages/sim/modal/n2_embed.py` on Modal, about
+$0.07 for train seeds 41–48; the checked-in `packages/sim/lab/n2/widen-train-41-48.jsonl.gz`) as the engine's `widen`
+dependency for an arm with `pushWiden` (and `pushCheck`, `--check live|replay`); pi-ab takes the same flag (short
+worlds only). `-- --templates a,b` runs only those templates' tasks in a whole world (the confirmation's 40 held-out
+templates). `python3 -I packages/sim/lab/n2/compare.py --arm NAME=F …` prints planted and decoy handed, neutral
+packets and N2's pre-registered bars. Read a check's quality from replayed labels: a live check slower than the
+funnel's 3 s observe wait misses the push (D510).
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash

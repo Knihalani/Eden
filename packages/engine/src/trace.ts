@@ -27,6 +27,7 @@ export interface Trace {
     | "answer"
     | "reader-push"
     | "reader-late"
+    | "check-late"
     | "verify";
   reason: string;
   latencyMs: number;
@@ -46,6 +47,12 @@ export interface Trace {
    */
   readerCalls?: number;
   readerCostUsd?: number;
+  /**
+   * With `pushCheck` (D500): the part of `modelCalls` and `costUsd` that is the push check's call, so a harness that
+   * meters the check's model itself does not count it twice.
+   */
+  checkCalls?: number;
+  checkCostUsd?: number;
   /** On a "reader-push" trace: the push handed out candidates (`pushCandidates`, D237), not a reading. */
   candidates?: boolean;
   itemIds: string[];
@@ -75,6 +82,7 @@ export const TRACE_DECISIONS: readonly Trace["decision"][] = [
   "answer",
   "reader-push",
   "reader-late",
+  "check-late",
   "verify",
 ];
 
@@ -180,6 +188,8 @@ export function explainTrace(t: Trace): string {
         : "The request acts: the reader read it and flagged nothing that bears on it.";
     case "reader-late":
       return "A reader call an ask had stopped waiting for finished late; its cost is counted here.";
+    case "check-late":
+      return "A push check the push had stopped waiting for (or whose session closed) finished; its cost is counted here.";
     case "verify":
       return `Re-read ${items} whose source reported changes, before delivering them.`;
     case "silent":

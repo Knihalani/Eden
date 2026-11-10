@@ -1,7 +1,7 @@
 # N1: fewer connector calls at 1,000 sources (learned source yield, a lazy push, search reuse, batched probes)
 
 Status: measured 2026-11-10 on branch `claude/n1-calls` (from `claude/lucid-hypatia-v9wqk5` at 3e10a6fe; the base's
-later tip 4f40eb81, D495–D524, merged in at c3271fe7). Decisions D505–D509. Paid calls: Anthropic API only, the
+later tips merged in at c3271fe7 and again before the last push; the gates were re-run on the final tree). Decisions D505–D509. Paid calls: Anthropic API only, the
 Modal Secret `HAIKU_API_KEY`, `claude-haiku-5-5` in every role, `claude-sonnet-5-5` for the concern regrade, lab
 provider (D97): **Anthropic-direct lab figures**, not the OpenRouter route the servers ship. **Spent: $3.894
 Anthropic** of the $8 cap (five Modal runs $3.855, regrades $0.039; `manifest-*.json`). Modal: $0.66 billed for this

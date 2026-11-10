@@ -22,7 +22,7 @@ import { READER_KINDS } from "./reader";
 type Key = keyof EngineConfig;
 
 /** A partner dependency some settings act through (`PartnerDeps`). */
-export type ConfigDep = "cards" | "reader";
+export type ConfigDep = "cards" | "reader" | "checker";
 
 /**
  * Keys that act only when the partner has a dependency, with that dependency. Set to anything but their default
@@ -63,6 +63,14 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   readerReuse: "reader",
   readerStopEarly: "reader",
   // `pushCandidates` is not here: the candidates make no reader call and act without one (D276).
+  pushCheck: "checker",
+  pushCheckWaitMs: "checker",
+  pushCheckItemChars: "checker",
+  pushCheckItems: "checker",
+  pushWiden: "checker",
+  pushWidenEmbed: "checker",
+  pushWidenIntent: "checker",
+  pushWidenDeep: "checker",
 };
 
 /**
@@ -159,6 +167,14 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   askNudge: PUSH,
   askNudgeDeep: [...PUSH, "askNudge"],
   pushCandidatesSettled: PUSH,
+  pushCheck: PUSH,
+  pushCheckWaitMs: [...PUSH, "pushCheck"],
+  pushCheckItemChars: [...PUSH, "pushCheck"],
+  pushCheckItems: [...PUSH, "pushCheck"],
+  pushWiden: [...PUSH, "pushCheck"],
+  pushWidenEmbed: [...PUSH, "pushCheck", "pushWiden"],
+  pushWidenIntent: [...PUSH, "pushCheck", "pushWiden"],
+  pushWidenDeep: [...PUSH, "pushCheck", "pushWiden"],
   revisionDiff: ["revisionNotice"],
 };
 
@@ -220,6 +236,12 @@ const RANGES: Partial<Record<Key, Range>> = {
   askReaderPool: COUNT,
   pushCandidates: { integer: true, max: 40 },
   pushCandidatesSettled: { integer: true, max: 40 },
+  pushCheckWaitMs: COUNT,
+  pushCheckItemChars: { integer: true, min: 40, max: 400 },
+  pushCheckItems: { integer: true, min: 1, max: 20 },
+  pushWidenEmbed: { integer: true, max: 20 },
+  pushWidenIntent: { integer: true, max: 20 },
+  pushWidenDeep: { integer: true, max: 20 },
 };
 
 /** String-list keys whose entries must come from a known list. */

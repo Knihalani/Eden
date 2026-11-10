@@ -251,6 +251,7 @@ function connectorCalls(traces: Trace[], syncRuns: Map<string, { done: number; l
     const followUp =
       t.decision === "verify" ||
       t.decision === "reader-late" ||
+      t.decision === "check-late" ||
       t.decision === "reader-push" ||
       (t.decision === "skipped" && (t.reason === "sync poll behind" || t.reason === "cut search behind")) ||
       t.reason.startsWith("updated:") ||
