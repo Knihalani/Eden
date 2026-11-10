@@ -4,9 +4,11 @@
 # answer takes the regrade's verdict, the rest keep the run's), $/1k over the horizon's tasks (agent billed + Eden per
 # task + the shard's background cards spread over its Eden task runs), wall mean s, Eden path ms (the union of
 # eden.observe and tool.ask_context path spans), connector calls a task. Bootstrap 95%: 5,000 draws, seed 1, tasks
-# resampled within each (shard, kind) stratum, so every seed keeps its weight. `--seeds 41,42` keeps those seeds.
+# resampled within each (shard, kind) stratum (numpy), so every seed keeps its weight. `--seeds 41,42` keeps those seeds.
 # usage: python3 -I parts.py --arms tools,eden,eden~minus-nudge [--base eden,tools] [--seeds S] [--json OUT] RUN_DIR...
-import json, os, random, statistics as st, sys
+import json, os, statistics as st, sys
+
+import numpy as np
 
 args = sys.argv[1:]
 
@@ -129,19 +131,25 @@ for a in ARMS:
           f"{(row['concernsRegraded'] or 0):.4f}  {m['usd']:6.3f}  {st.median(w):5.2f}/{st.mean(w):5.2f}   "
           f"{m['edenms']:6.0f}  {m['conn']:5.2f}")
 
-rng = random.Random(1)
+rng = np.random.default_rng(1)
 
 
-def boot(stat, keep):
-    """stat over the kept tasks, and over 5,000 resamples within each (shard, kind) stratum."""
-    groups = [v for (s, k), v in strata.items() if keep(k)]
-    point = stat([t for g in groups for t in g])
-    vals = sorted(stat([rng.choice(g) for g in groups for _ in g]) for _ in range(DRAWS))
-    return point, vals[int(0.025 * DRAWS)], vals[int(0.975 * DRAWS) - 1]
+def boot(f_pair, keep):
+    """The mean paired difference over the kept tasks, and over 5,000 resamples within each (shard, kind) stratum."""
+    groups = [np.array([f_pair(t) for t in v]) for (s, k), v in strata.items() if keep(k)]
+    n = sum(len(g) for g in groups)
+    if not n:
+        return 0.0, 0.0, 0.0
+    point = sum(g.sum() for g in groups) / n
+    sums = np.zeros(DRAWS)
+    for g in groups:
+        sums += g[rng.integers(0, len(g), size=(DRAWS, len(g)))].sum(axis=1)
+    vals = np.sort(sums / n)
+    return float(point), float(vals[int(0.025 * DRAWS)]), float(vals[int(0.975 * DRAWS) - 1])
 
 
 def diff(a, b, f):
-    return lambda ts: st.mean(X[t][a][f] - X[t][b][f] for t in ts) if ts else 0.0
+    return lambda t: X[t][a][f] - X[t][b][f]
 
 
 ex = lambda p: p[1] > 0 or p[2] < 0

@@ -72,6 +72,17 @@ all eight seeds; part effects are read against `eden`, which every shard has), a
 tasks only (`--variants hidden`). Caps: short 41–44 $3.20 (24 shards), short 45–48 $2.80 (24 shards), long $3.20 (8
 shards), 1,000 sources $0.45 (24 shards), regrade at most $0.30; with the smoke, $9.96 at most.
 
+**Deviation during the runs (recorded before the short part pairs on 45–48 were read).** All four runs went at once on
+one key, so each short shard (about 60 agent streams: 12 worlds × 5 arms) met Anthropic's concurrent-request limit:
+1,500–1,900 retried 429s a shard, 122 tasks lost to it and mean wall about 11 s (p50 4.3 s) against 2 s over days.
+Hidden facts and concerns stay paired (a task an arm did not finish is dropped from every arm's pair), but the short
+runs' wall time is the retry backoff, not the agent. The long horizon (about 5% of requests retried) and the
+1,000-source run (almost none) are not affected. So the short horizon's wall and the 1,000-source wall pair come from
+a **wall-only rerun**: one shard at a time, `--limit 6` a world (72 tasks a seed), all short arms, seeds 41–48, and the
+default at 995 sources on seeds 41–44 with the same tasks; its hidden and concern counts are not pooled with the
+main runs. The 1,000-source shards also hit their $0.018 caps (Eden's card calls for noise items cost more than
+estimated): 208 of 768 hidden tasks did not run, so its hidden pair rests on the 543 tasks both runs graded.
+
 **Metrics.** Hidden facts raised; false concerns on control (short and long) and neutral (long), Haiku-graded and
 after the regrade; $ per 1,000 tasks (agent billed + Eden per task + background cards spread over the arm's task
 runs; the short horizon over its hidden + control tasks, the long horizon over the user's mixed days) and the
