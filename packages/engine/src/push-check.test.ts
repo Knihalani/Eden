@@ -371,3 +371,16 @@ describe("pushCheckReshow (N2, D512): a candidate taken earlier goes again only 
     expect(r.second).toEqual([]);
   });
 });
+
+describe("pushCheckReshow (N2, D512): what a session handed is its own", () => {
+  test("a hand-out in one session marks nothing in another session or for another user", async () => {
+    const { partner } = setup({ pushCheck: true, pushCheckReshow: true }, says(["Harlow venue"]));
+    expect(await handed(partner)).toEqual(["mail:hold"]);
+    // Another session of the same user, and another user, start with nothing handed: their first request gets the
+    // item as anything fresh, never as a re-show (the ledger is theirs, and so is `handedIn`).
+    const other = { ...ref, sessionId: "s2" };
+    expect(await handed(partner, other)).toEqual(["mail:hold"]);
+    const stranger = { tenantId: "t", userId: "u2", sessionId: "s1" };
+    expect(await handed(partner, stranger)).toEqual(["mail:hold"]);
+  });
+});

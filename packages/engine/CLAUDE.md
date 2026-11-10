@@ -280,6 +280,13 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **No re-show of a candidate across requests (D340 deleted by D380).** A candidate the agent took for an earlier
   request stays behind the not-twice ledger (D13) at its own request: a fresh paired run did not show the re-show
   better (docs/research/a26-reshow.md). Measure any revival on `pi-ab --days`, never the funnel (one request a session).
+  **`pushCheckReshow` (N2, D512, a trial, off)** re-shows one only when `pushCheck`'s call names it for the later
+  request (`candidatesOf`'s `named`, never the fallback's candidates); `Session.handedIn` is filled only with it on.
+- **`pushWiden` (N2, D511, a trial, off; docs/research/n2-recall.md).** With `pushCheck`, `widenPool` adds items past
+  the lexical pool (the `widen` dependency's, raw intent hits, deeper ranks) to what the check reads, within its 20
+  items, only where the check runs. They are handed only when the check names them; the nudge's deeper look,
+  `anchoredPast` and the returned pool stay the lexical pool's, so an unnamed widened item never reaches an ask. Every
+  route fails open to no widening.
 - **Updates name the times they drop (D342, `revisionDiff`).** `buildUpdate`'s title reads `Ledger.seenTimes`; times
   are noted only when a copy is handed out (`watchCopies`, from `copiesOf`'s `times`), never when an update is queued
   (one superseded in the queue was never shown). `timesOf` compares one written form ("HH:MM", "<day> <mon>"), so a

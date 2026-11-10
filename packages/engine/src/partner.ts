@@ -2106,7 +2106,9 @@ export class ContextPartner {
           (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)) ||
           // `pushCheckReshow` (N2, D512): a candidate the agent took for an earlier request goes again only when the
           // check named it for this one (D380's blind re-show raised concerns).
-          (candidates?.checked === true && this.config.pushCheckReshow && this.handedBefore(s, x.item.id)),
+          (this.config.pushCheckReshow &&
+            candidates?.named?.has(x.item.id) === true &&
+            this.handedBefore(s, x.item.id)),
       );
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
@@ -2611,13 +2613,15 @@ export class ContextPartner {
     cue: Cue,
     gate: PushGate,
     check: PushCheckRead | null = null,
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; checked?: boolean } {
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; named?: ReadonlySet<string> } {
     const { like } = gate;
-    // `pushWiden` (D511): widened items count as the pool's only when the check answered; they follow its own items.
     const yes = check?.yes ?? null;
-    const pool = yes && gate.widened?.length ? [...gate.pool, ...gate.widened] : gate.pool;
-    if (pool.length === 0) return { items: [], pool };
-    const open = pool.filter((x) => !bulkMail(x.item));
+    // `pushWiden` (D511): widened items are read only by the check and handed only when it names them, after the
+    // pool's own; the nudge's deeper look, `anchoredPast` and the returned pool stay the lexical pool's.
+    const pool = gate.pool;
+    const reported = yes && gate.widened?.length ? [...pool, ...gate.widened] : pool;
+    if (reported.length === 0) return { items: [], pool };
+    const open = reported.filter((x) => !bulkMail(x.item));
     let items = yes
       ? open.filter((x) => yes.has(x.item.id)).slice(0, this.config.pushCandidates)
       : like.some(Boolean)
@@ -2643,8 +2647,8 @@ export class ContextPartner {
     const read = anchors;
     this.deps.onPushPool?.({
       sessionId: s.id,
-      pool: pool.map((x) => x.item.id),
-      constraintLike: pool.length > like.length ? [...like, ...pool.slice(like.length).map(() => false)] : like,
+      pool: reported.map((x) => x.item.id),
+      constraintLike: reported.length > like.length ? [...like, ...reported.slice(like.length).map(() => false)] : like,
       handed: items.map((x) => x.item.id),
       ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
       ...(read
@@ -2656,11 +2660,11 @@ export class ContextPartner {
       ...(this.config.pushCheck && this.deps.checker
         ? {
             check: yes ? "yes" : !check ? "none" : check.late ? "late" : "failed",
-            ...(yes ? { checked: pool.map((x) => yes.has(x.item.id)) } : {}),
+            ...(yes ? { checked: reported.map((x) => yes.has(x.item.id)) } : {}),
           }
         : {}),
     });
-    return { items, pool, ...(unsettled ? { unsettled } : {}), ...(yes ? { checked: true } : {}) };
+    return { items, pool, ...(unsettled ? { unsettled } : {}), ...(yes ? { named: yes } : {}) };
   }
 
   /**
@@ -2687,8 +2691,12 @@ export class ContextPartner {
       }
     };
     if (c.pushWidenEmbed > 0 && this.deps.widen) {
+      const widen = this.deps.widen;
+      // Fail open: a dependency that throws, rejects or is late widens nothing.
       const ids = await within(
-        this.deps.widen(s.scope, sanitizeForStore(cue.raw), c.pushWidenEmbed * 2).catch(() => [] as string[]),
+        Promise.resolve()
+          .then(() => widen(s.scope, sanitizeForStore(cue.raw), c.pushWidenEmbed * 2))
+          .catch(() => [] as string[]),
         c.pushCheckWaitMs,
       );
       if (s.closed) return [];
@@ -2698,11 +2706,15 @@ export class ContextPartner {
     if (c.pushWidenIntent > 0 && c.cards && c.intent && enricher) {
       const accept = (id: string) => this.deps.cache.get(s.scope, id, now) !== null;
       const text = cue.raw.slice(0, INTENT_QUERY_CHARS);
-      const rows = enricher.intentFinds(s.scope, text, cue.arrived ?? now, c.pushWidenIntent * 2, accept);
-      add(
-        rows.flatMap((r) => r.ids),
-        c.pushWidenIntent,
-      );
+      try {
+        const rows = enricher.intentFinds(s.scope, text, cue.arrived ?? now, c.pushWidenIntent * 2, accept);
+        add(
+          rows.flatMap((r) => r.ids),
+          c.pushWidenIntent,
+        );
+      } catch {
+        // Fail open: the widening is extra reach, never a reason to lose the push.
+      }
     }
     if (c.pushWidenDeep > 0) {
       const deep: string[] = [];
