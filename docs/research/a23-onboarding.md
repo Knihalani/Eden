@@ -68,10 +68,9 @@ before the router's; `x-api-key` is not accepted (Bearer only, now documented); 
 
 ## Top remaining reasons a team would not adopt Eden (not fixable in this session), ranked
 
-1. **The one-line proxy speaks only OpenAI chat completions.** (Anthropic's Messages API added 2026-11-10, D653,
-   o2-proxy-messages.md; the Responses API is still open.) Teams on the Anthropic Messages API or OpenAI's
-   Responses API must use the SDK instead. Fix: the same insertion for `/v1/messages` and `/v1/responses` in
-   `@eden/proxy`, with a smoke test each.
+1. **The one-line proxy speaks only OpenAI chat completions.** Closed 2026-11-10 (D653, D656, o2-proxy-messages.md):
+   the proxy also serves Anthropic's Messages API (checked live) and OpenAI's Responses API (not yet checked against
+   the real API).
 2. **Nothing is published.** No npm package, no PyPI package, no image in a registry, no versions or changelog; every
    adopter builds from a checkout. Fix: publish `pack:client`'s output and `eden-client`, push tagged images, and a
    release note per version (needs the owner's accounts).

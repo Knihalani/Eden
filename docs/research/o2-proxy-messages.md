@@ -59,10 +59,46 @@ event reported once, a retry reporting nothing), tool results with text, a later
 fail open (Eden down, no user, a body that is not JSON), streaming, token counting, error shape, and the two
 translations alone.
 
+## OpenAI's Responses API (D656)
+
+Built after the Messages route, on branch `claude/o2-proxy-responses` (stacked on this one). `POST /v1/responses`
+gets the same treatment through `fromResponses` and `toResponses`:
+
+- `input`'s items map one to one onto chat messages: a message item is its role and text (`input_text`,
+  `output_text`), a `function_call` an assistant message with that call, a `function_call_output` a tool message.
+  A custom tool's call and output are read the same way. Other items (reasoning, references, built-in tools' calls)
+  keep their place and are neither reported nor a turn. A packet goes directly before a user message, or at the end
+  when the input has none, so it never lands between a reasoning item and its call or between a call and its
+  output unless the caller put a user message there.
+  A string input is one user message.
+- The API takes system items inside `input`, so a packet goes back exactly where the chat route puts its system
+  message; every other item is the caller's own object. Only `input` is rewritten (`withMessages` with a key).
+- **History held by the provider.** With `conversation` or `previous_response_id` the input is only what is new,
+  and what the proxy inserted on an earlier request is already in the provider's history. So nothing is kept in
+  place, and each packet is inserted once: the first version put the turn's packet into every tool-output request
+  of the turn, and the provider stored a copy each time (the review; tested for both fields). It also needs a
+  session: `conversation` names it when no
+  `x-eden-session-id` does. With `previous_response_id` alone and no header, each request is its own Eden session
+  (keyed by its first message), so Eden may show an item again that it showed on an earlier turn: send the header.
+  The input is only what is new, so the same short reply on two turns ("yes", "yes") would hash as a retry of the
+  request before (not reported, not a new turn): the retry check also counts the `previous_response_id` the input
+  follows (else the `conversation`), so a reply after a different response is a new turn (the second review). With
+  `conversation` alone and no new response id, a repeated reply and a retry still look the same.
+- **Limit: with the history held, tool calls are not reported.** The model's `function_call` items live with the
+  provider and are never in a request, so Eden is told of no tool call, and each `function_call_output` reaches it
+  as the result of a tool named "tool" (its call, which names it, is not there). Reading the calls from the
+  upstream's reply was not built: it would mean buffering every non-streamed reply and reporting after it, outside
+  the request's deadline, and would still miss streamed replies, the common case. Documented, not fixed. A caller
+  that sends the whole input (no `previous_response_id`, no `conversation`) has its calls reported.
+- Tests: `packages/proxy/src/proxy-responses.test.ts`, 10 (injection with the rest byte for byte, a tool turn with a
+  reasoning item, `user` and `conversation`, history held (a packet sent once; the same short reply after a
+  different response a new turn), a custom tool, streaming, fail open, another `…/responses` route untouched, the
+  translations).
+- **Not checked against the real API**: this session's paid calls are limited to Anthropic. The shapes are from
+  OpenAI's published reference; a first live call may show a field this misses.
+
 ## Not done
 
-- **OpenAI's Responses API** (`/v1/responses`). With `previous_response_id` the history lives at the provider and
-  the proxy sees only the latest input, so "what is new" and "where packets stay" need a different design.
 - **A measured effect on an Anthropic-SDK agent.** The lab's Pi harness already measures Eden's context in front of
   Haiku; this change is transport. A Pi run through the proxy's Messages route would show nothing the SDK runs do
   not, and was not paid for.
