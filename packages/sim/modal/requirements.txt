@@ -1,1 +1,1 @@
-modal==1.6.3
+modal[api-proxy-support]==1.6.3

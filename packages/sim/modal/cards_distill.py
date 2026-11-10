@@ -107,8 +107,13 @@ def generate_remote(model: str, rows: list, guided_json: bool) -> dict:
     return {"texts": texts, "seconds": round(time.time() - t0), "model": path}
 
 
+# The endpoint's key secret is attached only when serving (EDEN_CARDS_RUN set, as `modal deploy` needs it), so `train`
+# and `evaluate` run before the owner has made it.
+SERVE_SECRETS = [modal.Secret.from_name(ENDPOINT_SECRET)] if os.environ.get("EDEN_CARDS_RUN") else []
+
+
 @app.function(image=vllm_image, gpu="L4", volumes={"/vol": vol}, timeout=24 * 3600, scaledown_window=300,
-              secrets=[modal.Secret.from_name(ENDPOINT_SECRET)])
+              secrets=SERVE_SECRETS)
 @modal.concurrent(max_inputs=32)
 @modal.web_server(port=8000, startup_timeout=600)
 def serve():
