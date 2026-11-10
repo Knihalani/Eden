@@ -28,6 +28,21 @@ export interface ListPage {
   next: string | null;
 }
 
+/**
+ * What changed in a source since a cursor (`Source.changes`): a Gmail history list from a `historyId`, a Graph or
+ * Drive delta from its token, a Calendar list with a `syncToken`, a Salesforce change-data-capture replay.
+ */
+export interface ChangePage {
+  /** Items created or changed since the cursor, as `list` returns them. */
+  items: ContextItem[];
+  /** Refs (`ContextItem.ref`) of items deleted since the cursor. */
+  removed: string[];
+  /** The cursor to hand back next time. */
+  next: string;
+  /** More changes wait behind this page: call again with `next`. */
+  more?: boolean;
+}
+
 export interface Source {
   /** Unique within a user's set: "gmail", "notion", "crm". */
   readonly id: string;
@@ -66,6 +81,14 @@ export interface Source {
    * A source whose next cursor is the server's own may return more (its whole page): rows cut from it would be skipped.
    */
   list?(scope: Scope, cursor: string | undefined, limit: number, signal: AbortSignal): Promise<ListPage>;
+  /**
+   * What changed since `cursor` (D476): every item created or changed and every ref deleted, in one read-only call,
+   * whatever their place in the listing. With no cursor: no changes, and a cursor for "now" (asked for before the
+   * first listing, so nothing falls between the two). Null: the cursor is no longer valid (a Gmail `historyId` older
+   * than its history, a 410 on a sync token); the caller starts over from a listing. A sync that has this reads a
+   * source's changes with one call and needs no re-listing to notice deletions.
+   */
+  changes?(scope: Scope, cursor: string | undefined, signal: AbortSignal): Promise<ChangePage | null>;
   close?(): Promise<void>;
 }
 

@@ -2,7 +2,7 @@
   "name": "@eden/example-onboarding",
   "version": "0.0.0",
   "private": true,
-  "description": "Smoke tests for the three adopter paths in the README (D365): the packed TypeScript client, Python behind the proxy, the production server. No network, no keys.",
+  "description": "Smoke tests for the three adopter paths in the README (D365): the packed TypeScript client, Python behind the proxy, the production server; and the integration defaults (ref notices, guarded acting tools, the Hermes plugin; D420–D422). No network, no keys.",
   "type": "module",
   "devDependencies": {
     "@eden/client": "workspace:*",

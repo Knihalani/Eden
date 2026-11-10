@@ -1,0 +1,51 @@
+== t1-base (train1-3, seed 41, --time 1, 995 noise sources)
+request  n 96  wall p50 21.7  p90 37.9  p99 88.7  max 88.7  mean 24.6 ms  (funnel rows)
+askCall  n 96  wall p50 1444  p90 1511  p99 1526  max 1526  mean 1234 ms  (funnel rows)
+observe  n 96  wall p50 21.5  p90 37.6  p99 82.2  max 82.2  mean 24.2 ms
+ask      n 96  wall p50 1444  p90 1511  p99 1526  max 1526  mean 1234 ms
+  source.search    ran  91%  p50    772  p90   1137  p99   1500  share 55.8%
+  sync.freshen     ran 100%  p50    574  p90   1429  p99   1500  share 50.4%
+  search           ran 100%  p50    598  p90   1036  p99   1501  share 48.9%
+  probes           ran 100%  p50    604  p90   1017  p99   1498  share 48.6%
+  probe.person     ran  83%  p50    597  p90    999  p99   1193  share 39.8%
+  probe.topic      ran  17%  p50    555  p90   1497  p99   1498  share 7.5%
+  probe.consequence ran  33%  p50   0.32  p90    618  p99    939  share 4.1%
+  cache.put        ran  54%  p50   0.14  p90    440  p99    592  share 3.6%
+  sanitize         ran  22%  p50   0.17  p90    365  p99    571  share 1.8%
+  probe.org        ran   9%  p50   1.49  p90    260  p99    260  share 0.7%
+  mentions         ran  11%  p50   0.21  p90    261  p99    263  share 0.6%
+  render           ran 100%  p50   1.48  p90   2.45  p99   3.15  share 0.1%
+== t1-ab300 (train1-3, seed 41, --time 1, 995 noise sources)
+request  n 96  wall p50 21.3  p90 39.3  p99 76.8  max 76.8  mean 24.4 ms  (funnel rows)
+askCall  n 96  wall p50 313  p90 319  p99 349  max 349  mean 314 ms  (funnel rows)
+observe  n 96  wall p50 20.7  p90 39.2  p99 73.6  max 73.6  mean 24.0 ms
+ask      n 96  wall p50 313  p90 319  p99 349  max 349  mean 314 ms
+  source.search    ran 100%  p50    982  p90   1497  p99   1508  share 328.9%
+  search.behind    ran 100%  p50    910  p90   1497  p99   1509  share 291.0%
+  probes           ran 100%  p50    778  p90   1497  p99   1509  share 274.2%
+  probe.person     ran  83%  p50    742  p90   1495  p99   1508  share 227.0%
+  sync.freshen     ran 100%  p50    601  p90   1212  p99   1508  share 196.9%
+  ask.wait         ran 100%  p50    300  p90    301  p99    321  share 95.7%
+  cache.put        ran  55%  p50   0.15  p90    960  p99   1495  share 54.0%
+  probe.topic      ran  17%  p50    622  p90   1497  p99   1497  share 38.7%
+  sanitize         ran  28%  p50   0.25  p90    701  p99   1175  share 20.4%
+  probe.consequence ran  33%  p50   0.26  p90    298  p99   1303  share 10.0%
+  mentions         ran  16%  p50   0.23  p90    652  p99    739  share 6.9%
+  probe.org        ran   9%  p50   1.48  p90    738  p99    738  share 5.2%
+== t1-ab0 (train1-3, seed 41, --time 1, 995 noise sources)
+request  n 96  wall p50 21.7  p90 40.1  p99 80.5  max 80.5  mean 25.5 ms  (funnel rows)
+askCall  n 96  wall p50 13.7  p90 18.9  p99 31.9  max 31.9  mean 14.2 ms  (funnel rows)
+observe  n 96  wall p50 21.4  p90 39.7  p99 76.3  max 76.3  mean 25.1 ms
+ask      n 96  wall p50 13.6  p90 18.9  p99 31.9  max 31.9  mean 14.1 ms
+  source.search    ran 100%  p50    994  p90   1498  p99   1498  share 7377.0%
+  search.behind    ran 100%  p50    911  p90   1497  p99   1499  share 6574.9%
+  probes           ran 100%  p50    765  p90   1496  p99   1500  share 5955.7%
+  probe.person     ran  83%  p50    742  p90   1495  p99   1498  share 5016.6%
+  sync.freshen     ran 100%  p50    601  p90   1213  p99   1499  share 4366.7%
+  cache.put        ran  57%  p50   0.13  p90    774  p99   1492  share 943.8%
+  probe.topic      ran  17%  p50    562  p90   1496  p99   1496  share 837.5%
+  sanitize         ran  31%  p50   0.20  p90    649  p99    946  share 390.3%
+  probe.consequence ran  33%  p50   0.28  p90    297  p99    882  share 189.1%
+  mentions         ran  16%  p50   0.23  p90    261  p99    648  share 105.5%
+  probe.org        ran   9%  p50   0.38  p90    324  p99    324  share 62.1%
+  search           ran 100%  p50   3.34  p90   4.74  p99   6.17  share 22.8%

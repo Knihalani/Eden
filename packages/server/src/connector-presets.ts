@@ -38,6 +38,12 @@ export interface ConnectorPreset {
    * checks the tool by hand and lists it in `trustedReadTools` (D7). The lab's note on why each only reads is here.
    */
   unannotated?: { tools: string[]; why: string };
+  /**
+   * Why the preset names no `fetchTool`, required when it names none (C1, D415). Without one the source cannot find
+   * an item by ref (`fetchesById` false): its listing, if any, keeps the daily sweep (D356) and its doubted copies
+   * are delivered as held (D126). An operator who has checked that both tools return the same copy may add one.
+   */
+  noFetch?: string;
 }
 
 export const PRESETS: Readonly<Record<string, ConnectorPreset>> = {
@@ -47,21 +53,26 @@ export const PRESETS: Readonly<Record<string, ConnectorPreset>> = {
     // THREAD_VIEW_SUMMARY: each thread's most recent message, since the latest word on a thread is what changes an
     // action (the default view shows its five oldest).
     searchTool: { name: "search_threads", fixed: { view: "THREAD_VIEW_SUMMARY" } },
-    // No fetch: `get_thread` returns every message where search and listing hold the newest one, so a re-read of an
-    // unchanged thread would differ from the held copy and be sent as an update (D126, D205; the A7 review). Doubted
-    // copies are delivered as held, labelled by age, as for any source without a fetch tool.
     // search_threads with no query lists every thread, newest first, paged by pageToken: the sync's listing.
     listTool: { name: "search_threads", fixed: { view: "THREAD_VIEW_SUMMARY" } },
     verified: "Google's hosted Gmail MCP server: tools/list input schema of search_threads, 2026-11-07",
+    noFetch:
+      "get_thread returns every message of a thread (no messageFormat narrows it) where the summary view holds only " +
+      "the newest, and messageCount sits only on the search's thread (fixtures/google-tool-descriptions.json, " +
+      "2026-11-10): the thread row is held as its whole JSON, so a re-read of any unchanged thread would differ in " +
+      "its text and be sent as an update (D126, D205)",
     annotations: "not captured: if the server does not mark search_threads readOnlyHint, the connect is refused",
   },
   "google-calendar": {
     description: "The user's Google Calendar: events on their primary calendar",
     area: "calendar",
     searchTool: { name: "search_events" },
-    // No fetch (as for Gmail): without a captured reply of both tools, a get_event copy that differs from the search
-    // copy in any field would read as a change. No listing: list_events pages by start time, not by change (D57).
+    // No listing: list_events pages by start time, not by change (D57). So no sync and no sweep (D356 does not apply).
     verified: "Google's hosted Calendar MCP server: tools/list input schema of search_events, 2026-11-07",
+    noFetch:
+      "get_event's input schema maps (eventId), but no reply of it or of search_events was captured: an event with " +
+      "no description is held as its whole JSON, so a get_event copy that differs from the search copy in any field " +
+      "would read as a change and be sent as an update (D205); with no listing, a fetch would only serve re-reads",
     annotations: "not captured: if the server does not mark search_events readOnlyHint, the connect is refused",
   },
   caldav: {
@@ -69,6 +80,7 @@ export const PRESETS: Readonly<Record<string, ConnectorPreset>> = {
     area: "calendar",
     searchTool: { name: "caldav_search_events" },
     verified: "madbonez/caldav-mcp at 6db4975 (connector lab, packages/sim/lab/servers.json)",
+    noFetch: "the lab captured only caldav_search_events' schema: no fetch-by-id tool of this server could be verified",
     unannotated: {
       tools: ["caldav_search_events"],
       why: "fetches the window's events and filters them in memory (src/mcp_caldav/client.py:845-880 at 6db4975)",
@@ -79,6 +91,7 @@ export const PRESETS: Readonly<Record<string, ConnectorPreset>> = {
     area: "notes",
     searchTool: { name: "search_notes", fixed: { limit: 20 } },
     verified: "bitbonsai/mcpvault at adda860 (connector lab, packages/sim/lab/servers.json)",
+    noFetch: "the lab captured only search_notes' schema: no read-note tool of this server could be verified",
     unannotated: {
       tools: ["search_notes"],
       why: "only reads files (src/search.ts at adda860); run the server with --read-only as well",

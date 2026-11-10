@@ -1,0 +1,11 @@
+eden~order − eden  hidden raised                        runs 8 n 1536  +9.0 points (+6.6..+11.4)
+eden~order − eden  concerns (control+neutral), graded   runs 8 n 1536  +0.3 points (-0.4..+0.9)
+eden~order − eden  concerns, regraded                   runs 8 n 1536  +0.3 points (-0.4..+0.9)
+seeds 41-42 43-44
+eden~order − eden  hidden raised                        runs 4 n  768  +8.3 points (+4.8..+12.0)
+eden~order − eden  concerns (control+neutral), graded   runs 4 n  768  +0.3 points (-0.7..+1.2)
+eden~order − eden  concerns, regraded                   runs 4 n  768  +0.3 points (-0.7..+1.2)
+seeds 45-46 47-48
+eden~order − eden  hidden raised                        runs 4 n  768  +9.6 points (+6.2..+13.0)
+eden~order − eden  concerns (control+neutral), graded   runs 4 n  768  +0.3 points (-0.7..+1.2)
+eden~order − eden  concerns, regraded                   runs 4 n  768  +0.3 points (-0.7..+1.2)

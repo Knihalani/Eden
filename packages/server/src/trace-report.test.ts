@@ -75,6 +75,34 @@ describe("trace-report (D279)", () => {
     expect(r.spoke).toBe(3);
   });
 
+  test("an ask's follow-up packet (askBehind, D430) is a follow-up of that ask, not an event of its own", () => {
+    const ask = t({ event: "ask", decision: "answer", reason: "cue:1", turn: 0, itemIds: ["a"] });
+    const late = t({
+      event: "ask",
+      decision: "sources",
+      reason: "ask behind",
+      turn: 0,
+      itemIds: ["b"],
+      sourceCalls: 0,
+    });
+    const r = traceReport([ask, late]);
+    expect(r.events).toBe(1);
+    expect(r.spoke).toBe(1);
+  });
+
+  test("a push's background search of a cut copy (B1, D405) is a follow-up, not an event of its own", () => {
+    const push = t({ decision: "sources", reason: "cue:1", itemIds: ["a"] });
+    const behind = t({
+      event: "search",
+      decision: "skipped",
+      reason: "cut search behind",
+      itemIds: [],
+      sourceCalls: 1,
+    });
+    const r = traceReport([push, behind]);
+    expect(r.events).toBe(1);
+  });
+
   test("a push and its second pass are their request's one event, whatever their order in the log (audit A11)", () => {
     const push = (itemIds: string[]) => t({ decision: "reader-push", reason: "cue:1", itemIds, candidates: true });
     const r = traceReport([push(["a"]), push(["a", "b"]), t({ decision: "silent", reason: "no candidates" })]);

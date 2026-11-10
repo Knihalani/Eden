@@ -102,10 +102,11 @@ import { sanitizeForStore } from "@eden/redact";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
-import { connectorOptions, pushNotifier } from "./connector-options";
+import { applyConnectorMix, connectorOptions, parseConnectorMix, pushNotifier } from "./connector-options";
 import { noiseSources } from "./noise-sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
+import { ENDPOINT_LABEL, endpointCardMaker, endpointFromArgs } from "./cards-endpoint";
 import {
   allMissedHint,
   cacheModels,
@@ -177,6 +178,9 @@ const cli = flags(
         "ask-question",
         "spans",
         "cards",
+        "cards-calls",
+        "cards-endpoint",
+        "cards-endpoint-model",
         "intent",
         "card-log",
         "card-limits",
@@ -209,6 +213,7 @@ const cli = flags(
         "distill",
         "noise-sources",
         "noise-items",
+        "connector-mix",
         "source-profile",
         "push",
         "push-rates",
@@ -257,6 +262,7 @@ const CONNECTORS = connectorOptions(opt);
 /** `--fetch-gone false`: the sources' fetch null proves nothing, as an MCP connector's (A18; default true). */
 const FETCH_GONE = opt("fetch-gone", "true") !== "false";
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
+const CONNECTOR_MIX = parseConnectorMix(opt("connector-mix", ""));
 /** `--config`: engine settings, checked whole (checkEngineConfig); a typo or a child whose parent is off exits 2. */
 const CONFIG = ((): Record<string, unknown> => {
   try {
@@ -334,15 +340,28 @@ const INTENT_FILES = opt("intent", "").split(",").filter(Boolean);
 /** One replaying maker for every seed and suite: the disk cache is read once. */
 // With no --intent, no requests are replayed at all (not a card file's `r` lines), so `--ask-diag`'s replay figure
 // (null with no --intent) says what the run replayed.
+/**
+ * `--cards-endpoint URL [--cards-endpoint-model NAME]` (M0, lab only, `cards-endpoint.ts`): cards `--cards` does not
+ * hold are made live by an OpenAI-compatible endpoint (the distilled card model on Modal) and appended to `--cards`,
+ * at $0 Anthropic. The run's label and JSON say so (`cardsTransport`): its cards are not the shipped model's.
+ */
+const CARDS_ENDPOINT = opt("cards-endpoint", "");
+if (CARDS_ENDPOINT && !CARDS) throw new Error("--cards-endpoint needs --cards FILE (the endpoint's cards go there)");
+const cardLive = CARDS_ENDPOINT
+  ? endpointCardMaker(endpointFromArgs(CARDS_ENDPOINT, opt("cards-endpoint-model", "")))
+  : undefined;
 const cardMaker = CARDS
-  ? new DiskCardMaker(CARDS, undefined, { requests: INTENT_FILES, cardRequests: INTENT_FILES.length > 0 })
+  ? new DiskCardMaker(CARDS, cardLive, { requests: INTENT_FILES, cardRequests: INTENT_FILES.length > 0 })
   : null;
 if (INTENT_FILES.length && !cardMaker) throw new Error("--intent needs --cards");
+if (CARDS_ENDPOINT) console.log(`cards: ${ENDPOINT_LABEL}, misses made live and appended to ${CARDS}`);
 /**
  * `--card-log out.jsonl`: every item the enrichment sent for a card (its content hash, title, the head of its text
  * the prefilter reads, and the replayed card's kind: "none", or "uncovered" when not replayed), to study the
  * prefilter offline (docs/research/gen-tokens.md). Sim worlds only.
  */
+/** `--cards-calls N` (F2): each world's enrichment gets N card calls; the items past them stay uncovered. */
+const CARDS_CALLS = Number(opt("cards-calls", "-1"));
 const CARD_LOG = opt("card-log", "");
 if (CARD_LOG && cardMaker) {
   writeFileSync(CARD_LOG, "");
@@ -638,6 +657,8 @@ interface TaskRow {
   askKept?: number;
   askItems?: number;
   askMs?: number;
+  /** `askBehind` (D430): the planted item came in the ask's follow-up packet, this many ms after the ask began. */
+  askLateMs?: number;
   /** When the planted item reached the agent, from the request (ms of wall time); absent when it did not. */
   deliveryMs?: number;
   /** It came with the request's own reply (the observe call), not later. */
@@ -687,6 +708,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   const notify = pushNotifier(own, CONNECTORS, seed, world.now);
   if (!FETCH_GONE) for (const s of own) s.fetchReportsGone = false;
   const sources = [...own, ...(NOISE_SOURCES > 0 ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed) : [])];
+  // `--connector-mix P,D` (F1): which connectors push and have a change feed, which only a feed, which neither.
+  applyConnectorMix(sources, CONNECTOR_MIX, seed);
   const returned = new Set<string>();
   let served = 0;
   for (const s of sources) {
@@ -745,8 +768,20 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
           },
         }
       : cardMaker;
-  const cards = laneMaker
-    ? new CardEnricher({ maker: laneMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
+  // `--cards-calls N` (F2, D483): the lane's card model answers its first N calls and leaves the rest uncovered, as
+  // a new user's first request meets a backfill the enrichment has only begun. Not `async`, as above.
+  let cardCalls = 0;
+  const cappedMaker: CardMaker | null =
+    laneMaker && CARDS_CALLS >= 0
+      ? {
+          make: (items, today, signal, retry, intent) =>
+            cardCalls++ < CARDS_CALLS
+              ? laneMaker.make(items, today, signal, retry, intent)
+              : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
+        }
+      : laneMaker;
+  const cards = cappedMaker
+    ? new CardEnricher({ maker: cappedMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
     : null;
   if (cards) cardLanes.push(cards);
   // The lane's asks run one at a time: the model's latency for this task's call (as made, when replayed) is kept so a
@@ -1038,6 +1073,17 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     const answered = ASK ? await partner.ask({ ...scope, sessionId, question }) : null;
     const askMs = performance.now() - a0;
     const askCited = answered ? answered.citations.some((c) => c.itemId === id) : undefined;
+    // `askBehind` (D430): what an ask that answered before its sources were read queues after it, taken once nothing
+    // is left running (bounded as the request's own wait). Nothing is queued when the trial is off.
+    let askLate: number | undefined;
+    if (ASK) {
+      const until = performance.now() + Math.max(WAIT_MS, WAIT_DEFAULT);
+      while (busy(sessionId) && performance.now() < until) await Bun.sleep(1);
+      for (const x of partner.takePending({ ...scope, sessionId })) {
+        if (!x.reason.startsWith("ask-behind:")) continue;
+        if (askLate === undefined && x.citations.some((c) => c.itemId === id)) askLate = performance.now() - a0;
+      }
+    }
     const reports = readerReports.get(sessionId) ?? [];
     readerReports.delete(sessionId);
     const rr = reports.at(-1);
@@ -1120,13 +1166,21 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
           handed: push!.handed.includes(x),
           auto: it ? automated(it) : false,
           cl: push!.constraintLike[k] === true,
+          ...(push!.anchored ? { anchored: push!.anchored[k] === true } : {}),
           title: it?.title ?? "",
           text: it?.text ?? "",
           ...(card ? { card: card.kind, statement: card.statement } : {}),
         };
       });
       const line = { suite, seed, variant, template: task.template, request: task.text, detail: task.detail };
-      appendFileSync(POOL_DUMP, `${JSON.stringify({ ...line, planted: id, at: ids.indexOf(id), pool: items })}\n`);
+      const extra = {
+        planted: id,
+        at: ids.indexOf(id),
+        ...(push?.unsettled !== undefined ? { unsettled: push.unsettled } : {}),
+        ...(push?.anchorKinds ? { anchorKinds: push.anchorKinds } : {}),
+        pool: items,
+      };
+      appendFileSync(POOL_DUMP, `${JSON.stringify({ ...line, ...extra })}\n`);
     }
     if (CANDIDATES) {
       const line = {
@@ -1171,9 +1225,12 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
             ...(askCited ? { askKept: kept(task.detail, planted[i]!, answered!.answer) } : {}),
             askItems: answered!.citations.length,
             askMs: Number(askMs.toFixed(2)),
+            ...(askLate !== undefined ? { askLateMs: Number(askLate.toFixed(2)) } : {}),
           }),
       // `pushCandidates`' last pass: the planted item's place in its pool (-1: not in it), and whether it was handed.
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
+      // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
+      ...(push ? { pushHandedN: push.handed.length } : {}),
       // `askNudge` (D316): whether that pass's candidates left the request unsettled (the packet nudged an ask).
       ...(push?.unsettled !== undefined ? { pushUnsettled: push.unsettled } : {}),
       ...(rr
@@ -1455,7 +1512,11 @@ if (REAL_SYNC) {
 if (cardMaker) {
   for (const c of cardLanes) for (const [k, v] of Object.entries(c.stats)) cardUse[k] = (cardUse[k] ?? 0) + v;
   cardUse.users = cardLanes.length;
-  console.log(`cards: ${cardMaker.hits} replayed, ${cardMaker.misses} uncovered (no cached card)`);
+  console.log(
+    CARDS_ENDPOINT
+      ? `cards: ${cardMaker.hits} replayed, ${cardMaker.misses} made by the endpoint (${ENDPOINT_LABEL})`
+      : `cards: ${cardMaker.hits} replayed, ${cardMaker.misses} uncovered (no cached card)`,
+  );
   console.log(`cards use: ${JSON.stringify(cardUse)}`);
 }
 if (readerModel) {
@@ -1590,7 +1651,8 @@ if (out) {
         seeds: SEEDS,
         config: CONFIG,
         // The run's label, stamped when intent was on but inert, so a number copied out of the file keeps the caveat.
-        label: (opt("label", "") + inertTag()).trim(),
+        label: (opt("label", "") + inertTag() + (CARDS_ENDPOINT ? `  [cards: ${ENDPOINT_LABEL}]` : "")).trim(),
+        ...(CARDS_ENDPOINT ? { cardsTransport: ENDPOINT_LABEL } : {}),
         intent: { state: intentNow(), ...intentUse },
         rows,
         total: grand,

@@ -18,6 +18,8 @@ COPY docs/profiles ./docs/profiles
 # Only the server's runtime dependencies (the MCP SDK, zod, re2js); no lab, no dev tools.
 RUN bun install --frozen-lockfile --production
 # The source map (entity names and counts, never content, D8) persists in EDEN_HOME; item text stays in memory.
+# Opt-in (D425): -e EDEN_PERSIST_FROZEN_DIR=/data/frozen -e EDEN_PERSIST_KEY=<openssl rand -hex 32> keeps idle
+# users across restarts, encrypted on disk (docs/INTEGRATION.md, "Restarts without a full re-sync").
 ENV HOST=0.0.0.0 PORT=8790 EDEN_HOME=/data NODE_ENV=production
 RUN mkdir -p /data && chown bun:bun /data
 VOLUME /data

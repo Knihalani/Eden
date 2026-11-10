@@ -12,5 +12,6 @@
   "askReaderItemChars": 400,
   "pushCandidates": 0,
   "askNudge": false,
+  "askNudgeDeep": false,
   "pushCandidatesSettled": 0
 }

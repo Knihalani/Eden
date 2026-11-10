@@ -1,0 +1,36 @@
+== regrade-ab-41a.txt
+      "answers": 0,
+      "factsTrue": 0,
+      "usd": 0,
+== regrade-ab-41b.txt
+w41:train5-control:rail-strike-leeds eden~ab claude-sonnet-5-5: {"rail-strike-leeds":false} (811ms)
+      "answers": 1,
+      "factsTrue": 0,
+      "usd": 0.001076,
+          "answers": 1,
+== regrade-ab-42a.txt
+      "answers": 0,
+      "factsTrue": 0,
+      "usd": 0,
+== regrade-ab-42b.txt
+      "answers": 0,
+      "factsTrue": 0,
+      "usd": 0,
+== regrade-base-41a.txt
+      "answers": 0,
+      "factsTrue": 0,
+      "usd": 0,
+== regrade-base-41b.txt
+      "answers": 0,
+      "factsTrue": 0,
+      "usd": 0,
+== regrade-base-42a.txt
+w42:train2-control:mum-no-ibuprofen eden claude-sonnet-5-5: {"mum-no-ibuprofen":false} (781ms)
+      "answers": 1,
+      "factsTrue": 0,
+      "usd": 0.001348,
+          "answers": 1,
+== regrade-base-42b.txt
+      "answers": 0,
+      "factsTrue": 0,
+      "usd": 0,

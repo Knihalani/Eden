@@ -275,6 +275,21 @@ export interface EngineConfig {
    */
   pushCutBehind: boolean;
   /**
+   * On in the default (D430, D431, C4; docs/research/c4-ask-path.md). With `pushCutBehind`: an explicit ask's lookup
+   * runs as the push's does (a warm copy answers as it stands; the on-demand poll and the cut copies' live searches
+   * run behind, joining any read of the same source already in flight), and the ask waits at most `askBehindWaitMs`
+   * for that work. Done in time: the ask ranks on the refreshed index, as with D264. Not: it answers from what is
+   * held, names the sources still being read (status "searching", never an all-clear, D127), and what that work then
+   * stores which the ask would cite goes to the agent as a packet at its next take. Off: the ask waits for its poll
+   * and searches cut copies live (D127, D264), ~1.4 s an ask at 1,000 sources (~3 ms at five).
+   */
+  askBehind: boolean;
+  /**
+   * With `askBehind`: how long an ask waits for its poll and cut copies' searches before answering from what is held.
+   * 0 (C4's screens: at market latency the work never settled within 300 ms, and the wait was the ask's whole time).
+   */
+  askBehindWaitMs: number;
+  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -317,6 +332,35 @@ export interface EngineConfig {
    * tick. At 1,000 sources the daily sweep was ~1,100 listing calls a user a day (D324).
    */
   syncUnusedSweepMs: number;
+  /**
+   * A trial (D475, F1; docs/research/f1-local-copy.md), off. With `sync`: the items a user's `syncMaxItems` cap pushes
+   * out of the index are kept compressed in memory in a cold tier (`cold.ts`), per source behind a compact index of
+   * their terms, up to `syncColdMaxItems` a user, and the backfill reads each listing to its end while there is room.
+   * A source whose items are all held, indexed or cold, answers lookups here: its cold copies that hold the request's
+   * words are brought back into the index (no call), instead of the live search D264 makes of a cut copy on every
+   * lookup (~33 connector calls a task at 1,000 sources). Past `syncColdMaxItems` a copy is cut and searched live, as
+   * before. Cold copies keep the read time and read mark they were read under, so D126's and D356's re-reads see them
+   * as they would the indexed copy.
+   */
+  syncCold: boolean;
+  syncColdMaxItems: number;
+  /**
+   * With `syncCold` and `verifyDelivery`: a copy a lookup brought back from the cold tier is re-read by its ref before
+   * it is delivered or cited (a source with no change feed whose connector can fetch by ref), as the live search it
+   * replaces would have read it at its source. Off: it is delivered as any other synced copy is (D126: a copy's age
+   * alone does not doubt it), with no wait on the agent's path.
+   */
+  syncColdVerify: boolean;
+  /**
+   * A trial (D476, F1; docs/research/f1-local-copy.md), off. With `sync`: a source whose connector has a change feed
+   * (`Source.changes`: a Gmail history, a Graph or Drive delta, a Calendar sync token) is polled by one read of what
+   * changed since its cursor: new and changed items wherever they sit in its listing, and deletions. A complete delta
+   * read vouches for every copy held, so (with `syncPush`) a change notice costs one delta read instead of a re-read
+   * of each doubted item before delivery (D126), and the daily re-listing for deletions becomes one delta read (the
+   * whole listing is read again about every six days, inside the cache's time to live). Sources without a feed are
+   * polled, swept and re-read as before.
+   */
+  syncDelta: boolean;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
   syncMaxUsersPerTenant: number;
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
@@ -434,6 +478,15 @@ export interface EngineConfig {
    * surfaced 313 to 321 and decoys 127 to 129 (train1-6, seeds 41-42, paid reader; docs/research/cl-cl3.md).
    */
   cardsLeanDays: number;
+  /**
+   * On in the default (D482, promoted by D483; F2, docs/research/f2-quality.md). The card queue is read best first
+   * rather than as it filled (`orderQueue`, cards.ts): items with constraint wording first, then events ahead, mail
+   * from people the user writes to and items of the last three days, so a new user's first requests meet cards for
+   * the items most likely to bear on them. Once every waiting item is read the cards are the same (the funnel reads
+   * the same with it on and off); with four card calls made per new user, Pi raised +9.0 points more hidden facts
+   * (+6.6..+11.4, n 1,536, train, seeds 41–48, cards made in-run by Haiku).
+   */
+  cardsOrder: boolean;
   /**
    * On in the default (D320). With `cards` and `sync`, for a user with more than 32 synced sources: a synced item is
    * read by the card model only when its source is one the user's lookups use (`Sync.engage`), or it names a name the
@@ -596,6 +649,18 @@ export interface EngineConfig {
    */
   askNudge: boolean;
   /**
+   * D460 (M5, docs/research/m5-nudge-narrow.md; promoted by D461, on in the default, part `nudge`): a narrower
+   * `askNudge`. The nudge fires only when, besides
+   * leaving the request unsettled, the push pool past the handed candidates holds an item (not bulk mail) that names
+   * one of the request's anchors: what the ask's deeper look would list. With nothing anchored past the handed items
+   * an ask has nothing deeper to show, and at $0 (train 41–44) the planted fact was already handed in 322 of the 421
+   * hidden tasks the nudge fired on; this cuts the fires to 202 hidden (34 of 43 with the fact deep in the pool kept)
+   * and 423 → 231 control. Needs `askNudge`. Pi, train 41–44, short and over days, against the current nudge, every
+   * hidden answer Sonnet-graded: targeted-template hidden +2.1 points (−1.3..+5.5), all hidden +0.7 (−1.8..+3.4),
+   * asks −0.062 a task, −$0.005 per 1,000 tasks and −0.06 s a task (each interval below zero), concerns 0 both.
+   */
+  askNudgeDeep: boolean;
+  /**
    * D400 (A30, docs/research/a30-token-gap.md; promoted by D404: 2 in the default, part `fewer`; 0 = off): with
    * `pushCandidates`, when the request names an anchor (a person, thing or day) and the handed candidates settle it
    * (`settle.ts`, `askNudge`'s test), the push hands only the first `pushCandidatesSettled` of them, extended through
@@ -692,11 +757,17 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncIngestTurns: true,
   syncLocalComplete: true,
   pushCutBehind: true,
+  askBehind: true,
+  askBehindWaitMs: 0,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,
   syncEngagedDeep: true,
   syncUnusedSweepMs: 7 * 24 * 3_600_000,
+  syncCold: false,
+  syncColdMaxItems: 30_000,
+  syncColdVerify: true,
+  syncDelta: false,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncPush: true,
@@ -717,6 +788,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intent: true,
   cardsLean: true,
   cardsLeanDays: 7,
+  cardsOrder: true,
   cardsSourceAware: true,
   intentHits: 12,
   intentMinCoverage: 0.2,
@@ -746,6 +818,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   partyCheck: true,
   planConflict: true,
   askNudge: true,
+  askNudgeDeep: true,
   pushCandidatesSettled: 2,
   revisionDiff: true,
 };

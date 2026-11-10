@@ -1,6 +1,7 @@
 /**
  * The per-user item cache: what sources returned recently, redacted, indexed for the fast path. It lives in memory
- * only. Content is never written to disk by default (docs/PRIVACY.md), so a restart costs warm-up, not a leak.
+ * only. Content is never written to disk by default (docs/PRIVACY.md), so a restart costs warm-up, not a leak; an
+ * operator may opt in to writing frozen users' blobs encrypted (`persist`, D425), which turns a restart into thaws.
  *
  * Each user has a vocabulary (term ↔ id) and a two-field inverted index (title, body; title weighted 2, which the
  * cache used to approximate by indexing the title twice) from `@eden/primitives`. An item is tokenized once, when it
@@ -28,6 +29,7 @@ import { sanitizeForStore } from "@eden/redact";
 import type { ListReuse } from "@eden/sources";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
 import { clearDecoded, packItem, repackLike } from "./packed-text";
+import type { FrozenDisk } from "./persist";
 import { head, termIds } from "./text";
 import { orgLabel } from "./firewall";
 
@@ -151,6 +153,8 @@ class UserCache {
   seen = 0;
   /** Changes whenever an item is added, changed or dropped (`ItemCache.revision`); unique across rebuilds. */
   revision = 0;
+  /** `putBack` (D475) appended a copy older than its list's tail: the tails may not be the newest (`anyAlive`). */
+  backdated = false;
   readonly items = new Map<string, Entry>();
   /** Per class (`LOOSE`, `SYNCED`): the oldest and newest entry of its list, the same order as `items` restricted. */
   readonly heads: [Entry | null, Entry | null] = [null, null];
@@ -185,9 +189,11 @@ class UserCache {
 /**
  * A user's cache while idle (`CacheLimits.freezeIdleMs`, D325): every entry, with the tallies kept beside them, as one
  * deflated JSON blob in memory, and no vocabulary, index, sketcher or entry objects. Content stays in memory (D8):
- * nothing is written to disk. The next read or write of the user thaws it (`ItemCache.thaw`) into the same state:
- * the same items in the same order, fetch times, read marks, raw hashes and sketches, the same revision and probes,
- * and an index whose docs were added in the same order, so every answer is the same (`cache-freeze.test.ts`).
+ * nothing is written to disk, unless the operator opted in (`ItemCache.persist`, D425: the blob is then also
+ * written, encrypted, while the user stays frozen). The next read or write of the user thaws it (`ItemCache.thaw`)
+ * into the same state: the same items in the same order, fetch times, read marks, raw hashes and sketches, the same
+ * revision and probes, and an index whose docs were added in the same order, so every answer is the same
+ * (`cache-freeze.test.ts`).
  */
 class FrozenUser {
   constructor(
@@ -202,10 +208,21 @@ class FrozenUser {
     readonly newest: [number, number],
     /** The user's `seen` when frozen. */
     readonly seen: number,
+    /** The largest `Entry.seq` in the blob (D425: a cache that loads it moves its own counter past it). */
+    readonly maxSeq: number,
+    /**
+     * Loaded from disk (D425), written by an earlier process: its read marks are another process's (thawed as 0, older
+     * than any signal here), and `extra` is what the owner saved beside it (the sync's state), for `restored`.
+     */
+    readonly fromDisk = false,
+    readonly extra?: unknown,
   ) {}
 }
 
-/** One frozen entry: the item as JSON sees it (text decoded), and the entry's own fields. */
+/**
+ * One frozen entry: the item as JSON sees it (text decoded), and the entry's own fields. A change here (or to
+ * `FrozenBody`) bumps `PERSIST_FORMAT` (persist.ts, D425), so a blob an earlier build wrote is not read as this one.
+ */
 interface FrozenEntry {
   i: ContextItem;
   f: number;
@@ -605,8 +622,24 @@ export class ItemCache {
   private pumping = false;
   /** Thaws under way in slices (`ready`): the frozen user each started from, and when it is done. */
   private readonly thawing = new Map<string, { from: FrozenUser; done: Promise<void> }>();
-  /** Users frozen and thawed since the cache was built (D325): for the benches and stats. */
-  readonly freezes = { frozen: 0, thawed: 0, thawMs: 0 };
+  /**
+   * Users frozen and thawed since the cache was built (D325): for the benches and stats. `loaded`: users read back
+   * from disk (D425), counted in `thawed` too once thawed; `loadMs` their reads.
+   */
+  readonly freezes = { frozen: 0, thawed: 0, thawMs: 0, loaded: 0, loadMs: 0 };
+  /** The owner's restores still settling, per user read back from disk (D425): `ready` waits on them. */
+  private readonly restoring = new Map<string, Promise<unknown>>();
+  /** Where frozen users are also written (D425, opt-in); null by default: nothing goes to disk (D8). */
+  private disk: FrozenDisk | null = null;
+  /**
+   * The owner's part of a persisted user (D425; the partner: its sync's per-source state): what to save beside the
+   * blob, and what to do once a user written by an earlier process is thawed here.
+   */
+  persistHooks: {
+    save(scope: Scope): unknown;
+    /** May return a promise: a `ready` that read the user back resolves only once it settles. */
+    restored(scope: Scope, items: ContextItem[], extra: unknown): Promise<unknown> | void;
+  } | null = null;
   private readonly perTenant = new Map<string, number>();
   /**
    * Gone-holds per tenant (`removeItems` with a hold; `TenantHolds`), bounded per user and per tenant. Apart from the
@@ -641,10 +674,138 @@ export class ItemCache {
     this.limits = { ...DEFAULT_CACHE_LIMITS, ...limits };
   }
 
+  /**
+   * Opts in to persisting frozen users (D425): from now on each freeze also writes the user's blob to `disk`, a thaw
+   * deletes it (what is on disk is only ever a frozen user's state), and a user this process does not hold is read
+   * back from it on first use. Content reaches the disk only through here.
+   */
+  persist(disk: FrozenDisk): void {
+    this.disk = disk;
+  }
+
+  /** Whether frozen users are written to disk (D425). */
+  get persisting(): boolean {
+    return this.disk !== null;
+  }
+
+  /**
+   * Writes every live user (not frozen) to disk as a freeze would, for a shutdown (D425): users frozen already were
+   * written when they froze. Stops at `deadlineMs`; returns how many it wrote. Only for a process about to exit: the
+   * users stay live, so a later change to them (a removal) would not reach the file they now have on disk.
+   */
+  flush(deadlineMs = Infinity): number {
+    const disk = this.disk;
+    if (disk === null) return 0;
+    const t0 = performance.now();
+    let n = 0;
+    for (const x of this.users.values()) {
+      if (performance.now() - t0 > deadlineMs) break;
+      if (!(x instanceof UserCache) || x.items.size === 0) continue;
+      const steps = this.freezeSteps(x);
+      let r = steps.next();
+      while (!r.done) r = steps.next();
+      if (this.write(r.value)) n++;
+    }
+    return n;
+  }
+
+  /** The cache's clock: the last `put`'s `now` moved on by wall time since (the wall clock before any put). */
+  private clock(): number {
+    return this.lastWall === 0 ? Date.now() : this.lastNow + (Date.now() - this.lastWall);
+  }
+
+  /** Writes a frozen user to disk (D425) with what the owner saves beside it. */
+  private write(f: FrozenUser): boolean {
+    const disk = this.disk;
+    if (disk === null) return false;
+    let extra: unknown;
+    try {
+      extra = this.persistHooks?.save(f.scope);
+    } catch {
+      extra = undefined;
+    }
+    return disk.write(
+      f.scope,
+      {
+        synced: f.synced,
+        size: f.size,
+        probes: [...f.probes],
+        oldest: f.oldest,
+        newest: f.newest,
+        maxSeq: f.maxSeq,
+        extra,
+        blob: f.blob,
+        expiresAt: this.frozenExpiry(f),
+      },
+      this.clock(),
+    );
+  }
+
+  /**
+   * When everything a frozen user holds has expired (D428): the latest of each class's newest item plus its time to
+   * live, and of the newest probe plus a lookup's (probes are kept that long, `expireIdle`). NaN when it holds none.
+   */
+  private frozenExpiry(f: FrozenUser): number {
+    const [loose, synced] = f.newest;
+    let probe = Number.NaN;
+    for (const p of f.probes.values()) probe = p.at; // Least recently made first: the last is the newest.
+    let until = Number.NaN;
+    for (const t of [loose + this.limits.ttlMs, synced + this.limits.syncTtlMs, probe + this.limits.ttlMs]) {
+      if (!Number.isNaN(t) && !(until >= t)) until = t; // NaN (none of that kind) never wins.
+    }
+    return until;
+  }
+
+  /**
+   * A user this process does not hold, read back from disk (D425) as a frozen user, or undefined. Counted against the
+   * tenant's cap as a new user is. Its revision is new (no revision of another process's means anything here), and
+   * the sequence counter moves past its entries', so items stored after it index after it, as they would have.
+   */
+  private load(key: string, scope: Scope): FrozenUser | undefined {
+    const disk = this.disk;
+    if (disk === null || !disk.has(scope)) return undefined;
+    const t0 = performance.now();
+    const p = disk.read(scope, this.clock());
+    if (p === null) return undefined;
+    this.admit(scope.tenantId);
+    this.seqs = Math.max(this.seqs, p.maxSeq);
+    const nan = (x: [number, number]): [number, number] => [x[0] ?? Number.NaN, x[1] ?? Number.NaN]; // JSON's null.
+    const f = new FrozenUser(
+      { tenantId: scope.tenantId, userId: scope.userId },
+      ++this.revisions,
+      p.synced,
+      p.size,
+      new Map(p.probes),
+      p.blob,
+      nan(p.oldest),
+      nan(p.newest),
+      this.epoch,
+      p.maxSeq,
+      true,
+      p.extra,
+    );
+    this.users.set(key, f);
+    this.perTenant.set(scope.tenantId, (this.perTenant.get(scope.tenantId) ?? 0) + 1);
+    this.freezes.loaded++;
+    this.freezes.loadMs += performance.now() - t0;
+    return f;
+  }
+
+  /** Makes room for one more of the tenant's users: past `maxUsersPerTenant`, its least recently written goes. */
+  private admit(tenantId: string): void {
+    if ((this.perTenant.get(tenantId) ?? 0) < this.limits.maxUsersPerTenant) return;
+    const prefix = `${tenantId}/`;
+    for (const k of this.users.keys()) {
+      if (!k.startsWith(prefix)) continue;
+      this.dropUser(k, tenantId);
+      break;
+    }
+  }
+
   /** A user's cache, without creating one: reads never allocate state for a user who has none. */
   private peek(scope: Scope): UserCache | undefined {
     const key = scopeKey(scope);
-    const x = this.users.get(key);
+    const x = this.users.get(key) ?? this.load(key, scope);
     if (x === undefined) return undefined;
     const u = x instanceof UserCache ? x : this.thaw(key, x);
     u.seen = this.epoch;
@@ -653,7 +814,7 @@ export class ItemCache {
 
   private touch(scope: Scope): UserCache {
     const key = scopeKey(scope);
-    const found = this.users.get(key);
+    const found = this.users.get(key) ?? this.load(key, scope);
     if (found) {
       const existing = found instanceof UserCache ? found : this.thaw(key, found);
       existing.seen = this.epoch;
@@ -661,14 +822,7 @@ export class ItemCache {
       this.users.set(key, existing);
       return existing;
     }
-    if ((this.perTenant.get(scope.tenantId) ?? 0) >= this.limits.maxUsersPerTenant) {
-      const prefix = `${scope.tenantId}/`;
-      for (const k of this.users.keys()) {
-        if (!k.startsWith(prefix)) continue;
-        this.dropUser(k, scope.tenantId);
-        break;
-      }
-    }
+    this.admit(scope.tenantId);
     const u = new UserCache({ tenantId: scope.tenantId, userId: scope.userId }, this.limits.releaseTerms);
     u.revision = ++this.revisions;
     u.seen = this.epoch;
@@ -680,6 +834,8 @@ export class ItemCache {
   private dropUser(key: string, tenantId: string): void {
     const u = this.users.get(key);
     if (!u || !this.users.delete(key)) return;
+    this.restoring.delete(key);
+    this.disk?.delete(u.scope); // Expired, evicted or forgotten: its blob on disk goes with it (D425).
     this.dropped?.(u.scope, null);
     clearDecoded(); // An expired or evicted user's decoded text does not stay in the memo (`packed-text.ts`).
     const n = (this.perTenant.get(tenantId) ?? 1) - 1;
@@ -730,6 +886,11 @@ export class ItemCache {
         if (h !== undefined) madeFrom.set(redacted, h);
       },
     };
+  }
+
+  /** How long a synced item is kept with no listing showing it again (ms). */
+  get syncTtlMs(): number {
+    return this.limits.syncTtlMs;
   }
 
   /** Characters of item text kept (`sanitizeItem`'s limit for this cache). */
@@ -997,6 +1158,7 @@ export class ItemCache {
     u.partied = old.partied;
     u.self = old.self;
     u.synced = old.synced;
+    u.backdated = old.backdated;
     u.offsets = old.offsets;
     u.offset = old.offset;
     this.users.set(scopeKey(scope), u); // Same key: the user's place in the eviction order is unchanged.
@@ -1069,6 +1231,49 @@ export class ItemCache {
       const e = items?.get(id);
       return e !== undefined && e.synced === true && this.alive(e, now);
     };
+  }
+
+  /**
+   * `syncCold` (D475): the copy of a synced item as held, with when it was read and under which read mark, for the
+   * cold tier to keep when the sync's trim lets the item go. Undefined when it is not held as synced.
+   */
+  syncedCopy(scope: Scope, id: string): { item: ContextItem; fetchedAt: number; readMark: number } | undefined {
+    const e = this.peek(scope)?.items.get(id);
+    return e?.synced ? { item: e.item, fetchedAt: e.fetchedAt, readMark: e.readMark } : undefined;
+  }
+
+  /**
+   * `syncCold` (D475): copies the cold tier held go back into the index as synced items, each with the read time and
+   * read mark it was first read under (not now's): a copy's age is what D126 and D356 doubt it by. Returns the stored
+   * copies that were not held already (one the index holds is newer, and stands).
+   */
+  putBack(
+    scope: Scope,
+    copies: readonly { item: ContextItem; fetchedAt: number; readMark: number }[],
+    now = Date.now(),
+  ): ContextItem[] {
+    const held = this.peek(scope)?.items;
+    const fresh = copies.filter((c) => !held?.has(c.item.id));
+    if (fresh.length === 0) return [];
+    const added = this.put(
+      scope,
+      fresh.map((c) => c.item),
+      now,
+      true,
+      true,
+      0,
+    );
+    const u = this.peek(scope);
+    const items = u?.items;
+    for (const c of fresh) {
+      const e = items?.get(c.item.id);
+      if (!e) continue;
+      // Older than the entries before it in its list: `anyAlive` no longer trusts the tail alone.
+      if (c.fetchedAt < e.fetchedAt) u!.backdated = true;
+      e.fetchedAt = c.fetchedAt;
+      e.readMark = c.readMark;
+    }
+    return added;
   }
 
   get(scope: Scope, id: string, now = Date.now()): ContextItem | null {
@@ -1355,6 +1560,8 @@ export class ItemCache {
       if (held.size === 0 && held.evicted === 0) this.holds.delete(tenant);
     }
     const freezeTicks = this.freezeTicks();
+    // Blobs on disk no one came back for go once every item in them would have expired (D425).
+    this.disk?.sweep(now);
     // Deleting the entry being visited is safe in a Map walk: no copy of 10k+ users per tick.
     for (const [key, x] of this.users) {
       let u: UserCache;
@@ -1509,18 +1716,23 @@ export class ItemCache {
     this.users.set(key, f); // Same key: the user's place in the eviction order is unchanged.
     clearDecoded(); // Decoded texts of this user's items do not stay in the memo.
     this.freezes.frozen++;
+    // D425 (opt-in): the same blob, encrypted, on disk while the user stays frozen; a write that fails leaves none.
+    this.write(f);
   }
 
   /** The work of a freeze, a step per `STEP_ITEMS` entries (reading each item's text inflates it). */
   private *freezeSteps(u: UserCache): Generator<undefined, FrozenUser> {
     const parts: string[] = [];
     let chunk: FrozenEntry[] = [];
+    let maxSeq = 0;
     const oldest: [number, number] = [Number.NaN, Number.NaN];
     const newest: [number, number] = [Number.NaN, Number.NaN];
     for (const e of u.items.values()) {
       const s = e.synced ? SYNCED : LOOSE;
-      if (Number.isNaN(oldest[s])) oldest[s] = e.fetchedAt;
-      newest[s] = e.fetchedAt;
+      // Least and greatest, not first and last: a copy `putBack` appended keeps its older read time.
+      if (!(oldest[s] <= e.fetchedAt)) oldest[s] = e.fetchedAt;
+      if (!(newest[s] >= e.fetchedAt)) newest[s] = e.fetchedAt;
+      if (e.seq > maxSeq) maxSeq = e.seq;
       const rec: FrozenEntry = { i: e.item, f: e.fetchedAt, m: e.readMark, s: e.synced ? 1 : 0, q: e.seq };
       if (e.raw !== undefined) rec.r = e.raw;
       if (e.sketch !== undefined) rec.k = e.sketch && [e.sketch.lo, e.sketch.hi, e.sketch.numbers];
@@ -1538,7 +1750,7 @@ export class ItemCache {
     // zstd at level 3 over the whole user: 270 B an item against 464 for deflate at its default level, at 3.3 against
     // 42.7 µs an item (500 workload items, `.local` scratch measurement; docs/research/a14-scale-users.md).
     const blob = Bun.zstdCompressSync(utf8.encode(json), { level: 3 });
-    return new FrozenUser(u.scope, u.revision, u.synced, u.items.size, u.probes, blob, oldest, newest, u.seen);
+    return new FrozenUser(u.scope, u.revision, u.synced, u.items.size, u.probes, blob, oldest, newest, u.seen, maxSeq);
   }
 
   /**
@@ -1550,16 +1762,24 @@ export class ItemCache {
    */
   ready(scope: Scope): Promise<void> | null {
     const key = scopeKey(scope);
-    const x = this.users.get(key);
+    // A user an earlier process froze to disk (D425) is read back here, then thawed in slices like any other.
+    const x = this.users.get(key) ?? this.load(key, scope);
     const running = this.thawing.get(key);
-    if (!(x instanceof FrozenUser)) return running?.done ?? null;
+    if (!(x instanceof FrozenUser)) return running?.done ?? this.restorePending(key);
     if (running?.from === x) return running.done;
     const done = new Promise<void>((resolve) => {
       this.urgent.push({
         steps: this.thawJob(key, x),
         done: () => {
-          if (this.thawing.get(key)?.from === x) this.thawing.delete(key);
-          resolve();
+          const finish = () => {
+            if (this.thawing.get(key)?.from === x) this.thawing.delete(key);
+            resolve();
+          };
+          // A user read back from disk (D425) is ready once the owner's restore settles (its sources checked).
+          const restoring = this.restoring.get(key);
+          this.restoring.delete(key);
+          if (restoring) restoring.then(finish, finish);
+          else finish();
         },
       });
     });
@@ -1574,7 +1794,14 @@ export class ItemCache {
    * session that waits on that thaw (review of A24).
    */
   pendingThaw(scope: Scope): Promise<void> | null {
-    return this.thawing.get(scopeKey(scope))?.done ?? null;
+    const key = scopeKey(scope);
+    return this.thawing.get(key)?.done ?? this.restorePending(key);
+  }
+
+  /** The owner's restore of a user read back from disk and thawed outside `ready` (D425), still settling, or null. */
+  private restorePending(key: string): Promise<void> | null {
+    const r = this.restoring.get(key);
+    return r ? r.then(noop, noop) : null;
   }
 
   /** A thaw as a sliced job: given up if the user is thawed (`peek`) or dropped meanwhile. */
@@ -1584,7 +1811,7 @@ export class ItemCache {
     for (let r = steps.next(); ; r = steps.next()) {
       if (this.users.get(key) !== f) return;
       if (r.done) {
-        this.thawed(key, r.value, t0);
+        this.thawed(key, r.value, t0, f);
         return;
       }
       yield;
@@ -1602,13 +1829,31 @@ export class ItemCache {
     const steps = this.thawSteps(f);
     let r = steps.next();
     while (!r.done) r = steps.next();
-    return this.thawed(key, r.value, t0);
+    return this.thawed(key, r.value, t0, f);
   }
 
-  private thawed(key: string, u: UserCache, t0: number): UserCache {
+  private thawed(key: string, u: UserCache, t0: number, f: FrozenUser): UserCache {
     this.users.set(key, u); // Same key: the user's place in the eviction order is unchanged.
     this.freezes.thawed++;
     this.freezes.thawMs += performance.now() - t0;
+    // D425: on disk is only ever a frozen user's state; a live one changes, and is written again when it freezes.
+    this.disk?.delete(u.scope);
+    if (f.fromDisk && this.persistHooks) {
+      const items: ContextItem[] = [];
+      for (const e of u.items.values()) items.push(e.item);
+      try {
+        const r = this.persistHooks.restored(u.scope, items, f.extra);
+        if (r instanceof Promise) {
+          this.restoring.set(key, r);
+          // Gone once settled, whoever thawed the user (a sync `peek` as well as `ready`'s sliced job).
+          void r.finally(() => {
+            if (this.restoring.get(key) === r) this.restoring.delete(key);
+          });
+        }
+      } catch {
+        // The owner's restore fails open: the items are held, and its own state starts over (a re-sync).
+      }
+    }
     return u;
   }
 
@@ -1633,7 +1878,8 @@ export class ItemCache {
       const entry: Entry = {
         item: this.limits.packText ? packItem(item) : item,
         fetchedAt: r.f,
-        readMark: r.m,
+        // Another process's marks mean nothing here: 0 is older than any signal this process takes (D425).
+        readMark: f.fromDisk ? 0 : r.m,
         doc: -1,
         sketch,
         prev: null,
@@ -1645,6 +1891,9 @@ export class ItemCache {
         entry.synced = true;
         u.synced++;
       }
+      // A copy `putBack` appended older than its list's tail stays so (`backdated`, read by `anyAlive`).
+      const tail = u.tails[r.s === 1 ? SYNCED : LOOSE];
+      if (tail && r.f < tail.fetchedAt) u.backdated = true;
       u.items.set(item.id, entry);
       link(u, entry);
       entries[j] = entry;
@@ -1700,11 +1949,18 @@ export class ItemCache {
     return n;
   }
 
-  /** Whether any of the user's items is within its time to live: the newest of a class is, if any of it is. */
+  /**
+   * Whether any of the user's items is within its time to live: the newest of a class is, if any of it is. A copy
+   * `putBack` appended keeps its first read time, so a tail can be older than the entries before it: before the
+   * user is dropped whole, the items are read one by one (only then, and only while `backdated` says one may be).
+   */
   private anyAlive(u: UserCache, now: number): boolean {
     const loose = u.tails[LOOSE];
     const synced = u.tails[SYNCED];
-    return (loose !== null && this.alive(loose, now)) || (synced !== null && this.alive(synced, now));
+    if ((loose !== null && this.alive(loose, now)) || (synced !== null && this.alive(synced, now))) return true;
+    if (!u.backdated) return false;
+    for (const e of u.items.values()) if (this.alive(e, now)) return true;
+    return false;
   }
 
   /** Runs `expireIdle` on the cache's own clock (the last `put`'s `now` moved on by wall time since). */
@@ -1723,6 +1979,7 @@ export class ItemCache {
     clearDecoded(); // The decode memo may hold their text (`packed-text.ts`).
     if (!sourceId) {
       this.dropUser(scopeKey(scope), scope.tenantId);
+      this.disk?.delete(scope); // A blob of a user this process never read back (D425).
       // The user's gone-holds go with them.
       const held = this.holds.get(scope.tenantId);
       if (held) {
@@ -1747,6 +2004,8 @@ export class ItemCache {
     return this.users.size;
   }
 }
+
+function noop(): void {}
 
 /** Whether the user made a probe at or after `since` (the probes map is least recently made first). */
 function probedSince(probes: Map<string, { at: number }>, since: number): boolean {

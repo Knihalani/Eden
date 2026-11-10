@@ -8,6 +8,7 @@ import {
   ModelCardMaker,
   ModelReaderMaker,
   type EngineConfig,
+  type FrozenDisk,
   type ShadowSink,
   type TraceSink,
   type UsageSink,
@@ -71,6 +72,11 @@ export interface BuildOptions {
    * simulated user, whose items are dated around that world's own "now" (D292).
    */
   now?: () => number;
+  /**
+   * D425 (opt-in): where frozen users are also written, encrypted (`EncryptedFrozenDisk`, from EDEN_PERSIST_FROZEN_DIR
+   * and EDEN_PERSIST_KEY). Unset, the default: no item content reaches the disk (D8).
+   */
+  persist?: FrozenDisk;
 }
 
 /**
@@ -129,10 +135,13 @@ export function buildPartner(options: BuildOptions): ContextPartner {
           onFailure: readerFailureLog(options.log ?? console.error, models.scrub),
         })
       : undefined;
+  const cache = new ItemCache();
+  // Before the partner is built: it wires the sync's state into what a persisted user carries.
+  if (options.persist) cache.persist(options.persist);
   const partner = new ContextPartner({
     sources: options.sources,
     sourceMap,
-    cache: new ItemCache(),
+    cache,
     budget: budget(),
     model: options.model ?? null,
     ...(options.now ? { now: options.now } : {}),

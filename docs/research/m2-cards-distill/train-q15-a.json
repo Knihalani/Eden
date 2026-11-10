@@ -1,0 +1,24 @@
+{
+  "run": "q15-a",
+  "base": "qwen2.5-1.5b",
+  "hf": "Qwen/Qwen2.5-1.5B-Instruct",
+  "epochs": 2.0,
+  "lr": 0.0002,
+  "rank": 16,
+  "trainLoss": 0.8031434496836876,
+  "rows": 529,
+  "seconds": 449,
+  "gpu": "L40S",
+  "estimate": {
+    "base": "qwen2.5-1.5b",
+    "gpu": "A10G",
+    "tokens": 2625666.0,
+    "hours": 0.33,
+    "usd": 0.37,
+    "estimate": true
+  },
+  "evalLoss": [
+    0.7283,
+    0.6751
+  ]
+}

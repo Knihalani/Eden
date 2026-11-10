@@ -1,0 +1,22 @@
+shards 8, seeds 41,42,43,44,45,46,47,48, tasks paired 988 (dropped 1 unfinished)
+n per kind: hidden 101, control 101, neutral 786
+
+arm                    hidden  control  neutral  conc.rg   $/1k   wall p50/mean s  Eden ms  conn
+tools                  0.040   0.000    0.001    0.0000   0.212   2.27/ 2.63        0   1.19
+eden                   0.594   0.000    0.009    0.0000   0.248   1.54/ 1.92        8   0.00
+eden~minus-nudge       0.604   0.010    0.010    0.0000   0.236   1.50/ 1.83        8   0.00
+eden~minus-plans       0.594   0.000    0.004    0.0011   0.249   1.51/ 1.90        8   0.00
+eden~minus-fewer       0.644   0.000    0.004    0.0000   0.248   1.50/ 1.85        8   0.00
+eden~minus-freshness   0.624   0.010    0.005    0.0023   0.244   1.53/ 1.87        8   0.00
+
+== paired differences (a − b), bootstrap 95%; * the interval excludes zero
+points for hidden and concerns; $/1k; s; ms
+eden~minus-nudge       − eden   hidden +0.990 (-4.950..+6.931)   concerns +0.225 (-0.564..+1.015)   concernsRegraded +0.000 (+0.000..+0.000)   usdPer1k -0.012 (-0.015..-0.009)*  wallMean -0.094 (-0.223..+0.026)   edenMs -0 (-1..-0)  conn +0.000 (+0.000..+0.000) 
+eden~minus-plans       − eden   hidden +0.000 (-5.941..+5.941)   concerns -0.451 (-1.127..+0.113)   concernsRegraded +0.113 (+0.000..+0.338)   usdPer1k +0.001 (-0.003..+0.005)   wallMean -0.027 (-0.131..+0.075)   edenMs -0 (-0..+0)  conn +0.000 (+0.000..+0.000) 
+eden~minus-fewer       − eden   hidden +4.950 (-0.990..+10.891)   concerns -0.451 (-1.127..+0.113)   concernsRegraded +0.000 (+0.000..+0.000)   usdPer1k +0.000 (-0.004..+0.003)   wallMean -0.078 (-0.206..+0.049)   edenMs -0 (-0..+0)  conn +0.000 (+0.000..+0.000) 
+eden~minus-freshness   − eden   hidden +2.970 (-1.980..+8.911)   concerns -0.225 (-1.015..+0.564)   concernsRegraded +0.225 (+0.000..+0.564)   usdPer1k -0.004 (-0.008..-0.000)*  wallMean -0.055 (-0.137..+0.028)   edenMs -0 (-1..-0)  conn +0.000 (+0.000..+0.000) 
+eden                   − tools  hidden +55.446 (+45.545..+64.356)*  concerns +0.676 (+0.113..+1.353)*  concernsRegraded +0.000 (+0.000..+0.000)   usdPer1k +0.035 (+0.028..+0.044)*  wallMean -0.701 (-0.855..-0.549)*  edenMs +8 (+7..+9)  conn -1.190 (-1.274..-1.102)*
+eden~minus-nudge       − tools  hidden +56.436 (+46.535..+66.337)*  concerns +0.902 (+0.225..+1.691)*  concernsRegraded +0.000 (+0.000..+0.000)   usdPer1k +0.023 (+0.016..+0.031)*  wallMean -0.795 (-0.948..-0.645)*  edenMs +8 (+7..+9)  conn -1.190 (-1.278..-1.107)*
+eden~minus-plans       − tools  hidden +55.446 (+45.545..+65.347)*  concerns +0.225 (-0.225..+0.676)   concernsRegraded +0.113 (+0.000..+0.338)   usdPer1k +0.036 (+0.029..+0.044)*  wallMean -0.728 (-0.875..-0.590)*  edenMs +8 (+7..+9)  conn -1.190 (-1.274..-1.106)*
+eden~minus-fewer       − tools  hidden +60.396 (+51.485..+70.297)*  concerns +0.225 (-0.225..+0.676)   concernsRegraded +0.000 (+0.000..+0.000)   usdPer1k +0.035 (+0.028..+0.043)*  wallMean -0.779 (-0.934..-0.627)*  edenMs +8 (+7..+9)  conn -1.190 (-1.277..-1.106)*
+eden~minus-freshness   − tools  hidden +58.416 (+49.505..+68.317)*  concerns +0.451 (+0.000..+1.015)   concernsRegraded +0.225 (+0.000..+0.564)   usdPer1k +0.031 (+0.024..+0.039)*  wallMean -0.756 (-0.913..-0.602)*  edenMs +8 (+7..+9)  conn -1.190 (-1.277..-1.104)*

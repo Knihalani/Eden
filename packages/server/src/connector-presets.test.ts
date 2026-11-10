@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { ContextPartner, CORE_CONFIG, ItemCache } from "@eden/engine";
+import { SourceMap } from "@eden/graph";
+import { Budget } from "@eden/llm";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import {
+  buildFetchArgs,
   fetchUsable,
   listUsable,
   mapFetchArgs,
@@ -13,6 +17,7 @@ import {
 } from "../../sources/src/schema-args";
 import labTools from "../../sources/src/fixtures/mcp-tools.json";
 import { expandPreset, PRESETS } from "./connector-presets";
+import described from "./fixtures/google-tool-descriptions.json";
 import google from "./fixtures/google-tools.json";
 import { checkSpecs, SourceConfigError, UserSources } from "./user-sources";
 
@@ -49,6 +54,27 @@ describe("connector presets (D294)", () => {
       }
     }
     expect(mapListArgs(SCHEMAS.search_threads!).cursor).toEqual({ name: "pageToken", kind: "token" });
+  });
+
+  test("every preset names a fetch tool or says why not (C1, D415)", () => {
+    for (const [name, p] of Object.entries(PRESETS)) {
+      // Exactly one: a fetch tool, or the reason there is none (the daily sweep, D356; doubted copies held, D126).
+      expect([name, (p.fetchTool !== undefined) !== (p.noFetch ?? "").length > 20]).toEqual([name, true]);
+    }
+    // Today none names one (D415); a preset that gains a verified fetch tool changes this line and its decision.
+    expect(Object.values(PRESETS).filter((p) => p.fetchTool)).toEqual([]);
+    // The served descriptions D415 rests on: the summary search holds one message, get_thread every one.
+    expect(described.search_threads["view.THREAD_VIEW_SUMMARY"]).toContain("`messages` has at most 1 entry");
+    expect(described.get_thread.description).toContain("a list of its messages");
+  });
+
+  test("Google's fetch-by-id tools map from their served schemas, the ref to the id argument (C1)", () => {
+    // Not named by a preset (D415), but an operator who has checked both copies match adds one by hand: the connect
+    // maps it with this code, and the ref must land on the record's id, never on calendarId.
+    const thread = mapFetchArgs(SCHEMAS.get_thread!);
+    expect([fetchUsable(thread), buildFetchArgs(thread, "t1")]).toEqual([true, { threadId: "t1" }]);
+    const event = mapFetchArgs(SCHEMAS.get_event!);
+    expect([fetchUsable(event), buildFetchArgs(event, "e1")]).toEqual([true, { eventId: "e1" }]);
   });
 
   test("expansion: explicit fields win, no write tool and no trustedReadTools are ever added", () => {
@@ -149,6 +175,52 @@ describe("connector presets (D294)", () => {
       /search_threads/,
     );
     expect(g.calls).toEqual([]);
+    await users.close();
+  });
+
+  test("a preset with a fetch tool reads by id and goes on the weekly sweep; without one it stays daily (D356)", async () => {
+    const MIN = 60_000;
+    const DAY = 24 * 60 * MIN;
+    const plain = gmailServer();
+    const fetching = gmailServer();
+    const users = new UserSources({
+      directory: () => [
+        { kind: "mcp", preset: "gmail", id: "mail", transport: plain.transport },
+        // The operator's own fetch tool over the preset (explicit fields win): the mechanism, not a recommendation.
+        { kind: "mcp", preset: "gmail", id: "mail2", transport: fetching.transport, fetchTool: { name: "get_thread" } },
+      ],
+      log: () => {},
+    });
+    const scope = { tenantId: "t", userId: "u" };
+    const byId = Object.fromEntries((await users.resolver(scope)).map((s) => [s.id, s]));
+    expect([byId.mail!.fetchesById, byId.mail2!.fetchesById]).toEqual([false, true]);
+    expect((await byId.mail2!.fetch!("t1", scope, AbortSignal.timeout(2_000)))?.ref).toBe("t1");
+
+    let clock = Date.UTC(2026, 10, 10, 9);
+    const partner = new ContextPartner({
+      sources: (s) => users.resolver(s),
+      sourceMap: new SourceMap(":memory:", { seed: 1 }),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { ...CORE_CONFIG, sync: true, verifyDelivery: true, syncCallsPerMin: 6_000, syncUnusedSweepMs: 7 * DAY },
+    });
+    const sync = partner.sync!;
+    sync.track(scope);
+    for (let i = 0; i < 200 && !sync.warm(scope); i++) await sync.tick();
+    expect(sync.warm(scope)).toBe(true);
+    const listings = (g: ReturnType<typeof gmailServer>) => g.calls.filter((c) => c.name === "search_threads").length;
+    const before = [listings(plain), listings(fetching)];
+    // Eight active days, the sync ticking every 10 minutes; neither source is used (no lookup routes to it). The
+    // plain source is swept daily (two pages a sweep), the one with a fetch tool once, at the week.
+    for (let k = 0; k < (8 * DAY) / (10 * MIN); k++) {
+      clock += 10 * MIN;
+      sync.track(scope, clock);
+      await sync.tick();
+    }
+    expect(listings(plain) - before[0]!).toBeGreaterThanOrEqual(14);
+    expect(listings(fetching) - before[1]!).toBe(2);
     await users.close();
   });
 });

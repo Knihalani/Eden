@@ -139,6 +139,14 @@ export function shownText(rendered: string): string {
 export const EDEN_NOTE = "Eden: ";
 
 /**
+ * `askBehind` (D430): the lead of a packet holding what an ask's sources still being read found after it answered.
+ */
+export const ASK_LATE_LEAD =
+  `${EDEN_NOTE}found after your last ask_context answer, in sources it was still reading; nothing has checked them ` +
+  "against the question. Use one only if it is about the same person, thing and date; if it is not, ignore it and do " +
+  "not mention it.";
+
+/**
  * `pushCandidates` (D236, D237; CL6 H19): the push hands the agent the top of its pool with no reader call, after this
  * line: the items may bear on the request, and the agent checks each against the request's who, what and when first
  * (D96's why-before-binds moved into the agent's packet; without the check, look-alikes were raised 4 times in 48).

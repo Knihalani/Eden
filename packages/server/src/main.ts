@@ -4,6 +4,7 @@
  * router (router.ts, D163) and each of its children runs this file again as one server process (EDEN_ROUTER_CHILD).
  */
 import { dirname } from "node:path";
+import { DEFAULT_CACHE_LIMITS, EncryptedFrozenDisk, type PersistEvent } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { warmGate } from "@eden/redact";
 import { loadConfig, type ServerConfig } from "./config";
@@ -12,6 +13,7 @@ import { buildPartner, startGatePool, tenantSpendFor } from "./build";
 import { engineConfig } from "./engine-config";
 import { createHandler } from "./http";
 import { modelRolesFromEnv } from "./models";
+import { childPersistDir, prunePersistDirs } from "./persist";
 import { rehomeSourceMaps, runRouter } from "./router";
 import { isLeaseGrant, LeasedSpend } from "./spend-lease";
 
@@ -79,6 +81,8 @@ async function serve(config: ServerConfig): Promise<void> {
     }
   }
   const engine = engineConfig();
+  // D425 (opt-in): frozen users written encrypted to this process's own directory, read back on first use.
+  const persist = persistStore(config);
   // Per-user sources when EDEN_USER_SOURCES_FILE is set (D108); forget closes their connections. Before the gate
   // pool, so a bad sources file exits 2 with its message before any worker starts.
   const sources = sourcesOrExit();
@@ -107,6 +111,7 @@ async function serve(config: ServerConfig): Promise<void> {
     onTrace: process.env.EDEN_TRACE === "1" ? (t) => console.log(JSON.stringify(t)) : undefined,
     // Whether the agent used each injection (D293), for `bun run digest`; content-free like the traces.
     onUsage: process.env.EDEN_TRACE === "1" ? (u) => console.log(JSON.stringify({ usage: u })) : undefined,
+    ...(persist ? { persist } : {}),
   });
   // The background sync's own connector calls (backfill, sweeps) are made outside any request, so no trace has them:
   // with EDEN_TRACE=1 its cumulative counters are logged once a minute, per process, for `bun run digest` (D293).
@@ -134,6 +139,12 @@ async function serve(config: ServerConfig): Promise<void> {
     stopping = true;
     void server.stop(true);
     partner.stopSync();
+    // D425: users still live are written as frozen ones, within the router's 2 s grace (the rest re-sync).
+    if (persist) {
+      const t0 = performance.now();
+      const n = partner.persistLive(PERSIST_FLUSH_MS);
+      console.error(`eden: persisted ${n} live users at shutdown in ${Math.round(performance.now() - t0)} ms`);
+    }
     try {
       sourceMap.close();
     } catch (e) {
@@ -150,6 +161,7 @@ async function serve(config: ServerConfig): Promise<void> {
       ` (startup ${startupMs} ms; model roles ${process.env.OPENROUTER_API_KEY ? "on" : "off (no OPENROUTER_API_KEY)"}` +
       `; sources ${sources.shared} shared${sources.userSources ? " + per user (EDEN_USER_SOURCES_FILE)" : ""}` +
       `${keys.length > 0 ? `; engine settings: ${keys.join(", ")}` : ""}` +
+      (persist ? `; frozen users persisted, encrypted (${persist.count} on disk, D425)` : "") +
       (child
         ? `; router child ${child.index} of ${child.count}, per-tenant caps divided by ${child.count}:` +
           (config.spendLeases
@@ -165,6 +177,43 @@ async function serve(config: ServerConfig): Promise<void> {
     // The router is gone (killed, crashed): nothing can reach this child any more, so it must not outlive it.
     process.on("disconnect", shutdown);
   }
+}
+
+/** Shutdown's budget for writing live users (D425): under the router's 2 s before it kills a child. */
+const PERSIST_FLUSH_MS = 1_500;
+
+/**
+ * The encrypted store of frozen users (D425), or null when not configured. One process with no router deletes the
+ * directories a router's children wrote first (their users re-sync). Problems are reported by reason and count only,
+ * a line a minute at most, never a name, id or the key.
+ */
+function persistStore(config: ServerConfig): EncryptedFrozenDisk | null {
+  const p = config.persist;
+  if (!p) return null;
+  const child = config.child ?? { index: 0, count: 1 };
+  if (!config.child) prunePersistDirs(p.dir, 1);
+  const counts = new Map<string, number>();
+  const report = (e: PersistEvent) => {
+    const k = `${e.kind} (${e.reason})`;
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  };
+  const flush = () => {
+    if (counts.size === 0) return;
+    const parts = [...counts].map(([k, n]) => `${n} ${k}`);
+    counts.clear();
+    console.error(`eden: frozen users on disk: ${parts.join(", ")}; those users re-sync (D425)`);
+  };
+  const store = new EncryptedFrozenDisk({
+    dir: childPersistDir(p.dir, child.index, child.count),
+    key: p.key.bytes(),
+    maxBytes: p.maxBytes,
+    // The cap on a file's own expiry (its newest item's, D428): the cache's longest time to live (synced, 7 days).
+    maxAgeMs: DEFAULT_CACHE_LIMITS.syncTtlMs,
+    report,
+  });
+  flush();
+  setInterval(flush, 60_000).unref();
+  return store;
 }
 
 /** A child's spend cap leased from the router over IPC (D327): requests go up, grants come back. */

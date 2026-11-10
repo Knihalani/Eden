@@ -1,0 +1,12 @@
+== seed 41, 5/5/90: default vs syncCold+syncDelta
+    base hidden   n  96  delivered  67  ask-cited  73  follow-up   0  surfaced  77  calls/task   46.9  ask ms p50    11.9 p90    21.4
+    base control  n  96  delivered  57  ask-cited  62  follow-up   0  surfaced  69  calls/task   47.8  ask ms p50    12.8 p90    24.4
+   trial hidden   n  96  delivered  66  ask-cited  73  follow-up   0  surfaced  76  calls/task   11.3  ask ms p50    17.1 p90    45.5
+   trial control  n  96  delivered  55  ask-cited  64  follow-up   0  surfaced  69  calls/task   11.1  ask ms p50    17.3 p90    50.4
+paired tasks: 192
+== seed 42, 5/5/90: default vs syncCold+syncDelta
+    base hidden   n  96  delivered  65  ask-cited  74  follow-up   0  surfaced  77  calls/task   47.9  ask ms p50    13.6 p90    27.3
+    base control  n  96  delivered  55  ask-cited  61  follow-up   0  surfaced  64  calls/task   48.0  ask ms p50    12.3 p90    26.3
+   trial hidden   n  96  delivered  64  ask-cited  74  follow-up   0  surfaced  76  calls/task   11.7  ask ms p50    19.9 p90    44.5
+   trial control  n  96  delivered  54  ask-cited  62  follow-up   0  surfaced  64  calls/task   11.7  ask ms p50    19.0 p90    56.0
+paired tasks: 192

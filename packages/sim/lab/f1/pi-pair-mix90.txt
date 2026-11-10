@@ -1,0 +1,26 @@
+tasks in every arm: 432 (hidden 144, control 144, neutral 144)
+arm       kind      n   rate   $/1k   calls/t (agent, Eden)
+base      hidden   144  0.611  0.518  29.75 (0.00, 29.75)
+base      control  144  0.007  0.547  33.19 (0.00, 33.19)
+base      neutral  144  0.000  0.552  37.00 (0.00, 37.00)
+base      mix 1:1:8             0.548  35.89 (0.00, 35.89)
+local     hidden   144  0.632  0.525  7.47 (0.00, 7.47)
+local     control  144  0.007  0.520  7.74 (0.00, 7.74)
+local     neutral  144  0.000  0.547  8.90 (0.00, 8.90)
+local     mix 1:1:8             0.542  8.64 (0.00, 8.64)
+
+Eden's connector calls a task by source and operation (all tasks of the arm, in its timelines):
+  base: gmail search 2.775, gmail list 0.993, crm search 0.898, slack list 0.799, drive search 0.706, slack search 0.535, calendar search 0.509, calendar list 0.412, crm list 0.266, drive list 0.197, github-230 search 0.090, sheets-800 search 0.086, slack-channel-110 search 0.076, sheets-233 search 0.076, jira-909 search 0.074, drive-folder-868 search 0.072, drive-folder-481 search 0.072, zendesk-348 search 0.072, slack-channel-893 search 0.069, slack-channel-317 search 0.069, slack-channel-218 search 0.067, github-419 search 0.065, figma-466 search 0.065, sheets-80 search 0.065, drive-folder-148 search 0.065, wiki-397 search 0.065, slack-channel-596 search 0.065, drive-folder-139 search 0.0
+  local: gmail fetch 1.021, gmail list 0.958, calendar search 0.588, calendar list 0.410, slack list 0.340, crm list 0.171, crm fetch 0.148, drive fetch 0.137, slack fetch 0.125, drive list 0.113, drive delta 0.051, drive-folder-760 list 0.028, zendesk-348 list 0.023, figma-52 list 0.023, drive-folder-580 list 0.021, github-869 list 0.021, jira-729 list 0.021, github-32 list 0.019, figma-745 list 0.019, figma-61 list 0.019, github-230 list 0.019, slack-channel-695 list 0.016, jira-342 list 0.016, slack-channel-839 list 0.016, github-455 list 0.016, github-968 list 0.016, jira-36 list 0.016, sheets-674 list 0.016, wiki-514 list 0.016, sheets-656 list 0.016, figma-466 list 0.014, github-644 li
+
+== paired B − A, bootstrap 95%; * the interval excludes zero
+local − base raised: hidden +0.021 (-0.049..+0.090) ; control +0.000 (-0.021..+0.021) ; neutral +0.000 (+0.000..+0.000) ; mix +0.002 (-0.006..+0.010) 
+local − base usd   : hidden +0.007 (-0.014..+0.027) ; control -0.027 (-0.052..-0.003)*; neutral -0.005 (-0.025..+0.014) ; mix -0.006 (-0.022..+0.009) 
+local − base conn  : hidden -22.285 (-24.236..-20.417)*; control -25.451 (-27.500..-23.458)*; neutral -28.097 (-30.062..-26.132)*; mix -27.251 (-28.901..-25.689)*
+local − base eden  : hidden -22.285 (-24.160..-20.438)*; control -25.451 (-27.604..-23.438)*; neutral -28.097 (-30.125..-26.062)*; mix -27.251 (-28.809..-25.636)*
+
+== path and wall, seeds 41-44, 5/5/90 (two arms a process)
+base     n 432  path mean   1193 ms  p50    572  p90   2780  observe    271  ask    922  wall mean   4033  p50   3593
+local    n 432  path mean   2088 ms  p50   1383  p90   5537  observe   1012  ask   1075  wall mean   5246  p50   4344
+local - base: path +895 ms (+598..+1200)
+local - base: wall +1213 ms (+849..+1579)

@@ -259,6 +259,60 @@ describe("askNudge (D316): a nudge to ask when the candidates do not settle the 
   });
 });
 
+describe("askNudgeDeep (D460, D461): the nudge only when the pool past the handed items holds an anchor", () => {
+  test("on in the default (D461); the config check needs askNudge", () => {
+    expect(DEFAULT_CONFIG.askNudgeDeep).toBe(true);
+    expect(checkEngineConfig({ askNudgeDeep: true })).toEqual({ askNudgeDeep: true });
+    expect(() => checkEngineConfig({ askNudge: false, askNudgeDeep: true })).toThrow(/askNudge/);
+  });
+
+  test("an anchored item past those handed: the nudge fires, and the ask lists it", async () => {
+    const pools: PushPoolReport[] = [];
+    const p = setup({ askNudge: true, askNudgeDeep: true, pushCandidates: 1 }, (r) => pools.push(r));
+    await say(p, DATED_REQUEST);
+    const pool = pools.at(-1)!;
+    expect(pool.handed).not.toContain(DATED.id);
+    expect(pool.unsettled).toBe(true);
+    expect(packet(p)!.text.split("\n")[1]).toBe(`${CANDIDATES_LEAD} ${ASK_NUDGE}`);
+    const answer = await p.ask({ ...ref(), question: "Anything about the cleaning rota?" });
+    expect(answer.citations.map((c) => c.itemId)).toContain(DATED.id);
+  });
+
+  test("nothing anchored past those handed: no nudge, though the request is unsettled", async () => {
+    const pools: PushPoolReport[] = [];
+    const on = setup({ askNudge: true, askNudgeDeep: true, pushCandidates: 1 }, (r) => pools.push(r));
+    ITEMS = [HOLD, OTHER];
+    await say(on, DATED_REQUEST);
+    const pool = pools.at(-1)!;
+    expect(pool.handed).toEqual([HOLD.id]);
+    // HOLD names Harlow but not the day; OTHER, past it, names neither.
+    expect(pool.anchored).toEqual(pool.pool.map((id) => id === HOLD.id));
+    expect(pool.unsettled).toBe(false);
+    expect(packet(on)!.text.split("\n")[1]).toBe(CANDIDATES_LEAD);
+    // The current nudge fires on the same pool.
+    const now: PushPoolReport[] = [];
+    const cur = setup({ askNudge: true, pushCandidates: 1 }, (r) => now.push(r));
+    ITEMS = [HOLD, OTHER];
+    await say(cur, DATED_REQUEST);
+    expect(now.at(-1)!.unsettled).toBe(true);
+  });
+
+  test("bulk mail past those handed does not count, anchored or not (review)", async () => {
+    const BULK: ContextItem = {
+      ...item("bulk", "Harlow newsletter", "Harlow venue news for 30 October: deposits now open.", 1),
+      meta: { category: "promotions" },
+    };
+    const pools: PushPoolReport[] = [];
+    const p = setup({ askNudge: true, askNudgeDeep: true, pushCandidates: 1 }, (r) => pools.push(r));
+    ITEMS = [BULK, HOLD, OTHER];
+    await say(p, DATED_REQUEST);
+    const pool = pools.at(-1)!;
+    expect(pool.handed).toEqual([HOLD.id]);
+    expect(pool.anchored![pool.pool.indexOf(BULK.id)]).toBe(true);
+    expect(pool.unsettled).toBe(false);
+  });
+});
+
 describe("pushCandidatesSettled (D400, D404): fewer candidates when they settle the request", () => {
   const handed = async (config: Record<string, unknown>, request: string) => {
     const pools: PushPoolReport[] = [];

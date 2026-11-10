@@ -87,15 +87,22 @@ with Eden down the request goes through as it came (D280). Any OpenAI-compatible
 Anthropic's `https://api.anthropic.com/v1`, a local server). For full control, use the SDK:
 
 ```ts
-import { EdenClient, withContext } from "@eden/client";
+import { EdenClient, guardTools, withContext } from "@eden/client";
 
 const eden = new EdenClient({ apiKey, userId, sessionId }); // a sent user message waits up to 3 s for its lookup
 const { injection } = await eden.observe({ kind: "user_message", text });  // report each event
 messages = withContext(messages, await eden.collect(injection));           // before each model call
 const answer = await eden.ask("What did Dana say about the renewal?");     // or expose as a tool
+const tools = guardTools(eden, { send_email, book_meeting });              // acting tools: checked before each call
+await eden.sourceChanged("gmail", { refs: changedMessageIds });            // a connector's change notice: send its refs
 ```
 
-Python agents use `packages/client-python` (`eden_client`: the same calls, standard library only, fail-open, D278).
+Wrap the tools that send, book, pay or share with `guardTools`: Eden's party check only sees calls it is shown, and
+a finding comes back to the agent as the tool's result (D376, D420). Forward change notices with the refs (or items)
+they name, not a bare "changed" signal, which makes Eden re-read and slows the agent's asks (D347, D421). On Hermes
+Agent, use the plugin in `examples/hermes` with Eden in place of the source tools (D422).
+Python agents use `packages/client-python` (`eden_client`: the same calls, `guard_tools` included, standard library
+only, fail-open, D278).
 Debugging: `eden.explain()` (or `POST /v1/explain`) lists the session's last decisions with a sentence each on why
 Eden spoke or stayed silent, never content (D277); `bun run trace-report` summarises an `EDEN_TRACE=1` log, and
 `bun run digest` turns it into a content-free "what Eden added and whether the agent used it" report (D293).
