@@ -717,6 +717,14 @@ export interface EngineConfig {
    * dependency beyond the checker.
    */
   pushCheckAnchored: boolean;
+  /**
+   * O3 (D702; a trial, off; docs/research/o3-push-open.md): with `pushCandidates` and without `pushCheck`, the push
+   * also runs for a message whose verb is on no list but which does not open as a question, a remark or a statement
+   * (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`, kept for the reader's
+   * paid push and the check's) guard nothing there; the candidates' own gate (a constraint-like item in the pool)
+   * still decides whether a packet goes. An opened message is not kept as an acting request for plan alerts (D301).
+   */
+  pushOpen: boolean;
   pushWidenEmbed: number;
   pushWidenIntent: number;
   pushWidenDeep: number;
@@ -881,6 +889,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckForm: 1,
   pushCheckSilent: true,
   pushCheckAnchored: false,
+  pushOpen: false,
   pushWidenEmbed: 3,
   pushWidenIntent: 2,
   pushWidenDeep: 0,

@@ -109,6 +109,7 @@ import {
   daysNamed,
   isAction,
   isImperative,
+  isOpenRequest,
   MORE_VERBS,
   LEADING,
   isScheduling,
@@ -852,7 +853,18 @@ export class ContextPartner {
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
     // not cut at `askReaderWaitMs` (that bounds an explicit ask): a reading that lands later is still queued, while its
     // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
-    const internal: { push: true; request?: number; turn?: number } = { push: true };
+    const internal: { push: true; request?: number; turn?: number; open?: boolean } = { push: true };
+    // `pushOpen` (O3, D702): the candidates' push also starts for a request whose verb is on no list. Not with
+    // `pushCheck`: an opened push would add the check's paid call, which D702 did not measure or cost.
+    const listed = event.kind === "user_message" && isImperative(event.text, MORE_VERBS);
+    const opened =
+      !listed &&
+      event.kind === "user_message" &&
+      this.config.pushOpen &&
+      this.config.pushCandidates > 0 &&
+      !this.config.pushCheck &&
+      isOpenRequest(event.text);
+    if (opened) internal.open = true;
     const push =
       this.config.readerPush &&
       this.config.askReader &&
@@ -861,7 +873,7 @@ export class ContextPartner {
       (this.deps.reader || this.config.pushCandidates > 0) &&
       event.kind === "user_message" &&
       event.draft !== true &&
-      isImperative(event.text, MORE_VERBS)
+      (listed || opened)
         ? // The question as an ask may carry it (`checkAsk`'s cap): the event's own cap is 100 times that, and the
           // ask redacts and tokenizes it before its first await, on the observe's critical path.
           this.ask({ ...event, question: head(event.text, MAX_QUESTION_CHARS), maxItems: 5 }, internal).catch(
@@ -2061,7 +2073,9 @@ export class ContextPartner {
     // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
     // a proactive packet (queued, taken before its next model request); nothing else is answered or handed out.
     if (internal.push) {
-      if (this.config.planConflict && internal.again === undefined) this.noteActed(s, cue);
+      // `pushOpen` (D702): a message the verb lists do not know is not kept as an acting request: a plan alert
+      // (D301) quotes the request it is about, and an opened message may be a remark.
+      if (this.config.planConflict && internal.again === undefined && !internal.open) this.noteActed(s, cue);
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
@@ -6695,6 +6709,8 @@ interface AskInternal {
   request?: number;
   /** The session's turn when the push's request was counted: the push's trace reports it (audit A11). */
   turn?: number;
+  /** `pushOpen` (D702): the push started on the message's shape (`isOpenRequest`), not on a listed verb. */
+  open?: boolean;
   /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
   again?: { searched: SearchedLive; prev: Injection | null };
   /**

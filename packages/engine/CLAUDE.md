@@ -309,6 +309,16 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   the funnel. A check answered from labels made at ingest (`pushCheckStored`, `pushCheckGate`) was measured and
   deleted (D526, D529): with no request in hand a model cannot tell a fact from a look-alike that is a real
   constraint about another venue, person or day.
+- **The push starts on a verb list; `pushOpen` (O3, D702, D706, a trial, off) reads the request's shape instead.**
+  `observe` starts the push only when `isImperative` knows the request's verb (a gate from the reader's paid push);
+  132 of 768 hidden train requests start none. With `pushOpen` and `pushCandidates` (and `pushCheck` off: an opened push never makes
+  the check's paid call), `isOpenRequest` (probes.ts: four words or more; not a remark, question or statement opener;
+  a question mark only on a polite ask; bounded input) also starts it. An opened message is not `noteActed`: a plan
+  alert (D301) quotes only a listed-verb request. Live:
+  hidden +4.1 points, confirmed concerns level, the decoy handed more often too (docs/research/o3-push-open.md). The
+  funnel always asks, so its "surfaced" cannot see this; read `pushHanded` (`n2/compare.py`) and measure live. Deleted
+  beside it: the push check run behind the packet (`pushCheckBehind`, D704: its follow-up reached the agent in 36 of
+  768 hidden tasks, hidden +0.0) and a lead line asking for the item's specifics (`candidatesSpecifics`, D705: +2.0).
 - **Updates name the times they drop (D342, `revisionDiff`).** `buildUpdate`'s title reads `Ledger.seenTimes`; times
   are noted only when a copy is handed out (`watchCopies`, from `copiesOf`'s `times`), never when an update is queued
   (one superseded in the queue was never shown). `timesOf` compares one written form ("HH:MM", "<day> <mon>"), so a
