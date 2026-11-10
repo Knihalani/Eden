@@ -322,3 +322,41 @@ describe("syncCold (D475)", () => {
     expect(t.partner.sync!.coldStats(bob).items).toBe(20);
   });
 });
+
+describe("ItemCache.putBack (review)", () => {
+  const scope: Scope = { tenantId: "t", userId: "u" };
+  const copy = (id: string): ContextItem => ({ id, sourceId: "s", ref: id, title: id, text: `text ${id}` });
+  const DAY = 86_400_000;
+
+  /** A synced list whose tail is a copy brought back with its first read time, older than the entry before it. */
+  function backdated(cache: ItemCache, t0: number): void {
+    cache.put(scope, [copy("a")], t0, true, true, 0); // expires at t0 + 7 days
+    cache.put(scope, [copy("b")], t0 + 6 * DAY, true, true, 0); // alive until t0 + 13 days
+    cache.putBack(scope, [{ item: copy("c"), fetchedAt: t0 + DAY / 2, readMark: 0 }], t0 + 6 * DAY);
+  }
+
+  test("expiry does not drop a user whose list ends in an older copy while another item is alive", () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    const t0 = 1_000 * DAY;
+    backdated(cache, t0);
+    const now = t0 + 7.6 * DAY;
+    cache.expireIdle(now);
+    expect(cache.get(scope, "a", now)).toBeNull();
+    expect(cache.get(scope, "c", now)).toBeNull();
+    expect(cache.get(scope, "b", now)?.id).toBe("b");
+  });
+
+  test("the same after the user is frozen and thawed", () => {
+    const cache = new ItemCache({ expireEveryMs: 60_000, freezeIdleMs: 60_000 });
+    try {
+      const t0 = 1_000 * DAY;
+      backdated(cache, t0);
+      for (let k = 1; k <= 4; k++) cache.expireIdle(t0 + 6 * DAY + k * 60_000);
+      const now = t0 + 7.6 * DAY;
+      cache.expireIdle(now);
+      expect(cache.get(scope, "b", now)?.id).toBe("b");
+    } finally {
+      cache.close();
+    }
+  });
+});

@@ -153,6 +153,8 @@ class UserCache {
   seen = 0;
   /** Changes whenever an item is added, changed or dropped (`ItemCache.revision`); unique across rebuilds. */
   revision = 0;
+  /** `putBack` (D475) appended a copy older than its list's tail: the tails may not be the newest (`anyAlive`). */
+  backdated = false;
   readonly items = new Map<string, Entry>();
   /** Per class (`LOOSE`, `SYNCED`): the oldest and newest entry of its list, the same order as `items` restricted. */
   readonly heads: [Entry | null, Entry | null] = [null, null];
@@ -1156,6 +1158,7 @@ export class ItemCache {
     u.partied = old.partied;
     u.self = old.self;
     u.synced = old.synced;
+    u.backdated = old.backdated;
     u.offsets = old.offsets;
     u.offset = old.offset;
     this.users.set(scopeKey(scope), u); // Same key: the user's place in the eviction order is unchanged.
@@ -1260,10 +1263,13 @@ export class ItemCache {
       true,
       0,
     );
-    const items = this.peek(scope)?.items;
+    const u = this.peek(scope);
+    const items = u?.items;
     for (const c of fresh) {
       const e = items?.get(c.item.id);
       if (!e) continue;
+      // Older than the entries before it in its list: `anyAlive` no longer trusts the tail alone.
+      if (c.fetchedAt < e.fetchedAt) u!.backdated = true;
       e.fetchedAt = c.fetchedAt;
       e.readMark = c.readMark;
     }
@@ -1723,8 +1729,9 @@ export class ItemCache {
     const newest: [number, number] = [Number.NaN, Number.NaN];
     for (const e of u.items.values()) {
       const s = e.synced ? SYNCED : LOOSE;
-      if (Number.isNaN(oldest[s])) oldest[s] = e.fetchedAt;
-      newest[s] = e.fetchedAt;
+      // Least and greatest, not first and last: a copy `putBack` appended keeps its older read time.
+      if (!(oldest[s] <= e.fetchedAt)) oldest[s] = e.fetchedAt;
+      if (!(newest[s] >= e.fetchedAt)) newest[s] = e.fetchedAt;
       if (e.seq > maxSeq) maxSeq = e.seq;
       const rec: FrozenEntry = { i: e.item, f: e.fetchedAt, m: e.readMark, s: e.synced ? 1 : 0, q: e.seq };
       if (e.raw !== undefined) rec.r = e.raw;
@@ -1884,6 +1891,9 @@ export class ItemCache {
         entry.synced = true;
         u.synced++;
       }
+      // A copy `putBack` appended older than its list's tail stays so (`backdated`, read by `anyAlive`).
+      const tail = u.tails[r.s === 1 ? SYNCED : LOOSE];
+      if (tail && r.f < tail.fetchedAt) u.backdated = true;
       u.items.set(item.id, entry);
       link(u, entry);
       entries[j] = entry;
@@ -1939,11 +1949,18 @@ export class ItemCache {
     return n;
   }
 
-  /** Whether any of the user's items is within its time to live: the newest of a class is, if any of it is. */
+  /**
+   * Whether any of the user's items is within its time to live: the newest of a class is, if any of it is. A copy
+   * `putBack` appended keeps its first read time, so a tail can be older than the entries before it: before the
+   * user is dropped whole, the items are read one by one (only then, and only while `backdated` says one may be).
+   */
   private anyAlive(u: UserCache, now: number): boolean {
     const loose = u.tails[LOOSE];
     const synced = u.tails[SYNCED];
-    return (loose !== null && this.alive(loose, now)) || (synced !== null && this.alive(synced, now));
+    if ((loose !== null && this.alive(loose, now)) || (synced !== null && this.alive(synced, now))) return true;
+    if (!u.backdated) return false;
+    for (const e of u.items.values()) if (this.alive(e, now)) return true;
+    return false;
   }
 
   /** Runs `expireIdle` on the cache's own clock (the last `put`'s `now` moved on by wall time since). */
