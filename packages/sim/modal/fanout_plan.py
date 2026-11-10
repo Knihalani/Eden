@@ -145,7 +145,54 @@ def shard_paths(shard):
         "ledger": f"{base}.ledger.jsonl",
         "cards": f"{base}.cards.jsonl",
         "log": f"{base}.log",
+        "cards_in": f"{base}.cards-in.jsonl",
     }
+
+
+def cards_list(args):
+    """`--cards A,B,C` on a pi-ab shard: the files to concatenate (pi-ab reads one file), else None (M1)."""
+    for i, a in enumerate(args):
+        val = None
+        if a == "--cards" and i + 1 < len(args):
+            val = args[i + 1]
+        elif a.startswith("--cards="):
+            val = a.split("=", 1)[1]
+        if val is not None and "," in val:
+            return split_list(val)
+    return None
+
+
+def with_cards_file(args, path):
+    """The args with a `--cards` list replaced by the one file the shard merged it into."""
+    out, skip = [], False
+    for i, a in enumerate(args):
+        if skip:
+            skip = False
+            continue
+        if a == "--cards" and i + 1 < len(args) and "," in args[i + 1]:
+            out += ["--cards", path]
+            skip = True
+        elif a.startswith("--cards=") and "," in a:
+            out += ["--cards", path]
+        else:
+            out.append(a)
+    return out
+
+
+def prepare_shard(shard, repo=REPO):
+    """Work a shard does before its command: a `--cards` list concatenated into one file, in the order given (the
+    replay keeps the first card a key has). Returns the merged file's path, or None."""
+    files = cards_list(shard.args) if shard.kind == "pi-ab" else None
+    if not files:
+        return None
+    dest = shard_paths(shard)["cards_in"]
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with open(dest, "wb") as out:
+        for f in files:
+            with open(os.path.join(repo, f), "rb") as src:
+                data = src.read()
+            out.write(data if data.endswith(b"\n") or not data else data + b"\n")
+    return dest
 
 
 def shard_command(shard):
@@ -156,7 +203,7 @@ def shard_command(shard):
                 ",".join(shard.seeds), "--out", p["out"], "--timeline", p["timeline"], "--cards-out", p["cards"],
                 "--spend-ledger", p["ledger"], "--spend-cap", f"{shard.cap_usd:.3f}", "--spend-headroom",
                 f"{shard.headroom_usd:.4f}", "--run-label", shard.run_label, "--budget", f"{shard.cap_usd:.3f}",
-                *shard.args]
+                *with_cards_file(shard.args, p["cards_in"])]
     if shard.kind == "funnel":
         blind = ["--blind"] if any(s.startswith("heldout") for s in shard.suites) else []
         rest = list(shard.args)

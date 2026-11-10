@@ -76,6 +76,7 @@ def _run(shard_dict):
     shard = plan.Shard(**shard_dict)
     paths = plan.shard_paths(shard)
     os.makedirs(plan.SHARD_DIR, exist_ok=True)
+    plan.prepare_shard(shard)
     cmd = plan.shard_command(shard)
     env = dict(os.environ)
     if shard.kind != "pi-ab":
