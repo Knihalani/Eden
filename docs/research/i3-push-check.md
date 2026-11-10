@@ -1,7 +1,9 @@
 # I3: a per-push Haiku check in the live loop
 
 Status: 2026-11-10, branch `claude/i3-push-check` (from `claude/lucid-hypatia-v9wqk5` with I2 merged), session I3.
-Decisions D500–D504. Train suites only; heldout18 is not run. Numbers marked **[EST]** are arithmetic or judgement;
+Decisions D500–D504. Train suites only; heldout18 is not run. **Result: hidden facts +4.0 points (+1.5..+6.5,
+Sonnet-graded, Pi), concerns unchanged, but +$0.11 per 1,000 tasks and +0.8 s a task: kept as an off trial, the
+trade reported to the owner (§5).** Numbers marked **[EST]** are arithmetic or judgement;
 every other number comes from a command in this note. Sections 1–3 were written and committed before any Pi run.
 
 ## 1. What is built (D500, D501)
@@ -109,3 +111,93 @@ tasks × $0.000316 (F3's per-task figure) + 4,608 × 0.82 checks × $0.0002 ≈ 
 answers × ~$0.0007 (half of A12's $0.0014) ≈ $2.6; total ≈ $7.7. Seed 41 short runs first; if its measured spend
 projects the whole plan (with the regrade's dry-run worst case) above $7.4, seeds 45–48 short run `--variants
 hidden,control` only (their concern rate then comes from control tasks and the days shape). Modal cap $10.
+
+## 4. Results (D503)
+
+Pi on Modal as pre-registered, from commit e871be86 (the pre-registration's): short shape 8 shards (4,608 tasks an
+arm), days shape 8 users (989 tasks an arm, 8 days of 12–20 requests, 1:1:8), 0 of 27,000+ agent requests retried on
+a 429, no shard failed. Sonnet 5.5 regraded 3,114 short answers and 218 days answers (every hidden answer and every
+concern, both arms; 0 failed). Intervals: template-clustered bootstrap (`bench_report.py --sonnet`) for quality,
+the paired bootstrap of `pi-ab-report.ts` for cost and wall.
+
+| Outcome (eden~check − eden) | Short (seeds 41–48) | Days (seeds 41–48) |
+| --- | --- | --- |
+| **Hidden raised, Sonnet** (primary: short) | 57.9% → 61.8%, **+4.0 points (+1.5..+6.5)** | 60.4% → 64.4%, +4.0 (−2.2..+10.1) |
+| Concerns (control, neutral), Sonnet | 0.1% → 0.0%, −0.1 (−0.2..+0.1) | 0.3% → 0.2%, −0.1 (−0.5..+0.2) |
+| Total $/1k, steady, 1:1:8 (agent + Eden + bg) | 0.252 → 0.406 (+0.154) | **0.247 → 0.359 (+0.112)**; paired billed +0.131 (+0.124..+0.138) |
+| Agent billed $/1k, 1:1:8 | 0.252 → 0.256 | 0.229 → 0.199 (−0.030) |
+| Eden's check $/1k (calls charged to tasks) | 0.164 | 0.161 |
+| Check calls a task (hidden / control / neutral) | 0.83 / 0.83 / 0.81 | 0.83 (817 of 989) |
+| $ a call; output tokens a call; failures | 0.000200; 71; 2 of 3,778 | 0.000195; 60; 0 of 817 |
+| Eden on the agent's critical path, ms a task | 27 → 788 | 9 → 760 |
+| Wall p50 / mean, s | 1.93 / 2.15 → 3.01 / 3.05 | 1.38 / 1.49 → 2.23 / 2.31 |
+| Wall, paired (hidden / control / neutral) | +0.85 / +0.93 / +0.91 s | +0.72 / +0.89 / +0.82 s |
+
+Haiku's own grading said the same (short hidden 57.4% → 63.3%; concerns 23 → 19 of 3,072). Agent tokens a task
+(short, `cl8/cache.py`): cache writes fall with the smaller packets (control 767 → 613, hidden 759 → 567, neutral 763 →
+670) while neutral tasks take more model requests (1.54 → 1.68) and output rises (272–279 → 290–312), so the agent's
+spend is flat one request at a time and 12% lower over a user's days (packets carried in the day's transcript).
+Connector calls are identical in the two arms (the check reads the cache, never a source), so every connector plan
+moves by the same dollars: on the days shape, steady state, Composio 0.293 → 0.405, Unified.to 0.361 → 0.473,
+Arcade.dev 1.764 → 1.876, Pipedream 2.067 → 2.179, Zapier MCP 4.160 → 4.272 ($ per 1,000 tasks).
+
+**Against the rule (D502).** Hidden is better (the clustered interval is above zero): the quality clause holds.
+Concerns did not fall significantly (they were 0.1% to begin with). The cost clause fails: the days shape's total
+rises $0.112 per 1,000 tasks (steady state; $0.131 paired, billed), above $0.10. **So `pushCheck` stays an off trial
+and the trade goes to the owner** (§5).
+
+## 5. The trade, for the owner (D504)
+
+Per 1,000 tasks of a 1:1:8 user (about 100 of them carrying a hidden fact): **about 4 more hidden facts raised**
+(+4.0 points on hidden tasks) for **+$0.11 to +$0.13** (Haiku 5.5 agent; through OpenRouter, uncached instructions,
+about +$0.06 more **[EST]**, COST-MODEL.md), and **+0.7 to +0.9 s on every task's wall** (the push waits on the call:
+p50 about 0.9 s), on any connector plan the same dollars. About $0.03 per extra fact raised. The latency is the
+larger cost for an interactive agent: today the push adds 10–30 ms to the agent's path.
+
+What would change the call: (a) a check that does not sit on the path. The push could hand nothing at first and let
+the check's packet reach the agent's next model request; untested here, and D257 showed a fact moved off the first
+request is used less. (b) A cheaper call. 200 × 10 items cost 25% less and kept most of the gain at $0 (+9 hidden
+in the funnel against +17), so it would need its own live run. (c) Through OpenRouter with `anthropicCache` (D145) the
+instructions would cache as they do here. (d) A promotion bar of +$0.15 per 1,000 tasks would pass on both shapes.
+
+## 6. Review, limits and spend
+
+**Review.** The reviewer subagent ran on the engine diff (REQUEST_CHANGES; `bun run check` green and eval
+0.65/0.52/0 on its own run). Fixed after the Pi runs, in commit 094126b5: `parseCheck` read entries only in the
+prompt's key order, so a reordered reply would have been read as "nothing changes the action" (fail-closed). Every
+recorded live reply (2,842 funnel replies) was re-parsed with the fix: identical answers, so the measured runs were
+not affected. Also fixed: a late or closed-session check is now traced (`check-late`) with its cost; kept checks are
+keyed by each item's date and sender too and are not reused on a smaller pool after a 5-item answer; the server logs
+the check's first failure once. Left as a known limit: a first pass that was late hands the default's candidates,
+and a second pass whose check names nothing does not withdraw that packet (a `readerPushBehind` replacement needs
+candidates of its own, D236's rule).
+
+**Limits.** Train suites only; Haiku 5.5 as the agent; one prompt; the lab caches the instruction block (OpenRouter
+would not, D145); `planConflict` (D301) still uses the default's candidates rule for items stored later.
+
+**Spend.** Anthropic **$6.90** of $8: funnel pilot and smoke $0.5446 (2,849 check calls), Pi shards $4.5323 (seed 41 short
+$0.4582, seeds 42–48 short $3.2552, days $0.8190), Sonnet regrade batches $1.8244 (`.local/i3/ledger.jsonl` totals
+$2.369 with the pilot; shard ledgers in `.local/modal/i3-*`). Modal **$0.41** (`modal billing report --for today`,
+the three apps' ids). heldout18 was not run.
+
+## Reproduce
+
+```bash
+L="--spend-ledger .local/i3/ledger.jsonl --spend-cap 8"
+bun run funnel --suite train --seeds 41,42 --json .local/i3/base-4142.json -- --neutral                        # $0
+bun run funnel --suite train --seeds 41,42 --json .local/i3/c200x15-4142.json \
+  --set '{"pushCheck":true,"pushCheckItemChars":200,"pushCheckItems":15}' \
+  -- --neutral --check live --check-cache .local/i3/check-c200x15.jsonl $L                                     # ~$0.19
+python3 -I packages/sim/lab/i1/compare.py --base .local/i3/base-4142.json --trial .local/i3/c200x15-4142.json
+export SSL_CERT_FILE=/root/.ccr/ca-bundle.crt
+A="--conditions eden,eden~check --variant-config '{\"check\":{\"pushCheck\":true}}'"
+EDEN_COMMIT=e871be86 modal run packages/sim/modal/lab_fanout.py --preset bench-tools --seeds 41-48 --cap 4.2 \
+  --run i3-short --args "$A --variants hidden,control,neutral"                                                 # ~$3.7
+EDEN_COMMIT=e871be86 modal run packages/sim/modal/lab_fanout.py --preset bench-tools --seeds 41-48 --cap 1.6 \
+  --max-streams 4 --run i3-days --args "$A --days 8"                                                           # ~$0.82
+for d in .local/modal/i3-short/s*/; do bun packages/sim/src/lab/i3-regrade.ts --results $d/out.json $L \
+  --run-label i3-regrade-$(basename $d); done                                                                  # ~$0.21 each
+python3 -I packages/sim/modal/bench_report.py --pair eden~check:eden --group short=.local/modal/i3-short --sonnet
+bun packages/sim/src/lab/pi-cost-report.ts .local/modal/i3-days/s*/out.json
+bun packages/sim/src/lab/pi-ab-report.ts .local/modal/i3-days/s*/out.json
+```

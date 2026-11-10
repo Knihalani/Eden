@@ -574,7 +574,10 @@ tokens of which 894 read from the cache, 71 output), p50 886 ms and p90 1,190 ms
 1,000 tasks** on the train mix **[EST: calls × price]**, before any change in the agent's own spend (fewer packets on
 neutral and control requests: 309 → 110 and 318 → 220 of 384 in that screen). Through OpenRouter (the servers'
 route) no cache breakpoint is sent (D145), so the instructions are paid in full: about +$0.00008 a call **[EST]**,
-about $0.23 per 1,000 tasks. The live per-task figure with the agent's change is in i3-push-check.md §4.
+about $0.23 per 1,000 tasks. **Live (Pi, train seeds 41–48, D503, lab provider, cached):** 0.82–0.83 calls a task,
+$0.0002 a call, Eden's check $0.161–0.164 per 1,000 tasks; total steady state on a 1:1:8 user over 8 days $0.247 →
+$0.359 (+$0.112; the agent itself −$0.030 from smaller packets), one request at a time $0.252 → $0.406; and +0.7 to
++0.9 s on every task's wall (the push waits on the call). Kept off (D504): i3-push-check.md §4–§5.
 
 ## A per-push "changes what to do" check (N2, D510–D514; a trial, off, not shipped)
 

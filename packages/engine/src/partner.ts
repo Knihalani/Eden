@@ -79,7 +79,7 @@ import {
   type ReaderKind,
   type ReaderVerdict,
 } from "./reader";
-import { CHECK_MAX_ITEMS, checkKey, type PushCheckRead, type PushChecker } from "./push-check";
+import { CHECK_MAX_ITEMS, checkKey, itemMark, type PushCheckRead, type PushChecker } from "./push-check";
 import {
   accounts,
   actionKey,
@@ -2059,6 +2059,8 @@ export class ContextPartner {
           ? await this.checkPush(s, cue, gate, performance.now() - widenFrom)
           : null;
       if ((check || gate?.widened) && s.closed) {
+        // The session closed while the check ran: its call was paid for, so it is traced on its own.
+        if (check?.called) this.traceCheck(s, check, t0);
         return {
           answer: "",
           citations: [],
@@ -2543,13 +2545,15 @@ export class ContextPartner {
     };
     const key = checkKey(input);
     const asked = `${input.today}\n${request}`;
-    const checks = (s.pushChecks ??= new Map());
+    const checks: Map<string, KeptCheck> = (s.pushChecks ??= new Map());
     // A settled check of this request that read every item of this pool, unchanged, answers it with no call: a second
     // pass (`readerPushBehind`) often only reorders the pool or drops an item.
     const items = input.items.slice(0, CHECK_MAX_ITEMS);
     for (const kept of checks.values()) {
       const yes = kept.settled?.yes;
-      if (!yes || kept.asked !== asked || !items.every((it) => kept.hashes.get(it.id) === it.hash)) continue;
+      if (!yes || kept.asked !== asked || !items.every((it) => kept.marks.get(it.id) === itemMark(it))) continue;
+      // An answer that named its most (5) may have left out items a fresh read of a smaller pool would name.
+      if (yes.size >= 5 && items.length < kept.marks.size) continue;
       return {
         yes: new Set(items.filter((it) => yes.has(it.id)).map((it) => it.id)),
         costUsd: 0,
@@ -2562,7 +2566,7 @@ export class ContextPartner {
     if (!kept) {
       const entry: KeptCheck = {
         asked,
-        hashes: new Map(items.map((it) => [it.id, it.hash])),
+        marks: new Map(items.map((it) => [it.id, itemMark(it)])),
         read: checker.check(s.scope, s.key, input, s.abort.signal),
       };
       void entry.read.then((r) => (entry.settled = r));
@@ -2580,11 +2584,37 @@ export class ContextPartner {
       const got = await Promise.race([running, late]);
       // A check this pass did not start (a second pass reading the first's) cost this pass nothing.
       if (got) return fresh ? got : { ...got, costUsd: 0, called: false };
-      // Past the wait: the call goes on behind and is counted by the pass that started it, when it settles.
+      // Past the wait: the call goes on behind; the pass that started it traces it when it settles ("check-late"),
+      // even after the session closed (the call was paid for), so traces sum to the calls made.
+      if (fresh) {
+        const t0 = performance.now();
+        void running.then(
+          (r) => r.called && this.traceCheck(s, r, t0),
+          () => undefined,
+        );
+      }
       return { yes: null, costUsd: 0, called: false, overBudget: false, late: true };
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
+  private traceCheck(s: Session, r: PushCheckRead, t0: number): void {
+    this.trace(s, {
+      sessionId: s.id,
+      turn: s.turn,
+      event: "user_message",
+      decision: "check-late",
+      reason: "push check",
+      latencyMs: Math.round(performance.now() - t0),
+      sourceCalls: 0,
+      modelCalls: 1,
+      costUsd: r.costUsd,
+      checkCalls: 1,
+      checkCostUsd: r.costUsd,
+      itemIds: [],
+    });
   }
 
   /**
@@ -6681,10 +6711,11 @@ const READER_POOL_CAP = READER_MAX_ITEMS;
 /** `pushCheck` (D500): the push checks a session keeps (a request's first and second pass, and a few before). */
 const CHECK_KEPT = 4;
 
-/** `pushCheck` (D500): one kept check: the request and day it read, its items' content hashes, its answer. */
+/** `pushCheck` (D500): one kept check: the request and day it read, its items as read (`itemMark`), its answer. */
 interface KeptCheck {
   asked: string;
-  hashes: Map<string, string>;
+  /** Per item read, `itemMark`: id, content hash, date and sender. */
+  marks: Map<string, string>;
   read: Promise<PushCheckRead>;
   settled?: PushCheckRead;
 }

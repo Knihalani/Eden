@@ -115,8 +115,9 @@ export interface ObserveResult {
 /**
  * One decision Eden made in a session, as `POST /v1/explain` returns it (D277): why it spoke or stayed silent, with no
  * content. `decision` is the engine's trace decision ("skipped", "repeat", "silent", "fast", "sources", "model",
- * "answer", "reader-push", "reader-late", "verify"); `reason` its fixed words or a cue id (a hash, never text); `why` a
- * plain sentence; `itemIds` the items it delivered or cited (ids only). Counts and cost are this decision's own.
+ * "answer", "reader-push", "reader-late", "check-late", "verify"); `reason` its fixed words or a cue id (a hash,
+ * never text); `why` a plain sentence; `itemIds` the items it delivered or cited (ids only). Counts and cost are this
+ * decision's own.
  */
 export interface ExplainedDecision {
   turn: number;
