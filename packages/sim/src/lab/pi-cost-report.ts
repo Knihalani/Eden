@@ -18,8 +18,6 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type { Background, RunResult, Task } from "./ab-common";
 import {
   CONNECTOR_PLANS,
-  EVENT_TRIGGER_USD,
-  triggerCosts,
   conditionCosts,
   costTasks,
   dayRows,
@@ -38,16 +36,6 @@ const flag = (name: string) => {
   return i >= 0 ? argv[i + 1] : undefined;
 };
 const files = argv.filter((a, i) => a.endsWith(".json") && !["--lifetime", "--json"].includes(argv[i - 1] ?? ""));
-// Event triggers (F1, D478): `--trigger-avoids N` connector calls a task that events replace (Eden's polls and
-// re-reads of the sources that offer triggers, as measured), `--events-per-task E` events billed a task (how often
-// the user's sources change: an assumption about the user, not something a static world measures), `--event-usd`.
-const TRIGGER = {
-  usdPerEvent: Number(flag("event-usd") ?? EVENT_TRIGGER_USD),
-  events: Number(flag("events-per-task") ?? "0"),
-  avoided: Number(flag("trigger-avoids") ?? "0"),
-};
-if (![TRIGGER.usdPerEvent, TRIGGER.events, TRIGGER.avoided].every((x) => Number.isFinite(x) && x >= 0))
-  throw new Error("--event-usd, --events-per-task and --trigger-avoids take numbers of at least 0");
 if (!files.length) throw new Error("usage: pi-cost-report.ts run.json [run2.json …] [--lifetime cold.json] [--json F]");
 
 interface RunFile {
@@ -158,24 +146,6 @@ for (const { c, by } of priced) {
       `${c.condition.padEnd(14)} ${p.plan.padEnd(28)} steady ${pad(k(p.steady), 7)}  all-in ${pad(k(p.allIn), 7)}  ` +
         `mix st ${pad(opt(p.mixSteady), 7)}  mix all ${pad(opt(p.mixAllIn), 7)}`,
     );
-  }
-}
-if (flag("trigger-avoids") !== undefined || flag("events-per-task") !== undefined) {
-  console.log(
-    `\nevent triggers (${TRIGGER.usdPerEvent} dollars an event, assumed): steady $ per 1,000 tasks with ` +
-      `${TRIGGER.avoided} connector calls a task replaced by ${TRIGGER.events} events a task, against calls alone; ` +
-      "break-even = events a task the replaced calls pay for (above it, calls are cheaper)",
-  );
-  for (const c of costs) {
-    if (c.connectorPerTask.eden + c.connectorPerTask.background === 0) continue;
-    for (const [plan, rate] of plans) {
-      if (rate === 0) continue;
-      const t = triggerCosts(c, rate, TRIGGER);
-      console.log(
-        `${c.condition.padEnd(14)} ${plan.padEnd(28)} calls ${pad(k(t.plain), 8)}  with triggers ` +
-          `${pad(k(t.steady), 8)}  break-even ${t.breakEvenEvents.toFixed(2)} events/task`,
-      );
-    }
   }
 }
 const base = priced.find((x) => x.c.condition === "tools");

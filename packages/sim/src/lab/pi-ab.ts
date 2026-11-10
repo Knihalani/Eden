@@ -101,16 +101,15 @@ import {
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
-import { QueryPlanner, type ChangePage, type ListPage, type Source } from "@eden/sources";
+import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import { noiseSources } from "./noise-sources";
 import type { World } from "../world";
 import {
-  applyConnectorMix,
-  changesField,
+  applyNotifyShare,
   connectorHeader,
   connectorOptions,
-  parseConnectorMix,
+  parseNotifyShare,
   pushNotifier,
   recapNotice,
   sourceFields,
@@ -239,8 +238,6 @@ const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
 const TIME_SCALE = Number(opt("time-scale", "1"));
 // `--source-profile`, `--push`, `--push-rates` (connector-options.ts).
 const CONNECTORS = connectorOptions(opt);
-// `--connector-mix P,D` (F1): the share of connectors with push and a change feed, and with a feed only.
-const CONNECTOR_MIX = parseConnectorMix(opt("connector-mix", ""));
 const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 // The first N tasks of each world only: a plumbing check before a real run.
@@ -253,6 +250,8 @@ if (!Number.isInteger(DAY) || DAY < 0) throw new Error(`--day must be a whole nu
 // `--noise-items` items each, default 20), as the funnel's flag (A1): a user with ~1,000 connected sources. The tools
 // arm keeps the world's sources (its agent's tools); every connector call Eden makes, noise ones too, is counted.
 const NOISE_SOURCES = Number(opt("noise-sources", "0"));
+// `--notify-share P` (N1, `applyNotifyShare`): the share of connectors that send change notifications.
+const NOTIFY_SHARE = parseNotifyShare(opt("notify-share", ""));
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
 if (!Number.isInteger(NOISE_SOURCES) || NOISE_SOURCES < 0 || !Number.isInteger(NOISE_ITEMS) || NOISE_ITEMS < 1)
   throw new Error("--noise-sources and --noise-items take whole numbers (--noise-items at least 1)");
@@ -324,7 +323,10 @@ const TASK_REQUESTS = MAX_STEPS + 1;
 let capStopped = 0;
 // Cards replayed from disk: the replay file is only read, new cards go to their own file (cards-disk.ts).
 const CARDS_FILE = opt("cards", opt("cards-disk", ""));
-/** `--cards-calls N` (F2): each stream's enrichment gets N card calls; items past them stay uncovered. */
+/**
+ * `--cards-calls N` (F2): each stream's enrichment gets N card calls; items past them stay uncovered. With
+ * `cardsLanes` K (N4) a stream gets N × K: the calls K lanes have made when one lane has made N.
+ */
 const CARDS_CALLS = Number(opt("cards-calls", "-1"));
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
 // Compared as files, not strings: `./a.cards.jsonl` or a symlink must not send new cards into the replay file.
@@ -532,7 +534,6 @@ function watched(
         () => source.list(scope, cursor, limit, signal),
         (page: ListPage) => page.items.length,
       ),
-    ...changesField(source, (run) => timed("delta", run, (page: ChangePage | null) => page?.items.length ?? 0)),
   };
 }
 
@@ -708,7 +709,8 @@ async function runWorld(
   let edenCalls = 0;
   const noise =
     NOISE_SOURCES > 0 && cond.withPartner ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME_SCALE, seed) : [];
-  applyConnectorMix([...sources, ...noise], CONNECTOR_MIX, seed);
+  // `--notify-share P` (N1): only that share of the connectors notify; the rest are polled and swept.
+  applyNotifyShare([...sources, ...noise], NOTIFY_SHARE, seed);
   const edenSources = [...sources, ...noise].map((s) =>
     watched(s, (id, op, start, end, status, items) => {
       edenCalls++;
@@ -752,10 +754,13 @@ async function runWorld(
   const cappedMaker = (): CardMaker => {
     const maker = cardMaker();
     if (CARDS_CALLS < 0) return maker;
+    // N4 (`cardsLanes`, D521): the cap stands for a moment in a new user's backfill, so a stream whose enricher
+    // has K lanes has made K times the calls by then.
+    const cap = CARDS_CALLS * Math.max(1, effective(config).cardsLanes);
     let calls = 0;
     return {
       make: (items, today, signal, retry, intent) =>
-        calls++ < CARDS_CALLS
+        calls++ < cap
           ? maker.make(items, today, signal, retry, intent)
           : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
     };

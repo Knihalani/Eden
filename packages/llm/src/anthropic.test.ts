@@ -211,4 +211,11 @@ describe("AnthropicModel", () => {
     const long = { inputTokens: 200_000, cachedInputTokens: 0, cacheWriteTokens: 0, outputTokens: 10 };
     expect(anthropicCost(long, p)).toBeCloseTo((200_000 * 0.5 + 10 * 2.5) / 1e6, 12);
   });
+
+  test("prices cache reads at the model's own share of input: 0.1x by default, 0.05x on Sonnet 5.5 and Opus 5.5", () => {
+    const u = { inputTokens: 1000, cachedInputTokens: 1000, cacheWriteTokens: 0, outputTokens: 0 };
+    expect(anthropicCost(u, anthropicPrice("claude-haiku-5-5"))).toBeCloseTo((1000 * 0.1 * 0.1) / 1e6, 12);
+    expect(anthropicCost(u, anthropicPrice("claude-sonnet-5-5"))).toBeCloseTo((1000 * 2 * 0.05) / 1e6, 12);
+    expect(anthropicCost(u, anthropicPrice("claude-opus-5-5"))).toBeCloseTo((1000 * 4 * 0.05) / 1e6, 12);
+  });
 });

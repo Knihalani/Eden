@@ -234,17 +234,6 @@ re-reads it by id first (D126, D211). A copy no re-read confirms is not delivere
 the next tick. At 1,000 sources the sweep falls from ~1,114 to ~282 listing calls a user a day; a five-source user uses
 all their sources and keeps the daily sweep.
 
-Two trials, both off (F1, D475–D479; docs/research/f1-local-copy.md), aim at a local copy that is complete without
-push. `syncCold`: what the cap pushes out of the index is kept compressed in memory per source behind a filter of its
-words (`cold.ts`), each listing is read to its end while `syncColdMaxItems` has room, and a lookup brings back the
-cold copies that hold its words instead of searching the source live; a copy brought back from a source with no
-change feed is re-read before delivery (`syncColdVerify`). `syncDelta`: a source with a change feed (`Source.changes`)
-is polled by one read of what changed since its cursor, deletions included; a complete delta read vouches for every
-copy held, so a change notice costs one delta read instead of D126's re-read of each doubted item, and the daily
-re-listing becomes a delta read. At ~1,000 sources live, with nine connectors in ten offering neither push nor a
-feed, they cut connector calls from 36 to 9 a task with hidden facts not lower, and made tasks about 1.2 s slower
-(the re-reads' wait and the cold tier's CPU), so they are not in the default.
-
 **Change notifications** (D125, `syncPush`; `Source.notifies`, `ContextPartner.sourceChanged` and `sourceItems`,
 `POST /v1/sources/changed` and `/v1/sources/items`, the client's `sourceChanged`/`sourceItems`): a source whose
 integrator forwards the provider's change notifications is not polled on its learned change rate. A notification marks
@@ -466,7 +455,9 @@ rejects are read for their requests only, and with `cardsLean` (D125) only when 
 automated mail (`automated`: a no-reply or list sender, a bulk category or footer) and dated within `cardsLeanDays`
 (7 since D244; 30 before) or upcoming; constraint-worded items are read whatever their sender or age, and first
 (`cardsOrder`, D482, D483: what waits for the card model is read best first, so a new user's early requests meet cards
-for the items most likely to bear on them; equal-score hits keep the order their items came in). They live in a per-user BM25 index apart
+for the items most likely to bear on them; equal-score hits keep the order their items came in; `cardsLanes` 4, D521,
+D522: up to four of a user's card calls run at once while full batches wait, so the backfill is read in a quarter of
+the time for the same calls). They live in a per-user BM25 index apart
 from the item text, keyed by content hash and dropped with the card. At request time, with no model, the request's words
 are searched in it: the best hits join the lookup's candidates and one judge seat, and are fused into an `ask` by
 reciprocal rank after the verdict hits. An intent hit alone is never a no-model delivery. A hit whose item holds a

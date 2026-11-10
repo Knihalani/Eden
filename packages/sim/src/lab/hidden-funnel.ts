@@ -102,11 +102,11 @@ import { sanitizeForStore } from "@eden/redact";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
-import { applyConnectorMix, connectorOptions, parseConnectorMix, pushNotifier } from "./connector-options";
+import { applyNotifyShare, connectorOptions, parseNotifyShare, pushNotifier } from "./connector-options";
 import { noiseSources } from "./noise-sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
-import { ENDPOINT_LABEL, endpointCardMaker, endpointFromArgs } from "./cards-endpoint";
+import { ENDPOINT_LABEL, cardsOnly, endpointCardMaker, endpointFromArgs } from "./cards-endpoint";
 import {
   allMissedHint,
   cacheModels,
@@ -179,6 +179,7 @@ const cli = flags(
         "spans",
         "cards",
         "cards-calls",
+        "cards-rest",
         "cards-endpoint",
         "cards-endpoint-model",
         "intent",
@@ -212,8 +213,8 @@ const cli = flags(
         "run-label",
         "distill",
         "noise-sources",
+        "notify-share",
         "noise-items",
-        "connector-mix",
         "source-profile",
         "push",
         "push-rates",
@@ -258,10 +259,11 @@ const NOISE_SOURCES = Number(opt("noise-sources", "0"));
  * not change). Defaults (REALISTIC, no notices) leave every earlier run as it was.
  */
 const CONNECTORS = connectorOptions(opt);
+/** `--notify-share P` (N1, `applyNotifyShare`): the share of connectors that send change notifications. */
+const NOTIFY_SHARE = parseNotifyShare(opt("notify-share", ""));
 /** `--fetch-gone false`: the sources' fetch null proves nothing, as an MCP connector's (A18; default true). */
 const FETCH_GONE = opt("fetch-gone", "true") !== "false";
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
-const CONNECTOR_MIX = parseConnectorMix(opt("connector-mix", ""));
 /** `--config`: engine settings, checked whole (checkEngineConfig); a typo or a child whose parent is off exits 2. */
 const CONFIG = ((): Record<string, unknown> => {
   try {
@@ -368,6 +370,14 @@ if (CARDS_ENDPOINT) console.log(`cards: ${ENDPOINT_LABEL}, misses made live and 
  */
 /** `--cards-calls N` (F2): each world's enrichment gets N card calls; the items past them stay uncovered. */
 const CARDS_CALLS = Number(opt("cards-calls", "-1"));
+/**
+ * `--cards-rest cards` (N4, with `--cards-calls N`): the calls past N are answered with their cards and no requests,
+ * standing in for a cheap card-only model (M2's distilled one, whose cards match the teacher's and whose requests do
+ * not) reading the rest of a new user's backfill while the card model proper has made N calls.
+ */
+const CARDS_REST = opt("cards-rest", "none");
+if (CARDS_REST !== "none" && CARDS_REST !== "cards") throw new Error("--cards-rest is none or cards");
+if (CARDS_REST === "cards" && CARDS_CALLS < 0) throw new Error("--cards-rest cards needs --cards-calls N");
 const CARD_LOG = opt("card-log", "");
 if (CARD_LOG && cardMaker) {
   writeFileSync(CARD_LOG, "");
@@ -714,8 +724,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   const notify = pushNotifier(own, CONNECTORS, seed, world.now);
   if (!FETCH_GONE) for (const s of own) s.fetchReportsGone = false;
   const sources = [...own, ...(NOISE_SOURCES > 0 ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed) : [])];
-  // `--connector-mix P,D` (F1): which connectors push and have a change feed, which only a feed, which neither.
-  applyConnectorMix(sources, CONNECTOR_MIX, seed);
+  // `--notify-share P` (N1): only that share of the connectors notify; the rest are polled and swept.
+  applyNotifyShare(sources, NOTIFY_SHARE, seed);
   const returned = new Set<string>();
   // `--call-split`: the sources searched in the current task's window, and every (source, query text) of this user.
   const searchedNow = new Map<string, number>();
@@ -807,7 +817,9 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
           make: (items, today, signal, retry, intent) =>
             cardCalls++ < CARDS_CALLS
               ? laneMaker.make(items, today, signal, retry, intent)
-              : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
+              : CARDS_REST === "cards"
+                ? laneMaker.make(items, today, signal, retry, intent).then((b) => cardsOnly(b, items.length))
+                : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
         }
       : laneMaker;
   const cards = cappedMaker

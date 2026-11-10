@@ -1,0 +1,4 @@
+arm         n  req/t  plain tok/t plain $/1k  write tok/t write $/1k   read tok/t  read $/1k    out tok/t   out $/1k  total $/1k
+tools      32   1.94            6      0.012          866      2.164        14928      1.493          519      5.191       8.860
+eden       32   1.97            4      0.009         1251      3.129        22306      2.231          525      5.254      10.622
+e - t          +0.03           -2     -0.003         +386     +0.965        +7378     +0.738           +6     +0.063      +1.762

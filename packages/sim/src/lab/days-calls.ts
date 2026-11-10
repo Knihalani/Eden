@@ -22,14 +22,7 @@ import type { AgentEvent } from "@eden/protocol";
 import { CardEnricher, ContextPartner, ItemCache, type EngineConfig } from "@eden/engine";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
-import {
-  applyConnectorMix,
-  changesField,
-  parseConnectorMix,
-  recapNotice,
-  sourceFields,
-  type PushMode,
-} from "./connector-options";
+import { applyNotifyShare, parseNotifyShare, recapNotice, sourceFields, type PushMode } from "./connector-options";
 import { DiskCardMaker, INTENT_PATH } from "./cards-disk";
 import { noiseSources } from "./noise-sources";
 import { isRecap, recapOf, shiftClocks, shiftMeta, UPDATED_MARK, type ClockMove } from "./pi-day";
@@ -51,8 +44,8 @@ export interface DaysCallsOptions {
   config?: Partial<EngineConfig>;
   gapMs?: number;
   nightMs?: number;
-  /** `--connector-mix P,D` (F1): the shares of connectors with push and a change feed, and with a feed only. */
-  connectorMix?: { push: number; delta: number } | null;
+  /** `--notify-share P` (N1): only this share of the connectors notify (`applyNotifyShare`). */
+  notifyShare?: number | null;
   /** `--noise-sources N` (N1): N unrelated connectors beside the world's five (`noise-sources.ts`), 20 items each. */
   noiseSources?: number;
 }
@@ -101,7 +94,6 @@ function counted(source: SimSource, phase: () => Phase, into: Counts, fetched: M
       bump(into, k("list"));
       return source.list(scope, cursor, limit, signal);
     },
-    ...changesField(source, (run) => (bump(into, k("delta")), run())),
   };
 }
 
@@ -122,7 +114,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   const own = simSources(world, REALISTIC, 0, seed);
   if (o.push !== "none") for (const s of own) s.notifies = true;
   const sources = [...own, ...(o.noiseSources ? noiseSources(world, o.noiseSources, 20, 0, seed) : [])];
-  applyConnectorMix(sources, o.connectorMix ?? null, seed);
+  applyNotifyShare(sources, o.notifyShare ?? null, seed);
   const counts: Counts = {};
   const fetched = new Map<string, number>();
   let phase: Phase = "backfill";
@@ -309,7 +301,7 @@ if (import.meta.main) {
     recapSignal: recap === "signal",
     cards: cardsFile ? new DiskCardMaker(cardsFile, undefined, { requests: [INTENT_PATH] }) : null,
     config: JSON.parse(opt("set", "{}")) as Partial<EngineConfig>,
-    connectorMix: parseConnectorMix(opt("connector-mix", "")),
+    notifyShare: parseNotifyShare(opt("notify-share", "")),
     noiseSources: Number(opt("noise-sources", "0")),
     gapMs: Number(opt("gap-min", "10")) * 60_000,
     nightMs: Number(opt("night-h", "2")) * 3_600_000,

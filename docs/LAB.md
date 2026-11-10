@@ -365,6 +365,16 @@ A second, independent draw of train seeds 41–42's requests with the shipped pr
 A new user's first requests (F2, D482): `bun run funnel --jobs 4 -- --cards-calls N` gives each world's card model N
 calls and leaves the rest uncovered (a train world needs about 16); `--set '{"cardsOrder":false}'` is the old read
 order. pi-ab takes the same flag; without `--cards` every card is made in-run.
+`-- --cards-calls N --cards-rest cards` (N4, funnel only) answers the calls past N with their cards and no requests:
+a card-only model reading the rest of the backfill, with the replayed teacher's cards standing in for it (an upper
+bound; it adds +1 hidden task of 384 at every cap, docs/research/n4-agents.md).
+
+**A stronger agent (N4, D520).** `packages/sim/lab/n4/run.sh AGENT LABEL CONDITIONS …` runs pi-ab on train with
+`--model AGENT` and Haiku 5.5 as Eden's card model, reader and grader. Sonnet 5.5 runs with thinking
+`between_tools`; Opus 5.5 accepts neither "disabled" nor `between_tools` and runs `adaptive` at effort `low`
+(`anthropicThinkingOff`, free.ts): label an Opus agent's row so. Cache reads are priced at 0.05x input on both
+(`ANTHROPIC_PRICES`, `cacheRead`), 0.1x on Haiku. A task run costs about $0.009 (Sonnet) and $0.015 (Opus) against
+Haiku's $0.0003. `packages/sim/lab/n4/tokens.py MODEL STEM…` splits each arm's agent bill by token class.
 
 ### 1c. Lab-only measurements of first-turn delivery, overlapping requests and sync items
 
@@ -452,12 +462,6 @@ Live (A21, D357): `pi-ab --noise-sources 995` gives Eden's arms the same noise c
 world's five as its agent's tools); one seed per process (two at once ran out of memory). Deletions under lost notices
 with every source on the weekly sweep (D356's worst case): `quality-cli --never-used` (no source is ever "used").
 Recipes and figures: docs/research/a21-scale.md.
-
-Connector kinds (F1, D478): `--connector-mix P,D` on the funnel, pi-ab, quality-cli and days-calls (`--mix=P,D` on
-`source-days.bench.ts`) makes a share P of the connectors push and have a change feed, a share D have a feed only,
-the rest neither (`0.3,0.3` in F1, an assumption); the trials that use them are `syncCold` and `syncDelta`
-(`--set '{"syncCold":true,"syncDelta":true}'`). `pi-cost-report.ts --trigger-avoids N --events-per-task E` prices
-event triggers. Recipes and figures: docs/research/f1-local-copy.md.
 
 Read hidden/decoys, `calls/task`, and the `merged cards use` line's `calls` and `sent` (card calls are stub-counted:
 noise items are not in the replay; price them at $0.000181 a call, A1). Compare task by task against the same seed

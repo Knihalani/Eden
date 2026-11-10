@@ -1,0 +1,19 @@
+arm                kind        n   own  later  turns   (later: Sonnet-confirmed)
+eden               hidden    380     0    153   3.62
+eden               control   391     0      0   3.63
+eden~minus-plans   hidden    420     0     62   3.62
+eden~minus-plans   control   478     0      1   3.60
+tools              hidden    891     2      8   3.51
+tools              control   900     0      0   3.52
+
+eden               plan packets taken 1107  agent $/1k tasks 0.2537 (n 1378)
+eden~minus-plans   plan packets taken    0  agent $/1k tasks 0.2323 (n 1455)
+tools              plan packets taken    0  agent $/1k tasks 0.2093 (n 2058)
+left out (request or a later reply cut by the shard's spend cap): eden 1757, eden~minus-plans 1671, tools 1106
+
+eden − eden~minus-plans hidden   late correction  n  279  +26.9 points (+14.6..+39.1 over 74 templates; task-level +20.1..+33.7)
+eden − eden~minus-plans control  false alarm      n  301  -0.3 points (-1.1..+0.0 over 88 templates; task-level -1.0..+0.0)
+eden − eden~minus-plans agent $/1k tasks n 1151  +0.0204 (+0.0113..+0.0289); +8.8% of eden~minus-plans
+eden − tools hidden   late correction  n  319  +40.8 points (+30.9..+50.9 over 89 templates; task-level +35.4..+46.1)
+eden − tools control  false alarm      n  331  +0.0 points (+0.0..+0.0 over 82 templates; task-level +0.0..+0.0)
+eden − tools agent $/1k tasks n 1127  +0.0371 (+0.0148..+0.0597); +17.7% of tools

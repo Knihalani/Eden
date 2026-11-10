@@ -1,0 +1,11 @@
+N3 Anthropic spend (ledgers: each Modal run's manifest.json `spentUsd`; local .local/n3/ledger.jsonl), cap $10
+n3-late          8 shards  2.1050   (each shard stopped by its $0.30 cap: PARTIAL, see n3-long.md section 2)
+n3-days          4 shards  0.7618
+n3-long          2 shards  0.3423
+n3-settle-days   2 shards  0.1466
+n3-settle        4 shards  0.2167
+local: two harness smokes (0.0264), Sonnet regrades of late alarms and of control/neutral concerns   0.1519
+total                      3.7243
+Modal: 20 measured shards, about 3,900 container-seconds at 4 CPUs and 16-24 GiB, plus 12 shards that exited in
+under a second (a quoting error in --variant-config) and one image build: about $0.5 by the README's list prices
+(an estimate; the billing report was not read), cap $15.

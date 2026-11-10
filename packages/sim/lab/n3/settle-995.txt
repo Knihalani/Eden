@@ -1,0 +1,15 @@
+eden           tasks  216  asks  158  settle waits    0 in    0 tasks,     0.0 ms each,    0.0 ms a task | packets taken after the first request  12 in  12 tasks, ask-behind   0 | Eden on the path    92.7 ms a task
+eden~settle    tasks  216  asks  150  settle waits  110 in  109 tasks,  1211.0 ms each,  616.7 ms a task | packets taken after the first request  24 in  20 tasks, ask-behind  14 | Eden on the path   694.6 ms a task
+eden         on the 1:1:8 mix: Eden on the path    94.3 ms a task, of it the settle wait    0.0 ms; wall 2.53 s
+eden~settle  on the 1:1:8 mix: Eden on the path   839.8 ms a task, of it the settle wait  762.7 ms; wall 3.26 s
+paired settle − eden, mix, Eden on the path, ms: +746 (+621..+869)
+paired settle − eden, mix, wall, ms: +722 (+499..+938)
+('eden~settle', 'control', 'follow-up packets') 2
+('eden~settle', 'control', 'planted cited by packets') 0
+('eden~settle', 'control', 'raised') 0
+('eden~settle', 'hidden', 'follow-up packets') 4
+('eden~settle', 'hidden', 'planted cited by packets') 0
+('eden~settle', 'hidden', 'raised') 0
+('eden~settle', 'neutral', 'follow-up packets') 6
+('eden~settle', 'neutral', 'planted cited by packets') 0
+('eden~settle', 'neutral', 'raised') 0
