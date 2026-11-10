@@ -294,6 +294,15 @@ describe("sourceYieldEarn (D600, a trial)", () => {
     expect(sum(after.searched.slice(1))).toBe(0);
   });
 
+  test("the rare word alone, no name in the request: read with sourceYieldRare, not with it at 0", async () => {
+    // No capitalised name, so the source map gives nothing: only source 0's sketch holds "renewal" and "payment".
+    const RARE = "please check the renewal payment status";
+    const on = await partnerOf(EARN);
+    expect((await on.request(u1, RARE)).searched).toEqual([1, 0, 0, 0]);
+    const off = await partnerOf({ ...EARN, sourceYieldRare: 0 });
+    expect(sum((await off.request(u1, RARE)).searched)).toBe(0);
+  });
+
   test("a word most sources hold is weak evidence: nothing is read for it", async () => {
     const p = await partnerOf(EARN);
     // "filler" and "words" are in every source's items.

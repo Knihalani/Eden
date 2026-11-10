@@ -207,6 +207,10 @@ Changed:
   distinct terms where a two-probe one holds about 11,400 (arithmetic from the constants), so a large source's
   older words are forgotten sooner. Four probes at the same bytes measured 0.16 false holders a word, which at
   eight words a request is more than one false source read a request (7.2 calls a task on seed 41 against 5.3).
+  **Turning the trial on or off where users are persisted (D425) drops every saved sketch** (a sketch loads only
+  with its own number of probes): a source the user does not use is listed again only by its weekly sweep (D356),
+  so for up to a week a rare word cannot name it. Promotion therefore bumps `PERSIST_FORMAT`, so the change is one
+  planned re-read and not a silent one.
 - **The lab's noise connectors can have words of their own** (`--noise-vocab N`: funnel, pi-ab, days-calls;
   `noiseSources`). At `--noise-vocab 1000`, the three switches against the default, on the code as committed:
 

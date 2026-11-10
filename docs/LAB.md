@@ -471,6 +471,14 @@ estimate is that ~90% of connectors send none: `--notify-share 0.05`). `days-cal
 `--days` user with the noise connectors and prints the planted items that reached the agent and the request-time
 calls by day, so a rule that learns over days can be screened at $0 (about 15 s a user).
 
+**Give the noise connectors words of their own: `--noise-vocab 1000`** (O1, docs/research/o1-earn.md §2b; funnel,
+pi-ab, days-calls). Without it the 995 share 45 sketchable words, so their vocabulary sketches set the same bits and
+any rule that reads sketches across sources (`sketchRare`, `sourceYieldEarn`) looks better than it is: a review
+found about 27 false holders a word that the shared words hid. `packages/sim/src/lab/o1-sketch-bytes.ts` prints
+sketch bytes and false holders a word; live: `lab_fanout.py --preset bench-earn2` through
+`EXTRA='--noise-vocab 1000' packages/sim/lab/o1/run.sh earn2 …` (two shards at once), reports by
+`packages/sim/lab/o1/report.sh`.
+
 Read hidden/decoys, `calls/task`, and the `merged cards use` line's `calls` and `sent` (card calls are stub-counted:
 noise items are not in the replay; price them at $0.000181 a call, A1). Compare task by task against the same seed
 without the arm (the JSON's `perTask`). The "hidden returned" count falls when sources answer from the index instead
