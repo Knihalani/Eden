@@ -1,0 +1,31 @@
+# N1 long horizon at $0: days-calls.ts, seeds 41-44, 8 days, 462 requests, one ask a request, 995 noise sources, 5% of connectors notifying, cards replayed
+# bun packages/sim/src/lab/days-calls.ts --seeds 41,42,43,44 --days 8 --ask --push payload --noise-sources 995 --notify-share 0.05 --cards CARDS --set SET
+# merged tree (c3271fe7), sourceYield as fixed after review
+== default
+request-time 57.244 a request; background (tick + notice) 20.28 a user-day, 1.352 a request; steady 58.596 a request; backfill 1003.5 a user
+surfaced (a packet or the ask's citations): hidden facts 37/46, control decoys 35/46
+request-time calls a request, by day: 34.0 54.9 57.4 58.6 60.4 59.7 61.1 62.3
+(noise)/list 14.406  (noise)/search 36.271  calendar/list 0.071  calendar/search 0.192  crm/list 0.054  crm/search 0.925  drive/list 0.042  drive/search 1.177  gmail/list 0.633  gmail/search 2.894  slack/list 0.208  slack/search 0.371  
+== sourceYield
+request-time 13.146 a request; background (tick + notice) 17.28 a user-day, 1.152 a request; steady 14.298 a request; backfill 1003.5 a user
+surfaced (a packet or the ask's citations): hidden facts 37/46, control decoys 35/46
+request-time calls a request, by day: 28.3 18.0 17.8 6.6 10.7 5.6 9.3 8.5
+(noise)/fetch 0.010  (noise)/list 1.467  (noise)/search 6.379  calendar/list 0.071  calendar/search 0.033  crm/list 0.056  crm/search 0.683  drive/list 0.040  drive/search 0.915  gmail/list 0.631  gmail/search 2.544  slack/list 0.210  slack/search 0.106  
+== pushLazy=1
+request-time 32.615 a request; background (tick + notice) 17.84 a user-day, 1.190 a request; steady 33.804 a request; backfill 1003.5 a user
+surfaced (a packet or the ask's citations): hidden facts 38/46, control decoys 36/46
+request-time calls a request, by day: 17.8 32.5 32.8 34.0 35.1 33.0 34.0 34.9
+(noise)/fetch 0.006  (noise)/list 14.356  (noise)/search 13.133  calendar/list 0.071  calendar/search 0.027  crm/list 0.054  crm/search 0.746  drive/list 0.046  drive/search 0.929  gmail/list 0.629  gmail/search 2.319  slack/list 0.208  slack/search 0.090  
+# before the merge (--connector-mix 0.05,0.05: the same sources notifying)
+== pushLazy=2
+request-time 23.158 a request; background (tick + notice) 16.66 a user-day, 1.110 a request; steady 24.269 a request; backfill 1003.5 a user
+surfaced (a packet or the ask's citations): hidden facts 37/46, control decoys 36/46
+request-time calls a request, by day: 17.6 23.2 23.6 24.1 24.4 22.8 24.2 24.7
+== searchFreshMs=30min(commit-e7c92d82)
+request-time 57.217 a request; background (tick + notice) 20.28 a user-day, 1.352 a request; steady 58.569 a request; backfill 1003.5 a user
+surfaced (a packet or the ask's citations): hidden facts 37/46, control decoys 35/46
+request-time calls a request, by day: 34.0 54.9 57.4 58.5 60.3 59.6 61.0 62.4
+== sourceYield-as-first-built(4dfc651c)
+request-time 9.733 a request; background (tick + notice) 16.44 a user-day, 1.096 a request; steady 10.829 a request; backfill 1003.5 a user
+surfaced (a packet or the ask's citations): hidden facts 37/46, control decoys 35/46
+request-time calls a request, by day: 24.7 9.2 11.6 5.1 7.9 5.5 7.0 6.7

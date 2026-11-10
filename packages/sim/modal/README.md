@@ -62,7 +62,9 @@ container:
 `--budget`, and a headroom of 10% of its cap (at most $0.25). The planner owns those flags (and `--seeds`,
 `--suite`, `--out`, `--timeline`, `--cards-out`, `--run-label`): passing one in `--args` is refused. After the run the
 shards' ledgers are summed and checked against the cap (`manifest.json`: `spentUsd`, `withinCap`, `overCap`).
-Held-out suites need `--blind` in `--args`, as `bun run funnel` asks.
+Held-out suites need `--blind` in `--args`, as `bun run funnel` asks. A shard stops when its committed spend (booked
+calls plus the reservations of calls in flight) reaches its cap less the headroom: size a shard's cap as (expected
+spend + about $0.002 a stream) / 0.9, or its last tasks are refused (N1b, D543).
 
 ```bash
 # Plan only, no token, nothing started:
@@ -95,6 +97,7 @@ or replace the preset's (`--variants hidden`, `--days 8`, `--conditions …`). `
 | `bench-tools` | `tools`, `eden` |
 | `bench-fewer` | `tools`, `eden`, `eden~minus-fewer` (D404) |
 | `bench-parts` | `eden` and `eden~minus-<part>` for nudge, plans, fewer, freshness (M1's arms; `PART_VARIANTS` are checked against `PARTS` by `modal-python.test.ts`) |
+| `bench-yield` | `eden`, `eden~off-yield` (`sourceYield` off) at `--noise-sources 995 --notify-share 0.05` (N1b, D543) |
 
 Anthropic shards run in **waves**: the planner counts a shard's agent streams (arms × worlds: six train suites ×
 variants, or one for a `--days` user) and starts only as many shards at once as keep the streams on the key at or
@@ -253,10 +256,16 @@ free of L4, A10G, T4. `packages/sim/lab/i1/evaluate.py` quantizes to int8 and me
 against Opus held out, but Opus itself could not separate facts from decoys (0.548) and the engine trial failed
 (D472). About $0.40 of Modal for eleven runs (bge-reranker-base $0.22 of it); no secret is used.
 
+**I2 (2026-11-10, D490–D494, docs/research/i2-changes-action.md)** reused it on `i2-label.ts`'s labels ("does this
+item change what the assistant should do?"; Opus separates facts from decoys at 0.917 held out): seven runs
+(TinyBERT-L2 to bge-reranker-v2-m3, `--decoy-weight 8 --epochs 5` on two) reached 0.83–0.92 against Opus but
+0.45–0.55 planted against decoy on new templates; $0.77 of Modal. `sidecar.py serve --oracle LABELS --pairs PAIRS`
+serves a teacher's labels as the checker (the upper-bound arm).
+
 ## Tests
 
 ```bash
-cd packages/sim/modal && python3 -I -m unittest     # 61 tests, no Modal, no token
+cd packages/sim/modal && python3 -I -m unittest     # 62 tests, no Modal, no token
 bun test ./packages/sim/src/lab/cards-distill.test.ts ./packages/sim/src/lab/cards-endpoint.test.ts \
   ./packages/sim/src/lab/modal-python.test.ts       # export, scorer, endpoint transport against a stub server
 ```

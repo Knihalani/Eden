@@ -1,0 +1,11 @@
+n3-days
+  eden               requests 5+:  352 tasks, asks  12 (0.034 a task), nudged  95, re-invited   0 | requests 1-4: 128 tasks, asks  35, nudged  26
+  eden+askReinvite   requests 5+:  352 tasks, asks  16 (0.045 a task), nudged   0, re-invited 227 | requests 1-4: 128 tasks, asks  29, nudged  25
+  eden+compact       requests 5+:  352 tasks, asks   3 (0.009 a task), nudged  95, re-invited   0 | requests 1-4: 128 tasks, asks  30, nudged  26
+  eden+compactUsed   requests 5+:  352 tasks, asks   7 (0.020 a task), nudged  94, re-invited   0 | requests 1-4: 128 tasks, asks  26, nudged  26
+  tools              requests 5+:  352 tasks, asks   0 (0.000 a task), nudged   0, re-invited   0 | requests 1-4: 128 tasks, asks   0, nudged   0
+n3-long
+  eden               requests 5+:  216 tasks, asks   0 (0.000 a task), nudged  52, re-invited   0 | requests 1-4:  24 tasks, asks   6, nudged  10
+  eden+askReinvite   requests 5+:  216 tasks, asks   0 (0.000 a task), nudged   0, re-invited 119 | requests 1-4:  24 tasks, asks   4, nudged  10
+  eden+compact       requests 5+:  216 tasks, asks   1 (0.005 a task), nudged  53, re-invited   0 | requests 1-4:  24 tasks, asks   5, nudged  10
+  eden+compactUsed   requests 5+:  216 tasks, asks   2 (0.009 a task), nudged  53, re-invited   0 | requests 1-4:  24 tasks, asks   5, nudged  10

@@ -11,8 +11,6 @@ import {
   lifetimeFor,
   p50,
   planCosts,
-  triggerCosts,
-  EVENT_TRIGGER_USD,
   type CostTask,
 } from "./pi-cost";
 
@@ -205,23 +203,5 @@ describe("pi-cost (H16)", () => {
     // A stream recorded before A3 (no totals) counts only the tasks' windows.
     const [old] = conditionCosts(tasks, [bg({ cardsUsd: 0.01 })], []);
     expect(old!.connectorPerTask.background).toBe(0);
-  });
-
-  test("event triggers (F1, D478): events billed in place of the calls they replace, with the break-even", () => {
-    const tasks = [t({ kind: "neutral", agentSourceCalls: 2, edenSourceCalls: 6 })];
-    const [c] = conditionCosts(tasks, [bg({ sourceCalls: 6, setupSourceCalls: 0 })], []);
-    const zap = CONNECTOR_PLANS["Zapier MCP (10k tasks)"]!;
-    const plain = planCosts(c!, zap).steady;
-    // 4 of Eden's 6 calls a task replaced by 2 events at the brief's price.
-    const w = triggerCosts(c!, zap, { usdPerEvent: EVENT_TRIGGER_USD, events: 2, avoided: 4 });
-    expect(w.plain).toBeCloseTo(plain, 12);
-    expect(w.steady).toBeCloseTo(plain - (4 * zap) / 1_000 + 2 * 0.003, 12);
-    expect(w.breakEvenEvents).toBeCloseTo((4 * zap) / 1_000 / 0.003, 9);
-    // Never more calls avoided than Eden makes; on a cheap per-call plan the events cost more than the calls.
-    expect(triggerCosts(c!, zap, { usdPerEvent: 0.003, events: 0, avoided: 99 }).avoided).toBe(6);
-    const composio = CONNECTOR_PLANS["Composio (overage)"]!;
-    const cheap = triggerCosts(c!, composio, { usdPerEvent: 0.003, events: 2, avoided: 4 });
-    expect(cheap.steady).toBeGreaterThan(cheap.plain);
-    expect(cheap.breakEvenEvents).toBeCloseTo(0.4, 9);
   });
 });

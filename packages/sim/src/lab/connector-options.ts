@@ -75,61 +75,6 @@ export function sourceFields(
   };
 }
 
-export type ConnectorKind = "push" | "delta" | "plain";
-
-/** `--connector-mix P,D`: the share of connectors that push (and have a change feed), and that only have a feed. */
-export function parseConnectorMix(arg: string): { push: number; delta: number } | null {
-  if (!arg) return null;
-  const [push, delta] = arg.split(",").map(Number);
-  if (!(push! >= 0) || !(delta! >= 0) || push! + delta! > 1) {
-    throw new Error("--connector-mix takes two shares, push,delta, each at least 0 and at most 1 together (0.3,0.3)");
-  }
-  return { push: push!, delta: delta! };
-}
-
-/**
- * `--connector-mix` (F1, D478): gives each connector one of three kinds, by a hash of its id and the seed, so a run
- * holds the kinds a user's connectors really come in rather than all of one:
- * - "push": it sends change notifications and has a change feed (Gmail watch + history, Graph notifications + delta,
- *   Calendar channels + sync token, Salesforce CDC): `notifies` and `changes`;
- * - "delta": a change feed only (a delta cursor with no webhook): `changes`, not `notifies`;
- * - "plain": neither: a listing and a search, polled and swept.
- * The shares are an assumption (the brief's 30% / 30% / 40%), not a census of connectors. Overrides the `--push`
- * rule that every source notifies; what a notice carries is still `--push`'s. Returns each source's kind.
- */
-export function applyConnectorMix(
-  sources: SimSource[],
-  mix: { push: number; delta: number } | null,
-  seed: number,
-): Map<string, ConnectorKind> {
-  const kinds = new Map<string, ConnectorKind>();
-  if (!mix) return kinds;
-  for (const s of sources) {
-    let h = (0x811c9dc5 ^ seed) >>> 0;
-    for (let i = 0; i < s.id.length; i++) h = Math.imul(h ^ s.id.charCodeAt(i), 0x01000193) >>> 0;
-    // The low bits of FNV over short ids are poor: mix before reading a share.
-    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0;
-    h = (h ^ (h >>> 13)) >>> 0;
-    const u = h / 0x1_0000_0000;
-    const kind: ConnectorKind = u < mix.push ? "push" : u < mix.push + mix.delta ? "delta" : "plain";
-    kinds.set(s.id, kind);
-    s.notifies = kind === "push";
-    if (kind !== "plain") s.enableDelta();
-  }
-  return kinds;
-}
-
-/** A wrapper's `changes`, when the source has a change feed (a wrapper that drops it turns the feed off). */
-export function changesField(
-  source: Source,
-  around: (run: () => ReturnType<NonNullable<Source["changes"]>>) => ReturnType<NonNullable<Source["changes"]>> = (
-    run,
-  ) => run(),
-): Pick<Source, "changes"> {
-  const changes = source.changes?.bind(source);
-  return changes ? { changes: (scope, cursor, signal) => around(() => changes(scope, cursor, signal)) } : {};
-}
-
 /** What a results file records of these options (nothing when both are at their defaults). */
 export function connectorHeader(o: ConnectorOptions): Record<string, unknown> {
   return {
@@ -215,4 +160,31 @@ export async function recapNotice(
     } else partner.sourceChanged(scope, src.id);
   }
   return sent;
+}
+
+/** `--notify-share P`: a share in [0, 1], or null when the flag is absent. */
+export function parseNotifyShare(text: string): number | null {
+  if (!text) return null;
+  const share = Number(text);
+  if (!(share >= 0 && share <= 1)) throw new Error("--notify-share takes a share between 0 and 1");
+  return share;
+}
+
+/**
+ * `--notify-share P` (N1): only a share P of the connectors send change notifications (`notifies`), chosen by a hash
+ * of the connector's id and the seed; the rest are polled and swept. Most connectors a user adds offer a search and a
+ * listing and no webhook: the owner's estimate is that about 90% send nothing (an assumption, not a census). Run after
+ * `--push` has marked every source as notifying; what a notice carries is still `--push`'s. Null: nothing changes.
+ * The hash is the one F1's `--connector-mix` used, so `--notify-share 0.05` marks the sources its 5/5/90 marked.
+ */
+export function applyNotifyShare(sources: SimSource[], share: number | null, seed: number): void {
+  if (share === null) return;
+  for (const s of sources) {
+    let h = (0x811c9dc5 ^ seed) >>> 0;
+    for (let i = 0; i < s.id.length; i++) h = Math.imul(h ^ s.id.charCodeAt(i), 0x01000193) >>> 0;
+    // The low bits of FNV over short ids are poor: mix before reading a share.
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0;
+    h = (h ^ (h >>> 13)) >>> 0;
+    s.notifies = h / 0x1_0000_0000 < share;
+  }
 }

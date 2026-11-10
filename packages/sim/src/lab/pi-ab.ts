@@ -96,21 +96,21 @@ import {
   ModelCardMaker,
   AskReader,
   ModelReaderMaker,
+  PushChecker,
   type CardMaker,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
-import { QueryPlanner, type ChangePage, type ListPage, type Source } from "@eden/sources";
+import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import { noiseSources } from "./noise-sources";
 import type { World } from "../world";
 import {
-  applyConnectorMix,
-  changesField,
+  applyNotifyShare,
   connectorHeader,
   connectorOptions,
-  parseConnectorMix,
+  parseNotifyShare,
   pushNotifier,
   recapNotice,
   sourceFields,
@@ -173,6 +173,7 @@ import {
 } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { sanitizeForStore } from "@eden/redact";
+import { loadWidenTable, widenFor } from "./n2-widen";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
 
@@ -239,8 +240,6 @@ const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
 const TIME_SCALE = Number(opt("time-scale", "1"));
 // `--source-profile`, `--push`, `--push-rates` (connector-options.ts).
 const CONNECTORS = connectorOptions(opt);
-// `--connector-mix P,D` (F1): the share of connectors with push and a change feed, and with a feed only.
-const CONNECTOR_MIX = parseConnectorMix(opt("connector-mix", ""));
 const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 // The first N tasks of each world only: a plumbing check before a real run.
@@ -253,6 +252,8 @@ if (!Number.isInteger(DAY) || DAY < 0) throw new Error(`--day must be a whole nu
 // `--noise-items` items each, default 20), as the funnel's flag (A1): a user with ~1,000 connected sources. The tools
 // arm keeps the world's sources (its agent's tools); every connector call Eden makes, noise ones too, is counted.
 const NOISE_SOURCES = Number(opt("noise-sources", "0"));
+// `--notify-share P` (N1, `applyNotifyShare`): the share of connectors that send change notifications.
+const NOTIFY_SHARE = parseNotifyShare(opt("notify-share", ""));
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
 if (!Number.isInteger(NOISE_SOURCES) || NOISE_SOURCES < 0 || !Number.isInteger(NOISE_ITEMS) || NOISE_ITEMS < 1)
   throw new Error("--noise-sources and --noise-items take whole numbers (--noise-items at least 1)");
@@ -294,6 +295,17 @@ if (!DAYS_ON && CONDITIONS.some((c) => c.packets !== "kept")) {
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
 const USES_READER = CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).askReader);
+/** `pushCheck` (I3, D500): the push check's model, `--check-model` (default Haiku 5.5, on the spend ledger). */
+const CHECK_MODEL = opt("check-model", "claude-haiku-5-5");
+const USES_CHECK = CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).pushCheck);
+/**
+ * `--widen-table FILE` (N2, D511): the `widen` dependency of an arm with `pushWiden` (`n2-widen.ts`), the embedding's
+ * nearest items per (suite, seed, variant, request) of the funnel's worlds, which one-request-a-session worlds are
+ * (`worldOf`). A `--days` user's world is not in it: there the embedding route finds nothing.
+ */
+const WIDEN_TABLE = opt("widen-table", "") ? loadWidenTable(opt("widen-table", "")) : null;
+/** Every stream's push checker, for the run's CHECK line. */
+const checkers: PushChecker[] = [];
 // Every model a role of this run calls, once: the pacer and spend ledger are set up for them, and the key check below
 // reads the same list, so a role added here cannot go unchecked.
 const RUN_MODELS = [
@@ -301,6 +313,7 @@ const RUN_MODELS = [
   GRADER,
   ...(CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).cards) ? [CARD_MODEL] : []),
   ...(USES_READER ? [READER_MODEL] : []),
+  ...(USES_CHECK ? [CHECK_MODEL] : []),
 ];
 // A pilot bundle is a real person's data (D489): every role on Anthropic's API under the owner's key, never the lab's
 // OpenRouter route (it does not pin D12's no-retention endpoints) and never a logging endpoint. `pilot run` passes
@@ -324,7 +337,10 @@ const TASK_REQUESTS = MAX_STEPS + 1;
 let capStopped = 0;
 // Cards replayed from disk: the replay file is only read, new cards go to their own file (cards-disk.ts).
 const CARDS_FILE = opt("cards", opt("cards-disk", ""));
-/** `--cards-calls N` (F2): each stream's enrichment gets N card calls; items past them stay uncovered. */
+/**
+ * `--cards-calls N` (F2): each stream's enrichment gets N card calls; items past them stay uncovered. With
+ * `cardsLanes` K (N4) a stream gets N × K: the calls K lanes have made when one lane has made N.
+ */
 const CARDS_CALLS = Number(opt("cards-calls", "-1"));
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
 // Compared as files, not strings: `./a.cards.jsonl` or a symlink must not send new cards into the replay file.
@@ -404,6 +420,17 @@ const readerReplay =
           : labModel(ACCESS, { apiKey: KEY ?? "", model: READER_MODEL, timeoutMs: 60_000 }, "eden.reader"),
         READER_MODEL,
         { salt: replaySalt("eden.reader"), timing: REPLAY_TIMING },
+      )
+    : null;
+const checkReplay =
+  REPLAY_DIR && USES_CHECK
+    ? new ReplayModel(
+        join(REPLAY_DIR, "check.jsonl"),
+        REPLAY_ONLY
+          ? null
+          : labModel(ACCESS, { apiKey: KEY ?? "", model: CHECK_MODEL, timeoutMs: 60_000 }, "eden.check"),
+        CHECK_MODEL,
+        { salt: replaySalt("eden.check"), timing: REPLAY_TIMING },
       )
     : null;
 const graderReplay = REPLAY_DIR
@@ -532,7 +559,6 @@ function watched(
         () => source.list(scope, cursor, limit, signal),
         (page: ListPage) => page.items.length,
       ),
-    ...changesField(source, (run) => timed("delta", run, (page: ChangePage | null) => page?.items.length ?? 0)),
   };
 }
 
@@ -708,7 +734,8 @@ async function runWorld(
   let edenCalls = 0;
   const noise =
     NOISE_SOURCES > 0 && cond.withPartner ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME_SCALE, seed) : [];
-  applyConnectorMix([...sources, ...noise], CONNECTOR_MIX, seed);
+  // `--notify-share P` (N1): only that share of the connectors notify; the rest are polled and swept.
+  applyNotifyShare([...sources, ...noise], NOTIFY_SHARE, seed);
   const edenSources = [...sources, ...noise].map((s) =>
     watched(s, (id, op, start, end, status, items) => {
       edenCalls++;
@@ -752,10 +779,13 @@ async function runWorld(
   const cappedMaker = (): CardMaker => {
     const maker = cardMaker();
     if (CARDS_CALLS < 0) return maker;
+    // N4 (`cardsLanes`, D521): the cap stands for a moment in a new user's backfill, so a stream whose enricher
+    // has K lanes has made K times the calls by then.
+    const cap = CARDS_CALLS * Math.max(1, effective(config).cardsLanes);
     let calls = 0;
     return {
       make: (items, today, signal, retry, intent) =>
-        calls++ < CARDS_CALLS
+        calls++ < cap
           ? maker.make(items, today, signal, retry, intent)
           : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
     };
@@ -794,6 +824,22 @@ async function runWorld(
         })
       : undefined;
   if (reader) budgeted.reader.push(reader);
+  // `pushCheck` (I3, D500): one budgeted call per push whose pool is constraint-like, charged to the running task.
+  const checker =
+    withPartner && !noKey && effective(config).pushCheck
+      ? new PushChecker({
+          model: meteredModel(
+            ownedModel(
+              checkReplay ??
+                labModel(ACCESS, { apiKey: KEY ?? "", model: CHECK_MODEL, timeoutMs: 60_000 }, "eden.check"),
+              () => readerTask,
+            ),
+            (start, end, data) => current?.span("eden.check", "eden", "path", start, end, data),
+          ),
+          budget: new Budget(),
+        })
+      : undefined;
+  if (checker) checkers.push(checker);
   const partner = withPartner
     ? new ContextPartner({
         sources: async () => edenSources,
@@ -810,13 +856,18 @@ async function runWorld(
         config,
         ...(cards ? { cards } : {}),
         ...(reader ? { reader } : {}),
+        ...(checker ? { checker } : {}),
+        ...(WIDEN_TABLE && baseTasks[0]
+          ? { widen: widenFor(WIDEN_TABLE, baseTasks[0].suite, seed, baseTasks[0].kind) }
+          : {}),
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
           if (!owner) return;
           // The reader's part is charged by `ownedModel` (a late call too), so it is not counted again here.
-          owner.r.edenModelCalls += t.modelCalls - (t.readerCalls ?? 0);
-          owner.r.edenCostUsd += t.costUsd - (t.readerCostUsd ?? 0);
+          // So is the push check's (D500).
+          owner.r.edenModelCalls += t.modelCalls - (t.readerCalls ?? 0) - (t.checkCalls ?? 0);
+          owner.r.edenCostUsd += t.costUsd - (t.readerCostUsd ?? 0) - (t.checkCostUsd ?? 0);
           owner.tl.point(t.decision === "fast" ? "eden.cache-hit" : "eden.decision", {
             decision: t.decision,
             event: t.event,
@@ -1640,6 +1691,16 @@ console.error(
     (INTENT_WANTED ? `; ${INTENT_LINE}` : ""),
 );
 console.error(overBudgetLine(budgeted));
+if (checkers.length) {
+  const sum = (k: keyof PushChecker["stats"]) => checkers.reduce((n, c) => n + c.stats[k], 0);
+  const calls = sum("calls");
+  console.error(
+    `CHECK (I3, ${CHECK_MODEL}): ${calls} calls of ${sum("asked")} asked, ${sum("failures")} failed, ` +
+      `${sum("overBudget")} over budget; $${sum("costUsd").toFixed(4)}; ` +
+      `${calls ? (sum("inputTokens") / calls).toFixed(0) : 0} in (${calls ? (sum("cachedInputTokens") / calls).toFixed(0) : 0} ` +
+      `cached) / ${calls ? (sum("outputTokens") / calls).toFixed(0) : 0} out a call`,
+  );
+}
 const replayMisses = (readerReplay?.missed ?? 0) + (graderReplay?.missed ?? 0);
 if (REPLAY_ONLY && replayMisses > 0) {
   console.error(

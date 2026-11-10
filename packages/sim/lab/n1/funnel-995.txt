@@ -1,0 +1,19 @@
+# N1 $0 funnel at 995 noise sources, 5% of connectors notifying, train1-6, --limit 16 (96 hidden + 96 control tasks a seed)
+# bun run funnel --jobs 2 --suite train1..6 --seeds S --set SET --baseline base-S.json -- --noise-sources 995 --limit 16 --notify-share 0.05
+# surfaced = delivered or cited by the ask. Merged tree (c3271fe7), sourceYield as fixed after review.
+base     seed 41  hidden returned 22/96, delivered 67/96; decoys delivered 57/96; 47.3 calls/task  surfaced hidden 77/96  decoys 69/96  
+Y        seed 41  hidden returned 22/96, delivered 67/96; decoys delivered 57/96; 33.3 calls/task  surfaced hidden 77/96  decoys 69/96  vs base: hidden +0 −0, decoys +0 −0
+lazy1    seed 41  hidden returned 22/96, delivered 65/96; decoys delivered 55/96; 29.3 calls/task  surfaced hidden 77/96  decoys 69/96  vs base: hidden +0 −0, decoys +0 −0
+base     seed 42  hidden returned 24/96, delivered 65/96; decoys delivered 54/96; 48.0 calls/task  surfaced hidden 77/96  decoys 64/96  
+Y        seed 42  hidden returned 24/96, delivered 65/96; decoys delivered 55/96; 31.0 calls/task  surfaced hidden 77/96  decoys 64/96  vs base: hidden +0 −0, decoys +0 −0
+lazy1    seed 42  hidden returned 23/96, delivered 63/96; decoys delivered 54/96; 29.5 calls/task  surfaced hidden 76/96  decoys 63/96  vs base: hidden +0 −1, decoys +0 −1
+# Before the merge (commit e7c92d82 for batch2 and fresh30, whose code is deleted after it; --connector-mix 0.05,0.05, the same sources notifying):
+base     seed 41  hidden returned 22/96, delivered 67/96; decoys delivered 57/96; 47.3 calls/task  surfaced hidden 77/96  decoys 69/96  
+lazy2    seed 41  hidden returned 23/96, delivered 65/96; decoys delivered 55/96; 21.4 calls/task  surfaced hidden 76/96  decoys 69/96  vs base: hidden +0 −1, decoys +0 −0
+batch2   seed 41  hidden returned 23/96, delivered 68/96; decoys delivered 56/96; 49.3 calls/task  surfaced hidden 77/96  decoys 69/96  vs base: hidden +0 −0, decoys +0 −0
+fresh30  seed 41  hidden returned 22/96, delivered 67/96; decoys delivered 57/96; 47.3 calls/task  surfaced hidden 77/96  decoys 69/96  vs base: hidden +0 −0, decoys +0 −0
+base     seed 42  hidden returned 24/96, delivered 65/96; decoys delivered 55/96; 48.0 calls/task  surfaced hidden 77/96  decoys 64/96  
+lazy2    seed 42  hidden returned 21/96, delivered 62/96; decoys delivered 54/96; 21.8 calls/task  surfaced hidden 75/96  decoys 63/96  vs base: hidden +0 −2, decoys +0 −1
+batch2   seed 42  hidden returned 23/96, delivered 64/96; decoys delivered 55/96; 49.8 calls/task  surfaced hidden 77/96  decoys 64/96  vs base: hidden +0 −0, decoys +0 −0
+fresh30  seed 42  hidden returned 24/96, delivered 65/96; decoys delivered 55/96; 48.0 calls/task  surfaced hidden 77/96  decoys 64/96  vs base: hidden +0 −0, decoys +0 −0
+# sourceYield as first built (reads booked when sent, once a lookup; commit 4dfc651c): 27.3 (seed 41) and 25.2 (seed 42) calls/task, hidden +0 -0, decoys +0 -0

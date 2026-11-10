@@ -7,6 +7,7 @@ import {
   ItemCache,
   ModelCardMaker,
   ModelReaderMaker,
+  PushChecker,
   type EngineConfig,
   type FrozenDisk,
   type ShadowSink,
@@ -97,14 +98,18 @@ const FAILURE_CHARS = 400;
  * (`scrub`) and redacted (D10), never the request. One line and no probe: a probe at startup would be a model call
  * (CLAUDE.md, "Model last"). Later failures are counted in `AskReader.stats.failures`.
  */
-export function readerFailureLog(log: (line: string) => void, scrub: (text: string) => string = (t) => t) {
+export function readerFailureLog(
+  log: (line: string) => void,
+  scrub: (text: string) => string = (t) => t,
+  what = "the reader's model call failed; asks and pushes fall back to the no-model path",
+) {
   let logged = false;
   return (error: unknown): void => {
     if (logged) return;
     logged = true;
     const raw = error instanceof Error ? error.message : String(error);
     const text = sanitizeForStore(scrub(raw).slice(0, FAILURE_CHARS)).replace(/\s+/g, " ");
-    log(`eden: the reader's model call failed; asks and pushes fall back to the no-model path (logged once): ${text}`);
+    log(`eden: ${what} (logged once): ${text}`);
   };
 }
 
@@ -135,6 +140,19 @@ export function buildPartner(options: BuildOptions): ContextPartner {
           onFailure: readerFailureLog(options.log ?? console.error, models.scrub),
         })
       : undefined;
+  // `pushCheck` (D500, a trial, off): the push check runs on the reader's model, with a budget of its own.
+  const checker =
+    models.reader && config.pushCheck
+      ? new PushChecker({
+          model: models.reader,
+          budget: budget(),
+          onFailure: readerFailureLog(
+            options.log ?? console.error,
+            models.scrub,
+            "the push check's model call failed; pushes hand the default's candidates",
+          ),
+        })
+      : undefined;
   const cache = new ItemCache();
   // Before the partner is built: it wires the sync's state into what a persisted user carries.
   if (options.persist) cache.persist(options.persist);
@@ -147,6 +165,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     ...(options.now ? { now: options.now } : {}),
     ...(cards ? { cards } : {}),
     ...(reader ? { reader } : {}),
+    ...(checker ? { checker } : {}),
     onTrace: options.onTrace,
     ...(options.onUsage ? { onUsage: options.onUsage } : {}),
     gatePool: options.gatePool,

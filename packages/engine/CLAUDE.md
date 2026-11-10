@@ -23,8 +23,9 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
 | `settle.ts`                                                                | `askNudge`'s no-model test of whether the candidates settle a request's people, things and days (D316, D317)                                                                                                                  |
 | `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
-| `cold.ts`                                                                  | `ColdPack` (`syncCold`, D475, a trial): one source's items the user's cap pushed out of the index, zstd chunks of 64 behind a Bloom filter of their terms, per (user, source) on the sync's state; `coldQuery`/`match` (rare words first), `holds` (a listing showed the copy unchanged)                                                 |
+| `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, on in the default): per (user, source) a run of live reads with nothing used, and per user two pooled rates (reads on no evidence, reads on words alone); the partner's `spentSources` skips live reads by them |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
+| `push-check.ts`                                                            | The push check (`pushCheck`, D500–D504, a trial, off): one budgeted call a push names the pool's items that change the action (`CHECK_SYSTEM`, `parseCheck`, `PushChecker`); `push-check.test.ts`                              |
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
 | `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default): identifiers a call adds and its packets showed; `ItemCache.isCorrespondent` reads the user's header addresses |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
@@ -130,6 +131,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   as cards land must not break ties by insertion order, or the funnel's output varies with machine load
   (`funnel-flags.test.ts`'s sharded-files test caught it). Pruning an item's requests by word overlap with the item
   was measured and deleted (D480, D481): the requests that look least like their item reach the hidden facts.
+- **A user's card calls run in up to four lanes (`cardsLanes`, D521, D522, 4 in the default; `drainLanes`).** A lane
+  starts another only when it has taken a batch and a full batch still waits, so steady-state trickles stay on one
+  lane with the batches they had. One lane (`cardsLanes: 1`, part `cards`) is `drain` itself with no wrapper: keep it
+  so, or the single-lane timing moves. The lanes take from the queue synchronously and share `UserCards.flying` (the
+  sentence keys in flight): a new await between taking a batch and the maker call would let two lanes send the same
+  sentence. Re-run the default funnel after touching it (314 / 274, card calls 382–392 by load).
 - `cardsLean` (D125; window `cardsLeanDays` 7 since D244, 30 before) only narrows what the intent index reads
   (`readForIntent`): constraint-worded items are carded whatever their sender or age. `automated` reads a `From:` line
   in the text or a `meta.from`/`meta.sender` field (connectors differ: `toItems` keeps whatever text the tool
@@ -280,6 +287,13 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **No re-show of a candidate across requests (D340 deleted by D380).** A candidate the agent took for an earlier
   request stays behind the not-twice ledger (D13) at its own request: a fresh paired run did not show the re-show
   better (docs/research/a26-reshow.md). Measure any revival on `pi-ab --days`, never the funnel (one request a session).
+  N2's re-show gated by the push check (`pushCheckReshow`, D512) was measured on `pi-ab --days` and deleted too
+  (hidden −10.9 points against the check alone; code in commit 69ce1942 and, on I3's check, 00e20972).
+- **`pushWiden` (N2, D511, a trial, off; docs/research/n2-recall.md).** With `pushCheck`, `widenPool` adds items past
+  the lexical pool (the `widen` dependency's, raw intent hits, deeper ranks) to what the check reads, within its 20
+  items, only where the check runs. They are handed only when the check names them; the nudge's deeper look,
+  `anchoredPast` and the returned pool stay the lexical pool's, so an unnamed widened item never reaches an ask. Every
+  route fails open to no widening.
 - **Updates name the times they drop (D342, `revisionDiff`).** `buildUpdate`'s title reads `Ledger.seenTimes`; times
   are noted only when a copy is handed out (`watchCopies`, from `copiesOf`'s `times`), never when an update is queued
   (one superseded in the queue was never shown). `timesOf` compares one written form ("HH:MM", "<day> <mon>"), so a
@@ -344,6 +358,24 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   lost 2 of 96 hidden facts: what it stores is routing evidence), and the trim waits for 1.5x the cap (trimming the
   backfill's overshoot back to the cap also lost 2). The sketch (`sketch.ts`) is per (user, source) in `SourceSync`,
   filled from every listed item in `store`, folded at `warmUp`.
+- **Which sources are read live is learned (`sourceYield`, D505, D509, on in the default; `source-yield.ts`,
+  docs/research/n1-calls.md).** `spentSources` gives a lookup the warm copies whose live reads it skips: no search
+  behind, no probe (they join the probes' `local` set) and, for a cut copy, no on-demand poll. A lookup that waits for
+  its poll (not behind) still searches a spent cut copy live with the rest: more reads, never fewer facts. A read is booked in
+  `noteLiveRead` from outcomes, "ok" only, once a source a turn (`Session.liveReads`), for warm copies only: booked
+  when sent, one call counted twice (the push and the ask it starts join it) and an outage read as "nothing used".
+  A new path that makes live reads must book them there, or its sources never earn or lose anything; a new path
+  that hands the agent an injection must go through `handOut`, which ends the sources' runs. A whole copy keeps its
+  poll (dropped, an ask called it failed). An ask's status for a cut copy it did not search is "unsearched"
+  (`UNSEARCHED`; `reachAnswer` names it apart from failures, never an all-clear, D127). The pools count only sources
+  with nothing used yet: counting the user's own mail's reads kept the words pool alive and noise sources read
+  (57 → 40 calls a request instead of 13). A read for a request that names an entity the source mentioned is never
+  skipped: a cap on those lost recall where sources are few. With five sources nothing is booked (no copy is cut),
+  so the usual funnel cannot see this: screen with `-- --noise-sources 995 --limit 16 --notify-share 0.05` and
+  `days-calls.ts --noise-sources 995` (it learns over a user's days). Deleted beside it: a push that searches
+  nothing live (`pushLazy`, D506: stale deliveries 15 → 19, hidden −2.3 points one request a session), a longer
+  reuse window for search pages (D507: a user's searches do not repeat) and one search of a source a lookup (D508:
+  the probes' budget goes elsewhere).
 - **A budget for live searches of cut copies was measured and deleted (D390, D391, docs/research/a28-scale.md).**
   Searching live only the 4 cut copies with the most routing evidence halved Eden's calls at 1,000 sources live, but
   left its path time unchanged (one live search of a cut copy that matters costs a connector's latency) and hidden
@@ -366,6 +398,14 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   (`ASK_LATE_LEAD`), dropped after the next user message. A cut copy no search was sent for is "timeout" at once. Do not reintroduce a wait: at market latency the work never settled within 300 ms (the wait was the
   ask's whole time), and in Pi no follow-up was ever taken (the agent's next model request starts as the tool result
   lands); the ask finds what the push missed from what the push's own searches behind stored.
+- **Three levers for late packets and long days were measured and deleted (N3, D515, D517, D518;
+  docs/research/n3-long.md; code in commit e1f9b213).** A bounded wait for a session's work behind before the take
+  that follows a tool result (`takeSettleMs`) did hand over the ask's follow-up (0 → 14 packets in 216 tasks at 1,000
+  sources) but none held the planted fact and the agent waited +746 ms a task. Shortening earlier requests' packets in
+  the transcript lost the facts later requests take from them (raised from an earlier packet 16 of 32 → 2 of 33): the
+  ledger hands an item once a session, so its packet is the only place it stands. A re-invitation to ask from a
+  session's fifth request on (`askReinvite`) was ignored (16 asks against 12 of 568 requests). Plan alerts were
+  re-measured on eight users and stand (D516: +26.9 points of late facts raised, 60% still not raised).
 - **Idle users are frozen (D325, docs/research/a14-scale-users.md).** `ItemCache` holds a user idle for
   `freezeIdleMs` (30 min) as one zstd blob (`FrozenUser`) and thaws them exactly on next use. Every reader of a
   user's state goes through `peek`/`touch` (which thaw and mark the user seen); only `revision` and `syncedCount`
@@ -402,36 +442,6 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `doubted`/`verifyItems` would hand over items the weekly sweep has not checked; a source that cannot find an item by
   ref (`Source.fetchesById` false: an `McpSource` with no `fetchTool` still has a `fetch` that answers null) must stay
   on the daily sweep (`onLongSweep`); a wrapper around a `Source` must copy `fetchesById` (as `notifies`).
-- **The cold tier (`syncCold`, D475, a trial, off; `cold.ts`, `cold.test.ts`, docs/research/f1-local-copy.md).** The
-  trim moves what the cap pushes out into the source's `ColdPack` (`SourceSync.cold`) instead of dropping it, and the
-  backfill reads each listing to its end while `syncColdMaxItems` has room, so `Sync.complete` is true for a copy
-  that is whole across both tiers and lookups stop searching it live. An id is in the index (`SourceSync.ids`) or
-  cold, never both: `store` drops a cold id whose listed copy changed (`ColdPack.holds` is false) and leaves an
-  unchanged one cold (counted as listed for the sweep); the sweep of a source with cold items reads its whole listing
-  and counts cold ids among the missed. Cold copies come back only through `Sync.thaw` (from `localAnswer`, so the
-  probes get them too) and `rewarm` (a source just marked used, up to the trim's half), always with the read time and
-  read mark they were read under (`ItemCache.putBack`; a `put` would stamp them as read now and D126/D356 would stop
-  doubting them). A copy `thaw` brought back from a source with no change feed and a fetch tool is `doubted` until a
-  listing or re-read sees it (`thawedUnread`, `syncColdVerify`): it stands in for a live search's find, which was the
-  source's copy of that moment. A source that lists by time (a calendar) stays out (the cold match is on words). The
-  cards and the intent index read only indexed items, which is why used sources are re-warmed: without it 5 planted
-  items stayed cold in the 995-source funnel. Cold packs are this process's memory only: `snapshot` (D425) saves such
-  a source as cut. A source with neither a fetch by ref nor a change feed stays out too (`chills`): its copies could
-  not be re-read. Signatures are per id (`ColdPack.sigs`): a bare set read a copy that changed and changed back as
-  unchanged. Memory is the cost (about 430 B an item in the day bench, 10 MB for a 1,000-source user), and CPU
-  (about three times a user-day's).
-- **Change feeds (`syncDelta`, D476, a trial, off; `delta.test.ts`).** A source with `Source.changes` is polled by
-  `pollDelta` (one call; `fanout.changes`), its cursor taken before the backfill's first page (`acquire`). A complete
-  delta read sets `deltaMark` (the read mark it began under) and `sweptAt`: `signalledSince` is false for a signal at
-  or before it, so a notice costs one delta read (`check` → `recheckByDelta` → `Sync.settleDelta`, shared by every
-  doubted item of the source) instead of a fetch per item; anything it cannot settle falls back to `recheck`.
-  Deletions go through `SyncDeps.onRemoved` (the partner's `dropGone`: held gone, queued packets withdrawn). It never
-  vouches from a cursor taken over copies already held (`gap`, until a whole listing begun after it ends), nor for a
-  copy the sync does not hold (`signalledSince`'s `itemId`: pass it, or the feed's vouch does not apply), and never
-  clears `missed`: after an expired cursor a deletion in the gap is in no feed, so the source is re-listed (daily
-  while anything is missed, else every `deltaSweepMs`, inside the cache's time to live, which only a listing renews).
-  A wrapper around a `Source` must pass `changes` through (as `list`), or the feed is silently off; `McpSource` has
-  no delta tool yet, so no shipped connector has a feed.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

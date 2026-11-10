@@ -98,7 +98,12 @@ narrow and more seeds do not help; a part's effect (`fewer`: 1.3) is where seeds
 - **`--cards-calls N`** (F2, D482; hidden-funnel after `--`, pi-ab): each user's card model answers its first N calls
   and leaves the rest uncovered (no call, no spend), standing in for a new user whose requests arrive before the
   backfill is read. Without it both harnesses wait for the enrichment to finish before the first request, so they
-  cannot see what order the cards were made in.
+  cannot see what order the cards were made in. `--cards-rest cards` (N4, funnel only)
+  answers the calls past N with their cards and no requests (a card-only model for the rest, the replayed cards
+  standing in for it).
+- **A stronger agent (N4, D520):** `--model claude-sonnet-5-5` or `claude-opus-5-5` changes only the Pi agent
+  (`../../lab/n4/run.sh`). Opus 5.5 cannot run with thinking off: it runs `adaptive` at effort `low`
+  (`anthropicThinkingOff`); say so beside its numbers. Budget about $0.009 (Sonnet) and $0.015 (Opus) a task run.
 - **Keys** are read by `keyFor`, never printed or put in results.
 - **Budgets:** every live run passes `--budget` (a hard cap per process on everything it spends).
 - **Strict CLIs (audit 2026-11-03b).** funnel.ts, hidden-funnel.ts and quality-cli.ts parse through `flags()`; a new
@@ -135,6 +140,11 @@ narrow and more seeds do not help; a part's effect (`fewer`: 1.3) is where seeds
   poll), standing in for the two hours between change and recap; `DaySummary.updatePackets` counts "updated:" packets.
   The change lands just before the recap, so a lever that re-sends an update at the recap repeats the packet the agent
   has just read (D341); `staleHanded`/`staleUpdated` say whether a stale recap's item was handed and updated that day.
+- **`--days` intervals** (N3, D519): a day's requests share one transcript, so pair with whole days resampled
+  (`../../lab/n3/day-cluster.py`); an arm that changed nothing differed from its twin over two users (asks +0.06 a
+  task, $ +0.015/1k, intervals excluding zero). `--late` on train costs about $0.48 a shard: a lower cap cuts every
+  stream's later days (`../../lab/n3/late.py` counts whole days only). `../../lab/n3/stems.sh RUN` turns a Modal
+  fan-out's shards into the `STEM.json`/`STEM.tl` pairs the Python reports read.
 - **Position in the day** (A17): `../../lab/a17/days.py` reads `--days` runs per position bucket and pairs arms task by
   task (it needs `--timeline`). One request a session (the funnel, short pi-ab) cannot see D340's re-show: screen it on
   `--days` only.

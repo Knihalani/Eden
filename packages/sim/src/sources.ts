@@ -163,8 +163,6 @@ export interface SourceStats {
   /** Calls given up on before they answered (the caller's deadline or the session ending). */
   aborted: number;
   results: number;
-  /** Change-feed reads (`changes`, D476), also counted in `calls`. */
-  deltas?: number;
   /** Results that state at least one fact (useful hits). */
   usefulResults: number;
   bytes: number;
@@ -371,13 +369,6 @@ export class SimSource implements Source {
    * an MCP connector is (a null fetch proves nothing), for the re-read paths that depend on it (D126, D345).
    */
   fetchReportsGone = true;
-  /**
-   * The connector's change feed (D476), set by `enableDelta`: absent, the connector has none (the engine reads
-   * `typeof source.changes`), as most connectors without a history or delta API.
-   */
-  changes?: NonNullable<Source["changes"]>;
-  /** The feed's last cursor and what the source held when it was handed out (id to ref and a signature). */
-  private feed: { cursor: number; held: Map<string, { ref: string; sig: string }> } | null = null;
   /** Fetches by ref (`--null-proves-nothing` makes its null prove nothing; it still finds what exists, D356). */
   readonly fetchesById = true;
   /** The calendar lists by time, as its list call does (D44). */
@@ -437,31 +428,6 @@ export class SimSource implements Source {
     const items = hits.map((it) => render(it, this.profile.snippetChars));
     for (const i of items) this.stats.bytes += i.title.length + i.text.length;
     return { items, next: at + limit < this.byRecency.length ? String(at + limit) : null };
-  }
-
-  /**
-   * Gives the connector a change feed (D476; a Gmail history, a Graph delta, a Calendar sync token): one call returns
-   * every item created or changed and every ref deleted since the cursor, at the cost and with the guards of any
-   * call. A cursor other than the last one handed out is expired (null), as a history id older than its history.
-   */
-  enableDelta(): void {
-    this.changes = async (_scope, cursor, signal) => {
-      this.stats.deltas = (this.stats.deltas ?? 0) + 1;
-      await this.callGuards(signal);
-      const now = new Map(
-        this.index.items.map((it) => [it.id, { ref: it.ref, sig: `${it.updatedAt}\u0000${it.title}\u0000${it.text}` }]),
-      );
-      const before = this.feed;
-      const next = (before?.cursor ?? 0) + 1;
-      this.feed = { cursor: next, held: now };
-      if (cursor === undefined) return { items: [], removed: [], next: String(next) };
-      if (!before || Number(cursor) !== before.cursor) return null;
-      const changed = this.index.items.filter((it) => before.held.get(it.id)?.sig !== now.get(it.id)!.sig);
-      const removed = [...before.held].filter(([id]) => !now.has(id)).map(([, x]) => x.ref);
-      const items = changed.map((it) => render(it, this.profile.snippetChars));
-      for (const i of items) this.stats.bytes += i.title.length + i.text.length;
-      return { items, removed, next: String(next) };
-    };
   }
 
   /** A call's latency, rate limit, faults and error draw (search and list share them); throws as a connector would. */

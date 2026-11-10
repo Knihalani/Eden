@@ -209,6 +209,18 @@ class Presets(unittest.TestCase):
                 if "~" in cond:
                     self.assertIn(cond.split("~", 1)[1].split("+")[0], given, name)
 
+    def test_the_yield_bench_runs_the_default_against_sourceYield_off_at_scale(self):
+        _, suites, args = plan.with_preset("bench-yield", ["--variants", "hidden", "--limit", "16"])
+        self.assertEqual(plan.flag_value(args, "--conditions"), "eden,eden~off-yield")
+        self.assertEqual(json.loads(plan.flag_value(args, "--variant-config")), {"off-yield": {"sourceYield": False}})
+        self.assertEqual((plan.flag_value(args, "--noise-sources"), plan.flag_value(args, "--notify-share")),
+                         ("995", "0.05"))
+        shards = plan.plan_pi_ab(suites, "45-68", 3.6, "r", args)
+        self.assertEqual((len(shards), shards[0].cap_usd), (24, 0.15))
+        # Two arms on six hidden worlds: five shards at once under 60 streams, in the 1,000-source containers.
+        self.assertEqual((plan.streams_per_shard(shards[0]), plan.wave_width(shards)), (12, 5))
+        self.assertEqual(plan.resources("pi-ab", args), plan.resources("pi-ab", ["--noise-sources", "995"]))
+
     def test_an_unknown_preset_and_a_planner_owned_flag_are_refused(self):
         with self.assertRaises(plan.PlanError):
             plan.with_preset("bench-nothing")

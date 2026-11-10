@@ -202,7 +202,15 @@ unsynced one, so what is older than the cut is still found. The push does not wa
 reaches the agent through the poll's follow-ups. Nor does an explicit ask (`askBehind`, D430, D431): its lookup runs
 behind as the push's does, it waits `askBehindWaitMs` (0) for that work, answers from what is held and names the
 sources still being read (status "searching", never an all-clear), and what they then store that it would cite goes
-out as a packet at the next take. A lookup polls at most its `syncPollWidth` (8) best-routed
+out as a packet at the next take. Which cut copies are read live at all is learned (`sourceYield`, D505, D509;
+`source-yield.ts`; docs/research/n1-calls.md): each source keeps a run of the live reads it answered since one of its
+items last reached the agent, and the user's reads on no evidence, and on the request's words alone, are pooled over
+the sources with nothing used yet. A copy whose run has reached `sourceYieldRun` (4), or a never-used one while its
+kind of read is clearly not paying (`sourceYieldFloor`), gets no search behind, no probe and no on-demand poll for a
+request that names nothing the source mentioned: it answers from what is held, and an ask gives it the status
+"unsearched" and says so, never an all-clear. Runs and pools halve every week, so sources are tried again. With
+1,000 sources this took Eden's connector calls from ~36 to ~11 a task over a user's days. A lookup polls at most its
+`syncPollWidth` (8) best-routed
 stale sources (D263); a warm source past them answers from its copy as it stands, as under `syncPollBehind`. Routing
 (`SourceMap.route`) adds, per source, log2(1 + its items among the request's 40 best matches in the user's own index)
 (`routeLocalHits`, D265), so a request that names no one still reaches the sources whose items share its words. The
@@ -233,17 +241,6 @@ whose daily sweep was skipped, or such a source's copy the last sweep did not li
 re-reads it by id first (D126, D211). A copy no re-read confirms is not delivered and makes its source's sweep due at
 the next tick. At 1,000 sources the sweep falls from ~1,114 to ~282 listing calls a user a day; a five-source user uses
 all their sources and keeps the daily sweep.
-
-Two trials, both off (F1, D475–D479; docs/research/f1-local-copy.md), aim at a local copy that is complete without
-push. `syncCold`: what the cap pushes out of the index is kept compressed in memory per source behind a filter of its
-words (`cold.ts`), each listing is read to its end while `syncColdMaxItems` has room, and a lookup brings back the
-cold copies that hold its words instead of searching the source live; a copy brought back from a source with no
-change feed is re-read before delivery (`syncColdVerify`). `syncDelta`: a source with a change feed (`Source.changes`)
-is polled by one read of what changed since its cursor, deletions included; a complete delta read vouches for every
-copy held, so a change notice costs one delta read instead of D126's re-read of each doubted item, and the daily
-re-listing becomes a delta read. At ~1,000 sources live, with nine connectors in ten offering neither push nor a
-feed, they cut connector calls from 36 to 9 a task with hidden facts not lower, and made tasks about 1.2 s slower
-(the re-reads' wait and the cold tier's CPU), so they are not in the default.
 
 **Change notifications** (D125, `syncPush`; `Source.notifies`, `ContextPartner.sourceChanged` and `sourceItems`,
 `POST /v1/sources/changed` and `/v1/sources/items`, the client's `sourceChanged`/`sourceItems`): a source whose
@@ -431,6 +428,16 @@ written to the agent's prompt cache, hidden facts not lower, A30). An ask answer
 candidates need no
 reader, so a server with no model key runs them too (D276). `ContextPartner.explain` returns a session's last 32
 traces for `POST /v1/explain` (D277), each with `explainTrace`'s sentence; content-free like every trace (D56).
+**The push check (`pushCheck`, D500–D504, a trial, off; `push-check.ts`)** puts one budgeted model call on the push:
+when the gate passes, the model reads the pool (at most `pushCheckItems` items of `pushCheckItemChars`, fenced as
+data) and names the items that change what the agent should do; the candidates become those, in pool order, and a
+pool it names none of sends no packet. It runs on the reader's model through the `checker` dependency, waits at most
+`pushCheckWaitMs` (a miss, an error or a refusal hands the default's candidates; a late answer is traced
+"check-late" and kept for a second pass), and costs the push about 0.8 s on the agent's path (i3-push-check.md).
+
+Trial `pushWiden` (D511, off; with I3's `pushCheck` trial) adds items no lexical rank reached (a `widen` dependency's
+nearest items, raw intent hits) to what the push check reads, sharing its wait; only the check can hand them
+(docs/research/n2-recall.md: it pays only behind a check that thinks, which is too slow and dear as measured).
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search
@@ -466,7 +473,9 @@ rejects are read for their requests only, and with `cardsLean` (D125) only when 
 automated mail (`automated`: a no-reply or list sender, a bulk category or footer) and dated within `cardsLeanDays`
 (7 since D244; 30 before) or upcoming; constraint-worded items are read whatever their sender or age, and first
 (`cardsOrder`, D482, D483: what waits for the card model is read best first, so a new user's early requests meet cards
-for the items most likely to bear on them; equal-score hits keep the order their items came in). They live in a per-user BM25 index apart
+for the items most likely to bear on them; equal-score hits keep the order their items came in; `cardsLanes` 4, D521,
+D522: up to four of a user's card calls run at once while full batches wait, so the backfill is read in a quarter of
+the time for the same calls). They live in a per-user BM25 index apart
 from the item text, keyed by content hash and dropped with the card. At request time, with no model, the request's words
 are searched in it: the best hits join the lookup's candidates and one judge seat, and are fused into an `ask` by
 reciprocal rank after the verdict hits. An intent hit alone is never a no-model delivery. A hit whose item holds a

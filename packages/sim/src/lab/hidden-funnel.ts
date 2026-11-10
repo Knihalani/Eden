@@ -87,6 +87,7 @@ import {
   type CardMaker,
   automated,
   type PushPoolReport,
+  PushChecker,
   worthCarding,
   worthCardingStrict,
   ECONOMY_CARD_LIMITS,
@@ -102,11 +103,11 @@ import { sanitizeForStore } from "@eden/redact";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
-import { applyConnectorMix, connectorOptions, parseConnectorMix, pushNotifier } from "./connector-options";
+import { applyNotifyShare, connectorOptions, parseNotifyShare, pushNotifier } from "./connector-options";
 import { noiseSources } from "./noise-sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
-import { ENDPOINT_LABEL, endpointCardMaker, endpointFromArgs } from "./cards-endpoint";
+import { ENDPOINT_LABEL, cardsOnly, endpointCardMaker, endpointFromArgs } from "./cards-endpoint";
 import {
   allMissedHint,
   cacheModels,
@@ -147,6 +148,7 @@ import {
 } from "./neutral";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
+import { loadWidenTable, widenFor } from "./n2-widen";
 import {
   coverageLines,
   intentPlace,
@@ -179,6 +181,7 @@ const cli = flags(
         "spans",
         "cards",
         "cards-calls",
+        "cards-rest",
         "cards-endpoint",
         "cards-endpoint-model",
         "intent",
@@ -212,19 +215,23 @@ const cli = flags(
         "run-label",
         "distill",
         "noise-sources",
+        "notify-share",
         "noise-items",
-        "connector-mix",
         "source-profile",
         "push",
         "push-rates",
         "fetch-gone",
+        "check",
+        "check-model",
+        "check-cache",
+        "widen-table",
+        "templates",
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
-      ["overlap", "sync", "ask", "serial", "allow-misses", "no-record", "cpu", "allow-logging", "neutral"].map((k) => [
-        k,
-        B,
-      ]),
+      ["overlap", "sync", "ask", "serial", "allow-misses", "no-record", "cpu", "allow-logging", "neutral"]
+        .concat("call-split")
+        .map((k) => [k, B]),
     ),
   },
   `
@@ -259,10 +266,11 @@ const NOISE_SOURCES = Number(opt("noise-sources", "0"));
  * not change). Defaults (REALISTIC, no notices) leave every earlier run as it was.
  */
 const CONNECTORS = connectorOptions(opt);
+/** `--notify-share P` (N1, `applyNotifyShare`): the share of connectors that send change notifications. */
+const NOTIFY_SHARE = parseNotifyShare(opt("notify-share", ""));
 /** `--fetch-gone false`: the sources' fetch null proves nothing, as an MCP connector's (A18; default true). */
 const FETCH_GONE = opt("fetch-gone", "true") !== "false";
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
-const CONNECTOR_MIX = parseConnectorMix(opt("connector-mix", ""));
 /** `--config`: engine settings, checked whole (checkEngineConfig); a typo or a child whose parent is off exits 2. */
 const CONFIG = ((): Record<string, unknown> => {
   try {
@@ -331,6 +339,13 @@ const syncUse = {
 };
 /** Over the whole run: calls the connectors received in the tasks' windows (listings among them); the traces' sum. */
 const callCheck = { received: 0, listed: 0, traced: 0 };
+/**
+ * `--call-split` (N1, a diagnostic print for one process): the calls in the tasks' windows by connector (the world's
+ * own or a noise one; search or listing) and the traces' calls by what made them.
+ */
+const CALL_SPLIT = cli.has("call-split");
+const callSplit = { worldSearch: 0, worldList: 0, noiseSearch: 0, noiseList: 0, tasks: 0, distinct: 0, repeats: 0 };
+const callsByTrace = new Map<string, number>();
 const CARDS = opt("cards", "");
 /**
  * `--intent FILE[,FILE]` (with `"intent": true` in `--config`): the requests `cards-enrich.ts --intent` wrote, replayed
@@ -362,6 +377,14 @@ if (CARDS_ENDPOINT) console.log(`cards: ${ENDPOINT_LABEL}, misses made live and 
  */
 /** `--cards-calls N` (F2): each world's enrichment gets N card calls; the items past them stay uncovered. */
 const CARDS_CALLS = Number(opt("cards-calls", "-1"));
+/**
+ * `--cards-rest cards` (N4, with `--cards-calls N`): the calls past N are answered with their cards and no requests,
+ * standing in for a cheap card-only model (M2's distilled one, whose cards match the teacher's and whose requests do
+ * not) reading the rest of a new user's backfill while the card model proper has made N calls.
+ */
+const CARDS_REST = opt("cards-rest", "none");
+if (CARDS_REST !== "none" && CARDS_REST !== "cards") throw new Error("--cards-rest is none or cards");
+if (CARDS_REST === "cards" && CARDS_CALLS < 0) throw new Error("--cards-rest cards needs --cards-calls N");
 const CARD_LOG = opt("card-log", "");
 if (CARD_LOG && cardMaker) {
   writeFileSync(CARD_LOG, "");
@@ -455,6 +478,29 @@ const READER_THINKING = opt("reader-thinking", "off") as "off" | "adaptive";
 const READER_KEY = READER === "live" ? keyFor(READER_MODEL) : undefined;
 if (READER !== "none" && !ASK && !RUN.readerPush) throw new Error("--reader needs --ask (or readerPush)");
 const LIMIT = Number(opt("limit", "0"));
+/**
+ * `--templates a,b` (N2): only these templates' tasks run (every template's planted item stays in the world, so the
+ * kept tasks see the world a full run gives them).
+ */
+const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
+if (TEMPLATES) {
+  // A typo would run no tasks and print totals of zero: every name must be a template of a suite in the run.
+  const known = new Set(
+    SUITE_LIST.flatMap((suite) => SUITES[suite]!(buildWorld({ seed: SEEDS[0]! * 1_000 }), SEEDS[0]!, "hidden")).map(
+      (t) => t.template,
+    ),
+  );
+  const unknown = [...TEMPLATES].filter((t) => !known.has(t));
+  if (unknown.length) {
+    console.error(`hidden-funnel: --templates names no template of the run's suites: ${unknown.join(", ")}`);
+    process.exit(2);
+  }
+}
+/**
+ * `--widen-table FILE` (N2, D511): per (suite, seed, variant, request) the item ids an embedding ranks first for the
+ * request (`packages/sim/modal/n2_embed.py`), wired as the `widen` dependency the `pushWiden` trial reads.
+ */
+const WIDEN_TABLE = opt("widen-table", "") ? loadWidenTable(opt("widen-table", "")) : null;
 /** `--reader-log out.jsonl`: each reader call's prompt (the items as the model read them) and reply, sim data only. */
 const READER_LOG = opt("reader-log", "");
 // An approximated verdict logged beside recorded ones would be read back later as a real reading (checked before the
@@ -471,8 +517,36 @@ const READER_SYS = systemHash({ messages: readerMessages({ request: "", items: [
  */
 const READER_SUBSET = opt("reader-subset", "");
 if (READER_SUBSET && READER !== "replay") throw new Error("--reader-subset needs --reader replay");
-/** The judge's and the reader's requests: paced, capped and retried, with the run's logging choice (free.ts). */
-const ACCESS = labAccess(args, [...(LIVE ? [MODEL] : []), ...(READER === "live" ? [READER_MODEL] : [])]);
+/**
+ * `--check live|replay` (I3, D500): the `pushCheck` trial's model (`--check-model`, default Haiku 5.5), through a
+ * replay cache (`--check-cache F`, appended to by a live run: pay once). Wiring it changes nothing unless the run's
+ * configuration turns `pushCheck` on. `live` keeps the funnel to one process (one cache file, one ledger stream).
+ */
+const CHECK = opt("check", "none");
+if (!["none", "live", "replay"].includes(CHECK)) throw new Error("--check must be live or replay");
+const CHECK_MODEL = opt("check-model", "claude-haiku-5-5");
+const CHECK_CACHE = opt("check-cache", "");
+if (CHECK !== "none" && !CHECK_CACHE) throw new Error("--check needs --check-cache FILE");
+if (CHECK !== "none" && !RUN.pushCheck)
+  throw new Error("--check is inert unless pushCheck is on (--set pushCheck=true)");
+/** The judge's, the reader's and the check's requests: paced, capped and retried, with the run's logging choice. */
+const ACCESS = labAccess(args, [
+  ...(LIVE ? [MODEL] : []),
+  ...(READER === "live" ? [READER_MODEL] : []),
+  ...(CHECK === "live" ? [CHECK_MODEL] : []),
+]);
+/** One replaying check model for every lane; each lane's `PushChecker` keeps its own stats. */
+const checkModel =
+  CHECK === "none"
+    ? null
+    : new ReplayModel(
+        CHECK_CACHE,
+        CHECK === "live"
+          ? labModel(ACCESS, { apiKey: keyFor(CHECK_MODEL)!, model: CHECK_MODEL, timeoutMs: 60_000 }, "eden.check")
+          : null,
+        CHECK_MODEL,
+      );
+const checkLanes: PushChecker[] = [];
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
 const readerModel =
   READER === "none" || NO_MODEL_READER
@@ -685,13 +759,18 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   const world = buildWorld({ seed: seed * 1_000 });
   const before = world.items.length;
   const all: HiddenTask[] = SUITES[suite]!(world, seed, variant);
-  const tasks = LIMIT > 0 ? all.slice(0, LIMIT) : all;
-  const planted = world.items.slice(before);
-  if (PLANTED_AGE_DAYS > 0) for (const it of planted) it.updatedAt = world.now - PLANTED_AGE_DAYS * 86_400_000;
-  for (const it of planted) dress(world, it);
+  // Planted items line up with `all` (one a template, in order); `--templates` keeps the pairs together.
+  const plantedAll = world.items.slice(before);
+  const chosen = all.map((_, i) => i).filter((i) => !TEMPLATES || TEMPLATES.has(all[i]!.template));
+  const tasks = (LIMIT > 0 ? chosen.slice(0, LIMIT) : chosen).map((i) => all[i]!);
+  const planted = TEMPLATES && plantedAll.length === all.length ? chosen.map((i) => plantedAll[i]!) : plantedAll;
+  // The world is made whole whatever `--templates` keeps: every planted item aged and dressed, every slot cleared
+  // (with `--limit`, as before, only the kept tasks' slots).
+  if (PLANTED_AGE_DAYS > 0) for (const it of plantedAll) it.updatedAt = world.now - PLANTED_AGE_DAYS * 86_400_000;
+  for (const it of plantedAll) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
-  const keep = new Set(planted.map((it) => it.id));
-  for (const task of tasks) clearSlot(world, task.text, keep);
+  const keep = new Set(plantedAll.map((it) => it.id));
+  for (const task of LIMIT > 0 ? tasks : all) clearSlot(world, task.text, keep);
   if (CORPUS_DUMP) {
     // `--corpus-dump` (A2): the world's items as its sources hold them, with the tasks and their planted ids.
     // Each item as its source lists it (a separate, unmetered set of sources), and `h`: the card key of the copy the
@@ -708,14 +787,23 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   const notify = pushNotifier(own, CONNECTORS, seed, world.now);
   if (!FETCH_GONE) for (const s of own) s.fetchReportsGone = false;
   const sources = [...own, ...(NOISE_SOURCES > 0 ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed) : [])];
-  // `--connector-mix P,D` (F1): which connectors push and have a change feed, which only a feed, which neither.
-  applyConnectorMix(sources, CONNECTOR_MIX, seed);
+  // `--notify-share P` (N1): only that share of the connectors notify; the rest are polled and swept.
+  applyNotifyShare(sources, NOTIFY_SHARE, seed);
   const returned = new Set<string>();
+  // `--call-split`: the sources searched in the current task's window, and every (source, query text) of this user.
+  const searchedNow = new Map<string, number>();
+  const everAsked = new Set<string>();
   let served = 0;
   for (const s of sources) {
     const search = s.search.bind(s);
     s.search = async (q, signal) => {
       served++;
+      if (CALL_SPLIT) {
+        searchedNow.set(s.id, (searchedNow.get(s.id) ?? 0) + 1);
+        const key = `${s.id}|${q.text}`;
+        callSplit.repeats += everAsked.has(key) ? 1 : 0;
+        everAsked.add(key);
+      }
       const items = await search(q, signal);
       for (const i of items) returned.add(i.id);
       return items;
@@ -744,9 +832,24 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   // for calls per task, as `quality.ts` reads it.
   const received = () => sources.reduce((n, s) => n + s.stats.calls, 0);
   const listed = () => sources.reduce((n, s) => n + s.stats.lists, 0);
+  const ownIds = new Set(own.map((x) => x.id));
+  const splitNow = () => {
+    const at = { worldSearch: 0, worldList: 0, noiseSearch: 0, noiseList: 0 };
+    for (const x of sources) {
+      const searches = x.stats.calls - x.stats.lists;
+      if (ownIds.has(x.id)) ((at.worldSearch += searches), (at.worldList += x.stats.lists));
+      else ((at.noiseSearch += searches), (at.noiseList += x.stats.lists));
+    }
+    return at;
+  };
   const countCalls = (t: Trace) => {
     // The traces' count, a cross-check only.
     calls += t.sourceCalls;
+    if (CALL_SPLIT && t.sourceCalls > 0) {
+      const why = /^(cut search behind|sync poll behind|ask behind)/.exec(t.reason)?.[1] ?? "lookup";
+      const key = `${t.event}/${why}`;
+      callsByTrace.set(key, (callsByTrace.get(key) ?? 0) + t.sourceCalls);
+    }
     if (t.reason.startsWith("slow path busy")) busyTraces.busy++;
     if (t.localSources !== undefined) {
       syncUse.lookups++;
@@ -777,7 +880,9 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
           make: (items, today, signal, retry, intent) =>
             cardCalls++ < CARDS_CALLS
               ? laneMaker.make(items, today, signal, retry, intent)
-              : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
+              : CARDS_REST === "cards"
+                ? laneMaker.make(items, today, signal, retry, intent).then((b) => cardsOnly(b, items.length))
+                : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
         }
       : laneMaker;
   const cards = cappedMaker
@@ -845,6 +950,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   if (reader) readerLanes.push(reader);
   // Every report per session, in order: a request can be read twice (`readerPush`'s ask, then the funnel's own).
   const readerReports = new Map<string, ReaderReport[]>();
+  const checker = checkModel ? new PushChecker({ model: checkModel, budget: new Budget(UNCAPPED) }) : null;
+  if (checker) checkLanes.push(checker);
   const pushPools = new Map<string, PushPoolReport[]>();
   const partner = new ContextPartner({
     sources: async () => sources,
@@ -858,6 +965,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
+    ...(checker ? { checker } : {}),
+    ...(WIDEN_TABLE ? { widen: widenFor(WIDEN_TABLE, suite, seed, variant) } : {}),
     ...(reader
       ? {
           reader,
@@ -986,6 +1095,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     returned.clear();
     const callsBefore = calls;
     const receivedBefore = received();
+    const splitBefore = CALL_SPLIT ? splitNow() : null;
+    searchedNow.clear();
     const listedBefore = listed();
     const servedBefore = served;
     const c0 = cpuNow();
@@ -1199,6 +1310,15 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     // their grace: `busy`) and the ask have finished.
     const taskListed = listed() - listedBefore;
     const taskCalls = received() - receivedBefore;
+    if (splitBefore) {
+      const at = splitNow();
+      callSplit.tasks++;
+      callSplit.distinct += searchedNow.size;
+      searchedNow.clear();
+      for (const k of ["worldSearch", "worldList", "noiseSearch", "noiseList"] as const) {
+        callSplit[k] += at[k] - splitBefore[k];
+      }
+    }
     syncUse.demandSeen += taskListed;
     callCheck.received += taskCalls;
     callCheck.listed += taskListed;
@@ -1483,6 +1603,16 @@ console.log(
   `calls: connectors received ${callCheck.received} in the tasks' windows (${callCheck.listed} of them on-demand ` +
     `listings); traces summed ${callCheck.traced} (cross-check, fetches included)`,
 );
+if (CALL_SPLIT) {
+  const per = (n: number) => (n / Math.max(1, callSplit.tasks)).toFixed(2);
+  console.log(
+    `call split (a task): world searches ${per(callSplit.worldSearch)}, world listings ${per(callSplit.worldList)}, ` +
+      `noise searches ${per(callSplit.noiseSearch)}, noise listings ${per(callSplit.noiseList)}; distinct sources ` +
+      `searched ${per(callSplit.distinct)}; searches repeating a (source, text) this user sent before ` +
+      `${per(callSplit.repeats)}; by trace: ` +
+      [...callsByTrace].map(([k, n]) => `${k} ${per(n)}`).join(", "),
+  );
+}
 // The traces should carry every call the connectors received (audit 2026-11-03b, corr-poll-behind-calls-untraced):
 // a gap means per-trace `sourceCalls`, and every cost or rate-limit view built from traces, is off.
 if (callCheck.traced !== callCheck.received) {
@@ -1574,6 +1704,37 @@ if (READER_SUBSET && readerModel) {
   console.log(
     `READER SUBSET-REPLAYED: ${readerModel.subsetReplayed} reader prompts were answered from a recorded superset pool ` +
       "(--reader-subset): approximate, a verdict on fewer items read off a reading of more",
+  );
+}
+/** `--check` (I3, D500): the push check's calls over the whole run, every phase (neutral included). */
+const checkUse = checkModel
+  ? (() => {
+      const sum = (k: keyof PushChecker["stats"]) => checkLanes.reduce((n, c) => n + c.stats[k], 0);
+      const lat = checkModel.quantiles();
+      return {
+        asked: sum("asked"),
+        calls: sum("calls"),
+        failures: sum("failures"),
+        costUsdAsMade: Number(checkModel.calls.reduce((n, c) => n + c.costUsd, 0).toFixed(6)),
+        inputTokens: checkModel.calls.reduce((n, c) => n + c.inputTokens, 0),
+        cachedInputTokens: checkModel.calls.reduce((n, c) => n + c.cachedInputTokens, 0),
+        outputTokens: checkModel.calls.reduce((n, c) => n + c.outputTokens, 0),
+        replayed: checkModel.replayed,
+        sent: checkModel.sent,
+        missed: checkModel.missed,
+        p50Ms: lat.p50,
+        p90Ms: lat.p90,
+      };
+    })()
+  : null;
+if (checkUse) {
+  const per = (x: number) => (checkUse.calls ? x / checkUse.calls : 0);
+  console.log(
+    `CHECK (I3, ${CHECK_MODEL}, ${CHECK}): ${checkUse.calls} calls of ${checkUse.asked} asked, ` +
+      `${checkUse.failures} failed, ${checkUse.missed} replay misses; $${checkUse.costUsdAsMade.toFixed(4)} as made ` +
+      `($${per(checkUse.costUsdAsMade).toFixed(6)} a call); ${per(checkUse.inputTokens).toFixed(0)} in ` +
+      `(${per(checkUse.cachedInputTokens).toFixed(0)} cached) / ${per(checkUse.outputTokens).toFixed(0)} out a call; ` +
+      `as made p50 ${checkUse.p50Ms.toFixed(0)} ms, p90 ${checkUse.p90Ms.toFixed(0)} ms`,
   );
 }
 if (LIVE) {
@@ -1673,6 +1834,7 @@ if (out) {
               },
             }
           : {}),
+        ...(checkUse ? { check: checkUse } : {}),
         ...(SUITE_LIST.length > 1 ? { suites } : {}),
         // Per task, with the suite: how each planted item was delivered (`why`), for breakdowns by path.
         perTask: runs.flatMap((r) => r.perTask.map((t) => ({ suite: r.suite, ...t }))),

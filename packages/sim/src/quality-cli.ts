@@ -30,8 +30,8 @@ import { checkEngineConfig } from "@eden/engine";
 import { OpenRouterModel } from "@eden/llm";
 import { flags, parseJson } from "./lab/flags";
 import { Timeline } from "./lab/timeline";
-import { parseConnectorMix } from "./lab/connector-options";
 import { DiskCardMaker } from "./lab/cards-disk";
+import { parseNotifyShare } from "./lab/connector-options";
 import { mergeTallies, qualityReport, tallyQuality, type QualityOptions, type QualityTally } from "./quality";
 import { readFileSync } from "node:fs";
 import {
@@ -71,7 +71,7 @@ const cli = flags(
         "deletes",
         "push",
         "lost-notices",
-        "connector-mix",
+        "notify-share",
         "fetch-gone",
         "refresh-after-hours",
         "tool-rate",
@@ -196,9 +196,9 @@ const opts: QualityOptions = {
     return v;
   })(),
   nullProvesNothing: has("null-proves-nothing"),
-  connectorMix: parseConnectorMix(arg("connector-mix", "")),
   // A21 (D356): no source counts as used, so `syncUnusedSweepMs` sweeps every source less often (the worst case).
   neverUsed: has("never-used"),
+  notifyShare: parseNotifyShare(arg("notify-share", "")),
   config: {
     ...(has("refresh-after-hours") ? { refreshAfterMs: Number(arg("refresh-after-hours", "0")) * 3_600_000 } : {}),
     // Any engine setting, as JSON (`--config '{"probes":true}'`): for experiments behind a flag.

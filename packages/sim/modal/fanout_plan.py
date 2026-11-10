@@ -258,12 +258,19 @@ PART_VARIANTS = {
     "minus-freshness": {"verifyDelivery": False, "readerVerifyAfter": False, "revisionNotice": False,
                         "revisionDiff": False},
 }
+# One switch of the default turned off (not a whole part, so not checked against PARTS): N1b's arm, D540.
+SWITCH_VARIANTS = {
+    "off-yield": {"sourceYield": False},
+}
+# A user with about 1,000 connected sources, 5% of whose connectors send change notices (N1's shape, D509).
+SCALE = ["--noise-sources", "995", "--notify-share", "0.05"]
 
 
-def _bench(conditions, variants=()):
-    args = [*RECIPE, "--conditions", ",".join(conditions), "--variants", "hidden,control"]
+def _bench(conditions, variants=(), more=()):
+    args = [*RECIPE, *more, "--conditions", ",".join(conditions), "--variants", "hidden,control"]
     if variants:
-        args += ["--variant-config", json.dumps({v: PART_VARIANTS[v] for v in variants}, separators=(",", ":"))]
+        known = {**PART_VARIANTS, **SWITCH_VARIANTS}
+        args += ["--variant-config", json.dumps({v: known[v] for v in variants}, separators=(",", ":"))]
     return args
 
 
@@ -276,6 +283,9 @@ PRESETS = {
     "bench-parts": {"kind": "pi-ab", "suites": "train",
                     "args": _bench(["eden", *(f"eden~{v}" for v in PART_VARIANTS)], list(PART_VARIANTS)),
                     "about": "the default against default minus each part a plain pi-ab run exercises (M1's arms)"},
+    "bench-yield": {"kind": "pi-ab", "suites": "train",
+                    "args": _bench(["eden", "eden~off-yield"], ["off-yield"], SCALE),
+                    "about": "the default against the default with sourceYield off, at ~1,000 sources (N1b, D540)"},
 }
 
 

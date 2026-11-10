@@ -8,7 +8,7 @@
  * No product package imports this file. Prompts are Eden's own (`ModelCardMaker` builds them); the endpoint sees only
  * simulated items. The bearer key, when the server wants one, is read from `EDEN_LAB_CARDS_KEY` and never printed.
  */
-import { ModelCardMaker, type CardMaker } from "@eden/engine";
+import { ModelCardMaker, type CardBatch, type CardMaker } from "@eden/engine";
 import type { ChatRequest, ChatResponse, Model } from "@eden/llm";
 
 /** What `--cards-endpoint` reports in the run's header and JSON. */
@@ -89,6 +89,14 @@ export class EndpointModel implements Model {
       truncated: choice?.finish_reason === "length",
     };
   }
+}
+
+/**
+ * A batch with its cards kept and its requests dropped (N4's `--cards-rest`): what a card-only model gives. An item
+ * read for its requests only is then uncovered, as the enricher reads a null.
+ */
+export function cardsOnly(batch: CardBatch, count: number): CardBatch {
+  return { ...batch, requests: Array.from({ length: count }, () => null) };
 }
 
 /** The card maker over an endpoint: Eden's own `ModelCardMaker` (same prompt, caps and parser) on the lab transport. */

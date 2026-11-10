@@ -62,6 +62,15 @@ $0.0126 per 1,000 items at 16 calls at once and $0.133 one call at a time (p50 5
 items a call), against Haiku's $0.051 per 1,000 items (lab provider, cached; $0.001012 a 20-item call, p50 5.4 s).
 Its cards match Haiku's in the funnel but its intent requests lose hidden facts, so it is not used.
 
+Card lanes (`cardsLanes` 4, D521, D522; docs/research/n4-agents.md): a user's waiting batches are sent up to four at
+once. No call is added (the $0 funnel makes 382–392 card calls with one lane or four, by machine load); a new
+user's backfill of about sixteen calls ($0.0014 a call, about $0.022 a user on Haiku 5.5, Anthropic-direct lab
+figures, cards made in-run on train seeds 45–48) is spent in a quarter of the time, with up to four reservations of
+`estimatedCallUsd` held against the user's day at once. Near the user's day cap that costs calls: lanes in flight
+hold their estimates ($0.003) rather than what they will cost (about $0.0014), so the refusal that drops what waits
+comes up to three calls' worth earlier than with one lane (the reviewer's probe: 2 calls against 3 under a cap of
+$0.0045).
+
 The match thresholds (`intentMinCoverage` 0.2, `intentMinMatched` 1, `intentHits` 12 since D179) add no call: a looser
 match only lets more intent hits into the ask's reader pool, which is capped at `askReaderPool` items either way. On
 Pi held-out 13 seeds 41–44, intent replayed (ledger runs `close-d159-pi-41` to `-44`, $0.534;
@@ -551,6 +560,38 @@ MCP (docs/research/a3-cost-speed.md §12). Cuts of
 packet or ask bytes by lexical anchoring drop planted facts or move the bytes into the ask (D258, D273): the packet's
 bytes are what recall costs. An agent with a fixed prompt under the provider's cache minimum (512 tokens on Haiku 5.5)
 pays its whole prompt as a cache write on every task; Pi's minimal Eden agent did (D260, D271).
+
+## The push check (I3, `pushCheck`, a trial; D500–D504)
+
+A per-push model call, so it needs this estimate (CLAUDE.md, "model last"). One Haiku 5.5 call a push over the whole
+pool (`push-check.ts`), only when the pool is constraint-like (the candidates' own gate), thinking off, a fixed
+~890-token instruction block first, then the request and at most 15 items of at most 200 characters; output a few
+short entries cut by a stop sequence; budgeted at $0.001 a call on its own `Budget` (20 calls and $0.02 a session,
+$0.25 a user-day, and the tenant's shared cap). Measured (funnel, train seeds 41–42 with neutral tasks, 1,152 tasks,
+Anthropic direct, lab provider, cached; docs/research/i3-push-check.md §2): **0.82 calls a task** (944, exactly the
+pushes the default hands candidates on; a second pass reuses the first's answer), **$0.000202 a call** (2,467 input
+tokens of which 894 read from the cache, 71 output), p50 886 ms and p90 1,190 ms as made. So **about $0.17 per
+1,000 tasks** on the train mix **[EST: calls × price]**, before any change in the agent's own spend (fewer packets on
+neutral and control requests: 309 → 110 and 318 → 220 of 384 in that screen). Through OpenRouter (the servers'
+route) no cache breakpoint is sent (D145), so the instructions are paid in full: about +$0.00008 a call **[EST]**,
+about $0.23 per 1,000 tasks. **Live (Pi, train seeds 41–48, D503, lab provider, cached):** 0.82–0.83 calls a task,
+$0.0002 a call, Eden's check $0.161–0.164 per 1,000 tasks; total steady state on a 1:1:8 user over 8 days $0.247 →
+$0.359 (+$0.112; the agent itself −$0.030 from smaller packets), one request at a time $0.252 → $0.406; and +0.7 to
++0.9 s on every task's wall (the push waits on the call). Kept off (D504): i3-push-check.md §4–§5.
+
+## A per-push "changes what to do" check (N2, D510–D514; a trial, off, not shipped)
+
+N2 measured the push with one Haiku 5.5 call that reads the request and the pool and says which items change what the
+agent should do (docs/research/n2-recall.md; Anthropic-direct lab figures, I2's prompt with a 12-word reason per
+item). On the ledger: **$0.00115 a check at thinking effort low** (about 27 items; on Pi p50 5.5–5.9 s, p90 7.2–7.9 s),
+$0.00053 (about 15 items) and $0.00089 (about 27) with no thinking (p50 3.5 s, but it passed 82% of the pool's
+look-alikes and failed the widening screen). On Pi one request a session the push ran a check on 816 of 960 tasks:
+**+$0.98 per 1,000 tasks** for the check against the agent's $0.312 per 1,000 (the bench report's $ column), about
+three times the agent, and +5.1 s of wall a task while the agent waits for it (`@w12000`); over days +$0.80 per
+1,000. It is a per-event model call: shipping it needs its own decision (D4, D5), a `Budget` and a smaller, faster
+request, measured again before any promotion: **[EST]** I3's short-reply request with thinking at effort low, about
+300 output tokens, 2–3 s and $0.0004 a call (n2-recall.md §8). I3's no-thinking check (D500–D502) is the cheap end:
+$0.0002 a call, p50 0.9 s, which cannot gate a widened pool (D511).
 
 ## Levers, in order of leverage
 
