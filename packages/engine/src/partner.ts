@@ -132,6 +132,7 @@ import {
   CANDIDATES_LEAD,
   citationsOf,
   PLAN_LEAD,
+  POINTER_LEAD,
   renderAnswer,
   renderPacket,
   shownText,
@@ -2140,6 +2141,18 @@ export class ContextPartner {
           s.ledger.isFresh(x.item.id, s.turn) ||
           (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
       );
+      // `pushPointer` (O3, D708): this request's candidates that the agent was handed before this request began. The
+      // ledger keeps them out of the packet; the packet's lead names them.
+      const began = internal.turn ?? s.turn;
+      const pointed =
+        this.config.pushPointer && candidates
+          ? flagged
+              .filter((x) => {
+                const at = s.ledger.entry(x.item.id);
+                return !fresh.includes(x) && at !== undefined && at.turn < began;
+              })
+              .slice(0, POINTER_MAX)
+          : [];
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
       // As `deliverChecked` (audit A11): an item whose ledger entry changed over the re-reads' await was handed out
@@ -2152,7 +2165,10 @@ export class ContextPartner {
         return now === undefined || sameEntry(was.get(x.item.id), now);
       });
       const still = internal.request === undefined || internal.request === s.requests;
-      const delivering = checked.length > 0 && !s.closed && still;
+      // `pushPointer` (D708): with nothing new to hand, the names of what was handed before still go, as a packet
+      // with no item of its own.
+      const pointing = pointed.length > 0 && checked.length === 0 && fresh.length === 0;
+      const delivering = (checked.length > 0 || pointing) && !s.closed && still;
       if (replacing && (delivering || !candidates)) {
         const at = s.pending.indexOf(prev!);
         if (at >= 0) {
@@ -2172,7 +2188,7 @@ export class ContextPartner {
       // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
       const undo = behind ? new Map(checked.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       const injection =
-        delivering && checked.length > 0
+        delivering && (checked.length > 0 || pointing)
           ? candidates
             ? this.deliver(
                 s,
@@ -2181,7 +2197,7 @@ export class ContextPartner {
                 `candidates:${cue.id}`,
                 cue,
                 undefined,
-                this.candidateFrame(candidates.unsettled !== undefined),
+                this.candidateFrame(candidates.unsettled !== undefined, pointed),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -2935,15 +2951,18 @@ export class ContextPartner {
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
-  private candidateFrame(nudge = false): PacketFrame {
+  private candidateFrame(nudge = false, pointed: readonly Scored[] = []): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
+      lead: `${nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD}${pointerLine(pointed)}`,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
-      maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
+      maxBytes: Math.max(
+        this.config.maxInjectionBytes,
+        400 + k * (each + 120) + pointed.length * (POINTER_TITLE_CHARS + 60),
+      ),
     };
   }
 
@@ -6258,7 +6277,8 @@ export class ContextPartner {
       text: renderPacket(items, options),
       citations: this.cited(items),
       reason,
-      score: Math.max(...scored.map((x) => x.score)),
+      // A packet may hold no item of its own (`pushPointer`, D708: only the names of items handed before).
+      score: scored.length > 0 ? Math.max(...scored.map((x) => x.score)) : 0,
       createdAt: this.now(),
     };
     if (rendering) spans!.close(rendering);
@@ -6380,6 +6400,23 @@ export const EXPLAIN_TRACES = 32;
  */
 function pendingOf(s: Session): boolean {
   return s.inflight !== null || !!s.behind || s.pending.length > 0;
+}
+
+/** `pushPointer` (D708): the most earlier-handed items one packet names, and the most of a title it quotes. */
+const POINTER_MAX = 3;
+const POINTER_TITLE_CHARS = 80;
+
+/**
+ * `pushPointer` (D708): the lead's sentence naming items handed earlier, or nothing. A title is source text: made
+ * one inert line (`safeLine`), cut, its double quotes made single, as a plan alert quotes a request (D301).
+ */
+function pointerLine(pointed: readonly Scored[]): string {
+  if (pointed.length === 0) return "";
+  const names = pointed.map((x) => {
+    const title = safeLine(head(x.item.title, POINTER_TITLE_CHARS)).replace(/["“”]/g, "'");
+    return `"${title}" (${safeLine(x.item.sourceId)})`;
+  });
+  return ` ${POINTER_LEAD} ${names.join("; ")}.`;
 }
 
 /** `pushCandidates` (D236): the most of an item a candidate's excerpt says, whatever `compactItemBytes` is set to. */

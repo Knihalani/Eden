@@ -171,6 +171,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   askNudgeDeep: [...PUSH, "askNudge"],
   pushCandidatesSettled: PUSH,
   pushOpen: PUSH,
+  pushPointer: PUSH,
   pushCheck: PUSH,
   pushCheckWaitMs: [...PUSH, "pushCheck"],
   pushCheckItemChars: [...PUSH, "pushCheck"],
