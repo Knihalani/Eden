@@ -31,6 +31,8 @@ interface Line {
   model: string;
   provider?: string;
   truncated?: boolean;
+  /** Whether the reply ended on a stop sequence, when the provider said (`ChatResponse.stopped`; I3 reads it). */
+  stopped?: boolean;
 }
 
 /** One call as made, counts and timings only (`ReplayModel.calls`). */
@@ -297,6 +299,7 @@ export class ReplayModel implements Model {
       model: res.model,
       ...(res.provider ? { provider: res.provider } : {}),
       ...(res.truncated ? { truncated: true } : {}),
+      ...(res.stopped !== undefined ? { stopped: res.stopped } : {}),
     }));
     // Only a concurrent waiter awaits `pending`: with none, a failed live call would leave it rejected and unhandled
     // (an `unhandledRejection` that exits the run 1). The failure itself reaches the caller through `made`.

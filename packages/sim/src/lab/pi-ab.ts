@@ -96,6 +96,7 @@ import {
   ModelCardMaker,
   AskReader,
   ModelReaderMaker,
+  PushChecker,
   type CardMaker,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
@@ -173,11 +174,9 @@ import {
 } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { sanitizeForStore } from "@eden/redact";
+import { loadWidenTable, widenFor } from "./n2-widen";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
-import { checkerLine, sidecarChecker } from "./i1-checker";
-import { labChecker, labCheckerLine } from "./n2-check";
-import { loadWidenTable, widenFor } from "./n2-widen";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -297,6 +296,17 @@ if (!DAYS_ON && CONDITIONS.some((c) => c.packets !== "kept")) {
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
 const USES_READER = CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).askReader);
+/** `pushCheck` (I3, D500): the push check's model, `--check-model` (default Haiku 5.5, on the spend ledger). */
+const CHECK_MODEL = opt("check-model", "claude-haiku-5-5");
+const USES_CHECK = CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).pushCheck);
+/**
+ * `--widen-table FILE` (N2, D511): the `widen` dependency of an arm with `pushWiden` (`n2-widen.ts`), the embedding's
+ * nearest items per (suite, seed, variant, request) of the funnel's worlds, which one-request-a-session worlds are
+ * (`worldOf`). A `--days` user's world is not in it: there the embedding route finds nothing.
+ */
+const WIDEN_TABLE = opt("widen-table", "") ? loadWidenTable(opt("widen-table", "")) : null;
+/** Every stream's push checker, for the run's CHECK line. */
+const checkers: PushChecker[] = [];
 // Every model a role of this run calls, once: the pacer and spend ledger are set up for them, and the key check below
 // reads the same list, so a role added here cannot go unchecked.
 const RUN_MODELS = [
@@ -304,6 +314,7 @@ const RUN_MODELS = [
   GRADER,
   ...(CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).cards) ? [CARD_MODEL] : []),
   ...(USES_READER ? [READER_MODEL] : []),
+  ...(USES_CHECK ? [CHECK_MODEL] : []),
 ];
 // A pilot bundle is a real person's data (D489): every role on Anthropic's API under the owner's key, never the lab's
 // OpenRouter route (it does not pin D12's no-retention endpoints) and never a logging endpoint. `pilot run` passes
@@ -330,28 +341,6 @@ const CARDS_FILE = opt("cards", opt("cards-disk", ""));
 /** `--cards-calls N` (F2): each stream's enrichment gets N card calls; items past them stay uncovered. */
 const CARDS_CALLS = Number(opt("cards-calls", "-1"));
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
-/** `--checker URL` (I1, D471): the pair checker sidecar an arm with `pushCheck` on reads (`i1-checker.ts`). */
-const SIDECAR = opt("checker", "") ? sidecarChecker(opt("checker", "")) : null;
-/**
- * `--check-cache FILE` (N2, D510): the lab's Haiku "changes what the agent should do" checker (`n2-check.ts`) for an arm
- * with `pushCheck` on, its answers kept in FILE and replayed; a miss calls Haiku on the run's spend ledger (role
- * `n2.check`); `--check-replay-only` answers misses from FILE's per-pair labels and counts them instead.
- */
-const LAB_CHECK = opt("check-cache", "")
-  ? labChecker({
-      cache: opt("check-cache", ""),
-      replayOnly: args.includes("--check-replay-only"),
-      thinking: opt("check-thinking", "off") === "low" ? "low" : "off",
-      ...(ACCESS.ledger ? { ledger: ACCESS.ledger } : {}),
-    })
-  : null;
-const CHECKER = LAB_CHECK ?? SIDECAR;
-/**
- * `--widen-table FILE` (N2, D511): the `widen` dependency of an arm with `pushWiden` (`n2-widen.ts`), the embedding's
- * nearest items per (suite, seed, variant, request) of the funnel's worlds, which one-request-a-session worlds are
- * (`worldOf`). A `--days` user's world is not in it: there the embedding route finds nothing.
- */
-const WIDEN_TABLE = opt("widen-table", "") ? loadWidenTable(opt("widen-table", "")) : null;
 // Compared as files, not strings: `./a.cards.jsonl` or a symlink must not send new cards into the replay file.
 if (CARDS_FILE && samePath(CARDS_OUT, CARDS_FILE)) {
   throw new Error(`--cards-out ${CARDS_OUT} is the replayed --cards file: give new cards their own file`);
@@ -429,6 +418,17 @@ const readerReplay =
           : labModel(ACCESS, { apiKey: KEY ?? "", model: READER_MODEL, timeoutMs: 60_000 }, "eden.reader"),
         READER_MODEL,
         { salt: replaySalt("eden.reader"), timing: REPLAY_TIMING },
+      )
+    : null;
+const checkReplay =
+  REPLAY_DIR && USES_CHECK
+    ? new ReplayModel(
+        join(REPLAY_DIR, "check.jsonl"),
+        REPLAY_ONLY
+          ? null
+          : labModel(ACCESS, { apiKey: KEY ?? "", model: CHECK_MODEL, timeoutMs: 60_000 }, "eden.check"),
+        CHECK_MODEL,
+        { salt: replaySalt("eden.check"), timing: REPLAY_TIMING },
       )
     : null;
 const graderReplay = REPLAY_DIR
@@ -819,6 +819,22 @@ async function runWorld(
         })
       : undefined;
   if (reader) budgeted.reader.push(reader);
+  // `pushCheck` (I3, D500): one budgeted call per push whose pool is constraint-like, charged to the running task.
+  const checker =
+    withPartner && !noKey && effective(config).pushCheck
+      ? new PushChecker({
+          model: meteredModel(
+            ownedModel(
+              checkReplay ??
+                labModel(ACCESS, { apiKey: KEY ?? "", model: CHECK_MODEL, timeoutMs: 60_000 }, "eden.check"),
+              () => readerTask,
+            ),
+            (start, end, data) => current?.span("eden.check", "eden", "path", start, end, data),
+          ),
+          budget: new Budget(),
+        })
+      : undefined;
+  if (checker) checkers.push(checker);
   const partner = withPartner
     ? new ContextPartner({
         sources: async () => edenSources,
@@ -835,7 +851,7 @@ async function runWorld(
         config,
         ...(cards ? { cards } : {}),
         ...(reader ? { reader } : {}),
-        ...(CHECKER ? { checker: CHECKER } : {}),
+        ...(checker ? { checker } : {}),
         ...(WIDEN_TABLE && baseTasks[0]
           ? { widen: widenFor(WIDEN_TABLE, baseTasks[0].suite, seed, baseTasks[0].kind) }
           : {}),
@@ -844,8 +860,9 @@ async function runWorld(
           const owner = bySession.get(t.sessionId);
           if (!owner) return;
           // The reader's part is charged by `ownedModel` (a late call too), so it is not counted again here.
-          owner.r.edenModelCalls += t.modelCalls - (t.readerCalls ?? 0);
-          owner.r.edenCostUsd += t.costUsd - (t.readerCostUsd ?? 0);
+          // So is the push check's (D500).
+          owner.r.edenModelCalls += t.modelCalls - (t.readerCalls ?? 0) - (t.checkCalls ?? 0);
+          owner.r.edenCostUsd += t.costUsd - (t.readerCostUsd ?? 0) - (t.checkCostUsd ?? 0);
           owner.tl.point(t.decision === "fast" ? "eden.cache-hit" : "eden.decision", {
             decision: t.decision,
             event: t.event,
@@ -1669,8 +1686,16 @@ console.error(
     (INTENT_WANTED ? `; ${INTENT_LINE}` : ""),
 );
 console.error(overBudgetLine(budgeted));
-if (SIDECAR) console.error(checkerLine(SIDECAR));
-if (LAB_CHECK) console.error(labCheckerLine(LAB_CHECK));
+if (checkers.length) {
+  const sum = (k: keyof PushChecker["stats"]) => checkers.reduce((n, c) => n + c.stats[k], 0);
+  const calls = sum("calls");
+  console.error(
+    `CHECK (I3, ${CHECK_MODEL}): ${calls} calls of ${sum("asked")} asked, ${sum("failures")} failed, ` +
+      `${sum("overBudget")} over budget; $${sum("costUsd").toFixed(4)}; ` +
+      `${calls ? (sum("inputTokens") / calls).toFixed(0) : 0} in (${calls ? (sum("cachedInputTokens") / calls).toFixed(0) : 0} ` +
+      `cached) / ${calls ? (sum("outputTokens") / calls).toFixed(0) : 0} out a call`,
+  );
+}
 const replayMisses = (readerReplay?.missed ?? 0) + (graderReplay?.missed ?? 0);
 if (REPLAY_ONLY && replayMisses > 0) {
   console.error(

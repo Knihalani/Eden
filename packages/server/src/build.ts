@@ -7,6 +7,7 @@ import {
   ItemCache,
   ModelCardMaker,
   ModelReaderMaker,
+  PushChecker,
   type EngineConfig,
   type FrozenDisk,
   type ShadowSink,
@@ -135,6 +136,9 @@ export function buildPartner(options: BuildOptions): ContextPartner {
           onFailure: readerFailureLog(options.log ?? console.error, models.scrub),
         })
       : undefined;
+  // `pushCheck` (D500, a trial, off): the push check runs on the reader's model, with a budget of its own.
+  const checker =
+    models.reader && config.pushCheck ? new PushChecker({ model: models.reader, budget: budget() }) : undefined;
   const cache = new ItemCache();
   // Before the partner is built: it wires the sync's state into what a persisted user carries.
   if (options.persist) cache.persist(options.persist);
@@ -147,6 +151,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     ...(options.now ? { now: options.now } : {}),
     ...(cards ? { cards } : {}),
     ...(reader ? { reader } : {}),
+    ...(checker ? { checker } : {}),
     onTrace: options.onTrace,
     ...(options.onUsage ? { onUsage: options.onUsage } : {}),
     gatePool: options.gatePool,

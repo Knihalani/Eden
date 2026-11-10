@@ -9,7 +9,6 @@ export {
 } from "./partner";
 export { FACT_NAMES, vectorOf, type Facts } from "./decide";
 export { DEFAULT_CONFIG, type EngineConfig } from "./config";
-export { checkPool, type CheckPair, type PairChecker } from "./checker";
 export { CORE_CONFIG, PARTS, withoutParts, type Part } from "./parts";
 export { checkEngineConfig, NEEDS_DEP, PARENTS, type ConfigCheckOptions, type ConfigDep } from "./config-check";
 export { DEFAULT_CACHE_LIMITS, ItemCache, sanitizeItem, type CacheHit, type CacheLimits } from "./cache";
@@ -107,4 +106,19 @@ export {
   type ReaderStats,
   type ReaderVerdict,
 } from "./reader";
+export {
+  CHECK_MAX_ITEMS,
+  CHECK_STOP,
+  CHECK_SYSTEM,
+  CHECK_VERSION,
+  checkKey,
+  checkMessages,
+  DEFAULT_CHECK_LIMITS,
+  parseCheck,
+  PushChecker,
+  type PushCheckInput,
+  type PushCheckLimits,
+  type PushCheckRead,
+  type PushCheckStats,
+} from "./push-check";
 export { mayConstrain } from "./conflict";

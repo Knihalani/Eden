@@ -671,40 +671,36 @@ export interface EngineConfig {
    */
   pushCandidatesSettled: number;
   /**
-   * N2 (D510; a trial, off; docs/research/n2-recall.md; I1's D471 and I2's D491 shape): with `pushCandidates` and a
-   * `checker` dependency (the lab's Haiku "does this item change what the agent should do for this request?" check;
-   * no server wires one), the push's pool is scored and its candidates are the pool's items scoring at least
-   * `pushCheckPass`, in the pool's order, the first `pushCandidates` of them: items 6-15 that pass enter, items 1-5
-   * that fail leave. None passing: the default's rule, or no packet with `pushCheckSilent`. A checker that errs or
-   * misses `pushCheckWaitMs` leaves the default's candidates.
+   * I3 (D500; a trial, off; docs/research/i3-push-check.md): with `pushCandidates` and a `checker` dependency (a
+   * budgeted model call, `push-check.ts`), a push whose pool passes the candidates' constraint-like gate asks the
+   * model once, over the whole pool, which items change what the assistant should do for the request (I2's question,
+   * D490); the candidates are the pool's items it names, in the pool's order (bulk mail out), the first
+   * `pushCandidates` of them, and a pool it names none of sends no packet. A refusal, an error, an unreadable reply or
+   * a reply later than `pushCheckWaitMs` leaves the default's candidates; a late reply still serves a second pass.
    */
   pushCheck: boolean;
-  /** `pushCheck`'s pass mark on the checker's score (0-1; 0.5 pre-registered, D470). */
-  pushCheckPass: number;
-  /** How long the push waits for the checker before it hands the default's candidates (ms). */
+  /** How long the push waits for its check before it hands the default's candidates (ms). */
   pushCheckWaitMs: number;
+  /** The characters of each item's most relevant parts the check reads (200, D501; at most `READER_ITEM_CHARS`). */
+  pushCheckItemChars: number;
   /**
-   * `pushCheck` as a gate only (I1's exploratory arm, D473): the checker decides only whether the push sends
-   * candidates (none passing: no packet); when one passes, the default's candidates go out unchanged.
+   * How many of the pool's items, from its first, the check reads (at most `CHECK_MAX_ITEMS`); when it answers, only
+   * those can be candidates.
    */
-  pushCheckGate: boolean;
+  pushCheckItems: number;
   /**
-   * N2 (D513; H3): with `pushCheck`, a pool none of whose items passes sends no candidates packet (silence where the
-   * checker says nothing changes what to do); off, such a pool gets the default's candidates.
-   */
-  pushCheckSilent: boolean;
-  /**
-   * N2 (D511; H1): with `pushCheck`, the pool the checker reads is widened past the lexical ranking (`widenPool`):
-   * the request's raw intent hits (`pushWidenIntent`), the `widen` dependency's nearest items (`pushWidenEmbed`) and
-   * the ranking's next items (`pushWidenDeep`), after the pool, so only the checker can hand them.
+   * N2 (D511; H1; a trial, off): with `pushCheck`, the check reads items past the lexical pool too (`widenPool`): the
+   * `widen` dependency's nearest items (`pushWidenEmbed`), the request's raw intent hits (`pushWidenIntent`) and the
+   * ranking's next items (`pushWidenDeep`), after the pool's head and within the check's 20 items. Only the check can
+   * hand them, and only where the check runs (the constraint-like gate passed).
    */
   pushWiden: boolean;
-  pushWidenIntent: number;
   pushWidenEmbed: number;
+  pushWidenIntent: number;
   pushWidenDeep: number;
   /**
-   * N2 (D512; H2): with `pushCheck`, a candidate the agent took for an earlier request of the session is handed again
-   * when the checker passes it for this one (D340's re-show, gated by the check instead of the constraint test).
+   * N2 (D512; H2; a trial, off): with `pushCheck`, a candidate the agent took for an earlier request of the session is
+   * handed again when the check names it for this one (D340's re-show, gated by the check, not the constraint test).
    */
   pushCheckReshow: boolean;
   /**
@@ -858,14 +854,13 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askNudgeDeep: true,
   pushCandidatesSettled: 2,
   pushCheck: false,
-  pushCheckPass: 0.5,
-  pushCheckWaitMs: 500,
-  pushCheckGate: false,
-  pushCheckSilent: false,
+  pushCheckWaitMs: 2_500,
+  pushCheckItemChars: 200,
+  pushCheckItems: 15,
   pushWiden: false,
-  pushWidenIntent: 6,
-  pushWidenEmbed: 5,
-  pushWidenDeep: 5,
+  pushWidenEmbed: 3,
+  pushWidenIntent: 2,
+  pushWidenDeep: 0,
   pushCheckReshow: false,
   revisionDiff: true,
 };
