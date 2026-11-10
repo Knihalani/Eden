@@ -366,6 +366,14 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   (`ASK_LATE_LEAD`), dropped after the next user message. A cut copy no search was sent for is "timeout" at once. Do not reintroduce a wait: at market latency the work never settled within 300 ms (the wait was the
   ask's whole time), and in Pi no follow-up was ever taken (the agent's next model request starts as the tool result
   lands); the ask finds what the push missed from what the push's own searches behind stored.
+- **Three levers for late packets and long days were measured and deleted (N3, D515, D517, D518;
+  docs/research/n3-long.md; code in commit e1f9b213).** A bounded wait for a session's work behind before the take
+  that follows a tool result (`takeSettleMs`) did hand over the ask's follow-up (0 → 14 packets in 216 tasks at 1,000
+  sources) but none held the planted fact and the agent waited +746 ms a task. Shortening earlier requests' packets in
+  the transcript lost the facts later requests take from them (raised from an earlier packet 16 of 32 → 2 of 33): the
+  ledger hands an item once a session, so its packet is the only place it stands. A re-invitation to ask from a
+  session's fifth request on (`askReinvite`) was ignored (16 asks against 12 of 568 requests). Plan alerts were
+  re-measured on eight users and stand (D516: +26.9 points of late facts raised, 60% still not raised).
 - **Idle users are frozen (D325, docs/research/a14-scale-users.md).** `ItemCache` holds a user idle for
   `freezeIdleMs` (30 min) as one zstd blob (`FrozenUser`) and thaws them exactly on next use. Every reader of a
   user's state goes through `peek`/`touch` (which thaw and mark the user seen); only `revision` and `syncedCount`

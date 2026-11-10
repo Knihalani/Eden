@@ -178,15 +178,6 @@ export const ASK_NUDGE =
   "They may not cover the person, thing or date this request names: before answering, call ask_context with " +
   "those specifics, if you have it.";
 
-/**
- * `askReinvite` (trial, D518): in place of `ASK_NUDGE` from a session's fifth request on. Shorter, and it says the
- * tool is still there: by then the agent has read the nudge several times and stopped asking (A17). Like the nudge
- * it only invites an ask (D257).
- */
-export const ASK_REINVITE =
-  "ask_context is still available: before answering, call it with the person, thing or date this request names, " +
-  "if you have it.";
-
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";
 const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;

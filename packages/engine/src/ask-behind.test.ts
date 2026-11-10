@@ -204,36 +204,6 @@ describe("askBehind (D430)", () => {
     expect(on.traces.some((t) => t.reason === "cut search behind" && t.sourceCalls > 0)).toBe(true);
   });
 
-  test("takeSettleMs (trial, D515): a take that waits for the work behind gets the follow-up; off, it does not", async () => {
-    const take = async (takeSettleMs: number) => {
-      const { partner, worlds } = await partnerFor({ askBehind: true, askBehindWaitMs: 20, takeSettleMs }, ["u1"]);
-      const ref = { tenantId: "t1", userId: "u1", sessionId: "s1" };
-      await partner.ask({ ...ref, question: QUESTION });
-      const t0 = performance.now();
-      await partner.settled(ref);
-      const waited = performance.now() - t0;
-      const got = partner.takePending(ref);
-      const fact = worlds.get("u1")!.fact;
-      return { waited, fact: got.some((x) => x.citations.some((c) => c.itemId === fact.id)), partner, ref };
-    };
-    const off = await take(0);
-    expect(off.waited).toBeLessThan(SEARCH_MS / 2);
-    expect(off.fact).toBe(false);
-    const on = await take(5_000);
-    // It waits for the searches behind, not for the bound.
-    expect(on.waited).toBeLessThan(2_000);
-    expect(on.fact).toBe(true);
-    // Nothing behind any more: no wait. An unknown session: none either.
-    const t0 = performance.now();
-    await on.partner.settled(on.ref);
-    await on.partner.settled({ ...on.ref, sessionId: "nobody" });
-    expect(performance.now() - t0).toBeLessThan(50);
-    // The bound holds when the work is slower than it.
-    const short = await take(30);
-    expect(short.waited).toBeLessThan(SEARCH_MS / 2);
-    expect(short.fact).toBe(false);
-  });
-
   test("on, the work done within the wait: the answer is D264's, with no follow-up", async () => {
     const on = await ask({ askBehind: true, askBehindWaitMs: 5_000 });
     expect(on.cited).toBe(true);

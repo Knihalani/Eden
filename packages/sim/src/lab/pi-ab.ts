@@ -158,7 +158,7 @@ import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Bu
 import { parseSuites } from "./suites";
 import { readBundle, worldFromPilot } from "../pilot/world";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
-import { earlierPackets, keptForm, priorTurnBreakpoint, userTurnBreakpoint } from "./packet-layout";
+import { earlierPackets, userTurnBreakpoint } from "./packet-layout";
 import {
   DayLog,
   dayId,
@@ -289,9 +289,7 @@ const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
 });
 // D336's layouts differ only where a session holds several requests; on one request they would rerun `eden`.
 if (!DAYS_ON && CONDITIONS.some((c) => c.packets !== "kept")) {
-  throw new Error(
-    "a packet layout (+ephemeral, +compact, …) changes how earlier requests' packets are kept: use --days or --day",
-  );
+  throw new Error("+ephemeral and +ephemeralBp change how earlier requests' packets are kept: use --days or --day");
 }
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
@@ -701,8 +699,6 @@ async function runWorld(
     packets: layout,
   } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
-  // `takeSettleMs` (trial, D515): off unless the condition's settings turn it on.
-  const SETTLE_MS = Number((config as { takeSettleMs?: unknown }).takeSettleMs ?? 0);
   let clock = world.now;
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.
   let current: Timeline | null = null;
@@ -1169,13 +1165,6 @@ async function runWorld(
         // Before every model request: Eden's packets queued since the last one join those already placed, all before
         // the user turn (agent-ab's `withContext` placement), never stored in the agent's own transcript.
         transformContext: async (messages) => {
-          // `takeSettleMs` (trial, D515): a request that follows a tool result in the same turn waits, bounded, for
-          // the work Eden left running behind (an ask's reads), so what it found is taken now and not after the turn.
-          if (partner && useEden && SETTLE_MS > 0 && messages.at(-1)?.role === "toolResult") {
-            const w = tl.begin("eden.settle", "eden", "path", {});
-            await partner.settled({ ...scope, sessionId });
-            tl.end(w);
-          }
           takeEden();
           // `--day`: the packets of the day's earlier turns stay where the agent saw them, before their requests.
           if (DAYS_ON && dayPackets.some((p) => p.length)) {
@@ -1229,8 +1218,6 @@ async function runWorld(
                 const p = anthropicThinkingOff(MODEL, payload);
                 // `+ephemeralBp` (D336): the request's user turn gets a breakpoint, so its entry outlives the packet.
                 if (layout === "ephemeralBp") userTurnBreakpoint(p as { messages?: unknown });
-                // `+compact`, `+compactUsed` (D517): the entry that ends before this request outlives its packet.
-                if (layout === "compact" || layout === "compactUsed") priorTurnBreakpoint(p as { messages?: unknown });
                 return p;
               },
               onProviderStreamEvent: (event) => {
@@ -1381,9 +1368,7 @@ async function runWorld(
       await agent.prompt(userPrompt(task));
       if (DAYS_ON) {
         dayMessages = [...agent.state.messages];
-        // `+compact`, `+compactUsed` (trial, D517): from the next request on, this one's packets in their short form.
-        const said = agent.state.messages.findLast((m) => m.role === "assistant");
-        dayPackets.push(keptForm(layout, packets, task.text, said ? textOf(said) : ""));
+        dayPackets.push([...packets]);
       }
       // A request that never reached its end (refused by the cap, or thrown) gives back its reservation.
       if (request) {

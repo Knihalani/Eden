@@ -177,10 +177,5 @@ describe("pi-ab conditions", () => {
     for (const n of ["tools+ephemeral", "none+ephemeralBp", "eden+ephemeral+ephemeralBp"])
       expect(() => parseCondition(n, { config: ALL })).toThrow(/ephemeral/);
     expect(pairedWith("eden+ephemeralBp")).toBe("eden");
-    // N3's layouts (trial, D517).
-    expect(parseCondition("eden+compact", { config: ALL, defaults }).packets).toBe("compact");
-    expect(parseCondition("eden+compactUsed", { config: ALL, defaults }).packets).toBe("compactUsed");
-    expect(() => parseCondition("eden+compact+compactUsed", { config: ALL })).toThrow(/two layouts/);
-    expect(() => parseCondition("tools+compact", { config: ALL })).toThrow(/compact/);
   });
 });

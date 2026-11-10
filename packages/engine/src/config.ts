@@ -290,13 +290,6 @@ export interface EngineConfig {
    */
   askBehindWaitMs: number;
   /**
-   * Trial (D515, N3; docs/research/n3-long.md; 0 = off): how long `ContextPartner.settled` waits for a session's work
-   * behind (an ask's reads, the push's poll and cut copies' searches) before a take. An integration awaits it only
-   * before a model request that follows a tool result in the same turn, so what an ask's reads behind found reaches
-   * the request that would otherwise start as the tool result lands (C4: no follow-up packet was taken in 432 tasks).
-   */
-  takeSettleMs: number;
-  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -668,13 +661,6 @@ export interface EngineConfig {
    */
   askNudgeDeep: boolean;
   /**
-   * Trial (D518, N3; docs/research/n3-long.md). With `askNudge`: from a session's fifth request on, candidates that
-   * do not settle the request's anchors are framed with `ASK_REINVITE` in place of `ASK_NUDGE`, whether or not
-   * `askNudgeDeep` finds more in the pool (A17: the agent's asks fall to zero after about four requests of a day).
-   * It invites an ask and says nothing against the candidates (D257, D335).
-   */
-  askReinvite: boolean;
-  /**
    * D400 (A30, docs/research/a30-token-gap.md; promoted by D404: 2 in the default, part `fewer`; 0 = off): with
    * `pushCandidates`, when the request names an anchor (a person, thing or day) and the handed candidates settle it
    * (`settle.ts`, `askNudge`'s test), the push hands only the first `pushCandidatesSettled` of them, extended through
@@ -773,7 +759,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCutBehind: true,
   askBehind: true,
   askBehindWaitMs: 0,
-  takeSettleMs: 0,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,
@@ -834,7 +819,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   planConflict: true,
   askNudge: true,
   askNudgeDeep: true,
-  askReinvite: false,
   pushCandidatesSettled: 2,
   revisionDiff: true,
 };

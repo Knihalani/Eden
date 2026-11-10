@@ -50,6 +50,9 @@ the upstream's answer back unchanged. Other routes are forwarded as is.
   items Eden will not send twice in a session. Re-inserting needs no Eden call (Eden down: still in place). At most
   `maxKeptBytes` (64,000 UTF-8 bytes) a conversation: past it placements whose message left the request go first, then
   the oldest. With no user message the turn's packets go where `withContext` puts them. Shadow mode inserts nothing.
+- **What is queued is taken on every chat request** (`eden.pending()`), a tool turn's later calls included. A wait
+  there for Eden's work behind, and shortened earlier packets, were measured on Pi and not built here (D515, D517,
+  docs/research/n3-long.md): the wait cost +746 ms a task for no fact, and shortened packets lost later requests' facts.
 - **Onboarding (D365).** `GET /healthz` is answered by the proxy (`{"ok":true}`, before the key checks: it says
   nothing about a user). A chat request naming no user goes upstream untouched, and the first one is reported once to
   `onError` (no content). `examples/onboarding/python-proxy.test.ts` runs `main.ts` as a process under Python.

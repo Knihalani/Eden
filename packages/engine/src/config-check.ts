@@ -154,7 +154,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   planConflict: [...PUSH, "sync"],
   askNudge: PUSH,
   askNudgeDeep: [...PUSH, "askNudge"],
-  askReinvite: [...PUSH, "askNudge"],
   pushCandidatesSettled: PUSH,
   revisionDiff: ["revisionNotice"],
 };

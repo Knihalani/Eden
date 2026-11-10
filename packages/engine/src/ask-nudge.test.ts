@@ -8,7 +8,7 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import { ASK_NUDGE, ASK_REINVITE, CANDIDATES_LEAD } from "./render";
+import { ASK_NUDGE, CANDIDATES_LEAD } from "./render";
 import { anchored, anchorsOf, namedDays, namesDay, settledCut, settles } from "./settle";
 
 // A12 (docs/research/a12-quality.md, D316): `askNudge`. When no candidate the push hands holds every kind of anchor the
@@ -310,44 +310,6 @@ describe("askNudgeDeep (D460, D461): the nudge only when the pool past the hande
     expect(pool.handed).toEqual([HOLD.id]);
     expect(pool.anchored![pool.pool.indexOf(BULK.id)]).toBe(true);
     expect(pool.unsettled).toBe(false);
-  });
-});
-
-describe("askReinvite (trial, D518): late in a session an unsettled packet re-invites an ask", () => {
-  const late = async (config: Record<string, unknown>, fillers: number) => {
-    const p = setup({ askNudge: true, askNudgeDeep: true, pushCandidates: 1, ...config });
-    ITEMS = [];
-    for (let k = 0; k < fillers; k++) await say(p, `Note ${k}: remind me to water the plants in room ${k}.`);
-    p.takePending(ref());
-    // HOLD names Harlow but not the day, and nothing past it is anchored: `askNudgeDeep` alone stays silent.
-    ITEMS = [HOLD, OTHER];
-    await say(p, DATED_REQUEST);
-    return packet(p)!.text.split("\n")[1];
-  };
-
-  test("off in the default; the config check needs askNudge", () => {
-    expect(DEFAULT_CONFIG.askReinvite).toBe(false);
-    expect(checkEngineConfig({ askReinvite: true })).toMatchObject({ askReinvite: true });
-    expect(() => checkEngineConfig({ askNudge: false, askNudgeDeep: false, askReinvite: true })).toThrow(/askNudge/);
-  });
-
-  test("the fifth request on: the re-invitation, whatever the pool holds past the handed items", async () => {
-    expect(await late({ askReinvite: true }, 4)).toBe(`${CANDIDATES_LEAD} ${ASK_REINVITE}`);
-    expect(await late({ askReinvite: false }, 4)).toBe(CANDIDATES_LEAD);
-  });
-
-  test("before the fifth request nothing changes", async () => {
-    expect(await late({ askReinvite: true }, 3)).toBe(CANDIDATES_LEAD);
-  });
-
-  test("a settled packet is never re-invited, and the line says nothing against the candidates or the ask", async () => {
-    const p = setup({ askNudge: true, askNudgeDeep: true, askReinvite: true, pushCandidates: 2 });
-    ITEMS = [];
-    for (let k = 0; k < 4; k++) await say(p, `Note ${k}: remind me to water the plants in room ${k}.`);
-    ITEMS = [HOLD, PLAIN, DATED, OTHER];
-    await say(p, UNDATED_REQUEST);
-    expect(packet(p)!.text.split("\n")[1]).toBe(CANDIDATES_LEAD);
-    expect(ASK_REINVITE).not.toMatch(/\b(no|not|none|nothing|never|only|enough)\b/i);
   });
 });
 
