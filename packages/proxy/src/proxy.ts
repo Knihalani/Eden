@@ -13,7 +13,9 @@
  * of its first message that is not a system prompt (stable as it grows). Ids pass through `edenId`. No user id: no
  * Eden. With `proxyKey`, every caller must send it (`x-eden-proxy-key`). One deadline bounds Eden's work per request.
  * The upstream key (`Authorization`) is forwarded and never logged; only the message text goes to Eden, as with the
- * SDK. Eden's `ask_context` is not added: give the agent the MCP tool for that (docs/INTEGRATION.md).
+ * SDK. Eden's `ask_context` is not added: give the agent the MCP tool for that (docs/INTEGRATION.md). Tool calls are
+ * not checked: the agent runs them between two requests, after their answer streamed through, so an agent that acts
+ * wraps its acting tools with the SDK's `guardTools` (D420).
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import { DEFAULT_WAIT_MS, EdenClient, edenId, withContext } from "@eden/client";
