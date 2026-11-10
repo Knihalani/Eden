@@ -16,4 +16,10 @@ export {
   MAX_TEXT_CHARS,
   type Checked,
 } from "./validate";
-export { ASK_CONTEXT_DESCRIPTION } from "./describe";
+export {
+  ASK_CONTEXT_DESCRIPTION,
+  ASK_CONTEXT_MULTI_DESCRIPTION,
+  ASK_MULTI_MAX,
+  askQuestions,
+  joinAnswers,
+} from "./describe";

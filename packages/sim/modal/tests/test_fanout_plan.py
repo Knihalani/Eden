@@ -181,6 +181,81 @@ class Merge(unittest.TestCase):
         self.assertEqual(zlib.decompress(zlib.compress(b"abc")), b"abc")
 
 
+def with_requests(name, sent, limited):
+    return result(name, "pi-ab", out={"requests": {"sent": sent, "retried": limited, "statuses": {"429": limited}}})
+
+
+class Presets(unittest.TestCase):
+    def test_a_preset_is_one_command_and_args_after_it_replace_its_flags(self):
+        kind, suites, args = plan.with_preset("bench-fewer", ["--variants", "hidden", "--days", "8"])
+        self.assertEqual((kind, suites), ("pi-ab", "train"))
+        self.assertEqual(args.count("--variants"), 1)
+        self.assertEqual(plan.flag_value(args, "--variants"), "hidden")
+        self.assertEqual(plan.flag_value(args, "--conditions"), "tools,eden,eden~minus-fewer")
+        self.assertEqual(json.loads(plan.flag_value(args, "--variant-config")), {"minus-fewer": {"pushCandidatesSettled": 0}})
+        self.assertEqual(plan.flag_value(args, "--days"), "8")
+        self.assertIn("--tenant-prompt", args)
+        shards = plan.plan_pi_ab(suites, "41-43", 3.0, "r", args)
+        self.assertEqual([s.seeds for s in shards], [["41"], ["42"], ["43"]])
+
+    def test_every_preset_plans_and_names_only_variants_it_configures(self):
+        for name in plan.PRESETS:
+            kind, suites, args = plan.with_preset(name)
+            shards = plan.plan_pi_ab(suites, "41", 1.0, "r", args)
+            given = json.loads(plan.flag_value(args, "--variant-config", "{}"))
+            for cond in plan.split_list(plan.flag_value(shards[0].args, "--conditions")):
+                if "~" in cond:
+                    self.assertIn(cond.split("~", 1)[1].split("+")[0], given, name)
+
+    def test_an_unknown_preset_and_a_planner_owned_flag_are_refused(self):
+        with self.assertRaises(plan.PlanError):
+            plan.with_preset("bench-nothing")
+        _, suites, args = plan.with_preset("bench-tools", ["--budget", "9"])
+        with self.assertRaises(plan.PlanError):
+            plan.plan_pi_ab(suites, "41", 1.0, "r", args)
+
+    def test_seed_ranges(self):
+        self.assertEqual(plan.expand_seeds("41-44,48,43"), ["41", "42", "43", "44", "48"])
+        with self.assertRaises(plan.PlanError):
+            plan.expand_seeds("44-41")
+
+
+class Concurrency(unittest.TestCase):
+    def shards(self, extra=(), seeds="41-48", preset="bench-fewer"):
+        _, suites, args = plan.with_preset(preset, list(extra))
+        return plan.plan_pi_ab(suites, seeds, 8.0, "r", args)
+
+    def test_streams_are_arms_times_worlds(self):
+        # train is six suites; hidden and control are a world each: 3 arms x 12 worlds.
+        self.assertEqual(plan.streams_per_shard(self.shards()[0]), 36)
+        self.assertEqual(plan.streams_per_shard(self.shards(["--variants", "hidden"])[0]), 18)
+        # A --days user is one world a seed.
+        self.assertEqual(plan.streams_per_shard(self.shards(["--days", "8"])[0]), 3)
+        self.assertEqual(plan.streams_per_shard(plan.plan_funnel("train1", "41", "r")[0]), 0)
+
+    def test_waves_stay_under_the_streams_limit(self):
+        self.assertEqual(plan.wave_width(self.shards()), 1)                       # 36 a shard under 60
+        self.assertEqual(plan.wave_width(self.shards(["--variants", "hidden"])), 3)  # 18 a shard
+        self.assertEqual(plan.wave_width(self.shards(["--days", "8"])), 20)
+        self.assertEqual(plan.wave_width(self.shards(), max_streams=10), 1)       # never under one shard
+        self.assertEqual(plan.wave_width(plan.plan_funnel("train1,train2", "41", "r")), 2)
+        with self.assertRaises(plan.PlanError):
+            plan.wave_width(self.shards(), max_streams=0)
+        wave, left = plan.waves(self.shards(["--variants", "hidden"]), 3)
+        self.assertEqual((len(wave), len(left)), (3, 5))
+
+    def test_a_wave_that_met_the_rate_limit_halves_the_next(self):
+        calm = [with_requests("s000", 1000, 5), with_requests("s001", 1000, 0)]
+        self.assertEqual(plan.next_width(4, calm), 4)
+        storm = [with_requests("s000", 1000, 400), with_requests("s001", 1000, 0)]
+        self.assertEqual(plan.retry_share(storm), (0.2, 2000, 400))
+        self.assertEqual(plan.next_width(4, storm), 2)
+        self.assertEqual(plan.next_width(1, storm), 1)
+        # A failed shard has no summary: it neither narrows nor hides the others' retries.
+        self.assertEqual(plan.next_width(4, [{"name": "s002", "files": {}}]), 4)
+        self.assertEqual(plan.next_width(4, storm + [{"name": "s002", "files": {}}]), 2)
+
+
 class Cli(unittest.TestCase):
     def test_plan_prints_and_refuses(self):
         self.assertEqual(plan.main(["plan", "--kind", "pi-ab", "--suites", "train1", "--seeds", "41"]), 2)

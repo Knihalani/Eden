@@ -6,7 +6,7 @@
  */
 import { createHash } from "node:crypto";
 import { inert } from "@eden/engine";
-import { ASK_CONTEXT_DESCRIPTION, type AgentEvent } from "@eden/protocol";
+import { ASK_CONTEXT_DESCRIPTION, ASK_CONTEXT_MULTI_DESCRIPTION, type AgentEvent } from "@eden/protocol";
 import type { Model } from "@eden/llm";
 import { buildSessions } from "../sessions";
 import type { ActionRecord } from "./act";
@@ -238,6 +238,8 @@ export const searchToolSpec = (s: SimSource) => ({
 
 // Eden's own description of the tool, as its MCP server gives it (packages/server/src/mcp.ts, @eden/protocol).
 export const ASK_DESCRIPTION = ASK_CONTEXT_DESCRIPTION;
+/** `askMulti` (trial, D485): the description of the tool that takes several questions in one call. */
+export const ASK_MULTI_DESCRIPTION = ASK_CONTEXT_MULTI_DESCRIPTION;
 
 /**
  * `--tenant-prompt` (A3, D271): a tenant's standing house rules, the same in every arm. Pi's own prompt is short (the

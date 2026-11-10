@@ -611,6 +611,14 @@ export interface EngineConfig {
    */
   askNudge: boolean;
   /**
+   * D485 (trial, off; F3, docs/research/f3-asks-bench-pilot.md): `ask_context` takes several questions in one call
+   * (`questions`, at most `ASK_MULTI_MAX`), each answered by `ask` as it would be alone and the answers returned
+   * together (`joinAnswers`), so an agent that needs a person, a thing and a date spends one tool turn, not three.
+   * The engine's `ask` is unchanged: the switch is read where the tool is declared (the MCP server; the lab's Pi
+   * harness), which then gives `ASK_CONTEXT_MULTI_DESCRIPTION` and the list schema. No model or source call is added.
+   */
+  askMulti: boolean;
+  /**
    * D400 (A30, docs/research/a30-token-gap.md; promoted by D404: 2 in the default, part `fewer`; 0 = off): with
    * `pushCandidates`, when the request names an anchor (a person, thing or day) and the handed candidates settle it
    * (`settle.ts`, `askNudge`'s test), the push hands only the first `pushCandidatesSettled` of them, extended through
@@ -763,6 +771,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   partyCheck: true,
   planConflict: true,
   askNudge: true,
+  askMulti: false,
   pushCandidatesSettled: 2,
   revisionDiff: true,
 };
