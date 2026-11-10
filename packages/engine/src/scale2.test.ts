@@ -287,6 +287,9 @@ describe("routeSketch (D322)", () => {
     const q = sketchTerms("isa allowance").map(termHashes);
     expect(partner.sync!.sketchScores(alice, q)?.has("bank")).toBe(true);
     expect(partner.sync!.sketchScores(bob, q)).toBeUndefined();
+    // `sourceYieldEarn` (D600): the rare-word reading of the same sketches is per user too.
+    expect(partner.sync!.sketchRare(alice, q, 2).has("bank")).toBe(true);
+    expect(partner.sync!.sketchRare(bob, q, 2).size).toBe(0);
   });
 });
 

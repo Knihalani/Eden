@@ -309,6 +309,17 @@ export interface EngineConfig {
   sourceYieldHalfLifeMs: number;
   sourceYieldPolls: boolean;
   /**
+   * A trial, off (D600, O1; docs/research/o1-earn.md). With `sourceYield`: a source earns its live reads on weak
+   * evidence. A warm copy none of whose items has ever reached the agent is read live only on strong evidence: a
+   * name its items mentioned, or a word of the request that at most `sourceYieldRare` of the user's sources hold in
+   * their sketches (0: names only). The pooled rates (`sourceYieldFloor`, `sourceYieldWords`) are not consulted: they
+   * start flat, so every new user paid about 44 reads a pool before they acted, and a look-alike listed in an ask
+   * kept the words pool open (33 calls a task at 1,000 sources, 8 with this). A source with an item used is read as
+   * before (`sourceYieldRun`), and a rare word counts as a name for its run too.
+   */
+  sourceYieldEarn: boolean;
+  sourceYieldRare: number;
+  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -794,6 +805,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sourceYieldWords: true,
   sourceYieldHalfLifeMs: 7 * 24 * 3_600_000,
   sourceYieldPolls: true,
+  sourceYieldEarn: false,
+  sourceYieldRare: 2,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,

@@ -259,3 +259,49 @@ describe("sourceYield (D505)", () => {
     expect(named.handed).toContain(p.fact.id);
   });
 });
+
+describe("sourceYieldEarn (D600, a trial)", () => {
+  const EARN = { sourceYield: true, sourceYieldEarn: true };
+  const FACT = "Pay Zed Quinn for the Globex renewal today";
+
+  test("a new user's source with nothing used is not read live on no evidence, from the first request", async () => {
+    const p = await partnerOf(EARN);
+    const first = await p.request(u1, BLIND);
+    expect(sum(first.searched)).toBe(0);
+    // The ask names what it did not search, and is not an all-clear (D127).
+    const asked = await p.ask(first.ref, "Is the offsite catering arranged?");
+    expect(sum(asked.searched)).toBe(0);
+    expect(asked.answer.answer).toContain("Not searched past what is held of");
+    expect(asked.answer.answer).toContain("not an all-clear");
+  });
+
+  test("a word only one source's sketch holds is read there, and a use earns the source its reads", async () => {
+    const p = await partnerOf(EARN);
+    const named = await p.request(u1, FACT);
+    expect(named.searched[0]).toBeGreaterThan(0);
+    expect(sum(named.searched.slice(1))).toBe(0);
+    expect(named.handed).toContain(p.fact.id);
+    // Source 0 has had an item used: it is read on no evidence now, the others still are not.
+    const after = await p.request(u1, BLIND);
+    expect(after.searched[0]).toBeGreaterThan(0);
+    expect(sum(after.searched.slice(1))).toBe(0);
+  });
+
+  test("a word most sources hold is weak evidence: nothing is read for it", async () => {
+    const p = await partnerOf(EARN);
+    // "filler" and "words" are in every source's items.
+    expect(sum((await p.request(u1, "Tidy the filler words in the report")).searched)).toBe(0);
+  });
+
+  test("what a source earned is per user", async () => {
+    const p = await partnerOf(EARN, [u1, u2]);
+    await p.request(u1, FACT);
+    expect((await p.request(u1, BLIND)).searched[0]).toBeGreaterThan(0);
+    expect(sum((await p.request(u2, BLIND)).searched)).toBe(0);
+  });
+
+  test("off (the default): a new user's first request on no evidence is read live", async () => {
+    const p = await partnerOf({ sourceYield: true });
+    expect(sum((await p.request(u1, BLIND)).searched)).toBeGreaterThan(0);
+  });
+});

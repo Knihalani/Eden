@@ -261,6 +261,8 @@ PART_VARIANTS = {
 # One switch of the default turned off (not a whole part, so not checked against PARTS): N1b's arm, D540.
 SWITCH_VARIANTS = {
     "off-yield": {"sourceYield": False},
+    # A trial switch turned on over the default: O1's arm, D600.
+    "earn": {"sourceYieldEarn": True},
 }
 # A user with about 1,000 connected sources, 5% of whose connectors send change notices (N1's shape, D509).
 SCALE = ["--noise-sources", "995", "--notify-share", "0.05"]
@@ -286,6 +288,9 @@ PRESETS = {
     "bench-yield": {"kind": "pi-ab", "suites": "train",
                     "args": _bench(["eden", "eden~off-yield"], ["off-yield"], SCALE),
                     "about": "the default against the default with sourceYield off, at ~1,000 sources (N1b, D540)"},
+    "bench-earn": {"kind": "pi-ab", "suites": "train",
+                   "args": _bench(["eden", "eden~earn"], ["earn"], SCALE),
+                   "about": "the default against the default with sourceYieldEarn on, at ~1,000 sources (O1, D600)"},
 }
 
 

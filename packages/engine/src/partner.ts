@@ -4375,14 +4375,17 @@ export class ContextPartner {
     all: readonly Source[],
     boost: ReadonlyMap<string, number> | undefined,
   ): Set<string> | null {
-    if (!this.yields || !this.sync || this.yields.size(s.scope) === 0) return null;
-    const now = this.now();
     const c = this.config;
+    // `sourceYieldEarn` (D600) acts from a user's first request: nothing has been read yet, and nothing has earned.
+    if (!this.yields || !this.sync || (!c.sourceYieldEarn && this.yields.size(s.scope) === 0)) return null;
+    const now = this.now();
     const evidence = this.evidenceFor(s, cue, boost);
-    const pooled = [
-      this.yields.poolSpent(s.scope, 0, c.sourceYieldFloor, now),
-      c.sourceYieldWords && this.yields.poolSpent(s.scope, 1, c.sourceYieldFloor, now),
-    ];
+    const pooled = c.sourceYieldEarn
+      ? [true, true]
+      : [
+          this.yields.poolSpent(s.scope, 0, c.sourceYieldFloor, now),
+          c.sourceYieldWords && this.yields.poolSpent(s.scope, 1, c.sourceYieldFloor, now),
+        ];
     let out: Set<string> | null = null;
     for (const x of all) {
       const kind = evidence(x.id);
@@ -4399,7 +4402,8 @@ export class ContextPartner {
 
   /**
    * `sourceYield` (D505): what the request has for a source: 2, it names an entity the source's items mentioned (the
-   * source map); 1, its words are among the source's held items or in its sketch (`boost`); 0, nothing.
+   * source map); 1, its words are among the source's held items or in its sketch (`boost`); 0, nothing. With
+   * `sourceYieldEarn` (D600) a word of the request that few of the user's sources hold counts as a name (2).
    */
   private evidenceFor(s: Session, cue: Cue, boost: ReadonlyMap<string, number> | undefined): (id: string) => Evidence {
     let named: Set<string> | undefined;
@@ -4407,6 +4411,11 @@ export class ContextPartner {
       if (!named) {
         named = new Set();
         for (const e of cue.entities) for (const m of this.deps.sourceMap.sourcesFor(s.scope, e)) named.add(m.sourceId);
+        if (this.config.sourceYieldEarn && this.config.sourceYieldRare > 0 && this.sync) {
+          const terms = sketchTerms(`${cue.text} ${cue.entities.join(" ")}`).slice(0, MAX_SKETCH_TERMS);
+          const rare = this.sync.sketchRare(s.scope, terms.map(termHashes), this.config.sourceYieldRare);
+          for (const id of rare) named.add(id);
+        }
       }
       return named.has(id) ? 2 : (boost?.get(id) ?? 0) > 0 ? 1 : 0;
     };

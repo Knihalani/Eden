@@ -725,6 +725,30 @@ export class SyncManager {
     return score;
   }
 
+  /**
+   * `sourceYieldEarn` (D600): the sources whose sketch holds one of `terms` that at most `maxHolders` of the user's
+   * sketched sources hold: a word that rare says where to look, as a name does. No call; empty with under two
+   * sketched sources (as `sketchScores`: with one source there is nothing to tell apart).
+   */
+  sketchRare(scope: Scope, terms: readonly (readonly [number, number])[], maxHolders: number): Set<string> {
+    const out = new Set<string>();
+    const u = this.users.get(scopeKey(scope));
+    if (!u || terms.length === 0 || maxHolders <= 0) return out;
+    const sketched: SourceSync[] = [];
+    for (const s of u.sources.values()) if (s.sketch) sketched.push(s);
+    if (sketched.length < 2) return out;
+    for (const t of terms) {
+      const holders: string[] = [];
+      for (const s of sketched) {
+        if (!s.sketch!.has(t[0], t[1])) continue;
+        holders.push(s.id);
+        if (holders.length > maxHolders) break;
+      }
+      if (holders.length <= maxHolders) for (const id of holders) out.add(id);
+    }
+    return out;
+  }
+
   /** Users synced now. */
   get userCount(): number {
     return this.users.size;
