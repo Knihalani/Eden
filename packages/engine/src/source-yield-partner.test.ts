@@ -90,6 +90,8 @@ async function partnerOf(config: Record<string, unknown>, scopes: Scope[] = [u1]
       syncMaxItems: 20,
       syncCallsPerMin: 6_000,
       probes: false,
+      // On in the default (D509): each test turns it on itself.
+      sourceYield: false,
       ...config,
     },
   });

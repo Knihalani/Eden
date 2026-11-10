@@ -9,7 +9,7 @@ run=$1; seeds=$2; cap=$3; conds=$4; vc=$5; shift 5
 C=packages/sim/lab/cards
 EDEN_COMMIT=${EDEN_COMMIT:-HEAD} .local/venv-modal/bin/python -m modal run packages/sim/modal/lab_fanout.py --kind pi-ab \
   --suites train --seeds "$seeds" --cap "$cap" --run "$run" --max-streams "${MAX_STREAMS:-60}" --args "--conditions $conds --noise-sources 995 \
-  --connector-mix 0.05,0.05 --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 \
+  --notify-share 0.05 --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 \
   --reader-model claude-haiku-5-5 --cards $C/cards-v2.jsonl,$C/cards-train.jsonl,$C/cards-train-4344.jsonl \
   --tenant-prompt --push payload --source-profile packages/sim/lab/before-after/market-profiles/direct.json \
   --variant-config '$vc' $*"

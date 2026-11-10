@@ -1,7 +1,8 @@
 /**
- * `sourceYield` (D505, a trial): what each of a user's sources has given back for the live reads made of it. A live
- * read (a search of a copy the cap cut, a probe) is booked against its source when it is sent; an item of the source
- * that reaches the agent (a packet, an ask's answer) clears the source's run. Two rules skip a read, both learned:
+ * `sourceYield` (D505, on in the default since D509): what each of a user's sources has given back for the live
+ * reads made of it. A live read (a search of a copy the cap cut, a probe) is booked against its source when the
+ * connector answers it, once a turn; an item of the source that reaches the agent (a packet, an ask's answer) clears
+ * the source's run. Two rules skip a read, both learned:
  *
  * - **The source's own run.** A source whose run of reads with nothing used is long is not read live again on no
  *   name until the run decays (one half-life halves it), so a source that starts to matter is tried again. A read

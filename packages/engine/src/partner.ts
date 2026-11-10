@@ -634,7 +634,7 @@ export class ContextPartner {
   private readonly redact: (items: ContextItem[]) => ContextItem[] | Promise<ContextItem[]>;
   /** What each user's probes bring back (`probeFresh`, `probeYield`). */
   private readonly economy = new ProbeEconomy();
-  /** `sourceYield` (D505, a trial): each source's run of live reads with nothing used; null when off. */
+  /** `sourceYield` (D505): each source's run of live reads with nothing used; null when off. */
   private readonly yields: SourceYield | null;
   /** Span tracing (`spans.ts`): null when off, so each phase's call site is one null check. */
   private readonly spans: Tracer | null;

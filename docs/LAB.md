@@ -463,6 +463,14 @@ world's five as its agent's tools); one seed per process (two at once ran out of
 with every source on the weekly sweep (D356's worst case): `quality-cli --never-used` (no source is ever "used").
 Recipes and figures: docs/research/a21-scale.md.
 
+Where the calls go, and over days (N1, docs/research/n1-calls.md): `-- --call-split` (one line a funnel process)
+splits a task's calls by connector (the world's or a noise one; search or listing) and by what made them (the poll,
+the push's probes, the cut copies' searches, the ask's probes). `--notify-share P` (funnel, pi-ab, quality-cli,
+days-calls) lets only a share P of the connectors send change notices, the rest polled and swept (the owner's
+estimate is that ~90% of connectors send none: `--notify-share 0.05`). `days-calls.ts --noise-sources 995` runs the
+`--days` user with the noise connectors and prints the planted items that reached the agent and the request-time
+calls by day, so a rule that learns over days can be screened at $0 (about 15 s a user).
+
 Read hidden/decoys, `calls/task`, and the `merged cards use` line's `calls` and `sent` (card calls are stub-counted:
 noise items are not in the replay; price them at $0.000181 a call, A1). Compare task by task against the same seed
 without the arm (the JSON's `perTask`). The "hidden returned" count falls when sources answer from the index instead

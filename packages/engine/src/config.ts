@@ -290,8 +290,9 @@ export interface EngineConfig {
    */
   askBehindWaitMs: number;
   /**
-   * A trial (D505, N1; docs/research/n1-calls.md), off. With `sync`: each of a user's sources keeps a run of the live
-   * reads made of it since one of its items last reached the agent (`source-yield.ts`), and the user's reads are
+   * On in the default (D505, D509, N1; docs/research/n1-calls.md). With `sync`: each of a user's sources keeps a run
+   * of the live reads it answered since one of its items last reached the agent (`source-yield.ts`), and the user's
+   * reads are
    * pooled by what the request had for the source: nothing, its words alone (among the source's held items or in its
    * sketch), or a name the source's items mentioned. A warm synced copy is not read live (no search of its cut copy
    * behind, no probe, and with `sourceYieldPolls` no on-demand poll; it answers from what is held, and an ask names
@@ -758,7 +759,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCutBehind: true,
   askBehind: true,
   askBehindWaitMs: 0,
-  sourceYield: false,
+  sourceYield: true,
   sourceYieldRun: 4,
   sourceYieldFloor: 0.05,
   sourceYieldWords: true,

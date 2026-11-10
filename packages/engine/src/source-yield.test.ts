@@ -1,5 +1,5 @@
 /**
- * `SourceYield` (`sourceYield`, D505, a trial): each source's run of live reads with nothing used, and the user's
+ * `SourceYield` (`sourceYield`, D505): each source's run of live reads with nothing used, and the user's
  * pooled rate for reads on weak evidence.
  */
 import { describe, expect, test } from "bun:test";

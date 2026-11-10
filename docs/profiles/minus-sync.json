@@ -14,5 +14,6 @@
   "askBehind": false,
   "syncKeepCut": false,
   "syncEngagedDeep": false,
-  "syncUnusedSweepMs": 0
+  "syncUnusedSweepMs": 0,
+  "sourceYield": false
 }
