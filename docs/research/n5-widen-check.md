@@ -143,3 +143,100 @@ For the best arm that passes §1's (or §3's) screen and confirmation, and A1 be
 
 No arm, seed, split, bar or rule above changes after its first paid call; anything added later is labelled as an
 addendum written before its own run.
+
+## 5. Results of §1 (the question asked at ingest): it fails, and why
+
+Labels: every item of train seeds 41–44 (6,891 distinct contents) and 45–48 (6,635), Haiku 5.5 at effort low, 12 items
+a call: **$0.000053–0.000055 an item** direct (ledger runs `n5-label`, `n5-label-v2`, `n5-label-v2-45`; p50 1.9 s a
+call). The prompt was revised once after reading fit-split labels, as §1 allowed (v2: `keys`, one to three words each,
+in place of `about`; a `dated` flag; a settled debt or cancelled fine is `act`). **By mistake the first fitting table
+also printed the screen split's rows for the v1 rules**; the v2 rules below were fitted on the fit split alone, and the
+confirmation worlds (45–48) were not read.
+
+- **Label gate (v2, fit split; the screen split reads the same):** planted `act` 439 of 439; decoys `act` 319 of 397
+  (80%). Of the pools' other items 67% are `act` (every calendar entry is a possible clash). So "this item is a
+  constraint" removes a fifth of the look-alikes and nothing else: most look-alikes are a real constraint about
+  **another** venue, invoice, person or day.
+- **No pass rule read from the stored answer separates them.** Fit split, offline on the dumped features
+  (`.local/n5/acts-dump.jsonl`, 608 tasks a variant): requiring one stored key in the request passes 304 of 472
+  planted facts in the read set and 232 of 438 decoys; every threshold of the rarity-weighted overlap moves both
+  together (planted to decoy pass ratio 1.2–1.6 throughout; N2's thinking check: 3.0). The facts it loses reach the
+  request by a leap the stored words do not hold ("Will is off sick" for "get Will to sign off": the request never
+  says sick, leave or approvals).
+- **In the funnel** (seeds 41–44, `compare.py`; R0 = `act`; R1 = `act` and (a key in the request or weighted overlap
+  ≥ 8) and not a dated answer outside the request's days):
+
+| Arm (fit split, 608 a variant)          | Hidden surfaced | Decoys surfaced | Planted handed | Decoy handed | Neutral packets |
+| --------------------------------------- | --------------- | --------------- | -------------- | ------------ | --------------- |
+| C0 default                              | 498             | 448             | 387            | 334          | 482             |
+| A1 stored, R0                           | 506             | 452             | 406            | 276          | 496             |
+| A3 stored, R0, widen (embedding)        | 506             | 452             | 406            | 276          | 499             |
+| A3i stored, R0, widen (stored requests) | 506             | 453             | 406            | 277          | 499             |
+| A1 stored, R1                           | 505             | 452             | 344            | 208          | 188             |
+| A3 stored, R1, widen (embedding)        | 519             | 467             | 357            | 221          | 206             |
+| A3i stored, R1, widen (stored requests) | 520             | 463             | 358            | 217          | 230             |
+
+On the screen split (160 a variant): C0 104 planted handed, 84 decoys, 135 neutral packets; A1 R0 105 / 61 / 135;
+A1 R1 90 / 59 / 55; A3 R1 93 / 66 / 58.
+
+- **Against §1's bars: every arm fails.** R0 keeps the facts (+19) and cuts decoys 17% but leaves neutral packets
+  where they were (bar: halved). R1 halves them and cuts decoys 34–38% but hands 11% fewer planted facts (bar: not
+  fewer). The stored answer does not keep I2's separation without the request in hand: hypothesis 4 is rejected
+  (D526). No confirmation run was made (the screen failed); the 45–48 labels were made before the screen was read and
+  are used only by §7's gate.
+
+## 6. Pilot of §2 (seed 41), and an arm §2 did not have: the reply compares first
+
+§2's sample was to be every 4th gated push of seed 41; the funnel runs a whole seed as cheaply, so **all of seed 41**
+(473 calls an arm) was run instead, every arm with `pushWiden` and the embedding table, `pushCheckWaitMs` 60,000:
+
+| Arm (seed 41, 192 a variant)                  | Planted handed | Decoy handed | Neutral packets | $ a call     | in (cached) / out tokens | p50 / p90 s     | failed |
+| --------------------------------------------- | -------------- | ------------ | --------------- | ------------ | ------------------------ | --------------- | ------ |
+| C0 default                                    | 121            | 110          | 156             |              |                          |                 |        |
+| T0 I3's reply, no thinking                    | 139            | 70           | 67              | 0.000237     | 2,772 (892) / 79         | 0.87 / 1.18     | 0      |
+| T1 I3's reply, thinking low                   | 108            | 14           | 15              | 0.000318     | 2,236 (840) / 340        | 2.16 / 3.36     | 28     |
+| T1a T1 over stored-`act` items only           | 103            | 15           | 18              | (as T1)      |                          | 2.6 / 3.7       |        |
+| T2c compare-first, first wording (`same`)     | 125            | 26           | 24              | 0.000253     | 2,905 (1,025) / 110      | 0.89 / 1.22     | 3      |
+| T2a T2c over stored-`act` items only          | 125            | 31           | 21              | 0.000213     | 2,504 (1,027) / 109      | 0.88 / 1.22     | 1      |
+| T3c compare-first, second wording             | 132            | 31           | 31              | 0.000262     | 3,030 (1,150) / 126      | 0.95 / 1.28     | 3      |
+| **T4c compare-first, third wording (`hits`)** | **138**        | **36**       | **45**          | **0.000269** | 3,056 (1,180) / 140      | **0.98 / 1.41** | 5      |
+
+- **Thinking on I3's short reply is not N2's check** (T1): 2.2 s and $0.00032 a call, as N2 guessed, but it hands
+  fewer planted facts than the default (108 against 121) and 28 replies ran past the output cap. Reading only the
+  stored-`act` items (T1a, T2a: hypothesis 2's "fewer items") saves 14% of the input and changes nothing else. Both
+  switches are deleted (D528).
+- **A reply that compares before it decides does what thinking did, without thinking** (`pushCheckForm` 2, D527): per
+  listed item it writes what the item's point applies to, then what of the request's own that point lands on (or
+  "none"), then the verdict. The wording was revised twice on seed 41 after reading fit-split replies: `same`
+  (true or false) rejected facts that bear on the request without sharing its names (an all-hands on the request's
+  evening, an allowance its amount counts against); `hits` names the link instead. With it the check hands as many
+  planted facts as I3's reply (138 against 139), half its look-alikes (36 against 70) and fewer neutral packets, at
+  I3's price and wait. N2's thinking check on the same seed's scale handed 146 / 49 / 37 for $0.00115 and 6.8 s.
+
+## 7. Pre-registration E (addendum): the compare-first check, its screen, a gate, and the live arms
+
+Committed after §6's pilot and **a few minutes after the seeds 42–44 runs below were started; none of their output had
+been read**. The wording (`CHECK_SYSTEM_COMPARE`, commit 9968cb8e) is frozen from here.
+
+- **Arm K:** `pushCheck`, `pushCheckForm` 2, `pushWiden` (the tree's `pushWidenEmbed` 3, `pushWidenIntent` 2, the
+  embedding table), Haiku 5.5, no thinking, I3's other settings.
+- **Screen:** seeds 42–44, all templates (seed 41 chose the wording, so it is reported apart), `pushCheckWaitMs`
+  60,000. **Confirmation:** seeds 45–48, the 40 held-out templates (intent inert in every arm).
+- **Bars (N2 §1's H1+H3 bar, K against C0, screen and confirmation, every clause):** planted handed ≥ C0's; decoy
+  handed ≤ C0's − 10%; hidden surfaced ≥ C0's; neutral packets at least halved. Beside it: N2's C4L on the same tasks.
+- **Arm G, the gate (hypothesis 3), only if K passes:** K's call is made only when a stored answer of some read item
+  scores at least a mark for the request (weighted overlap + 6 × keys in the request); otherwise no call. Two forms,
+  both screened at $0 on K's recorded replies: Gd (no call → the default's candidates) and Gs (no call → no packet).
+  The mark is the one, fitted on the fit split of seeds 41–44, that keeps the call rate on the 1:1:8 mix at or under
+  **0.33** (a 0.9 s call then adds under 0.3 s a task); the form is the one with more planted handed on the fit
+  split. G goes live if, on the screen split and the confirmation, planted handed ≥ C0's and decoy handed ≤ C0's.
+- **Live (§4's harness, regrade, intervals and rule), arms `eden`, `eden~K` and, if it qualifies, `eden~G`.** K's
+  wait: the shipped `pushCheckWaitMs` 2,500 inside the harness's 3,000 ms observe wait (I3's shape). Short: seeds
+  41–48, hidden, control and neutral, all templates if seed 41's measured spend projects the whole plan under $14,
+  else the 40 held-out templates. Days: `--days 8`, users w41–w48. The embedding table is keyed by item content for
+  both shapes, so (unlike N2) a days user's world is covered; the share of requests it finds is reported.
+- **What can be promoted:** K needs nothing at push time the product lacks except the `widen` dependency (no shipped
+  embedder), so by §4's rule `pushWiden` can be recommended only; `pushCheck` with `pushCheckForm` 2 can be promoted
+  if the live rule holds for it. Since K as run includes the widening, a promotion of the check alone would need K
+  without `pushWiden` measured too: **arm `eden~Kp`** (`pushCheck`, `pushCheckForm` 2, no widening) runs beside K
+  for that. G needs the stored answers (an ingest call the product does not make): recommended only.
