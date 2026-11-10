@@ -84,3 +84,22 @@ will say which of the two the interval supports.
 
 **Spend.** Anthropic hard cap **$6**; the caps above sum to $5.96. Modal under $6 (`modal billing report`; a 24 GiB
 shard of about five minutes is about $0.03 at list prices, an estimate).
+
+### 0b. Amendment (committed before run 4; on cost alone, no hidden result of any run had been read)
+
+Runs 1, 2, 3 and 5 are paid: $0.020, $0.793, $0.534 and $0.805, **$2.152** in all; no request was retried on a 429.
+Wave 3 priced a hidden-only seed with in-run cards at $0.129–0.138 (mean $0.134), above the $0.121 the
+registration allowed for, and it showed something the registration had not counted: a shard stops when its
+**committed** spend (booked calls plus the reservations of the calls in flight on its 12 streams, about $0.02)
+reaches its cap less the 10% headroom. Seed 45 spent $0.138 and stopped 23 task runs short at a $0.18 cap; a cap of
+"cost plus 20%" ($0.160, stopping at $0.144) would cut most shards' last templates.
+
+Registered: drop seeds 67–68 and run 18 shards at $0.160 ($2.88). **Done instead: all 20 seeds (49–68) at wave
+3's cap, $0.18 a shard ($3.60).** A shard cannot spend past $0.162, so run 4 cannot pass $3.24 and the session
+cannot pass $2.152 + $3.24 + $0.15 (regrade) = $5.54 before the long seeds 47–48, which are added as registered only
+if at least $0.40 is then left beyond the regrade (their two shards cannot spend past $0.306). The session's
+Anthropic spend therefore stays under $6 by the shards' own stops, though the nominal caps now sum to more than $6.
+This keeps the 28 seeds of the target and loses fewer tail tasks; it is a departure from the registered text and
+is recorded as one. The rule, the arms, the metrics and every other shape are unchanged. Run 5 ran before run 4
+(its cap did not depend on wave 3). Users 44 and 45 of run 5 reached their caps near the end: 10 and 15 task runs
+were refused and drop from their pairs.
