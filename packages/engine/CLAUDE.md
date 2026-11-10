@@ -242,11 +242,11 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   settled packet later in the request clears it. Entities match on letter boundaries (`namesEntity`). The nudge asks,
   never discourages (D257's lesson): hidden +9.2 points Sonnet-graded, the gain all through the agent's asks (A12,
   docs/research/a12-quality.md). A wording that tells the agent the candidates are wrong ("none of them matches") was
-  not measured: it risks the agent dropping a planted fact already in the packet (it is there in 322 of 422 nudged
+  not measured: it risks the agent dropping a planted fact already in the packet (it is there in 322 of 422 nudged (A12's screen)
   hidden tasks at $0). Its unit tests are `ask-nudge.test.ts`. **Narrowed by `askNudgeDeep` (D460, D461, on in the
   default):** the nudge fires only when the push pool past the handed candidates holds a non-bulk item that names one
   of the request's anchors (`anchoredPast`), what the deeper look would list; otherwise the packet is framed as
-  settled and `Session.nudged` cleared. At $0 the fact was already handed in 322 of 421 nudged hidden tasks; on Pi it
+  settled and `Session.nudged` cleared. At $0 (M5's screen) the fact was already handed in 322 of 421 nudged hidden tasks; on Pi it
   cut asks 0.062 a task with targeted hidden +2.1 (docs/research/m5-nudge-narrow.md). Measure any change to the
   trigger live: the funnel always asks, so it cannot see it (+0 −0).
 - **The candidates' packet is not smaller (D258, D259; docs/research/cl-cl8.md).** 200-byte excerpts lost hidden facts

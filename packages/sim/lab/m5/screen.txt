@@ -5,4 +5,9 @@ deepAnchCl |  97 (68/19/0/10) [15] | 86 | 119 | 99
 deepCl     | 375 (281/42/0/52) [22] | 229 | 381 | 242
 day        | 357 (264/42/0/51) [23] | 238 | 375 | 254
 noDay      |  64 (58/1/0/5) [0] | 12 | 48 | 8
+
+current trigger, hidden fires by planted place: targeted | other
+  handed    173 |  149
+  deep       37 |    6
+  notpool    40 |   16
 engine      | 202 (140/34/0/28) [23] | 161 | 231 | 183

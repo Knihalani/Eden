@@ -29,3 +29,9 @@ for n,f in T.items():
             if p=='deep' and r['pool'][r['at']].get('anchored'): pa+=1
         else: ctl+=1; tctl+=t
     print(f"{n:10} | {sum(c.values()):3} ({c['handed']}/{c['deep']}/{c['cut']}/{c['notpool']}) [{pa}] | {tg} | {ctl} | {tctl}")
+# The current trigger's fires by template group: where the planted item sits, targeted (A12's 91) against the rest.
+print("\ncurrent trigger, hidden fires by planted place: targeted | other")
+for p in ("handed", "deep", "notpool"):
+    n = [sum(1 for r in rows if r["variant"] == "hidden" and r.get("unsettled") is True and pos(r) == p
+             and (r["template"] in tt) == t) for t in (True, False)]
+    print(f"  {p:8} {n[0]:4} | {n[1]:4}")

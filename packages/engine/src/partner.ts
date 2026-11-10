@@ -2509,7 +2509,7 @@ export class ContextPartner {
   }
 
   /**
-   * `askNudgeDeep` (D460, trial): whether the pool past the handed candidates holds an item the ask's deeper look would
+   * `askNudgeDeep` (D460, D461): whether the pool past the handed candidates holds an item the ask's deeper look would
    * list (not bulk mail, holding one of the request's anchors), judged on the pool's copies as ranked.
    */
   private anchoredPast(pool: readonly Scored[], handed: readonly Scored[], anchors: Anchors): boolean {
