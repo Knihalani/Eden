@@ -1,0 +1,46 @@
+tasks paired 2016 (dropped 0 an arm did not finish)
+Sonnet graded 1645 answers, failed 0 (Haiku's verdict kept); flips hidden −77 +71, concern −16 +0
+hidden answers Sonnet did not grade (Haiku's verdict kept): 0
+
+The nudge's effect, eden − eden~minus-nudge (points; $/1k; s). * the interval excludes zero.
+
+[pooled] hidden 814, control+neutral 1202, targeted-template hidden 382
+  eden               hidden Sonnet 0.633 Haiku 0.639; concerns Sonnet 0.0008 Haiku 0.0108
+  eden~minus-nudge   hidden Sonnet 0.615 Haiku 0.617; concerns Sonnet 0.0000 Haiku 0.0033
+  hidden, Sonnet    +1.7 (-0.9..+4.3)  n 814
+  hidden, Haiku     +2.2 (-0.4..+4.8)  n 814
+  concerns, Sonnet  +0.1 (+0.0..+0.2)  n 1202
+  concerns, Haiku   +0.7 (+0.2..+1.4)* n 1202
+  targeted, Sonnet  +4.5 (+0.8..+8.4)* n 382
+  targeted, Haiku   +3.9 (+0.0..+7.9)  n 382
+  other templates, Sonnet -0.7 (-4.4..+3.0)  n 432
+  $/1k              +0.022 (+0.017..+0.027)*
+  wall mean s       +0.210 (+0.174..+0.247)*
+
+[short] hidden 768, control+neutral 768, targeted-template hidden 364
+  eden               hidden Sonnet 0.633 Haiku 0.641; concerns Sonnet 0.0000 Haiku 0.0091
+  eden~minus-nudge   hidden Sonnet 0.618 Haiku 0.615; concerns Sonnet 0.0000 Haiku 0.0039
+  hidden, Sonnet    +1.4 (-1.3..+4.3)  n 768
+  hidden, Haiku     +2.6 (+0.0..+5.2)  n 768
+  concerns, Sonnet  +0.0 (+0.0..+0.0)  n 768
+  concerns, Haiku   +0.5 (-0.1..+1.3)  n 768
+  targeted, Sonnet  +4.1 (+0.3..+8.0)* n 364
+  targeted, Haiku   +3.8 (-0.3..+8.0)  n 364
+  other templates, Sonnet -1.0 (-5.0..+2.7)  n 404
+  $/1k              +0.025 (+0.019..+0.031)*
+  wall mean s       +0.244 (+0.198..+0.291)*
+
+[long] hidden 46, control+neutral 434, targeted-template hidden 18
+  eden               hidden Sonnet 0.630 Haiku 0.609; concerns Sonnet 0.0023 Haiku 0.0138
+  eden~minus-nudge   hidden Sonnet 0.565 Haiku 0.652; concerns Sonnet 0.0000 Haiku 0.0023
+  hidden, Sonnet    +6.5 (-2.2..+15.2)  n 46
+  hidden, Haiku     -4.3 (-15.2..+6.5)  n 46
+  concerns, Sonnet  +0.2 (+0.0..+0.7)  n 434
+  concerns, Haiku   +1.2 (+0.0..+2.3)  n 434
+  targeted, Sonnet  +11.1 (+0.0..+27.8)  n 18
+  targeted, Haiku   +5.6 (-11.1..+22.2)  n 18
+  other templates, Sonnet +3.6 (-7.1..+14.3)  n 28
+  $/1k              +0.012 (+0.007..+0.017)*
+  wall mean s       +0.101 (+0.055..+0.149)*
+
+RULE: hidden Sonnet pooled +1.7 (-0.9..+4.3)  n 814; concerns up: False -> DELETE askNudge
