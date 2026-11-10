@@ -50,7 +50,7 @@ const VOLATILE_ENV =
  * Signs that a module can read files the import graph does not show: it starts a process, learns its own location
  * (other than to name a sibling module, which `URL_EDGE` follows), reads the working directory, or imports a module
  * named at run time (a variable, a template), or reads a path that is not absolute. A read of an absolute path made
- * at run time shows none of these: that is what `FS_USE` and the audit's record are for.
+ * at run time shows none of these: that is what the audit's record is for (D658).
  */
 /** Bun's module or node's built-ins reached indirectly: may spawn or read files, so it counts as both. */
 const BUN_INDIRECT =
@@ -116,10 +116,6 @@ export const isProse = (p: string) => p.startsWith("docs/") || p.endsWith(".md")
 const SPAWNS = new RegExp(
   /["'](?:node:)?child_process["']|\bBun\.spawn(Sync)?\b|\bBun\.\$|/.source + BUN_INDIRECT.source,
 );
-/** A module that reads files itself: keyed on the tree unless the audit traced its test (`verified`). */
-const FS_USE = new RegExp(
-  /["'](?:node:)?fs(?:\/promises)?["']|\bBun\.(?:file|write)\s*\(|/.source + BUN_INDIRECT.source,
-);
 /** `new URL("./worker.ts", import.meta.url)`: a module named by its file, followed as an import. */
 const URL_EDGE = /new URL\(\s*["'](\.{1,2}\/[^"']+)["']\s*,\s*import\.meta\.url\s*\)/g;
 /** `export const X = import.meta.url;`: a module naming itself (for a worker pool to load): already in the graph. */
@@ -159,8 +155,6 @@ interface Module {
   tree: string | null;
   /** It names docs/ or a Markdown file in a string, so the tree it may read includes them. */
   docs: boolean;
-  /** It imports the file system or opens files through Bun (`FS_USE`). */
-  fs: boolean;
 }
 const transpilers = { ts: new Bun.Transpiler({ loader: "ts" }), tsx: new Bun.Transpiler({ loader: "tsx" }) };
 /**
@@ -181,7 +175,7 @@ const modules = new Map<string, Module>();
 function scan(path: string): Module {
   let m = modules.get(path);
   if (m) return m;
-  m = { edges: [], tree: null, docs: false, fs: false };
+  m = { edges: [], tree: null, docs: false };
   modules.set(path, m);
   if (!/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(path)) return m; // JSON, text: a leaf, hashed as bytes
   let code: string;
@@ -208,7 +202,6 @@ function scan(path: string): Module {
   m.docs = DOCS_PATH.test(bare) || (m.tree !== null && DOCS_SEGMENT.test(bare));
   // A process it starts can read anything, prose too (the Modal apps' Python tests read their README).
   if (SPAWNS.test(bare)) m.docs = true;
-  m.fs = FS_USE.test(bare);
   if (TRUSTED[relative(ROOT, path)]) m.tree = null;
   const from = dirname(path);
   for (const name of names) {
@@ -232,25 +225,23 @@ function scan(path: string): Module {
  * Every repository file reachable from `entry`, sorted; the first reason it needs the whole tree; whether any module
  * names prose.
  */
-export function closure(entry: string): { files: string[]; tree: string | null; docs: boolean; fs: boolean } {
+export function closure(entry: string): { files: string[]; tree: string | null; docs: boolean } {
   const seen = new Set<string>([entry]);
   const stack = [entry];
   let tree: string | null = null;
   let docs = false;
-  let fs = false;
   while (stack.length > 0) {
     const at = stack.pop()!;
     const m = scan(at);
     if (m.tree && !tree) tree = `${relative(ROOT, at)}: ${m.tree}`;
     docs ||= m.docs;
-    fs ||= m.fs;
     for (const e of m.edges) {
       if (seen.has(e)) continue;
       seen.add(e);
       stack.push(e);
     }
   }
-  return { files: [...seen].sort(), tree, docs, fs };
+  return { files: [...seen].sort(), tree, docs };
 }
 
 /** One hash over a closure's paths and bytes: what the audit's record of a test (`VERIFIED`) is bound to. */
@@ -261,10 +252,36 @@ export function closureHash(files: readonly string[]): string {
 }
 
 /**
- * Tests the audit traced reading nothing outside their key (`scripts/test-cache-audit.ts --write`), each bound to its
- * closure's bytes then: `<closure hash> <test path>` a line. A test whose closure reads files (`FS_USE`) is keyed on
- * the tree unless its line here still matches, so an edit anywhere in its closure sends it back to the tree until
- * the audit runs again. A missing or stale file only makes more tests run.
+ * strace's output as one line a call: with `-f`, a call another thread interrupts is printed in two halves,
+ * `PID openat(…, "path", … <unfinished ...>` and later `PID <... openat resumed>) = 7`. Matched line by line, both
+ * halves were dropped, and Bun's thread-pool reads (`node:fs/promises`) are split routinely (the review of D658).
+ */
+export function joinTrace(text: string): string[] {
+  const pending = new Map<string, string>();
+  const out: string[] = [];
+  for (const line of text.split("\n")) {
+    const cut = /^(\d+)\s+(.*) <unfinished \.\.\.>$/.exec(line);
+    if (cut) {
+      pending.set(cut[1]!, cut[2]!);
+      continue;
+    }
+    const resumed = /^(\d+)\s+<\.\.\. \w+ resumed>(.*)$/.exec(line);
+    if (resumed) {
+      const head = pending.get(resumed[1]!);
+      pending.delete(resumed[1]!);
+      if (head !== undefined) out.push(`${resumed[1]} ${head}${resumed[2]}`);
+      continue;
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+/**
+ * Tests the audit traced reading nothing outside their closure (`scripts/test-cache-audit.ts --write`), each bound
+ * to its closure's bytes then: `<closure hash> <test path>` a line. A test with no sign is keyed on the tree unless
+ * its line here still matches (D658), so an edit anywhere in its closure sends it back to the tree until the audit
+ * runs again. A missing or stale line only makes more tests run; a forged one is stopped only by review.
  */
 export const VERIFIED = "scripts/test-cache-verified.txt";
 let verifiedMemo: Set<string> | undefined;

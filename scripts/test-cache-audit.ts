@@ -19,7 +19,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { closure, closureHash, configFiles, isProse, treeFiles, VERIFIED } from "./test-cache";
+import { closure, closureHash, configFiles, isProse, joinTrace, treeFiles, VERIFIED } from "./test-cache";
 
 const ROOT = realpathSync(join(import.meta.dir, ".."));
 const argv = process.argv.slice(2);
@@ -71,7 +71,7 @@ function audit(test: string, slot: number): Promise<Finding> {
       for (const f of [...covered, ...config]) {
         for (let d = dirname(f); d !== "." && !ancestors.has(d); d = dirname(d)) ancestors.add(d);
       }
-      for (const line of readFileSync(out, "utf8").split("\n")) {
+      for (const line of joinTrace(readFileSync(out, "utf8"))) {
         // A successful read of a path: an open that is not a write, or a stat, an access check, a link read. A failed
         // one is not traced: a file that does not exist yet can only matter through a listing or the tree.
         const m = /^\d+\s+(\w+)\((?:AT_FDCWD, )?"([^"]+)"(?:, ([A-Z_|0-9]+))?[^)]*\)\s+= (\d+)/.exec(line);

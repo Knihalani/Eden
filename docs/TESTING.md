@@ -117,10 +117,17 @@ every file. `bun scripts/test-cache.ts why <test file>` prints what a file's key
 `bun scripts/test-cache-audit.ts [--write]` runs each test file under strace (opens, stats, access checks, of files
 and of directories) and fails when a test read something its key does not cover; `--write` refreshes
 `scripts/test-cache-verified.txt`. Run it after changing the cache, when a test reads files in a new way, and now
-and then to bring edited closures back (230 traced, 0 missed, 128 verified; 87 s).
+and then to bring edited closures back (230 traced, 0 missed, 182 verified; 87–106 s). It joins the two halves strace
+prints for a call another thread interrupts (`<unfinished ...>` / `resumed`), which Bun's thread-pool reads produce.
 
-Measured on a 4-core container after D657 and before D658 (docs/research/o2-dev-loop.md; D658 keeps 48 of 230 files on the tree, as before, but an untraced edit now re-runs more until the audit is re-run): the same tree again 51 s to 0.5 s; a docs
-edit 24 s; a leaf-package edit 27 s; an engine edit 45 s.
+What the audit cannot see, so the key does not cover either: a test that depends on a file being absent (failed
+lookups are not traced), an `openat` relative to an open directory, a child that changes directory, and a read on a
+code path the traced run did not take. Each needs a path no sign sees (`Bun.main`, a stack trace) first; the gate
+runs cold (D657) for this reason too.
+
+Measured on a 4-core container after D657 and before D658 (docs/research/o2-dev-loop.md): the same tree again 51 s
+to 0.5 s; a docs edit 24 s; a leaf-package edit 27 s; an engine edit 45 s. D658 keeps the same 48 of 230 files on the
+tree, but a file whose closure was edited now re-runs on any change until the audit runs again.
 
 ## Bun's unref'd-timer spin (Bun 1.4.4, 2026-11-05)
 

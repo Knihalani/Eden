@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { MAX_AGE_MS } from "./test-cache";
+import { joinTrace, MAX_AGE_MS } from "./test-cache";
 
 /** A small repository of its own: the cache under test reads it through EDEN_TEST_CACHE_ROOT. */
 const repo = mkdtempSync(join(tmpdir(), "eden-test-cache-"));
@@ -238,6 +238,22 @@ describe("a test file's key (D650)", () => {
     const x1 = key("lib/spawn.test.ts", user);
     write("lib/extra.txt", "2\n");
     expect(key("lib/spawn.test.ts", user)).not.toBe(x1);
+  });
+});
+
+describe("the audit's trace (D658)", () => {
+  test("a call strace splits across two lines is read as one (the review of D658)", () => {
+    const trace = [
+      `12 openat(AT_FDCWD, "lib/a.ts", O_RDONLY|O_CLOEXEC) = 5`,
+      `13 openat(AT_FDCWD, "lib/d7.txt", O_RDONLY|O_CLOEXEC <unfinished ...>`,
+      `12 statx(AT_FDCWD, "lib/b.ts", AT_STATX_SYNC_AS_STAT, STATX_ALL, {}) = 0`,
+      `13 <... openat resumed>) = 7`,
+    ].join("\n");
+    expect(joinTrace(trace)).toEqual([
+      `12 openat(AT_FDCWD, "lib/a.ts", O_RDONLY|O_CLOEXEC) = 5`,
+      `12 statx(AT_FDCWD, "lib/b.ts", AT_STATX_SYNC_AS_STAT, STATX_ALL, {}) = 0`,
+      `13 openat(AT_FDCWD, "lib/d7.txt", O_RDONLY|O_CLOEXEC) = 7`,
+    ]);
   });
 });
 
