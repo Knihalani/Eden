@@ -16,6 +16,11 @@
  * SDK. Eden's `ask_context` is not added: give the agent the MCP tool for that (docs/INTEGRATION.md). Tool calls are
  * not checked: the agent runs them between two requests, after their answer streamed through, so an agent that acts
  * wraps its acting tools with the SDK's `guardTools` (D420).
+ *
+ * `POST /v1/messages` (Anthropic's Messages API, D653) gets the same treatment: `fromAnthropic` reads the conversation
+ * as chat messages, the code above runs on that view, and `toAnthropic` writes each packet into its user message as a
+ * text block. There the user is `x-eden-user-id`, else `metadata.user_id`; `x-api-key` is forwarded and never logged;
+ * the proxy's own errors have Anthropic's shape.
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import { DEFAULT_WAIT_MS, EdenClient, edenId, withContext } from "@eden/client";
@@ -249,12 +254,17 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
   };
 
   /** The request's messages with Eden's context in place, or null when Eden has nothing or cannot be used. */
-  const withEden = async (req: Request, body: Record<string, unknown>): Promise<Message[] | null> => {
+  const withEden = async (
+    req: Request,
+    body: Record<string, unknown>,
+    anthropic = false,
+  ): Promise<Message[] | null> => {
     const messages = body.messages;
     if (!Array.isArray(messages) || messages.length === 0) return null;
-    // The caller's header, else the body's user: OpenAI's `user`, Anthropic's `metadata.user_id`.
-    const meta = (body.metadata as { user_id?: unknown } | null | undefined)?.user_id;
-    const named = typeof body.user === "string" ? body.user : typeof meta === "string" ? meta : "";
+    // The caller's header, else the body's user: `user` on the chat route, `metadata.user_id` on Anthropic's (each
+    // route reads only its own field: a chat body's free-form `metadata` names nobody).
+    const field = anthropic ? (body.metadata as { user_id?: unknown } | null | undefined)?.user_id : body.user;
+    const named = typeof field === "string" ? field : "";
     const rawUser = req.headers.get("x-eden-user-id") ?? named;
     if (!rawUser) {
       // Once per proxy, through onError: otherwise a caller that forgot the header saw the agent work with no packet
@@ -400,7 +410,8 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     const url = new URL(req.url);
     // Two routes carry a conversation: OpenAI's chat completions and Anthropic's Messages (D653). The rest (models,
     // embeddings, Anthropic's token counting and batches) are forwarded as they came.
-    const anthropic = req.method === "POST" && url.pathname.endsWith("/messages");
+    // Matched whole: another API's `…/threads/{id}/messages` is not this route and is forwarded as bytes.
+    const anthropic = req.method === "POST" && /^(\/v1)?\/messages$/.test(url.pathname);
     const fail = errorFor(anthropic);
     // The proxy holds the tenant's Eden key: with `proxyKey` set, only callers who know it may name a user (D9).
     if (options.proxyKey !== undefined && !sameSecret(req.headers.get("x-eden-proxy-key"), options.proxyKey)) {
@@ -440,7 +451,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
           // The same work on the conversation read as chat messages; the context then goes back in as a text block.
           const theirs = (body as { messages?: unknown }).messages;
           const view = Array.isArray(theirs) ? fromAnthropic(theirs) : null;
-          const placed = view && (await withEden(req, { ...(body as object), messages: view.messages }));
+          const placed = view && (await withEden(req, { ...(body as object), messages: view.messages }, true));
           messages = placed ? toAnthropic(theirs as unknown[], view!, placed) : null;
         } else messages = await withEden(req, body as Record<string, unknown>);
         if (messages) sent = withMessages(raw, messages) ?? JSON.stringify({ ...(body as object), messages });
@@ -479,8 +490,10 @@ const ANTHROPIC_ERRORS: Record<number, string> = {
  * An Anthropic Messages conversation read as chat messages (D653), so the one implementation of what is new, what
  * is reported and where packets are kept serves both routes. Per Anthropic message, in order:
  *
- * - a user message's `tool_result` blocks become `tool` messages (their `tool_use_id` the call's id), then its text
- *   blocks one `user` message. A user message with only tool results has no `user` part: it is not a new turn;
+ * - a user message's `tool_result` blocks become `tool` messages (their `tool_use_id` the call's id). A message with
+ *   tool results is the agent's loop, not the user speaking: text beside them (a harness's reminder, a "continue")
+ *   is not reported and starts no turn, or every tool call would wait on a lookup of the harness's words;
+ * - any other user message is one `user` message of its text blocks;
  * - an assistant message's text blocks become its content and its `tool_use` blocks its `tool_calls`.
  *
  * Thinking, images and documents are left out, as `textOf` leaves non-text parts out. `at` maps each chat message to
@@ -521,17 +534,16 @@ export function fromAnthropic(messages: readonly unknown[]): { messages: Message
       add({ role: "tool", tool_call_id: r.tool_use_id, content: textOf(r.content) }, i);
       results++;
     }
-    const text = textOf(m.content);
-    // A message of tool results alone is not a user turn; anything else is (an image alone too: a turn with no text).
-    if (results === 0 || text) add({ role: "user", content: text }, i);
+    // Anything without tool results is a user turn (an image alone too: a turn with no text).
+    if (results === 0) add({ role: "user", content: textOf(m.content) }, i);
   }
   return { messages: out, at };
 }
 
 /**
  * The Anthropic messages with the context `withEden` placed (D653). A packet placed before a user turn becomes a
- * text block of that Anthropic message, ahead of its other text and after its tool results (the API wants a user
- * message's `tool_result` blocks first); a message whose content is a string becomes two text blocks. The API has
+ * text block of that Anthropic message, ahead of its other blocks and after any leading tool results (the API wants
+ * a user message's `tool_result` blocks first); a message whose content is a string becomes two text blocks. The API has
  * no system role inside `messages`, and a text block keeps the request a prefix of the next as the system message
  * does for chat completions. Packets with no user turn after them (a request with none) go into the last message
  * when it is the user's; otherwise nothing is inserted (null): an assistant prefill is not followed by Eden's text.
@@ -542,18 +554,21 @@ export function toAnthropic(
   placed: readonly Message[],
 ): unknown[] | null {
   const out = [...original];
-  const insert = (i: number, text: string) => {
+  const insert = (i: number, text: string): boolean => {
     const m = out[i] as { content?: unknown };
     const block = { type: "text", text };
+    // Content that is neither text nor blocks is the upstream's to refuse: replacing it would hide the caller's error.
+    if (!m || (typeof m.content !== "string" && !Array.isArray(m.content))) return false;
     if (!Array.isArray(m.content)) {
       const own = typeof m.content === "string" && m.content.length > 0 ? [{ type: "text", text: m.content }] : [];
       out[i] = { ...m, content: [block, ...own] };
-      return;
+      return true;
     }
     const blocks = m.content as { type?: unknown }[];
     let k = 0;
     while (k < blocks.length && blocks[k]?.type === "tool_result") k++;
     out[i] = { ...m, content: [...blocks.slice(0, k), block, ...blocks.slice(k)] };
+    return true;
   };
   let waiting: string[] = [];
   let inserted = false;
@@ -564,15 +579,13 @@ export function toAnthropic(
       continue;
     }
     if (waiting.length === 0 || m.role !== "user") continue;
-    insert(i, waiting.join("\n\n"));
+    if (insert(i, waiting.join("\n\n"))) inserted = true;
     waiting = [];
-    inserted = true;
   }
   if (waiting.length > 0) {
     const last = original.length - 1;
     if ((original[last] as { role?: unknown } | undefined)?.role !== "user") return inserted ? out : null;
-    insert(last, waiting.join("\n\n"));
-    inserted = true;
+    if (insert(last, waiting.join("\n\n"))) inserted = true;
   }
   return inserted ? out : null;
 }

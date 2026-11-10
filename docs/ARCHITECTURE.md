@@ -606,7 +606,8 @@ add the SDK: it turns each chat request's new messages (by content, so compacted
 events through `@eden/client`, inserts the turn's packets with `withContext`, and streams the upstream's answer back.
 It fails open under one deadline per request (the observe's wait plus 800 ms), keeps per-conversation state in memory
 (bounded, keyed by user and session), and off loopback needs its own key (`EDEN_PROXY_KEY`), since it holds the
-tenant's. A shadow mode reports and decides but injects nothing.
+tenant's. A shadow mode reports and decides but injects nothing. `POST /v1/messages` (Anthropic's Messages API, D653)
+runs the same logic on the conversation read as chat messages; a packet goes back as a text block of its user message.
 
 ## What is deliberately missing (see ROADMAP.md)
 

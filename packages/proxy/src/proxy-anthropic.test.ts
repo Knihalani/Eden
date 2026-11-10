@@ -132,25 +132,71 @@ describe("the proxy on Anthropic's Messages API (D653)", () => {
     expect(events.filter((e) => e === "tool_result").length).toBe(1);
   });
 
-  test("a user message with tool results and text: the context goes after the results, before the text", async () => {
+  test("text beside tool results is the harness's, not a user turn: not reported, the packet stays put", async () => {
     const proxy = proxyFor();
     const h = { "x-eden-user-id": "a4", "x-eden-session-id": "s4" };
+    const first = [{ role: "user", content: ASK }];
+    await send(proxy, { model: "m", max_tokens: 8, messages: first }, h);
+    const placed = seen.at(-1)!.body.messages[0];
     const messages = [
-      { role: "user", content: "hello" },
+      ...first,
       { role: "assistant", content: [{ type: "tool_use", id: "toolu_9", name: "noop", input: {} }] },
       {
         role: "user",
         content: [
           { type: "tool_result", tool_use_id: "toolu_9", content: [{ type: "text", text: "done" }] },
-          { type: "text", text: ASK },
+          { type: "text", text: "<reminder>keep going</reminder>" },
         ],
       },
     ];
     await send(proxy, { model: "m", max_tokens: 8, messages }, h);
-    const last = seen.at(-1)!.body.messages[2].content;
-    expect(last.map((b: any) => b.type)).toEqual(["tool_result", "text", "text"]);
-    expect(last[1].text).toContain("Dishoom");
-    expect(last[2].text).toBe(ASK);
+    const sent = seen.at(-1)!.body.messages;
+    expect(sent[0]).toEqual(placed);
+    expect(sent[2]).toEqual(messages[2]);
+    const events = (await explain("a4", "s4")).map((d) => d.event);
+    expect(events.filter((e) => e === "user_message").length).toBe(1);
+  });
+
+  test("the chat route does not read metadata.user_id, and this route does not read user", async () => {
+    const proxy = proxyFor();
+    const chat = JSON.stringify({
+      model: "m",
+      metadata: { user_id: "a9" },
+      messages: [{ role: "user", content: ASK }],
+    });
+    await post(proxy, "/v1/chat/completions", chat, {});
+    expect(seen.at(-1)!.raw).toBe(chat);
+    const ours = JSON.stringify({ model: "m", max_tokens: 8, user: "a9", messages: [{ role: "user", content: ASK }] });
+    await post(proxy, "/v1/messages", ours, {});
+    expect(seen.at(-1)!.raw).toBe(ours);
+  });
+
+  test("another API's route ending in /messages is forwarded as bytes, with OpenAI-shaped errors", async () => {
+    const raw = JSON.stringify({ role: "user", content: ASK, messages: [{ role: "user", content: ASK }] });
+    await post(proxyFor(), "/v1/threads/t_1/messages", raw, { "x-eden-user-id": "a10" });
+    expect(seen.at(-1)!.path).toBe("/v1/threads/t_1/messages");
+    expect(seen.at(-1)!.raw).toBe(raw);
+    const res = await post(proxyFor({ proxyKey: "secret" }), "/v1/threads/t_1/messages", raw, {});
+    expect(await res.json()).toEqual({ error: { message: "eden proxy: missing or wrong x-eden-proxy-key" } });
+  });
+
+  test("keepPackets off inserts only the turn's packet; shadow forwards the request as it came", async () => {
+    const mk = (o: object) =>
+      createProxy({ upstream: `${upstream.url.href}v1`, edenUrl: eden.url.href, edenApiKey: KEY, waitMs: 1_000, ...o });
+    const raw = JSON.stringify({ model: "m", max_tokens: 8, messages: [{ role: "user", content: ASK }] });
+    await post(mk({ keepPackets: false }), "/v1/messages", raw, { "x-eden-user-id": "a11", "x-eden-session-id": "s" });
+    expect(JSON.stringify(seen.at(-1)!.body.messages)).toContain("Dishoom");
+    const shadowed: unknown[] = [];
+    const shadow = mk({ shadow: true, onShadow: (r: unknown) => shadowed.push(r) });
+    await post(shadow, "/v1/messages", raw, { "x-eden-user-id": "a12", "x-eden-session-id": "s" });
+    expect(seen.at(-1)!.raw).toBe(raw);
+    expect(shadowed.length).toBe(1);
+  });
+
+  test("content that is neither text nor blocks is left for the upstream to refuse", () => {
+    const odd = [{ role: "user", content: { type: "text", text: "hi" } }];
+    const v = fromAnthropic(odd);
+    expect(toAnthropic(odd, v, [{ role: "system", content: "CTX" }, ...v.messages])).toBeNull();
   });
 
   test("a later turn keeps the earlier turn's context in place", async () => {
