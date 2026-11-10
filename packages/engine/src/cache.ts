@@ -733,9 +733,25 @@ export class ItemCache {
         maxSeq: f.maxSeq,
         extra,
         blob: f.blob,
+        expiresAt: this.frozenExpiry(f),
       },
       this.clock(),
     );
+  }
+
+  /**
+   * When everything a frozen user holds has expired (D428): the latest of each class's newest item plus its time to
+   * live, and of the newest probe plus a lookup's (probes are kept that long, `expireIdle`). NaN when it holds none.
+   */
+  private frozenExpiry(f: FrozenUser): number {
+    const [loose, synced] = f.newest;
+    let probe = Number.NaN;
+    for (const p of f.probes.values()) probe = p.at; // Least recently made first: the last is the newest.
+    let until = Number.NaN;
+    for (const t of [loose + this.limits.ttlMs, synced + this.limits.syncTtlMs, probe + this.limits.ttlMs]) {
+      if (!Number.isNaN(t) && !(until >= t)) until = t; // NaN (none of that kind) never wins.
+    }
+    return until;
   }
 
   /**
