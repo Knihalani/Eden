@@ -5,7 +5,7 @@
  *
  *   bun packages/sim/src/lab/cards-distill.ts export --out DIR [--suite train] [--seeds 41,42,43,44]
  *     [--cards-from intent|replay] [--cards default|F[,F]] [--intent default|none|F] [--batch-sizes 20,10,5]
- *     [--holdout 0.1] [--seed 7]
+ *     [--holdout 0.1] [--seed 7] [--train-batchings 1]
  *   bun packages/sim/src/lab/cards-distill.ts score --data DIR/heldout.jsonl --outputs OUT.jsonl [--json F]
  *
  * `export`: every item a sync of the train worlds would read (as `cards-enrich.ts` builds them: each suite's hidden,
@@ -35,7 +35,8 @@
  * `score`: reads each held-out row's model output (`{id, text}` lines) with Eden's own parsers (`parseCards`,
  * `parseRequests`: the fields as the engine keeps them, bounded and validated) and compares with the target read
  * the same way: the parse rate, the constraint flag (kind not none), kind, actions, span,
- * limit, entities, and the requests' coverage.
+ * limit, entities, and the requests' coverage. `kept` (M2) is the flag on items the shipped default keeps a card for
+ * (`carded`: the strict prefilter passes them); a flag on any other item is dropped by the enricher.
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -50,6 +51,7 @@ import {
   parseCards,
   parseRequests,
   worthCarding,
+  worthCardingStrict,
   type Card,
 } from "@eden/engine";
 import type { ChatMessage } from "@eden/llm";
@@ -154,6 +156,12 @@ export interface DistillRow {
   keys: string[];
   messages: ChatMessage[];
   maxTokens: number;
+  /**
+   * Per item, whether the shipped default keeps the card it is given (M2): the strict prefilter `cardsEconomy` runs
+   * (`worthCardingStrict`). An item it rejects is read for its requests only and the enricher drops whatever card
+   * the model wrote (`NONE_CARD`), so a flag there costs nothing. Rows exported before M2 lack it (all kept).
+   */
+  carded?: boolean[];
 }
 
 export interface ExportOptions {
@@ -162,6 +170,8 @@ export interface ExportOptions {
   holdout: number;
   seed: number;
   today?: string;
+  /** Train batchings (M2): the train items cut into batches this many times, each from a new shuffle (default 1). */
+  trainBatchings?: number;
 }
 
 export interface ExportResult {
@@ -214,9 +224,8 @@ export function buildRows(
     split[heldOut(h, o.holdout) ? "heldout" : "train"].push([h, it, card, q ?? null]);
   }
   const rng = new Rng(o.seed);
-  const batch = (name: "train" | "heldout"): DistillRow[] => {
+  const batch = (name: "train" | "heldout", rows: DistillRow[] = []): DistillRow[] => {
     const list = rng.sample(split[name], split[name].length);
-    const rows: DistillRow[] = [];
     for (let at = 0, k = 0; at < list.length; k++) {
       const size = o.batchSizes[k % o.batchSizes.length]!;
       const part = list.slice(at, at + size);
@@ -235,11 +244,17 @@ export function buildRows(
         keys: part.map(([h]) => h),
         messages: [...messages, { role: "assistant", content: target }],
         maxTokens: maxTokensFor(part.length, o.intent),
+        carded: part.map(([, it]) => worthCardingStrict(it)),
       });
     }
     return rows;
   };
-  return { train: batch("train"), heldout: batch("heldout"), stats };
+  // The first batching and the held-out rows draw from the rng as a one-batching export does, so they are the same
+  // rows; later batchings re-cut the same train items (and the same targets) into new batches after them.
+  const train = batch("train");
+  const heldout = batch("heldout");
+  for (let n = 1; n < (o.trainBatchings ?? 1); n++) batch("train", train);
+  return { train, heldout, stats };
 }
 
 /** Every suite that is not a train suite, whose planted items are kept out of the set. */
@@ -261,6 +276,8 @@ export interface ItemScore {
   limit: boolean;
   entities: number;
   requests: number | null;
+  /** Whether the shipped default keeps this item's card (`DistillRow.carded`); true when the row does not say. */
+  carded: boolean;
 }
 
 const set = (a: string[]) => [...new Set(a)].sort().join("|");
@@ -277,7 +294,13 @@ export function overlap(a: string[], b: string[]): number {
 }
 
 /** One batch: the target and the model's output read by Eden's parsers, item by item. */
-export function scoreBatch(target: string, output: string, count: number, intent: boolean): ItemScore[] {
+export function scoreBatch(
+  target: string,
+  output: string,
+  count: number,
+  intent: boolean,
+  carded?: boolean[],
+): ItemScore[] {
   const ref = parseCards(target, count);
   const got = parseCards(output, count);
   const refQ = intent ? parseRequests(target, count) : null;
@@ -300,6 +323,7 @@ export function scoreBatch(target: string, output: string, count: number, intent
       limit: (rr.limit ?? null) === (gg.limit ?? null),
       entities: overlap(rr.entities, gg.entities),
       requests: intent ? (qb === null ? null : overlap(qa, qb)) : null,
+      carded: carded?.[i] ?? true,
     };
   });
 }
@@ -313,6 +337,12 @@ export function summarize(scores: ItemScore[], batches: { parsed: number; of: nu
   const fp = scores.filter((s) => !s.flagRef && s.flagOut).length;
   const fn = scores.filter((s) => s.flagRef && !s.flagOut).length;
   const req = scores.filter((s) => s.requests !== null);
+  // The flag as the shipped default keeps it: only on items whose card it keeps (an item the strict prefilter
+  // rejects keeps no card, whatever either model wrote).
+  const kept = scores.filter((s) => s.carded);
+  const ktp = kept.filter((s) => s.flagRef && s.flagOut).length;
+  const kfp = kept.filter((s) => !s.flagRef && s.flagOut).length;
+  const kfn = kept.filter((s) => s.flagRef && !s.flagOut).length;
   return {
     items: scores.length,
     batches: batches.of,
@@ -324,6 +354,13 @@ export function summarize(scores: ItemScore[], batches: { parsed: number; of: nu
     flagPrecision: rate(tp, tp + fp),
     flagRecall: rate(tp, tp + fn),
     kindAgreement: rate(scores.filter((s) => s.kind).length, scores.length),
+    kept: {
+      items: kept.length,
+      constraintRef: kept.filter((s) => s.flagRef).length,
+      constraintOut: kept.filter((s) => s.flagOut).length,
+      flagPrecision: rate(ktp, ktp + kfp),
+      flagRecall: rate(ktp, ktp + kfn),
+    },
     // On items both call a constraint: the fields the request-time match reads.
     onBoth: {
       n: tp,
@@ -353,7 +390,7 @@ export function scoreRows(rows: DistillRow[], outputs: Map<string, string>, inte
   for (const row of rows) {
     const out = outputs.get(row.id) ?? "";
     const target = row.messages[2]!.content;
-    const s = scoreBatch(target, out, row.keys.length, intent);
+    const s = scoreBatch(target, out, row.keys.length, intent, row.carded);
     if (s.every((x) => x.parsed)) parsed++;
     scores.push(...s);
   }
@@ -403,6 +440,7 @@ function main(argv: string[]): void {
       batchSizes: opt("batch-sizes", "20,10,5").split(",").map(Number),
       holdout: Number(opt("holdout", "0.1")),
       seed: Number(opt("seed", "7")),
+      trainBatchings: Number(opt("train-batchings", "1")),
     });
     mkdirSync(out, { recursive: true });
     const lines = (rows: DistillRow[]) => rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : "");
@@ -419,6 +457,7 @@ function main(argv: string[]): void {
       intentVersion: INTENT_VERSION,
       today: DISTILL_TODAY,
       holdout: Number(opt("holdout", "0.1")),
+      trainBatchings: Number(opt("train-batchings", "1")),
       trainRows: res.train.length,
       heldoutRows: res.heldout.length,
       trainItems: res.train.reduce((a, r) => a + r.keys.length, 0),

@@ -3,8 +3,9 @@
 Lab tooling for three uses of the Modal credits: the lab at scale (`lab_fanout.py`), the background card model
 distilled into a small open model (`cards_distill.py`), and an embedding retrieval screen (`embed_screen.py`). **Not
 product code**: nothing in `packages/*` product code imports anything here, and every figure these apps make is a
-lab figure, labelled so. Built and tested without a Modal token on 2026-11-10 (session M0); nothing here has run on
-Modal yet, so every cost below is an **estimate**.
+lab figure, labelled so. Built and tested without a Modal token on 2026-11-10 (session M0); the card distillation
+first ran on Modal in session M2 (docs/research/m2-cards-distill.md: measured training, eval and serving figures).
+Every other cost below is an **estimate**.
 
 | File | What it is | Needs Modal |
 | --- | --- | --- |
@@ -31,19 +32,17 @@ python3 -m venv .venv-modal && .venv-modal/bin/pip install -r packages/sim/modal
 # extra and the proxy's CA, else "Could not connect to the Modal server":
 export SSL_CERT_FILE=/root/.ccr/ca-bundle.crt     # cloud containers only
 export MODAL_TOKEN_ID=… MODAL_TOKEN_SECRET=…        # or `modal token new`
+# The Anthropic key reaches Modal only as the Secret `HAIKU_API_KEY` (holding HAIKU_API_KEY), which the workspace owner
+# creates in Modal's dashboard; `EDEN_MODAL_HAIKU_SECRET` names another.
+# The card endpoint's bearer key: one random value, kept locally in the same variable the funnel reads. `modal
+# deploy` hands it to the app as an ephemeral `modal.Secret.from_dict` (M2): no Modal Secret is created or stored.
+export EDEN_LAB_CARDS_KEY=$(openssl rand -hex 24)
 ```
 
-Secrets are the owner's to make (never created by a session):
+Behind an HTTPS proxy that re-signs TLS (a cloud session), install `'modal[api-proxy-support]==1.6.3'` and point
+`SSL_CERT_FILE` at the proxy's CA bundle.
 
-- **`HAIKU_API_KEY`**: a Modal Secret named `HAIKU_API_KEY` holding the env var `HAIKU_API_KEY` (exists). Another
-  name: `EDEN_HAIKU_SECRET=<name>` when running `lab_fanout.py`.
-- **`eden-cards-endpoint`**: holding `EDEN_LAB_CARDS_KEY`, the card endpoint's bearer key; the same value is
-  exported locally as `EDEN_LAB_CARDS_KEY` for the funnel. Needed only by `cards_distill.py`'s `serve`.
-
-Each app is its own Modal app: `lab_fanout.py` is CPU only, and the GPU apps (`cards_distill.py`, `embed_screen.py`)
-are separate, since one GPU function blocks a whole app while the workspace cannot use GPUs.
-
-Only pi-ab shards get the Haiku secret; funnel shards, the distillation and the embedding screen never see a key.
+Only pi-ab shards get the `HAIKU_API_KEY` Secret; funnel shards, the distillation and the embedding screen never see a key.
 
 ## 1. The lab at scale: `lab_fanout.py`
 
@@ -153,18 +152,27 @@ are accepted, and any item planted in a held-out or dev world is dropped from bo
 On 2026-11-10: 6,891 items, 529 training rows (6,172 items), 61 held-out rows (719 items, 64 with a constraint),
 771 constraint cards in all; about 1.31 M tokens an epoch (3.6 characters a token, estimate).
 
+More data (M2): only these 6,891 train items have a Haiku target, so `--train-batchings N` cuts the train items into
+batches N times from new shuffles (each item seen in N batch contexts); the first batching and the held-out rows are
+the same as a one-batching export. 529 rows gave flag recall 0.48, 1,587 (N 3) 0.75, 3,174 (N 6) 0.81. Each row also
+carries `carded` (the strict prefilter's verdict per item), from which the scorer's `kept` view reads the flag only on
+items whose card the shipped default keeps.
+
 **Bases** (Apache-2.0 only, so a result could be served): `qwen2.5-1.5b` (Qwen2.5-1.5B-Instruct, trains on an A10G,
 serves on an L4) and `qwen3-4b` (Qwen3-4B-Instruct-2507, L40S). Qwen2.5-3B-Instruct is left out: its licence is
 non-commercial. Pick by quality per dollar: train both, evaluate both, compare the constraint flag's F1 against Haiku
 per training dollar (`evaluate` prints it). LoRA r 16, alpha 32, all linear layers, lr 2e-4 cosine, 2 epochs,
-effective batch 8, loss on the reply only (TRL prompt-completion), merged into the base for vLLM.
+effective batch 8, loss on the reply only (TRL prompt-completion), merged into the base for vLLM. `--gpu` overrides
+the base's training GPU (M2 trained the 1.5B on an L40S: 3.3 s a step against the A10G's 8.4 s, cheaper per step).
+`evaluate --guided-json` asks vLLM for a JSON object, as Eden's card call does (`json: true`); its outputs go to
+`<run>-guided/`.
 
 ```bash
 bun packages/sim/src/lab/cards-distill.ts export --out .local/modal/cards/data           # ~60 s, $0
 modal run packages/sim/modal/cards_distill.py::train --data .local/modal/cards/data --run q15-a --base qwen2.5-1.5b
 modal run packages/sim/modal/cards_distill.py::evaluate --data .local/modal/cards/data --run q15-a
 modal run packages/sim/modal/cards_distill.py::evaluate --data .local/modal/cards/data --run qwen2.5-1.5b  # untrained
-EDEN_CARDS_RUN=q15-a modal deploy packages/sim/modal/cards_distill.py      # prints the serve URL
+EDEN_CARDS_RUN=q15-a EDEN_CARDS_SERVE_GPU=L4 modal deploy packages/sim/modal/cards_distill.py   # prints the URL
 bun run funnel --suite train --seeds 41,42 --cards-endpoint https://…modal.run --cards .local/modal/cards/q15-a.cards.jsonl
 ```
 
@@ -185,11 +193,23 @@ M0)]` and its JSON carries `cardsTransport`: its numbers are the distilled model
 Screen hidden facts and decoys on train against the replayed-Haiku funnel (`bun run funnel --json` on the same
 suites and seeds); a held-out look needs `--blind` and is measurement only.
 
+The `serve` endpoint is defined only when `EDEN_CARDS_RUN` is set (a web function's label is unique per workspace, so
+defining it in every `modal run` made concurrent runs collide). Stop it when done: `modal app stop -y
+eden-cards-distill`. `endpoint_bench.py` (M2) measures a warm endpoint's latency and throughput at given
+concurrencies (`--concurrency 1,16`) and its $ per 1,000 items at the GPU's list price; on one L4, keep a container
+at 16 calls or fewer (at 32 the 1.5B's greedy replies looped to the token cap).
+
 **Cost (estimate: assumed training throughput, 2025 list prices).** Training: about $0.37 for `qwen2.5-1.5b` (A10G,
 ~0.33 h) and $0.77 for `qwen3-4b` (L40S, ~0.39 h) for 2 epochs (`distill_data.estimate_train`; the run records its
 real seconds). Eval: one L40S for model load and 61 batches, roughly 5–10 minutes, ~$0.20–0.35. Serving: an L4 at
 ~$0.80 an hour while up (it scales to zero 5 minutes after the last call); a train funnel through it makes a few
 hundred card calls (28 calls for train1 seed 41 with a stub endpoint, 2026-11-10).
+
+**Measured (M2, 2026-11-10, list prices):** 2 epochs of 529 / 1,587 / 3,174 rows on an L40S took 449 / 1,328 /
+2,491 s for the 1.5B ($0.24 / $0.72 / $1.35) and 2,684 s on 1,587 rows for the 4B ($1.45); `evaluate` generates
+the 61 held-out rows in 55–254 s after model load. A first deploy takes 8–11 minutes to answer (image pull,
+`torch.compile`, CUDA graphs); the train funnel made 356 card calls in about 8 minutes. The estimates above
+understate the 1.5B's training time (its assumed 4,000 tokens a second was about 2,300 on the A10G).
 
 ## 3. The embedding retrieval screen: `embed_screen.py`
 
@@ -236,7 +256,7 @@ against Opus held out, but Opus itself could not separate facts from decoys (0.5
 ## Tests
 
 ```bash
-cd packages/sim/modal && python3 -I -m unittest     # 59 tests, no Modal, no token
+cd packages/sim/modal && python3 -I -m unittest     # 61 tests, no Modal, no token
 bun test ./packages/sim/src/lab/cards-distill.test.ts ./packages/sim/src/lab/cards-endpoint.test.ts \
   ./packages/sim/src/lab/modal-python.test.ts       # export, scorer, endpoint transport against a stub server
 ```

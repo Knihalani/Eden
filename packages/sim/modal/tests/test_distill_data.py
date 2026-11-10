@@ -70,3 +70,17 @@ class Plans(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Bench(unittest.TestCase):
+    def test_percentile_is_nearest_rank(self):
+        self.assertEqual(dd.percentile([5, 1, 3, 2, 4], 50), 3)
+        self.assertEqual(dd.percentile([5, 1, 3, 2, 4], 90), 5)
+        self.assertEqual(dd.percentile([7], 99), 7)
+        self.assertIsNone(dd.percentile([], 50))
+
+    def test_cost_per_1000_items_is_gpu_seconds_at_list_price(self):
+        # One L4 hour ($0.80) for 10,000 items: $0.08 per 1,000.
+        self.assertAlmostEqual(dd.usd_per_1000_items("L4", 3600, 10_000), 0.08)
+        with self.assertRaises(ValueError):
+            dd.usd_per_1000_items("L4", 10, 0)
