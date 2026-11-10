@@ -91,6 +91,8 @@ export interface SyncOptions {
    * which `sketchScores` reads for routing.
    */
   sketch?: boolean;
+  /** `sourceYieldEarn` (D600): sketches set four bits a term (`TermSketch.probes`), for `sketchRare`. */
+  sketchProbes?: 2 | 4;
   /**
    * `syncUnusedSweepMs` (D356, on in the default at a week; 0 or absent: off): a source the user does not use
    * (`engage`) whose connector can fetch by ref is swept this often (ms) instead of every `sweepMs`. The engine
@@ -99,8 +101,9 @@ export interface SyncOptions {
    */
   unusedSweepMs?: number;
   /**
-   * `syncDormantMs` (D602, a trial; 0 or absent: off): a warm source no lookup has used (`engage`) for this long, and
-   * that does not notify, goes dormant: the items synced from it are dropped (its sketch and the source map's
+   * `syncDormantMs` (D602, a trial; 0 or absent: off): a warm source that is not among the user's used sources
+   * (`engage`: never used, or pushed out of the 64 most recent) and has not been for this long, and that does not
+   * notify, goes dormant: the items synced from it are dropped (its sketch and the source map's
    * mentions stay, so a request can still be routed to it and search it live), and it is no longer polled or swept.
    * Every `dormantRefreshMs` one page of its listing is read for the sketch alone. A lookup that uses it, or any read
    * that stores an item of it, wakes it.
@@ -255,6 +258,8 @@ interface SourceSync {
   /** `dormantMs`: dormant now (nothing of it is held; `sleep`), and when its sketch was last refreshed. */
   dormant: boolean;
   refreshedAt: number;
+  /** `dormantMs`: woken by a lookup and holding nothing yet; its read from the top (`deep`) or a search fills it. */
+  woke: boolean;
 }
 
 interface UserSync {
@@ -429,13 +434,19 @@ export class SyncManager {
       }
       s.engaged = x.engaged;
       s.skipped = x.skipped;
-      // Dormancy is not saved: a source dormant before holds nothing, and sleeps again `dormantMs` from now.
+      // Dormancy is not saved, but a source that was dormant is known by what it holds: warm, cut, not used, no
+      // item. It is dormant again, its sketch refreshed as of now, or the first tick would sweep every one (the
+      // review: one listing a source at each restart).
       s.idleAt = this.deps.now();
+      if ((this.o.dormantMs ?? 0) > 0 && s.phase === "warm" && s.cut && !s.engaged && s.ids.size === 0) {
+        s.dormant = true;
+        s.refreshedAt = s.idleAt;
+      }
       // As last seen, so a copy is doubted (`signalledSince`) and swept as before from the first event on; the next
       // `notes` (a lookup or a tick) sets both again from the source.
       s.notifies = x.notifies === true;
       s.fetches = x.fetches === true;
-      s.sketch = x.sketch === null ? null : TermSketch.load(x.sketch);
+      s.sketch = x.sketch === null ? null : TermSketch.load(x.sketch, this.o.sketchProbes ?? 2);
       // Behind until a poll that begins after now (a notifying source), and its earlier copies in doubt.
       s.notices = 1;
       s.noticesPolled = 0;
@@ -632,6 +643,7 @@ export class SyncManager {
       u.used.add(id);
       s.idleAt = this.deps.now();
       // `dormantMs`: a lookup uses it again (a dormant source is never engaged: its cut copy is read from the top).
+      if (s.dormant) s.woke = true;
       s.dormant = false;
       if (s.engaged) continue;
       s.engaged = true;
@@ -836,6 +848,9 @@ export class SyncManager {
         const s = u.sources.get(source.id);
         if (s) this.notes(s, source);
         if (!s || s.phase !== "warm" || this.isCurrent(s, now) || !source.list) return;
+        // `dormantMs` (D602): a dormant source holds nothing, so a poll would find no item it knows and read page
+        // after page (the review: 7 listings for one request). Its copy is cut: the lookup searches it live.
+        if (s.dormant || s.woke) return;
         // Its last on-demand poll just ran out of time (D140): not current, so the lookup searches it live.
         if (now - s.demandGaveUpAt < (this.o.demandTimeoutMs ?? 0)) return;
         // Its listing failed twice running and is backing off (`failed`): every lookup listed it again regardless, a
@@ -894,6 +909,7 @@ export class SyncManager {
     s.wholeAt = -1;
     s.skipped = false;
     s.dormant = true;
+    s.woke = false;
     s.refreshedAt = now;
   }
 
@@ -902,26 +918,38 @@ export class SyncManager {
    * word new to the source can still route a request to it. One background listing call.
    */
   private async refresh(u: UserSync, s: SourceSync, source: Source): Promise<void> {
+    // No sketch to feed (`routeSketch` off): no call.
+    if (!this.o.sketch) {
+      s.refreshedAt = this.deps.now();
+      return;
+    }
     if (this.budget.take(budgetKey(u, s)) > 0) return;
     const page = await this.list("sweep", source, u.scope, undefined, this.o.pageSize, {
       timeoutMs: this.o.timeoutMs,
       reserve: SERVING_HEADROOM,
     });
-    if (u.gone || !s.dormant) return;
+    if (u.gone) return;
     if (typeof page === "string") {
       if (page !== "limited" && page !== "busy") this.stats.backgroundCalls++;
-      this.failed(s, page);
+      if (s.dormant) this.failed(s, page);
       return;
     }
+    // Counted whatever happened meanwhile: the connector received the call.
     this.stats.backgroundCalls++;
     this.stats.backgroundItems += page.items.length;
+    // Woken while the page was read (a lookup used it): its copy is being read again, sketch and all.
+    if (!s.dormant) return;
     s.failures = 0;
     s.refreshedAt = this.deps.now();
-    if (!this.o.sketch) return;
-    const sketch = (s.sketch ??= new TermSketch());
+    const sketch = (s.sketch ??= new TermSketch(this.o.sketchProbes ?? 2));
     for (const it of page.items) {
       if (it.sourceId !== s.id) continue;
-      for (const t of sketchTerms(`${it.title} ${it.text}`)) sketch.add(...termHashes(t));
+      for (const t of sketchTerms(`${it.title} ${it.text}`)) {
+        // A full sketch would start again at the next term and forget every older one, and no sweep re-lists a
+        // dormant source to fill it back (the review): it keeps what it has.
+        if (sketch.full) return;
+        sketch.add(...termHashes(t));
+      }
     }
   }
 
@@ -1019,8 +1047,11 @@ export class SyncManager {
     const now = this.deps.now();
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
+    // A dormant source is never swept, and its refresh stores nothing: it needs no thaw.
     const due = (s: SourceSync) =>
-      s.phase === "warm" && (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs || this.dormantDue(s, now));
+      s.phase === "warm" &&
+      !s.dormant &&
+      (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs || this.dormantDue(s, now));
     thawing = [...u.sources.values()].some(due) ? this.deps.cache.ready(u.scope) : null;
     if (thawing) await thawing;
     if (u.gone) return;
@@ -1480,7 +1511,7 @@ export class SyncManager {
     const now = this.deps.now();
     // `routeSketch`: every listed item's terms, kept or not (what the cap trims still says what the source holds).
     if (this.o.sketch) {
-      const sketch = (s.sketch ??= new TermSketch());
+      const sketch = (s.sketch ??= new TermSketch(this.o.sketchProbes ?? 2));
       for (const it of items) {
         // Held items too: a sketch that restarted (saturated) is filled again by the next sweep's re-listing.
         if (it.sourceId !== s.id) continue;
@@ -1508,6 +1539,7 @@ export class SyncManager {
       s.dormant = false;
       s.idleAt = now;
     }
+    if (own.length > 0) s.woke = false;
     if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
     for (const it of own) {
@@ -1738,6 +1770,7 @@ function newSourceSync(id: string): SourceSync {
     idleAt: 0,
     dormant: false,
     refreshedAt: 0,
+    woke: false,
   };
 }
 

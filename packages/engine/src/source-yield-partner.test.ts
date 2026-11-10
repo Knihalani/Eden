@@ -356,6 +356,7 @@ describe("sourceYieldNames, sourceYieldEngage (D601, trials)", () => {
     expect(on.partner.sync!.engaged(u1, "src1")).toBe(false);
     // A source it does read is used as before.
     await on.request(u1, "Pay Zed Quinn for the Globex renewal today");
+    expect(on.partner.sync!.engaged(u1, "src0")).toBe(true);
     expect(on.partner.sync!.engaged(u1, "src1")).toBe(false);
   });
 });
@@ -398,6 +399,61 @@ describe("syncDormantMs (D602, a trial)", () => {
     const named = await p.request(u1, "Pay Zed Quinn for the Globex renewal today");
     expect(named.searched[0]).toBeGreaterThan(0);
     expect(named.handed).toContain(p.fact.id);
+  });
+
+  test("dormancy is per user, and a lookup that uses a dormant source wakes it", async () => {
+    const p = await partnerOf(CFG, [u1, u2]);
+    const heldBy = (scope: Scope, id: string) => [...p.partner.sync!.syncedIds(scope, id)].length;
+    p.advance(2 * DAY);
+    await p.request(u1, BLIND);
+    await p.partner.sync!.tick();
+    expect(heldBy(u1, "src0")).toBe(0);
+    // u2 was not active: nothing of theirs was dropped.
+    expect(heldBy(u2, "src0")).toBeGreaterThan(0);
+    // u1's request with strong evidence for source 0 uses it: its copy is read again from the top.
+    await p.request(u1, "Pay Zed Quinn for the Globex renewal today");
+    for (let i = 0; i < 5; i++) await p.partner.sync!.tick();
+    expect(p.partner.sync!.engaged(u1, "src0")).toBe(true);
+    expect(heldBy(u1, "src0")).toBeGreaterThan(0);
+    expect(heldBy(u1, "src1")).toBe(0);
+  });
+
+  test("a dormant source is not polled on demand: one request lists nothing of it", async () => {
+    const p = await partnerOf(CFG);
+    p.advance(2 * DAY);
+    await p.request(u1, BLIND);
+    await p.partner.sync!.tick();
+    const lists = p.sources.map((s) => s.lists);
+    await p.request(u1, "Pay Zed Quinn for the Globex renewal today");
+    // Sources 1 to 3 are not listed at all; source 0, now used, is listed only by the ticks that read it again.
+    expect(p.sources.slice(1).map((s) => s.lists)).toEqual(lists.slice(1));
+    expect(p.sources[0]!.lists).toBe(lists[0]!);
+  });
+
+  test("a source that notifies is never dormant", async () => {
+    const p = await partnerOf({ ...CFG, syncPush: true }, [u1], [10, 10, 10, 10], (sources) => {
+      (sources[2] as unknown as { notifies: boolean }).notifies = true;
+    });
+    p.advance(2 * DAY);
+    await p.request(u1, BLIND);
+    await p.partner.sync!.tick();
+    expect(held(p, "src1")).toBe(0);
+    expect(held(p, "src2")).toBeGreaterThan(0);
+  });
+
+  test("a restored user's dormant sources stay dormant: no listing at the first tick", async () => {
+    const p = await partnerOf(CFG);
+    p.advance(2 * DAY);
+    await p.request(u1, BLIND);
+    await p.partner.sync!.tick();
+    const snap = p.partner.sync!.snapshot(u1);
+    p.partner.forget(u1);
+    expect(p.partner.sync!.restore(u1, JSON.parse(JSON.stringify(snap)))).toBe(true);
+    const lists = p.sources.map((s) => s.lists);
+    await p.request(u1, BLIND);
+    await p.partner.sync!.tick();
+    expect(p.sources.map((s) => s.lists)).toEqual(lists);
+    for (const s of p.sources) expect(held(p, s.id)).toBe(0);
   });
 
   test("off (the default): copies are kept", async () => {

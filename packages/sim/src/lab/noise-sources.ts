@@ -22,18 +22,38 @@ const WORDS = (
 const PROFILES = ["slack", "drive", "gmail"] as const;
 const DAY = 86_400_000;
 
-/** `n` noise connectors of `items` items each for a world, seeded by the world and `seed`. */
-export function noiseSources(world: World, n: number, items: number, timeScale: number, seed: number): SimSource[] {
+const SYLLABLES = "ba co di fu ga he ji ko lu ma ne pi qua ro su ti vu wa xe yo zu bra cle dri flo".split(" ");
+
+/**
+ * `n` noise connectors of `items` items each for a world, seeded by the world and `seed`. With `vocab` > 0 (O1,
+ * D600) each connector also has that many words of its own (letters only, so its sketch keeps them): a real
+ * connector's vocabulary is its own and in the hundreds or thousands, where the shared 45 words give every noise
+ * sketch the same few bits. Half of an item's numbered words are then drawn from it. 0 leaves every item as it was.
+ */
+export function noiseSources(
+  world: World,
+  n: number,
+  items: number,
+  timeScale: number,
+  seed: number,
+  vocab = 0,
+): SimSource[] {
   const r = new Rng(world.seed * 7_919 + 104_729);
+  // Its own generator, so the items' other draws are the same with and without it.
+  const v = new Rng(world.seed * 104_729 + 7_919);
   const out: SimSource[] = [];
   for (let k = 0; k < n; k++) {
     const kind = KINDS[k % KINDS.length]!;
     const id = `${kind}-${k}`;
+    const own = Array.from({ length: vocab }, () =>
+      Array.from({ length: v.int(2, 4) }, () => v.pick(SYLLABLES)).join(""),
+    );
     const rows: WorldItem[] = Array.from({ length: items }, (_, i) => {
       const words = Array.from({ length: r.int(25, 140) }, () =>
         r.chance(0.5) ? r.pick(WORDS) : `${r.pick(WORDS)}-${r.int(1, 400)}`,
       );
       if (r.chance(0.03)) words.splice(r.int(0, words.length), 0, r.pick(world.people).full);
+      if (vocab > 0) for (let w = 0; w < words.length; w++) if (v.chance(0.5)) words[w] = v.pick(own);
       return {
         id: `${id}:${i}`,
         sourceId: id,

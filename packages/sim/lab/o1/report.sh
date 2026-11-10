@@ -12,8 +12,8 @@ dirs() { local IFS=,; local out=(); for r in $1; do out+=("$M/$r"); done; echo "
 if [ "${3:-}" = regrade ]; then
   for s in $M/$SHORT41/s0* $(for r in ${LONG_RUNS//,/ }; do echo $M/$r/s0*; done); do
     env -u OPENROUTER_API_KEY bun packages/sim/src/lab/regrade.ts --results "$s/out.json" \
-      --graders claude-sonnet-5-5 --only-concerns --spend-ledger .local/o1/ledger.jsonl --spend-cap "${REGRADE_CAP:-0.15}" \
-      --spend-headroom 0.02 --run-label "o1-$P-regrade" --out "$s/regrade.json"
+      --graders claude-sonnet-5-5 --only-concerns --spend-ledger .local/o1/ledger.jsonl \
+      --spend-cap "${REGRADE_CAP:-0.15}" --spend-headroom 0.02 --run-label "o1-$P-regrade" --out "$s/regrade.json"
   done
   exit 0
 fi

@@ -372,9 +372,10 @@ export interface EngineConfig {
    */
   syncUnusedSweepMs: number;
   /**
-   * A trial, off (D602, O1; docs/research/o1-earn.md): 0, or how long (ms) a warm source no lookup has used may hold a
-   * copy. Past it the source goes dormant (`Sync.sleep`): its synced items are dropped, it is no longer polled or
-   * swept, and one page of its listing is read every `syncDormantRefreshMs` for its sketch alone. Its sketch and the
+   * A trial, off (D602, O1; docs/research/o1-earn.md): 0, or how long (ms) a warm source that is not among the
+   * user's used sources (`Sync.engage`: never used, or pushed out of the 64 most recent) may hold a copy. Past it the
+   * source goes dormant (`Sync.sleep`): its synced items are dropped, it is no longer polled or swept, and one page
+   * of its listing is read every `syncDormantRefreshMs` for its sketch alone. Its sketch and the
    * source map's mentions stay, so a request with evidence for it still searches it live; a lookup that uses it, or a
    * read that stores an item of it, wakes it. A source that notifies is never dormant.
    */

@@ -48,6 +48,8 @@ export interface DaysCallsOptions {
   notifyShare?: number | null;
   /** `--noise-sources N` (N1): N unrelated connectors beside the world's five (`noise-sources.ts`), 20 items each. */
   noiseSources?: number;
+  /** `--noise-vocab N` (O1): words of its own for each noise connector (`noiseSources`). */
+  noiseVocab?: number;
 }
 
 export interface DaysCallsUser {
@@ -113,7 +115,10 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   // Time scale 0: instant sources, so the run is deterministic and the counts are the connectors' alone.
   const own = simSources(world, REALISTIC, 0, seed);
   if (o.push !== "none") for (const s of own) s.notifies = true;
-  const sources = [...own, ...(o.noiseSources ? noiseSources(world, o.noiseSources, 20, 0, seed) : [])];
+  const sources = [
+    ...own,
+    ...(o.noiseSources ? noiseSources(world, o.noiseSources, 20, 0, seed, o.noiseVocab ?? 0) : []),
+  ];
   applyNotifyShare(sources, o.notifyShare ?? null, seed);
   const counts: Counts = {};
   const fetched = new Map<string, number>();
@@ -303,6 +308,7 @@ if (import.meta.main) {
     config: JSON.parse(opt("set", "{}")) as Partial<EngineConfig>,
     notifyShare: parseNotifyShare(opt("notify-share", "")),
     noiseSources: Number(opt("noise-sources", "0")),
+    noiseVocab: Number(opt("noise-vocab", "0")),
     gapMs: Number(opt("gap-min", "10")) * 60_000,
     nightMs: Number(opt("night-h", "2")) * 3_600_000,
   };

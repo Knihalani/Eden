@@ -202,3 +202,44 @@ two days). **Not decided here:** the lab's noise connectors never hold a fact, s
 dormant source's dropped copy would have found; Pi's `--days` compresses eight days into 36 hours and never reaches
 a week. The trade (about 100 listings a user-day against whatever a never-used source's held items are worth) is
 the owner's.
+
+## 2b. Amendment to run 2 after the review (committed before run 2's first paid call; no result of run 1 read)
+
+The reviewer (`.claude/agents/reviewer.md`, REQUEST_CHANGES) measured what the lab could not show: **the rare-word
+rule did not work at the scale it is for.** A sketch set two bits a term and folds to a fill of 0.2, so a word one
+source holds was also "held" by about one sketch in 25: at 1,000 sources with vocabularies of their own, about 27
+false holders a word, and no word was ever held by "at most two". The lab hid it: its noise connectors share 45
+words (their numbered words carry a digit, which a sketch drops), so their sketches set the same few bits and a
+world word missed all of them at once.
+
+Changed, on the reviewer's findings:
+
+- **Sketches set four bits a term under `sourceYieldEarn`** (`TermSketch.probes`, `Sync`'s `sketchProbes`; folding
+  to a fill of 0.15, restart at 0.35). The default's sketches are untouched (two bits, the same dump).
+  `o1-sketch-bytes.ts`, 995 noise connectors with 1,000 words of their own each (460 distinct terms a source listed):
+  false holders of an unseen word 26.8 → 0.16 a word; at most one false holder for 4 of 500 words → 487 of 500;
+  **sketch memory 0.76 MB → 1.98 MB a user** (at 1,206 terms a source: 1.75 → 4.08 MB, 28.4 → 0.37 false holders).
+  A saved sketch loads only with its own number of probes (else it starts again).
+- **The lab's noise connectors can have words of their own** (`--noise-vocab N`: funnel, pi-ab, days-calls;
+  `noiseSources`). Seed 41 at `--noise-vocab 1000`: the default 30.5 calls a task; the companions' bundle with
+  two-probe sketches 3.9 calls and two hidden tasks lost, two gained (the rare rule dead, as the reviewer said);
+  **with four probes 7.2 calls and no task different from the default.** Seeds 42–44: 29.7 / 33.2 / 34.4 → 7.2 /
+  8.6 / 8.2 calls a task; hidden surfaced +2, +1 −1, +2; decoys +1 −1, +1 −1, 0. Over four seeds: **hidden +5 −1 of
+  384, decoys +2 −2**, card calls 226–251 a seed.
+- **Dormancy** (not in any paid run): a dormant source is not polled on demand, nor one just woken that holds
+  nothing yet (a poll with no known item read page after page: 7 listings for one request in the reviewer's probe);
+  a restored user's dormant sources stay dormant (they were all swept at the first tick); a refresh makes no call
+  with `routeSketch` off, counts its call even when the source woke meanwhile, and stops adding at a full sketch
+  (a restart would forget the source's older words, and nothing re-lists a dormant source); a dormant source no
+  longer makes the tick thaw a frozen user. D602's wording now says what the code does: the clock runs for a source
+  out of the user's used set, not "unused for that long". Tests added for each, and for isolation.
+
+**Run 2 as amended.** Arms and rule as section 2. Two changes, both arms: the image is the commit that holds this
+section (four-probe sketches in `eden~earn2`), and every step passes `--noise-vocab 1000` (`EXTRA` in `run.sh`), so
+the default arm is no longer N1b's exact harness; the comparison is paired within the run as before.
+
+**What run 1 can now decide.** Run 1's arm ran the rule as first built, in the lab that flatters it. It stands as
+a measurement of that arm (reported in full), but **it promotes nothing on its own**: the decision matrix of
+section 2 is replaced by "the three switches, with four-probe sketches, are promoted together if run 2 passes
+section 0's four clauses; otherwise they stay off (point estimate above −2.0) or are deleted". Promotion also
+states the sketches' memory (above) as a cost for the owner and O2.

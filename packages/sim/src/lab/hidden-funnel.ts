@@ -217,6 +217,7 @@ const cli = flags(
         "noise-sources",
         "notify-share",
         "noise-items",
+        "noise-vocab",
         "source-profile",
         "push",
         "push-rates",
@@ -271,6 +272,8 @@ const NOTIFY_SHARE = parseNotifyShare(opt("notify-share", ""));
 /** `--fetch-gone false`: the sources' fetch null proves nothing, as an MCP connector's (A18; default true). */
 const FETCH_GONE = opt("fetch-gone", "true") !== "false";
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
+/** `--noise-vocab N` (O1): each noise connector gets N words of its own (`noiseSources`); 0, the shared words only. */
+const NOISE_VOCAB = Number(opt("noise-vocab", "0"));
 /** `--config`: engine settings, checked whole (checkEngineConfig); a typo or a child whose parent is off exits 2. */
 const CONFIG = ((): Record<string, unknown> => {
   try {
@@ -786,7 +789,10 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   const own = simSources(world, CONNECTORS.profiles, TIME, seed);
   const notify = pushNotifier(own, CONNECTORS, seed, world.now);
   if (!FETCH_GONE) for (const s of own) s.fetchReportsGone = false;
-  const sources = [...own, ...(NOISE_SOURCES > 0 ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed) : [])];
+  const sources = [
+    ...own,
+    ...(NOISE_SOURCES > 0 ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed, NOISE_VOCAB) : []),
+  ];
   // `--notify-share P` (N1): only that share of the connectors notify; the rest are polled and swept.
   applyNotifyShare(sources, NOTIFY_SHARE, seed);
   const returned = new Set<string>();
