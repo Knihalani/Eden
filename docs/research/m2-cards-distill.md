@@ -22,4 +22,11 @@ teacher the model learns from, in place of the mixed-teacher replay) reads hidde
 and seeds. So the bar in (3) is against the shipped replay as asked; a secondary line, reported but not a gate,
 compares with the teacher: hidden ≥ 316 and decoys ≤ 278.
 
+Added after the first tuned model's eval (q15-a), before any other tuned model was scored: the shipped default
+keeps a card only for items its strict prefilter passes (`cardsEconomy`, `worthCardingStrict`); for any other item
+the enricher drops whatever card the model wrote (`NONE_CARD`, cards.ts). The scorer now also reports the flag on
+those **kept** items only (89 of the 719 held-out items; Haiku flags 61 of them). On them the replayed cards read
+precision 0.74 (23/31), recall 0.68 (23/34) over the 55 they cover. Bar (2) is read on both views and reported on
+both; it is not loosened.
+
 Failing (1)–(3) means no decision to build; failing only (4) means "works, not cheaper" and is written so.

@@ -100,6 +100,20 @@ describe("the distillation set (cards-distill export)", () => {
     for (const h of held) expect(heldOut(h, 0.5)).toBe(true);
   });
 
+  test("more train batchings re-cut the train items only; the first batching and held-out rows are unchanged", () => {
+    const { items, cards, requests } = corpus();
+    const o = { intent: true, batchSizes: [3], holdout: 0.3, seed: 1 };
+    const one = buildRows(items, cards, requests, new Set(), o);
+    const three = buildRows(items, cards, requests, new Set(), { ...o, trainBatchings: 3 });
+    expect(three.heldout).toEqual(one.heldout);
+    expect(three.train.slice(0, one.train.length)).toEqual(one.train);
+    const keys = (rows: typeof one.train) => rows.flatMap((r) => r.keys).sort();
+    expect(keys(three.train)).toEqual([...keys(one.train), ...keys(one.train), ...keys(one.train)].sort());
+    expect(new Set(three.train.map((r) => r.id)).size).toBe(three.train.length);
+    const held = new Set(keys(one.heldout));
+    for (const h of keys(three.train)) expect(held.has(h)).toBe(false);
+  });
+
   test("items with no target are left out; the split is stable", () => {
     const { items, cards, requests } = corpus();
     const [first, second] = [...items.keys()];
@@ -170,6 +184,29 @@ describe("the scorer (cards-distill score)", () => {
     expect(sum.onBoth.span).toBe(0);
     expect(sum.batchParseRate).toBe(1);
     expect(scoreRows(rows, new Map(), true).batchParseRate).toBe(0);
+  });
+
+  test("kept counts the flag only on items whose card the shipped default keeps", () => {
+    const ref = targetText([FREEZE, null], null);
+    // The model flags item 1 too; when the row says the strict prefilter rejects it, its card is never kept.
+    const out = targetText([FREEZE, FREEZE], null);
+    const row = (carded?: boolean[]) => ({
+      id: "r",
+      keys: ["a", "b"],
+      messages: [
+        { role: "system" as const, content: "" },
+        { role: "user" as const, content: "" },
+        { role: "assistant" as const, content: ref },
+      ],
+      maxTokens: 2000,
+      ...(carded ? { carded } : {}),
+    });
+    const all = scoreRows([row()], new Map([["r", out]]), false);
+    expect(all.flagPrecision).toBe(0.5);
+    expect(all.kept.flagPrecision).toBe(0.5);
+    const kept = scoreRows([row([true, false])], new Map([["r", out]]), false);
+    expect(kept.flagPrecision).toBe(0.5);
+    expect(kept.kept).toEqual({ items: 1, constraintRef: 1, constraintOut: 1, flagPrecision: 1, flagRecall: 1 });
   });
 
   test("overlap is the Jaccard of words", () => {
