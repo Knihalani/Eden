@@ -1,7 +1,12 @@
 # O2: what it would take to hold 20,000 users on a 4-core 16 GB box (a plan, not built)
 
-Status: a sized plan written 2026-11-10 from this session's measurements (o2-users-per-box.md, D651-D654). Nothing
-here is built. No decision number: it proposes work; it adopts nothing. Paid spend: $0.
+**Superseded by D750 ([o4-segment-screens.md](o4-segment-screens.md)): stop.** The three screens this plan named
+first were run: the redesign makes a live user about 2.0-2.4x smaller on sim text and 1.6-1.7x on prose, not the
+2.5-3x below, so the week-long build is not started. Kept as the record of the sizing.
+
+Status: a sized plan written 2026-11-10 from this session's measurements (o2-users-per-box.md, D651, D652; the codec
+figures from scratch runs, below). Nothing here is built. No decision number: it proposes work; it adopts nothing.
+Paid spend: $0.
 
 ## In plain words
 
@@ -20,7 +25,7 @@ A live user at the 3,000-item cap, sim world text (about 1,100 characters an ite
 | Part | Bytes an item | Source |
 | --- | --- | --- |
 | Whole live user (heap) | 1,670-1,870 | `users.bench.ts` (5.0-5.35 MB a user) |
-| Item text, deflated one by one | 453 | `.local` codec run, 4,969 texts (D654) |
+| Item text, deflated one by one | 453 | a scratch codec run in `.local`, 4,969 texts (not in the repo; O4 measured 548 on its own sample, o4-segment-screens.md) |
 | Search index (packed CSR and delta) | 415 at 6,892 items, about 800 at 2,000 | `index-memory.bench.ts` |
 | The rest: entry and item objects, ids, sketches, tallies, vocabulary | about 500-700 | by difference |
 | The same user frozen (one zstd JSON blob) | 101 (sim text; A14 estimates about 1.27x less gain on real prose) | `users.bench.ts` |
@@ -32,7 +37,8 @@ Resident memory is 1.4x the heap after a thaw (6.33 against 4.52 MB) and more af
 - Frozen users on disk only: 1.06-1.2x on a fleet (D652).
 - Leaving text in the frozen blob for a live user (read an item's text only when it is delivered): text is 453 of
   about 1,700 bytes an item, so at best 1.35x on a live user. Not built.
-- A faster codec or a deferred pack at the thaw: 1.4-2x on the thaw's wait, nothing on memory (D654).
+- A faster codec or a deferred pack at the thaw: 1.4-2x on the thaw's wait, nothing on memory (scratch runs in
+  `.local`, not in the repo and not recorded as a decision; o4-segment-screens.md, section 5, times a thaw's parts).
 - Bun's `--smol`: nothing (D651).
 
 ## 3. The redesign that could: one compact form that is both frozen and searchable

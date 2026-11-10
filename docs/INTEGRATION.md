@@ -411,7 +411,10 @@ not as a line per request.
 - On each `POST /v1/responses` (OpenAI's Responses API, D656) likewise: `input`'s items are read as the
   conversation, and the packet goes back as a system item before the latest user message. With the history held
   by the provider, `conversation` names the session; with `previous_response_id` alone send `x-eden-session-id`,
-  or each request is its own session. Not yet checked against the real API.
+  or each request is its own session. With the history held by the provider the model's `function_call` items
+  stay with the provider: Eden is told of no tool call, and each `function_call_output` reaches it as the result of
+  a tool named "tool" (the proxy does not read the replies for calls). Send the whole input instead of
+  `previous_response_id` if Eden should see tool calls. Not yet checked against the real API.
 - **Identity.** `x-eden-user-id` (else the body's `user`; on Anthropic's route `metadata.user_id` instead) names the end
   user; without either, Eden is skipped (the
   proxy says so once on stderr, D365).

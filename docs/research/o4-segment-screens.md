@@ -6,7 +6,7 @@ Outputs: `packages/sim/lab/o4/`. Figures here are from the runs after the review
 
 ## In plain words
 
-- **O2's plan** (`docs/research/o2-live-user-plan.md` on branch `claude/o2-plan`) proposed a week's rebuild of how a
+- **O2's plan** (`docs/research/o2-live-user-plan.md`) proposed a week's rebuild of how a
   live user is held (one compact "segment"), hoping to make a live user 2.5-3 times smaller. It left three cheap
   checks to run first. All three are now run.
 - **Verdict: stop. Do not start the week-long build for memory.** Measured, the rebuild would make a live user about

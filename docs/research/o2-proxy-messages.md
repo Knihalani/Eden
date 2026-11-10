@@ -80,8 +80,20 @@ gets the same treatment through `fromResponses` and `toResponses`:
   session: `conversation` names it when no
   `x-eden-session-id` does. With `previous_response_id` alone and no header, each request is its own Eden session
   (keyed by its first message), so Eden may show an item again that it showed on an earlier turn: send the header.
-- Tests: `packages/proxy/src/proxy-responses.test.ts`, 8 (injection with the rest byte for byte, a tool turn with a
-  reasoning item, `user` and `conversation`, fail open, another `…/responses` route untouched, the translations).
+  The input is only what is new, so the same short reply on two turns ("yes", "yes") would hash as a retry of the
+  request before (not reported, not a new turn): the retry check also counts the `previous_response_id` the input
+  follows (else the `conversation`), so a reply after a different response is a new turn (the second review). With
+  `conversation` alone and no new response id, a repeated reply and a retry still look the same.
+- **Limit: with the history held, tool calls are not reported.** The model's `function_call` items live with the
+  provider and are never in a request, so Eden is told of no tool call, and each `function_call_output` reaches it
+  as the result of a tool named "tool" (its call, which names it, is not there). Reading the calls from the
+  upstream's reply was not built: it would mean buffering every non-streamed reply and reporting after it, outside
+  the request's deadline, and would still miss streamed replies, the common case. Documented, not fixed. A caller
+  that sends the whole input (no `previous_response_id`, no `conversation`) has its calls reported.
+- Tests: `packages/proxy/src/proxy-responses.test.ts`, 10 (injection with the rest byte for byte, a tool turn with a
+  reasoning item, `user` and `conversation`, history held (a packet sent once; the same short reply after a
+  different response a new turn), a custom tool, streaming, fail open, another `…/responses` route untouched, the
+  translations).
 - **Not checked against the real API**: this session's paid calls are limited to Anthropic. The shapes are from
   OpenAI's published reference; a first live call may show a field this misses.
 

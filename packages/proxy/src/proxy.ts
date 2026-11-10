@@ -264,10 +264,11 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     /** The provider's own id for the conversation (the Responses API's `conversation`), when the caller sent no id. */
     conversation?: string,
     /**
-     * The provider holds the history (the Responses API's `conversation` or `previous_response_id`): the request is
-     * only what is new, and what an earlier request inserted is already in that history.
+     * Set when the provider holds the history (the Responses API's `previous_response_id`, else its `conversation`):
+     * the request is only what is new, and what an earlier request inserted is already in that history. The value is
+     * what the input follows, folded into the retry check: "yes" after a different response is a new turn.
      */
-    held = false,
+    held?: string,
   ): Promise<Message[] | null> => {
     const messages = body.messages;
     if (!Array.isArray(messages) || messages.length === 0) return null;
@@ -333,7 +334,10 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     // packets into it (audit A5).
     // System and developer messages left out, as from the conversation's key: one carrying today's date changes every
     // request, and a retry would then read as a new turn and lose its packets (the review).
+    // With the history held by the provider the request is only the new input, so a short reply repeated on the
+    // next turn would hash the same as a retry: the response it follows tells them apart (the review of D656).
     const all = createHash("sha256")
+      .update(held === undefined ? "" : `held:${held}\n`)
       .update(
         (messages as Message[])
           .filter((m) => m.role !== "system" && m.role !== "developer")
@@ -400,7 +404,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       }
       return null;
     }
-    if (held) {
+    if (held !== undefined) {
       // Each packet goes upstream once: re-inserted on the turn's later calls (tool outputs), it would be stored
       // again by the provider every time (the review of D656). Nothing is kept in place: the provider keeps it.
       const sent = (conv.sent ??= new Set());
@@ -483,6 +487,15 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
           // new: `conversation` then names the session; with `previous_response_id` alone send `x-eden-session-id`.
           const conv = (body as { conversation?: unknown }).conversation;
           const named = typeof conv === "string" ? conv : (conv as { id?: unknown } | null)?.id;
+          const previous = (body as { previous_response_id?: unknown }).previous_response_id;
+          // What the input follows: the previous response when named (each turn names a new one), else the
+          // conversation (one id for all its turns: there a repeated reply and a retry still look the same).
+          const held =
+            previous != null
+              ? `response:${String(previous)}`
+              : conv !== undefined
+                ? `conversation:${typeof named === "string" ? named : JSON.stringify(conv)}`
+                : undefined;
           const placed =
             view &&
             (await withEden(
@@ -490,7 +503,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
               { ...(body as object), messages: view.messages },
               false,
               typeof named === "string" && named ? named : undefined,
-              conv !== undefined || (body as { previous_response_id?: unknown }).previous_response_id != null,
+              held,
             ));
           messages = placed ? toResponses(view!, placed) : null;
         } else messages = await withEden(req, body as Record<string, unknown>);

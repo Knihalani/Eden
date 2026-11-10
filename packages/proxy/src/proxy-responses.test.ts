@@ -13,6 +13,7 @@ const sources = new StaticSource("calendar", "The user's calendar", [
 const partner = buildPartner({ sources: async () => [sources], model: null });
 const eden = Bun.serve({ port: 0, fetch: createHandler(partner, { keys: new Map([[KEY, "acme"]]), dev: false }) });
 const seen: { path: string; raw: string; body: any }[] = [];
+const SSE = 'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"hi"}\n\n';
 const upstream = Bun.serve({
   port: 0,
   async fetch(req) {
@@ -24,6 +25,7 @@ const upstream = Bun.serve({
       body = raw;
     }
     seen.push({ path: new URL(req.url).pathname, raw, body });
+    if (body?.stream) return new Response(SSE, { headers: { "content-type": "text/event-stream" } });
     return Response.json({ id: "resp_1", output: [] });
   },
 });
@@ -122,6 +124,22 @@ describe("the proxy on OpenAI's Responses API (D656)", () => {
     }
   });
 
+  test("history held by the provider: the same short reply after a different response is a new turn", async () => {
+    // With `previous_response_id` the input is only the new message: "yes" twice reads like a retry unless the
+    // response it follows is part of what counts as the same request (the review of D656).
+    const h = { "x-eden-user-id": "r9", "x-eden-session-id": "s9" };
+    for (const [prev, input] of [
+      ["resp_a", ASK],
+      ["resp_b", "yes"],
+      ["resp_c", "yes"],
+    ]) {
+      await post(JSON.stringify({ model: "m", previous_response_id: prev, input }), h);
+    }
+    // A true retry (the same previous response, the same input) is still one turn.
+    await post(JSON.stringify({ model: "m", previous_response_id: "resp_c", input: "yes" }), h);
+    expect((await explain("r9", "s9")).filter((e) => e === "user_message").length).toBe(3);
+  });
+
   test("a custom tool's call and output are reported as a function's are", async () => {
     const h = { "x-eden-user-id": "r8", "x-eden-session-id": "s8" };
     const input = [
@@ -133,6 +151,17 @@ describe("the proxy on OpenAI's Responses API (D656)", () => {
     const events = await explain("r8", "s8");
     expect(events.filter((e) => e === "tool_call").length).toBe(1);
     expect(events.filter((e) => e === "tool_result").length).toBe(1);
+  });
+
+  test("a stream comes back unchanged, with the context in the request", async () => {
+    const res = await post(JSON.stringify({ model: "m", stream: true, input: ASK }), {
+      "x-eden-user-id": "r10",
+      "x-eden-session-id": "s10",
+    });
+    expect(JSON.stringify(seen.at(-1)!.body.input)).toContain("Dishoom");
+    expect(seen.at(-1)!.body.stream).toBe(true);
+    expect(res.headers.get("content-type")).toBe("text/event-stream");
+    expect(await res.text()).toBe(SSE);
   });
 
   test("fails open: no user, an input that is neither text nor a list, and a body that is not JSON go as they came", async () => {
