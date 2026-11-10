@@ -17,4 +17,9 @@ Committed before any funnel run through a distilled model. A model passes only i
 4. **Cost.** GPU dollars per 1,000 items carded (measured GPU-seconds × list price, at the serving shape measured)
    below Haiku's per-item cost from the ledgers quoted in docs/COST-MODEL.md.
 
+Added before step 4, after a $0 control run: the funnel with **Haiku's own `intent-v2` cards replayed** (the
+teacher the model learns from, in place of the mixed-teacher replay) reads hidden 318, decoys 278 on the same suites
+and seeds. So the bar in (3) is against the shipped replay as asked; a secondary line, reported but not a gate,
+compares with the teacher: hidden ≥ 316 and decoys ≤ 278.
+
 Failing (1)–(3) means no decision to build; failing only (4) means "works, not cheaper" and is written so.
