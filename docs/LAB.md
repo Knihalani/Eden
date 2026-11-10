@@ -365,6 +365,16 @@ A second, independent draw of train seeds 41–42's requests with the shipped pr
 A new user's first requests (F2, D482): `bun run funnel --jobs 4 -- --cards-calls N` gives each world's card model N
 calls and leaves the rest uncovered (a train world needs about 16); `--set '{"cardsOrder":false}'` is the old read
 order. pi-ab takes the same flag; without `--cards` every card is made in-run.
+`-- --cards-calls N --cards-rest cards` (N4, funnel only) answers the calls past N with their cards and no requests:
+a card-only model reading the rest of the backfill, with the replayed teacher's cards standing in for it (an upper
+bound; it adds +1 hidden task of 384 at every cap, docs/research/n4-agents.md).
+
+**A stronger agent (N4, D520).** `packages/sim/lab/n4/run.sh AGENT LABEL CONDITIONS …` runs pi-ab on train with
+`--model AGENT` and Haiku 5.5 as Eden's card model, reader and grader. Sonnet 5.5 runs with thinking
+`between_tools`; Opus 5.5 accepts neither "disabled" nor `between_tools` and runs `adaptive` at effort `low`
+(`anthropicThinkingOff`, free.ts): label an Opus agent's row so. Cache reads are priced at 0.05x input on both
+(`ANTHROPIC_PRICES`, `cacheRead`), 0.1x on Haiku. A task run costs about $0.009 (Sonnet) and $0.015 (Opus) against
+Haiku's $0.0003. `packages/sim/lab/n4/tokens.py MODEL STEM…` splits each arm's agent bill by token class.
 
 ### 1c. Lab-only measurements of first-turn delivery, overlapping requests and sync items
 

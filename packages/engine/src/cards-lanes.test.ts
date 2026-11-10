@@ -3,11 +3,11 @@ import { Budget } from "@eden/llm";
 import type { ContextItem } from "@eden/protocol";
 import { CardEnricher, type Card, type CardMaker } from "./cards";
 
-// `cardsLanes` (N4, D521, a trial): one user's card calls run in up to N lanes while full batches wait, so a new
-// user's backfill is read sooner. One lane is the enricher as it was.
+// `cardsLanes` (N4, D521, promoted by D522): one user's card calls run in up to N lanes while full batches wait,
+// so a new user's backfill is read sooner. One lane is the enricher as it was.
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");
-const CONSTRAINT: Card = { kind: "constraint", actions: ["order"], entities: [], statement: "needs a signature" };
+const CONSTRAINT: Card = { kind: "limit", actions: ["purchase"], entities: [], statement: "needs a signature" };
 
 const item = (ref: string, body = `Spending over £5,000 must have a second signature, case ${ref}`): ContextItem => ({
   id: `mail:${ref}`,

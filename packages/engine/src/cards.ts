@@ -597,7 +597,7 @@ export interface CardLimits {
   /** `cardsOrder` (D482, D483; `order()` sets it): the queue is read best first (`orderQueue`), not as it filled. */
   order: boolean;
   /**
-   * `cardsLanes` (N4, D521, a trial; `lanes()` sets it): how many model calls one user may have in flight. 1: one
+   * `cardsLanes` (N4, D521, D522; `lanes()` sets it): how many model calls one user may have in flight. 1: one
    * batch at a time, as ever. More: while a full batch still waits behind a call in flight, another lane takes it, so
    * a new user's backfill is read in a fraction of the time for the same items a call.
    */
@@ -871,7 +871,7 @@ export class CardEnricher {
     this.limits = { ...this.limits, order: true };
   }
 
-  /** `cardsLanes` (N4, D521, a trial): up to `n` model calls in flight for one user. */
+  /** `cardsLanes` (N4, D521, D522): up to `n` model calls in flight for one user. */
   lanes(n: number): void {
     this.limits = { ...this.limits, lanes: Math.max(1, Math.floor(n)) };
   }

@@ -98,7 +98,12 @@ narrow and more seeds do not help; a part's effect (`fewer`: 1.3) is where seeds
 - **`--cards-calls N`** (F2, D482; hidden-funnel after `--`, pi-ab): each user's card model answers its first N calls
   and leaves the rest uncovered (no call, no spend), standing in for a new user whose requests arrive before the
   backfill is read. Without it both harnesses wait for the enrichment to finish before the first request, so they
-  cannot see what order the cards were made in.
+  cannot see what order the cards were made in. `--cards-rest cards` (N4, funnel only)
+  answers the calls past N with their cards and no requests (a card-only model for the rest, the replayed cards
+  standing in for it).
+- **A stronger agent (N4, D520):** `--model claude-sonnet-5-5` or `claude-opus-5-5` changes only the Pi agent
+  (`../../lab/n4/run.sh`). Opus 5.5 cannot run with thinking off: it runs `adaptive` at effort `low`
+  (`anthropicThinkingOff`); say so beside its numbers. Budget about $0.009 (Sonnet) and $0.015 (Opus) a task run.
 - **Keys** are read by `keyFor`, never printed or put in results.
 - **Budgets:** every live run passes `--budget` (a hard cap per process on everything it spends).
 - **Strict CLIs (audit 2026-11-03b).** funnel.ts, hidden-funnel.ts and quality-cli.ts parse through `flags()`; a new

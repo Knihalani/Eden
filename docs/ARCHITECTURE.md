@@ -466,7 +466,9 @@ rejects are read for their requests only, and with `cardsLean` (D125) only when 
 automated mail (`automated`: a no-reply or list sender, a bulk category or footer) and dated within `cardsLeanDays`
 (7 since D244; 30 before) or upcoming; constraint-worded items are read whatever their sender or age, and first
 (`cardsOrder`, D482, D483: what waits for the card model is read best first, so a new user's early requests meet cards
-for the items most likely to bear on them; equal-score hits keep the order their items came in). They live in a per-user BM25 index apart
+for the items most likely to bear on them; equal-score hits keep the order their items came in; `cardsLanes` 4, D521,
+D522: up to four of a user's card calls run at once while full batches wait, so the backfill is read in a quarter of
+the time for the same calls). They live in a per-user BM25 index apart
 from the item text, keyed by content hash and dropped with the card. At request time, with no model, the request's words
 are searched in it: the best hits join the lookup's candidates and one judge seat, and are fused into an `ask` by
 reciprocal rank after the verdict hits. An intent hit alone is never a no-model delivery. A hit whose item holds a
