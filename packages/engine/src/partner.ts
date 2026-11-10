@@ -91,6 +91,7 @@ import {
   structuralTie,
 } from "./firewall";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
+import { SourceYield, type Evidence } from "./source-yield";
 import { ProbeEconomy, type ProbeKind } from "./economy";
 import { judgeMessages, parseJudge } from "./judge";
 import {
@@ -304,6 +305,8 @@ interface Session {
   /** Tenant, user and session: the only key a session's state is ever looked up by. */
   key: string;
   turn: number;
+  /** `sourceYield` (D505): the sources a live read was booked against in turn `turn` (once a source a turn). */
+  liveReads?: { turn: number; ids: Set<string> };
   /**
    * The user messages (not drafts) observed so far. A `readerPush` reading is queued only while its request is still
    * the latest: the agent's own events move `turn` within one request, a new user message moves this.
@@ -433,6 +436,9 @@ interface Cue {
    * records each cut copy's outcome here as it settles, so the ask can tell which sources answered in time.
    */
   cutStatus?: Map<string, string>;
+  /** `sourceYield`: the lookup's routing boost and its evidence test, for the reads its probes book later. */
+  boost?: ReadonlyMap<string, number> | undefined;
+  evidence?: (id: string) => Evidence;
 }
 
 /**
@@ -545,6 +551,8 @@ const ANSWERED = new Set(["ok", "cached", "stale", "local"]);
 const ASK_BEHIND = "ask-behind:";
 /** `askBehind` (D430): a source whose poll or live search was still running when the ask answered. */
 const SEARCHING = "searching";
+/** `sourceYield` (D505): a cut copy an ask did not search, its source's run of unused live reads being spent. */
+const UNSEARCHED = "unsearched";
 
 /** How the answer names a status that did not answer (`unreached`). */
 const STATUS_WORDS: Record<string, string> = {
@@ -650,6 +658,8 @@ export class ContextPartner {
   private readonly redact: (items: ContextItem[]) => ContextItem[] | Promise<ContextItem[]>;
   /** What each user's probes bring back (`probeFresh`, `probeYield`). */
   private readonly economy = new ProbeEconomy();
+  /** `sourceYield` (D505): each source's run of live reads with nothing used; null when off. */
+  private readonly yields: SourceYield | null;
   /** Span tracing (`spans.ts`): null when off, so each phase's call site is one null check. */
   private readonly spans: Tracer | null;
   private readonly stats: SpanStats | null;
@@ -697,6 +707,7 @@ export class ContextPartner {
       // `cardsLanes` (N4, D521, D522): a new user's backfill read by several calls at once.
       if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
     }
+    this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
       sanitize: spans
@@ -3202,6 +3213,7 @@ export class ContextPartner {
     this.fanout.forget(scope, sourceId);
     this.deps.planner?.forget(scope, sourceId);
     this.economy.forget(scope, sourceId);
+    this.yields?.forget(scope, sourceId);
     this.sync?.forget(scope, sourceId);
     // A source's forget drops only what its items brought: the user's other items keep their cards.
     this.deps.cards?.forget(scope, sourceId);
@@ -3329,6 +3341,8 @@ export class ContextPartner {
   /** Starts usage tracking: from the moment the agent actually receives an injection, against what it had seen. */
   private handOut(s: Session, injection: Injection): void {
     const built = this.built.get(injection);
+    // `sourceYield` (D505): an item of a source reached the agent, so the source's run of unused reads ends.
+    if (built && this.yields && !s.closed) this.yields.used(s.scope, built.sourceIds, this.now());
     if (this.config.partyCheck && injection.reason !== "action-party" && injection.reason !== "ask") {
       this.notePacketParties(s, injection.text, injection.citations);
     }
@@ -4052,6 +4066,9 @@ export class ContextPartner {
     let pollable: Set<string> | null = null;
     let cutBehind: Set<string> | undefined;
     let probeLocal: Set<string> | null | undefined;
+    // `sourceYield` (D505): the warm copies whose unused live reads are spent; this lookup reads nothing live of them.
+    if (this.yields) cue.boost = boost;
+    const spent = this.spentSources(s, cue, all, boost);
     if (this.sync) {
       // `syncPollWidth` (D263): over that many sources, only the best routed are polled. The lookup is routed once,
       // here, before its poll, and searches the head of the same ranking, so every source it searches was polled
@@ -4073,7 +4090,12 @@ export class ContextPartner {
         const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(left())]);
         const freshening = this.spans?.open("sync.freshen", cue.span, { async: true });
         const tally = { fresh: 0 };
-        const toPoll = pollable ? all.filter((x) => pollable!.has(x.id)) : all;
+        // A spent copy the cap cut is not polled either: it is answered as held and named "unsearched". A whole copy
+        // keeps its poll (a listing is no live read, and without it an ask would call the copy failed).
+        const sync = this.sync;
+        const skipPoll =
+          spent && this.config.sourceYieldPolls ? (id: string) => spent.has(id) && !sync.complete(s.scope, id) : null;
+        const toPoll = all.filter((x) => (!pollable || pollable.has(x.id)) && !(skipPoll && skipPoll(x.id)));
         const polled = this.sync.freshen(s.scope, toPoll, signal, tally, s.abort.signal).then((calls) => {
           if (freshening) this.spans!.close(freshening, { calls, fresh: tally.fresh, ...(behind ? { behind } : {}) });
           return calls;
@@ -4119,6 +4141,11 @@ export class ContextPartner {
         // The probes keep D264: they search a cut copy live and are not waited for (`probeGraceMs`).
         probeLocal = this.localOf(s, all, behind);
       } else local = this.localOf(s, all, behind);
+      // A spent copy answers the probes from what is held too.
+      if (spent && spent.size > 0) {
+        const base = probeLocal === undefined ? local : probeLocal;
+        probeLocal = new Set([...(base ?? []), ...spent]);
+      }
     }
     // `askBehind` (D430): which copies answered here before they were whole or current (read once the route is known).
     const now0 = this.now();
@@ -4217,8 +4244,12 @@ export class ContextPartner {
           this.fanout.search(chosen, query, { timeoutMs: left(), signal: s.abort.signal });
     const settled = searching.catch(() => null);
     // As the lookup's own search (D140, D148): with under `MIN_SEARCH_MS` left, no call that could not answer is sent.
+    if (spent && cue.cutStatus && cutBehind) {
+      // An ask names a copy it did not search (D127): never "local" for a cut copy.
+      for (const id of spent) if (cutBehind.has(id)) cue.cutStatus.set(id, UNSEARCHED);
+    }
     if (cutBehind && cutBehind.size > 0 && !cue.followUp && left() >= MIN_SEARCH_MS) {
-      const behindOf = (listing ? listers : routed).filter((x) => cutBehind!.has(x.id));
+      const behindOf = (listing ? listers : routed).filter((x) => cutBehind!.has(x.id) && !spent?.has(x.id));
       // Sent as the lookup's own search would be: through the planner's cascade (its shapes find what the request's
       // words alone miss), its calls counted where they reach the connector.
       const via: (CountedPlanCalls | undefined)[] = [];
@@ -4234,7 +4265,7 @@ export class ContextPartner {
     } else if (cue.cutStatus && cutBehind) {
       // `askBehind` (D430): no search behind was sent (too little of the deadline left, D148), so nothing is reading
       // these copies: "timeout" at once, never "searching" (whose answer promises what follows).
-      for (const id of cutBehind) cue.cutStatus.set(id, "timeout");
+      for (const id of cutBehind) if (!cue.cutStatus.has(id)) cue.cutStatus.set(id, "timeout");
     }
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing = this.config.probes
@@ -4255,6 +4286,7 @@ export class ContextPartner {
         ).map((i) => i.id)
       : [];
     const outcomes = await searching;
+    this.noteLiveRead(s, cue, outcomes);
     if (searchSpan) spans!.close(searchSpan, outcomeAttrs(outcomes));
     const plans = planner
       ? chosen.flatMap((x) => {
@@ -4331,6 +4363,78 @@ export class ContextPartner {
   }
 
   /**
+   * `sourceYield` (D505): the user's warm synced copies this request reads nothing live of: a source whose own run
+   * of reads with nothing used has reached `sourceYieldRun` (never for a request that names an entity the source
+   * mentioned), or one with no item ever used while the user's reads on the request's kind of evidence for it are not
+   * paying (`SourceYield.poolSpent`). Only a warm copy: it answers from what is held, where a source with no copy
+   * would answer nothing. Null when the trial is off or no source is spent.
+   */
+  private spentSources(
+    s: Session,
+    cue: Cue,
+    all: readonly Source[],
+    boost: ReadonlyMap<string, number> | undefined,
+  ): Set<string> | null {
+    if (!this.yields || !this.sync || this.yields.size(s.scope) === 0) return null;
+    const now = this.now();
+    const c = this.config;
+    const evidence = this.evidenceFor(s, cue, boost);
+    const pooled = [
+      this.yields.poolSpent(s.scope, 0, c.sourceYieldFloor, now),
+      c.sourceYieldWords && this.yields.poolSpent(s.scope, 1, c.sourceYieldFloor, now),
+    ];
+    let out: Set<string> | null = null;
+    for (const x of all) {
+      const kind = evidence(x.id);
+      const run = this.yields.run(s.scope, x.id, now);
+      const limit = kind === 2 ? 0 : c.sourceYieldRun;
+      // Half a read of slack: a run decays from the moment of its last read, so 4 reads read 3.999 a minute later.
+      const spent =
+        (limit > 0 && run > limit - 0.5) ||
+        (kind < 2 && pooled[kind] === true && !this.yields.hasYielded(s.scope, x.id));
+      if (spent && this.sync.isWarm(s.scope, x.id)) (out ??= new Set()).add(x.id);
+    }
+    return out;
+  }
+
+  /**
+   * `sourceYield` (D505): what the request has for a source: 2, it names an entity the source's items mentioned (the
+   * source map); 1, its words are among the source's held items or in its sketch (`boost`); 0, nothing.
+   */
+  private evidenceFor(s: Session, cue: Cue, boost: ReadonlyMap<string, number> | undefined): (id: string) => Evidence {
+    let named: Set<string> | undefined;
+    return (id) => {
+      if (!named) {
+        named = new Set();
+        for (const e of cue.entities) for (const m of this.deps.sourceMap.sourcesFor(s.scope, e)) named.add(m.sourceId);
+      }
+      return named.has(id) ? 2 : (boost?.get(id) ?? 0) > 0 ? 1 : 0;
+    };
+  }
+
+  /**
+   * `sourceYield` (D505): books a live read against each source that answered one, once a source a turn: the push,
+   * its probes and an ask of the same turn often join one call. Only an answer counts ("ok": the connector was
+   * called and replied): a failure, a timeout or a guard's refusal says nothing about what the source holds, and a
+   * page from the fan-out's cache was no call. Only a warm copy's source: no other is ever skipped, so its reads
+   * would fill the pools with reads the rule cannot act on.
+   */
+  private noteLiveRead(s: Session, cue: Cue, outcomes: readonly FanoutOutcome[]): void {
+    if (!this.yields || !this.sync || s.closed) return;
+    if (s.liveReads?.turn !== s.turn) s.liveReads = { turn: s.turn, ids: new Set() };
+    const seen = s.liveReads.ids;
+    const fresh: string[] = [];
+    for (const o of outcomes) {
+      if (o.status !== "ok" || seen.has(o.sourceId) || !this.sync.isWarm(s.scope, o.sourceId)) continue;
+      seen.add(o.sourceId);
+      fresh.push(o.sourceId);
+    }
+    if (fresh.length === 0) return;
+    const evidence = (cue.evidence ??= this.evidenceFor(s, cue, cue.boost));
+    this.yields.read(s.scope, fresh, this.now(), evidence);
+  }
+
+  /**
    * `pushCutBehind` (D405): the live search D264 makes of cut copies, run behind a lookup that answered them from the
    * index. Same query, same deadline, same fan-out (breaker, rate, a call in flight joined). What it returns is stored
    * as the lookup's own finds are, and it joins `cue.polled`: if it stored anything new, the lookup's follow-up and
@@ -4370,6 +4474,7 @@ export class ContextPartner {
       .then(async (outcomes) => {
         let made = 0;
         for (let k = 0; k < outcomes.length; k++) made += via[k] ? via[k]!.made : reachedSource(outcomes[k]!) ? 1 : 0;
+        this.noteLiveRead(s, cue, outcomes);
         if (span) this.spans!.close(span, outcomeAttrs(outcomes));
         if (made > 0) {
           this.trace(s, {
@@ -4570,6 +4675,7 @@ export class ContextPartner {
         return run;
       };
       const outcomes = (await Promise.all(to.map(one))).filter((o): o is FanoutOutcome => o !== null);
+      this.noteLiveRead(s, cue, outcomes);
       // A page of the probe's own size from each source, even when the call was the planner's (8 items): more would
       // crowd the probes' seats with the judge (live, the judge passed fewer planted items with them).
       const items = outcomes.flatMap((o) => o.items.slice(0, window ? 20 : 5));
@@ -6414,15 +6520,29 @@ function reachAnswer(
   }
   // `askBehind` (D430): sources still being read when the ask answered are named apart from those that failed.
   const reading = (sources ?? []).filter((x) => x.status === SEARCHING);
-  const missed = (sources ?? []).filter((x) => !ANSWERED.has(x.status) && x.status !== SEARCHING);
+  // `sourceYield` (D505): cut copies the ask did not search are named apart too: nothing failed.
+  const skipped = (sources ?? []).filter((x) => x.status === UNSEARCHED);
+  const missed = (sources ?? []).filter(
+    (x) => !ANSWERED.has(x.status) && x.status !== SEARCHING && x.status !== UNSEARCHED,
+  );
   const told = unreached(packet, sources ?? [], missed);
-  if (reading.length === 0) return told;
-  const shown = reading.slice(0, 3).map((x) => x.sourceId);
-  const names = `${shown.join(", ")}${reading.length > 3 ? ` and ${reading.length - 3} more` : ""}`;
-  const note = `Still reading ${names}: anything there that fits follows as a later packet`;
-  if (told === "Nothing in the connected sources.")
-    return `Nothing found yet. ${note}, so this is not an all-clear yet.`;
-  return `${told}\n${note}.`;
+  if (reading.length === 0 && skipped.length === 0) return told;
+  const some = (xs: readonly SourceStatus[]) =>
+    `${xs
+      .slice(0, 3)
+      .map((x) => x.sourceId)
+      .join(", ")}${xs.length > 3 ? ` and ${xs.length - 3} more` : ""}`;
+  const notes: string[] = [];
+  if (reading.length > 0)
+    notes.push(`Still reading ${some(reading)}: anything there that fits follows as a later packet`);
+  if (skipped.length > 0) {
+    notes.push(`Not searched past what is held of ${some(skipped)}: nothing found there has been used lately`);
+  }
+  if (told === "Nothing in the connected sources.") {
+    const head = reading.length > 0 ? "Nothing found yet." : "Nothing found in what was searched.";
+    return `${head} ${notes.join(". ")}, so this is not an all-clear${reading.length > 0 ? " yet" : ""}.`;
+  }
+  return `${told}\n${notes.join(". ")}.`;
 }
 
 /** `reachAnswer`'s text for the sources that did not answer (`missed`), as D127 words it. */

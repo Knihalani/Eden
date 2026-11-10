@@ -26,6 +26,7 @@ import { OracleJudge } from "./judge";
 import { Rng } from "./rng";
 import { buildSessions, type AskCase, type Label, type SimTask, type SimTurn } from "./sessions";
 import { simSources, type ProfileSet, type SimSource } from "./sources";
+import { applyNotifyShare } from "./lab/connector-options";
 import {
   applyDelete,
   applyUpdate,
@@ -85,6 +86,8 @@ export interface QualityOptions {
    * source takes the longer sweep: the worst case for deletions a lost notice leaves to the sweep.
    */
   neverUsed?: boolean;
+  /** `--notify-share P` (N1, `applyNotifyShare`): only that share of the connectors send change notices. */
+  notifyShare?: number | null;
   agentToolRate?: number;
   /**
    * With no live model: "perfect" puts an oracle judge in the model's place (the ceiling of the model path),
@@ -574,6 +577,7 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
     if (o.nullProvesNothing)
       for (const src of sources) Object.defineProperty(src, "fetchReportsGone", { value: false, enumerable: true });
     if ((o.push ?? "none") !== "none") for (const s of sources) s.notifies = true;
+    applyNotifyShare(sources, o.notifyShare ?? null, o.seed + u);
     if (o.fetchGone === false) for (const s of sources) s.fetchReportsGone = false;
     return { world, sessions, asks, updates, deletes, sources };
   });
@@ -642,6 +646,8 @@ export async function tallyQuality(o: QualityOptions): Promise<QualityTally> {
       if (mode === "none") return;
       for (const s of sources) {
         if (!touched.has(s.id)) continue;
+        // `notifyShare`: a connector that does not notify sends nothing.
+        if (o.notifyShare != null && !s.notifies) continue;
         if ((o.lostNotices ?? 0) > 0 && losing.chance(o.lostNotices!)) {
           lostNotices++;
           continue;

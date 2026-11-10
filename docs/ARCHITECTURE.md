@@ -202,7 +202,15 @@ unsynced one, so what is older than the cut is still found. The push does not wa
 reaches the agent through the poll's follow-ups. Nor does an explicit ask (`askBehind`, D430, D431): its lookup runs
 behind as the push's does, it waits `askBehindWaitMs` (0) for that work, answers from what is held and names the
 sources still being read (status "searching", never an all-clear), and what they then store that it would cite goes
-out as a packet at the next take. A lookup polls at most its `syncPollWidth` (8) best-routed
+out as a packet at the next take. Which cut copies are read live at all is learned (`sourceYield`, D505, D509;
+`source-yield.ts`; docs/research/n1-calls.md): each source keeps a run of the live reads it answered since one of its
+items last reached the agent, and the user's reads on no evidence, and on the request's words alone, are pooled over
+the sources with nothing used yet. A copy whose run has reached `sourceYieldRun` (4), or a never-used one while its
+kind of read is clearly not paying (`sourceYieldFloor`), gets no search behind, no probe and no on-demand poll for a
+request that names nothing the source mentioned: it answers from what is held, and an ask gives it the status
+"unsearched" and says so, never an all-clear. Runs and pools halve every week, so sources are tried again. With
+1,000 sources this took Eden's connector calls from ~36 to ~11 a task over a user's days. A lookup polls at most its
+`syncPollWidth` (8) best-routed
 stale sources (D263); a warm source past them answers from its copy as it stands, as under `syncPollBehind`. Routing
 (`SourceMap.route`) adds, per source, log2(1 + its items among the request's 40 best matches in the user's own index)
 (`routeLocalHits`, D265), so a request that names no one still reaches the sources whose items share its words. The

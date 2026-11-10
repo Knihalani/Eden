@@ -290,6 +290,25 @@ export interface EngineConfig {
    */
   askBehindWaitMs: number;
   /**
+   * On in the default (D505, D509, N1; docs/research/n1-calls.md). With `sync`: each of a user's sources keeps a run
+   * of the live reads it answered since one of its items last reached the agent (`source-yield.ts`), and the user's
+   * reads are
+   * pooled by what the request had for the source: nothing, its words alone (among the source's held items or in its
+   * sketch), or a name the source's items mentioned. A warm synced copy is not read live (no search of its cut copy
+   * behind, no probe, and with `sourceYieldPolls` no on-demand poll; it answers from what is held, and an ask names
+   * it "not searched") when its own run is at `sourceYieldRun` or more and the request names nothing it mentioned, or
+   * when none of its items has ever reached the agent and the user's reads on that kind of evidence are surely
+   * paying under `sourceYieldFloor` (uses per read; 0: the pooled rule off). The pool of reads on nothing always
+   * acts; `sourceYieldWords` turns on the pool of reads on words; a read on a name is never pooled. Runs and pools
+   * halve every `sourceYieldHalfLifeMs`, so sources are tried again.
+   */
+  sourceYield: boolean;
+  sourceYieldRun: number;
+  sourceYieldFloor: number;
+  sourceYieldWords: boolean;
+  sourceYieldHalfLifeMs: number;
+  sourceYieldPolls: boolean;
+  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -769,6 +788,12 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCutBehind: true,
   askBehind: true,
   askBehindWaitMs: 0,
+  sourceYield: true,
+  sourceYieldRun: 4,
+  sourceYieldFloor: 0.05,
+  sourceYieldWords: true,
+  sourceYieldHalfLifeMs: 7 * 24 * 3_600_000,
+  sourceYieldPolls: true,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,

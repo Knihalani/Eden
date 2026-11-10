@@ -103,7 +103,7 @@ import { sanitizeForStore } from "@eden/redact";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
-import { connectorOptions, pushNotifier } from "./connector-options";
+import { applyNotifyShare, connectorOptions, parseNotifyShare, pushNotifier } from "./connector-options";
 import { noiseSources } from "./noise-sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
@@ -215,6 +215,7 @@ const cli = flags(
         "run-label",
         "distill",
         "noise-sources",
+        "notify-share",
         "noise-items",
         "source-profile",
         "push",
@@ -228,10 +229,9 @@ const cli = flags(
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
-      ["overlap", "sync", "ask", "serial", "allow-misses", "no-record", "cpu", "allow-logging", "neutral"].map((k) => [
-        k,
-        B,
-      ]),
+      ["overlap", "sync", "ask", "serial", "allow-misses", "no-record", "cpu", "allow-logging", "neutral"]
+        .concat("call-split")
+        .map((k) => [k, B]),
     ),
   },
   `
@@ -266,6 +266,8 @@ const NOISE_SOURCES = Number(opt("noise-sources", "0"));
  * not change). Defaults (REALISTIC, no notices) leave every earlier run as it was.
  */
 const CONNECTORS = connectorOptions(opt);
+/** `--notify-share P` (N1, `applyNotifyShare`): the share of connectors that send change notifications. */
+const NOTIFY_SHARE = parseNotifyShare(opt("notify-share", ""));
 /** `--fetch-gone false`: the sources' fetch null proves nothing, as an MCP connector's (A18; default true). */
 const FETCH_GONE = opt("fetch-gone", "true") !== "false";
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
@@ -337,6 +339,13 @@ const syncUse = {
 };
 /** Over the whole run: calls the connectors received in the tasks' windows (listings among them); the traces' sum. */
 const callCheck = { received: 0, listed: 0, traced: 0 };
+/**
+ * `--call-split` (N1, a diagnostic print for one process): the calls in the tasks' windows by connector (the world's
+ * own or a noise one; search or listing) and the traces' calls by what made them.
+ */
+const CALL_SPLIT = cli.has("call-split");
+const callSplit = { worldSearch: 0, worldList: 0, noiseSearch: 0, noiseList: 0, tasks: 0, distinct: 0, repeats: 0 };
+const callsByTrace = new Map<string, number>();
 const CARDS = opt("cards", "");
 /**
  * `--intent FILE[,FILE]` (with `"intent": true` in `--config`): the requests `cards-enrich.ts --intent` wrote, replayed
@@ -778,12 +787,23 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   const notify = pushNotifier(own, CONNECTORS, seed, world.now);
   if (!FETCH_GONE) for (const s of own) s.fetchReportsGone = false;
   const sources = [...own, ...(NOISE_SOURCES > 0 ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed) : [])];
+  // `--notify-share P` (N1): only that share of the connectors notify; the rest are polled and swept.
+  applyNotifyShare(sources, NOTIFY_SHARE, seed);
   const returned = new Set<string>();
+  // `--call-split`: the sources searched in the current task's window, and every (source, query text) of this user.
+  const searchedNow = new Map<string, number>();
+  const everAsked = new Set<string>();
   let served = 0;
   for (const s of sources) {
     const search = s.search.bind(s);
     s.search = async (q, signal) => {
       served++;
+      if (CALL_SPLIT) {
+        searchedNow.set(s.id, (searchedNow.get(s.id) ?? 0) + 1);
+        const key = `${s.id}|${q.text}`;
+        callSplit.repeats += everAsked.has(key) ? 1 : 0;
+        everAsked.add(key);
+      }
       const items = await search(q, signal);
       for (const i of items) returned.add(i.id);
       return items;
@@ -812,9 +832,24 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   // for calls per task, as `quality.ts` reads it.
   const received = () => sources.reduce((n, s) => n + s.stats.calls, 0);
   const listed = () => sources.reduce((n, s) => n + s.stats.lists, 0);
+  const ownIds = new Set(own.map((x) => x.id));
+  const splitNow = () => {
+    const at = { worldSearch: 0, worldList: 0, noiseSearch: 0, noiseList: 0 };
+    for (const x of sources) {
+      const searches = x.stats.calls - x.stats.lists;
+      if (ownIds.has(x.id)) ((at.worldSearch += searches), (at.worldList += x.stats.lists));
+      else ((at.noiseSearch += searches), (at.noiseList += x.stats.lists));
+    }
+    return at;
+  };
   const countCalls = (t: Trace) => {
     // The traces' count, a cross-check only.
     calls += t.sourceCalls;
+    if (CALL_SPLIT && t.sourceCalls > 0) {
+      const why = /^(cut search behind|sync poll behind|ask behind)/.exec(t.reason)?.[1] ?? "lookup";
+      const key = `${t.event}/${why}`;
+      callsByTrace.set(key, (callsByTrace.get(key) ?? 0) + t.sourceCalls);
+    }
     if (t.reason.startsWith("slow path busy")) busyTraces.busy++;
     if (t.localSources !== undefined) {
       syncUse.lookups++;
@@ -1060,6 +1095,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     returned.clear();
     const callsBefore = calls;
     const receivedBefore = received();
+    const splitBefore = CALL_SPLIT ? splitNow() : null;
+    searchedNow.clear();
     const listedBefore = listed();
     const servedBefore = served;
     const c0 = cpuNow();
@@ -1273,6 +1310,15 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     // their grace: `busy`) and the ask have finished.
     const taskListed = listed() - listedBefore;
     const taskCalls = received() - receivedBefore;
+    if (splitBefore) {
+      const at = splitNow();
+      callSplit.tasks++;
+      callSplit.distinct += searchedNow.size;
+      searchedNow.clear();
+      for (const k of ["worldSearch", "worldList", "noiseSearch", "noiseList"] as const) {
+        callSplit[k] += at[k] - splitBefore[k];
+      }
+    }
     syncUse.demandSeen += taskListed;
     callCheck.received += taskCalls;
     callCheck.listed += taskListed;
@@ -1557,6 +1603,16 @@ console.log(
   `calls: connectors received ${callCheck.received} in the tasks' windows (${callCheck.listed} of them on-demand ` +
     `listings); traces summed ${callCheck.traced} (cross-check, fetches included)`,
 );
+if (CALL_SPLIT) {
+  const per = (n: number) => (n / Math.max(1, callSplit.tasks)).toFixed(2);
+  console.log(
+    `call split (a task): world searches ${per(callSplit.worldSearch)}, world listings ${per(callSplit.worldList)}, ` +
+      `noise searches ${per(callSplit.noiseSearch)}, noise listings ${per(callSplit.noiseList)}; distinct sources ` +
+      `searched ${per(callSplit.distinct)}; searches repeating a (source, text) this user sent before ` +
+      `${per(callSplit.repeats)}; by trace: ` +
+      [...callsByTrace].map(([k, n]) => `${k} ${per(n)}`).join(", "),
+  );
+}
 // The traces should carry every call the connectors received (audit 2026-11-03b, corr-poll-behind-calls-untraced):
 // a gap means per-trace `sourceCalls`, and every cost or rate-limit view built from traces, is off.
 if (callCheck.traced !== callCheck.received) {

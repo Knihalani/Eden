@@ -161,3 +161,30 @@ export async function recapNotice(
   }
   return sent;
 }
+
+/** `--notify-share P`: a share in [0, 1], or null when the flag is absent. */
+export function parseNotifyShare(text: string): number | null {
+  if (!text) return null;
+  const share = Number(text);
+  if (!(share >= 0 && share <= 1)) throw new Error("--notify-share takes a share between 0 and 1");
+  return share;
+}
+
+/**
+ * `--notify-share P` (N1): only a share P of the connectors send change notifications (`notifies`), chosen by a hash
+ * of the connector's id and the seed; the rest are polled and swept. Most connectors a user adds offer a search and a
+ * listing and no webhook: the owner's estimate is that about 90% send nothing (an assumption, not a census). Run after
+ * `--push` has marked every source as notifying; what a notice carries is still `--push`'s. Null: nothing changes.
+ * The hash is the one F1's `--connector-mix` used, so `--notify-share 0.05` marks the sources its 5/5/90 marked.
+ */
+export function applyNotifyShare(sources: SimSource[], share: number | null, seed: number): void {
+  if (share === null) return;
+  for (const s of sources) {
+    let h = (0x811c9dc5 ^ seed) >>> 0;
+    for (let i = 0; i < s.id.length; i++) h = Math.imul(h ^ s.id.charCodeAt(i), 0x01000193) >>> 0;
+    // The low bits of FNV over short ids are poor: mix before reading a share.
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0;
+    h = (h ^ (h >>> 13)) >>> 0;
+    s.notifies = h / 0x1_0000_0000 < share;
+  }
+}

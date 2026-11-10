@@ -106,7 +106,15 @@ import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import { noiseSources } from "./noise-sources";
 import type { World } from "../world";
-import { connectorHeader, connectorOptions, pushNotifier, recapNotice, sourceFields } from "./connector-options";
+import {
+  applyNotifyShare,
+  connectorHeader,
+  connectorOptions,
+  parseNotifyShare,
+  pushNotifier,
+  recapNotice,
+  sourceFields,
+} from "./connector-options";
 import {
   armPromptsHash,
   ASK_DESCRIPTION,
@@ -244,6 +252,8 @@ if (!Number.isInteger(DAY) || DAY < 0) throw new Error(`--day must be a whole nu
 // `--noise-items` items each, default 20), as the funnel's flag (A1): a user with ~1,000 connected sources. The tools
 // arm keeps the world's sources (its agent's tools); every connector call Eden makes, noise ones too, is counted.
 const NOISE_SOURCES = Number(opt("noise-sources", "0"));
+// `--notify-share P` (N1, `applyNotifyShare`): the share of connectors that send change notifications.
+const NOTIFY_SHARE = parseNotifyShare(opt("notify-share", ""));
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
 if (!Number.isInteger(NOISE_SOURCES) || NOISE_SOURCES < 0 || !Number.isInteger(NOISE_ITEMS) || NOISE_ITEMS < 1)
   throw new Error("--noise-sources and --noise-items take whole numbers (--noise-items at least 1)");
@@ -724,6 +734,8 @@ async function runWorld(
   let edenCalls = 0;
   const noise =
     NOISE_SOURCES > 0 && cond.withPartner ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME_SCALE, seed) : [];
+  // `--notify-share P` (N1): only that share of the connectors notify; the rest are polled and swept.
+  applyNotifyShare([...sources, ...noise], NOTIFY_SHARE, seed);
   const edenSources = [...sources, ...noise].map((s) =>
     watched(s, (id, op, start, end, status, items) => {
       edenCalls++;
