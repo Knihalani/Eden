@@ -312,6 +312,57 @@ clauses; run 2 is reported beside it and promotes nothing by itself (its structu
 fails clause 1 with a point estimate at or below −2.0, run 3 is not paid for and the switches are deleted. Run 3's
 caps sum to $6.47 with its regrade; with runs 1 and 2 the session's Anthropic spend stays under $16 of $25.
 
+## 2d. Runs 1 and 2, and a days check registered before run 3 was read
+
+Runs 1 and 2 were read together once both were paid (`packages/sim/lab/o1/earn/`, `earn2/`: `bench.txt`,
+`bench-horizons.txt`, `pair-*.txt`, `pi-cost-*.txt`, manifests). `trial − default`, Haiku-graded hidden as
+registered, Sonnet's verdict on flagged concerns:
+
+| | Run 1: `eden~earn` (first build, shared noise words) | Run 2: `eden~earn2` (eight-probe sketches, `--noise-vocab 1000`) |
+| --- | --- | --- |
+| Hidden raised, pooled | **+1.0 points (−0.3..+2.3)**, n 2,304, 57.8 / 56.8; MDE 1.8 | **+1.2 points (−0.5..+2.9)**, n 2,405, 56.1 / 55.0; MDE 2.4 |
+| short, seeds 41–44 | +1.1 (−2.1..+4.4), n 378 | +0.5 (−2.6..+3.6), n 384 |
+| short, seeds 45–64 | +1.3 (−0.2..+2.6), n 1,825 | +1.7 (−0.2..+3.7), n 1,920 |
+| days, 8 users | −4.0 (−13.0..+3.8), n 101 | −6.9 (−14.0..−0.9), n 101 |
+| Eden's calls a task, short (paired, 1:1) | 26.7 → 9.3: −17.4 (−18.3..−16.6) | 23.3 → 6.2: −17.1 (−18.0..−16.1) |
+| Eden's calls a task, days (1:1:8) | 11.9 → 5.7: −6.1 (−6.9..−5.4) | 7.9 → 2.7: −5.2 (−5.8..−4.5) |
+| False concerns, regraded | 0 against 0 of 1,257 | 2 against 1 of 1,272: +0.1 points (−0.2..+0.4) |
+| $ per 1,000 tasks, agent + Eden per task | +0.002 (−0.001..+0.005) | +0.001 (−0.003..+0.004) |
+| Wall mean | +0.006 s (−0.015..+0.027) | +0.003 s (−0.022..+0.027) |
+| `ask_context` calls a task | +0.008 (−0.005..+0.021) | +0.015 (−0.003..+0.035) |
+
+Run 2's cost report, each arm's own tasks (not paired; list prices, assumed): first-party steady $ per 1,000 tasks
+(agent + Eden + background cards) 0.575 → 0.335 short and 0.390 → 0.289 over days (the noise connectors' items no
+longer reach the card model); Eden's background calls a task 1.99 → 1.34 and 1.00 → 0.53; Zapier MCP steady $640 →
+$194 short and $230 → $85 over days; Composio $8.01 → $2.58 and $3.06 → $1.27.
+
+**The rule's four clauses hold in both runs** (lower bounds −0.3 and −0.5 against −2.0; calls down on both
+horizons; concerns up at most +0.4; dollars level). By section 2c neither promotes anything: run 3 does.
+
+**The days horizon reads below zero in both runs, on the same 101 tasks of the same 8 users.** What was checked:
+
+- **Reach is not worse.** The planted item was in a packet or an ask's answer of its request in 52 tasks with the
+  trial and 51 without in run 2 (one lost, two gained), 51 and 53 in run 1 (five lost, three gained); short, run 2:
+  278 against 275 of 384 and 1,219 against 1,189 of 1,920.
+- **The grader moves it.** Every days hidden answer regraded by Sonnet (`regrade.ts --kinds hidden`,
+  `bench_report.py --sonnet all`): run 2 **−2.0 points (−8.6..+4.0)**, 3 tasks raised by the trial alone and 5 by
+  the default alone; run 1 −5.9 (−13.0..+0.0), 3 against 9.
+- A day's requests share one transcript, so these task-level and template-level intervals are too narrow by 1.5 to
+  3 times (D519), and the two runs are two readings of one set of tasks (D544).
+
+So nothing found says Eden hands the agent less over days, and nothing rules out a loss of a few points there.
+
+**Days check (registered here, before run 3's results are read; paid after run 3).** The same two arms as run 3
+(the table, `--noise-vocab 1000`, the image at run 3's commit), `--days 8`, **24 users on seeds 49–72** (none of
+41–48), two shards at once, cap $0.20 a user ($4.80; expected about $2.6); every hidden answer of both arms
+regraded by `claude-sonnet-5-5` (cap $1.00), Sonnet's verdict replacing Haiku's. **Rule:** the days horizon is
+accepted if the paired hidden effect's 95% interval **with users resampled as clusters** (`bench_report.py`'s "by
+seed" interval: users are independent where a day's tasks are not) has its **lower bound above −4.0 points**.
+Otherwise the switches are not promoted whatever run 3 reads, and stay off trials with the days loss stated. (This section was committed while run 3's first step ran: its later steps' image is this commit, which differs
+from the first step's, 20e36961, by this note alone.) The
+check is run whatever run 3's days arm reads; run 3's own days pairs are reported beside it and not pooled into
+the rule.
+
 ## 3. Dormant sources: built, screened at $0, removed after review (D602; a proposal, not a trial)
 
 With the trials above a 1,000-source user's request-time calls are a few a request. The weekly sweep of the sources
