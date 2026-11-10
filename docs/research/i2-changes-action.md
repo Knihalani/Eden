@@ -107,3 +107,15 @@ for those worlds: their 160 held-out groups are dumped and labelled by the same 
 **Live (step 4)** only if arm A passes both the screen and the confirmation: a Pi run on Modal (at most two Anthropic
 shards at a time, the existing `HAIKU_API_KEY` Secret, Sonnet-regraded concerns). Arm B passing alone is not run live
 (a model call a push is not on the fast path; it would need its own decision and a cost estimate).
+
+## 4b. Addendum, pre-registered before its run: Haiku 5.5 as the checker, on fresh worlds
+
+Written after §5's screens (arm A failed, arm B passed and confirmed) and after an exploratory arm not in §4: Haiku 5.5
+(`claude-haiku-5-5`, effort low) labelled the 160 held-out groups of seeds 41–44 with the same `CHANGES_SYSTEM`
+($0.1241: a batch with 23 replies cut short, re-run direct), planted-vs-decoy AUC 0.876, and its labels served as
+the checker passed §4's bar on those tasks. That arm was chosen after seeing arm B, so it is checked once on worlds no
+step has seen: **the held-out templates on seeds 45–48**, Haiku's labels for their 160 groups made the same way, the
+same pass mark (0.5) and bar (§4), against the trial off on the same seeds (intent inert in both arms, as in §5).
+Passing would recommend a per-push Haiku check to a later session (a model call a push needs its own decision and a
+cost estimate, docs/COST-MODEL.md); no live run is made in this session either way, since §4's live step was for a
+CPU checker (arm A) only.
