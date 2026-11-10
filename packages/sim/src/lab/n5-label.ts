@@ -13,6 +13,7 @@
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { gunzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import { AnthropicModel } from "@eden/llm";
 import { splitOf } from "./i1-label";
@@ -110,7 +111,9 @@ export function parseActs(text: string, items: readonly CorpusItem[]): ActLabel[
 export function loadActs(path: string): Map<string, ActLabel> {
   const out = new Map<string, ActLabel>();
   if (!existsSync(path)) return out;
-  for (const line of readFileSync(path, "utf8").split("\n")) {
+  const raw = readFileSync(path);
+  const text = path.endsWith(".gz") ? gunzipSync(raw).toString("utf8") : raw.toString("utf8");
+  for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     const l = JSON.parse(line) as ActLabel;
     if (l.v === ACT_VERSION) out.set(l.k, l);

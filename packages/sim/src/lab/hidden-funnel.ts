@@ -148,7 +148,7 @@ import {
 } from "./neutral";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
-import { loadWidenTable, widenFor } from "./n2-widen";
+import { loadWidenHashTable, loadWidenTable, widenByHash, widenFor } from "./n2-widen";
 import { loadActs } from "./n5-label";
 import { actsFor, StoredRequestIndex, type ActRule } from "./n5-acts";
 import {
@@ -228,6 +228,7 @@ const cli = flags(
         "check-thinking",
         "check-log",
         "widen-table",
+        "widen-hash",
         "acts",
         "acts-rule",
         "acts-dump",
@@ -501,9 +502,13 @@ if (TEMPLATES) {
  * request (`packages/sim/modal/n2_embed.py`), wired as the `widen` dependency the `pushWiden` trial reads.
  */
 const WIDEN_TABLE = opt("widen-table", "") ? loadWidenTable(opt("widen-table", "")) : null;
+/** `--widen-hash FILE` (N5, D530): the same table keyed by item content (`widenByHash`), as pi-ab's days need it. */
+const WIDEN_HASH = opt("widen-hash", "") ? loadWidenHashTable(opt("widen-hash", "")) : null;
+if (WIDEN_TABLE && WIDEN_HASH) throw new Error("--widen-table and --widen-hash are two forms of one table: pass one");
 /**
- * `--acts FILE` (N5, D525): the stored answers (`n5-label.ts`) the `pushCheckStored` trial reads, by `--acts-rule`
- * (JSON, `ActRule`; default R0); `--acts-dump FILE` writes each call's per-item features (sim data only).
+ * `--acts FILE` (N5, D525): the stored answers (`n5-label.ts`) the `pushCheckGate` trial reads, by `--acts-rule`
+ * (JSON, `ActRule`; default the stored `act` alone); `--acts-dump FILE` writes each call's per-item features (sim
+ * data only).
  * `--widen-q N`: the `widen` dependency also returns the stored requests' best N lexical hits (`StoredRequestIndex`),
  * after the embedding table's first `--widen-embed` ids (default 0 with no table, else 5).
  */
@@ -511,7 +516,7 @@ const ACTS = opt("acts", "") ? loadActs(opt("acts", "")) : null;
 const ACTS_RULE = parseJson(opt("acts-rule", '{"mode":"act"}'), "--acts-rule") as ActRule;
 const ACTS_DUMP = opt("acts-dump", "");
 const WIDEN_Q = Number(opt("widen-q", "0"));
-const WIDEN_EMBED = Number(opt("widen-embed", WIDEN_TABLE ? "5" : "0"));
+const WIDEN_EMBED = Number(opt("widen-embed", WIDEN_TABLE || WIDEN_HASH ? "5" : "0"));
 if (WIDEN_Q > 0 && !ACTS) throw new Error("--widen-q needs --acts FILE");
 if (ACTS_DUMP) writeFileSync(ACTS_DUMP, "");
 /** `--reader-log out.jsonl`: each reader call's prompt (the items as the model read them) and reply, sim data only. */
@@ -979,7 +984,18 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   if (checker) checkLanes.push(checker);
   const pushPools = new Map<string, PushPoolReport[]>();
   // `--widen-table`, `--widen-q` (N2, N5): the embedding table's ids, then the stored requests' lexical hits.
-  const embedded = WIDEN_TABLE ? widenFor(WIDEN_TABLE, suite, seed, variant) : null;
+  let byHash: Map<string, string> | null = null;
+  const idOf = (hash: string) =>
+    (byHash ??= new Map(
+      simSources(world, REALISTIC, 0, seed)
+        .flatMap((src) => src.listAll())
+        .map((raw) => [cardKey(sanitizeItem(raw)).slice(0, 20), raw.id] as const),
+    )).get(hash);
+  const embedded = WIDEN_TABLE
+    ? widenFor(WIDEN_TABLE, suite, seed, variant)
+    : WIDEN_HASH
+      ? widenByHash(WIDEN_HASH, seed, idOf, () => variant)
+      : null;
   let stored: StoredRequestIndex | null = null;
   const storedIndex = () =>
     (stored ??= new StoredRequestIndex(
@@ -1320,6 +1336,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       appendFileSync(PACKETS, JSON.stringify({ ...line, ...extra }) + "\n");
     }
     const push = pushPools.get(sessionId)?.at(-1);
+    // `pushCheck`: whether any pass of this task made the check's call (N5's call rate by variant).
+    const checkCalled = (pushPools.get(sessionId) ?? []).some((r) => r.checkCalled);
     pushPools.delete(sessionId);
     if (POOL_DUMP) {
       const ids = push?.pool ?? [];
@@ -1396,6 +1414,7 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
+      ...(checkCalled ? { pushCheckCalled: true } : {}),
       // `askNudge` (D316): whether that pass's candidates left the request unsettled (the packet nudged an ask).
       ...(push?.unsettled !== undefined ? { pushUnsettled: push.unsettled } : {}),
       ...(rr

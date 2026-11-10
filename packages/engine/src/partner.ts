@@ -227,8 +227,8 @@ export interface PartnerDeps {
    */
   widen?: (scope: Scope, request: string, k: number) => Promise<readonly string[]>;
   /**
-   * N5 (D525, trial `pushCheckStored`): the answer to the check's question written when each item was stored, read
-   * for this request: per item, whether it passes (true), does not (false), or has no stored answer yet (null).
+   * N5 (D529, trial `pushCheckGate`): the answer to the check's question written when each item was stored, read for
+   * this request: per item, whether it scores (true), does not (false), or has no stored answer yet (null).
    * Synchronous: no model call and no network. The lab wires a label table (`n5-acts.ts`); no server wires one.
    */
   acts?: StoredActs;
@@ -269,6 +269,8 @@ export interface PushPoolReport {
    */
   check?: "yes" | "none" | "late" | "failed";
   checked?: boolean[];
+  /** This pass made the check's model call; one that read a kept answer, or that `pushCheckGate` closed, did not. */
+  checkCalled?: boolean;
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -2069,24 +2071,12 @@ export class ContextPartner {
       // check can hand them, so it runs only where the check would.
       // One wait for both: the check gets what the widening left of `pushCheckWaitMs` (D500's bound holds).
       const widenFrom = performance.now();
-      // `pushCheckStored` (N5, D525): the check's answer is read from what was written when each item was stored
-      // (`PartnerDeps.acts`): no call and no wait of the check's own, and no constraint-like gate (the stored answer
-      // is that test, made by a model).
-      const stored = this.config.pushCheck && this.config.pushCheckStored && !!this.deps.acts;
-      if (
-        gate &&
-        this.config.pushCheck &&
-        this.config.pushWiden &&
-        (stored || (this.deps.checker && gate.like.some(Boolean)))
-      )
+      if (gate && this.config.pushCheck && this.config.pushWiden && this.deps.checker && gate.like.some(Boolean))
         gate.widened = await this.widenPool(s, cue, [...order, ...scored], gate.pool);
-      const check = !gate
-        ? null
-        : stored
-          ? this.checkStored(s, cue, gate)
-          : this.config.pushCheck && this.deps.checker
-            ? await this.checkPush(s, cue, gate, performance.now() - widenFrom)
-            : null;
+      const check =
+        gate && this.config.pushCheck && this.deps.checker
+          ? await this.checkPush(s, cue, gate, performance.now() - widenFrom)
+          : null;
       if ((check || gate?.widened) && s.closed) {
         // The session closed while the check ran: its call was paid for, so it is traced on its own.
         if (check?.called) this.traceCheck(s, check, t0);
@@ -2564,18 +2554,30 @@ export class ContextPartner {
     if (!request.trim()) return null;
     const focus = readerFocus(cue.raw);
     const head = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
-    let read = [...head, ...(gate.widened ?? [])];
-    // `pushCheckActOnly` (N5, D528): only the items whose stored answer could change an action (or that have none
-    // yet) are read; with none left the check answers "nothing" with no call.
-    if (this.config.pushCheckActOnly && this.deps.acts) {
-      const kept = this.actOnly(s, cue, read);
-      if (kept) {
-        if (kept.length === 0) return { yes: new Set(), costUsd: 0, called: false, overBudget: false };
-        read = kept;
+    // `pushWiden` (D511): the widened items after the pool's head, within the check's item cap.
+    const read = [...head, ...(gate.widened ?? []).slice(0, Math.max(0, CHECK_MAX_ITEMS - head.length))];
+    // `pushCheckGate` (N5, D529): the call is made only when the stored answer of some item read scores for this
+    // request (`PartnerDeps.acts`; an item with no stored answer yet counts, so a new item is never skipped).
+    // Otherwise no call: the default's candidates (1) or no packet (2). A dependency that throws gates nothing.
+    if (this.config.pushCheckGate > 0 && this.deps.acts) {
+      let open = true;
+      try {
+        const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+        const passes = this.deps.acts(
+          s.scope,
+          { text: request, anchors },
+          read.map((x) => x.item),
+        );
+        open = read.some((_, i) => passes[i] !== false);
+      } catch {
+        open = true;
+      }
+      if (!open) {
+        return this.config.pushCheckGate === 2
+          ? { yes: new Set(), costUsd: 0, called: false, overBudget: false }
+          : null;
       }
     }
-    // `pushWiden` (D511): the widened items after the pool's head, within the check's item cap.
-    read = read.slice(0, CHECK_MAX_ITEMS);
     const input = {
       request,
       items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
@@ -2637,63 +2639,6 @@ export class ContextPartner {
     } finally {
       clearTimeout(timer);
     }
-  }
-
-  /**
-   * `pushCheckActOnly` (N5, D528): `read` without the items whose stored answer is "no"; null when the dependency
-   * throws (the check then reads everything, as without the switch).
-   */
-  private actOnly(s: Session, cue: Cue, read: readonly Scored[]): Scored[] | null {
-    try {
-      const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
-      const passes = this.deps.acts!(
-        s.scope,
-        { text: sanitizeForStore(cue.raw), anchors },
-        read.map((x) => x.item),
-      );
-      return read.filter((_, i) => passes[i] !== false);
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * `pushCheckStored` (N5, D525): the check's answer with no call: the pool's and the widened items the stored answers
-   * (`PartnerDeps.acts`) pass for this request. A lexical-pool item with no stored answer yet passes where the
-   * default would hand it (a constraint-like pool, among its first `pushCandidates` items that are not bulk mail); a
-   * widened item with none does not. A dependency that throws leaves the default's candidates.
-   */
-  private checkStored(s: Session, cue: Cue, gate: PushGate): PushCheckRead | null {
-    const acts = this.deps.acts;
-    if (!acts) return null;
-    const text = sanitizeForStore(cue.raw);
-    if (!text.trim()) return null;
-    const read = [...gate.pool, ...(gate.widened ?? [])];
-    let passes: readonly (boolean | null)[];
-    try {
-      const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
-      passes = acts(
-        s.scope,
-        { text, anchors },
-        read.map((x) => x.item),
-      );
-    } catch {
-      return null;
-    }
-    const yes = new Set<string>();
-    const fallback = gate.like.some(Boolean)
-      ? new Set(
-          gate.pool
-            .filter((x) => !bulkMail(x.item))
-            .slice(0, this.config.pushCandidates)
-            .map((x) => x.item.id),
-        )
-      : new Set<string>();
-    read.forEach((x, i) => {
-      const pass = passes[i] ?? null;
-      if (pass === true || (pass === null && i < gate.pool.length && fallback.has(x.item.id))) yes.add(x.item.id);
-    });
-    return { yes, costUsd: 0, called: false, overBudget: false };
   }
 
   /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
@@ -2769,10 +2714,11 @@ export class ContextPartner {
             anchorKinds: { entities: read.entities.length, day: hasDay(read) },
           }
         : {}),
-      ...(this.config.pushCheck && (this.deps.checker || (this.config.pushCheckStored && this.deps.acts))
+      ...(this.config.pushCheck && this.deps.checker
         ? {
             check: yes ? "yes" : !check ? "none" : check.late ? "late" : "failed",
             ...(yes ? { checked: reported.map((x) => yes.has(x.item.id)) } : {}),
+            ...(check?.called ? { checkCalled: true } : {}),
           }
         : {}),
     });

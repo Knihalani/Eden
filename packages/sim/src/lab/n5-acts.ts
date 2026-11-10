@@ -1,8 +1,8 @@
 /**
- * N5 (D525, docs/research/n5-widen-check.md): the lab's `acts` dependency for the `pushCheckStored` trial, and the
- * stored requests' own retrieval route. Lab only: nothing in a product package imports this file. The labels come
- * from `n5-label.ts` (Haiku 5.5, once per item content, no request in hand); everything here is a pure function of a
- * label and a request: no model, no network.
+ * N5 (D529, docs/research/n5-widen-check.md): the lab's `acts` dependency for the `pushCheckGate` trial, and the
+ * stored requests' own retrieval route (§1's screen). Lab only: nothing in a product package imports this file.
+ * The labels come from `n5-label.ts` (Haiku 5.5, once per item content, no request in hand); everything here is a
+ * pure function of a label and a request: no model, no network.
  */
 import { appendFileSync } from "node:fs";
 import type { ContextItem, Scope } from "@eden/protocol";
@@ -127,24 +127,28 @@ export function features(
   };
 }
 
-/** The pass rule's settings (fitted on the fit split, frozen before the screen; the note's §1). */
+/** The pass rule's settings (the gate's mark is fitted on the fit split and frozen; the note's §7). */
 export interface ActRule {
-  /** "all": every labelled item passes (the lab's dump run). "act": R0. "match": R1. */
+  /** "all": every labelled item passes (the lab's dump run). "act": the stored `act` alone. "match": the gate. */
   mode: "all" | "act" | "match";
-  /** R1: at least this many of the answer's keys are in the request. */
-  minKeys?: number;
-  /** R1: or the rarity-weighted overlap is at least this. */
-  minBm?: number;
-  /** R1: a dated answer fails a request whose days are all outside it. */
-  dayOut?: boolean;
+  /** "match": the weighted overlap plus 6 for each stored key in the request is at least this. */
+  minScore?: number;
 }
+
+/** The gate's score of one stored answer for a request. */
+export const actScore = (f: ActFeatures) => f.bm + 6 * f.keys;
 
 export function passes(f: ActFeatures, rule: ActRule): boolean {
   if (rule.mode === "all") return true;
   if (!f.act) return false;
   if (rule.mode === "act") return true;
-  if (rule.dayOut && f.dated && f.day === "out") return false;
-  return f.keys >= (rule.minKeys ?? 1) || (rule.minBm !== undefined && f.bm >= rule.minBm);
+  return actScore(f) >= (rule.minScore ?? 0);
+}
+
+export interface ActsUse {
+  reads: number;
+  items: number;
+  unlabelled: number;
 }
 
 export interface ActsOptions {
@@ -153,6 +157,8 @@ export interface ActsOptions {
   now: () => number;
   /** How rare a word is among the user's stored answers (`StoredRequestIndex.idf`), for the weighted overlap. */
   idf?: () => (stem: string) => number;
+  /** Counted as the dependency is read: items looked up and those with no stored answer. */
+  use?: ActsUse;
   /** `--acts-dump`: each call's request and per-item features, sim data only. */
   dump?: { file: string; tag: Record<string, unknown> };
 }
@@ -162,8 +168,13 @@ export function actsFor(table: ReadonlyMap<string, ActLabel>, o: ActsOptions): S
   return (_scope: Scope, request, items) => {
     const year = new Date(o.now()).getUTCFullYear();
     const rows: unknown[] = [];
+    if (o.use) o.use.reads++;
     const out = items.map((item) => {
       const label = table.get(actKeyOf(item));
+      if (o.use) {
+        o.use.items++;
+        if (!label) o.use.unlabelled++;
+      }
       if (!label) {
         rows.push({ id: item.id, k: null });
         return null;

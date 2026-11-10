@@ -678,26 +678,18 @@ export interface EngineConfig {
    */
   pushWiden: boolean;
   /**
-   * N5 (D525; a trial, off; docs/research/n5-widen-check.md): with `pushCheck` and an `acts` dependency, the check's
-   * answer is not asked of a model on the push. It is read from the answer written once, when each item was stored
-   * (does this item change what an assistant should do, what is it about, over which days, for which requests),
-   * matched against the request with no model: the push makes no call and adds no wait. The candidates are the
-   * pool's (and, with `pushWiden`, the widened) items the stored answers pass, in order; none passing sends no
-   * packet; an item with no stored answer yet is handed as the default would hand it.
-   */
-  pushCheckStored: boolean;
-  /**
    * N5 (D527; a trial; 1 = I3's reply): 2 asks the check for a compare-first reply (`CHECK_SYSTEM_COMPARE`): per
    * listed item, what its point applies to, whether that is the request's own person, thing and day, then the
    * verdict. No thinking; a longer reply (no stop sequence).
    */
   pushCheckForm: number;
   /**
-   * N5 (D528; a trial, off): with `pushCheck` and an `acts` dependency, the check's call reads only the items whose
-   * stored answer says they could change an action (and items with no stored answer yet): fewer items a call, and a
-   * push whose items all have a stored "no" makes no call and sends no packet.
+   * N5 (D529; a trial; 0 = off; docs/research/n5-widen-check.md): with `pushCheck` and an `acts` dependency (the
+   * answer to the check's question written once, when each item was stored), the check's call is made only when the
+   * stored answer of some item it would read scores for this request; otherwise no call is made and the push hands
+   * the default's candidates (1) or no packet (2). An item with no stored answer yet always opens the gate.
    */
-  pushCheckActOnly: boolean;
+  pushCheckGate: number;
   pushWidenEmbed: number;
   pushWidenIntent: number;
   pushWidenDeep: number;
@@ -853,9 +845,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItemChars: 200,
   pushCheckItems: 15,
   pushWiden: false,
-  pushCheckStored: false,
   pushCheckForm: 1,
-  pushCheckActOnly: false,
+  pushCheckGate: 0,
   pushWidenEmbed: 3,
   pushWidenIntent: 2,
   pushWidenDeep: 0,

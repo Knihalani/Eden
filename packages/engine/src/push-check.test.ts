@@ -7,9 +7,19 @@ import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
-import { ContextPartner, type PushPoolReport } from "./partner";
+import { ContextPartner, type PushPoolReport, type StoredActs } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import { CHECK_STOP, CHECK_SYSTEM, checkKey, checkMessages, itemMark, parseCheck, PushChecker } from "./push-check";
+import {
+  CHECK_STOP,
+  CHECK_SYSTEM,
+  CHECK_SYSTEM_COMPARE,
+  checkKey,
+  checkMessages,
+  itemMark,
+  parseCheck,
+  parseCompare,
+  PushChecker,
+} from "./push-check";
 
 // I3 (D500): the `pushCheck` trial. One model call over the push's pool names the items that change what the agent
 // should do; the candidates are those, in pool order; none named sends no packet; any failure leaves the default's.
@@ -49,7 +59,7 @@ function says(yes: string[], extra = "") {
   });
 }
 
-function setup(config: Record<string, unknown>, model: Model | null, pools: PushPoolReport[] = []) {
+function setup(config: Record<string, unknown>, model: Model | null, pools: PushPoolReport[] = [], acts?: StoredActs) {
   const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
   const checker = model ? new PushChecker({ model, budget: new Budget() }) : undefined;
   const partner = new ContextPartner({
@@ -70,6 +80,7 @@ function setup(config: Record<string, unknown>, model: Model | null, pools: Push
       ...config,
     },
     ...(checker ? { checker } : {}),
+    ...(acts ? { acts } : {}),
     onPushPool: (r) => pools.push(r),
   });
   return { partner, checker };
@@ -451,5 +462,178 @@ describe("pushWiden (N2, D511): items past the pool, read by the check only", ()
     expect(() => checkEngineConfig({ pushCheck: true, pushWidenEmbed: 4 }, { deps: { checker: true } })).toThrow();
     const ok = { pushCheck: true, pushWiden: true, pushWidenEmbed: 4 };
     expect(checkEngineConfig(ok, { deps: { checker: true } })).toEqual(ok);
+  });
+});
+
+// N5 (D527): `pushCheckForm` 2, the compare-first reply. Per listed item: what its point applies to, what of the
+// request's own it lands on (or none), then the verdict.
+describe("pushCheckForm 2 (N5, D527): the reply compares before it decides", () => {
+  /** A model that answers in the compare-first format: `yes` land on the request, `other` are about another one. */
+  const compares = (yes: string[], other: string[] = []) =>
+    new FakeModel((req) => {
+      const n = numbers(req);
+      const entry = (t: string, hits: string, act: boolean) =>
+        `{"i":${n.get(t)},"on":"${t}","hits":"${hits}","act":${act}}`;
+      const entries = [
+        ...yes.filter((t) => n.has(t)).map((t) => entry(t, "the Harlow deposit", true)),
+        ...other.filter((t) => n.has(t)).map((t) => entry(t, "none", false)),
+      ];
+      return `{"items":[${entries.join(",")}]}`;
+    });
+
+  test("1 in the default; 2 sends the compare-first instructions with no stop sequence", async () => {
+    expect(DEFAULT_CONFIG.pushCheckForm).toBe(1);
+    const model = compares(["Harlow deposit"], ["Invoice archive"]);
+    const { partner } = setup({ pushCheck: true, pushCheckForm: 2 }, model);
+    expect(await handed(partner)).toEqual(["mail:dated"]);
+    const req = model.calls[0]!;
+    expect(req.messages[0]).toEqual({ role: "system", content: CHECK_SYSTEM_COMPARE });
+    expect(req.stop).toBeUndefined();
+    expect(JSON.stringify(req.messages)).not.toContain("AKIAIOSFODNN7EXAMPLE");
+  });
+
+  test("none listed, or every entry landing on nothing, sends no packet", async () => {
+    expect(await handed(setup({ pushCheck: true, pushCheckForm: 2 }, compares([])).partner)).toEqual([]);
+    const p = setup({ pushCheck: true, pushCheckForm: 2 }, compares([], ["Harlow venue", "Harlow invoice"])).partner;
+    expect(await handed(p)).toEqual([]);
+  });
+
+  test("an unreadable compare-first reply leaves the default's candidates", async () => {
+    const { partner, checker } = setup({ pushCheck: true, pushCheckForm: 2 }, new FakeModel(() => "Item 2 lands."));
+    expect((await handed(partner)).length).toBe(2);
+    expect(checker!.stats.failures).toBe(1);
+  });
+
+  test("the two forms' answers are kept apart, and the instructions cache", () => {
+    const input = { request: "Pay Harlow", today: "2026-10-27", items: [] };
+    expect(checkKey({ ...input, form: 2 })).not.toBe(checkKey(input));
+    expect(CHECK_SYSTEM_COMPARE.length).toBeGreaterThan(2_400);
+    // The question, its yes and no, the example and the data rule are I3's own paragraphs.
+    expect(CHECK_SYSTEM_COMPARE.startsWith(CHECK_SYSTEM.split("\n\n").slice(0, 5).join("\n\n"))).toBe(true);
+  });
+
+  test("parseCompare: a yes needs act and a link; a contradiction is a no; a bad yes fails open", () => {
+    expect(parseCompare('{"items":[]}', 5)).toEqual([]);
+    const e = (i: number | string, hits: unknown, act: unknown) =>
+      `{"i":${JSON.stringify(i)},"on":"x","hits":${JSON.stringify(hits)},"act":${JSON.stringify(act)}}`;
+    expect(parseCompare(`{"items":[${e(2, "its evening", true)},${e(4, "none", false)}]}`, 5)).toEqual([1]);
+    // act true with no link is the entry contradicting itself: read as no, in any spelling of none.
+    for (const none of ["none", "None.", "", "nothing", "n/a", " NONE "]) {
+      expect(parseCompare(`{"items":[${e(1, none, true)}]}`, 5)).toEqual([]);
+    }
+    expect(parseCompare('{"items":[{"i":1,"on":"x","act":true}]}', 5)).toEqual([]);
+    expect(parseCompare(`{"items":[${e("3", "its venue", "true")}]}`, 5)).toEqual([2]);
+    // A yes naming no item of the pool fails the reply open; so does a cut or wordy reply.
+    expect(parseCompare(`{"items":[${e(9, "its venue", true)}]}`, 5)).toBeNull();
+    expect(parseCompare(`{"items":[${e(2, "its venue", true)},{"i":3,"on":"y","hi`, 5)).toBeNull();
+    expect(parseCompare("Item 2 lands on the venue.", 5)).toBeNull();
+    expect(parseCompare('{"items":"none"}', 5)).toBeNull();
+    // Repeats count once; at most five.
+    const many = Array.from({ length: 8 }, (_, k) => e((k % 7) + 1, "its day", true)).join(",");
+    expect(parseCompare(`{"items":[${many}]}`, 10)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  test("the form's settings are checked: whole, 1 or 2, under pushCheck", () => {
+    const deps = { deps: { cards: true, reader: true, checker: true } };
+    expect(checkEngineConfig({ pushCheck: true, pushCheckForm: 2 }, deps)).toEqual({
+      pushCheck: true,
+      pushCheckForm: 2,
+    });
+    expect(() => checkEngineConfig({ pushCheck: true, pushCheckForm: 3 }, deps)).toThrow();
+    expect(() => checkEngineConfig({ pushCheckForm: 2 }, deps)).toThrow(/pushCheck/);
+  });
+});
+
+// N5 (D529): `pushCheckGate`. The check's call is made only when a stored answer of some item read scores for the
+// request (`PartnerDeps.acts`); otherwise no call: the default's candidates (1) or no packet (2).
+describe("pushCheckGate (N5, D529): the stored answers decide whether the check calls", () => {
+  const stored =
+    (score: (id: string) => boolean | null, seen: string[][] = []): StoredActs =>
+    (_scope, request, items) => {
+      seen.push([request.text, ...items.map((it) => it.id)]);
+      return items.map((it) => score(it.id));
+    };
+
+  test("0 in the default; off, the stored answers are never read", async () => {
+    expect(DEFAULT_CONFIG.pushCheckGate).toBe(0);
+    const seen: string[][] = [];
+    const model = says(["Harlow deposit"]);
+    const { partner } = setup(
+      { pushCheck: true },
+      model,
+      [],
+      stored(() => false, seen),
+    );
+    expect(await handed(partner)).toEqual(["mail:dated"]);
+    expect(seen.length).toBe(0);
+    expect(model.calls.length).toBe(1);
+  });
+
+  test("an open gate calls as without it; the request reaches the dependency redacted", async () => {
+    const seen: string[][] = [];
+    const model = says(["Harlow deposit"]);
+    const acts = stored((id) => id === "mail:hold", seen);
+    const { partner } = setup({ pushCheck: true, pushCheckGate: 1 }, model, [], acts);
+    expect(await handed(partner)).toEqual(["mail:dated"]);
+    expect(model.calls.length).toBe(1);
+    expect(seen[0]![0]).toBe(sanitizeForStore(REQUEST));
+    expect(seen[0]!).toContain("mail:hold");
+  });
+
+  test("a closed gate makes no call: 1 hands the default's candidates, 2 hands nothing", async () => {
+    const pools: PushPoolReport[] = [];
+    const m1 = says(["Harlow deposit"]);
+    const one = setup(
+      { pushCheck: true, pushCheckGate: 1 },
+      m1,
+      pools,
+      stored(() => false),
+    );
+    expect((await handed(one.partner)).length).toBe(2);
+    expect(m1.calls.length).toBe(0);
+    expect(one.checker!.stats.asked).toBe(0);
+    expect(pools.at(-1)!.checkCalled).toBeUndefined();
+    const m2 = says(["Harlow deposit"]);
+    const two = setup(
+      { pushCheck: true, pushCheckGate: 2 },
+      m2,
+      [],
+      stored(() => false),
+    );
+    expect(await handed(two.partner)).toEqual([]);
+    expect(m2.calls.length).toBe(0);
+  });
+
+  test("an item with no stored answer yet opens the gate; so does a dependency that throws", async () => {
+    const m1 = says(["Harlow deposit"]);
+    const unread = stored((id) => (id === "mail:dated" ? null : false));
+    expect(await handed(setup({ pushCheck: true, pushCheckGate: 2 }, m1, [], unread).partner)).toEqual(["mail:dated"]);
+    expect(m1.calls.length).toBe(1);
+    const m2 = says(["Harlow deposit"]);
+    const broken: StoredActs = () => {
+      throw new Error("no table");
+    };
+    expect(await handed(setup({ pushCheck: true, pushCheckGate: 2 }, m2, [], broken).partner)).toEqual(["mail:dated"]);
+    expect(m2.calls.length).toBe(1);
+  });
+
+  test("isolation: the dependency is asked with the session's own scope", async () => {
+    const scopes: string[] = [];
+    const acts: StoredActs = (scope, _request, items) => {
+      scopes.push(`${scope.tenantId}/${scope.userId}`);
+      return items.map(() => true);
+    };
+    const { partner } = setup({ pushCheck: true, pushCheckGate: 1 }, says([]), [], acts);
+    await handed(partner);
+    await handed(partner, { tenantId: "t", userId: "u2", sessionId: "s9" });
+    expect(new Set(scopes)).toEqual(new Set(["t/u1", "t/u2"]));
+  });
+
+  test("the gate needs the acts dependency and pushCheck", () => {
+    const on = { pushCheck: true, pushCheckGate: 1 };
+    expect(() => checkEngineConfig(on, { deps: { cards: true, reader: true, checker: true } })).toThrow(/acts/);
+    expect(checkEngineConfig(on, { deps: { cards: true, reader: true, checker: true, acts: true } })).toEqual(on);
+    expect(() => checkEngineConfig({ pushCheckGate: 1 }, { deps: { checker: true, acts: true } })).toThrow(/pushCheck/);
+    expect(() => checkEngineConfig({ ...on, pushCheckGate: 3 }, { deps: { checker: true, acts: true } })).toThrow();
   });
 });
