@@ -7,7 +7,8 @@
  * ask), `notice` (the recap's change notice and what it starts, settled as pi-ab settles it), `tick` (the background
  * sync before each request), `backfill` (before the first request, once per user).
  *
- *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask] [--suite train]
+ *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
+ *     [--suite train]
  *     [--cards FILE] [--recap-notice push|signal|none] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
  *     [--pool-diag FILE] [--intent FILE[,FILE]]
  *
@@ -44,7 +45,7 @@ export type MovedFate = "unhanded" | "updated" | "unpolled" | "unseen" | "undeli
 
 export interface DaysCallsOptions {
   days: number;
-  /** The suites the user's requests come from (`--suite`, default `train`; `synth-val` etc. run generated worlds, D884). */
+  /** The suites the requests come from (`--suite`, default `train`; `synth-val` etc. run generated worlds, D884). */
   suites?: readonly string[];
   push: PushMode;
   /** One `ask` per request after its push (the eden arm's agent asks about once a request one at a time). */

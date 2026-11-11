@@ -429,9 +429,12 @@ function rawWorld(p: Plan): RawWorld | undefined {
   }
 }
 
+/** "Tue 27 Oct 2026 at 10:30" for a time, by its day's offset from the sim's present. */
 const at = (ms: number) => {
   const d = new Date(ms);
-  return `${dayName(Math.round((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(2026, 9, 27)) / DAY))} at ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+  const day = Math.round((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(2026, 9, 27)) / DAY);
+  const hm = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+  return `${dayName(day)} at ${hm}`;
 };
 
 function taskJobs(): Job[] {

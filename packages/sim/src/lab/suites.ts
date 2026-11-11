@@ -163,8 +163,9 @@ const SYNTH_SPLITS = ["synth-train", "synth-val", "synth-test"];
 
 /**
  * Registers a generated suite on first use (D884): `synth-train|val|test` read `synthPath(<split>)`, `synth:<file>`
- * reads that worlds file, and `@K` after any of them (or `synth-sample`) plants K worlds a seed. `synth` names the train and validation splits; `synth-test` is the generated test split M1
- * and M3 measure on, so it is only ever named on its own.
+ * reads that worlds file, and `@K` after any of them (or `synth-sample`) plants K worlds a seed. `synth` names the
+ * train and validation splits; `synth-test` is the generated test split M1 and M3 measure on, so it is only ever
+ * named on its own.
  */
 function registerSynth(name: string): boolean {
   if (name in SUITES) return true;
