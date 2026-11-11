@@ -185,6 +185,8 @@ function mergeInto(target: string, from: string, tables: readonly string[], scop
 const decoder = new TextDecoder();
 const UNAVAILABLE = "temporarily unable to serve context";
 const MAX_RESTART_MS = 30_000;
+/** The router kills a child this many times the shutdown grace after its SIGTERM (R1: the child's steps fill it). */
+export const KILL_AFTER_GRACE = 1.25;
 
 export interface RouterOptions {
   /** The router's own configuration (`loadConfig`): port, host, keys, dev, body cap, source-map base, processes. */
@@ -264,6 +266,39 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     timer: null,
   }));
 
+  /** The last membership a child accepted (`/internal/cluster`), replayed to a child that (re)starts after it. */
+  let lastMembership: { auth: string; body: Uint8Array } | null = null;
+  /**
+   * Children listening and being told `lastMembership`, not up yet: a newer membership reaches them too (review of
+   * R1), or one that lands during the replay would be missed and the child would serve on the older table. The
+   * child's epoch check keeps the newer one whatever order they arrive in.
+   */
+  const replaying = new Set<Child>();
+  /** A membership being sent to the children now (`clusterEverywhere`): a replay sends it rather than the last. */
+  let deliveringMembership: { auth: string; body: Uint8Array } | null = null;
+  const replayMembership = async (port: number): Promise<void> => {
+    // Until what it sent is still the newest: a membership that began its fan-out before this child was `replaying`
+    // skipped it, so the replay sends that one too (at most a few rounds; the epoch check orders them).
+    let sent: { auth: string; body: Uint8Array } | null = null;
+    for (let round = 0; round < 4; round++) {
+      const m = deliveringMembership ?? lastMembership;
+      if (!m || m === sent) return;
+      sent = m;
+      try {
+        const r = await fetch(`http://127.0.0.1:${port}/internal/cluster`, {
+          method: "POST",
+          headers: { authorization: m.auth, "content-type": "application/json" },
+          body: m.body,
+          signal: AbortSignal.timeout(10_000),
+        });
+        await r.arrayBuffer();
+      } catch {
+        // The child serves as before (no table); the cluster router's next membership reaches it.
+        return;
+      }
+    }
+  };
+
   // Each start resolves when the child reports its port, rejects if it exits first or misses its deadline (it is then
   // killed, and its exit takes the usual path: logged, and restarted with backoff unless the router is stopping).
   const spawn = (c: Child): Promise<void> =>
@@ -292,9 +327,17 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
           ready = true;
           clearTimeout(deadline);
           c.port = port;
-          c.up = true;
-          c.restartMs = baseRestartMs;
-          resolve();
+          // A restarted child is told the last cluster membership before it serves (R1): without it it has no table,
+          // so no fence, and it would write and delete store copies of buckets this machine no longer owns.
+          replaying.add(c);
+          void replayMembership(port).finally(() => {
+            replaying.delete(c);
+            if (c.proc === proc) {
+              c.up = true;
+              c.restartMs = baseRestartMs;
+            }
+            resolve();
+          });
         },
       });
       c.proc = proc;
@@ -344,8 +387,10 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         const proc = c.proc;
         if (!proc) return;
         proc.kill("SIGTERM");
-        // A child drains, writes its live users and settles its store writes within the grace (main.ts).
-        const killer = setTimeout(() => proc.kill("SIGKILL"), grace);
+        // A child drains, writes its live users and settles its store writes within the grace (main.ts). Its steps
+        // fill the grace almost exactly and `persistLive` checks its deadline only between users, so the kill waits a
+        // quarter longer (R1): a SIGKILL at the grace itself cut store writes and the source map's last batch.
+        const killer = setTimeout(() => proc.kill("SIGKILL"), grace * KILL_AFTER_GRACE);
         await proc.exited;
         clearTimeout(killer);
       }),
@@ -470,9 +515,11 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     if (req.method !== "POST") return fail(405, "POST only");
     if (!clusterKeyMatches(config.cluster?.key ?? undefined, req)) return fail(401, "missing or wrong cluster key");
     const body = new Uint8Array(await req.arrayBuffer());
+    const membership = { auth: req.headers.get("authorization") ?? "", body };
+    deliveringMembership = membership;
     const answers = await Promise.all(
       children.map(async (c) => {
-        if (!c.up) return null;
+        if (!c.up && !replaying.has(c)) return null;
         try {
           const r = await fetch(`http://127.0.0.1:${c.port}/internal/cluster`, {
             method: "POST",
@@ -485,8 +532,10 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         }
       }),
     );
+    if (deliveringMembership === membership) deliveringMembership = null;
     const got = answers.filter((a): a is Record<string, number> => a !== null);
     if (got.length === 0) return fail(503, UNAVAILABLE);
+    lastMembership = membership;
     const sum = { released: 0, written: 0, pending: 0, ms: 0, processesDown: n - got.length };
     for (const a of got) {
       sum.released += a.released ?? 0;
@@ -530,10 +579,13 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
       async fetch(req) {
         const url = new URL(req.url);
         if (req.method === "GET" && url.pathname === "/readyz") {
-          // Ready only with every child up: a cluster router moves a machine's users elsewhere when it is not (D992),
-          // and a child that keeps failing to start is better served there than at 503 here.
+          // The cluster router asks `?all=1`: ready only with every child up, since it moves a machine's users
+          // elsewhere when it is not (D992), and a child that keeps failing to start is better served there than at
+          // 503 here. Anyone else (Caddy, a container's health check) gets ready while any child is up (R1): one
+          // child's crash must not take every user of the machine out, as /healthz says below.
           const up = children.filter((c) => c.up).length;
-          if (!draining && up === n) return Response.json({ ready: true, processes: n, up });
+          const all = url.searchParams.get("all") === "1";
+          if (!draining && (all ? up === n : up > 0)) return Response.json({ ready: true, processes: n, up });
           const error = draining ? "draining" : `${n - up} of ${n} processes down`;
           return Response.json({ ready: false, processes: n, up, error }, { status: 503 });
         }

@@ -635,6 +635,11 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1053 | 2026-11-11 | Finding: the shipped card-and-intent prompt leaves the whole requests list out of about a quarter of its replies; a fix is recommended as… | finding |
 | D1054 | 2026-11-11 | Finding: full intent coverage adds no facts over the lean selection when the requests are the same | finding |
 | D1055 | 2026-11-11 | Adopted (lab tooling, H2): `h2-cards-screen.ts` (the card call's shapes on fixed items, `--arms`, `--show`), `packages/sim/lab/h2/skip.py`… | lab |
+| D1000 | 2026-11-11 | Rejected (deleted with its code): `pushWide`, the push's lexical search read 60 deep with a re-ranker for the pool's tail seats | rejected |
+| D1001 | 2026-11-11 | Rejected (deleted with its code): `poolExpand`, a query-side expansion distilled from M1's 8B teacher | rejected |
+| D1002 | 2026-11-11 | Rejected (stopped on the round-3 rule before any held-out read; deleted with its engine code): `poolScan`, a request × item scorer… | rejected |
+| D1003 | 2026-11-11 | Finding: distilling the 8B teacher did not reach facts the pool misses on the sim. | finding |
+| D1004 | 2026-11-11 | Adopted (lab tooling, M12): `packages/sim/lab/m12/` (expansion and pair-scorer trainers, re-rank, PRF and ceiling screens, `poolscore.py`… | lab |
 | D1010 | 2026-11-11 | Rejected: `pushGate`, a tiny learned turn gate in place of `pushStart`'s verb lists and lead-ins | superseded (replaced by D1014) |
 | D1011 | 2026-11-11 | Finding: a learned gate transfers to hand-written text only beside the rule, as a union with a veto. | finding |
 | D1012 | 2026-11-11 | Finding: what generated training text teaches a gate besides the task. | finding |
@@ -645,3 +650,14 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1061 | 2026-11-11 | Precision over recall, an explicit exception (the parent's decision): `cardsRequestsFix` goes ahead with funnel decoys +11 of 608. | adopted |
 | D1062 | 2026-11-11 | `cardsRequestsFix` joins the default (closes D1060's trial; parts `cards` and `intent`). | adopted |
 | D1063 | 2026-11-11 | Adopted (lab tooling): the card prompt's form in replay. | lab |
+| D940 | 2026-11-11 | Rejected (deleted by D948): trial `routerGate`, a learned connector router. | superseded (deleted by D948) |
+| D941 | 2026-11-11 | Adopted (lab tooling, M8), at commit d42d30b9 with the engine hooks it needs; the Python trainers stay in `packages/sim/lab/m8/`… | lab |
+| D942 | 2026-11-11 | Pre-registered rule for D940 | lab |
+| D943 | 2026-11-11 | Rejected (deleted with the router, D949): trial `routerDormantMs`: a source on D356's weekly sweep that the router has not found likely… | superseded (deleted by D949) |
+| D944 | 2026-11-11 | Finding: the router's frozen model and its parity (c2923a86; deleted with the router, D948). | finding |
+| D945 | 2026-11-11 | Approved for the trial, then deleted with it (D948), so D603 stands unchanged: a departure from D603's "a read on strong evidence is never… | adopted |
+| D946 | 2026-11-11 | Finding: rare-connector facts are lost after fetching, not before. | finding |
+| D947 | 2026-11-11 | The parent's decisions on D942's rule (recorded with their reasons). | adopted |
+| D948 | 2026-11-11 | Rejected and deleted (stopped on its Pi clause, D814): `routerGate`, its model, asset, hooks and tests; D603 stands. | rejected |
+| D949 | 2026-11-11 | `routerDormantMs` passed its powered re-test but is deleted with the router (D948) | rejected |
+| D1070 | 2026-11-11 | Release readiness: the deploy kit's correctness fixes; amends D994 and D995. | adopted |
