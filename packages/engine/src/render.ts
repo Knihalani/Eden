@@ -159,6 +159,14 @@ export const CANDIDATES_LEAD =
   "not, ignore it and do not mention it.";
 
 /**
+ * `leadShort` (D855, trial): `CANDIDATES_LEAD`'s three instructions in fewer words (who, what and when; still
+ * current; otherwise ignore it and say nothing), Eden's fixed words like it.
+ */
+export const CANDIDATES_LEAD_SHORT =
+  `${EDEN_NOTE}unchecked candidates. Use one only if it is about the request's person, thing and date and still ` +
+  "current; otherwise ignore it and do not mention it.";
+
+/**
  * `planConflict` (D301): the framing line of a packet about an earlier request; the request's own words follow, quoted.
  * Like the candidates' lead, it asks the agent to check before using an item, and to say nothing of one that does not
  * bear on that request.
@@ -177,6 +185,10 @@ export const PLAN_LEAD =
 export const ASK_NUDGE =
   "They may not cover the person, thing or date this request names: before answering, call ask_context with " +
   "those specifics, if you have it.";
+
+/** `leadShort` (D855): `ASK_NUDGE` in fewer words. */
+export const ASK_NUDGE_SHORT =
+  "They may miss this request's specifics: call ask_context with them first, if you have it.";
 
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";
