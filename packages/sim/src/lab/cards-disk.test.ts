@@ -9,6 +9,7 @@ import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import {
   DiskCardMaker,
+  harnessCoverage,
   harnessIntent,
   INTENT_PATH,
   intentCoverage,
@@ -387,5 +388,37 @@ describe("shipped coverage (D872)", () => {
     expect(shippedUncovered(["heldout18"], [41])).toEqual(["heldout18 seed 41"]);
     expect(shippedUncovered(["train1"], [45])).toEqual(["train1 seed 45"]);
     expect(existsSync(SHIPPED_PATH)).toBe(true);
+  });
+});
+
+// D878: the live harnesses' coverage, resolved as the funnel's (D877).
+describe("harnessCoverage (D878)", () => {
+  const run = { suites: ["train1"], seeds: [41, 42] };
+  test("shipped by default where covered, replayed as cards and intent", () => {
+    const c = harnessCoverage({ coverage: "", cards: "", intent: "default", ...run });
+    expect(c.coverage).toBe("shipped");
+    expect(c.cards).toBe(c.intent);
+    expect(existsSync(c.cards)).toBe(true);
+  });
+  test("an uncovered run keeps its files; own files need --coverage full; a bad value throws", () => {
+    const off = harnessCoverage({
+      coverage: "",
+      cards: "x.jsonl",
+      intent: "default",
+      suites: ["heldout18"],
+      seeds: [41],
+    });
+    expect([off.coverage, off.cards, off.intent]).toEqual(["full", "x.jsonl", "default"]);
+    expect(() => harnessCoverage({ coverage: "", cards: "x.jsonl", intent: "default", ...run })).toThrow(
+      /--coverage full/,
+    );
+    const pinned = harnessCoverage({ coverage: "full", cards: "x.jsonl", intent: "none", ...run });
+    expect([pinned.coverage, pinned.cards, pinned.intent]).toEqual(["full", "x.jsonl", "none"]);
+    expect(() =>
+      harnessCoverage({ coverage: "shipped", cards: "", intent: "default", suites: ["heldout18"], seeds: [41] }),
+    ).toThrow(/does not cover/);
+    expect(() => harnessCoverage({ coverage: "most", cards: "", intent: "default", ...run })).toThrow(
+      /shipped or full/,
+    );
   });
 });

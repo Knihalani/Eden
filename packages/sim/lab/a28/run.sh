@@ -5,7 +5,7 @@
 L=$1; CONDS=$2; shift 2
 # The eden~cut arm needs the D390 code: git checkout def8c153 (deleted after the measurement).
 mkdir -p .local/a28/runs
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite ${SUITE:-train} --conditions $CONDS \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite ${SUITE:-train} --conditions $CONDS \
   --config default \
   --cards .local/a28/cards-all.jsonl --cards-out .local/a28/runs/$L.cards.jsonl \
   --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 \

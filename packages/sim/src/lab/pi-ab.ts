@@ -154,7 +154,7 @@ import {
 } from "./ab-common";
 import { variantsFor } from "./neutral";
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
-import { DiskCardMaker, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
+import { DiskCardMaker, harnessCoverage, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
 import {
   anthropicThinkingOff,
   isAnthropic,
@@ -381,7 +381,16 @@ if (OPENROUTER_ROLES.length && !KEY && !DRY)
 const TASK_REQUESTS = MAX_STEPS + 1;
 let capStopped = 0;
 // Cards replayed from disk: the replay file is only read, new cards go to their own file (cards-disk.ts).
-const CARDS_FILE = opt("cards", opt("cards-disk", ""));
+// `--coverage` (D878): shipped coverage by default where it covers the run, replayed as cards and intent; a run that
+// names its own `--cards`/`--intent` pins `--coverage full`.
+const COVERAGE = harnessCoverage({
+  coverage: opt("coverage", ""),
+  cards: opt("cards", opt("cards-disk", "")),
+  intent: opt("intent", "default"),
+  suites: SUITE_LIST,
+  seeds: SEEDS,
+});
+const CARDS_FILE = COVERAGE.cards;
 /**
  * `--cards-calls N` (F2): each stream's enrichment gets N card calls; items past them stay uncovered. With
  * `cardsLanes` K (N4) a stream gets N × K: the calls K lanes have made when one lane has made N.
@@ -404,7 +413,7 @@ if (CARDS_FILE && !existsSync(CARDS_FILE)) throw new Error(`--cards ${CARDS_FILE
 const INTENT_WANTED = CONDITIONS.some(
   (c) => c.withPartner && !c.noKey && effective(c.config).intent && effective(c.config).cards,
 );
-const INTENT = harnessIntent(opt("intent", "default"), {
+const INTENT = harnessIntent(COVERAGE.intent, {
   wanted: INTENT_WANTED,
   cardsReplayed: !!CARDS_FILE,
   suites: SUITE_LIST,
@@ -1698,6 +1707,7 @@ console.error(
     (REPLAY_DIR ? `, replay ${REPLAY_DIR}${REPLAY_ONLY ? " (only)" : ""}${REPLAY_TIMING ? " (timed)" : ""}` : ""),
 );
 console.error(`pi-ab: ${INTENT_LINE}`);
+console.error(`pi-ab: ${COVERAGE.note}`);
 if (USER_DAYS > 0) {
   for (const w of worlds) {
     const kinds = ["hidden", "control", "neutral"].map((k) => w.tasks.filter((t) => t.kind === k).length);
@@ -1811,6 +1821,7 @@ writeFileSync(
       ...(DRESS ? { dress: true } : {}),
       ...(CARDS_FILE ? { cards: { replay: CARDS_FILE, out: CARDS_OUT } } : {}),
       ...(INTENT_WANTED ? { intent: { line: INTENT_LINE, files: INTENT_FILES, ...intentCount } } : {}),
+      coverage: COVERAGE.coverage,
       timeScale: TIME_SCALE,
       ...connectorHeader(CONNECTORS),
       ...(ACCESS.allowLogging ? { allowLogging: true } : {}),

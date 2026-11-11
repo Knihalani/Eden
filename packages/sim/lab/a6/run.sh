@@ -3,7 +3,7 @@
 # arms (VC below names each trial switch's variant).
 L=$1; PUSH=$2; CONDS=$3; shift 3
 VC=${A6_VC:-'{}'}
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite train --conditions $CONDS --config default \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite train --conditions $CONDS --config default \
   --variant-config "$VC" \
   --cards .local/a6/cards-all.jsonl --cards-out .local/a6/runs/$L.cards.jsonl \
   --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 \
