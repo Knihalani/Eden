@@ -47,10 +47,13 @@ describe("days-calls: connector calls over a user's days (A8)", () => {
       expect(r.rank).toBeLessThan(r.poolSize);
       if (!r.pushRan) expect(r.rank).toBe(-1);
       if (r.pushed) expect(r.got).toBe(true);
+      // P3's density counts: other requests' planted items in the pool and among the handed, never more than there.
+      expect(r.poolPlanted).toBeLessThanOrEqual(r.poolSize);
+      expect(r.handedPlanted).toBeLessThanOrEqual(Math.min(r.handed, r.poolPlanted));
       expect(Object.keys(r).sort()).toEqual(
         ["day", "got", "handed", "kind", "like", "likeAhead", "poolSize", "pushRan", "pushed", "rank", "seed", "task"]
           // M3's offline-screen fields (D900, D911): the planted id, the request and template, the pool's ids.
-          .concat("today", "planted", "pool", "request", "template")
+          .concat("today", "planted", "pool", "request", "template", "poolPlanted", "handedPlanted")
           .sort(),
       );
     }

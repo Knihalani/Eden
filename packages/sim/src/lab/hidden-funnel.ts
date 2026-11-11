@@ -137,6 +137,7 @@ import {
   type ScreenRow,
 } from "./reader-stub";
 import { packetLine } from "./uptake";
+import { DumpingChecker, replyKeeping, type DumpTask } from "./check-dump";
 import {
   addNeutralRows,
   addNeutralTask,
@@ -148,7 +149,7 @@ import {
 } from "./neutral";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
-import { loadSuperseder, loadTagger } from "./m3-tagger";
+import { loadSuperseder } from "./m3-superseder";
 import {
   coverageLines,
   intentPlace,
@@ -226,12 +227,12 @@ const cli = flags(
         "check-model",
         "check-cache",
         "check-log",
+        "check-dump",
         "templates",
         "connect-at",
         "connect-tick-s",
         "connect-stagger-s",
         "cards-ms",
-        "tagger",
         "supersede",
       ].map((k) => [k, V]),
     ),
@@ -556,15 +557,8 @@ const CHECK_CACHE = opt("check-cache", "");
 if (CHECK !== "none" && !CHECK_CACHE) throw new Error("--check needs --check-cache FILE");
 if (CHECK !== "none" && !RUN.pushCheck)
   throw new Error("--check is inert unless pushCheck is on (--set pushCheck=true)");
-/**
- * `--tagger DIR` (M3, D908): the `constraintTag` trial's item tagger, an exported binnet `tags` network. Inert unless
- * the run's configuration sets `constraintTag` above 0.
- */
-const TAGGER_DIR = opt("tagger", "");
-if (TAGGER_DIR && !(RUN.constraintTag > 0)) throw new Error("--tagger is inert unless constraintTag > 0 (--set)");
-const tagger = TAGGER_DIR ? loadTagger(TAGGER_DIR) : null;
-if (tagger) process.on("exit", () => console.error(`TAGGER ${JSON.stringify(tagger.stats())}`));
-/** `--supersede DIR` (M3, D908 rule 1): the `pushSupersede` trial's pair model, an exported binnet `supersede` network. */
+/** `--supersede DIR` (M3, D908 rule 1; M3b, D914): the `pushSupersede` trial's pair model: an `h10.py export`
+ * student or a binnet `supersede` export. */
 const SUPERSEDE_DIR = opt("supersede", "");
 if (SUPERSEDE_DIR && !(RUN.pushSupersede > 0)) throw new Error("--supersede is inert unless pushSupersede > 0 (--set)");
 const superseder = SUPERSEDE_DIR ? loadSuperseder(SUPERSEDE_DIR) : null;
@@ -602,6 +596,10 @@ const loggedCheck = (tag: Record<string, unknown>): Model | null =>
       }
     : checkModel;
 const checkLanes: PushChecker[] = [];
+/** `--check-dump FILE` (M7, D932): each check call as a row with its pool, reply and task labels (`check-dump.ts`). */
+const CHECK_DUMP = opt("check-dump", "");
+if (CHECK_DUMP && CHECK === "none") throw new Error("--check-dump needs --check");
+if (CHECK_DUMP) writeFileSync(CHECK_DUMP, "");
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
 const readerModel =
   READER === "none" || NO_MODEL_READER
@@ -1059,7 +1057,19 @@ async function runSeed(
   // Every report per session, in order: a request can be read twice (`readerPush`'s ask, then the funnel's own).
   const readerReports = new Map<string, ReaderReport[]>();
   const laneCheck = loggedCheck({ suite, seed, variant });
-  const checker = laneCheck ? new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) }) : null;
+  const dumpTasks = new Map<string, DumpTask>();
+  const checker = !laneCheck
+    ? null
+    : CHECK_DUMP
+      ? ((kept) =>
+          new DumpingChecker(
+            { model: kept.model, budget: new Budget(UNCAPPED) },
+            kept.replies,
+            CHECK_DUMP,
+            (key) => dumpTasks.get(key.slice(key.indexOf("#") + 1)),
+            (id) => ((it) => (it ? `${it.title ?? ""}\n${it.text}` : ""))(cache.get(scope, id, clock)),
+          ))(replyKeeping(laneCheck))
+      : new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) });
   if (checker) checkLanes.push(checker);
   const pushPools = new Map<string, PushPoolReport[]>();
   const partner = new ContextPartner({
@@ -1075,7 +1085,6 @@ async function runSeed(
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
     ...(checker ? { checker } : {}),
-    ...(tagger ? { constraintTag: { read: tagger.tag } } : {}),
     ...(superseder ? { supersede: superseder.replaces } : {}),
     ...(reader
       ? {
@@ -1237,6 +1246,7 @@ async function runSeed(
     // A neutral task plants nothing: no item has the empty id, so every planted-item field reads false.
     const id = variant === "neutral" ? "" : planted[i]!.id;
     const sessionId = task.id;
+    dumpTasks.set(sessionId, { suite, seed, variant, template: task.template, planted: id });
     returned.clear();
     const callsBefore = calls;
     const receivedBefore = received();
@@ -1504,7 +1514,7 @@ async function runSeed(
         ? {
             stalePoolAt: push.pool.indexOf(task.stale),
             staleHanded: push.handed.includes(task.stale),
-            // M3b's diagnosis (D914): the ids, to join the superseder's pair trace (M3B_SUPERSEDE_TRACE).
+            // M3b (D914): the ids, to join the superseder's pair trace (M3B_SUPERSEDE_TRACE) and label pool pairs.
             staleId: task.stale,
             factId: id,
             user: scope.userId,

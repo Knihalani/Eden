@@ -489,11 +489,6 @@ alerts (docs/research/o3-push-open.md). **Indirect requests (`pushIndirect`, D82
 (`pushStart`, `indirectRest`, `secondClause`), the push's lookup is given the message from where the request starts, and
 the open shape refuses pasted log lines and chatter openers (docs/research/p2-push-check.md §1, §7, §8). Listed, opened
 and indirect pushes are all checked when the push check is wired (D823, D828), so each may make the check's paid call.
-**The constraint tagger (`constraintTag` 0.5, D908; in the default, part `tag`; `tagger.ts`):** a small binarised
-network shipped with the engine (4.2 MB on disk, read once per process) reads each stored item in the background
-(`TagMemo`, per user) and gives its probability of being a binding fact; in the push gate and in plan alerts an item the
-constraint test passes stops counting as constraint-like under 0.5. It only removes: fewer look-alike packets and fewer
-push-check calls, no model call (docs/research/m3-arch.md §7h).
 
 **The intent index** (`intent`, needs `cards`, on in the default, D112; D87, D109, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four requests

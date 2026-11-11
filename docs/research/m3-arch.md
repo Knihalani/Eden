@@ -375,6 +375,40 @@ alone. The lab tagger encoded 492 distinct items in 377 ms in that run (0.77 ms 
 the pair with the push check S live in front (the shipped path with a key; pre-registered in commit after e6aef109,
 running), and Pi.
 
+**Rule 2, continued: the result does not transfer; not promoted.** While promoting (the parent's go, conditional on
+the check-on run), the default's own tests showed the veto silencing a short real constraint: the tagger's `fact`
+probability is 0.16 for "Do not pay Zed Quinn: the Globex renewal payment is on hold until legal signs off" and 0.02
+for "Payments to Harlow are on hold until the deposit dispute ends." Short items read as `other`, the tag training gave
+to background items, which in M2 and the sim are short filler while facts and look-alikes are long, formatted
+documents. Reading `1 − P(all-clear tags)` instead (pre-registered in 2709dc28 before the runs) keeps such items, and
+fails rule 2 (same funnels, the plan-alert veto on, baselines the same switch-off runs):
+
+| | control+neutral packets | hidden surfaced | decoys delivered | check calls |
+|---|---|---|---|---|
+| no check: P(fact) | 949 → 493 (−48.1%) | 281 → 281 | 243 → 125 | |
+| no check: 1 − P(all-clear) | 949 → 944 (−0.5%) | 281 → 281 | 243 → 237 | |
+| check live: P(fact) | 688 → 483 (−29.8%) | 306 → 307 | 147 → 109 | 706 → 497 tasks |
+| check live: 1 − P(all-clear) | 688 → 670 (−2.6%) | 306 → 307 | 147 → 141 | 706 → 751 tasks |
+
+The sim's gain came from the length cue, not from reading all-clears; on real short snippets it would cost facts.
+Recommendation: delete `constraintTag` and the shipped weights (D814); a tagger trained with short items in every class
+(and short all-clears) would re-enter as a new trial on the same rule.
+
+**Rule 2, the length-balanced retrain (the parent's one round; pre-registered in 1b230abb): fails; `constraintTag`
+deleted (D908; code in bce85de1).** `w-tags-len`: as `w-tags-bin` with every training item also as its title with one
+and two body sentences and one sentence alone, under its tag (`binnet.py --len-aug`; 1,025 s on Modal). Gate: the 52
+short constraints of `packages/sim/lab/m3r/short-constraints.jsonl` (built by `short_fixture.py` before training) must
+read ≥ 0.5 under 1 − P(all-clear) in at least 97%:
+
+| weights | gate, 1 − P(all-clear) | gate, P(fact) | fact vs twin AUC, M2 val | fact vs twin AUC, sim held-out |
+|---|---|---|---|---|
+| `w-tags-bin` | 37 of 52 (71%) | 3 of 52 | 0.947 | 0.759 |
+| `w-tags-len` | 36 of 52 (69%) | 33 of 52 | 0.934 | 0.664 |
+
+The augmentation moved P(fact) on short items (3 → 33) but not the all-clear reading, and lost separation on the sim.
+Both clauses were required; the gate failed, so rule 2 was not run. The switch, `tagger.ts`, the weights and their
+tests are deleted; the fixture stays in the lab for any later tagger.
+
 **Rule 1, supersession (`pushSupersede`), amended before any result.** (a) The suite: `synth:<M2 v2 val>+stale`
 (`+stale`, D884's synth family, a separate option: a hidden silent-change task's earlier revision stays as a background
 item beside the fact; the default suites are unchanged, `synth.test.ts` pins it), worlds H10 never trained on. (b) The

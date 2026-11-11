@@ -6,7 +6,7 @@ import type { SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
-import { ContextPartner, type TagReader } from "./partner";
+import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { PLAN_LEAD } from "./render";
 
@@ -64,7 +64,7 @@ const CANCEL = {
 };
 const UNRELATED = { ref: "u1", title: "Garden centre", text: "Seed potatoes are back in stock at the garden centre." };
 
-async function setup(config: Record<string, unknown> = {}, scopes: Scope[] = [scope], tag?: TagReader) {
+async function setup(config: Record<string, unknown> = {}, scopes: Scope[] = [scope]) {
   let clock = T0;
   const srcs = new Map<string, Listed>();
   for (const sc of scopes) {
@@ -90,7 +90,6 @@ async function setup(config: Record<string, unknown> = {}, scopes: Scope[] = [sc
       pushCandidates: 5,
       ...config,
     },
-    ...(tag ? { constraintTag: tag } : {}),
   });
   for (const sc of scopes) {
     partner.sync!.track(sc, clock);
@@ -143,25 +142,6 @@ describe("planConflict (A9): a new item that bears on an earlier acting request 
     expect(text).toContain(PLAN_LEAD);
     expect(text).toContain("Book my flights to Lisbon");
     expect(text).toContain("cancelled");
-  });
-
-  test("the tag's veto (constraintTag, D908) holds for plan alerts too: a vetoed pool sends none", async () => {
-    for (const [p, want] of [
-      [0.1, 0],
-      [0.9, 1],
-    ] as const) {
-      const read: string[] = [];
-      const t = await setup({ planConflict: true, constraintTag: 0.5 }, [scope], {
-        read: (sc, it) => (read.push(`${sc.userId}:${it.id}`), p),
-      });
-      await say(t.partner, BOOK, "s1", t.now());
-      t.advance(30 * MIN);
-      await t.arrive(CANCEL);
-      t.advance(30 * MIN);
-      expect(plans(await say(t.partner, LATER, "s1", t.now())).length).toBe(want);
-      expect(read.length).toBeGreaterThan(0);
-      expect(read.every((x) => x.startsWith("u:"))).toBe(true);
-    }
   });
 
   test("a message that starts no push still reports the packet as pending", async () => {

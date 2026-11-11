@@ -327,6 +327,20 @@ class PairTag(nn.Module):
 TAGS = ["fact", "superseded", "other-entity", "resolved", "other-period", "already-met", "neutral", "other", "twin"]
 
 
+def shorter(text):
+    """An item's shorter forms (title + 1 sentence, title + 2, 1 sentence alone), as short_fixture.py cuts them."""
+    title, _, body = text.partition("\n")
+    ss = []
+    for line in body.split("\n"):
+        ss += [x.strip() for x in re.split(r"(?<=[.!?])\s+", line) if len(x.strip().split()) >= 4]
+    if not ss:
+        return []
+    out = [f"{title}\n{ss[0]}", ss[0]]
+    if len(ss) > 1:
+        out.append(f"{title}\n{ss[0]} {ss[1]}")
+    return [x for x in out if x != text]
+
+
 def m2_items(path, every=1):
     """M2 raw worlds -> tagged items and supersession pairs. Items: (text, tag) for each task's fact, its twin (the
     twin's kind), its neutrals and one other item; pairs: (older, newer, 1) for `revisionOf`, and as negatives the
@@ -782,6 +796,10 @@ def run(o):
                 for k in random.sample(range(len(w["texts"])), min(8, len(w["texts"]))):
                     I.append((w["texts"][k], "other"))
             I = list({(t, g) for t, g in I})
+        if o.len_aug:
+            # Length is not a cue (D908's retrain): every item also as a connector-style snippet, its title with one
+            # or two body sentences, and one sentence alone, under the same tag.
+            I = list({x for t, g in I for x in [(t, g)] + [(v, g) for v in shorter(t)]})
         Ie, _ = m2_items(o.eval)
         net = Intent(q, o.bits, len(TAGS))
         opt = torch.optim.Adam(net.parameters(), lr=o.lr)
@@ -909,6 +927,7 @@ if __name__ == "__main__":
     a.add_argument("--save", default="", help="write the trained network here (torch state dict + settings)")
     a.add_argument("--ranks", default="", help="pair/notwin: write the eval's ranks (score.py's format) here")
     a.add_argument("--eval2", default="", help="a second eval file to rank (M2's test split)")
+    a.add_argument("--len-aug", action="store_true", help="tags: add each item's shorter forms (D908's retrain)")
     a.add_argument("--train2", default="", help="tags: export groups whose planted items are added to training")
     a.add_argument("--ranks2", default="")
     run(a.parse_args())

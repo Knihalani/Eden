@@ -111,7 +111,7 @@ not strict yet.
 | Harness             | Command                                        | What it measures                                                                                                                                                                                                           |
 | ------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | No-model funnel     | `hidden-funnel.ts` (`bun run funnel` wraps it) | Per task: planted item returned, cached, delivered; with `--ask`, cited by an ask; decoy delivered on controls; source calls and ms per task. Deterministic at `--time 0`                                                  |
-| Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][+ask][+nokey][@w<ms>]`, graded by a second model; per-task timelines; `--day K`; `--days D` (a user's mixed days, recipe 4c) |
+| Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][+ask][+nokey][@w<ms>]` and `hits` (P3, D831: the five best BM25 hits on every request in Eden's packet, no Eden, `lexical-hits.ts`), graded by a second model; per-task timelines; `--day K`; `--days D` (a user's mixed days, recipe 4c) |
 | Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`), or Eden in place of its source tools (`hermes-eden`, A16: Pi's `eden` shape); same tasks, grader and results format as Pi                                                                                   |
 | Injection suite     | `injection-ab.ts`                              | A10 (D305): planted prompt-injection attempts against Pi with recorded-only action tools: attack success by arm and kind, hidden facts kept; `--dry` is its $0 screen (recipe 4d)                                                                                    |
 | In-house loop       | `agent-ab.ts`                                  | The pre-Pi loop; label any result from it as such (CLAUDE.md)                                                                                                                                                              |
@@ -551,7 +551,12 @@ The default has the check on; the funnel wires a checker only with `-- --check l
 the part is inert and the funnel is the no-model screen). A live check keeps the funnel to one process: run one seed a
 process and merge the JSONs (about $0.13 and 8 minutes a seed with neutral tasks). `-- --check-log F` writes each
 call's prompt and reply; each row's `pushCheckCalled` gives the call rate by variant;
-`python3 -I packages/sim/lab/p2/calls.py LEDGER` reads a ledger's check calls (tokens, p50, time to first token).
+`python3 -I packages/sim/lab/p2/calls.py LEDGER` reads a ledger's check calls (tokens, p50, time to first token). `--
+--check-dump F` (D932) writes each call as a training row: the pool exactly as the check read it, each item's cached
+text, the verdict, the raw reply and the task's labels; one process and one file a seed.
+`packages/sim/lab/m7/self-agree.ts` re-asks a sample of those rows live and prints how often Haiku repeats its own
+verdict (D931: 75–79% of item sets, about 90% of silences); score any student of the check against that, not against one
+recorded answer (docs/research/m7-prescreen.md).
 `python3 -I packages/sim/lab/n2/compare.py --arm NAME=F …` prints planted and decoy handed and neutral packets. For a
 live pair read quality from `bench_report.py --sonnet`, cost and wall on the 1:1:8 mix from `python3 -I
 packages/sim/lab/n5/mix.py --base eden --arms eden~V OUT.json…` (`--days` for a days run), days' hidden facts by user

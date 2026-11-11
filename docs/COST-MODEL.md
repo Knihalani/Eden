@@ -628,22 +628,6 @@ Through OpenRouter with no cache breakpoint (D145) the instructions are paid in 
 Haiku 5.5 at effort low, 12 items a call: about $0.12 per 1,000 tasks at 36 new items and 16 requests a day
 **[EST]**, half by Message Batches. Thinking at effort low on I3's short reply: $0.00036 and 2.0 s a call (D528).
 
-## The constraint tagger (`constraintTag`, in the default since D908; M3, docs/research/m3-arch.md §7h)
-
-No model call and no money: CPU and memory only. The weights ship with the engine (`packages/engine/models/tags-v1.bin`,
-4,214,052 bytes; a test keeps it under 4.5 MB) and are read once per process, shared by every user
-(`bun packages/engine/bench/tagger.bench.ts`, 4 cores, 2026-11-11: load 133-157 ms, +22-24 MB resident).
-An item costs 266 µs median (258-276) on one generated sim world's 1,508 items (an earlier form of the bench) and 307 µs (293-336) on 1,600 longer
-generated items (mean 626 characters); it is read once per item version, in the background after the store, a few
-items an event-loop turn. At 36-50 new items a user-day that is about 10-15 ms of CPU a user-day; a new user's
-3,000-item backfill about 0.8-0.9 s, spread over turns. The push gate reads the memo; an item the background has not
-reached yet is tagged inline (at most the pool's 15, about 4.5 ms worst). The memo holds one number an item (about
-70 bytes with its key), at most 8,192 items a user, dropped with the user's items.
-
-It saves paid calls: with the push check S live (funnel train1–6, seeds 41–42, `--neutral`, Haiku), the check ran on
-1,132 pushes without the tag and 498 with it ($0.263 → $0.123 for the 1,152 tasks, $0.000232-0.000248 a call), as
-fewer pools pass the constraint test.
-
 ## Connector calls at about 1,000 sources and the earn rule (O1, D603)
 
 No model call. With `sourceYieldEarn`, `sourceYieldNames` and `sourceYieldEngage` in the default (Pi, train, 995

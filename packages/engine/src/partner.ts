@@ -137,7 +137,6 @@ import {
   type Party,
 } from "./parties";
 import { safeLine } from "./line";
-import { sharedTagger, TagMemo } from "./tagger";
 import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
@@ -220,25 +219,10 @@ export interface PartnerDeps {
    */
   checker?: PushChecker;
   /**
-   * `constraintTag` (M3, D908): the tagger's readings. Absent, the partner builds its own (`TagMemo` over the process's
-   * shared `ItemTagger`, the shipped weights); null turns the veto off; a test passes its own reader. Read only when
-   * `constraintTag` is above 0. `read` answering null vetoes nothing.
-   */
-  constraintTag?: TagReader | null;
-  /**
    * M3 (D908 rule 1, trial `pushSupersede`): the probability that `newer` replaces `older` (a later version, a
    * correction, a cancellation), from a small pair model the embedder wires. Read only when `pushSupersede` is above 0.
    */
   supersede?: (scope: Scope, older: ContextItem, newer: ContextItem) => number | null;
-}
-
-/** What the push gate reads an item's tag from (`TagMemo` in the product). */
-export interface TagReader {
-  read(scope: Scope, item: ContextItem): number | null;
-  /** Stored items, to read in the background before a request needs them. */
-  ingest?(scope: Scope, items: readonly ContextItem[]): void;
-  /** Drops a user's readings (or those of `ids`). */
-  forget?(scope: Scope, ids?: readonly string[]): void;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -669,8 +653,6 @@ export class ContextPartner {
   private readonly economy = new ProbeEconomy();
   /** `sourceYield` (D505): each source's run of live reads with nothing used; null when off. */
   private readonly yields: SourceYield | null;
-  /** `constraintTag` (D908): the tagger's readings, or null (off, or no weights). */
-  private readonly tags: TagReader | null;
   /** Span tracing (`spans.ts`): null when off, so each phase's call site is one null check. */
   private readonly spans: Tracer | null;
   private readonly stats: SpanStats | null;
@@ -702,23 +684,10 @@ export class ContextPartner {
     const spans = this.spans;
     // The card enrichment (`cards`) reports its background calls into the same spans.
     if (spans && deps.cards && this.config.cards) deps.cards.tracer = spans;
-    // `constraintTag` (D908): the partner's own tagger unless the embedder passes one (or null for none).
-    this.tags =
-      this.config.constraintTag > 0
-        ? deps.constraintTag !== undefined
-          ? deps.constraintTag
-          : ((t) => (t ? new TagMemo(t) : null))(sharedTagger())
-        : null;
-    // A card or a tag is held no longer than its item: an item leaving the cache (or the whole user) takes it along.
-    const tags = this.tags;
-    const cardsOn = !!deps.cards && this.config.cards;
-    if (cardsOn || tags?.forget)
-      deps.cache.onDropped((scope, ids) => {
-        if (cardsOn) void (ids ? deps.cards!.forgetItems(scope, ids) : deps.cards!.forget(scope));
-        tags?.forget?.(scope, ids ?? undefined);
-      });
+    // A card is held no longer than its item: an item leaving the cache (or the whole user) takes its card along.
     if (deps.cards && this.config.cards) {
       const cards = deps.cards;
+      deps.cache.onDropped((scope, ids) => (ids ? cards.forgetItems(scope, ids) : cards.forget(scope)));
       // Dates in an item resolve against the user's day, as the request's do (D44).
       cards.offsetOf = (scope) => deps.cache.offsetOf(scope);
       if (this.config.cardsEconomy) cards.economize();
@@ -2442,26 +2411,7 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    const like = pool.map((x) => this.constraintLike(x, cards) && !this.tagVetoes(s.scope, x.item));
-    return { pool, like };
-  }
-
-  /**
-   * `constraintTag` (D908): the tag's veto on the constraint test, read only for an item the test passed (so it can
-   * only take constraint-likeness away), in the push gate and in plan alerts (`checkPlans`), which mirror it. Not on
-   * the ask's `readerGate` (the explicit ask reads its pool whatever the push did). A reader that throws or answers
-   * null vetoes nothing (fail open).
-   */
-  private tagVetoes(scope: Scope, item: ContextItem): boolean {
-    const th = this.config.constraintTag;
-    if (!(th > 0) || !this.tags) return false;
-    let p: number | null = null;
-    try {
-      p = this.tags.read(scope, item);
-    } catch {
-      p = null;
-    }
-    return p !== null && p < th;
+    return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
   }
 
   /**
@@ -2765,7 +2715,7 @@ export class ContextPartner {
               now,
             )
           : new Map<string, Card>();
-      if (!pool.some((x) => this.constraintLike(x, cards) && !this.tagVetoes(s.scope, x.item))) continue;
+      if (!pool.some((x) => this.constraintLike(x, cards))) continue;
       const bearing = hits;
       for (const x of bearing) {
         said.add(x.item.id);
@@ -3131,8 +3081,6 @@ export class ContextPartner {
     this.deps.cards?.forget(scope, sourceId);
     // The reader's bearings are made from the items' text: any forget, of the user or of one source, drops them.
     this.deps.reader?.forget(scope);
-    // A user's forget drops their tag readings (a source's items leave through the cache's `onDropped`).
-    if (sourceId === undefined) this.tags?.forget?.(scope);
   }
 
   get sessionCount(): number {
@@ -4821,8 +4769,6 @@ export class ContextPartner {
 
   /** `cards`: what is new to the cache (looked up or synced) is read for constraints in the background, off-path. */
   private enqueueCards(scope: Scope, added: ContextItem[], defer?: (item: ContextItem) => boolean): void {
-    // `constraintTag` (D908): every stored item is tagged in the background (cheap, no call), deferred cards or not.
-    if (added.length > 0) this.tags?.ingest?.(scope, added);
     if (this.config.cards && this.deps.cards && added.length > 0) this.deps.cards.enqueue(scope, added, defer);
   }
 

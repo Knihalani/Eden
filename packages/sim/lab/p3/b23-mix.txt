@@ -1,0 +1,9 @@
+# (b2)+(b3) days, 48 users, users resampled
+[hits - eden] 3072 pairs ({'hidden': 384, 'control': 384, 'neutral': 2304}), 48 users, days: plain mean
+  agent $/1k   +0.018 (+0.014..+0.022)   base 0.235
+  Eden $/1k    +0.000 (+0.000..+0.000)   base 0.000
+  total $/1k   +0.018 (+0.014..+0.022)   base 0.235
+  wall s       +0.045 (+0.008..+0.081)   base 1.445
+  Eden calls   +0.000 (+0.000..+0.000)   base 0.000
+  agent turns  -0.050 (-0.058..-0.042)   base 1.050
+  agent tools  -0.056 (-0.065..-0.048)   base 0.056

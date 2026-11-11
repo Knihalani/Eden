@@ -23,11 +23,19 @@ export {
 } from "./persist";
 export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
 export { Ledger } from "./ledger";
-export { inert, oneLine, renderAnswer, renderPacket } from "./render";
+export { CANDIDATES_LEAD, inert, oneLine, renderAnswer, renderPacket } from "./render";
 export { safeBlock, safeLine } from "./line";
 export { callParties, partiesIn, type Party } from "./parties";
 export { classifySituation, type Situation } from "./situation";
-export { contentTerms, distinctTermIds, extractEntities, extractTypedEntities, isChatter, termIds } from "./text";
+export {
+  contentTerms,
+  distinctTermIds,
+  extractEntities,
+  extractTypedEntities,
+  isChatter,
+  isStopword,
+  termIds,
+} from "./text";
 export {
   cpuNow,
   SPAN_NAMES,
@@ -119,5 +127,4 @@ export {
   type PushCheckRead,
   type PushCheckStats,
 } from "./push-check";
-export { ALL_CLEAR, ItemTagger, readTagger, sharedTagger, TAGGER_PATH, TagMemo } from "./tagger";
 export { mayConstrain } from "./conflict";

@@ -1,0 +1,13 @@
+== 16 runs, arms eden, hits; clusters: seed
+  eden             hidden raised 78/128 =  60.9% (51.6..69.5); handed at its request 66 (52%), raised 55 = 83.3% (72.1..92.9); in hand not raised 16.7%
+                   earlier that day only 40 (raised 23); not that day 22 (raised 0)
+                   control: 128; concerns 0, confirmed 0; packet on 125 (98%), items a packet 3.4
+                   neutral: 768; concerns 6, confirmed 0; packet on 746 (97%), items a packet 3.8
+                   cost per 1,000 task runs $0.236 (agent + Eden per task), wall 1.47 s
+  hits             hidden raised 62/128 =  48.4% (41.4..55.5); handed at its request 70 (55%), raised 51 = 72.9% (62.7..82.8); in hand not raised 27.1%
+                   earlier that day only 41 (raised 11); not that day 17 (raised 0)
+                   control: 128; concerns 1, confirmed 0; packet on 128 (100%), items a packet 5.0
+                   neutral: 768; concerns 5, confirmed 0; packet on 768 (100%), items a packet 5.0
+                   cost per 1,000 task runs $0.254 (agent + Eden per task), wall 1.51 s
+  [eden - hits] hidden raised +12.5 points (+4.7..+20.3), 128 pairs, 16 clusters; only eden 28, only hits 12
+             handed at its request in both: 49; raised 39 against 39 (+0.0 points)
