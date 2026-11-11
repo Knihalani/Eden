@@ -1,6 +1,6 @@
 # M5: a standing-constraint ledger built when items arrive
 
-Status: 2026-11-11, branch `claude/m5-ledger`, session M5 (decisions D910–D911). **Stopped** (D910). Train suites
+Status: 2026-11-11, branch `claude/m5-ledger`, session M5 (decisions D910–D912). **Stopped** (D910, D912). Train suites
 only; held-out 17–19 are not run or read. Anthropic cap $30 (ledger `.local/m5/ledger.jsonl`), Modal cap $100.
 Numbers marked **[EST]**
 are arithmetic or judgement; every other number comes from a command in this note.
@@ -137,3 +137,30 @@ while v1 was built, so this fold is not blind to the author. The read is a secon
 **Frozen (v3):** `m5_match.py --typed` at this commit, other defaults as in §2 (front 2; `--day-w` stays 0, a day
 weight added nothing on fit). Fit (train3–6 days requests): facts @5 220 → 246 of 315 (+8.3 points; v1's matcher
 239), decoys @5 184 → 188 of 287 (v1's 188).
+
+## 5. Version 3's result: stop (D912)
+
+train1–2 days requests, read once at 7d26ee8e with `--typed`:
+
+| | shipped pool | v3 (typed) | change |
+|---|---|---|---|
+| facts @5 (118 hidden) | 82 | 89 | **+7, +5.9 points** (ratio 1.085) |
+| decoys @5 (146 control) | 115 | 118 | +3 (ratio 1.026) |
+
+**Stop.** Decoys pass the clause (they rise far slower than facts), but facts are below the +8-point bar.
+
+For reference only, outside the pre-registered read:
+
+- v1's matcher on the same rows (it was fit on them) gets 82 → 91 facts and 115 → 118 decoys. The typed comparisons
+  added nothing there.
+- v3 on train5–6 (already read once under v1) gets 116 → 127 facts (+7.0 points) and 88 → 95 decoys.
+
+The typed comparisons reach a few of the leaps:
+
+- an amount over a stated limit (£120k against £50k to sign);
+- a destination abroad against a pause on international trips or a passport away;
+- a role named in the record's own item.
+
+Most misses still name nothing the record holds. A hire car does not name the expired licence, a party invite does
+not name the babysitter who cancelled, and a hoodie order does not name an embargoed logo. No pass of v1's records
+reaches +8 points on a second fold. Anthropic spend for v3: $0, since v1's records were reused.

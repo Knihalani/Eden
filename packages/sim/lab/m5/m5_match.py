@@ -1,4 +1,4 @@
-"""M5 (D910-D911, docs/research/m5-ledger.md): the standing-constraint ledger matched against a request with no model.
+"""M5 (D910-D912, docs/research/m5-ledger.md): the standing-constraint ledger matched against a request with no model.
 
 Reads a ledger (`m5-ledger.ts extract`: per item content hash, typed records), a corpus dump and a pool dump
 (`days-calls.ts --corpus-dump --pool-diag`, or the funnel's `--corpus-dump --pool-dump`), and for each request:
