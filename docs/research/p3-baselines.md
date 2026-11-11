@@ -107,3 +107,40 @@ hand read with an independent one:
   Sonnet as the agent has "in hand, core not stated" under 5%, the docs say weak point 6 is the agent model plus the
   grade's every-clause rule, and no Eden lever is built for it. The rubric check must call at least 38 of the 40
   raised answers core-stated, or the second grade is not used.
+
+## 5. Results: (a) Sonnet 5.5 as the agent
+
+Runs 2026-11-11 (`packages/sim/lab/p3/ab.sh`; readouts `a-short.txt`, `a-days.txt`, `a2-core-grade.json` beside it).
+No run stopped on its budget; no task errored. Sonnet's grade unless said.
+
+| | Haiku 5.5 agent | Sonnet 5.5 agent |
+| --- | --- | --- |
+| Short, seed 41 (192 hidden): `tools` | 20 (10.4%) | 57 of 191 (29.8%) |
+| Short: `eden` | 124 (64.6%) | 148 (77.1%) |
+| Short: `eden` − `tools` (templates resampled) | +54.2 (+46.9..+61.5) | +47.1 (+39.3..+55.5) |
+| Short: handed at its own request | 154 (80%) | 165 (86%) |
+| Short: raised of handed ("in hand, not raised") | 80.5% (19.5%) | 89.7% (10.3%) |
+| Days, w41–w44, 4 days of 16 (32 hidden): `eden` | 18 (56.2%) | 27 (84.4%) |
+| Days: handed at its own request; raised of handed | 17; 12 (29.4% not raised) | 28; 25 (10.7%) |
+| In hand, not raised, short and days pooled¹ | 67 of 333 (20.1%) | 20 of 193 (10.4%) |
+| **In hand, core not stated (Opus's second grade, §4)** | **17 of 333 (5.1%)** | **1 of 193 (0.5%)** |
+| Confirmed concerns, control and neutral | 0 | 1 of 192 control (short) |
+| Agent + Eden cost per 1,000 task runs, short `eden` | $0.27 | $8.64 (`tools` $9.03) |
+
+¹ Haiku's pooled count is over both short seeds' `eden` arms (seed 42 from (b)), so its denominators differ from the
+paired rows above; Opus graded all of them.
+
+- **Paired, `eden` with Sonnet against `eden` with Haiku** (the same tasks and Eden's same replayed packets): short
+  +12.5 points (+6.2..+18.8; 192 pairs); on the 151 tasks handed in both, 136 against 122 raised. Days +28.1
+  (+15.6..+43.8; 32 pairs, 4 users, an interval on four clusters): Sonnet asks more, so the fact reaches it at its own
+  request in 28 tasks against 17.
+- **(a)'s rule read on Sonnet's grade:** "in hand, not raised" 10.4% pooled, just over the 10% bar (upper bound about
+  15%). **(a2)'s rule:** with Opus's core grade (its rubric check: 40 of 40 raised answers called core-stated) it is
+  0.5%, under 5%. Of Sonnet's 20 graded misses, Opus calls 19 core-stated; they name the fact and leave out a clause
+  of a multi-part detail ("DVLA asks not to apply again", "fees paid now won't be refunded until January").
+- **What it says (D834):** weak point 6 ("one handed fact in five not raised") is the agent model and the grade's
+  every-clause rule, not Eden. With Sonnet as the agent, a fact Eden hands is stated, in its core, in 192 of 193 tasks;
+  with Haiku in 316 of 333. Half of Haiku's gap to Sonnet is the grade (Opus calls 50 of Haiku's 67 graded misses
+  core-stated). No Eden lever is built for it, and four failed wording fixes (D705 and earlier) are consistent with
+  this. The headline grade stays as it is (it is what every earlier figure used); a report quoting "raised" should say
+  it requires every clause.
