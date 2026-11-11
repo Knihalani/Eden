@@ -1,0 +1,17 @@
+cold: list 1000 bg + 0 demand, search 3, fetch 0, cards 0 calls ($0, 0 items, 99793 deferred), listed 99793, held 3000, 10390 ms
+day 1: list 21 bg + 26 demand, search 124, fetch 0, cards 65 calls ($0.0118, 766 items, 95 deferred), listed 2396, held 3000, 1860 ms
+day 2: list 26 bg + 30 demand, search 150, fetch 0, cards 21 calls ($0.0038, 107 items, 7 deferred), listed 2722, held 3005, 1725 ms
+day 3: list 23 bg + 31 demand, search 156, fetch 0, cards 17 calls ($0.0031, 103 items, 5 deferred), listed 2565, held 3009, 1487 ms
+day 4: list 25 bg + 32 demand, search 188, fetch 0, cards 21 calls ($0.0038, 104 items, 16 deferred), listed 2513, held 3023, 1426 ms
+day 5: list 27 bg + 38 demand, search 147, fetch 0, cards 15 calls ($0.0027, 107 items, 0 deferred), listed 2920, held 3001, 1385 ms
+day 6: list 34 bg + 42 demand, search 140, fetch 0, cards 30 calls ($0.0054, 142 items, 0 deferred), listed 3579, held 3008, 1378 ms
+day 7: list 27 bg + 47 demand, search 199, fetch 0, cards 22 calls ($0.004, 32 items, 96 deferred), listed 3027, held 3000, 1453 ms
+day 8: list 1041 bg + 74 demand, search 193, fetch 0, cards 108 calls ($0.0195, 1220 items, 83923 deferred), listed 103281, held 2981, 11934 ms
+day 9: list 51 bg + 64 demand, search 205, fetch 0, cards 24 calls ($0.0043, 59 items, 164 deferred), listed 3683, held 3002, 1288 ms
+day 10: list 46 bg + 72 demand, search 229, fetch 0, cards 20 calls ($0.0036, 43 items, 0 deferred), listed 3077, held 3007, 1339 ms
+day 11: list 41 bg + 55 demand, search 213, fetch 0, cards 15 calls ($0.0027, 28 items, 0 deferred), listed 2475, held 3044, 1269 ms
+day 12: list 41 bg + 57 demand, search 173, fetch 0, cards 14 calls ($0.0025, 19 items, 0 deferred), listed 2563, held 3061, 1312 ms
+day 13: list 41 bg + 68 demand, search 215, fetch 0, cards 15 calls ($0.0027, 18 items, 0 deferred), listed 2586, held 3081, 1239 ms
+day 14: list 41 bg + 60 demand, search 152, fetch 0, cards 13 calls ($0.0024, 24 items, 0 deferred), listed 2455, held 3010, 1147 ms
+day 15: list 1025 bg + 80 demand, search 143, fetch 0, cards 101 calls ($0.0183, 1289 items, 69712 deferred), listed 102345, held 2955, 11512 ms
+day 16: list 42 bg + 73 demand, search 169, fetch 0, cards 19 calls ($0.0034, 58 items, 0 deferred), listed 2792, held 3042, 1404 ms

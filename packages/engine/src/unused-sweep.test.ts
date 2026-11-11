@@ -308,4 +308,46 @@ describe("syncUnusedSweepMs (D356)", () => {
       expect(reply.answer).not.toContain("Left out");
     }
   });
+
+  test("syncSweepSpread (D604): unused sources are swept at their own points in the week, none later", async () => {
+    const days = async (spread: boolean) => {
+      const make = (prefix: string) =>
+        Array.from({ length: 40 }, (_, k) => new FetchSource(`${prefix}s${k}`, [item(`${prefix}s${k}`, 0, "x")], true));
+      const mine = make("");
+      const theirs = make("");
+      const t = setup(
+        new Map([
+          ["alice", mine],
+          ["bob", theirs],
+        ]),
+        { ...ON, syncSweepSpread: spread },
+      );
+      await warm(t.partner, alice);
+      await warm(t.partner, bob);
+      // The day (after the backfill) of each source's sweeps over three weeks.
+      const seen = [...mine, ...theirs].map(() => [] as number[]);
+      const counts = [...mine, ...theirs].map((x) => x.lists);
+      for (let day = 0; day < 21; day++) {
+        await live(t, [alice, bob], 1);
+        [...mine, ...theirs].forEach((x, k) => {
+          for (; counts[k]! < x.lists; counts[k]!++) seen[k]!.push(day);
+        });
+      }
+      return { alice: seen.slice(0, 40), bob: seen.slice(40) };
+    };
+    const off = await days(false);
+    // Off: every source a week after the backfill, in the same tick.
+    for (const d of off.alice) expect(d).toEqual([6, 13, 20]);
+    const on = await days(true);
+    const perDay = Array.from({ length: 21 }, (_, day) => on.alice.filter((d) => d.includes(day)).length);
+    expect(Math.max(...perDay)).toBeLessThan(20);
+    for (const d of [...on.alice, ...on.bob]) {
+      // The first within a week of the backfill, then weekly: three or four sweeps in three weeks, never a longer gap.
+      expect(d[0]!).toBeLessThanOrEqual(6);
+      expect(d.length === 3 || d.length === 4).toBe(true);
+      for (let k = 1; k < d.length; k++) expect(d[k]! - d[k - 1]!).toBe(7);
+    }
+    // Another user's sources of the same ids have points of their own.
+    expect(on.alice.filter((d, k) => d[0] === on.bob[k]![0]).length).toBeLessThan(20);
+  });
 });

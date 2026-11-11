@@ -490,6 +490,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `doubted`/`verifyItems` would hand over items the weekly sweep has not checked; a source that cannot find an item by
   ref (`Source.fetchesById` false: an `McpSource` with no `fetchTool` still has a `fetch` that answers null) must stay
   on the daily sweep (`onLongSweep`); a wrapper around a `Source` must copy `fetchesById` (as `notifies`).
+  Trial `syncSweepSpread` (D604, off; ends 2026-11-18): each such source is swept at its own point in the week (a
+  hash of tenant, user and source, `Sync.sweepTurn`), never later than a week after its last sweep, so a user's
+  unused sources are not all listed in one tick.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

@@ -22,7 +22,7 @@
  * the fast path (timers or a lookup's slow path), and stores only what the fan-out has already redacted. Users idle
  * longer than `syncDropMs` are no longer synced and their synced items are dropped (retention, D57).
  */
-import { Gcra, IdSet } from "@eden/primitives";
+import { Gcra, hashString, IdSet } from "@eden/primitives";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { Source, SourceFanout, SourceResolver } from "@eden/sources";
@@ -101,6 +101,12 @@ export interface SyncOptions {
    * before delivering them, since a deletion may be behind them.
    */
   unusedSweepMs?: number;
+  /**
+   * Trial `syncSweepSpread` (D604): each source on the long sweep has its own point in the period (a hash of the
+   * user and the source) and is swept at the first tick past it, so a user's unused sources are not all listed in
+   * the tick a week after the backfill. Never later than `unusedSweepMs` after its last sweep; the first comes early.
+   */
+  sweepSpread?: boolean;
   /**
    * `syncPush`: a source that says it `notifies` is current until told it changed (`Sync.changed`) or its last poll
    * is `maxStaleMs` old, instead of by its learned change rate.
@@ -854,6 +860,15 @@ export class SyncManager {
    * `unusedSweepMs` (D356): a source the user does not use whose connector can fetch by ref is swept that often. One
    * without a fetch keeps the daily sweep: its copies could not be re-read before delivery.
    */
+  /**
+   * `sweepSpread`: the source's own point in the long period has passed since its last sweep. The point is a hash
+   * of the tenant, the user and the source, so it needs no saved state and two users' sweeps do not line up.
+   */
+  private sweepTurn(u: UserSync, s: SourceSync, now: number, every: number): boolean {
+    const at = hashString(`${u.scope.tenantId}\0${u.scope.userId}\0${s.id}`, 0x5eed) % every;
+    return Math.floor((now + at) / every) > Math.floor((s.sweptAt + at) / every);
+  }
+
   private onLongSweep(s: SourceSync): boolean {
     return (this.o.unusedSweepMs ?? 0) > 0 && !s.engaged && s.fetches;
   }
@@ -953,8 +968,10 @@ export class SyncManager {
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);
         if (!source || s.phase !== "warm" || s.busy || now < s.retryAt) return;
-        const every = this.onLongSweep(s) ? Math.max(this.o.unusedSweepMs!, this.o.sweepMs) : this.o.sweepMs;
-        if (s.sweep !== null || now - s.sweptAt >= every) await this.run(s, () => this.sweep(u, s, source));
+        const long = this.onLongSweep(s);
+        const every = long ? Math.max(this.o.unusedSweepMs!, this.o.sweepMs) : this.o.sweepMs;
+        const turn = long && this.o.sweepSpread === true && this.sweepTurn(u, s, now, every);
+        if (s.sweep !== null || now - s.sweptAt >= every || turn) await this.run(s, () => this.sweep(u, s, source));
         else if (now - s.sweptAt >= this.o.sweepMs) s.skipped = true;
       }),
     );
