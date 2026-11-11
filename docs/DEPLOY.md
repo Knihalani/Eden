@@ -288,10 +288,18 @@ suite.
 Also validated: the cloud-init file rendered for each role (`render-cloud-init.py`) passes `cloud-init schema`
 (cloud-init 26.2 from Ubuntu's archive).
 
-Not validated: **the OpenTofu configs** (`deploy/tofu/hetzner`, `deploy/tofu/oci`; no OpenTofu binary could be run in
-the session: run `tofu init && tofu validate && tofu plan` before the first apply); cloud-init and
+Checked statically (D997), since neither OpenTofu, Terraform's official image nor Alloy's could be run in the
+session: `deploy/scripts/check-tf.py` (python-hcl2 from PyPI) parses every `.tf` file and checks that every
+variable, local, resource and data source referenced exists and that each `templatefile` call passes exactly the
+cloud-init template's variables (both configs pass; a misspelt variable and a renamed template variable are caught);
+`deploy/scripts/check-monitoring.py` checks `config.alloy`'s braces, quotes, component references and listed
+environment variables, and that every rule in `alerts.yaml` is complete and watches a metric Eden emits (passes; a
+misspelt metric and a dangling reference are caught).
+
+Not validated: **the OpenTofu configs against the providers' schemas** (run `tofu init && tofu validate && tofu
+plan` before the first apply); cloud-init and
 `bootstrap-dedicated.sh` on a real machine; Hetzner Object Storage's lifecycle rule
-(S3-compatible per its docs; unverified); Grafana Alloy's config (`alloy fmt` it first); a real network between
+(S3-compatible per its docs; unverified); Alloy's and PromQL's semantics (`alloy fmt` and `promtool check rules` first); a real network between
 machines; real Ampere hardware (the arm64 run was emulated, so no arm64 timings are quoted).
 
 ## 13. Runbook
