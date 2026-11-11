@@ -184,3 +184,16 @@ check arm silently lost those pushes (31 of train's 192 templates).
   (its recorded replies replayed, the opened pushes' calls made live, about $0.05 **[EST]**), and those rows are
   reported beside A's. A's rule is applied to A's own rows, unchanged.
 - **B's arms, amended:** `eden~N*` and `eden~S*` also set `pushCheckOpen` true. Nothing else in B changes.
+
+### 1.5 Pre-registration D: `pushIndirect` live (Pi), committed before its first call
+
+- **Arms:** `eden` and `eden~I` (`pushIndirect` true), the bench-tools harness of §2.3, `--suites train-rw`, seeds
+  41–44 (the seeds the intent file covers), `--variants hidden,control,neutral`, two shards at a time.
+- **Measures:** every hidden answer and every concern regraded by Sonnet 5.5; hidden raised with the
+  template-clustered bootstrap; cost and wall paired on the 1:1:8 mix (`n5/mix.py`), agent tokens and packet
+  characters a task.
+- **Rule:** `pushIndirect` is recommended for promotion if hidden raised on train-rw is better (clustered interval
+  above zero), Sonnet-confirmed concerns are not up, and the agent's $ per 1,000 tasks on the mix rises by at most
+  the default's own packet cost on train (it adds no model call of Eden's; on train it changes no task at $0, §1.2).
+  Otherwise the switch is deleted at its end date.
+- **Budget:** about $4 **[EST]** (two arms, four seeds, regrades).
