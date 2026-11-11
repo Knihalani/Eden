@@ -17,8 +17,8 @@ def load_eval(path):
                 reqs[r["rid"]] = r
     return reqs
 
-def load_ranks(run):
-    return {r["rid"]: r["top"] for r in map(json.loads, open(os.path.join(run, "ranks.jsonl")))}
+def load_ranks(run, key="top"):
+    return {r["rid"]: r.get(key, r["top"]) for r in map(json.loads, open(os.path.join(run, "ranks.jsonl")))}
 
 def rrf(lists, cut=15, c=60):
     score, first = defaultdict(float), {}
@@ -87,11 +87,12 @@ if __name__ == "__main__":
     a.add_argument("--heldout", default="train5,train6")
     a.add_argument("--ks", default="5,10,15")
     a.add_argument("--brief", action="store_true")
+    a.add_argument("--key", default="top", help="which list a run's rows rank by: top (above NULL) or all")
     a.add_argument("--at5", action="store_true", help="§1b's @5 bar (the eval's pool15 is the shipped default's)")
     o = a.parse_args()
     reqs = load_eval(o.eval)
     for run in o.runs:
-        agg = table(reqs, load_ranks(run), set(o.heldout.split(",")), [int(k) for k in o.ks.split(",")])
+        agg = table(reqs, load_ranks(run, o.key), set(o.heldout.split(",")), [int(k) for k in o.ks.split(",")])
         if not o.brief:
             show(agg, run)
         bar(agg, run, at5=o.at5)

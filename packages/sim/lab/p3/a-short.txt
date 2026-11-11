@@ -1,0 +1,22 @@
+== 3 runs, arms eden@haiku, eden@sonnet, hits@haiku, tools@haiku, tools@sonnet; clusters: template
+  eden@haiku       hidden raised 124/192 =  64.6% (57.8..71.4); handed at its request 154 (80%), raised 124 = 80.5% (74.0..86.4); in hand not raised 19.5%
+                   control: 192; concerns 1, confirmed 0; packet on 192 (100%), items a packet 4.3
+                   neutral: 192; concerns 1, confirmed 0; packet on 186 (97%), items a packet 4.6
+                   cost per 1,000 task runs $0.269 (agent + Eden per task), wall 2.14 s
+  eden@sonnet      hidden raised 148/192 =  77.1% (70.8..82.8); handed at its request 165 (86%), raised 148 = 89.7% (84.8..93.9); in hand not raised 10.3%
+                   control: 192; concerns 4, confirmed 1; packet on 192 (100%), items a packet 4.3
+                   cost per 1,000 task runs $8.636 (agent + Eden per task), wall 5.54 s
+  hits@haiku       hidden raised 80/192 =  41.7% (34.9..49.0); handed at its request 101 (53%), raised 80 = 79.2% (71.3..87.1); in hand not raised 20.8%
+                   control: 192; concerns 1, confirmed 0; packet on 192 (100%), items a packet 5.0
+                   neutral: 192; concerns 0, confirmed 0; packet on 192 (100%), items a packet 5.0
+                   cost per 1,000 task runs $0.176 (agent + Eden per task), wall 1.55 s
+  tools@haiku      hidden raised 20/192 =  10.4% (6.2..15.1)
+                   control: 192; concerns 0, confirmed 0; packet on 0 (0%), items a packet 0.0
+                   neutral: 192; concerns 3, confirmed 0; packet on 0 (0%), items a packet 0.0
+                   cost per 1,000 task runs $0.236 (agent + Eden per task), wall 3.30 s
+  tools@sonnet     hidden raised 57/191 =  29.8% (23.6..36.6)
+                   cost per 1,000 task runs $9.028 (agent + Eden per task), wall 8.39 s
+  [eden@sonnet - eden@haiku] hidden raised +12.5 points (+6.2..+18.8), 192 pairs, 192 clusters; only eden@sonnet 32, only eden@haiku 8
+             handed at its request in both: 151; raised 136 against 122 (+9.3 points)
+  [eden@sonnet - tools@sonnet] hidden raised +47.1 points (+39.3..+55.5), 191 pairs, 191 clusters; only eden@sonnet 96, only tools@sonnet 6
+  [eden@haiku - tools@haiku] hidden raised +54.2 points (+46.9..+61.5), 192 pairs, 192 clusters; only eden@haiku 108, only tools@haiku 4

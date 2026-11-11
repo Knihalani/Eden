@@ -47,7 +47,7 @@ M7's rows also carry the push gate's flags (`like`), recorded through the delete
 
 Labels cost $1.10, about $0.00024 a call. A replay is byte-identical: re-dumping seeds 41–44 from their caches gave
 the same check key and verdict on 564 of 566, 563 of 566, 558 of 559 and 567 of 568 rows (the rest were failed calls
-that fail open differently). M3's tagger (`tags-v1.bin`, from `claude/m3-retriever`) gave each item's nine logits
+that fail open differently). M3's tagger (`tags-v1.bin`, from `claude/m3-retriever`; rejected and deleted since, D908) gave each item's nine logits
 (`m7/tag-dump.ts`). The features use only the one quantised probability `TagMemo` keeps (`1 − P(all-clear tags)`, in
 1/255 steps), because that is all the engine holds.
 
