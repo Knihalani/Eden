@@ -40,7 +40,8 @@ describe("days-calls: connector calls over a user's days (A8)", () => {
       if (r.pushed) expect(r.got).toBe(true);
       expect(Object.keys(r).sort()).toEqual(
         ["day", "got", "handed", "kind", "like", "likeAhead", "poolSize", "pushRan", "pushed", "rank", "seed", "task"]
-          .concat("today")
+          // M3's offline-screen fields (D900, D911): the planted id, the request and template, the pool's ids.
+          .concat("today", "planted", "pool", "request", "template")
           .sort(),
       );
     }
