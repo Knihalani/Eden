@@ -75,3 +75,11 @@ Models fitted on generated text transferred badly to the sim's hand-written fami
   trained or selected on. Bar item 1 adds: the gate's start rate on SIM56 is at least the shipped rule's − 1 point
   (the rule is near 100% there, so no +10 is possible), and on its reworded part (5r, 6r, 5rw, 6rw) alone likewise.
 - The Pi pair (bar item 5) runs locally with the Anthropic lab provider (no Modal needed), cap $8; it is required.
+
+### 0.2 Freeze rule (committed before full training's results are read)
+
+Full training: R2i (`--arch mil --bits 16 --dim 24 --hidden 64 --quant int8 --rule2 --kind-weight 1.0`) and R2f
+(`--arch bag --bits 16 --dim 24 --hidden 128 --quant int8 --rule2 --kind-weight 1.0`), 6 epochs, seeds 1 and 2. The
+frozen candidate is the one run of the four with the highest dev `macro_union_veto` (its threshold and veto as
+picked on dev by gate.py); ties go to the smaller and faster bag. It is then exported, parity-checked and scored once
+on S3, S4, M2T and SIM56 (score.py), with the union as shipped (the gate alone reported beside it, not decided on).
