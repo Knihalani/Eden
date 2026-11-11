@@ -75,6 +75,8 @@ export const INTENT_FILE = "intent-v2.jsonl.gz";
 export const INTENT_PATH = join(import.meta.dir, "..", "..", "lab", "distilled", INTENT_FILE);
 export const INTENT_COVERS: Record<string, string[]> = {
   ...Object.fromEntries(parseSuites("train").map((s) => [s, ["41", "42", "43", "44"]])),
+  // The reworded train suites (D871) plant into the same worlds: the same items, so the same coverage.
+  ...Object.fromEntries(parseSuites("reworded").map((s) => [s, ["41", "42", "43", "44"]])),
   heldout10: ["41", "42"],
   heldout11: ["41", "42"],
   heldout13: ["41", "42", "43", "44"],
@@ -100,7 +102,7 @@ export const INTENT_COVERS: Record<string, string[]> = {
 export const SHIPPED_FILE = "cards-shipped.jsonl.gz";
 export const SHIPPED_PATH = join(import.meta.dir, "..", "..", "lab", "distilled", SHIPPED_FILE);
 export const SHIPPED_COVERS: Record<string, string[]> = {
-  ...Object.fromEntries(parseSuites("train").map((s) => [s, ["41", "42", "43", "44"]])),
+  ...Object.fromEntries(parseSuites("train,reworded").map((s) => [s, ["41", "42", "43", "44"]])),
 };
 
 /** The suite × seed shards SHIPPED_FILE was not made for. */
@@ -130,7 +132,8 @@ export function harnessIntent(
   if (arg !== "default") return { files: arg.split(",").filter(Boolean), note: arg };
   if (!run.wanted || !run.cardsReplayed) return { files: [], note: "" };
   const uncovered = intentUncovered(run.suites, run.seeds);
-  if (!uncovered.length) return { files: [INTENT_PATH], note: `${INTENT_FILE} by default, D158` };
+  if (!uncovered.length)
+    return { files: [INTENT_PATH], note: `${INTENT_FILE} by default, D158; coverage full: every item, D714` };
   const shown = uncovered.slice(0, 4).join(", ") + (uncovered.length > 4 ? `, … ${uncovered.length - 4} more` : "");
   return { files: [], note: `the checked-in requests do not cover ${shown}` };
 }

@@ -12,6 +12,7 @@ import {
   HELDOUT19_SILENT,
 } from "./hidden-heldout19";
 import { supportsNeutral } from "./neutral";
+import { REWORDED } from "./reworded";
 import { parseSuites, preparedWorld, SUITE_NAMES, SUITES, UNREAD_BLIND, UNRUN_BLIND } from "./suites";
 
 describe("suite registry", () => {
@@ -348,7 +349,35 @@ describe("longtail (P7, D873)", () => {
         expect(b.tasks.map((t) => t.text)).toEqual(hidden!.tasks.map((t) => t.text));
     }
     expect(supportsNeutral("longtail")).toBe(true);
-    expect(parseSuites("all")).toContain("longtail");
+    expect(parseSuites("all")).not.toContain("longtail");
     expect(parseSuites("train")).not.toContain("longtail");
+  });
+});
+
+describe("reworded train (P7, D871)", () => {
+  test("train1r-6r: train's worlds and tasks, every request reworded, six non-English a suite, ids `<suite>r`", () => {
+    expect(parseSuites("reworded")).toEqual(["train1r", "train2r", "train3r", "train4r", "train5r", "train6r"]);
+    for (const n of [1, 2, 3, 4, 5, 6]) {
+      const base = `train${n}`;
+      expect(Object.values(REWORDED[base]!).filter((w) => w.lang).length).toBe(6);
+      for (const seed of [41, 47, 52]) {
+        for (const v of ["hidden", "control", "neutral"] as const) {
+          const a = preparedWorld(base, seed);
+          const b = preparedWorld(`${base}r`, seed);
+          const orig = SUITES[base]!(a, seed, v);
+          const re = SUITES[`${base}r`]!(b, seed, v);
+          // The same items planted, and the slot cleared from the original request.
+          expect(b.items.map((i) => i.id)).toEqual(a.items.map((i) => i.id));
+          expect(re.map((t) => [t.template, t.detail, t.slotText])).toEqual(
+            orig.map((t) => [t.template, t.detail, t.text]),
+          );
+          // No capture left unfilled: a `$` digit only where the original has one ("$40k").
+          const left = (t: { text: string }) => t.text.match(/\$\d/g)?.length ?? 0;
+          expect(re.every((t, i) => t.text !== orig[i]!.text && left(t) <= left(orig[i]!))).toBe(true);
+          expect(re.map((t) => t.id)).toEqual(orig.map((t) => t.id.replace(`:${base}`, `:${base}r`)));
+        }
+      }
+    }
+    expect(parseSuites("all")).not.toContain("train1r");
   });
 });

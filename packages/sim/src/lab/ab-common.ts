@@ -198,7 +198,7 @@ export function worldOf(
   for (const it of plantedItems) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
   const keep = new Set(plantedItems.map((it) => it.id));
-  for (const h of planted) clearSlot(world, h.text, keep);
+  for (const h of planted) clearSlot(world, h.slotText ?? h.text, keep);
   // After the planted items are read off the end of `world.items`: dressing appends its own after them.
   if (opts.dress)
     dressEntities(

@@ -101,7 +101,7 @@ if (FUNNEL) {
         const planted = world.items.slice(before);
         for (const it of planted) dress(world, it);
         const keep = new Set(planted.map((it) => it.id));
-        for (const task of tasks) clearSlot(world, task.text, keep);
+        for (const task of tasks) clearSlot(world, task.slotText ?? task.text, keep);
         take(simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll()));
       }
     }

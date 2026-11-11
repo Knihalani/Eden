@@ -34,6 +34,9 @@ per suite for train1–6 and held-out 10–12.
 | `heldout16`                                | Blind, the CL wave's (cl-cl5.md); 32 new templates over the same 8 areas, with `neutral`              | **Read** (RealUse-3 Pi, 2026-11-07, realuse-3/pi-heldout16.md): no longer blind; cards and intent cached for seeds 41–44 |
 | `heldout17` | Blind, the end-of-day confirmation's (a19-heldout17.md, D350); 32 new templates over the same 8 areas, with `neutral`; 8 late-arrival templates (`HELDOUT17_LATE`, for `--late`) | **Read** (A29 Pi, 2026-11-07, a29-heldout17.md): no longer blind; cards and intent cached for seeds 41–44 |
 | `heldout18` | Blind, M6's (m6-heldout18.md, D465); 32 new templates over the same 8 areas, with `neutral`; 8 late arrivals (`HELDOUT18_LATE`); 13 short anchored requests (`HELDOUT18_ANCHORED`, D466) | Run once and read by B18, 2026-11-11 (b18-heldout18.md, D802); cards and intent cached, 41–44     |
+| `heldout19` | Blind, P7's for the end-of-wave confirmation (p7-benchmarks.md, D870); 40 templates over the 8 areas, with `neutral`; indirect, question and non-English requests (`HELDOUT19_INDIRECT`, `HELDOUT19_NON_ENGLISH`), anchored requests, facts in rarely used connectors (`HELDOUT19_RARE`) and silent edits (`HELDOUT19_SILENT`, with `heldout19Before`) | **Unread** (`UNREAD_BLIND`): nobody runs it before the parent's end-of-wave call; cards and intent only at shipped coverage |
+| `train1r`–`train6r` (`--suite reworded`) | Train with every request reworded as a need, a plan or a question, 6 of 32 a suite in another language (reworded.ts, D871); same worlds, so train's caches replay | Tuning set (Q6); out of `all` |
+| `longtail` | 24 templates, every fact and decoy in one of eight rarely used connectors (rare-sources.ts, D873); with `neutral` | Tuning and measurement, not blind; out of `all`; pair with `days-calls.ts --arrive-days` |
 
 **The `neutral` variant** (held-out 14–17 and, since CL5, train1–6; `neutral.ts`, `NEUTRAL_SUITES`): the same request
 as `hidden` and `control` with nothing planted. The train suites get it from `withNeutral` in suites.ts (the control
@@ -49,9 +52,30 @@ a neutral task as a false one, and `pi-ab-report.ts` adds a `neutral` table and 
   written by an author who saw no engine code.
 - `UNRUN_BLIND` (held-out 9–16) keeps them out of `--suite all` so a tuning command cannot spend them, but all five
   have been read (D72, D80, D85, D98, D112), 14 by RealUse-1 and 15 by RealUse-2: treat the list as "not in `all`",
-  not as "fresh". Held-out 18 (M6, D465) was spent by B18 (D802): no suite is unread (`UNREAD_BLIND` is
-  empty), and the next blind check needs a new one.
+  not as "fresh". Held-out 18 (M6, D465) was spent by B18 (D802). Held-out 19 (P7, D870) is the one unread suite:
+  its single use is the end-of-wave confirmation the parent calls; `bun run funnel` says so when a run names it.
+- **Worlds with rare connectors** (heldout19, longtail; rare-sources.ts): eight more connectors (notes, whatsapp,
+  bank, health, school, trips, residents, tasks) with 6–8 old filler items each, added by `prepareWorld(suite, …)`
+  before the planted items in every variant; every harness calls it, and planting without it throws.
 - Seeds: 41–44 for funnel work (41–42 on train), 41–48 for the Haiku benchmark. Same seed, same world, same tasks.
+
+## The benchmark map: which question each benchmark answers, and its known biases
+
+P7 (D876; docs/research/p7-benchmarks.md, B1–B13 of docs/research/weak-points-1111.md). Read a figure with its row:
+a benchmark answers its question and no other, and each has a bias that moves its level.
+
+| Benchmark | Question it answers | Known biases (what it cannot see) |
+| --- | --- | --- |
+| `bun run eval` | Did an engine change move behaviour on the hand-written scenarios? (precision 0.65, recall 0.52, falseFireRate 0 on main) | Its `falseFireRate` does not count candidates on nothing-to-add requests, and cards and intent are inert in it (B1). A merge gate, not a level |
+| Funnel on `train` (`bun run funnel`) | Does a change surface more planted facts and fewer decoys, at $0, one request a session? | Imperative English requests only (B4: use `reworded`); every template's constraint and decoy in one world at once (B6); the funnel always asks (B13); intent at full coverage on seeds 41–44 (B8, D714: pass `--coverage shipped` for a deployment's); facts in the world's five sources only (B5: use `longtail`); one author per suite, tuned on for weeks |
+| Funnel on `train1r`–`train6r` | Does the push start for needs, plans, questions and non-English requests (Q6)? | Rewordings by one writer; the six non-English requests a suite are a handful per language; slot clearing reads the original request, so worlds equal train's |
+| Funnel on `longtail` | Is a fact in a rarely used connector found when it is there from the backfill? | Easy at one request a session (every connector is read at the backfill); its question is a days one. 24 templates, P7's own; rare connectors hold only 6–8 filler items each, so their search is easier than a real notes app's |
+| `days-calls.ts` ($0, weeks) | Connector calls and facts handed over a user's days and weeks: sweeps, polls, dormancy, `--arrive-days` | No agent and no model (facts handed, not facts used); Eden's clock moves while the world's "now" is fixed, so items age against requests written for it (worse over weeks); weeks reuse templates as requests past about 12 days (D874); recaps move each day's planted times |
+| Held-out suites (`--blind`) | Does the default generalise to an author who never saw the engine? | Levels differ by suite (Q10: 73% on heldout17, 47–49% on heldout18 with one default), so compare arms within a suite; each is blind once. heldout19 is unread (D870) |
+| Pi short (`pi-ab.ts`) | Does a live agent raise the fact with Eden, against the agent alone? | One agent model (Haiku) for most decisions, graders that disagree by 7 points (B9); the baseline has search tools, with no "top five search hits" arm (B10); single runs (B11) |
+| Pi days (`pi-ab --days`) | The same over a user's mixed days, with cost and wall time | 2–8 compressed days, four to eight users in most runs (B7; `days-calls.ts` is the $0 weeks view); sessions reset daily, never compacted (A3) |
+| Connector lab, the pilot | Real MCP servers; one consenting account's data | The pilot is built, not run (B2): no figure here comes from real data |
+| Prices (COST-MODEL.md, pi-cost) | What a task, a user-day and a backfill cost | List prices assumed; Anthropic-direct lab transport, not the shipped OpenRouter route (B12) |
 
 ## Configurations (`presets.ts`)
 

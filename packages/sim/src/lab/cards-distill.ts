@@ -104,7 +104,7 @@ export function syncItems(
         const plantedItems = world.items.slice(before);
         for (const it of plantedItems) dress(world, it);
         const keep = new Set(plantedItems.map((it) => it.id));
-        for (const task of tasks) clearSlot(world, task.text, keep);
+        for (const task of tasks) clearSlot(world, task.slotText ?? task.text, keep);
         const cache = new ItemCache({ maxItemsPerUser: 100_000 });
         const raw = simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll());
         for (const it of cache.put({ tenantId: "t", userId: "u" }, raw, 0)) {

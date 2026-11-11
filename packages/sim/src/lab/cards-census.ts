@@ -76,7 +76,7 @@ for (const suite of SUITE_LIST) {
       const planted = world.items.slice(before);
       for (const it of planted) dress(world, it);
       const keep = new Set(planted.map((it) => it.id));
-      for (const task of tasks) clearSlot(world, task.text, keep);
+      for (const task of tasks) clearSlot(world, task.slotText ?? task.text, keep);
       const cache = new ItemCache({ maxItemsPerUser: 100_000 });
       const raw = simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll());
       const items: ContextItem[] = cache.put({ tenantId: "t", userId: "u" }, raw, world.now);

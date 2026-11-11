@@ -27,6 +27,12 @@ export const NEUTRAL_SUITES: readonly string[] = [
   "train5",
   "train6",
   "longtail",
+  "train1r",
+  "train2r",
+  "train3r",
+  "train4r",
+  "train5r",
+  "train6r",
 ];
 
 export const supportsNeutral = (suite: string) => NEUTRAL_SUITES.includes(suite);

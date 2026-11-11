@@ -67,7 +67,7 @@ describe("pi-user (H16)", () => {
     // A plan whose planted slots outrun the unplanted templates still throws.
     expect(() =>
       planUser(41, { train1: ["a", "b", "c"] }, { days: 2, size: [3, 3], mix: { hidden: 1, control: 0, neutral: 0 } }),
-    ).toThrow(/unplanted templates/);
+    ).toThrow(/runs out of unplanted templates/);
     expect(() => planUser(41, { heldout13: ["a", "b", "c", "d"] }, { days: 1, size: [4, 4], mix: MIX })).toThrow(
       /no neutral/,
     );

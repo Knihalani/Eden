@@ -315,7 +315,7 @@ describe("the harnesses' intent replay (D158)", () => {
   test("default replays the checked-in file only where it covers every suite and seed", () => {
     expect(harnessIntent("default", run)).toEqual({
       files: [INTENT_PATH],
-      note: "intent-v2.jsonl.gz by default, D158",
+      note: "intent-v2.jsonl.gz by default, D158; coverage full: every item, D714",
     });
     expect(harnessIntent("default", { ...run, suites: ["train1", "heldout10"], seeds: ["41", "42"] }).files).toEqual([
       INTENT_PATH,

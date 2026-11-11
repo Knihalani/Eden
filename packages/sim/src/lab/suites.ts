@@ -28,6 +28,7 @@ import { plantHeldout17 } from "./hidden-heldout17";
 import { plantHeldout18 } from "./hidden-heldout18";
 import { plantHeldout19 } from "./hidden-heldout19";
 import { plantLongtail } from "./hidden-longtail";
+import { REWORDED } from "./reworded";
 import { plantTrain1 } from "./hidden-train1";
 import { plantTrain2 } from "./hidden-train2";
 import { plantTrain3 } from "./hidden-train3";
@@ -100,6 +101,29 @@ const needsPrepared =
     return plant(world, seed, variant);
   };
 
+/**
+ * A train suite with its requests reworded (P7, D871; B4 in docs/research/weak-points-1111.md): the same worlds, items
+ * and decoys, each request's text rewritten as a need, a plan or a question, six of each suite's 32 in another
+ * language (`REWORDED`, reworded.ts: a pattern over the original text whose captures carry the seed's names). Ids read
+ * `<suite>r`, so a run can name both. The worlds are the original suite's, so its card and intent replays cover them.
+ */
+const reworded =
+  (name: string, base: string): Plant =>
+  (world, seed, variant) => {
+    const table = REWORDED[base];
+    if (!table) throw new Error(`${name}: no rewordings for ${base} (reworded.ts)`);
+    return SUITES[base]!(world, seed, variant).map((t) => {
+      const w = table[t.template];
+      if (!w) throw new Error(`${name}: no rewording for ${t.template}`);
+      const re = new RegExp(`^(?:${w.re})$`);
+      if (!re.test(t.text)) throw new Error(`${name}: ${t.template}'s request no longer matches its rewording`);
+      // `$n` is capture n; any other `$` (a "$40k" in the text) stays as written.
+      const groups = re.exec(t.text)!;
+      const text = w.to.replace(/\$(\d)/g, (all, d: string) => groups[Number(d)] ?? all);
+      return { ...t, id: t.id.replace(`:${base}`, `:${name}`), text, slotText: t.text };
+    });
+  };
+
 export const SUITES: Record<string, Plant> = {
   hidden: twoVariant("hidden", plantHidden),
   heldout: twoVariant("heldout", plantHeldout),
@@ -170,9 +194,12 @@ export const SUITES: Record<string, Plant> = {
   // dormancy over days (`days-calls.ts --arrive-days`). Written by P7, not blind: tune on it.
   longtail: needsPrepared("longtail", plantLongtail),
 };
+for (const n of [1, 2, 3, 4, 5, 6]) SUITES[`train${n}r`] = reworded(`train${n}r`, `train${n}`);
 export const SUITE_NAMES = Object.keys(SUITES);
 const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
 const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
+/** The train suites reworded (D871): `--suite reworded`. */
+const REWORDED_TRAIN = TRAIN.map((n) => `${n}r`);
 /**
  * Held-out suites kept out of `all` so a tuning command cannot spend them; held-out 9-13 have been read (D72, D80,
  * D85, D98, D112) and a blind round needs a new suite. Held-out 14 is RealUse-1's blind suite (run once for it);
@@ -197,7 +224,9 @@ export const UNRUN_BLIND = [
  * read by A29 (D399) and held-out 18 (M6, D465) by B18 (D802). Held-out 19 (P7, D870) is unread, for the end-of-wave
  * confirmation only. */
 export const UNREAD_BLIND: string[] = ["heldout19"];
-const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
+/** P7's suites (D871, D873) stay out of `all`, so `--suite all` measures what it measured before them. */
+const NOT_IN_ALL = ["longtail", ...REWORDED_TRAIN];
+const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n) && !NOT_IN_ALL.includes(n));
 
 /**
  * A `--suite` value: a comma list of suite names, `all` (every suite but those in UNRUN_BLIND), `heldout-all`, or
@@ -209,10 +238,19 @@ export function parseSuites(arg: string): string[] {
   for (const raw of arg.split(",")) {
     const name = raw.trim();
     if (!name) continue;
-    const names = name === "all" ? ALL : name === "heldout-all" ? HELDOUT_ALL : name === "train" ? TRAIN : [name];
+    const names =
+      name === "all"
+        ? ALL
+        : name === "heldout-all"
+          ? HELDOUT_ALL
+          : name === "train"
+            ? TRAIN
+            : name === "reworded"
+              ? REWORDED_TRAIN
+              : [name];
     for (const n of names) {
       if (!(n in SUITES))
-        throw new Error(`unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train)`);
+        throw new Error(`unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train, reworded)`);
       if (!out.includes(n)) out.push(n);
     }
   }

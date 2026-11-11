@@ -114,15 +114,15 @@ export function planUser(
     let drawn = pool.splice(0, n);
     // Fresh templates first (a stable reorder), so the day's planted slots take them; with no refill all are fresh.
     if (drawn.some((t) => plantedBefore.has(keyOf(t)))) {
-      drawn = [
-        ...drawn.filter((t) => !plantedBefore.has(keyOf(t))),
-        ...drawn.filter((t) => plantedBefore.has(keyOf(t))),
-      ];
-      const fresh = drawn.filter((t) => !plantedBefore.has(keyOf(t))).length;
-      if (fresh < k.hidden + k.control)
-        throw new Error(
-          `--days ${options.days}: day ${d} has ${fresh} unplanted templates for ${k.hidden + k.control}`,
-        );
+      const fresh = (t: { suite: string; template: string }) => !plantedBefore.has(keyOf(t));
+      // Too few fresh ones drawn: pull the next unplanted templates forward from the pool, returning stale ones.
+      for (let need = k.hidden + k.control - drawn.filter(fresh).length; need > 0; need--) {
+        const at = pool.findIndex(fresh);
+        const stale = drawn.findLastIndex((t) => !fresh(t));
+        if (at < 0 || stale < 0) throw new Error(`--days ${options.days}: day ${d} runs out of unplanted templates`);
+        [drawn[stale], pool[at]] = [pool[at]!, drawn[stale]!];
+      }
+      drawn = [...drawn.filter(fresh), ...drawn.filter((t) => !fresh(t))];
     }
     for (const t of drawn.slice(0, k.hidden + k.control)) plantedBefore.add(keyOf(t));
     const day: UserPlanEntry[] = drawn.map((t, i) => ({
@@ -170,7 +170,7 @@ export function userWorldOf(seed: number, plan: readonly (readonly UserPlanEntry
   // The suites' own connectors and filler (rare-sources.ts) are part of the user's base world, in every variant.
   for (const suite of suites) prepareWorld(suite, world, seed);
   // Each suite planted once per variant in a scratch copy of the base world: a task and its item by template.
-  type Planted = { task: { id: string; text: string; detail: string }; item?: WorldItem };
+  type Planted = { task: { id: string; text: string; detail: string; slotText?: string }; item?: WorldItem };
   const made = new Map<string, Planted>();
   for (const suite of suites) {
     for (const variant of ["hidden", "control", "neutral"] as const) {
@@ -186,6 +186,8 @@ export function userWorldOf(seed: number, plan: readonly (readonly UserPlanEntry
   const tasks: Task[] = [];
   /** Ids seen: a template that returns as a request in a weeks-long plan (D874) gets `#2`, `#3`, … on its id. */
   const seen = new Map<string, number>();
+  /** A reworded request's original text, whose slot is cleared (D871). */
+  const slotOf = new Map<string, string>();
   for (const entry of plan.flat()) {
     const p = made.get(`${entry.suite}|${entry.template}|${entry.variant}`);
     if (!p) throw new Error(`${entry.suite} has no ${entry.variant} task ${entry.template}`);
@@ -202,8 +204,10 @@ export function userWorldOf(seed: number, plan: readonly (readonly UserPlanEntry
     }
     const times = (seen.get(p.task.id) ?? 0) + 1;
     seen.set(p.task.id, times);
+    const id = times === 1 ? p.task.id : `${p.task.id}#${times}`;
+    if (p.task.slotText) slotOf.set(id, p.task.slotText);
     tasks.push({
-      id: times === 1 ? p.task.id : `${p.task.id}#${times}`,
+      id,
       suite: entry.suite,
       kind: entry.variant,
       type: entry.template,
@@ -218,11 +222,11 @@ export function userWorldOf(seed: number, plan: readonly (readonly UserPlanEntry
   let clashes = 0;
   for (const t of tasks) {
     const probe: World = { ...world, items: [...world.items] };
-    clearSlot(probe, t.text, new Set(t.planted ? [t.planted] : []));
+    clearSlot(probe, slotOf.get(t.id) ?? t.text, new Set(t.planted ? [t.planted] : []));
     const left = new Set(probe.items.map((i) => i.id));
     for (const id of keep) if (id !== t.planted && !left.has(id)) clashes++;
   }
-  for (const t of tasks) clearSlot(world, t.text, keep);
+  for (const t of tasks) clearSlot(world, slotOf.get(t.id) ?? t.text, keep);
   return { seed, world, tasks, daySizes: plan.map((d) => d.length), clashes };
 }
 
