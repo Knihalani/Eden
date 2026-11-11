@@ -435,3 +435,28 @@ falseFireRate 0; `bun run funnel` hidden 281/384, decoys 264/384 at main's shipp
 full index before that merge, also unchanged). Every P2 switch is off, so neither moves. The `reviewer` subagent ran
 twice (before the paid runs and on the merged branch before c5df42bf); its findings are fixed (§3.3 and the final
 review's doc figures).
+
+## 7. `pushIndirect` v4 (after the parent's ask: second clauses, hedges, personal intent; $0)
+
+Fitted on blind sets 1 and 2 (both read before), frozen at 0d34ea10, then scored once on **blind set 3** (written by
+a Haiku subagent that saw no code and no rule, weighted on purpose to second-clause requests, hedges and
+request-shaped resolutions). v4 adds: a request after a first clause of context ("The boiler's making that noise
+again, can you book Ferguson's for Tuesday?"), hedges ("might be worth chasing …", "would be handy if you could …",
+"it's probably time we …", "should probably …"), passive needs ("I'll need the Dublin hotel changed …"), a veto for
+resolutions and someday ideas ("I need to stop eating biscuits", "we should go to Iceland one day", "I want to get
+fitter by spring"), and log and chatter marks seen in set 2. One fix after scoring, a bug not a tune ("sometime this
+week" read as a someday idea, which lost one train-rw template); set 3's counts are the same with and without it.
+
+| Blind set 3 (clean) | Start a push today | v4 |
+| --- | --- | --- |
+| Indirect acting requests | 54 of 120 | **98 of 120** |
+| Log lines | 25 of 25 | 3 of 25 |
+| Chatter | 18 of 30 | 5 of 30 |
+| Statements (25 of 45 shaped like requests) | 15 of 45 | **12 of 45** |
+| Questions for information | 1 of 30 | 1 of 30 |
+| All negatives | 59 of 130 | **21 of 130** |
+
+On the fit sets v4 reads set 1: 97 of 100 indirect, 3 of 105 negatives; set 2: 107 of 120, 7 of 140. Funnel on
+train-rw (seeds 41–44, `--coverage full`, as §1.2): planted handed 580 of 768, as v3; on train, no request starts
+differently (`reword.test.ts`). Statements of intent now start fewer pushes than today's gate, not more. The Pi pair
+of §3.8 ran v3; v4 differs from it only on messages train-rw does not hold.
