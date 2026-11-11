@@ -724,11 +724,12 @@ export interface EngineConfig {
    */
   pushIndirect: boolean;
   /**
-   * M13 (D1010, trial; docs/research/m13-gate.md): the push's start is decided by the turn gate (`turn-gate.ts`), a
-   * tiny local model over hashed character n-grams that reads any language, instead of `pushStart`'s verb lists and
-   * lead-ins. A turn the gate passes starts the push with the rule's own request text when the rule read one (a
-   * lead-in's imperative), else the whole message; one it refuses starts nothing. No model call: local CPU, loaded
-   * once a process; if its weights cannot be loaded the push falls back to `pushStart` (fail open to the rules).
+   * M13 (D1010, promoted by the owner's D1014, part `gate`; docs/research/m13-gate.md): the turn gate
+   * (`turn-gate.ts`), a local model over hashed character n-grams that reads any language, decides the push's start
+   * beside `pushStart`: a rule start stands unless the gate's score is under its veto, and the gate adds a start where
+   * the rule has none. A start keeps the rule's request text when the rule read one (a lead-in's imperative), else the
+   * whole message. No model call: local CPU, loaded once a process; with no readable weights `pushStart` decides alone
+   * (fail open).
    */
   pushGate: boolean;
   /**
@@ -892,6 +893,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItems: 15,
   pushOpen: true,
   pushIndirect: true,
-  pushGate: false,
+  pushGate: true,
   revisionDiff: true,
 };
