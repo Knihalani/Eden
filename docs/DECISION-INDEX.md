@@ -580,7 +580,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D906 | 2026-11-11 | Stopped: FrameRank, frames, five symbolic candidate channels and LightGBM over 48 integer pair features | adopted |
 | D907 | 2026-11-11 | Lab only: the binarised track, end-to-end networks over hashed n-grams with ternary/binary internals | lab |
 | D908 | 2026-11-11 | Trial, not promoted: `constraintTag`, a small binarised item tagger's veto on the push's constraint test; the decision is the parent's… | trial |
-| D909 | 2026-11-11 | Pre-registered: H1's bar, a learned request–item ranker against the shipped pool on held-out families | lab |
+| D909 | 2026-11-11 | Rejected: H1, a learned request–item ranker, scrapped; no variant came near its pre-registered bar. | rejected |
 | D910 | 2026-11-11 | Rejected (stopped on its pre-registered rule): a per-user standing-constraint ledger, typed records a cheap model writes when each item… | rejected |
 | D911 | 2026-11-11 | Adopted (lab tooling, M5): `m5-ledger.ts extract` (typed constraint records per item content, pay once, redacted with `sanitizeForStore`… | lab |
 | D912 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | rejected |

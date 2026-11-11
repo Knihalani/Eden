@@ -192,4 +192,5 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D507 | Rejected at $0 and deleted: reusing a search's answer across a user's day | A user's searches do not repeat: about one search a task matches an earlier (source, text) of the same user… |
 | D515 | Trial `takeSettleMs`, opened and closed 2026-11-10: not promoted, deleted. | measured hidden +1.4 points (−4.2..+6.9); killed for another reason (read the row) |
 | D824 | Rejected at $0: opening arm N's anchored gate only on the pool's first few items |  |
+| D909 | Rejected: H1, a learned request–item ranker, scrapped; no variant came near its pre-registered bar. | the owner's decision |
 | D912 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | stopped on its pre-registered rule, 3e05b16d |
