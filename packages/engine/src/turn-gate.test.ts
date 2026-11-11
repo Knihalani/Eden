@@ -43,6 +43,13 @@ describe("the shipped gate", () => {
     return { how: s?.how ?? ("none" as const), rest: s !== null && s.request !== text };
   };
 
+  test("the shipped weights stay within 2 MB (M13's bar) and decide a turn in well under a millisecond", () => {
+    expect(gate!.bytes).toBeLessThanOrEqual(2 * 1024 * 1024);
+    const t0 = performance.now();
+    for (let i = 0; i < 200; i++) gate!.read(`Kannst du den Termin ${i} auf Freitag verschieben?`, rule("x"));
+    expect((performance.now() - t0) / 200).toBeLessThan(1);
+  });
+
   test("loads once a process; a missing or broken file gives null (the rules stay)", () => {
     expect(gate).not.toBeNull();
     expect(turnGate()).toBe(gate);
