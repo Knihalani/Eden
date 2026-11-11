@@ -149,16 +149,18 @@ The 72 runs cost $0.50 in all ($0.0070 a world, 6.8 card calls, 1,507 items at t
 lines for 1,108 distinct items, 963 of them with requests. Within one world the enricher reads about 8% of the items
 (128 of 1,517 in the smoke run): the lean rule leaves the rest uncarded.
 
-`bun run funnel --seeds 41,42,43,44 --coverage full|shipped` (default, stub reader; `-- --neutral` on train):
+`bun run funnel --seeds 41,42,43,44 --coverage full|shipped` (default, stub reader; `-- --neutral` on train), run
+again after merging main at #245. Its calendar change moved the full-coverage rows by one task (train 635/554 and
+reworded 579/504 before it):
 
 | Suite    | Coverage         | Hidden surfaced | Decoys surfaced | Hidden via candidates | Neutral: any packet |
 | -------- | ---------------- | --------------- | --------------- | --------------------- | ------------------- |
-| train    | full (intent-v2) | 635/768         | 554/768         | 582                   | 741/768             |
+| train    | full (intent-v2) | 634/768         | 553/768         | 582                   | 741/768             |
 | train    | shipped          | 575/768         | 528/768         | 525                   | 746/768             |
-| reworded | full             | 579/768         | 504/768         | 232                   | (not run)           |
+| reworded | full             | 578/768         | 504/768         | 232                   | (not run)           |
 | reworded | shipped          | 519/768         | 479/768         | 188                   | (not run)           |
 
-The full index lifts train's hidden level by 60 of 768 (7.8 points) and its decoys by 26. This matches D714's reading
+The full index lifts train's hidden level by 59 of 768 (7.7 points) and its decoys by 25. This matches D714's reading
 of seeds 41–44 against 45–48. The reworded gap is the same under both coverages (−56 and −56 hidden).
 
 **Recommendation: make shipped coverage the default for train seeds, and keep the label on every run.**
