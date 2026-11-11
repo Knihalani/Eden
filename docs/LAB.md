@@ -1020,6 +1020,9 @@ compares two arm shapes. The report pairs `hermes-eden` with `hermes` and with `
   `--recap-notice none` (O1, D605) moves the day's items with no notice at all, so only a poll or a sweep finds the
   change: the screen that prices fewer polls (update packets, old copies held undoubted). The line `moved items at
   their recap` says what became of each (unhanded, updated, unpolled, unseen, undelivered; D606).
+  `--move-after N` (P4, D841) moves a handed item N requests later in the same session instead (one whose turn falls
+  past the recap moves there): `moved mid-session` gives each one's fate at the session's end and how many requests
+  its update took, and `owed updates arrived by source` covers both kinds of move (docs/research/p4-reread.md).
   `--pool-diag FILE` (O3, D712) writes one row a hidden or control request: whether the candidates' pass ran, the
   planted item's place in the push's pool, the constraint test on it, and whether it was handed then or earlier that
   day (docs/research/o3-pointer.md §3.2).
