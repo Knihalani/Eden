@@ -119,7 +119,7 @@ tenant and the box. Either way Eden's own port is never public.
 | Secret | Made by | Lives | Rotation |
 | --- | --- | --- | --- |
 | `EDEN_API_KEYS` (tenant:key, 16+ chars) | `openssl rand -hex 24` per tenant | `.env` (600) on each Eden box and the cluster router | list the new key beside the old (`acme:<new>,acme:<old>`: a tenant may have several), restart, move the tenant over, remove the old (§13) |
-| `EDEN_PERSIST_KEY` (32 bytes) | `openssl rand -hex 32`, **once** | `.env`; a copy in your password manager | none: a new key discards every persisted user (they re-sync, D425) |
+| `EDEN_PERSIST_KEY` (32 bytes) | `openssl rand -hex 32`, **once** | `.env`; a copy in your password manager | none: a start with a key that opens none of the persisted users stops (exit 2, nothing deleted, D1071); `EDEN_PERSIST_DISCARD=1` discards them on purpose (they re-sync, D425) |
 | `EDEN_CLUSTER_KEY` (24+ chars) | `openssl rand -hex 24` | `.env` on nodes and routers | replace on all at once (a rolling restart) |
 | `EDEN_S3_*` | the store's console, scoped to the one bucket | `.env` on nodes | create the new key, roll, delete the old |
 | `OPENROUTER_API_KEY` (optional) | OpenRouter | `.env` | in OpenRouter; restart |
@@ -311,8 +311,8 @@ machines; real Ampere hardware (the arm64 run was emulated, so no arm64 timings 
 for `/readyz`, add its line to the nodes file. Down: remove the line, watch the router log the release, then
 destroy it.
 
-**Restore a box** (disk lost, moving providers): new box (§2), the same `.env` (the same `EDEN_PERSIST_KEY`, or the
-persisted users are discarded), then before starting Eden: `tar -xzf eden-<host>-<stamp>.tar.gz -C
+**Restore a box** (disk lost, moving providers): new box (§2), the same `.env` (the same `EDEN_PERSIST_KEY`: with
+another key Eden refuses to start, D1071), then before starting Eden: `tar -xzf eden-<host>-<stamp>.tar.gz -C
 <the eden-data volume's mountpoint>` and `chown -R 1000:1000` it (the image's `bun` user); start, smoke-check.
 Users come back from their files on first use; anything after the backup re-syncs from the sources.
 
@@ -331,8 +331,10 @@ without context meanwhile.
 answering`). Bring it back or replace it; when it answers it gets its users back. If the store is failing too
 (`EdenStoreFailing`), moved users re-sync: check the store's status page and credentials.
 
-**Incident: a leak of a key.** A tenant key: rotate it. `EDEN_PERSIST_KEY` with the disk or store: rotate it (users
-re-sync), and treat the store's and disk's contents as exposed (redacted content, D10; T12 in THREAT-MODEL.md).
+**Incident: a leak of a key.** A tenant key: rotate it. `EDEN_PERSIST_KEY` with the disk or store: rotate it, and
+start once with `EDEN_PERSIST_DISCARD=1` beside the new key (the old users are discarded and re-sync; without it Eden
+refuses to start, D1071), then remove it; treat the store's and disk's contents as exposed (redacted content, D10;
+T12 in THREAT-MODEL.md).
 
 ## 14. Persistence is the default (D991)
 

@@ -81,3 +81,28 @@ On the branch's final tree (main 793a4c47 merged), with `OPENROUTER_API_KEY` uns
   persistence report and the turn-gate log line.
 
 Not done: `bun run eval --live` (no engine scoring, threshold or delivery change; no paid calls allowed tonight).
+
+## Round 2 (the parent's decisions on what round 1 left, D1071)
+
+- **A wrong `EDEN_PERSIST_KEY` (finding 11): fixed.** A start whose key opens none of the blobs on disk (its own
+  buckets) exits 2 with `eden: cannot start: EDEN_PERSIST_KEY opens none of the N persisted users in <dir> (a
+  mistyped or changed key?): … or EDEN_PERSIST_DISCARD=1 …`, and deletes nothing; with a shared store, up to 8 of
+  the store's blobs are sampled and all foreign stops it the same way (an unreachable store does not). Some blob
+  opening is a key that works: the foreign ones are discarded and logged, as before. `EDEN_PERSIST_DISCARD=1` starts
+  and logs `EDEN_PERSIST_DISCARD=1: discarded N persisted users written with another key`. Tests: engine
+  `persist.test.ts` (all foreign: refused, files kept; partial: starts, one discarded), `persist-shared.test.ts`
+  (sampling: all foreign, none, empty, down), server `persist.test.ts` (a real process: exit 2 and both blobs kept,
+  then the override starts and the blobs go). DEPLOY.md (§ secrets table, restore, key leak) and the quickstart say so.
+- **Pins for round 1's lows:** the 1.25x kill (`router-processes.test.ts`: a child that ignores SIGTERM under a 400 ms
+  grace takes at least 480 ms to go; fails at 1x), the 503 `error` handler (`serveError`, passed by `main.ts`), the
+  shutdown flush (a flipped ciphertext byte read after start is logged at SIGTERM; fails without the flush), the
+  turn-gate notice (`turnGateNotice`).
+- **An unknown GET (finding 13): fixed.** A path the API does not have is 404 whatever the method; a route asked
+  with GET stays 405.
+- **The 300-user thaw stall (finding 12): GC, not fixed.** With `BUN_JSC_logGC=1` and lag probes timestamped, the
+  stall coincides each time with a JSC `FullCollection` of a 590-670 MB heap at the start of the thaw-all (one run:
+  heap 491 MB before, 210 MB at the probe after a 270 ms gap); no engine step runs longer than `SLICE_MS` (5 ms)
+  between yields. Runs without a long stall also had full collections there (48 ms at most). `bun --smol` does not
+  help: 301, 354 and 359 ms in 3 of 3 runs. The heap is the freeze's garbage (300 users' live structures let go a
+  moment before); a real server frees it gradually as users go idle over minutes, not all in 0.7 s. No cheap fix:
+  forcing a collection after a sliced freeze would move the same pause. Left as a finding.
