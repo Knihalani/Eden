@@ -116,7 +116,9 @@ export function createHandler(
   return async function handle(req: Request): Promise<Response> {
     const url = new URL(req.url);
     if (req.method === "GET" && url.pathname === "/healthz") return json({ ok: true });
-    if (req.method !== "POST") return fail(405, "method not allowed");
+    // A path the API does not have is 404 whatever the method (R1); one of its routes asked with GET is 405.
+    if (req.method !== "POST")
+      return ROUTES.has(url.pathname) ? fail(405, "method not allowed") : fail(404, "not found");
     const tenant = tenantOf(req);
     if (!tenant) return fail(401, "missing or unknown API key");
     if (foreignPage(req, tenant)) return fail(403, "dev mode serves no key-less request from another site's page");

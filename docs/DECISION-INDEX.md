@@ -667,3 +667,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1023 | 2026-11-11 | Finding: no transfer recipe closes the gap to the sim's hand-written families; mixing generators does not beat M2 alone. | finding |
 | D1024 | 2026-11-11 | Adopted (lab data, M14): a length-debiased M2 (`m2lb`), the M2 slice a micro model is screened on. | lab |
 | D1025 | 2026-11-11 | Rejected: the recipes that did not help on the held-out sources. | rejected |
+| D1071 | 2026-11-11 | A persistence key that opens none of the persisted users stops the start (the parent's decision on R1's finding; amends D425 and D991). | adopted |
