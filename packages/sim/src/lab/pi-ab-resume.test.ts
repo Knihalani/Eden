@@ -25,7 +25,14 @@ async function piAb(dir: string, name: string, out: string, extra: string[], kil
       ...extra,
     ],
     {
-      env: { ...process.env, OPENROUTER_API_KEY: "fake", FAKE_LOG: log, FAKE_KILL_AFTER: String(killAfter) },
+      // A placeholder key for the fake transport, so the lab guard (D818) is told this child may hold one.
+      env: {
+        ...process.env,
+        OPENROUTER_API_KEY: "fake",
+        EDEN_ALLOW_OPENROUTER: "1",
+        FAKE_LOG: log,
+        FAKE_KILL_AFTER: String(killAfter),
+      },
       stdout: "ignore",
       stderr: "pipe",
     },
