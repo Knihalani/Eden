@@ -5,9 +5,11 @@
  * (Latin-1 bytes when every character fits, else UTF-8) and decodes it on read: `text` is an own, enumerable getter,
  * so reads, spreads, `JSON` and `structuredClone` see the same item as before.
  *
- * A small process-wide memo of recently decoded texts, keyed by the packed bytes (as the held string, so two keys are
- * equal only when the deflated bytes, and so the texts, are: a hit is always the reading item's own text, whoever
- * else holds the same words), keeps the repeated reads of one candidate on the ask path from inflating each time.
+ * A small process-wide memo of recently decoded texts, keyed by the packed bytes (as the held string) in one map per
+ * encoding, so two keys are equal only when the deflated bytes and their decoding are, and so the texts: a hit is
+ * always the reading item's own text, whoever else holds the same words ("Ã©" in Latin-1 and "é" in UTF-8 are the
+ * same bytes, hence the two maps). It keeps the repeated reads of one candidate on the ask path from inflating each
+ * time.
  */
 // Imported, not the global: under `bun test --parallel` a reused worker was seen with a global `Buffer` whose `from`
 // was TypedArray.from (A23's review; no code here assigns it), so `Buffer.from(text, "latin1")` threw in 1 run of 3.
@@ -31,10 +33,12 @@ type Packed = ContextItem & { readonly [PACKED]: string };
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const decoded = new Map<string, string>();
+/** Decoded texts by held bytes: [UTF-8, Latin-1]. */
+const decoded = [new Map<string, string>(), new Map<string, string>()] as const;
 
 function unpack(held: string, latin1: boolean): string {
-  const hit = decoded.get(held);
+  const memo = decoded[latin1 ? 1 : 0];
+  const hit = memo.get(held);
   if (hit !== undefined) return hit;
   const raw = Bun.inflateSync(Buffer.from(held, "latin1"));
   // Latin-1 text comes back through `latin1`, which makes a one-byte string; a UTF-8 decode of the same bytes gives a
@@ -43,8 +47,8 @@ function unpack(held: string, latin1: boolean): string {
     ? Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString("latin1")
     : decoder.decode(raw);
   // First in, first out: a hit is not moved up, which keeps the memo's own cost off the many hits.
-  if (decoded.size >= MEMO_ITEMS) decoded.delete(decoded.keys().next().value as string);
-  decoded.set(held, text);
+  if (memo.size >= MEMO_ITEMS) memo.delete(memo.keys().next().value as string);
+  memo.set(held, text);
   return text;
 }
 
@@ -116,12 +120,12 @@ export function repackLike(item: ContextItem, held: ContextItem): ContextItem {
  * does not outlive them in the memo (it is never reachable from another item, but it should not stay resident).
  */
 export function clearDecoded(): void {
-  decoded.clear();
+  for (const memo of decoded) memo.clear();
 }
 
 /** Decoded texts the memo holds (for tests). */
 export function decodedCount(): number {
-  return decoded.size;
+  return decoded[0].size + decoded[1].size;
 }
 
 export function isPacked(item: ContextItem): boolean {

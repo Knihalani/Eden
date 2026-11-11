@@ -98,7 +98,8 @@ export class Vocab {
    * The terms (D998): each Latin-1 term's characters as bytes in one arena (`start`, `blen` per id), a term past
    * Latin-1 as a string in `wide`. A string per term was about 35 bytes a term with its array slot (0.5 MB of a heavy
    * user's 18,000 terms, `live-heap.bench.ts`); bytes and offsets are about 6 plus its length. `term` decodes
-   * (`latin1Slice`, about 40 ns); a released term's bytes stay until the arena is compacted (`compact`).
+   * (`latin1Slice`, about 40 ns, behind the memo above); a released term's bytes are zeroed and their room taken back
+   * when the arena next needs to grow (`room`).
    */
   private bytes: Buffer = Buffer.alloc(256);
   private used = 0;
