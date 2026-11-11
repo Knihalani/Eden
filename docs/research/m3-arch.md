@@ -220,3 +220,12 @@ its val split unless said; or fold A's groups as before.
 | H15 | request understanding (anchors, phrasing) | — | — | **not built**: no anchor labels (person, thing, date) in M2 v1 or the exports, and P7's reworded suites are not in this tree; intent (H8) stands for it |
 | H6′ | no-word-overlap recall where room exists | H6 on M2 v1 | first measure the room: M2 test facts outside BM25's top 50 | room ≥ 10% of facts, then H6's bar |
 | H1+ | top-5 ranking (the owner's targets: twin@5 near 0, fact@5 high 130s of 147, silence on nearly all controls) | H1 scaled: 256 bits, wider layers, M2 v1 + generated families + train, hard-twin curriculum, multi-task with H13 | fold A held out | step 6 |
+
+### 7c. Round 2 results so far (developed versions; fold A held out unless said)
+
+| # | network | round-2 signal | reading |
+|---|---|---|---|
+| H1 | pair + prior bits (150 worlds, 1 epoch, checks every 50 steps) | fact@1 55 / 59 / **69** (lexical 64), fact@5 97 / 97 / 96 (86), twin@5 70 / 69 / 69 (66), silent controls 112–128 of 148 | facts up +10 in the five and +5 first, **twin rejection lost**: the prior bits lift a twin exactly as its fact. Developed again: a multi-task constraint head on the item codes (fact against twin on every planted item), its bit an input beside the prior (`--aux`) |
+| H7 | BloomMatch + prior bits | fact@5 **100** (86), twin@5 71 (66) | facts +14, twins +5 (ratio 1.16 against 1.08); how much of it is the prior bits alone is step 6's ablation |
+| H4 | tagger, 150 worlds, 3 epochs | AUC fact against **its own twin 0.72 / 0.72 / 0.73**, against other items 0.94 / 0.94 / 0.92 | **keep**: the item alone separates a fact from its all-clear twin on unseen families (D491's distilled cross-encoders: 0.45–0.55) |
+| H10 | supersession (my own 18 s check: M2 v1, 1/20 of train, 1 epoch) | AUC 0.911 against the Jaccard baseline's 0.785 on M2 val | above its bar already; full test runs (binary and float) running |
