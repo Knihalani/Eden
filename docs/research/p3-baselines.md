@@ -89,6 +89,64 @@ above 0 on short and on days, and `eden`'s confirmed concerns are not above `hit
 `eden` (interval including 0) on either horizon, the report says that Eden's selection adds nothing measurable over
 plain retrieval there, and what `eden` costs over `hits`.
 
+## 3. Weak point 2: facts outside the push's pool over days ($0)
+
+All runs here: `days-calls.ts --days 8 --pool-diag` (Eden alone, no agent, time scale 0), the same 32 users O3 paid
+for (w41–w72, 433 hidden and 433 control requests), cards replayed where the checked-in files hold them, and **the
+intent index off** (`--intent none`). Without it the pool-recall gap is at its widest, so a lexical lever shows its
+full reach; the paid run's users w45 on had intent requests only for the items a card call read.
+`packages/sim/lab/p3/pool.py` sorts each request's planted item into o3-pointer §3.2's buckets.
+
+| Arm | hidden pushed at its request | handed earlier that day | not in the pool | pooled, fails the constraint test | pooled, below the cut | decoys pushed at their request |
+| --- | --- | --- | --- | --- | --- | --- |
+| default (`--intent none`) | 184 | 94 | **112** | 27 | 12 | 184 |
+| + `aliasTerms` (dates and names) | 190 | 93 | 108 | 25 | 13 | **197** |
+| + dates only | 189 | 92 | 112 | 24 | 12 | 195 |
+| + names only | 187 | 95 | 107 | 27 | 13 | 184 |
+
+(With intent replayed, w41–w44: 26 pushed, 13 earlier that day, 2 not in the pool of 46, as O3 read.)
+
+### 3.1 The lab's constraint density does not make the miss (B6)
+
+A days user's world (`userWorldOf`) holds the base world's ~1,490 items plus one planted item for each of its own
+hidden and control requests (about 28), not every template's. `--pool-diag` now counts, for each request, how many of
+the pool's items are **other requests' planted items** (`poolPlanted`, `handedPlanted`): on average 1.3 of a hidden
+request's ~15 pool items and 0.7 of its handed ones. Among the 112 facts not in the pool, the pool held none of them
+in 40 cases, one in 40, two in 16 and three to six in 16. N2 found that a 60-item pool takes in only 10 of 72 such
+facts (they are not ranked just below the cut; they are not ranked). So removing every other planted item would free
+about one seat and would not bring these facts in: **the miss is the product's, not the lab's density.** (The lab may
+still be easier than a real mailbox, which is larger and noisier than 1,500 items; that would make the miss larger.)
+
+### 3.2 What links a missed fact to its request
+
+Of the 112 facts not in the pool (a scratch classifier over request and item text; by hand on 15 of them):
+
+- **60 share no content word, date or name with the request.** The link is an inference: "Dubai" and "no
+  international trips"; "upper circle" and "on crutches, stairs are a nightmare"; "AWS, GitHub and Vault" and "14 SSO
+  app assignments removed". Only the intent index (a card model's requests) or a model at the push reaches these.
+- **38 share a content word** but rank outside the 15 (other items hold the same word more often).
+- **About 14 share an anchor written another way:** a day ("Thursday 10 December" against "Thu 10 Dec", 10 tasks),
+  a person ("Alex" against "Alexander Novak"; "Becky" against "Rebecca Stone"), an organisation ("Calder Mutual"
+  against `caldermutual.com`, 2 tasks).
+
+### 3.3 The alias table (`aliasTerms`, D833; built, screened, not run paid)
+
+Built as a trial switch, off: at ingest each item is indexed with the other written forms of its day-and-month dates
+(weekday and month in full, the day unpadded) and of its first names (a static nickname table both ways, the ambiguous
+ones such as "Will" or "Pat" never read back), derived from the item's own text with no model and nothing stored
+(`alias.ts`, `ItemCache.index`). The query is unchanged, so every search path sees the forms alike.
+
+- **Dates** move 5 facts to their request's packet and **11 decoys**: a control task's decoy is written to share the
+  request's day, so a date written another way finds the look-alike at least as often as the fact.
+- **Names** move 3 facts (5 more into the pool) and no decoy.
+- One request a session (`bun run funnel`): hidden surfaced 317 against 315, decoys 276 against 276; candidates hand
+  290 facts against 289 and 250 decoys against 247.
+
+**Size of the bet: about +3 facts in 433 (0.7%) for names alone, under 1 point of hidden raised over days [EST], and
+dates trade one fact for two decoys.** A paid run that could see 1 point needs several hundred users. The organisation
+part (a domain label split by the user's own words) would reach 2 tasks. Lexical levers are exhausted here as well:
+what remains is the 60 with no shared word, where every widening measured so far (embeddings k 3: +42 facts, +48
+decoys, M3; N2) brings a look-alike per fact unless a model check separates them (the push check, owner decision Q4.1).
 ## 4. Pre-registration: (a2) a second grade of "in hand, not raised" (D830, a measurement)
 
 Written after (a)'s first read and before any call of this grade. (a)'s rule reads Sonnet's "in hand, not raised" at
