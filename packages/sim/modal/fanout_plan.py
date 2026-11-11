@@ -221,6 +221,8 @@ def shard_command(shard):
                 ",".join(shard.seeds), "--out", p["out"], "--timeline", p["timeline"], "--cards-out", p["cards"],
                 "--spend-ledger", p["ledger"], "--spend-cap", f"{shard.cap_usd:.3f}", "--spend-headroom",
                 f"{shard.headroom_usd:.4f}", "--run-label", shard.run_label, "--budget", f"{shard.cap_usd:.3f}",
+                # D878: the presets replay their own --cards, so they keep the full index unless a run names one.
+                *([] if "--coverage" in flag_names(shard.args) else ["--coverage", "full"]),
                 *with_cards_file(shard.args, p["cards_in"])]
     if shard.kind == "funnel":
         blind = ["--blind"] if any(s.startswith("heldout") for s in shard.suites) else []

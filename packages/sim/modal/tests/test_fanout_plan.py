@@ -113,6 +113,14 @@ class FunnelPlan(unittest.TestCase):
         self.assertLess(cmd.index("--jobs"), cmd.index("--"))
         self.assertGreater(cmd.index("--noise-sources"), cmd.index("--"))
 
+    def test_pi_ab_shards_pin_full_coverage_unless_named(self):
+        # D878: pi-ab defaults to shipped coverage; the presets replay their own --cards, so shards keep the full index.
+        s = plan.plan_pi_ab("train1", "41", 1.0, "p", ["--cards", "x.jsonl"])[0]
+        cmd = plan.shard_command(s)
+        self.assertEqual(cmd[cmd.index("--coverage") + 1], "full")
+        named = plan.shard_command(plan.plan_pi_ab("train1", "41", 1.0, "p", ["--coverage", "shipped"])[0])
+        self.assertEqual(named.count("--coverage"), 1)
+
     def test_funnel_shards_share_one_coverage(self):
         # D877: funnel.ts picks shipped coverage per run where it covers it; a grid's shards must not mix indexes.
         shards = plan.plan_funnel("train1,heldout13", "41-44", "f", ["--blind"])

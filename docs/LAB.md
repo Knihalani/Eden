@@ -789,8 +789,14 @@ the result whatever it says, and do not tune afterwards on what you read.
 
 One seed per process (a single process for four seeds over nine suites was killed at 14 GB; pi-full-benchmark.md).
 
+**Coverage (D878).** pi-ab and hermes-ab default to shipped coverage wherever it covers the run (train, reworded,
+longtail and heldout19, seeds 41–44): they replay `cards-shipped.jsonl.gz` as cards and intent, as the funnel does
+(D877), and print `coverage shipped` in the header and `coverage` in the results. A run that replays its own
+`--cards`/`--intent` pins `--coverage full`, as the recipes below and every script under `packages/sim/lab/` do; with
+the default, an explicit `--cards` is refused. Drop `--cards` and `--coverage full` for the deployment's coverage.
+
 ```bash
-bun packages/sim/src/lab/pi-ab.ts --suite train --seeds 41 --variants hidden,control \
+bun packages/sim/src/lab/pi-ab.ts --coverage full --suite train --seeds 41 --variants hidden,control \
   --conditions tools,eden,eden~X --config default --variant-config '{"X":{"myFlag":true}}' \
   --cards packages/sim/lab/cards/cards-train.jsonl --grader deepseek/deepseek-v4.1-flash --budget 1 \
   --timeline .local/pi-41 --out .local/pi-41.json
@@ -865,7 +871,7 @@ above)` marks, asks citing an item a packet already gave, stale deliveries after
   changed item's old time (`staleRecap`) or its new one (`freshRecap`). Each request is still graded as a task.
 
 ```bash
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite heldout14 --seeds 41 \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite heldout14 --seeds 41 \
   --variants hidden,control,neutral --conditions tools,eden,both+ask --day 4 --config default \
   --cards packages/sim/lab/cards/cards-v2.jsonl --model claude-haiku-5-5 --grader claude-haiku-5-5 \
   --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 --push signals \
@@ -960,7 +966,7 @@ header counts slot clashes (a planted item in another request's calendar slot; 0
   `--reuse-arms` are refused with `--days`. One seed per process.
 
 ```bash
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite train --seeds 41 --days 8 \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite train --seeds 41 --days 8 \
   --conditions tools,eden --config default --cards .local/cards-all.jsonl \
   --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 \
   --source-profile packages/sim/lab/before-after/market-profiles/direct.json --push signals --budget 0.35 \
@@ -1062,7 +1068,7 @@ RUN.json …` attributes each concern's decoy to push-flagged, rule-path, ask-fl
 ### 5. Live A/B on Hermes
 
 ```bash
-bun packages/sim/src/lab/hermes-ab.ts --hermes-src $HERMES --concurrency 6 --suite train --seeds 41 \
+bun packages/sim/src/lab/hermes-ab.ts --coverage full --hermes-src $HERMES --concurrency 6 --suite train --seeds 41 \
   --variants hidden,control --conditions hermes,hermes+eden,hermes+eden~X --config default \
   --variant-config '{"X":{"myFlag":true}}' --cards packages/sim/lab/cards/cards-train.jsonl \
   --grader deepseek/deepseek-v4.1-flash --budget 1 --timeline .local/h-41 --out .local/h-41.json
