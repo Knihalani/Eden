@@ -9,7 +9,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import asyncio
 
-from eden_client import EdenClient, eden_id, guard_tool, guard_tools, held_result, with_context
+import eden_client
+from eden_client import EdenClient, default_on_error, eden_env, eden_id, guard_tool, guard_tools, held_result, with_context
 
 
 class Stub:
@@ -479,6 +480,69 @@ class Guard(unittest.TestCase):
                           on_error=errors.append)
         self.assertEqual(guard_tools(eden, {"pay": lambda p: f"paid {p['amount']}"})["pay"]({"amount": 5}), "paid 5")
         self.assertIn("eden /v1/check: cannot reach", str(errors[0]))
+
+
+class DefaultOnError(unittest.TestCase):
+    """D850: an unset on_error prints misuse with its fix; None silences; production prints each kind once."""
+
+    def setUp(self):
+        eden_client._reset_default_on_error()
+
+    def test_env(self):
+        self.assertEqual(eden_env({}), "development")
+        self.assertEqual(eden_env({"NODE_ENV": "production"}), "production")
+        self.assertEqual(eden_env({"NODE_ENV": "production", "EDEN_ENV": "development"}), "development")
+
+    def test_development_prints_each_problem_once_with_its_fix(self):
+        lines = []
+        on_error = default_on_error("development", lines.append)
+        on_error(Exception("eden /v1/events: 401 unauthorized"))
+        on_error(Exception("eden /v1/events: 401 unauthorized"))
+        on_error(Exception("eden /v1/pending: 401 unauthorized"))
+        self.assertEqual(len(lines), 2)
+        self.assertIn("fix: the server refused the key", lines[0])
+
+    def test_production_prints_each_kind_once(self):
+        lines = []
+        on_error = default_on_error("production", lines.append)
+        on_error(Exception("eden /v1/events: 503 busy"))
+        on_error(Exception("eden /v1/events: 503 overloaded"))
+        self.assertEqual(len(lines), 1)
+
+    def test_unset_is_loud_none_is_silent(self):
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            EdenClient(user_id="alice+x@y.com", session_id="s")
+        self.assertIn("eden_id", buf.getvalue())
+        self.assertNotIn("alice", buf.getvalue())
+        eden_client._reset_default_on_error()
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            EdenClient(user_id="alice+x@y.com", session_id="s", on_error=None)
+        self.assertEqual(buf.getvalue(), "")
+
+
+class EnvDefaults(unittest.TestCase):
+    """D856: unset base_url and api_key read EDEN_URL and EDEN_API_KEY; explicit values win."""
+
+    def test_env(self):
+        import os
+        before = {k: os.environ.get(k) for k in ("EDEN_URL", "EDEN_API_KEY")}
+        os.environ["EDEN_URL"] = "http://eden.test:9100/"
+        os.environ["EDEN_API_KEY"] = "k_env_0123456789abcdef"
+        try:
+            c = EdenClient(user_id="u", session_id="s", on_error=None)
+            self.assertEqual((c._base, c._key), ("http://eden.test:9100", "k_env_0123456789abcdef"))
+            c = EdenClient(user_id="u", session_id="s", on_error=None, base_url="http://x:1", api_key="")
+            self.assertEqual((c._base, c._key), ("http://x:1", ""))
+        finally:
+            for k, v in before.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
 
 
 if __name__ == "__main__":

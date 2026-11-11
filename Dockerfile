@@ -16,7 +16,11 @@ COPY examples ./examples
 # The "default minus a part" profiles, for EDEN_ENGINE_CONFIG=docs/profiles/minus-<part>.json.
 COPY docs/profiles ./docs/profiles
 # Only the server's runtime dependencies (the MCP SDK, zod, re2js); no lab, no dev tools.
-RUN bun install --frozen-lockfile --production
+# Behind a TLS-inspecting proxy, pass its CA for this step only (never baked into the image):
+#   docker build --secret id=ca,src=/path/to/ca.pem -t eden .
+RUN --mount=type=secret,id=ca,required=false \
+  if [ -s /run/secrets/ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca; fi; \
+  bun install --frozen-lockfile --production
 # The source map (entity names and counts, never content, D8) persists in EDEN_HOME; item text stays in memory.
 # Opt-in (D425): -e EDEN_PERSIST_FROZEN_DIR=/data/frozen -e EDEN_PERSIST_KEY=<openssl rand -hex 32> keeps idle
 # users across restarts, encrypted on disk (docs/INTEGRATION.md, "Restarts without a full re-sync").
