@@ -115,6 +115,10 @@ rows, $0.0453 ($0.0172 off, $0.0281 low). It used a scratch script outside the r
 
 The bridging query (D89) was deleted by D112; its cost notes are in git history.
 
+**The open push (`pushOpen`, D710) adds no model call of Eden's**: the candidates' push runs for more requests (98%
+of nothing-to-add requests get a packet against 87%), which cost the agent's own model +$0.012 per 1,000 tasks
+(+0.009..+0.014) over 32 simulated users' days on Haiku 5.5 (Anthropic-direct lab figures, o3-pointer.md §3).
+
 **Since D237 (CL6, 2026-11-07) the default makes no reader call** (`pushCandidates` 5: the push hands the agent its
 pool's first five items to judge, about 950 bytes a task in the $0 funnel; an ask reads nothing either). Eden's
 per-task model spend is $0; the agent reads about 300–600 more input tokens a task on the short horizon. Pi, Anthropic
