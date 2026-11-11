@@ -128,6 +128,11 @@ export interface ClusterOptions {
   rebalanceMs?: number;
   /** How long a request is retried while its node refuses connections (a restart); default 5 s. */
   retryRefusedMs?: number;
+  /**
+   * How long a forwarded request may take before the router answers 503 (default 60 s, R1): a node that accepts
+   * connections and hangs must not hold the router's requests open for ever. Well above an event's 5 s wait.
+   */
+  forwardTimeoutMs?: number;
   log?: (line: string) => void;
 }
 
@@ -140,6 +145,7 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
   const recoverAfter = options.recoverAfter ?? 2;
   const rebalanceMs = options.rebalanceMs ?? 60_000;
   const retryRefusedMs = options.retryRefusedMs ?? 5_000;
+  const forwardTimeoutMs = options.forwardTimeoutMs ?? 60_000;
   const grace = config.shutdownGraceMs ?? 10_000;
   const clusterKey = config.cluster?.key ?? "";
   if (clusterKey === "") throw new Error("a cluster router needs EDEN_CLUSTER_KEY (the same on every node)");
@@ -169,7 +175,7 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
   /** One `/readyz` probe: up, draining (a stop in progress: a planned leave), or down. */
   const probe = async (n: NodeState): Promise<"up" | "draining" | "down"> => {
     try {
-      const r = await fetch(`${n.url}/readyz`, { signal: AbortSignal.timeout(1_500) });
+      const r = await fetch(`${n.url}/readyz?all=1`, { signal: AbortSignal.timeout(1_500) });
       if (r.ok) {
         void r.arrayBuffer().catch(() => {});
         return "up";
@@ -352,6 +358,7 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
           method: req.method,
           headers,
           body: req.method === "GET" || req.method === "HEAD" ? undefined : body,
+          signal: AbortSignal.timeout(forwardTimeoutMs),
         });
       } catch (e) {
         const code = (e as { code?: string } | null)?.code ?? "";

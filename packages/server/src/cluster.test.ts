@@ -277,3 +277,42 @@ describe("fencing (review of D992)", () => {
     await cluster.stop();
   }, 120_000);
 });
+
+test("a node that takes a request and never answers gets the caller a 503 after the forward timeout (R1)", async () => {
+  // Ready and told the membership, then silent on the API: a hung process behind an open port.
+  const hung = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch(req) {
+      const path = new URL(req.url).pathname;
+      if (path === "/readyz") return Response.json({ ready: true });
+      if (path === "/internal/cluster") return Response.json({ released: 0, written: 0, pending: 0, ms: 0 });
+      return new Promise<Response>(() => {});
+    },
+  });
+  const router = await startCluster({
+    config: {
+      port: 0,
+      host: "127.0.0.1",
+      keys: new Map([[KEY, "acme"]]),
+      dev: false,
+      cluster: { key: CLUSTER_KEY, size: 1 },
+    },
+    nodes: [{ id: "h", url: `http://127.0.0.1:${hung.port}` }],
+    healthEveryMs: 0,
+    forwardTimeoutMs: 200,
+    log: () => {},
+  });
+  try {
+    const r = await fetch(`http://127.0.0.1:${router.port}/v1/ask`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
+      body: JSON.stringify({ userId: "u1", sessionId: "s1", question: "x" }),
+    });
+    // Without the timeout this request never ends, and the test times out.
+    expect(r.status).toBe(503);
+  } finally {
+    await router.stop();
+    hung.stop(true);
+  }
+});
