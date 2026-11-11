@@ -44,6 +44,11 @@ export function renderPacket(
      * made single).
      */
     lead?: string;
+    /**
+     * Lab only (M6's dump, `hidden-funnel --packet-parts`, D921): told each compacted item's parts as `messageParts`
+     * read them and the text compaction kept. Reads only; the engine never sets it.
+     */
+    onParts?: (item: ContextItem, parts: readonly Part[], text: string) => void;
   },
 ): string {
   const before = options.shownBefore;
@@ -78,6 +83,7 @@ export function renderPacket(
       );
       // `compactText`, with what this session showed of the item before as known too.
       const text = prior && !saysNew(parts) ? SHOWN : pick(parts, focus, each);
+      options.onParts?.(item, parts, text);
       for (const w of title) shown.add(w);
       for (const w of text.toLowerCase().match(WORDS) ?? []) shown.add(w);
       return { ...item, text };

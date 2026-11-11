@@ -59,6 +59,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D855 | Trial `leadShort`: the candidates' lead and the ask nudge in fewer words, same three instructions | killed by D859: Hidden facts raised −1.4 points (−3.8..+0.9 clustered by template; by seed −2.3..−0.5), below the rule's −3… |
 | D908 | Rejected (stopped on its pre-registered rules; deleted with its code, weights and tests): `constraintTag`, a small binarised item tagger's… | stopped on its pre-registered rules; deleted with its code, weights and tests |
 | D913 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | stopped on its pre-registered rule, M3, D908 rule 1 |
+| D914 | Rejected (stopped on its pre-registered hand-written gate, M3b): `pushSupersede` with H10 retrained and compressed; findings and lab kit… | stopped on its pre-registered hand-written gate, M3b |
 | D930 | Rejected (stopped on its offline bar): a no-model pre-screen in front of the push check, `pushPrescreen` | stopped on its offline bar |
 | D950 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | stopped on its ceiling, before any candidate was frozen |
 
@@ -165,6 +166,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D341 | Rejected and deleted: re-sending every item a session was sent an "updated:" packet for, in its current version, on a recap- or… |  |
 | D401 | Rejected at $0: moving the agent's cache mark off the first request's user turn so a one-call task pays 1x, not 1.25x, for the packet. |  |
 | D517 | Rejected: shortening earlier requests' packets in the transcript | hidden −16.0 points (−23.3..−8.1 by day) |
+| D920 | Rejected (stopped on its pre-registered rule, a3faa15a): `packetTrim`, a learned packet trimmer | stopped on its pre-registered rule, a3faa15a |
 
 ## Lab and eval
 
