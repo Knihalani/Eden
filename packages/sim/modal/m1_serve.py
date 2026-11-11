@@ -271,3 +271,29 @@ def teacher(path: str, run: str = "t8b-truth-a", shards: int = 8, limit: int = 0
     print(json.dumps(res))
     if merge and not limit:
         print(json.dumps(teacher_merge.remote(path, shards)))
+
+
+@app.function(gpu="H100", volumes={"/vol": vol}, timeout=3 * 3600)
+def score_pools_remote(run: str, pools: list) -> list:
+    """Each pool ({request, today, items: [{title, text}]}) scored as one pool with the shared head (a batch job)."""
+    st = Student(run)
+    out = []
+    for p in pools:
+        rows = [{"request": p["request"], "today": p.get("today", ""), "title": it.get("title", ""),
+                 "text": it.get("text", ""), "group": "q"} for it in p["items"]]
+        s = []
+        for k in range(0, len(rows), 20):
+            s += st.score_prefix(rows[k : k + 20])
+        out.append([round(x, 4) for x in s])
+    return out
+
+
+@app.local_entrypoint()
+def score_pools(pools: str, run: str, out: str, gpu: str = "H100"):
+    """`pools`: a JSONL of {request, today, items}; writes one JSON list of scores a line to `out`, same order."""
+    ps = d.read_jsonl(pools)
+    res = score_pools_remote.with_options(gpu=gpu).remote(run, ps)
+    with open(out, "w") as f:
+        for s in res:
+            f.write(json.dumps(s) + "\n")
+    print(f"{len(res)} pools scored by {run} -> {out}")
