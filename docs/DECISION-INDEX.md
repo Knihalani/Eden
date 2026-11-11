@@ -572,8 +572,6 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D882 | 2026-11-11 | Synth splits are by family cluster, and families are deduped against each other and the train suites. | adopted |
 | D883 | 2026-11-11 | Synth quality: a revision pass by the writer, a blind critic, a hand audit. | adopted |
 | D884 | 2026-11-11 | Lab only: the `synth` suite family runs the generated worlds as hidden-context suites. | lab |
-| D878 | 2026-11-11 | Lab only: pi-ab and hermes-ab default to shipped coverage too (amends D877's "keep replaying the full index") | lab |
-| D879 | 2026-11-11 | Finding: at 1,000 connectors over four weeks, the weekly sweep of unused sources (D356) costs no fact against a daily sweep, at 18% of its… | finding |
 | D828 | 2026-11-11 | The push check and indirect requests join the default. | adopted |
 | D829 | 2026-11-11 | Precision over recall, an explicit exception: `pushIndirect` is in the default with one more Sonnet-confirmed false concern | adopted |
 | D900 | 2026-11-11 | Lab only: a retriever trained on Eden's own question, "which held item bears on this request?", with its tooling and pre-registered bars | lab |
