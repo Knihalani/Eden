@@ -1,6 +1,6 @@
 # M5: a standing-constraint ledger built when items arrive
 
-Status: 2026-11-11, branch `claude/m5-ledger`, session M5 (decisions D910–D919). Train suites only; held-out 17–19
+Status: 2026-11-11, branch `claude/m5-ledger`, session M5 (decisions D910–D911). **Stopped** (D910). Train suites only; held-out 17–19
 are not run or read. Anthropic cap $30 (ledger `.local/m5/ledger.jsonl`), Modal cap $100. Numbers marked **[EST]**
 are arithmetic or judgement; every other number comes from a command in this note.
 
@@ -42,3 +42,58 @@ a dated record whose days miss every day the request names is rejected; the firs
 pool. Fit split (train1–4 days requests): facts @5 186 → 205 of 276, decoys @5 211 → 211 of 285. Prompt v2 (roles,
 up to 8 broader request words in `things`; $1.72 for the days corpora) was worse on the fit split (best 186 → 196,
 decoys 211 → 220): broader words bring the twins back (D526's failure), and it was rejected before any held-out read.
+
+## 3. Results, and the stop (D910)
+
+**Held-out families (train5–6 days requests, read once at cdeeeef6):**
+
+| | shipped pool | with the ledger | change |
+|---|---|---|---|
+| facts @5 (157 hidden) | 116 | 125 | **+9, +5.7 points** (ratio 1.078) |
+| decoys @5 (148 control) | 88 | 95 | +7 (ratio 1.080) |
+
+**Stop.** Below the +8-point bar, and decoys rise slightly faster than facts. Nothing is wired; no trial, no Pi pair.
+(The shipped baseline here is a fresh live-carded run of the same recipe as M3's §1b: 116 of 157 against M3's 123,
+so card-run variance alone moves the base by a few facts.)
+
+**Short worlds** (the funnel's train1–6, seeds 41–44, its `--pool-dump`, ledger made from those worlds; same frozen
+matcher): fit facts @5 403 → 417 of 512, decoys 371 → 380; held-out families 201 → 208 of 256 (+2.7 points), decoys
+156 → 170. **Neutral:** the ledger puts a new item in the first five on 321 of 768 neutral requests (198 fit, 123
+held); the shipped push already sends a packet on about 97% of them, so neutral packets would not rise in count, only
+change content.
+
+**Why it falls short.** The ledger is precise: on the fit split it moved no decoy (211 → 211), because the all-clear
+twin is written as a `clears` record and another day is a date miss. What it lacks is reach. Of the 90 fit facts the
+shipped pool misses at @5, 85 have a record and about 20 match the request's words; the rest need a leap the
+request never states ("Dubai" for a pause on international trips, "£120k" for a £50k signing limit, "our usual
+babysitter" for Megan's exams, "Saturday 31 Oct" for a provider's maintenance window). Widening the records' words
+to reach them (prompt v2) brought the twins back as D526 found: facts 186 → 196, decoys 211 → 220 on the fit split.
+A symbolic match over model-written records reaches the facts that share an anchor with the request, which the
+shipped pool mostly reaches already.
+
+**Costs (measured):** extraction $0.000035 an item (Haiku 5.5 direct, no thinking, 15 items a call; 46,859 days
+items read for $1.72 with prompt v2 and $1.63 with v1; the short worlds' 6,891 for $0.31), p50 1.1 s a call; Batch pricing would halve it
+**[EST]**. The sim's users get about 25 dated items a day (w41: 1,215 dated items over 61 days, peak 40), so about
+**$0.0009 a user a day** (300 items a day would be $0.011) **[EST from the measured rate]**. Request time: 3.3 ms in
+unoptimised Python over a 266-record ledger (anchors recomputed per request); a TypeScript matcher with the anchors
+built at ingest would be well under that **[EST]**. Records: about 0.18 an item.
+
+**Not done:** M2's `eden-synth` test split (on a Modal Volume; Modal's API is unreachable from this session's
+container); the open-model extraction arm on Modal (Haiku's price passes the bound by a factor of ten, so it was not
+needed for the stop).
+
+Spend: Anthropic $4.16 of $30 (ledger `.local/m5/ledger.jsonl`: shipped-coverage cards, extraction v1 and v2), Modal $0.
+
+## Reproduce
+
+```bash
+# Shipped-coverage days baseline (M3's §1b recipe), users w41–w72; also dumps each user's corpus.
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/days-calls.ts --seeds 41,…,72 --cards-live claude-haiku-5-5 \
+  --intent none --cards-out .local/m5/d/cards.jsonl --spend-ledger .local/m5/ledger.jsonl --spend-cap 3 \
+  --pool-diag .local/m5/d/pool.jsonl --corpus-dump .local/m5/d/corpus.jsonl
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/m5-ledger.ts extract --corpus .local/m5/d/corpus.jsonl \
+  --out .local/m5/led-v1.jsonl --spend-ledger .local/m5/ledger.jsonl --spend-cap 30 --concurrency 6
+python3 -I packages/sim/lab/m5/m5_match.py --ledger .local/m5/led-v1.jsonl --corpus .local/m5/d/corpus.jsonl \
+  --pool .local/m5/d/pool.jsonl --only fit   # --only held: the one held-out read
+# Short worlds and neutral: bun run funnel --seeds 41,42,43,44 -- --neutral --pool-dump P --corpus-dump C
+```
