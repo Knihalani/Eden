@@ -5,7 +5,10 @@
  *
  *   bun packages/sim/src/lab/cards-enrich.ts --dir DIR [--funnel hidden,heldout] [--seeds 41,42,43,44]
  *     [--sim-seeds 41,42] [--sim-users 6] [--cap 2.80] [--rejected N] [--concurrency 4] [--dry]
- *     [--model m] [--sort price] [--batch 10] [--spend FILE] [--only N] [--strict]
+ *     [--model m] [--sort price] [--batch 10] [--spend FILE] [--only N] [--strict] [--days-users 45,46]
+ *
+ * `--days-users` (O3, D713): the `pi-ab --days` users of those seeds (train, 8 days, `pi-user.ts`), whose worlds hold
+ * every planted item of the user's plan at once.
  *
  * Items are those a sync would read (every source's `listAll`, as the realistic connectors return them), redacted as
  * the cache redacts them. Only items the no-model prefilter passes are sent, in batches of ten, unless `--rejected N`
@@ -47,6 +50,7 @@ import { DiskCardMaker, loadRequests } from "./cards-disk";
 import { isCapError, keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { variantsFor } from "./neutral";
+import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf } from "./pi-user";
 import { parseSuites, SUITES } from "./suites";
 
 const args = process.argv.slice(2);
@@ -61,6 +65,7 @@ const FUNNEL = opt("funnel", "");
 const SEEDS = opt("seeds", "41,42,43,44").split(",").map(Number);
 const SIM_SEEDS = opt("sim-seeds", "").split(",").filter(Boolean).map(Number);
 const SIM_USERS = Number(opt("sim-users", "6"));
+const DAYS_USERS = opt("days-users", "").split(",").filter(Boolean).map(Number);
 const CAP = Number(opt("cap", "2.80"));
 const REJECTED = Number(opt("rejected", "0"));
 const CONCURRENCY = Number(opt("concurrency", "4"));
@@ -107,6 +112,16 @@ for (const seed of SIM_SEEDS) {
     const world = buildWorld({ seed: seed * 1_000 + u });
     take(simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll()));
   }
+}
+
+for (const seed of DAYS_USERS) {
+  // As pi-ab and days-calls.ts build a `--days` user (their defaults: train, 8 days of 12-20 requests, 1:1:8).
+  const plan = planUser(seed, suiteTemplates(seed, parseSuites("train")), {
+    days: 8,
+    size: parseDaySize("12-20"),
+    mix: parseMix("1:1:8"),
+  });
+  take(simSources(userWorldOf(seed, plan).world, REALISTIC, 0, seed).flatMap((s) => s.listAll()));
 }
 
 const disk = new DiskCardMaker(`${DIR}/cards-v${CARD_VERSION}.jsonl`);
