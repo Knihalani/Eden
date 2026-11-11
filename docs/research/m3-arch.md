@@ -350,3 +350,32 @@ against main e4f3649a.
   tasks the older version is the task's decoy, and the synth suite plants the fact *or* the decoy, never both: no
   request ever meets a stale version beside its replacement. Reading the rule needs a variant that plants both (the
   older version as background beside the fact); raised with the parent before building it.
+
+### 7h. Results of the wiring rules and of H1's screen (2026-11-11)
+
+**Rule 2, ingest tag (`constraintTag`, D908): passes.** The fold-A binary tagger (`w-tags-bin`: M2 v2 train plus the
+sim's train1–4 planted items, 3 epochs, 256 bits; fact against twin AUC 0.947 on M2 val, 0.759 on the sim's held-out
+items), exported to TypeScript (`tags-bin`, max error against PyTorch 0), read in the push gate as the probability of
+its `fact` tag; θ 0.5 was fixed in a commit before any funnel run (e6aef109). `bun run funnel --jobs 2 -- --neutral`
+on this branch, switch off (= main e4f3649a's behaviour; no checker wired, reader stub) against
+`--set '{"constraintTag":0.5}' -- --tagger .local/m3/nets/tags-bin`, train1–6, seeds 41–42, $0:
+
+| | all (384 a variant) | train1–4 (trained on) | train5–6 (held out) |
+|---|---|---|---|
+| hidden surfaced | 281 → 281 | 181 → 181 | 100 → 100 |
+| hidden delivered by the push | 265 → 263 | 170 → 169 | 95 → 94 |
+| control packets | 490 → 343 (−30.0%) | 321 → 204 | 169 → 139 (−17.8%) |
+| control tasks with a candidates packet | 380 → 134 | 254 → 44 | 126 → 90 |
+| decoy delivered by the push | 243 → 125 | 167 → 70 | 76 → 55 |
+| neutral packets | 459 → 150 (−67.3%) | 310 → 107 | 149 → 43 (−71.1%) |
+| **control + neutral packets** | **949 → 493 (−48.1%)** | 631 → 311 (−50.7%) | **318 → 182 (−42.8%)** |
+
+The rule's bar is −20% packets with hidden surfaced not down more than 1%: met overall and on the held-out suites
+alone. The tagger encoded 492 distinct items in 377 ms (0.77 ms an item, cached per item version). Not yet measured:
+the pair with the push check S live in front (the shipped path with a key; pre-registered in commit after e6aef109,
+running), and Pi.
+
+**H1, set-level variant (Haiku round, local CPU slice, 150 worlds): killed.** On fold A's held-out train5–6 days
+requests (`score.py --at5 --key all`, eval-ship) its own ranking hands facts@5 33 of 56 against the shipped pool's
+47, and every fusion with the shipped pool is below the shipped pool (hyb10: 45 facts at 27 decoys against 47 at 26).
+Far from D909's bar; not taken to Modal.
