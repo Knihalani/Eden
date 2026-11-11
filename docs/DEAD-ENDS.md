@@ -112,6 +112,8 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D449 | What a distilled card model would need before production (M2, written, not built). |  |
 | D480 | Trial `intentPrune` (pruning an item's intent requests by a no-model score against the item) is rejected and deleted | Four rules (`share:x` of the request's terms in the item, `names` the item does not hold, the closest N, the… |
 | D523 | Rejected without a paid run: a card-only (distilled) model reading the rest of a new user's backfill | the bar was +10 (D361), written after the screen was read |
+| D960 | Rejected: `cardsMicro`, a micro card tagger at ingest in place of the card model's cards | micro 205 / 167 / 250 (hidden −1.4%): fails |
+| D963 | Not taken: dropping the card fields from the card call (cards off, the call writing requests only). |  |
 | D970 | Rejected (stopped on its pre-registered rule, ee079a30, amended before selection by 61f5130b and 4539fab1): `intentMicro`, an intent… | mode 2 (only where Haiku wrote none) read 234 and 232 (+2.5 and +1.9 points, against a bar of +5.0), with… |
 | D1052 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | stopped on its pre-registered screen |
 
@@ -209,3 +211,4 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D909 | Rejected: H1, a learned request–item ranker, scrapped; no variant came near its pre-registered bar. | the owner's decision |
 | D912 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | stopped on its pre-registered rule, 3e05b16d |
 | D1032 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | Failed its rule (b3cc3f12): one request a session (train 41–44, Sonnet, template-clustered) hidden +0.9… |
+| D996 | Rejected (stopped on its pre-registered rule, 327c9fb2): a shorter warm-to-compact window for daily agents' peak hour. | stopped on its pre-registered rule, 327c9fb2 |
