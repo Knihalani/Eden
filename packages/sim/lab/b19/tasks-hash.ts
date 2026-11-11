@@ -23,7 +23,9 @@ for (const seed of seedList.split(",").map(Number)) {
   for (const name of names) {
     for (const variant of ["hidden", "control", "neutral"]) {
       const w = common.worldOf(seed, name, variant, { maxTasks: 30, maxOffworld: 5 }, {});
-      console.log(`short w${seed} ${name} ${variant}: ${w.tasks.length} tasks ${sha(w.tasks)} world ${worldSha(w.world)}`);
+      console.log(
+        `short w${seed} ${name} ${variant}: ${w.tasks.length} tasks ${sha(w.tasks)} world ${worldSha(w.world)}`,
+      );
     }
   }
   const plan = user.planUser(seed, user.suiteTemplates(seed, names), {
@@ -32,6 +34,8 @@ for (const seed of seedList.split(",").map(Number)) {
     mix: user.parseMix("1:1:8"),
   });
   const u = user.userWorldOf(seed, plan);
-  console.log(`days w${seed}: ${u.tasks.length} tasks (${u.daySizes.join(",")}) ${sha(u.tasks)} world ${worldSha(u.world)}`);
+  console.log(
+    `days w${seed}: ${u.tasks.length} tasks (${u.daySizes.join(",")}) ${sha(u.tasks)} world ${worldSha(u.world)}`,
+  );
 }
 console.log(`prompts ${common.armPromptsHash()} neutral ${common.armPromptsHash(null, true)}`);

@@ -596,3 +596,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D932 | 2026-11-11 | Adopted (lab tooling, M7): the funnel's `--check-dump F` (`check-dump.ts`): one row a push-check call (the request head, day and pool… | lab |
 | D950 | 2026-11-11 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | rejected |
 | D951 | 2026-11-11 | Adopted (lab tooling, M9): `packages/sim/lab/m9/` (`links.py` per-user link state, `screen.py` fronting screen, `oracle.py` and… | lab |
+| D1040 | 2026-11-11 | Adopted (lab tooling, B19): an Eden arm at any commit beside a pinned harness. | lab |
+| D1041 | 2026-11-11 | Lab only: pi-ab loads P3's `hits` helper (`lexical-hits.ts`) only for the `hits` arm | lab |
+| D1042 | 2026-11-11 | Lab fix: hermes-ab wires the push check | adopted |
+| D1043 | 2026-11-11 | Lab only: B19's final run is pre-registered | lab |

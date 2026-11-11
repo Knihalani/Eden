@@ -9,8 +9,9 @@ with the same condition name (Eden before and Eden final) are told apart by file
 Per arm: hidden facts raised (the run's grader; run.sh grades with Sonnet 5.5), false concerns on control tasks
 (the planted look-alike) and on neutral tasks, neutral-turn packets (share of neutral tasks handed any item, items a
 neutral task), agent tokens a task, Eden's own spend per 1,000 tasks by ledger role (every `eden.*` line of the arm's
-label, background cards included), connector calls a task (the agent's `search_<source>` calls, Eden's own reads on
-the task's clock, and the background backfill's reads spread over the arm's tasks), and wall time a task, p50 and p90
+label, background cards included), connector calls a task (the agent's `search_<source>` calls, the calls Eden's
+decision traces count on the task's clock, and the background backfill's reads spread over the arm's tasks), and
+wall time a task, p50 and p90
 (each stream's first task excluded: it pays the worker's start-up).
 
 Each pair A:B prints A − B on the tasks both arms finished, with two 95% intervals from 5,000 bootstrap draws (seed
@@ -28,7 +29,7 @@ DRAWS = 5000
 
 
 def args():
-    out = {"arm": [], "pair": [], "ledger": None, "draws": DRAWS, "json": None}
+    out = {"arm": [], "pair": [], "ledger": None, "draws": DRAWS, "json": None}  # --arm NAME=STEM[,STEM…]
     a = sys.argv[1:]
     i = 0
     while i < len(a):
@@ -96,7 +97,8 @@ def read_arm(stem, ledger_rows):
         rec = tl_by.get((r["task"], r["condition"]), {})
         ev = rec.get("events", [])
         agent_calls = sum(1 for e in ev if e["ev"].startswith("tool.search_") and e["ph"] == "B")
-        eden_calls = sum(1 for e in ev if e["ev"] == "eden.source" and e["ph"] == "B")
+        # The engine's traces count what its connectors were sent (searches, polls, re-reads; partner.ts), per decision.
+        eden_calls = sum(e.get("data", {}).get("sourceCalls", 0) for e in ev if e["ev"] == "eden.decision")
         graded = r.get("facts") is not None and len(t.get("must") or []) > 0
         rows[r["task"]] = {
             "kind": t["kind"],
@@ -120,6 +122,27 @@ def read_arm(stem, ledger_rows):
             roles[x.get("role", "?")][1] += x.get("costUsd", 0.0)
     bg_conn = sum(b.get("sourceCalls", 0) for b in res.get("background", []))
     return {"label": label, "header": res, "rows": rows, "roles": dict(roles), "bgConn": bg_conn, "n": n, "days": days}
+
+
+def read_arms(stems, ledger_rows):
+    """One arm from several results files (Pi: one seed or user a process); task ids carry the seed, so none clash."""
+    parts = [read_arm(s, ledger_rows) for s in stems]
+    roles = collections.defaultdict(lambda: [0, 0.0])
+    for p in parts:
+        for k, v in p["roles"].items():
+            roles[k][0] += v[0]
+            roles[k][1] += v[1]
+    rows = {}
+    for p in parts:
+        rows.update(p["rows"])
+    return {
+        "label": ",".join(p["label"] for p in parts),
+        "rows": rows,
+        "roles": dict(roles),
+        "bgConn": sum(p["bgConn"] for p in parts),
+        "n": sum(p["n"] for p in parts),
+        "days": any(p["days"] for p in parts),
+    }
 
 
 def mean(xs):
@@ -211,7 +234,7 @@ def main():
     arms = {}
     for spec in o["arm"]:
         name, stem = spec.split("=", 1)
-        arms[name] = read_arm(stem, ledger)
+        arms[name] = read_arms(stem.split(","), ledger)
     sums = {k: summary(v) for k, v in arms.items()}
     print("arm      tasks  hidden         control conc.  neutral conc.  neutral packets     tokens/task  agent $/1k"
           "  Eden $/1k  conn/task (agent, Eden, bg)  wall p50  p90")
@@ -231,7 +254,8 @@ def main():
             f"{r} ${v:.3f} ({s['edenCallsPer1kByRole'][r]:.0f} calls)" for r, v in s["edenUsdPer1kByRole"].items()
         )
         print(f"Eden per 1k tasks, {k}: {roles or 'no model calls'}")
-    pairs = o["pair"] or [p for p in ("final:before", "final:raw", "before:raw") if all(x in arms for x in p.split(":"))]
+    known = ("final:before", "final:raw", "before:raw")
+    pairs = o["pair"] or [p for p in known if all(x in arms for x in p.split(":"))]
     effects = {}
     for p in pairs:
         a, b = p.split(":")
