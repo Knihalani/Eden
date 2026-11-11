@@ -169,15 +169,17 @@ What changed (`scripts/check.sh`, `scripts/test.sh`, `scripts/test-tail.txt`, `s
 - **The three steps run at once.** Prettier and tsc are single processes; one after another they left cores idle.
 - **The slowest files start first** (`bun test --timings`, last run's durations under the git common dir; an order,
   never a result): 51.7-51.9 s against 54-56 s for the tests alone.
-- **A tail.** 23 files that wait on real time and assert on it (a deadline met, a sleeping connector overtaken, a
+- **A tail.** 25 files that wait on real time and assert on it (a deadline met, a sleeping connector overtaken, a
   child process started within a bound), or spend at least three times their CPU waiting for a second or more, run
   after the rest, eight at a time, on a machine nothing else loads: 8.1-9.2 s. Before, they flaked under contention
   and held a worker while idle (52.6 s of wall, 19.3 s of CPU).
 - **Bounds on work are CPU time.** 22 wall-clock ceilings around synchronous code (ReDoS and linearity guards in
   engine, primitives, redact, protocol and sim) read `process.cpuUsage()` (`cpuMs`): the same bound on the same work,
   not on how long the scheduler kept the test waiting.
-- **20 s a test unless it names its own** (`TEST_TIMEOUT_MS`): the limit catches a hang; Bun's 5 s default failed
-  CPU-bound tests under load. The run ends with the ten slowest files and every test over 3.5 s, so slowness stays
+- **20 s a test in the main run unless it names its own** (`TEST_TIMEOUT_MS`): the limit catches a hang; Bun's 5 s
+  default failed CPU-bound tests under load. The tail keeps 5 s (`TEST_TAIL_TIMEOUT_MS`): deadline tests there that
+  assert nothing about time relied on it, and the tail runs unloaded. A name filter (`bun run test -- -t X`) runs one
+  invocation, unsplit, since a part it matched nothing in would fail. The run ends with the ten slowest files and every test over 3.5 s, so slowness stays
   visible. `rare-terms.test.ts`'s two full-table tests fill 300,000 words, not 400,000 (still 38,000 past the table's
   cap; about 0.5 s less), and carry 30 s.
 

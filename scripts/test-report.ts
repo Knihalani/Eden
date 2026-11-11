@@ -64,7 +64,7 @@ export function report(parts: { files: Timed[]; tests: Timed[] }[]): string[] {
   out.push(
     slow.length === 0
       ? `── no test over ${s(SLOW_MS)}`
-      : `── tests over ${s(SLOW_MS)} (within 30% of Bun's 5 s default):`,
+      : `── tests over ${s(SLOW_MS)} (70% of Bun's 5 s default; some set a longer timeout of their own):`,
   );
   for (const t of slow) out.push(`   ${s(t.ms)}  ${t.file} > ${t.name}`);
   return out;

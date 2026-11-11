@@ -9,9 +9,8 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-steps=(format:check typecheck test)
 if [ "${CHECK_SERIAL:-}" = "1" ]; then
-  for s in "${steps[@]}"; do bun run "$s" || exit 1; done
+  bun run format:check && bun run typecheck && bun run test "$@" || exit 1
   exit 0
 fi
 
@@ -27,7 +26,8 @@ for s in format:check typecheck; do
   pids+=($!)
 done
 status=0
-bun run test || status=1
+# Arguments go to the tests, as `bun run check X` passed them before (`bun run test X`).
+bun run test "$@" || status=1
 wait "${pids[@]}"
 
 for s in format:check typecheck; do
