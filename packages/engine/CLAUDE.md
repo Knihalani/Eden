@@ -13,7 +13,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `partner.ts` (about 7,000 lines)                                           | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues                                                                                       |
 | `config.ts`, `parts.ts`                                                    | `EngineConfig`, `DEFAULT_CONFIG` (the unified default, D112: thresholds such as `confidentScore` 1.1, D6, and every part on); `PARTS` (each part's settings that take it out), `withoutParts`, `CORE_CONFIG` (every part out) |
-| `cache.ts`, `packed-text.ts`                                               | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem`; item text held deflated behind a `text` getter (D188)                                                                  |
+| `cache.ts`, `packed-text.ts`                                               | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem`; item text held deflated behind a `text` getter (D188), the bytes as a one-byte string (D998)                                                                  |
 | `persist.ts`                                                               | `EncryptedFrozenDisk` (D425; the servers' default since D991): frozen users' blobs written AES-256-GCM, one file per user under a keyed-hash name, tenant/user in the additional data; `FrozenDisk`, `PERSIST_FORMAT` (bump it when a blob's shape changes) |
 | `persist-shared.ts`                                                        | `SharedFrozenDisk` (D992): the local files mirrored to a `BlobStore` (S3-compatible), a user fetched before their first read (`fetch`, awaited by `ItemCache.ready`), the store's copy kept at a thaw (failover) and deleted on forget; `handOff`, `settle`, `sweepStore`, `forgetAbsent` |
 | `text.ts`, `situation.ts`                                                  | Cues with no model (entities, content terms, chatter); a coarse situation label for routing                                                                                                                                   |
@@ -33,7 +33,9 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `spans.ts`, `trace.ts`                                                     | Span tracing (off by default, content-free, D56); decision traces, `explainTrace` (a sentence per trace, D277); `UsageRecord` for the optional `onUsage` sink (whether the agent used each injection, content-free, D293); `ContextPartner.explain` keeps a session's last `EXPLAIN_TRACES` (32) |
 | `gate.ts`                                                                  | Redaction off the event loop through the worker pool (D25, D26)                                                                                                                                                                                                                                  |
 
-`bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `ingest.bench.ts` (memory per synced
+`bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `live-heap.bench.ts` (a live heavy
+user's state walked and summed by part, JSC's object counts and heap snapshot by class, D998), `stub-cards.ts` (a $0
+card maker for the memory benches' `--cards`), `ingest.bench.ts` (memory per synced
 user, ingest µs/item; the scale anchor, docs/TESTING.md), `users.bench.ts` (many users: memory live and frozen, thaw,
 D325), `storm.bench.ts` (a cold-start storm with warm users' p99, D328), `index-memory` (the per-user index's heap per
 item and per user, put/search latency, D111), `segment-screen` (O4's screens of varint postings, columns and text
@@ -472,6 +474,15 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   warm freeze without `releaseTerms` (the blob carries the vocabulary) or with `freezeIdleMs` 0. A new per-user
   field of `UserCache` must be carried by both forms, and a test that counts thaws or freezes with the default limits
   now sees warm ones.
+- **Card state freezes with its user (D998; `CardEnricher.freeze`, `cards-freeze.test.ts`).** When the cache
+  freezes a user (warm or compact, `ItemCache.onFreeze`, wired by the partner), their `UserCards` becomes one zstd
+  JSON blob (`FrozenCards`), but only with nothing queued, draining or in flight; the first read or write (`live`)
+  thaws it into the same maps in the same order, the intent index rebuilt from its docs (`IntentIndex.export`/
+  `from`). Before, card state stayed live for frozen users: about 3.7 MB of heap a heavy user with a card and
+  requests an item (`users.bench.ts --cards`). A new field of `UserCards` must be carried by `FrozenCardsBody` and
+  `cards-freeze.test.ts`'s `state`, or a thaw loses it; per-hash state belongs on `Stored`, not in a new Map keyed by
+  hash (a Map of thousands is 40-130 bytes an entry in JSC, a one-element `Set` 248: D998's C1, C4, C5 folded three
+  such). Card state is not persisted (a restart cards again).
 - **Idle compaction (D861, in the default; `idleCompact`).** At an expiry tick a live user not used through a whole
   interval, with at least `COMPACT_MIN_DELTA` (32) delta docs or removals waiting, has `index.compact()` (a full
   merge, 2.6-6 ms at 3,000 items, the delta's spare room let go) as a sliced background job, looked at again when it

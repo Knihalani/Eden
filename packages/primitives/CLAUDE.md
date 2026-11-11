@@ -29,6 +29,7 @@ near-duplicate sketches, calibration and certification statistics, Thompson samp
 | `src/pool.fixture.ts`, `src/pool-worker.ts` | The worker pool's test fixture and worker entry (Bun workers) |
 | `src/regressions.test.ts` | Bugs found in audits, one test each |
 | `src/sparse-index.reference.ts` | The index layout before D111, unchanged: the oracle `sparse-index-packed.test.ts` compares the packed index with, result for result; not exported |
+| `src/dedup.reference.ts` | `TextSketcher` before D998 (a per-id hash memo as long as the vocabulary), unchanged: the oracle `dedup.test.ts` compares the memo-free sketcher with, output for output; not exported |
 | `bench/sparse-index-ab.bench.ts` | Reference vs packed index interleaved in one process (the A/B to trust); memory is `packages/engine/bench/index-memory.bench.ts` |
 
 ## Test
@@ -47,6 +48,12 @@ bun packages/primitives/bench/tokenize.bench.ts   # a benchmark (no assertions; 
   because a freed doc is neither `FROZEN` nor `DELTA`. A doc number may become `FROZEN` again only in a merge that
   filtered its stale postings (`staleDocs`, snapshotted at the seal); anything that freezes a doc another way breaks
   that. Work per step is `MERGE_MIN_WORK`; re-run `index-memory.bench.ts` (churn) after changing it.
+- `Vocab` holds terms as bytes (D998): `term(id)` makes a string (behind a process-wide memo keyed by the
+  vocabulary's serial), so a hot loop that only hashes or tests a term reads the arena (`termFnv`) instead.
+  `clearTermMemo` empties the memo; the engine calls it wherever it clears packed text's (a forgotten user's terms
+  must not stay resident). A test that
+  looks for a term in a serialized structure must render a `Vocab` by its terms (`partner.test.ts`'s
+  `sessionsJson`): its bytes print as numbers.
 - `pool.test.ts` starts real Bun workers: keep per-test timeouts generous, the parallel test run shares the cores.
 - Statistical tests (`bandit`, `calibrate`, `pack`, `random`) use seeded `Xoshiro128`; keep seeds fixed so a failure
   reproduces.

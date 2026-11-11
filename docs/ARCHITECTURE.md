@@ -601,7 +601,9 @@ of tokenizing, indexing and deflating every item (10-20 ms at 3,000 items agains
 no words across items, so a warm blob is about twice a compact one on prose; a user still idle at `freezeIdleMs` (30
 minutes) is thawed and frozen again *compact*, the one zstd stream above. A live user idle through a whole tick
 interval has its index compacted first (D861: the delta tier merged and its spare room let go, 0.5-1 MB at the
-cap).
+cap). With a card model wired, the user's card state (cards, requests, the intent index) freezes with them as one
+zstd blob and thaws at its first read or write (D998, `CardEnricher.freeze`): until then it stayed live, about 3.7 MB
+of heap a heavy user, more than the frozen cache itself.
 
 Frozen users are persisted by default (D991; D425-D427 built it opt-in, `persist.ts`; the operator's
 `EDEN_PERSIST_KEY` is required unless `EDEN_PERSIST=off`, and the directory is `EDEN_PERSIST_FROZEN_DIR`, default
