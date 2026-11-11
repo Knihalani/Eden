@@ -146,6 +146,8 @@ let frozenAt = T0;
   target = held(cache);
   const t = performance.now();
   for (let i = 0; i < 3; i++) cache.expireIdle(clock);
+  // A warm freeze writes nothing (D862): the shutdown's flush writes warm users, as a server's SIGTERM does.
+  if (WARM) cache.flush();
   const freezeMs = performance.now() - t;
   frozenAt = clock;
   console.log(

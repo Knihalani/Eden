@@ -842,9 +842,10 @@ export class ItemCache {
   }
 
   /**
-   * Writes every live user (not frozen) to disk as a freeze would, for a shutdown (D425): users frozen already were
-   * written when they froze. Stops at `deadlineMs`; returns how many it wrote. Only for a process about to exit: the
-   * users stay live, so a later change to them (a removal) would not reach the file they now have on disk.
+   * Writes every live user to disk as a freeze would, and every warm one (D862, not written at its freeze), for a
+   * shutdown (D425): users frozen compact were written when they froze. Stops at `deadlineMs`; returns how many it
+   * wrote. Only for a process about to exit: the users stay as they are, so a later change to them (a removal) would
+   * not reach the file they now have on disk.
    */
   flush(deadlineMs = Infinity): number {
     const disk = this.disk;
@@ -853,7 +854,11 @@ export class ItemCache {
     let n = 0;
     for (const x of this.users.values()) {
       if (performance.now() - t0 > deadlineMs) break;
-      if (!(x instanceof UserCache) || x.items.size === 0) continue;
+      if (x instanceof FrozenUser) {
+        if (x.warm && x.blob !== null && this.write(x)) n++;
+        continue;
+      }
+      if (x.items.size === 0) continue;
       // Warm when the trial is on (D862): a restart then thaws its users in milliseconds.
       const steps = this.freezeSteps(x, this.limits.warmIdleMs > 0);
       let r = steps.next();
@@ -1883,6 +1888,10 @@ export class ItemCache {
     this.freezes.frozen++;
     // D425 (opt-in): the same blob, encrypted, on disk while the user stays frozen; a write that fails leaves none.
     // D652 (`persistDiskOnly`): once it is on disk the memory's copy goes; a write that failed keeps it.
+    // D862: a warm user is not written. An active user pauses every few minutes, and each pause would write (and its
+    // thaw delete) a file of 1-3 MB; the warm blob is written at a shutdown (`flush`) and the compact one at its
+    // freeze, so a crash loses what it lost before the trial: users used within the compact bound re-sync.
+    if (f.warm) return;
     if (this.write(f) && this.diskOnly) {
       f.blob = null;
       this.freezes.released++;
