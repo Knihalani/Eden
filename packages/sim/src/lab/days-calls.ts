@@ -12,8 +12,8 @@
  *     [--pool-diag FILE] [--intent FILE[,FILE]]
  *
  * Weeks and more users (P7, D874, D875): `--days 28 --night-h 20` is four weeks of Eden's clock, long enough for the
- * weekly sweep of unused sources (D356) to run three times; the plan refills its templates past about 12 days
- * (`planUser`). `--seeds 41-64` runs 24 users (a range or a list). `--suite train,longtail` adds the long-tail suite's
+ * weekly sweep of unused sources (D356) to run three times; past about 12 days the plan is a weeks plan
+ * (`planWeeks`). `--seeds 41-64` runs 24 users (a range or a list). `--suite train,longtail` adds the long-tail suite's
  * facts in rarely used connectors (rare-sources.ts); `--day-size` and `--mix` as pi-ab takes them. `--arrive-days
  * LO-HI`: each planted item (fact or decoy) is not there at the backfill but appears at its connector LO to HI days
  * before its request, with no notice (a quiet source), so only a poll, a sweep or the request's own reads find it.

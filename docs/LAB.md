@@ -70,7 +70,7 @@ a benchmark answers its question and no other, and each has a bias that moves it
 | Funnel on `train` (`bun run funnel`) | Does a change surface more planted facts and fewer decoys, at $0, one request a session? | Imperative English requests only (B4: use `reworded`); every template's constraint and decoy in one world at once (B6); the funnel always asks (B13); intent at full coverage on seeds 41–44 (B8, D714: pass `--coverage shipped` for a deployment's); facts in the world's five sources only (B5: use `longtail`); one author per suite, tuned on for weeks |
 | Funnel on `train1r`–`train6r` | Does the push start for needs, plans, questions and non-English requests (Q6)? | Rewordings by one writer; the six non-English requests a suite are a handful per language; slot clearing reads the original request, so worlds equal train's |
 | Funnel on `longtail` | Is a fact in a rarely used connector found when it is there from the backfill? | Easy at one request a session (every connector is read at the backfill); its question is a days one. 24 templates, P7's own; rare connectors hold only 6–8 filler items each, so their search is easier than a real notes app's |
-| `days-calls.ts` ($0, weeks) | Connector calls and facts handed over a user's days and weeks: sweeps, polls, dormancy, `--arrive-days` | No agent and no model (facts handed, not facts used); Eden's clock moves while the world's "now" is fixed, so items age against requests written for it (worse over weeks); weeks reuse templates as requests past about 12 days (D874); recaps move each day's planted times |
+| `days-calls.ts` ($0, weeks) | Connector calls and facts handed over a user's days and weeks: sweeps, polls, dormancy, `--arrive-days` | No agent and no model (facts handed, not facts used); Eden's clock moves while the world's "now" is fixed, so items age against requests written for it (worse over weeks); weeks plans repeat neutral requests (only on templates never planted for the user, D874); recaps move each day's planted times |
 | Held-out suites (`--blind`) | Does the default generalise to an author who never saw the engine? | Levels differ by suite (Q10: 73% on heldout17, 47–49% on heldout18 with one default), so compare arms within a suite; each is blind once. heldout19 is unread (D870) |
 | Pi short (`pi-ab.ts`) | Does a live agent raise the fact with Eden, against the agent alone? | One agent model (Haiku) for most decisions, graders that disagree by 7 points (B9); the baseline has search tools, with no "top five search hits" arm (B10); single runs (B11) |
 | Pi days (`pi-ab --days`) | The same over a user's mixed days, with cost and wall time | 2–8 compressed days, four to eight users in most runs (B7; `days-calls.ts` is the $0 weeks view); sessions reset daily, never compacted (A3) |
@@ -579,7 +579,8 @@ only a poll, a sweep or the request's own reads can find it; the surfaced lines 
 `common`) and arrival lag (`0d`, `1-6d`, `7d+`, `backfill`), and a line prices the rare connectors' listings. Add
 `--set '{"syncUnusedSweepMs":0}'` for every source swept daily, `--push none` for sources that never notify, and
 `--noise-sources N --noise-vocab 1000` for the unused connectors a weekly sweep or dormancy rule is about (with 13
-connectors the sweep setting moved nothing, D875). Weeks reuse templates as requests past about 12 days (D874).
+connectors the sweep setting moved nothing, D875). Past about 12 days a plan is a weeks plan
+(D874): planted templates are drawn first and neutral requests repeat only templates never planted for the user.
 
 ### 2. The same with Eden's reader live (NEW)
 

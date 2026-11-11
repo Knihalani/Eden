@@ -12,7 +12,7 @@ calls went to Anthropic only (the card role, Haiku 5.5, lab transport, D97), to 
 | `train1r`–`train6r`: train with every request reworded, 36 of 192 in eight other languages        | `reworded.ts`, `suites.ts`                                                         | B4, Q6   | D871     |
 | Shipped-coverage caches: the cards and requests `buildPartner`'s own enricher writes              | `cold-start.ts --cards-out`, `funnel --coverage shipped`, `cards-shipped.jsonl.gz` | B8, D714 | D872     |
 | `longtail`: 24 templates, every fact in one of eight rarely used connectors                       | `hidden-longtail.ts`, `rare-sources.ts`                                            | B5       | D873     |
-| Weeks-long plans (templates refill past about 12 days, never planted twice)                       | `pi-user.ts`                                                                       | B7       | D874     |
+| Weeks-long plans (`planWeeks`: planted templates first, neutral ones never planted)                       | `pi-user.ts`                                                                       | B7       | D874     |
 | `days-calls.ts`: `--suite`, `--day-size`, `--mix`, seed ranges, `--arrive-days` (silent arrivals) | `days-calls.ts`                                                                    | B5, B7   | D875     |
 | The benchmark map: each benchmark's question and known biases                                     | docs/LAB.md                                                                        | all      | D876     |
 
@@ -176,4 +176,4 @@ They are in the benchmark map (docs/LAB.md). In short:
   - It has 24 templates, and its rare connectors hold only 6–8 filler items each.
   - It is easy one request a session.
 - **days-calls weeks:** Eden's clock moves while the world's "now" is fixed, so items age against requests written
-  for it. Templates return as requests past about 12 days.
+  for it. Past about 12 days neutral requests repeat (on templates never planted for the user).
