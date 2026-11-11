@@ -14,11 +14,13 @@ import { writeFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { readFileSync } from "node:fs";
 import { ItemCache } from "@eden/engine";
+import { readText } from "../../../../engine/src/micro-cards";
 import { cardKey, datedOf, ownText, worthCarding, worthCardingStrict, type Card } from "../../../../engine/src/cards";
 import { REALISTIC, simSources } from "../../sources";
 import { worldOf } from "../ab-common";
 import { SHIPPED_PATH } from "../cards-disk";
-import { parseSuites } from "../suites";
+import { parseSuites, prepareWorld } from "../suites";
+import { buildWorld } from "../../world";
 
 const args = process.argv.slice(2);
 const opt = (k: string, d: string) => {
@@ -48,12 +50,19 @@ for (const suite of suites) {
         continue;
       }
       const { world } = built;
-      const plantedIds = new Set(world.items.filter((it) => /planted|hidden|decoy/i.test(String(it.id))).map((i) => i.id));
+      // Planted: what the suite added past its prepared base world (the same seed, `prepareWorld` alone).
+      const base = buildWorld({ seed: seed * 1_000 });
+      prepareWorld(suite, base, seed);
+      const baseIds = new Set(base.items.map((i) => i.id));
+      const plantedIds = new Set(world.items.filter((i) => !baseIds.has(i.id)).map((i) => i.id));
       const cache = new ItemCache({ maxItemsPerUser: 100_000 });
       const raw = simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll());
       for (const it of cache.put({ tenantId: "t", userId: "u" }, raw, 0)) {
         const h = cardKey(it);
         if (rows.has(h)) continue;
+        const dated = datedOf(it);
+        const anchor = Date.parse(`${dated || new Date(world.now).toISOString().slice(0, 10)}T12:00:00Z`);
+        const read = readText(it.title, ownText(it), anchor);
         rows.set(h, {
           h,
           suite,
@@ -63,14 +72,18 @@ for (const suite of suites) {
           id: it.id,
           title: it.title.slice(0, 200),
           own: ownText(it),
-          head: it.text.slice(0, 600),
+          text: it.text.slice(0, 2700),
+          updatedAt: it.updatedAt ?? null,
+          meta: it.meta ?? null,
           dated: datedOf(it),
           now: new Date(world.now).toISOString().slice(0, 10),
           source: it.sourceId,
-          kind: it.kind,
           start: it.meta?.start ?? null,
           strict: worthCardingStrict(it),
           worth: worthCarding(it),
+          toks: read.toks.map((t) => [t.w, t.s]),
+          dates: read.dates,
+          amounts: read.amounts,
           card: shipped.has(h) ? shipped.get(h) : undefined,
         });
       }
