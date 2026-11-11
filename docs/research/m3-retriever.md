@@ -248,3 +248,26 @@ present (target: the fact) and with only its twin (target: NULL). Read two ways:
   recall list.
 - **As a ranker** (its full order): fold A facts @15 alone 149, decoys 90; fused k 10, @5 against shipped 147 with
   decoys 84 (asym-s1: 149, 92); M2's test @5 fused 1,357 against asym-s1's 1,329. About asym's level, not above it.
+
+## 4. Serving asym's ingest side: ONNX Runtime against a hand-written forward (measured)
+
+Asym's request side is a token-table lookup and an int8 dot product over the user's item vectors (scoring 3,000
+items: 1.1 ms in numpy, §3). Its ingest side is bge-small (33M parameters, 12 layers) once an item. Measured on
+this container's CPU, one thread, the fine-tuned model's export (`.local/m3/models/dense-a1`, the same
+architecture):
+
+| route | ms an item at 128 tokens | at 256 | 3,000 items (a new user at about 1,000 sources) | what it adds |
+|---|---|---|---|---|
+| hand-written TypeScript forward, fp32 weights (`m3r/ts-layer-bench.ts`) | about 2,900 (one layer 243 ms × 12) | — | about 2.4 hours of one core | no dependency |
+| the same, int8 weights | about 3,040 (one layer 253 ms × 12) | — | the same | no dependency |
+| `onnxruntime-node` 1.22.0 in Bun, dynamic int8 (`m3r/ort-bench.ts`) | **22.0** | 47.7 | **66 s of one core** (128 tokens) | a native package, 236 MB installed (every platform's binaries), RSS about 127 MB with the model |
+| ONNX Runtime from Python, int8 (`m3r/cpu_bench.py`) | — | 23.1 | — | (reference) |
+
+- **A hand-written forward of a 12-layer encoder is about 140 times slower than ONNX Runtime** in plain typed-array
+  loops (no SIMD, no blocking): out of the question for a backfill.
+- **ONNX Runtime fits the time budget but is a heavy new dependency** (D24 asks for few). 66 s of CPU for a new
+  user's 3,000 items cannot run on the request path; it would run behind the sync as the cards do (a queue drained
+  off the event loop, the new user's first requests falling back to the lexical ranking until their vectors are
+  in: `pushRetrieve` fails open to it), so it need not delay `syncKick`'s first value, but it competes for the same
+  cores as every user's requests.
+- **The route that avoids both** is an item side with no transformer: `bag` (§5), being trained.

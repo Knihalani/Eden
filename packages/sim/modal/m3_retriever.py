@@ -139,6 +139,41 @@ def static_query(tok, model):
     return table, weight, query
 
 
+BIGRAMS = 1 << 18
+
+
+def bag_items(tok, model):
+    """`bag`'s item side: a learned vector a WordPiece token and a hashed bigram bucket, weighted per entry, summed,
+    then a two-layer MLP: no transformer at ingest either (a lookup, a sum and two small matrix products)."""
+    import torch
+
+    emb = model.get_input_embeddings().weight.detach().clone().float()
+    dim = emb.shape[1]
+    uni = torch.nn.EmbeddingBag.from_pretrained(emb, freeze=False, mode="sum").cuda()
+    bi = torch.nn.EmbeddingBag(BIGRAMS, dim, mode="sum").cuda()
+    torch.nn.init.normal_(bi.weight, std=0.01)
+    uw = torch.nn.Parameter(torch.ones(emb.shape[0], device="cuda"))
+    mlp = torch.nn.Sequential(torch.nn.Linear(dim, 2 * dim), torch.nn.GELU(), torch.nn.Linear(2 * dim, dim)).cuda()
+    special = set(tok.all_special_ids)
+
+    def enc(texts, max_len, grad=False):
+        u_ids, u_off, b_ids, b_off = [], [], [], []
+        for t in tok(texts, truncation=True, max_length=max_len, add_special_tokens=False)["input_ids"]:
+            t = [i for i in t if i not in special] or [tok.unk_token_id]
+            u_off.append(len(u_ids))
+            u_ids += t
+            b_off.append(len(b_ids))
+            b_ids += [(a * 1_000_003 + b) % BIGRAMS for a, b in zip(t, t[1:])] or [0]
+        with torch.set_grad_enabled(grad):
+            ui = torch.tensor(u_ids, device="cuda")
+            v = uni(ui, torch.tensor(u_off, device="cuda"), per_sample_weights=torch.relu(uw[ui]))
+            v = v + bi(torch.tensor(b_ids, device="cuda"), torch.tensor(b_off, device="cuda"))
+            v = v + mlp(torch.nn.functional.layer_norm(v, (dim,)))
+            return torch.nn.functional.normalize(v, dim=-1)
+
+    return enc, list(uni.parameters()) + list(bi.parameters()) + [uw] + list(mlp.parameters())
+
+
 # --------------------------------------------------------------------------------------------------------------- sparse
 def sparse_encoder(base):
     """Doc side: MLM logits -> log(1 + relu) -> max over tokens. Query side: learned weight per token id (from the
@@ -281,6 +316,15 @@ def train_remote(family: str, base: str, suites: list, run: str, epochs: float, 
                      {"params": list(table.parameters()) + [qweight], "lr": table_lr}]
         score_q = squery
         score_d = lambda ds: enc(ds, max_len, grad=True)  # noqa: E731
+    elif family == "bag":
+        tok, model, _enc = dense_encoder(base)
+        table, qweight, squery = static_query(tok, model)
+        enc, bag_params = bag_items(tok, model)
+        model = model.cpu()  # the transformer is not used: only its vocabulary's embeddings seeded the tables
+        params = bag_params + list(table.parameters()) + [qweight]
+        groups_lr = [{"params": params, "lr": table_lr}]
+        score_q = squery
+        score_d = lambda ds: enc(ds, max_len, grad=True)  # noqa: E731
     elif family == "sparse":
         tok, model, doc, query, qw = sparse_encoder(base)
         params = list(model.parameters()) + [qw]
@@ -289,7 +333,7 @@ def train_remote(family: str, base: str, suites: list, run: str, epochs: float, 
     else:
         raise ValueError(family)
     if epochs > 0:
-        opt = torch.optim.AdamW(groups_lr if family == "asym" else params, lr=lr, weight_decay=0.01)
+        opt = torch.optim.AdamW(groups_lr if family in ("asym", "bag") else params, lr=lr, weight_decay=0.01)
         steps_per = sum((len(g) + batch - 1) // batch for g in groups)
         total = int(steps_per * epochs)
         sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, s / max(1, total // 20)) * max(0.0, 1 - s / total))
@@ -304,7 +348,7 @@ def train_remote(family: str, base: str, suites: list, run: str, epochs: float, 
                     docs += [e["pos"]] + e["neg"]
                 q = score_q([e["q"] for e in b])
                 d = score_d(docs)
-                s = (q @ d.T) / (temp if family in ("dense", "asym") else 1.0)
+                s = (q @ d.T) / (temp if family in ("dense", "asym", "bag") else 1.0)
                 k = 1 + n_neg
                 target = torch.arange(len(b), device=s.device) * k
                 loss = torch.nn.functional.cross_entropy(s, target)
@@ -328,8 +372,10 @@ def train_remote(family: str, base: str, suites: list, run: str, epochs: float, 
     tok.save_pretrained(out_dir)
     if family == "sparse":
         torch.save(qw.detach().cpu(), f"{out_dir}/query_weights.pt")
-    if family == "asym":
+    if family in ("asym", "bag"):
         torch.save({"table": table.weight.detach().cpu(), "weight": qweight.detach().cpu()}, f"{out_dir}/query_table.pt")
+    if family == "bag":
+        torch.save([p.detach().cpu() for p in bag_params], f"{out_dir}/bag_items.pt")
     # Eval: every eval world's items ranked for each of its requests; the top TOP ids come back.
     ranks, nnz, ws = [], [], 0
     with torch.no_grad():
@@ -340,9 +386,9 @@ def train_remote(family: str, base: str, suites: list, run: str, epochs: float, 
             reqs = [r["request"] for r in w["requests"]]
             if not reqs:
                 continue
-            if family in ("dense", "asym"):
+            if family in ("dense", "asym", "bag"):
                 D = torch.cat([enc(texts[i : i + 256], max_len) for i in range(0, len(texts), 256)])
-                Q = enc(reqs, 64) if family == "dense" else squery(reqs, grad=False)
+                Q = enc(reqs, 64) if family == "dense" else squery(reqs, grad=False)  # asym, bag: the table
                 S = Q @ D.T
             else:
                 rows = []

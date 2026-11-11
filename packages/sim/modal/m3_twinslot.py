@@ -330,6 +330,8 @@ def train_remote(run: str, files: list, suites: list, ablate: list, epochs: int,
             items = keep + [i for i in w["items"] if i["id"] in planted and i["id"] not in drop]
             idx = {i["id"]: k for k, i in enumerate(items)}
             sel = [(t, h) for t, h in zip(tasks, hid) if (t["pos"] if h else t["decoy"]) in idx]
+            if not sel:
+                continue
             if len(sel) > 96:
                 sel = [sel[k] for k in rng.permutation(len(sel))[:96]]
             ids, mask, feat, A, st, p = world_tensors(prep, items, m, dev)
