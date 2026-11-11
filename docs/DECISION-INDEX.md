@@ -572,10 +572,19 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D882 | 2026-11-11 | Synth splits are by family cluster, and families are deduped against each other and the train suites. | adopted |
 | D883 | 2026-11-11 | Synth quality: a revision pass by the writer, a blind critic, a hand audit. | adopted |
 | D884 | 2026-11-11 | Lab only: the `synth` suite family runs the generated worlds as hidden-context suites. | lab |
-| D878 | 2026-11-11 | Lab only: pi-ab and hermes-ab default to shipped coverage too (amends D877's "keep replaying the full index") | lab |
-| D879 | 2026-11-11 | Finding: at 1,000 connectors over four weeks, the weekly sweep of unused sources (D356) costs no fact against a daily sweep, at 18% of its… | finding |
 | D828 | 2026-11-11 | The push check and indirect requests join the default. | adopted |
 | D829 | 2026-11-11 | Precision over recall, an explicit exception: `pushIndirect` is in the default with one more Sonnet-confirmed false concern | adopted |
+| D900 | 2026-11-11 | Lab only: a retriever trained on Eden's own question, "which held item bears on this request?", with its tooling and pre-registered bars | lab |
+| D901 | 2026-11-11 | Finding, then withdrawn by the owner's scope: asymmetric dense retrieval with generated families passed both bars on two folds | finding |
+| D902 | 2026-11-11 | Stopped: query-side expansion learned as a lookup table | adopted |
+| D903 | 2026-11-11 | Stopped: setrank, an abstaining set-level ranker over asym's vectors | adopted |
+| D904 | 2026-11-11 | Finding: serving an ingest-side encoder in TypeScript | finding |
+| D905 | 2026-11-11 | Stopped: `bag`, a ranker with no transformer on either side | adopted |
+| D906 | 2026-11-11 | Stopped: FrameRank, frames, five symbolic candidate channels and LightGBM over 48 integer pair features | adopted |
+| D907 | 2026-11-11 | Lab only: the binarised track, end-to-end networks over hashed n-grams with ternary/binary internals | lab |
+| D908 | 2026-11-11 | Rejected (stopped on its pre-registered rules; deleted with its code, weights and tests): `constraintTag`, a small binarised item tagger's… | rejected |
+| D909 | 2026-11-11 | Rejected: H1, a learned request–item ranker, scrapped; no variant came near its pre-registered bar. | rejected |
 | D910 | 2026-11-11 | Rejected (stopped on its pre-registered rule): a per-user standing-constraint ledger, typed records a cheap model writes when each item… | rejected |
 | D911 | 2026-11-11 | Adopted (lab tooling, M5): `m5-ledger.ts extract` (typed constraint records per item content, pay once, redacted with `sanitizeForStore`… | lab |
 | D912 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | rejected |
+| D913 | 2026-11-11 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | rejected |
